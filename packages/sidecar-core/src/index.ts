@@ -52,6 +52,8 @@ export {
   sessionChangeNumber,
   sessionMessageText,
   UNKNOWN_WORKSPACE_LABEL,
+  WORKSPACE_MANAGER,
+  type WorkspaceManagerName,
 } from "./session.js";
 export { InMemorySessionRegistry } from "./session-registry.js";
 export {
@@ -321,6 +323,7 @@ export {
   OPENAI_PATH,
   OPENCODE_BLOCK_PATH,
   OPENCODE_FRAME_PATH,
+  ORCA_PATH,
 } from "./provider-mark-paths.js";
 export {
   compareSessionsByUrgency,

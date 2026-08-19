@@ -15,7 +15,7 @@ import {
 } from "../shared/contracts";
 import { type AskHandler, AskLuke } from "./ask-luke";
 import { PANEL_TAB, type PanelTab, TabBar } from "./panel-tabs";
-import { CloudBadge, ProviderMark } from "./provider-marks";
+import { CloudBadge, ProviderMark, WorkspaceManagerMark } from "./provider-marks";
 import {
   type ArrangedSessions,
   actsOnWorkspace,
@@ -605,6 +605,7 @@ function SessionRun({
           never reseat the keyed rows beside it. */}
       {tray ? (
         <header className="workspace-tray-header">
+          {run.workspace?.manager ? <WorkspaceManagerMark manager={run.workspace.manager} /> : null}
           <span className="workspace-tray-name">
             <Highlighted text={run.workspace?.name ?? ""} tokens={highlight} />
           </span>

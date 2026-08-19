@@ -4,6 +4,8 @@ import {
   SESSION_LOCATION,
   type SessionControl,
   type SessionLocation,
+  WORKSPACE_MANAGER,
+  type WorkspaceManagerName,
 } from "./session.js";
 import { SESSION_URGENCY, type SessionUrgency } from "./session-display.js";
 
@@ -11,6 +13,8 @@ import { SESSION_URGENCY, type SessionUrgency } from "./session-display.js";
 export interface WorkspaceSnapshot {
   id: string;
   name: string;
+  /** The app managing the workspace, when the group is its annotation. */
+  manager?: WorkspaceManagerName;
 }
 
 export interface SessionSnapshot {
@@ -138,6 +142,40 @@ const smokeFixture: FixtureSnapshot = {
       location: SESSION_LOCATION.CLOUD,
       observedAt: minutesBeforeEpoch(1),
       workspace: { id: "conductor-lisbon", name: "lisbon-v2" },
+    },
+    // Two local chats of one Orca-managed worktree: the workspace and its
+    // name are a manager's annotation rather than any provider's own nesting,
+    // and the tray wears the manager's mark beside that name. The pair is what
+    // proves the mark is drawn in the one screenshot the evidence is reviewed
+    // from — synthetic, like every row here, never copied from a real session.
+    {
+      id: "orca-chat-recap",
+      title: "Land the recap fallback",
+      providerId: PROVIDER_ID.CLAUDE_CODE,
+      provider: "Claude Code",
+      detail: "Editing the transcript tail reader.",
+      repository: "luke",
+      branch: "orca/kelp-heron",
+      model: "claude-opus-5",
+      urgency: SESSION_URGENCY.WORKING,
+      location: SESSION_LOCATION.LOCAL,
+      observedAt: minutesBeforeEpoch(2),
+      workspace: { id: "orca-kelp-heron", name: "Recap fallback", manager: WORKSPACE_MANAGER.ORCA },
+    },
+    // The same provider twice on purpose: a new provider here would change the
+    // wing arithmetic the Devin row's comment below pins down.
+    {
+      id: "orca-chat-tests",
+      title: "Prove the annotation pass",
+      providerId: PROVIDER_ID.CLAUDE_CODE,
+      provider: "Claude Code",
+      detail: "Annotation tests green in all four adapters.",
+      repository: "luke",
+      model: "claude-opus-5",
+      urgency: SESSION_URGENCY.COMPLETE,
+      location: SESSION_LOCATION.LOCAL,
+      observedAt: minutesBeforeEpoch(3),
+      workspace: { id: "orca-kelp-heron", name: "Recap fallback", manager: WORKSPACE_MANAGER.ORCA },
     },
     {
       id: "cursor-agent",

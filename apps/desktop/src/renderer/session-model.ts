@@ -16,6 +16,7 @@ import {
   type SessionUrgency,
   sessionChangeNumber,
   urgencyLabel,
+  type WorkspaceManagerName,
 } from "@sidecar/core";
 import type { AppBootstrap } from "../shared/contracts";
 
@@ -116,6 +117,9 @@ export interface SessionAction {
 export interface DisplayWorkspace {
   id: string;
   name: string;
+  /** The app managing the workspace, when the group is its annotation — what
+   * the tray wears the manager's mark beside its name for. */
+  manager?: WorkspaceManagerName;
 }
 
 export interface DisplaySession {
@@ -440,6 +444,7 @@ export function displaySessions(
                 workspace: {
                   id: session.workspace.providerWorkspaceId,
                   name: session.workspace.name ?? session.workspace.providerWorkspaceId,
+                  ...(session.workspace.manager ? { manager: session.workspace.manager } : {}),
                 },
               }
             : {}),

@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
+import { WORKSPACE_MANAGER } from "@sidecar/core";
 import {
   OrcaWorkspaceIndex,
   orcaDataFilePath,
@@ -118,6 +119,7 @@ test("annotates a session running in a worktree Orca created", async (t) => {
     workspace: {
       providerWorkspaceId: "/Users/dev/orca/workspaces/checkout/fix-login",
       name: "Fix login flow",
+      manager: WORKSPACE_MANAGER.ORCA,
     },
     change: "https://github.com/example/checkout/pull/42",
   });

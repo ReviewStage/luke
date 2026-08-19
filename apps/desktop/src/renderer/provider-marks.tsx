@@ -13,7 +13,10 @@ import {
   OPENAI_PATH,
   OPENCODE_BLOCK_PATH,
   OPENCODE_FRAME_PATH,
+  ORCA_PATH,
   PROVIDER_ID,
+  WORKSPACE_MANAGER,
+  type WorkspaceManagerName,
 } from "@sidecar/core";
 import { useId } from "react";
 import { CREDENTIAL_PROVIDER_ID } from "../shared/credential-providers";
@@ -41,11 +44,14 @@ import { GOOGLE_CALENDAR_ID } from "../shared/google-calendar";
  * https://developers.google.com/calendar), Jules via Simple Icons (CC0-1.0, sourced from
  * https://jules.google), OpenAI via Simple Icons (CC0-1.0), Linear via Simple Icons (CC0-1.0, sourced from
  * https://linear.app), OpenCode's two-tone terminal mark verbatim from
- * the favicon https://opencode.ai serves. Each keeps its own brand colour
+ * the favicon https://opencode.ai serves, and Orca's leaping-orca mark
+ * verbatim from the `resources/logo.svg` its own repository ships
+ * (https://github.com/stablyai/orca, MIT), with only the file's translate
+ * flattened into the path. Each keeps its own brand colour
  * (see the `--mark-*` custom properties), so a mark says which provider a
  * session belongs to while the chips and row tints say what state it is in.
- * Copilot, Cursor, and Devin each publish one silhouette rather than a
- * colour, so all three are drawn in the light form their brand uses on a dark
+ * Copilot, Cursor, Devin, and Orca each publish one silhouette rather than a
+ * colour, so all four are drawn in the light form their brand uses on a dark
  * surface. They are trademarks of their respective owners. Do not restyle the
  * geometry or recolour them; swap the path in the generator if a provider
  * publishes an updated mark.
@@ -241,6 +247,36 @@ function OpenCodeMark({ className }: MarkProps): React.JSX.Element {
     >
       <path fill="var(--mark-opencode-block, #5a5858)" d={OPENCODE_BLOCK_PATH} />
       <path fill="currentColor" fillRule="evenodd" clipRule="evenodd" d={OPENCODE_FRAME_PATH} />
+    </svg>
+  );
+}
+
+/**
+ * The mark of the app managing a workspace on this machine, worn by the tray
+ * beside the name that app gave the work — the tray-level echo of the provider
+ * mark leading each row, for a group that is the manager's annotation rather
+ * than any provider's own nesting. The mark carries the fact nothing else in
+ * the header states, so it is labelled rather than hidden. Orca's logo is
+ * wider than it is tall, so the box keeps the artwork's own proportions and
+ * the glyph fits by height.
+ */
+export function WorkspaceManagerMark({
+  manager,
+}: {
+  manager: WorkspaceManagerName;
+}): React.JSX.Element | null {
+  if (manager !== WORKSPACE_MANAGER.ORCA) return null;
+  const label = `Managed by ${manager}`;
+  return (
+    <svg
+      className="workspace-manager-mark"
+      viewBox="0 0 318.61 202.67"
+      role="img"
+      aria-label={label}
+      focusable="false"
+    >
+      <title>{label}</title>
+      <path fill="currentColor" d={ORCA_PATH} />
     </svg>
   );
 }

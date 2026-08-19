@@ -63,6 +63,8 @@ test("the most urgent sessions are listed first in either data source", () => {
     SESSION_URGENCY.WORKING,
     SESSION_URGENCY.WORKING,
     SESSION_URGENCY.WORKING,
+    SESSION_URGENCY.WORKING,
+    SESSION_URGENCY.COMPLETE,
     SESSION_URGENCY.COMPLETE,
     SESSION_URGENCY.UNKNOWN,
   ]);
@@ -249,13 +251,13 @@ test("the tally counts per state and per provider", () => {
   assert.deepEqual(
     { ...tally, providers: undefined },
     {
-      total: 6,
+      total: 8,
       attention: 1,
       // Named as well as counted: Luke's face reacts to a session that has just
       // started asking, which the count alone cannot report.
       attentionIds: ["claude-review"],
-      working: 3,
-      complete: 1,
+      working: 4,
+      complete: 2,
       idle: 1,
       urgency: SESSION_URGENCY.ATTENTION,
       providers: undefined,
@@ -267,7 +269,7 @@ test("the tally counts per state and per provider", () => {
   // one more than the wings hold, so the fixture also proves the remainder is
   // counted rather than dropped.
   assert.deepEqual(tally.providers, [
-    { providerId: PROVIDER_ID.CLAUDE_CODE, provider: "Claude Code", total: 1, attention: 1 },
+    { providerId: PROVIDER_ID.CLAUDE_CODE, provider: "Claude Code", total: 3, attention: 1 },
     { providerId: PROVIDER_ID.CODEX, provider: "Codex", total: 1, attention: 0 },
     { providerId: PROVIDER_ID.CONDUCTOR, provider: "Conductor", total: 2, attention: 0 },
     { providerId: PROVIDER_ID.CURSOR, provider: "Cursor", total: 1, attention: 0 },
@@ -286,8 +288,8 @@ test("the providers re-seat with the rows when the other sort is chosen", () => 
     recent.providers.map((provider) => provider.providerId),
     [
       PROVIDER_ID.CONDUCTOR,
-      PROVIDER_ID.CODEX,
       PROVIDER_ID.CLAUDE_CODE,
+      PROVIDER_ID.CODEX,
       PROVIDER_ID.CURSOR,
       PROVIDER_ID.DEVIN,
     ],
@@ -316,10 +318,10 @@ test("the caption names its own number so the count is never misread", () => {
   const tally = sessionTally(displaySessions(bootstrap(true), []));
 
   assert.equal(tallyCaption(tally), "1 needs you");
-  assert.equal(tallySummary(tally), "6 sessions tracked, 1 needing you");
+  assert.equal(tallySummary(tally), "8 sessions tracked, 1 needing you");
   assert.equal(tallyCaption({ ...tally, attention: 2 }), "2 need you");
   assert.equal(tallyCaption({ ...tally, attention: 0, working: 3 }), "3 working");
-  assert.equal(tallyCaption({ ...tally, attention: 0, working: 0 }), "1 complete");
+  assert.equal(tallyCaption({ ...tally, attention: 0, working: 0 }), "2 complete");
   assert.equal(tallyCaption({ ...tally, attention: 0, working: 0, complete: 0 }), "tracked");
   assert.equal(tallyCaption(sessionTally([])), "none tracked");
   assert.equal(tallySummary(sessionTally([])), "No sessions tracked");
@@ -329,13 +331,13 @@ test("the filters offered run from everything to one agent, counted", () => {
   const list = arrangeSessions(FIXTURE_SESSIONS, DEFAULT_SESSION_VIEW);
 
   assert.deepEqual(list.options, [
-    { filter: SESSION_FILTER.ALL, label: "All", count: 6 },
-    { filter: SESSION_FILTER.LOCAL, label: "Local", count: 2 },
+    { filter: SESSION_FILTER.ALL, label: "All", count: 8 },
+    { filter: SESSION_FILTER.LOCAL, label: "Local", count: 4 },
     { filter: SESSION_FILTER.CLOUD, label: "Cloud", count: 4 },
     {
       filter: PROVIDER_ID.CLAUDE_CODE,
       label: "Claude Code",
-      count: 1,
+      count: 3,
       providerId: PROVIDER_ID.CLAUDE_CODE,
     },
     { filter: PROVIDER_ID.CODEX, label: "Codex", count: 1, providerId: PROVIDER_ID.CODEX },
@@ -426,11 +428,11 @@ test("a filter narrows the list without changing what is tracked", () => {
   );
   assert.deepEqual(
     agent.sessions.map((session) => session.id),
-    ["claude-review"],
+    ["claude-review", "orca-chat-recap", "orca-chat-tests"],
   );
   assert.equal(cloud.filter, SESSION_FILTER.CLOUD);
-  assert.equal(cloud.total, 6);
-  assert.equal(agent.total, 6);
+  assert.equal(cloud.total, 8);
+  assert.equal(agent.total, 8);
 });
 
 test("a filter whose last session has left falls back to showing everything", () => {
@@ -537,6 +539,8 @@ test("the two orderings answer different questions about the same sessions", () 
     urgent.sessions.map((session) => session.id),
     [
       "claude-review",
+      "orca-chat-recap",
+      "orca-chat-tests",
       "codex-bootstrap",
       "conductor-chat-package",
       "conductor-chat-tidy",
@@ -549,6 +553,8 @@ test("the two orderings answer different questions about the same sessions", () 
     [
       "conductor-chat-tidy",
       "conductor-chat-package",
+      "orca-chat-recap",
+      "orca-chat-tests",
       "codex-bootstrap",
       "claude-review",
       "cursor-agent",

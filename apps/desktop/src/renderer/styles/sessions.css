@@ -583,6 +583,18 @@ html[data-keyboard="true"] button.session-row:focus-visible {
   color: var(--text-tertiary);
 }
 
+/* The managing app's mark leads the name that app gave the work — the
+   tray-level echo of the provider mark leading each row. Sized to the name
+   line rather than a row's mark box, and in the manager's own brand colour;
+   Orca is the one manager drawn today, so the colour lives here rather than
+   on a per-manager attribute a second manager would earn. */
+.workspace-manager-mark {
+  width: 17px;
+  height: 11px;
+  flex: 0 0 auto;
+  color: var(--mark-orca);
+}
+
 /* The name grows from a zero basis so it soaks up the line's free space and
    ellipsizes when long, rather than letting the wrap above break the meta or
    an act onto a line of its own. */

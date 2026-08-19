@@ -243,6 +243,21 @@ export interface SessionDetail {
 }
 
 /**
+ * The apps this build knows as workspace managers: tools that arrange other
+ * providers' sessions into worktrees of their own making, annotating rows
+ * rather than owning them. The value is the manager's display name, and the
+ * set is what admits one — a surface draws a manager's mark, so a name
+ * outside the set would claim artwork that does not exist.
+ */
+export const WORKSPACE_MANAGER = {
+  ORCA: "Orca",
+} as const;
+
+export type WorkspaceManagerName = (typeof WORKSPACE_MANAGER)[keyof typeof WORKSPACE_MANAGER];
+
+const WORKSPACE_MANAGER_NAMES = new Set<string>(Object.values(WORKSPACE_MANAGER));
+
+/**
  * The place a provider groups several sessions under — a workspace holding
  * more than one chat. It is identity plus a name, nothing else: the id is what
  * a surface groups rows by and the name is what it titles the group, and a
@@ -254,6 +269,12 @@ export interface SessionDetail {
 export interface SessionWorkspace {
   providerWorkspaceId: string;
   name?: string;
+  /**
+   * The app on this machine that manages the workspace, when the group is
+   * that app's annotation around the sessions rather than the provider's own
+   * nesting — what the tray wears the manager's mark beside its name for.
+   */
+  manager?: WorkspaceManagerName;
 }
 
 /**
@@ -530,7 +551,14 @@ function normalizeWorkspace(workspace: SessionWorkspace | undefined): SessionWor
   );
   if (!providerWorkspaceId) return undefined;
   const name = boundedText(workspace?.name, maximumSessionTitleLength);
-  return { providerWorkspaceId, ...(name ? { name } : {}) };
+  // The manager rides only when it is one this build draws a mark for; a name
+  // outside the set is dropped rather than kept as a mark no surface can draw.
+  const manager = workspace?.manager;
+  return {
+    providerWorkspaceId,
+    ...(name ? { name } : {}),
+    ...(manager !== undefined && WORKSPACE_MANAGER_NAMES.has(manager) ? { manager } : {}),
+  };
 }
 
 /** Normalizes the two-part identity used to locate a session in the registry. */

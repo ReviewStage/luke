@@ -117,6 +117,7 @@ const sameAttention = exhaustiveSame<AttentionDecision>({
 const sameWorkspace = exhaustiveSame<SessionWorkspace>({
   providerWorkspaceId: (first, second) => first.providerWorkspaceId === second.providerWorkspaceId,
   name: (first, second) => first.name === second.name,
+  manager: (first, second) => first.manager === second.manager,
 });
 
 const sameSession = exhaustiveSame<NormalizedSession>({

@@ -1,6 +1,6 @@
 import os from "node:os";
 import path from "node:path";
-import { isRecord, recordFromJsonLine, text, wholeNumber } from "@sidecar/core";
+import { isRecord, recordFromJsonLine, text, WORKSPACE_MANAGER, wholeNumber } from "@sidecar/core";
 import {
   fileStats,
   readTextFile,
@@ -46,8 +46,6 @@ const ORCA_WORK_ITEM_TYPE = {
 
 /** Where Orca puts worktrees when the user has not chosen a different root. */
 const ORCA_DEFAULT_WORKSPACE_ROOT_SEGMENTS = ["orca", "workspaces"] as const;
-
-export const ORCA_MANAGER_NAME = "Orca";
 
 export interface OrcaWorkspaceIndexOptions {
   dataDirectory?: string;
@@ -170,6 +168,7 @@ function annotationsFrom(state: Record<string, unknown>): Map<string, WorkspaceA
               // the session's working directory.
               providerWorkspaceId: worktreePath,
               name,
+              manager: WORKSPACE_MANAGER.ORCA,
             },
           }
         : {}),

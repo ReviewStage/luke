@@ -9,6 +9,8 @@ import {
   SESSION_STATUS,
   type SessionLocation,
   type SessionProvider,
+  WORKSPACE_MANAGER,
+  type WorkspaceManagerName,
 } from "../src";
 import { maximumSessionLinkLength, supportsSessionControl } from "../src/session";
 
@@ -73,6 +75,31 @@ test("a workspace grouping is bounded, and one without an id is dropped whole", 
     }),
   );
   assert.deepEqual(grouped.workspace, { providerWorkspaceId: "workspace-1", name: "lisbon-v2" });
+
+  // A manager this build draws a mark for rides; a name outside the set is
+  // dropped rather than kept as a mark no surface can draw.
+  const managed = registry.upsert(
+    codex,
+    observation("run:managed", 100, {
+      workspace: {
+        providerWorkspaceId: "workspace-2",
+        name: "fix-login",
+        manager: WORKSPACE_MANAGER.ORCA,
+      },
+    }),
+  );
+  assert.equal(managed.workspace?.manager, WORKSPACE_MANAGER.ORCA);
+  const unknownManager = registry.upsert(
+    codex,
+    observation("run:unknown-manager", 100, {
+      workspace: {
+        providerWorkspaceId: "workspace-3",
+        name: "fix-login",
+        manager: "Not A Manager" as WorkspaceManagerName,
+      },
+    }),
+  );
+  assert.equal(unknownManager.workspace?.manager, undefined);
 
   // A workspace no sibling could ever be matched to groups nothing.
   const unidentified = registry.upsert(
