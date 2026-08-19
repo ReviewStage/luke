@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { Effect } from "effect";
 import type { AccountClient } from "../src/account-client";
 import { AccountSessionManager } from "../src/account-session-manager";
 import type { StoredAccount } from "../src/settings-store";
@@ -19,9 +20,11 @@ function manager(options: { stored?: StoredAccount; revoke?: (token: string) => 
   const instance = new AccountSessionManager({
     // SAFETY: Fixture client implements only the AccountClient methods the manager calls.
     client: {
-      revoke: options.revoke ?? (async () => undefined),
-      userInfo: async () => STORED,
-      refresh: async () => ({ accessToken: "new-access", refreshToken: "new-refresh" }),
+      revoke: options.revoke
+        ? (token) => Effect.promise(() => options.revoke?.(token) ?? Promise.resolve())
+        : () => Effect.void,
+      userInfo: () => Effect.succeed(STORED),
+      refresh: () => Effect.succeed({ accessToken: "new-access", refreshToken: "new-refresh" }),
     } as AccountClient,
     store: {
       readAccount: async () => stored,
@@ -40,6 +43,7 @@ function manager(options: { stored?: StoredAccount; revoke?: (token: string) => 
     startCapabilities: async () => events.push("start"),
     stopCapabilities: async () => events.push("stop"),
     onChange: (account) => changes.push(account.status),
+    runEffect: (effect) => Effect.runPromise(effect),
   });
   return { instance, changes, events, stored: () => stored };
 }

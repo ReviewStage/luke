@@ -17,6 +17,7 @@ import {
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceProject,
 } from "@sidecar/core";
+import { Effect } from "effect";
 import { canIgnoreFilesystemError } from "./local-session-adapter";
 import {
   SUPERSET_WORKSPACE_PROVIDER_ID,
@@ -463,8 +464,8 @@ export class SupersetWorkspaceAdapter extends SessionProviderAdapterBase {
     this.#cli = cli;
   }
 
-  async observe(): Promise<readonly never[]> {
-    return [];
+  observe(): Effect.Effect<readonly never[], unknown, unknown> {
+    return Effect.succeed([]);
   }
 
   async refresh(defaultAgent: string | undefined, connected: boolean): Promise<void> {
@@ -491,7 +492,9 @@ export class SupersetWorkspaceAdapter extends SessionProviderAdapterBase {
     return this.#projects;
   }
 
-  override createWorkspace(request: ProviderWorkspaceRequest): Promise<ProviderWorkspaceResult> {
-    return this.#cli.createWorkspace(request);
+  override createWorkspace(
+    request: ProviderWorkspaceRequest,
+  ): Effect.Effect<ProviderWorkspaceResult, unknown, unknown> {
+    return Effect.promise(() => this.#cli.createWorkspace(request));
   }
 }

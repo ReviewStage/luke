@@ -5,6 +5,8 @@ import {
   positiveInteger,
   text,
 } from "@sidecar/core";
+import { Effect } from "effect";
+import { Http } from "./services/http";
 import { unparsedWire } from "./wire-boundary";
 
 const HOSTED_DEFAULTS = {
@@ -13,14 +15,11 @@ const HOSTED_DEFAULTS = {
 
 const UNAUTHORIZED_STATUS = 401;
 
-type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
-
 export interface HostedUsageReaderOptions {
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
-  readAccessToken: () => Promise<string | undefined>;
-  refreshAccount: () => Promise<void>;
-  fetch?: FetchLike;
+  readAccessToken: () => Effect.Effect<string | undefined, never, never>;
+  refreshAccount: () => Effect.Effect<void, never, never>;
   requestTimeoutMs?: number;
 }
 
@@ -38,9 +37,8 @@ function withoutTrailingSlash(value: string): string {
  */
 export class HostedUsageReader {
   readonly #endpoint: string;
-  readonly #readAccessToken: () => Promise<string | undefined>;
-  readonly #refreshAccount: () => Promise<void>;
-  readonly #fetch: FetchLike;
+  readonly #readAccessToken: () => Effect.Effect<string | undefined, never, never>;
+  readonly #refreshAccount: () => Effect.Effect<void, never, never>;
   readonly #requestTimeoutMs: number;
 
   constructor(options: HostedUsageReaderOptions) {
@@ -49,40 +47,49 @@ export class HostedUsageReader {
     this.#endpoint = `${withoutTrailingSlash(baseUrl)}${HOSTED_SERVICE_PATH.USAGE}`;
     this.#readAccessToken = options.readAccessToken;
     this.#refreshAccount = options.refreshAccount;
-    this.#fetch = options.fetch ?? ((input, init) => fetch(input, init));
     this.#requestTimeoutMs = positiveInteger(
       options.requestTimeoutMs,
       HOSTED_DEFAULTS.REQUEST_TIMEOUT_MS,
     );
   }
 
-  async read(): Promise<HostedUsageAnswer | undefined> {
-    const token = await this.#readAccessToken();
-    if (!token) return undefined;
+  read(): Effect.Effect<HostedUsageAnswer | undefined, never, Http> {
+    return Effect.gen(this, function* () {
+      const token = yield* this.#readAccessToken();
+      if (!token) return undefined;
 
-    let response = await this.#request(token);
-    if (response?.status === UNAUTHORIZED_STATUS) {
-      await this.#refreshAccount().catch(() => undefined);
-      const refreshed = await this.#readAccessToken();
-      if (refreshed && refreshed !== token) {
-        response = await this.#request(refreshed);
+      let response = yield* this.#request(token);
+      if (response?.status === UNAUTHORIZED_STATUS) {
+        yield* this.#refreshAccount().pipe(Effect.catchAll(() => Effect.void));
+        const refreshed = yield* this.#readAccessToken();
+        if (refreshed && refreshed !== token) {
+          response = yield* this.#request(refreshed);
+        }
       }
-    }
-    if (!response?.ok) return undefined;
+      if (!response?.ok) return undefined;
 
-    const payload = await response.json().catch(() => undefined);
-    return payload === undefined ? undefined : hostedUsageAnswerFromWire(unparsedWire(payload));
+      const http = yield* Http;
+      const payload = yield* http
+        .readJson(response)
+        .pipe(Effect.catchAll(() => Effect.succeed(undefined)));
+      return payload === undefined
+        ? undefined
+        : hostedUsageAnswerFromWire(
+            unparsedWire(payload as import("./wire-boundary").WireBoundaryInput),
+          );
+    });
   }
 
-  async #request(token: string): Promise<Response | undefined> {
-    try {
-      return await this.#fetch(this.#endpoint, {
-        method: "GET",
-        headers: { authorization: `Bearer ${token}` },
-        signal: AbortSignal.timeout(this.#requestTimeoutMs),
-      });
-    } catch {
-      return undefined;
-    }
+  #request(token: string): Effect.Effect<Response | undefined, never, Http> {
+    return Effect.gen(this, function* () {
+      const http = yield* Http;
+      return yield* http
+        .request(this.#endpoint, {
+          method: "GET",
+          headers: { authorization: `Bearer ${token}` },
+          signal: AbortSignal.timeout(this.#requestTimeoutMs),
+        })
+        .pipe(Effect.catchAll(() => Effect.succeed(undefined)));
+    });
   }
 }

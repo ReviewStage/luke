@@ -1,5 +1,6 @@
 import path from "node:path";
 import { PROVIDER_ID, type ProviderSessionObservation, type WireRecord } from "@sidecar/core";
+import { Effect } from "effect";
 import { readDirectory } from "./local-session-adapter";
 import {
   canIgnoreSqliteError,
@@ -196,51 +197,53 @@ export class SupersetWorkspaceReader {
     this.#sqlite = options.sqlite ?? defaultSqliteModule;
   }
 
-  async read(): Promise<SupersetWorkspaceSnapshot> {
-    const hostDirectory = path.join(this.#homeDirectory, "host");
-    const entries = await readDirectory(hostDirectory);
-    const contexts = (
-      await Promise.all(
+  read(): Effect.Effect<SupersetWorkspaceSnapshot, unknown, import("./services/files").Files> {
+    return Effect.gen(this, function* () {
+      const hostDirectory = path.join(this.#homeDirectory, "host");
+      const entries = yield* readDirectory(hostDirectory);
+      const contexts = (yield* Effect.all(
         entries
           .filter((entry) => entry.isDirectory())
           .map((entry) =>
             this.#readHost(entry.name, path.join(hostDirectory, entry.name, "host.db")),
           ),
-      )
-    ).flat();
-    return new SupersetWorkspaceSnapshot(contexts);
+      )).flat();
+      return new SupersetWorkspaceSnapshot(contexts);
+    });
   }
 
-  async #readHost(
+  #readHost(
     hostId: string,
     databasePath: string,
-  ): Promise<readonly SupersetSessionContext[]> {
-    const database = await openReadOnlyDatabase(this.#sqlite, databasePath);
-    if (!database) return [];
-    try {
-      const spawnableAgents = database
-        .prepare(SUPERSET_AGENT_QUERY)
-        .all()
-        .flatMap((value) => {
-          const row = wireRecord(value);
-          if (!row) return [];
-          const presetId = textFromRow(row, "preset_id");
-          return presetId ? [presetId] : [];
-        });
-      return database
-        .prepare(SUPERSET_WORKSPACE_QUERY)
-        .all()
-        .flatMap((value) => {
-          const row = wireRecord(value);
-          if (!row) return [];
-          const context = contextFromRow(hostId, row, spawnableAgents);
-          return context ? [context] : [];
-        });
-    } catch (error) {
-      if (error instanceof Error && canIgnoreSqliteError(error)) return [];
-      throw error;
-    } finally {
-      database.close();
-    }
+  ): Effect.Effect<readonly SupersetSessionContext[], unknown, import("./services/files").Files> {
+    return Effect.gen(this, function* () {
+      const database = yield* openReadOnlyDatabase(this.#sqlite, databasePath);
+      if (!database) return [];
+      try {
+        const spawnableAgents = database
+          .prepare(SUPERSET_AGENT_QUERY)
+          .all()
+          .flatMap((value) => {
+            const row = wireRecord(value);
+            if (!row) return [];
+            const presetId = textFromRow(row, "preset_id");
+            return presetId ? [presetId] : [];
+          });
+        return database
+          .prepare(SUPERSET_WORKSPACE_QUERY)
+          .all()
+          .flatMap((value) => {
+            const row = wireRecord(value);
+            if (!row) return [];
+            const context = contextFromRow(hostId, row, spawnableAgents);
+            return context ? [context] : [];
+          });
+      } catch (error) {
+        if (error instanceof Error && canIgnoreSqliteError(error)) return [];
+        throw error;
+      } finally {
+        database.close();
+      }
+    });
   }
 }

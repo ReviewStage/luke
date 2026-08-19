@@ -8,6 +8,8 @@ import {
   type SessionStatus,
   type WireRecord,
 } from "@sidecar/core";
+import type { CloudFailure } from "@sidecar/core/effect-errors";
+import { Effect } from "effect";
 import {
   type CloudAdapterOptions,
   type CloudRequest,
@@ -19,6 +21,7 @@ import {
   textFromRecord,
   timestampFromRecord,
 } from "./cloud-session-adapter";
+import type { Http } from "./services/http";
 import { CREDENTIAL_PROVIDER_ID, CREDENTIAL_PROVIDERS } from "./shared/credential-providers";
 
 // Shared with the credential registry so the key the user saves and the
@@ -240,23 +243,25 @@ export class CopilotSessionAdapter extends CloudSessionAdapter {
     return COPILOT_REQUEST_HEADERS satisfies Readonly<Record<string, string>>;
   }
 
-  protected async collect(
+  protected collect(
     request: CloudRequest,
     now: number,
-  ): Promise<readonly ProviderSessionObservation[]> {
-    // One call per pass. The list projection already carries the state, the
-    // timestamps, and the task's own addresses, so there is nothing a
-    // per-task read would add. Tasks are never aged out or capped — one page
-    // of the documented maximum is the request's only bound.
-    const body = await request(COPILOT_ROUTE.TASKS, {
-      [COPILOT_QUERY.PER_PAGE]: String(COPILOT_ADAPTER_DEFAULTS.TASK_PAGE_SIZE),
-    });
+  ): Effect.Effect<readonly ProviderSessionObservation[], CloudFailure, Http> {
+    return Effect.gen(this, function* () {
+      // One call per pass. The list projection already carries the state, the
+      // timestamps, and the task's own addresses, so there is nothing a
+      // per-task read would add. Tasks are never aged out or capped — one page
+      // of the documented maximum is the request's only bound.
+      const body = yield* request(COPILOT_ROUTE.TASKS, {
+        [COPILOT_QUERY.PER_PAGE]: String(COPILOT_ADAPTER_DEFAULTS.TASK_PAGE_SIZE),
+      });
 
-    return recordsFromPage(body, COPILOT_FIELD.TASKS)
-      .map(taskFromRecord)
-      .filter(isDefined)
-      .sort((first, second) => second.observedAt - first.observedAt)
-      .map((task) => this.#observationFor(task, now));
+      return recordsFromPage(body, COPILOT_FIELD.TASKS)
+        .map(taskFromRecord)
+        .filter(isDefined)
+        .sort((first, second) => second.observedAt - first.observedAt)
+        .map((task) => this.#observationFor(task, now));
+    });
   }
 
   #observationFor(task: CopilotTask, now: number): ProviderSessionObservation {

@@ -6,6 +6,7 @@ import {
   SessionAttentionReviewer,
   type SessionIdentity,
 } from "@sidecar/core";
+import { Effect } from "effect";
 import { HostedAttentionEvaluator } from "./hosted-attention-evaluator";
 import { HostedRealtimeCredentialMinter } from "./hosted-realtime-credentials";
 import { HostedUsageReader } from "./hosted-usage";
@@ -57,7 +58,7 @@ interface VoiceSettings {
   readVoiceSource(): Promise<VoiceSource>;
   readApiKey(providerId: typeof VOICE_CREDENTIAL_PROVIDER_ID): Promise<string | undefined>;
   get<Field extends AppSettingField>(field: Field): Promise<AppSettingValue<Field>>;
-  readAccount(): Promise<{ accessToken: string } | undefined>;
+  readAccount(): Effect.Effect<{ accessToken: string } | undefined>;
 }
 
 export interface VoiceCapabilityAssemblerOptions {
@@ -65,7 +66,7 @@ export interface VoiceCapabilityAssemblerOptions {
   credentialsUsable: () => boolean;
   accountSignedIn: () => boolean;
   hostedServiceBaseUrl: string;
-  refreshAccount: () => Promise<void>;
+  refreshAccount: () => Effect.Effect<void>;
   currentSession: (identity: SessionIdentity) => NormalizedSession | undefined;
   noticeRequestFor: (identity: SessionIdentity) => string | undefined;
   fetch?: typeof fetch;
@@ -124,9 +125,9 @@ export class VoiceCapabilityAssembler {
     });
     const seams = {
       serviceBaseUrl: this.#options.hostedServiceBaseUrl,
-      readAccessToken: async () => (await this.#options.settings.readAccount())?.accessToken,
+      readAccessToken: () =>
+        this.#options.settings.readAccount().pipe(Effect.map((account) => account?.accessToken)),
       refreshAccount: this.#options.refreshAccount,
-      ...(this.#options.fetch ? { fetch: this.#options.fetch } : undefined),
     };
     const evaluator = apiKey
       ? openAiAttentionEvaluator(apiKey)

@@ -15,6 +15,8 @@ import {
   type WorkspaceAgentSelection,
   type WorkspaceProject,
 } from "@sidecar/core";
+import type { CloudFailure } from "@sidecar/core/effect-errors";
+import { Effect } from "effect";
 import {
   type CloudAdapterOptions,
   type CloudRequest,
@@ -27,6 +29,7 @@ import {
   textFromRecord,
   timestampFromRecord,
 } from "./cloud-session-adapter";
+import type { Http } from "./services/http";
 import { CREDENTIAL_PROVIDER_ID, CREDENTIAL_PROVIDERS } from "./shared/credential-providers";
 import { isListedWorkspaceAgentModel, workspaceAgentModels } from "./shared/workspace-agents";
 
@@ -502,227 +505,239 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
     return route;
   }
 
-  protected async collect(
+  protected collect(
     request: CloudRequest,
     now: number,
-  ): Promise<readonly ProviderSessionObservation[]> {
-    const userId = await this.#identity(request);
-    if (!userId) return [];
+  ): Effect.Effect<readonly ProviderSessionObservation[], CloudFailure, Http> {
+    return Effect.gen(this, function* () {
+      const userId = yield* this.#identity(request);
+      if (!userId) return [];
 
-    // Every fan-out below is bounded by the page sizes in
-    // CONDUCTOR_ADAPTER_DEFAULTS — one page of workspaces per project, one
-    // page of chats per workspace — and workspaces and chats are never
-    // capped beyond that: a conversation is never dropped to spare a request.
-    const projects = await this.#listProjects(request);
-    this.#projects = projects;
-    const workspaces = (
-      await Promise.all(
+      // Every fan-out below is bounded by the page sizes in
+      // CONDUCTOR_ADAPTER_DEFAULTS — one page of workspaces per project, one
+      // page of chats per workspace — and workspaces and chats are never
+      // capped beyond that: a conversation is never dropped to spare a request.
+      const projects = yield* this.#listProjects(request);
+      this.#projects = projects;
+      const workspaces = (yield* Effect.all(
         projects.map((project) =>
           this.tolerateItemFailure(() => this.#listWorkspaces(request, project)),
         ),
-      )
-    )
-      .filter(isDefined)
-      .flat()
-      // Conductor does not attribute a workspace Luke can prove belongs to this
-      // user unless it reports a creator, and unattributed org workspaces stay
-      // out of a personal sidecar.
-      .filter((workspace) => workspace.creatorId === userId)
-      .sort((first, second) => second.lastActivityAt - first.lastActivityAt);
+        { concurrency: "unbounded" },
+      ))
+        .filter(isDefined)
+        .flat()
+        // Conductor does not attribute a workspace Luke can prove belongs to this
+        // user unless it reports a creator, and unattributed org workspaces stay
+        // out of a personal sidecar.
+        .filter((workspace) => workspace.creatorId === userId)
+        .sort((first, second) => second.lastActivityAt - first.lastActivityAt);
 
-    // Conductor's listing keeps a filed-away workspace in the page without
-    // marking it — only the lifecycle endpoint says it was archived — so the
-    // lifecycle reads come before the session listings, one per listed
-    // workspace, and a workspace standing archived or deleted is dropped
-    // here, before its chats are ever asked for. This is what makes a press
-    // of the archive control actually clear the rows it acted on. A
-    // lifecycle that could not be read keeps its workspace: a transient
-    // failure costs that workspace's activity words and failure message,
-    // never its rows.
-    const workspaceLifecycles = new Map(
-      (
-        await Promise.all(
-          workspaces.map(async (workspace) => {
-            const lifecycle = await this.tolerateItemFailure(() =>
-              this.#workspaceLifecycle(request, workspace.id),
-            );
-            return lifecycle ? ([workspace.id, lifecycle] as const) : undefined;
-          }),
-        )
-      ).filter(isDefined),
-    );
-    const openWorkspaces = workspaces.filter((workspace) => {
-      const lifecycleStatus = workspaceLifecycles.get(workspace.id)?.status;
-      return !lifecycleStatus || !CONDUCTOR_RETIRED_WORKSPACE_STATUSES.has(lifecycleStatus);
-    });
+      // Conductor's listing keeps a filed-away workspace in the page without
+      // marking it — only the lifecycle endpoint says it was archived — so the
+      // lifecycle reads come before the session listings, one per listed
+      // workspace, and a workspace standing archived or deleted is dropped
+      // here, before its chats are ever asked for. This is what makes a press
+      // of the archive control actually clear the rows it acted on. A
+      // lifecycle that could not be read keeps its workspace: a transient
+      // failure costs that workspace's activity words and failure message,
+      // never its rows.
+      const workspaceLifecycles = new Map(
+        (yield* Effect.all(
+          workspaces.map((workspace) =>
+            Effect.gen(this, function* () {
+              const lifecycle = yield* this.tolerateItemFailure(() =>
+                this.#workspaceLifecycle(request, workspace.id),
+              );
+              return lifecycle ? ([workspace.id, lifecycle] as const) : undefined;
+            }),
+          ),
+          { concurrency: "unbounded" },
+        )).filter(isDefined),
+      );
+      const openWorkspaces = workspaces.filter((workspace) => {
+        const lifecycleStatus = workspaceLifecycles.get(workspace.id)?.status;
+        return !lifecycleStatus || !CONDUCTOR_RETIRED_WORKSPACE_STATUSES.has(lifecycleStatus);
+      });
 
-    const sessions = (
-      await Promise.all(
+      const sessions = (yield* Effect.all(
         openWorkspaces.map((workspace) =>
           this.tolerateItemFailure(() => this.#listSessions(request, workspace)),
         ),
-      )
-    )
-      .filter(isDefined)
-      .flat();
+        { concurrency: "unbounded" },
+      ))
+        .filter(isDefined)
+        .flat();
 
-    // The transcripts read rides beside the status reads: one bounded query
-    // for every observed session, so a failed or missing answer costs a recap
-    // and an agent kind, never the pass. That holds even for a credential
-    // refusal: a key an org scopes away from the query endpoint alone still
-    // reads the roster, and the roster reads above are what judge the
-    // credential — so this one read swallows everything rather than letting
-    // an enrichment 403 clear every observed row.
-    const [transcripts, reportedStatuses] = await Promise.all([
-      this.#sessionTranscripts(request, sessions).catch(() => undefined),
-      Promise.all(
-        sessions.map((session) =>
-          this.tolerateItemFailure(() => this.#sessionStatus(request, session.id)),
+      // The transcripts read rides beside the status reads: one bounded query
+      // for every observed session, so a failed or missing answer costs a recap
+      // and an agent kind, never the pass. That holds even for a credential
+      // refusal: a key an org scopes away from the query endpoint alone still
+      // reads the roster, and the roster reads above are what judge the
+      // credential — so this one read swallows everything rather than letting
+      // an enrichment 403 clear every observed row.
+      const [transcripts, reportedStatuses] = yield* Effect.all([
+        this.#sessionTranscripts(request, sessions).pipe(
+          Effect.catchAll(() => Effect.succeed(undefined)),
         ),
-      ),
-    ]);
-
-    // The workspaces every observed chat of which was positively seen settled
-    // — reporting idle or errored — judged from this pass's own statuses. An
-    // archive is a workspace-level act, so it is offered only for these: a
-    // chat still working, and just as much one whose status could not be read
-    // at all, keeps the whole workspace off the list, because filing away a
-    // workspace whose state Luke has not actually seen stop could take a live
-    // turn with it. The chats already filed away never reached this pass, so
-    // they neither settle a workspace nor hold one open.
-    const settledWorkspaceIds = new Set(sessions.map((session) => session.workspace.id));
-    sessions.forEach((session, index) => {
-      const settled =
-        reportedStatuses[index]?.status === CONDUCTOR_SESSION_STATUS.IDLE ||
-        reportedStatuses[index]?.status === CONDUCTOR_SESSION_STATUS.ERROR;
-      if (!settled) settledWorkspaceIds.delete(session.workspace.id);
-    });
-
-    // One row per chat, each grouped under its workspace. The grouping names
-    // the workspace once, which leaves each chat free to say what it alone is
-    // doing, be opened where it alone lives, and take the message meant for it
-    // rather than for whichever sibling most needed a person.
-    return sessions
-      .map((session, index) =>
-        this.#observationFor(
-          session,
-          reportedStatuses[index],
-          transcripts?.get(session.id),
-          workspaceLifecycles.get(session.workspace.id),
-          settledWorkspaceIds,
-          now,
+        Effect.all(
+          sessions.map((session) =>
+            this.tolerateItemFailure(() => this.#sessionStatus(request, session.id)),
+          ),
+          { concurrency: "unbounded" },
         ),
-      )
-      .filter(isDefined);
-  }
+      ]);
 
-  async #identity(request: CloudRequest): Promise<string | undefined> {
-    if (this.#userId) return this.#userId;
-    const body = await request(CONDUCTOR_ROUTE.IDENTITY);
-    this.#userId = textFromRecord(body, CONDUCTOR_FIELD.USER_ID);
-    return this.#userId;
-  }
+      // The workspaces every observed chat of which was positively seen settled
+      // — reporting idle or errored — judged from this pass's own statuses. An
+      // archive is a workspace-level act, so it is offered only for these: a
+      // chat still working, and just as much one whose status could not be read
+      // at all, keeps the whole workspace off the list, because filing away a
+      // workspace whose state Luke has not actually seen stop could take a live
+      // turn with it. The chats already filed away never reached this pass, so
+      // they neither settle a workspace nor hold one open.
+      const settledWorkspaceIds = new Set(sessions.map((session) => session.workspace.id));
+      sessions.forEach((session, index) => {
+        const settled =
+          reportedStatuses[index]?.status === CONDUCTOR_SESSION_STATUS.IDLE ||
+          reportedStatuses[index]?.status === CONDUCTOR_SESSION_STATUS.ERROR;
+        if (!settled) settledWorkspaceIds.delete(session.workspace.id);
+      });
 
-  async #listProjects(request: CloudRequest): Promise<ConductorProject[]> {
-    const body = await request(CONDUCTOR_ROUTE.PROJECTS, {
-      [CONDUCTOR_QUERY.LIMIT]: String(CONDUCTOR_ADAPTER_DEFAULTS.MAXIMUM_PROJECTS),
+      // One row per chat, each grouped under its workspace. The grouping names
+      // the workspace once, which leaves each chat free to say what it alone is
+      // doing, be opened where it alone lives, and take the message meant for it
+      // rather than for whichever sibling most needed a person.
+      return sessions
+        .map((session, index) =>
+          this.#observationFor(
+            session,
+            reportedStatuses[index],
+            transcripts?.get(session.id),
+            workspaceLifecycles.get(session.workspace.id),
+            settledWorkspaceIds,
+            now,
+          ),
+        )
+        .filter(isDefined);
     });
-    return recordsFromPage(body, CONDUCTOR_FIELD.DATA)
-      .map((record): ConductorProject | undefined => {
-        const id = textFromRecord(record, CONDUCTOR_FIELD.ID);
-        return id
-          ? {
-              id,
-              repositoryLabel: repositoryLabel(
-                textFromRecord(record, CONDUCTOR_FIELD.GIT_REMOTE),
-                textFromRecord(record, CONDUCTOR_FIELD.NAME),
-              ),
-            }
-          : undefined;
-      })
-      .filter(isDefined)
-      .slice(0, CONDUCTOR_ADAPTER_DEFAULTS.MAXIMUM_PROJECTS);
   }
 
-  async #listWorkspaces(
+  #identity(request: CloudRequest): Effect.Effect<string | undefined, CloudFailure, Http> {
+    return Effect.gen(this, function* () {
+      if (this.#userId) return this.#userId;
+      const body = yield* request(CONDUCTOR_ROUTE.IDENTITY);
+      this.#userId = textFromRecord(body, CONDUCTOR_FIELD.USER_ID);
+      return this.#userId;
+    });
+  }
+
+  #listProjects(request: CloudRequest): Effect.Effect<ConductorProject[], CloudFailure, Http> {
+    return Effect.gen(function* () {
+      const body = yield* request(CONDUCTOR_ROUTE.PROJECTS, {
+        [CONDUCTOR_QUERY.LIMIT]: String(CONDUCTOR_ADAPTER_DEFAULTS.MAXIMUM_PROJECTS),
+      });
+      return recordsFromPage(body, CONDUCTOR_FIELD.DATA)
+        .map((record): ConductorProject | undefined => {
+          const id = textFromRecord(record, CONDUCTOR_FIELD.ID);
+          return id
+            ? {
+                id,
+                repositoryLabel: repositoryLabel(
+                  textFromRecord(record, CONDUCTOR_FIELD.GIT_REMOTE),
+                  textFromRecord(record, CONDUCTOR_FIELD.NAME),
+                ),
+              }
+            : undefined;
+        })
+        .filter(isDefined)
+        .slice(0, CONDUCTOR_ADAPTER_DEFAULTS.MAXIMUM_PROJECTS);
+    });
+  }
+
+  #listWorkspaces(
     request: CloudRequest,
     project: ConductorProject,
-  ): Promise<ConductorWorkspace[]> {
-    const body = await request(
-      [...CONDUCTOR_ROUTE.PROJECTS, project.id, CONDUCTOR_ROUTE_SEGMENT.WORKSPACES],
-      { [CONDUCTOR_QUERY.LIMIT]: String(CONDUCTOR_ADAPTER_DEFAULTS.WORKSPACE_PAGE_SIZE) },
-    );
-    return recordsFromPage(body, CONDUCTOR_FIELD.DATA)
-      .map((record): ConductorWorkspace | undefined => {
-        const id = textFromRecord(record, CONDUCTOR_FIELD.ID);
-        const lastActivityAt =
-          timestampFromRecord(record, CONDUCTOR_FIELD.LAST_ACTIVITY_AT) ??
-          timestampFromRecord(record, CONDUCTOR_FIELD.CREATED_AT);
-        if (!id || lastActivityAt === undefined) return undefined;
-        // Conductor's listing does not mark a filed-away workspace today —
-        // the lifecycle read in the collect pass is what drops those — but a
-        // record that does carry an archive timestamp is honored without
-        // waiting for that read.
-        if (timestampFromRecord(record, CONDUCTOR_FIELD.ARCHIVED_AT) !== undefined) {
-          return undefined;
-        }
-        const creatorId = textFromRecord(record, CONDUCTOR_FIELD.CREATOR_ID);
-        const name = textFromRecord(record, CONDUCTOR_FIELD.NAME)?.slice(
-          0,
-          maximumSessionTitleLength,
-        );
-        return {
-          id,
-          repositoryLabel: project.repositoryLabel,
-          lastActivityAt,
-          ...(name ? { name } : undefined),
-          ...(creatorId ? { creatorId } : undefined),
-        };
-      })
-      .filter(isDefined);
+  ): Effect.Effect<ConductorWorkspace[], CloudFailure, Http> {
+    return Effect.gen(function* () {
+      const body = yield* request(
+        [...CONDUCTOR_ROUTE.PROJECTS, project.id, CONDUCTOR_ROUTE_SEGMENT.WORKSPACES],
+        { [CONDUCTOR_QUERY.LIMIT]: String(CONDUCTOR_ADAPTER_DEFAULTS.WORKSPACE_PAGE_SIZE) },
+      );
+      return recordsFromPage(body, CONDUCTOR_FIELD.DATA)
+        .map((record): ConductorWorkspace | undefined => {
+          const id = textFromRecord(record, CONDUCTOR_FIELD.ID);
+          const lastActivityAt =
+            timestampFromRecord(record, CONDUCTOR_FIELD.LAST_ACTIVITY_AT) ??
+            timestampFromRecord(record, CONDUCTOR_FIELD.CREATED_AT);
+          if (!id || lastActivityAt === undefined) return undefined;
+          // Conductor's listing does not mark a filed-away workspace today —
+          // the lifecycle read in the collect pass is what drops those — but a
+          // record that does carry an archive timestamp is honored without
+          // waiting for that read.
+          if (timestampFromRecord(record, CONDUCTOR_FIELD.ARCHIVED_AT) !== undefined) {
+            return undefined;
+          }
+          const creatorId = textFromRecord(record, CONDUCTOR_FIELD.CREATOR_ID);
+          const name = textFromRecord(record, CONDUCTOR_FIELD.NAME)?.slice(
+            0,
+            maximumSessionTitleLength,
+          );
+          return {
+            id,
+            repositoryLabel: project.repositoryLabel,
+            lastActivityAt,
+            ...(name ? { name } : undefined),
+            ...(creatorId ? { creatorId } : undefined),
+          };
+        })
+        .filter(isDefined);
+    });
   }
 
-  async #listSessions(
+  #listSessions(
     request: CloudRequest,
     workspace: ConductorWorkspace,
-  ): Promise<ConductorSession[]> {
-    const body = await request(
-      [
-        CONDUCTOR_ROUTE_SEGMENT.V0,
-        CONDUCTOR_ROUTE_SEGMENT.WORKSPACES,
-        workspace.id,
-        CONDUCTOR_ROUTE_SEGMENT.SESSIONS,
-      ],
-      { [CONDUCTOR_QUERY.LIMIT]: String(CONDUCTOR_ADAPTER_DEFAULTS.SESSION_PAGE_SIZE) },
-    );
-    return recordsFromPage(body, CONDUCTOR_FIELD.DATA)
-      .map((record): ConductorSession | undefined => {
-        const id = textFromRecord(record, CONDUCTOR_FIELD.ID);
-        if (!id) return undefined;
-        // Conductor's listing already leaves an archived chat off the page,
-        // but one that arrives carrying an archive timestamp is dropped all
-        // the same, before its status or transcript is ever asked for. Its
-        // workspace stays, carrying only the chats still open.
-        if (timestampFromRecord(record, CONDUCTOR_FIELD.ARCHIVED_AT) !== undefined) {
-          return undefined;
-        }
-        const model = modelLabel(record);
-        const deepLink = textFromRecord(record, CONDUCTOR_FIELD.DEEP_LINK);
-        // The chat's own name tells it from its siblings; the workspace's
-        // name belongs to the group.
-        const name = textFromRecord(record, CONDUCTOR_FIELD.NAME)?.slice(
-          0,
-          maximumSessionTitleLength,
-        );
-        return {
-          id,
-          workspace,
-          ...(name ? { name } : undefined),
-          ...(model ? { model } : undefined),
-          ...(deepLink ? { deepLink } : undefined),
-        };
-      })
-      .filter(isDefined);
+  ): Effect.Effect<ConductorSession[], CloudFailure, Http> {
+    return Effect.gen(function* () {
+      const body = yield* request(
+        [
+          CONDUCTOR_ROUTE_SEGMENT.V0,
+          CONDUCTOR_ROUTE_SEGMENT.WORKSPACES,
+          workspace.id,
+          CONDUCTOR_ROUTE_SEGMENT.SESSIONS,
+        ],
+        { [CONDUCTOR_QUERY.LIMIT]: String(CONDUCTOR_ADAPTER_DEFAULTS.SESSION_PAGE_SIZE) },
+      );
+      return recordsFromPage(body, CONDUCTOR_FIELD.DATA)
+        .map((record): ConductorSession | undefined => {
+          const id = textFromRecord(record, CONDUCTOR_FIELD.ID);
+          if (!id) return undefined;
+          // Conductor's listing already leaves an archived chat off the page,
+          // but one that arrives carrying an archive timestamp is dropped all
+          // the same, before its status or transcript is ever asked for. Its
+          // workspace stays, carrying only the chats still open.
+          if (timestampFromRecord(record, CONDUCTOR_FIELD.ARCHIVED_AT) !== undefined) {
+            return undefined;
+          }
+          const model = modelLabel(record);
+          const deepLink = textFromRecord(record, CONDUCTOR_FIELD.DEEP_LINK);
+          // The chat's own name tells it from its siblings; the workspace's
+          // name belongs to the group.
+          const name = textFromRecord(record, CONDUCTOR_FIELD.NAME)?.slice(
+            0,
+            maximumSessionTitleLength,
+          );
+          return {
+            id,
+            workspace,
+            ...(name ? { name } : undefined),
+            ...(model ? { model } : undefined),
+            ...(deepLink ? { deepLink } : undefined),
+          };
+        })
+        .filter(isDefined);
+    });
   }
 
   protected override workspaceAgentRoute(
@@ -909,34 +924,39 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
     );
   }
 
-  async #sessionStatus(request: CloudRequest, sessionId: string): Promise<ConductorReportedStatus> {
-    const body = await request([
-      CONDUCTOR_ROUTE_SEGMENT.V0,
-      CONDUCTOR_ROUTE_SEGMENT.SESSIONS,
-      sessionId,
-      CONDUCTOR_ROUTE_SEGMENT.STATUS,
-    ]);
-    // A session that failed says why. `lastError` is the
-    // last failure this session ever had rather than its current state, so both
-    // are read only while the session is actually reporting an error: otherwise
-    // a chat that recovered hours ago would keep showing the failure it
-    // recovered from, ahead of whatever it is really doing.
-    const status = knownValue(
-      CONDUCTOR_SESSION_STATUS,
-      textFromRecord(body, CONDUCTOR_FIELD.STATUS),
-    );
-    const errorMessage =
-      status === CONDUCTOR_SESSION_STATUS.ERROR
-        ? (
-            textFromRecord(body, CONDUCTOR_FIELD.ERROR_MESSAGE) ??
-            textFromRecord(body, CONDUCTOR_FIELD.LAST_ERROR)
-          )?.slice(0, CONDUCTOR_ADAPTER_DEFAULTS.MAXIMUM_ERROR_LENGTH)
-        : undefined;
-    return {
-      status,
-      updatedAt: timestampFromRecord(body, CONDUCTOR_FIELD.UPDATED_AT),
-      ...(errorMessage ? { errorMessage } : undefined),
-    };
+  #sessionStatus(
+    request: CloudRequest,
+    sessionId: string,
+  ): Effect.Effect<ConductorReportedStatus, CloudFailure, Http> {
+    return Effect.gen(function* () {
+      const body = yield* request([
+        CONDUCTOR_ROUTE_SEGMENT.V0,
+        CONDUCTOR_ROUTE_SEGMENT.SESSIONS,
+        sessionId,
+        CONDUCTOR_ROUTE_SEGMENT.STATUS,
+      ]);
+      // A session that failed says why. `lastError` is the
+      // last failure this session ever had rather than its current state, so both
+      // are read only while the session is actually reporting an error: otherwise
+      // a chat that recovered hours ago would keep showing the failure it
+      // recovered from, ahead of whatever it is really doing.
+      const status = knownValue(
+        CONDUCTOR_SESSION_STATUS,
+        textFromRecord(body, CONDUCTOR_FIELD.STATUS),
+      );
+      const errorMessage =
+        status === CONDUCTOR_SESSION_STATUS.ERROR
+          ? (
+              textFromRecord(body, CONDUCTOR_FIELD.ERROR_MESSAGE) ??
+              textFromRecord(body, CONDUCTOR_FIELD.LAST_ERROR)
+            )?.slice(0, CONDUCTOR_ADAPTER_DEFAULTS.MAXIMUM_ERROR_LENGTH)
+          : undefined;
+      return {
+        status,
+        updatedAt: timestampFromRecord(body, CONDUCTOR_FIELD.UPDATED_AT),
+        ...(errorMessage ? { errorMessage } : undefined),
+      };
+    });
   }
 
   /**
@@ -946,28 +966,30 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
    * carries is the one thing that says a workspace never came up at all —
    * nothing else reports it, because every chat inside just reads idle.
    */
-  async #workspaceLifecycle(
+  #workspaceLifecycle(
     request: CloudRequest,
     workspaceId: string,
-  ): Promise<ConductorWorkspaceLifecycle> {
-    const body = await request([
-      CONDUCTOR_ROUTE_SEGMENT.V0,
-      CONDUCTOR_ROUTE_SEGMENT.WORKSPACES,
-      workspaceId,
-      CONDUCTOR_ROUTE_SEGMENT.STATUS,
-    ]);
-    const status = knownValue(
-      CONDUCTOR_WORKSPACE_STATUS,
-      textFromRecord(body, CONDUCTOR_FIELD.STATUS),
-    );
-    const errorMessage = textFromRecord(body, CONDUCTOR_FIELD.ERROR_MESSAGE)?.slice(
-      0,
-      CONDUCTOR_ADAPTER_DEFAULTS.MAXIMUM_ERROR_LENGTH,
-    );
-    return {
-      ...(status ? { status } : undefined),
-      ...(errorMessage ? { errorMessage } : undefined),
-    };
+  ): Effect.Effect<ConductorWorkspaceLifecycle, CloudFailure, Http> {
+    return Effect.gen(function* () {
+      const body = yield* request([
+        CONDUCTOR_ROUTE_SEGMENT.V0,
+        CONDUCTOR_ROUTE_SEGMENT.WORKSPACES,
+        workspaceId,
+        CONDUCTOR_ROUTE_SEGMENT.STATUS,
+      ]);
+      const status = knownValue(
+        CONDUCTOR_WORKSPACE_STATUS,
+        textFromRecord(body, CONDUCTOR_FIELD.STATUS),
+      );
+      const errorMessage = textFromRecord(body, CONDUCTOR_FIELD.ERROR_MESSAGE)?.slice(
+        0,
+        CONDUCTOR_ADAPTER_DEFAULTS.MAXIMUM_ERROR_LENGTH,
+      );
+      return {
+        ...(status ? { status } : undefined),
+        ...(errorMessage ? { errorMessage } : undefined),
+      };
+    });
   }
 
   /**
@@ -977,34 +999,36 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
    * id that is anything else is a shape this build does not know, so it is
    * left out rather than sent — and with none there is no read at all.
    */
-  async #sessionTranscripts(
+  #sessionTranscripts(
     request: CloudRequest,
     sessions: readonly ConductorSession[],
-  ): Promise<ReadonlyMap<string, ConductorTranscript>> {
-    const transcripts = new Map<string, ConductorTranscript>();
-    const ids = sessions.map((session) => session.id).filter((id) => UUID_PATTERN.test(id));
-    if (ids.length === 0) return transcripts;
+  ): Effect.Effect<ReadonlyMap<string, ConductorTranscript>, CloudFailure, Http> {
+    return Effect.gen(function* () {
+      const transcripts = new Map<string, ConductorTranscript>();
+      const ids = sessions.map((session) => session.id).filter((id) => UUID_PATTERN.test(id));
+      if (ids.length === 0) return transcripts;
 
-    const document = `${CONDUCTOR_READ_TRANSCRIPT_TAILS_PREFIX}${ids
-      .map((id) => `'${id}'`)
-      .join(", ")}${CONDUCTOR_READ_TRANSCRIPT_TAILS_SUFFIX}`;
-    const body = await request(CONDUCTOR_ROUTE.SQL, undefined, { document });
-    for (const row of recordsFromPage(body, CONDUCTOR_SQL_FIELD.ROWS)) {
-      const sessionId = textFromRecord(row, CONDUCTOR_SQL_FIELD.SESSION_ID);
-      if (!sessionId) continue;
-      const agentKind = textFromRecord(row, CONDUCTOR_SQL_FIELD.AGENT_TYPE)?.slice(
-        0,
-        CONDUCTOR_ADAPTER_DEFAULTS.MAXIMUM_AGENT_KIND_LENGTH,
-      );
-      const recap = recapFromTranscriptTail(
-        textFromRecord(row, CONDUCTOR_SQL_FIELD.TRANSCRIPT_TAIL),
-      );
-      transcripts.set(sessionId, {
-        ...(agentKind ? { agentKind } : undefined),
-        ...(recap ? { recap } : undefined),
-      });
-    }
-    return transcripts;
+      const document = `${CONDUCTOR_READ_TRANSCRIPT_TAILS_PREFIX}${ids
+        .map((id) => `'${id}'`)
+        .join(", ")}${CONDUCTOR_READ_TRANSCRIPT_TAILS_SUFFIX}`;
+      const body = yield* request(CONDUCTOR_ROUTE.SQL, undefined, { document });
+      for (const row of recordsFromPage(body, CONDUCTOR_SQL_FIELD.ROWS)) {
+        const sessionId = textFromRecord(row, CONDUCTOR_SQL_FIELD.SESSION_ID);
+        if (!sessionId) continue;
+        const agentKind = textFromRecord(row, CONDUCTOR_SQL_FIELD.AGENT_TYPE)?.slice(
+          0,
+          CONDUCTOR_ADAPTER_DEFAULTS.MAXIMUM_AGENT_KIND_LENGTH,
+        );
+        const recap = recapFromTranscriptTail(
+          textFromRecord(row, CONDUCTOR_SQL_FIELD.TRANSCRIPT_TAIL),
+        );
+        transcripts.set(sessionId, {
+          ...(agentKind ? { agentKind } : undefined),
+          ...(recap ? { recap } : undefined),
+        });
+      }
+      return transcripts;
+    });
   }
 }
 

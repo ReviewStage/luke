@@ -14,6 +14,8 @@ import {
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceProject,
 } from "@sidecar/core";
+import type { CliFailure } from "@sidecar/core/effect-errors";
+import { Effect } from "effect";
 import {
   type CliAdapterOptions,
   type CliReadRequest,
@@ -28,6 +30,7 @@ import {
   timestampFromRecord,
 } from "./cloud-session-adapter";
 import { CODEX_PROVIDER } from "./codex-adapter";
+import type { Cli } from "./services/cli";
 
 /**
  * The invocations this adapter is allowed to make, fixed by the build the way
@@ -228,76 +231,80 @@ export class CodexCloudSessionAdapter extends CliSessionAdapter {
     return this.#projects;
   }
 
-  override async createWorkspace(
+  override createWorkspace(
     request: ProviderWorkspaceRequest,
-  ): Promise<ProviderWorkspaceResult> {
-    const project = this.#projects.find(
-      (candidate) => candidate.providerProjectId === request.providerProjectId,
-    );
-    if (!project) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+  ): Effect.Effect<ProviderWorkspaceResult, unknown, Cli> {
+    return Effect.gen(this, function* () {
+      const project = this.#projects.find(
+        (candidate) => candidate.providerProjectId === request.providerProjectId,
+      );
+      if (!project) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
 
-    // Codex names tasks itself from the prompt; a name the user typed has
-    // nowhere to go, and dropping it silently would honour half the ask.
-    if (request.name !== undefined) {
+      // Codex names tasks itself from the prompt; a name the user typed has
+      // nowhere to go, and dropping it silently would honour half the ask.
+      if (request.name !== undefined) {
+        return {
+          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          reason: "Codex names its own tasks.",
+        };
+      }
+
+      // The task is the whole creation — `cloud exec` starts nothing without a
+      // prompt — and it is held to the same bound as a message.
+      const task = request.task === undefined ? undefined : sessionMessageText(request.task);
+      if (!task) {
+        return {
+          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          reason: "A Codex cloud task needs an opening task shorter than a document.",
+        };
+      }
+
+      const written = yield* this.performWrite([
+        ...CODEX_CLI.CREATE_TASK_ARGV,
+        project.providerProjectId,
+        CODEX_CLI.ARGUMENT_SEPARATOR,
+        task,
+      ]);
+      if (written.outcome.status !== PROVIDER_ACT_RESULT_STATUS.ACCEPTED) {
+        return written.outcome;
+      }
+      const providerSessionId = createdTaskId(written.stdout ?? "");
       return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-        reason: "Codex names its own tasks.",
+        status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED,
+        ...(providerSessionId ? { providerSessionId } : undefined),
       };
-    }
-
-    // The task is the whole creation — `cloud exec` starts nothing without a
-    // prompt — and it is held to the same bound as a message.
-    const task = request.task === undefined ? undefined : sessionMessageText(request.task);
-    if (!task) {
-      return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-        reason: "A Codex cloud task needs an opening task shorter than a document.",
-      };
-    }
-
-    const written = await this.performWrite([
-      ...CODEX_CLI.CREATE_TASK_ARGV,
-      project.providerProjectId,
-      CODEX_CLI.ARGUMENT_SEPARATOR,
-      task,
-    ]);
-    if (written.outcome.status !== PROVIDER_ACT_RESULT_STATUS.ACCEPTED) {
-      return written.outcome;
-    }
-    const providerSessionId = createdTaskId(written.stdout ?? "");
-    return {
-      status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED,
-      ...(providerSessionId ? { providerSessionId } : undefined),
-    };
+    });
   }
 
-  protected async collect(
+  protected collect(
     request: CliReadRequest,
     now: number,
-  ): Promise<readonly ProviderSessionObservation[]> {
-    const body = await request(CODEX_CLI.LIST_TASKS_ARGV);
-    const tasks = recordsFromPage(body, CODEX_TASK_FIELD.TASKS)
-      .map(taskFromRecord)
-      .filter(isDefined)
-      .sort((first, second) => second.observedAt - first.observedAt);
+  ): Effect.Effect<readonly ProviderSessionObservation[], CliFailure, Cli> {
+    return Effect.gen(this, function* () {
+      const body = yield* request(CODEX_CLI.LIST_TASKS_ARGV);
+      const tasks = recordsFromPage(body, CODEX_TASK_FIELD.TASKS)
+        .map(taskFromRecord)
+        .filter(isDefined)
+        .sort((first, second) => second.observedAt - first.observedAt);
 
-    if (
-      now - this.#lastEnvironmentSweepAt >=
-      CODEX_ADAPTER_DEFAULTS.ENVIRONMENT_SWEEP_INTERVAL_MS
-    ) {
-      this.#projects = await this.#sweepEnvironments(request, body, tasks);
-      this.#lastEnvironmentSweepAt = now;
-    } else {
-      // Between sweeps the newest page still joins the offer, so an
-      // environment first used moments ago is offered without waiting for
-      // one; only a sweep, or the login going away, removes an environment.
-      const environments = new Map(
-        this.#projects.map((project) => [project.providerProjectId, project]),
-      );
-      collectEnvironments(environments, tasks);
-      this.#projects = [...environments.values()];
-    }
-    return tasks.map((task) => observationFor(task));
+      if (
+        now - this.#lastEnvironmentSweepAt >=
+        CODEX_ADAPTER_DEFAULTS.ENVIRONMENT_SWEEP_INTERVAL_MS
+      ) {
+        this.#projects = yield* this.#sweepEnvironments(request, body, tasks);
+        this.#lastEnvironmentSweepAt = now;
+      } else {
+        // Between sweeps the newest page still joins the offer, so an
+        // environment first used moments ago is offered without waiting for
+        // one; only a sweep, or the login going away, removes an environment.
+        const environments = new Map(
+          this.#projects.map((project) => [project.providerProjectId, project]),
+        );
+        collectEnvironments(environments, tasks);
+        this.#projects = [...environments.values()];
+      }
+      return tasks.map((task) => observationFor(task));
+    });
   }
 
   /**
@@ -311,35 +318,35 @@ export class CodexCloudSessionAdapter extends CliSessionAdapter {
    * the sweep has — the offer grows by what was actually read, and the pages
    * beyond it wait for the next sweep rather than costing the whole pass.
    */
-  async #sweepEnvironments(
+  #sweepEnvironments(
     request: CliReadRequest,
     firstPage: WireRecord,
     firstTasks: readonly CodexCloudTask[],
-  ): Promise<readonly WorkspaceProject[]> {
-    const environments = new Map<string, WorkspaceProject>();
-    collectEnvironments(environments, firstTasks);
-    let cursor = sweepCursor(firstPage);
-    try {
+  ): Effect.Effect<readonly WorkspaceProject[], CliFailure, Cli> {
+    return Effect.gen(function* () {
+      const environments = new Map<string, WorkspaceProject>();
+      collectEnvironments(environments, firstTasks);
+      let cursor = sweepCursor(firstPage);
       for (
         let page = 1;
         page < CODEX_ADAPTER_DEFAULTS.ENVIRONMENT_SWEEP_MAXIMUM_PAGES && cursor;
         page += 1
       ) {
-        const body = await request([
+        const pageBody = yield* request([
           ...CODEX_CLI.LIST_TASKS_ARGV,
           `${CODEX_CLI.CURSOR_FLAG}${cursor}`,
-        ]);
+        ]).pipe(Effect.catchTag("CliFailure", () => Effect.succeed(undefined)));
+        if (!pageBody) break;
         collectEnvironments(
           environments,
-          recordsFromPage(body, CODEX_TASK_FIELD.TASKS).map(taskFromRecord).filter(isDefined),
+          recordsFromPage(pageBody, CODEX_TASK_FIELD.TASKS).map(taskFromRecord).filter(isDefined),
         );
-        cursor = sweepCursor(body);
+        cursor = sweepCursor(pageBody);
       }
-    } catch {
       // Deliberately swallowed: the roster page already succeeded, and a
       // shallower environment offer is better than losing the pass whole.
-    }
-    return [...environments.values()];
+      return [...environments.values()];
+    });
   }
 
   protected override forgetCachedIdentity(): void {

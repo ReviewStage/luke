@@ -11,6 +11,7 @@ import {
   UNKNOWN_WORKSPACE_LABEL,
   type WireRecord,
 } from "@sidecar/core";
+import { Effect } from "effect";
 import { CURSOR_PROVIDER } from "./cursor-adapter";
 import { readCursorSessionTranscript } from "./cursor-transcript";
 import {
@@ -27,6 +28,7 @@ import {
   tailRecords,
   workspaceLabel,
 } from "./local-session-adapter";
+import type { Files } from "./services/files";
 import { unparsedWire, type WireBoundaryInput, wireRecord } from "./wire-boundary";
 
 /** A turn Cursor failed records its own reason, which is transcript content. */
@@ -161,23 +163,25 @@ class CursorWorkspaceLabels {
    * name. A record is read once; a project that stays unnamed is looked for
    * again, because the folder it belongs to may be opened later.
    */
-  async resolve(projectDirectoryNames: readonly string[]): Promise<void> {
-    if (
-      projectDirectoryNames.every((name) =>
-        this.#labelsByProjectName.has(canonicalProjectName(name)),
-      )
-    ) {
-      return;
-    }
-    for (const entry of await readDirectory(this.#directory)) {
-      if (this.#readWorkspaceRecords.has(entry.name)) continue;
-      this.#readWorkspaceRecords.add(entry.name);
-      const record = await readTextFile(
-        path.join(this.#directory, entry.name, CURSOR_WORKSPACE_FILE),
-      );
-      const folderPath = record ? folderPathFromWorkspaceRecord(record) : undefined;
-      if (folderPath) this.#record(folderPath);
-    }
+  resolve(projectDirectoryNames: readonly string[]): Effect.Effect<void, unknown, Files> {
+    return Effect.gen(this, function* () {
+      if (
+        projectDirectoryNames.every((name) =>
+          this.#labelsByProjectName.has(canonicalProjectName(name)),
+        )
+      ) {
+        return;
+      }
+      for (const entry of yield* readDirectory(this.#directory)) {
+        if (this.#readWorkspaceRecords.has(entry.name)) continue;
+        this.#readWorkspaceRecords.add(entry.name);
+        const record = yield* readTextFile(
+          path.join(this.#directory, entry.name, CURSOR_WORKSPACE_FILE),
+        );
+        const folderPath = record ? folderPathFromWorkspaceRecord(record) : undefined;
+        if (folderPath) this.#record(folderPath);
+      }
+    });
   }
 
   label(projectDirectoryName: string): string {
@@ -202,37 +206,42 @@ class CursorWorkspaceLabels {
   }
 }
 
-async function transcriptsIn(
+function transcriptsIn(
   transcriptsDirectory: string,
   projectDirectory: DirectoryEntry,
-): Promise<CursorTranscriptCandidate[]> {
-  const entries = await readDirectory(transcriptsDirectory);
-  const candidates = await Promise.all(
-    entries.map(async (entry) => {
-      const providerSessionId = entry.name.trim();
-      if (!providerSessionId) return undefined;
-      // Cursor names a session's own transcript after the session, so this
-      // reads that file rather than everything in the directory: the subagents
-      // a session spawns file their transcripts beside it, and they are part of
-      // the session rather than sessions of their own.
-      const filePath = path.join(
-        transcriptsDirectory,
-        entry.name,
-        `${entry.name}${CURSOR_TRANSCRIPT_FILE_EXTENSION}`,
-      );
-      const stats = await fileStats(filePath);
-      if (!stats?.isFile()) return undefined;
-      return {
-        filePath,
-        providerSessionId,
-        mtimeMs: stats.mtimeMs,
-        projectDirectoryName: projectDirectory.name,
-      };
-    }),
-  );
-  return candidates.filter(
-    (candidate): candidate is CursorTranscriptCandidate => candidate !== undefined,
-  );
+): Effect.Effect<CursorTranscriptCandidate[], unknown, Files> {
+  return Effect.gen(function* () {
+    const entries = yield* readDirectory(transcriptsDirectory);
+    const candidates = yield* Effect.all(
+      entries.map((entry) =>
+        Effect.gen(function* () {
+          const providerSessionId = entry.name.trim();
+          if (!providerSessionId) return undefined;
+          // Cursor names a session's own transcript after the session, so this
+          // reads that file rather than everything in the directory: the subagents
+          // a session spawns file their transcripts beside it, and they are part of
+          // the session rather than sessions of their own.
+          const filePath = path.join(
+            transcriptsDirectory,
+            entry.name,
+            `${entry.name}${CURSOR_TRANSCRIPT_FILE_EXTENSION}`,
+          );
+          const stats = yield* fileStats(filePath);
+          if (!stats?.isFile()) return undefined;
+          return {
+            filePath,
+            providerSessionId,
+            mtimeMs: stats.mtimeMs,
+            projectDirectoryName: projectDirectory.name,
+          };
+        }),
+      ),
+      { concurrency: "unbounded" },
+    );
+    return candidates.filter(
+      (candidate): candidate is CursorTranscriptCandidate => candidate !== undefined,
+    );
+  });
 }
 
 function isMessageRecord(record: WireRecord): boolean {
@@ -344,7 +353,7 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
     this.#transcriptMaximumRenderedLength = options.transcriptMaximumRenderedLength;
   }
 
-  protected discover(): Promise<CursorTranscriptCandidate[]> {
+  protected discover(): Effect.Effect<CursorTranscriptCandidate[], unknown, Files> {
     return discoverSessionFiles({
       projectsDirectory: path.join(this.#cursorHome, CURSOR_DIRECTORY.PROJECTS),
       sessionsDirectoryName: CURSOR_DIRECTORY.TRANSCRIPTS,
@@ -353,13 +362,17 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
     });
   }
 
-  protected override prepare(candidates: readonly CursorTranscriptCandidate[]): Promise<void> {
+  protected override prepare(
+    candidates: readonly CursorTranscriptCandidate[],
+  ): Effect.Effect<void, unknown, Files> {
     return this.#workspaceLabels.resolve(
       candidates.map((candidate) => candidate.projectDirectoryName),
     );
   }
 
-  override readTranscript(providerSessionId: string): Promise<string | undefined> {
+  override readTranscript(
+    providerSessionId: string,
+  ): Effect.Effect<string | undefined, unknown, Files> {
     return readCursorSessionTranscript({
       cursorHome: this.#cursorHome,
       providerSessionId,
@@ -368,10 +381,12 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
     });
   }
 
-  protected async parse(
+  protected parse(
     candidate: CursorTranscriptCandidate,
-  ): Promise<{ failed: boolean } | undefined> {
-    return closedTurn(await readTail(candidate.filePath, this.#readTailBytes));
+  ): Effect.Effect<{ failed: boolean } | undefined, unknown, Files> {
+    return Effect.gen(this, function* () {
+      return closedTurn(yield* readTail(candidate.filePath, this.#readTailBytes));
+    });
   }
 
   /**

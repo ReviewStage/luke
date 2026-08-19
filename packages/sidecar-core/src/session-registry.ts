@@ -274,7 +274,7 @@ export class InMemorySessionRegistry {
   refresh(
     adapter: Pick<SessionProviderAdapter, "provider" | "observe">,
     transform?: SessionObservationTransform,
-  ): Effect.Effect<SessionRegistrySnapshot, unknown> {
+  ): Effect.Effect<SessionRegistrySnapshot, unknown, unknown> {
     return Effect.gen(this, function* () {
       const providerId = normalizedProviderId(adapter.provider);
       const mutationEpoch = this.#providerMutationEpochs.get(providerId) ?? 0;

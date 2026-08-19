@@ -19,12 +19,16 @@ import {
   sessionMessageText,
   text,
   UNKNOWN_WORKSPACE_LABEL,
+  type UnparsedWireValue,
   type WireRecord,
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceAgentSelection,
   type WorkspaceProject,
   workspaceNameText,
 } from "@sidecar/core";
+import { CLOUD_FAILURE, CloudFailure, HTTP_STATUS } from "@sidecar/core/effect-errors";
+import { Duration, Effect, Schedule } from "effect";
+import { Http } from "./services/http";
 import { unparsedWire, type WireBoundaryInput, wireRecord } from "./wire-boundary";
 
 const GIT_SUFFIX = ".git";
@@ -32,14 +36,6 @@ const GIT_SUFFIX = ".git";
 const HTTP_METHOD = {
   GET: "GET",
   POST: "POST",
-} as const;
-
-/** HTTP statuses the adapter names when a response is not simply ok. */
-export const HTTP_STATUS = {
-  UNAUTHORIZED: 401,
-  FORBIDDEN: 403,
-  NOT_FOUND: 404,
-  CONFLICT: 409,
 } as const;
 
 /**
@@ -77,10 +73,7 @@ const DEFAULT_REQUEST_HEADERS = {
  */
 const READ_DOCUMENT_FIELD = "query";
 
-export const CLOUD_FAILURE = {
-  UNAUTHORIZED: "unauthorized",
-  TRANSIENT: "transient",
-} as const;
+const TRANSIENT_RETRY_SCHEDULE = Schedule.addDelay(Schedule.recurs(2), () => Duration.millis(250));
 
 // SAFETY: The preceding check establishes the asserted contract.
 /** What a write acts on, as a refusal should name it. */
@@ -90,8 +83,6 @@ const WRITE_SUBJECT = {
 } as const;
 
 type WriteSubject = (typeof WRITE_SUBJECT)[keyof typeof WRITE_SUBJECT];
-
-export type CloudFailure = (typeof CLOUD_FAILURE)[keyof typeof CLOUD_FAILURE];
 
 /**
  * Cloud-only request bounds. The freshness bound in `OBSERVATION_WINDOW` is
@@ -110,29 +101,16 @@ export const CLOUD_ADAPTER_DEFAULTS = {
   SLOW_REQUEST_TIMEOUT_MS: 45 * 1000,
 } as const;
 
-export type CloudFetch = (url: string, init: RequestInit) => Promise<Response>;
-
-export class CloudRequestError extends Error {
-  readonly failure: CloudFailure;
-
-  constructor(failure: CloudFailure, message: string) {
-    super(message);
-    this.name = "CloudRequestError";
-    this.failure = failure;
-  }
-}
-
 export interface CloudAdapterOptions {
   /** Resolves the credential at observation time so a settings change applies immediately. */
-  readApiKey: () => Promise<string | undefined>;
+  readApiKey: () => Effect.Effect<string | undefined>;
   baseUrl?: string;
-  fetch?: CloudFetch;
   now?: () => number;
   minimumRefreshIntervalMs?: number;
   /**
    * Called when an observation pass fails for a reason other than a network
    * or credential fault — a TypeError in a subclass's parsing, for example.
-   * Transient and unauthorized {@link CloudRequestError} never reach it.
+   * Transient and unauthorized {@link CloudFailure} never reach it.
    */
   onDiagnostic?: (error: Error) => void;
 }
@@ -165,7 +143,7 @@ export type CloudRequest = (
   segments: readonly string[],
   query?: Readonly<Record<string, string>>,
   options?: Readonly<{ timeoutMs?: number; document?: string }>,
-) => Promise<WireRecord>;
+) => Effect.Effect<WireRecord, CloudFailure, Http>;
 
 /**
  * One documented write a provider takes for one of its sessions: the route and
@@ -235,8 +213,6 @@ export function repositoryLabel(
   return repository || fallbackName?.trim() || UNKNOWN_WORKSPACE_LABEL;
 }
 
-const defaultFetch: CloudFetch = (url, init) => fetch(url, init);
-
 function resolveBaseUrl(profile: CloudAdapterProfile, configured: string | undefined): string {
   const fromEnvironment = profile.baseUrlEnvironmentVariable
     ? process.env[profile.baseUrlEnvironmentVariable]?.trim()
@@ -258,9 +234,8 @@ function resolveBaseUrl(profile: CloudAdapterProfile, configured: string | undef
 export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
   readonly provider: SessionProvider;
 
-  readonly #readApiKey: () => Promise<string | undefined>;
+  readonly #readApiKey: () => Effect.Effect<string | undefined>;
   readonly #baseUrl: string;
-  readonly #fetch: CloudFetch;
   readonly #authorizationHeaders: (apiKey: string) => Readonly<Record<string, string>>;
   readonly #now: () => number;
   readonly #minimumRefreshIntervalMs: number;
@@ -283,7 +258,6 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     this.provider = profile.provider;
     this.#readApiKey = options.readApiKey;
     this.#baseUrl = resolveBaseUrl(profile, options.baseUrl);
-    this.#fetch = options.fetch ?? defaultFetch;
     this.#authorizationHeaders =
       AUTHORIZATION_HEADERS[profile.authScheme ?? CLOUD_AUTH_SCHEME.BEARER];
     this.#now = options.now ?? Date.now;
@@ -296,54 +270,65 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     this.#onDiagnostic = options.onDiagnostic;
   }
 
-  async observe(): Promise<readonly ProviderSessionObservation[]> {
-    // One observer must never abort the shared refresh pass, so a settings read
-    // that fails is treated the same as having no credential at all.
-    const apiKey = await this.#readApiKey().catch(() => undefined);
-    if (!apiKey) {
-      this.#credential = undefined;
-      this.#forgetObservedState();
+  observe(): Effect.Effect<readonly ProviderSessionObservation[], unknown, Http> {
+    return Effect.gen(this, function* () {
+      // One observer must never abort the shared refresh pass, so a settings read
+      // that fails is treated the same as having no credential at all.
+      const apiKey = yield* this.#readApiKey().pipe(
+        Effect.catchAll(() => Effect.succeed(undefined)),
+      );
+      if (!apiKey) {
+        this.#credential = undefined;
+        this.#forgetObservedState();
+        return this.#observations;
+      }
+
+      const now = this.#now();
+      if (apiKey === this.#credential) {
+        // A network provider refreshes on its own cadence instead of on every
+        // tick of the shared observation timer.
+        if (now - this.#lastAttemptAt < this.#minimumRefreshIntervalMs) return this.#observations;
+      } else {
+        this.#credential = apiKey;
+        this.#forgetObservedState();
+      }
+      this.#lastAttemptAt = now;
+
+      // Observers can overlap: a settings save refreshes this adapter while a
+      // timer-driven pass is still in flight with the key it replaced. Only the
+      // newest pass may write, or sessions read as one credential would be
+      // served as another's until the next refresh.
+      const pass = ++this.#collectPass;
+      const collected = yield* this.collect(this.#requestForPass(pass, apiKey), now).pipe(
+        Effect.catchTag("CloudFailure", (error) => {
+          // A rejected credential clears observed state; a transient network or
+          // server failure keeps the previous snapshot until the next attempt. A
+          // superseded pass reports on a credential that no longer stands, so its
+          // rejection says nothing about the current one.
+          if (pass !== this.#collectPass) {
+            return Effect.succeed(undefined);
+          }
+          if (error.failure === CLOUD_FAILURE.UNAUTHORIZED) this.#forgetObservedState();
+          return Effect.succeed(undefined);
+        }),
+        Effect.catchAll((error) => {
+          if (pass !== this.#collectPass) {
+            return Effect.succeed(undefined);
+          }
+          // Anything else is a bug in this pass — a TypeError thrown by a
+          // subclass's parsing is not a network blip, and must not keep serving
+          // the stale snapshot with no log, counter, or hook.
+          this.#onDiagnostic?.(
+            (error as unknown) instanceof Error ? error : new Error(String(error)),
+          );
+          return Effect.fail(error);
+        }),
+      );
+      if (collected !== undefined && pass === this.#collectPass) {
+        this.#observations = cloudObservations(collected);
+      }
       return this.#observations;
-    }
-
-    const now = this.#now();
-    if (apiKey === this.#credential) {
-      // A network provider refreshes on its own cadence instead of on every
-      // tick of the shared observation timer.
-      if (now - this.#lastAttemptAt < this.#minimumRefreshIntervalMs) return this.#observations;
-    } else {
-      this.#credential = apiKey;
-      this.#forgetObservedState();
-    }
-    this.#lastAttemptAt = now;
-
-    // Observers can overlap: a settings save refreshes this adapter while a
-    // timer-driven pass is still in flight with the key it replaced. Only the
-    // newest pass may write, or sessions read as one credential would be
-    // served as another's until the next refresh.
-    const pass = ++this.#collectPass;
-    try {
-      const collected = await this.collect(this.#requestForPass(pass, apiKey), now);
-      if (pass === this.#collectPass) this.#observations = cloudObservations(collected);
-    } catch (error) {
-      // A rejected credential clears observed state; a transient network or
-      // server failure keeps the previous snapshot until the next attempt. A
-      // superseded pass reports on a credential that no longer stands, so its
-      // rejection says nothing about the current one.
-      if (pass !== this.#collectPass) {
-        return this.#observations;
-      }
-      if (error instanceof CloudRequestError) {
-        if (error.failure === CLOUD_FAILURE.UNAUTHORIZED) this.#forgetObservedState();
-        return this.#observations;
-      }
-      // Anything else is a bug in this pass — a TypeError thrown by a
-      // subclass's parsing is not a network blip, and must not keep serving
-      // the stale snapshot with no log, counter, or hook.
-      this.#onDiagnostic?.(error instanceof Error ? error : new Error(String(error)));
-      throw error;
-    }
-    return this.#observations;
+    });
   }
 
   /**
@@ -354,33 +339,39 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
    * text outside the message bound, and a missing credential all answer
    * without touching the network.
    */
-  override async sendMessage(message: ProviderSessionMessage): Promise<ProviderMessageResult> {
-    const observation = this.#observations.find(
-      (candidate) => candidate.providerSessionId === message.providerSessionId,
-    );
-    if (!observation?.canReceiveMessage) {
-      return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
-    }
+  override sendMessage(
+    message: ProviderSessionMessage,
+  ): Effect.Effect<ProviderMessageResult, unknown, Http> {
+    return Effect.gen(this, function* () {
+      const observation = this.#observations.find(
+        (candidate) => candidate.providerSessionId === message.providerSessionId,
+      );
+      if (!observation?.canReceiveMessage) {
+        return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+      }
 
-    const text = sessionMessageText(message.text);
-    if (!text) {
-      return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-        reason: "That message is empty or too long.",
-      };
-    }
+      const text = sessionMessageText(message.text);
+      if (!text) {
+        return {
+          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          reason: "That message is empty or too long.",
+        };
+      }
 
-    // The credential is read at send time, not held from the observation pass,
-    // so a key the user just replaced or removed is honoured immediately. Its
-    // absence is a rejection with the actual reason, not "unsupported": the
-    // session advertised taking messages while a key stood behind it, and a
-    // key that has since gone is a different fact than a session that moved on.
-    const apiKey = await this.#readApiKey().catch(() => undefined);
-    if (!apiKey) return this.#missingKeyRejection();
+      // The credential is read at send time, not held from the observation pass,
+      // so a key the user just replaced or removed is honoured immediately. Its
+      // absence is a rejection with the actual reason, not "unsupported": the
+      // session advertised taking messages while a key stood behind it, and a
+      // key that has since gone is a different fact than a session that moved on.
+      const apiKey = yield* this.#readApiKey().pipe(
+        Effect.catchAll(() => Effect.succeed(undefined)),
+      );
+      if (!apiKey) return this.#missingKeyRejection();
 
-    const route = this.messageRoute(message.providerSessionId, text);
-    if (!route) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
-    return this.#postWrite(apiKey, route);
+      const route = this.messageRoute(message.providerSessionId, text);
+      if (!route) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+      return yield* this.#postWrite(apiKey, route);
+    });
   }
 
   #missingKeyRejection(): ProviderActResult {
@@ -397,22 +388,30 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
    * not observe, for a control that session did not advertise, or without a
    * credential.
    */
-  override async executeControl(request: ProviderControlRequest): Promise<ProviderControlResult> {
-    const observation = this.#observations.find(
-      (candidate) => candidate.providerSessionId === request.providerSessionId,
-    );
-    // The advertised control — not the caller's copy of it — is what the route
-    // is built from, so whatever it targets is the thing the last pass actually
-    // saw, and nothing a caller sends can redirect it.
-    const advertised = observation?.controls?.find((control) => control.id === request.control.id);
-    if (!advertised) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+  override executeControl(
+    request: ProviderControlRequest,
+  ): Effect.Effect<ProviderControlResult, unknown, Http> {
+    return Effect.gen(this, function* () {
+      const observation = this.#observations.find(
+        (candidate) => candidate.providerSessionId === request.providerSessionId,
+      );
+      // The advertised control — not the caller's copy of it — is what the route
+      // is built from, so whatever it targets is the thing the last pass actually
+      // saw, and nothing a caller sends can redirect it.
+      const advertised = observation?.controls?.find(
+        (control) => control.id === request.control.id,
+      );
+      if (!advertised) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
 
-    const apiKey = await this.#readApiKey().catch(() => undefined);
-    if (!apiKey) return this.#missingKeyRejection();
+      const apiKey = yield* this.#readApiKey().pipe(
+        Effect.catchAll(() => Effect.succeed(undefined)),
+      );
+      if (!apiKey) return this.#missingKeyRejection();
 
-    const route = this.controlRoute(request.providerSessionId, advertised);
-    if (!route) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
-    return this.#postWrite(apiKey, route);
+      const route = this.controlRoute(request.providerSessionId, advertised);
+      if (!route) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+      return yield* this.#postWrite(apiKey, route);
+    });
   }
 
   /**
@@ -422,47 +421,51 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
    * its observation did not list, a name or task outside its bound, and a
    * missing credential all answer without touching the network.
    */
-  override async spawnWorkspaceAgent(
+  override spawnWorkspaceAgent(
     request: ProviderWorkspaceAgentRequest,
-  ): Promise<ProviderWorkspaceResult> {
-    const observation = this.#observations.find(
-      (candidate) => candidate.providerSessionId === request.providerSessionId,
-    );
-    if (!observation) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
-    // The advertised list — not the caller's word — is what the route is
-    // built from, so an agent kind is only ever one the last pass promised.
-    const agent = observation.spawnableAgents?.find((candidate) => candidate === request.agent);
-    if (!agent) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+  ): Effect.Effect<ProviderWorkspaceResult, unknown, Http> {
+    return Effect.gen(this, function* () {
+      const observation = this.#observations.find(
+        (candidate) => candidate.providerSessionId === request.providerSessionId,
+      );
+      if (!observation) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+      // The advertised list — not the caller's word — is what the route is
+      // built from, so an agent kind is only ever one the last pass promised.
+      const agent = observation.spawnableAgents?.find((candidate) => candidate === request.agent);
+      if (!agent) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
 
-    const name = request.name === undefined ? undefined : workspaceNameText(request.name);
-    if (request.name !== undefined && !name) {
-      return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-        reason: "That session name is empty or too long.",
-      };
-    }
-    const task = request.task === undefined ? undefined : sessionMessageText(request.task);
-    if (request.task !== undefined && !task) {
-      return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-        reason: "That task is empty or too long.",
-      };
-    }
+      const name = request.name === undefined ? undefined : workspaceNameText(request.name);
+      if (request.name !== undefined && !name) {
+        return {
+          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          reason: "That session name is empty or too long.",
+        };
+      }
+      const task = request.task === undefined ? undefined : sessionMessageText(request.task);
+      if (request.task !== undefined && !task) {
+        return {
+          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          reason: "That task is empty or too long.",
+        };
+      }
 
-    // The route is built in the same synchronous step as the validation, from
-    // the observation's own spawn target: a pass landing while the key is read
-    // must not be able to swap the snapshot between the check and the route.
-    const route = this.workspaceAgentRoute(observation.spawnTarget ?? request.providerSessionId, {
-      ...request,
-      agent,
-      name,
-      task,
+      // The route is built in the same synchronous step as the validation, from
+      // the observation's own spawn target: a pass landing while the key is read
+      // must not be able to swap the snapshot between the check and the route.
+      const route = this.workspaceAgentRoute(observation.spawnTarget ?? request.providerSessionId, {
+        ...request,
+        agent,
+        name,
+        task,
+      });
+      if (!route) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+
+      const apiKey = yield* this.#readApiKey().pipe(
+        Effect.catchAll(() => Effect.succeed(undefined)),
+      );
+      if (!apiKey) return this.#missingKeyRejection();
+      return yield* this.#postWrite(apiKey, route);
     });
-    if (!route) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
-
-    const apiKey = await this.#readApiKey().catch(() => undefined);
-    if (!apiKey) return this.#missingKeyRejection();
-    return this.#postWrite(apiKey, route);
   }
 
   /**
@@ -490,90 +493,94 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
    * outside its bound, a task a project does not take or the absence of one it
    * needs, and a missing credential all answer without touching the network.
    */
-  override async createWorkspace(
+  override createWorkspace(
     request: ProviderWorkspaceRequest,
-  ): Promise<ProviderWorkspaceResult> {
-    const projects = this.workspaceProjects();
-    const project = projects.find(
-      (candidate) => candidate.providerProjectId === request.providerProjectId,
-    );
-    if (!project) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+  ): Effect.Effect<ProviderWorkspaceResult, unknown, Http> {
+    return Effect.gen(this, function* () {
+      const projects = this.workspaceProjects();
+      const project = projects.find(
+        (candidate) => candidate.providerProjectId === request.providerProjectId,
+      );
+      if (!project) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
 
-    const name = request.name === undefined ? undefined : workspaceNameText(request.name);
-    if (request.name !== undefined && !name) {
+      const name = request.name === undefined ? undefined : workspaceNameText(request.name);
+      if (request.name !== undefined && !name) {
+        return {
+          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          reason: "That workspace name is empty or too long.",
+        };
+      }
+
+      // The task is held to the project's own word for it, again here: the
+      // renderer already refused what it could, but an adapter answers for its
+      // own writes.
+      const task = request.task === undefined ? undefined : sessionMessageText(request.task);
+      if (request.task !== undefined && !task) {
+        return {
+          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          reason: "That task is empty or too long.",
+        };
+      }
+      if (task && project.taskSupport === WORKSPACE_TASK_SUPPORT.NONE) {
+        return {
+          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          reason: "This project takes no opening task.",
+        };
+      }
+      if (!task && project.taskSupport === WORKSPACE_TASK_SUPPORT.REQUIRED) {
+        return {
+          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          reason: "This project needs an opening task to create a workspace.",
+        };
+      }
+
+      const apiKey = yield* this.#readApiKey().pipe(
+        Effect.catchAll(() => Effect.succeed(undefined)),
+      );
+      if (!apiKey) return this.#missingKeyRejection();
+
+      const route = this.workspaceCreationRoute(project, name, task, request.agentSelection);
+      if (!route) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+      const created = yield* this.#postWriteDetailed(apiKey, route, WRITE_SUBJECT.PROJECT);
+      if (created.outcome.status !== PROVIDER_ACT_RESULT_STATUS.ACCEPTED) {
+        return created.outcome;
+      }
+      // The id the response named rides the acceptance — an identifier only,
+      // never an address — so the surface can open the workspace once an
+      // observation pass reports that session itself. The body it was read
+      // from still never leaves the adapter.
+      const createdSessionId = this.createdWorkspaceSessionId(created.body ?? {});
+      const landed: ProviderWorkspaceResult = {
+        status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED,
+        ...(createdSessionId ? { providerSessionId: createdSessionId } : undefined),
+      };
+      if (!task) return landed;
+
+      // The workspace stands; what is left is the task. A provider whose
+      // creation request already carried it has nothing to answer here, and one
+      // that hands tasks somewhere the creation response names answers with
+      // that route — built from what the provider itself just returned.
+      const followUp = this.workspaceTaskRoute(created.body ?? {}, task);
+      if (followUp === undefined) return landed;
+      if ("undeliverable" in followUp) {
+        return {
+          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          reason: `The workspace was created, but its opening task was not delivered: ${followUp.undeliverable}`,
+        };
+      }
+      const delivered = yield* this.#postWriteDetailed(apiKey, followUp, WRITE_SUBJECT.SESSION);
+      if (delivered.outcome.status === PROVIDER_ACT_RESULT_STATUS.ACCEPTED) {
+        return landed;
+      }
       return {
         status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-        reason: "That workspace name is empty or too long.",
+        reason: `The workspace was created, but its opening task was not delivered: ${
+          delivered.outcome.status === PROVIDER_ACT_RESULT_STATUS.REJECTED
+            ? delivered.outcome.reason
+            : "the provider documents no way to hand it over."
+        }`,
       };
-    }
-
-    // The task is held to the project's own word for it, again here: the
-    // renderer already refused what it could, but an adapter answers for its
-    // own writes.
-    const task = request.task === undefined ? undefined : sessionMessageText(request.task);
-    if (request.task !== undefined && !task) {
-      return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-        reason: "That task is empty or too long.",
-      };
-    }
-    if (task && project.taskSupport === WORKSPACE_TASK_SUPPORT.NONE) {
-      return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-        reason: "This project takes no opening task.",
-      };
-    }
-    if (!task && project.taskSupport === WORKSPACE_TASK_SUPPORT.REQUIRED) {
-      return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-        reason: "This project needs an opening task to create a workspace.",
-      };
-    }
-
-    const apiKey = await this.#readApiKey().catch(() => undefined);
-    if (!apiKey) return this.#missingKeyRejection();
-
-    const route = this.workspaceCreationRoute(project, name, task, request.agentSelection);
-    if (!route) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
-    const created = await this.#postWriteDetailed(apiKey, route, WRITE_SUBJECT.PROJECT);
-    if (created.outcome.status !== PROVIDER_ACT_RESULT_STATUS.ACCEPTED) {
-      return created.outcome;
-    }
-    // The id the response named rides the acceptance — an identifier only,
-    // never an address — so the surface can open the workspace once an
-    // observation pass reports that session itself. The body it was read
-    // from still never leaves the adapter.
-    const createdSessionId = this.createdWorkspaceSessionId(created.body ?? {});
-    const landed: ProviderWorkspaceResult = {
-      status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED,
-      ...(createdSessionId ? { providerSessionId: createdSessionId } : undefined),
-    };
-    if (!task) return landed;
-
-    // The workspace stands; what is left is the task. A provider whose
-    // creation request already carried it has nothing to answer here, and one
-    // that hands tasks somewhere the creation response names answers with
-    // that route — built from what the provider itself just returned.
-    const followUp = this.workspaceTaskRoute(created.body ?? {}, task);
-    if (followUp === undefined) return landed;
-    if ("undeliverable" in followUp) {
-      return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-        reason: `The workspace was created, but its opening task was not delivered: ${followUp.undeliverable}`,
-      };
-    }
-    const delivered = await this.#postWriteDetailed(apiKey, followUp, WRITE_SUBJECT.SESSION);
-    if (delivered.outcome.status === PROVIDER_ACT_RESULT_STATUS.ACCEPTED) {
-      return landed;
-    }
-    return {
-      status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-      reason: `The workspace was created, but its opening task was not delivered: ${
-        delivered.outcome.status === PROVIDER_ACT_RESULT_STATUS.REJECTED
-          ? delivered.outcome.reason
-          : "the provider documents no way to hand it over."
-      }`,
-    };
+    });
   }
 
   /**
@@ -652,7 +659,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
   protected abstract collect(
     request: CloudRequest,
     now: number,
-  ): Promise<readonly ProviderSessionObservation[]>;
+  ): Effect.Effect<readonly ProviderSessionObservation[], CloudFailure, Http>;
 
   /**
    * Clears anything a subclass cached across passes. It runs whenever the
@@ -674,17 +681,16 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
   }
 
   /** Keeps one failed resource from discarding an otherwise complete pass. */
-  protected async tolerateItemFailure<Result>(
-    operation: () => Promise<Result>,
-  ): Promise<Result | undefined> {
-    try {
-      return await operation();
-    } catch (error) {
-      if (error instanceof CloudRequestError && error.failure === CLOUD_FAILURE.UNAUTHORIZED) {
-        throw error;
-      }
-      return undefined;
-    }
+  protected tolerateItemFailure<Result>(
+    operation: () => Effect.Effect<Result, CloudFailure, Http>,
+  ): Effect.Effect<Result | undefined, CloudFailure, Http> {
+    return operation().pipe(
+      Effect.catchTag("CloudFailure", (error) =>
+        error.failure === CLOUD_FAILURE.UNAUTHORIZED
+          ? Effect.fail(error)
+          : Effect.succeed(undefined),
+      ),
+    );
   }
 
   #forgetObservedState(): void {
@@ -707,28 +713,34 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
    * check and the write share one synchronous step and a credential cleared
    * in the gap between them has no gap to land in.
    */
-  protected async credentialBoundRead(
+  protected credentialBoundRead(
     segments: readonly string[],
     query: Readonly<Record<string, string>> | undefined,
     options: Readonly<{ timeoutMs?: number }> | undefined,
     apply: (body: WireRecord) => void,
-  ): Promise<void> {
-    const epoch = this.#credentialEpoch;
-    const apiKey = this.#credential;
-    if (!apiKey) {
-      throw new CloudRequestError(
-        CLOUD_FAILURE.TRANSIENT,
-        `${this.provider.displayName} has no credential to read with`,
-      );
-    }
-    const body = await this.#requestJson(apiKey, segments, query, options);
-    if (epoch !== this.#credentialEpoch) {
-      throw new CloudRequestError(
-        CLOUD_FAILURE.TRANSIENT,
-        `${this.provider.displayName} read outlived its credential`,
-      );
-    }
-    apply(body);
+  ): Effect.Effect<void, CloudFailure, Http> {
+    return Effect.gen(this, function* () {
+      const epoch = this.#credentialEpoch;
+      const apiKey = this.#credential;
+      if (!apiKey) {
+        return yield* Effect.fail(
+          new CloudFailure({
+            failure: CLOUD_FAILURE.TRANSIENT,
+            provider: this.provider.displayName,
+          }),
+        );
+      }
+      const body = yield* this.#requestJson(apiKey, segments, query, options);
+      if (epoch !== this.#credentialEpoch) {
+        return yield* Effect.fail(
+          new CloudFailure({
+            failure: CLOUD_FAILURE.TRANSIENT,
+            provider: this.provider.displayName,
+          }),
+        );
+      }
+      apply(body);
+    });
   }
 
   /**
@@ -738,21 +750,25 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
    * it over state that belongs to the new credential.
    */
   #requestForPass(pass: number, apiKey: string): CloudRequest {
-    return async (segments, query, options) => {
-      this.#assertPassCurrent(pass);
-      const body = await this.#requestJson(apiKey, segments, query, options);
-      this.#assertPassCurrent(pass);
-      return body;
-    };
+    return (segments, query, options) =>
+      Effect.gen(this, function* () {
+        yield* this.#assertPassCurrent(pass);
+        const body = yield* this.#requestJson(apiKey, segments, query, options);
+        yield* this.#assertPassCurrent(pass);
+        return body;
+      });
   }
 
-  #assertPassCurrent(pass: number): void {
+  #assertPassCurrent(pass: number): Effect.Effect<void, CloudFailure> {
     if (pass !== this.#collectPass) {
-      throw new CloudRequestError(
-        CLOUD_FAILURE.TRANSIENT,
-        `${this.provider.displayName} pass was superseded`,
+      return Effect.fail(
+        new CloudFailure({
+          failure: CLOUD_FAILURE.TRANSIENT,
+          provider: this.provider.displayName,
+        }),
       );
     }
+    return Effect.void;
   }
 
   #url(
@@ -778,12 +794,15 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
    * The subject is what the route acts on, so a refusal names the thing that
    * actually went missing.
    */
-  async #postWrite(
+  #postWrite(
     apiKey: string,
     route: CloudWriteRoute,
     subject: WriteSubject = WRITE_SUBJECT.SESSION,
-  ): Promise<ProviderActResult> {
-    return (await this.#postWriteDetailed(apiKey, route, subject)).outcome;
+  ): Effect.Effect<ProviderActResult, never, Http> {
+    return Effect.map(
+      this.#postWriteDetailed(apiKey, route, subject),
+      (detailed) => detailed.outcome,
+    );
   }
 
   /**
@@ -791,148 +810,197 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
    * response names the thing it created, and a follow-up write is built from
    * that. The body never travels further than the adapter that asked for it.
    */
-  async #postWriteDetailed(
+  #postWriteDetailed(
     apiKey: string,
     route: CloudWriteRoute,
     subject: WriteSubject,
-  ): Promise<{ outcome: ProviderActResult; body?: WireRecord }> {
-    const name = this.provider.displayName;
-    let response: Response;
-    try {
-      response = await this.#fetch(this.#url(route.segments, {}, route.action), {
-        method: HTTP_METHOD.POST,
-        // The same layering as a read: the provider's own headers first, the
-        // credential after them so no override can replace it.
-        headers: {
-          ...this.requestHeaders(),
-          ...this.#authorizationHeaders(apiKey),
-          // An endpoint that documents an empty request gets exactly that,
-          // not an empty JSON object it never asked for.
-          ...(route.body === undefined ? undefined : { "Content-Type": "application/json" }),
-        },
-        ...(route.body === undefined ? undefined : { body: JSON.stringify(route.body) }),
-        signal: AbortSignal.timeout(CLOUD_ADAPTER_DEFAULTS.REQUEST_TIMEOUT_MS),
-      });
-    } catch {
-      return {
-        outcome: {
-          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-          reason: `${name} could not be reached, so nothing was sent.`,
-        },
-      };
-    }
+  ): Effect.Effect<{ outcome: ProviderActResult; body?: WireRecord }, never, Http> {
+    return Effect.gen(this, function* () {
+      const name = this.provider.displayName;
+      const http = yield* Http;
+      const response = yield* http
+        .request(this.#url(route.segments, {}, route.action), {
+          method: HTTP_METHOD.POST,
+          // The same layering as a read: the provider's own headers first, the
+          // credential after them so no override can replace it.
+          headers: {
+            ...this.requestHeaders(),
+            ...this.#authorizationHeaders(apiKey),
+            // An endpoint that documents an empty request gets exactly that,
+            // not an empty JSON object it never asked for.
+            ...(route.body === undefined ? undefined : { "Content-Type": "application/json" }),
+          },
+          ...(route.body === undefined ? undefined : { body: JSON.stringify(route.body) }),
+        })
+        .pipe(
+          Effect.timeout(Duration.millis(CLOUD_ADAPTER_DEFAULTS.REQUEST_TIMEOUT_MS)),
+          Effect.catchTag("TimeoutException", () =>
+            Effect.succeed(undefined as Response | undefined),
+          ),
+          Effect.catchAll(() => Effect.succeed(undefined as Response | undefined)),
+        );
 
-    if (response.ok) {
-      // A write that landed changes what the session is doing, so the refresh
-      // that follows must actually ask: served from the cache inside the
-      // minimum interval, the row would keep offering what the provider has
-      // already taken.
-      this.#lastAttemptAt = Number.NEGATIVE_INFINITY;
-      // An unreadable body is not a failed write: the provider already said
-      // yes, so only a follow-up that needed the body has anything to miss.
-      const body = await response.json().catch(() => undefined);
-      return {
-        outcome: { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED },
-        ...(isRecord(body) ? { body } : undefined),
-      };
-    }
-    if (response.status === HTTP_STATUS.UNAUTHORIZED || response.status === HTTP_STATUS.FORBIDDEN) {
+      if (!response) {
+        return {
+          outcome: {
+            status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+            reason: `${name} could not be reached, so nothing was sent.`,
+          },
+        };
+      }
+
+      if (response.ok) {
+        // A write that landed changes what the session is doing, so the refresh
+        // that follows must actually ask: served from the cache inside the
+        // minimum interval, the row would keep offering what the provider has
+        // already taken.
+        this.#lastAttemptAt = Number.NEGATIVE_INFINITY;
+        // An unreadable body is not a failed write: the provider already said
+        // yes, so only a follow-up that needed the body has anything to miss.
+        const body = yield* Effect.async<unknown, never>((resume) => {
+          response.json().then(
+            (value) => resume(Effect.succeed(value)),
+            () => resume(Effect.succeed(undefined)),
+          );
+        });
+        const parsedBody = isRecord(body as UnparsedWireValue) ? (body as WireRecord) : undefined;
+        return {
+          outcome: { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED },
+          ...(parsedBody ? { body: parsedBody } : undefined),
+        };
+      }
+      if (
+        response.status === HTTP_STATUS.UNAUTHORIZED ||
+        response.status === HTTP_STATUS.FORBIDDEN
+      ) {
+        return {
+          outcome: {
+            status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+            reason: `${name} rejected the configured API key.`,
+          },
+        };
+      }
+      if (response.status === HTTP_STATUS.NOT_FOUND) {
+        return {
+          outcome: {
+            status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+            reason: `${name} no longer has this ${subject}.`,
+          },
+        };
+      }
+      if (response.status === HTTP_STATUS.CONFLICT) {
+        return {
+          outcome: {
+            status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+            reason: `${name} says this ${subject} has moved on since Luke last looked.`,
+          },
+        };
+      }
       return {
         outcome: {
           status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-          reason: `${name} rejected the configured API key.`,
+          reason: `${name} answered with status ${response.status}, so the request may not have landed.`,
         },
       };
-    }
-    if (response.status === HTTP_STATUS.NOT_FOUND) {
-      return {
-        outcome: {
-          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-          reason: `${name} no longer has this ${subject}.`,
-        },
-      };
-    }
-    if (response.status === HTTP_STATUS.CONFLICT) {
-      return {
-        outcome: {
-          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-          reason: `${name} says this ${subject} has moved on since Luke last looked.`,
-        },
-      };
-    }
-    return {
-      outcome: {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-        reason: `${name} answered with status ${response.status}, so the request may not have landed.`,
-      },
-    };
+    });
   }
 
-  async #requestJson(
+  #requestJson(
     apiKey: string,
     segments: readonly string[],
     query = {},
     options: Readonly<{ timeoutMs?: number; document?: string }> = {},
-  ): Promise<WireRecord> {
-    const name = this.provider.displayName;
-    // A widened deadline never widens past the slow bound: the option exists
-    // for a read the provider documents as slow, not for one that never ends.
-    const timeoutMs = Math.min(
-      positiveInteger(options.timeoutMs, CLOUD_ADAPTER_DEFAULTS.REQUEST_TIMEOUT_MS),
-      CLOUD_ADAPTER_DEFAULTS.SLOW_REQUEST_TIMEOUT_MS,
-    );
-    // A read document rides as a POST because that is how its endpoint is
-    // documented, not because it writes: the body carries the document and
-    // nothing else, so the request can still express nothing but a read.
-    const document = options.document;
-    let response: Response;
-    try {
-      response = await this.#fetch(this.#url(segments, query), {
-        method: document === undefined ? HTTP_METHOD.GET : HTTP_METHOD.POST,
-        headers: {
-          ...this.requestHeaders(),
-          ...this.#authorizationHeaders(apiKey),
-          ...(document === undefined ? undefined : { "Content-Type": "application/json" }),
+  ): Effect.Effect<WireRecord, CloudFailure, Http> {
+    return Effect.gen(this, function* () {
+      const name = this.provider.displayName;
+      const http = yield* Http;
+      // A widened deadline never widens past the slow bound: the option exists
+      // for a read the provider documents as slow, not for one that never ends.
+      const timeoutMs = Math.min(
+        positiveInteger(options.timeoutMs, CLOUD_ADAPTER_DEFAULTS.REQUEST_TIMEOUT_MS),
+        CLOUD_ADAPTER_DEFAULTS.SLOW_REQUEST_TIMEOUT_MS,
+      );
+      // A read document rides as a POST because that is how its endpoint is
+      // documented, not because it writes: the body carries the document and
+      // nothing else, so the request can still express nothing but a read.
+      const document = options.document;
+      const response = yield* http
+        .request(this.#url(segments, query), {
+          method: document === undefined ? HTTP_METHOD.GET : HTTP_METHOD.POST,
+          headers: {
+            ...this.requestHeaders(),
+            ...this.#authorizationHeaders(apiKey),
+            ...(document === undefined ? undefined : { "Content-Type": "application/json" }),
+          },
+          ...(document === undefined
+            ? undefined
+            : { body: JSON.stringify({ [READ_DOCUMENT_FIELD]: document }) }),
+        })
+        .pipe(
+          Effect.timeout(Duration.millis(timeoutMs)),
+          Effect.catchTag("TimeoutException", () =>
+            Effect.fail(
+              new CloudFailure({
+                failure: CLOUD_FAILURE.TRANSIENT,
+                provider: name,
+              }),
+            ),
+          ),
+          Effect.retry({
+            while: (error) => error.failure === CLOUD_FAILURE.TRANSIENT,
+            schedule: TRANSIENT_RETRY_SCHEDULE,
+          }),
+        );
+
+      if (
+        response.status === HTTP_STATUS.UNAUTHORIZED ||
+        response.status === HTTP_STATUS.FORBIDDEN
+      ) {
+        return yield* Effect.fail(
+          new CloudFailure({
+            failure: CLOUD_FAILURE.UNAUTHORIZED,
+            provider: name,
+            status: response.status,
+          }),
+        );
+      }
+      if (!response.ok) {
+        return yield* Effect.fail(
+          new CloudFailure({
+            failure: CLOUD_FAILURE.TRANSIENT,
+            provider: name,
+            status: response.status,
+          }),
+        );
+      }
+
+      const body: WireBoundaryInput = yield* Effect.async<WireBoundaryInput, CloudFailure>(
+        (resume) => {
+          response.json().then(
+            (value) => resume(Effect.succeed(value as WireBoundaryInput)),
+            () =>
+              resume(
+                Effect.fail(
+                  new CloudFailure({
+                    failure: CLOUD_FAILURE.TRANSIENT,
+                    provider: name,
+                  }),
+                ),
+              ),
+          );
         },
-        ...(document === undefined
-          ? undefined
-          : { body: JSON.stringify({ [READ_DOCUMENT_FIELD]: document }) }),
-        signal: AbortSignal.timeout(timeoutMs),
-      });
-    } catch {
-      throw new CloudRequestError(CLOUD_FAILURE.TRANSIENT, `${name} request failed`);
-    }
-
-    if (response.status === HTTP_STATUS.UNAUTHORIZED || response.status === HTTP_STATUS.FORBIDDEN) {
-      throw new CloudRequestError(
-        CLOUD_FAILURE.UNAUTHORIZED,
-        `${name} rejected the configured API key`,
       );
-    }
-    if (!response.ok) {
-      throw new CloudRequestError(
-        CLOUD_FAILURE.TRANSIENT,
-        `${name} responded with status ${response.status}`,
-      );
-    }
-
-    let body: WireBoundaryInput;
-    try {
-      body = await response.json();
-    } catch {
-      throw new CloudRequestError(
-        CLOUD_FAILURE.TRANSIENT,
-        `${name} returned an unreadable response`,
-      );
-    }
-    const bodyRecord = wireRecord(unparsedWire(body));
-    if (!bodyRecord) {
-      throw new CloudRequestError(
-        CLOUD_FAILURE.TRANSIENT,
-        `${name} returned an unexpected response`,
-      );
-    }
-    return bodyRecord;
+      const bodyRecord = wireRecord(unparsedWire(body));
+      if (!bodyRecord) {
+        return yield* Effect.fail(
+          new CloudFailure({
+            failure: CLOUD_FAILURE.TRANSIENT,
+            provider: name,
+          }),
+        );
+      }
+      return bodyRecord;
+    });
   }
 }
 
@@ -955,3 +1023,6 @@ function cloudObservations(
   }
   return [...unique.values()];
 }
+
+// Re-export for tests that record HTTP statuses beside the adapter's named set.
+export { HTTP_STATUS };

@@ -1,5 +1,4 @@
 import type { Dirent, Stats } from "node:fs";
-import fs from "node:fs/promises";
 import path from "node:path";
 import {
   agedStatus,
@@ -14,6 +13,8 @@ import {
   UNKNOWN_WORKSPACE_LABEL,
   type WireRecord,
 } from "@sidecar/core";
+import { Effect } from "effect";
+import { Files } from "./services/files";
 
 export function localSessionStatus(
   status: SessionStatus,
@@ -124,43 +125,53 @@ export abstract class LocalFileSessionAdapter<
     super(options);
   }
 
-  protected abstract discover(): Promise<readonly Candidate[]>;
-  protected abstract parse(candidate: Candidate): Promise<Parsed>;
+  protected abstract discover(): Effect.Effect<readonly Candidate[], unknown, Files>;
+  protected abstract parse(candidate: Candidate): Effect.Effect<Parsed, unknown, Files>;
   protected abstract observation(
     candidate: Candidate,
     parsed: Parsed,
     now: number,
     activeSessionFreshnessMs: number,
-  ): Promise<ProviderSessionObservation> | ProviderSessionObservation;
+  ): Effect.Effect<ProviderSessionObservation, unknown, Files> | ProviderSessionObservation;
 
-  protected prepare(_candidates: readonly Candidate[]): Promise<void> | void {}
+  protected prepare(
+    _candidates: readonly Candidate[],
+  ): Effect.Effect<void, unknown, Files> | void {}
 
-  async observe(): Promise<readonly ProviderSessionObservation[]> {
-    const now = this.observationTime();
-    const candidates = await this.discover();
-    await this.prepare(candidates);
-    const observations = new Map<string, ProviderSessionObservation>();
-    for (const candidate of candidates) {
-      if (observations.has(candidate.providerSessionId)) continue;
-      const cached = this.#parsed.get(candidate.filePath);
-      const parsed =
-        cached?.mtimeMs === candidate.mtimeMs ? cached.value : await this.parseAndCache(candidate);
-      observations.set(
-        candidate.providerSessionId,
-        await this.observation(candidate, parsed, now, this.activeSessionFreshnessMs),
-      );
-    }
-    const discovered = new Set(candidates.map((candidate) => candidate.filePath));
-    for (const filePath of this.#parsed.keys()) {
-      if (!discovered.has(filePath)) this.#parsed.delete(filePath);
-    }
-    return [...observations.values()];
+  observe(): Effect.Effect<readonly ProviderSessionObservation[], unknown, Files> {
+    return Effect.gen(this, function* () {
+      const now = this.observationTime();
+      const candidates = yield* this.discover();
+      const prepare = this.prepare(candidates);
+      if (prepare !== undefined) yield* prepare;
+      const observations = new Map<string, ProviderSessionObservation>();
+      for (const candidate of candidates) {
+        if (observations.has(candidate.providerSessionId)) continue;
+        const cached = this.#parsed.get(candidate.filePath);
+        const parsed =
+          cached?.mtimeMs === candidate.mtimeMs
+            ? cached.value
+            : yield* this.parseAndCache(candidate);
+        const observation = this.observation(candidate, parsed, now, this.activeSessionFreshnessMs);
+        observations.set(
+          candidate.providerSessionId,
+          Effect.isEffect(observation) ? yield* observation : observation,
+        );
+      }
+      const discovered = new Set(candidates.map((candidate) => candidate.filePath));
+      for (const filePath of this.#parsed.keys()) {
+        if (!discovered.has(filePath)) this.#parsed.delete(filePath);
+      }
+      return [...observations.values()];
+    });
   }
 
-  private async parseAndCache(candidate: Candidate): Promise<Parsed> {
-    const value = await this.parse(candidate);
-    this.#parsed.set(candidate.filePath, { mtimeMs: candidate.mtimeMs, value });
-    return value;
+  private parseAndCache(candidate: Candidate): Effect.Effect<Parsed, unknown, Files> {
+    return Effect.gen(this, function* () {
+      const value = yield* this.parse(candidate);
+      this.#parsed.set(candidate.filePath, { mtimeMs: candidate.mtimeMs, value });
+      return value;
+    });
   }
 }
 
@@ -173,7 +184,10 @@ export interface SessionFileDiscovery<Candidate extends SessionFileCandidate> {
    */
   sessionsDirectoryName?: string;
   maximumProjectDirectories: number;
-  sessionFilesIn: (sessionsDirectory: string, project: DirectoryEntry) => Promise<Candidate[]>;
+  sessionFilesIn: (
+    sessionsDirectory: string,
+    project: DirectoryEntry,
+  ) => Effect.Effect<Candidate[], unknown, Files>;
 }
 
 /** Where one project keeps its sessions, and when it last started one. */
@@ -201,81 +215,68 @@ export function canIgnoreFilesystemError(error: Error): boolean {
   );
 }
 
-export async function readDirectory(directoryPath: string): Promise<Dirent[]> {
-  try {
-    return await fs.readdir(directoryPath, { withFileTypes: true });
-  } catch (error) {
-    if (!(error instanceof Error) || !canIgnoreFilesystemError(error)) throw error;
-    return [];
-  }
+export function readDirectory(directoryPath: string): Effect.Effect<Dirent[], unknown, Files> {
+  return Effect.gen(function* () {
+    const files = yield* Files;
+    return yield* files.readDirectory(directoryPath);
+  });
 }
 
-export async function fileStats(filePath: string): Promise<Stats | undefined> {
-  try {
-    return await fs.stat(filePath);
-  } catch (error) {
-    if (!(error instanceof Error) || !canIgnoreFilesystemError(error)) throw error;
-    return undefined;
-  }
+export function fileStats(filePath: string): Effect.Effect<Stats | undefined, unknown, Files> {
+  return Effect.gen(function* () {
+    const files = yield* Files;
+    return yield* files.stat(filePath);
+  });
 }
 
 /** `lstat`, so a link out of a provider directory is never followed. */
-export async function statDirectoryEntry(
+export function statDirectoryEntry(
   directoryPath: string,
   name: string,
-): Promise<DirectoryEntry | undefined> {
-  const entryPath = path.join(directoryPath, name);
-  try {
-    const stats = await fs.lstat(entryPath);
-    return { directoryPath: entryPath, name, stats };
-  } catch (error) {
-    if (!(error instanceof Error) || !canIgnoreFilesystemError(error)) throw error;
-    return undefined;
-  }
+): Effect.Effect<DirectoryEntry | undefined, unknown, Files> {
+  return Effect.gen(function* () {
+    const files = yield* Files;
+    const entry = yield* files.lstat(directoryPath, name);
+    if (!entry) return undefined;
+    return { directoryPath: entry.directoryPath, name: entry.name, stats: entry.stats };
+  });
 }
 
-export async function readTextFile(filePath: string): Promise<string | undefined> {
-  try {
-    return await fs.readFile(filePath, "utf8");
-  } catch (error) {
-    if (!(error instanceof Error) || !canIgnoreFilesystemError(error)) throw error;
-    return undefined;
-  }
+export function readTextFile(filePath: string): Effect.Effect<string | undefined, unknown, Files> {
+  return Effect.gen(function* () {
+    const files = yield* Files;
+    return yield* files.readTextFileUtf8(filePath);
+  });
 }
 
 /**
  * Reads a bounded region of a session file. A transcript grows without bound,
  * so no adapter may read one whole, and the file is opened for reading alone.
  */
-async function readRegion(
+function readRegion(
   filePath: string,
   maximumBytes: number,
   offset: (size: number, length: number) => number,
-): Promise<string> {
-  let handle: fs.FileHandle | undefined;
-  try {
-    handle = await fs.open(filePath, "r");
-    const stats = await handle.stat();
-    if (!stats.isFile() || stats.size <= 0) return "";
-    const length = Math.min(stats.size, maximumBytes);
-    const buffer = Buffer.alloc(length);
-    await handle.read(buffer, 0, length, offset(stats.size, length));
-    return buffer.toString("utf8");
-  } catch (error) {
-    if (!(error instanceof Error) || !canIgnoreFilesystemError(error)) throw error;
-    return "";
-  } finally {
-    await handle?.close();
-  }
+): Effect.Effect<string, unknown, Files> {
+  return Effect.gen(function* () {
+    const files = yield* Files;
+    return yield* files.readFileRegion(filePath, maximumBytes, offset);
+  });
 }
 
 /** The end of a session file, where its newest records say what it is doing. */
-export function readTail(filePath: string, maximumBytes: number): Promise<string> {
+export function readTail(
+  filePath: string,
+  maximumBytes: number,
+): Effect.Effect<string, unknown, Files> {
   return readRegion(filePath, maximumBytes, (size, length) => size - length);
 }
 
 /** The start of a session file, for the records a provider writes only once. */
-export function readHead(filePath: string, maximumBytes: number): Promise<string> {
+export function readHead(
+  filePath: string,
+  maximumBytes: number,
+): Effect.Effect<string, unknown, Files> {
   return readRegion(filePath, maximumBytes, () => 0);
 }
 
@@ -314,21 +315,23 @@ export function uniquePaths(paths: readonly string[]): string[] {
  * by the day the provider first wrote there. A project with no sessions
  * directory has no sessions, and takes none of the bound below.
  */
-async function projectSessionsDirectory(
+function projectSessionsDirectory(
   project: DirectoryEntry,
   sessionsDirectoryName: string | undefined,
-): Promise<ProjectSessionsDirectory | undefined> {
-  if (sessionsDirectoryName === undefined) {
-    return {
-      project,
-      sessionsDirectory: project.directoryPath,
-      mtimeMs: project.stats.mtimeMs,
-    };
-  }
-  const sessionsDirectory = path.join(project.directoryPath, sessionsDirectoryName);
-  const stats = await fileStats(sessionsDirectory);
-  if (!stats?.isDirectory()) return undefined;
-  return { project, sessionsDirectory, mtimeMs: stats.mtimeMs };
+): Effect.Effect<ProjectSessionsDirectory | undefined, unknown, Files> {
+  return Effect.gen(function* () {
+    if (sessionsDirectoryName === undefined) {
+      return {
+        project,
+        sessionsDirectory: project.directoryPath,
+        mtimeMs: project.stats.mtimeMs,
+      };
+    }
+    const sessionsDirectory = path.join(project.directoryPath, sessionsDirectoryName);
+    const stats = yield* fileStats(sessionsDirectory);
+    if (!stats?.isDirectory()) return undefined;
+    return { project, sessionsDirectory, mtimeMs: stats.mtimeMs };
+  });
 }
 
 /**
@@ -340,35 +343,34 @@ async function projectSessionsDirectory(
  * projects that most recently *started* a session; the session bound that
  * follows it is ordered by each transcript's own last write.
  */
-export async function discoverSessionFiles<Candidate extends SessionFileCandidate>(
+export function discoverSessionFiles<Candidate extends SessionFileCandidate>(
   discovery: SessionFileDiscovery<Candidate>,
-): Promise<Candidate[]> {
-  const entries = await readDirectory(discovery.projectsDirectory);
-  const projects = (
-    await Promise.all(
+): Effect.Effect<Candidate[], unknown, Files> {
+  return Effect.gen(function* () {
+    const entries = yield* readDirectory(discovery.projectsDirectory);
+    const projects = (yield* Effect.all(
       entries.map((entry) => statDirectoryEntry(discovery.projectsDirectory, entry.name)),
-    )
-  ).filter((entry): entry is DirectoryEntry => entry?.stats.isDirectory() === true);
+      { concurrency: "unbounded" },
+    )).filter((entry): entry is DirectoryEntry => entry?.stats.isDirectory() === true);
 
-  const sessionsDirectories = (
-    await Promise.all(
+    const sessionsDirectories = (yield* Effect.all(
       projects.map((project) => projectSessionsDirectory(project, discovery.sessionsDirectoryName)),
-    )
-  )
-    .filter((entry): entry is ProjectSessionsDirectory => entry !== undefined)
-    .sort((first, second) => second.mtimeMs - first.mtimeMs)
-    .slice(0, discovery.maximumProjectDirectories);
+      { concurrency: "unbounded" },
+    ))
+      .filter((entry): entry is ProjectSessionsDirectory => entry !== undefined)
+      .sort((first, second) => second.mtimeMs - first.mtimeMs)
+      .slice(0, discovery.maximumProjectDirectories);
 
-  const files = (
-    await Promise.all(
+    const files = (yield* Effect.all(
       sessionsDirectories.map((entry) =>
         discovery.sessionFilesIn(entry.sessionsDirectory, entry.project),
       ),
-    )
-  ).flat();
-  // Newest first, so a duplicate session id resolves to its latest file.
-  // There is deliberately no cap: a conversation is never dropped for being
-  // old, and what keeps a pass cheap is each adapter re-reading only the
-  // files that changed since the last one.
-  return files.sort((first, second) => second.mtimeMs - first.mtimeMs);
+      { concurrency: "unbounded" },
+    )).flat();
+    // Newest first, so a duplicate session id resolves to its latest file.
+    // There is deliberately no cap: a conversation is never dropped for being
+    // old, and what keeps a pass cheap is each adapter re-reading only the
+    // files that changed since the last one.
+    return files.sort((first, second) => second.mtimeMs - first.mtimeMs);
+  });
 }

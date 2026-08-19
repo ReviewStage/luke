@@ -9,6 +9,8 @@ import {
   type SessionStatus,
   type WireRecord,
 } from "@sidecar/core";
+import type { CloudFailure } from "@sidecar/core/effect-errors";
+import { Effect } from "effect";
 import {
   CLOUD_AUTH_SCHEME,
   type CloudAdapterOptions,
@@ -22,6 +24,7 @@ import {
   textFromRecord,
   timestampFromRecord,
 } from "./cloud-session-adapter";
+import type { Http } from "./services/http";
 import { CREDENTIAL_PROVIDER_ID, CREDENTIAL_PROVIDERS } from "./shared/credential-providers";
 
 // Shared with the credential registry so the key the user saves and the
@@ -213,24 +216,26 @@ export class JulesSessionAdapter extends CloudSessionAdapter {
     );
   }
 
-  protected async collect(
+  protected collect(
     request: CloudRequest,
     now: number,
-  ): Promise<readonly ProviderSessionObservation[]> {
-    // One call per pass. The list projection already carries the state, the
-    // timestamps, and the source, so there is nothing a per-session read would
-    // add. Sessions are never capped — one page of the documented maximum is
-    // the request's only bound — and Jules documents no ordering, so the sort
-    // below is what orders the page rather than the order it arrives in.
-    const body = await request(JULES_ROUTE.SESSIONS, {
-      [JULES_QUERY.PAGE_SIZE]: String(JULES_ADAPTER_DEFAULTS.SESSION_PAGE_SIZE),
-    });
+  ): Effect.Effect<readonly ProviderSessionObservation[], CloudFailure, Http> {
+    return Effect.gen(this, function* () {
+      // One call per pass. The list projection already carries the state, the
+      // timestamps, and the source, so there is nothing a per-session read would
+      // add. Sessions are never capped — one page of the documented maximum is
+      // the request's only bound — and Jules documents no ordering, so the sort
+      // below is what orders the page rather than the order it arrives in.
+      const body = yield* request(JULES_ROUTE.SESSIONS, {
+        [JULES_QUERY.PAGE_SIZE]: String(JULES_ADAPTER_DEFAULTS.SESSION_PAGE_SIZE),
+      });
 
-    return recordsFromPage(body, JULES_FIELD.SESSIONS)
-      .map(sessionFromRecord)
-      .filter(isDefined)
-      .sort((first, second) => second.observedAt - first.observedAt)
-      .map((session) => this.#observationFor(session, now));
+      return recordsFromPage(body, JULES_FIELD.SESSIONS)
+        .map(sessionFromRecord)
+        .filter(isDefined)
+        .sort((first, second) => second.observedAt - first.observedAt)
+        .map((session) => this.#observationFor(session, now));
+    });
   }
 
   protected override messageRoute(

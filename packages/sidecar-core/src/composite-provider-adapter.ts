@@ -53,7 +53,7 @@ export class CompositeSessionProviderAdapter extends SessionProviderAdapterBase 
    * reporting the observers that answered would retire every session belonging
    * to the one that did not, and the panel would lose them until it recovers.
    */
-  observe(): Effect.Effect<readonly ProviderSessionObservation[], unknown> {
+  observe(): Effect.Effect<readonly ProviderSessionObservation[], unknown, unknown> {
     return Effect.gen(this, function* () {
       const collected = yield* Effect.all(
         this.#adapters.map((adapter) => adapter.observe()),
@@ -80,14 +80,14 @@ export class CompositeSessionProviderAdapter extends SessionProviderAdapterBase 
    */
   override sendMessage(
     message: ProviderSessionMessage,
-  ): Effect.Effect<ProviderMessageResult, unknown> {
+  ): Effect.Effect<ProviderMessageResult, unknown, unknown> {
     return this.#dispatchAct((adapter) => adapter.sendMessage(message));
   }
 
   /** A control finds its observer the same way a message does. */
   override executeControl(
     request: ProviderControlRequest,
-  ): Effect.Effect<ProviderControlResult, unknown> {
+  ): Effect.Effect<ProviderControlResult, unknown, unknown> {
     return this.#dispatchAct((adapter) => adapter.executeControl(request));
   }
 
@@ -103,18 +103,20 @@ export class CompositeSessionProviderAdapter extends SessionProviderAdapterBase 
    */
   override createWorkspace(
     request: ProviderWorkspaceRequest,
-  ): Effect.Effect<ProviderWorkspaceResult, unknown> {
+  ): Effect.Effect<ProviderWorkspaceResult, unknown, unknown> {
     return this.#dispatchAct((adapter) => adapter.createWorkspace(request));
   }
 
   /** A new agent finds the observer holding its workspace the same way. */
   override spawnWorkspaceAgent(
     request: ProviderWorkspaceAgentRequest,
-  ): Effect.Effect<ProviderWorkspaceResult, unknown> {
+  ): Effect.Effect<ProviderWorkspaceResult, unknown, unknown> {
     return this.#dispatchAct((adapter) => adapter.spawnWorkspaceAgent(request));
   }
 
-  override readTranscript(providerSessionId: string): Effect.Effect<string | undefined, unknown> {
+  override readTranscript(
+    providerSessionId: string,
+  ): Effect.Effect<string | undefined, unknown, unknown> {
     return Effect.gen(this, function* () {
       for (const adapter of this.#adapters) {
         const transcript = yield* adapter.readTranscript(providerSessionId);
@@ -130,8 +132,12 @@ export class CompositeSessionProviderAdapter extends SessionProviderAdapterBase 
    * subject's own and ends the search.
    */
   #dispatchAct<Result extends ProviderActResult>(
-    act: (adapter: SessionProviderAdapter) => Effect.Effect<Result, unknown>,
-  ): Effect.Effect<Result | { status: typeof PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED }, unknown> {
+    act: (adapter: SessionProviderAdapter) => Effect.Effect<Result, unknown, unknown>,
+  ): Effect.Effect<
+    Result | { status: typeof PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED },
+    unknown,
+    unknown
+  > {
     return Effect.gen(this, function* () {
       for (const adapter of this.#adapters) {
         const result = yield* act(adapter);

@@ -34,7 +34,7 @@ import {
   type WorkspaceAgentSelection,
   workspaceProjectSelectionId,
 } from "@sidecar/core";
-import { Layer, ManagedRuntime } from "effect";
+import { Effect } from "effect";
 import {
   app,
   BrowserWindow,
@@ -55,6 +55,7 @@ import { AccountSessionManager } from "./account-session-manager";
 import { buildCarriesDeveloperIdSigning, resolveAppName } from "./app-identity";
 import { CodexCloudSessionAdapter } from "./codex-cloud-adapter";
 import { DockPresence } from "./dock-presence";
+import { initializeEffectRuntime, runDesktopEffect } from "./effect-runtime";
 import { feedbackDeliveryFromEnvironment } from "./feedback-delivery";
 import { GoogleCalendarReader } from "./google-calendar";
 import { GoogleCalendarSignIn } from "./google-calendar-oauth";
@@ -78,10 +79,6 @@ import { PanelManager } from "./panel-manager";
 import { ProductEventSender } from "./product-event-sender";
 import { type ProviderRegistration, providerRegistrations } from "./provider-registrations";
 import { runModeFor } from "./run-mode";
-import { CliLive } from "./services/cli";
-import { FilesLive } from "./services/files";
-import { HttpLive } from "./services/http";
-import { settingsStoreLive } from "./services/settings-store-service";
 import { sessionNoticeSpeech } from "./session-notifications";
 import { createSettingsHandler } from "./settings-handler";
 import { SettingsStore } from "./settings-store";
@@ -181,9 +178,7 @@ const settingsStore = new SettingsStore({
   },
   codexCloudConnection: () => codexCloudAdapter.connection(),
 });
-const effectRuntime = ManagedRuntime.make(
-  Layer.mergeAll(HttpLive, CliLive, FilesLive, settingsStoreLive(settingsStore)),
-);
+const effectRuntime = initializeEffectRuntime(settingsStore);
 
 export { effectRuntime };
 
@@ -207,13 +202,14 @@ const accountSession = new AccountSessionManager({
     // from the browser's own sign-in, so nothing about it needs to travel again.
     if (signedIn && !wasSignedIn) productEvents.record(PRODUCT_EVENT.ACCOUNT_SIGN_IN, {});
   },
+  runEffect: runDesktopEffect,
 });
 const observationHooks = new ObservationHookRegistry(() => app.getPath("userData"));
 // Every provider this build observes, with the credential it reads and the
 // observation hook it registers, described in one place rather than assembled
 // from three parallel lists here.
 const providerRegistry = providerRegistrations({
-  readApiKey: (providerId) => settingsStore.readApiKey(providerId),
+  readApiKey: (providerId) => Effect.promise(() => settingsStore.readApiKey(providerId)),
   claudeHookInstallation: () => observationHooks.claudeInstallation(),
   codexHookInstallation: () => observationHooks.codexInstallation(),
   codexCloudAdapter,
@@ -240,9 +236,10 @@ const linearCredentials = new LinearCredentials({
     // saying connected would be a row about a grant that no longer exists.
     panels.broadcast(channels.settingsChanged, cleared.settings);
   },
+  runEffect: runDesktopEffect,
 });
 const linearTracker = new LinearIssueTracker({
-  readAccessToken: () => linearCredentials.accessToken(),
+  readAccessToken: () => Effect.promise(() => linearCredentials.accessToken()),
 });
 // The sign-in behind the Linear row: it opens Linear's own consent page in the
 // user's browser and hands back one grant, which the connect handler stores.
@@ -343,11 +340,16 @@ const createdWorkspaceOpens = new CreatedWorkspaceOpenTracker();
  */
 const attentionRequests = new AttentionRequestRegistry();
 const voiceCapabilities = new VoiceCapabilityAssembler({
-  settings: settingsStore,
+  settings: {
+    readVoiceSource: () => settingsStore.readVoiceSource(),
+    readApiKey: (providerId) => settingsStore.readApiKey(providerId),
+    get: (field) => settingsStore.get(field),
+    readAccount: () => Effect.promise(() => settingsStore.readAccount()),
+  },
   credentialsUsable: () => runMode.sendsNetwork && accountCapabilitiesActive(),
   accountSignedIn: () => account.status === ACCOUNT_STATUS.SIGNED_IN,
   hostedServiceBaseUrl: HOSTED_SERVICE_BASE_URL,
-  refreshAccount: accountSession.refreshOnce,
+  refreshAccount: () => Effect.promise(() => accountSession.refreshOnce()),
   currentSession: (identity) => sessionRegistry.get(identity),
   noticeRequestFor: (identity) => attentionRequests.get(identity),
 });
@@ -1016,7 +1018,7 @@ async function applyLocalSessionHooks(): Promise<void> {
   );
 }
 
-async function refreshProviderSessions(generation: number): Promise<void> {
+async function refreshProviderSessionsAsync(generation: number): Promise<void> {
   const actionsWereEnabled = observedSupersetActionsEnabled;
   let supersetSnapshot = new SupersetWorkspaceSnapshot([]);
   let supersetActionsEnabled = false;
@@ -1025,7 +1027,7 @@ async function refreshProviderSessions(generation: number): Promise<void> {
       APP_SETTING_SCHEMA.supersetAgentDefault.field,
     );
     [supersetSnapshot, supersetActionsEnabled] = await Promise.all([
-      supersetWorkspaces.read(),
+      runDesktopEffect(supersetWorkspaces.read()),
       supersetCli.connected(),
     ]);
     await supersetWorkspaceAdapter.refresh(supersetAgentDefault, supersetActionsEnabled);
@@ -1054,8 +1056,10 @@ async function refreshProviderSessions(generation: number): Promise<void> {
   await Promise.all(
     orderedRegistrations.map(async ({ adapter }) => {
       try {
-        await sessionRegistry.refresh(adapter, (providerId, observations) =>
-          supersetSnapshot.enrich(providerId, observations, supersetActionsEnabled),
+        await runDesktopEffect(
+          sessionRegistry.refresh(adapter, (providerId, observations) =>
+            supersetSnapshot.enrich(providerId, observations, supersetActionsEnabled),
+          ),
         );
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -1072,7 +1076,15 @@ async function refreshProviderSessions(generation: number): Promise<void> {
   void attentionObservationLoop.refresh();
 }
 
-async function reviewSessionAttention(generation: number): Promise<void> {
+function refreshProviderSessions(generation: number): Effect.Effect<void> {
+  return Effect.promise(() => refreshProviderSessionsAsync(generation));
+}
+
+function reviewSessionAttention(generation: number): Effect.Effect<void> {
+  return Effect.promise(() => reviewSessionAttentionAsync(generation));
+}
+
+async function reviewSessionAttentionAsync(generation: number): Promise<void> {
   const attentionReviewer = voiceCapabilities.attentionReviewer;
   if (!attentionReviewer) return;
   try {
@@ -1081,8 +1093,8 @@ async function reviewSessionAttention(generation: number): Promise<void> {
     // holds every conversation ever observed — reviewing all of it would send
     // an update about each one to OpenAI on every launch, hundreds of requests
     // rate-limiting the same key the voice opens calls with.
-    const reviews = await attentionReviewer.review(
-      rosterRelevantSessions(sessionRegistry.list(), Date.now()),
+    const reviews = await runDesktopEffect(
+      attentionReviewer.review(rosterRelevantSessions(sessionRegistry.list(), Date.now())),
     );
     if (!attentionObservationLoop.isCurrent(generation)) return;
     for (const review of reviews) {
@@ -1320,7 +1332,7 @@ async function releaseHeldNotices(): Promise<void> {
  * enter. Every pass ends by asking whether anything held can now be said: a
  * meeting deleted mid-way is over the moment the feed says so.
  */
-async function refreshCalendarMeetings(generation: number): Promise<void> {
+async function refreshCalendarMeetingsAsync(generation: number): Promise<void> {
   try {
     const observations = await googleCalendar.observe();
     // A pass that outlived its stop is no longer ours to report: the stop
@@ -1349,6 +1361,10 @@ async function refreshCalendarMeetings(generation: number): Promise<void> {
   void refreshMeetingQuiet();
   void releaseHeldNotices();
   armQuietBoundaryTimer();
+}
+
+function refreshCalendarMeetings(generation: number): Effect.Effect<void> {
+  return Effect.promise(() => refreshCalendarMeetingsAsync(generation));
 }
 
 const observationGate = () => runMode.observesProviders && accountCapabilitiesActive();
@@ -1451,8 +1467,8 @@ function broadcastRelevantSessions(): void {
   const snapshot = sessionRegistry.snapshot();
   const roster = rosterRelevantSessions(snapshot.sessions, Date.now());
   const rosterIds = roster
-    .map((session) => `${session.providerId} ${session.providerSessionId}`)
-    .join("  ");
+    .map((session) => `${session.providerId}${session.providerSessionId}`)
+    .join("");
   if (snapshot.revision === lastRosterRevision && rosterIds === lastRosterIds) return;
   lastRosterRevision = snapshot.revision;
   lastRosterIds = rosterIds;
@@ -1517,12 +1533,12 @@ function stopSessionObservation(): void {
  * not a board with nothing on it — and a tracker with no key stays absent,
  * which is how the renderer knows there is nothing to advertise.
  */
-async function refreshTrackedIssues(generation: number): Promise<void> {
+async function refreshTrackedIssuesAsync(generation: number): Promise<void> {
   try {
     const collected: TrackedIssue[] = [];
     let connected = false;
     for (const tracker of issueTrackers) {
-      const observations = await tracker.observe();
+      const observations = await effectRuntime.runPromise(tracker.observe());
       if (!observations) continue;
       connected = true;
       for (const observation of observations) {
@@ -1538,6 +1554,10 @@ async function refreshTrackedIssues(generation: number): Promise<void> {
     const message = error instanceof Error ? error.message : String(error);
     process.stderr.write(`Issue observation failed: ${message}\n`);
   }
+}
+
+function refreshTrackedIssues(generation: number): Effect.Effect<void> {
+  return Effect.promise(() => refreshTrackedIssuesAsync(generation));
 }
 
 function stopIssueObservation(): void {

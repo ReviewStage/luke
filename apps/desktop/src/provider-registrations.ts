@@ -4,6 +4,7 @@ import {
   type ProviderId,
   type SessionProviderAdapter,
 } from "@sidecar/core";
+import type { Effect } from "effect";
 import { ClaudeCodeSessionAdapter } from "./claude-code-adapter";
 import {
   CLAUDE_HOOK_SPOOL_MAXIMUM_AGE_MS,
@@ -41,7 +42,7 @@ export interface ProviderRegistration {
 }
 
 export interface ProviderRegistrationOptions {
-  readApiKey: (providerId: CredentialProviderId) => Promise<string | undefined>;
+  readApiKey: (providerId: CredentialProviderId) => Effect.Effect<string | undefined>;
   claudeHookInstallation: () => ClaudeCodeHookInstallation;
   codexHookInstallation: () => CodexHookInstallation;
   /**

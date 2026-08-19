@@ -5,9 +5,17 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
 import { PROVIDER_ID, SESSION_STATUS } from "@sidecar/core";
+import { Effect } from "effect";
+import { FilesLive } from "../src/services/files";
 import { SUPERSET_WORKSPACE_PROVIDER_ID } from "../src/shared/contracts";
 import { SUPERSET_CONTROL_ID } from "../src/superset-cli";
 import { SupersetWorkspaceReader } from "../src/superset-workspaces";
+
+async function readSnapshot(home: string) {
+  return Effect.runPromise(
+    new SupersetWorkspaceReader({ homeDirectory: home }).read().pipe(Effect.provide(FilesLive)),
+  );
+}
 
 async function temporarySupersetHome(t: TestContext): Promise<string> {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "luke-superset-"));
@@ -63,7 +71,7 @@ test("reads live host databases and enriches an exact provider session", async (
   `);
   database.close();
 
-  const snapshot = await new SupersetWorkspaceReader({ homeDirectory: home }).read();
+  const snapshot = await readSnapshot(home);
   assert.deepEqual(snapshot.context(PROVIDER_ID.CODEX, "session-1"), {
     providerId: PROVIDER_ID.CODEX,
     providerSessionId: "session-1",
@@ -129,7 +137,7 @@ test("keeps the newest duplicate binding across host databases", async (t) => {
     database.close();
   }
 
-  const snapshot = await new SupersetWorkspaceReader({ homeDirectory: home }).read();
+  const snapshot = await readSnapshot(home);
   assert.equal(snapshot.context(PROVIDER_ID.CLAUDE_CODE, "shared-session")?.hostId, "host-new");
 });
 
@@ -145,7 +153,7 @@ test("advertises Superset actions only after the CLI is connected", async (t) =>
     );
   `);
   database.close();
-  const snapshot = await new SupersetWorkspaceReader({ homeDirectory: home }).read();
+  const snapshot = await readSnapshot(home);
   const observation = {
     providerSessionId: "session-1",
     title: "Implement integration",
@@ -166,13 +174,13 @@ test("advertises Superset actions only after the CLI is connected", async (t) =>
 
 test("treats missing and drifted Superset state as no enrichment", async (t) => {
   const home = await temporarySupersetHome(t);
-  const empty = await new SupersetWorkspaceReader({ homeDirectory: home }).read();
+  const empty = await readSnapshot(home);
   assert.equal(empty.context(PROVIDER_ID.CODEX, "session-1"), undefined);
 
   const database = await writeHostDatabase(home, "host-drifted");
   database.exec("CREATE TABLE future_workspaces (id TEXT PRIMARY KEY)");
   database.close();
-  const drifted = await new SupersetWorkspaceReader({ homeDirectory: home }).read();
+  const drifted = await readSnapshot(home);
   assert.equal(drifted.context(PROVIDER_ID.CODEX, "session-1"), undefined);
 });
 
@@ -188,6 +196,6 @@ test("does not attach unknown Superset agent kinds to a Luke provider", async (t
   `);
   database.close();
 
-  const snapshot = await new SupersetWorkspaceReader({ homeDirectory: home }).read();
+  const snapshot = await readSnapshot(home);
   assert.equal(snapshot.context(PROVIDER_ID.CODEX, "session-1"), undefined);
 });

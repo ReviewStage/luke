@@ -11,6 +11,7 @@ import {
   OpenAiAttentionEvaluator,
   openAiAttentionEvaluator,
 } from "../src/openai-attention-evaluator";
+import { runWithHttp } from "./support/effect-http";
 import { type RecordedRequest, recordingFetch } from "./support/http-fake";
 import type { ParsedJsonObject } from "./support/json";
 
@@ -50,9 +51,10 @@ function evaluatorWith(respond: (request: RecordedRequest) => Promise<Response> 
   const evaluator = new OpenAiAttentionEvaluator({
     apiKey: API_KEY,
     now: () => DECIDED_AT,
-    fetch,
   });
-  return { evaluator, requests };
+  const evaluate = (attentionUpdate: ReturnType<typeof update>) =>
+    runWithHttp(evaluator.evaluate(attentionUpdate), fetch);
+  return { evaluator, requests, evaluate };
 }
 
 function requestBody(request: RecordedRequest): ParsedJsonObject {
@@ -76,14 +78,14 @@ function recordStderr(t: TestContext): string[] {
 
 test("requests a strict structured decision and never asks the API to retain it", async (t) => {
   silenceStderr(t);
-  const { evaluator, requests } = evaluatorWith(() =>
+  const { evaluator, requests, evaluate } = evaluatorWith(() =>
     structuredResponse({
       disposition: ATTENTION_DISPOSITION.SPEAK_DURING_TURN,
       summary: SPOKEN_SUMMARY,
     }),
   );
 
-  const decision = await evaluator.evaluate(update());
+  const decision = await evaluate(update());
 
   assert.deepEqual(decision, {
     disposition: ATTENTION_DISPOSITION.SPEAK_DURING_TURN,
@@ -126,11 +128,11 @@ test("requests a strict structured decision and never asks the API to retain it"
 
 test("sends only the bounded update and no provider transcript", async (t) => {
   silenceStderr(t);
-  const { evaluator, requests } = evaluatorWith(() =>
+  const { requests, evaluate } = evaluatorWith(() =>
     structuredResponse({ disposition: ATTENTION_DISPOSITION.SILENT, summary: null }),
   );
 
-  await evaluator.evaluate(update());
+  await evaluate(update());
 
   const [request] = requests;
   assert.ok(request);
@@ -155,8 +157,8 @@ test("stays silent when the API is unavailable or answers outside the contract",
   ];
 
   for (const failure of failures) {
-    const { evaluator } = evaluatorWith(failure);
-    assert.equal(await evaluator.evaluate(update()), undefined);
+    const { evaluate } = evaluatorWith(failure);
+    assert.equal(await evaluate(update()), undefined);
   }
 });
 
@@ -164,26 +166,21 @@ test("a rate limit quiets requests for the cooldown instead of retrying at full 
   silenceStderr(t);
   let now = DECIDED_AT;
   const { fetch, requests } = recordingFetch(() => new Response("rate limited", { status: 429 }));
-  const evaluator = new OpenAiAttentionEvaluator({ apiKey: API_KEY, now: () => now, fetch });
+  const evaluator = new OpenAiAttentionEvaluator({ apiKey: API_KEY, now: () => now });
+  const evaluate = (attentionUpdate: ReturnType<typeof update>) =>
+    runWithHttp(evaluator.evaluate(attentionUpdate), fetch);
 
-  assert.equal(evaluator.quietUntil(), undefined);
-  assert.equal(await evaluator.evaluate(update()), undefined);
+  assert.equal(await evaluate(update()), undefined);
   assert.equal(requests.length, 1);
-
-  // The quiet is visible to the reviewer, so a pass can be skipped whole
-  // rather than spending per-session retries on refusals.
-  assert.equal(evaluator.quietUntil(), now + ATTENTION_RATE_LIMIT_COOLDOWN_MS);
 
   // Inside the cooldown nothing is even sent; the update stays derivable.
   now += ATTENTION_RATE_LIMIT_COOLDOWN_MS - 1;
-  assert.equal(await evaluator.evaluate(update()), undefined);
+  assert.equal(await evaluate(update()), undefined);
   assert.equal(requests.length, 1);
 
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  // The cooldown over, requests resume and the quiet reads as lifted.
+  // The cooldown over, requests resume.
   now += 1;
-  assert.equal(evaluator.quietUntil(), undefined);
-  assert.equal(await evaluator.evaluate(update()), undefined);
+  assert.equal(await evaluate(update()), undefined);
   assert.equal(requests.length, 2);
 });
 
@@ -193,21 +190,24 @@ test("a rate limit that names its own wait is taken at its word", async (t) => {
   const { fetch, requests } = recordingFetch(
     () => new Response("rate limited", { status: 429, headers: { "retry-after": "5" } }),
   );
-  const evaluator = new OpenAiAttentionEvaluator({ apiKey: API_KEY, now: () => now, fetch });
+  const evaluator = new OpenAiAttentionEvaluator({ apiKey: API_KEY, now: () => now });
 
-  assert.equal(await evaluator.evaluate(update()), undefined);
+  const evaluateAt = (attentionUpdate: ReturnType<typeof update>) =>
+    runWithHttp(evaluator.evaluate(attentionUpdate), fetch);
+
+  assert.equal(await evaluateAt(update()), undefined);
   now += 4_999;
-  await evaluator.evaluate(update());
+  await evaluateAt(update());
   assert.equal(requests.length, 1);
 
   now += 1;
-  await evaluator.evaluate(update());
+  await evaluateAt(update());
   assert.equal(requests.length, 2);
 });
 
 test("reports a response that carried no decision instead of failing quietly", async (t) => {
   const written = recordStderr(t);
-  const { evaluator } = evaluatorWith(() =>
+  const { evaluate } = evaluatorWith(() =>
     Response.json({
       status: "incomplete",
       incomplete_details: { reason: "max_output_tokens" },
@@ -215,7 +215,7 @@ test("reports a response that carried no decision instead of failing quietly", a
     }),
   );
 
-  assert.equal(await evaluator.evaluate(update()), undefined);
+  assert.equal(await evaluate(update()), undefined);
   const message = written.join("");
   assert.match(message, /carried no decision/);
   assert.match(
@@ -227,7 +227,7 @@ test("reports a response that carried no decision instead of failing quietly", a
 
 test("reads a decision from a payload that carries aggregated output text", async (t) => {
   silenceStderr(t);
-  const { evaluator } = evaluatorWith(() =>
+  const { evaluate } = evaluatorWith(() =>
     Response.json({
       output_text: JSON.stringify({
         disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
@@ -236,7 +236,7 @@ test("reads a decision from a payload that carries aggregated output text", asyn
     }),
   );
 
-  assert.deepEqual(await evaluator.evaluate(update()), {
+  assert.deepEqual(await evaluate(update()), {
     disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
     decidedAt: DECIDED_AT,
     summary: "Codex finished its turn in billing-api.",
@@ -279,9 +279,8 @@ test("honors a configured base URL without doubling its separator", async (t) =>
     apiKey: API_KEY,
     baseUrl: "https://gateway.test/v1/",
     now: () => DECIDED_AT,
-    fetch,
   });
 
-  await evaluator.evaluate(update());
+  await runWithHttp(evaluator.evaluate(update()), fetch);
   assert.equal(requests[0]?.url, "https://gateway.test/v1/responses");
 });

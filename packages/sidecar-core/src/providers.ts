@@ -44,14 +44,16 @@ export function isProviderId(value: string): value is ProviderId {
  */
 export interface SessionProviderAdapter {
   readonly provider: SessionProvider;
-  observe(): Effect.Effect<readonly ProviderSessionObservation[], unknown>;
+  observe(): Effect.Effect<readonly ProviderSessionObservation[], unknown, unknown>;
 
   /**
    * Runs a control against a session the adapter has already observed.
    * Adapters must reject any request whose control that session's latest
    * observation did not advertise.
    */
-  executeControl(request: ProviderControlRequest): Effect.Effect<ProviderControlResult, unknown>;
+  executeControl(
+    request: ProviderControlRequest,
+  ): Effect.Effect<ProviderControlResult, unknown, unknown>;
 
   /**
    * Hands a message to an already-observed session through the provider's own
@@ -61,7 +63,9 @@ export interface SessionProviderAdapter {
    * latest observation, and nothing that decides on the user's behalf — the
    * attention evaluator above all — may reach it.
    */
-  sendMessage(message: ProviderSessionMessage): Effect.Effect<ProviderMessageResult, unknown>;
+  sendMessage(
+    message: ProviderSessionMessage,
+  ): Effect.Effect<ProviderMessageResult, unknown, unknown>;
 
   /** The projects the latest observation pass reported, or none. */
   workspaceProjects(): readonly WorkspaceProject[];
@@ -74,7 +78,7 @@ export interface SessionProviderAdapter {
    */
   createWorkspace(
     request: ProviderWorkspaceRequest,
-  ): Effect.Effect<ProviderWorkspaceResult, unknown>;
+  ): Effect.Effect<ProviderWorkspaceResult, unknown, unknown>;
 
   /**
    * Starts another agent in the workspace an observed session already runs in,
@@ -83,7 +87,7 @@ export interface SessionProviderAdapter {
    */
   spawnWorkspaceAgent(
     request: ProviderWorkspaceAgentRequest,
-  ): Effect.Effect<ProviderWorkspaceResult, unknown>;
+  ): Effect.Effect<ProviderWorkspaceResult, unknown, unknown>;
 
   /**
    * Renders one observed session's own transcript, read from the provider's
@@ -91,7 +95,7 @@ export interface SessionProviderAdapter {
    * performs nothing and reaches no provider; an adapter whose stored shape
    * this build cannot render faithfully reports nothing rather than guessing.
    */
-  readTranscript(providerSessionId: string): Effect.Effect<string | undefined, unknown>;
+  readTranscript(providerSessionId: string): Effect.Effect<string | undefined, unknown, unknown>;
 }
 
 /**
@@ -440,13 +444,17 @@ export interface ProviderWorkspaceAgentRequest {
  */
 export abstract class SessionProviderAdapterBase implements SessionProviderAdapter {
   abstract readonly provider: SessionProvider;
-  abstract observe(): Effect.Effect<readonly ProviderSessionObservation[], unknown>;
+  abstract observe(): Effect.Effect<readonly ProviderSessionObservation[], unknown, unknown>;
 
-  executeControl(_request: ProviderControlRequest): Effect.Effect<ProviderControlResult, unknown> {
+  executeControl(
+    _request: ProviderControlRequest,
+  ): Effect.Effect<ProviderControlResult, unknown, unknown> {
     return Effect.succeed({ status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED });
   }
 
-  sendMessage(_message: ProviderSessionMessage): Effect.Effect<ProviderMessageResult, unknown> {
+  sendMessage(
+    _message: ProviderSessionMessage,
+  ): Effect.Effect<ProviderMessageResult, unknown, unknown> {
     return Effect.succeed({ status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED });
   }
 
@@ -456,17 +464,17 @@ export abstract class SessionProviderAdapterBase implements SessionProviderAdapt
 
   createWorkspace(
     _request: ProviderWorkspaceRequest,
-  ): Effect.Effect<ProviderWorkspaceResult, unknown> {
+  ): Effect.Effect<ProviderWorkspaceResult, unknown, unknown> {
     return Effect.succeed({ status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED });
   }
 
   spawnWorkspaceAgent(
     _request: ProviderWorkspaceAgentRequest,
-  ): Effect.Effect<ProviderWorkspaceResult, unknown> {
+  ): Effect.Effect<ProviderWorkspaceResult, unknown, unknown> {
     return Effect.succeed({ status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED });
   }
 
-  readTranscript(_providerSessionId: string): Effect.Effect<string | undefined, unknown> {
+  readTranscript(_providerSessionId: string): Effect.Effect<string | undefined, unknown, unknown> {
     return Effect.succeed(undefined);
   }
 }

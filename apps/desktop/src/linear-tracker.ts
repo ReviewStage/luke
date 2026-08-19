@@ -7,13 +7,14 @@ import {
   isWireNumber,
   maximumIssueTransitions,
   TRACKER_ACTION_RESULT_STATUS,
-  type TrackerActionResult,
   type TrackerIssueAction,
   type TrackerIssueObservation,
   text,
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/core";
+import { Effect } from "effect";
+import { Http } from "./services/http";
 import { CREDENTIAL_PROVIDER_ID, CREDENTIAL_PROVIDERS } from "./shared/credential-providers";
 import { unparsedWire, wireRecord } from "./wire-boundary";
 
@@ -81,9 +82,7 @@ export interface LinearTrackerOptions {
    * here knows how the token was come by or when it lapses: it arrives
    * already renewed, or it does not arrive.
    */
-  readAccessToken: () => Promise<string | undefined>;
-  /** Injectable so tests exercise the client without a network. */
-  fetchImplementation?: typeof fetch;
+  readAccessToken: () => Effect.Effect<string | undefined>;
   now?: () => number;
 }
 
@@ -91,6 +90,11 @@ interface LinearState {
   id: string;
   name: string;
   position: number;
+}
+
+interface GraphQlPayload {
+  data?: WireRecord;
+  errors?: readonly unknown[];
 }
 
 function stateFrom(value: UnparsedWireValue): LinearState | undefined {
@@ -130,134 +134,137 @@ export class LinearIssueTracker implements IssueTrackerAdapter {
     displayName: LINEAR_TRACKER_NAME,
   };
 
-  readonly #readAccessToken: () => Promise<string | undefined>;
-  readonly #fetch: typeof fetch;
+  readonly #readAccessToken: () => Effect.Effect<string | undefined>;
   readonly #now: () => number;
   readonly #endpoint: string;
 
   constructor(options: LinearTrackerOptions) {
     this.#readAccessToken = options.readAccessToken;
-    this.#fetch = options.fetchImplementation ?? fetch;
     this.#now = options.now ?? Date.now;
     this.#endpoint = process.env[LINEAR_ENVIRONMENT.API_URL]?.trim() || LINEAR_DEFAULT_API_URL;
   }
 
-  async observe(): Promise<readonly TrackerIssueObservation[] | undefined> {
-    const accessToken = await this.#readAccessToken();
-    // No token, no request: the tracker is not connected, which is a different
-    // answer from a connected tracker listing nothing.
-    if (!accessToken) return undefined;
+  observe() {
+    return Effect.gen(this, function* () {
+      const accessToken = yield* this.#readAccessToken();
+      // No token, no request: the tracker is not connected, which is a different
+      // answer from a connected tracker listing nothing.
+      if (!accessToken) return undefined;
 
-    const payload = await this.#post(accessToken, LINEAR_READ_ASSIGNED_ISSUES, {
-      first: ISSUE_PAGE_SIZE,
-    });
-    if (payload.errors) throw new Error("Linear answered the read with errors");
-    const viewer =
-      isRecord(payload.data) && isRecord(payload.data.viewer) ? payload.data.viewer : undefined;
-    const issues = isRecord(viewer?.assignedIssues) ? viewer.assignedIssues : undefined;
-    const nodes = Array.isArray(issues?.nodes) ? issues.nodes : [];
-    const observedAt = this.#now();
+      const payload = yield* this.#post(accessToken, LINEAR_READ_ASSIGNED_ISSUES, {
+        first: ISSUE_PAGE_SIZE,
+      });
+      if (payload.errors)
+        return yield* Effect.fail(new Error("Linear answered the read with errors"));
+      const viewer =
+        isRecord(payload.data) && isRecord(payload.data.viewer) ? payload.data.viewer : undefined;
+      const issues = isRecord(viewer?.assignedIssues) ? viewer.assignedIssues : undefined;
+      const nodes = Array.isArray(issues?.nodes) ? issues.nodes : [];
+      const observedAt = this.#now();
 
-    // A malformed issue is skipped rather than failing the pass: the roster
-    // should say what Linear could say, not go silent over one broken node.
-    return nodes.flatMap((node): TrackerIssueObservation[] => {
-      if (!isRecord(node)) return [];
-      const trackerIssueId = text(node.id);
-      const identifier = text(node.identifier);
-      const title = text(node.title);
-      const state = stateFrom(node.state);
-      if (!trackerIssueId || !identifier || !title || !state) return [];
-      const url = text(node.url);
-      return [
-        {
-          trackerIssueId,
-          identifier,
-          title,
-          stateName: state.name,
-          observedAt,
-          ...(url ? { url } : undefined),
-          transitions: transitionsFrom(node, state.id),
-          canComment: true,
-        },
-      ];
+      // A malformed issue is skipped rather than failing the pass: the roster
+      // should say what Linear could say, not go silent over one broken node.
+      return nodes.flatMap((node): TrackerIssueObservation[] => {
+        if (!isRecord(node)) return [];
+        const trackerIssueId = text(node.id);
+        const identifier = text(node.identifier);
+        const title = text(node.title);
+        const state = stateFrom(node.state);
+        if (!trackerIssueId || !identifier || !title || !state) return [];
+        const url = text(node.url);
+        return [
+          {
+            trackerIssueId,
+            identifier,
+            title,
+            stateName: state.name,
+            observedAt,
+            ...(url ? { url } : undefined),
+            transitions: transitionsFrom(node, state.id),
+            canComment: true,
+          },
+        ];
+      });
     });
   }
 
-  async execute(action: TrackerIssueAction): Promise<TrackerActionResult> {
-    const accessToken = await this.#readAccessToken();
-    if (!accessToken) return { status: TRACKER_ACTION_RESULT_STATUS.UNSUPPORTED };
+  execute(action: TrackerIssueAction) {
+    return Effect.gen(this, function* () {
+      const accessToken = yield* this.#readAccessToken();
+      if (!accessToken) return { status: TRACKER_ACTION_RESULT_STATUS.UNSUPPORTED };
 
-    const [document, variables, resultField] =
-      action.kind === ISSUE_ACTION_KIND.SET_STATE
-        ? ([
-            LINEAR_WRITE[ISSUE_ACTION_KIND.SET_STATE],
-            { id: action.trackerIssueId, stateId: action.transition.id },
-            "issueUpdate",
-          ] as const)
-        : ([
-            LINEAR_WRITE[ISSUE_ACTION_KIND.COMMENT],
-            { issueId: action.trackerIssueId, body: action.body },
-            "commentCreate",
-          ] as const);
+      const [document, variables, resultField] =
+        action.kind === ISSUE_ACTION_KIND.SET_STATE
+          ? ([
+              LINEAR_WRITE[ISSUE_ACTION_KIND.SET_STATE],
+              { id: action.trackerIssueId, stateId: action.transition.id },
+              "issueUpdate",
+            ] as const)
+          : ([
+              LINEAR_WRITE[ISSUE_ACTION_KIND.COMMENT],
+              { issueId: action.trackerIssueId, body: action.body },
+              "commentCreate",
+            ] as const);
 
-    // What became of the act is an answer for the conversation, never a
-    // throw: the developer asked for something, and the reply has to say.
-    let payload: GraphQlPayload;
-    try {
-      payload = await this.#post(accessToken, document, variables);
-    } catch {
-      return {
-        status: TRACKER_ACTION_RESULT_STATUS.REJECTED,
-        reason: "The request to Linear did not complete.",
-      };
-    }
-    if (payload.errors) {
-      return {
-        status: TRACKER_ACTION_RESULT_STATUS.REJECTED,
-        reason: "Linear rejected that change.",
-      };
-    }
-    const result = isRecord(payload.data) ? payload.data[resultField] : undefined;
-    if (!isRecord(result) || result.success !== true) {
-      return {
-        status: TRACKER_ACTION_RESULT_STATUS.REJECTED,
-        reason: "Linear did not confirm that change.",
-      };
-    }
-    return { status: TRACKER_ACTION_RESULT_STATUS.ACCEPTED };
+      // What became of the act is an answer for the conversation, never a
+      // throw: the developer asked for something, and the reply has to say.
+      const posted = yield* this.#post(accessToken, document, variables).pipe(Effect.either);
+      if (posted._tag === "Left") {
+        return {
+          status: TRACKER_ACTION_RESULT_STATUS.REJECTED,
+          reason: "The request to Linear did not complete.",
+        };
+      }
+      const payload = posted.right;
+      if (payload.errors) {
+        return {
+          status: TRACKER_ACTION_RESULT_STATUS.REJECTED,
+          reason: "Linear rejected that change.",
+        };
+      }
+      const result = isRecord(payload.data) ? payload.data[resultField] : undefined;
+      if (!isRecord(result) || result.success !== true) {
+        return {
+          status: TRACKER_ACTION_RESULT_STATUS.REJECTED,
+          reason: "Linear did not confirm that change.",
+        };
+      }
+      return { status: TRACKER_ACTION_RESULT_STATUS.ACCEPTED };
+    });
   }
 
-  async #post(
+  #post(
     accessToken: string,
     document: string,
     variables: WireRecord,
-  ): Promise<GraphQlPayload> {
-    const response = await this.#fetch(this.#endpoint, {
-      method: "POST",
-      headers: {
-        // What the consent page granted is an OAuth access token, which
-        // Linear reads under the scheme every OAuth token is sent with.
-        authorization: `Bearer ${accessToken}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({ query: document, variables }),
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  ): Effect.Effect<GraphQlPayload, unknown, Http> {
+    return Effect.gen(this, function* () {
+      const http = yield* Http;
+      const response = yield* http.request(this.#endpoint, {
+        method: "POST",
+        headers: {
+          // What the consent page granted is an OAuth access token, which
+          // Linear reads under the scheme every OAuth token is sent with.
+          authorization: `Bearer ${accessToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ query: document, variables }),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+      if (!response.ok) return yield* Effect.fail(new Error(`Linear answered ${response.status}`));
+      const payload = yield* http.readJson(response);
+      const wirePayload = wireRecord(
+        unparsedWire(payload as import("./wire-boundary").WireBoundaryInput),
+      );
+      if (!wirePayload)
+        return yield* Effect.fail(new Error("Linear answered with something other than GraphQL"));
+      const data = wireRecord(unparsedWire(wirePayload.data));
+      return {
+        ...(data ? { data } : undefined),
+        ...(Array.isArray(wirePayload.errors) && wirePayload.errors.length > 0
+          ? { errors: wirePayload.errors }
+          : undefined),
+      };
     });
-    if (!response.ok) throw new Error(`Linear answered ${response.status}`);
-    const payload = await response.json();
-    const wirePayload = wireRecord(unparsedWire(payload));
-    if (!wirePayload) throw new Error("Linear answered with something other than GraphQL");
-    const data = wireRecord(unparsedWire(wirePayload.data));
-    return {
-      ...(data ? { data } : undefined),
-      ...(Array.isArray(wirePayload.errors) && wirePayload.errors.length > 0
-        ? { errors: wirePayload.errors }
-        : undefined),
-    };
   }
-}
-
-interface GraphQlPayload {
-  data?: WireRecord;
-  errors?: readonly unknown[];
 }

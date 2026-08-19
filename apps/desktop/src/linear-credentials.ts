@@ -1,6 +1,7 @@
 // The same collapsing the account's refresh uses, and for the same reason:
 // Linear consumes a refresh token when it is spent, so two refreshes racing
 // would have the loser spend one Linear has already rotated away.
+import { Effect } from "effect";
 import { singleFlight } from "./account-token-lifecycle";
 import {
   LINEAR_REFRESH_STATUS,
@@ -22,6 +23,7 @@ export interface LinearCredentialsOptions {
   writeGrant: (grant: LinearGrant) => Promise<void>;
   /** Deletes the stored grant, which is what a refusal from Linear settles. */
   forgetGrant: () => Promise<void>;
+  runEffect: <A, E>(effect: Effect.Effect<A, E, unknown>) => Promise<A>;
   environment?: NodeJS.ProcessEnv;
   fetchImplementation?: typeof fetch;
   now?: () => number;
@@ -46,40 +48,37 @@ export class LinearCredentials {
   constructor(options: LinearCredentialsOptions) {
     this.#options = options;
     this.#now = options.now ?? Date.now;
-    this.#renew = singleFlight(async () => {
-      const generation = this.#generation;
-      if (this.#disconnecting) return;
-      const grant = await this.#options.readGrant();
-      // Another ask may have renewed it while this one waited for the flight,
-      // in which case there is nothing left to spend a rotation on.
-      if (
-        generation !== this.#generation ||
-        this.#disconnecting ||
-        !grant?.refreshToken ||
-        this.#current(grant)
-      )
-        return;
-      const outcome = await refreshLinearGrant(grant.refreshToken, {
-        ...(this.#options.environment ? { environment: this.#options.environment } : undefined),
-        ...(this.#options.fetchImplementation
-          ? { fetchImplementation: this.#options.fetchImplementation }
-          : undefined),
-        now: this.#now,
-      });
-      if (outcome.status === LINEAR_REFRESH_STATUS.RENEWED) {
-        if (generation !== this.#generation) return;
-        await this.#options.writeGrant(outcome.grant);
-        return;
-      }
-      // Linear said no: the grant is spent, withdrawn, or expired, and no
-      // number of further passes will change that. Forgetting it is what
-      // turns the row back into an offer to connect, which is the only thing
-      // that helps.
-      if (outcome.status === LINEAR_REFRESH_STATUS.REFUSED) {
-        if (generation !== this.#generation) return;
-        await this.#options.forgetGrant();
-      }
-    });
+    const flight = singleFlight(() =>
+      Effect.promise(async () => {
+        const generation = this.#generation;
+        if (this.#disconnecting) return;
+        const grant = await this.#options.readGrant();
+        if (
+          generation !== this.#generation ||
+          this.#disconnecting ||
+          !grant?.refreshToken ||
+          this.#current(grant)
+        )
+          return;
+        const outcome = await refreshLinearGrant(grant.refreshToken, {
+          ...(this.#options.environment ? { environment: this.#options.environment } : undefined),
+          ...(this.#options.fetchImplementation
+            ? { fetchImplementation: this.#options.fetchImplementation }
+            : undefined),
+          now: this.#now,
+        });
+        if (outcome.status === LINEAR_REFRESH_STATUS.RENEWED) {
+          if (generation !== this.#generation) return;
+          await this.#options.writeGrant(outcome.grant);
+          return;
+        }
+        if (outcome.status === LINEAR_REFRESH_STATUS.REFUSED) {
+          if (generation !== this.#generation) return;
+          await this.#options.forgetGrant();
+        }
+      }),
+    );
+    this.#renew = () => options.runEffect(flight());
   }
 
   /**

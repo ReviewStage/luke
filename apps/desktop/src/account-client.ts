@@ -5,6 +5,9 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/core";
+import { AccountClientFailure, type CloudFailure } from "@sidecar/core/effect-errors";
+import { Effect } from "effect";
+import { Http } from "./services/http";
 import type { AccountProvider } from "./shared/contracts";
 
 export interface AccountTokens {
@@ -40,63 +43,49 @@ export function accountPictureUrl(value: UnparsedWireValue): string | undefined 
   return googleHosted || host === "avatars.githubusercontent.com" ? url.toString() : undefined;
 }
 
-export type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
-
 export interface AccountClientOptions {
   baseUrl: string;
   clientId: string;
-  fetch?: FetchLike;
   timeoutMs?: number;
-}
-
-export class AccountClientError extends Error {
-  readonly status?: number;
-  readonly oauthError?: string;
-
-  constructor(message: string, options: { status?: number; oauthError?: string } = {}) {
-    super(message);
-    this.name = "AccountClientError";
-    this.status = options.status;
-    this.oauthError = options.oauthError;
-  }
 }
 
 function record(value: UnparsedWireValue): WireRecord | undefined {
   return isRecord(value) ? value : undefined;
 }
 
-async function responseRecord(response: Response): Promise<WireRecord> {
-  const body = record(await response.json().catch(() => undefined));
+function responseRecord(
+  body: unknown,
+  response: Response,
+): Effect.Effect<WireRecord, AccountClientFailure> {
   if (!response.ok) {
-    throw new AccountClientError(
-      text(body?.error_description) ?? `Account service returned ${response.status}`,
-      {
+    const parsed = record(body as UnparsedWireValue);
+    return Effect.fail(
+      new AccountClientFailure({
         status: response.status,
-        ...(text(body?.error) ? { oauthError: text(body?.error) } : undefined),
-      },
+        ...(text(parsed?.error) ? { oauthError: text(parsed?.error) } : undefined),
+      }),
     );
   }
-  if (!body) throw new AccountClientError("Account service returned an invalid response");
-  return body;
+  const parsed = record(body as UnparsedWireValue);
+  if (!parsed) return Effect.fail(new AccountClientFailure({}));
+  return Effect.succeed(parsed);
 }
 
-function tokensFrom(body: WireRecord): AccountTokens {
+function tokensFrom(body: WireRecord): Effect.Effect<AccountTokens, AccountClientFailure> {
   if (!isWireString(body.access_token) || !isWireString(body.refresh_token)) {
-    throw new AccountClientError("Account service did not return both tokens");
+    return Effect.fail(new AccountClientFailure({}));
   }
-  return { accessToken: body.access_token, refreshToken: body.refresh_token };
+  return Effect.succeed({ accessToken: body.access_token, refreshToken: body.refresh_token });
 }
 
 export class AccountClient {
   readonly #baseUrl: string;
   readonly #clientId: string;
-  readonly #fetch: FetchLike;
   readonly #timeoutMs: number;
 
   constructor(options: AccountClientOptions) {
     this.#baseUrl = options.baseUrl.replace(/\/$/, "");
     this.#clientId = options.clientId;
-    this.#fetch = options.fetch ?? fetch;
     this.#timeoutMs = options.timeoutMs ?? 15_000;
   }
 
@@ -115,72 +104,90 @@ export class AccountClient {
     return url.toString();
   }
 
-  async exchangeCode(input: {
+  exchangeCode(input: {
     code: string;
     codeVerifier: string;
     redirectUri: string;
-  }): Promise<AccountTokens> {
-    return tokensFrom(
-      await this.#token({
+  }): Effect.Effect<AccountTokens, AccountClientFailure | CloudFailure, Http> {
+    return Effect.gen(this, function* () {
+      const body = yield* this.#token({
         grant_type: "authorization_code",
         code: input.code,
         code_verifier: input.codeVerifier,
         client_id: this.#clientId,
         redirect_uri: input.redirectUri,
-      }),
-    );
+      });
+      return yield* tokensFrom(body);
+    });
   }
 
-  async refresh(refreshToken: string): Promise<AccountTokens> {
-    const body = await this.#token({
-      grant_type: "refresh_token",
-      refresh_token: refreshToken,
-      client_id: this.#clientId,
+  refresh(
+    refreshToken: string,
+  ): Effect.Effect<AccountTokens, AccountClientFailure | CloudFailure, Http> {
+    return Effect.gen(this, function* () {
+      const body = yield* this.#token({
+        grant_type: "refresh_token",
+        refresh_token: refreshToken,
+        client_id: this.#clientId,
+      });
+      return yield* tokensFrom({ ...body, refresh_token: body.refresh_token ?? refreshToken });
     });
-    const refreshed = tokensFrom({ ...body, refresh_token: body.refresh_token ?? refreshToken });
-    return refreshed;
   }
 
   /** Revokes the long-lived credential; local sign-out never depends on this succeeding. */
-  async revoke(refreshToken: string): Promise<void> {
-    const response = await this.#fetch(`${this.#baseUrl}/oauth2/revoke`, {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: this.#clientId,
-        token: refreshToken,
-        token_type_hint: "refresh_token",
-      }),
-      signal: AbortSignal.timeout(this.#timeoutMs),
+  revoke(refreshToken: string): Effect.Effect<void, AccountClientFailure | CloudFailure, Http> {
+    return Effect.gen(this, function* () {
+      const http = yield* Http;
+      const response = yield* http.request(`${this.#baseUrl}/oauth2/revoke`, {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          client_id: this.#clientId,
+          token: refreshToken,
+          token_type_hint: "refresh_token",
+        }),
+        signal: AbortSignal.timeout(this.#timeoutMs),
+      });
+      if (!response.ok) yield* responseRecord(yield* http.readJson(response), response);
     });
-    if (!response.ok) await responseRecord(response);
   }
 
-  async userInfo(accessToken: string, provider: AccountProvider): Promise<AccountIdentity> {
-    const response = await this.#fetch(`${this.#baseUrl}/oauth2/userinfo`, {
-      headers: { authorization: `Bearer ${accessToken}` },
-      signal: AbortSignal.timeout(this.#timeoutMs),
+  userInfo(
+    accessToken: string,
+    provider: AccountProvider,
+  ): Effect.Effect<AccountIdentity, AccountClientFailure | CloudFailure, Http> {
+    return Effect.gen(this, function* () {
+      const http = yield* Http;
+      const response = yield* http.request(`${this.#baseUrl}/oauth2/userinfo`, {
+        headers: { authorization: `Bearer ${accessToken}` },
+        signal: AbortSignal.timeout(this.#timeoutMs),
+      });
+      const body = yield* responseRecord(yield* http.readJson(response), response);
+      if (!isWireString(body.email)) {
+        return yield* Effect.fail(new AccountClientFailure({}));
+      }
+      const pictureUrl = accountPictureUrl(body.picture);
+      return {
+        email: body.email,
+        ...(isWireString(body.name) && body.name ? { name: body.name } : undefined),
+        ...(pictureUrl ? { pictureUrl } : undefined),
+        provider,
+      };
     });
-    const body = await responseRecord(response);
-    if (!isWireString(body.email)) {
-      throw new AccountClientError("Account service returned an invalid identity");
-    }
-    const pictureUrl = accountPictureUrl(body.picture);
-    return {
-      email: body.email,
-      ...(isWireString(body.name) && body.name ? { name: body.name } : undefined),
-      ...(pictureUrl ? { pictureUrl } : undefined),
-      provider,
-    };
   }
 
-  async #token(fields: Record<string, string>): Promise<WireRecord> {
-    const response = await this.#fetch(`${this.#baseUrl}/oauth2/token`, {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams(fields),
-      signal: AbortSignal.timeout(this.#timeoutMs),
+  #token(
+    fields: Record<string, string>,
+  ): Effect.Effect<WireRecord, AccountClientFailure | CloudFailure, Http> {
+    return Effect.gen(this, function* () {
+      const http = yield* Http;
+      const response = yield* http.request(`${this.#baseUrl}/oauth2/token`, {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams(fields),
+        signal: AbortSignal.timeout(this.#timeoutMs),
+      });
+      return yield* responseRecord(yield* http.readJson(response), response);
     });
-    return responseRecord(response);
   }
 }

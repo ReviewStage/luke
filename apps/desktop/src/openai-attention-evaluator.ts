@@ -11,6 +11,9 @@ import {
   text,
   type UnparsedWireValue,
 } from "@sidecar/core";
+import { AttentionRateLimited } from "@sidecar/core/effect-errors";
+import { Duration, Effect, Ref, Schedule } from "effect";
+import { Http } from "./services/http";
 
 /* The key is not read here: it is the stored credential the settings store
    // SAFETY: The preceding check establishes the asserted contract.
@@ -48,13 +51,10 @@ const OPENAI_RETRY_AFTER_HEADER = "retry-after";
  */
 export const ATTENTION_RATE_LIMIT_COOLDOWN_MS = 60_000;
 
-type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
-
 export interface OpenAiAttentionEvaluatorOptions {
   apiKey: string;
   model?: string;
   baseUrl?: string;
-  fetch?: FetchLike;
   now?: () => number;
   requestTimeoutMs?: number;
   maximumOutputTokens?: number;
@@ -66,13 +66,22 @@ function withoutTrailingSlash(value: string): string {
   return value.endsWith("/") ? value.slice(0, -1) : value;
 }
 
-function parsedJson(text: string): UnparsedWireValue | undefined {
+function parsedJson(textValue: string): UnparsedWireValue | undefined {
   try {
     // SAFETY: JSON.parse returns a wire value; callers validate before use.
-    return JSON.parse(text) as UnparsedWireValue;
+    return JSON.parse(textValue) as UnparsedWireValue;
   } catch {
     return undefined;
   }
+}
+
+function rateLimitWaitMs(response: Response, now: number, quietUntil: number): number {
+  const retryAfterSeconds = Number(response.headers.get(OPENAI_RETRY_AFTER_HEADER));
+  const waitMs =
+    Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
+      ? retryAfterSeconds * 1000
+      : ATTENTION_RATE_LIMIT_COOLDOWN_MS;
+  return Math.max(waitMs, quietUntil - now);
 }
 
 /**
@@ -86,13 +95,10 @@ export class OpenAiAttentionEvaluator implements AttentionEvaluator {
   readonly #apiKey: string;
   readonly #model: string;
   readonly #baseUrl: string;
-  readonly #fetch: FetchLike;
   readonly #now: () => number;
   readonly #requestTimeoutMs: number;
   readonly #maximumOutputTokens: number;
-  // SAFETY: The preceding check establishes the asserted contract.
-  /** Until when rate-limited requests stay unsent, as epoch milliseconds. */
-  #quietUntil = 0;
+  readonly #quietUntil: Ref.Ref<number>;
 
   constructor(options: OpenAiAttentionEvaluatorOptions) {
     const apiKey = text(options.apiKey);
@@ -100,7 +106,6 @@ export class OpenAiAttentionEvaluator implements AttentionEvaluator {
     this.#apiKey = apiKey;
     this.#model = text(options.model) ?? OPENAI_DEFAULTS.MODEL;
     this.#baseUrl = withoutTrailingSlash(text(options.baseUrl) ?? OPENAI_DEFAULTS.BASE_URL);
-    this.#fetch = options.fetch ?? ((input, init) => fetch(input, init));
     this.#now = options.now ?? Date.now;
     this.#requestTimeoutMs = positiveInteger(
       options.requestTimeoutMs,
@@ -110,104 +115,108 @@ export class OpenAiAttentionEvaluator implements AttentionEvaluator {
       options.maximumOutputTokens,
       OPENAI_DEFAULTS.MAXIMUM_OUTPUT_TOKENS,
     );
+    this.#quietUntil = Ref.unsafeMake(0);
   }
 
   get model(): string {
     return this.#model;
   }
 
-  /**
-   * The moment rate-limited requests resume, for the reviewer to ask before a
-   * pass. A reviewer that asks skips the pass without spending anything; the
-   * guard inside {@link evaluate} still answers a caller that did not.
-   */
-  quietUntil(): number | undefined {
-    return this.#quietUntil > this.#now() ? this.#quietUntil : undefined;
-  }
-
-  async evaluate(update: AttentionUpdate): Promise<AttentionDecision | undefined> {
-    // Answering with nothing is how an evaluator stays silent, and staying
-    // silent is free: the update stays derivable and returns once the API is
-    // taking requests again.
-    if (this.#now() < this.#quietUntil) return undefined;
-    const response = await this.#request(update);
-    if (!response) return undefined;
-
-    if (!response.ok) {
-      if (response.status === OPENAI_RATE_LIMIT_STATUS) {
-        this.#quiet(response);
-        return undefined;
-      }
-      // Status alone is enough to diagnose credentials or rate limits without
-      // writing the request, the key, or any session material to the log.
-      this.#report(`OpenAI attention request failed with status ${response.status}`);
-      return undefined;
-    }
-
-    const payload = await this.#payload(response);
-    if (payload === undefined) return undefined;
-
-    const text = attentionResponsesOutputText(payload);
-    if (!text) {
-      this.#report(
-        `OpenAI attention response carried no decision${attentionResponsesMissingReason(payload)}`,
-      );
-      return undefined;
-    }
-
-    const decision = attentionDecisionFromModel(parsedJson(text), this.#now());
-    if (!decision) this.#report("OpenAI attention response did not satisfy the decision contract");
-    return decision;
-  }
-
-  async #request(update: AttentionUpdate): Promise<Response | undefined> {
-    try {
-      return await this.#fetch(`${this.#baseUrl}${ATTENTION_RESPONSES_PATH}`, {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${this.#apiKey}`,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify(
-          attentionResponsesRequest(update, {
-            model: this.#model,
-            maximumOutputTokens: this.#maximumOutputTokens,
-          }),
-        ),
-        signal: AbortSignal.timeout(this.#requestTimeoutMs),
-      });
-    } catch (error) {
-      this.#report(
-        `OpenAI attention request did not complete: ${error instanceof Error ? error.name : "unknown error"}`,
-      );
-      return undefined;
-    }
-  }
-
-  /**
-   * Starts the quiet a rate limit asked for, taking the API's own word for
-   * how long when it gives one. Reported once, at the moment the quiet
-   * begins: the requests held back during it are not failures to log.
-   */
-  #quiet(response: Response): void {
-    const retryAfterSeconds = Number(response.headers.get(OPENAI_RETRY_AFTER_HEADER));
-    const waitMs =
-      Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
-        ? retryAfterSeconds * 1000
-        : ATTENTION_RATE_LIMIT_COOLDOWN_MS;
-    this.#quietUntil = this.#now() + waitMs;
-    this.#report(
-      `OpenAI attention requests are rate limited; pausing reviews for ${Math.round(waitMs / 1000)}s`,
+  evaluate(update: AttentionUpdate) {
+    return this.#evaluateOnce(update).pipe(
+      Effect.retry({
+        while: (error): error is AttentionRateLimited =>
+          error instanceof AttentionRateLimited && error.retryAfterMs <= 0,
+        schedule: Schedule.addDelay(Schedule.recurs(1), () => Duration.zero),
+      }),
     );
   }
 
-  async #payload(response: Response): Promise<void> {
-    try {
-      return await response.json();
-    } catch {
-      this.#report("OpenAI attention response was not JSON");
-      return undefined;
-    }
+  #evaluateOnce(
+    update: AttentionUpdate,
+  ): Effect.Effect<AttentionDecision | undefined, AttentionRateLimited, Http> {
+    return Effect.gen(this, function* () {
+      const now = this.#now();
+      const quietUntil = yield* Ref.get(this.#quietUntil);
+      if (now < quietUntil) {
+        return yield* Effect.fail(new AttentionRateLimited({ retryAfterMs: quietUntil - now }));
+      }
+
+      const response = yield* this.#request(update);
+      if (!response) return undefined;
+
+      if (!response.ok) {
+        if (response.status === OPENAI_RATE_LIMIT_STATUS) {
+          const waitMs = rateLimitWaitMs(response, now, quietUntil);
+          yield* Ref.set(this.#quietUntil, now + waitMs);
+          this.#report(
+            `OpenAI attention requests are rate limited; pausing reviews for ${Math.round(waitMs / 1000)}s`,
+          );
+          return yield* Effect.fail(new AttentionRateLimited({ retryAfterMs: waitMs }));
+        }
+        // Status alone is enough to diagnose credentials or rate limits without
+        // writing the request, the key, or any session material to the log.
+        this.#report(`OpenAI attention request failed with status ${response.status}`);
+        return undefined;
+      }
+
+      const payload = yield* this.#payload(response);
+      if (payload === undefined) return undefined;
+
+      const outputText = attentionResponsesOutputText(payload);
+      if (!outputText) {
+        this.#report(
+          `OpenAI attention response carried no decision${attentionResponsesMissingReason(payload)}`,
+        );
+        return undefined;
+      }
+
+      const decision = attentionDecisionFromModel(parsedJson(outputText), this.#now());
+      if (!decision) {
+        this.#report("OpenAI attention response did not satisfy the decision contract");
+      }
+      return decision;
+    });
+  }
+
+  #request(update: AttentionUpdate): Effect.Effect<Response | undefined, never, Http> {
+    return Effect.gen(this, function* () {
+      const http = yield* Http;
+      return yield* http
+        .request(`${this.#baseUrl}${ATTENTION_RESPONSES_PATH}`, {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${this.#apiKey}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify(
+            attentionResponsesRequest(update, {
+              model: this.#model,
+              maximumOutputTokens: this.#maximumOutputTokens,
+            }),
+          ),
+          signal: AbortSignal.timeout(this.#requestTimeoutMs),
+        })
+        .pipe(
+          Effect.catchAll(() => {
+            this.#report("OpenAI attention request did not complete");
+            return Effect.succeed(undefined);
+          }),
+        );
+    });
+  }
+
+  #payload(response: Response): Effect.Effect<UnparsedWireValue | undefined, never, Http> {
+    return Effect.gen(this, function* () {
+      const http = yield* Http;
+      const payload = yield* http.readJson(response).pipe(
+        Effect.catchAll(() => {
+          this.#report("OpenAI attention response was not JSON");
+          return Effect.succeed(undefined);
+        }),
+      );
+      return payload === undefined ? undefined : (payload as UnparsedWireValue);
+    });
   }
 
   #report(message: string): void {

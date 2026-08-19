@@ -34,8 +34,10 @@ import {
   type WorkspaceAgentSelection,
   workspaceNameText,
 } from "@sidecar/core";
+import { Effect } from "effect";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from "electron";
 import { createActionHandler } from "../action-handler";
+import { runDesktopEffect } from "../effect-runtime";
 import type { LinearIssueTracker } from "../linear-tracker";
 import type { SettingsStore } from "../settings-store";
 import {
@@ -134,15 +136,18 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
   async function performSessionAct<Result extends ProviderActResult>(
     identity: SessionIdentity,
     counted: ProductSessionAct,
-    act: (adapter: SessionProviderAdapter, session: NormalizedSession) => Promise<Result>,
+    act: (
+      adapter: SessionProviderAdapter,
+      session: NormalizedSession,
+    ) => Effect.Effect<Result, unknown, unknown>,
   ): Promise<Result | { status: typeof PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED }> {
     const session = sessionRegistry.get(identity);
     if (!session) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
     const adapter = adapterFor(identity.providerId);
     if (!adapter) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
-    const result = await act(adapter, session);
+    const result = await runDesktopEffect(act(adapter, session));
     if (result.status === PROVIDER_ACT_RESULT_STATUS.ACCEPTED) {
-      void sessionRegistry.refresh(adapter);
+      void runDesktopEffect(sessionRegistry.refresh(adapter));
     }
     return countSessionAct(adapter.provider.id, counted, result);
   }
@@ -161,17 +166,19 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
         );
         return [identity];
       },
-      async act(identity) {
-        const url = address(identity);
-        if (!url) return { status: SESSION_OPEN_RESULT_STATUS.UNSUPPORTED };
-        await openExternal(url);
-        if (isProviderId(identity.providerId)) {
-          recordProductEvent(PRODUCT_EVENT.SESSION_ACT_SEND, {
-            provider_id: identity.providerId,
-            session_act: PRODUCT_SESSION_ACT.SESSION_OPEN,
-          });
-        }
-        return { status: SESSION_OPEN_RESULT_STATUS.OPENED };
+      act(identity) {
+        return Effect.promise(async () => {
+          const url = address(identity);
+          if (!url) return { status: SESSION_OPEN_RESULT_STATUS.UNSUPPORTED };
+          await openExternal(url);
+          if (isProviderId(identity.providerId)) {
+            recordProductEvent(PRODUCT_EVENT.SESSION_ACT_SEND, {
+              provider_id: identity.providerId,
+              session_act: PRODUCT_SESSION_ACT.SESSION_OPEN,
+            });
+          }
+          return { status: SESSION_OPEN_RESULT_STATUS.OPENED };
+        });
       },
       failure: () => ({ status: SESSION_OPEN_RESULT_STATUS.REJECTED, reason: failureReason }),
     });
@@ -203,15 +210,17 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       );
       return [identity];
     },
-    async act(identity) {
-      const url = trackedIssues()?.find(
-        (candidate) =>
-          candidate.trackerId === identity.trackerId &&
-          candidate.identifier === identity.identifier,
-      )?.url;
-      if (!url) return { status: SESSION_OPEN_RESULT_STATUS.UNSUPPORTED };
-      await openExternal(url);
-      return { status: SESSION_OPEN_RESULT_STATUS.OPENED };
+    act(identity) {
+      return Effect.promise(async () => {
+        const url = trackedIssues()?.find(
+          (candidate) =>
+            candidate.trackerId === identity.trackerId &&
+            candidate.identifier === identity.identifier,
+        )?.url;
+        if (!url) return { status: SESSION_OPEN_RESULT_STATUS.UNSUPPORTED };
+        await openExternal(url);
+        return { status: SESSION_OPEN_RESULT_STATUS.OPENED };
+      });
     },
     failure: () => ({
       status: SESSION_OPEN_RESULT_STATUS.REJECTED,
@@ -260,7 +269,9 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
         };
       }
       try {
-        const transcript = await adapter.readTranscript(identity.providerSessionId);
+        const transcript = await runDesktopEffect(
+          adapter.readTranscript(identity.providerSessionId),
+        );
         if (!transcript) {
           return {
             status: SESSION_TRANSCRIPT_RESULT_STATUS.REJECTED,
@@ -519,7 +530,7 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       if (workspaceName.value) createRequest.name = workspaceName.value;
       if (openingTask.value) createRequest.task = openingTask.value;
       if (agentSelection) createRequest.agentSelection = agentSelection;
-      const result = await adapter.createWorkspace(createRequest);
+      const result = await runDesktopEffect(adapter.createWorkspace(createRequest));
       // A workspace that landed is a session the panel should be showing, so
       // the next look must actually ask rather than serve the cache. A
       // rejection refreshes too: a workspace can stand with its opening task
@@ -543,7 +554,7 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
           // against here, and future commits carry every later arrival.
           openCreatedWorkspaces();
         }
-        void sessionRegistry.refresh(adapter);
+        void runDesktopEffect(sessionRegistry.refresh(adapter));
       }
       // The first workspace that actually lands chooses the default provider,
       // so a later ask that names none has somewhere unsurprising to go. Only
@@ -599,11 +610,13 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
           (candidate) => candidate.id === action.transition?.id,
         );
         if (!transition) return { status: TRACKER_ACTION_RESULT_STATUS.UNSUPPORTED };
-        result = await tracker.execute({
-          kind: ISSUE_ACTION_KIND.SET_STATE,
-          trackerIssueId: issue.trackerIssueId,
-          transition,
-        });
+        result = await runDesktopEffect(
+          tracker.execute({
+            kind: ISSUE_ACTION_KIND.SET_STATE,
+            trackerIssueId: issue.trackerIssueId,
+            transition,
+          }),
+        );
       } else {
         if (!issue.canComment) return { status: TRACKER_ACTION_RESULT_STATUS.UNSUPPORTED };
         const body = boundedField(action.body, issueCommentText);
@@ -613,11 +626,13 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
             reason: "That comment is empty or too long.",
           };
         }
-        result = await tracker.execute({
-          kind: ISSUE_ACTION_KIND.COMMENT,
-          trackerIssueId: issue.trackerIssueId,
-          body: body.value,
-        });
+        result = await runDesktopEffect(
+          tracker.execute({
+            kind: ISSUE_ACTION_KIND.COMMENT,
+            trackerIssueId: issue.trackerIssueId,
+            body: body.value,
+          }),
+        );
       }
       // An act that landed changes the board, so the roster should catch up
       // as soon as Linear will say.
@@ -701,28 +716,30 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
           await supersetCli.createAgent(managed, advertised, openingTask.value),
         );
       }
-      return performSessionAct(identity, PRODUCT_SESSION_ACT.AGENT_ADD, async (adapter) => {
-        const stored: WorkspaceAgentSelection | undefined = isProviderId(identity.providerId)
-          ? (await settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[
-              identity.providerId
-            ]
-          : undefined;
-        const fallback = stored?.agent === advertised ? stored : undefined;
-        const model = namedModel ?? fallback?.model;
-        const effort = namedModel !== undefined ? namedEffort : fallback?.effort;
-        const result = await adapter.spawnWorkspaceAgent({
-          providerSessionId: identity.providerSessionId,
-          agent: advertised,
-          ...(sessionName.value ? { name: sessionName.value } : undefined),
-          ...(openingTask.value ? { task: openingTask.value } : undefined),
-          ...(model ? { model } : undefined),
-          ...(effort ? { effort } : undefined),
-        });
-        if (result.status === PROVIDER_ACT_RESULT_STATUS.REJECTED) {
-          void sessionRegistry.refresh(adapter);
-        }
-        return result;
-      });
+      return performSessionAct(identity, PRODUCT_SESSION_ACT.AGENT_ADD, (adapter) =>
+        Effect.gen(function* () {
+          const stored: WorkspaceAgentSelection | undefined = isProviderId(identity.providerId)
+            ? (yield* Effect.promise(() =>
+                settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field),
+              ))?.[identity.providerId]
+            : undefined;
+          const fallback = stored?.agent === advertised ? stored : undefined;
+          const model = namedModel ?? fallback?.model;
+          const effort = namedModel !== undefined ? namedEffort : fallback?.effort;
+          const result = yield* adapter.spawnWorkspaceAgent({
+            providerSessionId: identity.providerSessionId,
+            agent: advertised,
+            ...(sessionName.value ? { name: sessionName.value } : undefined),
+            ...(openingTask.value ? { task: openingTask.value } : undefined),
+            ...(model ? { model } : undefined),
+            ...(effort ? { effort } : undefined),
+          });
+          if (result.status === PROVIDER_ACT_RESULT_STATUS.REJECTED) {
+            yield* sessionRegistry.refresh(adapter);
+          }
+          return result;
+        }),
+      );
     },
   );
 }

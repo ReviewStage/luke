@@ -7,6 +7,7 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/core";
+import { Effect } from "effect";
 import {
   argumentPhrase,
   CODEX_CALL_ARGUMENT_KEY,
@@ -21,6 +22,7 @@ import {
   type SqliteModuleLoader,
 } from "./local-sqlite";
 import { boundedTranscript, TRANSCRIPT_BOUNDS, transcriptLine } from "./local-transcript";
+import type { Files } from "./services/files";
 
 /**
  * On-demand reading of one Codex session's transcript, for a question the
@@ -245,39 +247,46 @@ function linesFromRecord(record: WireRecord): string[] {
  // SAFETY: The preceding check establishes the asserted contract.
  * a bounded tail cannot be cut from it — and answers as no transcript.
  */
-async function rolloutPathForThread(request: CodexTranscriptRequest): Promise<string | undefined> {
-  const codexHome = request.codexHome ?? defaultCodexHome();
-  const sqlite = request.sqlite ?? defaultSqliteModule;
-  for (const databasePath of await stateDatabasePaths(codexHome, request.sqliteHome)) {
-    const database = await openReadOnlyDatabase(sqlite, databasePath);
-    if (!database) continue;
-    try {
-      const row = database.prepare(CODEX_THREAD_ROLLOUT_QUERY).all(request.providerSessionId)[0];
-      const rolloutPath = isRecord(row) ? text(row.rollout_path) : undefined;
-      if (rolloutPath) return rolloutPath.endsWith(".zst") ? undefined : rolloutPath;
-    } catch (error) {
-      if (!(error instanceof Error) || !canIgnoreSqliteError(error)) throw error;
-    } finally {
-      database.close();
+function rolloutPathForThread(
+  request: CodexTranscriptRequest,
+): Effect.Effect<string | undefined, unknown, Files> {
+  return Effect.gen(function* () {
+    const codexHome = request.codexHome ?? defaultCodexHome();
+    const sqlite = request.sqlite ?? defaultSqliteModule;
+    const databasePaths = yield* stateDatabasePaths(codexHome, request.sqliteHome);
+    for (const databasePath of databasePaths) {
+      const database = yield* openReadOnlyDatabase(sqlite, databasePath);
+      if (!database) continue;
+      try {
+        const row = database.prepare(CODEX_THREAD_ROLLOUT_QUERY).all(request.providerSessionId)[0];
+        const rolloutPath = isRecord(row) ? text(row.rollout_path) : undefined;
+        if (rolloutPath) return rolloutPath.endsWith(".zst") ? undefined : rolloutPath;
+      } catch (error) {
+        if (!(error instanceof Error) || !canIgnoreSqliteError(error)) throw error;
+      } finally {
+        database.close();
+      }
     }
-  }
-  return undefined;
+    return undefined;
+  });
 }
 
 /**
  * Reads one session's recent transcript into a bounded rendering, or nothing
  * when no rollout file exists for that id.
  */
-export async function readCodexSessionTranscript(
+export function readCodexSessionTranscript(
   request: CodexTranscriptRequest,
-): Promise<string | undefined> {
-  const rolloutPath = await rolloutPathForThread(request);
-  if (!rolloutPath) return undefined;
+): Effect.Effect<string | undefined, unknown, Files> {
+  return Effect.gen(function* () {
+    const rolloutPath = yield* rolloutPathForThread(request);
+    if (!rolloutPath) return undefined;
 
-  const tail = await readTail(rolloutPath, CODEX_ROLLOUT_TAIL_BYTES);
-  const lines = tailRecords(tail).flatMap(linesFromRecord);
-  return boundedTranscript(
-    lines,
-    request.maximumRenderedLength ?? TRANSCRIPT_BOUNDS.MAXIMUM_RENDERED_LENGTH,
-  );
+    const tail = yield* readTail(rolloutPath, CODEX_ROLLOUT_TAIL_BYTES);
+    const lines = tailRecords(tail).flatMap(linesFromRecord);
+    return boundedTranscript(
+      lines,
+      request.maximumRenderedLength ?? TRANSCRIPT_BOUNDS.MAXIMUM_RENDERED_LENGTH,
+    );
+  });
 }

@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { ISSUE_ACTION_KIND, TRACKER_ACTION_RESULT_STATUS } from "@sidecar/core";
+import { Effect } from "effect";
 import { LinearIssueTracker } from "../src/linear-tracker";
+import { runWithHttp } from "./support/effect-http";
 import {
   HTTP_STATUS,
   jsonResponse,
@@ -34,12 +36,12 @@ function trackerWith(
     return jsonResponse(payload, options.status ?? HTTP_STATUS.OK);
   });
   const tracker = new LinearIssueTracker({
-    readAccessToken: async () => options.accessToken,
+    readAccessToken: () => Effect.succeed(options.accessToken),
     now: () => OBSERVED_AT,
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    fetchImplementation: fetch as typeof fetch,
   });
-  return { tracker, requests };
+  const run = <A, E>(effect: Effect.Effect<A, E, import("../src/services/http").Http>) =>
+    runWithHttp(effect, fetch as typeof fetch);
+  return { tracker, requests, run };
 }
 
 function assignedIssuesPayload() {
@@ -75,27 +77,29 @@ function assignedIssuesPayload() {
 }
 
 test("no token means no request and a tracker that is not connected", async () => {
-  const { tracker, requests } = trackerWith([assignedIssuesPayload()]);
+  const { tracker, requests, run } = trackerWith([assignedIssuesPayload()]);
 
-  assert.equal(await tracker.observe(), undefined);
+  assert.equal(await run(tracker.observe()), undefined);
   assert.equal(requests.length, 0);
   assert.deepEqual(
-    await tracker.execute({
-      kind: ISSUE_ACTION_KIND.SET_STATE,
-      trackerIssueId: "issue-uuid-1",
-      transition: { id: "state-done", name: "Done" },
-    }),
+    await run(
+      tracker.execute({
+        kind: ISSUE_ACTION_KIND.SET_STATE,
+        trackerIssueId: "issue-uuid-1",
+        transition: { id: "state-done", name: "Done" },
+      }),
+    ),
     { status: TRACKER_ACTION_RESULT_STATUS.UNSUPPORTED },
   );
   assert.equal(requests.length, 0);
 });
 
 test("observing reads the assigned issues and advertises the rest of the workflow", async () => {
-  const { tracker, requests } = trackerWith([assignedIssuesPayload()], {
+  const { tracker, requests, run } = trackerWith([assignedIssuesPayload()], {
     accessToken: "linear-access-token",
   });
 
-  const observations = await tracker.observe();
+  const observations = await run(tracker.observe());
 
   assert.ok(observations);
   assert.equal(observations.length, 1);
@@ -128,24 +132,26 @@ test("a failed or malformed read is an error, never a quieter roster", async () 
     accessToken: "linear-access-token",
     status: HTTP_STATUS.SERVER_ERROR,
   });
-  await assert.rejects(() => failed.tracker.observe());
+  await assert.rejects(() => run(failed.tracker.observe()));
 
   const errored = trackerWith([{ errors: [{ message: "rate limited" }] }], {
     accessToken: "linear-access-token",
   });
-  await assert.rejects(() => errored.tracker.observe());
+  await assert.rejects(() => run(errored.tracker.observe()));
 });
 
 test("moving an issue posts the one documented write and reads its answer", async () => {
-  const { tracker, requests } = trackerWith([{ data: { issueUpdate: { success: true } } }], {
+  const { tracker, requests, run } = trackerWith([{ data: { issueUpdate: { success: true } } }], {
     accessToken: "linear-access-token",
   });
 
-  const result = await tracker.execute({
-    kind: ISSUE_ACTION_KIND.SET_STATE,
-    trackerIssueId: "issue-uuid-1",
-    transition: { id: "state-done", name: "Done" },
-  });
+  const result = await run(
+    tracker.execute({
+      kind: ISSUE_ACTION_KIND.SET_STATE,
+      trackerIssueId: "issue-uuid-1",
+      transition: { id: "state-done", name: "Done" },
+    }),
+  );
 
   assert.deepEqual(result, { status: TRACKER_ACTION_RESULT_STATUS.ACCEPTED });
   assert.equal(requests.length, 1);
@@ -157,15 +163,17 @@ test("moving an issue posts the one documented write and reads its answer", asyn
 });
 
 test("a comment posts the other documented write", async () => {
-  const { tracker, requests } = trackerWith([{ data: { commentCreate: { success: true } } }], {
+  const { tracker, requests, run } = trackerWith([{ data: { commentCreate: { success: true } } }], {
     accessToken: "linear-access-token",
   });
 
-  const result = await tracker.execute({
-    kind: ISSUE_ACTION_KIND.COMMENT,
-    trackerIssueId: "issue-uuid-1",
-    body: "Deferred to next release.",
-  });
+  const result = await run(
+    tracker.execute({
+      kind: ISSUE_ACTION_KIND.COMMENT,
+      trackerIssueId: "issue-uuid-1",
+      body: "Deferred to next release.",
+    }),
+  );
 
   assert.deepEqual(result, { status: TRACKER_ACTION_RESULT_STATUS.ACCEPTED });
   assert.match(graphqlDocument(requests[0]).query, /^mutation CommentOnIssue/);
@@ -187,13 +195,13 @@ test("a write Linear turns down is a rejection with a reason, never a throw", as
     { data: { issueUpdate: { success: false } } },
     { data: {} },
   ]) {
-    const { tracker } = trackerWith([payload], { accessToken: "linear-access-token" });
-    const result = await tracker.execute(setState);
+    const { tracker, run } = trackerWith([payload], { accessToken: "linear-access-token" });
+    const result = await run(tracker.execute(setState));
     assert.equal(result.status, TRACKER_ACTION_RESULT_STATUS.REJECTED);
     assert.ok("reason" in result && result.reason.length > 0);
   }
 
   const failed = trackerWith([{}], { accessToken: "linear-access-token", status: 401 });
-  const result = await failed.tracker.execute(setState);
+  const result = await failed.run(failed.tracker.execute(setState));
   assert.equal(result.status, TRACKER_ACTION_RESULT_STATUS.REJECTED);
 });

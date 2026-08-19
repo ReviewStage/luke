@@ -15,6 +15,8 @@ import {
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceProject,
 } from "@sidecar/core";
+import type { CloudFailure } from "@sidecar/core/effect-errors";
+import { Effect } from "effect";
 import {
   CLOUD_ADAPTER_DEFAULTS,
   type CloudAdapterOptions,
@@ -28,6 +30,7 @@ import {
   textFromRecord,
   timestampFromRecord,
 } from "./cloud-session-adapter";
+import type { Http } from "./services/http";
 import { CREDENTIAL_PROVIDER_ID, CREDENTIAL_PROVIDERS } from "./shared/credential-providers";
 
 // Shared with the credential registry so the key the user saves and the
@@ -319,44 +322,47 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
     this.#repositoriesRefreshMs = CURSOR_REPOSITORY_RETRY_MS;
   }
 
-  protected async collect(
+  protected collect(
     request: CloudRequest,
     now: number,
-  ): Promise<readonly ProviderSessionObservation[]> {
-    // The repository offer rides beside the pass, never inside it: Cursor
-    // documents this read as slow for a large organisation, so it runs on its
-    // own clock with its own wide deadline, the sessions never wait on it, and
-    // an offer that lands after the pass — or several — is announced by the
-    // next one. It reads through the credential-bound path rather than the
-    // pass-scoped request, because passes keep coming while it runs and each
-    // would discard exactly the slow answer this exists for; only a
-    // credential change may do that.
-    void this.#refreshRepositories(now);
+  ): Effect.Effect<readonly ProviderSessionObservation[], CloudFailure, Http> {
+    return Effect.gen(this, function* () {
+      // The repository offer rides beside the pass, never inside it: Cursor
+      // documents this read as slow for a large organisation, so it runs on its
+      // own clock with its own wide deadline, the sessions never wait on it, and
+      // an offer that lands after the pass — or several — is announced by the
+      // next one. It reads through the credential-bound path rather than the
+      // pass-scoped request, because passes keep coming while it runs and each
+      // would discard exactly the slow answer this exists for; only a
+      // credential change may do that.
+      yield* Effect.fork(this.#refreshRepositories(now));
 
-    const body = await request(CURSOR_ROUTE.AGENTS, {
-      [CURSOR_QUERY.LIMIT]: String(CURSOR_ADAPTER_DEFAULTS.AGENT_PAGE_SIZE),
-    });
+      const body = yield* request(CURSOR_ROUTE.AGENTS, {
+        [CURSOR_QUERY.LIMIT]: String(CURSOR_ADAPTER_DEFAULTS.AGENT_PAGE_SIZE),
+      });
 
-    // Agents are never capped: one page of the documented maximum is the
-    // request's only bound, and Cursor lists newest-first, so the `cursor`
-    // page after it could only reach further into the settled past.
-    const agents = recordsFromPage(body, CURSOR_FIELD.ITEMS)
-      .map(agentFromRecord)
-      .filter(isDefined)
-      .sort(
-        (first, second) =>
-          Number(first.archived) - Number(second.archived) ||
-          second.lastActivityAt - first.lastActivityAt,
+      // Agents are never capped: one page of the documented maximum is the
+      // request's only bound, and Cursor lists newest-first, so the `cursor`
+      // page after it could only reach further into the settled past.
+      const agents = recordsFromPage(body, CURSOR_FIELD.ITEMS)
+        .map(agentFromRecord)
+        .filter(isDefined)
+        .sort(
+          (first, second) =>
+            Number(first.archived) - Number(second.archived) ||
+            second.lastActivityAt - first.lastActivityAt,
+        );
+
+      // The only fan-out in a pass, bounded by the page above — and an archived
+      // agent spends no request at all: an agent record reports whether it was
+      // filed away, never what it is doing, so the status Luke shows exists
+      // only on the run.
+      const observations = yield* Effect.all(
+        agents.map((agent) => this.#observationFor(request, agent, now)),
+        { concurrency: "unbounded" },
       );
-
-    // The only fan-out in a pass, bounded by the page above — and an archived
-    // agent spends no request at all: an agent record reports whether it was
-    // filed away, never what it is doing, so the status Luke shows exists
-    // only on the run.
-    const observations = await Promise.all(
-      agents.map((agent) => this.#observationFor(request, agent, now)),
-    );
-    return observations.filter(isDefined);
+      return observations.filter(isDefined);
+    });
   }
 
   /**
@@ -406,14 +412,11 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
    * this, and an offer read must never fail a pass or escape as an unhandled
    * rejection.
    */
-  async #refreshRepositories(now: number): Promise<void> {
-    if (now - this.#repositoriesAttemptedAt < this.#repositoriesRefreshMs) return;
-    this.#repositoriesAttemptedAt = now;
-    try {
-      // The write rides inside the read's own credential check, so a key
-      // cleared while the answer was in flight finds no gap to be overwritten
-      // in.
-      await this.credentialBoundRead(
+  #refreshRepositories(now: number): Effect.Effect<void, never, Http> {
+    return Effect.gen(this, function* () {
+      if (now - this.#repositoriesAttemptedAt < this.#repositoriesRefreshMs) return;
+      this.#repositoriesAttemptedAt = now;
+      const result = yield* this.credentialBoundRead(
         CURSOR_ROUTE.REPOSITORIES,
         undefined,
         { timeoutMs: CLOUD_ADAPTER_DEFAULTS.SLOW_REQUEST_TIMEOUT_MS },
@@ -428,15 +431,16 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
             .slice(0, maximumObservedWorkspaceProjects);
           this.#repositoriesRefreshMs = CURSOR_REPOSITORY_REFRESH_MS;
         },
-      );
-    } catch {
-      // Only this attempt's own failure sets the retry cadence: a stale read —
-      // discarded because the credential moved on, or outlasted by a newer
-      // attempt — must not clobber what that newer attempt decided.
-      if (this.#repositoriesAttemptedAt === now) {
-        this.#repositoriesRefreshMs = CURSOR_REPOSITORY_RETRY_MS;
+      ).pipe(Effect.either);
+      if (result._tag === "Left") {
+        // Only this attempt's own failure sets the retry cadence: a stale read —
+        // discarded because the credential moved on, or outlasted by a newer
+        // attempt — must not clobber what that newer attempt decided.
+        if (this.#repositoriesAttemptedAt === now) {
+          this.#repositoriesRefreshMs = CURSOR_REPOSITORY_RETRY_MS;
+        }
       }
-    }
+    });
   }
 
   /**
@@ -519,49 +523,51 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
     return undefined;
   }
 
-  async #observationFor(
+  #observationFor(
     request: CloudRequest,
     agent: CursorAgent,
     now: number,
-  ): Promise<ProviderSessionObservation | undefined> {
-    // An archived agent is already settled, and one that has never run has no
-    // run to ask about, so neither spends a request.
-    const latestRunId = agent.archived ? undefined : agent.latestRunId;
-    const run = latestRunId
-      ? await this.tolerateItemFailure(() => this.#latestRun(request, agent.id, latestRunId))
-      : undefined;
-    // The run's timestamp is the moment its state was entered; the agent's is
-    // only the last resort, because it also moves for edits that are not work.
-    const observedAt = run?.updatedAt ?? agent.lastActivityAt;
-    const status = this.#statusFor(agent, run, observedAt, now);
-    // A run names the repository it pushed to, so a list item that carries no
-    // `repos` still resolves to something better than "workspace".
-    const repository = agent.repositoryLabel ?? run?.repositoryLabel;
-    return {
-      providerSessionId: agent.id,
-      title: agent.name ?? repository ?? UNKNOWN_AGENT_LABEL,
-      status,
-      observedAt,
-      canReceiveMessage: this.#agentTakesMessages(agent, run),
-      // The two controls are exclusive by construction: an active run offers
-      // its stop, a settled agent offers to be filed away, and an archived one
-      // offers nothing.
-      ...(latestRunId && this.#agentTakesCancel(agent, run)
-        ? { controls: [cursorCancelRunControl(latestRunId)] }
-        : this.#agentTakesArchive(agent, run)
-          ? { controls: [CURSOR_ARCHIVE_AGENT_CONTROL] }
-          : undefined),
-      ...(run?.result ? { recap: run.result } : undefined),
-      detail: {
-        ...(repository ? { repository } : undefined),
-        // The branch a run opened says more than the ref it started from, but
-        // a run that has pushed nothing still has a starting point worth naming.
-        ...(run?.branch ? { branch: run.branch } : agent.ref ? { branch: agent.ref } : undefined),
-        ...(status === SESSION_STATUS.ERROR ? { error: CURSOR_RUN_FAILED_MESSAGE } : undefined),
-        ...(agent.url ? { link: agent.url } : undefined),
-        ...(run?.pullRequestUrl ? { change: run.pullRequestUrl } : undefined),
-      },
-    };
+  ): Effect.Effect<ProviderSessionObservation | undefined, CloudFailure, Http> {
+    return Effect.gen(this, function* () {
+      // An archived agent is already settled, and one that has never run has no
+      // run to ask about, so neither spends a request.
+      const latestRunId = agent.archived ? undefined : agent.latestRunId;
+      const run = latestRunId
+        ? yield* this.tolerateItemFailure(() => this.#latestRun(request, agent.id, latestRunId))
+        : undefined;
+      // The run's timestamp is the moment its state was entered; the agent's is
+      // only the last resort, because it also moves for edits that are not work.
+      const observedAt = run?.updatedAt ?? agent.lastActivityAt;
+      const status = this.#statusFor(agent, run, observedAt, now);
+      // A run names the repository it pushed to, so a list item that carries no
+      // `repos` still resolves to something better than "workspace".
+      const repository = agent.repositoryLabel ?? run?.repositoryLabel;
+      return {
+        providerSessionId: agent.id,
+        title: agent.name ?? repository ?? UNKNOWN_AGENT_LABEL,
+        status,
+        observedAt,
+        canReceiveMessage: this.#agentTakesMessages(agent, run),
+        // The two controls are exclusive by construction: an active run offers
+        // its stop, a settled agent offers to be filed away, and an archived one
+        // offers nothing.
+        ...(latestRunId && this.#agentTakesCancel(agent, run)
+          ? { controls: [cursorCancelRunControl(latestRunId)] }
+          : this.#agentTakesArchive(agent, run)
+            ? { controls: [CURSOR_ARCHIVE_AGENT_CONTROL] }
+            : undefined),
+        ...(run?.result ? { recap: run.result } : undefined),
+        detail: {
+          ...(repository ? { repository } : undefined),
+          // The branch a run opened says more than the ref it started from, but
+          // a run that has pushed nothing still has a starting point worth naming.
+          ...(run?.branch ? { branch: run.branch } : agent.ref ? { branch: agent.ref } : undefined),
+          ...(status === SESSION_STATUS.ERROR ? { error: CURSOR_RUN_FAILED_MESSAGE } : undefined),
+          ...(agent.url ? { link: agent.url } : undefined),
+          ...(run?.pullRequestUrl ? { change: run.pullRequestUrl } : undefined),
+        },
+      };
+    });
   }
 
   #statusFor(
@@ -581,29 +587,40 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
     );
   }
 
-  async #latestRun(request: CloudRequest, agentId: string, runId: string): Promise<CursorRun> {
-    // The agent names its own latest run, so this reads that run rather than
-    // assuming how the run list happens to be ordered.
-    const body = await request([...CURSOR_ROUTE.AGENTS, agentId, CURSOR_ROUTE_SEGMENT.RUNS, runId]);
-    const branch = firstRunBranch(body);
-    const repositoryUrl = textFromRecord(branch, CURSOR_FIELD.REPO_URL);
-    const branchName = textFromRecord(branch, CURSOR_FIELD.BRANCH)?.slice(
-      0,
-      CURSOR_ADAPTER_DEFAULTS.MAXIMUM_REFERENCE_LABEL_LENGTH,
-    );
-    const pullRequestUrl = textFromRecord(branch, CURSOR_FIELD.PR_URL);
-    const result = textFromRecord(body, CURSOR_FIELD.RESULT)?.slice(0, maximumSessionRecapLength);
-    return {
-      status: knownValue(CURSOR_RUN_STATUS, textFromRecord(body, CURSOR_FIELD.STATUS)),
-      updatedAt:
-        timestampFromRecord(body, CURSOR_FIELD.UPDATED_AT) ??
-        timestampFromRecord(body, CURSOR_FIELD.CREATED_AT),
-      ...(repositoryUrl
-        ? { repositoryLabel: repositoryLabel(repositoryUrl, undefined) }
-        : undefined),
-      ...(branchName ? { branch: branchName } : undefined),
-      ...(pullRequestUrl ? { pullRequestUrl } : undefined),
-      ...(result ? { result } : undefined),
-    };
+  #latestRun(
+    request: CloudRequest,
+    agentId: string,
+    runId: string,
+  ): Effect.Effect<CursorRun, CloudFailure, Http> {
+    return Effect.gen(function* () {
+      // The agent names its own latest run, so this reads that run rather than
+      // assuming how the run list happens to be ordered.
+      const body = yield* request([
+        ...CURSOR_ROUTE.AGENTS,
+        agentId,
+        CURSOR_ROUTE_SEGMENT.RUNS,
+        runId,
+      ]);
+      const branch = firstRunBranch(body);
+      const repositoryUrl = textFromRecord(branch, CURSOR_FIELD.REPO_URL);
+      const branchName = textFromRecord(branch, CURSOR_FIELD.BRANCH)?.slice(
+        0,
+        CURSOR_ADAPTER_DEFAULTS.MAXIMUM_REFERENCE_LABEL_LENGTH,
+      );
+      const pullRequestUrl = textFromRecord(branch, CURSOR_FIELD.PR_URL);
+      const result = textFromRecord(body, CURSOR_FIELD.RESULT)?.slice(0, maximumSessionRecapLength);
+      return {
+        status: knownValue(CURSOR_RUN_STATUS, textFromRecord(body, CURSOR_FIELD.STATUS)),
+        updatedAt:
+          timestampFromRecord(body, CURSOR_FIELD.UPDATED_AT) ??
+          timestampFromRecord(body, CURSOR_FIELD.CREATED_AT),
+        ...(repositoryUrl
+          ? { repositoryLabel: repositoryLabel(repositoryUrl, undefined) }
+          : undefined),
+        ...(branchName ? { branch: branchName } : undefined),
+        ...(pullRequestUrl ? { pullRequestUrl } : undefined),
+        ...(result ? { result } : undefined),
+      };
+    });
   }
 }

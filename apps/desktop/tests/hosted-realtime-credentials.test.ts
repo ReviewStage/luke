@@ -6,7 +6,9 @@ import {
   REALTIME_VOICE,
   REALTIME_VOICE_SPEED,
 } from "@sidecar/core";
+import { Effect } from "effect";
 import { HostedRealtimeCredentialMinter } from "../src/hosted-realtime-credentials";
+import { runWithHttp } from "./support/effect-http";
 import type { ParsedJsonObject } from "./support/json";
 
 const NOW = 1_800_000_000_000;
@@ -47,11 +49,15 @@ function service(answers: Array<() => Response>) {
 function minter(options: Partial<ConstructorParameters<typeof HostedRealtimeCredentialMinter>[0]>) {
   return new HostedRealtimeCredentialMinter({
     serviceBaseUrl: SERVICE,
-    readAccessToken: async () => "token-1",
-    refreshAccount: async () => undefined,
+    readAccessToken: () => Effect.succeed("token-1"),
+    refreshAccount: () => Effect.void,
     now: () => NOW,
     ...options,
   });
+}
+
+function mint(hosted: HostedRealtimeCredentialMinter, fetchLike: typeof fetch) {
+  return runWithHttp(hosted.mint(), fetchLike);
 }
 
 test("mints through the hosted service on the account's bearer token", async () => {
@@ -59,12 +65,11 @@ test("mints through the hosted service on the account's bearer token", async () 
     () => new Response(JSON.stringify(mintedBody()), { status: 200 }),
   ]);
   const hosted = minter({
-    fetch: fetchLike,
     voice: REALTIME_VOICE.MARIN,
     speed: REALTIME_VOICE_SPEED.QUICK,
   });
 
-  const connection = await hosted.mint();
+  const connection = await mint(hosted, fetchLike);
   assert.deepEqual(connection, {
     value: "eph-secret",
     expiresAt: NOW + 60_000,
@@ -91,26 +96,23 @@ test("mints a fresh secret for every call and follows a voice change on the next
   const { requests, fetchLike } = service([
     () => new Response(JSON.stringify(mintedBody()), { status: 200 }),
   ]);
-  const hosted = minter({ fetch: fetchLike });
+  const hosted = minter({});
 
-  // Never reused: the service refuses a reused secret at the calls endpoint,
-  // so each call is answered by its own mint — which is also what the hosted
-  // allowance counts.
-  await hosted.mint();
-  await hosted.mint();
+  await mint(hosted, fetchLike);
+  await mint(hosted, fetchLike);
   assert.equal(requests.length, 2);
 
   hosted.setVoice(REALTIME_VOICE.SAGE);
-  await hosted.mint();
+  await mint(hosted, fetchLike);
   assert.equal(requests.length, 3);
   assert.equal(JSON.parse(String(requests[2]?.init.body)).voice, REALTIME_VOICE.SAGE);
 });
 
 test("no access token asks the service nothing and says why voice is off", async () => {
   const { requests, fetchLike } = service([]);
-  const hosted = minter({ fetch: fetchLike, readAccessToken: async () => undefined });
+  const hosted = minter({ readAccessToken: () => Effect.succeed(undefined) });
 
-  assert.equal(await hosted.mint(), undefined);
+  assert.equal(await mint(hosted, fetchLike), undefined);
   assert.equal(requests.length, 0);
   assert.equal(hosted.diagnostics().lastOutcome, REALTIME_MINT_OUTCOME.NOT_SIGNED_IN);
 });
@@ -123,34 +125,33 @@ test("a 401 refreshes the account and retries once with the new token", async ()
     () => new Response(JSON.stringify(mintedBody()), { status: 200 }),
   ]);
   const hosted = minter({
-    fetch: fetchLike,
-    readAccessToken: async () => tokens[Math.min(refreshes, tokens.length - 1)],
-    refreshAccount: async () => {
+    readAccessToken: () => Effect.succeed(tokens[Math.min(refreshes, tokens.length - 1)]),
+    refreshAccount: () => {
       refreshes += 1;
+      return Effect.void;
     },
   });
 
-  const connection = await hosted.mint();
+  const connection = await mint(hosted, fetchLike);
   assert.ok(connection);
   assert.equal(refreshes, 1);
   assert.equal(requests.length, 2);
   assert.equal(new Headers(requests[1]?.init.headers).get("authorization"), "Bearer fresh-token");
 });
 
-// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("a refresh that changes nothing is not retried and reads as signed out", async () => {
   let refreshes = 0;
   const { requests, fetchLike } = service([
     () => new Response(JSON.stringify({ error: "invalid-token" }), { status: 401 }),
   ]);
   const hosted = minter({
-    fetch: fetchLike,
-    refreshAccount: async () => {
+    refreshAccount: () => {
       refreshes += 1;
+      return Effect.void;
     },
   });
 
-  assert.equal(await hosted.mint(), undefined);
+  assert.equal(await mint(hosted, fetchLike), undefined);
   assert.equal(refreshes, 1);
   assert.equal(requests.length, 1);
   assert.equal(hosted.diagnostics().lastOutcome, REALTIME_MINT_OUTCOME.NOT_SIGNED_IN);
@@ -161,26 +162,31 @@ test("a spent allowance is diagnosed with the quota the refusal carried", async 
   const { fetchLike } = service([
     () => new Response(JSON.stringify({ error: "quota-exhausted", quota: spent }), { status: 429 }),
   ]);
-  const hosted = minter({ fetch: fetchLike });
+  const hosted = minter({});
 
-  assert.equal(await hosted.mint(), undefined);
+  assert.equal(await mint(hosted, fetchLike), undefined);
   const report = hosted.diagnostics();
   assert.equal(report.lastOutcome, REALTIME_MINT_OUTCOME.QUOTA_EXHAUSTED);
   assert.deepEqual(report.quota, spent);
 });
 
 test("a switched-off service and a plain failure are told apart", async () => {
-  const unavailable = minter({
-    fetch: service([() => new Response(JSON.stringify({ error: "unavailable" }), { status: 503 })])
-      .fetchLike,
-  });
-  assert.equal(await unavailable.mint(), undefined);
+  const unavailable = minter({});
+  assert.equal(
+    await mint(
+      unavailable,
+      service([() => new Response(JSON.stringify({ error: "unavailable" }), { status: 503 })])
+        .fetchLike,
+    ),
+    undefined,
+  );
   assert.equal(unavailable.diagnostics().lastOutcome, REALTIME_MINT_OUTCOME.HOSTED_UNAVAILABLE);
 
-  const failing = minter({
-    fetch: service([() => new Response("oops", { status: 500 })]).fetchLike,
-  });
-  assert.equal(await failing.mint(), undefined);
+  const failing = minter({});
+  assert.equal(
+    await mint(failing, service([() => new Response("oops", { status: 500 })]).fetchLike),
+    undefined,
+  );
   assert.equal(failing.diagnostics().lastOutcome, REALTIME_MINT_OUTCOME.HTTP_ERROR);
 });
 
@@ -192,8 +198,8 @@ test("a credential aimed anywhere but OpenAI's calls endpoint is refused", async
         { status: 200 },
       ),
   ]);
-  const hosted = minter({ fetch: fetchLike });
+  const hosted = minter({});
 
-  assert.equal(await hosted.mint(), undefined);
+  assert.equal(await mint(hosted, fetchLike), undefined);
   assert.equal(hosted.diagnostics().lastOutcome, REALTIME_MINT_OUTCOME.MALFORMED_RESPONSE);
 });

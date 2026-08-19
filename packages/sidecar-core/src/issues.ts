@@ -271,6 +271,6 @@ export interface IssueTrackerAdapter {
    * tracker is not connected — no credential, so nothing was asked — which is
    * a different answer from a connected tracker listing nothing.
    */
-  observe(): Effect.Effect<readonly TrackerIssueObservation[] | undefined, unknown>;
-  execute(action: TrackerIssueAction): Effect.Effect<TrackerActionResult, unknown>;
+  observe(): Effect.Effect<readonly TrackerIssueObservation[] | undefined, unknown, unknown>;
+  execute(action: TrackerIssueAction): Effect.Effect<TrackerActionResult, unknown, unknown>;
 }

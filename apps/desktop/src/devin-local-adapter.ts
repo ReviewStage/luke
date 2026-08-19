@@ -14,6 +14,7 @@ import {
   text,
   type WireRecord,
 } from "@sidecar/core";
+import { Effect } from "effect";
 import { DEVIN_PROVIDER, millisecondsFromRecord } from "./devin-adapter";
 import { readDevinSessionTranscript } from "./devin-transcript";
 import { LocalSessionAdapter, uniquePaths, workspaceLabel } from "./local-session-adapter";
@@ -24,6 +25,7 @@ import {
   type SqliteDatabase,
   type SqliteModuleLoader,
 } from "./local-sqlite";
+import type { Files } from "./services/files";
 
 /**
  * Observes the Devin sessions running on this machine — the ones its CLI
@@ -359,29 +361,33 @@ export class DevinLocalSessionAdapter extends LocalSessionAdapter {
     this.#transcriptMaximumRenderedLength = options.transcriptMaximumRenderedLength;
   }
 
-  async observe(): Promise<readonly ProviderSessionObservation[]> {
-    for (const databasePath of devinDatabasePaths(this.#cliDirectory)) {
-      const database = await openReadOnlyDatabase(this.#sqlite, databasePath);
-      if (!database) continue;
-      let snapshots: DevinLocalSessionSnapshot[] | undefined;
-      let now = 0;
-      try {
-        now = this.observationTime();
-        snapshots = this.#databaseSnapshots(database, now);
-      } finally {
-        database.close();
+  observe(): Effect.Effect<readonly ProviderSessionObservation[], unknown, Files> {
+    return Effect.gen(this, function* () {
+      for (const databasePath of devinDatabasePaths(this.#cliDirectory)) {
+        const database = yield* openReadOnlyDatabase(this.#sqlite, databasePath);
+        if (!database) continue;
+        let snapshots: DevinLocalSessionSnapshot[] | undefined;
+        let now = 0;
+        try {
+          now = this.observationTime();
+          snapshots = this.#databaseSnapshots(database, now);
+        } finally {
+          database.close();
+        }
+        // A database whose schema was unusable answers nothing; the next
+        // candidate may still answer.
+        if (snapshots === undefined) continue;
+        return snapshots.map((snapshot) =>
+          observationFromSnapshot(snapshot, now, this.activeSessionFreshnessMs),
+        );
       }
-      // A database whose schema was unusable answers nothing; the next
-      // candidate may still answer.
-      if (snapshots === undefined) continue;
-      return snapshots.map((snapshot) =>
-        observationFromSnapshot(snapshot, now, this.activeSessionFreshnessMs),
-      );
-    }
-    return [];
+      return [];
+    });
   }
 
-  override readTranscript(providerSessionId: string): Promise<string | undefined> {
+  override readTranscript(
+    providerSessionId: string,
+  ): Effect.Effect<string | undefined, unknown, Files> {
     return readDevinSessionTranscript({
       cliDirectory: this.#cliDirectory,
       providerSessionId,

@@ -1,4 +1,5 @@
-import type { AccountClient, AccountIdentity, AccountTokens } from "./account-client";
+import { Effect } from "effect";
+import type { AccountClient, AccountIdentity } from "./account-client";
 import { deleteHostedAccount } from "./account-deletion";
 import {
   ACCOUNT_FAILURE_ACTION,
@@ -29,6 +30,7 @@ export interface AccountSessionManagerOptions {
   startCapabilities: () => Promise<void>;
   stopCapabilities: () => Promise<void>;
   onChange: (account: AccountSnapshot) => void;
+  runEffect: <A, E>(effect: Effect.Effect<A, E, unknown>) => Promise<A>;
 }
 
 export class AccountSessionManager {
@@ -41,7 +43,8 @@ export class AccountSessionManager {
 
   constructor(options: AccountSessionManagerOptions) {
     this.#options = options;
-    this.refreshOnce = singleFlight(() => this.refresh());
+    const flight = singleFlight(() => this.#refreshEffect());
+    this.refreshOnce = () => options.runEffect(flight());
   }
 
   get snapshot(): AccountSnapshot {
@@ -66,10 +69,15 @@ export class AccountSessionManager {
     this.#account = await clearing;
     this.#options.onChange(this.#account);
     if (stored?.refreshToken) {
-      await this.#options.client.revoke(stored.refreshToken).catch((error) => {
-        const message = error instanceof Error ? error.message : String(error);
-        process.stderr.write(`Account token revocation failed: ${message}\n`);
-      });
+      await this.#options.runEffect(
+        this.#options.client.revoke(stored.refreshToken).pipe(
+          Effect.catchAll((error) => {
+            const message = error instanceof Error ? error.message : String(error);
+            process.stderr.write(`Account token revocation failed: ${message}\n`);
+            return Effect.void;
+          }),
+        ),
+      );
     }
     return this.#account;
   }
@@ -78,54 +86,76 @@ export class AccountSessionManager {
     const stored = await this.#options.store.readAccount();
     if (!stored) throw new Error("No stored account credential to delete with");
     try {
-      await this.#deleteHosted(stored.accessToken);
+      await this.#options.runEffect(this.#deleteHosted(stored.accessToken));
     } catch (error) {
       if (!(error instanceof Error) || !accessTokenNeedsRefresh(error)) throw error;
       const generation = this.#generation;
-      const tokens = await this.#options.client.refresh(stored.refreshToken);
+      const tokens = await this.#options.runEffect(
+        this.#options.client.refresh(stored.refreshToken),
+      );
       await this.#storeCurrent(generation, { ...stored, ...tokens });
-      await this.#deleteHosted(tokens.accessToken);
+      await this.#options.runEffect(this.#deleteHosted(tokens.accessToken));
     }
     return this.signOut();
   }
 
-  async refresh(): Promise<void> {
-    const stored = await this.#options.store.readAccount();
-    if (!stored || !this.#options.requiresAccount) return;
-    const generation = this.#generation;
-    try {
-      const identity = await this.#options.client.userInfo(stored.accessToken, stored.provider);
-      if (!sameIdentity(stored, identity)) {
-        if (!(await this.#storeCurrent(generation, mergedIdentity(stored, identity)))) return;
-        this.#options.onChange(this.#account);
+  #refreshEffect(): Effect.Effect<void, unknown, unknown> {
+    return Effect.gen(this, function* () {
+      const stored = yield* Effect.promise(() => this.#options.store.readAccount());
+      if (!stored || !this.#options.requiresAccount) return;
+      const generation = this.#generation;
+      const identity = yield* this.#options.client
+        .userInfo(stored.accessToken, stored.provider)
+        .pipe(Effect.either);
+      if (identity._tag === "Right") {
+        if (!sameIdentity(stored, identity.right)) {
+          if (
+            !(yield* Effect.promise(() =>
+              this.#storeCurrent(generation, mergedIdentity(stored, identity.right)),
+            ))
+          ) {
+            return;
+          }
+          this.#options.onChange(this.#account);
+        }
+        return;
       }
-      return;
-    } catch (error) {
+      const error = identity.left;
       if (!(error instanceof Error) || !accessTokenNeedsRefresh(error)) return;
-    }
-    let tokens: AccountTokens;
-    try {
-      tokens = await this.#options.client.refresh(stored.refreshToken);
-    } catch (error) {
-      if (
-        error instanceof Error &&
-        accountFailureAction(error) === ACCOUNT_FAILURE_ACTION.SIGN_OUT &&
-        this.#isCurrent(generation)
-      ) {
-        await this.signOut();
+
+      const refreshed = yield* this.#options.client
+        .refresh(stored.refreshToken)
+        .pipe(Effect.either);
+      if (refreshed._tag === "Left") {
+        const refreshError = refreshed.left;
+        if (
+          refreshError instanceof Error &&
+          accountFailureAction(refreshError) === ACCOUNT_FAILURE_ACTION.SIGN_OUT &&
+          this.#isCurrent(generation)
+        ) {
+          yield* Effect.promise(() => this.signOut());
+        }
+        return;
       }
-      return;
-    }
-    try {
-      if (!(await this.#storeCurrent(generation, { ...stored, ...tokens }))) return;
-      const identity = await this.#options.client.userInfo(tokens.accessToken, stored.provider);
+      const tokens = refreshed.right;
       if (
-        !(await this.#storeCurrent(generation, mergedIdentity({ ...stored, ...tokens }, identity)))
+        !(yield* Effect.promise(() => this.#storeCurrent(generation, { ...stored, ...tokens })))
+      ) {
+        return;
+      }
+      const verified = yield* this.#options.client
+        .userInfo(tokens.accessToken, stored.provider)
+        .pipe(Effect.either);
+      if (verified._tag === "Left") return;
+      if (
+        !(yield* Effect.promise(() =>
+          this.#storeCurrent(generation, mergedIdentity({ ...stored, ...tokens }, verified.right)),
+        ))
       ) {
         return;
       }
       this.#options.onChange(this.#account);
-    } catch {}
+    });
   }
 
   beginSignIn(provider: AccountProvider): Promise<AccountSnapshot> {
@@ -153,27 +183,36 @@ export class AccountSessionManager {
           }),
         );
         const code = await activeLoopback.waitForCode;
-        await withIssuedAccountTokens({
-          issue: () =>
-            this.#options.client.exchangeCode({
-              code,
-              codeVerifier: activeLoopback.codeVerifier,
-              redirectUri: activeLoopback.redirectUri,
-            }),
-          use: async (tokens) => {
-            const identity = await this.#options.client.userInfo(tokens.accessToken, provider);
-            if (!(await this.#storeCurrent(generation, { ...tokens, ...identity }))) {
-              throw new Error(SIGN_IN_CANCELLED_MESSAGE);
-            }
-            await this.#options.startCapabilities();
-            if (!this.#isCurrent(generation)) throw new Error(SIGN_IN_CANCELLED_MESSAGE);
-          },
-          revoke: (refreshToken) => this.#options.client.revoke(refreshToken),
-          onRevokeFailure: (error) => {
-            const message = error instanceof Error ? error.message : String(error);
-            process.stderr.write(`Rejected account token revocation failed: ${message}\n`);
-          },
-        });
+        await this.#options.runEffect(
+          withIssuedAccountTokens({
+            issue: () =>
+              this.#options.client.exchangeCode({
+                code,
+                codeVerifier: activeLoopback.codeVerifier,
+                redirectUri: activeLoopback.redirectUri,
+              }),
+            use: (tokens) =>
+              Effect.gen(this, function* () {
+                const identity = yield* this.#options.client.userInfo(tokens.accessToken, provider);
+                if (
+                  !(yield* Effect.promise(() =>
+                    this.#storeCurrent(generation, { ...tokens, ...identity }),
+                  ))
+                ) {
+                  return yield* Effect.fail(new Error(SIGN_IN_CANCELLED_MESSAGE));
+                }
+                yield* Effect.promise(() => this.#options.startCapabilities());
+                if (!this.#isCurrent(generation)) {
+                  return yield* Effect.fail(new Error(SIGN_IN_CANCELLED_MESSAGE));
+                }
+              }),
+            revoke: (refreshToken) => this.#options.client.revoke(refreshToken),
+            onRevokeFailure: (error) => {
+              const message = error instanceof Error ? error.message : String(error);
+              process.stderr.write(`Rejected account token revocation failed: ${message}\n`);
+            },
+          }) as Effect.Effect<void, unknown, unknown>,
+        );
         this.#options.onChange(this.#account);
         return this.#account;
       } catch (error) {
@@ -202,7 +241,7 @@ export class AccountSessionManager {
     return generation === this.#generation;
   }
 
-  #deleteHosted(accessToken: string): Promise<void> {
+  #deleteHosted(accessToken: string): Effect.Effect<void, unknown, unknown> {
     return deleteHostedAccount({
       serviceBaseUrl: this.#options.hostedServiceBaseUrl,
       accessToken,

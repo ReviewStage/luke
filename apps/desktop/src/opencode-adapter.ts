@@ -17,6 +17,7 @@ import {
   type WireRecord,
   wholeNumber,
 } from "@sidecar/core";
+import { Effect } from "effect";
 import {
   discoverSessionFiles,
   fileStats,
@@ -40,6 +41,7 @@ import {
   textFromRow,
 } from "./local-sqlite";
 import { readOpenCodeSessionTranscript } from "./opencode-transcript";
+import type { Files } from "./services/files";
 
 const OPENCODE_PROVIDER_ID = PROVIDER_ID.OPENCODE;
 const OPENCODE_PROVIDER_NAME = "OpenCode";
@@ -380,24 +382,34 @@ function isObservableSessionRow(row: OpenCodeRow): boolean {
 }
 
 /** Legacy storage keeps one JSON file per session inside its project directory. */
-async function legacySessionFilesIn(projectDirectory: string): Promise<SessionFileCandidate[]> {
-  const entries = await readDirectory(projectDirectory);
-  const candidates = await Promise.all(
-    entries.map(async (entry) => {
-      const providerSessionId = sessionIdFromFileName(entry.name, OPENCODE_SESSION_FILE_EXTENSION);
-      if (!providerSessionId) return undefined;
-      const candidate = await statDirectoryEntry(projectDirectory, entry.name);
-      if (!candidate?.stats.isFile()) return undefined;
-      return {
-        filePath: candidate.directoryPath,
-        providerSessionId,
-        mtimeMs: candidate.stats.mtimeMs,
-      };
-    }),
-  );
-  return candidates.filter(
-    (candidate): candidate is SessionFileCandidate => candidate !== undefined,
-  );
+function legacySessionFilesIn(
+  projectDirectory: string,
+): Effect.Effect<SessionFileCandidate[], unknown, Files> {
+  return Effect.gen(function* () {
+    const entries = yield* readDirectory(projectDirectory);
+    const candidates = yield* Effect.all(
+      entries.map((entry) =>
+        Effect.gen(function* () {
+          const providerSessionId = sessionIdFromFileName(
+            entry.name,
+            OPENCODE_SESSION_FILE_EXTENSION,
+          );
+          if (!providerSessionId) return undefined;
+          const candidate = yield* statDirectoryEntry(projectDirectory, entry.name);
+          if (!candidate?.stats.isFile()) return undefined;
+          return {
+            filePath: candidate.directoryPath,
+            providerSessionId,
+            mtimeMs: candidate.stats.mtimeMs,
+          };
+        }),
+      ),
+      { concurrency: "unbounded" },
+    );
+    return candidates.filter(
+      (candidate): candidate is SessionFileCandidate => candidate !== undefined,
+    );
+  });
 }
 
 export function defaultOpenCodeDataDirectory(): string {
@@ -461,29 +473,33 @@ export class OpenCodeSessionAdapter extends LocalSessionAdapter {
     this.#transcriptMaximumRenderedLength = options.transcriptMaximumRenderedLength;
   }
 
-  async observe(): Promise<readonly ProviderSessionObservation[]> {
-    for (const databasePath of openCodeDatabasePaths(this.#dataDirectory)) {
-      const database = await openReadOnlyDatabase(this.#sqlite, databasePath);
-      if (!database) continue;
-      let snapshots: OpenCodeSessionSnapshot[] | undefined;
-      let now = 0;
-      try {
-        now = this.observationTime();
-        snapshots = this.#databaseSnapshots(database, now);
-      } finally {
-        database.close();
+  observe(): Effect.Effect<readonly ProviderSessionObservation[], unknown, Files> {
+    return Effect.gen(this, function* () {
+      for (const databasePath of openCodeDatabasePaths(this.#dataDirectory)) {
+        const database = yield* openReadOnlyDatabase(this.#sqlite, databasePath);
+        if (!database) continue;
+        let snapshots: OpenCodeSessionSnapshot[] | undefined;
+        let now = 0;
+        try {
+          now = this.observationTime();
+          snapshots = this.#databaseSnapshots(database, now);
+        } finally {
+          database.close();
+        }
+        // A database whose schema was unusable answers nothing; the next
+        // candidate, or the legacy files, may still answer.
+        if (snapshots === undefined) continue;
+        return snapshots.map((snapshot) =>
+          observationFromSnapshot(snapshot, now, this.activeSessionFreshnessMs),
+        );
       }
-      // A database whose schema was unusable answers nothing; the next
-      // candidate, or the legacy files, may still answer.
-      if (snapshots === undefined) continue;
-      return snapshots.map((snapshot) =>
-        observationFromSnapshot(snapshot, now, this.activeSessionFreshnessMs),
-      );
-    }
-    return this.#legacyObservations();
+      return yield* this.#legacyObservations();
+    });
   }
 
-  override readTranscript(providerSessionId: string): Promise<string | undefined> {
+  override readTranscript(
+    providerSessionId: string,
+  ): Effect.Effect<string | undefined, unknown, Files> {
     return readOpenCodeSessionTranscript({
       dataDirectory: this.#dataDirectory,
       providerSessionId,
@@ -564,66 +580,74 @@ export class OpenCodeSessionAdapter extends LocalSessionAdapter {
     }
   }
 
-  async #legacyObservations(): Promise<readonly ProviderSessionObservation[]> {
-    const now = this.observationTime();
-    const storageDirectory = path.join(this.#dataDirectory, OPENCODE_STORAGE_DIRECTORY);
-    const candidates = await discoverSessionFiles({
-      projectsDirectory: path.join(storageDirectory, OPENCODE_STORAGE_SEGMENT.SESSION),
-      maximumProjectDirectories: OPENCODE_ADAPTER_DEFAULTS.MAXIMUM_PROJECT_DIRECTORIES,
-      sessionFilesIn: legacySessionFilesIn,
-    });
+  #legacyObservations(): Effect.Effect<readonly ProviderSessionObservation[], unknown, Files> {
+    return Effect.gen(this, function* () {
+      const now = this.observationTime();
+      const storageDirectory = path.join(this.#dataDirectory, OPENCODE_STORAGE_DIRECTORY);
+      const candidates = yield* discoverSessionFiles({
+        projectsDirectory: path.join(storageDirectory, OPENCODE_STORAGE_SEGMENT.SESSION),
+        maximumProjectDirectories: OPENCODE_ADAPTER_DEFAULTS.MAXIMUM_PROJECT_DIRECTORIES,
+        sessionFilesIn: legacySessionFilesIn,
+      });
 
-    const observations = new Map<string, ProviderSessionObservation>();
-    for (const candidate of candidates) {
-      if (observations.has(candidate.providerSessionId)) continue;
-      const info = await this.#legacyInfoFor(candidate);
-      if (!info) continue;
-      if (text(info.parentID)) continue;
+      const observations = new Map<string, ProviderSessionObservation>();
+      for (const candidate of candidates) {
+        if (observations.has(candidate.providerSessionId)) continue;
+        const info = yield* this.#legacyInfoFor(candidate);
+        if (!info) continue;
+        if (text(info.parentID)) continue;
 
-      const time = isRecord(info.time) ? info.time : undefined;
-      const snapshot: OpenCodeSessionSnapshot = {
-        providerSessionId: candidate.providerSessionId,
-        directory: text(info.directory),
-        title: text(info.title),
-        model: modelFrom(info.model),
-        shareUrl: isRecord(info.share) ? text(info.share.url) : undefined,
-        observedAt: Math.max(
-          candidate.mtimeMs,
-          wholeNumber(time?.updated) ?? 0,
-          wholeNumber(time?.created) ?? 0,
-        ),
-      };
-      // Read for every reported session, not a capped few: a session without
-      // its turn would default to working on freshness alone. Steady state,
-      // each read is one directory listing and one stat — the caches above
-      // pay a file read only for what actually changed.
-      snapshot.turn = await this.#legacyTurn(storageDirectory, candidate.providerSessionId);
-      observations.set(
-        candidate.providerSessionId,
-        observationFromSnapshot(snapshot, now, this.activeSessionFreshnessMs),
+        const time = isRecord(info.time) ? info.time : undefined;
+        const snapshot: OpenCodeSessionSnapshot = {
+          providerSessionId: candidate.providerSessionId,
+          directory: text(info.directory),
+          title: text(info.title),
+          model: modelFrom(info.model),
+          shareUrl: isRecord(info.share) ? text(info.share.url) : undefined,
+          observedAt: Math.max(
+            candidate.mtimeMs,
+            wholeNumber(time?.updated) ?? 0,
+            wholeNumber(time?.created) ?? 0,
+          ),
+        };
+        // Read for every reported session, not a capped few: a session without
+        // its turn would default to working on freshness alone. Steady state,
+        // each read is one directory listing and one stat — the caches above
+        // pay a file read only for what actually changed.
+        snapshot.turn = yield* this.#legacyTurn(storageDirectory, candidate.providerSessionId);
+        observations.set(
+          candidate.providerSessionId,
+          observationFromSnapshot(snapshot, now, this.activeSessionFreshnessMs),
+        );
+      }
+
+      // A file no longer discovered was deleted, so its parse must not outlive it.
+      const discoveredFiles = new Set(candidates.map((candidate) => candidate.filePath));
+      for (const filePath of this.#legacyInfo.keys()) {
+        if (!discoveredFiles.has(filePath)) this.#legacyInfo.delete(filePath);
+      }
+      const discoveredSessions = new Set(
+        candidates.map((candidate) => candidate.providerSessionId),
       );
-    }
+      for (const providerSessionId of this.#legacyTurns.keys()) {
+        if (!discoveredSessions.has(providerSessionId)) this.#legacyTurns.delete(providerSessionId);
+      }
 
-    // A file no longer discovered was deleted, so its parse must not outlive it.
-    const discoveredFiles = new Set(candidates.map((candidate) => candidate.filePath));
-    for (const filePath of this.#legacyInfo.keys()) {
-      if (!discoveredFiles.has(filePath)) this.#legacyInfo.delete(filePath);
-    }
-    const discoveredSessions = new Set(candidates.map((candidate) => candidate.providerSessionId));
-    for (const providerSessionId of this.#legacyTurns.keys()) {
-      if (!discoveredSessions.has(providerSessionId)) this.#legacyTurns.delete(providerSessionId);
-    }
-
-    return [...observations.values()];
+      return [...observations.values()];
+    });
   }
 
   /** The session's own record, re-read only when its file has been written to. */
-  async #legacyInfoFor(candidate: SessionFileCandidate): Promise<WireRecord | undefined> {
-    const cached = this.#legacyInfo.get(candidate.filePath);
-    if (cached && cached.mtimeMs === candidate.mtimeMs) return cached.info;
-    const info = recordFromJsonLine((await readTextFile(candidate.filePath)) ?? "");
-    this.#legacyInfo.set(candidate.filePath, { mtimeMs: candidate.mtimeMs, info });
-    return info;
+  #legacyInfoFor(
+    candidate: SessionFileCandidate,
+  ): Effect.Effect<WireRecord | undefined, unknown, Files> {
+    return Effect.gen(this, function* () {
+      const cached = this.#legacyInfo.get(candidate.filePath);
+      if (cached && cached.mtimeMs === candidate.mtimeMs) return cached.info;
+      const info = recordFromJsonLine((yield* readTextFile(candidate.filePath)) ?? "");
+      this.#legacyInfo.set(candidate.filePath, { mtimeMs: candidate.mtimeMs, info });
+      return info;
+    });
   }
 
   /**
@@ -634,28 +658,30 @@ export class OpenCodeSessionAdapter extends LocalSessionAdapter {
    // SAFETY: The preceding check establishes the asserted contract.
    * message's file as its turn opens, aborts, fails, and completes.
    */
-  async #legacyTurn(
+  #legacyTurn(
     storageDirectory: string,
     providerSessionId: string,
-  ): Promise<OpenCodeTurn | undefined> {
-    const messagesDirectory = path.join(
-      storageDirectory,
-      OPENCODE_STORAGE_SEGMENT.MESSAGE,
-      providerSessionId,
-    );
-    const newest = (await readDirectory(messagesDirectory))
-      .map((entry) => entry.name)
-      .filter((name) => name.endsWith(OPENCODE_SESSION_FILE_EXTENSION))
-      .sort()
-      .at(-1);
-    if (!newest) return undefined;
-    const filePath = path.join(messagesDirectory, newest);
-    const mtimeMs = (await fileStats(filePath))?.mtimeMs ?? 0;
-    const cached = this.#legacyTurns.get(providerSessionId);
-    if (cached && cached.filePath === filePath && cached.mtimeMs === mtimeMs) return cached.turn;
-    const record = recordFromJsonLine((await readTextFile(filePath)) ?? "");
-    const turn = record ? turnFromMessage(record) : undefined;
-    this.#legacyTurns.set(providerSessionId, { filePath, mtimeMs, turn });
-    return turn;
+  ): Effect.Effect<OpenCodeTurn | undefined, unknown, Files> {
+    return Effect.gen(this, function* () {
+      const messagesDirectory = path.join(
+        storageDirectory,
+        OPENCODE_STORAGE_SEGMENT.MESSAGE,
+        providerSessionId,
+      );
+      const newest = (yield* readDirectory(messagesDirectory))
+        .map((entry) => entry.name)
+        .filter((name) => name.endsWith(OPENCODE_SESSION_FILE_EXTENSION))
+        .sort()
+        .at(-1);
+      if (!newest) return undefined;
+      const filePath = path.join(messagesDirectory, newest);
+      const mtimeMs = (yield* fileStats(filePath))?.mtimeMs ?? 0;
+      const cached = this.#legacyTurns.get(providerSessionId);
+      if (cached && cached.filePath === filePath && cached.mtimeMs === mtimeMs) return cached.turn;
+      const record = recordFromJsonLine((yield* readTextFile(filePath)) ?? "");
+      const turn = record ? turnFromMessage(record) : undefined;
+      this.#legacyTurns.set(providerSessionId, { filePath, mtimeMs, turn });
+      return turn;
+    });
   }
 }

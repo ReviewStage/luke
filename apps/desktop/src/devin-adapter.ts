@@ -10,6 +10,8 @@ import {
   type SessionStatus,
   type WireRecord,
 } from "@sidecar/core";
+import type { CloudFailure } from "@sidecar/core/effect-errors";
+import { Effect } from "effect";
 import {
   type CloudAdapterOptions,
   type CloudRequest,
@@ -20,6 +22,7 @@ import {
   recordsFromPage,
   textFromRecord,
 } from "./cloud-session-adapter";
+import type { Http } from "./services/http";
 import { CREDENTIAL_PROVIDER_ID, CREDENTIAL_PROVIDERS } from "./shared/credential-providers";
 
 // Shared with the credential registry so the key the user saves and the
@@ -308,18 +311,20 @@ export class DevinSessionAdapter extends CloudSessionAdapter {
     this.#principal = undefined;
   }
 
-  protected async collect(
+  protected collect(
     request: CloudRequest,
     now: number,
-  ): Promise<readonly ProviderSessionObservation[]> {
-    const identity = await this.#identity(request);
-    // A credential Luke cannot attribute to a person reads an organization's
-    // work. It reports nothing rather than a teammate's.
-    if (!identity) return [];
+  ): Effect.Effect<readonly ProviderSessionObservation[], CloudFailure, Http> {
+    return Effect.gen(this, function* () {
+      const identity = yield* this.#identity(request);
+      // A credential Luke cannot attribute to a person reads an organization's
+      // work. It reports nothing rather than a teammate's.
+      if (!identity) return [];
 
-    return (await this.#listSessions(request, identity))
-      .sort((first, second) => second.observedAt - first.observedAt)
-      .map((session) => this.#observationFor(session, now));
+      return (yield* this.#listSessions(request, identity))
+        .sort((first, second) => second.observedAt - first.observedAt)
+        .map((session) => this.#observationFor(session, now));
+    });
   }
 
   /**
@@ -332,19 +337,21 @@ export class DevinSessionAdapter extends CloudSessionAdapter {
    * costs one request rather than one every refresh for as long as it is
    * stored. The base clears the cache the moment the credential changes.
    */
-  async #identity(request: CloudRequest): Promise<DevinIdentity | undefined> {
-    if (this.#principal !== undefined) return this.#principal ?? undefined;
-    const body = await request([DEVIN_ROUTE_SEGMENT.V3, DEVIN_ROUTE_SEGMENT.SELF]);
-    const userId = textFromRecord(body, DEVIN_FIELD.USER_ID);
-    // Devin leaves `org_id` off a token it places in no organization, and every
-    // v3 session list is org-scoped — the only route that could name an
-    // organization for a token is enterprise-admin. So a token like that has
-    // nothing Luke can read, and asking again would not change that.
-    const orgId = textFromRecord(body, DEVIN_FIELD.ORG_ID);
-    const principal = textFromRecord(body, DEVIN_FIELD.PRINCIPAL_TYPE);
-    this.#principal =
-      principal === DEVIN_PRINCIPAL.PAT_USER && userId && orgId ? { userId, orgId } : null;
-    return this.#principal ?? undefined;
+  #identity(request: CloudRequest): Effect.Effect<DevinIdentity | undefined, CloudFailure, Http> {
+    return Effect.gen(this, function* () {
+      if (this.#principal !== undefined) return this.#principal ?? undefined;
+      const body = yield* request([DEVIN_ROUTE_SEGMENT.V3, DEVIN_ROUTE_SEGMENT.SELF]);
+      const userId = textFromRecord(body, DEVIN_FIELD.USER_ID);
+      // Devin leaves `org_id` off a token it places in no organization, and every
+      // v3 session list is org-scoped — the only route that could name an
+      // organization for a token is enterprise-admin. So a token like that has
+      // nothing Luke can read, and asking again would not change that.
+      const orgId = textFromRecord(body, DEVIN_FIELD.ORG_ID);
+      const principal = textFromRecord(body, DEVIN_FIELD.PRINCIPAL_TYPE);
+      this.#principal =
+        principal === DEVIN_PRINCIPAL.PAT_USER && userId && orgId ? { userId, orgId } : null;
+      return this.#principal ?? undefined;
+    });
   }
 
   /**
@@ -353,23 +360,28 @@ export class DevinSessionAdapter extends CloudSessionAdapter {
    * second request per session, and one person's page of newest sessions
    * reaches far past anything the observation cap would keep.
    */
-  async #listSessions(request: CloudRequest, identity: DevinIdentity): Promise<DevinSession[]> {
-    const body = await request(
-      [
-        DEVIN_ROUTE_SEGMENT.V3,
-        DEVIN_ROUTE_SEGMENT.ORGANIZATIONS,
-        identity.orgId,
-        DEVIN_ROUTE_SEGMENT.SESSIONS,
-      ],
-      {
-        [DEVIN_QUERY.FIRST]: String(DEVIN_ADAPTER_DEFAULTS.SESSION_PAGE_SIZE),
-        [DEVIN_QUERY.USER_IDS]: identity.userId,
-      },
-    );
+  #listSessions(
+    request: CloudRequest,
+    identity: DevinIdentity,
+  ): Effect.Effect<DevinSession[], CloudFailure, Http> {
+    return Effect.gen(function* () {
+      const body = yield* request(
+        [
+          DEVIN_ROUTE_SEGMENT.V3,
+          DEVIN_ROUTE_SEGMENT.ORGANIZATIONS,
+          identity.orgId,
+          DEVIN_ROUTE_SEGMENT.SESSIONS,
+        ],
+        {
+          [DEVIN_QUERY.FIRST]: String(DEVIN_ADAPTER_DEFAULTS.SESSION_PAGE_SIZE),
+          [DEVIN_QUERY.USER_IDS]: identity.userId,
+        },
+      );
 
-    return recordsFromPage(body, DEVIN_FIELD.ITEMS)
-      .map((record) => sessionFromRecord(record, identity))
-      .filter(isDefined);
+      return recordsFromPage(body, DEVIN_FIELD.ITEMS)
+        .map((record) => sessionFromRecord(record, identity))
+        .filter(isDefined);
+    });
   }
 
   /**

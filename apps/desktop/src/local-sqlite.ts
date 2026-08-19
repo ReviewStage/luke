@@ -1,5 +1,8 @@
+import type { Stats } from "node:fs";
 import { text, type UnparsedWireValue, type WireRecord, wholeNumber } from "@sidecar/core";
-import { canIgnoreFilesystemError, fileStats } from "./local-session-adapter";
+import { Effect } from "effect";
+import { canIgnoreFilesystemError } from "./local-session-adapter";
+import { type FileFailure, Files } from "./services/files";
 
 export function numberFromRow(row: WireRecord, key: string): number | undefined {
   return wholeNumber(row[key]);
@@ -30,12 +33,13 @@ export interface SqliteModule {
   DatabaseSync: new (location: string, options: { readOnly: boolean }) => SqliteDatabase;
 }
 
-export type SqliteModuleLoader = () => Promise<SqliteModule>;
+export type SqliteModuleLoader = () => Effect.Effect<SqliteModule, FileFailure, Files>;
 
-export async function defaultSqliteModule(): Promise<SqliteModule> {
-  // SAFETY: The preceding check establishes the asserted contract.
-  return (await import("node:sqlite")) as SqliteModule;
-}
+export const defaultSqliteModule: SqliteModuleLoader = () =>
+  Effect.gen(function* () {
+    const files = yield* Files;
+    return yield* files.dynamicImport<SqliteModule>("node:sqlite");
+  });
 
 function isNodeError(error: Error): error is NodeJS.ErrnoException {
   return error instanceof Error && "code" in error;
@@ -53,25 +57,39 @@ export function canIgnoreSqliteError(error: Error): boolean {
   );
 }
 
-export async function openReadOnlyDatabase(
+function optionalStat(filePath: string): Effect.Effect<Stats | undefined, FileFailure, Files> {
+  return Effect.gen(function* () {
+    const files = yield* Files;
+    return yield* files.stat(filePath);
+  });
+}
+
+export function openReadOnlyDatabase(
   sqlite: SqliteModuleLoader,
   filePath: string,
-): Promise<SqliteDatabase | undefined> {
-  const stats = await fileStats(filePath);
-  if (!stats?.isFile()) return undefined;
+): Effect.Effect<SqliteDatabase | undefined, FileFailure | unknown, Files> {
+  return Effect.gen(function* () {
+    const stats = yield* optionalStat(filePath);
+    if (!stats?.isFile()) return undefined;
 
-  try {
-    const module = await sqlite();
-    const database = new module.DatabaseSync(filePath, { readOnly: true });
-    database.enableDefensive?.(true);
-    return database;
-  } catch (error) {
-    if (
-      !(error instanceof Error) ||
-      (!canIgnoreSqliteError(error) && !canIgnoreFilesystemError(error))
-    ) {
-      throw error;
-    }
-    return undefined;
-  }
+    const module = yield* sqlite();
+    return yield* Effect.try({
+      try: () => {
+        const database = new module.DatabaseSync(filePath, { readOnly: true });
+        database.enableDefensive?.(true);
+        return database;
+      },
+      catch: (error) => error,
+    }).pipe(
+      Effect.catchAll((error) => {
+        if (
+          error instanceof Error &&
+          (canIgnoreSqliteError(error) || canIgnoreFilesystemError(error))
+        ) {
+          return Effect.succeed(undefined);
+        }
+        return Effect.fail(error);
+      }),
+    );
+  });
 }

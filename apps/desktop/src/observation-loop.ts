@@ -1,7 +1,10 @@
+import type { Effect } from "effect";
+import { effectRuntime } from "./effect-runtime";
+
 export interface ObservationLoopOptions {
   gate: () => boolean;
   intervalMs: number;
-  run: (generation: number) => Promise<void>;
+  run: (generation: number) => Effect.Effect<void>;
   afterRun?: () => void;
 }
 
@@ -47,7 +50,7 @@ export class ObservationLoop {
     const generation = this.#generation;
     this.#running = true;
     try {
-      await this.#options.run(generation);
+      await effectRuntime.runPromise(this.#options.run(generation));
     } finally {
       this.#running = false;
       // The hook re-checks what the clock alone changes, so it belongs to a

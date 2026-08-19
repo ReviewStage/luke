@@ -1,4 +1,5 @@
 import { isRecord, oneLine, recordFromJsonLine, text, type WireRecord } from "@sidecar/core";
+import { Effect } from "effect";
 import {
   canIgnoreSqliteError,
   defaultSqliteModule,
@@ -12,6 +13,7 @@ import {
   OPENCODE_TOOL_INPUT_KEY,
   openCodeDatabasePaths,
 } from "./opencode-adapter";
+import type { Files } from "./services/files";
 
 /**
  * On-demand reading of one OpenCode session's transcript, for a question the
@@ -214,24 +216,26 @@ function renderedFromDatabase(
  * Reads one session's recent transcript into a bounded rendering, or nothing
  * when no database holds messages for that id.
  */
-export async function readOpenCodeSessionTranscript(
+export function readOpenCodeSessionTranscript(
   request: OpenCodeTranscriptRequest,
-): Promise<string | undefined> {
-  const dataDirectory = request.dataDirectory ?? defaultOpenCodeDataDirectory();
-  const sqlite = request.sqlite ?? defaultSqliteModule;
-  for (const databasePath of openCodeDatabasePaths(dataDirectory)) {
-    const database = await openReadOnlyDatabase(sqlite, databasePath);
-    if (!database) continue;
-    try {
-      const rendered = renderedFromDatabase(
-        database,
-        request.providerSessionId,
-        request.maximumRenderedLength ?? TRANSCRIPT_BOUNDS.MAXIMUM_RENDERED_LENGTH,
-      );
-      if (rendered) return rendered;
-    } finally {
-      database.close();
+): Effect.Effect<string | undefined, unknown, Files> {
+  return Effect.gen(function* () {
+    const dataDirectory = request.dataDirectory ?? defaultOpenCodeDataDirectory();
+    const sqlite = request.sqlite ?? defaultSqliteModule;
+    for (const databasePath of openCodeDatabasePaths(dataDirectory)) {
+      const database = yield* openReadOnlyDatabase(sqlite, databasePath);
+      if (!database) continue;
+      try {
+        const rendered = renderedFromDatabase(
+          database,
+          request.providerSessionId,
+          request.maximumRenderedLength ?? TRANSCRIPT_BOUNDS.MAXIMUM_RENDERED_LENGTH,
+        );
+        if (rendered) return rendered;
+      } finally {
+        database.close();
+      }
     }
-  }
-  return undefined;
+    return undefined;
+  });
 }

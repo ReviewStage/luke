@@ -177,7 +177,7 @@ export function attentionContext(detail: SessionDetail): AttentionContext | unde
 
 /** Reviews one bounded update and decides whether Luke should speak. */
 export interface AttentionEvaluator {
-  evaluate(update: AttentionUpdate): Effect.Effect<AttentionDecision | undefined, unknown>;
+  evaluate(update: AttentionUpdate): Effect.Effect<AttentionDecision | undefined, unknown, unknown>;
 }
 
 /** Why a reviewed update ended up with the decision it carries. */
@@ -579,7 +579,9 @@ export class SessionAttentionReviewer {
     this.#ledger = new AttentionSpeechLedger(ledgerOptions);
   }
 
-  review(sessions: readonly NormalizedSession[]): Effect.Effect<readonly AttentionReview[]> {
+  review(
+    sessions: readonly NormalizedSession[],
+  ): Effect.Effect<readonly AttentionReview[], never, unknown> {
     return Effect.gen(this, function* () {
       this.#ledger.retain(sessions);
 
@@ -727,7 +729,9 @@ export class SessionAttentionReviewer {
     if (providerSessions.size === 0) this.#observed.delete(session.providerId);
   }
 
-  #reviewUpdate(update: AttentionUpdate): Effect.Effect<AttentionReview, AttentionRateLimited> {
+  #reviewUpdate(
+    update: AttentionUpdate,
+  ): Effect.Effect<AttentionReview, AttentionRateLimited, unknown> {
     return Effect.gen(this, function* () {
       const decision = yield* this.#evaluate(update);
       const identity: SessionIdentity = {
@@ -791,7 +795,7 @@ export class SessionAttentionReviewer {
 
   #evaluate(
     update: AttentionUpdate,
-  ): Effect.Effect<AttentionDecision | undefined, AttentionRateLimited> {
+  ): Effect.Effect<AttentionDecision | undefined, AttentionRateLimited, unknown> {
     return this.#evaluator.evaluate(update).pipe(
       Effect.retry({
         while: (error): error is AttentionRateLimited =>

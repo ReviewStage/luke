@@ -1,4 +1,6 @@
 import type { RealtimeConnection, RealtimeDiagnostics } from "@sidecar/core";
+import type { Effect } from "effect";
+import type { Http } from "./services/http";
 
 /**
  * What the main process asks of whichever credential source voice runs on —
@@ -7,7 +9,7 @@ import type { RealtimeConnection, RealtimeDiagnostics } from "@sidecar/core";
  * aimed at OpenAI's own calls endpoint, and diagnostics that can say why not.
  */
 export interface RealtimeCredentialMinter {
-  mint(): Promise<RealtimeConnection | undefined>;
+  mint(): Effect.Effect<RealtimeConnection | undefined, never, Http>;
   setVoice(voice: string | undefined): void;
   setSpeed(speed: number | undefined): void;
   diagnostics(): RealtimeDiagnostics;

@@ -1,6 +1,7 @@
 import os from "node:os";
 import path from "node:path";
 import { isRecord, oneLine, text, type WireRecord } from "@sidecar/core";
+import { Effect } from "effect";
 import { readDirectory, readTail, statDirectoryEntry, tailRecords } from "./local-session-adapter";
 import {
   boundedTranscript,
@@ -9,6 +10,7 @@ import {
   transcriptLine,
   transcriptMessageText,
 } from "./local-transcript";
+import type { Files } from "./services/files";
 
 /**
  * On-demand reading of one local Cursor session's transcript, for a question
@@ -156,44 +158,51 @@ function linesFromRecord(record: WireRecord): string[] {
  * project directories — without trusting the id as a path: an id outside a
  * plain file-name shape names nothing.
  */
-async function transcriptFilePath(
+function transcriptFilePath(
   cursorHome: string,
   providerSessionId: string,
-): Promise<string | undefined> {
-  if (!CURSOR_SESSION_ID_PATTERN.test(providerSessionId)) return undefined;
-  const projectsDirectory = path.join(cursorHome, CURSOR_PROJECTS_DIRECTORY);
-  const fileName = `${providerSessionId}${CURSOR_TRANSCRIPT_FILE_EXTENSION}`;
-  for (const entry of await readDirectory(projectsDirectory)) {
-    const projectDirectory = await statDirectoryEntry(projectsDirectory, entry.name);
-    if (!projectDirectory?.stats.isDirectory()) continue;
-    const sessionDirectory = await statDirectoryEntry(
-      path.join(projectDirectory.directoryPath, CURSOR_TRANSCRIPTS_DIRECTORY),
-      providerSessionId,
-    );
-    if (!sessionDirectory?.stats.isDirectory()) continue;
-    const candidate = await statDirectoryEntry(sessionDirectory.directoryPath, fileName);
-    if (candidate?.stats.isFile()) return candidate.directoryPath;
-  }
-  return undefined;
+): Effect.Effect<string | undefined, unknown, Files> {
+  return Effect.gen(function* () {
+    if (!CURSOR_SESSION_ID_PATTERN.test(providerSessionId)) return undefined;
+    const projectsDirectory = path.join(cursorHome, CURSOR_PROJECTS_DIRECTORY);
+    const fileName = `${providerSessionId}${CURSOR_TRANSCRIPT_FILE_EXTENSION}`;
+    for (const entry of yield* readDirectory(projectsDirectory)) {
+      const projectDirectory = yield* statDirectoryEntry(projectsDirectory, entry.name);
+      if (!projectDirectory?.stats.isDirectory()) continue;
+      const sessionDirectory = yield* statDirectoryEntry(
+        path.join(projectDirectory.directoryPath, CURSOR_TRANSCRIPTS_DIRECTORY),
+        providerSessionId,
+      );
+      if (!sessionDirectory?.stats.isDirectory()) continue;
+      const candidate = yield* statDirectoryEntry(sessionDirectory.directoryPath, fileName);
+      if (candidate?.stats.isFile()) return candidate.directoryPath;
+    }
+    return undefined;
+  });
 }
 
 /**
  * Reads one session's recent transcript into a bounded rendering, or nothing
  * when no transcript file exists for that id.
  */
-export async function readCursorSessionTranscript(
+export function readCursorSessionTranscript(
   request: CursorTranscriptRequest,
-): Promise<string | undefined> {
-  const filePath = await transcriptFilePath(
-    request.cursorHome ?? defaultCursorHome(),
-    request.providerSessionId,
-  );
-  if (!filePath) return undefined;
+): Effect.Effect<string | undefined, unknown, Files> {
+  return Effect.gen(function* () {
+    const filePath = yield* transcriptFilePath(
+      request.cursorHome ?? defaultCursorHome(),
+      request.providerSessionId,
+    );
+    if (!filePath) return undefined;
 
-  const tail = await readTail(filePath, request.readTailBytes ?? TRANSCRIPT_BOUNDS.READ_TAIL_BYTES);
-  const lines = tailRecords(tail).flatMap(linesFromRecord);
-  return boundedTranscript(
-    lines,
-    request.maximumRenderedLength ?? TRANSCRIPT_BOUNDS.MAXIMUM_RENDERED_LENGTH,
-  );
+    const tail = yield* readTail(
+      filePath,
+      request.readTailBytes ?? TRANSCRIPT_BOUNDS.READ_TAIL_BYTES,
+    );
+    const lines = tailRecords(tail).flatMap(linesFromRecord);
+    return boundedTranscript(
+      lines,
+      request.maximumRenderedLength ?? TRANSCRIPT_BOUNDS.MAXIMUM_RENDERED_LENGTH,
+    );
+  });
 }

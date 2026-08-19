@@ -1,4 +1,7 @@
+import type { AccountClientFailure, CloudFailure } from "@sidecar/core/effect-errors";
+import { Effect, Ref } from "effect";
 import type { AccountTokens } from "./account-client";
+import type { Http } from "./services/http";
 
 /**
  * Collapses concurrent asks for a refresh into one in-flight run, and every
@@ -10,30 +13,41 @@ import type { AccountTokens } from "./account-client";
  * right after a successful refresh. A run that ends, ends the flight; the next
  * ask starts a fresh one holding the newly rotated token.
  */
-export function singleFlight(run: () => Promise<void>): () => Promise<void> {
-  let running: Promise<void> | undefined;
-  return () => {
-    running ??= run().finally(() => {
-      running = undefined;
+export function singleFlight(
+  run: () => Effect.Effect<void, unknown, unknown>,
+): () => Effect.Effect<void, unknown, unknown> {
+  const running = Ref.unsafeMake<Effect.Effect<void, unknown, unknown> | undefined>(undefined);
+  return () =>
+    Effect.gen(function* () {
+      const current = yield* Ref.get(running);
+      if (current) return yield* current;
+      const flight = run().pipe(Effect.ensuring(Ref.set(running, undefined)));
+      yield* Ref.set(running, flight);
+      return yield* flight;
     });
-    return running;
-  };
 }
 
 /** Ensures credentials rejected before sign-in completes do not outlive the failed attempt. */
-export async function withIssuedAccountTokens<T>(options: {
-  issue: () => Promise<AccountTokens>;
-  use: (tokens: AccountTokens) => Promise<T>;
-  revoke: (refreshToken: string) => Promise<void>;
-  onRevokeFailure?: (error: Error) => void;
-}): Promise<T> {
-  const tokens = await options.issue();
-  try {
-    return await options.use(tokens);
-  } catch (error) {
-    await options.revoke(tokens.refreshToken).catch((revokeError) => {
-      options.onRevokeFailure?.(revokeError);
-    });
-    throw error;
-  }
+export function withIssuedAccountTokens<T, R>(options: {
+  issue: () => Effect.Effect<AccountTokens, AccountClientFailure | CloudFailure, Http>;
+  use: (tokens: AccountTokens) => Effect.Effect<T, unknown, R>;
+  revoke: (refreshToken: string) => Effect.Effect<void, AccountClientFailure | CloudFailure, Http>;
+  onRevokeFailure?: (error: unknown) => void;
+}): Effect.Effect<T, unknown, Http | R> {
+  return Effect.gen(function* () {
+    const tokens = yield* options.issue();
+    return yield* options.use(tokens).pipe(
+      Effect.catchAll((error) =>
+        Effect.gen(function* () {
+          yield* options.revoke(tokens.refreshToken).pipe(
+            Effect.catchAll((revokeError) => {
+              options.onRevokeFailure?.(revokeError);
+              return Effect.void;
+            }),
+          );
+          return yield* Effect.fail(error);
+        }),
+      ),
+    );
+  });
 }

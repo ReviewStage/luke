@@ -9,6 +9,9 @@ import {
   positiveInteger,
   text,
 } from "@sidecar/core";
+import { AttentionRateLimited } from "@sidecar/core/effect-errors";
+import { Duration, Effect, Ref, Schedule } from "effect";
+import { Http } from "./services/http";
 import { unparsedWire, wireRecord } from "./wire-boundary";
 
 const HOSTED_DEFAULTS = {
@@ -19,22 +22,6 @@ const HOSTED_DEFAULTS = {
 
 const UNAUTHORIZED_STATUS = 401;
 const QUOTA_STATUS = 429;
-
-type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
-
-export interface HostedAttentionEvaluatorOptions {
-  /** The hosted service origin, without a trailing slash. */
-  serviceBaseUrl: string;
-  readAccessToken: () => Promise<string | undefined>;
-  refreshAccount: () => Promise<void>;
-  fetch?: FetchLike;
-  now?: () => number;
-  requestTimeoutMs?: number;
-}
-
-function withoutTrailingSlash(value: string): string {
-  return value.endsWith("/") ? value.slice(0, -1) : value;
-}
 
 /**
  * Exactly the fields the review's prompt reads, picked rather than spread: an
@@ -56,6 +43,19 @@ function promptFields(update: AttentionUpdate): AttentionPromptUpdate {
   };
 }
 
+export interface HostedAttentionEvaluatorOptions {
+  /** The hosted service origin, without a trailing slash. */
+  serviceBaseUrl: string;
+  readAccessToken: () => Effect.Effect<string | undefined>;
+  refreshAccount: () => Effect.Effect<void>;
+  now?: () => number;
+  requestTimeoutMs?: number;
+}
+
+function withoutTrailingSlash(value: string): string {
+  return value.endsWith("/") ? value.slice(0, -1) : value;
+}
+
 /**
  * Reviews bounded session updates through Luke's hosted service on the
  * signed-in account, for a developer with no OpenAI key of their own. What
@@ -67,14 +67,11 @@ function promptFields(update: AttentionUpdate): AttentionPromptUpdate {
  */
 export class HostedAttentionEvaluator implements AttentionEvaluator {
   readonly #endpoint: string;
-  readonly #readAccessToken: () => Promise<string | undefined>;
-  readonly #refreshAccount: () => Promise<void>;
-  readonly #fetch: FetchLike;
+  readonly #readAccessToken: () => Effect.Effect<string | undefined>;
+  readonly #refreshAccount: () => Effect.Effect<void>;
   readonly #now: () => number;
   readonly #requestTimeoutMs: number;
-  // SAFETY: The preceding check establishes the asserted contract.
-  /** Until when reviews stay unsent, as epoch milliseconds. */
-  #quietUntil = 0;
+  readonly #quietUntil: Ref.Ref<number>;
 
   constructor(options: HostedAttentionEvaluatorOptions) {
     const baseUrl = text(options.serviceBaseUrl);
@@ -82,57 +79,70 @@ export class HostedAttentionEvaluator implements AttentionEvaluator {
     this.#endpoint = `${withoutTrailingSlash(baseUrl)}${HOSTED_SERVICE_PATH.ATTENTION_REVIEW}`;
     this.#readAccessToken = options.readAccessToken;
     this.#refreshAccount = options.refreshAccount;
-    this.#fetch = options.fetch ?? ((input, init) => fetch(input, init));
     this.#now = options.now ?? Date.now;
     this.#requestTimeoutMs = positiveInteger(
       options.requestTimeoutMs,
       HOSTED_DEFAULTS.REQUEST_TIMEOUT_MS,
     );
+    this.#quietUntil = Ref.unsafeMake(0);
   }
 
-  /** The moment held-back reviews resume, for the reviewer to ask before a pass. */
-  quietUntil(): number | undefined {
-    return this.#quietUntil > this.#now() ? this.#quietUntil : undefined;
+  evaluate(update: AttentionUpdate) {
+    return this.#evaluateOnce(update).pipe(
+      Effect.retry({
+        while: (error): error is AttentionRateLimited =>
+          error instanceof AttentionRateLimited && error.retryAfterMs <= 0,
+        schedule: Schedule.addDelay(Schedule.recurs(1), () => Duration.zero),
+      }),
+    );
   }
 
-  async evaluate(update: AttentionUpdate): Promise<AttentionDecision | undefined> {
-    if (this.#now() < this.#quietUntil) return undefined;
-
-    const token = await this.#readAccessToken();
-    if (!token) return undefined;
-
-    let response = await this.#request(token, update);
-    if (response?.status === UNAUTHORIZED_STATUS) {
-      // Routine expiry of an hour-lived token inside a day-lived app: refresh
-      // and retry once, like the hosted mint.
-      await this.#refreshAccount().catch(() => undefined);
-      const refreshed = await this.#readAccessToken();
-      if (refreshed && refreshed !== token) {
-        response = await this.#request(refreshed, update);
+  #evaluateOnce(
+    update: AttentionUpdate,
+  ): Effect.Effect<AttentionDecision | undefined, AttentionRateLimited, Http> {
+    return Effect.gen(this, function* () {
+      const now = this.#now();
+      const quietUntil = yield* Ref.get(this.#quietUntil);
+      if (now < quietUntil) {
+        return yield* Effect.fail(new AttentionRateLimited({ retryAfterMs: quietUntil - now }));
       }
-    }
-    if (!response) return undefined;
 
-    if (!response.ok) {
-      if (response.status === QUOTA_STATUS) {
-        await this.#quiet(response);
+      const token = yield* this.#readAccessToken();
+      if (!token) return undefined;
+
+      let response = yield* this.#request(token, update);
+      if (response?.status === UNAUTHORIZED_STATUS) {
+        // Routine expiry of an hour-lived token inside a day-lived app: refresh
+        // and retry once, like the hosted mint.
+        yield* this.#refreshAccount().pipe(Effect.catchAll(() => Effect.void));
+        const refreshed = yield* this.#readAccessToken();
+        if (refreshed && refreshed !== token) {
+          response = yield* this.#request(refreshed, update);
+        }
+      }
+      if (!response) return undefined;
+
+      if (!response.ok) {
+        if (response.status === QUOTA_STATUS) {
+          return yield* this.#quiet(response, now, quietUntil);
+        }
+        // Status alone diagnoses the refusal without writing session material.
+        this.#report(`Hosted attention review failed with status ${response.status}`);
         return undefined;
       }
-      // Status alone diagnoses the refusal without writing session material.
-      this.#report(`Hosted attention review failed with status ${response.status}`);
-      return undefined;
-    }
 
-    const payload = await response.json().catch(() => undefined);
-    const answer =
-      payload === undefined
-        ? undefined
-        : hostedReviewAnswerFromWire(unparsedWire(payload), this.#now());
-    if (!answer) {
-      this.#report("Hosted attention review answered outside the decision contract");
-      return undefined;
-    }
-    return answer.decision;
+      const payload = yield* this.#payload(response);
+      if (payload === undefined) return undefined;
+      const answer = hostedReviewAnswerFromWire(
+        unparsedWire(payload as import("./wire-boundary").WireBoundaryInput),
+        this.#now(),
+      );
+      if (!answer) {
+        this.#report("Hosted attention review answered outside the decision contract");
+        return undefined;
+      }
+      return answer.decision;
+    });
   }
 
   /**
@@ -140,38 +150,61 @@ export class HostedAttentionEvaluator implements AttentionEvaluator {
    * own word for when that is. Updates held back stay derivable and are
    * reviewed once the quiet ends, exactly like the keyed evaluator's 429.
    */
-  async #quiet(response: Response): Promise<void> {
-    const payload = await response.json().catch(() => undefined);
-    const record = wireRecord(unparsedWire(payload));
-    const quota = record ? hostedQuotaFromWire(unparsedWire(record.quota)) : undefined;
-    const resetsAt = quota?.resetsAt;
-    this.#quietUntil =
-      resetsAt !== undefined && resetsAt > this.#now()
-        ? resetsAt
-        : this.#now() + HOSTED_DEFAULTS.RATE_LIMIT_COOLDOWN_MS;
-    const waitMs = Math.max(0, this.#quietUntil - this.#now());
-    this.#report(
-      `Hosted attention reviews are out of today's allowance; pausing for ${Math.round(waitMs / 1000)}s`,
-    );
+  #quiet(
+    response: Response,
+    now: number,
+    previousQuietUntil: number,
+  ): Effect.Effect<never, AttentionRateLimited, Http> {
+    return Effect.gen(this, function* () {
+      const payload = yield* this.#payload(response);
+      const record = wireRecord(
+        unparsedWire(payload as import("./wire-boundary").WireBoundaryInput),
+      );
+      const quota = record ? hostedQuotaFromWire(unparsedWire(record.quota)) : undefined;
+      const resetsAt = quota?.resetsAt;
+      const quietUntil =
+        resetsAt !== undefined && resetsAt > now
+          ? resetsAt
+          : now + HOSTED_DEFAULTS.RATE_LIMIT_COOLDOWN_MS;
+      const waitMs = Math.max(quietUntil - now, quietUntil - previousQuietUntil);
+      yield* Ref.set(this.#quietUntil, Math.max(quietUntil, previousQuietUntil));
+      this.#report(
+        `Hosted attention reviews are out of today's allowance; pausing for ${Math.round(waitMs / 1000)}s`,
+      );
+      return yield* Effect.fail(new AttentionRateLimited({ retryAfterMs: waitMs }));
+    });
   }
 
-  async #request(token: string, update: AttentionUpdate): Promise<Response | undefined> {
-    try {
-      return await this.#fetch(this.#endpoint, {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${token}`,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify(promptFields(update)),
-        signal: AbortSignal.timeout(this.#requestTimeoutMs),
-      });
-    } catch (error) {
-      this.#report(
-        `Hosted attention review did not complete: ${error instanceof Error ? error.name : "unknown error"}`,
-      );
-      return undefined;
-    }
+  #request(
+    token: string,
+    update: AttentionUpdate,
+  ): Effect.Effect<Response | undefined, never, Http> {
+    return Effect.gen(this, function* () {
+      const http = yield* Http;
+      return yield* http
+        .request(this.#endpoint, {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${token}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify(promptFields(update)),
+          signal: AbortSignal.timeout(this.#requestTimeoutMs),
+        })
+        .pipe(
+          Effect.catchAll(() => {
+            this.#report("Hosted attention review did not complete");
+            return Effect.succeed(undefined);
+          }),
+        );
+    });
+  }
+
+  #payload(response: Response): Effect.Effect<unknown | undefined, never, Http> {
+    return Effect.gen(this, function* () {
+      const http = yield* Http;
+      return yield* http.readJson(response).pipe(Effect.catchAll(() => Effect.succeed(undefined)));
+    });
   }
 
   #report(message: string): void {

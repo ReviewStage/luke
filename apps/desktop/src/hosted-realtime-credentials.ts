@@ -17,8 +17,10 @@ import {
   text,
   type UnparsedWireValue,
 } from "@sidecar/core";
+import { Effect } from "effect";
 import type { RealtimeCredentialMinter } from "./realtime-minter";
-import { unparsedWire } from "./wire-boundary";
+import { Http } from "./services/http";
+import { unparsedWire, type WireBoundaryInput } from "./wire-boundary";
 
 const HOSTED_DEFAULTS = {
   REQUEST_TIMEOUT_MS: 10_000,
@@ -28,23 +30,20 @@ const UNAUTHORIZED_STATUS = 401;
 const QUOTA_STATUS = 429;
 const UNAVAILABLE_STATUS = 503;
 
-type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
-
 export interface HostedRealtimeCredentialOptions {
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
   /** The signed-in account's current access token, read fresh for every mint. */
-  readAccessToken: () => Promise<string | undefined>;
+  readAccessToken: () => Effect.Effect<string | undefined>;
   /**
    * Asks the account lifecycle to refresh its tokens. Access tokens outlive a
    * mint by an hour at most while the app runs for days, so a 401 here is
    * routine — the mint retries once with whatever the refresh produced, and
    * only a second refusal is reported.
    */
-  refreshAccount: () => Promise<void>;
+  refreshAccount: () => Effect.Effect<void>;
   voice?: string;
   speed?: number;
-  fetch?: FetchLike;
   now?: () => number;
   requestTimeoutMs?: number;
 }
@@ -64,14 +63,13 @@ function withoutTrailingSlash(value: string): string {
  */
 export class HostedRealtimeCredentialMinter implements RealtimeCredentialMinter {
   readonly #endpoint: string;
-  readonly #readAccessToken: () => Promise<string | undefined>;
-  readonly #refreshAccount: () => Promise<void>;
+  readonly #readAccessToken: () => Effect.Effect<string | undefined>;
+  readonly #refreshAccount: () => Effect.Effect<void>;
   /** The voice from construction, which a cleared setting falls back to. */
   readonly #configuredVoice: string | undefined;
   #voice: string | undefined;
   readonly #configuredSpeed: number | undefined;
   #speed: number | undefined;
-  readonly #fetch: FetchLike;
   readonly #now: () => number;
   readonly #requestTimeoutMs: number;
   #lastModel: string | undefined;
@@ -90,7 +88,6 @@ export class HostedRealtimeCredentialMinter implements RealtimeCredentialMinter 
     this.#voice = this.#configuredVoice;
     this.#configuredSpeed = options.speed;
     this.#speed = this.#configuredSpeed;
-    this.#fetch = options.fetch ?? ((input, init) => fetch(input, init));
     this.#now = options.now ?? Date.now;
     this.#requestTimeoutMs = positiveInteger(
       options.requestTimeoutMs,
@@ -117,46 +114,52 @@ export class HostedRealtimeCredentialMinter implements RealtimeCredentialMinter 
    * announcer's path is an announcement lost. This is also what the hosted
    * allowance counts — each mint answers exactly one call.
    */
-  async mint(): Promise<RealtimeConnection | undefined> {
-    this.#lastAttemptAt = this.#now();
+  mint(): Effect.Effect<RealtimeConnection | undefined, never, Http> {
+    return Effect.gen(this, function* () {
+      this.#lastAttemptAt = this.#now();
 
-    const token = await this.#readAccessToken();
-    if (!token) {
-      this.#record(REALTIME_MINT_OUTCOME.NOT_SIGNED_IN, "no access token");
-      return undefined;
-    }
-
-    let response = await this.#request(token);
-    if (response?.status === UNAUTHORIZED_STATUS) {
-      // Routine expiry of an hour-lived token inside a day-lived app: refresh
-      // and retry once. A retry on the same token would only repeat the no.
-      await this.#refreshAccount().catch(() => undefined);
-      const refreshed = await this.#readAccessToken();
-      if (refreshed && refreshed !== token) {
-        response = await this.#request(refreshed);
+      const token = yield* this.#readAccessToken();
+      if (!token) {
+        this.#record(REALTIME_MINT_OUTCOME.NOT_SIGNED_IN, "no access token");
+        return undefined;
       }
-    }
-    if (!response) return undefined;
 
-    const payload = await response.json().catch(() => undefined);
-    if (!response.ok) {
-      this.#refuse(response.status, unparsedWire(payload));
-      return undefined;
-    }
+      let response = yield* this.#request(token);
+      if (response?.status === UNAUTHORIZED_STATUS) {
+        yield* this.#refreshAccount().pipe(Effect.catchAll(() => Effect.void));
+        const refreshed = yield* this.#readAccessToken();
+        if (refreshed && refreshed !== token) {
+          response = yield* this.#request(refreshed);
+        }
+      }
+      if (!response) return undefined;
 
-    const answer =
-      payload === undefined
-        ? undefined
-        : hostedMintAnswerFromWire(unparsedWire(payload), this.#now());
-    if (!answer) {
-      this.#record(REALTIME_MINT_OUTCOME.MALFORMED_RESPONSE, "no usable hosted credential");
-      return undefined;
-    }
+      const http = yield* Http;
+      const payload = yield* http
+        .readJson(response)
+        .pipe(Effect.catchAll(() => Effect.succeed(undefined)));
+      if (!response.ok) {
+        this.#refuse(
+          response.status,
+          payload === undefined ? undefined : unparsedWire(payload as WireBoundaryInput),
+        );
+        return undefined;
+      }
 
-    this.#lastModel = answer.connection.model;
-    this.#quota = answer.quota ?? this.#quota;
-    this.#record(REALTIME_MINT_OUTCOME.SUCCEEDED);
-    return answer.connection;
+      const answer =
+        payload === undefined
+          ? undefined
+          : hostedMintAnswerFromWire(unparsedWire(payload as WireBoundaryInput), this.#now());
+      if (!answer) {
+        this.#record(REALTIME_MINT_OUTCOME.MALFORMED_RESPONSE, "no usable hosted credential");
+        return undefined;
+      }
+
+      this.#lastModel = answer.connection.model;
+      this.#quota = answer.quota ?? this.#quota;
+      this.#record(REALTIME_MINT_OUTCOME.SUCCEEDED);
+      return answer.connection;
+    });
   }
 
   diagnostics(): RealtimeDiagnostics {
@@ -176,7 +179,7 @@ export class HostedRealtimeCredentialMinter implements RealtimeCredentialMinter 
   }
 
   /** Names a refusal from its status and reason, keeping the quota a 429 carries. */
-  #refuse(status: number, payload: UnparsedWireValue): void {
+  #refuse(status: number, payload: UnparsedWireValue | undefined): void {
     const reason = hostedErrorFromWire(payload);
     if (status === QUOTA_STATUS && reason === HOSTED_API_ERROR.QUOTA_EXHAUSTED) {
       this.#quota = isRecord(payload)
@@ -196,29 +199,32 @@ export class HostedRealtimeCredentialMinter implements RealtimeCredentialMinter 
     this.#record(REALTIME_MINT_OUTCOME.HTTP_ERROR, `status ${status}`);
   }
 
-  async #request(token: string): Promise<Response | undefined> {
-    try {
-      return await this.#fetch(this.#endpoint, {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${token}`,
-          "content-type": "application/json",
-        },
-        // Only values inside the build's own sets travel; anything else lets
-        // the service mint its default rather than sending a refusable field.
-        body: JSON.stringify({
-          ...(isRealtimeVoice(this.#voice) ? { voice: this.#voice } : undefined),
-          ...(isRealtimeVoiceSpeed(this.#speed) ? { speed: this.#speed } : undefined),
-        }),
-        signal: AbortSignal.timeout(this.#requestTimeoutMs),
-      });
-    } catch (error) {
-      this.#record(
-        REALTIME_MINT_OUTCOME.NETWORK_ERROR,
-        error instanceof Error ? error.name : "unknown error",
-      );
-      return undefined;
-    }
+  #request(token: string): Effect.Effect<Response | undefined, never, Http> {
+    return Effect.gen(this, function* () {
+      const http = yield* Http;
+      return yield* http
+        .request(this.#endpoint, {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${token}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            ...(isRealtimeVoice(this.#voice) ? { voice: this.#voice } : undefined),
+            ...(isRealtimeVoiceSpeed(this.#speed) ? { speed: this.#speed } : undefined),
+          }),
+          signal: AbortSignal.timeout(this.#requestTimeoutMs),
+        })
+        .pipe(
+          Effect.catchAll((error) => {
+            this.#record(
+              REALTIME_MINT_OUTCOME.NETWORK_ERROR,
+              error instanceof Error ? error.failure : "unknown error",
+            );
+            return Effect.succeed(undefined);
+          }),
+        );
+    });
   }
 
   #record(outcome: RealtimeMintOutcome, detail?: string): void {

@@ -18,6 +18,7 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/core";
+import { Effect } from "effect";
 import {
   CODEX_HOOK_EVENT,
   type CodexHookEvent,
@@ -42,6 +43,7 @@ import {
   type SqliteModuleLoader,
   textFromRow,
 } from "./local-sqlite";
+import type { Files } from "./services/files";
 
 const CODEX_PROVIDER_ID = PROVIDER_ID.CODEX;
 const CODEX_PROVIDER_NAME = "Codex";
@@ -371,11 +373,15 @@ function topLevelTomlString(source: string, key: string): string | undefined {
   return undefined;
 }
 
-async function sqliteHomeFromConfig(codexHome: string): Promise<string | undefined> {
-  const config = await readTextFile(path.join(codexHome, CODEX_CONFIG_FILE.USER));
-  return config
-    ? normalizeDirectory(topLevelTomlString(config, CODEX_CONFIG_KEY.SQLITE_DIRECTORY), codexHome)
-    : undefined;
+function sqliteHomeFromConfig(
+  codexHome: string,
+): Effect.Effect<string | undefined, unknown, Files> {
+  return Effect.gen(function* () {
+    const config = yield* readTextFile(path.join(codexHome, CODEX_CONFIG_FILE.USER));
+    return config
+      ? normalizeDirectory(topLevelTomlString(config, CODEX_CONFIG_KEY.SQLITE_DIRECTORY), codexHome)
+      : undefined;
+  });
 }
 
 /**
@@ -383,21 +389,23 @@ async function sqliteHomeFromConfig(codexHome: string): Promise<string | undefin
  * home, then the one `config.toml` names, then wherever `CODEX_SQLITE_HOME`
  * points, then the paths Codex writes by default.
  */
-export async function stateDatabasePaths(
+export function stateDatabasePaths(
   codexHome: string,
   configuredSqliteHome: string | undefined,
-): Promise<string[]> {
-  const sqliteHome =
-    normalizeDirectory(configuredSqliteHome, codexHome) ??
-    (await sqliteHomeFromConfig(codexHome)) ??
-    normalizeDirectory(process.env[CODEX_ENVIRONMENT.SQLITE_DIRECTORY], codexHome);
-  return uniquePaths(
-    [
-      sqliteHome && path.join(sqliteHome, CODEX_DATABASE_FILE.STATE),
-      path.join(codexHome, "sqlite", CODEX_DATABASE_FILE.STATE),
-      path.join(codexHome, CODEX_DATABASE_FILE.STATE),
-    ].filter((candidate): candidate is string => candidate !== undefined),
-  );
+): Effect.Effect<string[], unknown, Files> {
+  return Effect.gen(function* () {
+    const sqliteHome =
+      normalizeDirectory(configuredSqliteHome, codexHome) ??
+      (yield* sqliteHomeFromConfig(codexHome)) ??
+      normalizeDirectory(process.env[CODEX_ENVIRONMENT.SQLITE_DIRECTORY], codexHome);
+    return uniquePaths(
+      [
+        sqliteHome && path.join(sqliteHome, CODEX_DATABASE_FILE.STATE),
+        path.join(codexHome, "sqlite", CODEX_DATABASE_FILE.STATE),
+        path.join(codexHome, CODEX_DATABASE_FILE.STATE),
+      ].filter((candidate): candidate is string => candidate !== undefined),
+    );
+  });
 }
 
 /**
@@ -563,48 +571,52 @@ export class CodexSessionAdapter extends LocalSessionAdapter {
     this.#hookEventsDirectory = options.hookEventsDirectory;
   }
 
-  async observe(): Promise<readonly ProviderSessionObservation[]> {
-    for (const databasePath of await stateDatabasePaths(this.#codexHome, this.#sqliteHome)) {
-      const database = await openReadOnlyDatabase(this.#sqlite, databasePath);
-      if (!database) continue;
-      let rows: CodexThreadRow[];
-      let now: number;
-      try {
-        now = this.observationTime();
-        rows = database
-          .prepare(CODEX_THREAD_QUERY)
-          .all()
-          .filter((row): row is CodexThreadRow => isRecord(row));
-      } catch (error) {
-        if (error instanceof Error && canIgnoreSqliteError(error)) continue;
-        throw error;
-      } finally {
-        database.close();
-      }
+  observe(): Effect.Effect<readonly ProviderSessionObservation[], unknown, Files> {
+    return Effect.gen(this, function* () {
+      for (const databasePath of yield* stateDatabasePaths(this.#codexHome, this.#sqliteHome)) {
+        const database = yield* openReadOnlyDatabase(this.#sqlite, databasePath);
+        if (!database) continue;
+        let rows: CodexThreadRow[];
+        let now: number;
+        try {
+          now = this.observationTime();
+          rows = database
+            .prepare(CODEX_THREAD_QUERY)
+            .all()
+            .filter((row): row is CodexThreadRow => isRecord(row));
+        } catch (error) {
+          if (error instanceof Error && canIgnoreSqliteError(error)) continue;
+          throw error;
+        } finally {
+          database.close();
+        }
 
-      // The rollout and spool reads happen with the database already closed,
-      // so a slow disk never holds a read lock on state Codex itself is
-      // writing.
-      const rollouts = await this.#rollouts(rows);
-      const hookEvents = await this.#hookEvents(rows);
-      return rows
-        .map((row) =>
-          observationFromThreadRow(
-            row,
-            rollouts.get(textFromRow(row, CODEX_THREAD_COLUMN.ID) ?? ""),
-            now,
-            this.activeSessionFreshnessMs,
-            hookEvents.get(textFromRow(row, CODEX_THREAD_COLUMN.ID) ?? ""),
-          ),
-        )
-        .filter(
-          (observation): observation is ProviderSessionObservation => observation !== undefined,
-        );
-    }
-    return [];
+        // The rollout and spool reads happen with the database already closed,
+        // so a slow disk never holds a read lock on state Codex itself is
+        // writing.
+        const rollouts = yield* this.#rollouts(rows);
+        const hookEvents = yield* this.#hookEvents(rows);
+        return rows
+          .map((row) =>
+            observationFromThreadRow(
+              row,
+              rollouts.get(textFromRow(row, CODEX_THREAD_COLUMN.ID) ?? ""),
+              now,
+              this.activeSessionFreshnessMs,
+              hookEvents.get(textFromRow(row, CODEX_THREAD_COLUMN.ID) ?? ""),
+            ),
+          )
+          .filter(
+            (observation): observation is ProviderSessionObservation => observation !== undefined,
+          );
+      }
+      return [];
+    });
   }
 
-  override readTranscript(providerSessionId: string): Promise<string | undefined> {
+  override readTranscript(
+    providerSessionId: string,
+  ): Effect.Effect<string | undefined, unknown, Files> {
     return readCodexSessionTranscript({
       codexHome: this.#codexHome,
       sqliteHome: this.#sqliteHome,
@@ -619,28 +631,35 @@ export class CodexSessionAdapter extends LocalSessionAdapter {
    * keeps a crowded day from turning one observation pass into dozens of file
    * reads.
    */
-  async #rollouts(rows: readonly CodexThreadRow[]): Promise<Map<string, ParsedCodexRollout>> {
-    const candidates = rows
-      .slice(0, CODEX_ADAPTER_DEFAULTS.MAXIMUM_ROLLOUT_READS)
-      .map((row) => ({
-        id: textFromRow(row, CODEX_THREAD_COLUMN.ID),
-        rolloutPath: textFromRow(row, CODEX_THREAD_COLUMN.ROLLOUT_PATH),
-      }))
-      .filter(
-        (candidate): candidate is { id: string; rolloutPath: string } =>
-          candidate.id !== undefined && candidate.rolloutPath !== undefined,
-      );
-
-    const parsed = await Promise.all(
-      candidates.map(async (candidate) => {
-        const tail = await readTail(
-          candidate.rolloutPath,
-          CODEX_ADAPTER_DEFAULTS.READ_ROLLOUT_TAIL_BYTES,
+  #rollouts(
+    rows: readonly CodexThreadRow[],
+  ): Effect.Effect<Map<string, ParsedCodexRollout>, unknown, Files> {
+    return Effect.gen(function* () {
+      const candidates = rows
+        .slice(0, CODEX_ADAPTER_DEFAULTS.MAXIMUM_ROLLOUT_READS)
+        .map((row) => ({
+          id: textFromRow(row, CODEX_THREAD_COLUMN.ID),
+          rolloutPath: textFromRow(row, CODEX_THREAD_COLUMN.ROLLOUT_PATH),
+        }))
+        .filter(
+          (candidate): candidate is { id: string; rolloutPath: string } =>
+            candidate.id !== undefined && candidate.rolloutPath !== undefined,
         );
-        return [candidate.id, parseCodexRolloutTail(tail)] as const;
-      }),
-    );
-    return new Map(parsed);
+
+      const parsed = yield* Effect.all(
+        candidates.map((candidate) =>
+          Effect.gen(function* () {
+            const tail = yield* readTail(
+              candidate.rolloutPath,
+              CODEX_ADAPTER_DEFAULTS.READ_ROLLOUT_TAIL_BYTES,
+            );
+            return [candidate.id, parseCodexRolloutTail(tail)] as const;
+          }),
+        ),
+        { concurrency: "unbounded" },
+      );
+      return new Map(parsed);
+    });
   }
 
   /**
@@ -650,18 +669,31 @@ export class CodexSessionAdapter extends LocalSessionAdapter {
    * or holding something unexpected reads as no event, and the row's own
    * verdict stands.
    */
-  async #hookEvents(rows: readonly CodexThreadRow[]): Promise<Map<string, ObservedCodexHookEvent>> {
-    const events = new Map<string, ObservedCodexHookEvent>();
-    const hookEventsDirectory = this.#hookEventsDirectory?.();
-    if (!hookEventsDirectory) return events;
-    await Promise.all(
-      rows.map(async (row) => {
-        const id = textFromRow(row, CODEX_THREAD_COLUMN.ID);
-        if (!id) return;
-        const event = await readCodexHookEvent(hookEventsDirectory, id).catch(() => undefined);
-        if (event) events.set(id, event);
-      }),
-    );
-    return events;
+  #hookEvents(
+    rows: readonly CodexThreadRow[],
+  ): Effect.Effect<Map<string, ObservedCodexHookEvent>, never, never> {
+    return Effect.gen(this, function* () {
+      const events = new Map<string, ObservedCodexHookEvent>();
+      const hookEventsDirectory = this.#hookEventsDirectory?.();
+      if (!hookEventsDirectory) return events;
+      yield* Effect.all(
+        rows.map((row) =>
+          Effect.gen(function* () {
+            const id = textFromRow(row, CODEX_THREAD_COLUMN.ID);
+            if (!id) return;
+            const event = yield* Effect.async<ObservedCodexHookEvent | undefined, never>(
+              (resume) => {
+                readCodexHookEvent(hookEventsDirectory, id)
+                  .then((value) => resume(Effect.succeed(value)))
+                  .catch(() => resume(Effect.succeed(undefined)));
+              },
+            );
+            if (event) events.set(id, event);
+          }),
+        ),
+        { concurrency: "unbounded" },
+      );
+      return events;
+    });
   }
 }

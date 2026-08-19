@@ -6,7 +6,9 @@ import {
   type AttentionUpdate,
   SESSION_STATUS,
 } from "@sidecar/core";
+import { Effect } from "effect";
 import { HostedAttentionEvaluator } from "../src/hosted-attention-evaluator";
+import { runWithHttp } from "./support/effect-http";
 
 const NOW = 1_800_000_000_000;
 const SERVICE = "https://tryluke.dev";
@@ -59,20 +61,28 @@ function evaluator(
 ) {
   return new HostedAttentionEvaluator({
     serviceBaseUrl: SERVICE,
-    readAccessToken: async () => "token-1",
-    refreshAccount: async () => undefined,
+    readAccessToken: () => Effect.succeed("token-1"),
+    refreshAccount: () => Effect.void,
     now: () => NOW,
     ...options,
   });
+}
+
+function evaluate(
+  hosted: HostedAttentionEvaluator,
+  fetchLike: typeof fetch,
+  attentionUpdate: AttentionUpdate = UPDATE,
+) {
+  return runWithHttp(hosted.evaluate(attentionUpdate), fetchLike);
 }
 
 test("sends only what the prompt reads — never the session's identifiers or clock", async () => {
   const { requests, fetchLike } = service([
     () => new Response(JSON.stringify(SPOKEN_ANSWER), { status: 200 }),
   ]);
-  const hosted = evaluator({ fetch: fetchLike });
+  const hosted = evaluator();
 
-  const decision = await hosted.evaluate(UPDATE);
+  const decision = await evaluate(hosted, fetchLike);
   assert.deepEqual(decision, {
     disposition: ATTENTION_DISPOSITION.SPEAK_DURING_TURN,
     decidedAt: NOW,
@@ -108,13 +118,12 @@ test("a spent allowance quiets reviews until the day's counters reset", async ()
         { status: 429 },
       ),
   ]);
-  const hosted = evaluator({ fetch: fetchLike });
+  const hosted = evaluator();
 
-  assert.equal(await hosted.evaluate(UPDATE), undefined);
-  assert.equal(hosted.quietUntil(), NOW + 3_600_000);
+  assert.equal(await evaluate(hosted, fetchLike), undefined);
 
   // Held back without another request until the reset.
-  assert.equal(await hosted.evaluate(UPDATE), undefined);
+  assert.equal(await evaluate(hosted, fetchLike), undefined);
   assert.equal(requests.length, 1);
 });
 
@@ -126,35 +135,37 @@ test("a 401 refreshes the account and retries once", async () => {
     () => new Response(JSON.stringify(SPOKEN_ANSWER), { status: 200 }),
   ]);
   const hosted = evaluator({
-    fetch: fetchLike,
-    readAccessToken: async () => tokens[Math.min(refreshes, tokens.length - 1)],
-    refreshAccount: async () => {
+    readAccessToken: () => Effect.succeed(tokens[Math.min(refreshes, tokens.length - 1)]),
+    refreshAccount: () => {
       refreshes += 1;
+      return Effect.void;
     },
   });
 
-  const decision = await hosted.evaluate(UPDATE);
+  const decision = await evaluate(hosted, fetchLike);
   assert.ok(decision);
   assert.equal(refreshes, 1);
   assert.equal(new Headers(requests[1]?.init.headers).get("authorization"), "Bearer fresh-token");
 });
 
 test("stays silent on failures, contract violations, and a missing account", async () => {
-  const failing = evaluator({
-    fetch: service([() => new Response("oops", { status: 502 })]).fetchLike,
-  });
-  assert.equal(await failing.evaluate(UPDATE), undefined);
+  const failing = evaluator();
+  assert.equal(
+    await evaluate(failing, service([() => new Response("oops", { status: 502 })]).fetchLike),
+    undefined,
+  );
 
-  const malformed = evaluator({
-    fetch: service([
-      () => new Response(JSON.stringify({ decision: { disposition: "shout" } }), { status: 200 }),
-    ]).fetchLike,
-  });
-  assert.equal(await malformed.evaluate(UPDATE), undefined);
+  const malformed = evaluator();
+  assert.equal(
+    await evaluate(
+      malformed,
+      service([
+        () => new Response(JSON.stringify({ decision: { disposition: "shout" } }), { status: 200 }),
+      ]).fetchLike,
+    ),
+    undefined,
+  );
 
-  const signedOut = evaluator({
-    fetch: service([]).fetchLike,
-    readAccessToken: async () => undefined,
-  });
-  assert.equal(await signedOut.evaluate(UPDATE), undefined);
+  const signedOut = evaluator({ readAccessToken: () => Effect.succeed(undefined) });
+  assert.equal(await evaluate(signedOut, service([]).fetchLike), undefined);
 });

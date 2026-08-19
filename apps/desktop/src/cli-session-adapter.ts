@@ -1,7 +1,4 @@
-import { execFile } from "node:child_process";
-import path from "node:path";
 import {
-  isWireNumber,
   PROVIDER_ACT_RESULT_STATUS,
   type ProviderActResult,
   type ProviderSessionObservation,
@@ -11,32 +8,11 @@ import {
   SessionProviderAdapterBase,
   type WireRecord,
 } from "@sidecar/core";
+import { CLI_FAILURE, CliFailure } from "@sidecar/core/effect-errors";
+import { Effect } from "effect";
+import { Cli } from "./services/cli";
 import { CLI_CONNECTION, type CliConnection } from "./shared/contracts";
 import { unparsedWire, type WireBoundaryInput, wireRecord } from "./wire-boundary";
-
-/**
- * How a CLI-observed provider fails. Unavailable means there is nothing to
- * observe with — the binary is not installed, or its login probe answered no —
- * which is the CLI analogue of a missing API key and clears observed state the
- * same way. Transient covers a command that ran and failed, which keeps the
- * last snapshot until the next attempt the way a network blip does.
- */
-export const CLI_FAILURE = {
-  UNAVAILABLE: "unavailable",
-  TRANSIENT: "transient",
-} as const;
-
-export type CliFailure = (typeof CLI_FAILURE)[keyof typeof CLI_FAILURE];
-
-export class CliCommandError extends Error {
-  readonly failure: CliFailure;
-
-  constructor(failure: CliFailure, message: string) {
-    super(message);
-    this.name = "CliCommandError";
-    this.failure = failure;
-  }
-}
 
 export const CLI_ADAPTER_DEFAULTS = {
   MINIMUM_REFRESH_INTERVAL_MS: 15 * 1000,
@@ -51,73 +27,7 @@ export const CLI_ADAPTER_DEFAULTS = {
   MAXIMUM_OUTPUT_BYTES: 4 * 1024 * 1024,
 } as const;
 
-/**
- * Where provider CLIs actually land on a Mac. An app launched from the Finder
- * inherits a PATH without the package-manager directories a terminal adds, so
- * these are appended after the inherited PATH — never ahead of it, so a binary
- * the user's own shell would resolve still wins.
- */
-const WELL_KNOWN_BINARY_DIRECTORIES = ["/opt/homebrew/bin", "/usr/local/bin"] as const;
-
-export interface CliRunResult {
-  exitCode: number;
-  stdout: string;
-}
-
-export type CliRun = (
-  binary: string,
-  argv: readonly string[],
-  options: Readonly<{ timeoutMs: number; maximumOutputBytes: number }>,
-) => Promise<CliRunResult>;
-
-/**
- * Runs the binary directly — no shell, so nothing in an argument can become a
- * second command — and answers with the exit code rather than throwing on it:
- * a probe's no is an answer, not a failure. Only a binary that cannot run at
- * all is unavailable; a command that ran out of time or output is transient.
- */
-const defaultRun: CliRun = (binary, argv, options) =>
-  new Promise((resolve, reject) => {
-    execFile(
-      binary,
-      argv,
-      {
-        timeout: options.timeoutMs,
-        maxBuffer: options.maximumOutputBytes,
-        windowsHide: true,
-        env: {
-          ...process.env,
-          PATH: [process.env.PATH, ...WELL_KNOWN_BINARY_DIRECTORIES]
-            .filter(Boolean)
-            .join(path.delimiter),
-        },
-      },
-      (error, stdout) => {
-        if (error === null) {
-          resolve({ exitCode: 0, stdout });
-          return;
-        }
-        // SAFETY: The preceding check establishes the asserted contract.
-        const exitCode = (error as NodeJS.ErrnoException & { code?: unknown }).code;
-        if (isWireNumber(exitCode)) {
-          resolve({ exitCode, stdout });
-          return;
-        }
-        reject(
-          new CliCommandError(
-            // SAFETY: The preceding check establishes the asserted contract.
-            (error as NodeJS.ErrnoException).code === "ENOENT"
-              ? CLI_FAILURE.UNAVAILABLE
-              : CLI_FAILURE.TRANSIENT,
-            `${binary} could not be run`,
-          ),
-        );
-      },
-    );
-  });
-
 export interface CliAdapterOptions {
-  run?: CliRun;
   now?: () => number;
   minimumRefreshIntervalMs?: number;
   /**
@@ -149,7 +59,9 @@ export interface CliAdapterProfile {
  * fixed by the build — the same rule that fixes a POSTed read document — with
  * nothing interpolated beyond bounded values the provider itself reported.
  */
-export type CliReadRequest = (argv: readonly string[]) => Promise<WireRecord>;
+export type CliReadRequest = (
+  argv: readonly string[],
+) => Effect.Effect<WireRecord, CliFailure, Cli>;
 
 /**
  * The shared half of every CLI-observed provider adapter: the login gate, its
@@ -170,7 +82,6 @@ export abstract class CliSessionAdapter extends SessionProviderAdapterBase {
 
   readonly #binary: string;
   readonly #loginProbeArgv: readonly string[];
-  readonly #run: CliRun;
   readonly #now: () => number;
   readonly #minimumRefreshIntervalMs: number;
   readonly #onDiagnostic: ((error: Error) => void) | undefined;
@@ -185,7 +96,6 @@ export abstract class CliSessionAdapter extends SessionProviderAdapterBase {
     this.provider = profile.provider;
     this.#binary = profile.binary;
     this.#loginProbeArgv = profile.loginProbeArgv;
-    this.#run = options.run ?? defaultRun;
     this.#now = options.now ?? Date.now;
     const { minimumRefreshIntervalMs } = resolveOptions(
       options,
@@ -196,52 +106,59 @@ export abstract class CliSessionAdapter extends SessionProviderAdapterBase {
     this.#onDiagnostic = options.onDiagnostic;
   }
 
-  async observe(): Promise<readonly ProviderSessionObservation[]> {
-    const now = this.#now();
-    // A CLI is spawned per read, so the cadence guard leads everything: the
-    // shared refresh timer ticks faster than a process-per-pass should run.
-    if (now - this.#lastAttemptAt < this.#minimumRefreshIntervalMs) return this.#observations;
-    this.#lastAttemptAt = now;
+  observe(): Effect.Effect<readonly ProviderSessionObservation[], unknown, Cli> {
+    return Effect.gen(this, function* () {
+      const now = this.#now();
+      // A CLI is spawned per read, so the cadence guard leads everything: the
+      // shared refresh timer ticks faster than a process-per-pass should run.
+      if (now - this.#lastAttemptAt < this.#minimumRefreshIntervalMs) return this.#observations;
+      this.#lastAttemptAt = now;
 
-    const pass = ++this.#collectPass;
-    try {
-      // The login is probed every pass rather than cached, so signing the CLI
-      // out is honoured on the next pass the way removing a key is: state read
-      // under a login that no longer stands must not keep being served.
-      const connection = await this.#probeLogin();
-      this.#connection = connection;
-      if (connection !== CLI_CONNECTION.CONNECTED) {
-        this.#forgetObservedState(pass);
-        return this.#observations;
-      }
-      const collected = await this.collect(this.#requestForPass(pass), now);
-      if (pass === this.#collectPass) this.#observations = cliObservations(collected);
-    } catch (error) {
-      // A superseded pass says nothing about the login that now stands.
-      if (pass !== this.#collectPass) return this.#observations;
-      if (error instanceof CliCommandError) {
-        // A binary gone mid-pass clears observed state; a command that ran and
-        // failed keeps the previous snapshot until the next attempt.
-        if (error.failure === CLI_FAILURE.UNAVAILABLE) {
-          this.#connection = CLI_CONNECTION.CLI_MISSING;
+      const pass = ++this.#collectPass;
+      yield* Effect.gen(this, function* () {
+        // The login is probed every pass rather than cached, so signing the CLI
+        // out is honoured on the next pass the way removing a key is: state read
+        // under a login that no longer stands must not keep being served.
+        const connection = yield* this.#probeLogin();
+        this.#connection = connection;
+        if (connection !== CLI_CONNECTION.CONNECTED) {
           this.#forgetObservedState(pass);
+          return;
         }
-        return this.#observations;
-      }
-      // Anything else is a bug in this pass — a TypeError thrown by a
-      // subclass's parsing is not a flaky command, and must not keep serving
-      // the stale snapshot with no log, counter, or hook.
-      this.#onDiagnostic?.(error instanceof Error ? error : new Error(String(error)));
-      throw error;
-    }
-    return this.#observations;
+        const collected = yield* this.collect(this.#requestForPass(pass), now);
+        if (pass === this.#collectPass) this.#observations = cliObservations(collected);
+      }).pipe(
+        Effect.catchTag("CliFailure", (error) => {
+          // A superseded pass says nothing about the login that now stands.
+          if (pass !== this.#collectPass) return Effect.void;
+          // A binary gone mid-pass clears observed state; a command that ran and
+          // failed keeps the previous snapshot until the next attempt.
+          if (error.failure === CLI_FAILURE.UNAVAILABLE) {
+            this.#connection = CLI_CONNECTION.CLI_MISSING;
+            this.#forgetObservedState(pass);
+          }
+          return Effect.void;
+        }),
+        Effect.catchAll((error) => {
+          if (pass !== this.#collectPass) return Effect.void;
+          // Anything else is a bug in this pass — a TypeError thrown by a
+          // subclass's parsing is not a flaky command, and must not keep serving
+          // the stale snapshot with no log, counter, or hook.
+          this.#onDiagnostic?.(
+            (error as unknown) instanceof Error ? error : new Error(String(error)),
+          );
+          return Effect.fail(error);
+        }),
+      );
+      return this.#observations;
+    });
   }
 
   /** Runs one login-gated pass. Duplicate session ids are dropped by the base. */
   protected abstract collect(
     request: CliReadRequest,
     now: number,
-  ): Promise<readonly ProviderSessionObservation[]>;
+  ): Effect.Effect<readonly ProviderSessionObservation[], CliFailure, Cli>;
 
   /**
    * What the latest pass learned about the login behind this provider, for a
@@ -270,82 +187,89 @@ export abstract class CliSessionAdapter extends SessionProviderAdapterBase {
    * acceptance for the subclass that needs the id a creation named — it
    * travels no further than that subclass.
    */
-  protected async performWrite(
+  protected performWrite(
     argv: readonly string[],
-  ): Promise<{ outcome: ProviderActResult; stdout?: string }> {
-    const name = this.provider.displayName;
-    let connection: CliConnection;
-    try {
-      connection = await this.#probeLogin();
-    } catch {
-      return {
-        outcome: {
-          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-          reason: `${name}'s CLI could not answer, so nothing was sent.`,
-        },
-      };
-    }
-    this.#connection = connection;
-    if (connection !== CLI_CONNECTION.CONNECTED) {
-      // The act just learned what the next pass would have: the login is
-      // gone. Observed state clears now rather than a tick later, and a pass
-      // still in flight is superseded so its answer cannot land what was read
-      // under the login that no longer stands.
-      this.#forgetLogin();
-      return {
-        outcome: {
-          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-          reason:
-            connection === CLI_CONNECTION.CLI_MISSING
-              ? `${name}'s CLI is not installed, so nothing was sent.`
-              : `${name}'s CLI is signed out, so nothing was sent.`,
-        },
-      };
-    }
-    let result: CliRunResult;
-    try {
-      result = await this.#run(this.#binary, argv, {
-        timeoutMs: CLI_ADAPTER_DEFAULTS.WRITE_TIMEOUT_MS,
-        maximumOutputBytes: CLI_ADAPTER_DEFAULTS.MAXIMUM_OUTPUT_BYTES,
-      });
-    } catch {
-      return {
-        outcome: {
-          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-          reason: `${name}'s CLI could not answer, so the request may not have landed.`,
-        },
-      };
-    }
-    if (result.exitCode !== 0) {
-      return {
-        outcome: {
-          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-          reason: `${name}'s CLI refused the request.`,
-        },
-      };
-    }
-    // A write that landed changes what the provider holds, so the refresh
-    // that follows must actually ask rather than serve the cached snapshot.
-    this.#lastAttemptAt = Number.NEGATIVE_INFINITY;
-    return { outcome: { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED }, stdout: result.stdout };
+  ): Effect.Effect<{ outcome: ProviderActResult; stdout?: string }, never, Cli> {
+    return Effect.gen(this, function* () {
+      const name = this.provider.displayName;
+      const probe = yield* Effect.either(this.#probeLogin());
+      if (probe._tag === "Left") {
+        return {
+          outcome: {
+            status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+            reason: `${name}'s CLI could not answer, so nothing was sent.`,
+          },
+        };
+      }
+      const connection = probe.right;
+      this.#connection = connection;
+      if (connection !== CLI_CONNECTION.CONNECTED) {
+        // The act just learned what the next pass would have: the login is
+        // gone. Observed state clears now rather than a tick later, and a pass
+        // still in flight is superseded so its answer cannot land what was read
+        // under the login that no longer stands.
+        this.#forgetLogin();
+        return {
+          outcome: {
+            status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+            reason:
+              connection === CLI_CONNECTION.CLI_MISSING
+                ? `${name}'s CLI is not installed, so nothing was sent.`
+                : `${name}'s CLI is signed out, so nothing was sent.`,
+          },
+        };
+      }
+      const cli = yield* Cli;
+      const run = yield* Effect.either(
+        cli.run(this.#binary, argv, {
+          timeoutMs: CLI_ADAPTER_DEFAULTS.WRITE_TIMEOUT_MS,
+          maximumOutputBytes: CLI_ADAPTER_DEFAULTS.MAXIMUM_OUTPUT_BYTES,
+          provider: name,
+        }),
+      );
+      if (run._tag === "Left") {
+        return {
+          outcome: {
+            status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+            reason: `${name}'s CLI could not answer, so the request may not have landed.`,
+          },
+        };
+      }
+      const result = run.right;
+      if (result.exitCode !== 0) {
+        return {
+          outcome: {
+            status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+            reason: `${name}'s CLI refused the request.`,
+          },
+        };
+      }
+      // A write that landed changes what the provider holds, so the refresh
+      // that follows must actually ask rather than serve the cached snapshot.
+      this.#lastAttemptAt = Number.NEGATIVE_INFINITY;
+      return { outcome: { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED }, stdout: result.stdout };
+    });
   }
 
-  async #probeLogin(): Promise<CliConnection> {
-    try {
-      const probe = await this.#run(this.#binary, this.#loginProbeArgv, {
-        timeoutMs: CLI_ADAPTER_DEFAULTS.COMMAND_TIMEOUT_MS,
-        maximumOutputBytes: CLI_ADAPTER_DEFAULTS.MAXIMUM_OUTPUT_BYTES,
-      });
+  #probeLogin(): Effect.Effect<CliConnection, CliFailure, Cli> {
+    return Effect.gen(this, function* () {
+      const cli = yield* Cli;
+      const probe = yield* cli
+        .run(this.#binary, this.#loginProbeArgv, {
+          timeoutMs: CLI_ADAPTER_DEFAULTS.COMMAND_TIMEOUT_MS,
+          maximumOutputBytes: CLI_ADAPTER_DEFAULTS.MAXIMUM_OUTPUT_BYTES,
+          provider: this.provider.displayName,
+        })
+        .pipe(
+          Effect.catchTag("CliFailure", (error) =>
+            error.failure === CLI_FAILURE.UNAVAILABLE
+              ? Effect.succeed(undefined)
+              : Effect.fail(error),
+          ),
+        );
+      if (probe === undefined) return CLI_CONNECTION.CLI_MISSING;
       return probe.exitCode === 0 ? CLI_CONNECTION.CONNECTED : CLI_CONNECTION.SIGNED_OUT;
-    } catch (error) {
-      // A probe that cannot run at all is a machine with nothing to observe;
-      // a probe that ran out of time says nothing about the login either way,
-      // so the pass keeps its snapshot and asks again next time.
-      if (error instanceof CliCommandError && error.failure === CLI_FAILURE.UNAVAILABLE) {
-        return CLI_CONNECTION.CLI_MISSING;
-      }
-      throw error;
-    }
+    });
   }
 
   /**
@@ -354,38 +278,60 @@ export abstract class CliSessionAdapter extends SessionProviderAdapterBase {
    * state that belongs to the newer pass.
    */
   #requestForPass(pass: number): CliReadRequest {
-    return async (argv) => {
-      this.#assertPassCurrent(pass);
-      const result = await this.#run(this.#binary, argv, {
-        timeoutMs: CLI_ADAPTER_DEFAULTS.COMMAND_TIMEOUT_MS,
-        maximumOutputBytes: CLI_ADAPTER_DEFAULTS.MAXIMUM_OUTPUT_BYTES,
+    return (argv) =>
+      Effect.gen(this, function* () {
+        yield* this.#assertPassCurrent(pass);
+        const cli = yield* Cli;
+        const result = yield* cli.run(this.#binary, argv, {
+          timeoutMs: CLI_ADAPTER_DEFAULTS.COMMAND_TIMEOUT_MS,
+          maximumOutputBytes: CLI_ADAPTER_DEFAULTS.MAXIMUM_OUTPUT_BYTES,
+          provider: this.provider.displayName,
+        });
+        yield* this.#assertPassCurrent(pass);
+        const name = this.provider.displayName;
+        if (result.exitCode !== 0) {
+          return yield* Effect.fail(
+            new CliFailure({
+              failure: CLI_FAILURE.TRANSIENT,
+              exitCode: result.exitCode,
+              provider: name,
+            }),
+          );
+        }
+        let body: WireBoundaryInput;
+        try {
+          body = JSON.parse(result.stdout) as WireBoundaryInput;
+        } catch {
+          return yield* Effect.fail(
+            new CliFailure({
+              failure: CLI_FAILURE.TRANSIENT,
+              provider: name,
+            }),
+          );
+        }
+        const bodyRecord = wireRecord(unparsedWire(body));
+        if (!bodyRecord) {
+          return yield* Effect.fail(
+            new CliFailure({
+              failure: CLI_FAILURE.TRANSIENT,
+              provider: name,
+            }),
+          );
+        }
+        return bodyRecord;
       });
-      this.#assertPassCurrent(pass);
-      const name = this.provider.displayName;
-      if (result.exitCode !== 0) {
-        throw new CliCommandError(CLI_FAILURE.TRANSIENT, `${name} CLI answered with a failure`);
-      }
-      let body: WireBoundaryInput;
-      try {
-        body = JSON.parse(result.stdout);
-      } catch {
-        throw new CliCommandError(CLI_FAILURE.TRANSIENT, `${name} CLI answered unreadably`);
-      }
-      const bodyRecord = wireRecord(unparsedWire(body));
-      if (!bodyRecord) {
-        throw new CliCommandError(CLI_FAILURE.TRANSIENT, `${name} CLI answered unexpectedly`);
-      }
-      return bodyRecord;
-    };
   }
 
-  #assertPassCurrent(pass: number): void {
+  #assertPassCurrent(pass: number): Effect.Effect<void, CliFailure> {
     if (pass !== this.#collectPass) {
-      throw new CliCommandError(
-        CLI_FAILURE.TRANSIENT,
-        `${this.provider.displayName} pass was superseded`,
+      return Effect.fail(
+        new CliFailure({
+          failure: CLI_FAILURE.TRANSIENT,
+          provider: this.provider.displayName,
+        }),
       );
     }
+    return Effect.void;
   }
 
   #forgetObservedState(pass: number): void {

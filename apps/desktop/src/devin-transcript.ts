@@ -6,6 +6,7 @@ import {
   text,
   type WireRecord,
 } from "@sidecar/core";
+import { Effect } from "effect";
 import { DEVIN_ROLE, defaultDevinCliDirectory, devinDatabasePaths } from "./devin-local-adapter";
 import {
   canIgnoreSqliteError,
@@ -15,6 +16,7 @@ import {
   type SqliteModuleLoader,
 } from "./local-sqlite";
 import { boundedTranscript, TRANSCRIPT_BOUNDS, transcriptLine } from "./local-transcript";
+import type { Files } from "./services/files";
 
 /**
  * On-demand reading of one local Devin session's transcript, for a question
@@ -219,24 +221,26 @@ function renderedFromDatabase(
  * Reads one session's recent transcript into a bounded rendering, or nothing
  * when no database holds messages for that id.
  */
-export async function readDevinSessionTranscript(
+export function readDevinSessionTranscript(
   request: DevinTranscriptRequest,
-): Promise<string | undefined> {
-  const cliDirectory = request.cliDirectory ?? defaultDevinCliDirectory();
-  const sqlite = request.sqlite ?? defaultSqliteModule;
-  for (const databasePath of devinDatabasePaths(cliDirectory)) {
-    const database = await openReadOnlyDatabase(sqlite, databasePath);
-    if (!database) continue;
-    try {
-      const rendered = renderedFromDatabase(
-        database,
-        request.providerSessionId,
-        request.maximumRenderedLength ?? TRANSCRIPT_BOUNDS.MAXIMUM_RENDERED_LENGTH,
-      );
-      if (rendered) return rendered;
-    } finally {
-      database.close();
+): Effect.Effect<string | undefined, unknown, Files> {
+  return Effect.gen(function* () {
+    const cliDirectory = request.cliDirectory ?? defaultDevinCliDirectory();
+    const sqlite = request.sqlite ?? defaultSqliteModule;
+    for (const databasePath of devinDatabasePaths(cliDirectory)) {
+      const database = yield* openReadOnlyDatabase(sqlite, databasePath);
+      if (!database) continue;
+      try {
+        const rendered = renderedFromDatabase(
+          database,
+          request.providerSessionId,
+          request.maximumRenderedLength ?? TRANSCRIPT_BOUNDS.MAXIMUM_RENDERED_LENGTH,
+        );
+        if (rendered) return rendered;
+      } finally {
+        database.close();
+      }
     }
-  }
-  return undefined;
+    return undefined;
+  });
 }

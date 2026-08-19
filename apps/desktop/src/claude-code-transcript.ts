@@ -7,6 +7,7 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/core";
+import { Effect } from "effect";
 import { readDirectory, readTail, statDirectoryEntry, tailRecords } from "./local-session-adapter";
 import {
   boundedTranscript,
@@ -15,6 +16,7 @@ import {
   transcriptLine,
   transcriptMessageText,
 } from "./local-transcript";
+import type { Files } from "./services/files";
 
 /**
  * On-demand reading of one Claude Code session's transcript, for a question
@@ -144,36 +146,43 @@ function linesFromRecord(record: WireRecord): string[] {
  * without trusting the id as a path: an id outside the shape Claude Code
  * mints names nothing.
  */
-async function transcriptFilePath(
+function transcriptFilePath(
   claudeHome: string,
   providerSessionId: string,
-): Promise<string | undefined> {
-  if (!CLAUDE_SESSION_ID_PATTERN.test(providerSessionId)) return undefined;
-  const projectsDirectory = path.join(claudeHome, CLAUDE_PROJECTS_DIRECTORY);
-  const fileName = `${providerSessionId}${CLAUDE_SESSION_FILE_EXTENSION}`;
-  for (const entry of await readDirectory(projectsDirectory)) {
-    const projectDirectory = await statDirectoryEntry(projectsDirectory, entry.name);
-    if (!projectDirectory?.stats.isDirectory()) continue;
-    const candidate = await statDirectoryEntry(projectDirectory.directoryPath, fileName);
-    if (candidate?.stats.isFile()) return candidate.directoryPath;
-  }
-  return undefined;
+): Effect.Effect<string | undefined, unknown, Files> {
+  return Effect.gen(function* () {
+    if (!CLAUDE_SESSION_ID_PATTERN.test(providerSessionId)) return undefined;
+    const projectsDirectory = path.join(claudeHome, CLAUDE_PROJECTS_DIRECTORY);
+    const fileName = `${providerSessionId}${CLAUDE_SESSION_FILE_EXTENSION}`;
+    for (const entry of yield* readDirectory(projectsDirectory)) {
+      const projectDirectory = yield* statDirectoryEntry(projectsDirectory, entry.name);
+      if (!projectDirectory?.stats.isDirectory()) continue;
+      const candidate = yield* statDirectoryEntry(projectDirectory.directoryPath, fileName);
+      if (candidate?.stats.isFile()) return candidate.directoryPath;
+    }
+    return undefined;
+  });
 }
 
 /**
  * Reads one session's recent transcript into a bounded rendering, or nothing
  * when no transcript file exists for that id.
  */
-export async function readClaudeSessionTranscript(
+export function readClaudeSessionTranscript(
   request: ClaudeTranscriptRequest,
-): Promise<string | undefined> {
-  const filePath = await transcriptFilePath(request.claudeHome, request.providerSessionId);
-  if (!filePath) return undefined;
+): Effect.Effect<string | undefined, unknown, Files> {
+  return Effect.gen(function* () {
+    const filePath = yield* transcriptFilePath(request.claudeHome, request.providerSessionId);
+    if (!filePath) return undefined;
 
-  const tail = await readTail(filePath, request.readTailBytes ?? TRANSCRIPT_BOUNDS.READ_TAIL_BYTES);
-  const lines = tailRecords(tail).flatMap(linesFromRecord);
-  return boundedTranscript(
-    lines,
-    request.maximumRenderedLength ?? TRANSCRIPT_BOUNDS.MAXIMUM_RENDERED_LENGTH,
-  );
+    const tail = yield* readTail(
+      filePath,
+      request.readTailBytes ?? TRANSCRIPT_BOUNDS.READ_TAIL_BYTES,
+    );
+    const lines = tailRecords(tail).flatMap(linesFromRecord);
+    return boundedTranscript(
+      lines,
+      request.maximumRenderedLength ?? TRANSCRIPT_BOUNDS.MAXIMUM_RENDERED_LENGTH,
+    );
+  });
 }

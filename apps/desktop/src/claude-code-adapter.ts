@@ -1,4 +1,3 @@
-import fs from "node:fs/promises";
 import path from "node:path";
 import {
   isRecord,
@@ -18,6 +17,7 @@ import {
   type WireRecord,
   wholeNumber,
 } from "@sidecar/core";
+import { Effect } from "effect";
 import {
   CLAUDE_HOOK_EVENT,
   type ClaudeHookEvent,
@@ -42,6 +42,7 @@ import {
   tailRecords,
   workspaceLabel,
 } from "./local-session-adapter";
+import { type FileFailure, Files } from "./services/files";
 
 const CLAUDE_CODE_PROVIDER_ID = PROVIDER_ID.CLAUDE_CODE;
 const CLAUDE_CODE_PROVIDER_NAME = "Claude Code";
@@ -162,52 +163,65 @@ interface ParsedClaudeSessionTail {
   usedTool?: boolean;
 }
 
-async function archivedSessionsIn(projectDirectory: string): Promise<ReadonlyMap<string, boolean>> {
-  try {
-    const raw = JSON.parse(
-      await fs.readFile(path.join(projectDirectory, "sessions-index.json"), "utf8"),
-    );
-    if (!isRecord(raw) || !Array.isArray(raw.entries)) return new Map();
-    const archived = new Map<string, boolean>();
-    for (const entry of raw.entries) {
-      if (!isRecord(entry)) continue;
-      const sessionId = text(entry.sessionId);
-      const isArchived = entry.isArchived;
-      if (!sessionId || (isArchived !== true && isArchived !== false)) continue;
-      archived.set(sessionId, isArchived);
+function archivedSessionsIn(
+  projectDirectory: string,
+): Effect.Effect<ReadonlyMap<string, boolean>, FileFailure, Files> {
+  return Effect.gen(function* () {
+    const files = yield* Files;
+    const raw = yield* files.readTextFileUtf8(path.join(projectDirectory, "sessions-index.json"));
+    if (!raw) return new Map<string, boolean>();
+    try {
+      const parsed = JSON.parse(raw);
+      if (!isRecord(parsed) || !Array.isArray(parsed.entries)) return new Map();
+      const archived = new Map<string, boolean>();
+      for (const entry of parsed.entries) {
+        if (!isRecord(entry)) continue;
+        const sessionId = text(entry.sessionId);
+        const isArchived = entry.isArchived;
+        if (!sessionId || (isArchived !== true && isArchived !== false)) continue;
+        archived.set(sessionId, isArchived);
+      }
+      return archived;
+    } catch {
+      return new Map();
     }
-    return archived;
-  } catch {
-    // Metadata is a best-effort provider signal. A missing or unreadable index
-    // leaves archive state unknown rather than treating every session as open.
-    return new Map();
-  }
+  });
 }
 
 /** Claude Code keeps a session's transcript directly in its project directory. */
-async function sessionFilesIn(projectDirectory: string): Promise<SessionFileCandidate[]> {
-  const entries = await readDirectory(projectDirectory);
-  const archived = await archivedSessionsIn(projectDirectory);
-  const candidates = await Promise.all(
-    entries.map(async (entry) => {
-      const providerSessionId = sessionIdFromFileName(entry.name, CLAUDE_SESSION_FILE_EXTENSION);
-      if (!providerSessionId) return undefined;
-      // Claude's index is authoritative when it explicitly marks a session
-      // archived. Missing, invalid, or false metadata leaves the transcript
-      // visible; archive state is never inferred from CLI resume membership.
-      if (archived.get(providerSessionId) === true) return undefined;
-      const candidate = await statDirectoryEntry(projectDirectory, entry.name);
-      if (!candidate?.stats.isFile()) return undefined;
-      return {
-        filePath: candidate.directoryPath,
-        providerSessionId,
-        mtimeMs: candidate.stats.mtimeMs,
-      };
-    }),
-  );
-  return candidates.filter(
-    (candidate): candidate is SessionFileCandidate => candidate !== undefined,
-  );
+function sessionFilesIn(
+  projectDirectory: string,
+): Effect.Effect<SessionFileCandidate[], unknown, Files> {
+  return Effect.gen(function* () {
+    const entries = yield* readDirectory(projectDirectory);
+    const archived = yield* archivedSessionsIn(projectDirectory);
+    const candidates = yield* Effect.all(
+      entries.map((entry) =>
+        Effect.gen(function* () {
+          const providerSessionId = sessionIdFromFileName(
+            entry.name,
+            CLAUDE_SESSION_FILE_EXTENSION,
+          );
+          if (!providerSessionId) return undefined;
+          // Claude's index is authoritative when it explicitly marks a session
+          // archived. Missing, invalid, or false metadata leaves the transcript
+          // visible; archive state is never inferred from CLI resume membership.
+          if (archived.get(providerSessionId) === true) return undefined;
+          const candidate = yield* statDirectoryEntry(projectDirectory, entry.name);
+          if (!candidate?.stats.isFile()) return undefined;
+          return {
+            filePath: candidate.directoryPath,
+            providerSessionId,
+            mtimeMs: candidate.stats.mtimeMs,
+          };
+        }),
+      ),
+      { concurrency: "unbounded" },
+    );
+    return candidates.filter(
+      (candidate): candidate is SessionFileCandidate => candidate !== undefined,
+    );
+  });
 }
 
 function eventTypeFromRecord(record: WireRecord): ClaudeEventType | undefined {
@@ -578,31 +592,35 @@ export class ClaudeCodeSessionAdapter extends LocalFileSessionAdapter<
     this.#hookEventsDirectory = options.hookEventsDirectory;
   }
 
-  protected async parse(candidate: SessionFileCandidate): Promise<ParsedClaudeSessionTail> {
-    const tail = await readTail(candidate.filePath, this.#readTailBytes);
-    let parsed = parseClaudeSessionTail(tail);
-    // A truncated tail holding no conversation clock says nothing about when
-    // the session last moved, and the file's date is exactly what a bulk
-    // touch falsifies — so one deeper read goes looking for the conversation
-    // before the fallback is trusted. A file read whole is never re-read:
-    // there is nothing further back to find.
-    if (
-      parsed.timestampMs === undefined &&
-      Buffer.byteLength(tail, "utf8") >= this.#readTailBytes &&
-      CLAUDE_ADAPTER_DEFAULTS.CLOCK_RESCUE_TAIL_BYTES > this.#readTailBytes
-    ) {
-      const rescued = parseClaudeSessionTail(
-        await readTail(candidate.filePath, CLAUDE_ADAPTER_DEFAULTS.CLOCK_RESCUE_TAIL_BYTES),
-      );
-      if (rescued.timestampMs !== undefined) parsed = rescued;
-    }
-    if (!parsed.aiTitle) {
-      parsed.aiTitle = titleFromHead(await readHead(candidate.filePath, this.#readHeadBytes));
-    }
-    return parsed;
+  protected parse(
+    candidate: SessionFileCandidate,
+  ): Effect.Effect<ParsedClaudeSessionTail, unknown, Files> {
+    return Effect.gen(this, function* () {
+      const tail = yield* readTail(candidate.filePath, this.#readTailBytes);
+      let parsed = parseClaudeSessionTail(tail);
+      // A truncated tail holding no conversation clock says nothing about when
+      // the session last moved, and the file's date is exactly what a bulk
+      // touch falsifies — so one deeper read goes looking for the conversation
+      // before the fallback is trusted. A file read whole is never re-read:
+      // there is nothing further back to find.
+      if (
+        parsed.timestampMs === undefined &&
+        Buffer.byteLength(tail, "utf8") >= this.#readTailBytes &&
+        CLAUDE_ADAPTER_DEFAULTS.CLOCK_RESCUE_TAIL_BYTES > this.#readTailBytes
+      ) {
+        const rescued = parseClaudeSessionTail(
+          yield* readTail(candidate.filePath, CLAUDE_ADAPTER_DEFAULTS.CLOCK_RESCUE_TAIL_BYTES),
+        );
+        if (rescued.timestampMs !== undefined) parsed = rescued;
+      }
+      if (!parsed.aiTitle) {
+        parsed.aiTitle = titleFromHead(yield* readHead(candidate.filePath, this.#readHeadBytes));
+      }
+      return parsed;
+    });
   }
 
-  protected discover(): Promise<SessionFileCandidate[]> {
+  protected discover(): Effect.Effect<readonly SessionFileCandidate[], unknown, Files> {
     return discoverSessionFiles({
       projectsDirectory: path.join(this.#claudeHome, CLAUDE_PROJECTS_DIRECTORY),
       maximumProjectDirectories: this.#maximumProjectDirectories,
@@ -610,22 +628,35 @@ export class ClaudeCodeSessionAdapter extends LocalFileSessionAdapter<
     });
   }
 
-  protected async observation(
+  protected observation(
     candidate: SessionFileCandidate,
     parsed: ParsedClaudeSessionTail,
     now: number,
     activeSessionFreshnessMs: number,
-  ): Promise<ProviderSessionObservation> {
-    const hookEventsDirectory = this.#hookEventsDirectory?.();
-    const hookEvent = hookEventsDirectory
-      ? await readClaudeHookEvent(hookEventsDirectory, candidate.providerSessionId).catch(
-          () => undefined,
-        )
-      : undefined;
-    return observationFromSessionFile(candidate, parsed, now, activeSessionFreshnessMs, hookEvent);
+  ): Effect.Effect<ProviderSessionObservation, unknown, Files> {
+    return Effect.gen(this, function* () {
+      const hookEventsDirectory = this.#hookEventsDirectory?.();
+      const hookEvent = hookEventsDirectory
+        ? yield* Effect.async<ObservedClaudeHookEvent | undefined, never>((resume) => {
+            readClaudeHookEvent(hookEventsDirectory, candidate.providerSessionId).then(
+              (value) => resume(Effect.succeed(value)),
+              () => resume(Effect.succeed(undefined)),
+            );
+          })
+        : undefined;
+      return observationFromSessionFile(
+        candidate,
+        parsed,
+        now,
+        activeSessionFreshnessMs,
+        hookEvent,
+      );
+    });
   }
 
-  override readTranscript(providerSessionId: string): Promise<string | undefined> {
+  override readTranscript(
+    providerSessionId: string,
+  ): Effect.Effect<string | undefined, unknown, Files> {
     return readClaudeSessionTranscript({
       claudeHome: this.#claudeHome,
       providerSessionId,
