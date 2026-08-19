@@ -5,8 +5,9 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
 import { PROVIDER_ID, SESSION_STATUS } from "@sidecar/core";
+import { SUPERSET_WORKSPACE_PROVIDER_ID } from "../src/shared/contracts";
 import { SUPERSET_CONTROL_ID } from "../src/superset-cli";
-import { SUPERSET_WORKSPACE_SCOPE_ID, SupersetWorkspaceReader } from "../src/superset-workspaces";
+import { SupersetWorkspaceReader } from "../src/superset-workspaces";
 
 async function temporarySupersetHome(t: TestContext): Promise<string> {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "luke-superset-"));
@@ -70,8 +71,6 @@ test("reads live host databases and enriches an exact provider session", async (
     workspaceId: "workspace-1",
     workspaceName: "power-vacation",
     terminalId: "terminal-1",
-    agentId: "codex",
-    lastEventType: "Start",
     updatedAt: 200,
     spawnableAgents: [],
     projectName: "Luke",
@@ -103,7 +102,7 @@ test("reads live host databases and enriches an exact provider session", async (
         workspace: {
           providerWorkspaceId: "workspace-1",
           name: "power-vacation",
-          scopeId: SUPERSET_WORKSPACE_SCOPE_ID,
+          scopeId: SUPERSET_WORKSPACE_PROVIDER_ID,
           managerName: "Superset",
         },
       },

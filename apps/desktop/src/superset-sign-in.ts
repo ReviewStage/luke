@@ -243,8 +243,3 @@ export class SupersetSignIn {
     this.#child = undefined;
   }
 }
-
-export const SUPERSET_SIGN_IN_LIMITS = {
-  CODE: CODE_LIMIT,
-  OUTPUT_TAIL: OUTPUT_TAIL_LIMIT,
-} as const;

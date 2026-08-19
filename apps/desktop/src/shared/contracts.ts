@@ -35,6 +35,7 @@ import type {
   SettingsResetScope,
   VoiceSource,
 } from "./settings-schema";
+import type { WorkspaceProviderId } from "./superset";
 
 export type { WindowMode } from "@sidecar/core";
 export type {
@@ -58,7 +59,11 @@ export const ACCOUNT_PROVIDER = {
   GITHUB: "github",
 } as const;
 
-export { SUPERSET_WORKSPACE_PROVIDER_ID } from "./superset";
+export {
+  isWorkspaceProviderId,
+  SUPERSET_WORKSPACE_PROVIDER_ID,
+  type WorkspaceProviderId,
+} from "./superset";
 
 export type AccountProvider = (typeof ACCOUNT_PROVIDER)[keyof typeof ACCOUNT_PROVIDER];
 
@@ -342,7 +347,7 @@ export interface AppSettings {
    * the first workspace the user actually creates saves its provider here, so
    * the default is always a choice they made rather than one made for them.
    */
-  defaultWorkspaceProvider?: string;
+  defaultWorkspaceProvider?: WorkspaceProviderId;
   /**
    * The agent kind and model new workspaces start with, per provider, each
    * entry absent while that provider's own defaults stand. Keyed by provider
@@ -361,7 +366,7 @@ export interface AppSettings {
    * and, where needed, its host; it steers an ask only while the provider
    * still offers that exact project target.
    */
-  workspaceProjectDefaults?: Readonly<Record<string, string>>;
+  workspaceProjectDefaults?: Readonly<Partial<Record<WorkspaceProviderId, string>>>;
   /** The configured Superset agent used when a creation ask names none. */
   supersetAgentDefault?: string;
 }

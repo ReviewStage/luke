@@ -11,8 +11,6 @@ import {
 import { SUPERSET_WORKSPACE_PROVIDER_ID } from "./shared/contracts";
 import { SUPERSET_CONTROL_ID } from "./superset-cli";
 
-export const SUPERSET_WORKSPACE_SCOPE_ID = SUPERSET_WORKSPACE_PROVIDER_ID;
-
 const SUPERSET_AGENT_PROVIDER: Readonly<Record<string, string>> = {
   claude: PROVIDER_ID.CLAUDE_CODE,
   codex: PROVIDER_ID.CODEX,
@@ -26,7 +24,6 @@ const SUPERSET_WORKSPACE_QUERY = `
     bindings.agent_id,
     bindings.agent_session_id,
     bindings.terminal_id,
-    bindings.last_event_type,
     workspaces.id AS workspace_id,
     workspaces.name AS workspace_name,
     workspaces.branch,
@@ -54,8 +51,6 @@ export interface SupersetSessionContext {
   workspaceId: string;
   workspaceName: string;
   terminalId: string;
-  agentId: string;
-  lastEventType: string;
   updatedAt: number;
   projectName?: string;
   branch?: string;
@@ -79,7 +74,6 @@ function contextFromRow(
   const workspaceId = textFromRow(row, "workspace_id");
   const workspaceName = textFromRow(row, "workspace_name");
   const terminalId = textFromRow(row, "terminal_id");
-  const lastEventType = textFromRow(row, "last_event_type");
   const updatedAt = numberFromRow(row, "updated_at");
   if (
     !agentId ||
@@ -88,7 +82,6 @@ function contextFromRow(
     !workspaceId ||
     !workspaceName ||
     !terminalId ||
-    !lastEventType ||
     updatedAt === undefined
   ) {
     return undefined;
@@ -103,8 +96,6 @@ function contextFromRow(
     workspaceId,
     workspaceName,
     terminalId,
-    agentId,
-    lastEventType,
     updatedAt,
     spawnableAgents,
     ...(projectName ? { projectName } : {}),
@@ -150,7 +141,7 @@ export class SupersetWorkspaceSnapshot {
         workspace: {
           providerWorkspaceId: context.workspaceId,
           name: context.workspaceName,
-          scopeId: SUPERSET_WORKSPACE_SCOPE_ID,
+          scopeId: SUPERSET_WORKSPACE_PROVIDER_ID,
           managerName: "Superset",
         },
         ...(actionsEnabled

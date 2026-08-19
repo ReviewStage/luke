@@ -21,7 +21,12 @@ import {
   type TrackedIssue,
 } from "@sidecar/core";
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { MicrophoneStatus, SessionOpenResult, VoiceHotkeyState } from "../shared/contracts";
+import type {
+  MicrophoneStatus,
+  SessionOpenResult,
+  VoiceHotkeyState,
+  WorkspaceProviderId,
+} from "../shared/contracts";
 import { TALK_KEY_RELEASE, talkKeyRelease } from "../shared/voice-hotkey";
 import { askRefusal } from "./ask-luke";
 import { openPreferredMicrophone } from "./microphone-choice";
@@ -356,9 +361,9 @@ export interface VoiceConversationOptions {
    */
   noticeAsks: readonly SessionNoticeAsk[];
   workspaceProjects: readonly ObservedWorkspaceProject[];
-  defaultWorkspaceProvider: string | undefined;
+  defaultWorkspaceProvider: WorkspaceProviderId | undefined;
   /** The per-provider default projects, riding the projects context they steer. */
-  workspaceProjectDefaults: Readonly<Partial<Record<string, string>>> | undefined;
+  workspaceProjectDefaults: Readonly<Partial<Record<WorkspaceProviderId, string>>> | undefined;
   voice: RealtimeVoice | undefined;
   voiceSpeed: RealtimeVoiceSpeed | undefined;
   voiceCaptions: boolean;

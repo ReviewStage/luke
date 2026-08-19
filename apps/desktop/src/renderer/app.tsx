@@ -48,10 +48,12 @@ import type {
   SupersetSignInSnapshot,
   UpdateSnapshot,
   VoiceSource,
+  WorkspaceProviderId,
 } from "../shared/contracts";
 import {
   ACCOUNT_STATUS,
   CREDENTIAL_SOURCE,
+  isWorkspaceProviderId,
   SESSION_OPEN_RESULT_STATUS,
   SUPERSET_SIGN_IN_STAGE,
   SUPERSET_WORKSPACE_PROVIDER_ID,
@@ -1091,7 +1093,7 @@ export function App(): React.JSX.Element {
   // creation makes on its own, offered by hand so the choice can be changed
   // or returned to asking each time.
   const changeDefaultWorkspaceProvider = useCallback(
-    async (providerId: string | undefined) =>
+    async (providerId: WorkspaceProviderId | undefined) =>
       applySettingsReply(
         await window.sidecar.updateSetting(
           APP_SETTING_SCHEMA.defaultWorkspaceProvider.field,
@@ -1126,7 +1128,7 @@ export function App(): React.JSX.Element {
   // write the first creation there makes on its own, offered by hand so the
   // choice can be changed or returned to the first creation.
   const changeWorkspaceProjectDefault = useCallback(
-    async (providerId: string, providerProjectId: string | undefined) =>
+    async (providerId: WorkspaceProviderId, providerProjectId: string | undefined) =>
       applySettingsReply(
         await window.sidecar.updateSettingEntry(
           APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
@@ -1156,16 +1158,21 @@ export function App(): React.JSX.Element {
   const storedWorkspaceProvider = settings?.defaultWorkspaceProvider;
   const storedWorkspaceProjects = settings?.workspaceProjectDefaults;
   const workspaceProviderOptions = useMemo(() => {
-    const fallbackName = (providerId: string) =>
+    const fallbackName = (providerId: WorkspaceProviderId) =>
       isCredentialProviderId(providerId)
         ? CREDENTIAL_PROVIDERS[providerId].displayName
         : providerId;
-    const names = new Map<string, string>();
-    for (const project of workspaceProjects) names.set(project.providerId, project.providerName);
+    const names = new Map<WorkspaceProviderId, string>();
+    for (const project of workspaceProjects) {
+      if (isWorkspaceProviderId(project.providerId)) {
+        names.set(project.providerId, project.providerName);
+      }
+    }
     if (storedWorkspaceProvider && !names.has(storedWorkspaceProvider)) {
       names.set(storedWorkspaceProvider, fallbackName(storedWorkspaceProvider));
     }
     for (const providerId of Object.keys(storedWorkspaceProjects ?? {})) {
+      if (!isWorkspaceProviderId(providerId)) continue;
       if (!names.has(providerId)) names.set(providerId, fallbackName(providerId));
     }
     return [...names.entries()].map(([id, name]) => {

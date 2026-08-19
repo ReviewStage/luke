@@ -20,7 +20,11 @@ import {
   type WorkspaceAgentSelection,
 } from "@sidecar/core";
 import { CREDENTIAL_PROVIDERS, isCredentialProviderId } from "./credential-providers";
-import { SUPERSET_WORKSPACE_PROVIDER_ID } from "./superset";
+import {
+  isWorkspaceProviderId,
+  SUPERSET_WORKSPACE_PROVIDER_ID,
+  type WorkspaceProviderId,
+} from "./superset";
 import { parseVoiceHotkey } from "./voice-hotkey";
 import {
   isWorkspaceAgentSelection,
@@ -108,9 +112,9 @@ export interface StoredAppSettings {
   quietDuringMeetings: boolean;
   showOnAllDisplays: boolean;
   formFactor?: PanelFormFactor;
-  defaultWorkspaceProvider?: string;
+  defaultWorkspaceProvider?: WorkspaceProviderId;
   workspaceAgentDefaults?: Readonly<Partial<Record<ProviderId, WorkspaceAgentSelection>>>;
-  workspaceProjectDefaults?: Readonly<Record<string, string>>;
+  workspaceProjectDefaults?: Readonly<Partial<Record<WorkspaceProviderId, string>>>;
   supersetAgentDefault?: string;
 }
 
@@ -214,7 +218,7 @@ function voiceSpeedWord(speed: RealtimeVoiceSpeed): string {
   );
 }
 
-function workspaceProviderName(providerId: string): string {
+function workspaceProviderName(providerId: WorkspaceProviderId): string {
   if (providerId === SUPERSET_WORKSPACE_PROVIDER_ID) return "Superset";
   if (isCredentialProviderId(providerId)) return CREDENTIAL_PROVIDERS[providerId].displayName;
   // The one workspace-capable provider with no credential row to take a
@@ -277,7 +281,7 @@ function workspaceProjectDefaults(
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     return invalid(undefined);
   }
-  const defaults: Record<string, string> = {};
+  const defaults: Partial<Record<WorkspaceProviderId, string>> = {};
   for (const [providerId, candidate] of Object.entries(value)) {
     if (!isWorkspaceProviderId(providerId) || typeof candidate !== "string") continue;
     const providerProjectId = candidate.trim();
@@ -287,10 +291,6 @@ function workspaceProjectDefaults(
     defaults[providerId] = providerProjectId;
   }
   return valid(Object.keys(defaults).length > 0 ? defaults : undefined);
-}
-
-function isWorkspaceProviderId(value: string): boolean {
-  return isProviderId(value) || value === SUPERSET_WORKSPACE_PROVIDER_ID;
 }
 
 export const APP_SETTING_SCHEMA = {
@@ -551,7 +551,7 @@ export const APP_SETTING_SCHEMA = {
     guard: (value: unknown) =>
       optional(
         value,
-        (candidate): candidate is string =>
+        (candidate): candidate is WorkspaceProviderId =>
           typeof candidate === "string" && isWorkspaceProviderId(candidate),
       ),
     settingsPage: SETTINGS_PAGE.CONNECTIONS,
@@ -656,7 +656,8 @@ export const APP_SETTING_SCHEMA = {
     default: undefined,
     guard: workspaceProjectDefaults,
     entry: {
-      isKey: (value): value is string => typeof value === "string" && isWorkspaceProviderId(value),
+      isKey: (value): value is WorkspaceProviderId =>
+        typeof value === "string" && isWorkspaceProviderId(value),
       same: (current, next) => current === next,
     },
     settingsPage: SETTINGS_PAGE.CONNECTIONS,

@@ -35,6 +35,7 @@ const SUPERSET_ORGANIZATION_LIMIT = 20;
 const SUPERSET_TARGET_LIMIT = 20;
 const SUPERSET_PROJECT_LIMIT = 50;
 const SUPERSET_FAILURE_REASON_LIMIT = 300;
+const SUPERSET_PROJECT_REFRESH_INTERVAL_MS = 60_000;
 const LOCAL_TARGET_ID = "local";
 const ANSI_ESCAPE_PATTERN = new RegExp(`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`, "gu");
 
@@ -446,6 +447,8 @@ export class SupersetWorkspaceAdapter extends SessionProviderAdapterBase {
   readonly provider = { id: SUPERSET_WORKSPACE_PROVIDER_ID, displayName: "Superset" };
   readonly #cli: SupersetCli;
   #projects: readonly WorkspaceProject[] = [];
+  #projectsRefreshedAt: number | undefined;
+  #defaultAgent: string | undefined;
 
   constructor(cli: SupersetCli) {
     super();
@@ -456,8 +459,24 @@ export class SupersetWorkspaceAdapter extends SessionProviderAdapterBase {
     return [];
   }
 
-  async refresh(defaultAgent?: string): Promise<void> {
+  async refresh(defaultAgent: string | undefined, connected: boolean): Promise<void> {
+    if (!connected) {
+      this.#projects = [];
+      this.#projectsRefreshedAt = undefined;
+      this.#defaultAgent = defaultAgent;
+      return;
+    }
+    const now = Date.now();
+    if (
+      defaultAgent === this.#defaultAgent &&
+      this.#projectsRefreshedAt !== undefined &&
+      now - this.#projectsRefreshedAt < SUPERSET_PROJECT_REFRESH_INTERVAL_MS
+    ) {
+      return;
+    }
     this.#projects = await this.#cli.workspaceProjects(defaultAgent);
+    this.#defaultAgent = defaultAgent;
+    this.#projectsRefreshedAt = now;
   }
 
   override workspaceProjects(): readonly WorkspaceProject[] {

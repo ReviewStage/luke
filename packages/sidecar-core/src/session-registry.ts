@@ -20,7 +20,7 @@ export interface SessionRegistrySnapshot {
 
 export type SessionRegistryListener = (snapshot: SessionRegistrySnapshot) => void;
 
-export type SessionObservationTransform = (
+type SessionObservationTransform = (
   providerId: string,
   observations: readonly ProviderSessionObservation[],
 ) => readonly ProviderSessionObservation[];

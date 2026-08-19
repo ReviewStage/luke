@@ -29,6 +29,7 @@ import type {
   ObservedAccountCalendars,
   SettingsResetScope,
   UpdateSnapshot,
+  WorkspaceProviderId,
 } from "../shared/contracts";
 import {
   ACCOUNT_PROVIDER,
@@ -135,7 +136,7 @@ import { UPDATE_ROW_ACTION, updateAvailable, updateRow } from "./update-row";
 
 /** One provider the default-workspace rows can offer, by id and display name. */
 export interface WorkspaceProviderOption {
-  id: string;
+  id: WorkspaceProviderId;
   name: string;
   /**
    * The projects this provider's default-project row can offer: everything
@@ -225,7 +226,9 @@ export interface PreferenceWrites {
    * answers with why when it refuses, and the row is where that answer
    * belongs.
    */
-  onDefaultWorkspaceProviderChange: (providerId: string | undefined) => Promise<string | undefined>;
+  onDefaultWorkspaceProviderChange: (
+    providerId: WorkspaceProviderId | undefined,
+  ) => Promise<string | undefined>;
   /**
    * Chooses the agent kind and model one provider starts new workspaces with,
    * or returns to that provider's own defaults when omitted. The store
@@ -243,7 +246,7 @@ export interface PreferenceWrites {
    * belongs.
    */
   onWorkspaceProjectDefaultChange: (
-    providerId: string,
+    providerId: WorkspaceProviderId,
     providerProjectId: string | undefined,
   ) => Promise<string | undefined>;
   /**
@@ -2164,7 +2167,8 @@ function WorkspacesSection({
         onChange={(next) => {
           if (next === ASK_EACH_TIME)
             return preferences.onDefaultWorkspaceProviderChange(undefined);
-          return preferences.onDefaultWorkspaceProviderChange(next);
+          const provider = workspaceProviders.find((option) => option.id === next);
+          if (provider) return preferences.onDefaultWorkspaceProviderChange(provider.id);
         }}
       />
       {workspaceProviders.map((provider) => (

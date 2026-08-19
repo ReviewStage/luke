@@ -919,8 +919,8 @@ async function refreshProviderSessions(generation: number): Promise<void> {
     [supersetSnapshot, supersetActionsEnabled] = await Promise.all([
       supersetWorkspaces.read(),
       supersetCli.connected(),
-      supersetWorkspaceAdapter.refresh(supersetAgentDefault),
     ]);
+    await supersetWorkspaceAdapter.refresh(supersetAgentDefault, supersetActionsEnabled);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     process.stderr.write(`Superset observation failed: ${message}\n`);

@@ -4,7 +4,12 @@ import os from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
 import { PROVIDER_ACT_RESULT_STATUS, PROVIDER_ID } from "@sidecar/core";
-import { isSupersetControlId, SUPERSET_CONTROL_ID, SupersetCli } from "../src/superset-cli";
+import {
+  isSupersetControlId,
+  SUPERSET_CONTROL_ID,
+  SupersetCli,
+  SupersetWorkspaceAdapter,
+} from "../src/superset-cli";
 import type { SupersetSessionContext } from "../src/superset-workspaces";
 
 async function connectedHome(t: TestContext): Promise<string> {
@@ -43,8 +48,6 @@ const CONTEXT: SupersetSessionContext = {
   workspaceId: "workspace-1",
   workspaceName: "power-vacation",
   terminalId: "terminal-1",
-  agentId: "codex",
-  lastEventType: "Start",
   updatedAt: 100,
   spawnableAgents: [],
 };
@@ -265,6 +268,29 @@ test("discovers host-scoped projects and creates a workspace with a generated br
     ],
     ["workspaces", "open", "workspace-new", "--json"],
   ]);
+});
+
+test("reuses recently discovered workspace projects", async (t) => {
+  const home = await connectedHome(t);
+  let projectQueries = 0;
+  const cli = new SupersetCli({
+    ...testCliOptions(home),
+    query: async (_executable, arguments_) => {
+      if (arguments_[0] === "projects") {
+        projectQueries += 1;
+        return JSON.stringify([{ id: "project-1", name: "Luke" }]);
+      }
+      if (arguments_[0] === "agents") return JSON.stringify([{ presetId: "codex" }]);
+      return "[]";
+    },
+  });
+  const adapter = new SupersetWorkspaceAdapter(cli);
+
+  await adapter.refresh("codex", true);
+  await adapter.refresh("codex", true);
+
+  assert.equal(projectQueries, 1);
+  assert.equal(adapter.workspaceProjects()[0]?.defaultAgent, "codex");
 });
 
 test("creates on an observed remote host and preserves success when opening fails", async (t) => {
