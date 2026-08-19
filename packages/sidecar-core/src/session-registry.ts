@@ -1,5 +1,3 @@
-import { Effect } from "effect";
-import { runPromiseOrDie } from "./effect/runtime-bridge.js";
 import { EffectInMemorySessionRegistry } from "./effect/session-registry.js";
 import type { SessionProviderAdapter } from "./providers.js";
 import type {
@@ -70,21 +68,9 @@ export class InMemorySessionRegistry {
     adapter: Pick<SessionProviderAdapter, "provider" | "observe">,
     transform?: SessionObservationTransform,
   ): Promise<SessionRegistrySnapshot> {
-    return runPromiseOrDie(
-      this.#registry.refresh(
-        {
-          provider: adapter.provider,
-          observe: () =>
-            Effect.async<readonly ProviderSessionObservation[], never>((resume) => {
-              void adapter.observe().then(
-                (observations) => resume(Effect.succeed(observations)),
-                (error) => resume(Effect.die(error)),
-              );
-            }),
-        },
-        transform,
-      ),
-    );
+    const context = this.#registry.beginPromiseRefresh(adapter.provider);
+    const observed = await adapter.observe();
+    return this.#registry.finishPromiseRefresh(adapter.provider, observed, context, transform);
   }
 
   /** Stores Luke's latest attention decision without mutating provider-owned data. */

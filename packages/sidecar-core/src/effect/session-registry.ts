@@ -27,6 +27,12 @@ export type SessionObservationTransform = (
 type ProviderSessions = Map<string, NormalizedSession>;
 type SessionStore = Map<string, ProviderSessions>;
 
+interface ProviderRefreshContext {
+  readonly providerId: string;
+  readonly mutationEpoch: number;
+  readonly attempt: number;
+}
+
 function copySession(session: NormalizedSession): NormalizedSession {
   const detail: SessionDetail = { ...session.detail };
   if (session.detail.diff) detail.diff = { ...session.detail.diff };
@@ -273,22 +279,28 @@ export class EffectInMemorySessionRegistry implements EffectSessionRegistry {
     const self = this;
     return Effect.gen(function* () {
       const providerId = normalizedProviderId(adapter.provider);
-      const mutationEpoch = self.#providerMutationEpochs.get(providerId) ?? 0;
-      const attempt = self.#startProviderRefreshAttempt(providerId);
+      const context = self.#beginProviderRefresh(providerId);
       const observed = yield* adapter.observe();
       const observations = transform ? transform(providerId, observed) : observed;
-      const latestAttempt = self.#latestAppliedRefreshAttempts.get(providerId) ?? 0;
-      if (
-        latestAttempt >= attempt ||
-        (self.#providerMutationEpochs.get(providerId) ?? 0) !== mutationEpoch
-      ) {
-        return self.snapshot();
-      }
-      const next = self.#nextProviderStore(adapter.provider, providerId, observations);
-      self.#latestAppliedRefreshAttempts.set(providerId, attempt);
-      self.#commit(next);
-      return self.snapshot();
+      return self.#finishProviderRefresh(adapter.provider, providerId, observations, context);
     });
+  }
+
+  /** Records refresh attempt state before a promise-side observe(). */
+  beginPromiseRefresh(provider: SessionProvider): ProviderRefreshContext {
+    const providerId = normalizedProviderId(provider);
+    return this.#beginProviderRefresh(providerId);
+  }
+
+  /** Applies observations after a promise-side observe(), honoring stale-refresh guards. */
+  finishPromiseRefresh(
+    provider: SessionProvider,
+    observed: readonly ProviderSessionObservation[],
+    context: ProviderRefreshContext,
+    transform?: SessionObservationTransform,
+  ): SessionRegistrySnapshot {
+    const observations = transform ? transform(context.providerId, observed) : observed;
+    return this.#finishProviderRefresh(provider, context.providerId, observations, context);
   }
 
   setAttention(
@@ -362,6 +374,33 @@ export class EffectInMemorySessionRegistry implements EffectSessionRegistry {
     const nextAttempt = (this.#nextProviderRefreshAttempts.get(providerId) ?? 0) + 1;
     this.#nextProviderRefreshAttempts.set(providerId, nextAttempt);
     return nextAttempt;
+  }
+
+  #beginProviderRefresh(providerId: string): ProviderRefreshContext {
+    return {
+      providerId,
+      mutationEpoch: this.#providerMutationEpochs.get(providerId) ?? 0,
+      attempt: this.#startProviderRefreshAttempt(providerId),
+    };
+  }
+
+  #finishProviderRefresh(
+    provider: SessionProvider,
+    providerId: string,
+    observations: readonly ProviderSessionObservation[],
+    context: ProviderRefreshContext,
+  ): SessionRegistrySnapshot {
+    const latestAttempt = this.#latestAppliedRefreshAttempts.get(providerId) ?? 0;
+    if (
+      latestAttempt >= context.attempt ||
+      (this.#providerMutationEpochs.get(providerId) ?? 0) !== context.mutationEpoch
+    ) {
+      return this.snapshot();
+    }
+    const next = this.#nextProviderStore(provider, providerId, observations);
+    this.#latestAppliedRefreshAttempts.set(providerId, context.attempt);
+    this.#commit(next);
+    return this.snapshot();
   }
 
   #commit(next: SessionStore, invalidateRefreshesForProvider?: string): boolean {

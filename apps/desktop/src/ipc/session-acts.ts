@@ -282,6 +282,7 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
           unparsedWire(rawIdentity as WireBoundaryInput),
           "Invalid session message request",
         );
+        // SAFETY: IPC validate receives structured-clone args; the second arg is the message text.
         return [identity, unparsedWire(text as WireBoundaryInput)];
       },
       act: (identity, text) =>
@@ -330,6 +331,7 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
         unparsedWire(rawIdentity as WireBoundaryInput),
         "Invalid session control request",
       );
+      // SAFETY: IPC validate receives structured-clone args; the second arg is the control id.
       const controlId = unparsedWire(controlIdRaw as WireBoundaryInput);
       if (!isWireString(controlId) || !controlId.trim()) {
         throw new Error("Invalid session control request");
@@ -370,6 +372,7 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
           unparsedWire(rawIdentity as WireBoundaryInput),
           "Invalid session notice request",
         );
+        // SAFETY: IPC validate receives structured-clone args; the second arg is the standing ask text.
         return [identity, unparsedWire(request as WireBoundaryInput)];
       },
       act: (identity, request) =>
@@ -595,6 +598,7 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
   registerAction<[IssueActionAsk], TrackerActionResult>(channels.executeIssueAction, {
     validate: (args) => {
       const [actionRaw] = args;
+      // SAFETY: IPC validate receives structured-clone args; this channel's first arg is an issue action object.
       const action = parseIssueActionAsk(unparsedWire(actionRaw as WireBoundaryInput));
       if (!action) throw new Error("Invalid issue action request");
       return [action];
@@ -754,6 +758,7 @@ interface AddWorkspaceAgentRequest {
 }
 
 function parseCreateWorkspaceRequest(args: readonly unknown[]): CreateWorkspaceRequest {
+  // SAFETY: IPC validate receives structured-clone args; this channel carries seven wire values.
   const wireArgs = args as readonly UnparsedWireValue[];
   const [providerId, providerProjectId, providerTargetId, agent, name, task, namedSelection] =
     wireArgs;
@@ -790,9 +795,11 @@ function parseCreateWorkspaceRequest(args: readonly unknown[]): CreateWorkspaceR
 }
 
 function parseAddWorkspaceAgentRequest(args: readonly unknown[]): AddWorkspaceAgentRequest {
+  // SAFETY: IPC validate receives structured-clone args; this channel carries six wire values.
   const wireArgs = args as readonly UnparsedWireValue[];
   const [identityRaw, agentRaw, name, task, namedModel, namedEffort] = wireArgs;
   const identity = requireSessionIdentity(
+    // SAFETY: IPC validate receives structured-clone args; the first arg is a session identity object.
     unparsedWire(identityRaw as WireBoundaryInput),
     "Invalid workspace agent request",
   );
