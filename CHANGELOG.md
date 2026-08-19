@@ -32,34 +32,30 @@
 Notable changes to Luke, newest first. Each heading is a released version and
 the date its release was published.
 
-## 0.2.0 — 2026-08-19
+## 0.2.0 — 2026-08-18
 
 ### Codex cloud tasks
 
-Luke observes your Codex cloud tasks through the login you already gave the
-Codex CLI — no key to paste, and a signed-out CLI simply reads as empty. Ask
-him for a new cloud task and he starts it the same way.
+Luke observes your Codex cloud tasks through the Codex CLI.
 ([#256](https://github.com/ReviewStage/luke/pull/256),
 [#258](https://github.com/ReviewStage/luke/pull/258))
 
 ### Previews you can press
 
-When a spoken reply names your sessions or tracked Linear issues, chips
-naming each appear under the notch for as long as the words last — press one
-to jump straight there.
+Linear issues show as chips under the notch.
 ([#250](https://github.com/ReviewStage/luke/pull/250),
 [#257](https://github.com/ReviewStage/luke/pull/257),
 [#271](https://github.com/ReviewStage/luke/pull/271))
 
 ### Improvements
 
-- Luke speaks as your agents' engineering manager — direct, candid, and calm
+- Luke's role is an engineering manager
   ([#265](https://github.com/ReviewStage/luke/pull/265))
-- Session rows carry each agent's diff: files touched, lines added and
-  removed ([#260](https://github.com/ReviewStage/luke/pull/260))
-- Luke observes Devin sessions running on your Mac
+- Session rows show number of files touched and lines changed when available
+  ([#260](https://github.com/ReviewStage/luke/pull/260))
+- Luke observes local Devin CLI sessions
   ([#255](https://github.com/ReviewStage/luke/pull/255))
-- Linear now connects through its own consent page instead of an API key
+- Linear now connects via a Luke Linear app instead of an API key
   ([#261](https://github.com/ReviewStage/luke/pull/261))
 - Luke hears what you say while the call is still connecting, even on the
   first press after launch
@@ -70,7 +66,7 @@ to jump straight there.
   [#272](https://github.com/ReviewStage/luke/pull/272))
 - A bare "new agent" ask opens a new workspace
   ([#230](https://github.com/ReviewStage/luke/pull/230))
-- The pull-request chip is titled by the request's own number
+- An agent's pull request button uses the PR number
   ([#249](https://github.com/ReviewStage/luke/pull/249))
 
 ### Fixes
@@ -91,7 +87,7 @@ to jump straight there.
 
 - Updated the landing page with a direct download button
   ([#221](https://github.com/ReviewStage/luke/pull/221))
-- Added the link card shared pages preview everywhere
+- Added the link card previews everywhere
   ([#244](https://github.com/ReviewStage/luke/pull/244),
   [#273](https://github.com/ReviewStage/luke/pull/273))
 - Removed the menu bar item
@@ -99,7 +95,7 @@ to jump straight there.
 - Removed excessive panel animations
   ([#243](https://github.com/ReviewStage/luke/pull/243))
 
-## 0.1.1 — 2026-08-18
+## 0.1.1 — 2026-08-17
 
 ### Free daily allowance
 
@@ -163,7 +159,7 @@ meeting is over.
 - Updated the landing page download button to always fetch the latest build
   ([#183](https://github.com/ReviewStage/luke/pull/183))
 
-## 0.1.0 — 2026-08-17
+## 0.1.0 — 2026-08-16
 
 Introducing Luke: a voice agent that lives in the MacBook notch and
 watches every local and cloud coding agent session.
