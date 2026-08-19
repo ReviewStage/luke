@@ -237,6 +237,19 @@ function elementVisible(element: HTMLElement): boolean {
 }
 
 /**
+ * Whether a planned travel animates for an element in this visibility. A slot
+ * hop leaves a hidden element to take its place unseen — nothing a reader
+ * watches moved. A travel the bound caused is the shape's own motion and
+ * carries every element it displaced, seen or not: a mark can be
+ * mid-entrance, transparent on the frame of the morph and visible before the
+ * spring settles, and one left untravelled fades in at its new seat ahead of
+ * the surface's edge, drawn on the desktop.
+ */
+export function travelApplies(input: { boundMoved: boolean; visible: boolean }): boolean {
+  return input.boundMoved || input.visible;
+}
+
+/**
  * Watches one list across commits and turns every reorder into motion.
  * Returns the ref the list container must carry; a commit that unmounts the
  * container (the settings tab, the slot, the wing yielding to the meter) drops
@@ -435,7 +448,8 @@ function useReorderMotion<T extends HTMLElement>(list: ReorderList): RefObject<T
       };
       for (const [id, from] of plan.travels) {
         const element = elements.get(id);
-        if (element === undefined || !elementVisible(element)) continue;
+        if (element === undefined) continue;
+        if (!travelApplies({ boundMoved, visible: elementVisible(element) })) continue;
         const within = from - groupTravelOf(element);
         if (Math.abs(within) > TRAVEL_EPSILON) travel(element, within, 0);
       }
