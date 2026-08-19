@@ -73,14 +73,15 @@ test("the desktop client stays public, secretless, trusted, and bound to PKCE", 
 });
 
 test("seeding updates the one client identity instead of creating another", async () => {
-  let insertedTable: unknown;
-  let insertedRecord: unknown;
+  let insertedTable: typeof oauthClient | undefined;
+  let insertedRecord: ReturnType<typeof desktopOAuthClientRecord> | undefined;
   let conflict: { target?: unknown; set?: unknown } | undefined;
+  type SeedDatabase = Parameters<typeof seedDesktopOAuthClient>[0];
   const database = {
-    insert(table: unknown) {
+    insert(table: typeof oauthClient) {
       insertedTable = table;
       return {
-        values(record: unknown) {
+        values(record: ReturnType<typeof desktopOAuthClientRecord>) {
           insertedRecord = record;
           return {
             async onConflictDoUpdate(input: { target?: unknown; set?: unknown }) {
@@ -90,13 +91,10 @@ test("seeding updates the one client identity instead of creating another", asyn
         },
       };
     },
-  };
+  } satisfies SeedDatabase;
 
   const now = new Date("2026-08-17T00:00:00.000Z");
-  await seedDesktopOAuthClient(
-    database as unknown as Parameters<typeof seedDesktopOAuthClient>[0],
-    now,
-  );
+  await seedDesktopOAuthClient(database, now);
 
   assert.equal(insertedTable, oauthClient);
   assert.deepEqual(insertedRecord, desktopOAuthClientRecord(now));

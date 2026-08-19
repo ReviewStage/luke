@@ -42,5 +42,5 @@ test("within one urgency, the session that moved most recently comes first", () 
 });
 
 test("collapse waits out exit then shape, matching the CSS token pair", () => {
-  assert.equal(MOTION_DURATION_MS.EXIT + MOTION_DURATION_MS.SHAPE, 550);
+  assert.equal(MOTION_DURATION_MS.EXIT + MOTION_DURATION_MS.SURFACE, 550);
 });

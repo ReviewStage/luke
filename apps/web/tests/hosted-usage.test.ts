@@ -11,18 +11,22 @@ import { handleUsage } from "../server/hosted/usage";
 
 const NOON_UTC = Date.parse("2026-08-17T12:00:00.000Z");
 
+type UsageReadDatabase = Parameters<typeof readHostedUsage>[0];
+
 /** A database that answers the one select the read makes. */
-function usageDatabase(rows: Array<{ voiceCalls: number; attentionReviews: number }>) {
+function usageDatabase(
+  rows: Array<{ voiceCalls: number; attentionReviews: number }>,
+): UsageReadDatabase {
   return {
     select() {
       return {
-        from(table: unknown) {
+        from(table: typeof hostedUsage) {
           assert.equal(table, hostedUsage);
           return { where: async () => rows };
         },
       };
     },
-  } as unknown as Parameters<typeof readHostedUsage>[0];
+  };
 }
 
 test("a day with spending reads back both meters without touching either", async () => {
@@ -58,7 +62,7 @@ test("the endpoint answers GET for the signed-in account and nobody else", async
     attention: { used: 2, limit: 500, remaining: 498, resetsAt: NOON_UTC + 43_200_000 },
   };
   const options = {
-    resolveUserId: async () => "user-1" as string | undefined,
+    resolveUserId: async (): Promise<string | undefined> => "user-1",
     readUsage: async () => answer,
   };
 

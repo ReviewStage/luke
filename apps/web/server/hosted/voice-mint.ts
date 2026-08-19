@@ -4,6 +4,7 @@ import {
   isRecord,
   REALTIME_CALLS_PATH,
   REALTIME_CLIENT_SECRETS_PATH,
+  type RealtimeSessionOptions,
   type RealtimeVoice,
   type RealtimeVoiceSpeed,
   realtimeClientSecretRequest,
@@ -53,10 +54,10 @@ export async function voiceMintPreferences(
   if (payload.voice !== undefined && !isRealtimeVoice(payload.voice)) return undefined;
   if (payload.speed !== undefined && !isRealtimeVoiceSpeed(payload.speed)) return undefined;
 
-  return {
-    ...(payload.voice !== undefined ? { voice: payload.voice } : {}),
-    ...(payload.speed !== undefined ? { speed: payload.speed } : {}),
-  };
+  const preferences: VoiceMintPreferences = {};
+  if (payload.voice !== undefined) preferences.voice = payload.voice;
+  if (payload.speed !== undefined) preferences.speed = payload.speed;
+  return preferences;
 }
 
 export interface VoiceMintOptions {
@@ -105,13 +106,14 @@ export async function handleVoiceMint(options: VoiceMintOptions): Promise<Respon
     });
   }
 
+  const sessionOptions: RealtimeSessionOptions = {};
+  if (model) sessionOptions.model = model;
+  if (preferences.voice) sessionOptions.voice = preferences.voice;
+  if (preferences.speed) sessionOptions.speed = preferences.speed;
+
   const response = await postOpenAi(
     REALTIME_CLIENT_SECRETS_PATH,
-    realtimeClientSecretRequest({
-      ...(model ? { model } : {}),
-      ...(preferences.voice ? { voice: preferences.voice } : {}),
-      ...(preferences.speed ? { speed: preferences.speed } : {}),
-    }),
+    realtimeClientSecretRequest(sessionOptions),
     { apiKey, fetch: options.fetch, timeoutMs: options.timeoutMs },
   );
   if (!response) {

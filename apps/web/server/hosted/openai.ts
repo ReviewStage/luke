@@ -5,6 +5,8 @@
  * off, the same kill switch the feedback endpoint uses.
  */
 
+import type { attentionResponsesRequest, realtimeClientSecretRequest } from "../core.js";
+
 export const HOSTED_OPENAI_ENVIRONMENT = {
   API_KEY: "OPENAI_API_KEY",
   /** The same override names the desktop honours, so one convention configures both. */
@@ -19,6 +21,11 @@ export const HOSTED_OPENAI_DEFAULTS = {
 
 export type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
 
+/** Build-fixed documents the hosted tier POSTs to OpenAI. */
+export type OpenAiPostBody =
+  | ReturnType<typeof realtimeClientSecretRequest>
+  | ReturnType<typeof attentionResponsesRequest>;
+
 export interface OpenAiUpstreamOptions {
   apiKey: string;
   fetch?: FetchLike;
@@ -32,7 +39,7 @@ export interface OpenAiUpstreamOptions {
  */
 export async function postOpenAi(
   path: string,
-  body: unknown,
+  body: OpenAiPostBody,
   options: OpenAiUpstreamOptions,
 ): Promise<Response | undefined> {
   const send = options.fetch ?? ((input: string, init: RequestInit) => fetch(input, init));

@@ -9,11 +9,16 @@
 
 type SessionUrgencyBrand<T extends string> = T & { readonly __brand: "SessionUrgency" };
 
+function sessionUrgencyBrand<T extends string>(value: T): SessionUrgencyBrand<T> {
+  // SAFETY: brands an urgency literal at the vocabulary boundary.
+  return value as SessionUrgencyBrand<T>;
+}
+
 export const SESSION_URGENCY = {
-  WORKING: "working" as SessionUrgencyBrand<"working">,
-  ATTENTION: "attention" as SessionUrgencyBrand<"attention">,
-  COMPLETE: "complete" as SessionUrgencyBrand<"complete">,
-  UNKNOWN: "unknown" as SessionUrgencyBrand<"unknown">,
+  WORKING: sessionUrgencyBrand("working"),
+  ATTENTION: sessionUrgencyBrand("attention"),
+  COMPLETE: sessionUrgencyBrand("complete"),
+  UNKNOWN: sessionUrgencyBrand("unknown"),
 } as const;
 
 export type SessionUrgency = (typeof SESSION_URGENCY)[keyof typeof SESSION_URGENCY];

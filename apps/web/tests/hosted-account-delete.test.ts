@@ -38,9 +38,9 @@ test("only POST reaches the resolver, and no token deletes nothing", async () =>
   let resolved = 0;
   let deleted = 0;
   const counting = {
-    resolveUserId: async () => {
+    resolveUserId: async (): Promise<string | undefined> => {
       resolved += 1;
-      return "user-1" as string | undefined;
+      return "user-1";
     },
     deleteUser: async () => {
       deleted += 1;

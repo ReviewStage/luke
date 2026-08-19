@@ -8,6 +8,7 @@ import { SiteFooter, SiteHeader } from "./SiteChrome";
  * drift from it. Parsed once at module load since the document is fixed at
  * build time.
  */
+// SAFETY: `async: false` makes marked.parse synchronous; the return is a string, not a Promise.
 const privacyHtml = marked.parse(privacyMarkdown, { async: false }) as string;
 
 export function PrivacyPage(): React.JSX.Element {
