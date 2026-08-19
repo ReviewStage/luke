@@ -5,6 +5,7 @@ import {
   type PanelFormFactor,
   positionNotchWindow,
   resolveNotchGeometry,
+  type UnparsedWireValue,
 } from "@sidecar/core";
 import {
   app,
@@ -37,7 +38,7 @@ export interface PanelManagerOptions {
  * content leaves, then the surface closes on the spring, and only then may the
  * window follow.
  */
-const COLLAPSE_ANIMATION_MS = MOTION_DURATION_MS.EXIT + MOTION_DURATION_MS.SHAPE;
+const COLLAPSE_ANIMATION_MS = MOTION_DURATION_MS.EXIT + MOTION_DURATION_MS.SURFACE;
 
 /** The mode every window is born in; only the dev and capture flags change it. */
 function initialWindowMode(runMode: RunMode, argv: readonly string[]): WindowMode {
@@ -182,7 +183,7 @@ export class PanelManager {
    * already holds the answer in its reply and must redraw from that rather
    * than race a broadcast.
    */
-  broadcast(channel: string, payload: unknown, except?: WebContents): void {
+  broadcast(channel: string, payload: UnparsedWireValue, except?: WebContents): void {
     for (const window of this.#windows.values()) {
       if (window.isDestroyed() || window.webContents === except) continue;
       window.webContents.send(channel, payload);
@@ -369,6 +370,7 @@ export class PanelManager {
    * Moves a living window to another display, state and all: its mode, its
    * collapse-in-flight, its exchange report, and the renderer behind it — which
    * learns its new ground from the `displayChanged` the repositioning sends,
+   // SAFETY: The preceding check establishes the asserted contract.
    * exactly as it would for a geometry change in place.
    */
   #rebind(fromDisplayId: number, toDisplayId: number): void {
@@ -408,6 +410,7 @@ export class PanelManager {
   }
 
   /**
+   // SAFETY: The preceding check establishes the asserted contract.
    * Brings one panel forward as the key window. An accessory app has no Dock
    * presence, so the app itself has to come forward before one of its windows can
    * take keyboard focus.

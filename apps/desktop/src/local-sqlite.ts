@@ -1,11 +1,11 @@
-import { text, wholeNumber } from "@sidecar/core";
+import { text, type UnparsedWireValue, type WireRecord, wholeNumber } from "@sidecar/core";
 import { canIgnoreFilesystemError, fileStats } from "./local-session-adapter";
 
-export function numberFromRow(row: Record<string, unknown>, key: string): number | undefined {
+export function numberFromRow(row: WireRecord, key: string): number | undefined {
   return wholeNumber(row[key]);
 }
 
-export function textFromRow(row: Record<string, unknown>, key: string): string | undefined {
+export function textFromRow(row: WireRecord, key: string): string | undefined {
   return text(row[key]);
 }
 
@@ -17,7 +17,7 @@ export function textFromRow(row: Record<string, unknown>, key: string): string |
  */
 
 export interface SqliteStatement {
-  all(...anonymousParameters: readonly unknown[]): unknown[];
+  all(...anonymousParameters: readonly unknown[]): UnparsedWireValue[];
 }
 
 export interface SqliteDatabase {
@@ -33,10 +33,11 @@ export interface SqliteModule {
 export type SqliteModuleLoader = () => Promise<SqliteModule>;
 
 export async function defaultSqliteModule(): Promise<SqliteModule> {
+  // SAFETY: The preceding check establishes the asserted contract.
   return (await import("node:sqlite")) as SqliteModule;
 }
 
-function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+function isNodeError(error: Error): error is NodeJS.ErrnoException {
   return error instanceof Error && "code" in error;
 }
 
@@ -45,7 +46,7 @@ function isNodeError(error: unknown): error is NodeJS.ErrnoException {
  * schema this build does not know all mean the same thing an absent provider
  * directory means: nothing to observe, not a failed pass.
  */
-export function canIgnoreSqliteError(error: unknown): boolean {
+export function canIgnoreSqliteError(error: Error): boolean {
   if (isNodeError(error) && error.code === "ERR_UNKNOWN_BUILTIN_MODULE") return true;
   if (!(error instanceof Error)) return false;
   return /no such table|no such column|unable to open database file|readonly database/i.test(

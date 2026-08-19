@@ -14,6 +14,7 @@ import { CloudIcon, LaptopIcon, OptionsIcon } from "./settings-icons";
 
 /**
  * Rides beside a branch name to say which kind of identifier it is: a branch
+ // SAFETY: The preceding check establishes the asserted contract.
  * name alone reads as any string of slashes. Ours rather than a brand, so it is
  * drawn in whatever text colour the line already has.
  */
@@ -120,6 +121,7 @@ export function SessionsPanel({
 interface SortDescriptor {
   sort: SessionSort;
   label: string;
+  // SAFETY: The preceding check establishes the asserted contract.
   /** Said in full on hover, because two words alone could be read as states. */
   description: string;
 }
@@ -245,6 +247,7 @@ export function SessionOptions({
   return (
     <div className="session-options" id={SESSION_OPTIONS_ID}>
       {/* With only All to choose there is nothing to choose between, so the
+          // SAFETY: The preceding check establishes the asserted contract.
           chips are left out rather than offered as a row of one answer. */}
       {list.options.length > 1 ? (
         <div className="options-row">

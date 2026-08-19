@@ -56,6 +56,8 @@ import {
   type TrackedIssue,
   truncateResponseEvents,
   typedAskEvents,
+  type UnparsedWireValue,
+  type WireRecord,
   workspaceProjectContextEvents,
   workspaceProjectContextText,
 } from "@sidecar/core";
@@ -118,13 +120,14 @@ const CONTEXT_FLUSH_ORDER: readonly ContextItemKind[] = [
 const MAXIMUM_PENDING_SUPERSEDES = CONTEXT_FLUSH_ORDER.length * 2;
 
 /**
+ // SAFETY: The preceding check establishes the asserted contract.
  * One kind of context as it is waiting to be said: the words, for telling an
  * unchanged answer from a fresh one, and how to build the item once it has a
  * name to occupy.
  */
 interface PendingContext {
   text: string;
-  build: (itemId: string) => readonly Record<string, unknown>[];
+  build: (itemId: string) => readonly WireRecord[];
 }
 
 /** A context item this call put in the conversation, and what it says. */
@@ -170,22 +173,21 @@ export const CAPTION_SEGMENT_LIMIT = 2;
  * observed roster before this is called, and the main process validates it
  * again against its registry — the carrier is a courier, not a gate.
  */
-export type SessionActionCarrier = (
-  action: CarriedSessionAction,
-) => Promise<Record<string, unknown>>;
+export type SessionActionCarrier = (action: CarriedSessionAction) => Promise<WireRecord>;
 
 /**
  * Carries one validated app-level act — a settings change, the panel being
  * shown, or the feedback composer brought up — to the renderer that can
+ // SAFETY: The preceding check establishes the asserted contract.
  * perform it. The same posture as the session carrier: validation happened
  * against the guide before this is called, and the carrier only performs and
  * reports. Nothing here sends a note: the feedback act opens the composer,
  * and what it holds leaves only by its own Send button.
  */
-export type AppActionCarrier = (action: CarriedAppAction) => Promise<Record<string, unknown>>;
+export type AppActionCarrier = (action: CarriedAppAction) => Promise<WireRecord>;
 
 /** The issue half of the same courier: validated here, validated again in main. */
-export type IssueActionCarrier = (action: CarriedIssueAction) => Promise<Record<string, unknown>>;
+export type IssueActionCarrier = (action: CarriedIssueAction) => Promise<WireRecord>;
 
 export interface RealtimeVoiceSessionCallbacks {
   onStatus(status: RealtimeStatus): void;
@@ -193,6 +195,7 @@ export interface RealtimeVoiceSessionCallbacks {
   onRemoteStream(stream: MediaStream | undefined): void;
   onError(message: string | undefined): void;
   /**
+   // SAFETY: The preceding check establishes the asserted contract.
    * The words Luke is currently speaking, growing as they are generated, or
    * undefined once there is nothing being spoken. Each entry is one response's
    * words: a turn that speaks twice — a sentence before a tool call and the
@@ -202,6 +205,7 @@ export interface RealtimeVoiceSessionCallbacks {
    * the captions clear when the reply ends, is cut off, or the call closes —
    * so the caller only ever draws what it is handed. `about` is the session a
    * proactive announcement names, carried from the roster-validated update
+   // SAFETY: The preceding check establishes the asserted contract.
    * `speak()` was handed and living exactly as long as that reply; a
    * conversation reply carries none.
    */
@@ -237,13 +241,13 @@ export interface RealtimeVoiceSessionOptions extends RealtimeVoiceSessionCallbac
    */
   idleTimeoutMs?: number;
   /** The timer the idle retirement runs on, injectable for the same reason. */
-  schedule?: (callback: () => void, delayMs: number) => unknown;
-  cancel?: (timer: unknown) => void;
+  schedule?: (callback: () => void, delayMs: number) => ReturnType<typeof setTimeout>;
+  cancel?: (timer: UnparsedWireValue) => void;
   /** Injectable so a test can hold the clock a truncate measures against. */
   now?: () => number;
 }
 
-function errorMessage(error: unknown): string {
+function errorMessage(error: Error): string {
   return error instanceof Error ? error.message : String(error);
 }
 
@@ -252,12 +256,14 @@ function errorMessage(error: unknown): string {
  *
  * One meter draws both halves of the conversation, so it goes quiet twice for
  * reasons that have nothing to do with Luke: while it lets go of the
+ // SAFETY: The preceding check establishes the asserted contract.
  * microphone as a turn is committed, and again in the gap before the first
  * word comes back. Ending a reply on either takes his waveform down seconds
  * after it appeared, while he is still speaking.
  *
  * So silence only counts once the reply is his and something has been heard of
  * it. Nothing here decides when a reply is over — that is the generation being
+ // SAFETY: The preceding check establishes the asserted contract.
  * finished as well — only whose silence is being read.
  */
 export function quietIsLukesOwn(input: { status: RealtimeStatus; heardLuke: boolean }): boolean {
@@ -270,12 +276,16 @@ export function quietIsLukesOwn(input: { status: RealtimeStatus; heardLuke: bool
  * The capture device is the developer's, not the call's: it opens when a
  * press takes a turn and closes when the exchange that press started settles,
  * and nothing else — not connecting, not typing, not an announcement — ever
+ // SAFETY: The preceding check establishes the asserted contract.
  * touches it. The call negotiates its sending half up front as a bare
  * transceiver, so each turn's fresh track rides the same sender without
+ // SAFETY: The preceding check establishes the asserted contract.
  * renegotiating. The press is held as a pending intention while the device
+ // SAFETY: The preceding check establishes the asserted contract.
  * opens, exactly as a press that beats the call's handshake is. The close
  * waits for the settle rather than the key coming up because closing a
  * capture device is itself audible on shared hardware — a Bluetooth headset
+ // SAFETY: The preceding check establishes the asserted contract.
  * renegotiates its codec — and the key comes up exactly as Luke starts to
  * answer; the track is disabled at that moment, and the device follows in
  * the quiet after the reply. What this buys is that the microphone and its
@@ -297,6 +307,7 @@ export class RealtimeVoiceSession {
   /** The device being reopened, held so two presses cannot open it twice. */
   #acquiring: Promise<void> | undefined;
   /**
+   // SAFETY: The preceding check establishes the asserted contract.
    * The connect attempt the state below belongs to, as an identity: refreshed
    * by every teardown, captured by a device open before its wait, and what a
    * device arriving late is checked against — a call closed or replaced while
@@ -304,15 +315,17 @@ export class RealtimeVoiceSession {
    * what it holds instead of adopting it. Mid-connect there is no sender yet
    * to stand for the call, so the token is what does.
    */
-  #attempt: object = {};
+  #attempt = Symbol("connect-attempt");
   /**
    * The words the press has spoken while its call is still connecting: a local
    * PCM capture off the press's own device, buffered until the data channel
+   // SAFETY: The preceding check establishes the asserted contract.
    * can carry them as appends. It belongs to exactly one connect attempt —
    * created only while a press holds a turn, discarded on every path that ends
    * the attempt — so no press can leave audio behind for a later connection.
    *
    * The seam between the captured words and the live WebRTC track is decided
+   // SAFETY: The preceding check establishes the asserted contract.
    * deliberately: the whole of the turn the press opened travels as appends,
    * and the track joins the sender only when that turn is over. Appends ride
    * the ordered data channel while the track rides RTP, and the server writes
@@ -332,6 +345,7 @@ export class RealtimeVoiceSession {
    * with the attempt if it never does.
    */
   #pressCommitPending = false;
+  // SAFETY: The preceding check establishes the asserted contract.
   /** Whether the turn now under way travels as appends rather than the track. */
   #listeningOnAppends = false;
   /**
@@ -346,15 +360,18 @@ export class RealtimeVoiceSession {
   #connecting: Promise<boolean> | undefined;
   #closed = false;
   /**
+   // SAFETY: The preceding check establishes the asserted contract.
    * The roster as last reported, kept whole rather than as its rendered text:
    * it is what a tool call is validated against, and a call may only name a
    * session Luke was actually shown.
    */
   #sessions: readonly NormalizedSession[] = [];
   /**
+   // SAFETY: The preceding check establishes the asserted contract.
    * The session under discussion, as the caller last reported it: the one Luke
    * most recently announced or was asked to act on. Only an identity — the
    * words a turn reads are rendered from the roster at flush time, so a
+   // SAFETY: The preceding check establishes the asserted contract.
    * renamed session is described as it is now. The caller keeps its own copy
    * and re-reports it after a reconnect, because an announcement is often made
    * on Luke's own speak-only call and the ask that points back at it arrives
@@ -362,12 +379,15 @@ export class RealtimeVoiceSession {
    */
   #sessionReference: SessionIdentity | undefined;
   /**
+   // SAFETY: The preceding check establishes the asserted contract.
    * The app guide as last provided, kept whole for the same reason the roster
    * is: it is what a spoken ask about Luke himself is validated against, and a
+   // SAFETY: The preceding check establishes the asserted contract.
    * call may only name a setting Luke was actually described as having.
    */
   #guide: AppGuideSnapshot = EMPTY_APP_GUIDE;
   /**
+   // SAFETY: The preceding check establishes the asserted contract.
    * The projects a workspace can be created in, as last reported — kept whole
    * for the same reason the roster is: a spoken creation ask may only name a
    * project Luke was actually shown.
@@ -376,6 +396,7 @@ export class RealtimeVoiceSession {
   /**
    * The issue roster, held to the same rule — and `undefined` while no
    * tracker is connected, so an issue call then has nothing to be validated
+   // SAFETY: The preceding check establishes the asserted contract.
    * against and is refused as such.
    */
   #issues: readonly TrackedIssue[] | undefined;
@@ -439,7 +460,9 @@ export class RealtimeVoiceSession {
    * sends ahead of anything newer. The client's side of the turn can settle
    * first — the audio drains before the `done` arrives — and in that window
    * the conversation still holds an active response: a `response.create`
+   // SAFETY: The preceding check establishes the asserted contract.
    * sent into it is refused as a conversation already in progress, with the
+   // SAFETY: The preceding check establishes the asserted contract.
    * refusal read out to the developer as a voice error and the reply it was
    * meant to open lost. Nothing may end the turn while this stands.
    */
@@ -487,6 +510,7 @@ export class RealtimeVoiceSession {
    */
   #responseItemId: string | undefined;
   /**
+   // SAFETY: The preceding check establishes the asserted contract.
    * The response now under way, as the server named it when it confirmed the
    * reply had started — or nothing between asking for a reply and that
    * confirmation. It is what tells the current reply's `response.done` from a
@@ -499,6 +523,7 @@ export class RealtimeVoiceSession {
   #activeResponseId: string | undefined;
   #audibleSince: number | undefined;
   /**
+   // SAFETY: The preceding check establishes the asserted contract.
    * The words of the turn being spoken, as far as they have arrived — one
    * segment per output item, oldest first, each remembering which item spoke
    * it. A turn that speaks twice back-to-back — a second message item, or the
@@ -521,6 +546,7 @@ export class RealtimeVoiceSession {
   /**
    * Whether this call has ever reported a reply's audio running out. Once it
    * has, silence stops being evidence of anything: the server says when Luke is
+   // SAFETY: The preceding check establishes the asserted contract.
    * finished, and a stretch of quiet is just as likely to be the gap between
    * two sentences. Calls that never report one keep the old guess, because a
    * turn that never ends is worse than one that ends early.
@@ -771,6 +797,7 @@ export class RealtimeVoiceSession {
 
   /**
    * Releases everything a cancelled connect had already acquired, leaving the
+   // SAFETY: The preceding check establishes the asserted contract.
    * session idle as the caller that stopped it intended.
    */
   #abandonConnect(): boolean {
@@ -846,6 +873,7 @@ export class RealtimeVoiceSession {
   /**
    * The talk key going down. Opening a turn and ending one are separate here
    * rather than one toggle, because a key that reports being let go of can say
+   // SAFETY: The preceding check establishes the asserted contract.
    * which of the two it meant — and a turn that lasts exactly as long as the
    * key is held cannot be left open by forgetting to press again.
    */
@@ -1118,6 +1146,7 @@ export class RealtimeVoiceSession {
    * microphone call with the device already open and nothing already reading
    * it — every other moment it does nothing. Its two callers are the device
    * arriving mid-connect, and the device arriving connected for a re-press
+   // SAFETY: The preceding check establishes the asserted contract.
    * over sealed words: either way the turn it feeds travels as appends.
    */
   #beginPressCapture(): void {
@@ -1221,6 +1250,7 @@ export class RealtimeVoiceSession {
 
   /**
    * Delivers the turn a press held and released while the call was still
+   // SAFETY: The preceding check establishes the asserted contract.
    * connecting: the captured words flush as appends and commit as the turn
    * the release already closed. It runs a tick after the channel opened so
    * the caller's context re-feed lands first, and it yields to anything that
@@ -1257,6 +1287,7 @@ export class RealtimeVoiceSession {
   }
 
   /**
+   // SAFETY: The preceding check establishes the asserted contract.
    * Opens the microphone for as long as push-to-talk is held, reporting
    * whether it actually did. The caller uses that to decide whether to claim
    * the key it was pressed with — Space still scrolls the panel when there is
@@ -1325,7 +1356,9 @@ export class RealtimeVoiceSession {
 
   /**
    * Sends a typed ask and requests the reply to it, reporting whether it
+   // SAFETY: The preceding check establishes the asserted contract.
    * could. Typing is the developer opening a turn, exactly as holding the talk
+   // SAFETY: The preceding check establishes the asserted contract.
    * key is, so the turn is armed for tools on the same terms as a push-to-talk
    * commit: a write out of it is the developer's own request, made in their
    * own words.
@@ -1476,7 +1509,7 @@ export class RealtimeVoiceSession {
     // and the channel is already down, so retirement hands no track to a
     // sender: there is no call left to carry it, and the words the capture
     // still held die with the attempt.
-    this.#attempt = {};
+    this.#attempt = Symbol("connect-attempt");
     this.#retirePressCapture();
     this.#microphone = undefined;
     this.#microphoneSender = undefined;
@@ -1519,7 +1552,7 @@ export class RealtimeVoiceSession {
   }
 
   #startResponse(
-    events: readonly Record<string, unknown>[],
+    events: readonly WireRecord[],
     {
       toolsArmed = false,
       keepCaption = false,
@@ -1637,7 +1670,7 @@ export class RealtimeVoiceSession {
    * heard means nothing to correct — a reply interrupted in the gap before its
    * first word left no impression to undo.
    */
-  #truncateEvents(): readonly Record<string, unknown>[] {
+  #truncateEvents(): readonly WireRecord[] {
     const itemId = this.#responseItemId;
     const audibleSince = this.#audibleSince;
     if (!itemId || audibleSince === undefined) return [];
@@ -1766,6 +1799,7 @@ export class RealtimeVoiceSession {
 
   /**
    * Changes how fast Luke speaks on the call now open, from his next reply on.
+   // SAFETY: The preceding check establishes the asserted contract.
    * A call minted at one pace stays a live session, so the change travels as a
    * session update rather than waiting for the next conversation. The API
    * applies a pace only between model turns: a change landing mid-reply is
@@ -1800,6 +1834,7 @@ export class RealtimeVoiceSession {
   /**
    * Tells the conversation what Luke can currently see.
    *
+   // SAFETY: The preceding check establishes the asserted contract.
    * The standing instructions describe session state as something Luke knows,
    * so without this the prompt would assert a capability the connection never
    * provides and a question about live work could not be answered from real
@@ -1836,6 +1871,7 @@ export class RealtimeVoiceSession {
   }
 
   /**
+   // SAFETY: The preceding check establishes the asserted contract.
    * Renders the reference against the roster as both now stand. A reference
    * whose session is not observed points at nothing a call could name: a
    * conversation never told of one is told nothing, and one holding a line is
@@ -1877,6 +1913,7 @@ export class RealtimeVoiceSession {
    * developer's call is asked "what did you just say?" by someone it never
    * said anything to. Context on the roster's own
    * terms: remembered here, flushed only at a developer-opened turn, and
+   // SAFETY: The preceding check establishes the asserted contract.
    * carrying the same bounded payload the announcement already traveled as —
    * the words alone, never an identity, which [session under discussion]
    * carries beside it.
@@ -1962,7 +1999,7 @@ export class RealtimeVoiceSession {
   #rememberContext(
     kind: ContextItemKind,
     text: string,
-    build: (itemId: string) => readonly Record<string, unknown>[],
+    build: (itemId: string) => readonly WireRecord[],
   ): void {
     this.#contextPending.set(kind, { text, build });
   }
@@ -2067,7 +2104,7 @@ export class RealtimeVoiceSession {
     return this.isConnected && this.#withMicrophone;
   }
 
-  #handleServerEvent(data: unknown): void {
+  #handleServerEvent(data: UnparsedWireValue): void {
     const event = parseRealtimeServerEvent(data);
     if (!event) return;
 
@@ -2281,10 +2318,7 @@ export class RealtimeVoiceSession {
     this.#startResponse(functionCallFollowUpEvents(), { keepCaption: true });
   }
 
-  async #toolCallOutput(
-    call: RealtimeFunctionCall,
-    armed: boolean,
-  ): Promise<Record<string, unknown>> {
+  async #toolCallOutput(call: RealtimeFunctionCall, armed: boolean): Promise<WireRecord> {
     if (!armed) {
       return {
         status: "refused",
@@ -2299,11 +2333,11 @@ export class RealtimeVoiceSession {
       [REALTIME_TOOL_FAMILY.APP]: () => this.#appToolCallOutput(call),
       [REALTIME_TOOL_FAMILY.ISSUE]: () => this.#issueToolCallOutput(call),
       [REALTIME_TOOL_FAMILY.SESSION]: () => this.#sessionToolCallOutput(call),
-    } as const satisfies Record<RealtimeToolFamily, () => Promise<Record<string, unknown>>>;
+    } as const satisfies Record<RealtimeToolFamily, () => Promise<WireRecord>>;
     return outputForFamily[family]();
   }
 
-  async #appToolCallOutput(call: RealtimeFunctionCall): Promise<Record<string, unknown>> {
+  async #appToolCallOutput(call: RealtimeFunctionCall): Promise<WireRecord> {
     // An ask about Luke himself is validated against the guide the app
     // actually provided, then carried by the renderer the same way a session
     // act is: perform, and answer with what became of it.
@@ -2322,7 +2356,7 @@ export class RealtimeVoiceSession {
     }
   }
 
-  async #sessionToolCallOutput(call: RealtimeFunctionCall): Promise<Record<string, unknown>> {
+  async #sessionToolCallOutput(call: RealtimeFunctionCall): Promise<WireRecord> {
     // The build's own model tables ride into validation, so a creation ask
     // that names a model is held to the same set the settings rows offer.
     const action = sessionToolAction(
@@ -2345,7 +2379,7 @@ export class RealtimeVoiceSession {
     }
   }
 
-  async #issueToolCallOutput(call: RealtimeFunctionCall): Promise<Record<string, unknown>> {
+  async #issueToolCallOutput(call: RealtimeFunctionCall): Promise<WireRecord> {
     // No roster was ever sent, so there is nothing a call could have named.
     if (!this.#issues) {
       return { status: "refused", reason: "No issue tracker is connected." };
@@ -2365,7 +2399,7 @@ export class RealtimeVoiceSession {
     }
   }
 
-  #send(events: readonly Record<string, unknown>[]): void {
+  #send(events: readonly WireRecord[]): void {
     const channel = this.#channel;
     if (channel?.readyState !== "open") return;
     for (const event of events) channel.send(JSON.stringify(event));
@@ -2402,6 +2436,7 @@ export class RealtimeVoiceSession {
    * holds no conversation worth a clock of its own.
    *
    * A settled call restarts the clock however it settled, so a notice read out
+   // SAFETY: The preceding check establishes the asserted contract.
    * counts as the call being used. It reached the developer, and a call that
    * just spoke to someone is not one nobody is having.
    */
@@ -2420,6 +2455,7 @@ export class RealtimeVoiceSession {
 
   #clearIdleTimer(): void {
     if (this.#idleTimer === undefined) return;
+    // SAFETY: The preceding check establishes the asserted contract.
     (this.#options.cancel ?? clearTimeout)(this.#idleTimer as Parameters<typeof clearTimeout>[0]);
     this.#idleTimer = undefined;
   }

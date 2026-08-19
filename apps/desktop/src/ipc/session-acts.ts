@@ -7,7 +7,9 @@ import {
   ISSUE_ACTION_KIND,
   type IssueIdentity,
   isProviderId,
+  isRecord,
   issueCommentText,
+  isWireString,
   type NormalizedSession,
   PROVIDER_ACT_RESULT_STATUS,
   type ProviderActResult,
@@ -22,6 +24,7 @@ import {
   TRACKER_ACTION_RESULT_STATUS,
   type TrackedIssue,
   type TrackerActionResult,
+  type UnparsedWireValue,
   type WorkspaceAgentSelection,
   workspaceNameText,
 } from "@sidecar/core";
@@ -45,7 +48,7 @@ export interface SessionActsIpcDependencies {
   ipcMain: Pick<IpcMain, "handle">;
   trustedSender: (event: IpcMainEvent | IpcMainInvokeEvent) => boolean;
   sessionRegistry: InMemorySessionRegistry;
-  openExternal: (url: string) => Promise<unknown>;
+  openExternal: (url: string) => Promise<void>;
   adapterFor: (providerId: string) => SessionProviderAdapter | undefined;
   attentionReviewer: () => SessionAttentionReviewer | undefined;
   attentionRequests: AttentionRequestRegistry;
@@ -178,7 +181,7 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
   // documented.
   ipcMain.handle(
     channels.readSessionTranscript,
-    async (event, identity: unknown): Promise<SessionTranscriptResult> => {
+    async (event, identity: UnparsedWireValue): Promise<SessionTranscriptResult> => {
       if (!trustedSender(event)) throw new Error("Untrusted renderer");
       if (!isSessionIdentity(identity)) throw new Error("Invalid transcript request");
       const session = sessionRegistry.get(identity);
@@ -232,7 +235,11 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
   // belongs beside the field it left.
   ipcMain.handle(
     channels.sendSessionMessage,
-    async (event, identity: unknown, text: unknown): Promise<ProviderMessageResult> => {
+    async (
+      event,
+      identity: UnparsedWireValue,
+      text: UnparsedWireValue,
+    ): Promise<ProviderMessageResult> => {
       if (!trustedSender(event)) throw new Error("Untrusted renderer");
       if (!isSessionIdentity(identity)) throw new Error("Invalid session message request");
       const message = boundedField(text, sessionMessageText);
@@ -264,9 +271,13 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
   // answers whether it stands.
   ipcMain.handle(
     channels.executeSessionControl,
-    async (event, identity: unknown, controlId: unknown): Promise<ProviderControlResult> => {
+    async (
+      event,
+      identity: UnparsedWireValue,
+      controlId: UnparsedWireValue,
+    ): Promise<ProviderControlResult> => {
       if (!trustedSender(event)) throw new Error("Untrusted renderer");
-      if (!isSessionIdentity(identity) || typeof controlId !== "string" || !controlId.trim()) {
+      if (!isSessionIdentity(identity) || !isWireString(controlId) || !controlId.trim()) {
         throw new Error("Invalid session control request");
       }
       const session = sessionRegistry.get(identity);
@@ -293,7 +304,7 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
   // will ever read is a promise Luke cannot keep.
   ipcMain.handle(
     channels.requestSessionNotice,
-    (event, identity: unknown, request: unknown): AttentionRequestResult => {
+    (event, identity: UnparsedWireValue, request: UnparsedWireValue): AttentionRequestResult => {
       if (!trustedSender(event)) throw new Error("Untrusted renderer");
       if (!isSessionIdentity(identity)) throw new Error("Invalid session notice request");
       const ask = attentionRequestText(request);
@@ -327,7 +338,7 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
 
   ipcMain.handle(
     channels.withdrawSessionNotice,
-    (event, identity: unknown): AttentionRequestResult => {
+    (event, identity: UnparsedWireValue): AttentionRequestResult => {
       if (!trustedSender(event)) throw new Error("Untrusted renderer");
       if (!isSessionIdentity(identity)) throw new Error("Invalid session notice request");
       const session = sessionRegistry.get(identity);
@@ -358,24 +369,24 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
     channels.createSessionWorkspace,
     async (
       event,
-      providerId: unknown,
-      providerProjectId: unknown,
-      providerTargetId: unknown,
-      agent: unknown,
-      name: unknown,
-      task: unknown,
-      namedSelection: unknown,
+      providerId: UnparsedWireValue,
+      providerProjectId: UnparsedWireValue,
+      providerTargetId: UnparsedWireValue,
+      agent: UnparsedWireValue,
+      name: UnparsedWireValue,
+      task: UnparsedWireValue,
+      namedSelection: UnparsedWireValue,
     ): Promise<ProviderWorkspaceResult> => {
       if (!trustedSender(event)) throw new Error("Untrusted renderer");
       if (
-        typeof providerId !== "string" ||
+        !isWireString(providerId) ||
         !providerId.trim() ||
-        typeof providerProjectId !== "string" ||
+        !isWireString(providerProjectId) ||
         !providerProjectId.trim() ||
-        (providerTargetId !== undefined && typeof providerTargetId !== "string") ||
-        (agent !== undefined && typeof agent !== "string") ||
-        (name !== undefined && typeof name !== "string") ||
-        (task !== undefined && typeof task !== "string")
+        (providerTargetId !== undefined && !isWireString(providerTargetId)) ||
+        (agent !== undefined && !isWireString(agent)) ||
+        (name !== undefined && !isWireString(name)) ||
+        (task !== undefined && !isWireString(task))
       ) {
         throw new Error("Invalid workspace creation request");
       }
@@ -424,14 +435,19 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
         ? (await settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[providerId]
         : undefined;
       const agentSelection = namedSelection ?? stored;
-      const result = await adapter.createWorkspace({
+      const createRequest: Parameters<SessionProviderAdapter["createWorkspace"]>[0] = {
         providerProjectId,
-        ...(providerTargetId ? { providerTargetId } : {}),
-        ...(agent?.trim() ? { agent: agent.trim() } : {}),
-        ...(workspaceName.value ? { name: workspaceName.value } : {}),
-        ...(openingTask.value ? { task: openingTask.value } : {}),
-        ...(agentSelection ? { agentSelection } : {}),
-      });
+      };
+      if (isWireString(providerTargetId) && providerTargetId.trim()) {
+        createRequest.providerTargetId = providerTargetId.trim();
+      }
+      if (isWireString(agent) && agent.trim()) {
+        createRequest.agent = agent.trim();
+      }
+      if (workspaceName.value) createRequest.name = workspaceName.value;
+      if (openingTask.value) createRequest.task = openingTask.value;
+      if (agentSelection) createRequest.agentSelection = agentSelection;
+      const result = await adapter.createWorkspace(createRequest);
       // A workspace that landed is a session the panel should be showing, so
       // the next look must actually ask rather than serve the cache. A
       // rejection refreshes too: a workspace can stand with its opening task
@@ -467,9 +483,9 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
         await rememberWorkspaceDefaults(
           adapter,
           providerProjectId,
-          providerTargetId,
+          isWireString(providerTargetId) ? providerTargetId.trim() : undefined,
           namedSelection as WorkspaceAgentSelection | undefined,
-          agent?.trim(),
+          isWireString(agent) ? agent.trim() : undefined,
         );
         // The named session was consumed above; the renderer's answer stays
         // what became of the ask, so nothing rides this boundary that the
@@ -490,7 +506,7 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
   // never from what a model composed.
   ipcMain.handle(
     channels.executeIssueAction,
-    async (event, action: unknown): Promise<TrackerActionResult> => {
+    async (event, action: UnparsedWireValue): Promise<TrackerActionResult> => {
       if (!trustedSender(event)) throw new Error("Untrusted renderer");
       if (!isIssueActionAsk(action)) throw new Error("Invalid issue action request");
       // A fixture run observes no tracker, so it refuses every act — a
@@ -548,22 +564,22 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
     channels.addWorkspaceAgent,
     async (
       event,
-      identity: unknown,
-      agent: unknown,
-      name: unknown,
-      task: unknown,
-      namedModel: unknown,
-      namedEffort: unknown,
+      identity: UnparsedWireValue,
+      agent: UnparsedWireValue,
+      name: UnparsedWireValue,
+      task: UnparsedWireValue,
+      namedModel: UnparsedWireValue,
+      namedEffort: UnparsedWireValue,
     ): Promise<ProviderWorkspaceResult> => {
       if (!trustedSender(event)) throw new Error("Untrusted renderer");
       if (
         !isSessionIdentity(identity) ||
-        typeof agent !== "string" ||
+        !isWireString(agent) ||
         !agent.trim() ||
-        (name !== undefined && typeof name !== "string") ||
-        (task !== undefined && typeof task !== "string") ||
-        (namedModel !== undefined && typeof namedModel !== "string") ||
-        (namedEffort !== undefined && (typeof namedEffort !== "string" || namedModel === undefined))
+        (name !== undefined && !isWireString(name)) ||
+        (task !== undefined && !isWireString(task)) ||
+        (namedModel !== undefined && !isWireString(namedModel)) ||
+        (namedEffort !== undefined && (!isWireString(namedEffort) || namedModel === undefined))
       ) {
         throw new Error("Invalid workspace agent request");
       }
@@ -574,15 +590,12 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       // A model named for this one agent must be a documented pairing of
       // exactly the asked-for kind: the user's chosen agent is never
       // re-decided by the model named beside it.
-      if (
-        namedModel !== undefined &&
-        !isWorkspaceAgentSelection(identity.providerId, {
-          agent: advertised,
-          model: namedModel,
-          ...(namedEffort !== undefined ? { effort: namedEffort } : {}),
-        })
-      ) {
-        throw new Error("Invalid workspace agent request");
+      if (namedModel !== undefined) {
+        const selection: WorkspaceAgentSelection = { agent: advertised, model: namedModel };
+        if (namedEffort !== undefined) selection.effort = namedEffort;
+        if (!isWorkspaceAgentSelection(identity.providerId, selection)) {
+          throw new Error("Invalid workspace agent request");
+        }
       }
       const sessionName = boundedField(name, workspaceNameText);
       if (!sessionName.ok) {
@@ -612,10 +625,10 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
         const result = await adapter.spawnWorkspaceAgent({
           providerSessionId: identity.providerSessionId,
           agent: advertised,
-          ...(sessionName.value ? { name: sessionName.value } : {}),
-          ...(openingTask.value ? { task: openingTask.value } : {}),
-          ...(model ? { model } : {}),
-          ...(effort ? { effort } : {}),
+          ...(sessionName.value ? { name: sessionName.value } : undefined),
+          ...(openingTask.value ? { task: openingTask.value } : undefined),
+          ...(model ? { model } : undefined),
+          ...(effort ? { effort } : undefined),
         });
         if (result.status === PROVIDER_ACT_RESULT_STATUS.REJECTED) {
           void sessionRegistry.refresh(adapter);
@@ -631,51 +644,54 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
  * terms: both halves present, and everything it names re-resolved against the
  * latest observation before anything is done with it.
  */
-function isIssueIdentity(value: unknown): value is IssueIdentity {
-  if (value === null || typeof value !== "object") return false;
+function isIssueIdentity(value: UnparsedWireValue): value is IssueIdentity {
+  if (!isRecord(value)) return false;
+  // SAFETY: The preceding check establishes the asserted contract.
   const { trackerId, identifier } = value as Partial<IssueIdentity>;
   return (
-    typeof trackerId === "string" &&
+    isWireString(trackerId) &&
     trackerId.trim().length > 0 &&
-    typeof identifier === "string" &&
+    isWireString(identifier) &&
     identifier.trim().length > 0
   );
 }
 
-function isSessionIdentity(value: unknown): value is SessionIdentity {
-  if (value === null || typeof value !== "object") return false;
+function isSessionIdentity(value: UnparsedWireValue): value is SessionIdentity {
+  if (!isRecord(value)) return false;
+  // SAFETY: The preceding check establishes the asserted contract.
   const { providerId, providerSessionId } = value as Partial<SessionIdentity>;
   return (
-    typeof providerId === "string" &&
+    isWireString(providerId) &&
     providerId.trim().length > 0 &&
-    typeof providerSessionId === "string" &&
+    isWireString(providerSessionId) &&
     providerSessionId.trim().length > 0
   );
 }
 
-function isIssueActionAsk(value: unknown): value is {
+function isIssueActionAsk(value: UnparsedWireValue): value is {
   kind: "issue-state" | "issue-comment";
   identity: { trackerId: string; identifier: string };
   transition?: { id: string; name: string };
   body?: string;
 } {
-  if (value === null || typeof value !== "object") return false;
+  if (!isRecord(value)) return false;
+  // SAFETY: The preceding check establishes the asserted contract.
   const { kind, identity } = value as {
-    kind?: unknown;
-    identity?: { trackerId?: unknown; identifier?: unknown };
+    kind?: UnparsedWireValue;
+    identity?: { trackerId?: UnparsedWireValue; identifier?: UnparsedWireValue };
   };
   if (kind !== "issue-state" && kind !== "issue-comment") return false;
   return (
-    typeof identity?.trackerId === "string" &&
+    isWireString(identity?.trackerId) &&
     identity.trackerId.trim().length > 0 &&
-    typeof identity.identifier === "string" &&
+    isWireString(identity.identifier) &&
     identity.identifier.trim().length > 0
   );
 }
 
 function boundedField(
-  raw: unknown,
-  bound: (value: unknown) => string | undefined,
+  raw: UnparsedWireValue,
+  bound: (value: UnparsedWireValue) => string | undefined,
 ): { ok: true; value: string | undefined } | { ok: false } {
   if (raw === undefined) return { ok: true, value: undefined };
   const value = bound(raw);

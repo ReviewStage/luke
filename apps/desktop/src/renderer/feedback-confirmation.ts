@@ -55,7 +55,7 @@ export function feedbackConfirmation(random: () => number = Math.random): Feedba
  * restates rather than the numbers.
  */
 export const CONFIRMATION_ENTRANCE_MS =
-  MOTION_DURATION_MS.EXIT + MOTION_DELAY_MS.PEEK + MOTION_DURATION_MS.SHAPE;
+  MOTION_DURATION_MS.EXIT + MOTION_DELAY_MS.PEEK + MOTION_DURATION_MS.SURFACE;
 
 /** The beat the landing rests after its gesture, before the panel returns. */
 export const CONFIRMATION_REST_MS = 700;

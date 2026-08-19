@@ -47,9 +47,11 @@ function spawnOutputVolumeHelper(): OutputVolumeProcess | undefined {
   const helperPath = app.isPackaged
     ? path.join(process.resourcesPath, "mac-output-volume")
     : path.join(app.getAppPath(), ".build", "native", "mac-output-volume");
-  return spawn(helperPath, [], {
+  const child = spawn(helperPath, [], {
     stdio: ["ignore", "pipe", "ignore"],
-  }) as unknown as OutputVolumeProcess;
+  });
+  // SAFETY: spawn returns ChildProcess; the helper's stdout protocol matches OutputVolumeProcess.
+  return child as OutputVolumeProcess;
 }
 
 /**

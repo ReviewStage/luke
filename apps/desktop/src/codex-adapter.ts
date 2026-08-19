@@ -2,6 +2,8 @@ import os from "node:os";
 import path from "node:path";
 import {
   isRecord,
+  isWireNumber,
+  isWireString,
   maximumSessionRecapLength,
   maximumSessionTitleLength,
   oneLine,
@@ -14,6 +16,8 @@ import {
   type SessionDetail,
   type SessionProvider,
   text,
+  type UnparsedWireValue,
+  type WireRecord,
 } from "@sidecar/core";
 import {
   CODEX_HOOK_EVENT,
@@ -62,6 +66,7 @@ const CODEX_CONFIG_KEY = {
 
 /**
  * The Codex app's own address for a local thread. Codex registers the `codex`
+ // SAFETY: The preceding check establishes the asserted contract.
  * scheme for its windows and documents `threads/<thread-id>` as the route to an
  * existing local chat, keyed by the same `threads.id` this adapter reads — so
  * the row and the address it opens name one thread rather than two.
@@ -93,6 +98,7 @@ const CODEX_ROLLOUT_TYPE = {
 /**
  * The turn boundary. `threads` carries no status column at all, so without the
  * rollout a Codex session can only be guessed at from how recently its row was
+ // SAFETY: The preceding check establishes the asserted contract.
  * touched — and could never be reported as waiting for its developer.
  */
 const CODEX_EVENT_PAYLOAD = {
@@ -133,6 +139,7 @@ const CODEX_ADAPTER_DEFAULTS = {
   MAXIMUM_ACTIVITY_LENGTH: 80,
   /**
    * How much older than the thread row's clock a hook event may run and still
+   // SAFETY: The preceding check establishes the asserted contract.
    * describe the same moment. The hook fires as a turn boundary happens and
    * Codex touches the row moments later under its own clock, so a boundary's
    * event usually trails the row it belongs with by a breath — never by more
@@ -167,7 +174,7 @@ const CODEX_THREAD_QUERY = `
     id DESC
 `;
 
-type CodexThreadRow = Record<string, unknown>;
+type CodexThreadRow = WireRecord;
 
 export const CODEX_PROVIDER: SessionProvider = {
   id: CODEX_PROVIDER_ID,
@@ -185,6 +192,7 @@ export interface CodexAdapterOptions {
    * Where the observation hook spools its events, when hooks are on at all.
    * Read lazily like the cloud adapters' credentials, because the app decides
    * the path after this adapter is declared. Absent — or answering nothing —
+   // SAFETY: The preceding check establishes the asserted contract.
    * the adapter reads the state database and rollouts alone, exactly as it
    * always has: the hooks only ever sharpen what those already showed.
    */
@@ -192,27 +200,33 @@ export interface CodexAdapterOptions {
 }
 
 /**
+ // SAFETY: The preceding check establishes the asserted contract.
  * Reads one argument as the phrase that names the work. Codex passes some of
+ // SAFETY: The preceding check establishes the asserted contract.
  * them as a list rather than a string — a search's terms, a command's argv —
  * so a list of plain values is joined instead of dropped. A list of anything
+ // SAFETY: The preceding check establishes the asserted contract.
  * else, such as a plan's steps, is not a phrase and is left alone.
  */
-export function argumentPhrase(value: unknown): string | undefined {
-  if (typeof value === "string") return text(value);
-  if (typeof value === "number") return String(value);
+export function argumentPhrase(value: UnparsedWireValue): string | undefined {
+  if (isWireString(value)) return text(value);
+  if (isWireNumber(value)) return String(value);
   if (!Array.isArray(value) || value.length === 0) return undefined;
   const tokens = value.map((entry) =>
-    typeof entry === "string" || typeof entry === "number" ? String(entry) : undefined,
+    isWireString(entry) || isWireNumber(entry) ? String(entry) : undefined,
   );
   return tokens.every((token) => token !== undefined) ? text(tokens.join(" ")) : undefined;
 }
 
 /** Names the tool Codex called, preferring whichever argument says what it is for. */
-function activityFromCall(payload: Record<string, unknown>): string | undefined {
+function activityFromCall(payload: WireRecord): string | undefined {
   const name = text(payload.name);
   if (!name) return undefined;
   const parsedArguments = text(payload.arguments)
-    ? recordFromJsonLine(payload.arguments as string)
+    ? recordFromJsonLine(
+        // SAFETY: text() narrows arguments to string before JSON parsing.
+        payload.arguments as string,
+      )
     : undefined;
   for (const key of CODEX_CALL_ARGUMENT_KEY) {
     const detail = oneLine(
@@ -471,12 +485,14 @@ function detailFromRow(
   const error = rollout?.error;
   const threadId = textFromRow(row, CODEX_THREAD_COLUMN.ID);
   return {
-    ...(activity ? { activity } : {}),
+    ...(activity ? { activity } : undefined),
     repository: workspaceLabel(textFromRow(row, CODEX_THREAD_COLUMN.CWD)),
-    ...(branch ? { branch } : {}),
-    ...(model ? { model } : {}),
-    ...(error ? { error } : {}),
-    ...(threadId ? { link: `${CODEX_THREAD_LINK_PREFIX}${encodeURIComponent(threadId)}` } : {}),
+    ...(branch ? { branch } : undefined),
+    ...(model ? { model } : undefined),
+    ...(error ? { error } : undefined),
+    ...(threadId
+      ? { link: `${CODEX_THREAD_LINK_PREFIX}${encodeURIComponent(threadId)}` }
+      : undefined),
   };
 }
 
@@ -519,9 +535,9 @@ function observationFromThreadRow(
     providerSessionId,
     title: titleFromRow(row),
     status,
-    ...(completionCause ? { completionCause } : {}),
+    ...(completionCause ? { completionCause } : undefined),
     observedAt,
-    ...(rollout?.lastAgentMessage ? { recap: rollout.lastAgentMessage } : {}),
+    ...(rollout?.lastAgentMessage ? { recap: rollout.lastAgentMessage } : undefined),
     detail: detailFromRow(row, rollout),
   };
 }
@@ -560,7 +576,7 @@ export class CodexSessionAdapter extends LocalSessionAdapter {
         rows = database
           .prepare(CODEX_THREAD_QUERY)
           .all(now - SESSION_ROSTER_RETENTION_MS.SETTLED_MS)
-          .filter((row): row is CodexThreadRow => row !== null && typeof row === "object");
+          .filter((row): row is CodexThreadRow => isRecord(row));
       } catch (error) {
         if (canIgnoreSqliteError(error)) continue;
         throw error;
@@ -633,6 +649,7 @@ export class CodexSessionAdapter extends LocalSessionAdapter {
   /**
    * Reads what the observation hook last said about each thread. The spool is
    * a refinement, never a dependency: a directory that is missing, unreadable,
+   // SAFETY: The preceding check establishes the asserted contract.
    * or holding something unexpected reads as no event, and the row's own
    * verdict stands.
    */

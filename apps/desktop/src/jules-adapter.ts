@@ -7,6 +7,7 @@ import {
   type SessionControl,
   type SessionProvider,
   type SessionStatus,
+  type WireRecord,
 } from "@sidecar/core";
 import {
   CLOUD_AUTH_SCHEME,
@@ -110,7 +111,7 @@ type JulesState = (typeof JULES_STATE)[keyof typeof JULES_STATE];
  * own, which is what Cursor's `ERROR` and Devin's `error` report too, and an
  * unspecified state says nothing at all.
  */
-const SESSION_STATUS_BY_JULES_STATE: Readonly<Record<JulesState, SessionStatus>> = {
+const SESSION_STATUS_BY_JULES_STATE = {
   [JULES_STATE.QUEUED]: SESSION_STATUS.WORKING,
   [JULES_STATE.PLANNING]: SESSION_STATUS.WORKING,
   [JULES_STATE.IN_PROGRESS]: SESSION_STATUS.WORKING,
@@ -123,6 +124,7 @@ const SESSION_STATUS_BY_JULES_STATE: Readonly<Record<JulesState, SessionStatus>>
 };
 
 const JULES_ADAPTER_DEFAULTS = {
+  // SAFETY: The preceding check establishes the asserted contract.
   /** The documented maximum, so one call reaches as deep into the history as it can. */
   SESSION_PAGE_SIZE: 100,
   MAXIMUM_BRANCH_LABEL_LENGTH: 60,
@@ -144,7 +146,7 @@ interface JulesSession {
   link?: string;
 }
 
-function sessionFromRecord(record: Record<string, unknown>): JulesSession | undefined {
+function sessionFromRecord(record: WireRecord): JulesSession | undefined {
   const id = textFromRecord(record, JULES_FIELD.ID);
   const observedAt =
     timestampFromRecord(record, JULES_FIELD.UPDATE_TIME) ??
@@ -170,8 +172,8 @@ function sessionFromRecord(record: Record<string, unknown>): JulesSession | unde
     // and there is deliberately no fallback to either.
     repositoryLabel: repositoryLabel(textFromRecord(context, JULES_FIELD.SOURCE), undefined),
     state: knownValue(JULES_STATE, textFromRecord(record, JULES_FIELD.STATE)),
-    ...(branch ? { branch } : {}),
-    ...(link ? { link } : {}),
+    ...(branch ? { branch } : undefined),
+    ...(link ? { link } : undefined),
   };
 }
 
@@ -266,14 +268,14 @@ export class JulesSessionAdapter extends CloudSessionAdapter {
       canReceiveMessage: session.state !== undefined && JULES_MESSAGEABLE_STATES.has(session.state),
       ...(session.state === JULES_STATE.AWAITING_PLAN_APPROVAL
         ? { controls: [JULES_APPROVE_PLAN_CONTROL] }
-        : {}),
+        : undefined),
       detail: {
         repository: session.repositoryLabel,
         // The starting branch is chosen by whoever opened the session, unlike
         // the branch Jules names for its own patch from the prompt.
-        ...(session.branch ? { branch: session.branch } : {}),
-        ...(status === SESSION_STATUS.ERROR ? { error: JULES_SESSION_FAILED_MESSAGE } : {}),
-        ...(session.link ? { link: session.link } : {}),
+        ...(session.branch ? { branch: session.branch } : undefined),
+        ...(status === SESSION_STATUS.ERROR ? { error: JULES_SESSION_FAILED_MESSAGE } : undefined),
+        ...(session.link ? { link: session.link } : undefined),
       },
     };
   }

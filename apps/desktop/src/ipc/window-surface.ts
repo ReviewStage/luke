@@ -1,3 +1,4 @@
+import type { UnparsedWireValue } from "@sidecar/core";
 import { BrowserWindow, type IpcMain, type IpcMainEvent, type IpcMainInvokeEvent } from "electron";
 import type { MicrophoneRouteWatcher } from "../microphone-route";
 import type { PanelManager } from "../panel-manager";
@@ -15,15 +16,18 @@ export interface WindowSurfaceIpcDependencies {
 
 export function registerWindowSurfaceIpc(dependencies: WindowSurfaceIpcDependencies): void {
   const { ipcMain, trustedSender, panels } = dependencies;
-  ipcMain.handle(channels.setExpanded, (event, expanded: unknown, focus: unknown) => {
-    if (!trustedSender(event) || typeof expanded !== "boolean") {
-      throw new Error("Invalid window mode request");
-    }
-    const displayId = panels.displayIdFor(event.sender);
-    if (displayId === undefined) throw new Error("Invalid window mode request");
-    return panels.setMode(displayId, expanded ? "expanded" : "compact", focus === true);
-  });
-  ipcMain.handle(channels.summonFeedback, (event, kind: unknown) => {
+  ipcMain.handle(
+    channels.setExpanded,
+    (event, expanded: UnparsedWireValue, focus: UnparsedWireValue) => {
+      if (!trustedSender(event) || (expanded !== true && expanded !== false)) {
+        throw new Error("Invalid window mode request");
+      }
+      const displayId = panels.displayIdFor(event.sender);
+      if (displayId === undefined) throw new Error("Invalid window mode request");
+      return panels.setMode(displayId, expanded ? "expanded" : "compact", focus === true);
+    },
+  );
+  ipcMain.handle(channels.summonFeedback, (event, kind: UnparsedWireValue) => {
     if (!trustedSender(event) || !isFeedbackKind(kind)) {
       throw new Error("Invalid composer request");
     }
@@ -32,8 +36,9 @@ export function registerWindowSurfaceIpc(dependencies: WindowSurfaceIpcDependenc
     panels.setMode(displayId, "expanded", true);
     event.sender.send(channels.lifecycle, FEEDBACK_LIFECYCLE_EVENT[kind]);
   });
-  ipcMain.on(channels.setPointerInterception, (event, interceptsPointer: unknown) => {
-    if (!trustedSender(event) || typeof interceptsPointer !== "boolean") return;
+  ipcMain.on(channels.setPointerInterception, (event, interceptsPointer: UnparsedWireValue) => {
+    if (!trustedSender(event) || (interceptsPointer !== true && interceptsPointer !== false))
+      return;
     BrowserWindow.fromWebContents(event.sender)?.setIgnoreMouseEvents(!interceptsPointer, {
       forward: true,
     });

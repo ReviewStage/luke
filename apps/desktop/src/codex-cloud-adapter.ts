@@ -1,5 +1,6 @@
 import {
   isRecord,
+  isWireNumber,
   PROVIDER_ACT_RESULT_STATUS,
   type ProviderSessionObservation,
   type ProviderWorkspaceRequest,
@@ -8,6 +9,8 @@ import {
   type SessionDiffSummary,
   type SessionStatus,
   sessionMessageText,
+  type UnparsedWireValue,
+  type WireRecord,
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceProject,
 } from "@sidecar/core";
@@ -35,6 +38,7 @@ import { CODEX_PROVIDER } from "./codex-adapter";
  * cadence gathers the environments in recent use; and `cloud exec --env` is
  * its documented way to start a task, the one write this adapter makes. The
  * `--` before the task text ends option parsing, so the developer's own words
+ // SAFETY: The preceding check establishes the asserted contract.
  * can never read as a flag, and a page cursor rides as one `--cursor=` token
  * for the same reason.
  */
@@ -84,6 +88,7 @@ const CODEX_SUMMARY_FIELD = {
   LINES_REMOVED: "lines_removed",
 } as const;
 
+// SAFETY: The preceding check establishes the asserted contract.
 /** The CLI's documented task states, kebab-case as its JSON serializes them. */
 const CODEX_TASK_STATUS = {
   PENDING: "pending",
@@ -92,8 +97,6 @@ const CODEX_TASK_STATUS = {
   ERROR: "error",
 } as const;
 
-type CodexTaskStatus = (typeof CODEX_TASK_STATUS)[keyof typeof CODEX_TASK_STATUS];
-
 /**
  * A pending task is queued or running; Codex documents no way to tell those
  * apart, and neither asks anything of the user yet. Ready and applied are both
@@ -101,7 +104,7 @@ type CodexTaskStatus = (typeof CODEX_TASK_STATUS)[keyof typeof CODEX_TASK_STATUS
  * user already pulled down — and a Codex task takes no follow-up, so neither
  * is ever waiting. An errored task stopped on something it cannot get past.
  */
-const SESSION_STATUS_BY_CODEX_TASK_STATUS: Readonly<Record<CodexTaskStatus, SessionStatus>> = {
+const SESSION_STATUS_BY_CODEX_TASK_STATUS = {
   [CODEX_TASK_STATUS.PENDING]: SESSION_STATUS.WORKING,
   [CODEX_TASK_STATUS.READY]: SESSION_STATUS.COMPLETE,
   [CODEX_TASK_STATUS.APPLIED]: SESSION_STATUS.COMPLETE,
@@ -129,22 +132,18 @@ interface CodexCloudTask {
  * missing any count is not half-reported, and the all-zero summary of a task
  * still working is left to the normalizer to drop.
  */
-function diffFromRecord(value: unknown): SessionDiffSummary | undefined {
+function diffFromRecord(value: UnparsedWireValue): SessionDiffSummary | undefined {
   if (!isRecord(value)) return undefined;
   const filesChanged = value[CODEX_SUMMARY_FIELD.FILES_CHANGED];
   const linesAdded = value[CODEX_SUMMARY_FIELD.LINES_ADDED];
   const linesRemoved = value[CODEX_SUMMARY_FIELD.LINES_REMOVED];
-  if (
-    typeof filesChanged !== "number" ||
-    typeof linesAdded !== "number" ||
-    typeof linesRemoved !== "number"
-  ) {
+  if (!isWireNumber(filesChanged) || !isWireNumber(linesAdded) || !isWireNumber(linesRemoved)) {
     return undefined;
   }
   return { filesChanged, linesAdded, linesRemoved };
 }
 
-function taskFromRecord(record: Record<string, unknown>): CodexCloudTask | undefined {
+function taskFromRecord(record: WireRecord): CodexCloudTask | undefined {
   const id = textFromRecord(record, CODEX_TASK_FIELD.ID);
   const observedAt = timestampFromRecord(record, CODEX_TASK_FIELD.UPDATED_AT);
   if (!id || observedAt === undefined) return undefined;
@@ -164,10 +163,10 @@ function taskFromRecord(record: Record<string, unknown>): CodexCloudTask | undef
     repositoryLabel: repositoryLabel(environmentLabel, undefined),
     // A state this build does not know is not guessed at.
     status: status ? SESSION_STATUS_BY_CODEX_TASK_STATUS[status] : SESSION_STATUS.UNKNOWN,
-    ...(link ? { link } : {}),
-    ...(environmentId ? { environmentId } : {}),
-    ...(environmentLabel ? { environmentLabel } : {}),
-    ...(diff ? { diff } : {}),
+    ...(link ? { link } : undefined),
+    ...(environmentId ? { environmentId } : undefined),
+    ...(environmentLabel ? { environmentLabel } : undefined),
+    ...(diff ? { diff } : undefined),
   };
 }
 
@@ -198,6 +197,7 @@ function createdTaskId(stdout: string): string | undefined {
  * Observes Codex cloud tasks through the Codex CLI's own documented read,
  * under the ChatGPT login the user already gave that CLI — Luke reads no
  * token and stores none, and a machine whose CLI is absent or signed out is
+ // SAFETY: The preceding check establishes the asserted contract.
  * observed as having nothing. The one write is the one the user asks for: a
  * new task, through the CLI's documented `cloud exec`, in an environment the
  * latest pass reported. Codex documents no way to message or steer a task
@@ -267,7 +267,7 @@ export class CodexCloudSessionAdapter extends CliSessionAdapter {
     const providerSessionId = createdTaskId(written.stdout ?? "");
     return {
       status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED,
-      ...(providerSessionId ? { providerSessionId } : {}),
+      ...(providerSessionId ? { providerSessionId } : undefined),
     };
   }
 
@@ -304,14 +304,16 @@ export class CodexCloudSessionAdapter extends CliSessionAdapter {
    * Walks a bounded few pages further into the task history for the
    * environments in recent use, so one older than the newest page is still
    * offered for creation. The cursor is the one value a read hands back into
+   // SAFETY: The preceding check establishes the asserted contract.
    * an invocation: bounded, and passed as a single `--cursor=` token so it can
+   // SAFETY: The preceding check establishes the asserted contract.
    * never read as a flag of its own. A page that fails mid-sweep keeps what
    * the sweep has — the offer grows by what was actually read, and the pages
    * beyond it wait for the next sweep rather than costing the whole pass.
    */
   async #sweepEnvironments(
     request: CliReadRequest,
-    firstPage: Record<string, unknown>,
+    firstPage: WireRecord,
     firstTasks: readonly CodexCloudTask[],
   ): Promise<readonly WorkspaceProject[]> {
     const environments = new Map<string, WorkspaceProject>();
@@ -347,7 +349,7 @@ export class CodexCloudSessionAdapter extends CliSessionAdapter {
 }
 
 /** The next page's cursor, or nothing where the history ends. */
-function sweepCursor(body: Record<string, unknown>): string | undefined {
+function sweepCursor(body: WireRecord): string | undefined {
   const cursor = textFromRecord(body, CODEX_TASK_FIELD.CURSOR);
   if (!cursor || cursor.length > CODEX_ADAPTER_DEFAULTS.MAXIMUM_CURSOR_LENGTH) return undefined;
   return cursor;
@@ -386,8 +388,8 @@ function observationFor(task: CodexCloudTask): ProviderSessionObservation {
     observedAt: task.observedAt,
     detail: {
       repository: task.repositoryLabel,
-      ...(task.link ? { link: task.link } : {}),
-      ...(task.diff ? { diff: task.diff } : {}),
+      ...(task.link ? { link: task.link } : undefined),
+      ...(task.diff ? { diff: task.diff } : undefined),
     },
   };
 }

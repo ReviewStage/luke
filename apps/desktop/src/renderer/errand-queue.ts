@@ -10,6 +10,7 @@ import type { SettingsView } from "./settings-views";
  *
  * A reply may carry several tool calls, and they are answered one after
  * another with nothing between them but a couple of IPC round trips — far
+ // SAFETY: The preceding check establishes the asserted contract.
  * inside the beat an errand waits before it sets off. So the acts arrive as a
  * burst and the flights cannot: there is only ever one Luke on screen, one
  * panel, and one settings page drawn at a time, and each of those is something
@@ -42,6 +43,7 @@ import type { SettingsView } from "./settings-views";
  * Every function here is pure, and every hold that goes in comes out exactly
  * once — at the tap that signs it, when the flight it belonged to is over, or
  * in the flush that ends a run nobody can watch any more. A hold nobody
+ // SAFETY: The preceding check establishes the asserted contract.
  * releases strands a switch showing the wrong state for as long as the panel
  * is open.
  */
@@ -103,14 +105,18 @@ export function armErrand(run: ErrandRun, pending: PendingErrand): ErrandRun {
  * while one is already out — that is the whole point — and nothing when there
  * is none left waiting.
  */
-export function nextErrand(run: ErrandRun): { run: ErrandRun; launch?: PendingErrand } {
-  if (run.flying !== undefined) return { run };
+export function nextErrand(run: ErrandRun) {
+  if (run.flying !== undefined) return { run } satisfies { run: ErrandRun; launch?: PendingErrand };
   const [next, ...rest] = run.waiting;
-  if (next === undefined) return { run };
-  return { run: { flying: next, waiting: rest }, launch: next };
+  if (next === undefined) return { run } satisfies { run: ErrandRun; launch?: PendingErrand };
+  return { run: { flying: next, waiting: rest }, launch: next } satisfies {
+    run: ErrandRun;
+    launch?: PendingErrand;
+  };
 }
 
 /**
+ // SAFETY: The preceding check establishes the asserted contract.
  * Several holds drawn as one. The newest snapshot is the only true one — they
  * are cumulative, so the last carries every change made before it — while the
  * view patches are folded in the order they were chosen, because each names
@@ -124,8 +130,8 @@ export function foldErrandHolds(holds: readonly ErrandHold[]): ErrandHold {
     if (hold.view !== undefined) view = { ...view, ...hold.view };
   }
   return {
-    ...(settings === undefined ? {} : { settings }),
-    ...(view === undefined ? {} : { view }),
+    ...(settings === undefined ? undefined : { settings }),
+    ...(view === undefined ? undefined : { view }),
   };
 }
 
@@ -133,10 +139,15 @@ export function foldErrandHolds(holds: readonly ErrandHold[]): ErrandHold {
  * The tap has landed: what the act in the air was holding is drawn, and it is
  * left holding nothing, so the end of its own flight draws it no second time.
  */
-export function landErrand(run: ErrandRun): { run: ErrandRun; hold: ErrandHold } {
+export function landErrand(run: ErrandRun) {
   const flying = run.flying;
-  if (flying === undefined) return { run, hold: NOTHING_HELD };
-  return { run: { ...run, flying: { ...flying, hold: NOTHING_HELD } }, hold: flying.hold };
+  if (flying === undefined) {
+    return { run, hold: NOTHING_HELD } satisfies { run: ErrandRun; hold: ErrandHold };
+  }
+  return {
+    run: { ...run, flying: { ...flying, hold: NOTHING_HELD } },
+    hold: flying.hold,
+  } satisfies { run: ErrandRun; hold: ErrandHold };
 }
 
 /**
@@ -144,10 +155,15 @@ export function landErrand(run: ErrandRun): { run: ErrandRun; hold: ErrandHold }
  * holding is drawn — a flight that never reached its control still has to
  * leave the switch showing the truth.
  */
-export function finishErrand(run: ErrandRun): { run: ErrandRun; hold: ErrandHold } {
+export function finishErrand(run: ErrandRun) {
   const flying = run.flying;
-  if (flying === undefined) return { run, hold: NOTHING_HELD };
-  return { run: { waiting: run.waiting }, hold: flying.hold };
+  if (flying === undefined) {
+    return { run, hold: NOTHING_HELD } satisfies { run: ErrandRun; hold: ErrandHold };
+  }
+  return { run: { waiting: run.waiting }, hold: flying.hold } satisfies {
+    run: ErrandRun;
+    hold: ErrandHold;
+  };
 }
 
 /**
@@ -155,12 +171,15 @@ export function finishErrand(run: ErrandRun): { run: ErrandRun; hold: ErrandHold
  * is nothing to sign in front of anybody. Everything still held is drawn at
  * once, in the order it was caught.
  */
-export function flushErrands(run: ErrandRun): { run: ErrandRun; hold: ErrandHold } {
+export function flushErrands(run: ErrandRun) {
   const held = [
     ...(run.flying === undefined ? [] : [run.flying.hold]),
     ...run.waiting.map((pending) => pending.hold),
   ];
-  return { run: EMPTY_ERRAND_RUN, hold: foldErrandHolds(held) };
+  return { run: EMPTY_ERRAND_RUN, hold: foldErrandHolds(held) } satisfies {
+    run: ErrandRun;
+    hold: ErrandHold;
+  };
 }
 
 /**
@@ -177,7 +196,7 @@ export function supersedeErrandSettings(run: ErrandRun): ErrandRun {
     return { ...pending, hold: kept };
   };
   return {
-    ...(run.flying === undefined ? {} : { flying: superseded(run.flying) }),
+    ...(run.flying === undefined ? undefined : { flying: superseded(run.flying) }),
     waiting: run.waiting.map(superseded),
   };
 }

@@ -1,3 +1,4 @@
+import type { UnparsedWireValue } from "@sidecar/core";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from "electron";
 import type { AccountSessionManager } from "../account-session-manager";
 import { channels, isAccountProvider } from "../shared/contracts";
@@ -10,7 +11,7 @@ export interface AccountSessionIpcDependencies {
 
 export function registerAccountSessionIpc(dependencies: AccountSessionIpcDependencies): void {
   const { ipcMain, trustedSender, accountSession } = dependencies;
-  ipcMain.handle(channels.beginSignIn, (event, provider: unknown) => {
+  ipcMain.handle(channels.beginSignIn, (event, provider: UnparsedWireValue) => {
     if (!trustedSender(event) || !isAccountProvider(provider)) {
       throw new Error("Invalid sign-in request");
     }

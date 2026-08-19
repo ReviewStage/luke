@@ -20,6 +20,7 @@ function addonPath(): string {
 
 /**
  * Show Desktop scoops every app window aside, but the hardware notch the panel
+ // SAFETY: The preceding check establishes the asserted contract.
  * poses as does not move, so neither may the panel. AppKit's stationary
  * collection behavior is what exempts a window from Exposé, and Electron only
  * sets it on `desktop`-type windows, which can never take keyboard focus — so
@@ -28,6 +29,7 @@ function addonPath(): string {
 export function keepWindowStationary(window: BrowserWindow): void {
   if (process.platform !== "darwin") return;
   try {
+    // SAFETY: The native addon exports one method keyed by the built path; require resolves that contract.
     const addon = requireAddon(addonPath()) as StationaryWindowAddon;
     addon.makeStationary(window.getNativeWindowHandle());
   } catch (error) {

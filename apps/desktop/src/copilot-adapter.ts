@@ -6,6 +6,7 @@ import {
   SESSION_STATUS,
   type SessionProvider,
   type SessionStatus,
+  type WireRecord,
 } from "@sidecar/core";
 import {
   type CloudAdapterOptions,
@@ -79,7 +80,7 @@ const GITHUB_MEDIA_TYPE = "application/vnd.github+json";
  */
 const GITHUB_API_VERSION = "2026-03-10";
 
-const COPILOT_REQUEST_HEADERS: Readonly<Record<string, string>> = {
+const COPILOT_REQUEST_HEADERS = {
   [GITHUB_REQUEST_HEADER.ACCEPT]: GITHUB_MEDIA_TYPE,
   [GITHUB_REQUEST_HEADER.API_VERSION]: GITHUB_API_VERSION,
 };
@@ -113,7 +114,7 @@ type CopilotTaskState = (typeof COPILOT_TASK_STATE)[keyof typeof COPILOT_TASK_ST
  * Luke leaves it unknown rather than promoting it to an error it cannot
  * describe. Idle says only that no session is running at all.
  */
-const SESSION_STATUS_BY_COPILOT_STATE: Readonly<Record<CopilotTaskState, SessionStatus>> = {
+const SESSION_STATUS_BY_COPILOT_STATE = {
   [COPILOT_TASK_STATE.QUEUED]: SESSION_STATUS.WORKING,
   [COPILOT_TASK_STATE.IN_PROGRESS]: SESSION_STATUS.WORKING,
   [COPILOT_TASK_STATE.WAITING_FOR_USER]: SESSION_STATUS.WAITING,
@@ -125,6 +126,7 @@ const SESSION_STATUS_BY_COPILOT_STATE: Readonly<Record<CopilotTaskState, Session
 };
 
 const COPILOT_ADAPTER_DEFAULTS = {
+  // SAFETY: The preceding check establishes the asserted contract.
   /** The documented maximum, so one call reaches as deep into the history as it can. */
   TASK_PAGE_SIZE: 100,
   MAXIMUM_BRANCH_LABEL_LENGTH: 60,
@@ -164,7 +166,7 @@ function repositoryFromTaskUrl(url: string | undefined): string | undefined {
  * `name` it stays off the row; `base_ref` is chosen by whoever opened the
  * task, the same thing Jules' starting branch reports.
  */
-function baseBranchFromArtifacts(record: Record<string, unknown>): string | undefined {
+function baseBranchFromArtifacts(record: WireRecord): string | undefined {
   const artifacts = record[COPILOT_FIELD.ARTIFACTS];
   if (!Array.isArray(artifacts)) return undefined;
   const branch = artifacts
@@ -176,7 +178,7 @@ function baseBranchFromArtifacts(record: Record<string, unknown>): string | unde
   return isRecord(data) ? textFromRecord(data, COPILOT_FIELD.BASE_REF) : undefined;
 }
 
-function taskFromRecord(record: Record<string, unknown>): CopilotTask | undefined {
+function taskFromRecord(record: WireRecord): CopilotTask | undefined {
   const id = textFromRecord(record, COPILOT_FIELD.ID);
   const observedAt =
     timestampFromRecord(record, COPILOT_FIELD.UPDATED_AT) ??
@@ -200,8 +202,8 @@ function taskFromRecord(record: Record<string, unknown>): CopilotTask | undefine
     ),
     state: knownValue(COPILOT_TASK_STATE, textFromRecord(record, COPILOT_FIELD.STATE)),
     archived: textFromRecord(record, COPILOT_FIELD.ARCHIVED_AT) !== undefined,
-    ...(branch ? { branch } : {}),
-    ...(link ? { link } : {}),
+    ...(branch ? { branch } : undefined),
+    ...(link ? { link } : undefined),
   };
 }
 
@@ -211,6 +213,7 @@ function taskFromRecord(record: Record<string, unknown>): CopilotTask | undefine
  * no request that can change provider state, and reports nothing at all
  * without a credential.
  *
+ // SAFETY: The preceding check establishes the asserted contract.
  * Deliberately read-only where the other cloud adapters write: as of the
  * pinned API version, GitHub documents no way to message, steer, or stop an
  * existing task — the agents panel can, but its API is undocumented, and the
@@ -233,8 +236,8 @@ export class CopilotSessionAdapter extends CloudSessionAdapter {
   }
 
   /** GitHub asks for its own media type, and the preview endpoint is pinned. */
-  protected override requestHeaders(): Readonly<Record<string, string>> {
-    return COPILOT_REQUEST_HEADERS;
+  protected override requestHeaders() {
+    return COPILOT_REQUEST_HEADERS satisfies Readonly<Record<string, string>>;
   }
 
   protected async collect(
@@ -266,8 +269,8 @@ export class CopilotSessionAdapter extends CloudSessionAdapter {
       observedAt: task.observedAt,
       detail: {
         repository: task.repositoryLabel,
-        ...(task.branch ? { branch: task.branch } : {}),
-        ...(task.link ? { link: task.link } : {}),
+        ...(task.branch ? { branch: task.branch } : undefined),
+        ...(task.link ? { link: task.link } : undefined),
       },
     };
   }

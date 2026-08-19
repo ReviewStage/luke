@@ -54,7 +54,7 @@ function FeedbackLanding({
       <span className="feedback-confirm-luke">
         <LukeFace
           key={gesturing ? confirming.play : 0}
-          {...(gesturing ? { motion: confirming.confirmation.motion } : {})}
+          {...(gesturing ? { motion: confirming.confirmation.motion } : undefined)}
         />
       </span>
       <p className="feedback-confirm-msg" role="status">

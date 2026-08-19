@@ -25,7 +25,7 @@ export interface AccountSessionManagerOptions {
   store: AccountSessionStore;
   hostedServiceBaseUrl: string;
   requiresAccount: boolean;
-  openExternal: (url: string) => Promise<unknown>;
+  openExternal: (url: string) => Promise<void>;
   startCapabilities: () => Promise<void>;
   stopCapabilities: () => Promise<void>;
   onChange: (account: AccountSnapshot) => void;

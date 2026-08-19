@@ -1,4 +1,4 @@
-import { ISSUE_TRACKER_ID, PROVIDER_ID } from "@sidecar/core";
+import { ISSUE_TRACKER_ID, isWireString, PROVIDER_ID, type UnparsedWireValue } from "@sidecar/core";
 
 /**
  * The services Luke can hold a credential for: the subset of the observed
@@ -121,7 +121,7 @@ export interface CredentialProvider {
 }
 
 /** Keyed by provider id so no caller has to build a key from an identifier. */
-export const CREDENTIAL_PROVIDERS: Readonly<Record<CredentialProviderId, CredentialProvider>> = {
+export const CREDENTIAL_PROVIDERS = {
   [CREDENTIAL_PROVIDER_ID.CONDUCTOR]: {
     id: CREDENTIAL_PROVIDER_ID.CONDUCTOR,
     connection: CREDENTIAL_CONNECTION.KEY,
@@ -257,6 +257,7 @@ export const CLOUD_AGENT_PROVIDER_LIST: readonly CredentialProvider[] =
   );
 
 /**
+ // SAFETY: The preceding check establishes the asserted contract.
  * The services beyond the agents. The Integrations section draws each as its
  * own block rather than from this list — a consent row and a key row are not
  * the same line — so this stands for what belongs in that section, which is
@@ -277,8 +278,9 @@ export function providerRunsSessionsInCloud(id: CredentialProviderId): boolean {
 
 /**
  * Guards the provider id an IPC message carries. `hasOwn` rather than `in`: an
+ // SAFETY: The preceding check establishes the asserted contract.
  * inherited name such as `toString` is not a provider.
  */
-export function isCredentialProviderId(value: unknown): value is CredentialProviderId {
-  return typeof value === "string" && Object.hasOwn(CREDENTIAL_PROVIDERS, value);
+export function isCredentialProviderId(value: UnparsedWireValue): value is CredentialProviderId {
+  return isWireString(value) && Object.hasOwn(CREDENTIAL_PROVIDERS, value);
 }

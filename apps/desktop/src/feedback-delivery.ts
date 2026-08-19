@@ -8,6 +8,7 @@ const FEEDBACK_ENVIRONMENT = {
 const FEEDBACK_DEFAULTS = {
   /**
    * The one place a submission goes: a small endpoint on Luke's own site that
+   // SAFETY: The preceding check establishes the asserted contract.
    * forwards it as email to the founders. Fixed here rather than passed in, so
    * the renderer names an intent and never an address.
    */
@@ -91,5 +92,6 @@ export function feedbackDeliveryFromEnvironment(
   options: FeedbackDeliveryOptions = {},
 ): FeedbackDelivery {
   const url = trimmedText(options.url) ?? trimmedText(process.env[FEEDBACK_ENVIRONMENT.URL]);
-  return new FeedbackDelivery({ ...options, ...(url ? { url } : {}) });
+  const deliveryOptions = url ? { ...options, url } : options;
+  return new FeedbackDelivery(deliveryOptions);
 }

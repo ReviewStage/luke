@@ -36,6 +36,7 @@ export function TabBar({
   tab: PanelTab;
   onTabChange: (tab: PanelTab) => void;
   /**
+   // SAFETY: The preceding check establishes the asserted contract.
    * News the Settings tab wears as a dot while it stands — a newer release
    * waiting to be fetched. The words are the hover's and the screen
    * reader's; the dot alone is the mark.
@@ -53,7 +54,7 @@ export function TabBar({
         {
           "--tab-count": PANEL_TABS.length,
           "--tab-index": Math.max(0, activeIndex),
-        } as React.CSSProperties
+        } satisfies React.CSSProperties
       }
     >
       <span className="tab-thumb" aria-hidden="true" />

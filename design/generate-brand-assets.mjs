@@ -917,17 +917,14 @@ ${MOTION_NAMES.map((name) => `  ${name.toUpperCase()}: "${name}",`).join("\n")}
 export type FaceMotion = (typeof FACE_MOTION)[keyof typeof FACE_MOTION];
 
 /** One full cycle: how long a caller waits to see a motion out before moving on. */
-export const FACE_MOTION_CYCLE_MS: Record<FaceMotion, number> = {
+export const FACE_MOTION_CYCLE_MS = {
 ${tsRecord(MOTION_NAMES.map((name) => [name, motionCycleMs(MOTIONS[name])]))}
-};
+} as const satisfies Record<FaceMotion, number>;
 
 /** What a motion needs drawn beyond the resting smile and eyes. */
-export const FACE_MOTION_PARTS: Record<
-  FaceMotion,
-  { brows: boolean; lids: boolean; sleepZ: boolean }
-> = {
+export const FACE_MOTION_PARTS = {
 ${tsRecord(parts)}
-};
+} as const satisfies Record<FaceMotion, { brows: boolean; lids: boolean; sleepZ: boolean }>;
 `;
 }
 

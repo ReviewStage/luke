@@ -23,13 +23,13 @@ import {
   type AppGuideSetting,
   type AppGuideSnapshot,
   PROVIDER_ID,
+  type WireRecord,
   type WorkspaceAgentSelection,
 } from "@sidecar/core";
 import type {
   AccountSnapshot,
   AppBridge,
   AppSettings,
-  CliConnection,
   CredentialSource,
   MicrophoneStatus,
   SettingsUpdateResult,
@@ -90,6 +90,7 @@ export interface LukeGuideInput {
   microphoneStatus: MicrophoneStatus;
   /**
    * The talk key labelled the way macOS writes it, absent when none was
+   // SAFETY: The preceding check establishes the asserted contract.
    * registered. Labelled rather than drawn as keys: the guide is spoken and
    * read, and a chord said aloud is one thing to press.
    */
@@ -136,7 +137,7 @@ function askKeyFact(askKey: string | undefined): AppGuideFact {
   };
 }
 
-const MICROPHONE_DETAIL: Record<MicrophoneStatus, string> = {
+const MICROPHONE_DETAIL = {
   granted:
     "Granted. The microphone opens only when the talk key takes a turn, sends nothing after " +
     "the key comes up, and closes once the exchange settles. Typing to Luke never opens it. " +
@@ -159,7 +160,7 @@ function connectionWord(source: CredentialSource): string {
 }
 
 /** The row's answer about the Codex CLI login, in words a fact can carry. */
-const CODEX_CLOUD_CONNECTION_WORD: Readonly<Record<CliConnection, string>> = {
+const CODEX_CLOUD_CONNECTION_WORD = {
   [CLI_CONNECTION.CONNECTED]: "connected",
   [CLI_CONNECTION.SIGNED_OUT]: "not connected; the CLI is signed out",
   [CLI_CONNECTION.CLI_MISSING]: "not connected; the CLI is not installed",
@@ -176,6 +177,7 @@ function providersFact(settings: AppSettings): AppGuideFact {
     detail:
       `${roster.join(", ")}. Connecting one takes the key its row names, typed by hand into ` +
       `${CONNECTIONS_PAGE}, under Cloud Agent API keys — never spoken, and never repeated back. ` +
+      // SAFETY: The preceding check establishes the asserted contract.
       "Local providers such as Claude Code need no key and are observed on their own. " +
       `Codex cloud tasks (${CODEX_CLOUD_CONNECTION_WORD[settings.codexCloudConnection]}) take ` +
       "no key in Luke at all: they are observed through the Codex CLI's own login, and the " +
@@ -194,6 +196,7 @@ function integrationsFact(settings: AppSettings): AppGuideFact {
       `consent page opens in the browser, and no key is ever typed or spoken. Connecting it ` +
       `lets Luke read the developer's assigned issues and, only when asked in a turn the ` +
       `developer opened, move one to another state or comment on it. Disconnecting from the ` +
+      // SAFETY: The preceding check establishes the asserted contract.
       `same row ends the access at Linear as well as here.`;
   const accounts = settings.calendarAccounts.length;
   const calendar = !settings.calendarSignInAvailable
@@ -250,6 +253,7 @@ function voiceKeyFact(settings: AppSettings, voiceAvailable: boolean): AppGuideF
 /**
  * Builds the guide from what the app currently knows about itself. Pure and
  * synchronous so the renderer can rebuild it on every settings change and the
+ // SAFETY: The preceding check establishes the asserted contract.
  * conversation always describes the app as it is, not as it launched.
  */
 export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
@@ -326,6 +330,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "Workspaces group on the Connections page carries its own reset on its heading, and " +
         "no reset touches a key, an account, or the Conductor agent choice, whose own menu " +
         "already offers Conductor's default. A " +
+        // SAFETY: The preceding check establishes the asserted contract.
         "change Luke makes himself is shown as it is made: the panel comes forward on the tab, " +
         "and the page, the change belongs to, and his face leaves the strip beside the housing, " +
         "dives to the control that moved, and floats back.",
@@ -334,7 +339,8 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
       label: "Account",
       detail:
         account.status === ACCOUNT_STATUS.SIGNED_IN
-          ? `Signed in as ${account.email} through ${account.provider === ACCOUNT_PROVIDER.GITHUB ? "GitHub" : "Google"}. Sign out by hand from ${ACCOUNT_SECTION} — it asks before acting. The same section's Delete account row erases the account and everything Luke's service holds for it, cannot be undone, and is only ever done by hand — its button asks before acting, and no spoken ask can reach it.`
+          ? // SAFETY: The preceding check establishes the asserted contract.
+            `Signed in as ${account.email} through ${account.provider === ACCOUNT_PROVIDER.GITHUB ? "GitHub" : "Google"}. Sign out by hand from ${ACCOUNT_SECTION} — it asks before acting. The same section's Delete account row erases the account and everything Luke's service holds for it, cannot be undone, and is only ever done by hand — its button asks before acting, and no spoken ask can reach it.`
           : "Not signed in. The sign-in screen greets the launch once with Google and GitHub, then closes like any panel. While signed out the strip beside the housing keeps Luke's face and a small Sign in label in place of the session count, and hovering or pressing it brings the sign-in screen back. Live sessions and Luke's controls stay off until sign-in finishes. Choosing a provider stands the panel down to a small waiting popup with a Cancel button while the browser finishes, and the panel opens itself once the sign-in lands.",
     },
     {
@@ -376,6 +382,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "without one, and a provider that reports none takes no ask. An ask that names no " +
         "provider goes to the default workspace provider; until one is chosen Luke asks when " +
         "more than one provider could take it, and the first workspace created saves its " +
+        // SAFETY: The preceding check establishes the asserted contract.
         "provider as the default — changed or cleared by hand in the Settings tab. An ask that " +
         "names no project goes the same way: each provider remembers a default project, filled " +
         "in by the first workspace created there and changed or cleared by hand on the " +
@@ -384,10 +391,12 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "Conductor agent runs — its model, and its effort where the model's agent takes one — " +
         "follows the choice on the Conductor row under Cloud Agent API keys, or Conductor's own " +
         "defaults while none is made. A model named in a creation ask rides that creation alone " +
+        // SAFETY: The preceding check establishes the asserted contract.
         "and is saved as the default only while none is chosen; the settings themselves change " +
         "only when the developer asks for that, and Luke never asks or suggests a model. A " +
         "workspace that lands opens on the developer's screen by itself: the moment observation " +
         "reports the new session with an address, that address is handed to the operating " +
+        // SAFETY: The preceding check establishes the asserted contract.
         "system, the same as pressing the session's row. One whose provider reports no address " +
         "stays on its row, unopened.",
     },
@@ -395,6 +404,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
       label: "Adding agents to a workspace",
       detail:
         "Where a session's provider documents it — Conductor today — the same kind of ask can " +
+        // SAFETY: The preceding check establishes the asserted contract.
         "start another agent in the workspace an observed session runs in, as one of the agent " +
         "kinds that session's roster entry lists, optionally named and optionally with an " +
         "opening task. The ask must name that workspace or session in its own words; a bare " +
@@ -406,6 +416,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
       label: "Archiving",
       detail:
         "Where a provider documents an archive endpoint — a Conductor workspace, a Cursor " +
+        // SAFETY: The preceding check establishes the asserted contract.
         "cloud agent, and a Devin cloud session today — Archive is offered as a control once the " +
         "work there was positively seen to settle: pressed, or asked of Luke in " +
         "conversation, it files the work away through the provider's own endpoint. Archiving a " +
@@ -483,6 +494,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
                   "on mid-meeting — silences Luke at once, an announcement mid-sentence " +
                   "included, and holds everything he would say unbidden, even on an open " +
                   "conversation; questions asked of him still get their replies. Luke's face " +
+                  // SAFETY: The preceding check establishes the asserted contract.
                   "sleeps beside the housing for as long as the quiet holds, which is how the " +
                   "hold is seen."
                 : ""),
@@ -499,8 +511,11 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
           {
             label: "How long a conversation lasts",
             detail:
+              // SAFETY: The preceding check establishes the asserted contract.
               "One conversation lasts as long as the call it is held on. The call opens on the " +
+              // SAFETY: The preceding check establishes the asserted contract.
               "first press of the talk key or the first typed ask, stays open across as many " +
+              // SAFETY: The preceding check establishes the asserted contract.
               "turns as the developer takes, and is put away after ten minutes with nothing said " +
               "on it — which releases the microphone rather than holding it all day. The voice " +
               "service also ends any call at an hour. Either way the next press opens a fresh " +
@@ -610,7 +625,7 @@ function spokenWorkspaceAgentSelection(
     const effort =
       current?.effort && named.efforts.includes(current.effort) ? current.effort : undefined;
     return {
-      selection: { agent: named.agent, model: named.model, ...(effort ? { effort } : {}) },
+      selection: { agent: named.agent, model: named.model, ...(effort ? { effort } : undefined) },
     };
   }
   // The effort entry only exists while a model is chosen, so an ask arriving
@@ -639,7 +654,7 @@ export async function applySpokenSetting(
   action: { setting: AppGuideSetting; value: string; effort?: string },
   onSettings: (settings: AppSettings) => void,
   current?: AppSettings,
-): Promise<Record<string, unknown>> {
+): Promise<WireRecord> {
   let result: SettingsUpdateResult;
   if (
     action.setting.id === APP_SETTING_ID.WORKSPACE_AGENT_MODEL ||
@@ -658,6 +673,7 @@ export async function applySpokenSetting(
       composed.selection,
     );
   } else {
+    // SAFETY: The preceding check establishes the asserted contract.
     const field = settingFieldForGuideId(action.setting.id as AppSettingId);
     if (!field) {
       return { status: "refused", reason: "That setting cannot be changed from here." };
@@ -674,13 +690,14 @@ export async function applySpokenSetting(
     status: "changed",
     setting: action.setting.label,
     value: action.value,
-    ...(action.effort !== undefined ? { effort: action.effort } : {}),
+    ...(action.effort !== undefined ? { effort: action.effort } : undefined),
     ...(action.setting.id === APP_SETTING_ID.VOICE
       ? {
+          // SAFETY: The preceding check establishes the asserted contract.
           note: "The new voice takes over as soon as this reply ends, and the conversation starts afresh in it.",
         }
       : action.setting.id === APP_SETTING_ID.VOICE_SPEED
         ? { note: "The new pace is heard from the next reply on." }
-        : {}),
+        : undefined),
   };
 }

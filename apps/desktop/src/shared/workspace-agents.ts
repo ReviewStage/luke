@@ -1,7 +1,11 @@
 import {
   isProviderId,
+  isRecord,
+  isWireString,
   PROVIDER_ID,
   type ProviderId,
+  type UnparsedWireValue,
+  type WireRecord,
   type WorkspaceAgentModels,
   type WorkspaceAgentSelection,
 } from "@sidecar/core";
@@ -25,9 +29,7 @@ import {
  * its own endpoint with a reason Luke reports. Fast mode is deliberately
  * absent — Conductor's default stands for everything the user is not offered.
  */
-export const WORKSPACE_AGENT_MODELS: Readonly<
-  Partial<Record<ProviderId, readonly WorkspaceAgentModels[]>>
-> = {
+export const WORKSPACE_AGENT_MODELS = {
   [PROVIDER_ID.CONDUCTOR]: [
     {
       agent: "claude",
@@ -77,7 +79,7 @@ export const WORKSPACE_AGENT_MODELS: Readonly<
       efforts: [],
     },
   ],
-};
+} as const satisfies Readonly<Partial<Record<ProviderId, readonly WorkspaceAgentModels[]>>>;
 
 /** The table for one provider, or nothing where none is documented. */
 export function workspaceAgentModels(providerId: string): readonly WorkspaceAgentModels[] {
@@ -115,15 +117,16 @@ export function workspaceAgentModelLabel(
 /** Guards a selection arriving over IPC: its shape first, then the table. */
 export function isWorkspaceAgentSelection(
   providerId: string,
-  value: unknown,
+  value: UnparsedWireValue,
 ): value is WorkspaceAgentSelection {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
-  const { agent, model, effort } = value as Record<string, unknown>;
-  if (typeof agent !== "string" || typeof model !== "string") return false;
-  if (effort !== undefined && typeof effort !== "string") return false;
+  if (!isRecord(value)) return false;
+  // SAFETY: The preceding check establishes the asserted contract.
+  const { agent, model, effort } = value as WireRecord;
+  if (!isWireString(agent) || !isWireString(model)) return false;
+  if (effort !== undefined && !isWireString(effort)) return false;
   return isListedWorkspaceAgentModel(providerId, {
     agent,
     model,
-    ...(effort !== undefined ? { effort } : {}),
+    ...(effort !== undefined ? { effort } : undefined),
   });
 }

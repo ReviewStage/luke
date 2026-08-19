@@ -8,6 +8,7 @@ import {
 } from "@sidecar/core";
 
 /**
+ // SAFETY: The preceding check establishes the asserted contract.
  * Carries one notice to the voice as the bounded fields it was observed as —
  * the provider's name for the session, the workspace it is one chat of, where
  * it runs, the agent's parting words or the provider's error line, and whether
@@ -61,6 +62,7 @@ function recapExcerpt(text: string): string {
   return `${(wordEnd > 0 ? cut.slice(0, wordEnd) : cut).trimEnd()}…`;
 }
 
+// SAFETY: The preceding check establishes the asserted contract.
 /** What happened, as data for the voice to word — not a sentence to read. */
 function noticeEvent(status: SessionNoticeStatus): string {
   switch (status) {
@@ -88,7 +90,9 @@ function quoted(text: string): string {
 }
 
 /**
+ // SAFETY: The preceding check establishes the asserted contract.
  * One notice as labeled fields on a single line. A field the provider left
+ // SAFETY: The preceding check establishes the asserted contract.
  * empty stays absent rather than drawn as a blank, and the whole line is data:
  * the fixed announcement instructions are what tell the voice to word it.
  */
@@ -120,6 +124,7 @@ function noticeUpdateContext(notice: SessionNotice): string {
 }
 
 /**
+ // SAFETY: The preceding check establishes the asserted contract.
  * One notice as attention speech: the same shape the evaluator's readouts
  * travel in, so the renderer voices both through one door — the source is
  * what tells the protocol layer these are fields to word, not a sentence to

@@ -176,17 +176,13 @@ function harness(
 
   const channel: MockDataChannel = {
     readyState: options.channelOpensImmediately === false ? "connecting" : "open",
-<<<<<<< HEAD
     send: (payload: string) => {
-      const event = JSON.parse(payload) as Record<string, unknown>;
+      const event = parseClientEvent(payload);
       const isSessionSync =
         event.type === REALTIME_CLIENT_EVENT.SESSION_UPDATE &&
         Array.isArray((event.session as { tools?: unknown } | undefined)?.tools);
       if (options.captureSessionSync || !isSessionSync) sent.push(event);
     },
-=======
-    send: (payload: string) => sent.push(parseClientEvent(payload)),
->>>>>>> 36acc12 (fix(desktop): resolve anti-slop oxlint violations in tests)
     close: () => {
       channel.readyState = "closed";
       queueMicrotask(() => channel.onclose?.());

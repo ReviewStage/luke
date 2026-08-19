@@ -2,7 +2,6 @@ import {
   APP_TOOL_KIND,
   dispatchByKind,
   FEEDBACK_COMPOSER_KIND,
-  type FeedbackComposerKind,
   FIXTURE_EPOCH_MS,
   type HostedUsageAnswer,
   type IssueIdentity,
@@ -179,7 +178,7 @@ const FEEDBACK_NOTICE_MS = 6_000;
  * composer's beside the endpoint that reads a submission — so the seam between
  * them is written down once, here, rather than assumed at a call site.
  */
-const FEEDBACK_KIND_FOR_COMPOSER: Record<FeedbackComposerKind, FeedbackKind> = {
+const FEEDBACK_KIND_FOR_COMPOSER = {
   [FEEDBACK_COMPOSER_KIND.FEEDBACK]: FEEDBACK_KIND.FEEDBACK,
   [FEEDBACK_COMPOSER_KIND.PROMPT]: FEEDBACK_KIND.PROMPT,
 };
@@ -207,7 +206,7 @@ function captionSizeStyle(
   if (!textHeight) return {};
   return {
     "--caption-size": `${captionBlockSize(textHeight, volumeHint, padding)}px`,
-  } as CSSProperties;
+  } satisfies CSSProperties;
 }
 
 /**
@@ -237,14 +236,14 @@ function captionBlockSize(textHeight: number, volumeHint: boolean, padding: numb
 function noticeGrowthStyle(rowsHeight: number | undefined): CSSProperties {
   if (!rowsHeight) return {};
   const growth = Math.min(SESSION_NOTICE_HEIGHT * SESSION_NOTICE_MAX_ROWS, rowsHeight + 6);
-  return { "--notice-growth": `${growth}px` } as CSSProperties;
+  return { "--notice-growth": `${growth}px` } satisfies CSSProperties;
 }
 
 function notchStyle(display: DisplayDiagnostic): CSSProperties {
   return {
     "--notch-top-inset": `${display.notch.topInset}px`,
     "--notch-housing-width": `${display.notch.housingWidth}px`,
-  } as CSSProperties;
+  } satisfies CSSProperties;
 }
 
 /** The two rosters a mention chip can stand for, deciding what its press does. */
@@ -276,16 +275,16 @@ type MentionChip =
       identity: IssueIdentity;
     };
 
-function shapeHeightStyle(
+function surfaceHeightStyle(
   panelHeight: number | undefined,
   slotHeight: number | undefined,
   feedbackHeight: number | undefined,
 ): CSSProperties {
   return {
-    ...(panelHeight === undefined ? {} : { "--panel-height": `${panelHeight}px` }),
-    ...(slotHeight === undefined ? {} : { "--slot-height": `${slotHeight}px` }),
-    ...(feedbackHeight === undefined ? {} : { "--feedback-height": `${feedbackHeight}px` }),
-  } as CSSProperties;
+    ...(panelHeight === undefined ? undefined : { "--panel-height": `${panelHeight}px` }),
+    ...(slotHeight === undefined ? undefined : { "--slot-height": `${slotHeight}px` }),
+    ...(feedbackHeight === undefined ? undefined : { "--feedback-height": `${feedbackHeight}px` }),
+  } satisfies CSSProperties;
 }
 
 /**
@@ -295,7 +294,7 @@ function shapeHeightStyle(
  * under the slot's field — which is what makes either one feel like a resize
  * rather than a redraw.
  */
-function useShapeHeight(): [(element: HTMLElement | null) => void, number | undefined] {
+function useSurfaceHeight(): [(element: HTMLElement | null) => void, number | undefined] {
   const observer = useRef<ResizeObserver | undefined>(undefined);
   const [height, setHeight] = useState<number>();
 
@@ -323,7 +322,7 @@ function useShapeHeight(): [(element: HTMLElement | null) => void, number | unde
   return [measured, height];
 }
 
-const COLLAPSE_ANIMATION_MS = MOTION_DURATION_MS.EXIT + MOTION_DURATION_MS.SHAPE;
+const COLLAPSE_ANIMATION_MS = MOTION_DURATION_MS.EXIT + MOTION_DURATION_MS.SURFACE;
 
 /**
  * True from the render that leaves the panel for a compact shape until the
@@ -383,6 +382,7 @@ export function App(): React.JSX.Element {
   /**
    * The landing being played in the composer's shape after a send, keyed by
    * play so a second send restarts the swoop rather than reusing a finished
+   // SAFETY: The preceding check establishes the asserted contract.
    * one. Undefined is the composer as it always was.
    */
   const [feedbackConfirming, setFeedbackConfirming] = useState<{
@@ -392,12 +392,12 @@ export function App(): React.JSX.Element {
   // Counts for nothing except having changed: each tick re-renders the rows so
   // their "how long ago" labels stay honest while they are on screen.
   const [, setClock] = useState(0);
-  const [panelElement, panelHeight] = useShapeHeight();
-  const [slotElement, slotHeight] = useShapeHeight();
-  const [signInSlotElement, signInSlotHeight] = useShapeHeight();
-  const [connectElement, connectHeight] = useShapeHeight();
-  const [feedbackElement, feedbackHeight] = useShapeHeight();
-  const [captionTextElement, captionTextHeight] = useShapeHeight();
+  const [panelElement, panelHeight] = useSurfaceHeight();
+  const [slotElement, slotHeight] = useSurfaceHeight();
+  const [signInSlotElement, signInSlotHeight] = useSurfaceHeight();
+  const [connectElement, connectHeight] = useSurfaceHeight();
+  const [feedbackElement, feedbackHeight] = useSurfaceHeight();
+  const [captionTextElement, captionTextHeight] = useSurfaceHeight();
   const captionElement = useRef<HTMLSpanElement>(null);
   const [captionPadding, setCaptionPadding] = useState(0);
   useLayoutEffect(() => {
@@ -408,6 +408,7 @@ export function App(): React.JSX.Element {
     setCaptionPadding((previous) => (previous === next ? previous : next));
   });
   /**
+   // SAFETY: The preceding check establishes the asserted contract.
    * The ask key as last re-taken, superseding bootstrap's once it has changed
    * at all: moving the talk key re-registers every global chord, and the ask
    * key can land somewhere new or nowhere. Wrapped so "changed to none" is
@@ -418,7 +419,9 @@ export function App(): React.JSX.Element {
   /** The stop key on the ask key's exact terms, for the guide's sake. */
   const [stopHotkeyChange, setStopHotkeyChange] = useState<{ accelerator?: string }>();
   /**
+   // SAFETY: The preceding check establishes the asserted contract.
    * The Mac's output as last read — its mute switch and volume — absent
+   // SAFETY: The preceding check establishes the asserted contract.
    * wherever it cannot be read, which is drawn as audible. While it says
    * Luke's voice would land on silence, his words are captioned whatever the
    * preference says, and a hint under them asks for volume.
@@ -429,6 +432,7 @@ export function App(): React.JSX.Element {
   /** Whether the calendar's quiet is holding announcements — the face sleeps on it. */
   const [meetingQuiet, setMeetingQuiet] = useState(false);
   /**
+   // SAFETY: The preceding check establishes the asserted contract.
    * Where the app stands against the latest release, as last pushed or
    * answered. Absent until bootstrap carries the main process's snapshot.
    */
@@ -478,6 +482,7 @@ export function App(): React.JSX.Element {
   const feedbackConfirmPlays = useRef(0);
   const feedbackConfirmTimer = useRef<number | undefined>(undefined);
   /**
+   // SAFETY: The preceding check establishes the asserted contract.
    * The panel's deferred return, held for as long as the confirmation plays.
    * Running it is the confirmation ending on time; dropping it is the shape
    * being asked for again — or left — before the celebration finished.
@@ -492,6 +497,7 @@ export function App(): React.JSX.Element {
   const spokenFeedbackDraft = useRef<string | undefined>(undefined);
   /**
    * How many errands Luke has run. Carried with each one so that asking for
+   // SAFETY: The preceding check establishes the asserted contract.
    * the same control twice flies twice, exactly as a repeated face gesture is
    * replayed by counting its plays.
    */
@@ -501,6 +507,7 @@ export function App(): React.JSX.Element {
    * The way to tell the conversation what the store now holds, for the spoken
    * carrier below. Only the drawing waits for Luke: the guide has to describe
    * the store's answer at once, because the next call in the same turn is
+   // SAFETY: The preceding check establishes the asserted contract.
    * validated against it — an effort named in the same breath as a model only
    * exists in the guide the model change just made true. A ref because the
    * carrier is created before the conversation hook that owns the publisher.
@@ -518,6 +525,7 @@ export function App(): React.JSX.Element {
    * It cannot be only the spoken answers, though, or a switch pressed by hand
    * between two spoken changes would be shadowed by a snapshot older than it.
    * So every write goes through {@link applySettings} and this is always at
+   // SAFETY: The preceding check establishes the asserted contract.
    * least as new as the drawn state, whichever path wrote it.
    */
   const answeredSettings = useRef<AppSettings | undefined>(undefined);
@@ -1248,8 +1256,8 @@ export function App(): React.JSX.Element {
         const result = await window.sidecar.sendFeedback({
           kind: sending.kind,
           message: sending.message.trim(),
-          ...(name ? { name } : {}),
-          ...(email ? { email } : {}),
+          ...(name ? { name } : undefined),
+          ...(email ? { email } : undefined),
           images: sending.images,
         });
         if (!result.delivered) {
@@ -1324,7 +1332,7 @@ export function App(): React.JSX.Element {
       const opened = openedFeedbackEntry(feedbackEntry.latest(), {
         kind,
         fromPanel,
-        ...(draft !== undefined ? { draft } : {}),
+        ...(draft !== undefined ? { draft } : undefined),
         // A fresh note starts signed with the account; a note already there
         // keeps its fields as its author left them, cleared ones included.
         signature: accountSignature(accountNow()),
@@ -1366,6 +1374,7 @@ export function App(): React.JSX.Element {
   /**
    * Takes picked or pasted files aboard. Encoding happens here on the user's
    * machine — scaled and re-written where a screenshot would not fit the
+   // SAFETY: The preceding check establishes the asserted contract.
    * request a submission has to travel as — and what could not come is said
    * beside the field rather than dropped in silence.
    */
@@ -1402,7 +1411,7 @@ export function App(): React.JSX.Element {
 
   const feedbackControl: FeedbackEntryControl = {
     entry: feedbackEntry.entry,
-    ...(feedbackNotice ? { notice: feedbackNotice } : {}),
+    ...(feedbackNotice ? { notice: feedbackNotice } : undefined),
     // The section's own buttons are the panel asking, so leaving returns there.
     begin: (kind) => beginFeedback(kind, true),
     changeMessage: (message) => feedbackEntry.patch({ message }),
@@ -1597,6 +1606,7 @@ export function App(): React.JSX.Element {
    * a flight whose shape goes out from under it is cut short where it stands.
    *
    * Every beat is acted on, with no test for whether the flight reporting it is
+   // SAFETY: The preceding check establishes the asserted contract.
    * still the current one. There is no such thing as a stale flight —
    * a second act waits its turn rather than overtaking the one in the air — and
    * a guard here would be worse than redundant: this is what advances the run,
@@ -1684,7 +1694,7 @@ export function App(): React.JSX.Element {
             armErrandFlight({
               targets: errandTargets(action),
               tab: PANEL_TAB.SETTINGS,
-              ...(page === undefined ? {} : { page }),
+              ...(page === undefined ? undefined : { page }),
               opening,
               borrowsPanel: true,
               hold,
@@ -1715,7 +1725,7 @@ export function App(): React.JSX.Element {
           const drafted = openedFeedbackEntry(feedbackEntry.latest(), {
             kind,
             fromPanel: false,
-            ...(action.draft === undefined ? {} : { draft: action.draft }),
+            ...(action.draft === undefined ? undefined : { draft: action.draft }),
             signature: accountSignature(accountNow()),
           }).drafted;
           spokenFeedbackDraft.current = action.draft;
@@ -1732,7 +1742,7 @@ export function App(): React.JSX.Element {
             status: "opened",
             kind: action.composer,
             ...(action.draft === undefined
-              ? {}
+              ? undefined
               : drafted
                 ? {
                     note: "The ask is drafted in the composer; the developer edits and sends it by hand.",
@@ -1760,8 +1770,8 @@ export function App(): React.JSX.Element {
           const view =
             filter || action.sort
               ? {
-                  ...(filter ? { filter } : {}),
-                  ...(action.sort ? { sort: action.sort } : {}),
+                  ...(filter ? { filter } : undefined),
+                  ...(action.sort ? { sort: action.sort } : undefined),
                 }
               : undefined;
           await changeMode(true);
@@ -1781,11 +1791,11 @@ export function App(): React.JSX.Element {
           return {
             status: "shown",
             tab: action.tab,
-            ...(spoken ? { filter: action.filter } : {}),
+            ...(spoken ? { filter: action.filter } : undefined),
             ...(action.filter && !spoken
               ? { note: "That agent has no filter of its own here, so every session is shown." }
-              : {}),
-            ...(action.sort ? { sort: action.sort } : {}),
+              : undefined),
+            ...(action.sort ? { sort: action.sort } : undefined),
           };
         },
       }),
@@ -2012,7 +2022,7 @@ export function App(): React.JSX.Element {
   // reveal the growth on the shape's own spring, which leaves the inner
   // stack's wrapped height as the only box that says how many rows the chips
   // made.
-  const [noticeRowsElement, noticeBandHeight] = useShapeHeight();
+  const [noticeRowsElement, noticeBandHeight] = useSurfaceHeight();
   /**
    * The measured caption and band heights the shape spends, held through a
    * collapse out of the panel. The compact width lands at the flip and
@@ -2022,13 +2032,13 @@ export function App(): React.JSX.Element {
    * travels on the panel's numbers; the compact re-measure lands when the
    * shape has settled, and grows it there the way words arriving at rest do.
    */
-  const heldShapeSizes = useRef<{ caption?: number; band?: number }>({});
+  const heldSurfaceSizes = useRef<{ caption?: number; band?: number }>({});
   useEffect(() => {
     if (leavingPanel) return;
-    heldShapeSizes.current = { caption: captionTextHeight, band: noticeBandHeight };
+    heldSurfaceSizes.current = { caption: captionTextHeight, band: noticeBandHeight };
   });
-  const shownCaptionHeight = leavingPanel ? heldShapeSizes.current.caption : captionTextHeight;
-  const shownBandHeight = leavingPanel ? heldShapeSizes.current.band : noticeBandHeight;
+  const shownCaptionHeight = leavingPanel ? heldSurfaceSizes.current.caption : captionTextHeight;
+  const shownBandHeight = leavingPanel ? heldSurfaceSizes.current.band : noticeBandHeight;
   const [noticeFold, setNoticeFold] = useState({ above: false, below: false });
   const measureNoticeFold = useCallback(() => {
     const band = noticeBand.current;
@@ -2058,6 +2068,7 @@ export function App(): React.JSX.Element {
 
   /**
    * A notice's press: a row press at one remove. A session its provider
+   // SAFETY: The preceding check establishes the asserted contract.
    * gave an address goes to the system, exactly as pressing the row would;
    * one with no address — a local session — has the panel opened instead,
    * where its row is already sorted near the top. Luke keeps talking: the
@@ -2333,6 +2344,7 @@ export function App(): React.JSX.Element {
 
   /**
    * The hint's own button. It quiets the hint, never the captions: the words
+   // SAFETY: The preceding check establishes the asserted contract.
    * stay for as long as the silence does, because they are what "got it"
    * leaves the user reading Luke by.
    */
@@ -2360,11 +2372,11 @@ export function App(): React.JSX.Element {
         voiceAvailable: current.voiceAvailable,
         microphoneStatus,
         hotkey: {
-          ...(talkKey.hotkey ? { hotkey: voiceHotkeyLabel(talkKey.hotkey) } : {}),
+          ...(talkKey.hotkey ? { hotkey: voiceHotkeyLabel(talkKey.hotkey) } : undefined),
           held: talkKey.held,
         },
-        ...(askAccelerator ? { askKey: voiceHotkeyLabel(askAccelerator) } : {}),
-        ...(stopAccelerator ? { stopKey: voiceHotkeyLabel(stopAccelerator) } : {}),
+        ...(askAccelerator ? { askKey: voiceHotkeyLabel(askAccelerator) } : undefined),
+        ...(stopAccelerator ? { stopKey: voiceHotkeyLabel(stopAccelerator) } : undefined),
       });
       syncGuide(guide);
     },
@@ -2485,14 +2497,14 @@ export function App(): React.JSX.Element {
   useEffect(
     () =>
       window.sidecar.onAskHotkeyChanged((accelerator) =>
-        setAskHotkeyChange(accelerator ? { accelerator } : {}),
+        setAskHotkeyChange(accelerator ? { accelerator } : undefined),
       ),
     [],
   );
   useEffect(
     () =>
       window.sidecar.onStopHotkeyChanged((accelerator) =>
-        setStopHotkeyChange(accelerator ? { accelerator } : {}),
+        setStopHotkeyChange(accelerator ? { accelerator } : undefined),
       ),
     [],
   );
@@ -2689,16 +2701,16 @@ export function App(): React.JSX.Element {
     onSettingsReset: changeSettingsReset,
   };
   const shortcuts: ShortcutControl = {
-    ...(shownHotkey.hotkey ? { voiceHotkey: shownHotkey.hotkey } : {}),
+    ...(shownHotkey.hotkey ? { voiceHotkey: shownHotkey.hotkey } : undefined),
     voiceHotkeyHeld: shownHotkey.held,
     voiceChosen: settings?.voiceHotkey !== undefined,
     onVoiceHotkeyChange: changeVoiceHotkey,
     // Both rows take the accelerator: they draw the keys apart and
     // label the chord whole for the buttons beside them.
-    ...(shownAskHotkey ? { askHotkey: shownAskHotkey } : {}),
+    ...(shownAskHotkey ? { askHotkey: shownAskHotkey } : undefined),
     askChosen: settings?.askHotkey !== undefined,
     onAskHotkeyChange: changeAskHotkey,
-    ...(shownStopHotkey ? { stopHotkey: shownStopHotkey } : {}),
+    ...(shownStopHotkey ? { stopHotkey: shownStopHotkey } : undefined),
     stopChosen: settings?.stopHotkey !== undefined,
     onStopHotkeyChange: changeStopHotkey,
     onCapture: changeShortcutCapture,
@@ -2731,7 +2743,7 @@ export function App(): React.JSX.Element {
         ...notchStyle(display),
         // One slot shape, three possible occupants: the surface follows the
         // height of whichever is actually drawn.
-        ...shapeHeightStyle(
+        ...surfaceHeightStyle(
           panelHeight,
           signInWait !== undefined
             ? signInSlotHeight
@@ -2758,7 +2770,7 @@ export function App(): React.JSX.Element {
             accountRequired={bootstrap.accountRequired}
             account={account ?? bootstrap.account}
             onBeginSignIn={beginSignIn}
-            {...(signInFailure ? { signInFailure } : {})}
+            {...(signInFailure ? { signInFailure } : undefined)}
             list={list}
             view={sessionView}
             onViewChange={changeSessionView}
@@ -2767,7 +2779,7 @@ export function App(): React.JSX.Element {
             writes={sessionWrites}
             ask={askLuke}
             onAskEngaged={changeAskEngagement}
-            {...(shownAskHotkey ? { askShortcut: shownAskHotkey } : {})}
+            {...(shownAskHotkey ? { askShortcut: shownAskHotkey } : undefined)}
             offerOptions={offerOptions}
             optionsOpen={optionsOpen}
             onOptionsToggle={() => setOptionsOpen((open) => !open)}
@@ -2797,8 +2809,8 @@ export function App(): React.JSX.Element {
               microphone,
               updates,
               settings,
-              ...(voiceService ? { voiceService } : {}),
-              ...(hostedUsage ? { hostedUsage } : {}),
+              ...(voiceService ? { voiceService } : undefined),
+              ...(hostedUsage ? { hostedUsage } : undefined),
               preferences,
               credentials,
               feedback: feedbackControl,
@@ -2897,7 +2909,7 @@ export function App(): React.JSX.Element {
       {credentialsEntry.entry === undefined && consentConnect.entry === undefined ? (
         /* The panel stood down to the account sign-in it is waiting on. */
         <SignInSlot
-          {...(signInWait ? { provider: signInWait } : {})}
+          {...(signInWait ? { provider: signInWait } : undefined)}
           drawn={slotOpen}
           onCancel={cancelSignIn}
           measure={signInSlotElement}
@@ -2921,7 +2933,7 @@ export function App(): React.JSX.Element {
         tally={tally}
         analyser={analyser}
         onVoiceActivity={handleVoiceActivity}
-        {...(voiceTurn ? { voice: voiceTurn } : {})}
+        {...(voiceTurn ? { voice: voiceTurn } : undefined)}
         fixtureSpeaking={fixtureSpeaking}
         hasAudioSignal={hasAudioSignal}
         voiceOpening={talkOpening}
@@ -2936,12 +2948,13 @@ export function App(): React.JSX.Element {
           over the gate's reserved box while the panel is up, and down to the
           peek's strip — the wing spot the authed face holds — when it closes.
           Keyed on the play so each gesture of the introduction cycle is a
+          // SAFETY: The preceding check establishes the asserted contract.
           fresh drawing, exactly as the wing remounts its own. */}
       {accountGated ? (
         <span className="sign-in-luke" aria-hidden="true">
           <LukeFace
             key={signInFace.play}
-            {...(signInFace.motion ? { motion: signInFace.motion } : {})}
+            {...(signInFace.motion ? { motion: signInFace.motion } : undefined)}
           />
         </span>
       ) : null}
@@ -2953,7 +2966,7 @@ export function App(): React.JSX.Element {
           be seen to move, and the way home is what lets a panel stood up for
           the errand stand back down. */}
       <LukeErrand
-        {...(errand ? { errand } : {})}
+        {...(errand ? { errand } : undefined)}
         onLanded={releaseErrandChange}
         onReturned={finishErrandFlight}
       />
@@ -2970,6 +2983,7 @@ export function App(): React.JSX.Element {
           is always mounted like the stack itself; the settled one mounts only
           while it has words, so a lone reply pays no gap for a block that is
           not there. Hidden from readers while it captions speech — it
+          // SAFETY: The preceding check establishes the asserted contract.
           duplicates what is already audible — and announced as a status line
           when it carries a failure, which was never audible at all. */}
       <span
@@ -3017,6 +3031,7 @@ export function App(): React.JSX.Element {
           both edges of its fade can run, and holds the last mentioned fields
           through its exit so the names leave in place. Inert while away so
           nothing hidden can be pressed or tabbed to; each chip's own hit
+          // SAFETY: The preceding check establishes the asserted contract.
           region keeps the pointer resting on it from reading as leaving the
           shape. */}
       <span

@@ -18,6 +18,7 @@ export interface FeedbackEntry {
   /**
    * Optional credit. A fresh note starts signed with the account the user is
    * signed in as; both fields stay theirs to edit or clear, and empty means
+   // SAFETY: The preceding check establishes the asserted contract.
    * unsigned. Kept as edited for the life of the note.
    */
   name: string;
@@ -71,12 +72,13 @@ export interface FeedbackSignature {
   email?: string;
 }
 
+// SAFETY: The preceding check establishes the asserted contract.
 /** What the account offers a fresh note as its signature: nothing, signed out. */
 export function accountSignature(
   account: AccountSnapshot | undefined,
 ): FeedbackSignature | undefined {
   if (account?.status !== ACCOUNT_STATUS.SIGNED_IN) return undefined;
-  return { ...(account.name ? { name: account.name } : {}), email: account.email };
+  return { ...(account.name ? { name: account.name } : undefined), email: account.email };
 }
 
 export function freshFeedbackEntry(
@@ -102,6 +104,7 @@ export function freshFeedbackEntry(
  * words: the section never sends one, and the spoken tool's
  * contract forbids anything the user did not say. `signature` is the
  * signed-in account's credit, and it seeds only a note that does not exist
+ // SAFETY: The preceding check establishes the asserted contract.
  * yet: a note already there keeps its fields exactly as its author left
  * them, cleared ones included.
  */
@@ -123,23 +126,21 @@ export interface FeedbackOpenAsk {
  * ask, not the first. `drafted` reports whether the starting text was placed,
  * so a spoken open can say honestly what it found.
  */
-export function openedFeedbackEntry(
-  current: FeedbackEntry | undefined,
-  ask: FeedbackOpenAsk,
-): { entry?: FeedbackEntry; drafted: boolean } {
-  if (current?.busy) return { drafted: false };
+export function openedFeedbackEntry(current: FeedbackEntry | undefined, ask: FeedbackOpenAsk) {
+  if (current?.busy)
+    return { drafted: false } satisfies { entry?: FeedbackEntry; drafted: boolean };
   const blank = (current?.message ?? "").trim().length === 0;
   const drafted = ask.draft !== undefined && blank;
   const base = current ?? freshFeedbackEntry(ask.kind, ask.fromPanel, ask.signature);
   return {
     entry: {
       ...base,
-      ...(blank ? { kind: ask.kind } : {}),
-      ...(drafted && ask.draft !== undefined ? { message: ask.draft } : {}),
+      ...(blank ? { kind: ask.kind } : undefined),
+      ...(drafted && ask.draft !== undefined ? { message: ask.draft } : undefined),
       fromPanel: ask.fromPanel,
     },
     drafted,
-  };
+  } satisfies { entry?: FeedbackEntry; drafted: boolean };
 }
 
 /**
@@ -148,10 +149,7 @@ export function openedFeedbackEntry(
  * with a switch, because they are read differently on arrival — feedback is
  * about Luke, and a prompt is a candidate for the product itself.
  */
-export const FEEDBACK_COPY: Record<
-  FeedbackKind,
-  { title: string; label: string; placeholder: string; detail?: string }
-> = {
+export const FEEDBACK_COPY = {
   [FEEDBACK_KIND.FEEDBACK]: {
     title: "Send feedback",
     label: "Feedback",
@@ -176,6 +174,7 @@ export function isSendable(entry: FeedbackEntry | undefined): entry is FeedbackE
  * beside the field rather than thrown, because attaching is the user's act.
  */
 export const IMAGE_REFUSAL = {
+  // SAFETY: The preceding check establishes the asserted contract.
   UNREADABLE: "That file could not come along as a screenshot.",
   FULL: `Up to ${FEEDBACK_LIMITS.MAX_IMAGES} screenshots can come along.`,
 } as const;

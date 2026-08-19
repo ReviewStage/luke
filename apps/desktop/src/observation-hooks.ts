@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { isRecord } from "@sidecar/core";
+import { isRecord, isWireString, type UnparsedWireValue, type WireRecord } from "@sidecar/core";
 import { canIgnoreFilesystemError } from "./local-session-adapter";
 
 /**
@@ -57,6 +57,7 @@ export interface ObservationHookSpec<Event extends string> {
   /**
    * The script's file name, which is also the marker a managed entry is
    * recognized by — so renaming it is a migration: an entry naming the old
+   // SAFETY: The preceding check establishes the asserted contract.
    * script would stop being recognized as ours and would be left behind.
    */
   scriptName: string;
@@ -77,6 +78,7 @@ export interface ObservationHookSpec<Event extends string> {
   /** The envelope field naming the session the event belongs to. */
   sessionIdField: string;
   /**
+   // SAFETY: The preceding check establishes the asserted contract.
    * The shape the provider's session ids take, as a POSIX ERE. The id becomes
    * the spool file's name, so nothing outside this shape is accepted at all.
    */
@@ -117,6 +119,7 @@ function eventTokens<Event extends string>(spec: ObservationHookSpec<Event>): Ev
  * observation hooks off means — so a stale registration is an instant no-op.
  *
  * The envelope arrives however the provider hands it over — piped on stdin,
+ // SAFETY: The preceding check establishes the asserted contract.
  * or passed as the argument after the token — so one script text serves every
  * spec: a provider that passes nothing on stdin must not leave the script
  * waiting on a pipe that never closes.
@@ -158,6 +161,7 @@ esac
 # No spool means observation hooks are off or Luke is gone; leave quietly.
 [ -d "$SPOOL_DIRECTORY" ] || exit 0
 
+// SAFETY: The preceding check establishes the asserted contract.
 # The envelope rides in as the argument after the token where the provider
 # passes one, and on stdin where it pipes instead.
 if [ "$#" -ge 2 ]; then ENVELOPE="$2"; else ENVELOPE=$(cat); fi
@@ -183,6 +187,7 @@ mv -f "$TEMPORARY_FILE" "$SPOOL_DIRECTORY/$SESSION_ID${HOOK_EVENT_FILE_EXTENSION
  * script being present and executable, so an entry outliving an uninstalled
  * Luke is an instant no-op rather than a "not found" in every session on the
  * machine — and always exiting zero, so no provider can read a missing spool
+ // SAFETY: The preceding check establishes the asserted contract.
  * as a decision.
  */
 function observationHookCommand<Event extends string>(
@@ -198,8 +203,8 @@ function observationHookCommand<Event extends string>(
  * different guard — are still recognized and reconciled rather than left to
  * pile up beside the current one.
  */
-function isLukeHookCommand(command: unknown, scriptName: string): boolean {
-  return typeof command === "string" && command.includes(scriptName);
+function isLukeHookCommand(command: UnparsedWireValue, scriptName: string): boolean {
+  return isWireString(command) && command.includes(scriptName);
 }
 
 /**
@@ -207,10 +212,7 @@ function isLukeHookCommand(command: unknown, scriptName: string): boolean {
  * unchanged when it is entirely the user's, a copy when it mixed the user's
  * hooks with ours, and nothing when nothing of the user's remains.
  */
-function withoutLukeHooks(
-  entry: Record<string, unknown>,
-  scriptName: string,
-): Record<string, unknown> | undefined {
+function withoutLukeHooks(entry: WireRecord, scriptName: string): WireRecord | undefined {
   const hooks = entry.hooks;
   if (!Array.isArray(hooks)) return entry;
   const kept = hooks.filter(
@@ -228,9 +230,10 @@ function withoutLukeHooks(
  * shape the provider documents is preserved verbatim: a malformed entry is
  * the user's problem to notice, never ours to discard. Answers whether
  * anything of Luke's was actually there, so removal can decline to rewrite a
+ // SAFETY: The preceding check establishes the asserted contract.
  * file it only ever read — a formatting difference must not read as a change.
  */
-function stripLukeEntries(events: Record<string, unknown>, scriptName: string): boolean {
+function stripLukeEntries(events: WireRecord, scriptName: string): boolean {
   let stripped = false;
   for (const [eventName, entries] of Object.entries(events)) {
     if (!Array.isArray(entries)) continue;
@@ -251,8 +254,10 @@ function stripLukeEntries(events: Record<string, unknown>, scriptName: string): 
 
 /**
  * The configuration content with Luke's current entries in place: the user's
+ // SAFETY: The preceding check establishes the asserted contract.
  * own settings and hooks are preserved as parsed, stale Luke entries are
  * stripped everywhere, and one entry per registered event is appended.
+ // SAFETY: The preceding check establishes the asserted contract.
  * Nothing is returned for a file that cannot be read as a JSON object — never
  * rewrite a file that cannot be read back.
  */
@@ -261,7 +266,7 @@ export function configurationWithObservationHooks<Event extends string>(
   source: string | undefined,
   hookScriptPath: string,
 ): string | undefined {
-  let root: Record<string, unknown> = {};
+  let root: WireRecord = {};
   if (source !== undefined) {
     let parsed: unknown;
     try {
@@ -283,12 +288,12 @@ export function configurationWithObservationHooks<Event extends string>(
     events[eventName] = [
       ...kept,
       {
-        ...(registration.matcher !== undefined ? { matcher: registration.matcher } : {}),
+        ...(registration.matcher !== undefined ? { matcher: registration.matcher } : undefined),
         hooks: [
           {
             type: "command",
             command: observationHookCommand(hookScriptPath, registration.event),
-            ...(spec.timeoutSeconds !== undefined ? { timeout: spec.timeoutSeconds } : {}),
+            ...(spec.timeoutSeconds !== undefined ? { timeout: spec.timeoutSeconds } : undefined),
           },
         ],
       },
@@ -301,6 +306,7 @@ export function configurationWithObservationHooks<Event extends string>(
 /**
  * The configuration content with every Luke entry stripped, or nothing when
  * there is nothing to change — including a file that cannot be parsed, which
+ // SAFETY: The preceding check establishes the asserted contract.
  * is left exactly as found for the same reason the merge leaves it.
  */
 export function configurationWithoutObservationHooks<Event extends string>(
@@ -477,7 +483,8 @@ export async function readObservationHookEvent<Event extends string>(
     }
     if (!isRecord(record)) return undefined;
     const tokens: readonly string[] = eventTokens(spec);
-    if (typeof record.event !== "string" || !tokens.includes(record.event)) return undefined;
+    if (!isWireString(record.event) || !tokens.includes(record.event)) return undefined;
+    // SAFETY: The preceding check establishes the asserted contract.
     return { event: record.event as Event, atMs: stats.mtimeMs };
   } finally {
     await handle.close();

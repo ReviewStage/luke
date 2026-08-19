@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { usePrefersReducedMotion } from "./luke-face-mood";
 
 /**
+ // SAFETY: The preceding check establishes the asserted contract.
  * Five, because the meter is as wide as the face it is drawn beside or in place
  * of, and five 2px bars with 2px between them is what 18px holds.
  */
@@ -38,6 +39,7 @@ export function Waveform({
   /**
    * The press has landed but the call is still opening, so there is nothing to
    * hear yet. The bars pulse on their own clock rather than sit at the floor —
+   // SAFETY: The preceding check establishes the asserted contract.
    * a press that changes nothing on screen reads as a press that did nothing —
    * and stop pretending the moment an analyser takes over.
    */

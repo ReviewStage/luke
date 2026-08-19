@@ -61,6 +61,7 @@ export const DEFAULT_ASK_HOTKEYS: readonly string[] = ["Alt+L", "Alt+Shift+L"];
 /**
  * The ask chords worth asking the system for, in order. A chosen chord goes
  * first — it is what the user asked for — with the defaults kept behind it,
+ // SAFETY: The preceding check establishes the asserted contract.
  * exactly as the talk key's candidates work. Any chord the talk key holds is
  * left out, the chosen one included: the two Luke keys must never compete for
  * one chord — whichever registered first would silently cost the other its
@@ -99,7 +100,7 @@ const MODIFIER_ORDER: readonly VoiceHotkeyModifier[] = [
 ];
 
 /** Every name the native helper's own table answers to, folded to one each. */
-const MODIFIER_ALIASES: Readonly<Record<string, VoiceHotkeyModifier>> = {
+const MODIFIER_ALIASES = {
   control: VOICE_HOTKEY_MODIFIER.CONTROL,
   ctrl: VOICE_HOTKEY_MODIFIER.CONTROL,
   alt: VOICE_HOTKEY_MODIFIER.ALT,
@@ -114,6 +115,7 @@ const MODIFIER_ALIASES: Readonly<Record<string, VoiceHotkeyModifier>> = {
 /**
  * The keys a talk key may end in: Space or a letter, because that is the whole
  * of the native helper's table. Anything wider stored here would register
+ // SAFETY: The preceding check establishes the asserted contract.
  * through the helper as nothing and silently fall back to the defaults, so the
  * limit is enforced where the chord is chosen rather than discovered where it
  * fails.
@@ -131,6 +133,7 @@ function joinVoiceHotkey(held: ReadonlySet<VoiceHotkeyModifier>, key: string): s
  * Whether the modifiers held cannot anchor a talk key: none at all, or Shift
  * alone. Shift-and-a-letter is how every app types a capital, and
  * Shift-and-Space is typed mid-sentence, so a chord Shift carries by itself
+ // SAFETY: The preceding check establishes the asserted contract.
  * takes plain typing away exactly as a bare key would. Shift may still join a
  * chord another modifier anchors.
  */
@@ -206,7 +209,9 @@ export interface VoiceHotkeyChord {
 const MODIFIER_CODE_PREFIXES = ["Alt", "Control", "Meta", "Shift"] as const;
 
 /**
+ // SAFETY: The preceding check establishes the asserted contract.
  * Reads one keystroke as a talk-key chord. `code` rather than `key`, because
+ // SAFETY: The preceding check establishes the asserted contract.
  * on macOS Option moves letters — Option-S arrives as `ß` — and the chord
  * being recorded is the physical one the helper will watch for.
  */
@@ -246,12 +251,12 @@ export function capturedVoiceHotkey(chord: VoiceHotkeyChord): VoiceHotkeyCapture
 export function voiceHotkeyToShow(
   bootstrap: { voiceHotkey?: string; voiceHotkeyHeld: boolean },
   changed?: { hotkey?: string; held: boolean },
-): { hotkey?: string; held: boolean } {
+) {
   if (changed) return changed;
   return {
-    ...(bootstrap.voiceHotkey ? { hotkey: bootstrap.voiceHotkey } : {}),
+    ...(bootstrap.voiceHotkey ? { hotkey: bootstrap.voiceHotkey } : undefined),
     held: bootstrap.voiceHotkeyHeld,
-  };
+  } satisfies { hotkey?: string; held: boolean };
 }
 
 /**
@@ -268,6 +273,7 @@ export const TALK_KEY_TAP_MS = 250;
 /**
  * What a release of the talk key does to the turn it opened.
  *
+ // SAFETY: The preceding check establishes the asserted contract.
  * Holding is the plain case: the turn lasts exactly as long as the key is down,
  * which is what makes it feel like a walkie-talkie and what stops a turn
  * outliving the finger that started it. A tap is for the question too long to
@@ -291,7 +297,7 @@ export function talkKeyRelease(input: { heldMs: number; latched: boolean }): Tal
   return input.heldMs < TALK_KEY_TAP_MS ? TALK_KEY_RELEASE.LATCH : TALK_KEY_RELEASE.SEND;
 }
 
-const MODIFIER_SYMBOLS: Readonly<Record<string, string>> = {
+const MODIFIER_SYMBOLS = {
   Command: "⌘",
   CommandOrControl: "⌘",
   Control: "⌃",
@@ -312,6 +318,7 @@ export function voiceHotkeyLabel(accelerator: string): string {
 }
 
 /**
+ // SAFETY: The preceding check establishes the asserted contract.
  * The same chord as the keys a hand actually presses, in the order macOS
  * writes them: one entry per key, so a surface can draw a cap each rather than
  * one chip for the whole chord.

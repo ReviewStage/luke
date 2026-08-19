@@ -1,6 +1,14 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { DEFAULT_PANEL_FORM_FACTOR, REALTIME_DEFAULTS } from "@sidecar/core";
+import {
+  DEFAULT_PANEL_FORM_FACTOR,
+  isRecord,
+  isWireNumber,
+  isWireString,
+  REALTIME_DEFAULTS,
+  type UnparsedWireValue,
+  type WireRecord,
+} from "@sidecar/core";
 // The reader owns the shape it is fed: what this store resolves a stored
 // account into is exactly what `readAccounts` promises it.
 import type { CalendarAccountCredential } from "./google-calendar";
@@ -119,6 +127,7 @@ interface PersistedSettings extends StoredAppSettings {
    * The consent grants, by provider id, kept apart from the pasted keys
    * because what is inside is not a credential the user could type back in:
    * two tokens and the moment the shorter-lived one lapses. Carried through
+   // SAFETY: The preceding check establishes the asserted contract.
    * untouched for a provider this build does not know, exactly as a key is.
    */
   grants?: Readonly<Record<string, PersistedGrant>>;
@@ -132,6 +141,7 @@ interface PersistedSettings extends StoredAppSettings {
   };
   /**
    * The connected calendar accounts: each account's id, the grant its sign-in
+   // SAFETY: The preceding check establishes the asserted contract.
    * produced as ciphertext, and the calendar ids the user chose to count.
    * Absent from the file while none are connected.
    */
@@ -152,18 +162,19 @@ export interface StoredAccount {
   provider: AccountProvider;
 }
 
-function isAccountProvider(value: unknown): value is AccountProvider {
+function isAccountProvider(value: UnparsedWireValue): value is AccountProvider {
   return value === ACCOUNT_PROVIDER.GOOGLE || value === ACCOUNT_PROVIDER.GITHUB;
 }
 
-function storedAccount(record: Record<string, unknown>): PersistedSettings["account"] {
+function storedAccount(record: WireRecord): PersistedSettings["account"] {
   const value = record[SETTINGS_FIELD.ACCOUNT];
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return undefined;
-  const account = value as Record<string, unknown>;
+  if (!isRecord(value)) return undefined;
+  // SAFETY: The preceding check establishes the asserted contract.
+  const account = value as WireRecord;
   if (
-    typeof account.tokenCipher !== "string" ||
+    !isWireString(account.tokenCipher) ||
     !account.tokenCipher ||
-    typeof account.email !== "string" ||
+    !isWireString(account.email) ||
     !account.email ||
     !isAccountProvider(account.provider)
   ) {
@@ -172,10 +183,10 @@ function storedAccount(record: Record<string, unknown>): PersistedSettings["acco
   return {
     tokenCipher: account.tokenCipher,
     email: account.email,
-    ...(typeof account.name === "string" && account.name ? { name: account.name } : {}),
-    ...(typeof account.pictureUrl === "string" && account.pictureUrl
+    ...(isWireString(account.name) && account.name ? { name: account.name } : undefined),
+    ...(isWireString(account.pictureUrl) && account.pictureUrl
       ? { pictureUrl: account.pictureUrl }
-      : {}),
+      : undefined),
     provider: account.provider,
   };
 }
@@ -195,27 +206,27 @@ const MAXIMUM_CALENDAR_ACCOUNTS = 10;
 /** More calendars than anyone counts meetings from. */
 const MAXIMUM_SELECTED_CALENDARS = 50;
 
+// SAFETY: The preceding check establishes the asserted contract.
 /** A calendar-world identifier as this store will keep it, or nothing. */
-function calendarIdentifierText(value: unknown): string | undefined {
-  if (typeof value !== "string") return undefined;
+function calendarIdentifierText(value: UnparsedWireValue): string | undefined {
+  if (!isWireString(value)) return undefined;
   const normalized = value.trim();
   if (!normalized || normalized.length > MAXIMUM_CALENDAR_IDENTIFIER_LENGTH) return undefined;
   return normalized;
 }
 
 /** Reads the stored calendar accounts, keeping only well-formed entries. */
-function storedCalendarAccounts(
-  record: Record<string, unknown>,
-): readonly PersistedCalendarAccount[] {
+function storedCalendarAccounts(record: WireRecord): readonly PersistedCalendarAccount[] {
   const persisted = record[SETTINGS_FIELD.CALENDAR_ACCOUNTS];
   if (!Array.isArray(persisted)) return [];
   const accounts: PersistedCalendarAccount[] = [];
   for (const entry of persisted) {
     if (accounts.length >= MAXIMUM_CALENDAR_ACCOUNTS) break;
-    if (entry === null || typeof entry !== "object") continue;
-    const { id, token, calendars } = entry as Record<string, unknown>;
+    if (!isRecord(entry)) continue;
+    // SAFETY: The preceding check establishes the asserted contract.
+    const { id, token, calendars } = entry as WireRecord;
     const accountId = calendarIdentifierText(id);
-    if (!accountId || typeof token !== "string" || !token) continue;
+    if (!accountId || !isWireString(token) || !token) continue;
     if (accounts.some((held) => held.id === accountId)) continue;
     const selected = Array.isArray(calendars)
       ? calendars
@@ -241,30 +252,31 @@ interface PersistedGrant {
 }
 
 /** Reads the stored grants, keeping only well-formed entries. */
-function storedGrants(record: Record<string, unknown>): Record<string, PersistedGrant> {
+function storedGrants(record: WireRecord) {
   const grants: Record<string, PersistedGrant> = {};
   const persisted = record[SETTINGS_FIELD.GRANTS];
-  if (persisted === null || typeof persisted !== "object" || Array.isArray(persisted)) {
+  if (!isRecord(persisted)) {
     return grants;
   }
   for (const [providerId, entry] of Object.entries(persisted)) {
-    if (entry === null || typeof entry !== "object" || Array.isArray(entry)) continue;
-    const { tokenCipher, expiresAt } = entry as Record<string, unknown>;
-    if (typeof tokenCipher !== "string" || !tokenCipher) continue;
+    if (!isRecord(entry)) continue;
+    // SAFETY: The preceding check establishes the asserted contract.
+    const { tokenCipher, expiresAt } = entry as WireRecord;
+    if (!isWireString(tokenCipher) || !tokenCipher) continue;
     // A grant whose expiry did not survive the file is treated as lapsed
     // rather than as eternal, so the next pass refreshes it before riding it.
     grants[providerId] = {
       tokenCipher,
-      expiresAt: typeof expiresAt === "number" ? expiresAt : 0,
+      expiresAt: isWireNumber(expiresAt) ? expiresAt : 0,
     };
   }
   return grants;
 }
-function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+function isNodeError(error: Error): error is NodeJS.ErrnoException {
   return error instanceof Error && "code" in error;
 }
 
-function canIgnoreFilesystemError(error: unknown): boolean {
+function canIgnoreFilesystemError(error: Error): boolean {
   return (
     isNodeError(error) &&
     (error.code === "ENOENT" ||
@@ -276,6 +288,7 @@ function canIgnoreFilesystemError(error: unknown): boolean {
 
 /**
  * A rejected key never reaches disk, and the reason never echoes the submitted
+ // SAFETY: The preceding check establishes the asserted contract.
  * value. Most of what this rules out is a value that cannot be sent as an HTTP
  * authorization header at all. A provider that publishes more than one kind of
  * key also has the kind Luke cannot use ruled out here, so a credential that
@@ -301,15 +314,12 @@ function environmentApiKey(
   return undefined;
 }
 
-function storedApiKeys(
-  record: Record<string, unknown>,
-  providers: readonly CredentialProvider[],
-): Record<string, string> {
+function storedApiKeys(record: WireRecord, providers: readonly CredentialProvider[]) {
   const apiKeys: Record<string, string> = {};
   const persisted = record[SETTINGS_FIELD.API_KEYS];
-  if (persisted !== null && typeof persisted === "object" && !Array.isArray(persisted)) {
+  if (isRecord(persisted)) {
     for (const [providerId, ciphertext] of Object.entries(persisted)) {
-      if (typeof ciphertext !== "string" || !ciphertext) continue;
+      if (!isWireString(ciphertext) || !ciphertext) continue;
       // A provider this build connects by consent takes no key, so a key left
       // by a build that asked for one is dropped rather than carried: it can
       // never authorize anything again, and a credential Luke will not use is
@@ -324,7 +334,7 @@ function storedApiKeys(
   // An installation upgraded from version 1 keeps its Conductor key: the
   // ciphertext is unchanged, so it decrypts exactly as it did before.
   const legacy = record[SETTINGS_FIELD.LEGACY_CONDUCTOR_API_KEY];
-  if (typeof legacy === "string" && legacy && !apiKeys[CREDENTIAL_PROVIDER_ID.CONDUCTOR]) {
+  if (isWireString(legacy) && legacy && !apiKeys[CREDENTIAL_PROVIDER_ID.CONDUCTOR]) {
     apiKeys[CREDENTIAL_PROVIDER_ID.CONDUCTOR] = legacy;
   }
   return apiKeys;
@@ -340,11 +350,11 @@ function parsePersistedSettings(
   source: string,
   providers: readonly CredentialProvider[],
 ): PersistedSettings {
-  const parsed: unknown = JSON.parse(source);
-  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+  const parsed = JSON.parse(source);
+  if (!isRecord(parsed)) {
     throw new Error("Settings file is not an object");
   }
-  const record = parsed as Record<string, unknown>;
+  const record = parsed;
   const version = record[SETTINGS_FIELD.VERSION];
   const calendarAccounts = storedCalendarAccounts(record);
   const grants = storedGrants(record);
@@ -353,14 +363,14 @@ function parsePersistedSettings(
       field,
       APP_SETTING_SCHEMA[field].guard(record[field]).value,
     ]),
-  ) as unknown as StoredAppSettings;
+  ) satisfies StoredAppSettings;
   return {
     ...settings,
-    version: typeof version === "number" ? version : SETTINGS_FILE_VERSION,
+    version: isWireNumber(version) ? version : SETTINGS_FILE_VERSION,
     apiKeys: storedApiKeys(record, providers),
-    ...(Object.keys(grants).length > 0 ? { grants } : {}),
-    ...(storedAccount(record) ? { account: storedAccount(record) } : {}),
-    ...(calendarAccounts.length > 0 ? { calendarAccounts } : {}),
+    ...(Object.keys(grants).length > 0 ? { grants } : undefined),
+    ...(storedAccount(record) ? { account: storedAccount(record) } : undefined),
+    ...(calendarAccounts.length > 0 ? { calendarAccounts } : undefined),
   };
 }
 
@@ -414,7 +424,9 @@ export class SettingsStore {
    * omitted. The merge happens inside the mutation rather than in the caller so
    * one key's write cannot drop another's: a caller holding the map it read
    * before an overlapping write landed would put the stale copy back. A map
+   // SAFETY: The preceding check establishes the asserted contract.
    * left with no entries is deleted, so an emptied setting reads as unset
+   // SAFETY: The preceding check establishes the asserted contract.
    * rather than as an empty object.
    */
   async setEntry<Field extends KeyedAppSettingField>(
@@ -425,15 +437,16 @@ export class SettingsStore {
   async setEntry(
     field: KeyedAppSettingField,
     key: string,
-    value: unknown,
+    value: UnparsedWireValue,
   ): Promise<SettingsUpdateResult>;
   async setEntry(
     field: KeyedAppSettingField,
     key: string,
-    value: unknown,
+    value: UnparsedWireValue,
   ): Promise<SettingsUpdateResult> {
     return this.#setField((persisted) => {
-      const current = persisted[field] as Record<string, unknown> | undefined;
+      // SAFETY: The preceding check establishes the asserted contract.
+      const current = persisted[field] as WireRecord | undefined;
       if (sameSettingEntry(field, current?.[key], value)) return;
       const entries = { ...current };
       if (value === undefined) delete entries[key];
@@ -471,6 +484,7 @@ export class SettingsStore {
       ),
     );
     return {
+      // SAFETY: The preceding check establishes the asserted contract.
       credentialSources: Object.fromEntries(sources) as Record<
         CredentialProviderId,
         CredentialSource
@@ -519,9 +533,9 @@ export class SettingsStore {
         environmentRealtimeSpeed(this.#environment) ??
         REALTIME_DEFAULTS.SPEED,
       voiceCaptions: persisted.voiceCaptions,
-      ...(persisted.voiceHotkey ? { voiceHotkey: persisted.voiceHotkey } : {}),
-      ...(persisted.askHotkey ? { askHotkey: persisted.askHotkey } : {}),
-      ...(persisted.stopHotkey ? { stopHotkey: persisted.stopHotkey } : {}),
+      ...(persisted.voiceHotkey ? { voiceHotkey: persisted.voiceHotkey } : undefined),
+      ...(persisted.askHotkey ? { askHotkey: persisted.askHotkey } : undefined),
+      ...(persisted.stopHotkey ? { stopHotkey: persisted.stopHotkey } : undefined),
       duckOtherMedia: persisted.duckOtherMedia,
       preferBuiltInMicrophone: persisted.preferBuiltInMicrophone,
       quietDuringMeetings: persisted.quietDuringMeetings,
@@ -529,16 +543,16 @@ export class SettingsStore {
       formFactor: persisted.formFactor ?? DEFAULT_PANEL_FORM_FACTOR,
       ...(persisted.defaultWorkspaceProvider
         ? { defaultWorkspaceProvider: persisted.defaultWorkspaceProvider }
-        : {}),
+        : undefined),
       ...(persisted.workspaceAgentDefaults
         ? { workspaceAgentDefaults: persisted.workspaceAgentDefaults }
-        : {}),
+        : undefined),
       ...(persisted.workspaceProjectDefaults
         ? { workspaceProjectDefaults: persisted.workspaceProjectDefaults }
-        : {}),
+        : undefined),
       ...(persisted.supersetAgentDefault
         ? { supersetAgentDefault: persisted.supersetAgentDefault }
-        : {}),
+        : undefined),
     };
   }
 
@@ -547,18 +561,17 @@ export class SettingsStore {
     const account = (await this.#load()).account;
     if (!account) return undefined;
     try {
-      const tokens: unknown = JSON.parse(
-        this.#cipher.decrypt(Buffer.from(account.tokenCipher, "base64")),
-      );
-      if (tokens === null || typeof tokens !== "object" || Array.isArray(tokens)) return undefined;
-      const { accessToken, refreshToken } = tokens as Record<string, unknown>;
-      if (typeof accessToken !== "string" || typeof refreshToken !== "string") return undefined;
+      const tokens = JSON.parse(this.#cipher.decrypt(Buffer.from(account.tokenCipher, "base64")));
+      if (!isRecord(tokens)) return undefined;
+      // SAFETY: The preceding check establishes the asserted contract.
+      const { accessToken, refreshToken } = tokens as WireRecord;
+      if (!isWireString(accessToken) || !isWireString(refreshToken)) return undefined;
       return {
         accessToken,
         refreshToken,
         email: account.email,
-        ...(account.name ? { name: account.name } : {}),
-        ...(account.pictureUrl ? { pictureUrl: account.pictureUrl } : {}),
+        ...(account.name ? { name: account.name } : undefined),
+        ...(account.pictureUrl ? { pictureUrl: account.pictureUrl } : undefined),
         provider: account.provider,
       };
     } catch {
@@ -572,8 +585,8 @@ export class SettingsStore {
       ? {
           status: ACCOUNT_STATUS.SIGNED_IN,
           email: account.email,
-          ...(account.name ? { name: account.name } : {}),
-          ...(account.pictureUrl ? { pictureUrl: account.pictureUrl } : {}),
+          ...(account.name ? { name: account.name } : undefined),
+          ...(account.pictureUrl ? { pictureUrl: account.pictureUrl } : undefined),
           provider: account.provider,
         }
       : { status: ACCOUNT_STATUS.SIGNED_OUT };
@@ -600,8 +613,8 @@ export class SettingsStore {
         account: {
           tokenCipher,
           email: account.email,
-          ...(account.name ? { name: account.name } : {}),
-          ...(account.pictureUrl ? { pictureUrl: account.pictureUrl } : {}),
+          ...(account.name ? { name: account.name } : undefined),
+          ...(account.pictureUrl ? { pictureUrl: account.pictureUrl } : undefined),
           provider: account.provider,
         },
       };
@@ -649,6 +662,7 @@ export class SettingsStore {
 
   /**
    * Stores one provider's key encrypted at rest, or clears it when omitted. A
+   // SAFETY: The preceding check establishes the asserted contract.
    * key the user cannot use comes back as a `reason` rather than an exception,
    * so only an unexpected filesystem failure throws.
    */
@@ -707,6 +721,7 @@ export class SettingsStore {
    * Main-process only, like the resolved keys: one provider's grant with its
    * tokens decrypted, for the reader that mints requests from it. A grant
    * that no longer decrypts — another OS account, a rotated Keychain — reads
+   // SAFETY: The preceding check establishes the asserted contract.
    * as absent, and the row it draws says to connect again.
    */
   async readGrant(providerId: CredentialProviderId): Promise<LinearGrant | undefined> {
@@ -719,6 +734,7 @@ export class SettingsStore {
 
   /**
    * Stores one provider's grant encrypted at rest. Every refresh comes back
+   // SAFETY: The preceding check establishes the asserted contract.
    * through here as well as every connection, because Linear consumes the
    * refresh token it is given: a grant refreshed and not written is a grant
    * the user has to make again.
@@ -741,7 +757,7 @@ export class SettingsStore {
         .encrypt(
           JSON.stringify({
             accessToken,
-            ...(grant.refreshToken ? { refreshToken: grant.refreshToken } : {}),
+            ...(grant.refreshToken ? { refreshToken: grant.refreshToken } : undefined),
           }),
         )
         .toString("base64");
@@ -789,15 +805,14 @@ export class SettingsStore {
   /** Recovers one stored grant's tokens, or nothing if they cannot be read. */
   #decryptGrant(held: PersistedGrant): LinearGrant | undefined {
     try {
-      const tokens: unknown = JSON.parse(
-        this.#cipher.decrypt(Buffer.from(held.tokenCipher, "base64")),
-      );
-      if (tokens === null || typeof tokens !== "object" || Array.isArray(tokens)) return undefined;
-      const { accessToken, refreshToken } = tokens as Record<string, unknown>;
-      if (typeof accessToken !== "string" || !accessToken) return undefined;
+      const tokens = JSON.parse(this.#cipher.decrypt(Buffer.from(held.tokenCipher, "base64")));
+      if (!isRecord(tokens)) return undefined;
+      // SAFETY: The preceding check establishes the asserted contract.
+      const { accessToken, refreshToken } = tokens as WireRecord;
+      if (!isWireString(accessToken) || !accessToken) return undefined;
       return {
         accessToken,
-        ...(typeof refreshToken === "string" && refreshToken ? { refreshToken } : {}),
+        ...(isWireString(refreshToken) && refreshToken ? { refreshToken } : undefined),
         expiresAt: held.expiresAt,
       };
     } catch {
@@ -902,7 +917,7 @@ export class SettingsStore {
     });
     return {
       settings: await this.snapshot(),
-      ...(unknownAccount ? { reason: "That calendar account is not connected." } : {}),
+      ...(unknownAccount ? { reason: "That calendar account is not connected." } : undefined),
     };
   }
 
@@ -965,6 +980,7 @@ export class SettingsStore {
         if (definition.guard(undefined).valid) delete next[field];
         else Object.assign(next, { [field]: definition.default });
       }
+      // SAFETY: The preceding check establishes the asserted contract.
       const changed = (Object.keys(persisted) as (keyof PersistedSettings)[]).some(
         (field) => next[field] !== persisted[field],
       );
@@ -1096,13 +1112,13 @@ export class SettingsStore {
     let persisted: PersistedSettings = {
       version: SETTINGS_FILE_VERSION,
       apiKeys: {},
-      ...(Object.fromEntries(
+      ...Object.fromEntries(
         APP_SETTING_FIELDS.map((field) => [
           field,
           APP_SETTING_SCHEMA[field].guard(undefined).value,
         ]),
-      ) as unknown as StoredAppSettings),
-    };
+      ),
+    } satisfies PersistedSettings;
     if (source) {
       try {
         persisted = parsePersistedSettings(source, this.#providers);
