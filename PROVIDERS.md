@@ -87,8 +87,9 @@ end — into a spool under Luke's own application data.
 ## Codex
 
 Local sessions need no credential. Luke reads the read-only session index in
-`state_5.sqlite` under `~/.codex` (honoring `CODEX_HOME`), then bounded tails
-of each thread's rollout file. The observation hook merges into `hooks.json`
+`state_5.sqlite` under `~/.codex` (honoring `CODEX_HOME`), skipping archived
+threads — a chat filed away in Codex's own UI is not a row — then bounded
+tails of each thread's rollout file. The observation hook merges into `hooks.json`
 and runs only after Codex's own review gate shows it to the user and they
 trust it; its events match Claude Code's minus stop failure.
 
