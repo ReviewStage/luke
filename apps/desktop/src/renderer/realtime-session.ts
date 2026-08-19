@@ -42,6 +42,7 @@ import {
   type RealtimeFunctionCall,
   type RealtimeStatus,
   type RealtimeToolFamily,
+  realtimeSessionSyncEvents,
   realtimeToolFamily,
   SESSION_REFERENCE_WITHDRAWN_TEXT,
   type SessionIdentity,
@@ -733,6 +734,7 @@ export class RealtimeVoiceSession {
 
       await this.#waitForChannel(channel, deadline);
       if (this.#closed) return this.#abandonConnect();
+      this.#send(realtimeSessionSyncEvents());
       this.#setStatus(REALTIME_STATUS.READY);
       // A pace changed during the handshake could not be sent then, and the
       // credential this call answered may have been minted before the change.

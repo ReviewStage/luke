@@ -111,6 +111,7 @@ export {
   type WorkspaceAgentSelection,
   type WorkspaceProject,
   workspaceNameText,
+  workspaceProjectSelectionId,
 } from "./providers.js";
 export { CompositeSessionProviderAdapter } from "./composite-provider-adapter.js";
 
@@ -250,6 +251,7 @@ export {
   realtimeCredentialFromResponse,
   realtimeCredentialIsUsable,
   realtimeMintExplanation,
+  realtimeSessionSyncEvents,
 } from "./realtime-credentials.js";
 export {
   appGuideContextEvents,

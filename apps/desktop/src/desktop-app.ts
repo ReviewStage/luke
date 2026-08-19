@@ -25,6 +25,7 @@ import {
   type SessionProviderAdapter,
   type TrackedIssue,
   type WorkspaceAgentSelection,
+  workspaceProjectSelectionId,
 } from "@sidecar/core";
 
 import {
@@ -82,10 +83,15 @@ import {
   type MicrophoneStatus,
   type ObservedAccountCalendars,
   type OutputAudioState,
+  SUPERSET_SIGN_IN_STAGE,
+  SUPERSET_WORKSPACE_PROVIDER_ID,
 } from "./shared/contracts";
 import { CREDENTIAL_PROVIDER_ID, type CredentialProviderId } from "./shared/credential-providers";
 import { type FeedbackResult, feedbackSubmission } from "./shared/feedback";
 import { APP_SETTING_SCHEMA } from "./shared/settings-schema";
+import { SupersetCli, SupersetWorkspaceAdapter } from "./superset-cli";
+import { SupersetSignIn } from "./superset-sign-in";
+import { SupersetWorkspaceReader, SupersetWorkspaceSnapshot } from "./superset-workspaces";
 import { UPDATE_ENDPOINT, UpdateService } from "./update-service";
 import { VoiceCapabilityAssembler } from "./voice-capability-assembler";
 
@@ -140,6 +146,15 @@ const sessionRegistry = new InMemorySessionRegistry();
 // evidence run never refreshes it, so there its answer stays the honest
 // "unknown".
 const codexCloudAdapter = new CodexCloudSessionAdapter();
+const supersetHomeDirectory =
+  process.env.SUPERSET_HOME_DIR ?? path.join(app.getPath("home"), ".superset");
+const supersetWorkspaces = new SupersetWorkspaceReader({
+  homeDirectory: supersetHomeDirectory,
+});
+const supersetCli = new SupersetCli({ homeDirectory: supersetHomeDirectory });
+const supersetWorkspaceAdapter = new SupersetWorkspaceAdapter(supersetCli);
+let observedSupersetWorkspaces = new SupersetWorkspaceSnapshot([]);
+let observedSupersetActionsEnabled = false;
 // `directory` and the cipher are read lazily so the store can be declared before
 // the Electron app is ready.
 const settingsStore = new SettingsStore({
@@ -347,6 +362,14 @@ const panels = new PanelManager({
   rendererHtmlPath: path.join(__dirname, "renderer", "index.html"),
   rendererUrl: rendererUrl(),
 });
+const supersetSignIn = new SupersetSignIn({
+  cli: supersetCli,
+  openExternal: (url) => shell.openExternal(url),
+  onChange: (state) => {
+    panels.broadcast(channels.supersetSignInChanged, state);
+    if (state.stage === SUPERSET_SIGN_IN_STAGE.CONNECTED) void sessionObservationLoop.refresh();
+  },
+});
 const hotkeys = new HotkeyRegistrar({
   registersGlobalKeys: runMode.registersGlobalKeys,
   hasCredentials: () => voiceCapabilities.realtimeCredentials !== undefined,
@@ -510,6 +533,7 @@ async function applyVoiceCredential(): Promise<void> {
 }
 
 function adapterFor(providerId: string) {
+  if (providerId === SUPERSET_WORKSPACE_PROVIDER_ID) return supersetWorkspaceAdapter;
   return isProviderId(providerId) ? providerRegistry[providerId].adapter : undefined;
 }
 
@@ -523,7 +547,7 @@ function workspaceProjectOffered(providerId: string, providerProjectId: string):
   if (!adapter) return false;
   return adapter
     .workspaceProjects()
-    .some((project) => project.providerProjectId === providerProjectId);
+    .some((project) => workspaceProjectSelectionId(project) === providerProjectId);
 }
 
 /**
@@ -533,10 +557,12 @@ function workspaceProjectOffered(providerId: string, providerProjectId: string):
 async function rememberWorkspaceDefaults(
   adapter: SessionProviderAdapter,
   providerProjectId: string,
+  providerTargetId: string | undefined,
   namedSelection: WorkspaceAgentSelection | undefined,
+  agent: string | undefined,
 ): Promise<void> {
-  if (!isProviderId(adapter.provider.id)) return;
   const providerId = adapter.provider.id;
+  if (!isProviderId(providerId) && providerId !== SUPERSET_WORKSPACE_PROVIDER_ID) return;
   try {
     if (
       (await settingsStore.get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field)) === undefined
@@ -545,6 +571,14 @@ async function rememberWorkspaceDefaults(
         APP_SETTING_SCHEMA.defaultWorkspaceProvider.field,
         providerId,
       );
+      panels.broadcast(channels.settingsChanged, saved.settings);
+    }
+    if (
+      providerId === SUPERSET_WORKSPACE_PROVIDER_ID &&
+      agent !== undefined &&
+      (await settingsStore.get(APP_SETTING_SCHEMA.supersetAgentDefault.field)) === undefined
+    ) {
+      const saved = await settingsStore.set(APP_SETTING_SCHEMA.supersetAgentDefault.field, agent);
       panels.broadcast(channels.settingsChanged, saved.settings);
     }
     // The project the workspace landed in becomes that provider's default on
@@ -559,7 +593,10 @@ async function rememberWorkspaceDefaults(
       const saved = await settingsStore.setEntry(
         APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
         providerId,
-        providerProjectId,
+        workspaceProjectSelectionId({
+          providerProjectId,
+          ...(providerTargetId ? { providerTargetId } : {}),
+        }),
       );
       panels.broadcast(channels.settingsChanged, saved.settings);
     }
@@ -571,6 +608,7 @@ async function rememberWorkspaceDefaults(
     // choice made by hand while the provider was answering is already
     // held, and must not lose to the request it overlapped.
     if (
+      isProviderId(providerId) &&
       namedSelection !== undefined &&
       (await settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[providerId] ===
         undefined
@@ -601,6 +639,10 @@ function registerIpc(): void {
     const display =
       (displayId !== undefined ? panels.display(displayId) : undefined) ??
       screen.getPrimaryDisplay();
+    const [supersetInstalled, supersetConnected] = await Promise.all([
+      supersetCli.installed(),
+      supersetCli.connected(),
+    ]);
     return {
       mode: displayId !== undefined ? panels.modeFor(displayId) : panels.initialMode,
       startPeeked,
@@ -609,6 +651,8 @@ function registerIpc(): void {
       fixture,
       captureMode,
       fixtureMode,
+      supersetInstalled,
+      supersetConnected,
       accountRequired: runMode.requiresAccount,
       account,
       packaged: app.isPackaged,
@@ -648,6 +692,26 @@ function registerIpc(): void {
       meetingQuiet: accountCapabilitiesActive() && meetingQuietActive,
       settings: await settingsStore.snapshot(),
     };
+  });
+  ipcMain.handle(channels.beginSupersetSignIn, async (event) => {
+    if (!trustedSender(event)) throw new Error("Untrusted renderer");
+    return supersetSignIn.begin();
+  });
+  ipcMain.handle(channels.submitSupersetSignInCode, (event, code: unknown) => {
+    if (!trustedSender(event)) throw new Error("Untrusted renderer");
+    if (typeof code !== "string") throw new Error("Invalid Superset sign-in code");
+    return supersetSignIn.submitCode(code);
+  });
+  ipcMain.handle(channels.chooseSupersetOrganization, async (event, slug: string) => {
+    if (!trustedSender(event)) throw new Error("Untrusted renderer");
+    if (typeof slug !== "string") throw new Error("Invalid Superset organization");
+    return supersetSignIn.chooseOrganization(slug);
+  });
+  ipcMain.on(channels.reopenSupersetSignIn, (event) => {
+    if (trustedSender(event)) supersetSignIn.reopen();
+  });
+  ipcMain.on(channels.cancelSupersetSignIn, (event) => {
+    if (trustedSender(event)) supersetSignIn.cancel();
   });
 
   registerAccountSessionIpc({ ipcMain, trustedSender, accountSession });
@@ -743,6 +807,11 @@ function registerIpc(): void {
     trackedIssues: () => trackedIssues,
     issueTrackers,
     refreshIssues: () => void issueObservationLoop.refresh(),
+    supersetContext: (identity) =>
+      observedSupersetActionsEnabled
+        ? observedSupersetWorkspaces.context(identity.providerId, identity.providerSessionId)
+        : undefined,
+    supersetCli,
   });
 
   // A note to the founders travels one road: typed in the composer, validated
@@ -797,12 +866,13 @@ function registerIpc(): void {
 function observedWorkspaceProjects(): readonly ObservedWorkspaceProject[] {
   if (!runMode.observesProviders) return [];
   return normalizeObservedWorkspaceProjects(
-    orderedRegistrations.flatMap(({ adapter }) =>
-      adapter.workspaceProjects().map((project) => ({
-        ...project,
-        providerId: adapter.provider.id,
-        providerName: adapter.provider.displayName,
-      })),
+    [...orderedRegistrations.map(({ adapter }) => adapter), supersetWorkspaceAdapter].flatMap(
+      (adapter) =>
+        adapter.workspaceProjects().map((project) => ({
+          ...project,
+          providerId: adapter.provider.id,
+          providerName: adapter.provider.displayName,
+        })),
     ),
   );
 }
@@ -839,6 +909,36 @@ async function applyLocalSessionHooks(): Promise<void> {
 }
 
 async function refreshProviderSessions(generation: number): Promise<void> {
+  const actionsWereEnabled = observedSupersetActionsEnabled;
+  let supersetSnapshot = new SupersetWorkspaceSnapshot([]);
+  let supersetActionsEnabled = false;
+  try {
+    const supersetAgentDefault = await settingsStore.get(
+      APP_SETTING_SCHEMA.supersetAgentDefault.field,
+    );
+    [supersetSnapshot, supersetActionsEnabled] = await Promise.all([
+      supersetWorkspaces.read(),
+      supersetCli.connected(),
+    ]);
+    await supersetWorkspaceAdapter.refresh(supersetAgentDefault, supersetActionsEnabled);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`Superset observation failed: ${message}\n`);
+  }
+  observedSupersetWorkspaces = supersetSnapshot;
+  observedSupersetActionsEnabled = supersetActionsEnabled;
+  if (actionsWereEnabled !== supersetActionsEnabled) {
+    if (supersetActionsEnabled) {
+      panels.broadcast(channels.supersetSignInChanged, {
+        stage: SUPERSET_SIGN_IN_STAGE.CONNECTED,
+      });
+    } else {
+      // The CLI withdrawing its login is also what makes a later Connect a
+      // new attempt. `cancel` returns the machine to idle and broadcasts that
+      // same state to every renderer.
+      supersetSignIn.cancel();
+    }
+  }
   // Providers are observed concurrently and reported independently: the
   // registry commits each provider atomically, so one that is slow or failing
   // can neither delay nor cancel the others. A network provider would
@@ -846,7 +946,9 @@ async function refreshProviderSessions(generation: number): Promise<void> {
   await Promise.all(
     orderedRegistrations.map(async ({ adapter }) => {
       try {
-        await sessionRegistry.refresh(adapter);
+        await sessionRegistry.refresh(adapter, (providerId, observations) =>
+          supersetSnapshot.enrich(providerId, observations, supersetActionsEnabled),
+        );
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         process.stderr.write(`Session observation failed (${adapter.provider.id}): ${message}\n`);
@@ -1483,6 +1585,7 @@ export function startDesktopApp(): void {
     // it to bring the players back up, so quitting mid-sentence costs the user
     // nothing.
     mediaDuck.stop();
+    supersetSignIn.shutdown();
   });
 
   app.on("before-quit", () => {

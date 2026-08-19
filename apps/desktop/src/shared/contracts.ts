@@ -35,6 +35,7 @@ import type {
   SettingsResetScope,
   VoiceSource,
 } from "./settings-schema";
+import type { WorkspaceProviderId } from "./superset";
 
 export type { WindowMode } from "@sidecar/core";
 export type {
@@ -57,6 +58,12 @@ export const ACCOUNT_PROVIDER = {
   GOOGLE: "google",
   GITHUB: "github",
 } as const;
+
+export {
+  isWorkspaceProviderId,
+  SUPERSET_WORKSPACE_PROVIDER_ID,
+  type WorkspaceProviderId,
+} from "./superset";
 
 export type AccountProvider = (typeof ACCOUNT_PROVIDER)[keyof typeof ACCOUNT_PROVIDER];
 
@@ -340,7 +347,7 @@ export interface AppSettings {
    * the first workspace the user actually creates saves its provider here, so
    * the default is always a choice they made rather than one made for them.
    */
-  defaultWorkspaceProvider?: ProviderId;
+  defaultWorkspaceProvider?: WorkspaceProviderId;
   /**
    * The agent kind and model new workspaces start with, per provider, each
    * entry absent while that provider's own defaults stand. Keyed by provider
@@ -355,10 +362,13 @@ export interface AppSettings {
    * starts unset the way the provider does: the first workspace the user
    * creates in a provider saves its project here, so the default is always a
    * choice they made rather than one made for them. Projects are observed
-   * rather than build-fixed, so the value is the provider's own project id,
-   * and it steers an ask only while its provider still offers that project.
+   * rather than build-fixed, so the value identifies the provider's project
+   * and, where needed, its host; it steers an ask only while the provider
+   * still offers that exact project target.
    */
-  workspaceProjectDefaults?: Readonly<Partial<Record<ProviderId, string>>>;
+  workspaceProjectDefaults?: Readonly<Partial<Record<WorkspaceProviderId, string>>>;
+  /** The configured Superset agent used when a creation ask names none. */
+  supersetAgentDefault?: string;
 }
 
 /**
@@ -475,6 +485,10 @@ export interface AppBootstrap {
   captureMode: boolean;
   /** True when `--fixture` (or a capture run) makes the panel render fixture sessions. */
   fixtureMode: boolean;
+  /** Whether Superset's bundled CLI exists on this Mac. */
+  supersetInstalled: boolean;
+  /** Whether that CLI also has its own login configuration. */
+  supersetConnected: boolean;
   /** False for fixture and capture runs, which must stay deterministic. */
   accountRequired: boolean;
   account: AccountSnapshot;
@@ -534,6 +548,30 @@ export interface AppBootstrap {
   /** Whether the calendar's quiet is holding announcements right now. */
   meetingQuiet: boolean;
   settings: AppSettings;
+}
+
+export const SUPERSET_SIGN_IN_STAGE = {
+  IDLE: "idle",
+  BROWSER_CODE: "browser-code",
+  EXCHANGING: "exchanging",
+  ORGANIZATION: "organization",
+  FAILURE: "failure",
+  CONNECTED: "connected",
+} as const;
+
+export type SupersetSignInStage =
+  (typeof SUPERSET_SIGN_IN_STAGE)[keyof typeof SUPERSET_SIGN_IN_STAGE];
+
+export interface SupersetOrganizationChoice {
+  id: string;
+  name: string;
+  slug: string;
+}
+
+export interface SupersetSignInSnapshot {
+  stage: SupersetSignInStage;
+  failure?: string;
+  organizations: readonly SupersetOrganizationChoice[];
 }
 
 /** One validated issue act on its way to the main process. */
@@ -623,6 +661,13 @@ export interface AppBridge {
    * process, so nothing an update check read can steer where this goes.
    */
   openLatestRelease(): void;
+  /** Starts Superset's own OAuth login in one directly spawned CLI child. */
+  beginSupersetSignIn(): Promise<SupersetSignInSnapshot>;
+  /** Hands one explicit paste to that exact child; the code is never stored. */
+  submitSupersetSignInCode(code: string): Promise<SupersetSignInSnapshot>;
+  reopenSupersetSignIn(): void;
+  cancelSupersetSignIn(): void;
+  chooseSupersetOrganization(slug: string): Promise<SupersetSignInSnapshot>;
   /**
    * Runs the Google Calendar sign-in: the browser opens Google's own consent
    * page, the grant comes back over a loopback redirect that never leaves the
@@ -748,6 +793,8 @@ export interface AppBridge {
   createSessionWorkspace(
     providerId: string,
     providerProjectId: string,
+    providerTargetId?: string,
+    agent?: string,
     name?: string,
     task?: string,
     /**
@@ -883,6 +930,7 @@ export interface AppBridge {
    * unreadable, which arrives as `undefined` and must be drawn as audible.
    */
   onOutputAudioChanged(callback: (state: OutputAudioState | undefined) => void): () => void;
+  onSupersetSignInChanged(callback: (state: SupersetSignInSnapshot) => void): () => void;
 }
 
 export const channels = {
@@ -913,6 +961,12 @@ export const channels = {
   meetingQuietChanged: "app:meeting-quiet-changed",
   checkForUpdates: "app:check-for-updates",
   openLatestRelease: "app:open-latest-release",
+  beginSupersetSignIn: "app:begin-superset-sign-in",
+  submitSupersetSignInCode: "app:submit-superset-sign-in-code",
+  reopenSupersetSignIn: "app:reopen-superset-sign-in",
+  cancelSupersetSignIn: "app:cancel-superset-sign-in",
+  chooseSupersetOrganization: "app:choose-superset-organization",
+  supersetSignInChanged: "app:superset-sign-in-changed",
   updateChanged: "app:update-changed",
   setVoiceExchange: "app:set-voice-exchange",
   openProviderApiKeys: "app:open-provider-api-keys",

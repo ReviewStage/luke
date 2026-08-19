@@ -168,12 +168,29 @@ export interface WorkspaceProject {
   repository: string;
   /** Whether a new workspace here takes — or needs — an opening task. */
   taskSupport: WorkspaceTaskSupport;
+  /** The provider-owned host or execution target that owns this project. */
+  providerTargetId?: string;
+  /** The bounded label a person uses to distinguish that target. */
+  targetName?: string;
+  /** Agent kinds the provider currently permits for a new workspace here. */
+  spawnableAgents?: readonly string[];
+  /** The saved agent kind used when a creation ask names none. */
+  defaultAgent?: string;
 }
 
 /** A workspace project as the app reports it, stamped with who offered it. */
 export interface ObservedWorkspaceProject extends WorkspaceProject {
   providerId: string;
   providerName: string;
+}
+
+/** The identity a saved default uses, including a host when one owns it. */
+export function workspaceProjectSelectionId(
+  project: Pick<WorkspaceProject, "providerProjectId" | "providerTargetId">,
+): string {
+  return project.providerTargetId
+    ? JSON.stringify([project.providerProjectId, project.providerTargetId])
+    : project.providerProjectId;
 }
 
 /** A workspace name reads in one breath; anything longer is a different ask. */
@@ -204,16 +221,19 @@ export function workspaceNameText(value: unknown): string | undefined {
 export function normalizeObservedWorkspaceProjects(
   projects: readonly ObservedWorkspaceProject[],
 ): readonly ObservedWorkspaceProject[] {
-  const seen = new Map<string, Set<string>>();
+  const seen = new Map<string, Map<string, Set<string>>>();
   const normalized: ObservedWorkspaceProject[] = [];
   for (const project of projects) {
     const providerId = project.providerId.trim();
     const providerProjectId = project.providerProjectId.trim();
+    const providerTargetId = project.providerTargetId?.trim() ?? "";
     const repository = project.repository.trim().slice(0, maximumWorkspaceNameLength);
     if (!providerId || !providerProjectId || !repository) continue;
-    const byProvider = seen.get(providerId) ?? new Set<string>();
-    if (byProvider.has(providerProjectId)) continue;
-    byProvider.add(providerProjectId);
+    const byProvider = seen.get(providerId) ?? new Map<string, Set<string>>();
+    const byProject = byProvider.get(providerProjectId) ?? new Set<string>();
+    if (byProject.has(providerTargetId)) continue;
+    byProject.add(providerTargetId);
+    byProvider.set(providerProjectId, byProject);
     seen.set(providerId, byProvider);
     normalized.push({
       providerId,
@@ -225,6 +245,18 @@ export function normalizeObservedWorkspaceProjects(
       taskSupport: WORKSPACE_TASK_SUPPORT_LIST.includes(project.taskSupport)
         ? project.taskSupport
         : WORKSPACE_TASK_SUPPORT.NONE,
+      ...(providerTargetId ? { providerTargetId } : {}),
+      ...(project.targetName?.trim()
+        ? { targetName: project.targetName.trim().slice(0, maximumWorkspaceNameLength) }
+        : {}),
+      ...(project.spawnableAgents
+        ? {
+            spawnableAgents: [...new Set(project.spawnableAgents.map((agent) => agent.trim()))]
+              .filter(Boolean)
+              .slice(0, 20),
+          }
+        : {}),
+      ...(project.defaultAgent?.trim() ? { defaultAgent: project.defaultAgent.trim() } : {}),
     });
   }
   return normalized
@@ -287,6 +319,8 @@ export interface WorkspaceAgentSelection {
 /** A user-asked request for a new workspace in one reported project. */
 export interface ProviderWorkspaceRequest {
   providerProjectId: string;
+  providerTargetId?: string;
+  agent?: string;
   /** The name the user chose, when they chose one; the provider names it otherwise. */
   name?: string;
   /**
@@ -320,6 +354,8 @@ export type ProviderWorkspaceResult =
       status: typeof PROVIDER_ACT_RESULT_STATUS.ACCEPTED;
       /** The created session's id, exactly as the provider's response named it. */
       providerSessionId?: string;
+      /** Creation landed, but a non-essential follow-up such as opening failed. */
+      warning?: string;
     }
   | { status: typeof PROVIDER_ACT_RESULT_STATUS.REJECTED; reason: string }
   | { status: typeof PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };

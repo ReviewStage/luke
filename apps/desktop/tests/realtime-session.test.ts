@@ -124,6 +124,7 @@ function harness(
     carryAppAction?: AppActionCarrier;
     carryIssueAction?: IssueActionCarrier;
     idleTimeoutMs?: number;
+    captureSessionSync?: boolean;
     /** Lets a test ride the status edges, the way the announcer does. */
     onStatus?: (status: RealtimeStatus) => void;
   } = {},
@@ -162,7 +163,13 @@ function harness(
   const channel: Record<string, unknown> = {
     // A channel that never opens models a stalled handshake.
     readyState: options.channelOpensImmediately === false ? "connecting" : "open",
-    send: (payload: string) => sent.push(JSON.parse(payload) as Record<string, unknown>),
+    send: (payload: string) => {
+      const event = JSON.parse(payload) as Record<string, unknown>;
+      const isSessionSync =
+        event.type === REALTIME_CLIENT_EVENT.SESSION_UPDATE &&
+        Array.isArray((event.session as { tools?: unknown } | undefined)?.tools);
+      if (options.captureSessionSync || !isSessionSync) sent.push(event);
+    },
     close: () => {
       channel.readyState = "closed";
       // A real channel fires onclose after close(), which is exactly how a
@@ -1286,13 +1293,39 @@ test("a finished response returns the session to ready", async () => {
   assert.equal(context.session.status, REALTIME_STATUS.READY);
 });
 
+test("an opened call synchronizes the local build's tool schema", async () => {
+  const context = harness({ captureSessionSync: true });
+  await context.session.connect();
+
+  const update = context.sent.find(
+    (event) =>
+      event.type === REALTIME_CLIENT_EVENT.SESSION_UPDATE &&
+      Array.isArray((event.session as { tools?: unknown } | undefined)?.tools),
+  );
+  const tools = (
+    update?.session as { tools?: { name?: string; parameters?: unknown }[] } | undefined
+  )?.tools;
+  const creation = tools?.find((tool) => tool.name === "create_workspace");
+  assert.deepEqual(
+    Object.keys(
+      (creation?.parameters as { properties?: Record<string, unknown> } | undefined)?.properties ??
+        {},
+    ).includes("agent"),
+    true,
+  );
+});
+
 test("a changed pace reaches the live call without waiting for the next one", async () => {
   const context = harness();
   await context.session.connect();
 
   context.session.applySpeed(1.25);
 
-  const update = context.sent.find((event) => event.type === REALTIME_CLIENT_EVENT.SESSION_UPDATE);
+  const update = context.sent.find(
+    (event) =>
+      event.type === REALTIME_CLIENT_EVENT.SESSION_UPDATE &&
+      (event.session as { audio?: unknown } | undefined)?.audio !== undefined,
+  );
   assert.deepEqual(update, {
     type: REALTIME_CLIENT_EVENT.SESSION_UPDATE,
     session: { type: "realtime", audio: { output: { speed: 1.25 } } },
@@ -1310,14 +1343,22 @@ test("a pace changed mid-reply waits for the reply to end", async () => {
   // Luke is still speaking.
   context.session.applySpeed(0.75);
   assert.equal(
-    context.sent.some((event) => event.type === REALTIME_CLIENT_EVENT.SESSION_UPDATE),
+    context.sent.some(
+      (event) =>
+        event.type === REALTIME_CLIENT_EVENT.SESSION_UPDATE &&
+        (event.session as { audio?: unknown } | undefined)?.audio !== undefined,
+    ),
     false,
   );
 
   context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_DONE });
   context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED });
 
-  const update = context.sent.find((event) => event.type === REALTIME_CLIENT_EVENT.SESSION_UPDATE);
+  const update = context.sent.find(
+    (event) =>
+      event.type === REALTIME_CLIENT_EVENT.SESSION_UPDATE &&
+      (event.session as { audio?: unknown } | undefined)?.audio !== undefined,
+  );
   assert.deepEqual(update?.session, { type: "realtime", audio: { output: { speed: 0.75 } } });
 });
 
@@ -1331,7 +1372,11 @@ test("a pace changed during the handshake reaches the call it was opening", asyn
   context.session.applySpeed(1.25);
   await opening;
 
-  const update = context.sent.find((event) => event.type === REALTIME_CLIENT_EVENT.SESSION_UPDATE);
+  const update = context.sent.find(
+    (event) =>
+      event.type === REALTIME_CLIENT_EVENT.SESSION_UPDATE &&
+      (event.session as { audio?: unknown } | undefined)?.audio !== undefined,
+  );
   assert.deepEqual(update?.session, { type: "realtime", audio: { output: { speed: 1.25 } } });
 });
 
@@ -1690,6 +1735,7 @@ function announcementSpeech(summary: string) {
 test("the last announcement travels with the roster, carrying the words said", async () => {
   const context = harness();
   await context.session.connect();
+  const sentAfterConnect = context.sent.length;
 
   context.session.updateSessions([observedSession("session-a")]);
   // The announcement may have been read out on a speak-only call this one
@@ -1699,7 +1745,7 @@ test("the last announcement travels with the roster, carrying the words said", a
     announcementSpeech("Claude Code finished checkout-service."),
   );
   // Remembered, not sent: the words go in at the turn that reads them.
-  assert.deepEqual(context.sent, []);
+  assert.deepEqual(context.sent.slice(sentAfterConnect), []);
 
   await armDeveloperTurn(context);
 
@@ -1883,6 +1929,7 @@ test("a turn is refused while another is already under way", async () => {
 test("a turn opens from an empty buffer and the key ends it", async () => {
   const context = harness();
   await context.session.connect();
+  const sentAfterConnect = context.sent.length;
 
   // One key: press to open a turn, press again to send it.
   context.session.toggleTurn();
@@ -1891,14 +1938,14 @@ test("a turn opens from an empty buffer and the key ends it", async () => {
   assert.equal(context.microphoneEnabled(), true);
   // A muted track still transmits, so a turn has to start from an empty buffer.
   assert.deepEqual(
-    context.sent.map((event) => event.type),
+    context.sent.slice(sentAfterConnect).map((event) => event.type),
     [REALTIME_CLIENT_EVENT.INPUT_AUDIO_BUFFER_CLEAR],
   );
 
   context.session.toggleTurn();
   assert.equal(context.microphoneEnabled(), false);
   assert.deepEqual(
-    context.sent.map((event) => event.type),
+    context.sent.slice(sentAfterConnect).map((event) => event.type),
     [
       REALTIME_CLIENT_EVENT.INPUT_AUDIO_BUFFER_CLEAR,
       REALTIME_CLIENT_EVENT.INPUT_AUDIO_BUFFER_COMMIT,
@@ -2783,6 +2830,161 @@ test("a spoken ask for a new workspace is carried, and an unlisted project is re
       ).status,
   );
   assert.deepEqual(statuses, ["accepted", "refused", "accepted"]);
+});
+
+test("a Superset workspace requires an observed host and agent", async () => {
+  const carried: unknown[] = [];
+  const context = harness({
+    carryAction: async (action) => {
+      carried.push(action);
+      return { status: "accepted" };
+    },
+  });
+  await context.session.connect();
+  context.session.updateWorkspaceProjects([
+    {
+      providerId: "superset",
+      providerName: "Superset",
+      providerProjectId: "project-1",
+      providerTargetId: "host-1",
+      targetName: "Build Mac",
+      repository: "Luke",
+      taskSupport: "required",
+      spawnableAgents: ["codex"],
+    },
+  ]);
+  await armDeveloperTurn(context);
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      output: [
+        {
+          type: "function_call",
+          name: "create_workspace",
+          call_id: "call-superset",
+          arguments:
+            '{"provider_id":"superset","project_id":"project-1","target_id":"host-1","agent":"codex","task":"Fix the panel"}',
+        },
+        {
+          type: "function_call",
+          name: "create_workspace",
+          call_id: "call-stale",
+          arguments:
+            '{"provider_id":"superset","project_id":"project-1","target_id":"host-old","agent":"codex","task":"Fix the panel"}',
+        },
+      ],
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.deepEqual(carried, [
+    {
+      kind: "create-workspace",
+      providerId: "superset",
+      providerProjectId: "project-1",
+      providerTargetId: "host-1",
+      agent: "codex",
+      task: "Fix the panel",
+    },
+  ]);
+});
+
+test("a sole Superset project resolves when the model omits its routing ids", async () => {
+  const carried: unknown[] = [];
+  const context = harness({
+    carryAction: async (action) => {
+      carried.push(action);
+      return { status: "accepted" };
+    },
+  });
+  await context.session.connect();
+  context.session.updateWorkspaceProjects([
+    {
+      providerId: "superset",
+      providerName: "Superset",
+      providerProjectId: "project-1",
+      providerTargetId: "local",
+      targetName: "This Mac",
+      repository: "Luke",
+      taskSupport: "required",
+      spawnableAgents: ["codex"],
+    },
+  ]);
+  await armDeveloperTurn(context);
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      output: [
+        {
+          type: "function_call",
+          name: "create_workspace",
+          call_id: "call-superset-implicit-project",
+          arguments: '{"provider_id":"superset","agent":"codex","task":"Fix the panel"}',
+        },
+      ],
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.deepEqual(carried, [
+    {
+      kind: "create-workspace",
+      providerId: "superset",
+      providerProjectId: "project-1",
+      providerTargetId: "local",
+      agent: "codex",
+      task: "Fix the panel",
+    },
+  ]);
+});
+
+test("a Superset agent display name resolves to its advertised preset id", async () => {
+  const carried: unknown[] = [];
+  const context = harness({
+    carryAction: async (action) => {
+      carried.push(action);
+      return { status: "accepted" };
+    },
+  });
+  await context.session.connect();
+  context.session.updateWorkspaceProjects([
+    {
+      providerId: "superset",
+      providerName: "Superset",
+      providerProjectId: "project-1",
+      providerTargetId: "local",
+      targetName: "This Mac",
+      repository: "Luke",
+      taskSupport: "required",
+      spawnableAgents: ["claude", "codex"],
+    },
+  ]);
+  await armDeveloperTurn(context);
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      output: [
+        {
+          type: "function_call",
+          name: "create_workspace",
+          call_id: "call-superset-display-agent",
+          arguments: '{"provider_id":"superset","agent":"Codex","task":"Fix the panel"}',
+        },
+      ],
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.deepEqual(carried, [
+    {
+      kind: "create-workspace",
+      providerId: "superset",
+      providerProjectId: "project-1",
+      providerTargetId: "local",
+      agent: "codex",
+      task: "Fix the panel",
+    },
+  ]);
 });
 
 test("a spoken ask to add an agent is carried, and an unlisted kind is refused", async () => {
@@ -4178,6 +4380,7 @@ test("a speak-only connect never asks for the microphone", async () => {
 test("a speak-only call reads a notice out but refuses a typed ask", async () => {
   const context = harness();
   await context.session.connect({ microphone: false });
+  const sentAfterConnect = context.sent.length;
 
   assert.equal(
     context.session.speak({
@@ -4191,7 +4394,7 @@ test("a speak-only call reads a notice out but refuses a typed ask", async () =>
     true,
   );
   assert.deepEqual(
-    context.sent.map((event) => event.type),
+    context.sent.slice(sentAfterConnect).map((event) => event.type),
     [REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE, REALTIME_CLIENT_EVENT.RESPONSE_CREATE],
   );
 
@@ -4334,6 +4537,7 @@ test("two presses while the device opens ask for it once", async () => {
 test("a press let go while the device opens drops the turn", async () => {
   const context = harness();
   await context.session.connect();
+  const sentAfterConnect = context.sent.length;
 
   context.session.beginTurn();
   context.session.endTurn(true);
@@ -4341,7 +4545,7 @@ test("a press let go while the device opens drops the turn", async () => {
 
   // Nothing was captured, so nothing is sent — and the device that arrived
   // for the dropped press closes as fast as it came.
-  assert.deepEqual(context.sent, []);
+  assert.deepEqual(context.sent.slice(sentAfterConnect), []);
   assert.equal(context.session.status, REALTIME_STATUS.READY);
   assert.equal(context.microphoneEnabled(), false);
   assert.equal(context.microphoneStopped(), true);

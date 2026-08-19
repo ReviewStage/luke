@@ -1,6 +1,10 @@
 import { isRecord } from "./json.js";
 import { PRESS_AUDIO_SAMPLE_RATE } from "./press-audio.js";
-import { REALTIME_SESSION_TYPE, realtimeInstructions } from "./realtime-protocol.js";
+import {
+  REALTIME_CLIENT_EVENT,
+  REALTIME_SESSION_TYPE,
+  realtimeInstructions,
+} from "./realtime-protocol.js";
 import { realtimeToolDefinitions } from "./realtime-tools.js";
 import { REALTIME_DEFAULTS } from "./realtime-voice-settings.js";
 
@@ -101,6 +105,21 @@ export function realtimeSessionConfig(options: RealtimeSessionOptions = {}) {
       },
     },
   };
+}
+
+/** Reasserts the local build's instructions and tools after any credential source opens a call. */
+export function realtimeSessionSyncEvents(): readonly Record<string, unknown>[] {
+  return [
+    {
+      type: REALTIME_CLIENT_EVENT.SESSION_UPDATE,
+      session: {
+        type: REALTIME_SESSION_TYPE,
+        instructions: realtimeInstructions(),
+        tools: realtimeToolDefinitions(),
+        tool_choice: "auto",
+      },
+    },
+  ];
 }
 
 /** Builds the request body that mints an ephemeral client secret. */

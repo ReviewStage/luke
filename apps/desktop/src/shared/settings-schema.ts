@@ -20,6 +20,11 @@ import {
   type WorkspaceAgentSelection,
 } from "@sidecar/core";
 import { CREDENTIAL_PROVIDERS, isCredentialProviderId } from "./credential-providers";
+import {
+  isWorkspaceProviderId,
+  SUPERSET_WORKSPACE_PROVIDER_ID,
+  type WorkspaceProviderId,
+} from "./superset";
 import { parseVoiceHotkey } from "./voice-hotkey";
 import {
   isWorkspaceAgentSelection,
@@ -40,6 +45,7 @@ export const APP_SETTING_ID = {
   DEFAULT_WORKSPACE_PROVIDER: "default_workspace_provider",
   WORKSPACE_AGENT_MODEL: "workspace_agent_model",
   WORKSPACE_AGENT_EFFORT: "workspace_agent_effort",
+  SUPERSET_AGENT: "superset_agent",
   VOICE_SOURCE: "voice_source",
 } as const;
 
@@ -106,9 +112,10 @@ export interface StoredAppSettings {
   quietDuringMeetings: boolean;
   showOnAllDisplays: boolean;
   formFactor?: PanelFormFactor;
-  defaultWorkspaceProvider?: ProviderId;
+  defaultWorkspaceProvider?: WorkspaceProviderId;
   workspaceAgentDefaults?: Readonly<Partial<Record<ProviderId, WorkspaceAgentSelection>>>;
-  workspaceProjectDefaults?: Readonly<Partial<Record<ProviderId, string>>>;
+  workspaceProjectDefaults?: Readonly<Partial<Record<WorkspaceProviderId, string>>>;
+  supersetAgentDefault?: string;
 }
 
 export type AppSettingField = keyof StoredAppSettings;
@@ -211,7 +218,8 @@ function voiceSpeedWord(speed: RealtimeVoiceSpeed): string {
   );
 }
 
-function workspaceProviderName(providerId: ProviderId): string {
+function workspaceProviderName(providerId: WorkspaceProviderId): string {
+  if (providerId === SUPERSET_WORKSPACE_PROVIDER_ID) return "Superset";
   if (isCredentialProviderId(providerId)) return CREDENTIAL_PROVIDERS[providerId].displayName;
   // The one workspace-capable provider with no credential row to take a
   // display name from.
@@ -264,7 +272,7 @@ function workspaceAgentDefaults(
   return valid(Object.keys(defaults).length > 0 ? defaults : undefined);
 }
 
-const MAXIMUM_WORKSPACE_PROJECT_ID_LENGTH = 200;
+const MAXIMUM_WORKSPACE_PROJECT_ID_LENGTH = 500;
 
 function workspaceProjectDefaults(
   value: unknown,
@@ -273,9 +281,9 @@ function workspaceProjectDefaults(
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     return invalid(undefined);
   }
-  const defaults: Partial<Record<ProviderId, string>> = {};
+  const defaults: Partial<Record<WorkspaceProviderId, string>> = {};
   for (const [providerId, candidate] of Object.entries(value)) {
-    if (!isProviderId(providerId) || typeof candidate !== "string") continue;
+    if (!isWorkspaceProviderId(providerId) || typeof candidate !== "string") continue;
     const providerProjectId = candidate.trim();
     if (!providerProjectId || providerProjectId.length > MAXIMUM_WORKSPACE_PROJECT_ID_LENGTH) {
       continue;
@@ -543,8 +551,8 @@ export const APP_SETTING_SCHEMA = {
     guard: (value: unknown) =>
       optional(
         value,
-        (candidate): candidate is ProviderId =>
-          typeof candidate === "string" && isProviderId(candidate),
+        (candidate): candidate is WorkspaceProviderId =>
+          typeof candidate === "string" && isWorkspaceProviderId(candidate),
       ),
     settingsPage: SETTINGS_PAGE.CONNECTIONS,
     resetScope: SETTINGS_RESET_SCOPE.WORKSPACES,
@@ -564,6 +572,7 @@ export const APP_SETTING_SCHEMA = {
         workspaceProviderName(PROVIDER_ID.CODEX),
         workspaceProviderName(PROVIDER_ID.CONDUCTOR),
         workspaceProviderName(PROVIDER_ID.CURSOR),
+        "Superset",
       ],
       defaultValue: ASK_EACH_TIME_CHOICE,
       adjustable: false,
@@ -647,13 +656,44 @@ export const APP_SETTING_SCHEMA = {
     default: undefined,
     guard: workspaceProjectDefaults,
     entry: {
-      isKey: isProviderId,
+      isKey: (value): value is WorkspaceProviderId =>
+        typeof value === "string" && isWorkspaceProviderId(value),
       same: (current, next) => current === next,
     },
     settingsPage: SETTINGS_PAGE.CONNECTIONS,
     resetScope: SETTINGS_RESET_SCOPE.WORKSPACES,
     // Observed project names and defaults travel in the workspace-project context.
     guideEntry: settingGuideEntry([], () => undefined),
+    mainProcessSideEffect: SETTING_SIDE_EFFECT.NONE,
+  },
+  supersetAgentDefault: {
+    field: "supersetAgentDefault",
+    default: undefined,
+    guard: (value) =>
+      optional(
+        value,
+        (candidate): candidate is string =>
+          typeof candidate === "string" && /^[a-z0-9][a-z0-9-]{0,79}$/u.test(candidate),
+      ),
+    settingsPage: SETTINGS_PAGE.CONNECTIONS,
+    resetScope: SETTINGS_RESET_SCOPE.WORKSPACES,
+    guideEntry: settingGuideEntry([APP_SETTING_ID.SUPERSET_AGENT], (settings) => [
+      {
+        id: APP_SETTING_ID.SUPERSET_AGENT,
+        label: "New Superset sessions run",
+        description:
+          "Which configured Superset agent starts when a creation ask names none. Unset, Luke asks which agent to use.",
+        kind: APP_SETTING_KIND.CHOICE,
+        value: settings.supersetAgentDefault ?? ASK_EACH_TIME_CHOICE,
+        choices: [
+          ASK_EACH_TIME_CHOICE,
+          ...(settings.supersetAgentDefault ? [settings.supersetAgentDefault] : []),
+        ],
+        defaultValue: ASK_EACH_TIME_CHOICE,
+        adjustable: false,
+        manual: `${CONNECTIONS_PAGE}, under Superset`,
+      },
+    ]),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.NONE,
   },
 } as const satisfies {

@@ -1328,6 +1328,20 @@ test("ignores a stored default provider this build does not know", async (t) => 
   assert.equal((await storeIn(directory).snapshot()).defaultWorkspaceProvider, undefined);
 });
 
+test("stores Superset workspace and agent defaults without touching credentials", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+
+  await store.set(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field, "superset");
+  await store.setEntry(APP_SETTING_SCHEMA.workspaceProjectDefaults.field, "superset", "project-1");
+  const { settings } = await store.set(APP_SETTING_SCHEMA.supersetAgentDefault.field, "codex");
+
+  assert.equal(settings.defaultWorkspaceProvider, "superset");
+  assert.equal(settings.workspaceProjectDefaults?.superset, "project-1");
+  assert.equal(settings.supersetAgentDefault, "codex");
+  assert.equal((await storeIn(directory).snapshot()).supersetAgentDefault, "codex");
+});
+
 test("starts new workspaces on the provider's defaults until a pairing is chosen", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
@@ -1533,7 +1547,7 @@ test("ignores stored default projects this store cannot hold", async (t) => {
         "someone-else": "proj-1",
         conductor: 7,
         cursor: "   ",
-        codex: "x".repeat(500),
+        codex: "x".repeat(501),
       },
     }),
   );

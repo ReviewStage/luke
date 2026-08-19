@@ -536,6 +536,9 @@ export class SettingsStore {
       ...(persisted.workspaceProjectDefaults
         ? { workspaceProjectDefaults: persisted.workspaceProjectDefaults }
         : {}),
+      ...(persisted.supersetAgentDefault
+        ? { supersetAgentDefault: persisted.supersetAgentDefault }
+        : {}),
     };
   }
 

@@ -116,6 +116,7 @@ export interface SessionAction {
  */
 export interface DisplayWorkspace {
   id: string;
+  scopeId?: string;
   name: string;
 }
 
@@ -457,6 +458,7 @@ export function displaySessions(
             ? {
                 workspace: {
                   id: session.workspace.providerWorkspaceId,
+                  ...(session.workspace.scopeId ? { scopeId: session.workspace.scopeId } : {}),
                   name: session.workspace.name ?? session.workspace.providerWorkspaceId,
                 },
               }
@@ -528,13 +530,13 @@ function filterOptions(sessions: readonly DisplaySession[]): readonly SessionFil
   ];
 }
 
-/** Whether two rows are chats of one workspace. The provider id rides the
- * comparison because two providers' workspace ids share no namespace. */
+/** Whether two rows are chats of one workspace. */
 function sameWorkspace(first: DisplaySession, second: DisplaySession): boolean {
   return (
     first.workspace !== undefined &&
     second.workspace !== undefined &&
-    first.providerId === second.providerId &&
+    (first.workspace.scopeId ?? first.providerId) ===
+      (second.workspace.scopeId ?? second.providerId) &&
     first.workspace.id === second.workspace.id
   );
 }

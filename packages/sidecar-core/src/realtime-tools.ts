@@ -121,6 +121,8 @@ export type SessionToolAction =
       kind: typeof SESSION_TOOL_KIND.CREATE_WORKSPACE;
       providerId: string;
       providerProjectId: string;
+      providerTargetId?: string;
+      agent?: string;
       name?: string;
       task?: string;
       /** The model the developer named for this one creation, resolved to ids. */
@@ -464,13 +466,45 @@ function validateCreateWorkspace(
   // A creation ask names a project rather than a session, so it is validated
   // against the projects the conversation was shown — the same discipline,
   // against the list that actually offered it.
-  const project = context.workspaceProjects.find(
+  const providerId = textArgument(parsed, "provider_id");
+  const projectId = textArgument(parsed, "project_id");
+  const targetId = textArgument(parsed, "target_id");
+  const matchingProjects = context.workspaceProjects.filter(
     (candidate) =>
-      candidate.providerId === textArgument(parsed, "provider_id") &&
-      candidate.providerProjectId === textArgument(parsed, "project_id"),
+      (!providerId || candidate.providerId === providerId) &&
+      (!projectId || candidate.providerProjectId === projectId) &&
+      (!targetId || candidate.providerTargetId === targetId),
   );
-  if (!project) {
-    return { kind: "refused", reason: "No listed project matches that identity." };
+  if (matchingProjects.length !== 1) {
+    return {
+      kind: "refused",
+      reason:
+        matchingProjects.length === 0
+          ? "No listed project matches that identity."
+          : "More than one listed project matches; name the project and host.",
+    };
+  }
+  const project = matchingProjects[0];
+  if (!project) return { kind: "refused", reason: "No listed project matches that identity." };
+  const requestedAgent = textArgument(parsed, "agent");
+  const matchingAgents = requestedAgent
+    ? project.spawnableAgents?.filter(
+        (candidate) => candidate.toLocaleLowerCase() === requestedAgent.toLocaleLowerCase(),
+      )
+    : undefined;
+  const agent =
+    (requestedAgent && project.spawnableAgents?.includes(requestedAgent)
+      ? requestedAgent
+      : matchingAgents?.length === 1
+        ? matchingAgents[0]
+        : undefined) ?? project.defaultAgent;
+  if (project.spawnableAgents && (!agent || !project.spawnableAgents.includes(agent))) {
+    return {
+      kind: "refused",
+      reason: agent
+        ? "That project lists no such agent to start."
+        : "Name one of the agents that project lists for a new workspace.",
+    };
   }
   let name: string | undefined;
   if (parsed.name !== undefined) {
@@ -525,6 +559,8 @@ function validateCreateWorkspace(
     kind: SESSION_TOOL_KIND.CREATE_WORKSPACE,
     providerId: project.providerId,
     providerProjectId: project.providerProjectId,
+    ...(project.providerTargetId ? { providerTargetId: project.providerTargetId } : {}),
+    ...(agent ? { agent } : {}),
     ...(name ? { name } : {}),
     ...(task ? { task } : {}),
     ...(agentSelection ? { agentSelection } : {}),
@@ -904,6 +940,16 @@ export const REALTIME_TOOLS = {
             type: "string",
             description: "The project_id, exactly as the projects list gives it.",
           },
+          target_id: {
+            type: "string",
+            description:
+              "The target_id of the host, exactly as the projects list gives it, when present.",
+          },
+          agent: {
+            type: "string",
+            description:
+              "The agent kind to start, exactly as the projects list gives it; omit only when the list names a default.",
+          },
           name: {
             type: "string",
             description:
@@ -930,7 +976,7 @@ export const REALTIME_TOOLS = {
               "developer named both; never without a model.",
           },
         },
-        required: ["provider_id", "project_id"],
+        required: [],
       },
     },
     validate: validateCreateWorkspace,

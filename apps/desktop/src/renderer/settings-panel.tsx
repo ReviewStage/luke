@@ -29,6 +29,7 @@ import type {
   ObservedAccountCalendars,
   SettingsResetScope,
   UpdateSnapshot,
+  WorkspaceProviderId,
 } from "../shared/contracts";
 import {
   ACCOUNT_PROVIDER,
@@ -135,7 +136,7 @@ import { UPDATE_ROW_ACTION, updateAvailable, updateRow } from "./update-row";
 
 /** One provider the default-workspace rows can offer, by id and display name. */
 export interface WorkspaceProviderOption {
-  id: string;
+  id: WorkspaceProviderId;
   name: string;
   /**
    * The projects this provider's default-project row can offer: everything
@@ -226,7 +227,7 @@ export interface PreferenceWrites {
    * belongs.
    */
   onDefaultWorkspaceProviderChange: (
-    providerId: ProviderId | undefined,
+    providerId: WorkspaceProviderId | undefined,
   ) => Promise<string | undefined>;
   /**
    * Chooses the agent kind and model one provider starts new workspaces with,
@@ -245,7 +246,7 @@ export interface PreferenceWrites {
    * belongs.
    */
   onWorkspaceProjectDefaultChange: (
-    providerId: ProviderId,
+    providerId: WorkspaceProviderId,
     providerProjectId: string | undefined,
   ) => Promise<string | undefined>;
   /**
@@ -363,6 +364,8 @@ export interface SettingsPanelProps {
   calendar: CalendarControl;
   /** Everything the Linear block can do. */
   linear: LinearControl;
+  /** Superset is observed locally; its CLI login only gates actions. */
+  superset: SupersetControl;
   onQuit: () => void;
   shortcuts: ShortcutControl;
 }
@@ -1520,6 +1523,69 @@ export interface LinearControl {
   onDisconnect: () => Promise<string | undefined>;
 }
 
+export interface SupersetControl {
+  installed: boolean;
+  connected: boolean;
+  held: boolean;
+  connecting: boolean;
+  onConnect: () => void;
+  agents: readonly string[];
+  defaultAgent?: string;
+  onDefaultAgentChange: (agent: string | undefined) => Promise<string | undefined>;
+}
+
+function SupersetIntegration({ control }: { control: SupersetControl }): React.JSX.Element | null {
+  if (!control.installed) return null;
+  return (
+    <div className="credential">
+      <div className="credential-row">
+        <span className="credential-identity">
+          <span className="credential-mark">
+            <PlugIcon />
+          </span>
+          <span className="credential-name">Superset</span>
+          {control.connected ? <CheckIcon /> : null}
+        </span>
+        {!control.connected ? (
+          <span className="settings-actions">
+            <button
+              type="button"
+              className="quiet-button"
+              disabled={control.held || control.connecting}
+              onClick={control.onConnect}
+            >
+              {control.connecting ? "Connecting…" : "Connect"}
+            </button>
+          </span>
+        ) : null}
+      </div>
+      <p className="settings-note">
+        Workspace grouping works automatically. Connecting enables messages, controls, and new
+        sessions.
+      </p>
+      {control.connected && control.agents.length > 0 ? (
+        <SelectRow
+          label="New Superset sessions run"
+          ariaLabel="Default agent for new Superset sessions"
+          detail="Used when a creation ask does not name an agent. Your first successful choice sets it."
+          changed={control.defaultAgent !== undefined}
+          value={control.defaultAgent ?? PROVIDER_DEFAULT_VALUE}
+          options={[
+            { value: PROVIDER_DEFAULT_VALUE, label: "Ask each time" },
+            ...control.agents.map((agent) => ({ value: agent, label: agent })),
+          ]}
+          parse={(raw) =>
+            raw === PROVIDER_DEFAULT_VALUE || control.agents.includes(raw) ? raw : undefined
+          }
+          onChange={(agent) =>
+            control.onDefaultAgentChange(agent === PROVIDER_DEFAULT_VALUE ? undefined : agent)
+          }
+        />
+      ) : null}
+    </div>
+  );
+}
+
 /**
  * The issue tracker: connected by signing in with Linear, never by a pasted
  * credential, and drawn at all only in a build that carries the OAuth client
@@ -1652,11 +1718,13 @@ function IntegrationsSection({
   preferences,
   calendar,
   linear,
+  superset,
 }: {
   settings: AppSettings;
   preferences: PreferenceWrites;
   calendar: CalendarControl;
   linear: LinearControl;
+  superset: SupersetControl;
 }): React.JSX.Element {
   const storageUnavailable = settings.secretStorage === SECRET_STORAGE.UNAVAILABLE;
   return (
@@ -1666,6 +1734,7 @@ function IntegrationsSection({
         Integrations
       </h2>
       <LinearIntegration settings={settings} linear={linear} />
+      <SupersetIntegration control={superset} />
       <GoogleCalendarIntegration
         settings={settings}
         calendar={calendar}
@@ -2090,7 +2159,7 @@ function WorkspacesSection({
           if (raw === ASK_EACH_TIME) return raw;
           // The set is the one this row offered, so anything else arriving
           // out of the select is a broken control rather than a choice.
-          if (isProviderId(raw) && workspaceProviders.some((option) => option.id === raw)) {
+          if (workspaceProviders.some((option) => option.id === raw)) {
             return raw;
           }
           return undefined;
@@ -2098,7 +2167,8 @@ function WorkspacesSection({
         onChange={(next) => {
           if (next === ASK_EACH_TIME)
             return preferences.onDefaultWorkspaceProviderChange(undefined);
-          if (isProviderId(next)) return preferences.onDefaultWorkspaceProviderChange(next);
+          const provider = workspaceProviders.find((option) => option.id === next);
+          if (provider) return preferences.onDefaultWorkspaceProviderChange(provider.id);
         }}
       />
       {workspaceProviders.map((provider) => (
@@ -2131,7 +2201,7 @@ function WorkspaceProjectRow({
   const providerId = provider.id;
   // A provider this build cannot store a choice for, or one with no projects
   // to choose between, has nothing for the row to say.
-  if (!isProviderId(providerId) || provider.projects.length === 0) return null;
+  if (provider.projects.length === 0) return null;
   const stored = settings.workspaceProjectDefaults?.[providerId];
   return (
     <SelectRow
@@ -3069,6 +3139,7 @@ export function SettingsPanel({
   workspaceProviders,
   calendar,
   linear,
+  superset,
   onQuit,
   shortcuts,
 }: SettingsPanelProps): React.JSX.Element {
@@ -3193,6 +3264,7 @@ export function SettingsPanel({
             preferences={preferences}
             calendar={calendar}
             linear={linear}
+            superset={superset}
           />
           <WorkspacesSection
             settings={settings}

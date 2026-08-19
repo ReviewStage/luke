@@ -6,7 +6,6 @@ import {
   FIXTURE_EPOCH_MS,
   type HostedUsageAnswer,
   type IssueIdentity,
-  isProviderId,
   MOTION_DURATION_MS,
   type NormalizedSession,
   type ObservedWorkspaceProject,
@@ -23,6 +22,7 @@ import {
   type SessionNoticeAsk,
   VOICE_CAPTION_MAX_HEIGHT,
   type WorkspaceAgentSelection,
+  workspaceProjectSelectionId,
 } from "@sidecar/core";
 import {
   type CSSProperties,
@@ -45,10 +45,19 @@ import type {
   SessionOpenResult,
   SettingsResetScope,
   SettingsUpdateResult,
+  SupersetSignInSnapshot,
   UpdateSnapshot,
   VoiceSource,
+  WorkspaceProviderId,
 } from "../shared/contracts";
-import { ACCOUNT_STATUS, CREDENTIAL_SOURCE, SESSION_OPEN_RESULT_STATUS } from "../shared/contracts";
+import {
+  ACCOUNT_STATUS,
+  CREDENTIAL_SOURCE,
+  isWorkspaceProviderId,
+  SESSION_OPEN_RESULT_STATUS,
+  SUPERSET_SIGN_IN_STAGE,
+  SUPERSET_WORKSPACE_PROVIDER_ID,
+} from "../shared/contracts";
 import type { CredentialProviderId } from "../shared/credential-providers";
 import {
   CREDENTIAL_PROVIDER_LIST,
@@ -143,6 +152,7 @@ import {
 import { useSignInFaceCycle } from "./sign-in-gate";
 import { SignInSlot } from "./sign-in-slot";
 import { pointOverStrip, type SpokenStripContent, stripHoldNext } from "./strip-hold";
+import { SupersetSignInSlot } from "./superset-sign-in-slot";
 import { useBootstrapRacedChannel } from "./use-bootstrap-raced-channel";
 import { panelEntryOpen, usePanelEntry } from "./use-panel-entry";
 import { usePanelPresentation } from "./use-panel-presentation";
@@ -342,6 +352,11 @@ function useLeavingPanel(presentation: PanelPresentation): boolean {
 
 export function App(): React.JSX.Element {
   const [bootstrap, setBootstrap] = useState<AppBootstrap>();
+  const [supersetConnected, setSupersetConnected] = useState<boolean>();
+  const [supersetSignIn, setSupersetSignIn] = useState<SupersetSignInSnapshot>({
+    stage: SUPERSET_SIGN_IN_STAGE.IDLE,
+    organizations: [],
+  });
   // Readable from a callback as well as rendered: opening the feedback
   // composer signs a fresh note from the account without re-wiring the
   // lifecycle subscription to every sign-in change.
@@ -446,10 +461,10 @@ export function App(): React.JSX.Element {
   const feedbackHeld = useRef(false);
   /** Whether a calendar sign-in holds the slot, mirrored like the other two. */
   const consentConnectHeld = useRef(false);
+  const supersetSignInHeld = useRef(false);
   /**
-   * Which entry the slot shape is drawn around — a key being pasted, or a
-   * sign-in being waited out. One shape, two occupants, never both: beginning
-   * either is refused while the other is held.
+   * Which entry the slot shape is drawn around — a key being pasted or either
+   * sign-in being waited out. One shape, three occupants, never together.
    */
   const slotOccupant = useRef<SlotOccupant>(PANEL_STAND_DOWN.KEY);
   const feedbackNoticeTimer = useRef<number | undefined>(undefined);
@@ -643,7 +658,10 @@ export function App(): React.JSX.Element {
     // close a panel showing nothing but sessions.
     entryDrawn: () => credentialHeld.current && tabNow() === PANEL_TAB.SETTINGS,
     composerHeld: () =>
-      credentialHeld.current || feedbackHeld.current || consentConnectHeld.current,
+      credentialHeld.current ||
+      feedbackHeld.current ||
+      consentConnectHeld.current ||
+      supersetSignInHeld.current,
     onNotPanel: () => setOptionsOpen(false),
     onCapsuleList: () => {
       // A search is a question about the list as it was, so it closes with
@@ -877,6 +895,32 @@ export function App(): React.JSX.Element {
     consentConnect.cancel();
   }, [consentConnect.cancel, consentConnect.latest]);
 
+  const beginSupersetSignIn = useCallback(() => {
+    if (supersetSignInHeld.current) {
+      if (supersetSignIn.stage === SUPERSET_SIGN_IN_STAGE.FAILURE) {
+        setSupersetSignIn({ stage: SUPERSET_SIGN_IN_STAGE.BROWSER_CODE, organizations: [] });
+        void window.sidecar.beginSupersetSignIn().then(setSupersetSignIn);
+      }
+      return;
+    }
+    if (credentialHeld.current || consentConnectHeld.current) return;
+    supersetSignInHeld.current = true;
+    slotOccupant.current = PANEL_STAND_DOWN.SUPERSET;
+    standDownPage.current = standDownReturnPage({ kind: PANEL_STAND_DOWN.SUPERSET });
+    setSupersetSignIn({ stage: SUPERSET_SIGN_IN_STAGE.BROWSER_CODE, organizations: [] });
+    cancelHover();
+    applyPresentation(PANEL_PRESENTATION.SLOT);
+    void window.sidecar.beginSupersetSignIn().then(setSupersetSignIn);
+  }, [applyPresentation, cancelHover, supersetSignIn.stage]);
+
+  const cancelSupersetSignIn = useCallback(() => {
+    if (!supersetSignInHeld.current) return;
+    window.sidecar.cancelSupersetSignIn();
+    supersetSignInHeld.current = false;
+    setSupersetSignIn({ stage: SUPERSET_SIGN_IN_STAGE.IDLE, organizations: [] });
+    if (presentationOf() === PANEL_PRESENTATION.SLOT) restorePanel();
+  }, [presentationOf, restorePanel]);
+
   /**
    * Asking to write a key is asking for one thing, so the panel gets out of the
    * way of it: the shape goes down to the slot, which is the field and nothing
@@ -1049,7 +1093,7 @@ export function App(): React.JSX.Element {
   // creation makes on its own, offered by hand so the choice can be changed
   // or returned to asking each time.
   const changeDefaultWorkspaceProvider = useCallback(
-    async (providerId: ProviderId | undefined) =>
+    async (providerId: WorkspaceProviderId | undefined) =>
       applySettingsReply(
         await window.sidecar.updateSetting(
           APP_SETTING_SCHEMA.defaultWorkspaceProvider.field,
@@ -1084,13 +1128,21 @@ export function App(): React.JSX.Element {
   // write the first creation there makes on its own, offered by hand so the
   // choice can be changed or returned to the first creation.
   const changeWorkspaceProjectDefault = useCallback(
-    async (providerId: ProviderId, providerProjectId: string | undefined) =>
+    async (providerId: WorkspaceProviderId, providerProjectId: string | undefined) =>
       applySettingsReply(
         await window.sidecar.updateSettingEntry(
           APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
           providerId,
           providerProjectId,
         ),
+      ),
+    [applySettingsReply],
+  );
+
+  const changeSupersetAgentDefault = useCallback(
+    async (agent: string | undefined) =>
+      applySettingsReply(
+        await window.sidecar.updateSetting(APP_SETTING_SCHEMA.supersetAgentDefault.field, agent),
       ),
     [applySettingsReply],
   );
@@ -1106,23 +1158,33 @@ export function App(): React.JSX.Element {
   const storedWorkspaceProvider = settings?.defaultWorkspaceProvider;
   const storedWorkspaceProjects = settings?.workspaceProjectDefaults;
   const workspaceProviderOptions = useMemo(() => {
-    const fallbackName = (providerId: string) =>
+    const fallbackName = (providerId: WorkspaceProviderId) =>
       isCredentialProviderId(providerId)
         ? CREDENTIAL_PROVIDERS[providerId].displayName
         : providerId;
-    const names = new Map<string, string>();
-    for (const project of workspaceProjects) names.set(project.providerId, project.providerName);
+    const names = new Map<WorkspaceProviderId, string>();
+    for (const project of workspaceProjects) {
+      if (isWorkspaceProviderId(project.providerId)) {
+        names.set(project.providerId, project.providerName);
+      }
+    }
     if (storedWorkspaceProvider && !names.has(storedWorkspaceProvider)) {
       names.set(storedWorkspaceProvider, fallbackName(storedWorkspaceProvider));
     }
     for (const providerId of Object.keys(storedWorkspaceProjects ?? {})) {
+      if (!isWorkspaceProviderId(providerId)) continue;
       if (!names.has(providerId)) names.set(providerId, fallbackName(providerId));
     }
     return [...names.entries()].map(([id, name]) => {
       const offered = workspaceProjects
         .filter((project) => project.providerId === id)
-        .map((project) => ({ id: project.providerProjectId, label: project.repository }));
-      const stored = isProviderId(id) ? storedWorkspaceProjects?.[id] : undefined;
+        .map((project) => ({
+          id: workspaceProjectSelectionId(project),
+          label: project.targetName
+            ? `${project.repository} on ${project.targetName}`
+            : project.repository,
+        }));
+      const stored = storedWorkspaceProjects?.[id];
       // A stored project the provider no longer offers is its own label: the
       // repository name lived on the observed list that stopped listing it.
       const projects =
@@ -2204,12 +2266,22 @@ export function App(): React.JSX.Element {
     const removeDisplay = window.sidecar.onDisplayChanged(setDisplay);
     const removeSessions = window.sidecar.onSessionsChanged(setSessions);
     const removeNoticeAsks = window.sidecar.onNoticeAsksChanged(setNoticeAsks);
+    const removeSupersetSignIn = window.sidecar.onSupersetSignInChanged((next) => {
+      setSupersetConnected(next.stage === SUPERSET_SIGN_IN_STAGE.CONNECTED);
+      if (!supersetSignInHeld.current) return;
+      setSupersetSignIn(next);
+      if (next.stage !== SUPERSET_SIGN_IN_STAGE.CONNECTED) return;
+      supersetSignInHeld.current = false;
+      setSupersetConnected(true);
+      if (presentationOf() === PANEL_PRESENTATION.SLOT) restorePanel();
+    });
     return () => {
       cancelHover();
       removeLifecycle();
       removeDisplay();
       removeSessions();
       removeNoticeAsks();
+      removeSupersetSignIn();
       void stopMicrophone();
     };
   }, [
@@ -2233,6 +2305,8 @@ export function App(): React.JSX.Element {
     stopMicrophone,
     summonAsk,
     modeGenerationOf,
+    presentationOf,
+    restorePanel,
   ]);
 
   // The one greeting an unauthed launch gets: the panel opens on the sign-in
@@ -2661,7 +2735,8 @@ export function App(): React.JSX.Element {
           panelHeight,
           signInWait !== undefined
             ? signInSlotHeight
-            : slotOccupant.current === PANEL_STAND_DOWN.CONSENT
+            : slotOccupant.current === PANEL_STAND_DOWN.CONSENT ||
+                slotOccupant.current === PANEL_STAND_DOWN.SUPERSET
               ? connectHeight
               : slotHeight,
           feedbackHeight,
@@ -2747,6 +2822,24 @@ export function App(): React.JSX.Element {
                 onSignIn: () => beginConsentSignIn(CONSENT_SERVICE_ID.LINEAR),
                 onDisconnect: disconnectLinear,
               },
+              superset: {
+                installed: bootstrap.supersetInstalled,
+                connected: supersetConnected ?? bootstrap.supersetConnected,
+                held: credentialHeld.current || consentConnectHeld.current,
+                connecting: supersetSignInHeld.current,
+                onConnect: beginSupersetSignIn,
+                agents: [
+                  ...new Set(
+                    workspaceProjects
+                      .filter((project) => project.providerId === SUPERSET_WORKSPACE_PROVIDER_ID)
+                      .flatMap((project) => project.spawnableAgents ?? []),
+                  ),
+                ],
+                ...((settings ?? bootstrap.settings).supersetAgentDefault
+                  ? { defaultAgent: (settings ?? bootstrap.settings).supersetAgentDefault }
+                  : {}),
+                onDefaultAgentChange: changeSupersetAgentDefault,
+              },
               onQuit: () => window.sidecar.quit(),
               shortcuts,
             }}
@@ -2787,6 +2880,18 @@ export function App(): React.JSX.Element {
             }}
             measure={connectElement}
           />
+          {supersetSignInHeld.current ? (
+            <SupersetSignInSlot
+              state={supersetSignIn}
+              drawn={slotOpen && slotOccupant.current === PANEL_STAND_DOWN.SUPERSET}
+              onSubmit={(code) => void window.sidecar.submitSupersetSignInCode(code)}
+              onReopen={() => window.sidecar.reopenSupersetSignIn()}
+              onCancel={cancelSupersetSignIn}
+              onRetry={beginSupersetSignIn}
+              onChooseOrganization={(slug) => void window.sidecar.chooseSupersetOrganization(slug)}
+              measure={connectElement}
+            />
+          ) : null}
         </>
       ) : null}
       {credentialsEntry.entry === undefined && consentConnect.entry === undefined ? (

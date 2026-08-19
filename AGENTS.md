@@ -27,6 +27,20 @@ Trust constraints:
 - Never write provider transcripts or session-state files. Reading them is what
   Luke is for; writing to them is never.
 - Never inject terminal input, simulate keystrokes, or request Accessibility.
+  A message the developer explicitly sends through Superset's documented
+  `terminals send` command is not terminal injection: Superset owns the
+  terminal and its authenticated endpoint, the observed binding identifies
+  the exact target, and Luke invokes it directly without a shell. It remains
+  bound by the same direct-user-act and latest-roster validation as every
+  other session message.
+- A Superset workspace creation is the same bounded exception at the workspace
+  level: only in a developer-opened turn, only on a host, project, and agent
+  preset returned by the CLI's latest read, and only through the documented
+  `workspaces create` command invoked directly without a shell. Luke supplies
+  the developer's opening task and a bounded generated branch, then may call
+  `workspaces open` for the identifier that creation returned. This does not
+  authorize arbitrary Superset CLI commands, deletion, tasks, automations,
+  account changes, or settings changes.
 - Product behavior must not require provider MCP, plugins, hooks, wrappers,
   credentials, or live sessions. A provider whose sessions exist only in a cloud
   service may read a user-supplied API key, but it must observe nothing until

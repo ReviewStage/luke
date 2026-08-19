@@ -52,6 +52,11 @@ const bridge: AppBridge = {
   disconnectLinear: invoke(channels.disconnectLinear),
   checkForUpdates: invoke(channels.checkForUpdates),
   openLatestRelease: () => ipcRenderer.send(channels.openLatestRelease),
+  beginSupersetSignIn: invoke(channels.beginSupersetSignIn),
+  submitSupersetSignInCode: invoke(channels.submitSupersetSignInCode),
+  reopenSupersetSignIn: () => ipcRenderer.send(channels.reopenSupersetSignIn),
+  cancelSupersetSignIn: () => ipcRenderer.send(channels.cancelSupersetSignIn),
+  chooseSupersetOrganization: invoke(channels.chooseSupersetOrganization),
   setVoiceExchangeActive: (active) => {
     ipcRenderer.send(channels.setVoiceExchange, active);
   },
@@ -92,6 +97,7 @@ const bridge: AppBridge = {
   onStopHotkeyPress: subscribe(channels.stopHotkeyPress),
   onStopHotkeyChanged: subscribe(channels.stopHotkeyChanged),
   onOutputAudioChanged: subscribe(channels.outputAudioChanged),
+  onSupersetSignInChanged: subscribe(channels.supersetSignInChanged),
   onAttentionSpeech: subscribe(channels.attentionSpeech),
 };
 

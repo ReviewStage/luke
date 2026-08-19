@@ -20,6 +20,11 @@ export interface SessionRegistrySnapshot {
 
 export type SessionRegistryListener = (snapshot: SessionRegistrySnapshot) => void;
 
+type SessionObservationTransform = (
+  providerId: string,
+  observations: readonly ProviderSessionObservation[],
+) => readonly ProviderSessionObservation[];
+
 type ProviderSessions = Map<string, NormalizedSession>;
 type SessionStore = Map<string, ProviderSessions>;
 
@@ -131,6 +136,8 @@ const sameAttention = exhaustiveSame<AttentionDecision>({
 
 const sameWorkspace = exhaustiveSame<SessionWorkspace>({
   providerWorkspaceId: (first, second) => first.providerWorkspaceId === second.providerWorkspaceId,
+  scopeId: (first, second) => first.scopeId === second.scopeId,
+  managerName: (first, second) => first.managerName === second.managerName,
   name: (first, second) => first.name === second.name,
 });
 
@@ -267,11 +274,13 @@ export class InMemorySessionRegistry {
   /** Reads a provider adapter and applies its newest full observation as one update. */
   async refresh(
     adapter: Pick<SessionProviderAdapter, "provider" | "observe">,
+    transform?: SessionObservationTransform,
   ): Promise<SessionRegistrySnapshot> {
     const providerId = normalizedProviderId(adapter.provider);
     const mutationEpoch = this.#providerMutationEpochs.get(providerId) ?? 0;
     const attempt = this.#startProviderRefreshAttempt(providerId);
-    const observations = await adapter.observe();
+    const observed = await adapter.observe();
+    const observations = transform ? transform(providerId, observed) : observed;
     const latestAttempt = this.#latestAppliedRefreshAttempts.get(providerId) ?? 0;
     if (
       latestAttempt >= attempt ||

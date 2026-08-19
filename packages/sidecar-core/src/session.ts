@@ -267,6 +267,14 @@ export interface SessionDiffSummary {
  */
 export interface SessionWorkspace {
   providerWorkspaceId: string;
+  /**
+   * The namespace that owns the workspace identity. It is normally the
+   * session provider, but an orchestrator may group sessions from several
+   * providers under one workspace of its own.
+   */
+  scopeId?: string;
+  /** The bounded product name shown when an orchestrator owns this workspace. */
+  managerName?: string;
   name?: string;
 }
 
@@ -567,8 +575,15 @@ function normalizeWorkspace(workspace: SessionWorkspace | undefined): SessionWor
     maximumSessionDetailLength,
   );
   if (!providerWorkspaceId) return undefined;
+  const scopeId = boundedText(workspace?.scopeId, maximumSessionDetailLength);
+  const managerName = boundedText(workspace?.managerName, maximumSessionDetailLength);
   const name = boundedText(workspace?.name, maximumSessionTitleLength);
-  return { providerWorkspaceId, ...(name ? { name } : {}) };
+  return {
+    providerWorkspaceId,
+    ...(scopeId ? { scopeId } : {}),
+    ...(managerName ? { managerName } : {}),
+    ...(name ? { name } : {}),
+  };
 }
 
 /** Normalizes the two-part identity used to locate a session in the registry. */

@@ -31,6 +31,7 @@ Visit [tryluke.dev](https://tryluke.dev) to see Luke in action.
 - See local and cloud coding-agent sessions in one place.
 - Know which sessions are working, waiting, complete, or failed.
 - Review current activity, errors, repository context, and turn recaps.
+- Group local agents by their Superset project and workspace automatically.
 - Filter and sort sessions by location, provider, urgency, or recency.
 - Ask Luke about supported local sessions by voice or text.
 - Send messages and supported controls only when you explicitly ask Luke to.
@@ -51,8 +52,19 @@ Visit [tryluke.dev](https://tryluke.dev) to see Luke in action.
 | Devin | Local and cloud sessions | Cloud only |
 | Jules | Cloud sessions | Yes |
 | OpenCode | Local sessions | No |
+| Superset | Local workspace and terminal context | Actions only |
 | Linear | Assigned issues | Yes (sign-in) |
 | Google Calendar | Meeting busy times | Yes (sign-in) |
+
+Superset enrichment needs no connection: Luke reads Superset's live local host
+database in read-only mode and joins agents by their exact session identifiers.
+When the Superset CLI has its own login, workspace controls, messages, and new
+workspace creation appear. Luke lists only the hosts, projects, and agent
+presets Superset currently reports and validates a creation against that list;
+Luke never reads or stores that login. Connect from Luke's Settings and finish
+Superset's own sign-in flow in the browser, then explicitly paste its one-time
+code into Luke. Superset's CLI still exchanges the code, stores the login, and
+switches organizations; no Terminal command or copied-command fallback is used.
 
 Cloud integrations remain inactive until you add their credentials in Luke's
 Settings. Linear and Google Calendar are connected by signing in on the
@@ -99,7 +111,7 @@ panel keeps showing every session state throughout either way.
 - Rows show the provider-assigned title (with a workspace fallback), current
   activity, error or turn recap, repository context, and whether the session is
   working, waiting, complete, failed, or merely observed.
-- A provider that nests chats in a workspace — Conductor today — gets one row
+- A provider or local orchestrator that nests chats in a workspace gets one row
   per chat: several chats sit inside one tray named by the workspace at its
   top, a workspace holding a single chat stays one row titled by the
   workspace, and each chat can be opened, messaged, or controlled on its own.
@@ -119,7 +131,13 @@ panel keeps showing every session state throughout either way.
 
 Luke never injects terminal input or simulates keystrokes. A message or a
 provider-advertised control reaches a session only when you explicitly ask —
-typed on its row, or requested of Luke in a conversation you opened.
+typed on its row, or requested of Luke in a conversation you opened. For a
+Superset-managed session, Luke may hand that message to Superset's documented
+`terminals send` command under Superset's own CLI login; it invokes the
+executable directly rather than typing into a terminal.
+The same direct-user-act rule covers creating a Superset workspace with one of
+its currently listed agent presets. Luke generates a bounded branch name from
+the requested work and asks Superset to open the workspace after creation.
 
 ## Talking to Luke
 

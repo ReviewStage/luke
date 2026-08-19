@@ -651,6 +651,35 @@ test("chats of one workspace sit together and read as one tray run", () => {
   ]);
 });
 
+test("an orchestrator workspace groups sessions from different providers", () => {
+  const workspace = {
+    providerWorkspaceId: "workspace-superset",
+    scopeId: "superset",
+    name: "power-vacation",
+  };
+  const rows = displaySessions(bootstrap(false), [
+    normalizeSession(CLAUDE_PROVIDER, {
+      providerSessionId: "claude-chat",
+      title: "Claude",
+      status: SESSION_STATUS.WORKING,
+      observedAt: 2_000,
+      workspace,
+    }),
+    normalizeSession(CODEX_PROVIDER, {
+      providerSessionId: "codex-chat",
+      title: "Codex",
+      status: SESSION_STATUS.COMPLETE,
+      observedAt: 1_000,
+      workspace,
+    }),
+  ]);
+
+  assert.deepEqual(
+    sessionListRuns(arrangeSessions(rows, DEFAULT_SESSION_VIEW).sessions).map((run) => run.indexes),
+    [[0, 1]],
+  );
+});
+
 test("a lone chat is a run of one, and namesake workspaces never join", () => {
   // Two workspaces wearing one name: the id is what groups, so each stays a
   // run of its own — drawn as a plain row, not a tray — rather than joining
