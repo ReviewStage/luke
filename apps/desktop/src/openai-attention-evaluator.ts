@@ -1,19 +1,19 @@
 import {
-  ATTENTION_RESPONSES_PATH,
   type AttentionDecision,
   type AttentionEvaluator,
   type AttentionUpdate,
-  attentionDecisionFromModel,
-  attentionResponsesMissingReason,
-  attentionResponsesOutputText,
-  attentionResponsesRequest,
   positiveInteger,
   text,
-  type UnparsedWireValue,
 } from "@sidecar/core";
+import {
+  AttentionReviewClient,
+  type AttentionReviewFailure,
+  AttentionReviewLive,
+  evaluateAttentionUpdate,
+} from "@sidecar/core/effect";
+import { Cause, Effect, Exit, type Layer, pipe } from "effect";
 
 /* The key is not read here: it is the stored credential the settings store
-   // SAFETY: The preceding check establishes the asserted contract.
    resolves, which reads `OPENAI_API_KEY` as its own fallback. */
 const OPENAI_ENVIRONMENT = {
   BASE_URL: "OPENAI_BASE_URL",
@@ -33,9 +33,6 @@ const OPENAI_DEFAULTS = {
   // with no output at all — indistinguishable from having nothing to say.
   MAXIMUM_OUTPUT_TOKENS: 4096,
 } as const;
-
-const OPENAI_RATE_LIMIT_STATUS = 429;
-const OPENAI_RETRY_AFTER_HEADER = "retry-after";
 
 /**
  * How long attention requests stay quiet after the API rate-limits one, when
@@ -66,50 +63,41 @@ function withoutTrailingSlash(value: string): string {
   return value.endsWith("/") ? value.slice(0, -1) : value;
 }
 
-function parsedJson(text: string): UnparsedWireValue | undefined {
-  try {
-    // SAFETY: JSON.parse returns a wire value; callers validate before use.
-    return JSON.parse(text) as UnparsedWireValue;
-  } catch {
-    return undefined;
-  }
-}
-
 /**
  * Evaluates bounded session updates with the OpenAI Responses API using the
- // SAFETY: The preceding check establishes the asserted contract.
  * shared decision contract as a strict structured-output schema. It sends only
  * the redacted update, never asks the API to retain the request, and answers
  * with nothing when the API is unavailable or replies outside the contract.
  */
 export class OpenAiAttentionEvaluator implements AttentionEvaluator {
-  readonly #apiKey: string;
-  readonly #model: string;
-  readonly #baseUrl: string;
-  readonly #fetch: FetchLike;
+  readonly #layer: Layer.Layer<AttentionReviewClient>;
   readonly #now: () => number;
-  readonly #requestTimeoutMs: number;
-  readonly #maximumOutputTokens: number;
-  // SAFETY: The preceding check establishes the asserted contract.
-  /** Until when rate-limited requests stay unsent, as epoch milliseconds. */
-  #quietUntil = 0;
+  readonly #model: string;
 
   constructor(options: OpenAiAttentionEvaluatorOptions) {
     const apiKey = text(options.apiKey);
     if (!apiKey) throw new Error("OpenAI API key must not be empty");
-    this.#apiKey = apiKey;
-    this.#model = text(options.model) ?? OPENAI_DEFAULTS.MODEL;
-    this.#baseUrl = withoutTrailingSlash(text(options.baseUrl) ?? OPENAI_DEFAULTS.BASE_URL);
-    this.#fetch = options.fetch ?? ((input, init) => fetch(input, init));
     this.#now = options.now ?? Date.now;
-    this.#requestTimeoutMs = positiveInteger(
+    this.#model = text(options.model) ?? OPENAI_DEFAULTS.MODEL;
+    const baseUrl = withoutTrailingSlash(text(options.baseUrl) ?? OPENAI_DEFAULTS.BASE_URL);
+    const requestTimeoutMs = positiveInteger(
       options.requestTimeoutMs,
       OPENAI_DEFAULTS.REQUEST_TIMEOUT_MS,
     );
-    this.#maximumOutputTokens = positiveInteger(
+    const maximumOutputTokens = positiveInteger(
       options.maximumOutputTokens,
       OPENAI_DEFAULTS.MAXIMUM_OUTPUT_TOKENS,
     );
+    this.#layer = AttentionReviewLive({
+      apiKey,
+      model: this.#model,
+      baseUrl,
+      fetch: options.fetch,
+      now: this.#now,
+      requestTimeoutMs,
+      maximumOutputTokens,
+      rateLimitCooldownMs: ATTENTION_RATE_LIMIT_COOLDOWN_MS,
+    });
   }
 
   get model(): string {
@@ -122,91 +110,47 @@ export class OpenAiAttentionEvaluator implements AttentionEvaluator {
    * guard inside {@link evaluate} still answers a caller that did not.
    */
   quietUntil(): number | undefined {
-    return this.#quietUntil > this.#now() ? this.#quietUntil : undefined;
-  }
-
-  async evaluate(update: AttentionUpdate): Promise<AttentionDecision | undefined> {
-    // Answering with nothing is how an evaluator stays silent, and staying
-    // silent is free: the update stays derivable and returns once the API is
-    // taking requests again.
-    if (this.#now() < this.#quietUntil) return undefined;
-    const response = await this.#request(update);
-    if (!response) return undefined;
-
-    if (!response.ok) {
-      if (response.status === OPENAI_RATE_LIMIT_STATUS) {
-        this.#quiet(response);
-        return undefined;
-      }
-      // Status alone is enough to diagnose credentials or rate limits without
-      // writing the request, the key, or any session material to the log.
-      this.#report(`OpenAI attention request failed with status ${response.status}`);
-      return undefined;
-    }
-
-    const payload = await this.#payload(response);
-    if (payload === undefined) return undefined;
-
-    const text = attentionResponsesOutputText(payload);
-    if (!text) {
-      this.#report(
-        `OpenAI attention response carried no decision${attentionResponsesMissingReason(payload)}`,
-      );
-      return undefined;
-    }
-
-    const decision = attentionDecisionFromModel(parsedJson(text), this.#now());
-    if (!decision) this.#report("OpenAI attention response did not satisfy the decision contract");
-    return decision;
-  }
-
-  async #request(update: AttentionUpdate): Promise<Response | undefined> {
-    try {
-      return await this.#fetch(`${this.#baseUrl}${ATTENTION_RESPONSES_PATH}`, {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${this.#apiKey}`,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify(
-          attentionResponsesRequest(update, {
-            model: this.#model,
-            maximumOutputTokens: this.#maximumOutputTokens,
-          }),
-        ),
-        signal: AbortSignal.timeout(this.#requestTimeoutMs),
-      });
-    } catch (error) {
-      this.#report(
-        `OpenAI attention request did not complete: ${error instanceof Error ? error.name : "unknown error"}`,
-      );
-      return undefined;
-    }
-  }
-
-  /**
-   * Starts the quiet a rate limit asked for, taking the API's own word for
-   * how long when it gives one. Reported once, at the moment the quiet
-   * begins: the requests held back during it are not failures to log.
-   */
-  #quiet(response: Response): void {
-    const retryAfterSeconds = Number(response.headers.get(OPENAI_RETRY_AFTER_HEADER));
-    const waitMs =
-      Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
-        ? retryAfterSeconds * 1000
-        : ATTENTION_RATE_LIMIT_COOLDOWN_MS;
-    this.#quietUntil = this.#now() + waitMs;
-    this.#report(
-      `OpenAI attention requests are rate limited; pausing reviews for ${Math.round(waitMs / 1000)}s`,
+    return Effect.runSync(
+      pipe(
+        Effect.gen(function* () {
+          const client = yield* AttentionReviewClient;
+          return client.quietUntil();
+        }),
+        Effect.provide(this.#layer),
+      ),
     );
   }
 
-  async #payload(response: Response): Promise<void> {
-    try {
-      return await response.json();
-    } catch {
-      this.#report("OpenAI attention response was not JSON");
+  async evaluate(update: AttentionUpdate): Promise<AttentionDecision | undefined> {
+    const exit = await Effect.runPromiseExit(
+      pipe(evaluateAttentionUpdate(update), Effect.provide(this.#layer)),
+    );
+    if (Exit.isFailure(exit)) {
+      const failure = Cause.failureOption(exit.cause);
+      if (failure._tag === "Some") this.#reportFailure(failure.value);
       return undefined;
+    }
+    return exit.value;
+  }
+
+  #reportFailure(failure: AttentionReviewFailure): void {
+    switch (failure._tag) {
+      case "AttentionReviewRateLimited": {
+        const waitMs = Math.max(0, failure.quietUntil - this.#now());
+        this.#report(
+          `OpenAI attention requests are rate limited; pausing reviews for ${Math.round(waitMs / 1000)}s`,
+        );
+        return;
+      }
+      case "AttentionReviewHttpFailure":
+      case "AttentionReviewNetworkFailure":
+      case "AttentionReviewInvalidResponse":
+      case "AttentionReviewContractViolation":
+        this.#report(failure.message);
+        return;
+      default: {
+        failure satisfies never;
+      }
     }
   }
 
