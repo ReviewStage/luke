@@ -207,23 +207,11 @@
   /* The one width the caption block, the volume hint, and the notice band all
      lay out at: the peek less one convex corner a side, so their last row ends
      inside the shape's bottom curve. The open panel overrides it with its own
-     usable width, where these three stand at its foot. `--voice-band-widen`
-     is the half-side step between the two — restated against the compact
-     formula rather than `--voice-band-width`, which the panel's override
-     would zero it through — and the widen keyframes spend it as a clip
-     released on the surface's own duration and spring, so the wider layout
-     is uncovered by the shape's travel instead of being drawn past an edge
-     still springing toward it. */
-  --voice-band-width: calc(var(--peek-width) - var(--notch-convex-radius) * 2);
-  --voice-band-widen: calc(
-    (
-      var(--panel-width) -
-      var(--panel-inset) *
-      2 -
-      (var(--peek-width) - var(--notch-convex-radius) * 2)
-    ) /
-    2
-  );
+     usable width, where these three stand at its foot; the compact value
+     keeps a name of its own because the panel measures its widen step
+     against it. */
+  --voice-band-width-compact: calc(var(--peek-width) - var(--notch-convex-radius) * 2);
+  --voice-band-width: var(--voice-band-width-compact);
   /* Wide enough for a key, a way out, and a way on, and no wider — the page the
      key was copied from is behind this and has to stay readable. The floor is
      what those three need on a display with no housing to grow from. */
@@ -267,9 +255,11 @@
      its usable width — the content column between the panel's insets, which
      also clears the bottom corners' curve beside the band's last row. The
      width itself snaps, because animating a width re-wraps text on every
-     frame; the widen keyframes are what carry the change on the shape's
-     spring. */
+     frame; `--voice-band-widen`, the half-side step up from the compact
+     width, is what the widen keyframe spends as a clip so the change rides
+     the shape's spring instead. */
   --voice-band-width: calc(var(--panel-width) - var(--panel-inset) * 2);
+  --voice-band-widen: calc((var(--voice-band-width) - var(--voice-band-width-compact)) / 2);
 }
 
 /* The wings keep the capsule's quiet form while the slot is drawn — one mark and
@@ -1291,6 +1281,9 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
    under it is what answers, so hovering the words holds the peek like
    hovering the shape does. */
 .voice-caption {
+  /* Named so the widen keyframe can hold it while animating the sides: an
+     animation owns the whole clip-path while it runs. */
+  --voice-band-clip-bottom: calc(var(--caption-max) - var(--caption-size, 28px));
   position: absolute;
   z-index: 3;
   top: var(--capsule-height);
@@ -1299,7 +1292,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   width: var(--voice-band-width);
   height: var(--caption-max);
   padding: 5px 0 9px;
-  clip-path: inset(0 0 calc(var(--caption-max) - var(--caption-size, 28px)) 0);
+  clip-path: inset(0 0 var(--voice-band-clip-bottom));
   opacity: 0;
   pointer-events: none;
   transform: translate(-50%, calc(var(--caption-rest, 0px) - var(--shape-top, 0px)));
@@ -1565,6 +1558,13 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
    would be drawn on the desktop. Above the hover strip (z-index 4) because
    the presses have to open the sessions. */
 .session-notices {
+  /* Named so the widen keyframe can hold it while animating the sides: an
+     animation owns the whole clip-path while it runs. */
+  --voice-band-clip-bottom: calc(
+    var(--notice-size) *
+    var(--notice-max-rows) -
+    var(--notice-growth, var(--notice-size))
+  );
   position: absolute;
   z-index: 5;
   top: var(--capsule-height);
@@ -1580,10 +1580,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
      gives the width back. */
   width: var(--voice-band-width);
   height: calc(var(--notice-size) * var(--notice-max-rows) - 6px);
-  clip-path: inset(
-    0 0 calc(var(--notice-size) * var(--notice-max-rows) - var(--notice-growth, var(--notice-size)))
-      0
-  );
+  clip-path: inset(0 0 var(--voice-band-clip-bottom));
   opacity: 0;
   pointer-events: none;
   transform: translate(-50%, calc(3px - var(--shape-top, 0px) + var(--notice-rest, 0px)));
@@ -1733,59 +1730,26 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
    elements are always mounted, so the animation fires only at the flip and
    never mid-panel, where the surface is already wide and the caption's and
    the band's arriving content needs its clip transition live rather than
-   owned by a finished animation. Those two carry their bottom clips in their
-   keyframes alongside the sides, because an animation owns the whole
-   property while it runs. Leaving the panel needs no twin: the compact width
-   snaps back on the flip, already inside every edge the collapse will
+   owned by a finished animation. One keyframe serves all three because each
+   element's `--voice-band-clip-bottom` — 0 for the hint's bare row — rides
+   through both frames unchanged, so the animation ends exactly on the clip
+   the element's own rule draws. Leaving the panel needs no twin: the compact
+   width snaps back on the flip, already inside every edge the collapse will
    pass. */
 @keyframes voice-band-widen {
   from {
-    clip-path: inset(0 var(--voice-band-widen));
+    clip-path: inset(0 var(--voice-band-widen) var(--voice-band-clip-bottom, 0px));
   }
 
   to {
-    clip-path: inset(0 0);
+    clip-path: inset(0 0 var(--voice-band-clip-bottom, 0px));
   }
 }
 
-@keyframes voice-caption-widen {
-  from {
-    clip-path: inset(
-      0 var(--voice-band-widen) calc(var(--caption-max) - var(--caption-size, 28px))
-    );
-  }
-
-  to {
-    clip-path: inset(0 0 calc(var(--caption-max) - var(--caption-size, 28px)));
-  }
-}
-
-@keyframes notice-band-widen {
-  from {
-    clip-path: inset(
-      0 var(--voice-band-widen)
-        calc(var(--notice-size) * var(--notice-max-rows) - var(--notice-growth, var(--notice-size)))
-    );
-  }
-
-  to {
-    clip-path: inset(
-      0 0
-        calc(var(--notice-size) * var(--notice-max-rows) - var(--notice-growth, var(--notice-size)))
-    );
-  }
-}
-
-.app-stage[data-presentation="panel"] .voice-caption {
-  animation: voice-caption-widen var(--duration-shape) var(--spring);
-}
-
-.app-stage[data-presentation="panel"] .volume-hint {
-  animation: voice-band-widen var(--duration-shape) var(--spring);
-}
-
+.app-stage[data-presentation="panel"] .voice-caption,
+.app-stage[data-presentation="panel"] .volume-hint,
 .app-stage[data-presentation="panel"] .session-notices {
-  animation: notice-band-widen var(--duration-shape) var(--spring);
+  animation: voice-band-widen var(--duration-shape) var(--spring);
 }
 
 /* The chips are drawn on the shape, not in the panel's flow, so the body
