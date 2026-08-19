@@ -23,8 +23,7 @@
     "typecheck": "pnpm --recursive --if-present run typecheck"
   },
   "lint-staged": {
-    "*.{js,jsx,mjs,ts,tsx,json,md,css}": "biome check --write --no-errors-on-unmatched",
-    "*.{js,jsx,mjs,ts,tsx}": "oxlint"
+    "*.{js,jsx,mjs,ts,tsx,json,md,css}": "biome check --write --no-errors-on-unmatched"
   },
   "optionalDependencies": {
     "ds-store": "0.1.6"
