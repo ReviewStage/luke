@@ -369,6 +369,12 @@ export interface VoiceConversationOptions {
    */
   voiceAvailable: boolean | undefined;
   outputSilent: boolean;
+  /**
+   * Whether the meeting quiet is holding — a meeting on the connected
+   * calendar covers now and the setting is on. True silences the announcer at
+   * once, the announcement mid-sentence on Luke's own call included.
+   */
+  meetingQuiet: boolean;
   fixtureSpeaking: boolean;
   /**
    * True while a settings row is recording a chord. Both Luke keys stay
@@ -984,6 +990,15 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   useEffect(() => {
     announcer.current?.onStatus(voiceStatus);
   }, [voiceStatus]);
+
+  // The meeting quiet reaching the announcer. Quiet beginning is built
+  // through ensure, so it stands even before the first notice would have
+  // built the announcer; quiet ending has no announcer to wake, because the
+  // main process re-sends what the meeting held as a fresh backlog.
+  useEffect(() => {
+    if (options.meetingQuiet) ensureAnnouncer().setMeetingQuiet(true);
+    else announcer.current?.setMeetingQuiet(false);
+  }, [ensureAnnouncer, options.meetingQuiet]);
 
   // The talk key is registered by the main process so it answers from any app,
   // which is the whole point: no window to find, nothing to focus first. Both

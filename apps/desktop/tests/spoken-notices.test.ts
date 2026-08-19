@@ -31,6 +31,7 @@ interface FakeSession extends AnnouncerSession {
   spoken: AttentionSpeech[];
   connects: number;
   closes: number;
+  stops: number;
   /** What the next connect resolves to; the call opens when it does. */
   connectOpens: boolean;
   setStatus(status: RealtimeStatus): void;
@@ -42,6 +43,7 @@ function fakeSession(): FakeSession {
     spoken: [],
     connects: 0,
     closes: 0,
+    stops: 0,
     connectOpens: true,
     microphone: false,
     status: REALTIME_STATUS.IDLE,
@@ -66,6 +68,12 @@ function fakeSession(): FakeSession {
       if (!this.isConnected || this.status === REALTIME_STATUS.RESPONDING) return false;
       this.spoken.push(item);
       this.setStatus(REALTIME_STATUS.RESPONDING);
+      return true;
+    },
+    stopSpeaking() {
+      if (this.status !== REALTIME_STATUS.RESPONDING) return false;
+      this.stops += 1;
+      this.setStatus(REALTIME_STATUS.READY);
       return true;
     },
     async close() {
@@ -338,6 +346,76 @@ test("a notice refused mid-reply keeps a clock of its own beside the READY edge"
     session.spoken.map((item) => item.providerSessionId),
     ["a"],
   );
+});
+
+test("quiet beginning cuts the announcement mid-sentence and closes Luke's own call", async () => {
+  const session = fakeSession();
+  const timers = fakeTimers();
+  const subject = announcer(session, timers);
+
+  // Mid-announcement on Luke's own call, with another sentence waiting.
+  subject.enqueue([speech("a"), speech("b")]);
+  await Promise.resolve();
+  assert.equal(session.status, REALTIME_STATUS.RESPONDING);
+
+  subject.setMeetingQuiet(true);
+  assert.equal(session.stops, 1, "the reply under way is cut off");
+  assert.equal(session.closes, 1, "the call Luke opened is closed");
+
+  // The backlog was dropped with the reply: quiet ending finds nothing to
+  // say, and no clock is left ticking toward saying it.
+  subject.onStatus(REALTIME_STATUS.IDLE);
+  subject.setMeetingQuiet(false);
+  assert.equal(timers.armed(), 0);
+  assert.equal(session.connects, 1);
+  assert.deepEqual(
+    session.spoken.map((item) => item.providerSessionId),
+    ["a"],
+  );
+
+  // Quiet over, fresh news speaks again — the release arrives exactly here.
+  subject.enqueue([speech("c")]);
+  await Promise.resolve();
+  assert.deepEqual(
+    session.spoken.map((item) => item.providerSessionId),
+    ["a", "c"],
+  );
+});
+
+test("a notice arriving under the quiet never opens a call", async () => {
+  const session = fakeSession();
+  const timers = fakeTimers();
+  const subject = announcer(session, timers);
+
+  subject.setMeetingQuiet(true);
+  subject.enqueue([speech("a")]);
+  await Promise.resolve();
+
+  assert.equal(session.connects, 0);
+  assert.deepEqual(session.spoken, []);
+  assert.equal(timers.armed(), 0);
+});
+
+test("quiet beginning never touches the developer's own call", () => {
+  const session = fakeSession();
+  session.microphone = true;
+  session.setStatus(REALTIME_STATUS.RESPONDING);
+  const timers = fakeTimers();
+  const subject = announcer(session, timers);
+
+  // Waiting out the developer's reply when the quiet lands.
+  subject.enqueue([speech("a")]);
+  assert.deepEqual(session.spoken, []);
+
+  subject.setMeetingQuiet(true);
+  assert.equal(session.stops, 0, "the developer's reply is theirs to finish");
+  assert.equal(session.closes, 0);
+
+  // But the waiting announcement is dropped rather than read after the reply.
+  assert.equal(timers.armed(), 0);
+  session.setStatus(REALTIME_STATUS.READY);
+  subject.onStatus(REALTIME_STATUS.READY);
+  assert.deepEqual(session.spoken, []);
 });
 
 test("a sentence that went stale in the queue is dropped, not read as news", () => {

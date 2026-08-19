@@ -482,7 +482,7 @@ export const APP_SETTING_SCHEMA = {
         id: APP_SETTING_ID.QUIET_DURING_MEETINGS,
         label: "Quiet during meetings",
         description:
-          "Whether spoken announcements wait while a connected calendar shows a meeting on, and are read out together once it ends. It changes nothing until a Google Calendar account is connected.",
+          "Whether spoken announcements wait while a connected calendar shows a meeting on, and are read out together once it ends. Switched on during a meeting it takes hold at once, cutting off an announcement mid-sentence. It changes nothing until a Google Calendar account is connected.",
         kind: APP_SETTING_KIND.TOGGLE,
         value: appToggleText(settings.quietDuringMeetings),
         defaultValue: appToggleText(defaultValue as boolean),

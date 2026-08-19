@@ -48,6 +48,7 @@ export interface AnnouncerSession {
   readonly microphoneCall: boolean;
   connect(options: { microphone: false }): Promise<boolean>;
   speak(speech: AttentionSpeech): boolean;
+  stopSpeaking(): boolean;
   close(): Promise<void>;
 }
 
@@ -75,6 +76,10 @@ export interface SpokenNoticeAnnouncerOptions {
  * per backlog, and every queued sentence ages out of being news regardless.
  * A backlog that outlives its attempts is dropped, because every notice is
  * still standing in the panel.
+ *
+ * The meeting quiet reaches it through {@link setMeetingQuiet}: quiet
+ * beginning silences it at once — the announcement mid-sentence on Luke's
+ * own call included — and holds it silent until the quiet ends.
  */
 export class SpokenNoticeAnnouncer {
   readonly #options: SpokenNoticeAnnouncerOptions;
@@ -85,14 +90,43 @@ export class SpokenNoticeAnnouncer {
   /** How many times the backlog now queued has tried to open Luke's own call. */
   #connectAttempts = 0;
   #retryTimer: unknown;
+  /** Whether the meeting quiet is holding, which silences this announcer. */
+  #quiet = false;
 
   constructor(options: SpokenNoticeAnnouncerOptions) {
     this.#options = options;
   }
 
+  /**
+   * Follows the meeting quiet the main process decided. Quiet beginning —
+   * the setting switched on mid-meeting, or a meeting starting under it — is
+   * asked-for silence right now: the announcement mid-sentence on Luke's own
+   * call is cut off and the call closed rather than left lingering into the
+   * meeting, and the backlog is dropped rather than played — every notice in
+   * it is still standing in the panel, and anything decided from here waits
+   * in the main process for the release. The developer's own call is never
+   * touched: a conversation they are holding passes, meeting or not. Quiet
+   * ending needs no act here — the main process re-sends what the meeting
+   * held, and that arrives as a fresh backlog.
+   */
+  setMeetingQuiet(active: boolean): void {
+    this.#quiet = active;
+    if (!active) return;
+    this.#queue = [];
+    this.#connectAttempts = 0;
+    this.#cancelRetry();
+    this.#cancelLinger();
+    if (!this.#ownsCall) return;
+    this.#ownsCall = false;
+    const session = this.#options.session();
+    if (session.microphoneCall) return;
+    session.stopSpeaking();
+    void session.close();
+  }
+
   /** Takes notices the main process decided to voice, and starts saying them. */
   enqueue(notices: readonly AttentionSpeech[]): void {
-    if (notices.length === 0) return;
+    if (this.#quiet || notices.length === 0) return;
     this.#queue.push(...notices);
     // The oldest waiting sentence is the least newsworthy one; a bounded queue
     // sheds from the front.
@@ -135,6 +169,9 @@ export class SpokenNoticeAnnouncer {
   }
 
   #flush(): void {
+    // Quiet holds everything: nothing may speak, and an empty queue must not
+    // start the linger toward closing a call the quiet already closed.
+    if (this.#quiet) return;
     const now = this.#options.now?.() ?? Date.now();
     this.#queue = this.#queue.filter((item) => now - item.decidedAt <= SPOKEN_NOTICE_MAX_AGE_MS);
     const session = this.#options.session();
@@ -206,6 +243,12 @@ export class SpokenNoticeAnnouncer {
       this.#retryTimer = undefined;
       this.#flush();
     }, ANNOUNCER_RETRY_DELAY_MS);
+  }
+
+  #cancelRetry(): void {
+    if (this.#retryTimer === undefined) return;
+    (this.#options.cancel ?? clearTimeout)(this.#retryTimer as Parameters<typeof clearTimeout>[0]);
+    this.#retryTimer = undefined;
   }
 
   #armLinger(): void {
