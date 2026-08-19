@@ -13,6 +13,9 @@
     "test": "tsx --test tests/**/*.test.ts",
     "typecheck": "tsc --project tsconfig.json"
   },
+  "dependencies": {
+    "effect": "3.22.1"
+  },
   "devDependencies": {
     "@electron/packager": "20.2.1",
     "@sidecar/core": "workspace:*",
