@@ -98,6 +98,21 @@ export const CREDENTIAL_SOURCE = {
 export type CredentialSource = (typeof CREDENTIAL_SOURCE)[keyof typeof CREDENTIAL_SOURCE];
 
 /**
+ * Whether a CLI-observed provider can be observed right now, without ever
+ * exposing the login behind it — the CLI analogue of {@link CredentialSource}.
+ * Unknown is the state before the first pass has asked; the other three are
+ * what the latest pass learned from the provider's own CLI.
+ */
+export const CLI_CONNECTION = {
+  UNKNOWN: "unknown",
+  CONNECTED: "connected",
+  SIGNED_OUT: "signed-out",
+  CLI_MISSING: "cli-missing",
+} as const;
+
+export type CliConnection = (typeof CLI_CONNECTION)[keyof typeof CLI_CONNECTION];
+
+/**
  * Whether Luke can store a credential through OS-provided encryption. Asking is
  * not free: on macOS the answer comes from the Keychain, and reading it is what
  * raises the permission dialog. Nobody who has never stored a key has any
@@ -194,6 +209,12 @@ export type UpdateSnapshot =
 export interface AppSettings {
   /** Where each provider's key comes from, keyed by provider id. */
   credentialSources: Readonly<Record<CredentialProviderId, CredentialSource>>;
+  /**
+   * Whether Codex cloud tasks can be observed right now: through the Codex
+   * CLI's own login rather than a key of Luke's, so the row it draws reports
+   * a fact learned from that CLI instead of offering anything to enter.
+   */
+  codexCloudConnection: CliConnection;
   /**
    * Luke stores credentials only through OS-provided encryption. When that is
    * known to be unavailable the app says so rather than falling back to

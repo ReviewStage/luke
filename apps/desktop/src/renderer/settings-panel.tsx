@@ -8,6 +8,7 @@ import {
   isRealtimeVoiceSpeed,
   PANEL_FORM_FACTOR_LIST,
   type PanelFormFactor,
+  PROVIDER_ID,
   type ProviderId,
   REALTIME_DEFAULTS,
   REALTIME_VOICE_LIST,
@@ -33,6 +34,8 @@ import {
   ACCOUNT_PROVIDER,
   ACCOUNT_STATUS,
   APP_SETTING_DEFAULTS,
+  CLI_CONNECTION,
+  type CliConnection,
   CREDENTIAL_SOURCE,
   SECRET_STORAGE,
   SETTINGS_RESET_SCOPE,
@@ -1159,6 +1162,52 @@ function WorkspaceAgentRow({
 }
 
 /**
+ * What each answer the Codex CLI can give reads as on its row. Every state
+ * has words — unlike a key row, whose check needs none — because the check
+ * alone could not say the connection is a CLI login rather than a key, and
+ * the disconnected states are exactly where the next step must be named.
+ * The step is a command, so it is drawn as one.
+ */
+const CODEX_CLOUD_STATUS: Readonly<Record<CliConnection, React.ReactNode>> = {
+  [CLI_CONNECTION.CONNECTED]: "Via the Codex CLI login",
+  [CLI_CONNECTION.SIGNED_OUT]: (
+    <>
+      Run <code>codex login</code> on your Mac
+    </>
+  ),
+  [CLI_CONNECTION.CLI_MISSING]: "Codex CLI not installed",
+  [CLI_CONNECTION.UNKNOWN]: "Not checked yet",
+};
+
+/**
+ * The one provider observed through its own CLI's login rather than a key.
+ * The row reports what the latest pass learned and offers nothing to enter
+ * or delete: connecting is `codex login` in the user's own terminal, and
+ * signing that CLI out is what disconnects — so the words name that step
+ * exactly when it is the missing one, and no control pretends otherwise.
+ */
+function CodexCloudConnection({ connection }: { connection: CliConnection }): React.JSX.Element {
+  return (
+    <div className="credential">
+      <div className="credential-row">
+        <span className="credential-identity">
+          {/* The same mark and cloud badge the codex session rows carry: the
+              login buys the observation of cloud tasks, and the same mark
+              cannot differ between the row and the sessions it stands for. */}
+          <span className="credential-mark">
+            <ProviderMark providerId={PROVIDER_ID.CODEX} />
+            <CloudBadge />
+          </span>
+          <span className="credential-name">Codex</span>
+          {connection === CLI_CONNECTION.CONNECTED ? <CheckIcon /> : null}
+        </span>
+        <span className="credential-status">{CODEX_CLOUD_STATUS[connection]}</span>
+      </div>
+    </div>
+  );
+}
+
+/**
  * Every agent provider that can hold a key, one line each. A provider is
  * listed whether or not it has one, because the list is how you learn which
  * services Luke can watch at all.
@@ -1188,6 +1237,8 @@ function CredentialsSection({
       <p className="settings-note">
         Luke reads only cloud workspaces you created, and never sends a prompt or any other change.
       </p>
+      {/* First because the list reads alphabetically, like the key rows below. */}
+      <CodexCloudConnection connection={settings.codexCloudConnection} />
       {CLOUD_AGENT_PROVIDER_LIST.map((provider) => {
         // The agent row belongs to providers the build documents a table for,
         // and only while connected: disconnected, there is nothing the choice

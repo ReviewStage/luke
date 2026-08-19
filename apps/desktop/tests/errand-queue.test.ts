@@ -24,7 +24,7 @@ import { PANEL_TAB } from "../src/renderer/panel-tabs";
 import { SESSION_FILTER, SESSION_SORT } from "../src/renderer/session-model";
 import { SETTINGS_VIEW } from "../src/renderer/settings-views";
 import type { AppSettings } from "../src/shared/contracts";
-import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "../src/shared/contracts";
+import { CLI_CONNECTION, CREDENTIAL_SOURCE, SECRET_STORAGE } from "../src/shared/contracts";
 import { CREDENTIAL_PROVIDER_ID } from "../src/shared/credential-providers";
 
 /** A settings snapshot, told apart from the next only by the switch that moved. */
@@ -40,6 +40,7 @@ function settings(captions: boolean): AppSettings {
       [CREDENTIAL_PROVIDER_ID.OPENAI]: CREDENTIAL_SOURCE.NONE,
     },
     secretStorage: SECRET_STORAGE.UNKNOWN,
+    codexCloudConnection: CLI_CONNECTION.UNKNOWN,
     showInDock: false,
     voice: REALTIME_VOICE.CEDAR,
     voiceSpeed: REALTIME_VOICE_SPEED.NORMAL,

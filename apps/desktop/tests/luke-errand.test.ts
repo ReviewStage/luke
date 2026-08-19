@@ -33,7 +33,7 @@ import {
 } from "../src/renderer/luke-guide";
 import { SETTING_PAGE, SETTINGS_PAGE_LABEL } from "../src/renderer/settings-views";
 import type { AppSettings } from "../src/shared/contracts";
-import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "../src/shared/contracts";
+import { CLI_CONNECTION, CREDENTIAL_SOURCE, SECRET_STORAGE } from "../src/shared/contracts";
 import { CREDENTIAL_PROVIDER_ID } from "../src/shared/credential-providers";
 
 function settings(): AppSettings {
@@ -48,6 +48,7 @@ function settings(): AppSettings {
       [CREDENTIAL_PROVIDER_ID.OPENAI]: CREDENTIAL_SOURCE.NONE,
     },
     secretStorage: SECRET_STORAGE.UNKNOWN,
+    codexCloudConnection: CLI_CONNECTION.UNKNOWN,
     showInDock: false,
     voice: REALTIME_VOICE.CEDAR,
     voiceSpeed: REALTIME_VOICE_SPEED.NORMAL,

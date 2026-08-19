@@ -1,11 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { PROVIDER_ID, PROVIDER_ID_LIST } from "@sidecar/core";
+import { CodexCloudSessionAdapter } from "../src/codex-cloud-adapter";
 import { providerRegistrations } from "../src/provider-registrations";
 import { CREDENTIAL_PROVIDER_ID } from "../src/shared/credential-providers";
 
 const registrations = providerRegistrations({
   readApiKey: async () => undefined,
+  // A runner that answers signed-out, so no test can spawn a real CLI.
+  codexCloudAdapter: new CodexCloudSessionAdapter({
+    run: async () => ({ exitCode: 1, stdout: "" }),
+  }),
   claudeHookInstallation: () => ({
     claudeHome: "/missing/claude",
     hookScriptPath: "/missing/claude-hook",
