@@ -71,11 +71,15 @@ const bridge: AppBridge = {
   disconnectLinear: invokeMethod<"disconnectLinear">(channels.disconnectLinear),
   checkForUpdates: invokeMethod<"checkForUpdates">(channels.checkForUpdates),
   openLatestRelease: () => ipcRenderer.send(channels.openLatestRelease),
-  beginSupersetSignIn: invoke(channels.beginSupersetSignIn),
-  submitSupersetSignInCode: invoke(channels.submitSupersetSignInCode),
+  beginSupersetSignIn: invokeMethod<"beginSupersetSignIn">(channels.beginSupersetSignIn),
+  submitSupersetSignInCode: invokeMethod<"submitSupersetSignInCode">(
+    channels.submitSupersetSignInCode,
+  ),
   reopenSupersetSignIn: () => ipcRenderer.send(channels.reopenSupersetSignIn),
   cancelSupersetSignIn: () => ipcRenderer.send(channels.cancelSupersetSignIn),
-  chooseSupersetOrganization: invoke(channels.chooseSupersetOrganization),
+  chooseSupersetOrganization: invokeMethod<"chooseSupersetOrganization">(
+    channels.chooseSupersetOrganization,
+  ),
   setVoiceExchangeActive: (active) => {
     ipcRenderer.send(channels.setVoiceExchange, active);
   },

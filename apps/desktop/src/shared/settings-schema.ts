@@ -673,7 +673,7 @@ export const APP_SETTING_SCHEMA = {
     guard: workspaceProjectDefaults,
     entry: {
       isKey: (value): value is WorkspaceProviderId =>
-        typeof value === "string" && isWorkspaceProviderId(value),
+        isWireString(value) && isWorkspaceProviderId(value),
       same: (current, next) => current === next,
     },
     settingsPage: SETTINGS_PAGE.CONNECTIONS,
@@ -689,7 +689,7 @@ export const APP_SETTING_SCHEMA = {
       optional(
         value,
         (candidate): candidate is string =>
-          typeof candidate === "string" && /^[a-z0-9][a-z0-9-]{0,79}$/u.test(candidate),
+          isWireString(candidate) && /^[a-z0-9][a-z0-9-]{0,79}$/u.test(candidate),
       ),
     settingsPage: SETTINGS_PAGE.CONNECTIONS,
     resetScope: SETTINGS_RESET_SCOPE.WORKSPACES,

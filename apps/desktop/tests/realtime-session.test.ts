@@ -11,6 +11,7 @@ import {
   ISSUE_TRACKER_ID,
   inputAudioAppendEvents,
   inputAudioFormatUpdateEvents,
+  isRecord,
   type NormalizedSession,
   normalizeSession,
   normalizeTrackedIssue,
@@ -46,6 +47,30 @@ import {
   type MockTrackEvent,
   parseClientEvent,
 } from "./support/realtime-fixtures";
+
+function sessionField(event: ParsedJsonObject | undefined): ParsedJsonObject | undefined {
+  if (!event) return undefined;
+  const session = event.session;
+  return isRecord(session) ? session : undefined;
+}
+
+function sessionHasTools(event: ParsedJsonObject): boolean {
+  const session = sessionField(event);
+  return session !== undefined && Array.isArray(session.tools);
+}
+
+function sessionAudioField(event: ParsedJsonObject | undefined): JsonValue | undefined {
+  return sessionField(event)?.audio;
+}
+
+function toolParameterPropertyNames(tool: ParsedJsonObject | undefined): readonly string[] {
+  if (!tool) return [];
+  const parameters = tool.parameters;
+  if (!isRecord(parameters)) return [];
+  const properties = parameters.properties;
+  if (!isRecord(properties)) return [];
+  return Object.keys(properties);
+}
 
 const CONNECTION: RealtimeConnection = {
   value: "ek_test_secret",
@@ -179,8 +204,7 @@ function harness(
     send: (payload: string) => {
       const event = parseClientEvent(payload);
       const isSessionSync =
-        event.type === REALTIME_CLIENT_EVENT.SESSION_UPDATE &&
-        Array.isArray((event.session as { tools?: unknown } | undefined)?.tools);
+        event.type === REALTIME_CLIENT_EVENT.SESSION_UPDATE && sessionHasTools(event);
       if (options.captureSessionSync || !isSessionSync) sent.push(event);
     },
     close: () => {
@@ -1333,21 +1357,12 @@ test("an opened call synchronizes the local build's tool schema", async () => {
   await context.session.connect();
 
   const update = context.sent.find(
-    (event) =>
-      event.type === REALTIME_CLIENT_EVENT.SESSION_UPDATE &&
-      Array.isArray((event.session as { tools?: unknown } | undefined)?.tools),
+    (event) => event.type === REALTIME_CLIENT_EVENT.SESSION_UPDATE && sessionHasTools(event),
   );
-  const tools = (
-    update?.session as { tools?: { name?: string; parameters?: unknown }[] } | undefined
-  )?.tools;
-  const creation = tools?.find((tool) => tool.name === "create_workspace");
-  assert.deepEqual(
-    Object.keys(
-      (creation?.parameters as { properties?: Record<string, unknown> } | undefined)?.properties ??
-        {},
-    ).includes("agent"),
-    true,
-  );
+  const tools = sessionField(update)?.tools;
+  const toolList = Array.isArray(tools) ? tools.filter(isRecord) : [];
+  const creation = toolList.find((tool) => tool.name === "create_workspace");
+  assert.deepEqual(toolParameterPropertyNames(creation).includes("agent"), true);
 });
 
 test("a changed pace reaches the live call without waiting for the next one", async () => {
@@ -1358,8 +1373,7 @@ test("a changed pace reaches the live call without waiting for the next one", as
 
   const update = context.sent.find(
     (event) =>
-      event.type === REALTIME_CLIENT_EVENT.SESSION_UPDATE &&
-      (event.session as { audio?: unknown } | undefined)?.audio !== undefined,
+      event.type === REALTIME_CLIENT_EVENT.SESSION_UPDATE && sessionAudioField(event) !== undefined,
   );
   assert.deepEqual(update, {
     type: REALTIME_CLIENT_EVENT.SESSION_UPDATE,
@@ -1381,7 +1395,7 @@ test("a pace changed mid-reply waits for the reply to end", async () => {
     context.sent.some(
       (event) =>
         event.type === REALTIME_CLIENT_EVENT.SESSION_UPDATE &&
-        (event.session as { audio?: unknown } | undefined)?.audio !== undefined,
+        sessionAudioField(event) !== undefined,
     ),
     false,
   );
@@ -1391,8 +1405,7 @@ test("a pace changed mid-reply waits for the reply to end", async () => {
 
   const update = context.sent.find(
     (event) =>
-      event.type === REALTIME_CLIENT_EVENT.SESSION_UPDATE &&
-      (event.session as { audio?: unknown } | undefined)?.audio !== undefined,
+      event.type === REALTIME_CLIENT_EVENT.SESSION_UPDATE && sessionAudioField(event) !== undefined,
   );
   assert.deepEqual(update?.session, { type: "realtime", audio: { output: { speed: 0.75 } } });
 });
@@ -1409,8 +1422,7 @@ test("a pace changed during the handshake reaches the call it was opening", asyn
 
   const update = context.sent.find(
     (event) =>
-      event.type === REALTIME_CLIENT_EVENT.SESSION_UPDATE &&
-      (event.session as { audio?: unknown } | undefined)?.audio !== undefined,
+      event.type === REALTIME_CLIENT_EVENT.SESSION_UPDATE && sessionAudioField(event) !== undefined,
   );
   assert.deepEqual(update?.session, { type: "realtime", audio: { output: { speed: 1.25 } } });
 });

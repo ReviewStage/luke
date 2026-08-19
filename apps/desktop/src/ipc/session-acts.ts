@@ -41,7 +41,7 @@ import {
 } from "../shared/contracts";
 import { APP_SETTING_SCHEMA } from "../shared/settings-schema";
 import {
-  isWorkspaceAgentSelection,
+  isListedWorkspaceAgentModel,
   parseWorkspaceAgentSelection,
 } from "../shared/workspace-agents";
 import { isSupersetControlId, type SupersetCli } from "../superset-cli";
@@ -612,7 +612,7 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       if (namedModel !== undefined) {
         const selection: WorkspaceAgentSelection = { agent: advertised, model: namedModel };
         if (namedEffort !== undefined) selection.effort = namedEffort;
-        if (!isWorkspaceAgentSelection(identity.providerId, selection)) {
+        if (!isListedWorkspaceAgentModel(identity.providerId, selection)) {
           throw new Error("Invalid workspace agent request");
         }
       }

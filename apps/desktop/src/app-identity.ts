@@ -1,5 +1,3 @@
-import type { UnparsedWireValue } from "@sidecar/core";
-
 /**
  * Which Luke a process is: the released app, an unpackaged development run, or
  * a locally packaged test build. Each carries a different code signature — a

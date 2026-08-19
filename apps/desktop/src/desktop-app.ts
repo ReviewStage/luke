@@ -12,6 +12,7 @@ import {
   fixtureSnapshot,
   InMemorySessionRegistry,
   isProviderId,
+  isWireString,
   type MeetingInterval,
   type NormalizedSession,
   nextMeetingBoundary,
@@ -608,10 +609,9 @@ async function rememberWorkspaceDefaults(
       const saved = await settingsStore.setEntry(
         APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
         providerId,
-        workspaceProjectSelectionId({
-          providerProjectId,
-          ...(providerTargetId ? { providerTargetId } : {}),
-        }),
+        workspaceProjectSelectionId(
+          providerTargetId ? { providerProjectId, providerTargetId } : { providerProjectId },
+        ),
       );
       panels.broadcast(channels.settingsChanged, saved.settings);
     }
@@ -712,14 +712,14 @@ function registerIpc(): void {
     if (!trustedSender(event)) throw new Error("Untrusted renderer");
     return supersetSignIn.begin();
   });
-  ipcMain.handle(channels.submitSupersetSignInCode, (event, code: unknown) => {
+  ipcMain.handle(channels.submitSupersetSignInCode, (event, code: UnparsedWireValue) => {
     if (!trustedSender(event)) throw new Error("Untrusted renderer");
-    if (typeof code !== "string") throw new Error("Invalid Superset sign-in code");
+    if (!isWireString(code)) throw new Error("Invalid Superset sign-in code");
     return supersetSignIn.submitCode(code);
   });
-  ipcMain.handle(channels.chooseSupersetOrganization, async (event, slug: string) => {
+  ipcMain.handle(channels.chooseSupersetOrganization, async (event, slug: UnparsedWireValue) => {
     if (!trustedSender(event)) throw new Error("Untrusted renderer");
-    if (typeof slug !== "string") throw new Error("Invalid Superset organization");
+    if (!isWireString(slug)) throw new Error("Invalid Superset organization");
     return supersetSignIn.chooseOrganization(slug);
   });
   ipcMain.on(channels.reopenSupersetSignIn, (event) => {

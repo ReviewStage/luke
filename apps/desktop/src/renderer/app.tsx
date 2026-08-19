@@ -138,6 +138,7 @@ import type {
   MicrophoneControl,
   PreferenceWrites,
   ShortcutControl,
+  SupersetControl,
   UpdateControl,
 } from "./settings-panel";
 import {
@@ -2835,24 +2836,28 @@ export function App(): React.JSX.Element {
                 onSignIn: () => beginConsentSignIn(CONSENT_SERVICE_ID.LINEAR),
                 onDisconnect: disconnectLinear,
               },
-              superset: {
-                installed: bootstrap.supersetInstalled,
-                connected: supersetConnected ?? bootstrap.supersetConnected,
-                held: credentialHeld.current || consentConnectHeld.current,
-                connecting: supersetSignInHeld.current,
-                onConnect: beginSupersetSignIn,
-                agents: [
-                  ...new Set(
-                    workspaceProjects
-                      .filter((project) => project.providerId === SUPERSET_WORKSPACE_PROVIDER_ID)
-                      .flatMap((project) => project.spawnableAgents ?? []),
-                  ),
-                ],
-                ...((settings ?? bootstrap.settings).supersetAgentDefault
-                  ? { defaultAgent: (settings ?? bootstrap.settings).supersetAgentDefault }
-                  : {}),
-                onDefaultAgentChange: changeSupersetAgentDefault,
-              },
+              superset: (() => {
+                const supersetAgentDefault = (settings ?? bootstrap.settings).supersetAgentDefault;
+                const superset: SupersetControl = {
+                  installed: bootstrap.supersetInstalled,
+                  connected: supersetConnected ?? bootstrap.supersetConnected,
+                  held: credentialHeld.current || consentConnectHeld.current,
+                  connecting: supersetSignInHeld.current,
+                  onConnect: beginSupersetSignIn,
+                  agents: [
+                    ...new Set(
+                      workspaceProjects
+                        .filter((project) => project.providerId === SUPERSET_WORKSPACE_PROVIDER_ID)
+                        .flatMap((project) => project.spawnableAgents ?? []),
+                    ),
+                  ],
+                  onDefaultAgentChange: changeSupersetAgentDefault,
+                };
+                if (supersetAgentDefault) {
+                  superset.defaultAgent = supersetAgentDefault;
+                }
+                return superset;
+              })(),
               onQuit: () => window.sidecar.quit(),
               shortcuts,
             }}

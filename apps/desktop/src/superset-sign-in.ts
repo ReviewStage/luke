@@ -15,7 +15,7 @@ type LoginChild = Pick<
 
 export interface SupersetSignInOptions {
   cli: SupersetCli;
-  openExternal: (url: string) => Promise<unknown>;
+  openExternal: (url: string) => Promise<void>;
   onChange: (snapshot: SupersetSignInSnapshot) => void;
   spawnLogin?: (executable: string, arguments_: readonly string[]) => LoginChild;
   timeoutMs?: number;
@@ -27,11 +27,12 @@ function snapshot(
     organizations: [],
   },
 ): SupersetSignInSnapshot {
-  return {
+  const next: SupersetSignInSnapshot = {
     stage,
     organizations: options.organizations,
-    ...(options.failure ? { failure: options.failure } : {}),
   };
+  if (options.failure) next.failure = options.failure;
+  return next;
 }
 
 function authorizationUrl(text: string): string | undefined {
@@ -59,7 +60,7 @@ export function validSupersetSignInCode(code: string): boolean {
 
 export class SupersetSignIn {
   readonly #cli: SupersetCli;
-  readonly #openExternal: (url: string) => Promise<unknown>;
+  readonly #openExternal: (url: string) => Promise<void>;
   readonly #onChange: (snapshot: SupersetSignInSnapshot) => void;
   readonly #spawnLogin: NonNullable<SupersetSignInOptions["spawnLogin"]>;
   readonly #timeoutMs: number;
@@ -122,7 +123,7 @@ export class SupersetSignIn {
     this.#starting = false;
     let stdoutTail = "";
     let stderrTail = "";
-    const inspect = (chunk: unknown, stream: "stdout" | "stderr") => {
+    const inspect = (chunk: Buffer, stream: "stdout" | "stderr") => {
       if (attempt !== this.#attempt || this.#authorizationUrl) return;
       const next = `${stream === "stdout" ? stdoutTail : stderrTail}${String(chunk)}`.slice(
         -OUTPUT_TAIL_LIMIT,

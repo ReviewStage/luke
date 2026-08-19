@@ -462,11 +462,16 @@ export function displaySessions(
           // the provider never reported.
           ...(session.workspace
             ? {
-                workspace: {
-                  id: session.workspace.providerWorkspaceId,
-                  ...(session.workspace.scopeId ? { scopeId: session.workspace.scopeId } : {}),
-                  name: session.workspace.name ?? session.workspace.providerWorkspaceId,
-                },
+                workspace: (() => {
+                  const workspace: DisplayWorkspace = {
+                    id: session.workspace.providerWorkspaceId,
+                    name: session.workspace.name ?? session.workspace.providerWorkspaceId,
+                  };
+                  if (session.workspace.scopeId) {
+                    workspace.scopeId = session.workspace.scopeId;
+                  }
+                  return workspace;
+                })(),
               }
             : undefined),
         };
