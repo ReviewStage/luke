@@ -1,6 +1,6 @@
 import { Marked } from "marked";
 import changelogMarkdown from "../../../CHANGELOG.md?raw";
-import { REPOSITORY_URL, SiteFooter, SiteHeader } from "./SiteChrome";
+import { GitHubMark, REPOSITORY_URL, SiteFooter, SiteHeader } from "./SiteChrome";
 
 /**
  * CHANGELOG.md at the repo root is the only place the release notes are
@@ -77,9 +77,15 @@ export function ChangelogPage(): React.JSX.Element {
           <h1 className="m-0 text-[2rem] leading-[1.15] font-semibold tracking-[-0.02em]">
             Changelog
           </h1>
-          <p className="mt-4 mb-0 max-w-[34rem] text-muted-foreground">
-            New in Luke, release by release.
-          </p>
+          {/* The landing hero's secondary button, so the two GitHub doors read
+              as the same control. */}
+          <a
+            className="mt-6 inline-flex items-center gap-2 rounded-md border border-border px-[23px] py-[11px] text-sm font-semibold text-muted-foreground no-underline transition-colors duration-150 hover:border-muted-foreground hover:text-foreground motion-reduce:transition-none"
+            href={`${REPOSITORY_URL}/releases`}
+          >
+            <GitHubMark />
+            View releases on GitHub
+          </a>
         </div>
 
         <div className="divide-y divide-border border-t border-border">
