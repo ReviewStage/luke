@@ -55,6 +55,7 @@ export interface SessionActsIpcDependencies {
   rememberWorkspaceDefaults: (
     adapter: SessionProviderAdapter,
     providerProjectId: string,
+    providerTargetId: string | undefined,
     selection: WorkspaceAgentSelection | undefined,
     agent: string | undefined,
   ) => Promise<void>;
@@ -466,6 +467,7 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
         await rememberWorkspaceDefaults(
           adapter,
           providerProjectId,
+          providerTargetId,
           namedSelection as WorkspaceAgentSelection | undefined,
           agent?.trim(),
         );

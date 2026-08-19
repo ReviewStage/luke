@@ -29,6 +29,28 @@ async function homeWithCli(t: TestContext): Promise<string> {
   return home;
 }
 
+function testCliOptions(homeDirectory: string) {
+  return {
+    homeDirectory,
+    organizationId: async () => {
+      try {
+        const parsed: unknown = JSON.parse(
+          await fs.readFile(path.join(homeDirectory, "config.json"), "utf8"),
+        );
+        return typeof parsed === "object" && parsed !== null && "organizationId" in parsed
+          ? String(parsed.organizationId)
+          : undefined;
+      } catch {
+        return undefined;
+      }
+    },
+  };
+}
+
+function testCli(homeDirectory: string): SupersetCli {
+  return new SupersetCli(testCliOptions(homeDirectory));
+}
+
 async function turn(): Promise<void> {
   await new Promise<void>((resolve) => setImmediate(resolve));
 }
@@ -50,7 +72,7 @@ test("login streams a pinned authorization URL and submits one bounded code", as
     written += String(chunk);
   });
   const signIn = new SupersetSignIn({
-    cli: new SupersetCli({ homeDirectory: home }),
+    cli: testCli(home),
     openExternal: async (url) => opened.push(url),
     onChange: () => undefined,
     spawnLogin: (executable, arguments_) => {
@@ -79,7 +101,7 @@ test("only the pinned Superset HTTPS host can be opened or reopened", async (t) 
   const child = new FakeChild();
   const opened: string[] = [];
   const signIn = new SupersetSignIn({
-    cli: new SupersetCli({ homeDirectory: home }),
+    cli: testCli(home),
     openExternal: async (url) => opened.push(url),
     onChange: () => undefined,
     spawnLogin: () => child,
@@ -108,7 +130,7 @@ test("codes require one separator, stay bounded, and can arrive before the URL",
     written += String(chunk);
   });
   const signIn = new SupersetSignIn({
-    cli: new SupersetCli({ homeDirectory: home }),
+    cli: testCli(home),
     openExternal: async () => undefined,
     onChange: () => undefined,
     spawnLogin: () => child,
@@ -127,7 +149,7 @@ test("duplicate starts share one attempt and cancellation kills its exact child"
   const child = new FakeChild();
   let spawns = 0;
   const signIn = new SupersetSignIn({
-    cli: new SupersetCli({ homeDirectory: home }),
+    cli: testCli(home),
     openExternal: async () => undefined,
     onChange: () => undefined,
     spawnLogin: () => {
@@ -148,7 +170,7 @@ test("process failure, timeout, and shutdown end without exposing CLI output", a
     const child = new FakeChild();
     const states: string[] = [];
     const signIn = new SupersetSignIn({
-      cli: new SupersetCli({ homeDirectory: home }),
+      cli: testCli(home),
       openExternal: async () => undefined,
       onChange: (state) => states.push(JSON.stringify(state)),
       spawnLogin: () => child,
@@ -176,7 +198,7 @@ test("zero organizations fail; listed organizations are offered and revalidated"
   const organizations = [{ id: "org-1", name: "Acme", slug: "acme" }];
   let listed = organizations;
   const cli = new SupersetCli({
-    homeDirectory: home,
+    ...testCliOptions(home),
     query: async (_executable, arguments_) => {
       if (arguments_[1] === "list") return JSON.stringify({ data: listed });
       await fs.writeFile(path.join(home, "config.json"), '{"organizationId":"org-1"}');

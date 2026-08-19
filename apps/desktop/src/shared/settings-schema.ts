@@ -268,7 +268,7 @@ function workspaceAgentDefaults(
   return valid(Object.keys(defaults).length > 0 ? defaults : undefined);
 }
 
-const MAXIMUM_WORKSPACE_PROJECT_ID_LENGTH = 200;
+const MAXIMUM_WORKSPACE_PROJECT_ID_LENGTH = 500;
 
 function workspaceProjectDefaults(
   value: unknown,

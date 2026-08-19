@@ -357,8 +357,9 @@ export interface AppSettings {
    * starts unset the way the provider does: the first workspace the user
    * creates in a provider saves its project here, so the default is always a
    * choice they made rather than one made for them. Projects are observed
-   * rather than build-fixed, so the value is the provider's own project id,
-   * and it steers an ask only while its provider still offers that project.
+   * rather than build-fixed, so the value identifies the provider's project
+   * and, where needed, its host; it steers an ask only while the provider
+   * still offers that exact project target.
    */
   workspaceProjectDefaults?: Readonly<Record<string, string>>;
   /** The configured Superset agent used when a creation ask names none. */

@@ -5,6 +5,7 @@ import {
   normalizeObservedWorkspaceProjects,
   type ObservedWorkspaceProject,
   WORKSPACE_TASK_SUPPORT,
+  workspaceProjectSelectionId,
 } from "../src";
 
 function project(overrides: Partial<ObservedWorkspaceProject>): ObservedWorkspaceProject {
@@ -17,6 +18,14 @@ function project(overrides: Partial<ObservedWorkspaceProject>): ObservedWorkspac
     ...overrides,
   };
 }
+
+test("saved project identities distinguish the same project on two hosts", () => {
+  assert.equal(workspaceProjectSelectionId(project({})), "proj-1");
+  assert.notEqual(
+    workspaceProjectSelectionId(project({ providerTargetId: "local" })),
+    workspaceProjectSelectionId(project({ providerTargetId: "studio" })),
+  );
+});
 
 test("workspace projects are offered alphabetically, however adapters answered", () => {
   const normalized = normalizeObservedWorkspaceProjects([

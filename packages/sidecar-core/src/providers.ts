@@ -184,6 +184,15 @@ export interface ObservedWorkspaceProject extends WorkspaceProject {
   providerName: string;
 }
 
+/** The identity a saved default uses, including a host when one owns it. */
+export function workspaceProjectSelectionId(
+  project: Pick<WorkspaceProject, "providerProjectId" | "providerTargetId">,
+): string {
+  return project.providerTargetId
+    ? JSON.stringify([project.providerProjectId, project.providerTargetId])
+    : project.providerProjectId;
+}
+
 /** A workspace name reads in one breath; anything longer is a different ask. */
 export const maximumWorkspaceNameLength = 80;
 

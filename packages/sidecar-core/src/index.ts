@@ -111,6 +111,7 @@ export {
   type WorkspaceAgentSelection,
   type WorkspaceProject,
   workspaceNameText,
+  workspaceProjectSelectionId,
 } from "./providers.js";
 export { CompositeSessionProviderAdapter } from "./composite-provider-adapter.js";
 

@@ -25,6 +25,7 @@ import {
   type SessionProviderAdapter,
   type TrackedIssue,
   type WorkspaceAgentSelection,
+  workspaceProjectSelectionId,
 } from "@sidecar/core";
 
 import {
@@ -153,6 +154,7 @@ const supersetWorkspaces = new SupersetWorkspaceReader({
 const supersetCli = new SupersetCli({ homeDirectory: supersetHomeDirectory });
 const supersetWorkspaceAdapter = new SupersetWorkspaceAdapter(supersetCli);
 let observedSupersetWorkspaces = new SupersetWorkspaceSnapshot([]);
+let observedSupersetActionsEnabled = false;
 // `directory` and the cipher are read lazily so the store can be declared before
 // the Electron app is ready.
 const settingsStore = new SettingsStore({
@@ -555,6 +557,7 @@ function workspaceProjectOffered(providerId: string, providerProjectId: string):
 async function rememberWorkspaceDefaults(
   adapter: SessionProviderAdapter,
   providerProjectId: string,
+  providerTargetId: string | undefined,
   namedSelection: WorkspaceAgentSelection | undefined,
   agent: string | undefined,
 ): Promise<void> {
@@ -590,7 +593,10 @@ async function rememberWorkspaceDefaults(
       const saved = await settingsStore.setEntry(
         APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
         providerId,
-        providerProjectId,
+        workspaceProjectSelectionId({
+          providerProjectId,
+          ...(providerTargetId ? { providerTargetId } : {}),
+        }),
       );
       panels.broadcast(channels.settingsChanged, saved.settings);
     }
@@ -802,7 +808,9 @@ function registerIpc(): void {
     issueTrackers,
     refreshIssues: () => void issueObservationLoop.refresh(),
     supersetContext: (identity) =>
-      observedSupersetWorkspaces.context(identity.providerId, identity.providerSessionId),
+      observedSupersetActionsEnabled
+        ? observedSupersetWorkspaces.context(identity.providerId, identity.providerSessionId)
+        : undefined,
     supersetCli,
   });
 
@@ -917,6 +925,7 @@ async function refreshProviderSessions(generation: number): Promise<void> {
     process.stderr.write(`Superset observation failed: ${message}\n`);
   }
   observedSupersetWorkspaces = supersetSnapshot;
+  observedSupersetActionsEnabled = supersetActionsEnabled;
   // Providers are observed concurrently and reported independently: the
   // registry commits each provider atomically, so one that is slow or failing
   // can neither delay nor cancel the others. A network provider would

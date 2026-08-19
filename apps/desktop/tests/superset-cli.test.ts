@@ -18,6 +18,24 @@ async function connectedHome(t: TestContext): Promise<string> {
   return home;
 }
 
+function testCliOptions(homeDirectory: string) {
+  return {
+    homeDirectory,
+    organizationId: async () => {
+      try {
+        const parsed: unknown = JSON.parse(
+          await fs.readFile(path.join(homeDirectory, "config.json"), "utf8"),
+        );
+        return typeof parsed === "object" && parsed !== null && "organizationId" in parsed
+          ? String(parsed.organizationId)
+          : undefined;
+      } catch {
+        return undefined;
+      }
+    },
+  };
+}
+
 const CONTEXT: SupersetSessionContext = {
   providerId: PROVIDER_ID.CODEX,
   providerSessionId: "session-1",
@@ -37,9 +55,9 @@ test("recognizes only controls owned by Superset", () => {
   assert.equal(isSupersetControlId("provider-native-control"), false);
 });
 
-test("login state is read portably from Superset's JSON config", async (t) => {
+test("login state uses only the injected organization-id answer", async (t) => {
   const home = await connectedHome(t);
-  const cli = new SupersetCli({ homeDirectory: home });
+  const cli = new SupersetCli(testCliOptions(home));
   assert.equal(await cli.connected(), true);
   await fs.writeFile(path.join(home, "config.json"), '{"organizationId":""}');
   assert.equal(await cli.connected(), false);
@@ -51,7 +69,7 @@ test("a missing CLI login exposes no Superset actions", async (t) => {
   const home = await fs.mkdtemp(path.join(os.tmpdir(), "luke-superset-cli-"));
   t.after(async () => fs.rm(home, { recursive: true, force: true }));
   const cli = new SupersetCli({
-    homeDirectory: home,
+    ...testCliOptions(home),
     run: async () => assert.fail("an unavailable CLI must not run"),
   });
 
@@ -71,7 +89,7 @@ test("organization selection is refreshed and switched by exact slug", async (t)
     { id: "org-2", name: "Luke", slug: "luke" },
   ];
   const cli = new SupersetCli({
-    homeDirectory: home,
+    ...testCliOptions(home),
     query: async (_executable, arguments_) => {
       if (arguments_[1] === "list") return JSON.stringify({ data: organizations });
       await fs.writeFile(path.join(home, "config.json"), '{"organizationId":"org-2"}');
@@ -88,7 +106,7 @@ test("message and controls use fixed arguments without a shell", async (t) => {
   const home = await connectedHome(t);
   const calls: Array<{ executable: string; arguments_: readonly string[] }> = [];
   const cli = new SupersetCli({
-    homeDirectory: home,
+    ...testCliOptions(home),
     run: async (executable, arguments_) => {
       calls.push({ executable, arguments_ });
     },
@@ -167,7 +185,7 @@ test("message and controls use fixed arguments without a shell", async (t) => {
 test("a CLI failure becomes a bounded rejection", async (t) => {
   const home = await connectedHome(t);
   const cli = new SupersetCli({
-    homeDirectory: home,
+    ...testCliOptions(home),
     run: async () => {
       throw new Error("secret provider output");
     },
@@ -184,7 +202,7 @@ test("discovers host-scoped projects and creates a workspace with a generated br
   const commands: readonly string[][] = [];
   const mutableCommands = commands as string[][];
   const cli = new SupersetCli({
-    homeDirectory: home,
+    ...testCliOptions(home),
     uniqueId: () => "deadbeef-0000-0000-0000-000000000000",
     query: async (_executable, arguments_) => {
       if (arguments_[0] === "hosts") return "[]";
@@ -252,7 +270,7 @@ test("discovers host-scoped projects and creates a workspace with a generated br
 test("creates on an observed remote host and preserves success when opening fails", async (t) => {
   const home = await connectedHome(t);
   const cli = new SupersetCli({
-    homeDirectory: home,
+    ...testCliOptions(home),
     query: async (_executable, arguments_) => {
       if (arguments_[0] === "hosts") return JSON.stringify([{ id: "host-1", name: "Studio" }]);
       if (arguments_[0] === "projects") {
@@ -305,7 +323,7 @@ test("creates on an observed remote host and preserves success when opening fail
 test("workspace creation reports Superset's bounded first error line", async (t) => {
   const home = await connectedHome(t);
   const cli = new SupersetCli({
-    homeDirectory: home,
+    ...testCliOptions(home),
     query: async (_executable, arguments_) => {
       if (arguments_[0] === "hosts") return "[]";
       if (arguments_[0] === "projects") return JSON.stringify([{ id: "project-1", name: "Luke" }]);

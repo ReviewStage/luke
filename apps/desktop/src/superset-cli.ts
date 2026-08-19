@@ -90,6 +90,7 @@ export interface SupersetCliOptions {
   run?: SupersetCommandRunner;
   query?: SupersetQueryRunner;
   uniqueId?: () => string;
+  organizationId?: () => Promise<string | undefined>;
 }
 
 export class SupersetCli {
@@ -97,11 +98,29 @@ export class SupersetCli {
   readonly #run: SupersetCommandRunner;
   readonly #query: SupersetQueryRunner;
   readonly #uniqueId: () => string;
+  readonly #organizationId: () => Promise<string | undefined>;
 
   constructor(options: SupersetCliOptions) {
     this.#homeDirectory = options.homeDirectory;
     this.#run = options.run ?? defaultCommandRunner;
     this.#uniqueId = options.uniqueId ?? randomUUID;
+    this.#organizationId =
+      options.organizationId ??
+      (async () => {
+        const { stdout } = await execFileAsync(
+          "/usr/bin/plutil",
+          [
+            "-extract",
+            "organizationId",
+            "raw",
+            "-o",
+            "-",
+            path.join(this.#homeDirectory, "config.json"),
+          ],
+          { timeout: 2_000, windowsHide: true },
+        );
+        return stdout;
+      });
     this.#query =
       options.query ??
       (async (executable, arguments_, timeoutMs) => {
@@ -121,12 +140,7 @@ export class SupersetCli {
   async connected(): Promise<boolean> {
     if (!(await this.installed())) return false;
     try {
-      const parsed: unknown = JSON.parse(
-        await fs.readFile(path.join(this.#homeDirectory, "config.json"), "utf8"),
-      );
-      return isRecord(parsed) && typeof parsed.organizationId === "string"
-        ? parsed.organizationId.trim().length > 0
-        : false;
+      return ((await this.#organizationId())?.trim().length ?? 0) > 0;
     } catch {
       return false;
     }

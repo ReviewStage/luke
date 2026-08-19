@@ -1547,7 +1547,7 @@ test("ignores stored default projects this store cannot hold", async (t) => {
         "someone-else": "proj-1",
         conductor: 7,
         cursor: "   ",
-        codex: "x".repeat(500),
+        codex: "x".repeat(501),
       },
     }),
   );

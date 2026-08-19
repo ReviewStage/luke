@@ -22,6 +22,7 @@ import {
   type SessionNoticeAsk,
   VOICE_CAPTION_MAX_HEIGHT,
   type WorkspaceAgentSelection,
+  workspaceProjectSelectionId,
 } from "@sidecar/core";
 import {
   type CSSProperties,
@@ -1170,7 +1171,12 @@ export function App(): React.JSX.Element {
     return [...names.entries()].map(([id, name]) => {
       const offered = workspaceProjects
         .filter((project) => project.providerId === id)
-        .map((project) => ({ id: project.providerProjectId, label: project.repository }));
+        .map((project) => ({
+          id: workspaceProjectSelectionId(project),
+          label: project.targetName
+            ? `${project.repository} on ${project.targetName}`
+            : project.repository,
+        }));
       const stored = storedWorkspaceProjects?.[id];
       // A stored project the provider no longer offers is its own label: the
       // repository name lived on the observed list that stopped listing it.

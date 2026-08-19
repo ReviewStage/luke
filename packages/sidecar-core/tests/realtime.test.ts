@@ -1525,6 +1525,15 @@ test("the projects context says which project a nameless ask lands in", () => {
   assert.match(item?.content?.[0]?.text ?? "", /default Conductor project is acme\/other/);
 });
 
+test("a host-scoped default names only its exact target", () => {
+  const local = { ...OFFERED_PROJECT, providerTargetId: "local", targetName: "This Mac" };
+  const remote = { ...OFFERED_PROJECT, providerTargetId: "studio", targetName: "Studio" };
+  const chosen = workspaceProjectContextText([local, remote], undefined, {
+    conductor: JSON.stringify(["proj-1", "studio"]),
+  });
+  assert.match(chosen, /default Conductor project is luke on Studio/);
+});
+
 test("a chosen default project survives the context cap", () => {
   // One more project than the context will list, alphabetical like the
   // normalizer hands them over, with the developer's chosen default sorted

@@ -1,7 +1,11 @@
 import type { SessionNoticeAsk } from "./attention.js";
 import { type AppGuideSnapshot, appGuideContextText } from "./guide.js";
 import type { TrackedIssue } from "./issues.js";
-import { type ObservedWorkspaceProject, WORKSPACE_TASK_SUPPORT } from "./providers.js";
+import {
+  type ObservedWorkspaceProject,
+  WORKSPACE_TASK_SUPPORT,
+  workspaceProjectSelectionId,
+} from "./providers.js";
 import {
   ATTENTION_SPEECH_SOURCE,
   type AttentionSpeech,
@@ -521,7 +525,7 @@ function listedWorkspaceProjects(
 ): readonly ObservedWorkspaceProject[] {
   const listed = projects.slice(0, maximumVoiceContextWorkspaceProjects);
   for (const project of projects.slice(maximumVoiceContextWorkspaceProjects)) {
-    if (defaultProjectIds?.[project.providerId] === project.providerProjectId) {
+    if (defaultProjectIds?.[project.providerId] === workspaceProjectSelectionId(project)) {
       listed.push(project);
     }
   }
@@ -576,11 +580,11 @@ function workspaceDefaultProjectLines(
     const offered = projects.filter((candidate) => candidate.providerId === project.providerId);
     const chosenId = defaultProjectIds?.[project.providerId];
     const chosen = chosenId
-      ? offered.find((candidate) => candidate.providerProjectId === chosenId)
+      ? offered.find((candidate) => workspaceProjectSelectionId(candidate) === chosenId)
       : undefined;
     if (chosen) {
       lines.push(
-        `The developer's default ${chosen.providerName} project is ${chosen.repository}: an ask that names no project creates there.`,
+        `The developer's default ${chosen.providerName} project is ${chosen.repository}${chosen.targetName ? ` on ${chosen.targetName}` : ""}: an ask that names no project creates there.`,
       );
     } else if (chosenId === undefined && offered.length > 1) {
       lines.push(
