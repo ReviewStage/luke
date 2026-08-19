@@ -547,7 +547,7 @@ function workspaceProjectOffered(providerId: string, providerProjectId: string):
   if (!adapter) return false;
   return adapter
     .workspaceProjects()
-    .some((project) => project.providerProjectId === providerProjectId);
+    .some((project) => workspaceProjectSelectionId(project) === providerProjectId);
 }
 
 /**
@@ -909,6 +909,7 @@ async function applyLocalSessionHooks(): Promise<void> {
 }
 
 async function refreshProviderSessions(generation: number): Promise<void> {
+  const actionsWereEnabled = observedSupersetActionsEnabled;
   let supersetSnapshot = new SupersetWorkspaceSnapshot([]);
   let supersetActionsEnabled = false;
   try {
@@ -926,6 +927,14 @@ async function refreshProviderSessions(generation: number): Promise<void> {
   }
   observedSupersetWorkspaces = supersetSnapshot;
   observedSupersetActionsEnabled = supersetActionsEnabled;
+  if (actionsWereEnabled !== supersetActionsEnabled) {
+    panels.broadcast(
+      channels.supersetSignInChanged,
+      supersetActionsEnabled
+        ? { stage: SUPERSET_SIGN_IN_STAGE.CONNECTED }
+        : { stage: SUPERSET_SIGN_IN_STAGE.IDLE },
+    );
+  }
   // Providers are observed concurrently and reported independently: the
   // registry commits each provider atomically, so one that is slow or failing
   // can neither delay nor cancel the others. A network provider would

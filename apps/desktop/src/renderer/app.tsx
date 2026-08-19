@@ -350,7 +350,7 @@ function useLeavingPanel(presentation: PanelPresentation): boolean {
 
 export function App(): React.JSX.Element {
   const [bootstrap, setBootstrap] = useState<AppBootstrap>();
-  const [supersetConnected, setSupersetConnected] = useState(false);
+  const [supersetConnected, setSupersetConnected] = useState<boolean>();
   const [supersetSignIn, setSupersetSignIn] = useState<SupersetSignInSnapshot>({
     stage: SUPERSET_SIGN_IN_STAGE.IDLE,
     organizations: [],
@@ -2260,6 +2260,7 @@ export function App(): React.JSX.Element {
     const removeSessions = window.sidecar.onSessionsChanged(setSessions);
     const removeNoticeAsks = window.sidecar.onNoticeAsksChanged(setNoticeAsks);
     const removeSupersetSignIn = window.sidecar.onSupersetSignInChanged((next) => {
+      setSupersetConnected(next.stage === SUPERSET_SIGN_IN_STAGE.CONNECTED);
       if (!supersetSignInHeld.current) return;
       setSupersetSignIn(next);
       if (next.stage !== SUPERSET_SIGN_IN_STAGE.CONNECTED) return;
@@ -2816,7 +2817,7 @@ export function App(): React.JSX.Element {
               },
               superset: {
                 installed: bootstrap.supersetInstalled,
-                connected: supersetConnected || bootstrap.supersetConnected,
+                connected: supersetConnected ?? bootstrap.supersetConnected,
                 held: credentialHeld.current || consentConnectHeld.current,
                 connecting: supersetSignInHeld.current,
                 onConnect: beginSupersetSignIn,
