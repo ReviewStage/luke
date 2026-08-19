@@ -143,10 +143,16 @@ const MICROPHONE_DETAIL = {
     "the key comes up, and closes once the exchange settles. Typing to Luke never opens it. " +
     "Which device it opens is the Prefer the Mac's microphone setting's to say.",
   denied:
-    "Denied. It can only be granted back in System Settings, under Privacy & Security, Microphone.",
-  restricted: "Restricted by a system policy, which only the system's manager can change.",
+    "Denied, so the talk key cannot capture. Typing to Luke still works: a typed ask opens no " +
+    "capture device, and the reply is spoken either way. It can only be granted back in " +
+    "System Settings, under Privacy & Security, Microphone.",
+  restricted:
+    "Restricted by a system policy, which only the system's manager can change. Typing to " +
+    "Luke still works: a typed ask opens no capture device.",
   "not-determined":
-    "Not asked yet. The Permissions section on the Settings tab's Voice page can ask while voice is available — a signed-in account includes it, and an OpenAI key also provides it.",
+    "Not asked yet — typing to Luke needs no permission, and only the talk key's capture " +
+    "does. The Permissions section on the Settings tab's Voice page can ask while voice is " +
+    "available — a signed-in account includes it, and an OpenAI key also provides it.",
   unknown: "Unknown. The Permissions section on the Settings tab's Voice page shows its state.",
 };
 

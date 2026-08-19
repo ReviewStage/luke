@@ -1,6 +1,5 @@
 import { REALTIME_STATUS, type RealtimeStatus } from "@sidecar/core";
 import { useCallback, useRef, useState } from "react";
-import type { MicrophoneStatus } from "../shared/contracts";
 import { FOCUS_FRAME_LIMIT } from "./credential-entry";
 import { cssCustomProperties } from "./css-custom-properties";
 import { Keycaps } from "./keycaps";
@@ -57,13 +56,15 @@ export type AskHandler = (text: string) => Promise<string | undefined>;
 /**
  * Why an ask could not be opened, said in one sentence the field can show.
  *
- * The refusal is diagnosed from the same two facts the settings rows draw —
- * how far the voice loop got, and what the system said about the microphone —
- * so the sentence under the field and the rows in settings can never tell two
- * different stories. A failure's own message is not repeated here: it lands
- * on the caption strip directly below, where the reply would have.
+ * The refusal is diagnosed from the same fact the settings rows draw — how
+ * far the voice loop got — so the sentence under the field and the rows in
+ * settings can never tell two different stories. The microphone permission
+ * has no say here: typing opens no capture device, and the reply arrives on
+ * the call's receiving half, so a typed ask goes whether or not the system
+ * would let a press capture. A failure's own message is not repeated here:
+ * it lands on the caption strip directly below, where the reply would have.
  */
-export function askRefusal(status: RealtimeStatus, microphone: MicrophoneStatus): string {
+export function askRefusal(status: RealtimeStatus): string {
   if (status === REALTIME_STATUS.LISTENING) {
     return "The microphone is open. Finish saying it.";
   }
@@ -74,9 +75,6 @@ export function askRefusal(status: RealtimeStatus, microphone: MicrophoneStatus)
   }
   if (status === REALTIME_STATUS.CONNECTING) {
     return "Still connecting. Ask again in a moment.";
-  }
-  if (microphone !== "granted") {
-    return "Luke answers out loud. Allow the microphone in Settings.";
   }
   if (status === REALTIME_STATUS.FAILED) {
     return "The conversation could not be opened.";
