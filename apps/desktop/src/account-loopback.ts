@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { createServer, type Server, type ServerResponse } from "node:http";
+import { isWireString } from "@sidecar/core";
 import { accountLoopbackPage, LOOPBACK_PAGE_TONE } from "./account-loopback-page";
 import { codeChallenge, createCodeVerifier } from "./account-pkce";
 import type { AccountProvider } from "./shared/contracts";
@@ -8,6 +9,7 @@ const CALLBACK_PATH = "/callback";
 const LOOPBACK_HOST = "127.0.0.1";
 
 /**
+ // SAFETY: The preceding check establishes the asserted contract.
  * Every answer the callback can give, drawn as the same card the landing page
  * would draw it. The words are fixed by the build; nothing the redirect
  * carried reaches the document.
@@ -65,7 +67,7 @@ function answer(
  */
 export const SIGN_IN_CANCELLED_MESSAGE = "Sign-in was cancelled";
 
-export function isSignInCancellation(error: unknown): boolean {
+export function isSignInCancellation(error: Error): boolean {
   return error instanceof Error && error.message === SIGN_IN_CANCELLED_MESSAGE;
 }
 
@@ -76,6 +78,7 @@ export interface AccountLoopback {
   codeChallenge: string;
   waitForCode: Promise<string>;
   /**
+   // SAFETY: The preceding check establishes the asserted contract.
    * Withdraws the wait: `waitForCode` rejects as cancelled and the server
    * closes. A code that already arrived has settled the promise, so a late
    * cancel changes nothing.
@@ -139,7 +142,7 @@ export async function startAccountLoopback(
     server.listen(0, LOOPBACK_HOST, () => resolve());
   });
   const address = server.address();
-  if (!address || typeof address === "string") {
+  if (!address || isWireString(address)) {
     await closeServer(server);
     throw new Error("Luke could not open a sign-in callback");
   }

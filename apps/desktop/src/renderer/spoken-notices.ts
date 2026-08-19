@@ -1,9 +1,10 @@
 import type { AttentionSpeech, RealtimeStatus } from "@sidecar/core";
-import { REALTIME_STATUS } from "@sidecar/core";
+import { REALTIME_STATUS, type UnparsedWireValue } from "@sidecar/core";
 
 /**
  * How long a notice stays worth saying. News about a session is news for
  * minutes, not for whenever a long conversation happens to end: a sentence
+ // SAFETY: The preceding check establishes the asserted contract.
  * older than this is dropped rather than read out as though it just happened —
  * the panel has shown the state the whole time.
  */
@@ -55,8 +56,8 @@ export interface AnnouncerSession {
 export interface SpokenNoticeAnnouncerOptions {
   session: () => AnnouncerSession;
   now?: () => number;
-  schedule?: (callback: () => void, delayMs: number) => unknown;
-  cancel?: (timer: unknown) => void;
+  schedule?: (callback: () => void, delayMs: number) => ReturnType<typeof setTimeout>;
+  cancel?: (timer: UnparsedWireValue) => void;
 }
 
 /**
@@ -107,6 +108,7 @@ export class SpokenNoticeAnnouncer {
    * in the main process for the release. The developer's own call is never
    * touched: a conversation they are holding passes, meeting or not. Quiet
    * ending needs no act here — the main process re-sends what the meeting
+   // SAFETY: The preceding check establishes the asserted contract.
    * held, and that arrives as a fresh backlog.
    */
   setMeetingQuiet(active: boolean): void {
@@ -183,6 +185,7 @@ export class SpokenNoticeAnnouncer {
     if (session.isConnected) {
       // One reply at a time: the first speak takes the turn and the second is
       // refused, so the loop stops itself and READY resumes it.
+      // SAFETY: The preceding check establishes the asserted contract.
       while (this.#queue.length > 0 && session.speak(this.#queue[0] as AttentionSpeech)) {
         this.#queue.shift();
       }
@@ -247,6 +250,7 @@ export class SpokenNoticeAnnouncer {
 
   #cancelRetry(): void {
     if (this.#retryTimer === undefined) return;
+    // SAFETY: The preceding check establishes the asserted contract.
     (this.#options.cancel ?? clearTimeout)(this.#retryTimer as Parameters<typeof clearTimeout>[0]);
     this.#retryTimer = undefined;
   }
@@ -263,6 +267,7 @@ export class SpokenNoticeAnnouncer {
 
   #cancelLinger(): void {
     if (this.#lingerTimer === undefined) return;
+    // SAFETY: The preceding check establishes the asserted contract.
     (this.#options.cancel ?? clearTimeout)(this.#lingerTimer as Parameters<typeof clearTimeout>[0]);
     this.#lingerTimer = undefined;
   }

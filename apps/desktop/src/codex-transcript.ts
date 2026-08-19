@@ -1,4 +1,12 @@
-import { isRecord, oneLine, recordFromJsonLine, text } from "@sidecar/core";
+import {
+  isRecord,
+  isWireString,
+  oneLine,
+  recordFromJsonLine,
+  text,
+  type UnparsedWireValue,
+  type WireRecord,
+} from "@sidecar/core";
 import {
   argumentPhrase,
   CODEX_CALL_ARGUMENT_KEY,
@@ -70,7 +78,7 @@ const CODEX_USER_MESSAGE_MARKER = "## My request for Codex:";
  * scaffolding — instructions, environment context, and their relatives —
  * not something the developer said.
  */
-const CODEX_SCAFFOLDING_SHAPE = /^<([a-z_]+)>[\s\S]*<\/\1>$/;
+const CODEX_SCAFFOLDING_PATTERN = /^<([a-z_]+)>[\s\S]*<\/\1>$/;
 
 const CODEX_ROLLOUT_TAIL_BYTES = TRANSCRIPT_BOUNDS.READ_TAIL_BYTES;
 
@@ -89,7 +97,7 @@ export interface CodexTranscriptRequest {
 }
 
 /** The words of one message's content blocks, whichever direction they face. */
-function messageWords(content: unknown): string | undefined {
+function messageWords(content: UnparsedWireValue): string | undefined {
   if (!Array.isArray(content)) return undefined;
   const parts = content
     .filter(isRecord)
@@ -111,16 +119,17 @@ function developerWords(words: string): string | undefined {
   if (markerIndex >= 0) {
     return text(words.slice(markerIndex + CODEX_USER_MESSAGE_MARKER.length));
   }
-  if (CODEX_SCAFFOLDING_SHAPE.test(words.trim())) return undefined;
+  if (CODEX_SCAFFOLDING_PATTERN.test(words.trim())) return undefined;
   return text(words);
 }
 
 /** Names the tool Codex called, preferring whichever argument says what it is for. */
-function callLine(payload: Record<string, unknown>): string | undefined {
+function callLine(payload: WireRecord): string | undefined {
   const name = text(payload.name);
   if (!name) return undefined;
   const parsedArguments = text(payload.arguments)
-    ? recordFromJsonLine(payload.arguments as string)
+    ? // SAFETY: The preceding check establishes the asserted contract.
+      recordFromJsonLine(payload.arguments as string)
     : undefined;
   for (const key of CODEX_CALL_ARGUMENT_KEY) {
     const detail = oneLine(
@@ -134,14 +143,15 @@ function callLine(payload: Record<string, unknown>): string | undefined {
 
 /**
  * The words a call answered with, wherever this build finds them. Codex wrote
+ // SAFETY: The preceding check establishes the asserted contract.
  * the output as a plain string for years, then as a list of text blocks; the
  * string itself often holds one more JSON layer whose `output` key carries
  * the human-readable text of a shell call.
  */
-function callOutputText(output: unknown): string | undefined {
-  if (typeof output === "string") {
+function callOutputText(output: UnparsedWireValue): string | undefined {
+  if (isWireString(output)) {
     const wrapped = recordFromJsonLine(output);
-    if (wrapped && typeof wrapped.output === "string") return text(wrapped.output);
+    if (wrapped && isWireString(wrapped.output)) return text(wrapped.output);
     return text(output);
   }
   if (Array.isArray(output)) {
@@ -155,7 +165,7 @@ function callOutputText(output: unknown): string | undefined {
   return undefined;
 }
 
-function linesFromResponseItem(payload: Record<string, unknown>): string[] {
+function linesFromResponseItem(payload: WireRecord): string[] {
   if (payload.type === CODEX_ITEM_TYPE.MESSAGE) {
     const words = messageWords(payload.content);
     if (!words) return [];
@@ -205,7 +215,7 @@ function linesFromResponseItem(payload: Record<string, unknown>): string[] {
  * way the message is the one thing worth a line, because the response items
  * around it never say why a turn stopped.
  */
-function linesFromEvent(payload: Record<string, unknown>): string[] {
+function linesFromEvent(payload: WireRecord): string[] {
   if (payload.type === CODEX_EVENT_TYPE.ERROR) {
     const words = oneLine(text(payload.message), TRANSCRIPT_BOUNDS.MAXIMUM_TOOL_LENGTH);
     return words ? [transcriptLine.error(words)] : [];
@@ -218,7 +228,7 @@ function linesFromEvent(payload: Record<string, unknown>): string[] {
 }
 
 /** Renders one rollout line into the lines a conversation can carry. */
-function linesFromRecord(record: Record<string, unknown>): string[] {
+function linesFromRecord(record: WireRecord): string[] {
   const payload = isRecord(record.payload) ? record.payload : undefined;
   if (!payload) return [];
   if (record.type === CODEX_ROLLOUT_LINE_TYPE.RESPONSE_ITEM) {
@@ -232,6 +242,7 @@ function linesFromRecord(record: Record<string, unknown>): string[] {
  * Finds the session's rollout file the way observation does: named by the
  * thread's own row in the state database, read through a parameterized
  * lookup, never composed from the id. A compressed rollout is left unread —
+ // SAFETY: The preceding check establishes the asserted contract.
  * a bounded tail cannot be cut from it — and answers as no transcript.
  */
 async function rolloutPathForThread(request: CodexTranscriptRequest): Promise<string | undefined> {

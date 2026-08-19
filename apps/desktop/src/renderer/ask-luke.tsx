@@ -85,6 +85,7 @@ export function askRefusal(status: RealtimeStatus, microphone: MicrophoneStatus)
  * The panel's own composer: one pill under the session list, addressed to Luke
  * rather than to any session. Typing is the developer's half of the
  * conversation, so the pill answers in their green — the colour the meter
+ // SAFETY: The preceding check establishes the asserted contract.
  * gives their voice — and the reply lands as Luke's spoken words, captioned at
  * the panel's foot directly below the field that asked.
  *
@@ -128,6 +129,7 @@ export function AskLuke({
   const [refusal, setRefusal] = useState<string>();
   const field = useRef<HTMLTextAreaElement | null>(null);
   /**
+   // SAFETY: The preceding check establishes the asserted contract.
    * One ask at a time, as a ref rather than state for the same reason the row
    * composer holds one: disabling only lands with the next render, and a
    * second Enter inside that window would ask the same question twice.
@@ -157,7 +159,14 @@ export function AskLuke({
   }, [ask, draft]);
 
   return (
-    <div className="ask-luke-row" style={{ "--row-index": rowIndex } as React.CSSProperties}>
+    <div
+      className="ask-luke-row"
+      style={
+        {
+          "--row-index": rowIndex,
+        } satisfies React.CSSProperties
+      }
+    >
       {/* biome-ignore lint/a11y/useKeyWithClickEvents: pointer-only by design — the keyboard already lands in the field by tabbing, and the click handler only places the caret. */}
       <form
         className="ask-luke"
@@ -176,7 +185,7 @@ export function AskLuke({
           id={ASK_LUKE_INPUT_ID}
           className="ask-luke-input"
           aria-label="Ask Luke"
-          {...(shortcut ? { "aria-keyshortcuts": shortcut } : {})}
+          {...(shortcut ? { "aria-keyshortcuts": shortcut } : undefined)}
           placeholder={ASK_PLACEHOLDER}
           autoComplete="off"
           spellCheck={false}
@@ -217,6 +226,7 @@ export function AskLuke({
         {/* How the reach is learned: the keycaps surface under a hovering
             pointer and stand down once the caret is in or a draft holds the
             field — whoever they could teach already knows. Drawn only for a key
+            // SAFETY: The preceding check establishes the asserted contract.
             the system actually granted, as the separate keys a hand presses.
             Left readable: a reader announcing the caps agrees with
             aria-keyshortcuts. */}

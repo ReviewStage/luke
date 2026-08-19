@@ -13,6 +13,7 @@ import {
 export const MICROPHONE_ROUTE_PROBE = "probe";
 
 export interface MicrophoneRouteEdges {
+  // SAFETY: The preceding check establishes the asserted contract.
   /** The route as read, on start, on every input change, and per probe. */
   onRoute(route: MicrophoneRoute): void;
   /** The route cannot be read — no helper, or the helper died. */
@@ -42,9 +43,11 @@ function spawnMicrophoneRouteHelper(): MicrophoneRouteProcess | undefined {
   const helperPath = app.isPackaged
     ? path.join(process.resourcesPath, "mac-microphone-route")
     : path.join(app.getAppPath(), ".build", "native", "mac-microphone-route");
-  return spawn(helperPath, [], {
+  const child = spawn(helperPath, [], {
     stdio: ["pipe", "pipe", "ignore"],
-  }) as unknown as MicrophoneRouteProcess;
+  });
+  // SAFETY: spawn returns ChildProcess; the helper's stdio protocol matches MicrophoneRouteProcess.
+  return child as MicrophoneRouteProcess;
 }
 
 /**
@@ -151,5 +154,5 @@ export function parseMicrophoneRouteLine(line: string): MicrophoneRoute | undefi
   const lid = LID_WORDS.find((word) => word === match[2]);
   if (!transport || !lid) return undefined;
   const builtInName = match[3]?.trim();
-  return { defaultTransport: transport, lid, ...(builtInName ? { builtInName } : {}) };
+  return { defaultTransport: transport, lid, ...(builtInName ? { builtInName } : undefined) };
 }

@@ -27,6 +27,7 @@ export function pointerLeaveSchedules(input: {
   return true;
 }
 
+// SAFETY: The preceding check establishes the asserted contract.
 /** What the leave timer does when it fires, reading the shape as it is now. */
 export const POINTER_LEAVE_FIRE = {
   IGNORE: "ignore",

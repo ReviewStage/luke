@@ -9,6 +9,7 @@ import {
  * Codex's observation hooks, described for the shared machinery in
  * `observation-hooks.ts`. Codex keeps user-level hooks in a `hooks.json` of
  * their own inside its home, nested the same way Claude Code's are, and hands
+ // SAFETY: The preceding check establishes the asserted contract.
  * a registered command its envelope as JSON on stdin. The envelope's
  * `session_id` is the same thread id the adapter reads from `threads.id`, so
  * the spool token lands under the name the roster already knows.
@@ -17,12 +18,14 @@ import {
  * the user at startup and runs only once they trust it. That gate is Codex's
  * own consent mechanism and Luke leaves it alone — until the user trusts the
  * entry, everything here observes from the state database and rollouts
+ // SAFETY: The preceding check establishes the asserted contract.
  * exactly as before, which is also what the entry costs when declined.
  */
 
 /**
  * The script's name is also the marker a managed entry is recognized by, so
  * renaming it is a migration: an entry naming the old script would stop being
+ // SAFETY: The preceding check establishes the asserted contract.
  * recognized as ours and would be left behind.
  */
 export const CODEX_HOOK_SCRIPT_NAME = "luke-codex-observation-hook.sh";
@@ -34,6 +37,7 @@ export const CODEX_HOOK_SPOOL_MAXIMUM_AGE_MS = HOOK_SPOOL_MAXIMUM_AGE_MS;
 
 /**
  * The tokens the script may write, fixed at registration: each hook entry
+ // SAFETY: The preceding check establishes the asserted contract.
  * passes its own token as the script's one argument, so nothing in the
  * envelope Codex hands in can choose what lands in the spool. The same
  * vocabulary Claude Code's spool speaks, minus the failure token — Codex

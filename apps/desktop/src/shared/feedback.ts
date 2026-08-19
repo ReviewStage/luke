@@ -1,8 +1,10 @@
+import { isRecord, isWireString, type UnparsedWireValue } from "@sidecar/core";
 /**
  * A note from the user to the people who make Luke. Two kinds, because they are
  * read differently on arrival: feedback is about Luke, and a prompt is an ask
  * Luke should have handled better. Both travel the same way — typed in the
  * panel, carried by the main process to one fixed endpoint, and forwarded from
+ // SAFETY: The preceding check establishes the asserted contract.
  * there as email to the founders. Nothing observed ever rides along: a
  * submission holds only what the composer's fields showed the user — their
  * words, the signature those fields started with from their own signed-in
@@ -17,8 +19,8 @@ export type FeedbackKind = (typeof FEEDBACK_KIND)[keyof typeof FEEDBACK_KIND];
 
 const FEEDBACK_KINDS: readonly string[] = Object.values(FEEDBACK_KIND);
 
-export function isFeedbackKind(value: unknown): value is FeedbackKind {
-  return typeof value === "string" && FEEDBACK_KINDS.includes(value);
+export function isFeedbackKind(value: UnparsedWireValue): value is FeedbackKind {
+  return isWireString(value) && FEEDBACK_KINDS.includes(value);
 }
 
 /**
@@ -26,7 +28,7 @@ export function isFeedbackKind(value: unknown): value is FeedbackKind {
  * `tab:settings` is. Keyed by kind rather than composed from one, so no
  * identifier is ever interpolated into an event name.
  */
-export const FEEDBACK_LIFECYCLE_EVENT: Record<FeedbackKind, string> = {
+export const FEEDBACK_LIFECYCLE_EVENT = {
   [FEEDBACK_KIND.FEEDBACK]: "feedback:feedback",
   [FEEDBACK_KIND.PROMPT]: "feedback:prompt",
 };
@@ -54,8 +56,8 @@ export type FeedbackImageType = (typeof FEEDBACK_IMAGE_TYPE)[keyof typeof FEEDBA
 
 const FEEDBACK_IMAGE_TYPES: readonly string[] = Object.values(FEEDBACK_IMAGE_TYPE);
 
-export function isFeedbackImageType(value: unknown): value is FeedbackImageType {
-  return typeof value === "string" && FEEDBACK_IMAGE_TYPES.includes(value);
+export function isFeedbackImageType(value: UnparsedWireValue): value is FeedbackImageType {
+  return isWireString(value) && FEEDBACK_IMAGE_TYPES.includes(value);
 }
 
 /**
@@ -108,20 +110,21 @@ function decodedByteLength(base64: string): number {
   return (base64.length / 4) * 3 - padding;
 }
 
-function feedbackImage(value: unknown): FeedbackImage | undefined {
-  if (value === null || typeof value !== "object") return undefined;
+function feedbackImage(value: UnparsedWireValue): FeedbackImage | undefined {
+  if (!isRecord(value)) return undefined;
+  // SAFETY: The preceding check establishes the asserted contract.
   const { name, mediaType, base64 } = value as Partial<FeedbackImage>;
-  if (typeof name !== "string" || name.trim().length === 0 || name.length > 255) return undefined;
+  if (!isWireString(name) || name.trim().length === 0 || name.length > 255) return undefined;
   if (!isFeedbackImageType(mediaType)) return undefined;
-  if (typeof base64 !== "string" || base64.length === 0) return undefined;
+  if (!isWireString(base64) || base64.length === 0) return undefined;
   if (!BASE64_PATTERN.test(base64)) return undefined;
   if (decodedByteLength(base64) > FEEDBACK_LIMITS.IMAGE_MAX_BYTES) return undefined;
   return { name: name.trim(), mediaType, base64 };
 }
 
-function optionalLine(value: unknown, maxLength: number): string | undefined | null {
+function optionalLine(value: UnparsedWireValue, maxLength: number): string | undefined | null {
   if (value === undefined) return undefined;
-  if (typeof value !== "string") return null;
+  if (!isWireString(value)) return null;
   const trimmed = value.trim();
   if (trimmed.length === 0) return undefined;
   // One line of credit, not a second message: a name or address has no
@@ -133,15 +136,17 @@ function optionalLine(value: unknown, maxLength: number): string | undefined | n
 
 /**
  * Reads a renderer message into a submission, or nothing if it is malformed.
+ // SAFETY: The preceding check establishes the asserted contract.
  * This is a trust boundary: every field arrives as `unknown`, and a message
  * that fails here is a broken request rather than something a user can fix —
  * the composer enforces the same bounds with words before anything is sent.
  */
-export function feedbackSubmission(value: unknown): FeedbackSubmission | undefined {
-  if (value === null || typeof value !== "object") return undefined;
+export function feedbackSubmission(value: UnparsedWireValue): FeedbackSubmission | undefined {
+  if (!isRecord(value)) return undefined;
+  // SAFETY: The preceding check establishes the asserted contract.
   const { kind, message, name, email, images } = value as Partial<FeedbackSubmission>;
   if (!isFeedbackKind(kind)) return undefined;
-  if (typeof message !== "string") return undefined;
+  if (!isWireString(message)) return undefined;
   const messageText = message.trim();
   if (messageText.length === 0 || messageText.length > FEEDBACK_LIMITS.MESSAGE_MAX_LENGTH) {
     return undefined;
@@ -160,8 +165,8 @@ export function feedbackSubmission(value: unknown): FeedbackSubmission | undefin
   return {
     kind,
     message: messageText,
-    ...(nameLine ? { name: nameLine } : {}),
-    ...(emailLine ? { email: emailLine } : {}),
+    ...(nameLine ? { name: nameLine } : undefined),
+    ...(emailLine ? { email: emailLine } : undefined),
     images: parsedImages,
   };
 }

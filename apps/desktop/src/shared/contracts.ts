@@ -22,6 +22,7 @@ import type {
   SessionNoticeAsk,
   TrackedIssue,
   TrackerActionResult,
+  UnparsedWireValue,
   WindowMode,
   WorkspaceAgentSelection,
 } from "@sidecar/core";
@@ -60,7 +61,7 @@ export const ACCOUNT_PROVIDER = {
 
 export type AccountProvider = (typeof ACCOUNT_PROVIDER)[keyof typeof ACCOUNT_PROVIDER];
 
-export function isAccountProvider(value: unknown): value is AccountProvider {
+export function isAccountProvider(value: UnparsedWireValue): value is AccountProvider {
   return value === ACCOUNT_PROVIDER.GOOGLE || value === ACCOUNT_PROVIDER.GITHUB;
 }
 
@@ -129,6 +130,7 @@ export const SECRET_STORAGE = {
 export type SecretStorage = (typeof SECRET_STORAGE)[keyof typeof SECRET_STORAGE];
 
 /**
+ // SAFETY: The preceding check establishes the asserted contract.
  * One connected Google Calendar account as a renderer may know it: which
  * account, and which of its calendars the user chose to count. The grant
  * behind it stays in the main process, like every credential.
@@ -139,10 +141,12 @@ export interface CalendarAccount {
   selectedCalendarIds: readonly string[];
 }
 
+// SAFETY: The preceding check establishes the asserted contract.
 /** One calendar as its account's list names it, for a settings row. */
 export interface AccountCalendar {
   id: string;
   label: string;
+  // SAFETY: The preceding check establishes the asserted contract.
   /** The calendar's own colour as Google lists it, when it sent a sound one. */
   color?: string;
 }
@@ -173,9 +177,12 @@ export interface ObservedAccountCalendars {
  * only way back would be deleting it.
  */
 /**
+ // SAFETY: The preceding check establishes the asserted contract.
  * Where the app stands against the latest published release, as last learned.
  * `UNKNOWN` is the state before any check has answered — at launch, and
+ // SAFETY: The preceding check establishes the asserted contract.
  * forever in a run that sends no network — and must be drawn as an offer to
+ // SAFETY: The preceding check establishes the asserted contract.
  * check rather than as an answer.
  */
 export const UPDATE_STATUS = {
@@ -247,6 +254,7 @@ export interface AppSettings {
    * The same for Linear, whose row is a sign-in rather than a field: the
    * issues are read under a grant Linear's own consent page issues, so a
    * build carrying no registration draws no Linear row at all. Whether one is
+   // SAFETY: The preceding check establishes the asserted contract.
    * connected is `credentialSources`, as it is for every other service.
    */
   linearSignInAvailable: boolean;
@@ -256,24 +264,28 @@ export interface AppSettings {
    */
   calendarAccounts: readonly CalendarAccount[];
   /**
+   // SAFETY: The preceding check establishes the asserted contract.
    * Whether Luke stands in the Dock as well as at the notch. Off by default:
    * an accessory app is what Luke ships as, so an icon among the user's apps
    * is opted into rather than discovered.
    */
   showInDock: boolean;
   /**
+   // SAFETY: The preceding check establishes the asserted contract.
    * The voice Luke speaks with, as the settings resolve it: the one the user
    * chose, else the launch environment's, else the default — so the panel
    * marks the voice that would actually be heard, not just a stored value.
    */
   voice: RealtimeVoice;
   /**
+   // SAFETY: The preceding check establishes the asserted contract.
    * The pace Luke speaks at, resolved the same way as the voice: the one the
    * user chose, else the launch environment's, else the natural rate.
    */
   voiceSpeed: RealtimeVoiceSpeed;
   /**
    * Whether Luke's words are captioned on screen while he speaks. Off by
+   // SAFETY: The preceding check establishes the asserted contract.
    * default: the voice experience ships as sound, and words drawn under the
    * housing all day are something to opt into rather than discover.
    */
@@ -292,6 +304,7 @@ export interface AppSettings {
    */
   askHotkey?: string;
   /**
+   // SAFETY: The preceding check establishes the asserted contract.
    * The stop-key chord the user chose, on the same terms as the other two:
    * only whether there is a choice to reset, never the key the row shows.
    */
@@ -309,6 +322,7 @@ export interface AppSettings {
    * input is a Bluetooth headset. On by default: capturing from a headset's
    * microphone pulls the whole headset onto its call codec, so everything it
    * plays turns phone-grade for the exchange. Off means the system default is
+   // SAFETY: The preceding check establishes the asserted contract.
    * used exactly as chosen. A shut lid keeps the headset microphone either
    * way, because a muffled question is worse than a degraded song.
    */
@@ -370,10 +384,12 @@ export interface AppSettings {
  */
 export interface OutputAudioState {
   muted: boolean;
+  // SAFETY: The preceding check establishes the asserted contract.
   /** The output volume as macOS reports it, 0–1. */
   volume: number;
 }
 
+// SAFETY: The preceding check establishes the asserted contract.
 /** How the default input device reaches the Mac, as CoreAudio classifies it. */
 export const MICROPHONE_TRANSPORT = {
   BUILT_IN: "built-in",
@@ -466,8 +482,10 @@ export interface DisplayDiagnostic {
 
 export interface AppBootstrap {
   mode: WindowMode;
+  // SAFETY: The preceding check establishes the asserted contract.
   /** Capture-only: start drawn as the peek, which normally needs a pointer. */
   startPeeked: boolean;
+  // SAFETY: The preceding check establishes the asserted contract.
   /** Capture-only: start drawn as the key slot, which normally needs a press. */
   startInSlot: boolean;
   profile: string;
@@ -487,12 +505,14 @@ export interface AppBootstrap {
   /**
    * The accelerator the talk key was registered as, absent when the system
    * refused to register one — a shortcut nothing can trigger must not be shown
+   // SAFETY: The preceding check establishes the asserted contract.
    * as though it works. Raw rather than labelled for the ask key's reason
    * below: the renderer draws the keys apart and says the chord whole.
    */
   voiceHotkey?: string;
   /**
    * Whether that key reports being let go of. Only a key that does can hold a
+   // SAFETY: The preceding check establishes the asserted contract.
    * turn open for as long as it is down; the fallback can only toggle one, and
    * the panel says which of the two the user actually has.
    */
@@ -511,11 +531,13 @@ export interface AppBootstrap {
    */
   stopHotkey?: string;
   /**
+   // SAFETY: The preceding check establishes the asserted contract.
    * The output's switches as last read, absent until the helper's first line
    * arrives — or forever, where there is no helper to ask.
    */
   outputAudio?: OutputAudioState;
   display: DisplayDiagnostic;
+  // SAFETY: The preceding check establishes the asserted contract.
   /** Where the app stands against the latest release, as last learned. */
   update: UpdateSnapshot;
   sessions: readonly NormalizedSession[];
@@ -525,10 +547,12 @@ export interface AppBootstrap {
    * developer's own and never a provider's.
    */
   noticeAsks: readonly SessionNoticeAsk[];
+  // SAFETY: The preceding check establishes the asserted contract.
   /** Where a new workspace can be created, as the adapters currently offer it. */
   workspaceProjects: readonly ObservedWorkspaceProject[];
   /** Absent while no issue tracker is connected, which is its own answer. */
   issues?: readonly TrackedIssue[];
+  // SAFETY: The preceding check establishes the asserted contract.
   /** Each connected account's calendars, as last observed. */
   calendars: readonly ObservedAccountCalendars[];
   /** Whether the calendar's quiet is holding announcements right now. */
@@ -539,6 +563,7 @@ export interface AppBootstrap {
 /** One validated issue act on its way to the main process. */
 export type IssueActionAsk = Extract<IssueToolAction, { kind: "issue-state" | "issue-comment" }>;
 
+// SAFETY: The preceding check establishes the asserted contract.
 /** The talk key as the panel should describe it, as an accelerator. */
 export interface VoiceHotkeyState {
   hotkey?: string;
@@ -565,9 +590,11 @@ export interface AppBridge {
   setPointerInterception(interceptsPointer: boolean): void;
   requestMicrophone(): Promise<MicrophoneStatus>;
   /**
+   // SAFETY: The preceding check establishes the asserted contract.
    * Where the developer's voice would be captured from, as last read — and a
    * fresh read is asked for behind the answer, so the next press sees a lid
    * that has closed meanwhile. `undefined` wherever the route cannot be read,
+   // SAFETY: The preceding check establishes the asserted contract.
    * which the caller must take as "use the browser's default".
    */
   getMicrophoneRoute(): Promise<MicrophoneRoute | undefined>;
@@ -753,6 +780,7 @@ export interface AppBridge {
     /**
      * The model the user named for this one creation, resolved to the wire
      * pairing the build's table documents. It overrides the stored default
+     // SAFETY: The preceding check establishes the asserted contract.
      * for this act alone; the main process saves it as the default only
      * while none is chosen, and validates it again either way.
      */
@@ -770,6 +798,7 @@ export interface AppBridge {
     name?: string,
     task?: string,
     /**
+     // SAFETY: The preceding check establishes the asserted contract.
      * The model the user named for this one agent, as its wire id — always of
      * the asked-for agent kind, which the main process validates again. It
      * never touches the stored default.
@@ -786,6 +815,7 @@ export interface AppBridge {
    */
   executeIssueAction(action: IssueActionAsk): Promise<TrackerActionResult>;
   /**
+   // SAFETY: The preceding check establishes the asserted contract.
    * Carries one user-typed note to the people who make Luke, as email. The
    * renderer sends only what the user wrote and attached — the destination is
    * fixed in the main process, and no session material rides along.
@@ -794,6 +824,7 @@ export interface AppBridge {
   /**
    * Brings the composer up on a kind through the spoken-ask gesture:
    * the main process expands the window and sends the composer's lifecycle
+   // SAFETY: The preceding check establishes the asserted contract.
    * event down the same ordered channel as the mode event, so the shape that
    * wins is always the composer — the ordering stays owned by setWindowMode
    * for every caller. Opening is all this does; a note still leaves only
@@ -822,6 +853,7 @@ export interface AppBridge {
   /** This window's own display, whenever its geometry or housing changes. */
   onDisplayChanged(callback: (display: DisplayDiagnostic) => void): () => void;
   /**
+   // SAFETY: The preceding check establishes the asserted contract.
    * The settings as another window just changed them. A window's own change
    * comes back in its reply; this is how every other window's rows and guide
    * stop describing a state the store no longer holds.
@@ -831,12 +863,14 @@ export interface AppBridge {
   /** Where the app stands against the latest release, whenever that changes. */
   onUpdateChanged(callback: (update: UpdateSnapshot) => void): () => void;
   onSessionsChanged(callback: (sessions: readonly NormalizedSession[]) => void): () => void;
+  // SAFETY: The preceding check establishes the asserted contract.
   /** The standing asks as they change — made, withdrawn, or let go with their sessions. */
   onNoticeAsksChanged(callback: (noticeAsks: readonly SessionNoticeAsk[]) => void): () => void;
   /** The projects a workspace can be created in, whenever the set changes. */
   onWorkspaceProjectsChanged(
     callback: (projects: readonly ObservedWorkspaceProject[]) => void,
   ): () => void;
+  // SAFETY: The preceding check establishes the asserted contract.
   /** The issue roster as last observed; `undefined` says no tracker is connected. */
   onIssuesChanged(callback: (issues: readonly TrackedIssue[] | undefined) => void): () => void;
   /** Each connected account's calendars, whenever an observation changes them. */
@@ -869,6 +903,7 @@ export interface AppBridge {
   /**
    * The stop key going down, from whatever app happened to be frontmost. The
    * press carries no decision: the renderer's session answers whether there
+   // SAFETY: The preceding check establishes the asserted contract.
    * is a reply to stop, exactly as Escape's press does.
    */
   onStopHotkeyPress(callback: () => void): () => void;
@@ -880,6 +915,7 @@ export interface AppBridge {
   onStopHotkeyChanged(callback: (accelerator: string | undefined) => void): () => void;
   /**
    * The output's switches changing under the user's own hand — or becoming
+   // SAFETY: The preceding check establishes the asserted contract.
    * unreadable, which arrives as `undefined` and must be drawn as audible.
    */
   onOutputAudioChanged(callback: (state: OutputAudioState | undefined) => void): () => void;

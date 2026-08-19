@@ -1,4 +1,11 @@
-import { isRecord, oneLine, recordFromJsonLine, text } from "@sidecar/core";
+import {
+  isRecord,
+  isWireNumber,
+  oneLine,
+  recordFromJsonLine,
+  text,
+  type WireRecord,
+} from "@sidecar/core";
 import { DEVIN_ROLE, defaultDevinCliDirectory, devinDatabasePaths } from "./devin-local-adapter";
 import {
   canIgnoreSqliteError,
@@ -73,7 +80,7 @@ const DEVIN_TOOL_INPUT_KEY = [
   "query",
 ] as const;
 
-type DevinRow = Record<string, unknown>;
+type DevinRow = WireRecord;
 
 export interface DevinTranscriptRequest {
   cliDirectory?: string;
@@ -86,7 +93,7 @@ export interface DevinTranscriptRequest {
  * One assistant tool call, in whichever of the shapes the CLI has written it.
  * A call this build cannot name takes no line rather than a guessed one.
  */
-function toolLine(call: Record<string, unknown>): string | undefined {
+function toolLine(call: WireRecord): string | undefined {
   const name =
     text(call.name) ??
     text(call.tool_name) ??
@@ -110,7 +117,7 @@ function toolLine(call: Record<string, unknown>): string | undefined {
  * nodes are the CLI's own scaffolding, not something anyone said; a tool
  * node's content is the answer a call came back with.
  */
-function linesFromChatMessage(record: Record<string, unknown>): string[] {
+function linesFromChatMessage(record: WireRecord): string[] {
   const role = text(record.role);
   if (role === DEVIN_ROLE.USER || role === DEVIN_ROLE.ASSISTANT) {
     const lines: string[] = [];
@@ -158,7 +165,7 @@ function chainRecords(
   database: SqliteDatabase,
   providerSessionId: string,
   mainChainId: number | undefined,
-): Record<string, unknown>[] {
+): WireRecord[] {
   const rows =
     mainChainId !== undefined
       ? readRows(database, DEVIN_CHAIN_QUERY, [
@@ -170,7 +177,7 @@ function chainRecords(
           providerSessionId,
           DEVIN_TRANSCRIPT_BOUNDS.MAXIMUM_CHAIN_WALK,
         ]);
-  const records: Record<string, unknown>[] = [];
+  const records: WireRecord[] = [];
   // Compaction re-inserts a message under a fresh node, so the tip-first walk
   // keeps each message's newest copy and drops the rest — a no-op on a chain,
   // which holds one copy, but what keeps the no-tip fallback from repeating
@@ -200,7 +207,7 @@ function renderedFromDatabase(
   const records = chainRecords(
     database,
     providerSessionId,
-    typeof mainChainId === "number" && Number.isInteger(mainChainId) ? mainChainId : undefined,
+    isWireNumber(mainChainId) && Number.isInteger(mainChainId) ? mainChainId : undefined,
   );
   return boundedTranscript(
     records.flatMap((record) => linesFromChatMessage(record)),

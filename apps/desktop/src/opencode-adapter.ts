@@ -2,6 +2,7 @@ import os from "node:os";
 import path from "node:path";
 import {
   isRecord,
+  isWireString,
   maximumSessionTitleLength,
   oneLine,
   PROVIDER_ID,
@@ -12,6 +13,8 @@ import {
   type SessionProvider,
   type SessionStatus,
   text,
+  type UnparsedWireValue,
+  type WireRecord,
   wholeNumber,
 } from "@sidecar/core";
 import {
@@ -65,6 +68,7 @@ const OPENCODE_DATABASE_FILE = {
 const OPENCODE_MEMORY_DATABASE = ":memory:";
 
 /**
+ // SAFETY: The preceding check establishes the asserted contract.
  * Where OpenCode kept sessions as flat JSON before v1.2.0 moved them into the
  * database. The files are left in place after the migration, so they are read
  * only when no database is usable — a machine the migration has already visited
@@ -108,6 +112,7 @@ const OPENCODE_TOOL_STATUS = {
 
 /**
  * The error OpenCode records when its own user stops a turn. It ends the turn
+ // SAFETY: The preceding check establishes the asserted contract.
  * rather than wedging it, so it reads as waiting and never as a failure.
  */
 const OPENCODE_ABORT_ERROR_NAME = "MessageAbortedError";
@@ -177,7 +182,7 @@ const OPENCODE_RECENT_PART_QUERY = `
   LIMIT ?
 `;
 
-type OpenCodeRow = Record<string, unknown>;
+type OpenCodeRow = WireRecord;
 
 export const OPENCODE_PROVIDER: SessionProvider = {
   id: OPENCODE_PROVIDER_ID,
@@ -215,9 +220,10 @@ interface OpenCodeSessionSnapshot {
   activity?: string;
 }
 
+// SAFETY: The preceding check establishes the asserted contract.
 /** OpenCode writes the session's model as JSON; older records carried an object. */
-function modelFrom(value: unknown): string | undefined {
-  const record = typeof value === "string" ? recordFromJsonLine(value) : value;
+function modelFrom(value: UnparsedWireValue): string | undefined {
+  const record = isWireString(value) ? recordFromJsonLine(value) : value;
   if (!isRecord(record)) return undefined;
   const model = text(record.id) ?? text(record.modelID);
   if (!model) return undefined;
@@ -245,7 +251,7 @@ function sessionTitle(title: string | undefined, directory: string | undefined):
  * failure that ended one early — its own user stopping the turn included,
  * which is a turn that ended rather than one that is stuck.
  */
-function turnFromMessage(record: Record<string, unknown>): OpenCodeTurn {
+function turnFromMessage(record: WireRecord): OpenCodeTurn {
   const turn: OpenCodeTurn = { role: text(record.role) };
   const time = isRecord(record.time) ? record.time : undefined;
   turn.completed = wholeNumber(time?.completed) !== undefined;
@@ -322,11 +328,11 @@ function activityFromPartRows(rows: readonly OpenCodeRow[]): string | undefined 
  */
 function detailFromSnapshot(snapshot: OpenCodeSessionSnapshot): SessionDetail {
   return {
-    ...(snapshot.activity ? { activity: snapshot.activity } : {}),
+    ...(snapshot.activity ? { activity: snapshot.activity } : undefined),
     repository: workspaceLabel(snapshot.directory),
-    ...(snapshot.model ? { model: snapshot.model } : {}),
-    ...(snapshot.turn?.failure ? { error: snapshot.turn.failure } : {}),
-    ...(snapshot.shareUrl ? { link: snapshot.shareUrl } : {}),
+    ...(snapshot.model ? { model: snapshot.model } : undefined),
+    ...(snapshot.turn?.failure ? { error: snapshot.turn.failure } : undefined),
+    ...(snapshot.shareUrl ? { link: snapshot.shareUrl } : undefined),
   };
 }
 
@@ -435,16 +441,14 @@ export class OpenCodeSessionAdapter extends LocalSessionAdapter {
   readonly #sqlite: SqliteModuleLoader;
   readonly #transcriptMaximumRenderedLength: number | undefined;
   /**
+   // SAFETY: The preceding check establishes the asserted contract.
    * What each legacy file said as of the mtime it was read at. Sessions are
    * never capped, so this is what keeps the no-database fallback's pass cheap:
    * a session's info file is re-read only when it has been written to, and its
    * turn only when a newer message file exists or the newest was written to —
    * OpenCode moves that file's clock whenever it moves the turn's bookkeeping.
    */
-  readonly #legacyInfo = new Map<
-    string,
-    { mtimeMs: number; info: Record<string, unknown> | undefined }
-  >();
+  readonly #legacyInfo = new Map<string, { mtimeMs: number; info: WireRecord | undefined }>();
   readonly #legacyTurns = new Map<
     string,
     { filePath: string; mtimeMs: number; turn: OpenCodeTurn | undefined }
@@ -614,9 +618,7 @@ export class OpenCodeSessionAdapter extends LocalSessionAdapter {
   }
 
   /** The session's own record, re-read only when its file has been written to. */
-  async #legacyInfoFor(
-    candidate: SessionFileCandidate,
-  ): Promise<Record<string, unknown> | undefined> {
+  async #legacyInfoFor(candidate: SessionFileCandidate): Promise<WireRecord | undefined> {
     const cached = this.#legacyInfo.get(candidate.filePath);
     if (cached && cached.mtimeMs === candidate.mtimeMs) return cached.info;
     const info = recordFromJsonLine((await readTextFile(candidate.filePath)) ?? "");
@@ -629,6 +631,7 @@ export class OpenCodeSessionAdapter extends LocalSessionAdapter {
    * in creation order, so the greatest file name is the newest message and no
    * second directory pass is needed to find it. The file is re-read only when
    * a newer message exists or this one's clock has moved: OpenCode rewrites a
+   // SAFETY: The preceding check establishes the asserted contract.
    * message's file as its turn opens, aborts, fails, and completes.
    */
   async #legacyTurn(

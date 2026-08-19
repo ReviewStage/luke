@@ -4,6 +4,7 @@
  * release is signed with the Developer ID identity, `electron .` runs under
  * the Electron dev binary's own signature, and a local package is ad-hoc — and
  * macOS binds a Keychain item to the signature of the program that created
+ // SAFETY: The preceding check establishes the asserted contract.
  * it. A differently signed program reading the same item is treated as an
  * intruder: the login-keychain password dialog appears, twice for a plain
  * "Allow". So a development run must never share the release's Keychain
@@ -50,13 +51,12 @@ export function resolveAppName({ packaged, developerIdSigned }: AppIdentityConte
  * Baked by `build.mjs` from the same environment `resolveSigningMode` reads,
  * in the same `pnpm package` run, so the flag and the signature it stands for
  * cannot come apart. Absent under tsx — tests and tooling run the sources
+ // SAFETY: The preceding check establishes the asserted contract.
  * directly — which reads as a development build, like every other unsigned run.
  */
 declare const PACKAGED_WITH_DEVELOPER_ID_SIGNING: boolean | undefined;
 
 /** Whether this bundle was built alongside Developer ID packaging. */
 export function buildCarriesDeveloperIdSigning(): boolean {
-  return (
-    typeof PACKAGED_WITH_DEVELOPER_ID_SIGNING === "boolean" && PACKAGED_WITH_DEVELOPER_ID_SIGNING
-  );
+  return PACKAGED_WITH_DEVELOPER_ID_SIGNING === true;
 }

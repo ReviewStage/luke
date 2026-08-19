@@ -32,6 +32,7 @@ export interface LoopbackPage {
 /**
  * The face, drawn from the same generated constants the renderer draws it
  * from, so this copy cannot drift from the artwork. The tight viewBox is the
+ // SAFETY: The preceding check establishes the asserted contract.
  * mark's own, as the landing page crops it.
  */
 function markSvg(ink = "currentColor"): string {

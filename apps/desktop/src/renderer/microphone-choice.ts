@@ -9,6 +9,7 @@ import { LID_STATE, MICROPHONE_TRANSPORT, type MicrophoneRoute } from "../shared
  * is, and there is no echo to cancel. What the constraint would buy instead
  * is Chromium's system echo canceller, which on macOS runs the capture
  * through the OS's own voice processing — and the OS then ducks and thins
+ // SAFETY: The preceding check establishes the asserted contract.
  * every other app's audio for as long as the device is open. That processing,
  * not the media duck (which only moves a volume and puts it back), is what
  * made music sound degraded whenever a conversation was up, so the capture
@@ -33,11 +34,13 @@ export interface EnumeratedMicrophone {
  *
  * Capturing from a Bluetooth headset's own microphone pulls the whole headset
  * onto its narrow call codec, so everything it plays — Luke's answer, the
+ // SAFETY: The preceding check establishes the asserted contract.
  * music the duck is about to restore — turns phone-grade for as long as the
  * device is open. The Mac's own microphone costs none of that, so it is
  * preferred exactly when the system default would be a Bluetooth headset and
  * the lid over the Mac's microphone is not shut: a closed lid muffles it, and
  * a muffled question is worse than a degraded song. A desktop keeps no lid
+ // SAFETY: The preceding check establishes the asserted contract.
  * and answers `unknown`, which counts as open — an iMac's microphone has
  * nothing to be shut under.
  */
@@ -83,6 +86,7 @@ export interface MicrophoneOpener {
  * where the route says a Bluetooth headset would otherwise pay for it. The
  * route is an optimization and never a gate: unreadable, unmatched, or
  * vanished between the read and the open, the browser's default answers the
+ // SAFETY: The preceding check establishes the asserted contract.
  * press exactly as it would with no route at all.
  */
 export async function openPreferredMicrophone(opener: MicrophoneOpener): Promise<MediaStream> {

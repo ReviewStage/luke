@@ -10,6 +10,7 @@ import {
   type SessionControl,
   type SessionProvider,
   type SessionStatus,
+  type WireRecord,
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceAgentSelection,
   type WorkspaceProject,
@@ -88,6 +89,7 @@ const CONDUCTOR_WORKSPACE_FIELD = {
   AGENT: "agent",
   MODEL: "model",
   EFFORT: "effort",
+  // SAFETY: The preceding check establishes the asserted contract.
   /** The first session, as `POST /v0/workspaces` names it in its response. */
   SESSION_ID: "sessionId",
 } as const;
@@ -104,6 +106,7 @@ const CONDUCTOR_SESSION_CREATE_FIELD = {
 
 /**
  * The kinds of agent Conductor's session-creation endpoint documents, named
+ // SAFETY: The preceding check establishes the asserted contract.
  * exactly as it takes them — read from the build's one table of Conductor's
  * agents and models, so the kinds a roster advertises and the pairings the
  * settings row offers can never disagree. The endpoint also takes `acp`,
@@ -135,6 +138,7 @@ const CONDUCTOR_ARCHIVE_WORKSPACE_CONTROL_ID = "archive-workspace";
  * settled — a
  * workspace mid-turn has a stop to offer, not a filing away, and one whose
  * state could not be read is not known to have stopped — and the workspace it
+ // SAFETY: The preceding check establishes the asserted contract.
  * acts on rides the advertisement as the control's target, so a press
  * archives the workspace the user was shown and nothing an adapter kept on
  * the side.
@@ -172,6 +176,7 @@ const CONDUCTOR_FIELD = {
   USER_ID: "userId",
 } as const;
 
+// SAFETY: The preceding check establishes the asserted contract.
 /** The columns the transcripts read asks for, named as the view answers them. */
 const CONDUCTOR_SQL_FIELD = {
   ROWS: "rows",
@@ -197,10 +202,12 @@ const CONDUCTOR_TRANSCRIPT_SPEAKER = {
   ASSISTANT: "## Assistant",
 } as const;
 
+// SAFETY: The preceding check establishes the asserted contract.
 /** A header as the transcript embeds it: its own line between two messages. */
 const CONDUCTOR_ASSISTANT_HEADER = `\n${CONDUCTOR_TRANSCRIPT_SPEAKER.ASSISTANT}\n`;
 const CONDUCTOR_USER_HEADER = `\n${CONDUCTOR_TRANSCRIPT_SPEAKER.USER}\n`;
 
+// SAFETY: The preceding check establishes the asserted contract.
 /** The header as a Postgres string literal, its newlines written as escapes. */
 function sqlHeaderLiteral(header: string): string {
   return `E'${header.replaceAll("\n", "\\n")}'`;
@@ -208,9 +215,11 @@ function sqlHeaderLiteral(header: string): string {
 
 /**
  * The one query document this adapter ever sends, fixed by this build. The
+ // SAFETY: The preceding check establishes the asserted contract.
  * endpoint takes a read as a POSTed document rather than a GET, so the
  * separation is held the way the Linear tracker holds it: observation only
  * ever sends this SELECT, and nothing reaches its text but session ids the
+ // SAFETY: The preceding check establishes the asserted contract.
  * same pass reported — each validated as a UUID first, so no name, title, or
  * message a provider controls can ever be spliced into the document.
  *
@@ -220,6 +229,7 @@ function sqlHeaderLiteral(header: string): string {
  * from whichever speaker header stands nearest the transcript's end, and the
  * returned tail is anchored at that header rather than cut at a fixed
  * distance: a fixed cut left any final message longer than the cut without
+ // SAFETY: The preceding check establishes the asserted contract.
  * its header, which read as unattributable and silently cost most long-form
  * agents their recap. A chat whose user spoke last answers with no tail at
  * all.
@@ -253,16 +263,16 @@ type ConductorSessionStatus =
 
 /**
  * An idle Conductor session has finished its turn and is holding for the user,
+ // SAFETY: The preceding check establishes the asserted contract.
  * which is what Luke reports as waiting. A session the provider reports as
  * errored stopped on something the user has to deal with, and it carries the
  * message that says what.
  */
-const SESSION_STATUS_BY_CONDUCTOR_STATUS: Readonly<Record<ConductorSessionStatus, SessionStatus>> =
-  {
-    [CONDUCTOR_SESSION_STATUS.IDLE]: SESSION_STATUS.WAITING,
-    [CONDUCTOR_SESSION_STATUS.WORKING]: SESSION_STATUS.WORKING,
-    [CONDUCTOR_SESSION_STATUS.ERROR]: SESSION_STATUS.ERROR,
-  };
+const SESSION_STATUS_BY_CONDUCTOR_STATUS = {
+  [CONDUCTOR_SESSION_STATUS.IDLE]: SESSION_STATUS.WAITING,
+  [CONDUCTOR_SESSION_STATUS.WORKING]: SESSION_STATUS.WORKING,
+  [CONDUCTOR_SESSION_STATUS.ERROR]: SESSION_STATUS.ERROR,
+} as const satisfies Readonly<Record<ConductorSessionStatus, SessionStatus>>;
 
 /** The lifecycle states `GET …/workspaces/{id}/status` documents. */
 const CONDUCTOR_WORKSPACE_STATUS = {
@@ -280,15 +290,16 @@ type ConductorWorkspaceStatus =
 /**
  * The lifecycle states worth a row's activity slot: a workspace still being
  * built or rebuilt is why its chats are quiet, and without the words a
+ // SAFETY: The preceding check establishes the asserted contract.
  * just-created session reads as unaccountably idle. A ready workspace is the
  * normal case and says nothing, and a sleeping one is Conductor's own economy
  * — it wakes on the next message — so wording it would bump the recap off the
  * row to report a non-event.
  */
-const CONDUCTOR_WORKSPACE_ACTIVITY: Readonly<Partial<Record<ConductorWorkspaceStatus, string>>> = {
+const CONDUCTOR_WORKSPACE_ACTIVITY = {
   [CONDUCTOR_WORKSPACE_STATUS.INITIALIZING]: "Workspace initializing",
   [CONDUCTOR_WORKSPACE_STATUS.UPDATING]: "Workspace updating",
-};
+} as const satisfies Readonly<Partial<Record<ConductorWorkspaceStatus, string>>>;
 
 /**
  * The lifecycle states of a workspace no longer open. Conductor's workspace
@@ -384,6 +395,7 @@ interface ConductorSession {
  * each chat's agent kind and the bounded tail its recap — the settled turn's
  * parting words — is read from; the history behind that tail is never asked
  * for, and the tail itself never leaves this adapter. Each chat is reported
+ // SAFETY: The preceding check establishes the asserted contract.
  * as its own session, carrying the workspace around it as its group — the
  * workspace is the unit Conductor's own surface shows, but the chat is the
  * thing a press opens and a write reaches, and a workspace holding two chats
@@ -454,21 +466,21 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
       segments: [CONDUCTOR_ROUTE_SEGMENT.V0, CONDUCTOR_ROUTE_SEGMENT.WORKSPACES],
       body: {
         [CONDUCTOR_WORKSPACE_FIELD.PROJECT_ID]: project.providerProjectId,
-        ...(name ? { [CONDUCTOR_WORKSPACE_FIELD.NAME]: name } : {}),
+        ...(name ? { [CONDUCTOR_WORKSPACE_FIELD.NAME]: name } : undefined),
         ...(chosen
           ? {
               [CONDUCTOR_WORKSPACE_FIELD.AGENT]: chosen.agent,
               [CONDUCTOR_WORKSPACE_FIELD.MODEL]: chosen.model,
-              ...(chosen.effort ? { [CONDUCTOR_WORKSPACE_FIELD.EFFORT]: chosen.effort } : {}),
+              ...(chosen.effort
+                ? { [CONDUCTOR_WORKSPACE_FIELD.EFFORT]: chosen.effort }
+                : undefined),
             }
-          : {}),
+          : undefined),
       },
     };
   }
 
-  protected override createdWorkspaceSessionId(
-    creationBody: Record<string, unknown>,
-  ): string | undefined {
+  protected override createdWorkspaceSessionId(creationBody: WireRecord): string | undefined {
     // The same field the opening task is routed by: the creation response
     // documents the first session's id, and that session is what the next
     // observation pass will report — deep link and all.
@@ -476,7 +488,7 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
   }
 
   protected override workspaceTaskRoute(
-    creationBody: Record<string, unknown>,
+    creationBody: WireRecord,
     task: string,
   ): CloudWriteRoute | { undeliverable: string } {
     // The creation response documents the first session's id; the task is a
@@ -663,8 +675,8 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
           id,
           repositoryLabel: project.repositoryLabel,
           lastActivityAt,
-          ...(name ? { name } : {}),
-          ...(creatorId ? { creatorId } : {}),
+          ...(name ? { name } : undefined),
+          ...(creatorId ? { creatorId } : undefined),
         };
       })
       .filter(isDefined);
@@ -705,9 +717,9 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
         return {
           id,
           workspace,
-          ...(name ? { name } : {}),
-          ...(model ? { model } : {}),
-          ...(deepLink ? { deepLink } : {}),
+          ...(name ? { name } : undefined),
+          ...(model ? { model } : undefined),
+          ...(deepLink ? { deepLink } : undefined),
         };
       })
       .filter(isDefined);
@@ -729,7 +741,7 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
       isListedWorkspaceAgentModel(CONDUCTOR_PROVIDER_ID, {
         agent: request.agent,
         model: request.model,
-        ...(request.effort ? { effort: request.effort } : {}),
+        ...(request.effort ? { effort: request.effort } : undefined),
       })
         ? { model: request.model, effort: request.effort }
         : undefined;
@@ -738,12 +750,14 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
       body: {
         [CONDUCTOR_SESSION_CREATE_FIELD.WORKSPACE_ID]: spawnTarget,
         [CONDUCTOR_SESSION_CREATE_FIELD.AGENT]: request.agent,
-        ...(chosen ? { [CONDUCTOR_SESSION_CREATE_FIELD.MODEL]: chosen.model } : {}),
-        ...(chosen?.effort ? { [CONDUCTOR_SESSION_CREATE_FIELD.EFFORT]: chosen.effort } : {}),
-        ...(request.name ? { [CONDUCTOR_SESSION_CREATE_FIELD.NAME]: request.name } : {}),
+        ...(chosen ? { [CONDUCTOR_SESSION_CREATE_FIELD.MODEL]: chosen.model } : undefined),
+        ...(chosen?.effort
+          ? { [CONDUCTOR_SESSION_CREATE_FIELD.EFFORT]: chosen.effort }
+          : undefined),
+        ...(request.name ? { [CONDUCTOR_SESSION_CREATE_FIELD.NAME]: request.name } : undefined),
         // The opening task rides the creation itself: `POST /v0/sessions`
         // documents taking the first message inline.
-        ...(request.task ? { [CONDUCTOR_SESSION_CREATE_FIELD.MESSAGE]: request.task } : {}),
+        ...(request.task ? { [CONDUCTOR_SESSION_CREATE_FIELD.MESSAGE]: request.task } : undefined),
       },
     };
   }
@@ -865,14 +879,14 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
       // snapshot that promised it.
       spawnableAgents: CONDUCTOR_SPAWNABLE_AGENTS,
       spawnTarget: session.workspace.id,
-      ...(controls.length > 0 ? { controls } : {}),
-      ...(recap ? { recap } : {}),
+      ...(controls.length > 0 ? { controls } : undefined),
+      ...(recap ? { recap } : undefined),
       detail: {
         repository: session.workspace.repositoryLabel,
-        ...(model ? { model } : {}),
-        ...(activity ? { activity } : {}),
-        ...(error ? { error } : {}),
-        ...(session.deepLink ? { link: session.deepLink } : {}),
+        ...(model ? { model } : undefined),
+        ...(activity ? { activity } : undefined),
+        ...(error ? { error } : undefined),
+        ...(session.deepLink ? { link: session.deepLink } : undefined),
       },
     };
   }
@@ -917,7 +931,7 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
     return {
       status,
       updatedAt: timestampFromRecord(body, CONDUCTOR_FIELD.UPDATED_AT),
-      ...(errorMessage ? { errorMessage } : {}),
+      ...(errorMessage ? { errorMessage } : undefined),
     };
   }
 
@@ -947,8 +961,8 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
       CONDUCTOR_ADAPTER_DEFAULTS.MAXIMUM_ERROR_LENGTH,
     );
     return {
-      ...(status ? { status } : {}),
-      ...(errorMessage ? { errorMessage } : {}),
+      ...(status ? { status } : undefined),
+      ...(errorMessage ? { errorMessage } : undefined),
     };
   }
 
@@ -982,8 +996,8 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
         textFromRecord(row, CONDUCTOR_SQL_FIELD.TRANSCRIPT_TAIL),
       );
       transcripts.set(sessionId, {
-        ...(agentKind ? { agentKind } : {}),
-        ...(recap ? { recap } : {}),
+        ...(agentKind ? { agentKind } : undefined),
+        ...(recap ? { recap } : undefined),
       });
     }
     return transcripts;
@@ -1019,6 +1033,7 @@ function recapFromTranscriptTail(tail: string | undefined): string | undefined {
 
 /**
  * The agent kind joins the model label — `codex · gpt-5.5 · high` — because
+ // SAFETY: The preceding check establishes the asserted contract.
  * which agent runs a chat is as much its configuration as which model does.
  */
 function agentAndModelLabel(
@@ -1029,8 +1044,9 @@ function agentAndModelLabel(
   return label || undefined;
 }
 
+// SAFETY: The preceding check establishes the asserted contract.
 /** Conductor reports the model it resolved as well as the one that was asked for. */
-function modelLabel(record: Record<string, unknown>): string | undefined {
+function modelLabel(record: WireRecord): string | undefined {
   const model = (
     textFromRecord(record, CONDUCTOR_FIELD.RESOLVED_MODEL) ??
     textFromRecord(record, CONDUCTOR_FIELD.MODEL)

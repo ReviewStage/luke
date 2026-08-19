@@ -1,8 +1,20 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { type AppBridge, channels } from "./shared/contracts";
 
+/** One argument Electron's IPC layer can carry between processes. */
+type IpcWireArgument =
+  | string
+  | number
+  | boolean
+  | null
+  | readonly IpcWireArgument[]
+  | { readonly [key: string]: IpcWireArgument };
+
 function invoke<T>(channel: string) {
-  return (...args: unknown[]) => ipcRenderer.invoke(channel, ...args) as Promise<T>;
+  return (...args: IpcWireArgument[]) => {
+    // SAFETY: Each channel's renderer contract names T; Electron delivers a deserialized wire value.
+    return ipcRenderer.invoke(channel, ...args) as Promise<T>;
+  };
 }
 
 function subscribe<T>(channel: string) {

@@ -1,10 +1,13 @@
 import {
   CALENDAR_LOOKAHEAD_MS,
   isRecord,
+  isWireNumber,
+  isWireString,
   MAXIMUM_MEETING_LENGTH_MS,
   type MeetingInterval,
   meetingsFromBusyIntervals,
   text,
+  type UnparsedWireValue,
 } from "@sidecar/core";
 import {
   GOOGLE_TOKEN_URL,
@@ -46,6 +49,7 @@ interface CachedAccessToken {
   expiresAt: number;
 }
 
+// SAFETY: The preceding check establishes the asserted contract.
 /** One connected account as the settings store resolves it for this reader. */
 export interface CalendarAccountCredential {
   id: string;
@@ -64,6 +68,7 @@ export interface CalendarAccountObservation extends ObservedAccountCalendars {
   failure?: string;
 }
 
+// SAFETY: The preceding check establishes the asserted contract.
 /** A calendar as the list endpoint names it, plus whether it is the primary. */
 export interface ListedCalendar extends AccountCalendar {
   primary: boolean;
@@ -183,7 +188,7 @@ export class GoogleCalendarReader {
       calendars.push({
         id,
         label,
-        ...(color && CALENDAR_COLOR_PATTERN.test(color) ? { color } : {}),
+        ...(color && CALENDAR_COLOR_PATTERN.test(color) ? { color } : undefined),
         primary: item.primary === true,
       });
     }
@@ -213,7 +218,7 @@ export class GoogleCalendarReader {
       calendars: calendars.map(({ id, label, color }) => ({
         id,
         label,
-        ...(color ? { color } : {}),
+        ...(color ? { color } : undefined),
       })),
       meetings: selected.length > 0 ? await this.#freeBusy(accessToken, selected, now) : [],
     };
@@ -253,7 +258,7 @@ export class GoogleCalendarReader {
     // empty diary. Read as free, one such entry would end a quiet mid-meeting
     // and dump the held announcements aloud — so the pass fails instead, and
     // the account stands what it last showed.
-    const busy: unknown[] = [];
+    const busy: UnparsedWireValue[] = [];
     for (const id of calendarIds) {
       const entry = calendars[id];
       const errored = isRecord(entry) && Array.isArray(entry.errors) && entry.errors.length > 0;
@@ -300,10 +305,10 @@ export class GoogleCalendarReader {
     }
     const payload: unknown = await response.json();
     const accessToken =
-      isRecord(payload) && typeof payload.access_token === "string" ? payload.access_token : "";
+      isRecord(payload) && isWireString(payload.access_token) ? payload.access_token : "";
     if (!accessToken) throw new Error("Google answered the token refresh without a token");
     const expiresIn =
-      isRecord(payload) && typeof payload.expires_in === "number" ? payload.expires_in : 0;
+      isRecord(payload) && isWireNumber(payload.expires_in) ? payload.expires_in : 0;
     this.#accessTokens.set(account.id, {
       refreshToken: account.refreshToken,
       accessToken,

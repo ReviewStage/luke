@@ -1,4 +1,4 @@
-import { isRecord, oneLine, recordFromJsonLine, text } from "@sidecar/core";
+import { isRecord, oneLine, recordFromJsonLine, text, type WireRecord } from "@sidecar/core";
 import {
   canIgnoreSqliteError,
   defaultSqliteModule,
@@ -24,6 +24,7 @@ import {
  *
  * Installs from before OpenCode moved its sessions into the database keep
  * their conversations in per-part JSON files this build does not read, so a
+ // SAFETY: The preceding check establishes the asserted contract.
  * legacy session answers as no transcript rather than a partial one.
  */
 
@@ -83,7 +84,7 @@ const OPENCODE_MESSAGE_PART_QUERY = `
   LIMIT ?
 `;
 
-type OpenCodeRow = Record<string, unknown>;
+type OpenCodeRow = WireRecord;
 
 export interface OpenCodeTranscriptRequest {
   dataDirectory?: string;
@@ -92,11 +93,11 @@ export interface OpenCodeTranscriptRequest {
   maximumRenderedLength?: number;
 }
 
-function rowData(row: OpenCodeRow): Record<string, unknown> | undefined {
+function rowData(row: OpenCodeRow): WireRecord | undefined {
   return recordFromJsonLine(text(row[OPENCODE_DATA_COLUMN]) ?? "");
 }
 
-function toolLine(part: Record<string, unknown>): string[] {
+function toolLine(part: WireRecord): string[] {
   const name = text(part.tool);
   if (!name) return [];
   const state = isRecord(part.state) ? part.state : {};
@@ -122,7 +123,7 @@ function toolLine(part: Record<string, unknown>): string[] {
  * The failure that ended a message's turn early, in the provider's words. An
  * abort is left out: the developer stopping a turn is not news to them.
  */
-function errorLine(data: Record<string, unknown>): string | undefined {
+function errorLine(data: WireRecord): string | undefined {
   const error = isRecord(data.error) ? data.error : undefined;
   if (!error || error.name === OPENCODE_ABORT_ERROR_NAME) return undefined;
   const errorData = isRecord(error.data) ? error.data : undefined;
@@ -139,7 +140,7 @@ function errorLine(data: Record<string, unknown>): string | undefined {
  * not the part — and a synthetic or ignored text part is OpenCode's own
  * scaffolding, not something anyone said.
  */
-function linesFromMessage(data: Record<string, unknown>, parts: readonly OpenCodeRow[]): string[] {
+function linesFromMessage(data: WireRecord, parts: readonly OpenCodeRow[]): string[] {
   const role = text(data.role);
   if (role !== OPENCODE_MESSAGE_ROLE.USER && role !== OPENCODE_MESSAGE_ROLE.ASSISTANT) return [];
   const lines: string[] = [];

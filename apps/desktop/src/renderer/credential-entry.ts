@@ -8,11 +8,11 @@ import type { CredentialProviderId } from "../shared/credential-providers";
    elsewhere. The label above names what to paste, so these do not repeat it —
    and cannot, since not every provider calls it the same thing. Both places the
    field is drawn carry that label, so both can use these. */
-export const CREDENTIAL_PLACEHOLDER: Record<CredentialSource, string> = {
+export const CREDENTIAL_PLACEHOLDER = {
   [CREDENTIAL_SOURCE.NONE]: "Paste it here",
   [CREDENTIAL_SOURCE.ENVIRONMENT]: "Paste one to use instead of the one from the environment",
   [CREDENTIAL_SOURCE.ENCRYPTED_FILE]: "Replace what is stored",
-};
+} as const satisfies Record<CredentialSource, string>;
 
 /**
  * A key being entered, wherever it happens to be drawn. Entering one outlives
@@ -94,6 +94,7 @@ export function removalEndsEntry(
 export const FOCUS_FRAME_LIMIT = 60;
 
 /**
+ // SAFETY: The preceding check establishes the asserted contract.
  * Hands focus to an element as soon as it can take it, and answers with the way
  * to stop waiting.
  *
@@ -121,6 +122,7 @@ export function focusWhenVisible(element: HTMLElement | null): () => void {
 }
 
 /**
+ // SAFETY: The preceding check establishes the asserted contract.
  * Keeps focus on an element for as long as holding it is what that element is
  * for.
  *

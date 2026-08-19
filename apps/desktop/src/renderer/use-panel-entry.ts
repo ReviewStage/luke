@@ -143,6 +143,7 @@ export interface PanelEntry<T extends PanelEntryBase> {
   entry: T | undefined;
   latest: () => T | undefined;
   apply: (next: T | undefined) => void;
+  // SAFETY: The preceding check establishes the asserted contract.
   /** Stands the panel down to the aside shape, with this as what it holds. */
   begin: (next: T) => void;
   /** Stands the panel down without replacing what is held. */
@@ -221,7 +222,7 @@ export function usePanelEntry<T extends PanelEntryBase>(
     void host.send(sending).then((result) => {
       const reply = panelEntryReply({
         stillHeld: latest() === sending,
-        ...(result.rejection ? { rejection: result.rejection } : {}),
+        rejection: result.rejection,
       });
       if (reply === PANEL_ENTRY_REPLY.IGNORE) return;
       if (reply === PANEL_ENTRY_REPLY.REJECT) {

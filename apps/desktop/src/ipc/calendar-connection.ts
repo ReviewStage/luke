@@ -1,3 +1,4 @@
+import { isWireString, type UnparsedWireValue } from "@sidecar/core";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from "electron";
 import type { GoogleCalendarReader } from "../google-calendar";
 import type { GoogleCalendarSignIn } from "../google-calendar-oauth";
@@ -55,8 +56,8 @@ export function registerCalendarConnectionIpc(
     if (trustedSender(event)) signIn.reopen();
   });
   registerSetting(channels.removeCalendarAccount, {
-    validate(accountId: unknown) {
-      if (typeof accountId !== "string" || !accountId) {
+    validate(accountId: UnparsedWireValue) {
+      if (!isWireString(accountId) || !accountId) {
         throw new Error("Invalid calendar account request");
       }
       return accountId;
@@ -68,14 +69,19 @@ export function registerCalendarConnectionIpc(
     refusal: "Could not disconnect that account on this system.",
   });
   registerSetting(channels.setCalendarSelected, {
-    async validate(accountId: unknown, calendarId: unknown, selected: unknown) {
-      if (typeof accountId !== "string" || !accountId) {
+    async validate(
+      accountId: UnparsedWireValue,
+      calendarId: UnparsedWireValue,
+      selected: UnparsedWireValue,
+    ) {
+      if (!isWireString(accountId) || !accountId) {
         throw new Error("Invalid calendar selection request");
       }
-      if (typeof calendarId !== "string" || !calendarId) {
+      if (!isWireString(calendarId) || !calendarId) {
         throw new Error("Invalid calendar selection request");
       }
-      if (typeof selected !== "boolean") throw new Error("Invalid calendar selection request");
+      if (selected !== true && selected !== false)
+        throw new Error("Invalid calendar selection request");
       if (
         selected &&
         !dependencies

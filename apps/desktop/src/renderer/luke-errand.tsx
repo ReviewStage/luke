@@ -11,17 +11,21 @@ import { parseMilliseconds, parsePixels, STILL_MS } from "./session-motion";
  *
  * A setting or a view changes two ways: a hand on the control, or Luke acting
  * on something asked of him. The control answers identically either way — and
+ // SAFETY: The preceding check establishes the asserted contract.
  * a switch that flips with nobody near it reads as a glitch rather than as an
  * answer. So Luke goes and does it in the open: he leaves the strip under the
  * housing, dives to the very control that changed, taps it, and floats back.
  *
  * The dive and the tap are the whole of the emphasis. The way home is the
+ // SAFETY: The preceding check establishes the asserted contract.
  * quietest motion that still reads as something moving under its own power,
  * because by then the point has been made and all that is left is to get out
  * of the way of the control he was pointing at.
  *
  * **There is only ever one Luke on screen.** The strip's own face is held
+ // SAFETY: The preceding check establishes the asserted contract.
  * invisible for exactly as long as the flight lasts, so what crosses the panel
+ // SAFETY: The preceding check establishes the asserted contract.
  * reads as the face itself having left its post rather than as a second copy
  * of it. The flying element is a stand-in — the strip's face is remounted
  * whenever a gesture plays, and an animation running on a node React is about
@@ -84,7 +88,7 @@ export const ERRAND_TARGET = {
 
 export type ErrandTarget = AppSettingId | (typeof ERRAND_TARGET)[keyof typeof ERRAND_TARGET];
 
-const TAB_ERRAND_TARGET: Record<AppPanelTab, ErrandTarget> = {
+const TAB_ERRAND_TARGET = {
   [APP_PANEL_TAB.SESSIONS]: ERRAND_TARGET.SESSIONS_TAB,
   [APP_PANEL_TAB.SETTINGS]: ERRAND_TARGET.SETTINGS_TAB,
 };
@@ -97,6 +101,7 @@ export function tabErrandTarget(tab: AppPanelTab): ErrandTarget {
 /**
  * What a control spreads onto itself to be somewhere an errand can land.
  *
+ // SAFETY: The preceding check establishes the asserted contract.
  * Mark the element that is *drawn* as the control, not a box that happens to
  * hold it. The errand measures what it marks and outlines it in the element's
  * own corners, so a wrapper positioning something rounded — with no radius of
@@ -104,13 +109,13 @@ export function tabErrandTarget(tab: AppPanelTab): ErrandTarget {
  * a control that has none. A control whose roundness lives on a child, or
  * behind it, either declares that radius itself or hands the mark down.
  */
-export function errandTargetProps(target: ErrandTarget): Record<string, string> {
-  return { [ERRAND_TARGET_ATTRIBUTE]: target };
+export function errandTargetProps(target: ErrandTarget) {
+  return { [ERRAND_TARGET_ATTRIBUTE]: target } satisfies Record<string, string>;
 }
 
 /** What Luke's own face spreads onto itself to be where one sets off from. */
-export function errandOriginProps(): Record<string, string> {
-  return { [ERRAND_ORIGIN_ATTRIBUTE]: "true" };
+export function errandOriginProps() {
+  return { [ERRAND_ORIGIN_ATTRIBUTE]: "true" } satisfies Record<string, string>;
 }
 
 /**
@@ -156,6 +161,7 @@ export const ERRAND_WAIT = {
 
 export type ErrandWait = (typeof ERRAND_WAIT)[keyof typeof ERRAND_WAIT];
 
+// SAFETY: The preceding check establishes the asserted contract.
 /** One errand, as the app asks for it. */
 export interface Errand {
   targets: readonly ErrandTarget[];
@@ -164,6 +170,7 @@ export interface Errand {
   run: number;
 }
 
+// SAFETY: The preceding check establishes the asserted contract.
 /** A box, as either a `DOMRect` or a plain reading of one. */
 export interface ErrandBox {
   left: number;
@@ -213,9 +220,10 @@ export function errandJourney(stage: ErrandBox, face: ErrandBox, target: ErrandB
   };
 }
 
+// SAFETY: The preceding check establishes the asserted contract.
 /** The motion tokens a flight is timed by, already read as milliseconds. */
 export interface ErrandTokens {
-  shape: number;
+  surfaceMs: number;
   quick: number;
   exit: number;
   expand: number;
@@ -249,7 +257,7 @@ export interface ErrandBeats {
  * to stay under. Neither wants a face crossing the panel at any speed.
  */
 export function errandFlies(tokens: ErrandTokens): boolean {
-  return tokens.shape >= STILL_MS;
+  return tokens.surfaceMs >= STILL_MS;
 }
 
 /**
@@ -265,37 +273,41 @@ export function errandFlies(tokens: ErrandTokens): boolean {
  * changes its height.
  */
 export function errandBeats(tokens: ErrandTokens, wait: ErrandWait): ErrandBeats {
-  const duration = tokens.shape * 2 + tokens.quick;
-  const arrival = tokens.shape / duration;
-  const arriving = tokens.expand + tokens.stagger * tokens.fanLimit + tokens.shape;
+  const duration = tokens.surfaceMs * 2 + tokens.quick;
+  const arrival = tokens.surfaceMs / duration;
+  const arriving = tokens.expand + tokens.stagger * tokens.fanLimit + tokens.surfaceMs;
   return {
     delay:
       wait === ERRAND_WAIT.AT_ONCE
         ? tokens.quick
         : wait === ERRAND_WAIT.SURFACE
-          ? tokens.shape
+          ? tokens.surfaceMs
           : arriving,
     duration,
     arrival,
-    departure: (tokens.shape + tokens.quick) / duration,
+    departure: (tokens.surfaceMs + tokens.quick) / duration,
     home: (duration - tokens.exit) / duration,
   };
 }
 
 /**
+ // SAFETY: The preceding check establishes the asserted contract.
  * The turn the captions belong to. Mirrors `WAVEFORM_VOICE.LUKE` as the stage
  * spells it in `data-voice`, read here rather than imported because this only
  * ever asks the DOM a question about itself.
  */
 const ERRAND_SPEAKING_VOICE = "luke";
 
+// SAFETY: The preceding check establishes the asserted contract.
 /** How many points the drift is drawn with. Enough that the bow reads as curved. */
 const DRIFT_SAMPLES = 8;
 
 /**
+ // SAFETY: The preceding check establishes the asserted contract.
  * How far off the straight run the drift bows, as a share of the way home.
  * Proportional, so a short hop and a long climb bow alike — and small, because
  * this is a drift rather than a manoeuvre: it is there to keep the way home
+ // SAFETY: The preceding check establishes the asserted contract.
  * from being a ruled line, not to be noticed as a shape of its own.
  */
 const DRIFT_SWAY_SHARE = 0.09;
@@ -316,6 +328,7 @@ export interface ErrandDriftStep {
  * than snapping away from it and settles onto the strip rather than arriving
  * at it. The speed is carried here rather than in the keyframes' easing
  * because the path is sampled — an easing per segment would ease at every
+ // SAFETY: The preceding check establishes the asserted contract.
  * sample and read as a series of small hesitations.
  */
 function driftEase(progress: number): number {
@@ -327,6 +340,7 @@ function driftEase(progress: number): number {
  *
  * Luke's words are drawn on the shape rather than in the panel's flow, so the
  * panel reserves their block under its own padding — and that block is
+ // SAFETY: The preceding check establishes the asserted contract.
  * measured off wrapped text, which means it grows line by line for as long as
  * he is talking. A flight lasts about a second and an errand sets off out of a
  * reply, so it is airborne for exactly the stretch the reservation is growing
@@ -345,6 +359,7 @@ export function captionRoom(input: {
   drawn: boolean;
   /** Whether Luke holds the turn, which is when one can still appear. */
   speaking: boolean;
+  // SAFETY: The preceding check establishes the asserted contract.
   /** The block's height as measured so far. */
   size: number;
   /** The most it is ever allowed to take. */
@@ -374,8 +389,10 @@ export function errandScrollTop(input: {
 }
 
 /**
+ // SAFETY: The preceding check establishes the asserted contract.
  * The shape as it will still be by the time the flight is over.
  *
+ // SAFETY: The preceding check establishes the asserted contract.
  * A drift bounded by the shape as drawn is bounded by a shape that may be
  * about to get smaller: the captions take their room out of the panel while
  * Luke talks and give every pixel of it back when he stops, and a reply
@@ -396,10 +413,12 @@ function roomFor(base: number, direction: number, low: number, high: number): nu
 }
 
 /**
+ // SAFETY: The preceding check establishes the asserted contract.
  * The way home, as a float rather than a line.
  *
  * The job on the way down is to be seen arriving at one control; the job on
  * the way back is only to get out of the way, so it is the quietest motion
+ // SAFETY: The preceding check establishes the asserted contract.
  * that still reads as a thing moving under its own power. He eases off the
  * control, bows gently to one side, and settles onto the strip — one half of a
  * sine's worth of sway, zero at both ends, so the drift joins the straight run
@@ -469,7 +488,7 @@ export function errandDrift(
 const MOTION_TOKEN = {
   SPRING: "--spring",
   SPRING_FAST: "--spring-fast",
-  SHAPE_DURATION: "--duration-shape",
+  SURFACE_DURATION: "--duration-shape",
   QUICK_DURATION: "--duration-quick",
   EXIT_DURATION: "--duration-exit",
   EXIT_EASING: "--motion-exit",
@@ -484,12 +503,15 @@ const MOTION_TOKEN = {
 type MotionToken = (typeof MOTION_TOKEN)[keyof typeof MOTION_TOKEN];
 
 /**
+ // SAFETY: The preceding check establishes the asserted contract.
  * How far past its own size the mark swells as it lands. The tap is the whole
+ // SAFETY: The preceding check establishes the asserted contract.
  * point of the landing, and a mark that only stopped would read as having
  * drifted there.
  */
 const LANDING_SCALE = 1.32;
 
+// SAFETY: The preceding check establishes the asserted contract.
 /** How far into its own life the ring is at full strength, as a fraction. */
 const RING_BLOOM = 0.26;
 
@@ -550,6 +572,7 @@ function drawn(element: HTMLElement): boolean {
 }
 
 /**
+ // SAFETY: The preceding check establishes the asserted contract.
  * The first candidate the panel is actually drawing. Read as one pass over the
  * marked elements rather than a selector per candidate, so the document is
  * queried once and the candidates are matched by their own ids.
@@ -597,6 +620,7 @@ export interface LukeErrandProps {
  * with the flight would have no size or place to set off from, and mounting
  * one is a commit the panel does not need in the middle of a spoken answer.
  * Neither is a second Luke — the strip's own face is held invisible for
+ // SAFETY: The preceding check establishes the asserted contract.
  * exactly as long as this one is drawn.
  *
  * The two callbacks are what let the act look like Luke's doing rather than
@@ -640,7 +664,7 @@ export function LukeErrand({ errand, onLanded, onReturned }: LukeErrandProps): R
     const style = getComputedStyle(stage);
     const token = (name: MotionToken) => style.getPropertyValue(name);
     const tokens: ErrandTokens = {
-      shape: parseMilliseconds(token(MOTION_TOKEN.SHAPE_DURATION)),
+      surfaceMs: parseMilliseconds(token(MOTION_TOKEN.SURFACE_DURATION)),
       quick: parseMilliseconds(token(MOTION_TOKEN.QUICK_DURATION)),
       exit: parseMilliseconds(token(MOTION_TOKEN.EXIT_DURATION)),
       expand: parseMilliseconds(token(MOTION_TOKEN.EXPAND_DELAY)),

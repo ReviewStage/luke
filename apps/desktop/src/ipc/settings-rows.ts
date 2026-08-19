@@ -1,4 +1,5 @@
 import type { SessionProviderAdapter } from "@sidecar/core";
+import { isWireString, type UnparsedWireValue } from "@sidecar/core";
 import type { IpcMainInvokeEvent } from "electron";
 import type { DockPresence } from "../dock-presence";
 import { HOTKEY_RANK, type HotkeyRegistrar } from "../hotkey-registrar";
@@ -30,7 +31,7 @@ export interface SettingsRowsIpcDependencies {
   registerSettingHandler: ReturnType<typeof createSettingsHandler>;
   settingsStore: SettingsStore;
   adapterForCredential: (providerId: CredentialProviderId) => SessionProviderAdapter | undefined;
-  refreshAdapter: (adapter: SessionProviderAdapter) => Promise<unknown>;
+  refreshAdapter: (adapter: SessionProviderAdapter) => Promise<void>;
   refreshIssues: () => void;
   applyVoiceCredential: () => Promise<void>;
   hotkeys: HotkeyRegistrar;
@@ -63,11 +64,11 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
   // The renderer can replace or clear a provider's credential but never reads
   // it back; the reply reports only where each key now comes from.
   registerSettingHandler(channels.setProviderApiKey, {
-    validate(providerId: unknown, apiKey: unknown) {
+    validate(providerId: UnparsedWireValue, apiKey: UnparsedWireValue) {
       // The provider list is fixed by this build, so an id outside it is a
       // malformed request rather than something the user can correct.
       if (!isCredentialProviderId(providerId)) throw new Error("Unknown credential provider");
-      if (apiKey !== undefined && typeof apiKey !== "string") {
+      if (apiKey !== undefined && !isWireString(apiKey)) {
         throw new Error("Invalid API key request");
       }
       return { providerId, apiKey };
@@ -123,15 +124,18 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
         realtimeCredentials()?.setSpeed(settings.voiceSpeed);
         break;
       case SETTING_SIDE_EFFECT.TALK_HOTKEY:
+        // SAFETY: The preceding check establishes the asserted contract.
         hotkeys.setChosen(HOTKEY_RANK.TALK, value as string | undefined);
         await hotkeys.reapply(HOTKEY_RANK.TALK);
         break;
       case SETTING_SIDE_EFFECT.ASK_HOTKEY:
+        // SAFETY: The preceding check establishes the asserted contract.
         hotkeys.setChosen(HOTKEY_RANK.ASK, value as string | undefined);
         if (waitForDeferredEffects) await hotkeys.reapply(HOTKEY_RANK.ASK);
         else void hotkeys.reapply(HOTKEY_RANK.ASK);
         break;
       case SETTING_SIDE_EFFECT.STOP_HOTKEY:
+        // SAFETY: The preceding check establishes the asserted contract.
         hotkeys.setChosen(HOTKEY_RANK.STOP, value as string | undefined);
         if (waitForDeferredEffects) await hotkeys.reapply(HOTKEY_RANK.STOP);
         else void hotkeys.reapply(HOTKEY_RANK.STOP);
@@ -152,7 +156,7 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
   }
 
   registerSettingHandler(channels.updateSetting, {
-    async validate(field: unknown, value: unknown) {
+    async validate(field: UnparsedWireValue, value: UnparsedWireValue) {
       if (!isAppSettingField(field)) throw new Error("Unknown setting");
       // A map-valued setting is written one entry at a time. Its own guard drops
       // entries it cannot hold rather than refusing them — right for reading a
@@ -161,7 +165,7 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
       if (isKeyedAppSettingField(field)) throw new Error("Setting takes one entry at a time");
       const parsed = APP_SETTING_SCHEMA[field].guard(value);
       if (!parsed.valid) throw new Error("Invalid setting value");
-      if (field === APP_SETTING_SCHEMA.askHotkey.field && typeof parsed.value === "string") {
+      if (field === APP_SETTING_SCHEMA.askHotkey.field && isWireString(parsed.value)) {
         if (hotkeys.reserve(parsed.value, HOTKEY_RANK.ASK) === HOTKEY_RANK.TALK) {
           return new SettingsRefusal({
             settings: await settingsStore.snapshot(),
@@ -169,7 +173,7 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
           });
         }
       }
-      if (field === APP_SETTING_SCHEMA.stopHotkey.field && typeof parsed.value === "string") {
+      if (field === APP_SETTING_SCHEMA.stopHotkey.field && isWireString(parsed.value)) {
         const owner = hotkeys.reserve(parsed.value, HOTKEY_RANK.STOP);
         if (owner === HOTKEY_RANK.TALK || owner === HOTKEY_RANK.ASK) {
           return new SettingsRefusal({
@@ -192,14 +196,14 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
   // arrives here is the single entry and the renderer never sends back a map it
   // read before an overlapping write landed.
   registerSettingHandler(channels.updateSettingEntry, {
-    async validate(field: unknown, key: unknown, value: unknown) {
+    async validate(field: UnparsedWireValue, key: UnparsedWireValue, value: UnparsedWireValue) {
       if (!isKeyedAppSettingField(field)) throw new Error("Unknown setting");
       if (!isSettingEntryKey(field, key)) throw new Error("Unknown setting entry");
       const parsed = settingEntryGuard(field, key, value);
       if (!parsed.valid) throw new Error("Invalid setting value");
       if (
         field === APP_SETTING_SCHEMA.workspaceProjectDefaults.field &&
-        typeof parsed.value === "string" &&
+        isWireString(parsed.value) &&
         !workspaceProjectOffered(key, parsed.value)
       ) {
         throw new Error("Unknown workspace project");
@@ -222,7 +226,7 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
   // own save runs are re-run here from the stored answer, so a reset takes
   // effect at once the way every other settings change does.
   registerSettingHandler(channels.resetSettings, {
-    validate(scope: unknown) {
+    validate(scope: UnparsedWireValue) {
       if (!isSettingsResetScope(scope)) throw new Error("Invalid settings reset request");
       return scope;
     },

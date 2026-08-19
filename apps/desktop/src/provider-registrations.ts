@@ -54,9 +54,7 @@ export interface ProviderRegistrationOptions {
   now?: () => number;
 }
 
-export function providerRegistrations(
-  options: ProviderRegistrationOptions,
-): Readonly<Record<ProviderId, ProviderRegistration>> {
+export function providerRegistrations(options: ProviderRegistrationOptions) {
   const now = options.now ?? Date.now;
   const claude = new ClaudeCodeSessionAdapter({
     hookEventsDirectory: () => options.claudeHookInstallation().spoolDirectory,
@@ -144,5 +142,5 @@ export function providerRegistrations(
       credential: CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.JULES],
     },
     [PROVIDER_ID.OPENCODE]: { adapter: new OpenCodeSessionAdapter() },
-  };
+  } satisfies Readonly<Record<ProviderId, ProviderRegistration>>;
 }

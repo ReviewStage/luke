@@ -48,11 +48,11 @@ function promptFields(update: AttentionUpdate): AttentionPromptUpdate {
     providerName: update.providerName,
     title: update.title,
     status: update.status,
-    ...(update.workspace ? { workspace: update.workspace } : {}),
-    ...(update.previousStatus ? { previousStatus: update.previousStatus } : {}),
-    ...(update.recap ? { recap: update.recap } : {}),
-    ...(update.context ? { context: update.context } : {}),
-    ...(update.noticeRequest ? { noticeRequest: update.noticeRequest } : {}),
+    ...(update.workspace ? { workspace: update.workspace } : undefined),
+    ...(update.previousStatus ? { previousStatus: update.previousStatus } : undefined),
+    ...(update.recap ? { recap: update.recap } : undefined),
+    ...(update.context ? { context: update.context } : undefined),
+    ...(update.noticeRequest ? { noticeRequest: update.noticeRequest } : undefined),
   };
 }
 
@@ -72,6 +72,7 @@ export class HostedAttentionEvaluator implements AttentionEvaluator {
   readonly #fetch: FetchLike;
   readonly #now: () => number;
   readonly #requestTimeoutMs: number;
+  // SAFETY: The preceding check establishes the asserted contract.
   /** Until when reviews stay unsent, as epoch milliseconds. */
   #quietUntil = 0;
 

@@ -15,6 +15,7 @@ import {
   type RealtimeDiagnostics,
   type RealtimeMintOutcome,
   text,
+  type UnparsedWireValue,
 } from "@sidecar/core";
 import type { RealtimeCredentialMinter } from "./realtime-minter";
 
@@ -165,14 +166,14 @@ export class HostedRealtimeCredentialMinter implements RealtimeCredentialMinter 
       speed: this.#speed ?? REALTIME_DEFAULTS.SPEED,
       endpoint: this.#endpoint,
       lastOutcome: this.#lastOutcome,
-      ...(this.#lastDetail ? { lastDetail: this.#lastDetail } : {}),
-      ...(this.#lastAttemptAt === undefined ? {} : { lastAttemptAt: this.#lastAttemptAt }),
-      ...(this.#quota ? { quota: this.#quota } : {}),
+      ...(this.#lastDetail ? { lastDetail: this.#lastDetail } : undefined),
+      ...(this.#lastAttemptAt === undefined ? undefined : { lastAttemptAt: this.#lastAttemptAt }),
+      ...(this.#quota ? { quota: this.#quota } : undefined),
     };
   }
 
   /** Names a refusal from its status and reason, keeping the quota a 429 carries. */
-  #refuse(status: number, payload: unknown): void {
+  #refuse(status: number, payload: UnparsedWireValue): void {
     const reason = hostedErrorFromWire(payload);
     if (status === QUOTA_STATUS && reason === HOSTED_API_ERROR.QUOTA_EXHAUSTED) {
       this.#quota = isRecord(payload) ? hostedQuotaFromWire(payload.quota) : undefined;
@@ -205,8 +206,8 @@ export class HostedRealtimeCredentialMinter implements RealtimeCredentialMinter 
         // Only values inside the build's own sets travel; anything else lets
         // the service mint its default rather than sending a refusable field.
         body: JSON.stringify({
-          ...(isRealtimeVoice(this.#voice) ? { voice: this.#voice } : {}),
-          ...(isRealtimeVoiceSpeed(this.#speed) ? { speed: this.#speed } : {}),
+          ...(isRealtimeVoice(this.#voice) ? { voice: this.#voice } : undefined),
+          ...(isRealtimeVoiceSpeed(this.#speed) ? { speed: this.#speed } : undefined),
         }),
         signal: AbortSignal.timeout(this.#requestTimeoutMs),
       });

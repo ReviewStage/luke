@@ -7,7 +7,7 @@
  * same bounded size however the records differ.
  */
 
-import { isRecord, text } from "@sidecar/core";
+import { isRecord, isWireString, text, type WireRecord } from "@sidecar/core";
 
 export const transcriptLine = {
   developer: (words: string) => `Developer: ${words}`,
@@ -25,6 +25,7 @@ export const TRANSCRIPT_BOUNDS = {
   /** A rendered tool call or its result: the gist, never the payload. */
   MAXIMUM_TOOL_LENGTH: 200,
   /**
+   // SAFETY: The preceding check establishes the asserted contract.
    * The whole rendering. It enters a live conversation as one tool output,
    * so it is sized for answering a question about the session, not for
    * carrying the session.
@@ -35,9 +36,9 @@ export const TRANSCRIPT_BOUNDS = {
 export const OMISSION_MARKER = "[earlier turns omitted]";
 
 export function transcriptContentBlocks(
-  record: Record<string, unknown>,
+  record: WireRecord,
   fallbackToRecordContent: boolean,
-): Record<string, unknown>[] {
+): WireRecord[] {
   const message = record.message;
   const content = isRecord(message)
     ? message.content
@@ -48,7 +49,7 @@ export function transcriptContentBlocks(
 }
 
 export function transcriptMessageText(
-  record: Record<string, unknown>,
+  record: WireRecord,
   fallbackToRecordContent: boolean,
 ): string | undefined {
   const message = record.message;
@@ -57,7 +58,7 @@ export function transcriptMessageText(
     : fallbackToRecordContent
       ? record.content
       : undefined;
-  if (typeof content === "string") return text(content);
+  if (isWireString(content)) return text(content);
   const parts = transcriptContentBlocks(record, fallbackToRecordContent)
     .filter((block) => block.type === "text")
     .map((block) => text(block.text))

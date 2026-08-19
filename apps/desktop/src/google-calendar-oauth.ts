@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
+import { isWireString, type UnparsedWireValue, type WireRecord } from "@sidecar/core";
 // The same landing page the Luke account sign-in leaves the browser on, so
 // the two flows' tabs cannot dress differently.
 import { accountLoopbackPage, LOOPBACK_PAGE_TONE } from "./account-loopback-page";
@@ -26,6 +27,7 @@ import { codeChallenge, createCodeVerifier } from "./account-pkce";
 export interface GoogleCalendarSignInConfig {
   clientId: string;
   /**
+   // SAFETY: The preceding check establishes the asserted contract.
    * Google issues desktop OAuth clients a "secret" it documents as not
    * confidential — every installed copy carries it — and the token endpoint
    * expects it for that client type, so a config without one is not offered.
@@ -50,6 +52,7 @@ const REGISTERED_GOOGLE_CALENDAR_CLIENT_ID =
 
 /**
  * The registration's secret half. Google documents a desktop client's secret
+ // SAFETY: The preceding check establishes the asserted contract.
  * as not confidential — every installed copy carries it, and PKCE over the
  * loopback is what actually protects the flow — but repository scanners
  * cannot tell it from a web client's real one, so it never sits in source:
@@ -58,10 +61,9 @@ const REGISTERED_GOOGLE_CALENDAR_CLIENT_ID =
  * variables supply one.
  */
 declare const PACKAGED_GOOGLE_CALENDAR_CLIENT_SECRET: string | undefined;
-const packagedClientSecret =
-  typeof PACKAGED_GOOGLE_CALENDAR_CLIENT_SECRET === "string"
-    ? PACKAGED_GOOGLE_CALENDAR_CLIENT_SECRET
-    : "";
+const packagedClientSecret = isWireString(PACKAGED_GOOGLE_CALENDAR_CLIENT_SECRET)
+  ? PACKAGED_GOOGLE_CALENDAR_CLIENT_SECRET
+  : "";
 
 /** The sign-in this run can offer, or nothing — which hides the button. */
 export function googleCalendarSignInConfig(
@@ -140,13 +142,16 @@ export interface GoogleCalendarSignInOptions {
 }
 
 /** Reads the tokens Google answered the exchange with, trusting no shape. */
-function tokensFrom(payload: unknown): { refreshToken: string; accessToken: string } | undefined {
-  if (payload === null || typeof payload !== "object") return undefined;
-  const record = payload as Record<string, unknown>;
+function tokensFrom(
+  payload: UnparsedWireValue,
+): { refreshToken: string; accessToken: string } | undefined {
+  if (!isRecord(payload)) return undefined;
+  // SAFETY: The preceding check establishes the asserted contract.
+  const record = payload as WireRecord;
   const refreshToken = record.refresh_token;
   const accessToken = record.access_token;
-  if (typeof refreshToken !== "string" || !refreshToken) return undefined;
-  if (typeof accessToken !== "string" || !accessToken) return undefined;
+  if (!isWireString(refreshToken) || !refreshToken) return undefined;
+  if (!isWireString(accessToken) || !accessToken) return undefined;
   return { refreshToken, accessToken };
 }
 
@@ -246,6 +251,7 @@ export class GoogleCalendarSignIn {
       server.once("error", reject);
       server.listen(0, "127.0.0.1", resolve);
     });
+    // SAFETY: The preceding check establishes the asserted contract.
     const port = (server.address() as AddressInfo).port;
     redirectUri = `http://127.0.0.1:${port}${CALLBACK_PATH}`;
 

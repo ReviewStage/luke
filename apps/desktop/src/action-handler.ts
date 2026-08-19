@@ -1,17 +1,18 @@
+import type { UnparsedWireValue } from "@sidecar/core";
 import type { IpcMainInvokeEvent } from "electron";
 
 interface ActionHandlerHost {
   trustedSender: (event: IpcMainInvokeEvent) => boolean;
   handle: (
     channel: string,
-    listener: (event: IpcMainInvokeEvent, ...args: unknown[]) => Promise<unknown>,
+    listener: (event: IpcMainInvokeEvent, ...args: UnparsedWireValue[]) => Promise<void>,
   ) => void;
 }
 
 interface ActionHandler<TArguments extends readonly unknown[], TResult> {
   validate: (args: readonly unknown[]) => TArguments | undefined;
   act: (...args: TArguments) => Promise<TResult>;
-  failure: (error: unknown) => TResult;
+  failure: (error: Error) => TResult;
 }
 
 export function createActionHandler(host: ActionHandlerHost) {

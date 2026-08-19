@@ -60,10 +60,10 @@ export class LinearCredentials {
       )
         return;
       const outcome = await refreshLinearGrant(grant.refreshToken, {
-        ...(this.#options.environment ? { environment: this.#options.environment } : {}),
+        ...(this.#options.environment ? { environment: this.#options.environment } : undefined),
         ...(this.#options.fetchImplementation
           ? { fetchImplementation: this.#options.fetchImplementation }
-          : {}),
+          : undefined),
         now: this.#now,
       });
       if (outcome.status === LINEAR_REFRESH_STATUS.RENEWED) {

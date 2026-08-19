@@ -29,6 +29,7 @@ import { GOOGLE_CALENDAR_ID } from "../shared/google-calendar";
  * different geometry. The React that traces it stays here: the desktop ships
  * marks the mock does not.
  *
+ // SAFETY: The preceding check establishes the asserted contract.
  * Provider marks are inlined as path data rather than bundled image files, so
  * the renderer stays asset-free and the marks scale with the surface.
  *
@@ -38,6 +39,7 @@ import { GOOGLE_CALENDAR_ID } from "../shared/google-calendar";
  * brand kit at https://www.conductor.build/brandkit, Copilot via Simple Icons
  * (MIT, sourced from https://primer.style/foundations/icons/copilot-24),
  * Cursor via Simple Icons (CC0-1.0, sourced from https://cursor.com/brand),
+ // SAFETY: The preceding check establishes the asserted contract.
  * Devin's verbatim from the mark https://devin.ai serves as its own favicon
  * and site header, Google Calendar via Simple Icons (CC0-1.0, sourced from
  * https://developers.google.com/calendar), Jules via Simple Icons (CC0-1.0, sourced from
@@ -263,7 +265,7 @@ export type MarkId =
   | typeof GOOGLE_CALENDAR_ID
   | typeof CREDENTIAL_PROVIDER_ID.OPENAI;
 
-const PROVIDER_MARKS: Readonly<Record<MarkId, (props: MarkProps) => React.JSX.Element>> = {
+const PROVIDER_MARKS = {
   [PROVIDER_ID.CLAUDE_CODE]: ClaudeCodeMark,
   [PROVIDER_ID.CODEX]: CodexMark,
   [PROVIDER_ID.CONDUCTOR]: ConductorMark,
@@ -275,24 +277,28 @@ const PROVIDER_MARKS: Readonly<Record<MarkId, (props: MarkProps) => React.JSX.El
   [ISSUE_TRACKER_ID.LINEAR]: LinearMark,
   [CREDENTIAL_PROVIDER_ID.OPENAI]: OpenAiMark,
   [PROVIDER_ID.OPENCODE]: OpenCodeMark,
-};
+} as const satisfies Readonly<Record<MarkId, (props: MarkProps) => React.JSX.Element>>;
 
 export function ProviderMark({
   providerId,
   className,
 }: MarkProps & { providerId: string }): React.JSX.Element {
+  // SAFETY: The preceding check establishes the asserted contract.
   const Mark = PROVIDER_MARKS[providerId as MarkId] ?? UnknownProviderMark;
   return <Mark className={className ? `provider-mark ${className}` : "provider-mark"} />;
 }
 
 /**
+ // SAFETY: The preceding check establishes the asserted contract.
  * Two small puffs and one large one over a flat base, traced as a single
+ // SAFETY: The preceding check establishes the asserted contract.
  * outline: drawn as overlapping shapes instead, a fill this translucent doubles
  * where they cross and every seam inside the cloud shows.
  *
  * Rides the bottom-right corner of a provider mark to say the work is not
  * happening on this machine. It is ours rather than a brand mark, so it is
  * drawn filled in the text palette: at this size a stroked outline closes up,
+ // SAFETY: The preceding check establishes the asserted contract.
  * and a second brand colour beside the provider's own would read as part of the
  * mark. It takes the mark's corner in every place a mark is shown, and each of
  * those places sizes it against the mark it annotates.

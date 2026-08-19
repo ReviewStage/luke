@@ -11,6 +11,7 @@ import {
   type SessionControl,
   type SessionProvider,
   type SessionStatus,
+  type WireRecord,
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceProject,
 } from "@sidecar/core";
@@ -96,6 +97,7 @@ const CURSOR_CANCEL_RUN_CONTROL_ID = "cancel-run";
 
 /**
  * The run-level control, advertised per session and only in the state Cursor
+ // SAFETY: The preceding check establishes the asserted contract.
  * documents it for. The run it would cancel rides the advertisement as the
  * control's target, so a press stops the run the user was shown — state an
  * adapter kept on the side could outlive the snapshot that promised it, but a
@@ -182,11 +184,12 @@ const CURSOR_SETTLED_RUN_STATUSES: ReadonlySet<CursorRunStatus> = new Set([
 
 /**
  * A finished run has stopped and is holding for the user, which is what Luke
+ // SAFETY: The preceding check establishes the asserted contract.
  * reports as waiting. A run that was cancelled or expired stopped for good. One
  * that is still being created, or that failed, is left unknown rather than
  * promoted to a state Luke cannot verify.
  */
-const SESSION_STATUS_BY_CURSOR_RUN_STATUS: Readonly<Record<CursorRunStatus, SessionStatus>> = {
+const SESSION_STATUS_BY_CURSOR_RUN_STATUS = {
   [CURSOR_RUN_STATUS.RUNNING]: SESSION_STATUS.WORKING,
   [CURSOR_RUN_STATUS.FINISHED]: SESSION_STATUS.WAITING,
   [CURSOR_RUN_STATUS.CANCELLED]: SESSION_STATUS.COMPLETE,
@@ -196,6 +199,7 @@ const SESSION_STATUS_BY_CURSOR_RUN_STATUS: Readonly<Record<CursorRunStatus, Sess
 };
 
 const CURSOR_ADAPTER_DEFAULTS = {
+  // SAFETY: The preceding check establishes the asserted contract.
   /** The documented maximum, so one call reaches as deep into the history as it can. */
   AGENT_PAGE_SIZE: 100,
   MAXIMUM_REFERENCE_LABEL_LENGTH: 60,
@@ -229,21 +233,21 @@ interface CursorRun {
 }
 
 /** An agent can be attached to several repositories; the first is its subject. */
-function firstRepository(record: Record<string, unknown>): Record<string, unknown> {
+function firstRepository(record: WireRecord): WireRecord {
   const repositories = record[CURSOR_FIELD.REPOS];
   const first = Array.isArray(repositories) ? repositories[0] : undefined;
   return isRecord(first) ? first : {};
 }
 
 /** The branch a run pushed, which is also the only place a run names its repository. */
-function firstRunBranch(record: Record<string, unknown>): Record<string, unknown> {
+function firstRunBranch(record: WireRecord): WireRecord {
   const git = record[CURSOR_FIELD.GIT];
   const branches = isRecord(git) ? git[CURSOR_FIELD.BRANCHES] : undefined;
   const first = Array.isArray(branches) ? branches[0] : undefined;
   return isRecord(first) ? first : {};
 }
 
-function agentFromRecord(record: Record<string, unknown>): CursorAgent | undefined {
+function agentFromRecord(record: WireRecord): CursorAgent | undefined {
   const id = textFromRecord(record, CURSOR_FIELD.ID);
   // An agent is a standing definition that can be run again months later, so
   // the time it was last touched is what orders it against the budget.
@@ -267,12 +271,12 @@ function agentFromRecord(record: Record<string, unknown>): CursorAgent | undefin
   return {
     id,
     lastActivityAt,
-    ...(name ? { name } : {}),
-    ...(repositoryUrl ? { repositoryLabel: repositoryLabel(repositoryUrl, undefined) } : {}),
+    ...(name ? { name } : undefined),
+    ...(repositoryUrl ? { repositoryLabel: repositoryLabel(repositoryUrl, undefined) } : undefined),
     archived: textFromRecord(record, CURSOR_FIELD.STATUS) === CURSOR_AGENT_STATUS.ARCHIVED,
-    ...(latestRunId ? { latestRunId } : {}),
-    ...(ref ? { ref } : {}),
-    ...(url ? { url } : {}),
+    ...(latestRunId ? { latestRunId } : undefined),
+    ...(ref ? { ref } : undefined),
+    ...(url ? { url } : undefined),
   };
 }
 
@@ -281,6 +285,7 @@ function agentFromRecord(record: Record<string, unknown>): CursorAgent | undefin
  * the agents the supplied key owns, observation issues no request that can
  * change provider state, and it reports nothing at all without a credential.
  * The writes it supports are a user-typed follow-up, through Cursor's own run
+ // SAFETY: The preceding check establishes the asserted contract.
  * endpoint, to an agent it advertised as taking one, a stop for an active run
  * and an archive for a settled agent — each on a row that advertised it — and
  * a new agent — asked for with the user's own opening task — in a repository
@@ -288,6 +293,7 @@ function agentFromRecord(record: Record<string, unknown>): CursorAgent | undefin
  */
 export class CursorSessionAdapter extends CloudSessionAdapter {
   /**
+   // SAFETY: The preceding check establishes the asserted contract.
    * The repositories the key may launch agents in, as Cursor last listed
    * them. They are where a new workspace — a new agent — can be created, so a
    * creation ask is honoured only against what this cache holds.
@@ -396,6 +402,7 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
    * Reads `GET /v1/repositories` on its own cadence, keeping only usable
    * entries. Every failure is swallowed here — including a rejected key, which
    * the agents read in the same pass will surface — because nothing awaits
+   // SAFETY: The preceding check establishes the asserted contract.
    * this, and an offer read must never fail a pass or escape as an unhandled
    * rejection.
    */
@@ -460,14 +467,12 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
       body: {
         [CURSOR_CREATE_FIELD.PROMPT]: { [CURSOR_CREATE_FIELD.TEXT]: task },
         [CURSOR_CREATE_FIELD.REPOS]: [{ [CURSOR_CREATE_FIELD.URL]: project.providerProjectId }],
-        ...(name ? { [CURSOR_CREATE_FIELD.NAME]: name } : {}),
+        ...(name ? { [CURSOR_CREATE_FIELD.NAME]: name } : undefined),
       },
     };
   }
 
-  protected override createdWorkspaceSessionId(
-    creationBody: Record<string, unknown>,
-  ): string | undefined {
+  protected override createdWorkspaceSessionId(creationBody: WireRecord): string | undefined {
     // The launch response nests the agent it made; its id is the id the
     // agents listing reports, and so the session the next pass will show.
     const agent = creationBody[CURSOR_FIELD.AGENT];
@@ -545,16 +550,16 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
         ? { controls: [cursorCancelRunControl(latestRunId)] }
         : this.#agentTakesArchive(agent, run)
           ? { controls: [CURSOR_ARCHIVE_AGENT_CONTROL] }
-          : {}),
-      ...(run?.result ? { recap: run.result } : {}),
+          : undefined),
+      ...(run?.result ? { recap: run.result } : undefined),
       detail: {
-        ...(repository ? { repository } : {}),
+        ...(repository ? { repository } : undefined),
         // The branch a run opened says more than the ref it started from, but
         // a run that has pushed nothing still has a starting point worth naming.
-        ...(run?.branch ? { branch: run.branch } : agent.ref ? { branch: agent.ref } : {}),
-        ...(status === SESSION_STATUS.ERROR ? { error: CURSOR_RUN_FAILED_MESSAGE } : {}),
-        ...(agent.url ? { link: agent.url } : {}),
-        ...(run?.pullRequestUrl ? { change: run.pullRequestUrl } : {}),
+        ...(run?.branch ? { branch: run.branch } : agent.ref ? { branch: agent.ref } : undefined),
+        ...(status === SESSION_STATUS.ERROR ? { error: CURSOR_RUN_FAILED_MESSAGE } : undefined),
+        ...(agent.url ? { link: agent.url } : undefined),
+        ...(run?.pullRequestUrl ? { change: run.pullRequestUrl } : undefined),
       },
     };
   }
@@ -593,10 +598,12 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
       updatedAt:
         timestampFromRecord(body, CURSOR_FIELD.UPDATED_AT) ??
         timestampFromRecord(body, CURSOR_FIELD.CREATED_AT),
-      ...(repositoryUrl ? { repositoryLabel: repositoryLabel(repositoryUrl, undefined) } : {}),
-      ...(branchName ? { branch: branchName } : {}),
-      ...(pullRequestUrl ? { pullRequestUrl } : {}),
-      ...(result ? { result } : {}),
+      ...(repositoryUrl
+        ? { repositoryLabel: repositoryLabel(repositoryUrl, undefined) }
+        : undefined),
+      ...(branchName ? { branch: branchName } : undefined),
+      ...(pullRequestUrl ? { pullRequestUrl } : undefined),
+      ...(result ? { result } : undefined),
     };
   }
 }
