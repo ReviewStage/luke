@@ -2,14 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { Effect } from "effect";
 import type { EffectSessionProviderAdapter } from "../../src/effect/provider-adapter.js";
-import { EffectInMemorySessionRegistry } from "../../src/effect/session-registry.js";
+import { InMemorySessionRegistry } from "../../src/effect/session-registry.js";
 import {
   ATTENTION_DISPOSITION,
   type ProviderSessionObservation,
   SESSION_STATUS,
   type SessionProvider,
 } from "../../src/session.js";
-import { InMemorySessionRegistry } from "../../src/session-registry.js";
 
 const codex: SessionProvider = { id: "codex", displayName: "Codex" };
 const claude: SessionProvider = { id: "claude-code", displayName: "Claude Code" };
@@ -49,8 +48,8 @@ class FakeEffectObserveAdapter
   }
 }
 
-test("refresh atomically replaces one adapter's sessions and preserves attention decisions", async () => {
-  const registry = new EffectInMemorySessionRegistry();
+test("refreshEffect atomically replaces one adapter's sessions and preserves attention decisions", async () => {
+  const registry = new InMemorySessionRegistry();
   registry.upsert(codex, observation("stale", 10));
   registry.upsert(codex, observation("active", 20));
   registry.upsert(claude, observation("review", 30, { status: SESSION_STATUS.WAITING }));
@@ -64,7 +63,7 @@ test("refresh atomically replaces one adapter's sessions and preserves attention
   );
 
   await Effect.runPromise(
-    registry.refresh({
+    registry.refreshEffect({
       provider: codex,
       observe: () => Effect.succeed([observation("active", 50), observation("new", 60)]),
     }),
@@ -89,12 +88,12 @@ test("refresh atomically replaces one adapter's sessions and preserves attention
   assert.equal(registry.get({ providerId: "codex", providerSessionId: "stale" }), undefined);
 });
 
-test("ignores an older overlapping refresh after a newer provider snapshot is applied", async () => {
-  const registry = new EffectInMemorySessionRegistry();
+test("ignores an older overlapping refreshEffect after a newer provider snapshot is applied", async () => {
+  const registry = new InMemorySessionRegistry();
   let resolveOlderObservation: ((value: readonly ProviderSessionObservation[]) => void) | undefined;
 
   const olderRefresh = Effect.runPromise(
-    registry.refresh(
+    registry.refreshEffect(
       new FakeEffectObserveAdapter(codex, () =>
         Effect.async((resume) => {
           resolveOlderObservation = (value) => resume(Effect.succeed(value));
@@ -103,7 +102,7 @@ test("ignores an older overlapping refresh after a newer provider snapshot is ap
     ),
   );
   await Effect.runPromise(
-    registry.refresh({
+    registry.refreshEffect({
       provider: codex,
       observe: () => Effect.succeed([observation("active", 20, { title: "Newer observation" })]),
     }),
@@ -119,12 +118,12 @@ test("ignores an older overlapping refresh after a newer provider snapshot is ap
   );
 });
 
-test("ignores a stale malformed refresh after a newer provider snapshot is applied", async () => {
-  const registry = new EffectInMemorySessionRegistry();
+test("ignores a stale malformed refreshEffect after a newer provider snapshot is applied", async () => {
+  const registry = new InMemorySessionRegistry();
   let resolveOlderObservation: ((value: readonly ProviderSessionObservation[]) => void) | undefined;
 
   const olderRefresh = Effect.runPromise(
-    registry.refresh(
+    registry.refreshEffect(
       new FakeEffectObserveAdapter(codex, () =>
         Effect.async((resume) => {
           resolveOlderObservation = (value) => resume(Effect.succeed(value));
@@ -133,7 +132,7 @@ test("ignores a stale malformed refresh after a newer provider snapshot is appli
     ),
   );
   await Effect.runPromise(
-    registry.refresh({
+    registry.refreshEffect({
       provider: codex,
       observe: () => Effect.succeed([observation("active", 20, { title: "Newer observation" })]),
     }),
@@ -149,22 +148,24 @@ test("ignores a stale malformed refresh after a newer provider snapshot is appli
   );
 });
 
-test("InMemorySessionRegistry wraps refresh for promise-based adapters", async () => {
+test("refresh applies promise-based adapter observations", async () => {
   const registry = new InMemorySessionRegistry();
   registry.upsert(codex, observation("active", 10));
 
   await registry.refresh({
     provider: codex,
-    observe: async () => [observation("active", 20, { title: "Refreshed through wrapper" })],
+    observe: async () => [
+      observation("active", 20, { title: "Refreshed through promise observe" }),
+    ],
   });
 
   assert.equal(
     registry.get({ providerId: codex.id, providerSessionId: "active" })?.title,
-    "Refreshed through wrapper",
+    "Refreshed through promise observe",
   );
 });
 
-test("InMemorySessionRegistry delegates synchronous operations", () => {
+test("subscribe receives revision updates from synchronous operations", () => {
   const registry = new InMemorySessionRegistry();
   const revisions: number[] = [];
 

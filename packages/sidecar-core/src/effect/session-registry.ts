@@ -13,11 +13,14 @@ import {
   type SessionProvider,
   type SessionWorkspace,
 } from "../session.js";
-import type { SessionRegistryListener, SessionRegistrySnapshot } from "../session-registry.js";
 import type { EffectSessionProviderAdapter } from "./provider-adapter.js";
-import { fromPromise, runPromiseOrDie } from "./runtime-bridge.js";
 
-export type { SessionRegistryListener, SessionRegistrySnapshot };
+export interface SessionRegistrySnapshot {
+  revision: number;
+  sessions: readonly NormalizedSession[];
+}
+
+export type SessionRegistryListener = (snapshot: SessionRegistrySnapshot) => void;
 
 export type SessionObservationTransform = (
   providerId: string,
@@ -193,7 +196,7 @@ export interface EffectSessionRegistry {
     provider: SessionProvider,
     observations: readonly ProviderSessionObservation[],
   ): SessionRegistrySnapshot;
-  refresh(
+  refreshEffect(
     adapter: Pick<EffectSessionProviderAdapter, "provider" | "observe">,
     transform?: SessionObservationTransform,
   ): Effect.Effect<SessionRegistrySnapshot, never, never>;
@@ -204,7 +207,7 @@ export interface EffectSessionRegistry {
   remove(identity: SessionIdentity): boolean;
 }
 
-export class EffectInMemorySessionRegistry implements EffectSessionRegistry {
+export class InMemorySessionRegistry implements EffectSessionRegistry {
   #revision = 0;
   #sessions: SessionStore = new Map();
   #providerMutationEpochs = new Map<string, number>();
@@ -272,7 +275,7 @@ export class EffectInMemorySessionRegistry implements EffectSessionRegistry {
     return this.snapshot();
   }
 
-  refresh(
+  refreshEffect(
     adapter: Pick<EffectSessionProviderAdapter, "provider" | "observe">,
     transform?: SessionObservationTransform,
   ): Effect.Effect<SessionRegistrySnapshot, never, never> {
@@ -284,6 +287,16 @@ export class EffectInMemorySessionRegistry implements EffectSessionRegistry {
       const observations = transform ? transform(providerId, observed) : observed;
       return self.#finishProviderRefresh(adapter.provider, providerId, observations, context);
     });
+  }
+
+  /** Reads a promise-based provider adapter and applies its newest full observation. */
+  async refresh(
+    adapter: Pick<SessionProviderAdapter, "provider" | "observe">,
+    transform?: SessionObservationTransform,
+  ): Promise<SessionRegistrySnapshot> {
+    const context = this.beginPromiseRefresh(adapter.provider);
+    const observed = await adapter.observe();
+    return this.finishPromiseRefresh(adapter.provider, observed, context, transform);
   }
 
   /** Records refresh attempt state before a promise-side observe(). */
@@ -414,56 +427,4 @@ export class EffectInMemorySessionRegistry implements EffectSessionRegistry {
     for (const listener of this.#listeners) listener(this.snapshot());
     return true;
   }
-}
-
-/** @deprecated Use {@link InMemorySessionRegistry} from `@sidecar/core` instead. */
-export interface PromiseSessionRegistry {
-  readonly revision: number;
-  get(identity: SessionIdentity): NormalizedSession | undefined;
-  list(): readonly NormalizedSession[];
-  snapshot(): SessionRegistrySnapshot;
-  subscribe(listener: SessionRegistryListener): () => void;
-  upsert(provider: SessionProvider, observation: ProviderSessionObservation): NormalizedSession;
-  replaceProvider(
-    provider: SessionProvider,
-    observations: readonly ProviderSessionObservation[],
-  ): SessionRegistrySnapshot;
-  refresh(
-    adapter: Pick<SessionProviderAdapter, "provider" | "observe">,
-    transform?: SessionObservationTransform,
-  ): Promise<SessionRegistrySnapshot>;
-  setAttention(
-    identity: SessionIdentity,
-    attention: AttentionDecision,
-  ): NormalizedSession | undefined;
-  remove(identity: SessionIdentity): boolean;
-}
-
-/** @deprecated Use {@link InMemorySessionRegistry} from `@sidecar/core` instead. */
-export function toPromiseSessionRegistry(
-  registry: EffectInMemorySessionRegistry,
-): PromiseSessionRegistry {
-  return {
-    get revision() {
-      return registry.revision;
-    },
-    get: (identity) => registry.get(identity),
-    list: () => registry.list(),
-    snapshot: () => registry.snapshot(),
-    subscribe: (listener) => registry.subscribe(listener),
-    upsert: (provider, observation) => registry.upsert(provider, observation),
-    replaceProvider: (provider, observations) => registry.replaceProvider(provider, observations),
-    refresh: (adapter, transform) =>
-      runPromiseOrDie(
-        registry.refresh(
-          {
-            provider: adapter.provider,
-            observe: () => fromPromise(() => adapter.observe()).pipe(Effect.orDie),
-          },
-          transform,
-        ),
-      ),
-    setAttention: (identity, attention) => registry.setAttention(identity, attention),
-    remove: (identity) => registry.remove(identity),
-  };
 }

@@ -1,6 +1,3 @@
-import type { UnknownException } from "effect/Cause";
-import type * as Effect from "effect/Effect";
-import { fromPromise, runPromiseOrDie } from "../../src/effect/runtime-bridge.js";
 import {
   ATTENTION_RESPONSES_PATH,
   type AttentionDecision,
@@ -133,16 +130,4 @@ export async function handleAttentionReview(options: AttentionReviewOptions): Pr
 
   const answer: AttentionReviewAnswer = { decision, quota: spend.quota };
   return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);
-}
-
-/** Effect entry point for the hosted attention review handler; defects stay on the Promise boundary. */
-export function attentionReviewEffect(
-  options: AttentionReviewOptions,
-): Effect.Effect<Response, UnknownException, never> {
-  return fromPromise(() => handleAttentionReview(options));
-}
-
-/** Runs {@link attentionReviewEffect} through the shared runtime bridge. */
-export function runAttentionReview(options: AttentionReviewOptions): Promise<Response> {
-  return runPromiseOrDie(attentionReviewEffect(options));
 }
