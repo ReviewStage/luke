@@ -31,6 +31,7 @@ const ATTENTION_INSTRUCTION_LINES: readonly string[] = [
   "",
   "Rules:",
   "- Default to silence when the update is routine, ambiguous, or merely continues work already underway.",
+  "- A session waiting on automation it set in motion — CI, a merge queue, a watcher it left running — is not waiting on the developer: nothing they reply can move it, so stay silent and let the automation's outcome be the development.",
   `- A speaking summary is one short spoken sentence under ${maximumAttentionSummaryLength} characters. Say what the session needs, not merely that it changed.`,
   "- Prefer the session's own recap and title over its status when deciding what to say; the status alone is rarely worth an interruption.",
   "- When the update names a workspace, the session is one chat of it.",

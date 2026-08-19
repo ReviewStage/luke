@@ -88,6 +88,29 @@ export const ATTENTION_TUNING_EXAMPLES: readonly AttentionTuningExample[] = [
       "The session reached a resting point and nothing is blocked, so it waits for a natural pause rather than interrupting.",
   },
   {
+    name: "A turn ends waiting on automation, not the developer",
+    update: {
+      providerId: "codex",
+      providerSessionId: "example-automation",
+      trigger: ATTENTION_TRIGGER.STATUS_CHANGED,
+      providerName: "Codex",
+      title: "Rename the quickstart headings",
+      status: SESSION_STATUS.WAITING,
+      previousStatus: SESSION_STATUS.WORKING,
+      recap:
+        "Pushed the heading rename to the pull request. CI is running, and a watcher will add it to the merge queue when the checks pass.",
+      context: { repository: "docs-site", branch: "codex/quickstart-headings" },
+      observedAt: 1_760_000_240_000,
+    },
+    expected: {
+      disposition: ATTENTION_DISPOSITION.SILENT,
+      summary: null,
+      answers_ask: false,
+    },
+    rationale:
+      "The session waits on CI and the merge queue, not on the developer; nothing they could reply would move it, and the merge itself is the development worth hearing about.",
+  },
+  {
     name: "A session stops on a failure it cannot pass",
     update: {
       providerId: "claude-code",
