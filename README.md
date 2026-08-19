@@ -45,7 +45,7 @@ key in Settings.
 Voice is the one feature that sends audio off your Mac. Refer to
 [PRIVACY.md](PRIVACY.md).
 
-## Supported agents
+## Supported providers
 
 | Provider | Local | Cloud |
 | --- | :---: | :---: |
