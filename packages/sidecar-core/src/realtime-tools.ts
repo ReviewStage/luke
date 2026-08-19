@@ -407,7 +407,7 @@ function validateSendSessionMessage(
   if (!messageText) {
     return {
       kind: "refused",
-      reason: "A message has to be shorter than a document and longer than nothing.",
+      reason: "That message is empty or too long.",
     };
   }
   return { kind: SESSION_TOOL_KIND.MESSAGE, identity, text: messageText };
@@ -556,7 +556,7 @@ function validateCreateWorkspace(
     if (!task) {
       return {
         kind: "refused",
-        reason: "A task has to be shorter than a document and longer than nothing.",
+        reason: "That task is empty or too long.",
       };
     }
   } else if (project.taskSupport === WORKSPACE_TASK_SUPPORT.REQUIRED) {
@@ -626,7 +626,7 @@ function validateAddWorkspaceAgent(
     if (!task) {
       return {
         kind: "refused",
-        reason: "A task has to be shorter than a document and longer than nothing.",
+        reason: "That task is empty or too long.",
       };
     }
   }
@@ -698,7 +698,7 @@ function validateCommentOnIssue(parsed: WireRecord, context: IssueToolContext): 
   if (!body) {
     return {
       kind: "refused",
-      reason: "A comment has to be shorter than a document and longer than nothing.",
+      reason: "That comment is empty or too long.",
     };
   }
   return { kind: ISSUE_TOOL_KIND.ISSUE_COMMENT, identity, body };

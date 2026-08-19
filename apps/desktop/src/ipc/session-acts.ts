@@ -260,7 +260,7 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       if (!message.ok || message.value === undefined) {
         return {
           status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-          reason: "A message has to be shorter than a document and longer than nothing.",
+          reason: "That message is empty or too long.",
         };
       }
       const messageText = message.value;
@@ -433,7 +433,7 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       if (!workspaceName.ok) {
         return {
           status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-          reason: "A workspace name has to be short enough to say and longer than nothing.",
+          reason: "That workspace name is empty or too long.",
         };
       }
       // The task's own bound, and its fit to the project, are answered by the
@@ -442,7 +442,7 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       if (!openingTask.ok) {
         return {
           status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-          reason: "A task has to be shorter than a document and longer than nothing.",
+          reason: "That task is empty or too long.",
         };
       }
       // A model the user named for this one creation outranks the stored
@@ -556,7 +556,7 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
         if (!body.ok || body.value === undefined) {
           return {
             status: TRACKER_ACTION_RESULT_STATUS.REJECTED,
-            reason: "A comment has to be shorter than a document and longer than nothing.",
+            reason: "That comment is empty or too long.",
           };
         }
         result = await tracker.execute({
@@ -620,14 +620,14 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       if (!sessionName.ok) {
         return {
           status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-          reason: "A session name has to be short enough to say and longer than nothing.",
+          reason: "That session name is empty or too long.",
         };
       }
       const openingTask = boundedField(task, sessionMessageText);
       if (!openingTask.ok) {
         return {
           status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-          reason: "A task has to be shorter than a document and longer than nothing.",
+          reason: "That task is empty or too long.",
         };
       }
       const managed = supersetContext(identity);

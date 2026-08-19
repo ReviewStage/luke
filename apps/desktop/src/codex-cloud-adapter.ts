@@ -241,7 +241,7 @@ export class CodexCloudSessionAdapter extends CliSessionAdapter {
     if (request.name !== undefined) {
       return {
         status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-        reason: "Codex names cloud tasks itself, so a chosen name has nowhere to go.",
+        reason: "Codex names its own tasks.",
       };
     }
 
