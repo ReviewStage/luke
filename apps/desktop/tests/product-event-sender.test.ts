@@ -282,6 +282,33 @@ test("a call site handing a value outside the allowlist queues nothing", async (
   assert.deepEqual(requests, []);
 });
 
+test("a run left open marks each day it crosses, not only its launch day", async () => {
+  let now = NOON;
+  const { sender, requests } = sharingSender({ now: () => now, flushIntervalMs: 10 });
+  sender.markDayActive();
+  sender.start();
+
+  // Two ticks inside the launch day add nothing: the day is already marked.
+  await new Promise((resolve) => setTimeout(resolve, 35));
+  assert.equal(requests.length, 1);
+  assert.deepEqual(sentEvents(requests[0]).length, 1);
+
+  // The day turns while the app stays open, which is the case the marker
+  // exists for — without a tick it would be a second copy of app:launch.
+  now = NOON + DAY_MS;
+  await new Promise((resolve) => setTimeout(resolve, 35));
+  sender.stop();
+
+  const marked = requests.flatMap((request) =>
+    sentEvents(request).filter((event) => event.name === PRODUCT_EVENT.APP_DAY_ACTIVE),
+  );
+  assert.equal(marked.length, 2);
+  assert.deepEqual(
+    marked.map((event) => event.at),
+    [NOON, NOON + DAY_MS],
+  );
+});
+
 test("stopping drops what was queued rather than holding the quit open", async () => {
   const { sender, requests } = sharingSender();
   sender.start();

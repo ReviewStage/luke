@@ -24,6 +24,7 @@ import {
   productSessionCountBucket,
   type RecordProductEvent,
   rosterRelevantSessions,
+  type SessionNotice,
   SessionNoticeHold,
   SessionNoticeTracker,
   type SessionProviderAdapter,
@@ -1149,6 +1150,17 @@ async function announceSessionNotices(sessions: readonly NormalizedSession[]): P
     return;
   }
   const speech = notices.map((notice) => sessionNoticeSpeech(notice, now));
+  countSpokenAnnouncements(notices);
+  panels.voiceHost()?.webContents.send(channels.attentionSpeech, speech);
+}
+
+/**
+ * Counts the announcements about to be spoken. It sits beside the send rather
+ * than inside the notice tracker because a notice held through a meeting is
+ * spoken later or not at all, and only the two paths that actually hand
+ * speech to the voice host know which happened.
+ */
+function countSpokenAnnouncements(notices: readonly SessionNotice[]): void {
   for (const notice of notices) {
     if (!isProviderId(notice.providerId)) continue;
     productEvents.record(PRODUCT_EVENT.VOICE_ANNOUNCEMENT_SPEAK, {
@@ -1156,7 +1168,6 @@ async function announceSessionNotices(sessions: readonly NormalizedSession[]): P
       session_status: notice.status,
     });
   }
-  panels.voiceHost()?.webContents.send(channels.attentionSpeech, speech);
 }
 
 /**
@@ -1287,6 +1298,7 @@ async function releaseHeldNotices(): Promise<void> {
   const releasedAsks = heldRequestSpeech.release().map((item) => ({ ...item, decidedAt: now }));
   const speech = [...releasedAsks, ...released.map((notice) => sessionNoticeSpeech(notice, now))];
   if (speech.length === 0) return;
+  countSpokenAnnouncements(released);
   panels.voiceHost()?.webContents.send(channels.attentionSpeech, speech);
 }
 

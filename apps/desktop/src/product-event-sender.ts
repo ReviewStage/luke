@@ -196,7 +196,14 @@ export class ProductEventSender {
     // Unlike the update check there is no flush here: letting the launch
     // events ride the first tick is what makes the first batch carry more
     // than one event.
-    this.#timer = setInterval(() => void this.flush(), this.#flushIntervalMs);
+    this.#timer = setInterval(() => {
+      // The day is marked on the tick rather than at launch alone, because a
+      // Luke left running crosses midnight without relaunching — which is the
+      // whole case this event exists for, and marking it only at launch would
+      // make it a second, worse copy of `app:launch`.
+      this.markDayActive();
+      void this.flush();
+    }, this.#flushIntervalMs);
     this.#timer.unref();
   }
 
