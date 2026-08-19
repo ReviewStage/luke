@@ -341,13 +341,18 @@ move — the spring vocabulary, how content joins and leaves a resizing shape,
 and how a motion change is proven. Read it before adding or altering any
 animation; this section covers only the window and the surface themselves.
 
-The window is a stage; the drawn surface is the shape. A window therefore holds
-the largest shape its mode can draw — a compact window holds the peek and an
-expanded one holds the slot as well as the panel, so neither hovering nor
-stepping aside for a browser costs any IPC — plus `SURFACE_MARGIN` on every
-side, which is what the spring overshoots into and the shadow falls in. Anything the shape does not cover is
-transparent and must stay click-through, so hit regions track the shape rather
-than the window.
+The window is a stage; the drawn surface is the shape. Every window holds the
+width of the widest shape any mode can draw — the panel, and the peek where a
+housing outgrows it — so hovering and the slot cost no IPC and a mode change
+never moves the window: macOS lands a window's move and its content's relayout
+on different frames, so a mode change that also recentred a narrower window
+flashed the capsule against the old origin before the move caught up. Only the
+height changes between modes, anchored to the top edge, where everything a
+shorter frame crops is margin below a shape that has already closed. The stage
+carries `SURFACE_MARGIN` on every side, which is what the spring overshoots
+into and the shadow falls in. Anything the shape does not cover is transparent
+and must stay click-through, so hit regions track the shape rather than the
+window.
 
 The shape's depth is the menu bar's painted depth, not the safe-area inset. The
 inset is the region apps must avoid; macOS may paint the bar deeper than it, and

@@ -34,9 +34,9 @@ test("anchors the compact window to the physical top edge", () => {
   });
 
   assert.deepEqual(result, {
-    x: 487,
+    x: 406,
     y: 0,
-    width: 538,
+    width: PANEL_WIDTH + SURFACE_MARGIN * 2,
     // The top inset, the caption block Luke's words wrap into below it, every
     // chip row the notice band can grow to under those words, and the margin
     // the overshoot and the shadow fall in: 38 + 210 + 26 × 3 + 40.
@@ -50,19 +50,28 @@ test("anchors the compact window to the physical top edge", () => {
   });
 });
 
-test("a compact window holds the peek, the overshoot, and the shadow", () => {
-  const result = positionNotchWindow(notchedDisplay, "compact", {
+test("both modes share one width and origin, so a mode change only resizes down", () => {
+  const native = {
     displayId: 1,
     safeAreaTop: 38,
     menuBarHeight: 38,
     notchWidth: 210,
     hasNotch: true,
-  });
+  };
+  const compact = positionNotchWindow(notchedDisplay, "compact", native);
+  const expanded = positionNotchWindow(notchedDisplay, "expanded", native);
 
-  assert.equal(result.width, peekWidth(210) + SURFACE_MARGIN * 2);
+  // A mode change that also moved the window flashed the capsule against the
+  // old origin, because macOS lands the move and the relayout on different
+  // frames. Equal widths keep the origin still in both directions.
+  assert.equal(compact.width, expanded.width);
+  assert.equal(compact.x, expanded.x);
+  assert.equal(compact.y, expanded.y);
+  // The stage still holds the peek, the overshoot, and the shadow.
+  assert.ok(compact.width >= peekWidth(210) + SURFACE_MARGIN * 2);
   // The capsule at rest stays centred on the housing inside that window.
   assert.equal(
-    (peekWidth(210) - result.notch.housingWidth) / 2,
+    (peekWidth(210) - compact.notch.housingWidth) / 2,
     CAPSULE_SIDE_WIDTH + PEEK_SIDE_GROWTH,
   );
 });
@@ -76,9 +85,9 @@ test("uses a top-center fallback without inventing a notch", () => {
     "compact",
   );
 
-  assert.equal(result.x, -1229);
+  assert.equal(result.x, -1310);
   assert.equal(result.y, -200);
-  assert.equal(result.width, peekWidth(0) + SURFACE_MARGIN * 2);
+  assert.equal(result.width, PANEL_WIDTH + SURFACE_MARGIN * 2);
   assert.equal(
     result.height,
     32 +
@@ -110,9 +119,9 @@ test("the notch form gives a display without a housing the simulated one", () =>
     hasNotch: true,
     source: "simulated",
   });
-  // The window grows to hold the peek around the simulated housing, exactly as
-  // it would around a real one of the same width.
-  assert.equal(result.width, peekWidth(SIMULATED_HOUSING_WIDTH) + SURFACE_MARGIN * 2);
+  // The window holds the peek around the simulated housing, exactly as it
+  // would around a real one of the same width.
+  assert.ok(result.width >= peekWidth(SIMULATED_HOUSING_WIDTH) + SURFACE_MARGIN * 2);
   assert.equal(
     result.height,
     32 +
@@ -154,9 +163,8 @@ test("a display without a housing keeps the peek's width beside the 14-inch one"
   // same floored peek the caption block's reservation was measured against —
   // never the 248px left when no housing grows it.
   assert.equal(PEEK_MIN_WIDTH, 210 + (CAPSULE_SIDE_WIDTH + PEEK_SIDE_GROWTH) * 2);
-  assert.equal(
-    positionNotchWindow(plainDisplay, "compact").width,
-    PEEK_MIN_WIDTH + SURFACE_MARGIN * 2,
+  assert.ok(
+    positionNotchWindow(plainDisplay, "compact").width >= PEEK_MIN_WIDTH + SURFACE_MARGIN * 2,
   );
 });
 
