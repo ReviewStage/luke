@@ -247,9 +247,20 @@ export class GoogleCalendarReader {
     const calendars = isRecord(payload) && isRecord(payload.calendars) ? payload.calendars : {};
     // Every asked-for calendar's busy blocks, together: which calendar a
     // meeting sits on does not matter to a hold, only that the user is in it.
+    // Every asked-for calendar must also have answered: Google reports a
+    // calendar it could not read just then as an `errors` entry inside a 200,
+    // not as a failing request, and a calendar that cannot answer is not an
+    // empty diary. Read as free, one such entry would end a quiet mid-meeting
+    // and dump the held announcements aloud — so the pass fails instead, and
+    // the account stands what it last showed.
     const busy: unknown[] = [];
-    for (const entry of Object.values(calendars)) {
-      if (isRecord(entry) && Array.isArray(entry.busy)) busy.push(...entry.busy);
+    for (const id of calendarIds) {
+      const entry = calendars[id];
+      const errored = isRecord(entry) && Array.isArray(entry.errors) && entry.errors.length > 0;
+      if (!isRecord(entry) || errored || !Array.isArray(entry.busy)) {
+        throw new Error(`Google Calendar could not read free/busy for "${id}"`);
+      }
+      busy.push(...entry.busy);
     }
     return meetingsFromBusyIntervals(busy, now);
   }

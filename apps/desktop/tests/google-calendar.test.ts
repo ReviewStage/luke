@@ -232,6 +232,58 @@ test("one bad account never blinds the others, and keeps what it last showed", a
   assert.equal(second?.[1]?.failure, undefined);
 });
 
+test("a calendar unread inside an OK answer is a failure, not a quieter calendar", async () => {
+  // Google reports a calendar it could not read just then as an `errors`
+  // entry inside a 200 answer, not as a failing request. Read as free, the
+  // ongoing meeting would vanish for one pass — ending the quiet mid-meeting
+  // and dumping the held announcements aloud — so the pass fails and the
+  // account stands what it last showed.
+  let broken = false;
+  const { reader } = readerWith(
+    (request) => {
+      if (request.url === FREEBUSY_URL && broken) {
+        return jsonOk({
+          calendars: {
+            "work@example.com": { busy: [] },
+            "team-calendar": { errors: [{ domain: "global", reason: "internalError" }] },
+          },
+        });
+      }
+      return routes(request);
+    },
+    [WORK_ACCOUNT],
+  );
+
+  const first = await reader.observe();
+  assert.equal(first?.[0]?.failure, undefined);
+  broken = true;
+  const second = await reader.observe();
+
+  assert.match(second?.[0]?.failure ?? "", /team-calendar/);
+  assert.deepEqual(second?.[0]?.meetings, first?.[0]?.meetings);
+});
+
+test("an asked-for calendar missing from the answer fails the pass the same way", async () => {
+  const { reader } = readerWith(
+    (request) =>
+      request.url === FREEBUSY_URL
+        ? jsonOk({
+            calendars: {
+              "work@example.com": {
+                busy: [{ start: "2026-08-17T13:00:00Z", end: "2026-08-17T14:00:00Z" }],
+              },
+            },
+          })
+        : routes(request),
+    [WORK_ACCOUNT],
+  );
+
+  const observed = await reader.observe();
+
+  assert.match(observed?.[0]?.failure ?? "", /team-calendar/);
+  assert.deepEqual(observed?.[0]?.meetings, []);
+});
+
 test("forgetting ends an era: a failing pass after it holds nothing up", async () => {
   let broken = false;
   const { reader } = readerWith(
