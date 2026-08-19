@@ -12,7 +12,7 @@ import {
   openReadOnlyDatabase,
   type SqliteModuleLoader,
 } from "./local-sqlite";
-import { boundedTranscript, TRANSCRIPT_BOUNDS } from "./local-transcript";
+import { boundedTranscript, TRANSCRIPT_BOUNDS, transcriptLine } from "./local-transcript";
 
 /**
  * On-demand reading of one Codex session's transcript, for a question the
@@ -127,9 +127,9 @@ function callLine(payload: Record<string, unknown>): string | undefined {
       argumentPhrase(parsedArguments?.[key]),
       TRANSCRIPT_BOUNDS.MAXIMUM_TOOL_LENGTH,
     );
-    if (detail) return `→ ${name}: ${detail}`;
+    if (detail) return transcriptLine.toolCall(name, detail);
   }
-  return `→ ${name}`;
+  return transcriptLine.toolCall(name);
 }
 
 /**
@@ -161,11 +161,11 @@ function linesFromResponseItem(payload: Record<string, unknown>): string[] {
     if (!words) return [];
     if (payload.role === CODEX_MESSAGE_ROLE.USER) {
       const typed = oneLine(developerWords(words), TRANSCRIPT_BOUNDS.MAXIMUM_MESSAGE_LENGTH);
-      return typed ? [`Developer: ${typed}`] : [];
+      return typed ? [transcriptLine.developer(typed)] : [];
     }
     if (payload.role === CODEX_MESSAGE_ROLE.ASSISTANT) {
       const said = oneLine(words, TRANSCRIPT_BOUNDS.MAXIMUM_MESSAGE_LENGTH);
-      return said ? [`${CODEX_SPEAKER_NAME}: ${said}`] : [];
+      return said ? [transcriptLine.agent(CODEX_SPEAKER_NAME, said)] : [];
     }
     return [];
   }
@@ -177,24 +177,24 @@ function linesFromResponseItem(payload: Record<string, unknown>): string[] {
     const name = text(payload.name);
     if (!name) return [];
     const detail = oneLine(text(payload.input), TRANSCRIPT_BOUNDS.MAXIMUM_TOOL_LENGTH);
-    return [detail ? `→ ${name}: ${detail}` : `→ ${name}`];
+    return [transcriptLine.toolCall(name, detail)];
   }
   if (
     payload.type === CODEX_ITEM_TYPE.FUNCTION_CALL_OUTPUT ||
     payload.type === CODEX_ITEM_TYPE.CUSTOM_TOOL_CALL_OUTPUT
   ) {
     const answer = oneLine(callOutputText(payload.output), TRANSCRIPT_BOUNDS.MAXIMUM_TOOL_LENGTH);
-    return answer ? [`← ${answer}`] : [];
+    return answer ? [transcriptLine.toolResult(answer)] : [];
   }
   if (payload.type === CODEX_ITEM_TYPE.LOCAL_SHELL_CALL) {
     const action = isRecord(payload.action) ? payload.action : undefined;
     const command = oneLine(argumentPhrase(action?.command), TRANSCRIPT_BOUNDS.MAXIMUM_TOOL_LENGTH);
-    return command ? [`→ shell: ${command}`] : [`→ shell`];
+    return [transcriptLine.toolCall("shell", command)];
   }
   if (payload.type === CODEX_ITEM_TYPE.WEB_SEARCH_CALL) {
     const action = isRecord(payload.action) ? payload.action : undefined;
     const query = oneLine(text(action?.query), TRANSCRIPT_BOUNDS.MAXIMUM_TOOL_LENGTH);
-    return query ? [`→ web_search: ${query}`] : [`→ web_search`];
+    return [transcriptLine.toolCall("web_search", query)];
   }
   return [];
 }
@@ -208,11 +208,11 @@ function linesFromResponseItem(payload: Record<string, unknown>): string[] {
 function linesFromEvent(payload: Record<string, unknown>): string[] {
   if (payload.type === CODEX_EVENT_TYPE.ERROR) {
     const words = oneLine(text(payload.message), TRANSCRIPT_BOUNDS.MAXIMUM_TOOL_LENGTH);
-    return words ? [`Error: ${words}`] : [];
+    return words ? [transcriptLine.error(words)] : [];
   }
   if (payload.type === CODEX_EVENT_TYPE.TASK_COMPLETE && isRecord(payload.error)) {
     const words = oneLine(text(payload.error.message), TRANSCRIPT_BOUNDS.MAXIMUM_TOOL_LENGTH);
-    return words ? [`Error: ${words}`] : [];
+    return words ? [transcriptLine.error(words)] : [];
   }
   return [];
 }
