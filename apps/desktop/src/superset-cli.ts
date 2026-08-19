@@ -219,12 +219,15 @@ export class SupersetCli {
   async workspaceProjects(defaultAgent?: string): Promise<readonly WorkspaceProject[]> {
     if (!(await this.connected())) return [];
     const remoteHosts = await this.#records(["hosts", "list", "--json"]);
-    const targets = [
-      { id: LOCAL_TARGET_ID, name: "This Mac", arguments_: ["--local"] as const },
+    // Only a remote host names itself on a project: the local target is the
+    // machine the user is sitting at, which the rows already say by wearing
+    // no cloud badge, so annotating it would state the default.
+    const targets: readonly { id: string; name?: string; arguments_: readonly string[] }[] = [
+      { id: LOCAL_TARGET_ID, arguments_: ["--local"] },
       ...remoteHosts.slice(0, SUPERSET_TARGET_LIMIT).flatMap((host) => {
         const id = text(host.machineId) ?? text(host.id);
         const name = text(host.name) ?? text(host.displayName) ?? text(host.hostname) ?? id;
-        return id && name ? [{ id, name, arguments_: ["--host", id] as const }] : [];
+        return id && name ? [{ id, name, arguments_: ["--host", id] }] : [];
       }),
     ];
     const projects = await Promise.all(
@@ -252,9 +255,11 @@ export class SupersetCli {
             repository: name,
             taskSupport: WORKSPACE_TASK_SUPPORT.REQUIRED,
             providerTargetId: target.id,
-            targetName: target.name,
             spawnableAgents: agents,
           };
+          if (target.name) {
+            project.targetName = target.name;
+          }
           if (selectedDefault) {
             project.defaultAgent = selectedDefault;
           }

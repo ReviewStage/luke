@@ -269,7 +269,6 @@ test("discovers host-scoped projects and creates a workspace with a generated br
       repository: "Luke",
       taskSupport: "required",
       providerTargetId: "local",
-      targetName: "This Mac",
       spawnableAgents: ["codex", "claude"],
       defaultAgent: "codex",
     },

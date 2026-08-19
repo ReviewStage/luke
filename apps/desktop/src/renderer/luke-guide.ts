@@ -380,7 +380,8 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "workspace or session the agent should join adds one beside it instead. Only reported " +
         "projects can be named, a project that needs a task cannot be created " +
         "without one, and a provider that reports none takes no ask. Superset asks for more than " +
-        "the others: every Superset project is listed against the host that runs it, and a new " +
+        "the others: every Superset project carries the host that runs it — named for a remote " +
+        "host, unannotated on this Mac — and a new " +
         "Superset workspace needs that host, an agent Superset currently lists for it, and an " +
         "opening task — so a task-less ask for one is refused rather than created idle. An ask that names no " +
         "provider goes to the default workspace provider; until one is chosen Luke asks when " +
