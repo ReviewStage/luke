@@ -6,6 +6,10 @@ export const NOTARY_KEYCHAIN_PROFILE = "luke-notary";
 // The version-free asset name every release carries beside the versioned DMG,
 // so the download link on the website can point at the latest release forever.
 export const RELEASE_LATEST_DMG_FILE_NAME = "Luke.dmg";
+// The version-free manifest name every release carries, so the app's update
+// feed URL — releases/latest/download/latest-mac.yml — never moves either.
+// The name is electron-updater's own convention for a macOS generic feed.
+export const RELEASE_UPDATE_FEED_FILE_NAME = "latest-mac.yml";
 export const NOTARY_CREDENTIAL_SOURCE = {
   KEYCHAIN_PROFILE: "keychain-profile",
   KEY_FILE: "key-file",
@@ -29,11 +33,35 @@ export function releaseDmgFileName(version) {
   return `Luke-${version}-${PACKAGED_ARCHITECTURE}.dmg`;
 }
 
-// The zip is the future auto-update path's food — Squirrel.Mac updates from
-// an archive of the app, never a DMG — so every release carries it beside the
+// The zip is the auto-update path's food — Squirrel.Mac updates from an
+// archive of the app, never a DMG — so every release carries it beside the
 // DMG people actually open.
 export function releaseZipFileName(version) {
   return `Luke-${version}-macos-${PACKAGED_ARCHITECTURE}.zip`;
+}
+
+/**
+ * The update manifest a release publishes beside its archive, in the
+ * `latest-mac.yml` shape electron-builder writes and electron-updater reads.
+ * The archive URL is the bare file name on purpose: the generic provider
+ * resolves it against the feed's own address, `releases/latest/download/`,
+ * so the manifest and the archive can only ever be read from the same
+ * release. The sha512 is what makes a truncated or substituted download a
+ * refusal rather than an install.
+ */
+export function releaseUpdateManifest({ version, sha512, size, releaseDate }) {
+  const zipFileName = releaseZipFileName(version);
+  return [
+    `version: ${version}`,
+    "files:",
+    `  - url: ${zipFileName}`,
+    `    sha512: ${sha512}`,
+    `    size: ${size}`,
+    `path: ${zipFileName}`,
+    `sha512: ${sha512}`,
+    `releaseDate: '${releaseDate}'`,
+    "",
+  ].join("\n");
 }
 
 export function releaseArtifactDirectory(repoRoot) {

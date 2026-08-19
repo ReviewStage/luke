@@ -70,6 +70,7 @@ const bridge: AppBridge = {
   },
   disconnectLinear: invokeMethod<"disconnectLinear">(channels.disconnectLinear),
   checkForUpdates: invokeMethod<"checkForUpdates">(channels.checkForUpdates),
+  installUpdate: () => ipcRenderer.send(channels.installUpdate),
   openLatestRelease: () => ipcRenderer.send(channels.openLatestRelease),
   beginSupersetSignIn: invokeMethod<"beginSupersetSignIn">(channels.beginSupersetSignIn),
   submitSupersetSignInCode: invokeMethod<"submitSupersetSignInCode">(

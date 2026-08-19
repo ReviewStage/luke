@@ -266,17 +266,26 @@ Trust constraints:
   the press opened — opened by the press, closed when the exchange settles —
   and never outlives it; typed asks never open one at all. An unreadable
   route means the browser's default device, never a refusal to listen.
-- The update check is the one request Luke makes with no user-supplied key at
-  all: an unauthenticated read of this repository's latest release name from
-  GitHub's public API, on a timer of its own — always on, like the
-  announcements, answering only to the run mode — and at the press of the
-  Updates row's button; never in a fixture or capture run.
-  It carries nothing about the user, their sessions, or their keys; only the
-  release's version name is read back, and what a check learns changes only
-  what the row says. The way to a newer build is the browser, at the releases
-  page fixed by the build — nothing read from the network chooses that
-  address — and Luke never modifies the running app. Widening what the check
-  sends, reads, or does is a product decision, not an implementation detail.
+- Updating is the one thing Luke does on the network with no user-supplied
+  key at all, and it follows the same shape Superset's production updater
+  keeps: electron-updater reads this repository's release manifest from a
+  feed address fixed by the build — an unauthenticated fetch carrying
+  nothing about the user, their sessions, or their keys — on a timer of its
+  own and at the press of the Updates row's button; never in a fixture or
+  capture run, and never in an unpackaged build. A newer build found by any
+  check downloads at once, so the row can offer a restart instead of a wait,
+  but what is fetched is only ever what this repository's own release
+  pipeline published: the manifest carries the archive's sha512, the archive
+  must sit on the same release as the manifest, and Squirrel.Mac refuses one
+  whose code signature does not match the running app's. The running build
+  is replaced only at a quit — the row's restart press, or whenever the user
+  next quits — and an install is asked for at most once, because repeat asks
+  race the binary swap. A transient network failure is silence for the next
+  timed check; any other failure is an answer on the row whose way forward
+  is the browser, at the releases page fixed by the build — the same page
+  that serves a build which cannot install in place at all. Widening what
+  the updater sends, reads, or does is a product decision, not an
+  implementation detail.
 - Keep unsupported capabilities explicit; do not invent fallback controls.
 - Keep Electron renderers sandboxed with context isolation and narrow IPC.
 - Commit only synthetic fixtures and repository-relative paths. This binds

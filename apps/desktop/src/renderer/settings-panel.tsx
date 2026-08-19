@@ -142,7 +142,7 @@ import {
   type SettingsView,
   settingsNavRowId,
 } from "./settings-views";
-import { UPDATE_ROW_ACTION, updateAvailable, updateRow } from "./update-row";
+import { UPDATE_ROW_ACTION, type UpdateRowAction, updateAvailable, updateRow } from "./update-row";
 
 /** One provider the default-workspace rows can offer, by id and display name. */
 export interface WorkspaceProviderOption {
@@ -174,15 +174,18 @@ export interface MicrophoneControl {
 }
 
 /**
- * Where the app stands against the latest release, and the two things the row
- * can do about that: ask GitHub now, or open the newer release's page in the
- * browser. Fetching an update stays the user's own act there — the row never
- * changes the running build.
+ * Where the app stands against the latest release, and the acts the row can
+ * take about that: ask the release manifest now, restart into a build already
+ * downloaded, or — where installing in place is impossible or has failed —
+ * open the releases page in the browser. A newer build downloads itself when
+ * a check finds one; the running build is replaced only at a quit.
  */
 export interface UpdateControl {
   update: UpdateSnapshot;
-  /** Asks GitHub for the latest release name, right now. */
+  /** Asks the release manifest for the latest build, right now. */
   onCheck: () => Promise<void>;
+  /** Restarts into the downloaded release. */
+  onInstall: () => void;
   /** Opens the latest release's page, fixed by the build, in the browser. */
   onOpenLatest: () => void;
 }
@@ -3185,6 +3188,46 @@ function pageResetControl(
 }
 
 /**
+ * The buttons with somewhere new to go — fetch the release, restart into it,
+ * or reach its page in the browser — wear the same accent the tab's dot
+ * announced the news with; checking stays the quiet button, because checking
+ * is maintenance.
+ */
+function updateButton(action: UpdateRowAction, control: UpdateControl): React.JSX.Element {
+  switch (action) {
+    case UPDATE_ROW_ACTION.DOWNLOADING:
+      return (
+        <button type="button" className="quiet-button" disabled>
+          Downloading…
+        </button>
+      );
+    case UPDATE_ROW_ACTION.RESTART:
+      return (
+        <button type="button" className="action-button" onClick={control.onInstall}>
+          Restart to update
+        </button>
+      );
+    case UPDATE_ROW_ACTION.GET:
+      return (
+        <button type="button" className="action-button" onClick={control.onOpenLatest}>
+          Download
+        </button>
+      );
+    default:
+      return (
+        <button
+          type="button"
+          className="quiet-button"
+          disabled={action === UPDATE_ROW_ACTION.CHECKING}
+          onClick={() => void control.onCheck()}
+        >
+          {action === UPDATE_ROW_ACTION.CHECKING ? "Checking…" : "Check for updates"}
+        </button>
+      );
+  }
+}
+
+/**
  * Where the build stands against the latest release. It sits below the pages
  * until a newer release is positively known, and leads the front page while
  * one is — the place in the stack is itself the answer to "is there news",
@@ -3217,23 +3260,7 @@ function UpdatesSection({
           </span>
           <small>{row.detail}</small>
         </span>
-        {row.action === UPDATE_ROW_ACTION.GET ? (
-          /* The one button on the page with somewhere new to go, in the same
-             accent the tab's dot announced it with; every other state of this
-             row keeps the quiet button, because checking is maintenance. */
-          <button type="button" className="action-button" onClick={control.onOpenLatest}>
-            Download
-          </button>
-        ) : (
-          <button
-            type="button"
-            className="quiet-button"
-            disabled={row.action === UPDATE_ROW_ACTION.CHECKING}
-            onClick={() => void control.onCheck()}
-          >
-            {row.action === UPDATE_ROW_ACTION.CHECKING ? "Checking…" : "Check for updates"}
-          </button>
-        )}
+        {updateButton(row.action, control)}
       </div>
     </section>
   );

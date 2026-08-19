@@ -2872,6 +2872,7 @@ export function App(): React.JSX.Element {
     onCheck: async () => {
       setUpdate(await window.sidecar.checkForUpdates());
     },
+    onInstall: () => window.sidecar.installUpdate(),
     onOpenLatest: () => window.sidecar.openLatestRelease(),
   };
   const preferences: PreferenceWrites = {

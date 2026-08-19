@@ -87,6 +87,7 @@ jobs:
           ASSET_NAME=$(node -e "import('./apps/desktop/scripts/release-config.mjs').then((config) => process.stdout.write(config.releaseZipFileName(process.argv[1])))" "$VERSION")
           DMG_ASSET_NAME=$(node -e "import('./apps/desktop/scripts/release-config.mjs').then((config) => process.stdout.write(config.releaseDmgFileName(process.argv[1])))" "$VERSION")
           LATEST_DMG_ASSET_NAME=$(node -e "import('./apps/desktop/scripts/release-config.mjs').then((config) => process.stdout.write(config.RELEASE_LATEST_DMG_FILE_NAME))")
+          UPDATE_FEED_ASSET_NAME=$(node -e "import('./apps/desktop/scripts/release-config.mjs').then((config) => process.stdout.write(config.RELEASE_UPDATE_FEED_FILE_NAME))")
           {
             echo "VERSION=$VERSION"
             echo "DIST_DIR=$DIST_DIR"
@@ -95,6 +96,7 @@ jobs:
             echo "DMG_ASSET_NAME=$DMG_ASSET_NAME"
             echo "DMG_CHECKSUM_NAME=$DMG_ASSET_NAME.sha256"
             echo "LATEST_DMG_ASSET_NAME=$LATEST_DMG_ASSET_NAME"
+            echo "UPDATE_FEED_ASSET_NAME=$UPDATE_FEED_ASSET_NAME"
             echo "APP_PATH=$GITHUB_WORKSPACE/apps/desktop/out/Luke-darwin-arm64/Luke.app"
             echo "SUBMISSION_ZIP=$RUNNER_TEMP/Luke-$VERSION-notarization.zip"
           } >> "$GITHUB_ENV"
@@ -179,6 +181,7 @@ jobs:
           cp "artifacts/release/$ASSET_NAME" "$DIST_DIR/$ASSET_NAME"
           cp "artifacts/release/$DMG_ASSET_NAME" "$DIST_DIR/$DMG_ASSET_NAME"
           cp "artifacts/release/$DMG_ASSET_NAME" "$DIST_DIR/$LATEST_DMG_ASSET_NAME"
+          node apps/desktop/scripts/write-update-feed.mjs "$DIST_DIR/$UPDATE_FEED_ASSET_NAME"
           (
             cd "$DIST_DIR"
             shasum -a 256 "$ASSET_NAME" > "$CHECKSUM_NAME"
@@ -203,6 +206,7 @@ jobs:
             "$DIST_DIR/$DMG_ASSET_NAME" \
             "$DIST_DIR/$DMG_CHECKSUM_NAME" \
             "$DIST_DIR/$LATEST_DMG_ASSET_NAME" \
+            "$DIST_DIR/$UPDATE_FEED_ASSET_NAME" \
             --clobber
 
       - name: Preserve rehearsal artifacts
@@ -216,6 +220,7 @@ jobs:
             ${{ env.DIST_DIR }}/${{ env.DMG_ASSET_NAME }}
             ${{ env.DIST_DIR }}/${{ env.DMG_CHECKSUM_NAME }}
             ${{ env.DIST_DIR }}/${{ env.LATEST_DMG_ASSET_NAME }}
+            ${{ env.DIST_DIR }}/${{ env.UPDATE_FEED_ASSET_NAME }}
           if-no-files-found: error
           retention-days: 14
 

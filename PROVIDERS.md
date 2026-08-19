@@ -311,10 +311,13 @@ review. They are credential-only — nothing of theirs is ever observed as a
 session — and the hosted account's daily allowance runs both until a
 user-supplied OpenAI key takes over.
 
-**The update check** is the one request made with no user key: an
-unauthenticated read of this repository's latest release name from GitHub's
-public API. Only the version name is read back, and it changes only what the
-Updates row says.
+**The updater** is the one thing on the network with no user key:
+electron-updater reads this repository's release manifest from a feed address
+fixed by the build, unauthenticated and carrying nothing about the user. A
+newer build found by any check downloads at once from the same release,
+checksum-verified against the manifest and signature-verified against the
+running app, and installs only at a quit — the Updates row's restart press,
+or the next quit. A failure falls back to the releases page in the browser.
 
 ## Keeping this document current
 

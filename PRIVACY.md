@@ -158,20 +158,28 @@ condition of it. A deployment holding no analytics configuration has no such
 request to make. Turning the switch off stops further collection but erases
 nothing already collected; ask us and we will run the erasure again.
 
-## Update check
+## Updates
 
-Luke asks GitHub's public API for the name of this repository's latest
-published release, so the Settings tab's Updates row can say whether a newer
-build exists. The request is unauthenticated and carries no account, session,
-transcript, or key material — GitHub sees what any HTTPS request shows it,
-such as the network address it came from, under GitHub's own policies. Only
-the release's version name is read from the answer.
+Luke keeps itself current with electron-updater, the same updater most
+Electron apps ship. It reads this repository's release manifest from GitHub
+(`releases/latest/download/latest-mac.yml`, an address fixed by the build) so
+the Settings tab's Updates row can say where the build stands. The requests
+are unauthenticated and carry no account, session, transcript, or key
+material — GitHub sees what any HTTPS request shows it, such as the network
+address it came from, under GitHub's own policies.
 
-Luke asks at launch and a few times a day while running, and at the press of
-the Updates row's Check for Updates button. Fixture and evidence runs never
-check. What a check learns changes only what the row says: fetching an update
-is your own download in the browser, from the repository's releases page, and
-Luke never modifies the running app.
+Luke checks at launch and a few times a day while running, and at the press
+of the Updates row's Check for updates button. Fixture and evidence runs
+never check, and an unpackaged build never checks. When a check finds a newer
+build, Luke downloads it right away from the same release the manifest came
+from — the manifest carries the archive's checksum, and macOS's own update
+machinery (Squirrel.Mac) refuses an archive whose code signature does not
+match the running app's. The downloaded build replaces the running one only
+when the app quits: at your press on Restart to update, or whenever you next
+quit. If a download or install fails, the row says so and offers the
+repository's releases page in the browser instead — the same fallback an
+unpackaged build offers, since only a signed, packaged build can install in
+place.
 
 ## Sending feedback
 
