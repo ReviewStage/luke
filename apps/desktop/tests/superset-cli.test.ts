@@ -293,6 +293,29 @@ test("reuses recently discovered workspace projects", async (t) => {
   assert.equal(adapter.workspaceProjects()[0]?.defaultAgent, "codex");
 });
 
+test("retries workspace discovery after an empty result", async (t) => {
+  const home = await connectedHome(t);
+  let projectQueries = 0;
+  const cli = new SupersetCli({
+    ...testCliOptions(home),
+    query: async (_executable, arguments_) => {
+      if (arguments_[0] === "projects") {
+        projectQueries += 1;
+        return projectQueries === 1 ? "[]" : JSON.stringify([{ id: "project-1", name: "Luke" }]);
+      }
+      if (arguments_[0] === "agents") return JSON.stringify([{ presetId: "codex" }]);
+      return "[]";
+    },
+  });
+  const adapter = new SupersetWorkspaceAdapter(cli);
+
+  await adapter.refresh("codex", true);
+  await adapter.refresh("codex", true);
+
+  assert.equal(projectQueries, 2);
+  assert.equal(adapter.workspaceProjects()[0]?.providerProjectId, "project-1");
+});
+
 test("creates on an observed remote host and preserves success when opening fails", async (t) => {
   const home = await connectedHome(t);
   const cli = new SupersetCli({

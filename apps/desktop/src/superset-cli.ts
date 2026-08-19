@@ -476,7 +476,7 @@ export class SupersetWorkspaceAdapter extends SessionProviderAdapterBase {
     }
     this.#projects = await this.#cli.workspaceProjects(defaultAgent);
     this.#defaultAgent = defaultAgent;
-    this.#projectsRefreshedAt = now;
+    this.#projectsRefreshedAt = this.#projects.length > 0 ? now : undefined;
   }
 
   override workspaceProjects(): readonly WorkspaceProject[] {
