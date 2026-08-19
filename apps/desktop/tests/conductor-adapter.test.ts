@@ -3,6 +3,7 @@ import test from "node:test";
 import { SESSION_STATUS } from "@sidecar/core";
 import type { CloudFetch } from "../src/cloud-session-adapter";
 import { CONDUCTOR_PROVIDER, ConductorSessionAdapter } from "../src/conductor-adapter";
+import { describeCloudAdapterContract } from "./support/cloud-adapter-contract";
 import { HTTP_STATUS, jsonResponse, recordingFetch } from "./support/http-fake";
 
 const TEST_TIME = Date.parse("2026-08-12T02:45:00.000Z");
@@ -268,6 +269,35 @@ function ownedWorkspace(id: string, lastActivityAt: number): TestWorkspace {
     lastActivityAt,
   };
 }
+
+describeCloudAdapterContract("Conductor", (options) => {
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [ownedWorkspace("contract-workspace", TEST_TIME - 1_000)],
+    sessions: [
+      {
+        id: "contract-session",
+        workspaceId: "contract-workspace",
+        name: TEST_SESSION_NAME,
+        status: TEST_CONDUCTOR_STATUS.WORKING,
+        statusUpdatedAt: TEST_TIME - 1_000,
+      },
+    ],
+  });
+  const fetch: CloudFetch = async (url, init) => {
+    if (options.failRequests()) throw new Error("network unreachable");
+    return api.fetch(url, init);
+  };
+  return {
+    adapter: adapterFor(fetch, options),
+    requestCount: () => api.requests.length,
+    credentials: () =>
+      api.requests
+        .map((request) => request.authorization?.replace("Bearer ", ""))
+        .filter((credential): credential is string => credential !== undefined),
+  };
+});
 
 test("observes cloud sessions the signed-in user created, under their own names", async () => {
   const api = fakeConductorApi({
@@ -1156,112 +1186,6 @@ test("keeps only the open chats of a workspace that also holds filed-away ones",
   assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
 });
 
-test("reports nothing and issues no request without an API key", async () => {
-  const api = fakeConductorApi({
-    userId: TEST_USER_ID,
-    projects: [LUKE_PROJECT],
-    workspaces: [ownedWorkspace("workspace-active", TEST_TIME - 1_000)],
-    sessions: [{ id: "session-active", workspaceId: "workspace-active", name: TEST_SESSION_NAME }],
-  });
-
-  const observations = await adapterFor(api.fetch, { apiKey: undefined }).observe();
-
-  assert.deepEqual(observations, []);
-  assert.deepEqual(api.requests, []);
-});
-
-test("reports nothing when the credential cannot be read", async () => {
-  const api = fakeConductorApi({
-    userId: TEST_USER_ID,
-    projects: [LUKE_PROJECT],
-    workspaces: [ownedWorkspace("workspace-active", TEST_TIME - 1_000)],
-    sessions: [{ id: "session-active", workspaceId: "workspace-active", name: TEST_SESSION_NAME }],
-  });
-  const adapter = adapterFor(api.fetch, {
-    readApiKey: async () => {
-      throw new Error("settings are unreadable");
-    },
-  });
-
-  assert.deepEqual(await adapter.observe(), []);
-  assert.deepEqual(api.requests, []);
-});
-
-test("reuses the previous snapshot inside the minimum refresh interval", async () => {
-  const api = fakeConductorApi({
-    userId: TEST_USER_ID,
-    projects: [LUKE_PROJECT],
-    workspaces: [ownedWorkspace("workspace-active", TEST_TIME - 1_000)],
-    sessions: [
-      {
-        id: "session-active",
-        workspaceId: "workspace-active",
-        name: TEST_SESSION_NAME,
-        status: TEST_CONDUCTOR_STATUS.WORKING,
-        statusUpdatedAt: TEST_TIME - 1_000,
-      },
-    ],
-  });
-  let now = TEST_TIME;
-  const adapter = adapterFor(api.fetch, {
-    now: () => now,
-    minimumRefreshIntervalMs: 15_000,
-  });
-
-  const first = await adapter.observe();
-  const requestsAfterFirstPass = api.requests.length;
-  now = TEST_TIME + 5_000;
-  const throttled = await adapter.observe();
-  const requestsAfterThrottledPass = api.requests.length;
-  now = TEST_TIME + 20_000;
-  const refreshed = await adapter.observe();
-
-  assert.equal(first.length, 1);
-  assert.deepEqual(throttled, first);
-  assert.equal(
-    requestsAfterThrottledPass,
-    requestsAfterFirstPass,
-    "throttled pass issued requests",
-  );
-  assert.ok(api.requests.length > requestsAfterThrottledPass, "refreshed pass issued no request");
-  assert.equal(refreshed.length, 1);
-});
-
-test("observes again immediately after the API key changes", async () => {
-  const api = fakeConductorApi({
-    userId: TEST_USER_ID,
-    projects: [LUKE_PROJECT],
-    workspaces: [ownedWorkspace("workspace-active", TEST_TIME - 1_000)],
-    sessions: [
-      {
-        id: "session-active",
-        workspaceId: "workspace-active",
-        name: TEST_SESSION_NAME,
-        status: TEST_CONDUCTOR_STATUS.WORKING,
-        statusUpdatedAt: TEST_TIME - 1_000,
-      },
-    ],
-  });
-  let apiKey = TEST_API_KEY;
-  const adapter = adapterFor(api.fetch, {
-    readApiKey: async () => apiKey,
-    minimumRefreshIntervalMs: 60_000,
-  });
-
-  await adapter.observe();
-  const requestsAfterFirstPass = api.requests.length;
-  apiKey = "conductor-replacement-key";
-  const observations = await adapter.observe();
-
-  assert.ok(api.requests.length > requestsAfterFirstPass);
-  assert.equal(observations.length, 1);
-  assert.equal(
-    api.requests.at(-1)?.authorization,
-    "Bearer conductor-replacement-key",
-    "the replacement key was not used",
-  );
-});
-
 test("clears observations when Conductor rejects the API key", async () => {
   const api = fakeConductorApi({
     userId: TEST_USER_ID,
@@ -1288,36 +1212,6 @@ test("clears observations when Conductor rejects the API key", async () => {
 
   assert.equal(authorized.length, 1);
   assert.deepEqual(rejected, []);
-});
-
-test("keeps the previous snapshot when a request fails transiently", async () => {
-  const api = fakeConductorApi({
-    userId: TEST_USER_ID,
-    projects: [LUKE_PROJECT],
-    workspaces: [ownedWorkspace("workspace-active", TEST_TIME - 1_000)],
-    sessions: [
-      {
-        id: "session-active",
-        workspaceId: "workspace-active",
-        name: TEST_SESSION_NAME,
-        status: TEST_CONDUCTOR_STATUS.WORKING,
-        statusUpdatedAt: TEST_TIME - 1_000,
-      },
-    ],
-  });
-  let failRequests = false;
-  const gatedFetch: CloudFetch = async (url, init) => {
-    if (failRequests) throw new Error("network unreachable");
-    return api.fetch(url, init);
-  };
-  const adapter = adapterFor(gatedFetch);
-
-  const observed = await adapter.observe();
-  failRequests = true;
-  const duringOutage = await adapter.observe();
-
-  assert.equal(observed.length, 1);
-  assert.deepEqual(duringOutage, observed);
 });
 
 test("keeps observing when one session's status cannot be read", async () => {
