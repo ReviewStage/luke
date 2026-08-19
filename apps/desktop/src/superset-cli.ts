@@ -25,6 +25,10 @@ export const SUPERSET_CONTROL_ID = {
   CLOSE_TERMINAL: "superset-close-terminal",
 } as const;
 
+export function isSupersetControlId(controlId: string): boolean {
+  return Object.values(SUPERSET_CONTROL_ID).some((candidate) => candidate === controlId);
+}
+
 const execFileAsync = promisify(execFile);
 const SUPERSET_QUERY_OUTPUT_LIMIT = 64 * 1024;
 const SUPERSET_ORGANIZATION_LIMIT = 20;
@@ -117,19 +121,12 @@ export class SupersetCli {
   async connected(): Promise<boolean> {
     if (!(await this.installed())) return false;
     try {
-      const { stdout } = await execFileAsync(
-        "/usr/bin/plutil",
-        [
-          "-extract",
-          "organizationId",
-          "raw",
-          "-o",
-          "-",
-          path.join(this.#homeDirectory, "config.json"),
-        ],
-        { timeout: 2_000, windowsHide: true },
+      const parsed: unknown = JSON.parse(
+        await fs.readFile(path.join(this.#homeDirectory, "config.json"), "utf8"),
       );
-      return stdout.trim().length > 0;
+      return isRecord(parsed) && typeof parsed.organizationId === "string"
+        ? parsed.organizationId.trim().length > 0
+        : false;
     } catch {
       return false;
     }

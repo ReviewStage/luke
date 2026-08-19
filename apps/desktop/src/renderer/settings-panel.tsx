@@ -2164,7 +2164,7 @@ function WorkspacesSection({
         onChange={(next) => {
           if (next === ASK_EACH_TIME)
             return preferences.onDefaultWorkspaceProviderChange(undefined);
-          if (isProviderId(next)) return preferences.onDefaultWorkspaceProviderChange(next);
+          return preferences.onDefaultWorkspaceProviderChange(next);
         }}
       />
       {workspaceProviders.map((provider) => (

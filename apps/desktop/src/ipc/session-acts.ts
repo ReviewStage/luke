@@ -38,7 +38,7 @@ import {
 } from "../shared/contracts";
 import { APP_SETTING_SCHEMA } from "../shared/settings-schema";
 import { isWorkspaceAgentSelection } from "../shared/workspace-agents";
-import type { SupersetCli } from "../superset-cli";
+import { isSupersetControlId, type SupersetCli } from "../superset-cli";
 import type { SupersetSessionContext } from "../superset-workspaces";
 
 export interface SessionActsIpcDependencies {
@@ -272,7 +272,9 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       const control = session?.controls.find((candidate) => candidate.id === controlId);
       if (!control) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
       const managed = supersetContext(identity);
-      if (managed) return supersetCli.executeControl(managed, control.id);
+      if (managed && isSupersetControlId(control.id)) {
+        return supersetCli.executeControl(managed, control.id);
+      }
       return performSessionAct(identity, (adapter) => {
         return adapter.executeControl({
           providerSessionId: identity.providerSessionId,

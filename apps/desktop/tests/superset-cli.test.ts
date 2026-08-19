@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
 import { PROVIDER_ACT_RESULT_STATUS, PROVIDER_ID } from "@sidecar/core";
-import { SUPERSET_CONTROL_ID, SupersetCli } from "../src/superset-cli";
+import { isSupersetControlId, SUPERSET_CONTROL_ID, SupersetCli } from "../src/superset-cli";
 import type { SupersetSessionContext } from "../src/superset-workspaces";
 
 async function connectedHome(t: TestContext): Promise<string> {
@@ -30,6 +30,22 @@ const CONTEXT: SupersetSessionContext = {
   updatedAt: 100,
   spawnableAgents: [],
 };
+
+test("recognizes only controls owned by Superset", () => {
+  assert.equal(isSupersetControlId(SUPERSET_CONTROL_ID.OPEN_WORKSPACE), true);
+  assert.equal(isSupersetControlId(SUPERSET_CONTROL_ID.CLOSE_TERMINAL), true);
+  assert.equal(isSupersetControlId("provider-native-control"), false);
+});
+
+test("login state is read portably from Superset's JSON config", async (t) => {
+  const home = await connectedHome(t);
+  const cli = new SupersetCli({ homeDirectory: home });
+  assert.equal(await cli.connected(), true);
+  await fs.writeFile(path.join(home, "config.json"), '{"organizationId":""}');
+  assert.equal(await cli.connected(), false);
+  await fs.writeFile(path.join(home, "config.json"), "not json");
+  assert.equal(await cli.connected(), false);
+});
 
 test("a missing CLI login exposes no Superset actions", async (t) => {
   const home = await fs.mkdtemp(path.join(os.tmpdir(), "luke-superset-cli-"));
