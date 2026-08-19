@@ -238,9 +238,8 @@ function voiceKeyFact(settings: AppSettings, voiceAvailable: boolean): AppGuideF
     detail:
       `${openai.displayName} (${connectionWord(source)}). ` +
       (hosted
-        ? `Voice and session review run on the signed-in Luke account's daily allowance, free; ` +
-          `connecting your own key removes the daily limit and runs them on it instead, billed ` +
-          `by OpenAI. `
+        ? `Voice and session review run on the signed-in Luke account's daily allowance. A ` +
+          `key of the developer's own runs them unmetered instead, billed by OpenAI. `
         : source === CREDENTIAL_SOURCE.NONE
           ? `Signing in — or connecting a key — is what lets Luke speak and review sessions. `
           : `Voice and session review run on this key: no daily limit, nothing through Luke's ` +
@@ -263,77 +262,72 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
       label: "What Luke is",
       detail:
         "A macOS sidecar living beside the notch. The number beside the housing is the most " +
-        "pressing count among the sessions the panel lists — the ones still live or recently " +
-        "settled, not every conversation on disk: how many need the developer, else how many " +
-        "are working, else how many settled — wearing that state's colour, and the peek's " +
-        "caption names the state in words; hovering it peeks, " +
-        "pressing it opens the panel, and Escape closes what is open. " +
-        "Resting the pointer on the face itself earns one trick — most often flying off the strip " +
-        "and swooping back — and another only after the pointer leaves and returns; asking the " +
-        "system for reduced motion stills the tricks.",
+        "pressing count among the sessions the panel lists: how many need the developer, else " +
+        "how many are working, else how many settled. It wears that state's colour, and the " +
+        "peek's caption names the state in words. Hovering peeks, pressing opens the panel, " +
+        "and Escape closes what is open.",
     },
     {
       label: "The panel",
       detail:
-        "Two tabs, switched by pressing one or by asking Luke — out loud or typed — to show it; " +
-        "asked while the panel is closed, the panel opens on that tab. " +
-        "Sessions lists every session that still matters — one that is working or waiting stays " +
-        "at any age, a failure stays for three days, and a finished or quiet one for two — " +
-        "with its state, narrowable to all, local, " +
-        "cloud, or one provider, and orderable by urgency (what needs the developer first) or " +
-        "recency (what moved last first) — by its options button, or by the same ask that shows " +
-        "the tab. The list is searchable by hand alone: the magnifier beside the options " +
-        "button, or Command-F while the panel has the keyboard, opens a field that keeps only " +
-        "rows saying every typed word in their title, status line, branch, repository, " +
-        "workspace, agent, or model, marks where the words landed, and counts what it left; a " +
-        "search that matches nothing says so — offering the matches a filter is hiding rather " +
-        "than pretending there are none — Escape clears the query and then closes the field, " +
-        "no spoken ask can search, and no search survives the panel closing. " +
-        "A row can be opened, messaged, or controlled where its " +
-        "provider allows; a session whose provider reported a pull request grows a chip that " +
-        "opens it in the browser, titled by the request's own number — #245 — or reading " +
-        "Pull request when its address names none; and a row the developer asked Luke to listen for — " +
-        "“tell me when this finishes” — wears a small listening mark beside its age, whose hover " +
-        "says the ask in the developer's own words. Luke's own composer at the foot of the list " +
-        "takes a typed ask — Enter sends it, Shift-Enter breaks the line, and the field grows " +
-        "with what it holds. " +
-        "Where a provider nests chats in a workspace — Conductor today — each " +
-        "chat is its own row: a workspace holding several draws them inside one tray named by " +
-        "the workspace at its top, one holding a single chat stays one row titled by the " +
-        "workspace, and every chat can be seen, opened, and messaged individually. Settings " +
-        "holds a front page led by the What Luke runs on section — a two-way toggle naming the " +
+        "Two tabs, Sessions and Settings, switched by pressing one or by asking Luke to show " +
+        "it. Asked while the panel is closed, the panel opens on that tab. Command-comma " +
+        "switches to Settings while the panel has the keyboard.",
+    },
+    {
+      label: "The sessions list",
+      detail:
+        "Lists every session that still matters: one working or waiting stays at any age, a " +
+        "failure for three days, a finished or quiet one for two. Narrowable to all, local, " +
+        "cloud, or one provider, and orderable by urgency or recency — by its options button, " +
+        "or by the same ask that shows the tab. A row can be opened, messaged, or controlled " +
+        "where its provider allows. A session whose provider reported a pull request grows a " +
+        "chip that opens it in the browser. A row the developer asked Luke to listen for wears " +
+        "a listening mark beside its age. Luke's own composer at the foot takes a typed ask.",
+    },
+    {
+      label: "Searching sessions",
+      detail:
+        "The list is searchable by hand alone: the magnifier beside the options button, or " +
+        "Command-F while the panel has the keyboard. It keeps rows saying every typed word in " +
+        "their title, status line, branch, repository, workspace, agent, or model, and counts " +
+        "what it left. A search matching nothing offers the matches a filter is hiding rather " +
+        "than pretending there are none. Escape clears the query and then closes the field; " +
+        "no spoken ask can search, and no search survives the panel closing.",
+    },
+    {
+      label: "Workspaces in the list",
+      detail:
+        "Where a provider nests chats in a workspace — Conductor today — each chat is its own " +
+        "row. A workspace holding several draws them inside one tray named by the workspace; " +
+        "one holding a single chat stays one row titled by the workspace. Every chat can be " +
+        "seen, opened, and messaged individually.",
+    },
+    {
+      label: "The Settings tab",
+      detail:
+        "A front page led by the What Luke runs on section: a two-way toggle naming the " +
         "signed-in Luke account (free, a daily amount) against the developer's own OpenAI key " +
         "(unmetered, billed by OpenAI), with the live one marked and the other pressable to " +
-        "switch: choosing the key with none stored asks for one, and choosing the account " +
-        "parks a stored key without deleting it. Under the toggle stands whichever half is " +
-        "live, and only that one: on the account, small meters filling with the day's talking " +
-        "and announcements and checks on your sessions — blue until the last fifth of either " +
-        "is left and amber from there on — when they reset, and a folded How this works " +
-        "saying what spends each; on the key, the OpenAI row itself, typed by hand and never " +
-        "read from the environment, and a folded How your key is used saying it pays for " +
-        "those same two things, straight from the Mac to OpenAI with no daily limit " +
-        "— then rows that open its Voice, Appearance, Keyboard " +
-        "shortcuts, and Connections pages — each led back out by its back button or Escape — " +
-        "and keeps the Feedback section, the Account section, and Quit on the front page " +
-        "itself, the account last because signing out and deleting are done once or never; the Voice page " +
-        "holds the microphone permission and then the voice settings once voice is available, " +
-        "and only a pointer back to What Luke runs on while it is not — and a small " +
+        "switch. Choosing the key with none stored asks for one; choosing the account parks a " +
+        "stored key without deleting it. Under the toggle stands whichever half is live: on " +
+        "the account, meters for the day's talking and announcements and checks on your " +
+        "sessions, and when they reset; on the key, the OpenAI row itself. Below are rows " +
+        "opening the Voice, Appearance, Keyboard shortcuts, and Connections pages, each led " +
+        "back out by its back button or Escape. The Feedback section, the Account section, and " +
+        "Quit stay on the front page itself.",
+    },
+    {
+      label: "What a settings page marks",
+      detail:
+        "A dot beside a row marks a value changed from its default, and a page holding one " +
+        "ends its head with a reset, pressed by hand and never spoken, returning that page's " +
+        "settings to their defaults. The Workspaces group on the Connections page carries its " +
+        "own reset. No reset touches a key, an account, or the Conductor agent choice. An " +
         "exclamation mark sits on whatever still needs a hand: the What Luke runs on heading " +
-        "while voice has nothing to run on, the front page's Voice row and the microphone row " +
-        "while the permission is ungranted, and the Keyboard shortcuts rows while voice is off, " +
-        "where each key's chord stays shown and changeable but answers nothing until voice is " +
-        "available; the " +
-        "Command-comma switches to it while " +
-        "the panel has the keyboard. A dot beside a settings row marks a value changed from " +
-        "its default, and a page holding one ends its head with a reset, pressed by hand and " +
-        "never spoken, that returns that page's settings to their defaults in one act — the " +
-        "Workspaces group on the Connections page carries its own reset on its heading, and " +
-        "no reset touches a key, an account, or the Conductor agent choice, whose own menu " +
-        "already offers Conductor's default. A " +
-        // SAFETY: The preceding check establishes the asserted contract.
-        "change Luke makes himself is shown as it is made: the panel comes forward on the tab, " +
-        "and the page, the change belongs to, and his face leaves the strip beside the housing, " +
-        "dives to the control that moved, and floats back.",
+        "while voice has nothing to run on, the Voice and microphone rows while the permission " +
+        "is ungranted, and the Keyboard shortcuts rows while voice is off, where each chord " +
+        "stays shown and changeable but answers nothing until voice is available.",
     },
     {
       label: "Account",
@@ -346,17 +340,14 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
     {
       label: "Feedback and prompts",
       detail:
-        "The Feedback section near the foot of the Settings tab, just above Quit, opens a composer under the notch. " +
-        "Send feedback is for bugs and ideas; Submit a prompt sends a prompt to a coding agent, and one the founders " +
-        "like ships in the next release. Either goes by email to the founders with an optional " +
-        "name and email for credit — a fresh note starts them from the signed-in account, and " +
-        "both stay free to edit or clear before sending — and up to three screenshots. A spoken ask can open the " +
-        "composer and start it with the developer's own words — Luke offers exactly that, once, " +
-        "after refusing something he cannot do — but a note already being written is never " +
-        "overwritten, and sending is always the Send button's own press, by hand: no spoken ask " +
-        "can send one. A landed send is answered in the composer's own shape before the panel " +
-        "returns: Luke swoops down beside “Sent — thank you!” and plays a little flourish, a " +
-        "different one each send.",
+        "The Feedback section near the foot of the Settings tab, just above Quit, opens a " +
+        "composer under the notch. Send feedback is for bugs and ideas; Submit a prompt sends a " +
+        "prompt to a coding agent. Either goes by email to the founders with an optional name " +
+        "and email for credit, and up to three screenshots. A spoken ask can open the composer " +
+        "and start it with the developer's own words — Luke offers exactly that, once, after " +
+        "refusing something he cannot do — but a note already being written is never " +
+        "overwritten, and sending is always the Send button's own press: no spoken ask can " +
+        "send one.",
     },
     {
       label: "Reading a session's transcript",

@@ -352,7 +352,7 @@ export const APP_SETTING_SCHEMA = {
       id: APP_SETTING_ID.VOICE_SPEED,
       label: "Speed",
       description:
-        "How fast Luke talks — slow is 0.75×, normal 1×, quick 1.25×, fast 1.5× the voice's natural rate, and an ask may use the word or the multiple; a change is heard from the next reply on.",
+        "How fast Luke talks: slow 0.75×, normal 1×, quick 1.25×, fast 1.5× the voice's natural rate. An ask may use the word or the multiple. A change is heard from the next reply on.",
       kind: APP_SETTING_KIND.CHOICE,
       value: voiceSpeedWord(settings.voiceSpeed),
       // SAFETY: The preceding check establishes the asserted contract.
@@ -452,10 +452,9 @@ export const APP_SETTING_SCHEMA = {
       id: APP_SETTING_ID.VOICE_SOURCE,
       label: "What Luke runs on",
       description:
-        "Which credential Luke speaks and reviews sessions on: the signed-in Luke account, free " +
-        "and metered daily, or the developer's own OpenAI key, unmetered and billed to them by " +
-        "OpenAI. A key stays stored either way, so the free allowance can be used without " +
-        "deleting it.",
+        "Which credential Luke speaks and reviews sessions on: the signed-in Luke account, " +
+        "metered daily, or the developer's own OpenAI key, unmetered and billed by OpenAI. A " +
+        "key stays stored either way.",
       kind: APP_SETTING_KIND.CHOICE,
       value: VOICE_SOURCE_CHOICE[settings.voiceSource],
       defaultValue: VOICE_SOURCE_CHOICE[VOICE_SOURCE.ACCOUNT],
@@ -502,7 +501,7 @@ export const APP_SETTING_SCHEMA = {
         id: APP_SETTING_ID.QUIET_DURING_MEETINGS,
         label: "Quiet during meetings",
         description:
-          "Whether spoken announcements wait while a connected calendar shows a meeting on, and are read out together once it ends. Switched on during a meeting it takes hold at once, cutting off an announcement mid-sentence. It changes nothing until a Google Calendar account is connected.",
+          "Whether spoken announcements wait while a connected calendar shows a meeting on, then read out together once it ends. Switched on mid-meeting it takes hold at once. It changes nothing until a Google Calendar account is connected.",
         kind: APP_SETTING_KIND.TOGGLE,
         value: appToggleText(settings.quietDuringMeetings),
         // SAFETY: The preceding check establishes the asserted contract.
