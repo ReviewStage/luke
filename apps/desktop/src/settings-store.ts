@@ -572,6 +572,7 @@ export class SettingsStore {
       preferBuiltInMicrophone: persisted.preferBuiltInMicrophone,
       quietDuringMeetings: persisted.quietDuringMeetings,
       showOnAllDisplays: persisted.showOnAllDisplays,
+      shareUsageData: persisted.shareUsageData,
       formFactor: persisted.formFactor ?? DEFAULT_PANEL_FORM_FACTOR,
       ...(persisted.defaultWorkspaceProvider
         ? { defaultWorkspaceProvider: persisted.defaultWorkspaceProvider }

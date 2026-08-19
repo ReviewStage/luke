@@ -6,16 +6,22 @@ import {
   type InMemorySessionRegistry,
   ISSUE_ACTION_KIND,
   type IssueIdentity,
+  isIssueTrackerId,
   isProviderId,
   isRecord,
   issueCommentText,
   isWireString,
   type NormalizedSession,
+  PRODUCT_EVENT,
+  PRODUCT_ISSUE_ACT,
+  PRODUCT_SESSION_ACT,
   PROVIDER_ACT_RESULT_STATUS,
+  type ProductSessionAct,
   type ProviderActResult,
   type ProviderControlResult,
   type ProviderMessageResult,
   type ProviderWorkspaceResult,
+  type RecordProductEvent,
   SESSION_LOCATION,
   type SessionAttentionReviewer,
   type SessionIdentity,
@@ -73,6 +79,7 @@ export interface SessionActsIpcDependencies {
   refreshIssues: () => void;
   supersetContext: (identity: SessionIdentity) => SupersetSessionContext | undefined;
   supersetCli: SupersetCli;
+  recordProductEvent: RecordProductEvent;
 }
 
 export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies): void {
@@ -95,14 +102,38 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
     refreshIssues,
     supersetContext,
     supersetCli,
+    recordProductEvent,
   } = dependencies;
   const registerAction = createActionHandler({
     trustedSender,
     handle: (channel, handler) => ipcMain.handle(channel, handler),
   });
+  /**
+   * Counts an act that actually landed. It takes the result rather than
+   * sitting inside `performSessionAct`, because a Superset-managed session
+   * takes the same acts through the CLI without passing through there — an act
+   * counted in only one of the two paths would read as a provider nobody sends
+   * messages to.
+   */
+  function countSessionAct<Result extends ProviderActResult>(
+    providerId: string,
+    counted: ProductSessionAct,
+    result: Result,
+  ): Result {
+    // An adapter reports its provider id as a string; only one this build's
+    // own vocabulary names has anything to be counted under.
+    if (result.status === PROVIDER_ACT_RESULT_STATUS.ACCEPTED && isProviderId(providerId)) {
+      recordProductEvent(PRODUCT_EVENT.SESSION_ACT_SEND, {
+        provider_id: providerId,
+        session_act: counted,
+      });
+    }
+    return result;
+  }
   // Capability checks stay in their handlers so no act can inherit another act's authority.
   async function performSessionAct<Result extends ProviderActResult>(
     identity: SessionIdentity,
+    counted: ProductSessionAct,
     act: (adapter: SessionProviderAdapter, session: NormalizedSession) => Promise<Result>,
   ): Promise<Result | { status: typeof PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED }> {
     const session = sessionRegistry.get(identity);
@@ -113,7 +144,7 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
     if (result.status === PROVIDER_ACT_RESULT_STATUS.ACCEPTED) {
       void sessionRegistry.refresh(adapter);
     }
-    return result;
+    return countSessionAct(adapter.provider.id, counted, result);
   }
   const registerOpenAction = (
     channel: string,
@@ -134,6 +165,12 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
         const url = address(identity);
         if (!url) return { status: SESSION_OPEN_RESULT_STATUS.UNSUPPORTED };
         await openExternal(url);
+        if (isProviderId(identity.providerId)) {
+          recordProductEvent(PRODUCT_EVENT.SESSION_ACT_SEND, {
+            provider_id: identity.providerId,
+            session_act: PRODUCT_SESSION_ACT.SESSION_OPEN,
+          });
+        }
         return { status: SESSION_OPEN_RESULT_STATUS.OPENED };
       },
       failure: () => ({ status: SESSION_OPEN_RESULT_STATUS.REJECTED, reason: failureReason }),
@@ -230,6 +267,12 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
             reason: "That session's transcript could not be found.",
           };
         }
+        if (isProviderId(identity.providerId)) {
+          recordProductEvent(PRODUCT_EVENT.SESSION_ACT_SEND, {
+            provider_id: identity.providerId,
+            session_act: PRODUCT_SESSION_ACT.TRANSCRIPT_READ,
+          });
+        }
         return { status: SESSION_TRANSCRIPT_RESULT_STATUS.READ, transcript };
       } catch {
         return {
@@ -269,8 +312,14 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
         return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
       }
       const managed = supersetContext(identity);
-      if (managed) return supersetCli.sendMessage(managed, messageText);
-      return performSessionAct(identity, (adapter) => {
+      if (managed) {
+        return countSessionAct(
+          identity.providerId,
+          PRODUCT_SESSION_ACT.MESSAGE_SEND,
+          await supersetCli.sendMessage(managed, messageText),
+        );
+      }
+      return performSessionAct(identity, PRODUCT_SESSION_ACT.MESSAGE_SEND, (adapter) => {
         return adapter.sendMessage({
           providerSessionId: identity.providerSessionId,
           text: messageText,
@@ -300,9 +349,13 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       if (!control) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
       const managed = supersetContext(identity);
       if (managed && isSupersetControlId(control.id)) {
-        return supersetCli.executeControl(managed, control.id);
+        return countSessionAct(
+          identity.providerId,
+          PRODUCT_SESSION_ACT.CONTROL_RUN,
+          await supersetCli.executeControl(managed, control.id),
+        );
       }
-      return performSessionAct(identity, (adapter) => {
+      return performSessionAct(identity, PRODUCT_SESSION_ACT.CONTROL_RUN, (adapter) => {
         return adapter.executeControl({
           providerSessionId: identity.providerSessionId,
           control,
@@ -506,6 +559,7 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
           parsedSelection,
           isWireString(agent) ? agent.trim() : undefined,
         );
+        countSessionAct(adapter.provider.id, PRODUCT_SESSION_ACT.WORKSPACE_CREATE, result);
         // The named session was consumed above; the renderer's answer stays
         // what became of the ask, so nothing rides this boundary that the
         // roster will not report on its own.
@@ -569,6 +623,15 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       // as soon as Linear will say.
       if (result.status === TRACKER_ACTION_RESULT_STATUS.ACCEPTED) {
         refreshIssues();
+        if (isIssueTrackerId(issue.trackerId)) {
+          recordProductEvent(PRODUCT_EVENT.ISSUE_ACT_SEND, {
+            tracker_id: issue.trackerId,
+            issue_act:
+              action.kind === "issue-state"
+                ? PRODUCT_ISSUE_ACT.STATE_MOVE
+                : PRODUCT_ISSUE_ACT.COMMENT_ADD,
+          });
+        }
       }
       return result;
     },
@@ -631,8 +694,14 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
         };
       }
       const managed = supersetContext(identity);
-      if (managed) return supersetCli.createAgent(managed, advertised, openingTask.value);
-      return performSessionAct(identity, async (adapter) => {
+      if (managed) {
+        return countSessionAct(
+          identity.providerId,
+          PRODUCT_SESSION_ACT.AGENT_ADD,
+          await supersetCli.createAgent(managed, advertised, openingTask.value),
+        );
+      }
+      return performSessionAct(identity, PRODUCT_SESSION_ACT.AGENT_ADD, async (adapter) => {
         const stored: WorkspaceAgentSelection | undefined = isProviderId(identity.providerId)
           ? (await settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[
               identity.providerId

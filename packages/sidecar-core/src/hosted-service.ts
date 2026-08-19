@@ -20,6 +20,7 @@ export const HOSTED_SERVICE_PATH = {
   ATTENTION_REVIEW: "/api/attention/review",
   ACCOUNT_DELETE: "/api/account/delete",
   USAGE: "/api/usage",
+  EVENTS: "/api/events",
 } as const;
 
 /** Every refusal a hosted endpoint answers with, by its reason. */
@@ -28,11 +29,18 @@ export const HOSTED_API_ERROR = {
   INVALID_TOKEN: "invalid-token",
   /** The request body is not what this endpoint takes. */
   INVALID_REQUEST: "invalid-request",
-  /** Today's free allowance for this meter is spent. */
+  /**
+   * Today's free allowance for this meter is spent, or — on the recording
+   * endpoint, which meters nothing — this account has sent more counts this
+   * minute than the brake allows.
+   */
   QUOTA_EXHAUSTED: "quota-exhausted",
-  /** The deployment holds no OpenAI key: the hosted tier is switched off. */
+  /**
+   * The deployment holds no key for what was asked — OpenAI's for the hosted
+   * tier, the analytics processor's for recording — so that endpoint is off.
+   */
   UNAVAILABLE: "unavailable",
-  /** OpenAI refused or failed; the status travels, the bodies never do. */
+  /** The upstream refused or failed; the status travels, the bodies never do. */
   UPSTREAM_ERROR: "upstream-error",
   METHOD_NOT_ALLOWED: "method-not-allowed",
 } as const;

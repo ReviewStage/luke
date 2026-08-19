@@ -155,6 +155,25 @@ Trust constraints:
   outputs out of its transcripts, so a Cursor reading carries none — and a
   provider whose stored shape this build cannot render faithfully keeps the
   honest refusal instead.
+- Analytics may name only what the build already fixed. An event is a name from
+  `packages/sidecar-core/src/product-events.ts` and properties whose values
+  come from `as const` sets in that same file, validated by one reader both the
+  desktop and the service run and which builds its output from the allowlist
+  rather than from what arrived. No observed value — a title, a branch, a path,
+  a recap, a prompt, an error line — may reach a property, and no property may
+  take free text; counts travel as buckets and versions as release versions.
+  The desktop posts to Luke's own service and never to an analytics provider,
+  and the account is the bearer token's, so no identity travels from the
+  desktop at all. The service attaches the account's own name and address to
+  the analytics person record, read from its own user row — never from the
+  request, and never onto an event, because an event property is what the
+  allowlist governs and a person property is not.
+  Nothing is sent in a fixture or evidence run, or while the developer has
+  switched sharing off — a switch that is on by default, sits on the settings
+  front page, and belongs to no reset scope, because a reset that turned
+  counting back on would be a consent nobody gave. Widening the event list or a
+  property's value set is a product decision, not an implementation detail, and
+  moves `PRIVACY.md` in the same change.
 - The issue tracker follows the same rule at one remove, and is connected the
   way the calendar is rather than the way a cloud provider is. Luke reads the
   issues a tracker lists for the user under a grant the tracker's own consent
@@ -518,7 +537,10 @@ no longer keeps — has no lever, so the rule is stated here: a capability the
 document does not describe is one a reader will not know Luke has, and a stale
 entry describes a Luke that does not exist. `PRIVACY.md` and the README's
 integration table cover the same connections at different altitudes; a change
-that touches one usually touches all three.
+that touches one usually touches all three. `PRIVACY.md`'s product-analytics
+section is bound the same way and by nothing but this rule: it names every
+event and every property by name, so an event added, renamed, or given a wider
+value set leaves that document describing a Luke that no longer exists.
 
 ## Code comments
 

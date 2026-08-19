@@ -190,6 +190,8 @@ export interface PreferenceWrites {
   onVoiceCaptionsChange: (enabled: boolean) => Promise<string | undefined>;
   /** Turns the quieting of Music and Spotify during a spoken exchange on or off. */
   onDuckOtherMediaChange: (enabled: boolean) => Promise<string | undefined>;
+  /** Turns the counting of Luke's own feature use on or off. */
+  onShareUsageDataChange: (enabled: boolean) => Promise<string | undefined>;
   /**
    * Chooses which credential Luke speaks and reviews sessions on. The store
    * answers with why when it refuses, and the toggle is where that answer
@@ -2870,8 +2872,7 @@ function AccountSection({
   };
 
   return (
-    // SAFETY: The preceding check establishes the asserted contract.
-    <section className="settings-section" style={{ "--row-index": 5 } as React.CSSProperties}>
+    <section className="settings-section" style={cssCustomProperties({ "--row-index": 6 })}>
       <h2>
         <UserIcon />
         Account
@@ -3122,6 +3123,41 @@ function UpdatesSection({
   );
 }
 
+/**
+ * The one thing Luke sends without being asked, and the switch for it. It sits
+ * beside Updates because both are always-on background behaviours rather than
+ * features with a page: the section is where the developer learns the counting
+ * happens at all, so the detail says what travels rather than only naming the
+ * switch.
+ */
+function UsageDataSection({
+  settings,
+  preferences,
+}: {
+  settings: AppSettings;
+  preferences: PreferenceWrites;
+}): React.JSX.Element {
+  return (
+    <section className="settings-section" style={cssCustomProperties({ "--row-index": 4 })}>
+      <h2>
+        <ShieldIcon />
+        Usage data
+      </h2>
+      <SwitchRow
+        label="Share usage data"
+        ariaLabel="Share counts of how Luke's own features are used"
+        errand={APP_SETTING_ID.SHARE_USAGE_DATA}
+        // Tied to the account rather than anonymous, because that is the
+        // honest claim and the narrow one is what the allowlist buys.
+        detail="Counts of feature use, tied to your account. Never session contents."
+        changed={settings.shareUsageData !== APP_SETTING_DEFAULTS.shareUsageData}
+        checked={settings.shareUsageData}
+        onChange={preferences.onShareUsageDataChange}
+      />
+    </section>
+  );
+}
+
 export function SettingsPanel({
   account,
   onSignOut,
@@ -3198,8 +3234,8 @@ export function SettingsPanel({
       {view === SETTINGS_VIEW.ROOT ? (
         /* The front page: what voice runs on and what is left of it today,
            then one row per page, then the sections that answer at a glance —
-           what Luke is allowed, the way to the founders, whose account this
-           is, and the way out. The allowance leads because it is the one
+           what Luke is allowed, what he counts about his own use, the way to
+           the founders, whose account this is, and the way out. The allowance leads because it is the one
            thing here worth checking daily; the account itself follows the
            page down to the ways out, which are done once or never. A newer
            // SAFETY: The preceding check establishes the asserted contract.
@@ -3285,6 +3321,8 @@ export function SettingsPanel({
         <>
           {updateLeads ? null : <UpdatesSection control={updates} rowIndex={3} />}
 
+          {settings ? <UsageDataSection settings={settings} preferences={preferences} /> : null}
+
           <FeedbackSection control={feedback} />
 
           {/* The account and the two ways out of it, last of the sections:
@@ -3302,8 +3340,7 @@ export function SettingsPanel({
           <button
             type="button"
             className="quit-button"
-            // SAFETY: The preceding check establishes the asserted contract.
-            style={{ "--row-index": 6 } as React.CSSProperties}
+            style={cssCustomProperties({ "--row-index": 7 })}
             onClick={onQuit}
           >
             <PowerIcon />

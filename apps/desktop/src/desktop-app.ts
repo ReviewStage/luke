@@ -19,8 +19,12 @@ import {
   normalizeObservedWorkspaceProjects,
   normalizeTrackedIssue,
   type ObservedWorkspaceProject,
+  PRODUCT_EVENT,
   PROVIDER_ID_LIST,
+  productSessionCountBucket,
+  type RecordProductEvent,
   rosterRelevantSessions,
+  type SessionNotice,
   SessionNoticeHold,
   SessionNoticeTracker,
   type SessionProviderAdapter,
@@ -71,6 +75,7 @@ import { ObservationHookRegistry } from "./observation-hook-registry";
 import { ObservationLoop, ObservationSupervisor } from "./observation-loop";
 import { OutputVolumeWatcher } from "./output-volume";
 import { PanelManager } from "./panel-manager";
+import { ProductEventSender } from "./product-event-sender";
 import { type ProviderRegistration, providerRegistrations } from "./provider-registrations";
 import { runModeFor } from "./run-mode";
 import { sessionNoticeSpeech } from "./session-notifications";
@@ -183,9 +188,14 @@ const accountSession = new AccountSessionManager({
   startCapabilities: () => startAccountCapabilities(),
   stopCapabilities: stopAccountCapabilities,
   onChange: (next) => {
+    const signedIn = next.status === ACCOUNT_STATUS.SIGNED_IN;
+    const wasSignedIn = account.status === ACCOUNT_STATUS.SIGNED_IN;
     account = next;
     broadcastAccount();
     void broadcastVoiceAvailability();
+    // The transition alone: which provider signed in is already on the person
+    // from the browser's own sign-in, so nothing about it needs to travel again.
+    if (signedIn && !wasSignedIn) productEvents.record(PRODUCT_EVENT.ACCOUNT_SIGN_IN, {});
   },
 });
 const observationHooks = new ObservationHookRegistry(() => app.getPath("userData"));
@@ -343,6 +353,21 @@ const updateService = new UpdateService({
   currentVersion: app.getVersion(),
   onChange: (update) => panels.broadcast(channels.updateChanged, update),
 });
+// Counts how Luke's own features are used. It lives here rather than in a
+// renderer because every emit site is already in this process and the timer
+// must survive every window; what it may say is fixed by the vocabulary in
+// core, and a fixture or evidence run switches it off entirely.
+const productEvents = new ProductEventSender({
+  serviceBaseUrl: HOSTED_SERVICE_BASE_URL,
+  appVersion: app.getVersion(),
+  sends: runMode.sendsNetwork,
+  readAccessToken: async () => (await settingsStore.readAccount())?.accessToken,
+  refreshAccount: accountSession.refreshOnce,
+});
+// One narrow function rather than the service itself, so an IPC module can
+// count an act without being handed anything it could flush, stop, or read.
+const recordProductEvent: RecordProductEvent = (name, properties) =>
+  productEvents.record(name, properties);
 /**
  // SAFETY: The preceding check establishes the asserted contract.
  * The output's switches as last read, and the helper that reads them. The
@@ -806,6 +831,8 @@ function registerIpc(): void {
     workspaceProjectOffered,
     refreshMeetingQuiet: () => void refreshMeetingQuiet(),
     releaseHeldNotices: () => void releaseHeldNotices(),
+    setUsageSharing: (enabled) => productEvents.setSharing(enabled),
+    recordProductEvent,
   });
 
   registerCalendarConnectionIpc({
@@ -817,6 +844,7 @@ function registerIpc(): void {
     signIn: googleCalendarSignIn,
     observedCalendars: () => observedCalendars,
     refresh: () => void calendarObservationLoop.refresh(),
+    recordProductEvent,
   });
 
   registerTrackerConnectionIpc({
@@ -827,6 +855,7 @@ function registerIpc(): void {
     credentials: linearCredentials,
     signIn: linearSignIn,
     refresh: () => void issueObservationLoop.refresh(),
+    recordProductEvent,
   });
 
   // The row's button. Answered rather than fire-and-forget so the row that
@@ -854,6 +883,8 @@ function registerIpc(): void {
     realtimeCredentials: () => voiceCapabilities.realtimeCredentials,
     unavailableDiagnostics: () => voiceCapabilities.unavailableDiagnostics,
     hostedUsageReader: () => voiceCapabilities.hostedUsageReader,
+    voiceSource: () => voiceCapabilities.voiceSource,
+    recordProductEvent,
   });
 
   registerSessionActsIpc({
@@ -878,6 +909,7 @@ function registerIpc(): void {
         ? observedSupersetWorkspaces.context(identity.providerId, identity.providerSessionId)
         : undefined,
     supersetCli,
+    recordProductEvent,
   });
 
   // A note to the founders travels one road: typed in the composer, validated
@@ -1118,7 +1150,24 @@ async function announceSessionNotices(sessions: readonly NormalizedSession[]): P
     return;
   }
   const speech = notices.map((notice) => sessionNoticeSpeech(notice, now));
+  countSpokenAnnouncements(notices);
   panels.voiceHost()?.webContents.send(channels.attentionSpeech, speech);
+}
+
+/**
+ * Counts the announcements about to be spoken. It sits beside the send rather
+ * than inside the notice tracker because a notice held through a meeting is
+ * spoken later or not at all, and only the two paths that actually hand
+ * speech to the voice host know which happened.
+ */
+function countSpokenAnnouncements(notices: readonly SessionNotice[]): void {
+  for (const notice of notices) {
+    if (!isProviderId(notice.providerId)) continue;
+    productEvents.record(PRODUCT_EVENT.VOICE_ANNOUNCEMENT_SPEAK, {
+      provider_id: notice.providerId,
+      session_status: notice.status,
+    });
+  }
 }
 
 /**
@@ -1249,6 +1298,7 @@ async function releaseHeldNotices(): Promise<void> {
   const releasedAsks = heldRequestSpeech.release().map((item) => ({ ...item, decidedAt: now }));
   const speech = [...releasedAsks, ...released.map((notice) => sessionNoticeSpeech(notice, now))];
   if (speech.length === 0) return;
+  countSpokenAnnouncements(released);
   panels.voiceHost()?.webContents.send(channels.attentionSpeech, speech);
 }
 
@@ -1414,7 +1464,29 @@ function startSessionObservation(): void {
     // A commit is the earliest a write-triggered refresh can have changed the
     // offer, so the announcement rides it rather than waiting for the timer.
     void broadcastWorkspaceProjects();
+    countObservedSessions(snapshot.sessions);
   });
+}
+
+/**
+ * Counts what each provider is observing, once per provider per day. The
+ * registry commits on every effective change, so counting each commit would
+ * measure registry churn rather than use; and the count itself is a rung of
+ * the shared ladder rather than a number, because "137 sessions" identifies a
+ * machine where "a crowd" does not.
+ */
+function countObservedSessions(sessions: readonly NormalizedSession[]): void {
+  const counts = new Map<string, number>();
+  for (const session of sessions) {
+    counts.set(session.providerId, (counts.get(session.providerId) ?? 0) + 1);
+  }
+  for (const [providerId, count] of counts) {
+    if (!isProviderId(providerId)) continue;
+    productEvents.recordOncePerDay(PRODUCT_EVENT.SESSION_OBSERVE, providerId, {
+      provider_id: providerId,
+      session_count: productSessionCountBucket(count),
+    });
+  }
 }
 
 function stopSessionObservation(): void {
@@ -1539,10 +1611,28 @@ export function startDesktopApp(): void {
         (enabled) => mediaDuck.setEnabled(enabled === true),
         () => mediaDuck.setEnabled(APP_SETTING_DEFAULTS.duckOtherMedia),
       );
+      // Armed from the settings file alone, like the duck above, and on the
+      // same terms: a file that cannot be read leaves counting on, the answer
+      // a file that has never said gives.
+      void settingsStore
+        .get(APP_SETTING_SCHEMA.shareUsageData.field)
+        .catch(() => APP_SETTING_DEFAULTS.shareUsageData)
+        .then((share) => {
+          productEvents.setSharing(share);
+          // Recorded behind the read, because nothing may be counted before
+          // the file has said whether counting is wanted at all.
+          productEvents.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: app.getVersion() });
+          // Luke can run for a week on one launch, so launches alone would
+          // undercount the days he was actually used.
+          productEvents.markDayActive();
+        });
       // Always on, like the announcements: the timed check answers to no
       // setting, only to the run — a fixture or capture run sends no network,
       // so it never asks GitHub anything.
-      if (runMode.sendsNetwork) updateService.start();
+      if (runMode.sendsNetwork) {
+        updateService.start();
+        productEvents.start();
+      }
       // The hook registrations converge at every launch. Each provider's
       // failure is logged under its own name and absorbed inside — a launch
       // must never hang on another app's configuration file — so this catch is
@@ -1662,6 +1752,10 @@ export function startDesktopApp(): void {
   app.on("before-quit", () => {
     observationSupervisor.setEnabled(false);
     stopCalendarObservation();
+    // Deliberately not a flush: a request here either delays the quit or is
+    // killed mid-flight, and an instant quit is worth the last minute of
+    // counts.
+    productEvents.stop();
     panels.clearCollapseTimers();
   });
 

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   APP_SETTING_KIND,
+  APP_TOGGLE_VALUE,
   type AppGuideSetting,
   PANEL_FORM_FACTOR,
   PROVIDER_ID,
@@ -721,6 +722,33 @@ test("the feedback fact says what a spoken open may do, and that sending stays b
   assert.match(fact.detail, /no spoken ask can send one/);
 });
 
+test("the usage-data fact describes the counting, and names no session field", () => {
+  const fact = buildLukeGuide(guideInput()).facts.find(
+    (candidate) => candidate.label === "Usage data",
+  );
+
+  assert.ok(fact);
+  // On by default is the fact a developer is owed without asking, and where
+  // the switch lives is the only useful thing to say next.
+  assert.match(fact.detail, /on to begin with/);
+  assert.match(fact.detail, /Usage data section on the panel's Settings tab, on its front page/);
+  assert.match(fact.detail, /[Nn]othing is sent while signed out/);
+  // The guide leaves the machine, so a fact that claimed a session field
+  // travelled would be describing a Luke that must not exist.
+  assert.match(fact.detail, /no title, branch, path, recap, or transcript/);
+});
+
+test("the usage-data switch is described where it is turned, and is spoken", () => {
+  const setting = buildLukeGuide(guideInput()).settings.find(
+    (candidate) => candidate.id === APP_SETTING_ID.SHARE_USAGE_DATA,
+  );
+
+  assert.ok(setting);
+  assert.equal(setting.adjustable, true);
+  assert.equal(setting.defaultValue, APP_TOGGLE_VALUE.ON);
+  assert.match(setting.manual, /front page, in the Usage data section/);
+});
+
 test("every adjustable setting is carried to the bridge call its row uses", async () => {
   const calls: string[] = [];
   const answered: SettingsUpdateResult = { settings: settings() };
@@ -754,6 +782,7 @@ test("every adjustable setting is carried to the bridge call its row uses", asyn
     "formFactor:notch",
     "preferBuiltInMicrophone:true",
     "quietDuringMeetings:true",
+    "shareUsageData:true",
     "showInDock:true",
     "showOnAllDisplays:true",
     "voice:alloy",

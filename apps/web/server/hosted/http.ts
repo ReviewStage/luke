@@ -11,6 +11,7 @@ export { HOSTED_API_ERROR, type HostedApiError } from "../core.js";
 
 export const HOSTED_HTTP_STATUS = {
   OK: 200,
+  ACCEPTED: 202,
   BAD_REQUEST: 400,
   UNAUTHORIZED: 401,
   METHOD_NOT_ALLOWED: 405,

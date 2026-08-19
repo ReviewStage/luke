@@ -350,6 +350,15 @@ export interface AppSettings {
    */
   showOnAllDisplays: boolean;
   /**
+   * Whether Luke counts how his own features are used and sends those counts
+   * to his own service. On by default, and the only thing that ever leaves
+   * unbidden: every event name and every property value is fixed by the build,
+   * so nothing observed and nothing typed or spoken can travel in one. It is
+   * excluded from every reset scope, because a reset that turned it back on
+   * would be a consent nobody gave.
+   */
+  shareUsageData: boolean;
+  /**
    * How Luke stands on a display without a camera housing: a drawn notch
    * pressed into the top edge, or the free-floating bubble every such display
    * gets by default. A display with a real notch answers to neither.

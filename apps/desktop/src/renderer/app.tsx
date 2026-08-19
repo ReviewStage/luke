@@ -814,6 +814,14 @@ export function App(): React.JSX.Element {
     [applySettingsReply],
   );
 
+  const changeShareUsageData = useCallback(
+    async (enabled: boolean) =>
+      applySettingsReply(
+        await window.sidecar.updateSetting(APP_SETTING_SCHEMA.shareUsageData.field, enabled),
+      ),
+    [applySettingsReply],
+  );
+
   const changeVoiceSource = useCallback(
     async (source: VoiceSource) =>
       applySettingsReply(
@@ -2703,6 +2711,7 @@ export function App(): React.JSX.Element {
   const preferences: PreferenceWrites = {
     onVoiceCaptionsChange: changeVoiceCaptions,
     onDuckOtherMediaChange: changeDuckOtherMedia,
+    onShareUsageDataChange: changeShareUsageData,
     onVoiceSourceChange: changeVoiceSource,
     onPreferBuiltInMicrophoneChange: changePreferBuiltInMicrophone,
     onQuietDuringMeetingsChange: changeQuietDuringMeetings,
