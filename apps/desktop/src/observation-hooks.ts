@@ -513,3 +513,28 @@ export async function pruneObservationHookSpool(
     }
   }
 }
+
+interface BoundObservationHookInstallation {
+  hookScriptPath: string;
+  spoolDirectory: string;
+}
+
+export function observationHooksFor<
+  Event extends string,
+  Installation extends BoundObservationHookInstallation,
+>(spec: ObservationHookSpec<Event>, providerHome: (installation: Installation) => string) {
+  const sharedInstallation = (installation: Installation): ObservationHookInstallation => ({
+    providerHome: providerHome(installation),
+    hookScriptPath: installation.hookScriptPath,
+    spoolDirectory: installation.spoolDirectory,
+  });
+  return {
+    install: (installation: Installation) =>
+      installObservationHooks(spec, sharedInstallation(installation)),
+    remove: (installation: Installation) =>
+      removeObservationHooks(spec, sharedInstallation(installation)),
+    read: (spoolDirectory: string, providerSessionId: string) =>
+      readObservationHookEvent(spec, spoolDirectory, providerSessionId),
+    prune: pruneObservationHookSpool,
+  } as const;
+}

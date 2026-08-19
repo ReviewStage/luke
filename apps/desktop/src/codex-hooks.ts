@@ -1,12 +1,8 @@
 import {
   HOOK_SPOOL_MAXIMUM_AGE_MS,
-  installObservationHooks,
-  type ObservationHookInstallation,
   type ObservationHookSpec,
   type ObservedHookEvent,
-  pruneObservationHookSpool,
-  readObservationHookEvent,
-  removeObservationHooks,
+  observationHooksFor,
 } from "./observation-hooks";
 
 /**
@@ -91,33 +87,12 @@ export interface CodexHookInstallation {
   spoolDirectory: string;
 }
 
-function sharedInstallation(installation: CodexHookInstallation): ObservationHookInstallation {
-  return {
-    providerHome: installation.codexHome,
-    hookScriptPath: installation.hookScriptPath,
-    spoolDirectory: installation.spoolDirectory,
-  };
-}
+const codexHooks = observationHooksFor(
+  CODEX_HOOK_SPEC,
+  (installation: CodexHookInstallation) => installation.codexHome,
+);
 
-export function installCodexObservationHooks(installation: CodexHookInstallation): Promise<void> {
-  return installObservationHooks(CODEX_HOOK_SPEC, sharedInstallation(installation));
-}
-
-export function removeCodexObservationHooks(installation: CodexHookInstallation): Promise<void> {
-  return removeObservationHooks(CODEX_HOOK_SPEC, sharedInstallation(installation));
-}
-
-export function readCodexHookEvent(
-  spoolDirectory: string,
-  providerSessionId: string,
-): Promise<ObservedCodexHookEvent | undefined> {
-  return readObservationHookEvent(CODEX_HOOK_SPEC, spoolDirectory, providerSessionId);
-}
-
-export function pruneCodexHookSpool(
-  spoolDirectory: string,
-  maximumAgeMs: number,
-  now: number,
-): Promise<void> {
-  return pruneObservationHookSpool(spoolDirectory, maximumAgeMs, now);
-}
+export const installCodexObservationHooks = codexHooks.install;
+export const removeCodexObservationHooks = codexHooks.remove;
+export const readCodexHookEvent = codexHooks.read;
+export const pruneCodexHookSpool = codexHooks.prune;
