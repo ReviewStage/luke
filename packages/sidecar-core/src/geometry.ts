@@ -73,13 +73,12 @@ export interface NotchWindowLayout extends Rectangle {
 
 /**
  * The window is a stage for a shape the renderer draws and animates; it is not
- * the shape itself. A compact window therefore has to hold the widest thing
- * that can be drawn without the window resizing — the peek the capsule grows
- * into under the pointer — plus a margin for what falls outside the shape: a
- * spring overshooting its target, and the shadow the peek and the panel cast.
- * A clipped shadow is a hard edge, so the margin runs along the bottom too.
- * Everything the shape does not cover is transparent and passes the pointer
- * through.
+ * the shape itself. Every window therefore holds the widest thing any mode can
+ * draw — the panel, and the peek where a housing outgrows it — plus a margin
+ * for what falls outside the shape: a spring overshooting its target, and the
+ * shadow the peek and the panel cast. A clipped shadow is a hard edge, so the
+ * margin runs along the bottom too. Everything the shape does not cover is
+ * transparent and passes the pointer through.
  *
  * The margin is measured against what actually falls outside the shape rather
  * than chosen: `--surface-shadow` still puts ink about 35px below the panel —
@@ -164,10 +163,17 @@ export function positionNotchWindow(
 ): NotchWindowLayout {
   const notch = resolveNotchGeometry(display, native, formFactor);
   const housingWidth = notch.hasNotch ? notch.housingWidth : 0;
-  const width =
-    mode === "expanded"
-      ? Math.min(PANEL_WIDTH + SURFACE_MARGIN * 2, display.bounds.width)
-      : Math.min(peekWidth(housingWidth) + SURFACE_MARGIN * 2, display.bounds.width);
+  // One width for both modes, so a mode change is a height-only resize and the
+  // window never moves. macOS lands a window's move and its content's relayout
+  // on different frames, so a mode change that also recentred a narrower
+  // window drew the capsule laid out for the new width against the old origin
+  // — flashed toward the panel's corner — before the move caught up. A height
+  // change has no such tear: the window stays put, and everything a shorter
+  // frame crops is transparent margin below a shape that has already closed.
+  const width = Math.min(
+    Math.max(PANEL_WIDTH, peekWidth(housingWidth)) + SURFACE_MARGIN * 2,
+    display.bounds.width,
+  );
   // A bubble panel floats `BUBBLE_LIFT` below the top edge, and the margin was
   // measured from a panel drawn at the edge, so the lift is added back or the
   // last of the shadow's tail meets the window edge as a faint line.
