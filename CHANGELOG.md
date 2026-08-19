@@ -12,7 +12,11 @@
      for what got better, `### Fixes` for what got repaired, and
      `### Miscellaneous` for what fits neither — brand, packaging, and the
      like. A standing section's bullets are each one sentence with no period
-     at the end. Link pull requests where relevant.
+     at the end. One voice per section: feature prose and Improvements speak
+     in the present tense to "you", with Luke as the actor; Fixes each read
+     "Fixed <symptom you could see>"; Miscellaneous bullets read
+     "Added/Updated …". Name things concretely and lead with the benefit.
+     Link pull requests where relevant.
      Screenshots live in apps/web/public/changelog/<version>/, one file per
      `###` section named by the section heading's kebab-case slug (a second
      image for a section keeps the slug as its prefix), and are written here
@@ -31,8 +35,8 @@ the date its release was published.
 
 ### Free daily allowance
 
-Luke's voice runs on an included daily allowance. Users can still provide their
-own OpenAI API key to extend their usage.
+Luke's voice runs on an included daily allowance. Want more? Connect your own
+OpenAI key.
 ([#182](https://github.com/ReviewStage/luke/pull/182),
 [#204](https://github.com/ReviewStage/luke/pull/204),
 [#216](https://github.com/ReviewStage/luke/pull/216))
@@ -41,55 +45,54 @@ own OpenAI API key to extend their usage.
 
 ### Google Calendar
 
-Luke reads when your meetings start and end, and waits until after a meeting to
-give updates.
+Luke reads when your meetings start and end, and holds his updates until the
+meeting is over.
 ([#195](https://github.com/ReviewStage/luke/pull/195))
 
 ![The Google Calendar card in Settings: a connected account with its calendars chosen and "Quiet during meetings" switched on.](apps/web/public/changelog/0.1.1/google-calendar.png)
 
 ### Improvements
 
-- Luke checks for updates automatically
+- Luke now checks for updates on his own
   ([#186](https://github.com/ReviewStage/luke/pull/186))
-- Announcements join a conversation you already have open instead of talking
-  over it, and the clickable session chip is anchored to the spoken
-  announcement ([#180](https://github.com/ReviewStage/luke/pull/180),
+- Announcements now join a conversation you already have open, with a
+  clickable chip that jumps to the session
+  ([#180](https://github.com/ReviewStage/luke/pull/180),
   [#184](https://github.com/ReviewStage/luke/pull/184))
-- Every Settings page offers reset to defaults, with changed rows marked
+- Every Settings page now marks changed rows and offers a reset to defaults
   ([#192](https://github.com/ReviewStage/luke/pull/192))
-- A Luke account can be deleted from Settings
+- You can delete your Luke account from Settings
   ([#222](https://github.com/ReviewStage/luke/pull/222))
-- A spoken ask can set a Conductor session's model and effort in one change
+- Luke can set a Conductor session's model and effort in one move
   ([#228](https://github.com/ReviewStage/luke/pull/228))
-- The signed-out experience was reworked end to end
+- Signing in is smoother, from first launch to the finished account
   ([#190](https://github.com/ReviewStage/luke/pull/190))
-- The workspace archive control moved from each chat row to the tray header,
-  and the microphone permission was moved to the Voice page
-  ([#219](https://github.com/ReviewStage/luke/pull/219),
-  [#200](https://github.com/ReviewStage/luke/pull/200))
+- The archive control now lives on the workspace tray header
+  ([#219](https://github.com/ReviewStage/luke/pull/219))
+- The microphone permission now lives on the Voice page
+  ([#200](https://github.com/ReviewStage/luke/pull/200))
 
 ### Fixes
 
-- Fixed behavior where Luke repeated himself across back-to-back replies
+- Fixed Luke repeating himself across back-to-back replies
   ([#227](https://github.com/ReviewStage/luke/pull/227))
-- Fixed an issue where Luke held onto the microphone too long
+- Fixed the microphone staying open after an exchange ended
   ([#210](https://github.com/ReviewStage/luke/pull/210))
-- Fixed an issue where archived Conductor workspaces were still being listed
+- Fixed archived Conductor workspaces still appearing in the list
   ([#198](https://github.com/ReviewStage/luke/pull/198))
-- Fixed scroll speed of captions
+- Fixed captions scrolling too fast to read
   ([#201](https://github.com/ReviewStage/luke/pull/201))
-- Fixed Claude Code session timestamps
+- Fixed Claude Code sessions showing the wrong time
   ([#208](https://github.com/ReviewStage/luke/pull/208))
-- Fixed behavior where Luke didn't understand questions about all sessions at
-  once ([#213](https://github.com/ReviewStage/luke/pull/213))
+- Fixed Luke misunderstanding questions about all your sessions at once
+  ([#213](https://github.com/ReviewStage/luke/pull/213))
 
 ### Miscellaneous
 
-- Added square, transparent, and black variants of Luke's mark, and a shareable
-  logo set ([#191](https://github.com/ReviewStage/luke/pull/191),
+- Added logo and mark variations
+  ([#191](https://github.com/ReviewStage/luke/pull/191),
   [#196](https://github.com/ReviewStage/luke/pull/196))
-- The release workflow publishes the DMG beside the app archive, so the
-  landing page's download button always reaches the newest build
+- Updated the landing page download button to always fetch the latest build
   ([#183](https://github.com/ReviewStage/luke/pull/183))
 
 ## 0.1.0 — 2026-08-17
@@ -99,9 +102,10 @@ watches every local and cloud coding agent session.
 
 ### One panel for every agent
 
-Support for a variety of local and cloud coding agents. Basic filtering,
-sorting, and search capabilities. Clicking on an agent opens its session for
-supported agents.
+One panel shows every coding agent working for you — Claude Code, Codex,
+Cursor, and OpenCode on your Mac, and Conductor, Cursor, Devin, Google Jules,
+and GitHub Copilot in the cloud. Filter, sort, or search the list, and click a
+session to open it where it runs.
 ([#18](https://github.com/ReviewStage/luke/pull/18),
 [#27](https://github.com/ReviewStage/luke/pull/27),
 [#59](https://github.com/ReviewStage/luke/pull/59),
@@ -124,26 +128,25 @@ agents, and reads and acts on Linear issues.
 
 ### Announcements
 
-Luke speaks up when a session starts waiting, stops on an error, or
-finishes. Luke can display captions on screen, quiet Music and Spotify while he
-talks, and show a clickable chip naming the session. Luke remembers requests
-like "tell me when this finishes".
+Luke speaks up when a session starts waiting, hits an error, or finishes —
+captions on screen, Music and Spotify quieted while he talks, and a clickable
+chip naming the session. Ask him to "tell me when this finishes" and he will.
 ([#97](https://github.com/ReviewStage/luke/pull/97),
 [#149](https://github.com/ReviewStage/luke/pull/149),
 [#173](https://github.com/ReviewStage/luke/pull/173))
 
 ### Miscellaneous
 
-- Hook observation for Claude Code and Codex, so a turn that just ended reads
-  differently from a session walked away from, and local transcripts read
-  aloud on ask ([#119](https://github.com/ReviewStage/luke/pull/119),
+- Added hook observation for Claude Code and Codex, so Luke can tell a
+  finished turn from one you walked away from
+  ([#119](https://github.com/ReviewStage/luke/pull/119),
   [#169](https://github.com/ReviewStage/luke/pull/169))
-- Luke's face in the menu bar and the notch
+- Added Luke's face to the menu bar and the notch
   ([#35](https://github.com/ReviewStage/luke/pull/35),
   [#51](https://github.com/ReviewStage/luke/pull/51))
-- Settings for menu-bar and Dock visibility, the display Luke stands on, his
-  voice and pace, and editable shortcuts
-- Feedback to the founders from the panel
-  ([#87](https://github.com/ReviewStage/luke/pull/87))
-- Sign-in with Google or GitHub
+- Added settings for showing Luke in the menu bar and Dock, the display he
+  stands on, his voice and pace, and editable shortcuts
+- Added a feedback panel — send the founders a note or a prompt straight from
+  Luke ([#87](https://github.com/ReviewStage/luke/pull/87))
+- Added sign-in with Google or GitHub
   ([#161](https://github.com/ReviewStage/luke/pull/161))
