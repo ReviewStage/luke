@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { DMG_WINDOW } from "../../../design/dmg-window.mjs";
 import { packagedAppExecutable } from "./package-layout.mjs";
 import {
+  awaitNotarizationDecision,
   codesignDisplayArguments,
   DMG_MOUNT_POINT,
   DMG_STAGING_ENTRIES,
@@ -17,6 +18,7 @@ import {
   hdiutilConvertArguments,
   hdiutilCreateArguments,
   hdiutilDetachArguments,
+  notaryInfoArguments,
   notaryLogArguments,
   notarySubmitArguments,
   releaseArtifactDirectory,
@@ -225,14 +227,35 @@ try {
       );
     }
 
-    if (submission.status !== "Accepted") {
-      process.stderr.write(`Notarization failed with status: ${submission.status ?? "unknown"}\n`);
-      if (submission.id) {
-        execFileSync("xcrun", notaryLogArguments(submission.id, notaryCredentials), {
-          stdio: "inherit",
-        });
+    if (!submission.id) {
+      process.stderr.write(notaryOutput);
+      throw new Error("Apple did not return a notarization submission ID");
+    }
+
+    // A lookup that fails or answers unreadably is a blip in the poll, not a
+    // verdict on a submission Apple already holds: reporting no status leaves
+    // the loop waiting, and notarytool's own complaint has reached stderr.
+    const readNotarizationStatus = () => {
+      try {
+        return JSON.parse(
+          execFileSync("xcrun", notaryInfoArguments(submission.id, notaryCredentials), {
+            encoding: "utf8",
+            stdio: ["ignore", "pipe", "inherit"],
+          }),
+        ).status;
+      } catch {
+        return undefined;
       }
-      throw new Error("Apple did not accept the DMG for notarization");
+    };
+
+    try {
+      await awaitNotarizationDecision({ readStatus: readNotarizationStatus, wait: sleep });
+    } catch (error) {
+      process.stderr.write(`${error.message}\n`);
+      execFileSync("xcrun", notaryLogArguments(submission.id, notaryCredentials), {
+        stdio: "inherit",
+      });
+      throw new Error("Apple did not accept the DMG for notarization", { cause: error });
     }
 
     execFileSync("xcrun", stapleArguments(dmgPath), { stdio: "inherit" });

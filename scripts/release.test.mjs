@@ -5,6 +5,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { PACKAGED_ARCHITECTURE } from "../apps/desktop/scripts/package-layout.mjs";
 import {
+  awaitNotarizationDecision,
   codesignDisplayArguments,
   DMG_MOUNT_POINT,
   DMG_STAGING_ENTRIES,
@@ -16,6 +17,10 @@ import {
   hdiutilCreateArguments,
   hdiutilDetachArguments,
   NOTARY_CREDENTIAL_SOURCE,
+  NOTARY_POLL_INTERVAL_MS,
+  NOTARY_POLL_TIMEOUT_MS,
+  NOTARY_SUBMISSION_STATUS,
+  notaryInfoArguments,
   notaryLogArguments,
   notarySubmitArguments,
   parseHdiutilAttachPlist,
@@ -343,9 +348,19 @@ test("release notarization commands carry key-file credentials", () => {
     "KEYID",
     "--issuer",
     "issuer-id",
-    "--wait",
-    "--timeout",
-    "20m",
+    "--output-format",
+    "json",
+  ]);
+  assert.deepEqual(notaryInfoArguments("submission-id", credentials), [
+    "notarytool",
+    "info",
+    "submission-id",
+    "--key",
+    "/tmp/AuthKey_KEYID.p8",
+    "--key-id",
+    "KEYID",
+    "--issuer",
+    "issuer-id",
     "--output-format",
     "json",
   ]);
@@ -370,9 +385,15 @@ test("release notarization commands use the local keychain profile", () => {
     "/tmp/Luke.dmg",
     "--keychain-profile",
     "luke-notary",
-    "--wait",
-    "--timeout",
-    "20m",
+    "--output-format",
+    "json",
+  ]);
+  assert.deepEqual(notaryInfoArguments("submission-id", credentials), [
+    "notarytool",
+    "info",
+    "submission-id",
+    "--keychain-profile",
+    "luke-notary",
     "--output-format",
     "json",
   ]);
@@ -390,6 +411,100 @@ test("release notarization commands use the local keychain profile", () => {
     "--timestamp",
     "/tmp/Luke.dmg",
   ]);
+});
+
+test("neither notarization path asks notarytool to wait", () => {
+  const credentials = { source: NOTARY_CREDENTIAL_SOURCE.KEYCHAIN_PROFILE };
+  assert.ok(!notarySubmitArguments("/tmp/Luke.dmg", credentials).includes("--wait"));
+  assert.ok(!notarySubmitArguments("/tmp/Luke.dmg", credentials).includes("--timeout"));
+
+  const notarizeScript = fs.readFileSync(
+    path.join(repoRoot, "scripts", "release", "notarize.sh"),
+    "utf8",
+  );
+  // The rationale comment names the flag it removed, so only uncommented lines count.
+  assert.ok(!/^[^#\n]*--wait\b/m.test(notarizeScript));
+  assert.ok(!/^[^#\n]*--timeout\b/m.test(notarizeScript));
+  assert.ok(notarizeScript.includes("notarytool info"));
+});
+
+test("the CI notarization path polls the submission id, not the submit exit status", () => {
+  const notarizeScript = fs.readFileSync(
+    path.join(repoRoot, "scripts", "release", "notarize.sh"),
+    "utf8",
+  );
+
+  // notarytool can fail after the upload lands, so only a missing id may end
+  // the run before the poll — the JS path continues from that stdout the same way.
+  assert.ok(notarizeScript.includes('if [[ -z "$submission_id" ]]; then'));
+  assert.ok(!/\$submit_exit"?\s+-ne\s+0\s*\|\|/.test(notarizeScript));
+});
+
+test("notarization polling settles on each status Apple reports", async () => {
+  const acceptedAfter = async (statuses) => {
+    const waits = [];
+    const remaining = [...statuses];
+    const settled = await awaitNotarizationDecision({
+      readStatus: () => remaining.shift(),
+      wait: (milliseconds) => waits.push(milliseconds),
+    });
+    return { settled, waits };
+  };
+
+  assert.deepEqual(await acceptedAfter([NOTARY_SUBMISSION_STATUS.ACCEPTED]), {
+    settled: NOTARY_SUBMISSION_STATUS.ACCEPTED,
+    waits: [],
+  });
+  assert.deepEqual(
+    await acceptedAfter([
+      NOTARY_SUBMISSION_STATUS.IN_PROGRESS,
+      NOTARY_SUBMISSION_STATUS.IN_PROGRESS,
+      NOTARY_SUBMISSION_STATUS.ACCEPTED,
+    ]),
+    {
+      settled: NOTARY_SUBMISSION_STATUS.ACCEPTED,
+      waits: [NOTARY_POLL_INTERVAL_MS, NOTARY_POLL_INTERVAL_MS],
+    },
+  );
+
+  for (const status of [NOTARY_SUBMISSION_STATUS.INVALID, NOTARY_SUBMISSION_STATUS.REJECTED]) {
+    await assert.rejects(
+      awaitNotarizationDecision({
+        readStatus: () => status,
+        wait: () => assert.fail(`${status} is terminal and must not be polled again`),
+      }),
+      new RegExp(`Notarization failed with status: ${status}`),
+    );
+  }
+});
+
+test("an unrecognised notarization status is polled to the bound, never failed early", async () => {
+  let polls = 0;
+
+  await assert.rejects(
+    awaitNotarizationDecision({
+      readStatus: () => {
+        polls += 1;
+        return "Bewildered";
+      },
+      wait: () => {},
+    }),
+    /Apple did not finish notarization within 20 minutes; last status: Bewildered/,
+  );
+
+  assert.equal(polls, NOTARY_POLL_TIMEOUT_MS / NOTARY_POLL_INTERVAL_MS);
+});
+
+test("a notarization status Apple never returns is bounded like any other", async () => {
+  await assert.rejects(
+    awaitNotarizationDecision({
+      readStatus: () => undefined,
+      wait: () => {},
+      intervalMs: 1,
+      timeoutMs: 3,
+    }),
+    /last status: unknown/,
+  );
 });
 
 test("release artifacts stay under the repository artifacts directory", () => {

@@ -10,6 +10,14 @@ export const NOTARY_CREDENTIAL_SOURCE = {
   KEYCHAIN_PROFILE: "keychain-profile",
   KEY_FILE: "key-file",
 };
+export const NOTARY_SUBMISSION_STATUS = {
+  ACCEPTED: "Accepted",
+  IN_PROGRESS: "In Progress",
+  INVALID: "Invalid",
+  REJECTED: "Rejected",
+};
+export const NOTARY_POLL_INTERVAL_MS = 30_000;
+export const NOTARY_POLL_TIMEOUT_MS = 20 * 60_000;
 export const RELEASE_VOLUME_NAME = "Luke";
 export const DMG_MOUNT_POINT = `/Volumes/${RELEASE_VOLUME_NAME}`;
 export const DMG_STAGING_ENTRIES = [
@@ -216,15 +224,26 @@ function notaryCredentialArguments(credentials) {
   return ["--keychain-profile", NOTARY_KEYCHAIN_PROFILE];
 }
 
+// notarytool's own --wait crashes with SIGBUS on most runs, and the upload has
+// already reached Apple by the time it does, so resubmitting would only
+// duplicate a submission that is already queued: submit once, then poll.
 export function notarySubmitArguments(dmgPath, credentials) {
   return [
     "notarytool",
     "submit",
     dmgPath,
     ...notaryCredentialArguments(credentials),
-    "--wait",
-    "--timeout",
-    "20m",
+    "--output-format",
+    "json",
+  ];
+}
+
+export function notaryInfoArguments(submissionId, credentials) {
+  return [
+    "notarytool",
+    "info",
+    submissionId,
+    ...notaryCredentialArguments(credentials),
     "--output-format",
     "json",
   ];
@@ -232,6 +251,35 @@ export function notarySubmitArguments(dmgPath, credentials) {
 
 export function notaryLogArguments(submissionId, credentials) {
   return ["notarytool", "log", submissionId, ...notaryCredentialArguments(credentials)];
+}
+
+// A status Apple has not documented here is treated as still running rather
+// than as a failure, so an unfamiliar name costs the release a wait instead of
+// the whole build.
+export async function awaitNotarizationDecision({
+  readStatus,
+  wait,
+  intervalMs = NOTARY_POLL_INTERVAL_MS,
+  timeoutMs = NOTARY_POLL_TIMEOUT_MS,
+}) {
+  for (let waited = 0; ; waited += intervalMs) {
+    const status = readStatus();
+    if (status === NOTARY_SUBMISSION_STATUS.ACCEPTED) {
+      return status;
+    }
+    if (
+      status === NOTARY_SUBMISSION_STATUS.INVALID ||
+      status === NOTARY_SUBMISSION_STATUS.REJECTED
+    ) {
+      throw new Error(`Notarization failed with status: ${status}`);
+    }
+    if (waited + intervalMs >= timeoutMs) {
+      throw new Error(
+        `Apple did not finish notarization within ${timeoutMs / 60_000} minutes; last status: ${status ?? "unknown"}`,
+      );
+    }
+    await wait(intervalMs);
+  }
 }
 
 export function stapleArguments(dmgPath) {
