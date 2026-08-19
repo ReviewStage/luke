@@ -497,6 +497,29 @@ const RING_BLOOM = 0.26;
 const RING_SPREAD = 1.16;
 
 /**
+ * Where a scroller's view really starts: a child pinned to its top — the
+ * settings pages' header — covers the first strip of it, so a landing brought
+ * flush with the scroller's own edge would arrive under the header rather
+ * than below it. Measured off the children rather than assumed, because
+ * which scroller pins what is the panel's business, not the errand's. The
+ * strip one gap below a pinned child is covered too: that is the band where
+ * rows dissolve under it, so a landing there is a landing mid-fade — and the
+ * gap is what the scroller's own scroll padding already adds for the
+ * keyboard, so the errand and a tabbed-to control agree on what clear means.
+ */
+function pinnedViewTop(scroller: HTMLElement, viewTop: number): number {
+  let bottom = Number.NEGATIVE_INFINITY;
+  for (const child of scroller.children) {
+    if (!(child instanceof HTMLElement)) continue;
+    if (getComputedStyle(child).position !== "sticky") continue;
+    bottom = Math.max(bottom, child.getBoundingClientRect().bottom);
+  }
+  if (bottom === Number.NEGATIVE_INFINITY) return viewTop;
+  const gap = Number.parseFloat(getComputedStyle(scroller).rowGap);
+  return Math.max(viewTop, bottom + (Number.isNaN(gap) ? 0 : gap));
+}
+
+/**
  * Scrolls the landing clear of the room the captions may still take. Reads the
  * scroller off the control rather than being told which one: the errand knows
  * what it is flying to, not what the panel happens to have wrapped it in.
@@ -513,7 +536,7 @@ function keepInView(stage: HTMLElement, target: HTMLElement, room: number): void
     const box = target.getBoundingClientRect();
     node.scrollTop = errandScrollTop({
       scrollTop: node.scrollTop,
-      view: { top: view.top, bottom: view.bottom },
+      view: { top: pinnedViewTop(node, view.top), bottom: view.bottom },
       target: { top: box.top, bottom: box.bottom },
       room,
     });
