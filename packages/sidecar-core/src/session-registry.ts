@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import type { SessionProviderAdapter } from "./providers.js";
 import {
   type AttentionDecision,
@@ -270,26 +271,30 @@ export class InMemorySessionRegistry {
   }
 
   /** Reads a provider adapter and applies its newest full observation as one update. */
-  async refresh(
+  refresh(
     adapter: Pick<SessionProviderAdapter, "provider" | "observe">,
     transform?: SessionObservationTransform,
-  ): Promise<SessionRegistrySnapshot> {
-    const providerId = normalizedProviderId(adapter.provider);
-    const mutationEpoch = this.#providerMutationEpochs.get(providerId) ?? 0;
-    const attempt = this.#startProviderRefreshAttempt(providerId);
-    const observed = await adapter.observe();
-    const observations = transform ? transform(providerId, observed) : observed;
-    const latestAttempt = this.#latestAppliedRefreshAttempts.get(providerId) ?? 0;
-    if (
-      latestAttempt >= attempt ||
-      (this.#providerMutationEpochs.get(providerId) ?? 0) !== mutationEpoch
-    ) {
+  ): Effect.Effect<SessionRegistrySnapshot, unknown> {
+    return Effect.gen(this, function* () {
+      const providerId = normalizedProviderId(adapter.provider);
+      const mutationEpoch = this.#providerMutationEpochs.get(providerId) ?? 0;
+      const attempt = yield* Effect.sync(() => this.#startProviderRefreshAttempt(providerId));
+      const observed = yield* adapter.observe();
+      const observations = transform ? transform(providerId, observed) : observed;
+      const latestAttempt = this.#latestAppliedRefreshAttempts.get(providerId) ?? 0;
+      if (
+        latestAttempt >= attempt ||
+        (this.#providerMutationEpochs.get(providerId) ?? 0) !== mutationEpoch
+      ) {
+        return this.snapshot();
+      }
+      const next = this.#nextProviderStore(adapter.provider, providerId, observations);
+      yield* Effect.sync(() => {
+        this.#latestAppliedRefreshAttempts.set(providerId, attempt);
+        this.#commit(next);
+      });
       return this.snapshot();
-    }
-    const next = this.#nextProviderStore(adapter.provider, providerId, observations);
-    this.#latestAppliedRefreshAttempts.set(providerId, attempt);
-    this.#commit(next);
-    return this.snapshot();
+    });
   }
 
   /** Stores Luke's latest attention decision without mutating provider-owned data. */

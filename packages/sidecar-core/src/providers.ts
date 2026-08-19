@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import { text, type UnparsedWireValue } from "./json.js";
 import type { ProviderSessionObservation, SessionControl, SessionProvider } from "./session.js";
 
@@ -43,14 +44,14 @@ export function isProviderId(value: string): value is ProviderId {
  */
 export interface SessionProviderAdapter {
   readonly provider: SessionProvider;
-  observe(): Promise<readonly ProviderSessionObservation[]>;
+  observe(): Effect.Effect<readonly ProviderSessionObservation[], unknown>;
 
   /**
    * Runs a control against a session the adapter has already observed.
    * Adapters must reject any request whose control that session's latest
    * observation did not advertise.
    */
-  executeControl(request: ProviderControlRequest): Promise<ProviderControlResult>;
+  executeControl(request: ProviderControlRequest): Effect.Effect<ProviderControlResult, unknown>;
 
   /**
    * Hands a message to an already-observed session through the provider's own
@@ -60,7 +61,7 @@ export interface SessionProviderAdapter {
    * latest observation, and nothing that decides on the user's behalf — the
    * attention evaluator above all — may reach it.
    */
-  sendMessage(message: ProviderSessionMessage): Promise<ProviderMessageResult>;
+  sendMessage(message: ProviderSessionMessage): Effect.Effect<ProviderMessageResult, unknown>;
 
   /** The projects the latest observation pass reported, or none. */
   workspaceProjects(): readonly WorkspaceProject[];
@@ -71,14 +72,18 @@ export interface SessionProviderAdapter {
    * asked for, through the provider's own documented endpoint, and nothing
    * that decides on the user's behalf may reach it.
    */
-  createWorkspace(request: ProviderWorkspaceRequest): Promise<ProviderWorkspaceResult>;
+  createWorkspace(
+    request: ProviderWorkspaceRequest,
+  ): Effect.Effect<ProviderWorkspaceResult, unknown>;
 
   /**
    * Starts another agent in the workspace an observed session already runs in,
    * under the same rules and one more: the agent must be one of the kinds that
    * session's latest observation listed.
    */
-  spawnWorkspaceAgent(request: ProviderWorkspaceAgentRequest): Promise<ProviderWorkspaceResult>;
+  spawnWorkspaceAgent(
+    request: ProviderWorkspaceAgentRequest,
+  ): Effect.Effect<ProviderWorkspaceResult, unknown>;
 
   /**
    * Renders one observed session's own transcript, read from the provider's
@@ -86,7 +91,7 @@ export interface SessionProviderAdapter {
    * performs nothing and reaches no provider; an adapter whose stored shape
    * this build cannot render faithfully reports nothing rather than guessing.
    */
-  readTranscript(providerSessionId: string): Promise<string | undefined>;
+  readTranscript(providerSessionId: string): Effect.Effect<string | undefined, unknown>;
 }
 
 /**
@@ -435,31 +440,33 @@ export interface ProviderWorkspaceAgentRequest {
  */
 export abstract class SessionProviderAdapterBase implements SessionProviderAdapter {
   abstract readonly provider: SessionProvider;
-  abstract observe(): Promise<readonly ProviderSessionObservation[]>;
+  abstract observe(): Effect.Effect<readonly ProviderSessionObservation[], unknown>;
 
-  async executeControl(_request: ProviderControlRequest): Promise<ProviderControlResult> {
-    return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+  executeControl(_request: ProviderControlRequest): Effect.Effect<ProviderControlResult, unknown> {
+    return Effect.succeed({ status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED });
   }
 
-  async sendMessage(_message: ProviderSessionMessage): Promise<ProviderMessageResult> {
-    return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+  sendMessage(_message: ProviderSessionMessage): Effect.Effect<ProviderMessageResult, unknown> {
+    return Effect.succeed({ status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED });
   }
 
   workspaceProjects(): readonly WorkspaceProject[] {
     return [];
   }
 
-  async createWorkspace(_request: ProviderWorkspaceRequest): Promise<ProviderWorkspaceResult> {
-    return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+  createWorkspace(
+    _request: ProviderWorkspaceRequest,
+  ): Effect.Effect<ProviderWorkspaceResult, unknown> {
+    return Effect.succeed({ status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED });
   }
 
-  async spawnWorkspaceAgent(
+  spawnWorkspaceAgent(
     _request: ProviderWorkspaceAgentRequest,
-  ): Promise<ProviderWorkspaceResult> {
-    return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+  ): Effect.Effect<ProviderWorkspaceResult, unknown> {
+    return Effect.succeed({ status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED });
   }
 
-  async readTranscript(_providerSessionId: string): Promise<string | undefined> {
-    return undefined;
+  readTranscript(_providerSessionId: string): Effect.Effect<string | undefined, unknown> {
+    return Effect.succeed(undefined);
   }
 }

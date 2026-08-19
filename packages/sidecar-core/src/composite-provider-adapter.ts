@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import {
   PROVIDER_ACT_RESULT_STATUS,
   type ProviderActResult,
@@ -52,17 +53,22 @@ export class CompositeSessionProviderAdapter extends SessionProviderAdapterBase 
    * reporting the observers that answered would retire every session belonging
    * to the one that did not, and the panel would lose them until it recovers.
    */
-  async observe(): Promise<readonly ProviderSessionObservation[]> {
-    const collected = await Promise.all(this.#adapters.map((adapter) => adapter.observe()));
-    const observations = new Map<string, ProviderSessionObservation>();
-    // A session two observers both reached is still one session, and the
-    // registry rejects a snapshot that names one twice.
-    for (const observation of collected.flat()) {
-      if (!observations.has(observation.providerSessionId)) {
-        observations.set(observation.providerSessionId, observation);
+  observe(): Effect.Effect<readonly ProviderSessionObservation[], unknown> {
+    return Effect.gen(this, function* () {
+      const collected = yield* Effect.all(
+        this.#adapters.map((adapter) => adapter.observe()),
+        { concurrency: "unbounded" },
+      );
+      const observations = new Map<string, ProviderSessionObservation>();
+      // A session two observers both reached is still one session, and the
+      // registry rejects a snapshot that names one twice.
+      for (const observation of collected.flat()) {
+        if (!observations.has(observation.providerSessionId)) {
+          observations.set(observation.providerSessionId, observation);
+        }
       }
-    }
-    return [...observations.values()];
+      return [...observations.values()];
+    });
   }
 
   /**
@@ -72,12 +78,16 @@ export class CompositeSessionProviderAdapter extends SessionProviderAdapterBase 
    * still reachable — so the question moves on rather than settling. Any firm
    * answer, accepted or rejected, is the session's own and ends the search.
    */
-  override async sendMessage(message: ProviderSessionMessage): Promise<ProviderMessageResult> {
+  override sendMessage(
+    message: ProviderSessionMessage,
+  ): Effect.Effect<ProviderMessageResult, unknown> {
     return this.#dispatchAct((adapter) => adapter.sendMessage(message));
   }
 
   /** A control finds its observer the same way a message does. */
-  override async executeControl(request: ProviderControlRequest): Promise<ProviderControlResult> {
+  override executeControl(
+    request: ProviderControlRequest,
+  ): Effect.Effect<ProviderControlResult, unknown> {
     return this.#dispatchAct((adapter) => adapter.executeControl(request));
   }
 
@@ -91,25 +101,27 @@ export class CompositeSessionProviderAdapter extends SessionProviderAdapterBase 
    * answers unsupported never offered the project, so the question moves on,
    * and any firm answer is the project's own and ends the search.
    */
-  override async createWorkspace(
+  override createWorkspace(
     request: ProviderWorkspaceRequest,
-  ): Promise<ProviderWorkspaceResult> {
+  ): Effect.Effect<ProviderWorkspaceResult, unknown> {
     return this.#dispatchAct((adapter) => adapter.createWorkspace(request));
   }
 
   /** A new agent finds the observer holding its workspace the same way. */
-  override async spawnWorkspaceAgent(
+  override spawnWorkspaceAgent(
     request: ProviderWorkspaceAgentRequest,
-  ): Promise<ProviderWorkspaceResult> {
+  ): Effect.Effect<ProviderWorkspaceResult, unknown> {
     return this.#dispatchAct((adapter) => adapter.spawnWorkspaceAgent(request));
   }
 
-  override async readTranscript(providerSessionId: string): Promise<string | undefined> {
-    for (const adapter of this.#adapters) {
-      const transcript = await adapter.readTranscript(providerSessionId);
-      if (transcript !== undefined) return transcript;
-    }
-    return undefined;
+  override readTranscript(providerSessionId: string): Effect.Effect<string | undefined, unknown> {
+    return Effect.gen(this, function* () {
+      for (const adapter of this.#adapters) {
+        const transcript = yield* adapter.readTranscript(providerSessionId);
+        if (transcript !== undefined) return transcript;
+      }
+      return undefined;
+    });
   }
 
   /**
@@ -117,13 +129,15 @@ export class CompositeSessionProviderAdapter extends SessionProviderAdapterBase 
    * never seen the subject, so the question moves on; any firm answer is the
    * subject's own and ends the search.
    */
-  async #dispatchAct<Result extends ProviderActResult>(
-    act: (adapter: SessionProviderAdapter) => Promise<Result>,
-  ): Promise<Result | { status: typeof PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED }> {
-    for (const adapter of this.#adapters) {
-      const result = await act(adapter);
-      if (result.status !== PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED) return result;
-    }
-    return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+  #dispatchAct<Result extends ProviderActResult>(
+    act: (adapter: SessionProviderAdapter) => Effect.Effect<Result, unknown>,
+  ): Effect.Effect<Result | { status: typeof PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED }, unknown> {
+    return Effect.gen(this, function* () {
+      for (const adapter of this.#adapters) {
+        const result = yield* act(adapter);
+        if (result.status !== PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED) return result;
+      }
+      return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+    });
   }
 }

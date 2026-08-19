@@ -45,3 +45,12 @@ export class AccountClientFailure extends Data.TaggedError("AccountClientFailure
   readonly status?: number;
   readonly oauthError?: string;
 }> {}
+
+/**
+ * An attention evaluator stood itself down after a rate limit. The reviewer
+ * retries only when the wait is already over; a positive delay is left for
+ * the next pass rather than sleeping through it.
+ */
+export class AttentionRateLimited extends Data.TaggedError("AttentionRateLimited")<{
+  readonly retryAfterMs: number;
+}> {}

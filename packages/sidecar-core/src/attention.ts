@@ -1,3 +1,5 @@
+import { Duration, Effect, Schedule } from "effect";
+import { AttentionRateLimited } from "./effect-errors.js";
 import {
   isRecord,
   isWireString,
@@ -175,15 +177,7 @@ export function attentionContext(detail: SessionDetail): AttentionContext | unde
 
 /** Reviews one bounded update and decides whether Luke should speak. */
 export interface AttentionEvaluator {
-  evaluate(update: AttentionUpdate): Promise<AttentionDecision | undefined>;
-  /**
-   * When the evaluator has stood itself down — a rate limit's quiet — the
-   * moment it will take requests again, as epoch milliseconds. A reviewer
-   * that asks first skips the pass whole: nothing is sent, no baseline
-   * advances, and no per-session retry is spent on a refusal that was never
-   * about the session. Absent or in the past means requests are welcome.
-   */
-  quietUntil?(): number | undefined;
+  evaluate(update: AttentionUpdate): Effect.Effect<AttentionDecision | undefined, unknown>;
 }
 
 /** Why a reviewed update ended up with the decision it carries. */
@@ -585,82 +579,92 @@ export class SessionAttentionReviewer {
     this.#ledger = new AttentionSpeechLedger(ledgerOptions);
   }
 
-  async review(sessions: readonly NormalizedSession[]): Promise<readonly AttentionReview[]> {
-    // An evaluator in its own quiet would answer every update with nothing,
-    // and each nothing costs a per-session retry budgeted for real failures.
-    // Skipping the pass before any baseline advances spends none of them:
-    // every development stays derivable and is reviewed once the quiet ends.
-    const quietUntil = this.#evaluator.quietUntil?.();
-    if (quietUntil !== undefined && quietUntil > this.#now()) return [];
-    this.#ledger.retain(sessions);
+  review(sessions: readonly NormalizedSession[]): Effect.Effect<readonly AttentionReview[]> {
+    return Effect.gen(this, function* () {
+      this.#ledger.retain(sessions);
 
-    const candidates: AttentionCandidate[] = [];
-    // Developments whose events are already old: consumed without a model
-    // call, but their baselines still advance, so history never resurfaces.
-    const staleConsumed: AttentionCandidate[] = [];
-    const closedConsumed: NormalizedSession[] = [];
-    const now = this.#now();
-    for (const session of sessions) {
-      if (this.#isPending(session)) continue;
-      if (session.completionCause === SESSION_COMPLETION_CAUSE.SESSION_CLOSED) {
-        closedConsumed.push(session);
-        continue;
-      }
-      const update = attentionUpdate(
-        session,
-        this.#observedSession(session),
-        this.#noticeRequestFor?.(session),
-      );
-      if (!update) continue;
-      // An event older than the freshness window is history arriving late — a
-      // launch reading yesterday's roster, a wake replaying the afternoon —
-      // and is never news, unless the developer's own standing ask is waiting
-      // on exactly this session: an ask answered late still beats one answered
-      // never.
-      if (!update.noticeRequest && now - update.observedAt > this.#freshEventAgeMs) {
-        staleConsumed.push({ session, update });
-        continue;
-      }
-      candidates.push({ session, update });
-    }
-
-    const selected = candidates
-      .sort((first, second) => second.session.observedAt - first.session.observedAt)
-      .slice(0, this.#maximumUpdatesPerReview);
-
-    // Sessions left out of this pass keep their previous baseline so the same
-    // development is derived again once a slot frees up. A stale development
-    // advances its baseline exactly as a reviewed one does: it was decided —
-    // deterministically, to silence — not deferred.
-    this.#observed = this.#nextObserved(sessions, [
-      ...selected.map((candidate) => candidate.session),
-      ...staleConsumed.map((candidate) => candidate.session),
-      ...closedConsumed,
-    ]);
-    for (const candidate of selected) this.#markPending(candidate.session);
-
-    try {
-      const evaluated = await Promise.all(
-        selected.map((candidate) => this.#reviewUpdate(candidate.update)),
-      );
-      // Every speaking decision is settled here, in one uninterrupted step,
-      // rather than as each evaluation lands: waiting on a slower sibling is
-      // itself long enough for a provider to move a session on. Callers apply
-      // the returned decisions without awaiting in between, so nothing can
-      // change the session between this check and the write.
-      return evaluated.map((review, index) => {
-        const settled = this.#settle(review);
-        const candidate = selected[index];
-        // A development is only consumed once a decision was actually reached
-        // about it. Anything else must stay derivable, or the update is lost.
-        if (candidate && this.#keepsDevelopmentPending(settled, candidate.session)) {
-          this.#reopen(candidate.session);
+      const candidates: AttentionCandidate[] = [];
+      // Developments whose events are already old: consumed without a model
+      // call, but their baselines still advance, so history never resurfaces.
+      const staleConsumed: AttentionCandidate[] = [];
+      const closedConsumed: NormalizedSession[] = [];
+      const now = this.#now();
+      for (const session of sessions) {
+        if (this.#isPending(session)) continue;
+        if (session.completionCause === SESSION_COMPLETION_CAUSE.SESSION_CLOSED) {
+          closedConsumed.push(session);
+          continue;
         }
-        return settled;
-      });
-    } finally {
-      for (const candidate of selected) this.#clearPending(candidate.session);
-    }
+        const update = attentionUpdate(
+          session,
+          this.#observedSession(session),
+          this.#noticeRequestFor?.(session),
+        );
+        if (!update) continue;
+        // An event older than the freshness window is history arriving late — a
+        // launch reading yesterday's roster, a wake replaying the afternoon —
+        // and is never news, unless the developer's own standing ask is waiting
+        // on exactly this session: an ask answered late still beats one answered
+        // never.
+        if (!update.noticeRequest && now - update.observedAt > this.#freshEventAgeMs) {
+          staleConsumed.push({ session, update });
+          continue;
+        }
+        candidates.push({ session, update });
+      }
+
+      const selected = candidates
+        .sort((first, second) => second.session.observedAt - first.session.observedAt)
+        .slice(0, this.#maximumUpdatesPerReview);
+
+      const staleAndClosed = [
+        ...staleConsumed.map((candidate) => candidate.session),
+        ...closedConsumed,
+      ];
+      // Sessions left out of this pass keep their previous baseline so the same
+      // development is derived again once a slot frees up. A stale development
+      // advances its baseline exactly as a reviewed one does: it was decided —
+      // deterministically, to silence — not deferred.
+      // Stale and closed sessions advance immediately; selected sessions wait
+      // until an evaluation actually runs, so a rate limit does not consume them.
+      this.#observed = this.#nextObserved(sessions, staleAndClosed);
+
+      for (const candidate of selected) this.#markPending(candidate.session);
+
+      return yield* Effect.gen(this, function* () {
+        const evaluated = yield* Effect.all(
+          selected.map((candidate) => this.#reviewUpdate(candidate.update)),
+          { concurrency: "unbounded" },
+        ).pipe(Effect.catchTag("AttentionRateLimited", () => Effect.succeed([])));
+        if (evaluated.length > 0) {
+          this.#observed = this.#nextObserved(sessions, [
+            ...selected.map((candidate) => candidate.session),
+            ...staleAndClosed,
+          ]);
+        }
+        // Every speaking decision is settled here, in one uninterrupted step,
+        // rather than as each evaluation lands: waiting on a slower sibling is
+        // itself long enough for a provider to move a session on. Callers apply
+        // the returned decisions without awaiting in between, so nothing can
+        // change the session between this check and the write.
+        return evaluated.map((review, index) => {
+          const settled = this.#settle(review);
+          const candidate = selected[index];
+          // A development is only consumed once a decision was actually reached
+          // about it. Anything else must stay derivable, or the update is lost.
+          if (candidate && this.#keepsDevelopmentPending(settled, candidate.session)) {
+            this.#reopen(candidate.session);
+          }
+          return settled;
+        });
+      }).pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            for (const candidate of selected) this.#clearPending(candidate.session);
+          }),
+        ),
+      );
+    });
   }
 
   /**
@@ -723,17 +727,19 @@ export class SessionAttentionReviewer {
     if (providerSessions.size === 0) this.#observed.delete(session.providerId);
   }
 
-  async #reviewUpdate(update: AttentionUpdate): Promise<AttentionReview> {
-    const decision = await this.#evaluate(update);
-    const identity: SessionIdentity = {
-      providerId: update.providerId,
-      providerSessionId: update.providerSessionId,
-    };
+  #reviewUpdate(update: AttentionUpdate): Effect.Effect<AttentionReview, AttentionRateLimited> {
+    return Effect.gen(this, function* () {
+      const decision = yield* this.#evaluate(update);
+      const identity: SessionIdentity = {
+        providerId: update.providerId,
+        providerSessionId: update.providerSessionId,
+      };
 
-    if (!decision) {
-      return this.#silentReview(identity, update, ATTENTION_REVIEW_OUTCOME.UNAVAILABLE);
-    }
-    return { ...identity, update, decision, outcome: ATTENTION_REVIEW_OUTCOME.DECIDED };
+      if (!decision) {
+        return this.#silentReview(identity, update, ATTENTION_REVIEW_OUTCOME.UNAVAILABLE);
+      }
+      return { ...identity, update, decision, outcome: ATTENTION_REVIEW_OUTCOME.DECIDED };
+    });
   }
 
   /**
@@ -783,14 +789,23 @@ export class SessionAttentionReviewer {
     return { ...identity, update, decision: silentAttention(this.#now()), outcome };
   }
 
-  async #evaluate(update: AttentionUpdate): Promise<AttentionDecision | undefined> {
-    try {
-      return await this.#evaluator.evaluate(update);
-    } catch {
-      // A background evaluator must never break session observation; a failed
-      // review simply leaves Luke silent about that update.
-      return undefined;
-    }
+  #evaluate(
+    update: AttentionUpdate,
+  ): Effect.Effect<AttentionDecision | undefined, AttentionRateLimited> {
+    return this.#evaluator.evaluate(update).pipe(
+      Effect.retry({
+        while: (error): error is AttentionRateLimited =>
+          error instanceof AttentionRateLimited && error.retryAfterMs <= 0,
+        schedule: Schedule.addDelay(Schedule.recurs(1), () => Duration.zero),
+      }),
+      Effect.catchAll((error) =>
+        error instanceof AttentionRateLimited
+          ? Effect.fail(error)
+          : // A background evaluator must never break session observation; a failed
+            // review simply leaves Luke silent about that update.
+            Effect.succeed(undefined),
+      ),
+    );
   }
 
   #observedSession(session: NormalizedSession): NormalizedSession | undefined {

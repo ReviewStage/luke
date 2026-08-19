@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { Effect } from "effect";
 import {
   ATTENTION_DECISION_SCHEMA,
   ATTENTION_DISPOSITION,
@@ -20,6 +21,7 @@ import {
 import {
   ATTENTION_REVIEW_OUTCOME,
   AttentionRequestRegistry,
+  type AttentionReview,
   AttentionSpeechLedger,
   attentionRequestText,
   attentionUpdate,
@@ -28,6 +30,7 @@ import {
   maximumAttentionSummaryLength,
 } from "../src/attention";
 import { ATTENTION_TUNING_EXAMPLES } from "../src/attention-examples";
+import { AttentionRateLimited } from "../src/effect-errors.js";
 
 const claude: SessionProvider = { id: "claude-code", displayName: "Claude Code" };
 const codex: SessionProvider = { id: "codex", displayName: "Codex" };
@@ -68,18 +71,25 @@ function speakDecision(summary = SPOKEN_SUMMARY): AttentionDecision {
 }
 
 function evaluatorReturning(decision: AttentionDecision | undefined): {
-  evaluate: (update: AttentionUpdate) => Promise<AttentionDecision | undefined>;
+  evaluate: (update: AttentionUpdate) => Effect.Effect<AttentionDecision | undefined, unknown>;
 } & {
   readonly updates: AttentionUpdate[];
 } {
   const updates: AttentionUpdate[] = [];
   return {
     updates,
-    evaluate: async (update) => {
+    evaluate: (update) => {
       updates.push(update);
-      return decision;
+      return Effect.succeed(decision);
     },
   };
+}
+
+async function reviewSessions(
+  reviewer: SessionAttentionReviewer,
+  sessions: readonly NormalizedSession[],
+): Promise<readonly AttentionReview[]> {
+  return Effect.runPromise(reviewer.review(sessions));
 }
 
 test("derives an update only when a session reports something new", () => {
@@ -207,19 +217,19 @@ test("reviews only changed sessions and suppresses a repeated decision", async (
   });
 
   const working = session(claude, "review");
-  const [firstReview, ...extraReviews] = await reviewer.review([working]);
+  const [firstReview, ...extraReviews] = await reviewSessions(reviewer, [working]);
   assert.equal(extraReviews.length, 0);
   assert.deepEqual(firstReview?.decision, speakDecision());
   assert.equal(firstReview?.outcome, ATTENTION_REVIEW_OUTCOME.DECIDED);
 
   assert.deepEqual(
-    await reviewer.review([working]),
+    await reviewSessions(reviewer, [working]),
     [],
     "an unchanged session is not re-evaluated",
   );
 
   const waiting = session(claude, "review", { status: SESSION_STATUS.WAITING });
-  const [repeatReview] = await reviewer.review([waiting]);
+  const [repeatReview] = await reviewSessions(reviewer, [waiting]);
   assert.equal(repeatReview?.outcome, ATTENTION_REVIEW_OUTCOME.DEDUPLICATED);
   assert.deepEqual(
     repeatReview?.decision,
@@ -249,10 +259,10 @@ test("history arriving late is consumed silently and never resurfaces", async ()
     observedAt: DECIDED_AT - 7 * 60 * 60 * 1000,
   });
 
-  assert.deepEqual(await reviewer.review([asked, failed, finished]), []);
+  assert.deepEqual(await reviewSessions(reviewer, [asked, failed, finished]), []);
   assert.equal(evaluator.updates.length, 0, "a stale development costs no model call");
   assert.deepEqual(
-    await reviewer.review([asked, failed, finished]),
+    await reviewSessions(reviewer, [asked, failed, finished]),
     [],
     "consumed, not deferred: the same history is not re-derived next pass",
   );
@@ -264,7 +274,7 @@ test("history arriving late is consumed silently and never resurfaces", async ()
     status: SESSION_STATUS.WORKING,
     observedAt: DECIDED_AT,
   });
-  const [review] = await reviewer.review([revived, failed, finished]);
+  const [review] = await reviewSessions(reviewer, [revived, failed, finished]);
   assert.equal(review?.providerSessionId, "asked");
   assert.equal(review?.update.previousStatus, SESSION_STATUS.WAITING);
   assert.equal(evaluator.updates.length, 1);
@@ -276,7 +286,7 @@ test("a wake from hours of sleep reviews nothing about the evening it slept thro
   const reviewer = new SessionAttentionReviewer({ evaluator, now: () => now });
 
   const working = session(claude, "overnight", { observedAt: DECIDED_AT });
-  await reviewer.review([working]);
+  await reviewSessions(reviewer, [working]);
   assert.equal(evaluator.updates.length, 1, "a fresh first sight is still reviewed");
 
   // The Mac sleeps for six hours; the session finished half an hour in. The
@@ -286,7 +296,7 @@ test("a wake from hours of sleep reviews nothing about the evening it slept thro
     status: SESSION_STATUS.COMPLETE,
     observedAt: DECIDED_AT + 30 * 60 * 1000,
   });
-  assert.deepEqual(await reviewer.review([finished]), []);
+  assert.deepEqual(await reviewSessions(reviewer, [finished]), []);
   assert.equal(evaluator.updates.length, 1, "the sleep-aged finish costs no model call");
 });
 
@@ -315,7 +325,7 @@ test("a stale development the developer asked about still reaches the evaluator"
     status: SESSION_STATUS.COMPLETE,
     observedAt: DECIDED_AT - 5 * 60 * 60 * 1000,
   });
-  const [review] = await reviewer.review([finished]);
+  const [review] = await reviewSessions(reviewer, [finished]);
   assert.equal(review?.outcome, ATTENTION_REVIEW_OUTCOME.DECIDED);
   assert.equal(evaluator.updates[0]?.noticeRequest, "Tell me when this finishes.");
 });
@@ -333,12 +343,12 @@ test("keeps a second real development visible when Luke stays quiet about it", a
   const complete = session(codex, "build", { status: SESSION_STATUS.COMPLETE });
   const working = session(codex, "build");
 
-  const [first] = await reviewer.review([complete]);
+  const [first] = await reviewSessions(reviewer, [complete]);
   assert.equal(first?.outcome, ATTENTION_REVIEW_OUTCOME.DECIDED);
 
-  await reviewer.review([working]);
+  await reviewSessions(reviewer, [working]);
 
-  const [second] = await reviewer.review([complete]);
+  const [second] = await reviewSessions(reviewer, [complete]);
   assert.equal(second?.outcome, ATTENTION_REVIEW_OUTCOME.DEDUPLICATED);
   assert.notEqual(
     second?.decision.disposition,
@@ -349,12 +359,10 @@ test("keeps a second real development visible when Luke stays quiet about it", a
 
 test("stays silent when an evaluator fails or answers outside the contract", async () => {
   const failing = {
-    evaluate: async () => {
-      throw new Error("network unavailable");
-    },
+    evaluate: () => Effect.fail(new Error("network unavailable")),
   };
   const reviewer = new SessionAttentionReviewer({ evaluator: failing, now: () => DECIDED_AT });
-  const [review] = await reviewer.review([session(claude, "review")]);
+  const [review] = await reviewSessions(reviewer, [session(claude, "review")]);
   assert.deepEqual(review?.decision, {
     disposition: ATTENTION_DISPOSITION.SILENT,
     decidedAt: DECIDED_AT,
@@ -365,7 +373,7 @@ test("stays silent when an evaluator fails or answers outside the contract", asy
     evaluator: evaluatorReturning(undefined),
     now: () => DECIDED_AT,
   });
-  const [emptyReview] = await empty.review([session(codex, "build")]);
+  const [emptyReview] = await reviewSessions(empty, [session(codex, "build")]);
   assert.equal(emptyReview?.decision.disposition, ATTENTION_DISPOSITION.SILENT);
   assert.equal(emptyReview?.outcome, ATTENTION_REVIEW_OUTCOME.UNAVAILABLE);
 });
@@ -376,10 +384,12 @@ test("a quiet evaluator skips the pass whole, spending nothing", async () => {
   const updates: AttentionUpdate[] = [];
   const reviewer = new SessionAttentionReviewer({
     evaluator: {
-      quietUntil: () => quietUntil,
-      evaluate: async (update) => {
+      evaluate: (update) => {
+        if (now < quietUntil) {
+          return Effect.fail(new AttentionRateLimited({ retryAfterMs: quietUntil - now }));
+        }
         updates.push(update);
-        return speakDecision();
+        return Effect.succeed(speakDecision());
       },
     },
     now: () => now,
@@ -389,13 +399,13 @@ test("a quiet evaluator skips the pass whole, spending nothing", async () => {
   });
 
   const waiting = session(claude, "review", { status: SESSION_STATUS.WAITING });
-  await reviewer.review([waiting]);
-  await reviewer.review([waiting]);
+  await reviewSessions(reviewer, [waiting]);
+  await reviewSessions(reviewer, [waiting]);
   assert.equal(updates.length, 0, "nothing is sent while the evaluator is quiet");
 
   // The quiet over, the development that waited through it is reviewed.
   now = quietUntil;
-  const [review] = await reviewer.review([waiting]);
+  const [review] = await reviewSessions(reviewer, [waiting]);
   assert.equal(review?.outcome, ATTENTION_REVIEW_OUTCOME.DECIDED);
   assert.equal(updates.length, 1);
 });
@@ -416,16 +426,17 @@ test("drops a decision about a failure the session has already replaced", async 
 
   const reviewer = new SessionAttentionReviewer({
     evaluator: {
-      evaluate: async () => {
-        current = disconnected;
-        return speakDecision();
-      },
+      evaluate: () =>
+        Effect.sync(() => {
+          current = disconnected;
+          return speakDecision();
+        }),
     },
     currentSession: () => current,
     now: () => DECIDED_AT,
   });
 
-  const [review] = await reviewer.review([rateLimited]);
+  const [review] = await reviewSessions(reviewer, [rateLimited]);
   assert.equal(review?.outcome, ATTENTION_REVIEW_OUTCOME.SUPERSEDED);
   assert.deepEqual(review?.decision, {
     disposition: ATTENTION_DISPOSITION.SILENT,
@@ -441,17 +452,18 @@ test("drops a decision the session already moved past", async () => {
 
   const reviewer = new SessionAttentionReviewer({
     evaluator: {
-      evaluate: async () => {
-        // The developer answers the session while the model is still thinking.
-        if (answeredWhileEvaluating) current = working;
-        return speakDecision();
-      },
+      evaluate: () =>
+        Effect.sync(() => {
+          // The developer answers the session while the model is still thinking.
+          if (answeredWhileEvaluating) current = working;
+          return speakDecision();
+        }),
     },
     currentSession: () => current,
     now: () => DECIDED_AT,
   });
 
-  const [staleReview] = await reviewer.review([waiting]);
+  const [staleReview] = await reviewSessions(reviewer, [waiting]);
   assert.equal(staleReview?.outcome, ATTENTION_REVIEW_OUTCOME.SUPERSEDED);
   assert.deepEqual(staleReview?.decision, {
     disposition: ATTENTION_DISPOSITION.SILENT,
@@ -460,7 +472,7 @@ test("drops a decision the session already moved past", async () => {
 
   answeredWhileEvaluating = false;
   current = working;
-  const [spokenReview] = await reviewer.review([working]);
+  const [spokenReview] = await reviewSessions(reviewer, [working]);
   assert.equal(
     spokenReview?.outcome,
     ATTENTION_REVIEW_OUTCOME.DECIDED,
@@ -477,28 +489,29 @@ test("reviews the development again after the session returns to a superseded st
 
   const reviewer = new SessionAttentionReviewer({
     evaluator: {
-      evaluate: async (update) => {
-        if (update.status !== SESSION_STATUS.WAITING) {
-          return { disposition: ATTENTION_DISPOSITION.SILENT, decidedAt: DECIDED_AT };
-        }
-        if (answeredWhileEvaluating) current = working;
-        return speakDecision();
-      },
+      evaluate: (update) =>
+        Effect.sync(() => {
+          if (update.status !== SESSION_STATUS.WAITING) {
+            return { disposition: ATTENTION_DISPOSITION.SILENT, decidedAt: DECIDED_AT };
+          }
+          if (answeredWhileEvaluating) current = working;
+          return speakDecision();
+        }),
     },
     currentSession: () => current,
     now: () => DECIDED_AT,
   });
 
-  await reviewer.review([working]);
+  await reviewSessions(reviewer, [working]);
 
   answeredWhileEvaluating = true;
-  const [supersededReview] = await reviewer.review([waiting]);
+  const [supersededReview] = await reviewSessions(reviewer, [waiting]);
   assert.equal(supersededReview?.outcome, ATTENTION_REVIEW_OUTCOME.SUPERSEDED);
 
   // The session asks again before any pass observed the answered state.
   answeredWhileEvaluating = false;
   current = waiting;
-  const [retriedReview] = await reviewer.review([waiting]);
+  const [retriedReview] = await reviewSessions(reviewer, [waiting]);
   assert.equal(
     retriedReview?.outcome,
     ATTENTION_REVIEW_OUTCOME.DECIDED,
@@ -522,20 +535,21 @@ test("re-checks every decision after the slowest evaluation in the pass lands", 
 
   const reviewer = new SessionAttentionReviewer({
     evaluator: {
-      evaluate: async (update) => {
-        if (update.providerSessionId === "slow") {
-          await new Promise<void>((resolve) => {
-            releaseSlow = resolve;
-          });
-        }
-        return speakDecision();
-      },
+      evaluate: (update) =>
+        Effect.gen(function* () {
+          if (update.providerSessionId === "slow") {
+            yield* Effect.async<void>((resume) => {
+              releaseSlow = () => resume(Effect.void);
+            });
+          }
+          return speakDecision();
+        }),
     },
     currentSession: (identity) => current.get(identity.providerSessionId),
     now: () => DECIDED_AT,
   });
 
-  const pass = reviewer.review([waitingSession, slowSession]);
+  const pass = Effect.runPromise(reviewer.review([waitingSession, slowSession]));
   // Let the answered session's evaluation finish completely, so the pass is
   // held open only by the slow sibling.
   await new Promise((resolve) => setImmediate(resolve));
@@ -562,7 +576,7 @@ test("drops a decision for a session that disappeared while it was evaluated", a
     now: () => DECIDED_AT,
   });
 
-  const [review] = await reviewer.review([session(claude, "review")]);
+  const [review] = await reviewSessions(reviewer, [session(claude, "review")]);
   assert.equal(review?.outcome, ATTENTION_REVIEW_OUTCOME.SUPERSEDED);
   assert.equal(review?.decision.disposition, ATTENTION_DISPOSITION.SILENT);
 });
@@ -572,10 +586,10 @@ test("retries a failed evaluation a bounded number of times", async () => {
   const failuresBeforeSuccess = 2;
   const reviewer = new SessionAttentionReviewer({
     evaluator: {
-      evaluate: async () => {
+      evaluate: () => {
         attempts += 1;
-        if (attempts <= failuresBeforeSuccess) throw new Error("network blip");
-        return speakDecision();
+        if (attempts <= failuresBeforeSuccess) return Effect.fail(new Error("network blip"));
+        return Effect.succeed(speakDecision());
       },
     },
     now: () => DECIDED_AT,
@@ -583,11 +597,11 @@ test("retries a failed evaluation a bounded number of times", async () => {
 
   const waiting = session(claude, "review", { status: SESSION_STATUS.WAITING });
   for (let pass = 0; pass < failuresBeforeSuccess; pass += 1) {
-    const [review] = await reviewer.review([waiting]);
+    const [review] = await reviewSessions(reviewer, [waiting]);
     assert.equal(review?.outcome, ATTENTION_REVIEW_OUTCOME.UNAVAILABLE);
   }
 
-  const [recovered] = await reviewer.review([waiting]);
+  const [recovered] = await reviewSessions(reviewer, [waiting]);
   assert.equal(
     recovered?.outcome,
     ATTENTION_REVIEW_OUTCOME.DECIDED,
@@ -600,22 +614,23 @@ test("stops retrying an evaluator that keeps failing", async () => {
   let attempts = 0;
   const reviewer = new SessionAttentionReviewer({
     evaluator: {
-      evaluate: async () => {
-        attempts += 1;
-        return undefined;
-      },
+      evaluate: () =>
+        Effect.sync(() => {
+          attempts += 1;
+          return undefined;
+        }),
     },
     maximumUnavailableRetries: 1,
     now: () => DECIDED_AT,
   });
 
   const waiting = session(claude, "review", { status: SESSION_STATUS.WAITING });
-  await reviewer.review([waiting]);
-  await reviewer.review([waiting]);
+  await reviewSessions(reviewer, [waiting]);
+  await reviewSessions(reviewer, [waiting]);
   assert.equal(attempts, 2);
 
   assert.deepEqual(
-    await reviewer.review([waiting]),
+    await reviewSessions(reviewer, [waiting]),
     [],
     "a standing misconfiguration must not re-evaluate on every poll",
   );
@@ -630,12 +645,12 @@ test("a superseded answer ends the failure streak", async () => {
 
   const reviewer = new SessionAttentionReviewer({
     evaluator: {
-      evaluate: async () => {
+      evaluate: () => {
         pass += 1;
         // Fail, then answer into a session that moved on, then fail again.
-        if (pass === 1 || pass === 3) throw new Error("network blip");
+        if (pass === 1 || pass === 3) return Effect.fail(new Error("network blip"));
         if (pass === 2) current = working;
-        return speakDecision();
+        return Effect.succeed(speakDecision());
       },
     },
     currentSession: () => current,
@@ -644,17 +659,20 @@ test("a superseded answer ends the failure streak", async () => {
   });
 
   assert.equal(
-    (await reviewer.review([waiting]))[0]?.outcome,
+    (await reviewSessions(reviewer, [waiting]))[0]?.outcome,
     ATTENTION_REVIEW_OUTCOME.UNAVAILABLE,
   );
-  assert.equal((await reviewer.review([waiting]))[0]?.outcome, ATTENTION_REVIEW_OUTCOME.SUPERSEDED);
+  assert.equal(
+    (await reviewSessions(reviewer, [waiting]))[0]?.outcome,
+    ATTENTION_REVIEW_OUTCOME.SUPERSEDED,
+  );
 
   current = waiting;
   assert.equal(
-    (await reviewer.review([waiting]))[0]?.outcome,
+    (await reviewSessions(reviewer, [waiting]))[0]?.outcome,
     ATTENTION_REVIEW_OUTCOME.UNAVAILABLE,
   );
-  const [recovered] = await reviewer.review([waiting]);
+  const [recovered] = await reviewSessions(reviewer, [waiting]);
   assert.equal(
     recovered?.outcome,
     ATTENTION_REVIEW_OUTCOME.DECIDED,
@@ -676,21 +694,25 @@ test("reviews a session that round-trips back to the state it was reopened from"
 
   const reviewer = new SessionAttentionReviewer({
     evaluator: {
-      evaluate: async (update) => {
-        if (update.status !== SESSION_STATUS.COMPLETE) throw new Error("network blip");
-        return finished;
+      evaluate: (update) => {
+        if (update.status !== SESSION_STATUS.COMPLETE)
+          return Effect.fail(new Error("network blip"));
+        return Effect.succeed(finished);
       },
     },
     now: () => DECIDED_AT,
   });
 
-  assert.equal((await reviewer.review([complete]))[0]?.outcome, ATTENTION_REVIEW_OUTCOME.DECIDED);
   assert.equal(
-    (await reviewer.review([working]))[0]?.outcome,
+    (await reviewSessions(reviewer, [complete]))[0]?.outcome,
+    ATTENTION_REVIEW_OUTCOME.DECIDED,
+  );
+  assert.equal(
+    (await reviewSessions(reviewer, [working]))[0]?.outcome,
     ATTENTION_REVIEW_OUTCOME.UNAVAILABLE,
   );
 
-  const [second] = await reviewer.review([complete]);
+  const [second] = await reviewSessions(reviewer, [complete]);
   assert.ok(second, "a second completed turn must still be reviewed");
   assert.notEqual(
     second.decision.disposition,
@@ -712,19 +734,19 @@ test("bounds one review pass and re-derives the updates it deferred", async () =
 
   const newest = session(claude, "newest", { observedAt: DECIDED_AT });
   const oldest = session(claude, "oldest", { observedAt: DECIDED_AT - 5_000 });
-  const firstPass = await reviewer.review([oldest, newest]);
+  const firstPass = await reviewSessions(reviewer, [oldest, newest]);
   assert.deepEqual(
     firstPass.map((review) => review.providerSessionId),
     ["newest"],
     "the newest development is reviewed first",
   );
 
-  const secondPass = await reviewer.review([oldest, newest]);
+  const secondPass = await reviewSessions(reviewer, [oldest, newest]);
   assert.deepEqual(
     secondPass.map((review) => review.providerSessionId),
     ["oldest"],
   );
-  assert.deepEqual(await reviewer.review([oldest, newest]), []);
+  assert.deepEqual(await reviewSessions(reviewer, [oldest, newest]), []);
 });
 
 test("keeps one evaluation in flight per session", async () => {
@@ -732,31 +754,32 @@ test("keeps one evaluation in flight per session", async () => {
   const started: AttentionUpdate[] = [];
   const reviewer = new SessionAttentionReviewer({
     evaluator: {
-      evaluate: async (update) => {
-        started.push(update);
-        if (started.length === 1) {
-          await new Promise<void>((resolve) => {
-            release = resolve;
-          });
-        }
-        return { disposition: ATTENTION_DISPOSITION.SILENT, decidedAt: DECIDED_AT };
-      },
+      evaluate: (update) =>
+        Effect.gen(function* () {
+          started.push(update);
+          if (started.length === 1) {
+            yield* Effect.async<void>((resume) => {
+              release = () => resume(Effect.void);
+            });
+          }
+          return { disposition: ATTENTION_DISPOSITION.SILENT, decidedAt: DECIDED_AT };
+        }),
     },
     now: () => DECIDED_AT,
   });
 
   const working = session(claude, "review");
-  const inFlight = reviewer.review([working]);
+  const inFlight = Effect.runPromise(reviewer.review([working]));
   await Promise.resolve();
 
   const waiting = session(claude, "review", { status: SESSION_STATUS.WAITING });
-  assert.deepEqual(await reviewer.review([waiting]), []);
+  assert.deepEqual(await reviewSessions(reviewer, [waiting]), []);
   assert.equal(started.length, 1);
 
   release?.();
   await inFlight;
 
-  const [laterReview] = await reviewer.review([waiting]);
+  const [laterReview] = await reviewSessions(reviewer, [waiting]);
   assert.equal(
     laterReview?.update.trigger,
     ATTENTION_TRIGGER.STATUS_CHANGED,
@@ -770,7 +793,7 @@ test("sends bounded material and withholds what a decision does not turn on", as
     decidedAt: DECIDED_AT,
   });
   const reviewer = new SessionAttentionReviewer({ evaluator, now: () => DECIDED_AT });
-  await reviewer.review([
+  await reviewSessions(reviewer, [
     session(claude, "review", {
       title: `Split the checkout total ${TRANSCRIPT_SECRET}`.padEnd(400, "x"),
       recap: `Waiting on the rounding rule. ${TRANSCRIPT_SECRET}`.padEnd(900, "y"),
@@ -928,7 +951,7 @@ test("a standing ask rides the update of the session it was made about, and no o
     noticeRequestFor: (identity) => requests.get(identity),
   });
 
-  await reviewer.review([session(claude, "watched"), session(claude, "unwatched")]);
+  await reviewSessions(reviewer, [session(claude, "watched"), session(claude, "unwatched")]);
 
   const watched = evaluator.updates.find((update) => update.providerSessionId === "watched");
   const unwatched = evaluator.updates.find((update) => update.providerSessionId === "unwatched");
@@ -947,10 +970,10 @@ test("a closed session never reaches the evaluator, even with a standing finish 
     now: () => DECIDED_AT,
   });
 
-  await reviewer.review([session(claude, "watched", { status: SESSION_STATUS.WAITING })]);
+  await reviewSessions(reviewer, [session(claude, "watched", { status: SESSION_STATUS.WAITING })]);
   evaluator.updates.length = 0;
 
-  const reviews = await reviewer.review([
+  const reviews = await reviewSessions(reviewer, [
     session(claude, "watched", {
       status: SESSION_STATUS.COMPLETE,
       completionCause: SESSION_COMPLETION_CAUSE.SESSION_CLOSED,
@@ -965,9 +988,9 @@ test("a work-finished completion still reaches the evaluator", async () => {
   const evaluator = evaluatorReturning(speakDecision());
   const reviewer = new SessionAttentionReviewer({ evaluator, now: () => DECIDED_AT });
 
-  await reviewer.review([session(claude, "finished")]);
+  await reviewSessions(reviewer, [session(claude, "finished")]);
   evaluator.updates.length = 0;
-  await reviewer.review([
+  await reviewSessions(reviewer, [
     session(claude, "finished", {
       status: SESSION_STATUS.COMPLETE,
       completionCause: SESSION_COMPLETION_CAUSE.WORK_FINISHED,
@@ -989,7 +1012,7 @@ test("closure supersedes an in-flight work-finished review", async () => {
     now: () => DECIDED_AT,
   });
 
-  const [review] = await reviewer.review([
+  const [review] = await reviewSessions(reviewer, [
     session(claude, "finished", {
       status: SESSION_STATUS.COMPLETE,
       completionCause: SESSION_COMPLETION_CAUSE.WORK_FINISHED,

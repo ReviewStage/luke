@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { Effect } from "effect";
 import {
   ATTENTION_DISPOSITION,
   InMemorySessionRegistry,
@@ -231,10 +232,12 @@ test("refresh atomically replaces one adapter's sessions and preserves attention
     },
   );
 
-  await registry.refresh({
-    provider: codex,
-    observe: async () => [observation("active", 50), observation("new", 60)],
-  });
+  await Effect.runPromise(
+    registry.refresh({
+      provider: codex,
+      observe: () => Effect.succeed([observation("active", 50), observation("new", 60)]),
+    }),
+  );
 
   assert.deepEqual(
     registry.list().map(({ providerId, providerSessionId }) => ({ providerId, providerSessionId })),
@@ -262,14 +265,21 @@ test("ignores an older overlapping refresh after a newer provider snapshot is ap
     resolveOlderObservation = resolve;
   });
 
-  const olderRefresh = registry.refresh({
-    provider: codex,
-    observe: async () => olderObservation,
-  });
-  await registry.refresh({
-    provider: codex,
-    observe: async () => [observation("active", 20, { title: "Newer observation" })],
-  });
+  const olderRefresh = Effect.runPromise(
+    registry.refresh({
+      provider: codex,
+      observe: () =>
+        Effect.async<readonly ProviderSessionObservation[]>((resume) => {
+          olderObservation.then((value) => resume(Effect.succeed(value)));
+        }),
+    }),
+  );
+  await Effect.runPromise(
+    registry.refresh({
+      provider: codex,
+      observe: () => Effect.succeed([observation("active", 20, { title: "Newer observation" })]),
+    }),
+  );
 
   if (!resolveOlderObservation) throw new Error("Older observation did not start");
   resolveOlderObservation([observation("active", 10, { title: "Older observation" })]);
@@ -287,14 +297,21 @@ test("ignores a stale malformed refresh after a newer provider snapshot is appli
   const olderObservation = new Promise<readonly ProviderSessionObservation[]>((resolve) => {
     resolveOlderObservation = resolve;
   });
-  const olderRefresh = registry.refresh({
-    provider: codex,
-    observe: async () => olderObservation,
-  });
-  await registry.refresh({
-    provider: codex,
-    observe: async () => [observation("active", 20, { title: "Newer observation" })],
-  });
+  const olderRefresh = Effect.runPromise(
+    registry.refresh({
+      provider: codex,
+      observe: () =>
+        Effect.async<readonly ProviderSessionObservation[]>((resume) => {
+          olderObservation.then((value) => resume(Effect.succeed(value)));
+        }),
+    }),
+  );
+  await Effect.runPromise(
+    registry.refresh({
+      provider: codex,
+      observe: () => Effect.succeed([observation("active", 20, { title: "Newer observation" })]),
+    }),
+  );
 
   if (!resolveOlderObservation) throw new Error("Older observation did not start");
   resolveOlderObservation([observation("duplicate", 10), observation("duplicate", 10)]);
@@ -313,10 +330,15 @@ test("keeps a valid refresh after a rejected or unchanged direct update", async 
   const pendingObservation = new Promise<readonly ProviderSessionObservation[]>((resolve) => {
     resolveObservation = resolve;
   });
-  const refresh = registry.refresh({
-    provider: codex,
-    observe: async () => pendingObservation,
-  });
+  const refresh = Effect.runPromise(
+    registry.refresh({
+      provider: codex,
+      observe: () =>
+        Effect.async<readonly ProviderSessionObservation[]>((resume) => {
+          pendingObservation.then((value) => resume(Effect.succeed(value)));
+        }),
+    }),
+  );
 
   registry.upsert(codex, observation("active", 10));
   assert.throws(

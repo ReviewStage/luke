@@ -6,6 +6,7 @@
  * session are offered to the rest of the app under the same discipline.
  */
 
+import type { Effect } from "effect";
 import { text, type UnparsedWireValue } from "./json.js";
 
 /**
@@ -270,6 +271,6 @@ export interface IssueTrackerAdapter {
    * tracker is not connected — no credential, so nothing was asked — which is
    * a different answer from a connected tracker listing nothing.
    */
-  observe(): Promise<readonly TrackerIssueObservation[] | undefined>;
-  execute(action: TrackerIssueAction): Promise<TrackerActionResult>;
+  observe(): Effect.Effect<readonly TrackerIssueObservation[] | undefined, unknown>;
+  execute(action: TrackerIssueAction): Effect.Effect<TrackerActionResult, unknown>;
 }
