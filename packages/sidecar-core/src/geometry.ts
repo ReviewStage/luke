@@ -1,3 +1,4 @@
+import { isWireString, type UnparsedWireValue } from "./json.js";
 import {
   BUBBLE_LIFT,
   PANEL_WIDTH,
@@ -52,8 +53,10 @@ export type PanelFormFactor = (typeof PANEL_FORM_FACTOR)[keyof typeof PANEL_FORM
 export const PANEL_FORM_FACTOR_LIST: readonly PanelFormFactor[] = Object.values(PANEL_FORM_FACTOR);
 
 /** Guards a form factor arriving from persisted or renderer-supplied data. */
-export function isPanelFormFactor(value: unknown): value is PanelFormFactor {
-  return typeof value === "string" && PANEL_FORM_FACTOR_LIST.includes(value as PanelFormFactor);
+export function isPanelFormFactor(value: UnparsedWireValue): value is PanelFormFactor {
+  if (!isWireString(value)) return false;
+  // SAFETY: value is a string; list membership is the form-factor vocabulary contract check.
+  return PANEL_FORM_FACTOR_LIST.includes(value as PanelFormFactor);
 }
 
 export const DEFAULT_PANEL_FORM_FACTOR: PanelFormFactor = PANEL_FORM_FACTOR.BUBBLE;

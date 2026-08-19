@@ -1,4 +1,11 @@
-import { nonNegativeNumber, positiveInteger } from "./json.js";
+import {
+  isRecord,
+  isWireString,
+  nonNegativeNumber,
+  positiveInteger,
+  text,
+  type UnparsedWireValue,
+} from "./json.js";
 import {
   ATTENTION_DISPOSITION,
   type AttentionDecision,
@@ -33,9 +40,8 @@ export const maximumAttentionRequestLength = 300;
  * rather than cut when it runs long, on the message rule's own grounds: a
  * truncated ask asks for something its author did not.
  */
-export function attentionRequestText(value: unknown): string | undefined {
-  if (typeof value !== "string") return undefined;
-  const normalized = value.trim();
+export function attentionRequestText(value: UnparsedWireValue): string | undefined {
+  const normalized = text(value);
   if (!normalized || normalized.length > maximumAttentionRequestLength) return undefined;
   return normalized;
 }
@@ -159,12 +165,11 @@ export interface AttentionUpdate extends SessionIdentity {
 
 /** Narrows a session's observed detail to the fields an evaluator may receive. */
 export function attentionContext(detail: SessionDetail): AttentionContext | undefined {
-  const context: AttentionContext = {
-    ...(detail.repository ? { repository: detail.repository } : {}),
-    ...(detail.branch ? { branch: detail.branch } : {}),
-    ...(detail.activity ? { activity: detail.activity } : {}),
-    ...(detail.error ? { error: detail.error } : {}),
-  };
+  const context: AttentionContext = {};
+  if (detail.repository) context.repository = detail.repository;
+  if (detail.branch) context.branch = detail.branch;
+  if (detail.activity) context.activity = detail.activity;
+  if (detail.error) context.error = detail.error;
   return Object.keys(context).length > 0 ? context : undefined;
 }
 
@@ -246,10 +251,9 @@ interface AttentionCandidate {
   update: AttentionUpdate;
 }
 
-function isAttentionDisposition(value: unknown): value is AttentionDisposition {
-  return (
-    typeof value === "string" && ATTENTION_DISPOSITIONS.some((disposition) => disposition === value)
-  );
+function isAttentionDisposition(value: UnparsedWireValue): value is AttentionDisposition {
+  if (!isWireString(value)) return false;
+  return ATTENTION_DISPOSITIONS.some((disposition) => disposition === value);
 }
 
 /**
@@ -307,20 +311,21 @@ export function attentionUpdate(
 
   const context = attentionContext(session.detail);
   const workspace = session.workspace?.name;
-  return {
+  const update: AttentionUpdate = {
     providerId: session.providerId,
     providerSessionId: session.providerSessionId,
     trigger,
     providerName: session.provider.displayName,
     title: session.title,
-    ...(workspace ? { workspace } : {}),
     status: session.status,
-    ...(previous ? { previousStatus: previous.status } : {}),
-    ...(session.recap ? { recap: session.recap } : {}),
-    ...(context ? { context } : {}),
-    ...(noticeRequest ? { noticeRequest } : {}),
     observedAt: session.observedAt,
   };
+  if (workspace) update.workspace = workspace;
+  if (previous) update.previousStatus = previous.status;
+  if (session.recap) update.recap = session.recap;
+  if (context) update.context = context;
+  if (noticeRequest) update.noticeRequest = noticeRequest;
+  return update;
 }
 
 /**
@@ -329,31 +334,29 @@ export function attentionUpdate(
  * malformed response leaves Luke silent.
  */
 export function attentionDecisionFromModel(
-  value: unknown,
+  value: UnparsedWireValue,
   decidedAt: number,
 ): AttentionDecision | undefined {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return undefined;
+  if (!isRecord(value)) return undefined;
 
-  const record = value as Record<string, unknown>;
-  if (!isAttentionDisposition(record.disposition)) return undefined;
+  if (!isAttentionDisposition(value.disposition)) return undefined;
 
-  const summary =
-    typeof record.summary === "string"
-      ? record.summary.trim().slice(0, maximumAttentionSummaryLength)
-      : undefined;
-  if (record.disposition !== ATTENTION_DISPOSITION.SILENT && !summary) return undefined;
+  const summaryText = text(value.summary);
+  const summary = summaryText?.slice(0, maximumAttentionSummaryLength);
+  if (value.disposition !== ATTENTION_DISPOSITION.SILENT && !summary) return undefined;
 
   // Anything but a literal true reads as not answering: an ask's privileges
   // are earned by the model saying so, never by a field being malformed.
   const answersAsk =
-    record.answers_ask === true && record.disposition !== ATTENTION_DISPOSITION.SILENT;
+    value.answers_ask === true && value.disposition !== ATTENTION_DISPOSITION.SILENT;
 
-  return normalizeAttention({
-    disposition: record.disposition,
+  const decision: AttentionDecision = {
+    disposition: value.disposition,
     decidedAt,
-    ...(summary ? { summary } : {}),
-    ...(answersAsk ? { answersAsk } : {}),
-  });
+  };
+  if (summary) decision.summary = summary;
+  if (answersAsk) decision.answersAsk = true;
+  return normalizeAttention(decision);
 }
 
 /**
@@ -392,11 +395,12 @@ export class AttentionSpeechLedger {
     const normalizedIdentity = normalizeSessionIdentity(identity);
     const providerRecords =
       this.#spoken.get(normalizedIdentity.providerId) ?? new Map<string, SpokenRecord>();
-    providerRecords.set(normalizedIdentity.providerSessionId, {
+    const record: SpokenRecord = {
       disposition: decision.disposition,
-      ...(decision.summary ? { summary: decision.summary } : {}),
       spokenAt: this.#now(),
-    });
+    };
+    if (decision.summary) record.summary = decision.summary;
+    providerRecords.set(normalizedIdentity.providerSessionId, record);
     this.#spoken.set(normalizedIdentity.providerId, providerRecords);
   }
 
@@ -575,10 +579,10 @@ export class SessionAttentionReviewer {
       options.freshEventAgeMs,
       ATTENTION_EVENT_FRESH_AGE_MS,
     );
-    this.#ledger = new AttentionSpeechLedger({
-      ...(options.now ? { now: options.now } : {}),
-      ...(options.repeatWindowMs !== undefined ? { repeatWindowMs: options.repeatWindowMs } : {}),
-    });
+    const ledgerOptions: AttentionSpeechLedgerOptions = {};
+    if (options.now) ledgerOptions.now = options.now;
+    if (options.repeatWindowMs !== undefined) ledgerOptions.repeatWindowMs = options.repeatWindowMs;
+    this.#ledger = new AttentionSpeechLedger(ledgerOptions);
   }
 
   async review(sessions: readonly NormalizedSession[]): Promise<readonly AttentionReview[]> {

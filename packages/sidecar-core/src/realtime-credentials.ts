@@ -1,4 +1,4 @@
-import { isRecord } from "./json.js";
+import { isRecord, text, type UnparsedWireValue, wholeNumber } from "./json.js";
 import { PRESS_AUDIO_SAMPLE_RATE } from "./press-audio.js";
 import { REALTIME_SESSION_TYPE, realtimeInstructions } from "./realtime-protocol.js";
 import { realtimeToolDefinitions } from "./realtime-tools.js";
@@ -114,22 +114,19 @@ export function realtimeClientSecretRequest(options: RealtimeSessionOptions = {}
  * leaves the voice experience unavailable instead of half-configured.
  */
 export function realtimeCredentialFromResponse(
-  payload: unknown,
+  payload: UnparsedWireValue,
   fallbackModel: string = REALTIME_DEFAULTS.MODEL,
 ): RealtimeCredential | undefined {
   if (!isRecord(payload)) return undefined;
 
-  const value = typeof payload.value === "string" ? payload.value.trim() : "";
+  const value = text(payload.value);
   if (!value) return undefined;
 
-  const expiresAtSeconds = payload.expires_at;
-  if (typeof expiresAtSeconds !== "number" || !Number.isFinite(expiresAtSeconds)) {
-    return undefined;
-  }
-  if (expiresAtSeconds <= 0) return undefined;
+  const expiresAtSeconds = wholeNumber(payload.expires_at);
+  if (expiresAtSeconds === undefined || expiresAtSeconds <= 0) return undefined;
 
   const session = isRecord(payload.session) ? payload.session : undefined;
-  const model = typeof session?.model === "string" ? trimmedText(session.model) : undefined;
+  const model = session ? trimmedText(text(session.model)) : undefined;
 
   return {
     value,
@@ -200,7 +197,7 @@ export interface RealtimeDiagnostics {
   };
 }
 
-const REALTIME_MINT_EXPLANATIONS: Record<RealtimeMintOutcome, string> = {
+const REALTIME_MINT_EXPLANATIONS = {
   [REALTIME_MINT_OUTCOME.NOT_ATTEMPTED]: "No credential has been requested yet.",
   [REALTIME_MINT_OUTCOME.SUCCEEDED]: "A short-lived credential was minted.",
   [REALTIME_MINT_OUTCOME.NO_API_KEY]:
@@ -218,7 +215,7 @@ const REALTIME_MINT_EXPLANATIONS: Record<RealtimeMintOutcome, string> = {
     "Today's included voice is used up. It returns at midnight UTC, and a personal OpenAI key in Settings removes the daily allowance.",
   [REALTIME_MINT_OUTCOME.HOSTED_UNAVAILABLE]:
     "Luke's hosted voice service is not answering right now. A personal OpenAI key in Settings works independently of it.",
-};
+} satisfies Record<RealtimeMintOutcome, string>;
 
 /** Explains a mint outcome in one sentence, for the panel and for logs. */
 export function realtimeMintExplanation(outcome: RealtimeMintOutcome): string {

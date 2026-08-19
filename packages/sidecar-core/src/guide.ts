@@ -10,6 +10,8 @@
  * a provider is connected, never what connects it.
  */
 
+import { isWireString, type UnparsedWireValue } from "./json.js";
+
 /** How a setting takes a value: a switch, or one choice from a fixed set. */
 export const APP_SETTING_KIND = {
   TOGGLE: "toggle",
@@ -95,9 +97,18 @@ export type AppPanelTab = (typeof APP_PANEL_TAB)[keyof typeof APP_PANEL_TAB];
 
 const APP_PANEL_TAB_LIST: readonly AppPanelTab[] = Object.values(APP_PANEL_TAB);
 
+function isListedGuideValue<T extends string>(
+  value: UnparsedWireValue,
+  list: readonly T[],
+): value is T {
+  if (!isWireString(value)) return false;
+  // SAFETY: value is a string; list membership is the guide vocabulary contract check.
+  return list.includes(value as T);
+}
+
 /** Guards a tab arriving from a tool call's untrusted arguments. */
-export function isAppPanelTab(value: unknown): value is AppPanelTab {
-  return typeof value === "string" && APP_PANEL_TAB_LIST.includes(value as AppPanelTab);
+export function isAppPanelTab(value: UnparsedWireValue): value is AppPanelTab {
+  return isListedGuideValue(value, APP_PANEL_TAB_LIST);
 }
 
 /**
@@ -120,10 +131,8 @@ const FEEDBACK_COMPOSER_KIND_LIST: readonly FeedbackComposerKind[] =
   Object.values(FEEDBACK_COMPOSER_KIND);
 
 /** Guards a kind arriving from a tool call's untrusted arguments. */
-export function isFeedbackComposerKind(value: unknown): value is FeedbackComposerKind {
-  return (
-    typeof value === "string" && FEEDBACK_COMPOSER_KIND_LIST.includes(value as FeedbackComposerKind)
-  );
+export function isFeedbackComposerKind(value: UnparsedWireValue): value is FeedbackComposerKind {
+  return isListedGuideValue(value, FEEDBACK_COMPOSER_KIND_LIST);
 }
 
 /**
@@ -142,8 +151,8 @@ export type SessionListSort = (typeof SESSION_LIST_SORT)[keyof typeof SESSION_LI
 const SESSION_LIST_SORT_LIST: readonly SessionListSort[] = Object.values(SESSION_LIST_SORT);
 
 /** Guards a sort arriving from a tool call's untrusted arguments. */
-export function isSessionListSort(value: unknown): value is SessionListSort {
-  return typeof value === "string" && SESSION_LIST_SORT_LIST.includes(value as SessionListSort);
+export function isSessionListSort(value: UnparsedWireValue): value is SessionListSort {
+  return isListedGuideValue(value, SESSION_LIST_SORT_LIST);
 }
 
 /**
@@ -151,7 +160,7 @@ export function isSessionListSort(value: unknown): value is SessionListSort {
  * model's rendering of the developer's words, so the vocabulary is wider than
  * the two the guide prints — but never wider than unambiguous.
  */
-const TOGGLE_WORDS: Readonly<Record<string, AppToggleValue>> = {
+const TOGGLE_WORDS = {
   [APP_TOGGLE_VALUE.ON]: APP_TOGGLE_VALUE.ON,
   [APP_TOGGLE_VALUE.OFF]: APP_TOGGLE_VALUE.OFF,
   true: APP_TOGGLE_VALUE.ON,
@@ -160,12 +169,16 @@ const TOGGLE_WORDS: Readonly<Record<string, AppToggleValue>> = {
   disabled: APP_TOGGLE_VALUE.OFF,
   yes: APP_TOGGLE_VALUE.ON,
   no: APP_TOGGLE_VALUE.OFF,
-};
+} satisfies Record<string, AppToggleValue>;
 
 /** Reads a spoken toggle value, or nothing when the words are ambiguous. */
-export function appToggleValue(value: unknown): AppToggleValue | undefined {
-  if (typeof value !== "string") return undefined;
-  return TOGGLE_WORDS[value.trim().toLowerCase()];
+export function appToggleValue(value: UnparsedWireValue): AppToggleValue | undefined {
+  if (!isWireString(value)) return undefined;
+  const word = value.trim().toLowerCase();
+  for (const [alias, toggle] of Object.entries(TOGGLE_WORDS)) {
+    if (word === alias) return toggle;
+  }
+  return undefined;
 }
 
 /** The guide's own rendering of a toggle's state. */

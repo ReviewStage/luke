@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   type NormalizedSession,
   normalizeSession,
+  type ProviderSessionObservation,
   SESSION_COMPLETION_CAUSE,
   SESSION_NOTICE_STATUS,
   SESSION_STATUS,
@@ -34,25 +35,29 @@ function session(
     completionCause?: (typeof SESSION_COMPLETION_CAUSE)[keyof typeof SESSION_COMPLETION_CAUSE];
   } = {},
 ): NormalizedSession {
-  return normalizeSession(provider, {
+  const observation: ProviderSessionObservation = {
     providerSessionId,
     title: `Session ${providerSessionId}`,
     status,
     observedAt: overrides.observedAt ?? 100,
-    ...(overrides.completionCause ? { completionCause: overrides.completionCause } : {}),
-    ...(overrides.recap ? { recap: overrides.recap } : {}),
-    ...(overrides.workspace
-      ? { workspace: { providerWorkspaceId: "ws-1", name: overrides.workspace } }
-      : {}),
-    ...(overrides.canReceiveMessage !== undefined
-      ? { canReceiveMessage: overrides.canReceiveMessage }
-      : {}),
-    detail: {
-      ...(overrides.error ? { error: overrides.error } : {}),
-      ...(overrides.repository ? { repository: overrides.repository } : {}),
-      ...(overrides.branch ? { branch: overrides.branch } : {}),
-    },
-  });
+    detail: {},
+  };
+  if (overrides.completionCause) observation.completionCause = overrides.completionCause;
+  if (overrides.recap) observation.recap = overrides.recap;
+  if (overrides.workspace) {
+    observation.workspace = { providerWorkspaceId: "ws-1", name: overrides.workspace };
+  }
+  if (overrides.canReceiveMessage !== undefined) {
+    observation.canReceiveMessage = overrides.canReceiveMessage;
+  }
+  if (overrides.error || overrides.repository || overrides.branch) {
+    const detail = observation.detail ?? {};
+    if (overrides.error) detail.error = overrides.error;
+    if (overrides.repository) detail.repository = overrides.repository;
+    if (overrides.branch) detail.branch = overrides.branch;
+    observation.detail = detail;
+  }
+  return normalizeSession(provider, observation);
 }
 
 test("first sight seeds silently, and only a change of status is news", () => {

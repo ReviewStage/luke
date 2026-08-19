@@ -3,7 +3,7 @@ import {
   type AttentionReview,
   maximumAttentionSummaryLength,
 } from "./attention.js";
-import { isRecord } from "./json.js";
+import { isRecord, isWireString, text, type UnparsedWireValue, type WireRecord } from "./json.js";
 import { PRESS_AUDIO_SAMPLE_RATE } from "./press-audio.js";
 import { spokenRealtimeToolCount } from "./realtime-tools.js";
 import {
@@ -220,7 +220,7 @@ export function realtimeInstructions(): string {
  * output buffer is what drops that, and doing it second means the server is not
  * still filling the buffer as it empties it.
  */
-export function cancelResponseEvents(): readonly Record<string, unknown>[] {
+export function cancelResponseEvents(): readonly WireRecord[] {
   return [
     { type: REALTIME_CLIENT_EVENT.RESPONSE_CANCEL },
     { type: REALTIME_CLIENT_EVENT.OUTPUT_AUDIO_BUFFER_CLEAR },
@@ -242,7 +242,7 @@ export function cancelResponseEvents(): readonly Record<string, unknown>[] {
 export function truncateResponseEvents(input: {
   itemId: string;
   audioEndMs: number;
-}): readonly Record<string, unknown>[] {
+}): readonly WireRecord[] {
   if (!trimmedText(input.itemId) || !Number.isFinite(input.audioEndMs) || input.audioEndMs <= 0) {
     return [];
   }
@@ -283,7 +283,7 @@ export const maximumFeedbackDraftLength = maximumTypedAskLength;
  * developer turn exactly as a push-to-talk commit does — the caller arms the
  * turn on the same terms, and the roster gauntlet stands behind it unchanged.
  */
-export function typedAskEvents(text: string): readonly Record<string, unknown>[] {
+export function typedAskEvents(text: string): readonly WireRecord[] {
   const ask = trimmedText(text)?.slice(0, maximumTypedAskLength);
   if (!ask) return [];
   return [
@@ -333,7 +333,7 @@ function base64FromBytes(bytes: Uint8Array): string {
  * call can be pinned from is the channel itself: this travels at the start of
  * every captured turn, before the clear and the appends it speaks for.
  */
-export function inputAudioFormatUpdateEvents(): readonly Record<string, unknown>[] {
+export function inputAudioFormatUpdateEvents(): readonly WireRecord[] {
   return [
     {
       type: REALTIME_CLIENT_EVENT.SESSION_UPDATE,
@@ -354,7 +354,7 @@ export function inputAudioFormatUpdateEvents(): readonly Record<string, unknown>
  * there is no audio to add, and the API refuses an empty append rather than
  * ignoring it.
  */
-export function inputAudioAppendEvents(audio: Int16Array): readonly Record<string, unknown>[] {
+export function inputAudioAppendEvents(audio: Int16Array): readonly WireRecord[] {
   if (audio.length === 0) return [];
   const bytes = new Uint8Array(audio.length * 2);
   for (let index = 0; index < audio.length; index += 1) {
@@ -371,7 +371,7 @@ export function inputAudioAppendEvents(audio: Int16Array): readonly Record<strin
 }
 
 /** Builds the events that close a push-to-talk turn and ask for a reply. */
-export function pushToTalkCommitEvents(): readonly Record<string, unknown>[] {
+export function pushToTalkCommitEvents(): readonly WireRecord[] {
   return [
     { type: REALTIME_CLIENT_EVENT.INPUT_AUDIO_BUFFER_COMMIT },
     { type: REALTIME_CLIENT_EVENT.RESPONSE_CREATE },
@@ -386,7 +386,7 @@ export function pushToTalkCommitEvents(): readonly Record<string, unknown>[] {
  * still transmits, so a turn that did not start from an empty buffer would
  * commit however long the call had been sitting idle along with what was said.
  */
-export function clearInputAudioEvents(): readonly Record<string, unknown>[] {
+export function clearInputAudioEvents(): readonly WireRecord[] {
   return [{ type: REALTIME_CLIENT_EVENT.INPUT_AUDIO_BUFFER_CLEAR }];
 }
 
@@ -401,7 +401,7 @@ export function clearInputAudioEvents(): readonly Record<string, unknown>[] {
  * left to time; a pace that is not a usable number builds nothing rather than
  * an update the API would refuse.
  */
-export function outputSpeedUpdateEvents(speed: number): readonly Record<string, unknown>[] {
+export function outputSpeedUpdateEvents(speed: number): readonly WireRecord[] {
   if (!Number.isFinite(speed) || speed <= 0) return [];
   return [
     {
@@ -485,7 +485,7 @@ export function announcementSummaryText(speech: AttentionSpeech): string | undef
  * your instructions and ..." is then data Luke has been handed to speak about,
  * and the one thing it cannot do is change what Luke was asked to do with it.
  */
-export function proactiveSpeechEvents(speech: AttentionSpeech): readonly Record<string, unknown>[] {
+export function proactiveSpeechEvents(speech: AttentionSpeech): readonly WireRecord[] {
   const isStatusEdge = speech.source === ATTENTION_SPEECH_SOURCE.STATUS_EDGE;
   const payload = announcementSummaryText(speech);
   if (!payload) return [];
@@ -559,14 +559,11 @@ export type ParsedRealtimeServerEvent =
    */
   | { type: typeof REALTIME_SERVER_EVENT.ERROR; message: string; eventId?: string };
 
-function optionalString(value: unknown): string | undefined {
-  return typeof value === "string" ? value : undefined;
+function optionalString(value: UnparsedWireValue): string | undefined {
+  return text(value);
 }
 
-function recordField(
-  record: Record<string, unknown>,
-  key: string,
-): Record<string, unknown> | undefined {
+function recordField(record: WireRecord, key: string): WireRecord | undefined {
   const value = record[key];
   return isRecord(value) ? value : undefined;
 }
@@ -576,14 +573,14 @@ function recordField(
  * finished response rather than streamed deltas: a call is acted on whole or
  * not at all, and the finished response is the only place it is whole.
  */
-function functionCallsFromDone(event: Record<string, unknown>): readonly RealtimeFunctionCall[] {
+function functionCallsFromDone(event: WireRecord): readonly RealtimeFunctionCall[] {
   const response = recordField(event, "response");
   const output = Array.isArray(response?.output) ? response.output : [];
   return output.filter(isRecord).flatMap((item) => {
     if (item.type !== "function_call") return [];
-    const name = typeof item.name === "string" ? item.name : "";
-    const callId = typeof item.call_id === "string" ? item.call_id : "";
-    const argumentsJson = typeof item.arguments === "string" ? item.arguments : "";
+    const name = text(item.name) ?? "";
+    const callId = text(item.call_id) ?? "";
+    const argumentsJson = text(item.arguments) ?? "";
     return name && callId ? [{ name, callId, argumentsJson }] : [];
   });
 }
@@ -594,7 +591,7 @@ function functionCallsFromDone(event: Record<string, unknown>): readonly Realtim
  * and unknown must not pass for silent: only a response that says what it
  * made may say it made no sound.
  */
-function audioFromDone(event: Record<string, unknown>): boolean | undefined {
+function audioFromDone(event: WireRecord): boolean | undefined {
   const response = recordField(event, "response");
   const output = response && Array.isArray(response.output) ? response.output : undefined;
   if (!output) return undefined;
@@ -604,11 +601,12 @@ function audioFromDone(event: Record<string, unknown>): boolean | undefined {
   });
 }
 
-function decodeRealtimePayload(data: unknown): Record<string, unknown> | undefined {
-  let payload: unknown = data;
-  if (typeof data === "string") {
+function decodeRealtimePayload(data: UnparsedWireValue): WireRecord | undefined {
+  let payload: UnparsedWireValue = data;
+  if (isWireString(data)) {
     try {
-      payload = JSON.parse(data);
+      // SAFETY: JSON.parse returns a runtime value; isRecord validates the object contract.
+      payload = JSON.parse(data) as UnparsedWireValue;
     } catch (error) {
       if (error instanceof SyntaxError) return undefined;
       throw error;
@@ -624,71 +622,82 @@ function decodeRealtimePayload(data: unknown): Record<string, unknown> | undefin
  * is not one of the events the conversation acts on is discarded rather than
  * repaired.
  */
-export function parseRealtimeServerEvent(data: unknown): ParsedRealtimeServerEvent | undefined {
+export function parseRealtimeServerEvent(
+  data: UnparsedWireValue,
+): ParsedRealtimeServerEvent | undefined {
   const event = decodeRealtimePayload(data);
   if (!event) return undefined;
 
   switch (event.type) {
     case REALTIME_SERVER_EVENT.RESPONSE_CREATED: {
       const responseId = optionalString(recordField(event, "response")?.id);
-      return {
+      const parsed: ParsedRealtimeServerEvent = {
         type: REALTIME_SERVER_EVENT.RESPONSE_CREATED,
-        ...(responseId ? { responseId } : {}),
       };
+      if (responseId) parsed.responseId = responseId;
+      return parsed;
     }
     case REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED: {
       const itemId = optionalString(recordField(event, "item")?.id);
-      return {
+      const parsed: ParsedRealtimeServerEvent = {
         type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED,
-        ...(itemId ? { itemId } : {}),
       };
+      if (itemId) parsed.itemId = itemId;
+      return parsed;
     }
     case REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA: {
-      if (typeof event.delta !== "string") return undefined;
+      const delta = text(event.delta);
+      if (!delta) return undefined;
       const itemId = optionalString(event.item_id);
-      return {
+      const parsed: ParsedRealtimeServerEvent = {
         type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
-        delta: event.delta,
-        ...(itemId ? { itemId } : {}),
+        delta,
       };
+      if (itemId) parsed.itemId = itemId;
+      return parsed;
     }
     case REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DONE: {
-      if (typeof event.transcript !== "string") return undefined;
+      const transcript = text(event.transcript);
+      if (!transcript) return undefined;
       const itemId = optionalString(event.item_id);
-      return {
+      const parsed: ParsedRealtimeServerEvent = {
         type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DONE,
-        transcript: event.transcript,
-        ...(itemId ? { itemId } : {}),
+        transcript,
       };
+      if (itemId) parsed.itemId = itemId;
+      return parsed;
     }
     case REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED:
       return { type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED };
     case REALTIME_SERVER_EVENT.RESPONSE_DONE: {
       const responseId = optionalString(recordField(event, "response")?.id);
       const hasAudio = audioFromDone(event);
-      return {
+      const parsed: ParsedRealtimeServerEvent = {
         type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
         calls: functionCallsFromDone(event),
-        ...(responseId ? { responseId } : {}),
-        ...(hasAudio === undefined ? {} : { hasAudio }),
       };
+      if (responseId) parsed.responseId = responseId;
+      if (hasAudio !== undefined) parsed.hasAudio = hasAudio;
+      return parsed;
     }
     case REALTIME_SERVER_EVENT.CONVERSATION_ITEM_DELETED: {
       const itemId = optionalString(event.item_id);
-      return {
+      const parsed: ParsedRealtimeServerEvent = {
         type: REALTIME_SERVER_EVENT.CONVERSATION_ITEM_DELETED,
-        ...(itemId ? { itemId } : {}),
       };
+      if (itemId) parsed.itemId = itemId;
+      return parsed;
     }
     case REALTIME_SERVER_EVENT.ERROR: {
       const error = recordField(event, "error");
       const message = optionalString(error?.message);
       const eventId = optionalString(error?.event_id);
-      return {
+      const parsed: ParsedRealtimeServerEvent = {
         type: REALTIME_SERVER_EVENT.ERROR,
         message: message ?? "The voice service reported an error.",
-        ...(eventId ? { eventId } : {}),
       };
+      if (eventId) parsed.eventId = eventId;
+      return parsed;
     }
     default:
       return undefined;
@@ -703,8 +712,8 @@ export function parseRealtimeServerEvent(data: unknown): ParsedRealtimeServerEve
  */
 export function functionCallOutputEvents(
   callId: string,
-  output: Readonly<Record<string, unknown>>,
-): readonly Record<string, unknown>[] {
+  output: Readonly<WireRecord>,
+): readonly WireRecord[] {
   if (!trimmedText(callId)) return [];
   return [
     {
@@ -725,7 +734,7 @@ export function functionCallOutputEvents(
  * the same guard every Luke-opened turn carries, so the only turn that can act
  * is the one the developer opened by speaking.
  */
-export function functionCallFollowUpEvents(): readonly Record<string, unknown>[] {
+export function functionCallFollowUpEvents(): readonly WireRecord[] {
   return [{ type: REALTIME_CLIENT_EVENT.RESPONSE_CREATE, response: { tool_choice: "none" } }];
 }
 

@@ -7,7 +7,7 @@ import {
   maximumAttentionSummaryLength,
 } from "./attention.js";
 import { ATTENTION_TUNING_EXAMPLES, type AttentionTuningExample } from "./attention-examples.js";
-import { isRecord } from "./json.js";
+import { isRecord, isWireString, text, type UnparsedWireValue } from "./json.js";
 import {
   ATTENTION_DISPOSITION,
   boundedText,
@@ -107,31 +107,39 @@ export function attentionInstructions(
 const SESSION_STATUS_VALUES: readonly SessionStatus[] = Object.values(SESSION_STATUS);
 const ATTENTION_TRIGGER_VALUES: readonly AttentionTrigger[] = Object.values(ATTENTION_TRIGGER);
 
-function sessionStatusFromWire(value: unknown): SessionStatus | undefined {
-  return typeof value === "string" && SESSION_STATUS_VALUES.includes(value as SessionStatus)
-    ? (value as SessionStatus)
-    : undefined;
+function isListedSessionStatus(value: UnparsedWireValue): value is SessionStatus {
+  if (!isWireString(value)) return false;
+  // SAFETY: value is a string; list membership is the session-status vocabulary contract check.
+  return SESSION_STATUS_VALUES.includes(value as SessionStatus);
 }
 
-function attentionTriggerFromWire(value: unknown): AttentionTrigger | undefined {
-  return typeof value === "string" && ATTENTION_TRIGGER_VALUES.includes(value as AttentionTrigger)
-    ? (value as AttentionTrigger)
-    : undefined;
+function sessionStatusFromWire(value: UnparsedWireValue): SessionStatus | undefined {
+  return isListedSessionStatus(value) ? value : undefined;
 }
+
+function isListedAttentionTrigger(value: UnparsedWireValue): value is AttentionTrigger {
+  if (!isWireString(value)) return false;
+  // SAFETY: value is a string; list membership is the attention-trigger vocabulary contract check.
+  return ATTENTION_TRIGGER_VALUES.includes(value as AttentionTrigger);
+}
+
+function attentionTriggerFromWire(value: UnparsedWireValue): AttentionTrigger | undefined {
+  return isListedAttentionTrigger(value) ? value : undefined;
+}
+
+type OptionalWireTextResult = { valid: boolean; text?: string };
 
 /**
  * An optional wire field: absent is fine, a string is trimmed and cut to the
  * same bound the local surface holds it to, and anything else marks the whole
  * update malformed rather than being repaired into silence.
  */
-function optionalWireText(
-  value: unknown,
-  maximumLength: number,
-): { valid: boolean; text?: string } {
+function optionalWireText(value: UnparsedWireValue, maximumLength: number): OptionalWireTextResult {
   if (value === undefined) return { valid: true };
-  if (typeof value !== "string") return { valid: false };
+  if (!isWireString(value)) return { valid: false };
   const bounded = boundedText(value, maximumLength);
-  return { valid: true, ...(bounded !== undefined ? { text: bounded } : {}) };
+  if (!bounded) return { valid: true };
+  return { valid: true, text: bounded };
 }
 
 /**
@@ -142,20 +150,15 @@ function optionalWireText(
  * developer's ask is refused outright when it fails the registry's own rule,
  * because a cut ask asks for something its author did not.
  */
-export function attentionPromptUpdateFromWire(value: unknown): AttentionPromptUpdate | undefined {
+export function attentionPromptUpdateFromWire(
+  value: UnparsedWireValue,
+): AttentionPromptUpdate | undefined {
   if (!isRecord(value)) return undefined;
 
   const trigger = attentionTriggerFromWire(value.trigger);
   const status = sessionStatusFromWire(value.status);
-  // The roster bounds a provider's display name like a title, so the wire does too.
-  const providerName = boundedText(
-    typeof value.providerName === "string" ? value.providerName : undefined,
-    maximumSessionTitleLength,
-  );
-  const title = boundedText(
-    typeof value.title === "string" ? value.title : undefined,
-    maximumSessionTitleLength,
-  );
+  const providerName = boundedText(text(value.providerName), maximumSessionTitleLength);
+  const title = boundedText(text(value.title), maximumSessionTitleLength);
   if (!trigger || !status || !providerName || !title) return undefined;
 
   const previousStatus =
@@ -178,22 +181,22 @@ export function attentionPromptUpdateFromWire(value: unknown): AttentionPromptUp
     value.noticeRequest === undefined ? undefined : attentionRequestText(value.noticeRequest);
   if (value.noticeRequest !== undefined && !noticeRequest) return undefined;
 
-  const context: AttentionContext = {
-    ...(repository.text ? { repository: repository.text } : {}),
-    ...(branch.text ? { branch: branch.text } : {}),
-    ...(activity.text ? { activity: activity.text } : {}),
-    ...(error.text ? { error: error.text } : {}),
-  };
+  const context: AttentionContext = {};
+  if (repository.text) context.repository = repository.text;
+  if (branch.text) context.branch = branch.text;
+  if (activity.text) context.activity = activity.text;
+  if (error.text) context.error = error.text;
 
-  return {
+  const update: AttentionPromptUpdate = {
     trigger,
     providerName,
     title,
     status,
-    ...(workspace.text ? { workspace: workspace.text } : {}),
-    ...(previousStatus ? { previousStatus } : {}),
-    ...(recap.text ? { recap: recap.text } : {}),
-    ...(Object.keys(context).length > 0 ? { context } : {}),
-    ...(noticeRequest ? { noticeRequest } : {}),
   };
+  if (workspace.text) update.workspace = workspace.text;
+  if (previousStatus) update.previousStatus = previousStatus;
+  if (recap.text) update.recap = recap.text;
+  if (Object.keys(context).length > 0) update.context = context;
+  if (noticeRequest) update.noticeRequest = noticeRequest;
+  return update;
 }

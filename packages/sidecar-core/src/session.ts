@@ -1,3 +1,5 @@
+import { text, type UnparsedWireValue } from "./json.js";
+
 /**
  * Provider-observed condition. Distinct from `SESSION_URGENCY`, the surface's
  * ranked disposition: both contain the literal "working", so the brand keeps
@@ -5,9 +7,14 @@
  */
 type SessionStatusBrand<T extends string> = T & { readonly __brand: "SessionStatus" };
 
+function sessionStatusBrand<T extends string>(value: T): SessionStatusBrand<T> {
+  // SAFETY: brands a session-status literal at the vocabulary boundary.
+  return value as SessionStatusBrand<T>;
+}
+
 export const SESSION_STATUS = {
-  WORKING: "working" as SessionStatusBrand<"working">,
-  WAITING: "waiting" as SessionStatusBrand<"waiting">,
+  WORKING: sessionStatusBrand("working"),
+  WAITING: sessionStatusBrand("waiting"),
   /**
    * The session stopped on something it cannot get past on its own. Providers
    * report this natively — a Conductor `error`, a Cursor `ERROR` run, a Claude
@@ -15,9 +22,9 @@ export const SESSION_STATUS = {
    * ask different things of the developer: one wants an answer, the other wants
    * a rescue.
    */
-  ERROR: "error" as SessionStatusBrand<"error">,
-  COMPLETE: "complete" as SessionStatusBrand<"complete">,
-  UNKNOWN: "unknown" as SessionStatusBrand<"unknown">,
+  ERROR: sessionStatusBrand("error"),
+  COMPLETE: sessionStatusBrand("complete"),
+  UNKNOWN: sessionStatusBrand("unknown"),
 } as const;
 
 export type SessionStatus = (typeof SESSION_STATUS)[keyof typeof SESSION_STATUS];
@@ -361,9 +368,8 @@ export const maximumSessionMessageLength = 4_000;
  * field this one is refused rather than cut when it runs long: a truncated
  * message says something its author did not.
  */
-export function sessionMessageText(value: unknown): string | undefined {
-  if (typeof value !== "string") return undefined;
-  const normalized = value.trim();
+export function sessionMessageText(value: UnparsedWireValue): string | undefined {
+  const normalized = text(value);
   if (!normalized || normalized.length > maximumSessionMessageLength) return undefined;
   return normalized;
 }
@@ -502,12 +508,13 @@ function normalizeControls(
       (candidate) => candidate === control.kind,
     );
     const target = boundedText(control.target, maximumSessionDetailLength);
-    return {
+    const normalized: SessionControl = {
       id,
       label: boundedText(control.label, maximumSessionTitleLength) ?? id,
-      ...(kind ? { kind } : {}),
-      ...(target ? { target } : {}),
     };
+    if (kind) normalized.kind = kind;
+    if (target) normalized.target = target;
+    return normalized;
   });
 }
 
@@ -527,16 +534,16 @@ export function normalizeSessionDetail(detail: SessionDetail | undefined): Sessi
   const change = sessionChange(detail.change);
   const diff = sessionDiff(detail.diff);
 
-  return {
-    ...(activity ? { activity } : {}),
-    ...(repository ? { repository } : {}),
-    ...(branch ? { branch } : {}),
-    ...(model ? { model } : {}),
-    ...(error ? { error } : {}),
-    ...(link ? { link } : {}),
-    ...(change ? { change } : {}),
-    ...(diff ? { diff } : {}),
-  };
+  const result: SessionDetail = {};
+  if (activity) result.activity = activity;
+  if (repository) result.repository = repository;
+  if (branch) result.branch = branch;
+  if (model) result.model = model;
+  if (error) result.error = error;
+  if (link) result.link = link;
+  if (change) result.change = change;
+  if (diff) result.diff = diff;
+  return result;
 }
 
 /**
@@ -568,7 +575,9 @@ function normalizeWorkspace(workspace: SessionWorkspace | undefined): SessionWor
   );
   if (!providerWorkspaceId) return undefined;
   const name = boundedText(workspace?.name, maximumSessionTitleLength);
-  return { providerWorkspaceId, ...(name ? { name } : {}) };
+  const normalized: SessionWorkspace = { providerWorkspaceId };
+  if (name) normalized.name = name;
+  return normalized;
 }
 
 /** Normalizes the two-part identity used to locate a session in the registry. */
@@ -593,12 +602,13 @@ export function normalizeAttention(decision: AttentionDecision): AttentionDecisi
     throw new Error(`Unknown attention disposition: ${decision.disposition}`);
   }
   const summary = boundedText(decision.summary, maximumSessionRecapLength);
-  return {
+  const normalized: AttentionDecision = {
     disposition: decision.disposition,
     decidedAt: timestamp(decision.decidedAt, "attention decidedAt"),
-    ...(summary ? { summary } : {}),
-    ...(decision.answersAsk ? { answersAsk: true } : {}),
   };
+  if (summary) normalized.summary = summary;
+  if (decision.answersAsk) normalized.answersAsk = true;
+  return normalized;
 }
 
 /**
@@ -622,7 +632,7 @@ export function normalizeSession(
   const spawnTarget = boundedText(observation.spawnTarget, maximumSessionDetailLength);
   const workspace = normalizeWorkspace(observation.workspace);
 
-  return {
+  const session: NormalizedSession = {
     providerId,
     providerSessionId,
     provider: {
@@ -631,20 +641,21 @@ export function normalizeSession(
     },
     title: boundedText(observation.title, maximumSessionTitleLength) ?? "Untitled session",
     status,
-    ...(completionCause ? { completionCause } : {}),
     observedAt,
     location: normalizeLocation(observation.location),
-    ...(recap ? { recap } : {}),
     detail: normalizeSessionDetail(observation.detail),
     controls: normalizeControls(observation.controls),
     // Anything but an explicit yes is a no, so an adapter that has not thought
     // about messaging reports a session that cannot be messaged.
     canReceiveMessage: observation.canReceiveMessage === true,
     spawnableAgents: normalizeSpawnableAgents(observation.spawnableAgents),
-    ...(spawnTarget ? { spawnTarget } : {}),
-    ...(workspace ? { workspace } : {}),
     attention: normalizeAttention(attention),
   };
+  if (completionCause) session.completionCause = completionCause;
+  if (recap) session.recap = recap;
+  if (spawnTarget) session.spawnTarget = spawnTarget;
+  if (workspace) session.workspace = workspace;
+  return session;
 }
 
 /** Returns whether a provider explicitly exposed a given control for a session. */

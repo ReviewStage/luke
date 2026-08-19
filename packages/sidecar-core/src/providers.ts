@@ -1,3 +1,4 @@
+import { text, type UnparsedWireValue } from "./json.js";
 import type { ProviderSessionObservation, SessionControl, SessionProvider } from "./session.js";
 
 /**
@@ -187,9 +188,8 @@ export const maximumObservedWorkspaceProjects = 20;
  * than cut when it runs long, the same posture as a message: a truncated name
  * says something its author did not.
  */
-export function workspaceNameText(value: unknown): string | undefined {
-  if (typeof value !== "string") return undefined;
-  const normalized = value.trim();
+export function workspaceNameText(value: UnparsedWireValue): string | undefined {
+  const normalized = text(value);
   if (!normalized || normalized.length > maximumWorkspaceNameLength) return undefined;
   return normalized;
 }

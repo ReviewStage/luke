@@ -14,6 +14,8 @@ import {
   SESSION_STATUS,
 } from "../src";
 import { maximumAttentionRequestLength } from "../src/attention";
+import type { WireRecord } from "../src/json.js";
+import { isRecord } from "../src/json.js";
 import { maximumSessionRecapLength, maximumSessionTitleLength } from "../src/session";
 
 const UPDATE: AttentionPromptUpdate = {
@@ -88,16 +90,23 @@ test("a wire update needs only its required fields", () => {
 });
 
 test("a wire update outside the build's value sets is refused, not repaired", () => {
-  const valid = JSON.parse(JSON.stringify(UPDATE)) as Record<string, unknown>;
+  const parsed = JSON.parse(JSON.stringify(UPDATE));
+  if (!isRecord(parsed)) throw new Error("fixture wire record expected");
+  const validWire: WireRecord = parsed;
 
-  assert.equal(attentionPromptUpdateFromWire({ ...valid, trigger: "made-up" }), undefined);
-  assert.equal(attentionPromptUpdateFromWire({ ...valid, status: "sleeping" }), undefined);
-  assert.equal(attentionPromptUpdateFromWire({ ...valid, previousStatus: "sleeping" }), undefined);
-  assert.equal(attentionPromptUpdateFromWire({ ...valid, title: undefined }), undefined);
-  assert.equal(attentionPromptUpdateFromWire({ ...valid, title: "   " }), undefined);
-  assert.equal(attentionPromptUpdateFromWire({ ...valid, recap: 7 }), undefined);
-  assert.equal(attentionPromptUpdateFromWire({ ...valid, context: "not a record" }), undefined);
-  assert.equal(attentionPromptUpdateFromWire({ ...valid, context: { error: 9 } }), undefined);
+  assert.equal(attentionPromptUpdateFromWire({ ...validWire, trigger: "made-up" }), undefined);
+  assert.equal(attentionPromptUpdateFromWire({ ...validWire, status: "sleeping" }), undefined);
+  assert.equal(
+    attentionPromptUpdateFromWire({ ...validWire, previousStatus: "sleeping" }),
+    undefined,
+  );
+  const noTitle = { ...validWire };
+  delete noTitle.title;
+  assert.equal(attentionPromptUpdateFromWire(noTitle), undefined);
+  assert.equal(attentionPromptUpdateFromWire({ ...validWire, title: "   " }), undefined);
+  assert.equal(attentionPromptUpdateFromWire({ ...validWire, recap: 7 }), undefined);
+  assert.equal(attentionPromptUpdateFromWire({ ...validWire, context: "not a record" }), undefined);
+  assert.equal(attentionPromptUpdateFromWire({ ...validWire, context: { error: 9 } }), undefined);
   assert.equal(attentionPromptUpdateFromWire("not a record"), undefined);
 });
 

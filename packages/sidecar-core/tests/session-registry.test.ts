@@ -210,6 +210,7 @@ test("a session runs on this machine unless its provider observed it elsewhere",
     () =>
       registry.upsert(
         codex,
+        // SAFETY: test deliberately supplies an out-of-vocabulary location to prove rejection.
         observation("elsewhere", 100, { location: "orbit" as SessionLocation }),
       ),
     /Unknown session location: orbit/,
@@ -339,7 +340,7 @@ test("registry snapshots are isolated and listeners only receive effective updat
   const revisions: number[] = [];
   const unsubscribe = registry.subscribe((snapshot) => {
     revisions.push(snapshot.revision);
-    const mutable = snapshot.sessions[0] as { title: string } | undefined;
+    const mutable = snapshot.sessions[0];
     if (mutable) mutable.title = "Changed outside the registry";
   });
 

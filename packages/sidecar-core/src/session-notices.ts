@@ -97,21 +97,22 @@ function noticeStatus(status: SessionStatus): SessionNoticeStatus | undefined {
 function sessionNotice(session: NormalizedSession, previousStatus: SessionStatus): SessionNotice {
   const status = noticeStatus(session.status);
   if (!status) throw new Error(`Not a notice status: ${session.status}`);
-  return {
+  const notice: SessionNotice = {
     providerId: session.providerId,
     providerSessionId: session.providerSessionId,
     providerName: session.provider.displayName,
     title: session.title,
-    ...(session.workspace?.name ? { workspace: session.workspace.name } : {}),
     status,
     previousStatus,
-    ...(session.recap ? { recap: session.recap } : {}),
-    ...(session.detail.error ? { error: session.detail.error } : {}),
-    ...(session.detail.repository ? { repository: session.detail.repository } : {}),
-    ...(session.detail.branch ? { branch: session.detail.branch } : {}),
     canReceiveMessage: session.canReceiveMessage,
     observedAt: session.observedAt,
   };
+  if (session.workspace?.name) notice.workspace = session.workspace.name;
+  if (session.recap) notice.recap = session.recap;
+  if (session.detail.error) notice.error = session.detail.error;
+  if (session.detail.repository) notice.repository = session.detail.repository;
+  if (session.detail.branch) notice.branch = session.detail.branch;
+  return notice;
 }
 
 /**

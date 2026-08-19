@@ -1,5 +1,5 @@
 import { attentionDecisionFromModel } from "./attention.js";
-import { isRecord } from "./json.js";
+import { isRecord, text, type UnparsedWireValue, wholeNumber } from "./json.js";
 import {
   REALTIME_CALLS_PATH,
   type RealtimeConnection,
@@ -48,17 +48,18 @@ export interface HostedQuota {
   resetsAt: number;
 }
 
-function wholeNumber(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
+function nonNegativeWholeNumber(value: UnparsedWireValue): number | undefined {
+  const parsed = wholeNumber(value);
+  return parsed !== undefined && parsed >= 0 ? parsed : undefined;
 }
 
 /** Reads a quota out of an untrusted hosted answer, or nothing. */
-export function hostedQuotaFromWire(value: unknown): HostedQuota | undefined {
+export function hostedQuotaFromWire(value: UnparsedWireValue): HostedQuota | undefined {
   if (!isRecord(value)) return undefined;
-  const used = wholeNumber(value.used);
-  const limit = wholeNumber(value.limit);
-  const remaining = wholeNumber(value.remaining);
-  const resetsAt = wholeNumber(value.resetsAt);
+  const used = nonNegativeWholeNumber(value.used);
+  const limit = nonNegativeWholeNumber(value.limit);
+  const remaining = nonNegativeWholeNumber(value.remaining);
+  const resetsAt = nonNegativeWholeNumber(value.resetsAt);
   if (used === undefined || limit === undefined || remaining === undefined) return undefined;
   if (resetsAt === undefined) return undefined;
   return { used, limit, remaining, resetsAt };
@@ -84,16 +85,16 @@ export interface HostedMintAnswer {
  * the OpenAI mint response reader.
  */
 export function hostedMintAnswerFromWire(
-  value: unknown,
+  value: UnparsedWireValue,
   now: number,
 ): HostedMintAnswer | undefined {
   if (!isRecord(value) || !isRecord(value.connection)) return undefined;
-  const { connection } = value;
-  const secret = typeof connection.value === "string" ? connection.value.trim() : "";
-  const expiresAt = connection.expiresAt;
-  const model = typeof connection.model === "string" ? connection.model.trim() : "";
+  const connection = value.connection;
+  const secret = text(connection.value);
+  const expiresAt = wholeNumber(connection.expiresAt);
+  const model = text(connection.model);
   if (!secret || !model) return undefined;
-  if (typeof expiresAt !== "number" || !Number.isFinite(expiresAt)) return undefined;
+  if (expiresAt === undefined) return undefined;
   if (connection.callsUrl !== HOSTED_CALLS_URL) return undefined;
   const credential: RealtimeConnection = {
     value: secret,
@@ -103,7 +104,9 @@ export function hostedMintAnswerFromWire(
   };
   if (!realtimeCredentialIsUsable(credential, now)) return undefined;
   const quota = hostedQuotaFromWire(value.quota);
-  return { connection: credential, ...(quota ? { quota } : {}) };
+  const answer: HostedMintAnswer = { connection: credential };
+  if (quota !== undefined) answer.quota = quota;
+  return answer;
 }
 
 export interface HostedReviewAnswer {
@@ -117,22 +120,16 @@ export interface HostedReviewAnswer {
  * local dedup windows, so the service's clock has no business in it.
  */
 export function hostedReviewAnswerFromWire(
-  value: unknown,
+  value: UnparsedWireValue,
   decidedAt: number,
 ): HostedReviewAnswer | undefined {
   if (!isRecord(value) || !isRecord(value.decision)) return undefined;
-  const wire = value.decision;
-  const decision = attentionDecisionFromModel(
-    {
-      disposition: wire.disposition,
-      summary: typeof wire.summary === "string" ? wire.summary : null,
-      answers_ask: wire.answersAsk === true,
-    },
-    decidedAt,
-  );
+  const decision = attentionDecisionFromModel(value.decision, decidedAt);
   if (!decision) return undefined;
   const quota = hostedQuotaFromWire(value.quota);
-  return { decision, ...(quota ? { quota } : {}) };
+  const answer: HostedReviewAnswer = { decision };
+  if (quota !== undefined) answer.quota = quota;
+  return answer;
 }
 
 /**
@@ -145,17 +142,22 @@ export interface HostedUsageAnswer {
 }
 
 /** Validates a usage answer; a malformed one reads as no answer at all. */
-export function hostedUsageAnswerFromWire(value: unknown): HostedUsageAnswer | undefined {
+export function hostedUsageAnswerFromWire(value: UnparsedWireValue): HostedUsageAnswer | undefined {
   if (!isRecord(value)) return undefined;
   const voice = hostedQuotaFromWire(value.voice);
   const attention = hostedQuotaFromWire(value.attention);
   return voice && attention ? { voice, attention } : undefined;
 }
 
+const HOSTED_API_ERROR_LIST: readonly HostedApiError[] = Object.values(HOSTED_API_ERROR);
+
 /** Reads the error reason out of a refused hosted answer, or nothing. */
-export function hostedErrorFromWire(value: unknown): HostedApiError | undefined {
-  if (!isRecord(value) || typeof value.error !== "string") return undefined;
-  return (Object.values(HOSTED_API_ERROR) as string[]).includes(value.error)
-    ? (value.error as HostedApiError)
+export function hostedErrorFromWire(value: UnparsedWireValue): HostedApiError | undefined {
+  if (!isRecord(value)) return undefined;
+  const error = text(value.error);
+  if (!error) return undefined;
+  // SAFETY: error is a string; membership in HOSTED_API_ERROR_LIST is the wire contract check.
+  return HOSTED_API_ERROR_LIST.includes(error as HostedApiError)
+    ? (error as HostedApiError)
     : undefined;
 }
