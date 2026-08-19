@@ -790,9 +790,10 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
    * the call before it can open a turn, which is what lets the key work without
    * the panel ever being visited.
    *
-   * The talk key going down. Every press goes to the session, including the one
-   * that has no call to press against yet: the microphone opens for the press,
-   * so one that beats the call is remembered and applied when it comes up.
+   * The talk key going down. Every press the system lets capture goes to the
+   * session, including the one that has no call to press against yet: the
+   * microphone opens for the press, so one that beats the call is remembered
+   * and applied when it comes up.
    */
   const beginTalk = useCallback(async () => {
     talkPressedAt.current = performance.now();
@@ -800,6 +801,24 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     // done, which is the release's to answer.
     if (talkLatched.current) return;
     const session = ensureVoiceSession();
+    // The press is what opens a capture device, and the call under it may
+    // have been opened by a typed ask, which asked the system for nothing.
+    // So a press against anything but a granted microphone asks before the
+    // turn opens: refused, the press is dropped here — before its device
+    // request could fail a standing call that was carrying the typed
+    // conversation fine.
+    if (microphoneStatus !== "granted") {
+      const permission = await window.sidecar.requestMicrophone();
+      setMicrophoneStatus(permission);
+      if (permission !== "granted") {
+        // Said where the device failure used to land it: the caption strip.
+        setVoiceError(
+          "The talk key needs the microphone. Allow it in System Settings, " +
+            "under Privacy & Security, Microphone — or type to Luke instead.",
+        );
+        return;
+      }
+    }
     session.beginTurn();
     const press = talkKeyPress({ latched: false, microphoneCall: session.microphoneCall });
     // A press against no call — or against Luke's own speak-only call, which
@@ -811,7 +830,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     // `connect` inside stands Luke's own call down if one is open: the
     // developer pressing the key always gets the developer's call.
     await startMicrophone();
-  }, [ensureVoiceSession, startMicrophone]);
+  }, [ensureVoiceSession, microphoneStatus, startMicrophone]);
 
   /**
    * The talk key coming up. How long it was held is the whole of the decision:
