@@ -137,6 +137,16 @@ async function writeCodexConfig(codexHome: string, source: string): Promise<void
   await fs.writeFile(path.join(codexHome, "config.toml"), source);
 }
 
+async function writeCodexSessionIndex(
+  codexHome: string,
+  entries: readonly { id: string; threadName: string }[],
+): Promise<void> {
+  await fs.writeFile(
+    path.join(codexHome, "session_index.jsonl"),
+    `${entries.map((entry) => JSON.stringify({ id: entry.id, thread_name: entry.threadName })).join("\n")}\n`,
+  );
+}
+
 async function writeMalformedCodexState(codexHome: string): Promise<void> {
   await fs.mkdir(codexHome, { recursive: true });
   const database = new DatabaseSync(path.join(codexHome, CODEX_STATE_DATABASE), {});
@@ -180,6 +190,104 @@ test("observes a Codex thread under the name Codex gave it", async (t) => {
     model: "gpt-5.6-luna · medium",
     link: "codex://threads/codex-active",
   });
+});
+
+test("falls back to the workspace for Codex delegation marker titles", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  await writeCodexState(codexHome, [
+    {
+      id: "codex-delegated",
+      cwd: "/Users/test/delegated-repository",
+      observedAt: TEST_TIME - 1_000,
+      title:
+        "<codex_delegation>\n<source_thread_id>01a01c04-31e2-7be1-a478-0f321abcdef0</source_thread_id>\n</codex_delegation>",
+    },
+  ]);
+
+  const adapter = new CodexSessionAdapter({
+    codexHome,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60_000,
+  });
+
+  const observations = await adapter.observe();
+
+  assert.equal(observations[0]?.title, "delegated-repository");
+});
+
+test("resolves a Codex delegation marker through the source chat title index", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  await writeCodexSessionIndex(codexHome, [
+    { id: "01a01c04-31e2-7be1-a478-0f321abcdef0", threadName: "Fix Luke Voice Announcements" },
+  ]);
+  await writeCodexState(codexHome, [
+    {
+      id: "codex-delegated",
+      cwd: "/Users/test/luke",
+      observedAt: TEST_TIME - 1_000,
+      title:
+        "<codex_delegation>\n<source_thread_id>01a01c04-31e2-7be1-a478-0f321abcdef0</source_thread_id>\n<input>delegated work</input>\n</codex_delegation>",
+    },
+  ]);
+
+  const adapter = new CodexSessionAdapter({
+    codexHome,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60_000,
+  });
+
+  const observations = await adapter.observe();
+
+  assert.equal(observations[0]?.title, "Fix Luke Voice Announcements");
+});
+
+test("prefers a delegated session's own indexed title over its source chat", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  await writeCodexSessionIndex(codexHome, [
+    { id: "01a01c04-31e2-7be1-a478-0f321abcdef0", threadName: "Parent chat" },
+    { id: "codex-delegated", threadName: "Add Claude Code archive status" },
+  ]);
+  await writeCodexState(codexHome, [
+    {
+      id: "codex-delegated",
+      cwd: "/Users/test/luke",
+      observedAt: TEST_TIME - 1_000,
+      title:
+        "<codex_delegation> <source_thread_id>01a01c04-31e2-7be1-a478-0f321abcdef0</source_thread_id> <input>delegated work</input> </codex_delegation>",
+    },
+  ]);
+
+  const adapter = new CodexSessionAdapter({
+    codexHome,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60_000,
+  });
+
+  const observations = await adapter.observe();
+
+  assert.equal(observations[0]?.title, "Add Claude Code archive status");
+});
+
+test("keeps a legitimate title that resembles a delegation marker", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  await writeCodexState(codexHome, [
+    {
+      id: "codex-named",
+      cwd: "/Users/test/luke",
+      observedAt: TEST_TIME - 1_000,
+      title: "<codex_delegation> <source_thread_id>not-a-uuid",
+    },
+  ]);
+
+  const adapter = new CodexSessionAdapter({
+    codexHome,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60_000,
+  });
+
+  const observations = await adapter.observe();
+
+  assert.equal(observations[0]?.title, "<codex_delegation> <source_thread_id>not-a-uuid");
 });
 
 test("addresses a Codex thread by the id Codex files it under", async (t) => {
