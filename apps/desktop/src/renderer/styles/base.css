@@ -1520,6 +1520,27 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   transition-delay: 0s;
 }
 
+/* Leaving the panel is the one way into the compact states by a shrink, and
+   the grow-leads rules above would let the shape abandon its content: the
+   panel's rows are still fading over `--duration-exit`, and the caption
+   block and the notice band wait out the same delay before riding down from
+   the panel's foot — a surface moving at once shrinks out from under all of
+   them. The renderer marks the collapse for the window's own collapse clock,
+   exit plus shape, so the shape waits here and nowhere else: a caption or a
+   band growing at rest keeps leading. */
+.app-stage[data-leaving-panel="true"][data-presentation="capsule"] .panel-surface,
+.app-stage[data-leaving-panel="true"][data-presentation="peek"] .panel-surface {
+  transition-delay: var(--duration-exit);
+}
+
+/* The hint rides undelayed everywhere else — expanding, it leads with the
+   panel — so the collapse holds it back with the caption block it explains,
+   or it would leave the block behind and arrive at the housing alone. The
+   opacity keeps the arrival crossing it rides in every state. */
+.app-stage[data-leaving-panel="true"][data-volume-hint="true"][data-caption="true"] .volume-hint {
+  transition-delay: calc(var(--duration-shape) - var(--duration-quick)), var(--duration-exit);
+}
+
 .app-stage[data-presentation="capsule"][data-notice="true"] .compact-hover-target {
   width: var(--peek-width);
   transform: translateX(-50%);

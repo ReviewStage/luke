@@ -7,6 +7,7 @@ import {
   type HostedUsageAnswer,
   type IssueIdentity,
   isProviderId,
+  MOTION_DURATION_MS,
   type NormalizedSession,
   type ObservedWorkspaceProject,
   type PanelFormFactor,
@@ -101,7 +102,12 @@ import { usePrefersReducedMotion } from "./luke-face-mood";
 import { applySpokenSetting, buildLukeGuide, isAppSettingId } from "./luke-guide";
 import { NotchWings } from "./notch-wings";
 import { PanelBody, type SessionWriteHandlers } from "./panel-body";
-import { HIT_REGION, PANEL_PRESENTATION } from "./panel-state";
+import {
+  HIT_REGION,
+  leavesPanelForCompact,
+  PANEL_PRESENTATION,
+  type PanelPresentation,
+} from "./panel-state";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import { ProviderMark } from "./provider-marks";
 import type { AppActionCarrier } from "./realtime-session";
@@ -305,6 +311,33 @@ function useShapeHeight(): [(element: HTMLElement | null) => void, number | unde
   useEffect(() => () => observer.current?.disconnect(), []);
 
   return [measured, height];
+}
+
+const COLLAPSE_ANIMATION_MS = MOTION_DURATION_MS.EXIT + MOTION_DURATION_MS.SHAPE;
+
+/**
+ * True from the render that leaves the panel for a compact shape until the
+ * collapse has settled — the window's own collapse clock, exit plus shape.
+ * The stylesheet spends it to hold the surface behind the content it is
+ * still carrying: the panel's rows fading out, and a caption block or
+ * notice band riding down from the panel's foot. Derived during render
+ * rather than in an effect, because the surface's transition reads its
+ * delay on the same style change that retargets it — an attribute landing
+ * one commit later finds the shape already moving.
+ */
+function useLeavingPanel(presentation: PanelPresentation): boolean {
+  const [leaving, setLeaving] = useState(false);
+  const [previous, setPrevious] = useState(presentation);
+  if (previous !== presentation) {
+    setPrevious(presentation);
+    setLeaving(leavesPanelForCompact(previous, presentation));
+  }
+  useEffect(() => {
+    if (!leaving) return;
+    const timer = window.setTimeout(() => setLeaving(false), COLLAPSE_ANIMATION_MS);
+    return () => window.clearTimeout(timer);
+  }, [leaving]);
+  return leaving;
 }
 
 export function App(): React.JSX.Element {
@@ -621,6 +654,8 @@ export function App(): React.JSX.Element {
     },
     onCapsuleTab: () => changeTab(PANEL_TAB.SESSIONS),
   });
+
+  const leavingPanel = useLeavingPanel(presentation);
 
   /**
    * Sends Luke to sign the next act waiting on him, and puts the panel where
@@ -1915,6 +1950,22 @@ export function App(): React.JSX.Element {
   // stack's wrapped height as the only box that says how many rows the chips
   // made.
   const [noticeRowsElement, noticeBandHeight] = useShapeHeight();
+  /**
+   * The measured caption and band heights the shape spends, held through a
+   * collapse out of the panel. The compact width lands at the flip and
+   * re-wraps the words and the chips while they are still riding down at the
+   * panel's foot, and a re-measure landing mid-ride would open the clips and
+   * retarget the surface past room nothing has made yet. The collapse
+   * travels on the panel's numbers; the compact re-measure lands when the
+   * shape has settled, and grows it there the way words arriving at rest do.
+   */
+  const heldShapeSizes = useRef<{ caption?: number; band?: number }>({});
+  useEffect(() => {
+    if (leavingPanel) return;
+    heldShapeSizes.current = { caption: captionTextHeight, band: noticeBandHeight };
+  });
+  const shownCaptionHeight = leavingPanel ? heldShapeSizes.current.caption : captionTextHeight;
+  const shownBandHeight = leavingPanel ? heldShapeSizes.current.band : noticeBandHeight;
   const [noticeFold, setNoticeFold] = useState({ above: false, below: false });
   const measureNoticeFold = useCallback(() => {
     const band = noticeBand.current;
@@ -2596,6 +2647,9 @@ export function App(): React.JSX.Element {
       // them; with captions off the band stands alone.
       data-notice={String(noticeShown)}
       data-presentation={presentation}
+      // Whether the shape is still on its way down from the panel, so the
+      // surface waits for the content it is carrying instead of leading it.
+      data-leaving-panel={String(leavingPanel)}
       data-notch={String(display.notch.hasNotch)}
       data-capture={String(bootstrap.captureMode)}
       style={{
@@ -2611,8 +2665,8 @@ export function App(): React.JSX.Element {
               : slotHeight,
           feedbackHeight,
         ),
-        ...captionSizeStyle(captionTextHeight, volumeHint, captionPadding),
-        ...noticeGrowthStyle(noticeBandHeight),
+        ...captionSizeStyle(shownCaptionHeight, volumeHint, captionPadding),
+        ...noticeGrowthStyle(shownBandHeight),
       }}
     >
       {/* Capsule, peek, slot and panel are all this one shape at different
