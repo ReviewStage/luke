@@ -1,3 +1,6 @@
+import type { UnknownException } from "effect/Cause";
+import type * as Effect from "effect/Effect";
+import { fromPromise, runPromiseOrDie } from "../../src/effect/runtime-bridge.js";
 import {
   isRealtimeVoice,
   isRealtimeVoiceSpeed,
@@ -153,4 +156,16 @@ export async function handleVoiceMint(options: VoiceMintOptions): Promise<Respon
     },
     quota: spend.quota,
   });
+}
+
+/** Effect entry point for the hosted voice mint handler; defects stay on the Promise boundary. */
+export function voiceMintEffect(
+  options: VoiceMintOptions,
+): Effect.Effect<Response, UnknownException, never> {
+  return fromPromise(() => handleVoiceMint(options));
+}
+
+/** Runs {@link voiceMintEffect} through the shared runtime bridge. */
+export function runVoiceMint(options: VoiceMintOptions): Promise<Response> {
+  return runPromiseOrDie(voiceMintEffect(options));
 }

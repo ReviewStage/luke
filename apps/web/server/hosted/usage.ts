@@ -1,3 +1,6 @@
+import type { UnknownException } from "effect/Cause";
+import type * as Effect from "effect/Effect";
+import { fromPromise, runPromiseOrDie } from "../../src/effect/runtime-bridge.js";
 import type { HostedUsageAnswer } from "../core.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
 
@@ -29,4 +32,16 @@ export async function handleUsage(options: UsageOptions): Promise<Response> {
   }
 
   return jsonResponse(HOSTED_HTTP_STATUS.OK, await options.readUsage(userId));
+}
+
+/** Effect entry point for the hosted usage handler; defects stay on the Promise boundary. */
+export function usageEffect(
+  options: UsageOptions,
+): Effect.Effect<Response, UnknownException, never> {
+  return fromPromise(() => handleUsage(options));
+}
+
+/** Runs {@link usageEffect} through the shared runtime bridge. */
+export function runUsage(options: UsageOptions): Promise<Response> {
+  return runPromiseOrDie(usageEffect(options));
 }

@@ -1,3 +1,6 @@
+import type { UnknownException } from "effect/Cause";
+import type * as Effect from "effect/Effect";
+import { fromPromise, runPromiseOrDie } from "../../src/effect/runtime-bridge.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
 
 /**
@@ -32,4 +35,16 @@ export async function handleAccountDelete(options: AccountDeleteOptions): Promis
 
   await options.deleteUser(userId);
   return jsonResponse(HOSTED_HTTP_STATUS.OK, { deleted: true });
+}
+
+/** Effect entry point for the hosted account delete handler; defects stay on the Promise boundary. */
+export function accountDeleteEffect(
+  options: AccountDeleteOptions,
+): Effect.Effect<Response, UnknownException, never> {
+  return fromPromise(() => handleAccountDelete(options));
+}
+
+/** Runs {@link accountDeleteEffect} through the shared runtime bridge. */
+export function runAccountDelete(options: AccountDeleteOptions): Promise<Response> {
+  return runPromiseOrDie(accountDeleteEffect(options));
 }
