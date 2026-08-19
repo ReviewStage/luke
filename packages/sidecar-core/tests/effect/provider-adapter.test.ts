@@ -165,6 +165,30 @@ test("fromPromiseAdapter and toPromiseAdapter round-trip a promise adapter", asy
   assert.equal(await roundTripped.readTranscript("missing"), undefined);
 });
 
+test("toPromiseAdapter preserves the original rejection through fromPromiseAdapter", async () => {
+  const failure = Object.assign(new Error("timed out"), { name: "TimeoutError" });
+  const adapter: SessionProviderAdapter = {
+    provider,
+    observe: () => Promise.reject(failure),
+    executeControl: () => Promise.resolve({ status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED }),
+    sendMessage: () =>
+      Promise.resolve({ status: PROVIDER_ACT_RESULT_STATUS.REJECTED, reason: "no" }),
+    workspaceProjects: () => projects,
+    createWorkspace: () =>
+      Promise.resolve({ status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED, providerSessionId: "new" }),
+    spawnWorkspaceAgent: () => Promise.resolve({ status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED }),
+    readTranscript: () => Promise.resolve(undefined),
+  };
+  const roundTripped = toPromiseAdapter(fromPromiseAdapter(adapter));
+
+  try {
+    await roundTripped.observe();
+    assert.fail("Expected observe to reject");
+  } catch (error) {
+    assert.equal(error, failure);
+  }
+});
+
 test("toPromiseAdapter and fromPromiseAdapter round-trip an effect adapter", async () => {
   const original = new FakeEffectAdapter();
   const promiseAdapter = toPromiseAdapter(original);

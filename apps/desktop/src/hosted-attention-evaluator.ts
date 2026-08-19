@@ -9,7 +9,7 @@ import {
   positiveInteger,
   text,
 } from "@sidecar/core";
-import { fromPromise } from "@sidecar/core/effect";
+import { fromPromise, fromPromiseWithError } from "@sidecar/core/effect";
 import { Effect } from "effect";
 import { unparsedWire, wireRecord } from "./wire-boundary";
 
@@ -172,16 +172,18 @@ export class HostedAttentionEvaluator implements AttentionEvaluator {
     token: string,
     update: AttentionUpdate,
   ): Effect.Effect<Response | undefined, never, never> {
-    return fromPromise(() =>
-      this.#fetch(this.#endpoint, {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${token}`,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify(promptFields(update)),
-        signal: AbortSignal.timeout(this.#requestTimeoutMs),
-      }),
+    return fromPromiseWithError(
+      () =>
+        this.#fetch(this.#endpoint, {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${token}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify(promptFields(update)),
+          signal: AbortSignal.timeout(this.#requestTimeoutMs),
+        }),
+      (cause) => cause,
     ).pipe(
       Effect.catchAll((cause) => {
         this.#report(

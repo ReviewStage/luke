@@ -11,7 +11,7 @@ import type {
   WorkspaceProject,
 } from "../providers.js";
 import type { ProviderSessionObservation, SessionProvider } from "../session.js";
-import { fromPromise, runPromiseOrDie } from "./runtime-bridge.js";
+import { runPromiseOrDie } from "./runtime-bridge.js";
 
 export interface EffectSessionProviderAdapter {
   readonly provider: SessionProvider;
@@ -31,7 +31,12 @@ export interface EffectSessionProviderAdapter {
 }
 
 function wrapPromise<A>(promise: () => Promise<A>): Effect.Effect<A, never, never> {
-  return fromPromise(promise).pipe(Effect.orDie);
+  return Effect.async((resume) => {
+    void promise().then(
+      (value) => resume(Effect.succeed(value)),
+      (error) => resume(Effect.die(error)),
+    );
+  });
 }
 
 export function fromPromiseAdapter(adapter: SessionProviderAdapter): EffectSessionProviderAdapter {

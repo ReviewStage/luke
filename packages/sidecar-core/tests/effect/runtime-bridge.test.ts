@@ -37,6 +37,16 @@ test("runPromiseOrDie rejects when the effect fails", async () => {
   await assert.rejects(() => runPromiseOrDie(Effect.fail("nope")));
 });
 
+test("runPromiseOrDie rejects with the die defect", async () => {
+  const error = new Error("boom");
+  try {
+    await runPromiseOrDie(Effect.die(error));
+    assert.fail("Expected runPromiseOrDie to reject");
+  } catch (thrown) {
+    assert.equal(thrown, error);
+  }
+});
+
 test("fromPromise resolves when the promise fulfills", async () => {
   const exit = await runPromiseExit(fromPromise(async () => "wire"));
   assert.equal(Exit.isSuccess(exit), true);
