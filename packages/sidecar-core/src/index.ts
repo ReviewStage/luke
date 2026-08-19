@@ -199,6 +199,8 @@ export {
   clearInputAudioEvents,
   functionCallFollowUpEvents,
   functionCallOutputEvents,
+  inputAudioAppendEvents,
+  inputAudioFormatUpdateEvents,
   maximumNoticeContextLength,
   outputSpeedUpdateEvents,
   parseRealtimeServerEvent,
@@ -213,6 +215,11 @@ export {
   truncateResponseEvents,
   typedAskEvents,
 } from "./realtime-protocol.js";
+export {
+  MAXIMUM_PRESS_AUDIO_MS,
+  PRESS_AUDIO_SAMPLE_RATE,
+  PressAudioBuffer,
+} from "./press-audio.js";
 export {
   HOSTED_API_ERROR,
   HOSTED_CALLS_URL,

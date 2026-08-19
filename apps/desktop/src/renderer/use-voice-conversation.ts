@@ -789,10 +789,20 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       return;
     }
     talkLatched.current = false;
-    // A held press let go of before the call opened is dropped, not sent —
-    // nothing was captured to send — and the meter it put up leaves with it.
-    if (voiceSession.current && !voiceSession.current.isConnected) setTalkOpening(false);
     voiceSession.current?.endTurn(true);
+    // A held press let go of before the call opened is no longer always
+    // dropped: its words were captured beside the handshake, and a press that
+    // said something is still owed its turn — the session keeps it pending
+    // and delivers it when the channel opens, so the meter rides until the
+    // reply to it begins. One that said nothing leaves with its meter, as it
+    // always did.
+    if (
+      voiceSession.current &&
+      !voiceSession.current.isConnected &&
+      !voiceSession.current.turnPending
+    ) {
+      setTalkOpening(false);
+    }
   }, []);
 
   /**

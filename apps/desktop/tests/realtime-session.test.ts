@@ -9,6 +9,8 @@ import {
   type AttentionSpeech,
   CONTEXT_ITEM_KIND,
   ISSUE_TRACKER_ID,
+  inputAudioAppendEvents,
+  inputAudioFormatUpdateEvents,
   type NormalizedSession,
   normalizeSession,
   normalizeTrackedIssue,
@@ -73,6 +75,11 @@ interface Harness {
   fireIdle: () => void;
   /** Every track handed to the sender, `null` standing for the device let go. */
   replacedTracks: () => (object | null)[];
+  /**
+   * The press captures the session created, in order. `feed` plays samples
+   * into one as the audio graph would; `stopped` says the session let go.
+   */
+  pressCaptures: { stopped: boolean; feed: (samples: readonly number[]) => void }[];
   /** Makes the next device request refuse, as a vanished microphone would. */
   failMicrophone: () => void;
   /** Holds device opens in flight until `ungateMicrophone` lets them land. */
@@ -202,6 +209,7 @@ function harness(
   let connection = "connection" in options ? options.connection : CONNECTION;
   let microphoneError = options.microphoneError;
   let microphoneGate: (() => void)[] | undefined;
+  const pressCaptures: { stopped: boolean; feed: (samples: readonly number[]) => void }[] = [];
   const session = new RealtimeVoiceSession({
     requestConnection: async () => {
       calls.push("credential-requested");
@@ -221,6 +229,18 @@ function harness(
         });
       }
       return stream as unknown as MediaStream;
+    },
+    createPressCapture: (_stream, onChunk) => {
+      const record = {
+        stopped: false,
+        feed: (samples: readonly number[]) => onChunk(new Int16Array(samples)),
+      };
+      pressCaptures.push(record);
+      return {
+        stop: () => {
+          record.stopped = true;
+        },
+      };
     },
     createPeerConnection: () => peer as unknown as RTCPeerConnection,
     exchangeDescription: async (url, init) => {
@@ -310,6 +330,7 @@ function harness(
       for (const release of held) release();
     },
     transceivers,
+    pressCaptures,
   };
 }
 
@@ -560,13 +581,17 @@ test("a press during the handshake opens the turn it was asking for", async () =
   const context = harness({ connectionDelayMs: 5 });
 
   // The order a talk key produces: the press comes first, and the call is what
-  // it starts. Nothing is captured until the microphone opens at the far end.
+  // it starts. The press opens the device beside the mint and is captured
+  // from the moment it answers, so the turn opens on those words — as
+  // appends, with the track joining the sender only when the turn is over.
   context.session.toggleTurn();
   await context.session.connect();
-  await deviceArrives();
 
   assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
+  // Open for the capture to read — a disabled track reads as silence — while
+  // the sender stays empty, so nothing rides the network before the commit.
   assert.equal(context.microphoneEnabled(), true);
+  assert.deepEqual(context.replacedTracks(), []);
 });
 
 test("pressing twice during the handshake leaves no turn open", async () => {
@@ -586,6 +611,240 @@ test("pressing twice during the handshake leaves no turn open", async () => {
     context.sent.filter((event) => event.type === REALTIME_CLIENT_EVENT.INPUT_AUDIO_BUFFER_COMMIT),
     [],
   );
+});
+
+test("words spoken into the handshake are carried into the turn it opens", async () => {
+  const context = harness({ connectionDelayMs: 5 });
+
+  context.session.beginTurn();
+  const opening = context.session.connect();
+  // The press asked for the device before the mint was even requested — the
+  // press is what opens it — and it answered while the mint was still out:
+  // the press's words are already being captured.
+  await deviceArrives();
+  assert.deepEqual(context.calls.slice(0, 2), ["microphone-requested", "credential-requested"]);
+  const capture = context.pressCaptures[0];
+  assert.ok(capture);
+  assert.equal(context.microphoneEnabled(), true);
+  capture.feed([1, 2, 3]);
+  capture.feed([4, 5]);
+  assert.equal(await opening, true);
+
+  // The turn opened on what was held: the format the appends must be read
+  // as, a clean buffer, then the captured chunks in capture order, all on
+  // the one ordered channel.
+  assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
+  assert.deepEqual(context.sent, [
+    ...inputAudioFormatUpdateEvents(),
+    { type: REALTIME_CLIENT_EVENT.INPUT_AUDIO_BUFFER_CLEAR },
+    ...inputAudioAppendEvents(new Int16Array([1, 2, 3])),
+    ...inputAudioAppendEvents(new Int16Array([4, 5])),
+  ]);
+  // The whole turn travels as appends, so the sender carries no track yet:
+  // its silence must not land beside the words.
+  assert.deepEqual(context.replacedTracks(), []);
+
+  // Words said after the channel opened ride the same path, live.
+  capture.feed([6]);
+  assert.deepEqual(context.sent.at(-1), inputAudioAppendEvents(new Int16Array([6]))[0]);
+
+  // The release commits behind the last append: nothing can double or drop,
+  // because one channel carried every word and the commit follows them all.
+  context.session.endTurn(true);
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+  assert.deepEqual(
+    context.sent.slice(-2).map((event) => event.type),
+    [REALTIME_CLIENT_EVENT.INPUT_AUDIO_BUFFER_COMMIT, REALTIME_CLIENT_EVENT.RESPONSE_CREATE],
+  );
+  // The seam settles with the turn: the capture ends, the track closes with
+  // it, and the sender takes the track for every turn after this one.
+  assert.equal(capture.stopped, true);
+  assert.equal(context.microphoneEnabled(), false);
+  assert.equal(context.replacedTracks().length, 1);
+  assert.notEqual(context.replacedTracks().at(-1), null);
+});
+
+test("a release during the handshake delivers the words once the channel opens", async () => {
+  const context = harness({ connectionDelayMs: 5 });
+
+  context.session.beginTurn();
+  const opening = context.session.connect();
+  await deviceArrives();
+  const capture = context.pressCaptures[0];
+  assert.ok(capture);
+  capture.feed([7, 8]);
+  // The key comes up while the call is still connecting: the capture stops
+  // reading and the device closes this instant — the sealed words wait in
+  // memory, not on an open microphone.
+  context.session.endTurn(true);
+  assert.equal(capture.stopped, true);
+  assert.equal(context.microphoneStopped(), true);
+  // The press is still owed its turn, so the opening meter keeps riding.
+  assert.equal(context.session.turnPending, true);
+
+  assert.equal(await opening, true);
+  // The delivery waits a beat for exactly this: the caller re-feeds the
+  // roster right after connect resolves, and the held words' reply must be
+  // answered from that context rather than from none.
+  context.session.updateSessions([observedSession("session-1")]);
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+  await deviceArrives();
+
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+  assert.equal(context.session.turnPending, false);
+  assert.deepEqual(
+    context.sent.map((event) => event.type),
+    [
+      REALTIME_CLIENT_EVENT.SESSION_UPDATE,
+      REALTIME_CLIENT_EVENT.INPUT_AUDIO_BUFFER_CLEAR,
+      REALTIME_CLIENT_EVENT.INPUT_AUDIO_BUFFER_APPEND,
+      REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE,
+      REALTIME_CLIENT_EVENT.INPUT_AUDIO_BUFFER_COMMIT,
+      REALTIME_CLIENT_EVENT.RESPONSE_CREATE,
+    ],
+  );
+  assert.deepEqual(context.sent[0], inputAudioFormatUpdateEvents()[0]);
+  assert.deepEqual(context.sent[2], inputAudioAppendEvents(new Int16Array([7, 8]))[0]);
+});
+
+test("the words a failed attempt captured die with it", async () => {
+  const context = harness({ connection: undefined, connectionDelayMs: 5 });
+
+  context.session.beginTurn();
+  const opening = context.session.connect();
+  await deviceArrives();
+  context.pressCaptures[0]?.feed([9, 9]);
+  context.session.endTurn(true);
+  assert.equal(await opening, false);
+
+  assert.equal(context.session.status, REALTIME_STATUS.UNAVAILABLE);
+  assert.equal(context.pressCaptures[0]?.stopped, true);
+  assert.equal(context.session.turnPending, false);
+
+  // The key appears later and something opens a call. Nobody has pressed
+  // anything since, so nothing of those words may reach it: a press does not
+  // outlive the attempt it started, and now neither does what it said.
+  context.provideConnection();
+  assert.equal(await context.session.connect(), true);
+  await deviceArrives();
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+  assert.deepEqual(
+    context.sent.filter(
+      (event) =>
+        event.type === REALTIME_CLIENT_EVENT.INPUT_AUDIO_BUFFER_APPEND ||
+        event.type === REALTIME_CLIENT_EVENT.INPUT_AUDIO_BUFFER_COMMIT,
+    ),
+    [],
+  );
+});
+
+test("pressing twice during the handshake takes the words back with the press", async () => {
+  const context = harness({ connectionDelayMs: 5 });
+
+  context.session.toggleTurn();
+  const opening = context.session.connect();
+  await deviceArrives();
+  context.pressCaptures[0]?.feed([1]);
+  context.session.toggleTurn();
+  // The cancelled turn takes its words and its device with it.
+  assert.equal(context.pressCaptures[0]?.stopped, true);
+  assert.equal(context.microphoneStopped(), true);
+  await opening;
+
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+  assert.deepEqual(
+    context.sent.filter(
+      (event) =>
+        event.type === REALTIME_CLIENT_EVENT.INPUT_AUDIO_BUFFER_APPEND ||
+        event.type === REALTIME_CLIENT_EVENT.INPUT_AUDIO_BUFFER_COMMIT,
+    ),
+    [],
+  );
+});
+
+test("an abandoned captured turn clears the buffer and settles the seam", async () => {
+  const context = harness({ connectionDelayMs: 5 });
+
+  context.session.beginTurn();
+  const opening = context.session.connect();
+  await deviceArrives();
+  const capture = context.pressCaptures[0];
+  assert.ok(capture);
+  capture.feed([1, 2]);
+  await opening;
+  assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
+
+  context.session.endTurn(false);
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+  assert.equal(capture.stopped, true);
+  const types = context.sent.map((event) => event.type);
+  // One clear opened the turn, one abandoned it, and nothing was committed.
+  assert.equal(
+    types.filter((type) => type === REALTIME_CLIENT_EVENT.INPUT_AUDIO_BUFFER_CLEAR).length,
+    2,
+  );
+  assert.equal(types.includes(REALTIME_CLIENT_EVENT.INPUT_AUDIO_BUFFER_COMMIT), false);
+
+  // A chunk from the capture the session already let go of goes nowhere.
+  const sentBefore = context.sent.length;
+  capture.feed([5]);
+  assert.equal(context.sent.length, sentBefore);
+
+  // And the next turn rides the track, as every turn before the press did.
+  await holdTurn(context);
+  assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
+  assert.equal(context.microphoneEnabled(), true);
+  assert.notEqual(context.replacedTracks().at(-1), null);
+});
+
+test("a press landing again over sealed words re-opens the same turn", async () => {
+  const context = harness({ connectionDelayMs: 20 });
+
+  context.session.beginTurn();
+  const opening = context.session.connect();
+  await deviceArrives();
+  context.pressCaptures[0]?.feed([1]);
+  // Released mid-connect: the words seal for delivery and the device rests.
+  context.session.endTurn(true);
+  assert.equal(context.pressCaptures[0]?.stopped, true);
+
+  // Pressed again before the channel opened. The sealed delivery is
+  // superseded — this press's own release will decide afresh — and capture
+  // resumes into the same turn, so neither press's words are lost.
+  context.session.beginTurn();
+  await deviceArrives();
+  const resumed = context.pressCaptures[1];
+  assert.ok(resumed);
+  resumed.feed([2]);
+  await opening;
+
+  // Still held at the open, so the turn is live on both presses' words.
+  assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
+  assert.deepEqual(context.sent, [
+    ...inputAudioFormatUpdateEvents(),
+    { type: REALTIME_CLIENT_EVENT.INPUT_AUDIO_BUFFER_CLEAR },
+    ...inputAudioAppendEvents(new Int16Array([1])),
+    ...inputAudioAppendEvents(new Int16Array([2])),
+  ]);
+
+  context.session.endTurn(true);
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+  assert.equal(resumed.stopped, true);
+});
+
+test("a speak-only call captures nothing, however long a press waits", async () => {
+  const context = harness();
+
+  context.session.beginTurn();
+  assert.equal(await context.session.connect({ microphone: false }), true);
+  await deviceArrives();
+
+  // Luke's own call takes no device: one the press opened ahead of it is
+  // released the moment it answers, nothing is captured, and the press stays
+  // pending for the developer's call.
+  assert.deepEqual(context.pressCaptures, []);
+  assert.equal(context.session.turnPending, true);
+  assert.equal(context.microphoneEnabled(), false);
 });
 
 test("a press does not outlive the call it failed to open", async () => {

@@ -1,4 +1,5 @@
 import { isRecord } from "./json.js";
+import { PRESS_AUDIO_SAMPLE_RATE } from "./press-audio.js";
 import { REALTIME_SESSION_TYPE, realtimeInstructions } from "./realtime-protocol.js";
 import { realtimeToolDefinitions } from "./realtime-tools.js";
 import { REALTIME_DEFAULTS } from "./realtime-voice-settings.js";
@@ -81,6 +82,12 @@ export function realtimeSessionConfig(options: RealtimeSessionOptions = {}) {
     },
     audio: {
       input: {
+        // What base64 audio over the data channel means, pinned rather than
+        // assumed: the words a press captures during the handshake travel as
+        // appends, and PCM read at any rate but its own is not heard wrong,
+        // it is not heard at all. The track's own Opus is negotiated by the
+        // call and never reads this.
+        format: { type: "audio/pcm", rate: PRESS_AUDIO_SAMPLE_RATE },
         turn_detection: null,
       },
       output: {
