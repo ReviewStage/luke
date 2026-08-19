@@ -1,6 +1,6 @@
 import { auth } from "../server/auth.js";
 import { getDatabase } from "../server/db/index.js";
-import { hostedUserId } from "../server/hosted/bearer.js";
+import { hostedUserId, oauthUserInfoFromAuthAnswer } from "../server/hosted/bearer.js";
 import { readHostedUsage } from "../server/hosted/quota.js";
 import { handleUsage } from "../server/hosted/usage.js";
 
@@ -14,7 +14,9 @@ export default {
     return handleUsage({
       request,
       resolveUserId: (incoming) =>
-        hostedUserId(incoming, (input) => auth.api.oauth2UserInfo(input)),
+        hostedUserId(incoming, async (input) =>
+          oauthUserInfoFromAuthAnswer(await auth.api.oauth2UserInfo(input)),
+        ),
       readUsage: (userId) => readHostedUsage(getDatabase(), { userId, now: Date.now() }),
     });
   },

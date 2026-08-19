@@ -7,7 +7,13 @@ import {
   attentionResponsesRequest,
   text as trimmedText,
 } from "../core.js";
-import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
+import {
+  errorResponse,
+  HOSTED_API_ERROR,
+  HOSTED_HTTP_STATUS,
+  type HostedErrorFields,
+  jsonResponse,
+} from "./http.js";
 import { type FetchLike, postOpenAi } from "./openai.js";
 import type { HostedSpend } from "./quota.js";
 
@@ -89,27 +95,26 @@ export async function handleAttentionReview(options: AttentionReviewOptions): Pr
     { apiKey, fetch: options.fetch, timeoutMs: options.timeoutMs },
   );
   if (!response || !response.ok) {
-    return errorResponse(HOSTED_HTTP_STATUS.BAD_GATEWAY, HOSTED_API_ERROR.UPSTREAM_ERROR, {
-      ...(response ? { upstreamStatus: response.status } : {}),
-    });
+    const extra: HostedErrorFields = {};
+    if (response) extra.upstreamStatus = response.status;
+    return errorResponse(HOSTED_HTTP_STATUS.BAD_GATEWAY, HOSTED_API_ERROR.UPSTREAM_ERROR, extra);
   }
 
   const body: unknown = await response.json().catch(() => undefined);
   const text = body === undefined ? undefined : attentionResponsesOutputText(body);
   const now = options.now ?? Date.now;
-  const decision = text ? attentionDecisionFromModel(parsedJson(text), now()) : undefined;
+  let decision: AttentionDecision | undefined;
+  if (text) {
+    try {
+      decision = attentionDecisionFromModel(JSON.parse(text), now());
+    } catch {
+      decision = undefined;
+    }
+  }
   if (!decision) {
     return errorResponse(HOSTED_HTTP_STATUS.BAD_GATEWAY, HOSTED_API_ERROR.UPSTREAM_ERROR);
   }
 
   const answer: AttentionReviewAnswer = { decision, quota: spend.quota };
   return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);
-}
-
-function parsedJson(text: string): unknown {
-  try {
-    return JSON.parse(text) as unknown;
-  } catch {
-    return undefined;
-  }
 }

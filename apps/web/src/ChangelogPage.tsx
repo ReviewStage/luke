@@ -63,6 +63,7 @@ function parseReleases(markdown: string): readonly Release[] {
     return {
       version,
       date,
+      // SAFETY: `async: false` makes marked.parse synchronous; the return is a string, not a Promise.
       html: changelogMarked.parse(body, { async: false }) as string,
     };
   });

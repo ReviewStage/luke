@@ -3,7 +3,7 @@ import { auth } from "../../server/auth.js";
 import { getDatabase } from "../../server/db/index.js";
 import { user } from "../../server/db/schema.js";
 import { handleAccountDelete } from "../../server/hosted/account-delete.js";
-import { hostedUserId } from "../../server/hosted/bearer.js";
+import { hostedUserId, oauthUserInfoFromAuthAnswer } from "../../server/hosted/bearer.js";
 
 /**
  * Erases the signed-in desktop's account. The logic lives in
@@ -16,7 +16,9 @@ export default {
     return handleAccountDelete({
       request,
       resolveUserId: (incoming) =>
-        hostedUserId(incoming, (input) => auth.api.oauth2UserInfo(input)),
+        hostedUserId(incoming, async (input) =>
+          oauthUserInfoFromAuthAnswer(await auth.api.oauth2UserInfo(input)),
+        ),
       deleteUser: async (userId) => {
         await getDatabase().delete(user).where(eq(user.id, userId));
       },

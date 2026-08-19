@@ -44,7 +44,7 @@ const SPRING_FAST = [
 
 const MOTION_DURATION_MS = {
   FAST: 280,
-  SHAPE: 460,
+  SURFACE: 460,
   EXIT: 90,
   QUICK: 140,
   HOVER: 70,
@@ -238,7 +238,7 @@ function motionTokensCss() {
   --spring-fast: ${linearCss(SPRING_FAST)};
   --duration-fast: ${ms(MOTION_DURATION_MS.FAST)};
   --motion-exit: ${MOTION_EXIT};
-  --duration-shape: ${ms(MOTION_DURATION_MS.SHAPE)};
+  --duration-shape: ${ms(MOTION_DURATION_MS.SURFACE)};
   --duration-exit: ${ms(MOTION_DURATION_MS.EXIT)};
   --duration-quick: ${ms(MOTION_DURATION_MS.QUICK)};
   --duration-hover: ${ms(MOTION_DURATION_MS.HOVER)};
@@ -336,11 +336,6 @@ ${tsStringConst("CLOUD_BADGE_PATH", CLOUD_BADGE_PATH)}
 }
 
 function sessionDisplayTs() {
-  const values = Object.keys(URGENCY_LABEL)
-    .map(
-      (key) => `  ${key}: "${key.toLowerCase()}" as SessionUrgencyBrand<"${key.toLowerCase()}">,`,
-    )
-    .join("\n");
   const labels = Object.entries(URGENCY_LABEL)
     .map(([key, label]) => `  [SESSION_URGENCY.${key}]: "${label}",`)
     .join("\n");
@@ -359,8 +354,15 @@ function sessionDisplayTs() {
 
 type SessionUrgencyBrand<T extends string> = T & { readonly __brand: "SessionUrgency" };
 
+function sessionUrgencyBrand<T extends string>(value: T): SessionUrgencyBrand<T> {
+  // SAFETY: brands an urgency literal at the vocabulary boundary.
+  return value as SessionUrgencyBrand<T>;
+}
+
 export const SESSION_URGENCY = {
-${values}
+${Object.keys(URGENCY_LABEL)
+  .map((key) => `  ${key}: sessionUrgencyBrand("${key.toLowerCase()}"),`)
+  .join("\n")}
 } as const;
 
 export type SessionUrgency = (typeof SESSION_URGENCY)[keyof typeof SESSION_URGENCY];

@@ -3,7 +3,9 @@ import test from "node:test";
 import type { Client } from "pg";
 import { migrateWithLock } from "../server/db/migrate";
 
-function migrationConnection(events: string[]) {
+type MigrationConnection = Pick<Client, "connect" | "query" | "end">;
+
+function migrationConnection(events: string[]): MigrationConnection {
   return {
     async connect() {
       events.push("connect");
@@ -15,7 +17,7 @@ function migrationConnection(events: string[]) {
     async end() {
       events.push("end");
     },
-  } as unknown as Pick<Client, "connect" | "query" | "end">;
+  };
 }
 
 test("database migrations hold one session advisory lock", async () => {
@@ -44,11 +46,11 @@ test("an unlock failure still closes the database connection", async () => {
   const events: string[] = [];
   const connection = migrationConnection(events);
   const query = connection.query.bind(connection);
-  connection.query = (async (text: string, values?: unknown[]) => {
+  connection.query = async (text: string, values?: unknown[]) => {
     const result = await query(text, values);
     if (text.includes("unlock")) throw new Error("unlock failed");
     return result;
-  }) as typeof connection.query;
+  };
 
   await assert.rejects(
     migrateWithLock(connection, async () => undefined),

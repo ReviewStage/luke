@@ -211,6 +211,7 @@ function MockSessionRow({
     <article
       className="session-row"
       data-state={session.urgency}
+      // SAFETY: React.CSSProperties omits custom properties; --row-index is a declared custom property.
       style={{ "--row-index": index + 1 } as CSSProperties}
     >
       <span className="row-mark">
@@ -336,6 +337,11 @@ export function NotchMock(): React.JSX.Element {
   const providers = WING_PROVIDERS.slice(0, overflowing ? drawnCapacity - 1 : drawnCapacity);
   const unshown = WING_PROVIDERS.length - providers.length;
 
+  const mockStyle: CSSProperties = {};
+  if (panelHeight !== undefined) {
+    mockStyle["--panel-height"] = `${panelHeight}px`;
+  }
+
   return (
     <div className="mock-scroll" ref={scrollSection}>
       <div className="mock-pin" ref={pin}>
@@ -343,17 +349,7 @@ export function NotchMock(): React.JSX.Element {
             so the whole recreation reads as a single illustration. The hidden
             stage stays inert so find-in-page cannot match invisible titles and
             a drag cannot select text nobody can see. */}
-        <div
-          className="mock"
-          data-mode={mode}
-          role="img"
-          aria-label={MOCK_LABEL}
-          style={
-            {
-              ...(panelHeight === undefined ? {} : { "--panel-height": `${panelHeight}px` }),
-            } as CSSProperties
-          }
-        >
+        <div className="mock" data-mode={mode} role="img" aria-label={MOCK_LABEL} style={mockStyle}>
           <span className="mock-frame" />
 
           {/* Capsule, peek and panel are all this one shape at different sizes,
@@ -363,9 +359,14 @@ export function NotchMock(): React.JSX.Element {
           <div className="expanded-stage" inert>
             <section className="expanded-panel" ref={measurePanel}>
               <div className="body">
-                <div className="panel-header" style={{ "--row-index": 0 } as CSSProperties}>
+                <div
+                  className="panel-header"
+                  // SAFETY: React.CSSProperties omits custom properties; --row-index is a declared custom property.
+                  style={{ "--row-index": 0 } as CSSProperties}
+                >
                   <div
                     className="tab-bar"
+                    // SAFETY: React.CSSProperties omits custom properties; --tab-count and --tab-index are declared custom properties.
                     style={{ "--tab-count": 2, "--tab-index": 0 } as CSSProperties}
                   >
                     <span className="tab-thumb" />

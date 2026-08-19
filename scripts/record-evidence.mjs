@@ -47,7 +47,7 @@ async function availablePort() {
     server.listen(0, "127.0.0.1", resolve);
   });
   const address = server.address();
-  if (!address || typeof address === "string") throw new Error("Could not allocate a port");
+  if (!address || !("port" in address)) throw new Error("Could not allocate a port");
   await new Promise((resolve, reject) =>
     server.close((error) => (error ? reject(error) : resolve())),
   );

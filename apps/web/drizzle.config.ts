@@ -2,10 +2,13 @@ import { defineConfig } from "drizzle-kit";
 
 const connectionString = process.env.DATABASE_URL_UNPOOLED;
 
-export default defineConfig({
-  dialect: "postgresql",
+const config = {
+  dialect: "postgresql" as const,
   schema: "./server/db/*-schema.ts",
   out: "./drizzle",
   strict: true,
-  ...(connectionString ? { dbCredentials: { url: connectionString } } : {}),
-});
+};
+
+export default defineConfig(
+  connectionString ? { ...config, dbCredentials: { url: connectionString } } : config,
+);

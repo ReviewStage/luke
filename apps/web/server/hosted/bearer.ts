@@ -1,4 +1,17 @@
-import { isRecord } from "../core.js";
+import { isRecord, text } from "../core.js";
+
+/** The subject a signed-in OAuth userinfo answer names. */
+export interface OAuthUserInfo {
+  sub: string;
+}
+
+/** Fields the auth userinfo endpoint may return before subject extraction. */
+export interface AuthUserInfoFields {
+  sub?: string | number | boolean | null;
+}
+
+/** Answers the auth service's userinfo endpoint may return before parsing. */
+export type AuthUserInfoAnswer = AuthUserInfoFields | string | number | boolean | null | undefined;
 
 /**
  * The auth service's own userinfo endpoint, called in process. It is the same
@@ -6,7 +19,14 @@ import { isRecord } from "../core.js";
  * revocation, and scope are all the OAuth provider's answer, never a second
  * implementation here.
  */
-export type UserInfoEndpoint = (input: { headers: Headers }) => Promise<unknown>;
+export type UserInfoEndpoint = (input: { headers: Headers }) => Promise<OAuthUserInfo | undefined>;
+
+/** Parses the auth service's raw userinfo answer at the hosted API boundary. */
+export function oauthUserInfoFromAuthAnswer(value: AuthUserInfoAnswer): OAuthUserInfo | undefined {
+  if (!isRecord(value)) return undefined;
+  const sub = text(value.sub);
+  return sub ? { sub } : undefined;
+}
 
 /**
  * Resolves the signed-in user behind a request's bearer token, or nothing.
@@ -22,8 +42,7 @@ export async function hostedUserId(
   if (!authorization) return undefined;
   try {
     const identity = await userInfo({ headers: new Headers({ authorization }) });
-    const subject = isRecord(identity) && typeof identity.sub === "string" ? identity.sub : "";
-    return subject || undefined;
+    return identity?.sub || undefined;
   } catch {
     return undefined;
   }
