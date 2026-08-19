@@ -4,6 +4,7 @@ import {
   maximumAttentionSummaryLength,
 } from "./attention.js";
 import { isRecord } from "./json.js";
+import { PRESS_AUDIO_SAMPLE_RATE } from "./press-audio.js";
 import { spokenRealtimeToolCount } from "./realtime-tools.js";
 import {
   ATTENTION_DISPOSITION,
@@ -41,6 +42,13 @@ export type RealtimeStatus = (typeof REALTIME_STATUS)[keyof typeof REALTIME_STAT
 
 export const REALTIME_CLIENT_EVENT = {
   SESSION_UPDATE: "session.update",
+  /**
+   * Adds audio to the input buffer over the data channel. On a WebRTC call the
+   * microphone track already feeds that buffer, so this exists for the audio
+   * the track cannot carry: the words spoken while the call was still
+   * connecting, captured locally and flushed once the channel opens.
+   */
+  INPUT_AUDIO_BUFFER_APPEND: "input_audio_buffer.append",
   INPUT_AUDIO_BUFFER_COMMIT: "input_audio_buffer.commit",
   INPUT_AUDIO_BUFFER_CLEAR: "input_audio_buffer.clear",
   CONVERSATION_ITEM_CREATE: "conversation.item.create",
@@ -288,6 +296,77 @@ export function typedAskEvents(text: string): readonly Record<string, unknown>[]
       },
     },
     { type: REALTIME_CLIENT_EVENT.RESPONSE_CREATE },
+  ];
+}
+
+const BASE64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+/**
+ * Encodes bytes without reaching for an environment: `btoa` wants a binary
+ * string and Node's `Buffer` does not exist in a sandboxed renderer, and the
+ * audio event is this module's grammar, so its encoding lives here too.
+ */
+function base64FromBytes(bytes: Uint8Array): string {
+  let encoded = "";
+  for (let index = 0; index < bytes.length; index += 3) {
+    const first = bytes[index] ?? 0;
+    const second = bytes[index + 1];
+    const third = bytes[index + 2];
+    encoded += BASE64_ALPHABET[first >> 2];
+    encoded += BASE64_ALPHABET[((first & 0b11) << 4) | ((second ?? 0) >> 4)];
+    encoded +=
+      second === undefined ? "=" : BASE64_ALPHABET[((second & 0b1111) << 2) | ((third ?? 0) >> 6)];
+    encoded += third === undefined ? "=" : BASE64_ALPHABET[third & 0b111111];
+  }
+  return encoded;
+}
+
+/**
+ * Builds the event that declares what the appended audio is, ahead of
+ * appending any.
+ *
+ * On a WebRTC call the negotiated input is Opus at the codec's own rate, so
+ * nothing about the call itself says how base64 audio arriving over the data
+ * channel should be read — and 24kHz PCM read at any other rate is not heard
+ * wrong, it is not heard at all. The keyed mint pins the same format, but the
+ * hosted mint composes its session on the service, so the one place every
+ * call can be pinned from is the channel itself: this travels at the start of
+ * every captured turn, before the clear and the appends it speaks for.
+ */
+export function inputAudioFormatUpdateEvents(): readonly Record<string, unknown>[] {
+  return [
+    {
+      type: REALTIME_CLIENT_EVENT.SESSION_UPDATE,
+      session: {
+        type: REALTIME_SESSION_TYPE,
+        audio: { input: { format: { type: "audio/pcm", rate: PRESS_AUDIO_SAMPLE_RATE } } },
+      },
+    },
+  ];
+}
+
+/**
+ * Builds the event that adds one captured chunk to the input audio buffer.
+ *
+ * The samples travel as the format {@link inputAudioFormatUpdateEvents} pins —
+ * 16-bit PCM at the press capture's own rate, little-endian whatever this
+ * machine is, base64 over the data channel. An empty chunk builds nothing:
+ * there is no audio to add, and the API refuses an empty append rather than
+ * ignoring it.
+ */
+export function inputAudioAppendEvents(audio: Int16Array): readonly Record<string, unknown>[] {
+  if (audio.length === 0) return [];
+  const bytes = new Uint8Array(audio.length * 2);
+  for (let index = 0; index < audio.length; index += 1) {
+    const sample = audio[index] ?? 0;
+    bytes[index * 2] = sample & 0xff;
+    bytes[index * 2 + 1] = (sample >> 8) & 0xff;
+  }
+  return [
+    {
+      type: REALTIME_CLIENT_EVENT.INPUT_AUDIO_BUFFER_APPEND,
+      audio: base64FromBytes(bytes),
+    },
   ];
 }
 

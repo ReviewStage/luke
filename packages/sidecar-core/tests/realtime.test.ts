@@ -17,6 +17,8 @@ import {
   functionCallFollowUpEvents,
   functionCallOutputEvents,
   ISSUE_TRACKER_ID,
+  inputAudioAppendEvents,
+  inputAudioFormatUpdateEvents,
   isIssueToolName,
   isRealtimeVoice,
   isRealtimeVoiceSpeed,
@@ -31,6 +33,7 @@ import {
   normalizeTrackedIssue,
   type ObservedWorkspaceProject,
   outputSpeedUpdateEvents,
+  PRESS_AUDIO_SAMPLE_RATE,
   parseRealtimeServerEvent,
   proactiveSpeechEvents,
   pushToTalkCommitEvents,
@@ -387,6 +390,58 @@ test("nothing heard is nothing to correct", () => {
   ]) {
     assert.deepEqual(truncateResponseEvents(input), []);
   }
+});
+
+test("a captured turn declares its audio's format before appending any", () => {
+  // On a WebRTC call nothing else says how base64 audio over the data channel
+  // should be read, and the hosted mint composes its session on the service —
+  // so the channel itself pins the format, at the capture's own rate.
+  assert.deepEqual(inputAudioFormatUpdateEvents(), [
+    {
+      type: REALTIME_CLIENT_EVENT.SESSION_UPDATE,
+      session: {
+        type: "realtime",
+        audio: { input: { format: { type: "audio/pcm", rate: PRESS_AUDIO_SAMPLE_RATE } } },
+      },
+    },
+  ]);
+});
+
+test("the keyed mint pins the same input format the appends travel as", () => {
+  const config = realtimeSessionConfig();
+
+  assert.deepEqual(config.audio.input.format, {
+    type: "audio/pcm",
+    rate: PRESS_AUDIO_SAMPLE_RATE,
+  });
+});
+
+test("captured audio travels as one append, little-endian PCM in base64", () => {
+  const events = inputAudioAppendEvents(new Int16Array([0, 1, -1, 32_767, -32_768]));
+
+  assert.equal(events.length, 1);
+  assert.equal(events[0]?.type, REALTIME_CLIENT_EVENT.INPUT_AUDIO_BUFFER_APPEND);
+  // The five samples byte for byte, as Node's own encoder writes them —
+  // including the padded tail a length that is not a multiple of three needs.
+  assert.equal(events[0]?.audio, "AAABAP///38AgA==");
+});
+
+test("the append encoder agrees with a reference encoder at every length", () => {
+  // Base64 groups three bytes at a time, so each length modulo three is its
+  // own code path; a hand-rolled encoder has to be held to all of them.
+  for (const length of [1, 2, 3, 4, 5, 6, 100]) {
+    const samples = new Int16Array(length);
+    for (let index = 0; index < length; index += 1) samples[index] = index * 257 - 30_000;
+    const bytes = Buffer.alloc(length * 2);
+    for (let index = 0; index < length; index += 1) {
+      bytes.writeInt16LE(samples[index] ?? 0, index * 2);
+    }
+    assert.equal(inputAudioAppendEvents(samples)[0]?.audio, bytes.toString("base64"));
+  }
+});
+
+test("an empty chunk builds no append rather than one the API refuses", () => {
+  assert.deepEqual(inputAudioAppendEvents(new Int16Array(0)), []);
 });
 
 test("push-to-talk commits a turn and cancelling discards it", () => {
