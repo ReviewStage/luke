@@ -711,6 +711,24 @@ test("session context carries only bounded, redacted fields", () => {
   const linkedText = sessionContextText([linked]);
   assert.match(linkedText, /can be opened/);
   assert.doesNotMatch(linkedText, /https:/);
+
+  // A session with no address of its own still reads as openable when a
+  // control advertises the act — a local chat managed by Superset — or Luke
+  // would refuse an open its row plainly offers.
+  const managed = normalizeSession(
+    { id: "claude-code", displayName: "Claude Code" },
+    {
+      providerSessionId: "session-managed",
+      title: "checkout-service",
+      status: SESSION_STATUS.WORKING,
+      observedAt: DECIDED_AT,
+      controls: [
+        { id: "superset-open-workspace", label: "Open in Superset", kind: "open" },
+        { id: "superset-close-terminal", label: "Close terminal" },
+      ],
+    },
+  );
+  assert.match(sessionContextText([managed]), /can be opened/);
 });
 
 test("a chat carries its workspace in the roster, so siblings read apart out loud", () => {
@@ -1409,6 +1427,34 @@ test("a tool call can act only on a session Luke was shown, doing what it advert
     [quiet],
   );
   assert.equal(nowhereToOpen.kind, "refused");
+
+  // A session with no address of its own is still opened where a control
+  // advertises the act — the ask becomes that control's run, behind the same
+  // main-process gauntlet every control passes.
+  const managed = normalizeSession(
+    { id: "claude-code", displayName: "Claude Code" },
+    {
+      providerSessionId: "session-managed",
+      title: "checkout-service",
+      status: SESSION_STATUS.WORKING,
+      observedAt: DECIDED_AT,
+      controls: [{ id: "superset-open-workspace", label: "Open in Superset", kind: "open" }],
+    },
+  );
+  assert.deepEqual(
+    sessionToolAction(
+      messageCall(
+        '{"provider_id":"claude-code","provider_session_id":"session-managed"}',
+        REALTIME_TOOL.OPEN_SESSION,
+      ),
+      [managed],
+    ),
+    {
+      kind: "control",
+      identity: { providerId: "claude-code", providerSessionId: "session-managed" },
+      control: { id: "superset-open-workspace", label: "Open in Superset", kind: "open" },
+    },
+  );
 
   // A cloud session's conversation lives with its provider, not on this
   // machine, so a transcript read is refused rather than guessed at.

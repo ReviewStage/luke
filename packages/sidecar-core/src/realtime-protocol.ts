@@ -175,7 +175,7 @@ const REALTIME_INSTRUCTION_TAIL: readonly string[] = [
   "- Use a tool only when the developer asks you to in this conversation, for the thing they asked.",
   "- Message, control, or open only sessions the roster marks as taking each. Say so when one cannot.",
   "- Reading a transcript or keeping an ask needs no such mark: any observed session can be asked about, any local one read.",
-  "- Opening a session brings it up in its provider's window, like pressing its row. It shows you nothing new.",
+  "- Opening a session brings it up where it is kept — its provider's window, or the workspace manager's app for a local chat one manages — like pressing its row. It shows you nothing new.",
   "- read_session_transcript reads a local session's recent words on this machine and keeps them nowhere.",
   "- Answer the transcript question asked, quoting sparingly. Never recite the transcript.",
   '- request_session_notice keeps a standing ask about one session — "tell me when this finishes" — in the developer\'s words.',

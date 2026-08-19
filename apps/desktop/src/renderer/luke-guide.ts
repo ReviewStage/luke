@@ -219,7 +219,9 @@ function integrationsFact(settings: AppSettings): AppGuideFact {
     " Superset workspaces on this Mac are recognized automatically from Superset's local " +
     "read-only host state, so agents from different providers group under the project and " +
     "workspace that owns them. When Superset's CLI is logged in, those rows can send the " +
-    "developer's own message, offer Superset workspace controls, and create a new workspace " +
+    "developer's own message, offer Superset workspace controls — a local chat with no page " +
+    "of its own can then be opened in Superset, pressed or asked of Luke like any other open " +
+    "— and create a new workspace " +
     "with an agent in a project and host Superset currently lists; connect from Luke's " +
     "Settings, finish Superset's own sign-in flow in the browser, and paste its one-time code " +
     "into Luke. Superset's CLI exchanges that code, stores the login, and switches organizations; " +

@@ -63,6 +63,11 @@ Sessions Superset manages also take its workspace-level acts — including a
 workspace rename — through its CLI; see
 [Integrations beyond sessions](#integrations-beyond-sessions).
 
+Superset management widens local rows past this table: a session Superset's
+host state binds to one of its terminals gains the message path, controls,
+and agent adds described under [Integrations beyond
+sessions](#integrations-beyond-sessions), whatever its own provider takes.
+
 Transcript readout is Luke reading a local session's conversation aloud — or
 into his composer — when asked about that session; a cloud session's
 conversation lives with its provider and is never fetched. Every provider's
@@ -267,6 +272,23 @@ per-account grants read the calendar list and free/busy intervals — start and
 end instants only, so titles cannot even travel. The intervals drive exactly
 one behavior: while a meeting covers now and Quiet during meetings is on,
 spoken announcements hold and the face sleeps.
+
+**Superset** is a workspace manager rather than a session provider: Luke
+reads its local host state (`host/<host-id>/host.db`) read-only, joins each
+terminal-agent binding to a session another provider already observes, and
+groups those rows under the Superset workspace that owns them — enriched with
+the project, branch, and pull-request link Superset records. With Superset's
+CLI installed and logged in, a managed row takes the developer's message
+through `terminals send` and offers two controls: Open in Superset
+(`superset-open-workspace`) and Close terminal (`superset-close-terminal`).
+The open control is also how an ask to open a managed local chat is carried —
+the chat has no address of its own, so Superset's window is where it opens —
+whether the control is pressed on the row or the open is asked of Luke in a
+developer-opened turn. A managed row can start another agent in its workspace
+through `agents create`, and a new workspace can be created in a project and
+host the CLI currently lists, with an agent it lists and an opening task,
+through `workspaces create`. Signing the CLI out withdraws every act;
+observation of the local host state continues unchanged.
 
 **OpenAI and the hosted account** carry voice and the optional attention
 review. They are credential-only — nothing of theirs is ever observed as a

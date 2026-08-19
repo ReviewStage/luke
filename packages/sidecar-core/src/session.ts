@@ -153,12 +153,16 @@ export interface AttentionDecision {
 /**
  * What a control does to the session, at the altitude a surface draws at: a
  * stop ends the turn that is running and is drawn as the stop glyph every chat
- * surface uses, while anything else is a provider-worded action drawn by its
- * label. The adapter says which its control is, because only it knows what the
- * endpoint behind the control means.
+ * surface uses, an open brings the session up on the developer's screen
+ * through the app that manages it — the act a row press cannot make for a
+ * session with no address of its own — while anything else is a
+ * provider-worded action drawn by its label. The adapter says which its
+ * control is, because only it knows what the endpoint behind the control
+ * means.
  */
 export const SESSION_CONTROL_KIND = {
   ACTION: "action",
+  OPEN: "open",
   STOP: "stop",
 } as const;
 
@@ -710,4 +714,15 @@ export function normalizeSession(
 /** Returns whether a provider explicitly exposed a given control for a session. */
 export function supportsSessionControl(session: NormalizedSession, controlId: string): boolean {
   return session.controls.some((control) => control.id === controlId);
+}
+
+/**
+ * The control that opens this session on the developer's screen, when its
+ * provider advertised one. It is how a session with no address of its own —
+ * a local chat whose workspace manager owns its window — can still be
+ * opened: an ask to open runs this control instead of handing an address to
+ * the operating system.
+ */
+export function sessionOpenControl(session: NormalizedSession): SessionControl | undefined {
+  return session.controls.find((control) => control.kind === SESSION_CONTROL_KIND.OPEN);
 }

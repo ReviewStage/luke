@@ -1,5 +1,10 @@
 import path from "node:path";
-import { PROVIDER_ID, type ProviderSessionObservation, type WireRecord } from "@sidecar/core";
+import {
+  PROVIDER_ID,
+  type ProviderSessionObservation,
+  SESSION_CONTROL_KIND,
+  type WireRecord,
+} from "@sidecar/core";
 import { readDirectory } from "./local-session-adapter";
 import {
   canIgnoreSqliteError,
@@ -150,9 +155,13 @@ export class SupersetWorkspaceSnapshot {
       }
       const controls = [
         ...(observation.controls ?? []),
+        // The open kind is what lets an ask to open this chat run the
+        // control: a Superset-managed local session has no address of its
+        // own, and Superset's window is where it opens.
         {
           id: SUPERSET_CONTROL_ID.OPEN_WORKSPACE,
           label: "Open in Superset",
+          kind: SESSION_CONTROL_KIND.OPEN,
           target: context.workspaceId,
         },
         {

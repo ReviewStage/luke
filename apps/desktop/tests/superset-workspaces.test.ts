@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
-import { PROVIDER_ID, SESSION_STATUS } from "@sidecar/core";
+import { PROVIDER_ID, SESSION_CONTROL_KIND, SESSION_STATUS } from "@sidecar/core";
 import { SUPERSET_WORKSPACE_PROVIDER_ID } from "../src/shared/contracts";
 import { SUPERSET_CONTROL_ID } from "../src/superset-cli";
 import { SupersetWorkspaceReader } from "../src/superset-workspaces";
@@ -163,6 +163,12 @@ test("advertises Superset actions only after the CLI is connected", async (t) =>
   assert.deepEqual(
     connected?.controls?.map((control) => control.id),
     [SUPERSET_CONTROL_ID.OPEN_WORKSPACE, SUPERSET_CONTROL_ID.CLOSE_TERMINAL],
+  );
+  // The open kind is what lets an ask to open a Superset-managed local chat —
+  // which has no address of its own — run this control instead of refusing.
+  assert.equal(
+    connected?.controls?.find((control) => control.id === SUPERSET_CONTROL_ID.OPEN_WORKSPACE)?.kind,
+    SESSION_CONTROL_KIND.OPEN,
   );
 });
 
