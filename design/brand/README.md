@@ -88,6 +88,7 @@ spans ~58% of the tile width (typical macOS glyph-in-tile proportion). Only the 
 | `mark/luke-mark-square-black.svg` + `-1024.png` | The dark mark once more over flat pure black (`#000000`) instead of the tile's gradient, for surfaces that want the mark on true black |
 | `logo/luke-logo-{light,dark}.svg` + `-{256,512}.png` | The wordmark lockup as a shareable logo set, per mode: transparent background, no tile and no rounded corners. The PNGs are cut at 256 and 512 wide — a lockup goes into headers and docs, not a 1024 avatar tile |
 | `social/luke-og-card.svg` | The 1200×630 link-preview card the web pages' `og:image` points at — the wordmark on the landing page's dark ground. One card, dark only: a link preview follows no UI theme. Its PNG is the one derivative cut outside this directory, into `apps/web/public/luke-og-card.png`, because Vite serves `public/` at the site root and scrapers fetch the card from `https://tryluke.dev/luke-og-card.png` |
+| `button/luke-cta-{download,site}-{light,dark}.svg` | The repository README's two buttons — the download and the landing page — drawn as the site's hero CTAs, per mode |
 | `motion/luke-<state>-{light,dark}.svg` | Animated state marks (below) |
 
 ## Motion states
