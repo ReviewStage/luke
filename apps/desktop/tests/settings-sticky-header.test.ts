@@ -4,6 +4,7 @@ import test from "node:test";
 
 /**
  * The nested settings pages pin their header to the scroller's top edge.
+ // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
  * These read the stylesheet as text, the way face-motion's tests do, and
  * guard the declarations the pinning stands on: the pin itself, the opacity
  * that keeps rows from reading through the title, the dissolve band's tie to

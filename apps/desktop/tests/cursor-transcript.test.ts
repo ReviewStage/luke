@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
 import { CursorLocalSessionAdapter } from "../src/cursor-local-adapter";
+import type { ParsedJsonObject } from "./support/json";
 
 function readCursorSessionTranscript(request: {
   cursorHome?: string;
@@ -32,7 +33,7 @@ async function temporaryCursorHome(t: TestContext): Promise<string> {
 async function writeTranscript(
   cursorHome: string,
   sessionId: string,
-  records: readonly Record<string, unknown>[],
+  records: readonly ParsedJsonObject[],
 ): Promise<void> {
   const sessionDirectory = path.join(
     cursorHome,

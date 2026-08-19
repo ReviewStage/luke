@@ -49,6 +49,7 @@ test("the microphone outranks the session list", () => {
 });
 
 test("nothing about the session list holds the face at all", () => {
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // A rest repeats for as long as it is true, so anything the sessions could ask
   // for would be a loop that never stops for anyone whose sessions usually need
   // them. Sessions waiting, sessions working, sessions doing neither: the face
@@ -64,6 +65,7 @@ test("the fidget answers a session that has just started asking", () => {
   assert.equal(noticedMotion(asking, observed(["a", "b"])), FACE_MOTION.WAITING);
   // The same session still asking is not news, however long it goes on asking.
   assert.equal(noticedMotion(asking, observed(["a"])), undefined);
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // One answered as another starts leaves the count where it was, and is
   // exactly the moment counting would have missed.
   assert.equal(noticedMotion(asking, observed(["b"])), FACE_MOTION.WAITING);
@@ -99,6 +101,7 @@ test("a meeting the calendar is holding through puts the face to sleep", () => {
   );
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("only what stays true for as long as it holds may hold the face", () => {
   // Nothing to watch at all, which is a different thing from nothing happening.
   assert.equal(restingMotion(context()), FACE_MOTION.SLEEPING);

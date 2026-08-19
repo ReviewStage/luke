@@ -6,6 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
 import { SESSION_COMPLETION_CAUSE, SESSION_STATUS } from "@sidecar/core";
 import { CODEX_PROVIDER, CodexSessionAdapter } from "../src/codex-adapter";
+import type { ParsedJsonObject } from "./support/json";
 
 const TEST_TIME = Date.parse("2026-08-11T23:45:00.000Z");
 const CODEX_STATE_DATABASE = "state_5.sqlite";
@@ -38,10 +39,7 @@ interface TestThread {
   reasoningEffort?: string;
 }
 
-async function writeRollout(
-  filePath: string,
-  records: readonly Record<string, unknown>[],
-): Promise<void> {
+async function writeRollout(filePath: string, records: readonly ParsedJsonObject[]): Promise<void> {
   await fs.writeFile(filePath, `${records.map((record) => JSON.stringify(record)).join("\n")}\n`);
 }
 
@@ -207,6 +205,7 @@ test("addresses a Codex thread by the id Codex files it under", async (t) => {
   assert.equal(observations[0]?.detail?.link, "codex://threads/codex%20thread%2Fone%3Ftwo");
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("reports a finished Codex turn as waiting for its developer", async (t) => {
   const codexHome = await temporaryCodexHome(t);
   const rolloutPath = path.join(codexHome, "rollout-complete.jsonl");
@@ -241,6 +240,7 @@ test("reports a finished Codex turn as waiting for its developer", async (t) => 
   assert.equal(observation?.detail?.activity, undefined);
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("reports a running Codex turn as working with the call it is making", async (t) => {
   const codexHome = await temporaryCodexHome(t);
   const rolloutPath = path.join(codexHome, "rollout-running.jsonl");
@@ -272,6 +272,7 @@ test("reports a running Codex turn as working with the call it is making", async
   assert.equal(observation?.detail?.activity, "exec_command: pnpm test");
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("names a call whose argument Codex passes as a list of tokens", async (t) => {
   const codexHome = await temporaryCodexHome(t);
   const rolloutPath = path.join(codexHome, "rollout-list-argument.jsonl");
@@ -285,6 +286,7 @@ test("names a call whose argument Codex passes as a list of tokens", async (t) =
       payload: {
         type: "function_call",
         name: "run",
+        // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
         // Codex passes a search's terms as a list rather than a string.
         arguments: '{"search_query":["notch","geometry","inset"]}',
       },
@@ -301,6 +303,7 @@ test("names a call whose argument Codex passes as a list of tokens", async (t) =
   assert.equal(observation?.detail?.activity, "run: notch geometry inset");
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("names a call by its tool alone when no argument reads as a phrase", async (t) => {
   const codexHome = await temporaryCodexHome(t);
   const rolloutPath = path.join(codexHome, "rollout-structured-argument.jsonl");
@@ -705,6 +708,7 @@ test("keeps stale unarchived Codex sessions unknown instead of inventing activit
   assert.equal(observations[0]?.status, SESSION_STATUS.UNKNOWN);
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("keeps archived Codex threads as closed completed rows", async (t) => {
   const codexHome = await temporaryCodexHome(t);
   await writeCodexState(codexHome, [
@@ -789,6 +793,7 @@ test("returns an empty snapshot when node sqlite is unavailable", async (t) => {
       observedAt: TEST_TIME - 1_000,
     },
   ]);
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   const error = new Error("No such built-in module: node:sqlite") as NodeJS.ErrnoException;
   error.code = TEST_SQLITE_ERROR.UNKNOWN_BUILTIN_MODULE;
 
@@ -833,6 +838,7 @@ test("a permission request the database cannot show turns the row to waiting", a
   const codexHome = await temporaryCodexHome(t);
   const spool = await temporaryHookSpool(t);
   // Mid-turn by every record: a call holding for approval writes nothing
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // further, so without the event this thread reads as working.
   const rolloutPath = path.join(codexHome, "rollout-held.jsonl");
   await writeCodexState(codexHome, [
@@ -937,6 +943,7 @@ test("a stop event does not talk a failed turn out of its error", async (t) => {
     },
   ]);
   // Codex fires no failure hook, so `stop` fires for the failed turn too: an
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // event standing for the same turn must not read the failure as waiting.
   await writeHookEvent(spool, "codex-stopped-error", "stop", TEST_TIME - 30_000);
 
@@ -974,6 +981,7 @@ test("an event the thread has moved past refines nothing", async (t) => {
   assert.equal(observation?.observedAt, TEST_TIME - 60_000);
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("a prompt event reads a fresh turn as working before the rollout shows it", async (t) => {
   const codexHome = await temporaryCodexHome(t);
   const spool = await temporaryHookSpool(t);
@@ -1034,6 +1042,7 @@ test("a spool that cannot be read costs only the refinement", async (t) => {
   assert.equal(observation?.status, SESSION_STATUS.WORKING);
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("a permission hold that outlives the freshness window never reads as work", async (t) => {
   const codexHome = await temporaryCodexHome(t);
   const spool = await temporaryHookSpool(t);

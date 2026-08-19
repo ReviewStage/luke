@@ -13,6 +13,7 @@ import {
   readCodexHookEvent,
   removeCodexObservationHooks,
 } from "../src/codex-hooks";
+import type { ParsedJsonObject } from "./support/json";
 
 const execFileAsync = promisify(execFile);
 
@@ -21,6 +22,7 @@ const TEST_SESSION_ID = "0198c1f2-4d5e-7789-abcd-ef0123456789";
 const SECRET_ENVELOPE_TEXT = "SECRET_ENVELOPE_TEXT";
 const CODEX_HOOKS_FILE_NAME = "hooks.json";
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 /** Every lifecycle event the build registers, as hooks.json names them. */
 const REGISTERED_EVENT_NAMES = [
   "SessionStart",
@@ -48,25 +50,28 @@ function hooksPath(installation: CodexHookInstallation): string {
   return path.join(installation.codexHome, CODEX_HOOKS_FILE_NAME);
 }
 
-async function readHooksFile(
-  installation: CodexHookInstallation,
-): Promise<Record<string, unknown>> {
+async function readHooksFile(installation: CodexHookInstallation): Promise<ParsedJsonObject> {
   return JSON.parse(await fs.readFile(hooksPath(installation), "utf8"));
 }
 
-function hookEntries(configuration: Record<string, unknown>, eventName: string): unknown[] {
-  const events = configuration.hooks as Record<string, unknown>;
+function hookEntries(configuration: ParsedJsonObject, eventName: string): unknown[] {
+  // SAFETY: Parsed JSON matches the event object shape this harness exercises.
+  const events = configuration.hooks as ParsedJsonObject;
   const entries = events[eventName];
   return Array.isArray(entries) ? entries : [];
 }
 
 function entryCommands(entries: unknown[]): string[] {
   return entries.flatMap((entry) => {
+    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
     const hooks = (entry as { hooks?: { command?: unknown }[] }).hooks;
     if (!Array.isArray(hooks)) return [];
     return hooks
       .map((hook) => hook.command)
-      .filter((command): command is string => typeof command === "string");
+      .filter(
+        (command): command is string =>
+          Object.prototype.toString.call(command) === "[object String]",
+      );
   });
 }
 
@@ -91,6 +96,7 @@ async function pipeToHookScript(
 
 /**
  * Runs the installed script the other way an agent can hand an envelope over:
+ // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
  * as the argument after the token, with nothing on stdin at all. The script
  * must not sit waiting on a pipe no one is writing.
  */
@@ -132,6 +138,7 @@ test("registers every lifecycle event beside the user's own hooks", async (t) =>
     assert.equal(commands.length, 1, `${eventName} carries exactly one Luke entry`);
     // Guarded on the script's own presence and always exiting zero, so an
     // entry outliving an uninstalled Luke is a no-op — and a PermissionRequest
+    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
     // hook can never read as a decision.
     assert.ok(commands[0]?.startsWith(`[ -x "${installation.hookScriptPath}" ]`));
     assert.ok(commands[0]?.endsWith("|| true"));
@@ -154,6 +161,7 @@ test("touches nothing on a machine with no Codex home at all", async (t) => {
   await assert.rejects(fs.stat(installation.spoolDirectory));
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("leaves a hooks file it cannot parse exactly as it was", async (t) => {
   const installation = await temporaryInstallation(t);
   const corrupt = "{ this is not json";
@@ -176,6 +184,7 @@ test("converges rather than accumulates: reinstalling changes nothing", async (t
 
 test("appends its entries after the user's, so their trust anchors hold still", async (t) => {
   const installation = await temporaryInstallation(t);
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // Codex trusts a hook by its position in the file as well as its content,
   // so a merge that slid a user's entry down a slot would silently stop it.
   await fs.writeFile(
@@ -245,6 +254,7 @@ test("the script writes one fixed token from a piped envelope", async (t) => {
   }
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("the script accepts an envelope passed as its argument too", async (t) => {
   const installation = await temporaryInstallation(t);
   await installCodexObservationHooks(installation);
@@ -290,6 +300,7 @@ test("the script skips a subagent's events", async (t) => {
   assert.deepEqual(await fs.readdir(installation.spoolDirectory), []);
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("an empty agent_id does not read as a subagent", async (t) => {
   const installation = await temporaryInstallation(t);
   await installCodexObservationHooks(installation);

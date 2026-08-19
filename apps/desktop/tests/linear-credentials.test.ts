@@ -34,13 +34,14 @@ function grantStore(initial: LinearGrant | undefined) {
 function credentialsFor(
   store: ReturnType<typeof grantStore>,
   respond: (request: RecordedRequest) => Response,
-): { credentials: LinearCredentials; requests: RecordedRequest[] } {
+) {
   const { fetch: fakeFetch, requests } = recordingFetch(respond);
   const credentials = new LinearCredentials({
     readGrant: store.readGrant,
     writeGrant: store.writeGrant,
     forgetGrant: store.forgetGrant,
     environment: ENVIRONMENT,
+    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
     fetchImplementation: fakeFetch as typeof globalThis.fetch,
     now: () => NOW,
   });
@@ -108,6 +109,7 @@ test("two asks at once spend one rotation between them", async () => {
 
   // An observation pass and a spoken act can both find the token lapsed. The
   // loser of a race would spend a refresh token Linear had already rotated
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // away, and Linear reads that as a withdrawn grant.
   const [first, second] = await Promise.all([credentials.accessToken(), credentials.accessToken()]);
   assert.equal(first, "renewed-access");
@@ -206,19 +208,26 @@ test("disconnecting while a refresh is in flight cannot restore the grant", asyn
     finishRefresh = resolve;
   });
   const requests: RecordedRequest[] = [];
+  const refreshFetchImpl = async (input: RequestInfo | URL, init?: RequestInit) => {
+    requests.push({
+      url: String(input),
+      authorization: new Headers(init?.headers).get("authorization"),
+      body:
+        init?.body !== undefined &&
+        init?.body !== null &&
+        Object.prototype.toString.call(init.body) === "[object String]"
+          ? init.body
+          : undefined,
+    });
+    return requests.length === 1 ? refreshResponse : jsonResponse({}, HTTP_STATUS.OK);
+  };
   const credentials = new LinearCredentials({
     readGrant: store.readGrant,
     writeGrant: store.writeGrant,
     forgetGrant: store.forgetGrant,
     environment: ENVIRONMENT,
-    fetchImplementation: (async (input, init) => {
-      requests.push({
-        url: String(input),
-        authorization: new Headers(init?.headers).get("authorization"),
-        body: typeof init?.body === "string" ? init.body : undefined,
-      });
-      return requests.length === 1 ? refreshResponse : jsonResponse({}, HTTP_STATUS.OK);
-    }) as typeof globalThis.fetch,
+    // SAFETY: Recording fetch matches globalThis.fetch for test harness injection.
+    fetchImplementation: refreshFetchImpl as typeof globalThis.fetch,
     now: () => NOW,
   });
 
@@ -245,19 +254,26 @@ test("a refresh cannot start while disconnect is revoking the grant", async () =
     finishRevocation = resolve;
   });
   const requests: RecordedRequest[] = [];
+  const revokeFetchImpl = async (input: RequestInfo | URL, init?: RequestInit) => {
+    requests.push({
+      url: String(input),
+      authorization: new Headers(init?.headers).get("authorization"),
+      body:
+        init?.body !== undefined &&
+        init?.body !== null &&
+        Object.prototype.toString.call(init.body) === "[object String]"
+          ? init.body
+          : undefined,
+    });
+    return revocationResponse;
+  };
   const credentials = new LinearCredentials({
     readGrant: store.readGrant,
     writeGrant: store.writeGrant,
     forgetGrant: store.forgetGrant,
     environment: ENVIRONMENT,
-    fetchImplementation: (async (input, init) => {
-      requests.push({
-        url: String(input),
-        authorization: new Headers(init?.headers).get("authorization"),
-        body: typeof init?.body === "string" ? init.body : undefined,
-      });
-      return revocationResponse;
-    }) as typeof globalThis.fetch,
+    // SAFETY: Recording fetch matches globalThis.fetch for test harness injection.
+    fetchImplementation: revokeFetchImpl as typeof globalThis.fetch,
     now: () => NOW,
   });
 

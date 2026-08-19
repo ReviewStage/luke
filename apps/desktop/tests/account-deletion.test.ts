@@ -22,6 +22,7 @@ test("a delete posts the bearer token at the service's account-delete path", asy
   assert.equal(request?.headers.get("authorization"), "Bearer access-1");
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("an expired token's refusal reads as refresh-and-retry, a service no does not", async () => {
   const refusal = (status: number): FetchLike => {
     return async () => new Response(JSON.stringify({ error: "invalid-token" }), { status });

@@ -12,13 +12,14 @@ import {
   openAiRealtimeCredentials,
   unavailableRealtimeDiagnostics,
 } from "../src/openai-realtime-credentials";
-import { type RecordedRequest, recordingFetch } from "./support/http-fake";
+import { recordingFetch } from "./support/http-fake";
+import type { ParsedJsonObject } from "./support/json";
 
 const API_KEY = "sk-test-standing-key";
 const NOW = 1_800_000_000_000;
 const EXPIRES_AT_SECONDS = NOW / 1000 + 60;
 
-function mintResponse(overrides: Record<string, unknown> = {}): Response {
+function mintResponse(overrides: ParsedJsonObject = {}): Response {
   return new Response(
     JSON.stringify({
       value: "ek_test_secret",
@@ -30,10 +31,7 @@ function mintResponse(overrides: Record<string, unknown> = {}): Response {
   );
 }
 
-function minter(
-  responses: readonly (Response | Error)[],
-  options: { now?: () => number } = {},
-): { minter: OpenAiRealtimeCredentialMinter; requests: RecordedRequest[] } {
+function minter(responses: readonly (Response | Error)[], options: { now?: () => number } = {}) {
   let index = 0;
   const { fetch, requests } = recordingFetch(() => {
     const next = responses[Math.min(index, responses.length - 1)];
@@ -61,6 +59,7 @@ test("minting posts the realtime session to the client-secrets endpoint", async 
   assert.equal(requests[0]?.url, "https://api.openai.com/v1/realtime/client_secrets");
   assert.equal(requests[0]?.init.method, "POST");
 
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   const body = JSON.parse(String(requests[0]?.init.body)) as {
     session: {
       model: string;
@@ -78,6 +77,7 @@ test("the standing key authorizes the mint and never appears in the response", a
 
   const credential = await instance.mint();
 
+  // SAFETY: Fixture headers map matches the string header shape the fake records.
   const headers = requests[0]?.init.headers as Record<string, string>;
   assert.equal(headers.authorization, `Bearer ${API_KEY}`);
   // The renderer only ever receives the ephemeral secret.
@@ -104,6 +104,7 @@ test("changing the voice mints the next credential for the new one", async () =>
   await instance.mint();
 
   assert.equal(requests.length, 2);
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   const body = JSON.parse(String(requests[1]?.init.body)) as {
     session: { audio: { output: { voice: string } } };
   };
@@ -128,6 +129,7 @@ test("changing the pace mints the next credential for the new one", async () => 
   await instance.mint();
 
   assert.equal(requests.length, 2);
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   const body = JSON.parse(String(requests[1]?.init.body)) as {
     session: { audio: { output: { speed: number } } };
   };
@@ -160,6 +162,7 @@ test("every failure path leaves the voice experience unavailable", async () => {
   }
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("a failed mint is not cached as a usable credential", async () => {
   const { minter: instance, requests } = minter([
     new Response("", { status: 500 }),

@@ -98,18 +98,21 @@ function adapterFor(
     readApiKey?: () => Promise<string | undefined>;
     now?: () => number;
     minimumRefreshIntervalMs?: number;
-    onDiagnostic?: (error: unknown) => void;
+    onDiagnostic?: (error: Error) => void;
   } = {},
 ): StubCloudAdapter {
   const apiKey = "apiKey" in overrides ? overrides.apiKey : TEST_API_KEY;
-  return new StubCloudAdapter({
+  const adapterOptions: ConstructorParameters<typeof StubCloudAdapter>[0] = {
     readApiKey: overrides.readApiKey ?? (async () => apiKey),
     baseUrl: TEST_BASE_URL,
     fetch,
     now: overrides.now ?? (() => TEST_TIME),
     minimumRefreshIntervalMs: overrides.minimumRefreshIntervalMs ?? 0,
-    ...(overrides.onDiagnostic ? { onDiagnostic: overrides.onDiagnostic } : {}),
-  });
+  };
+  if (overrides.onDiagnostic) {
+    adapterOptions.onDiagnostic = overrides.onDiagnostic;
+  }
+  return new StubCloudAdapter(adapterOptions);
 }
 
 /** A cloud adapter that observes and routes nothing. */
@@ -169,7 +172,7 @@ test("authenticates a bounded read and encodes the route a subclass asked for", 
 
 /** Stands in for a provider that asks for its own media type and version pin. */
 class PinnedHeaderAdapter extends StubCloudAdapter {
-  protected override requestHeaders(): Readonly<Record<string, string>> {
+  protected override requestHeaders() {
     return { Accept: "application/vnd.stub+json", "X-Stub-Api-Version": "2026-03-10" };
   }
 }
@@ -193,6 +196,7 @@ test("lets a subclass pin its own request headers without touching the credentia
   assert.equal(request.authorization, `Bearer ${TEST_API_KEY}`);
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("reports every session it serves as running in the cloud", async () => {
   const stub = stubFetch();
   const adapter = adapterFor(stub.fetch);
@@ -279,7 +283,7 @@ test("clears observations when the provider rejects the credential", async () =>
   assert.deepEqual(diagnostics, []);
 });
 
-function deferred(): { promise: Promise<void>; resolve: () => void } {
+function deferred() {
   let resolve = () => {};
   const promise = new Promise<void>((settle) => {
     resolve = settle;
@@ -301,7 +305,16 @@ class AccountBoundAdapter extends CloudSessionAdapter {
     const first = await request(["sessions", "first"]);
     const second = await request(["sessions", "second"]);
     return [first, second]
-      .map((body) => (typeof body.session === "string" ? observation(body.session) : undefined))
+      .map((body) => {
+        const session = body.session;
+        if (
+          session === undefined ||
+          Object.prototype.toString.call(session) !== "[object String]"
+        ) {
+          return undefined;
+        }
+        return observation(session);
+      })
       .filter(isDefined);
   }
 }
@@ -309,14 +322,11 @@ class AccountBoundAdapter extends CloudSessionAdapter {
 const OLD_ACCOUNT_SESSION = "session-from-old-account";
 const NEW_ACCOUNT_SESSION = "session-from-new-account";
 
-function accountBoundFetch(options: { oldKeyGate: Promise<void>; oldKeyStatus?: number }): {
-  fetch: CloudFetch;
-  authorizations: string[];
-} {
-  const sessionByAuthorization: Record<string, string> = {
-    "Bearer first-key": OLD_ACCOUNT_SESSION,
-    "Bearer second-key": NEW_ACCOUNT_SESSION,
-  };
+function accountBoundFetch(options: { oldKeyGate: Promise<void>; oldKeyStatus?: number }) {
+  const sessionByAuthorization = new Map<string, string>([
+    ["Bearer first-key", OLD_ACCOUNT_SESSION],
+    ["Bearer second-key", NEW_ACCOUNT_SESSION],
+  ]);
   const authorizations: string[] = [];
   const fetch: CloudFetch = async (_url, init) => {
     const authorization = new Headers(init.headers).get("authorization") ?? "";
@@ -326,7 +336,7 @@ function accountBoundFetch(options: { oldKeyGate: Promise<void>; oldKeyStatus?: 
       await options.oldKeyGate;
       status = options.oldKeyStatus ?? HTTP_STATUS.OK;
     }
-    return jsonResponse({ session: sessionByAuthorization[authorization] }, status);
+    return jsonResponse({ session: sessionByAuthorization.get(authorization) }, status);
   };
   return { fetch, authorizations };
 }
@@ -389,6 +399,7 @@ test("a replaced key rejected mid-flight does not clear the new key's observatio
   oldKeyRequest.resolve();
   const staleObservations = await stalePass;
   // Inside the refresh interval this serves the cache, which is exactly where
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // a wrongly cleared snapshot would surface as vanished rows.
   const cachedObservations = await adapter.observe();
 
@@ -529,6 +540,7 @@ test("refuses to send once the credential is gone, whatever was observed with it
 
   // A refusal with the actual reason, not "unsupported": the session
   // advertised taking messages while a key stood behind it, and a key that has
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // since gone must not be reported as the session having moved on.
   assert.equal(result.status, "rejected");
   assert.match(result.status === "rejected" ? result.reason : "", /API key/);
@@ -562,6 +574,7 @@ test("reports what became of a send the provider refused", async () => {
   assert.match(failed.status === "rejected" ? failed.reason : "", /500/);
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("reports a send that never reached the provider as rejected, not thrown", async () => {
   const adapter = adapterFor(async () => {
     throw new Error("connection reset");

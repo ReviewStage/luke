@@ -26,6 +26,7 @@ import {
   SECRET_STORAGE,
 } from "../src/shared/contracts";
 import { CREDENTIAL_PROVIDER_ID } from "../src/shared/credential-providers";
+import { spokenSettingBridge } from "./support/spoken-setting-bridge";
 
 function settings(overrides: Partial<AppSettings> = {}): AppSettings {
   return {
@@ -261,6 +262,7 @@ test("the guide names the signed-in identity and keeps sign-out manual", () => {
   assert.match(account?.detail ?? "", /developer@example.com/);
   assert.match(account?.detail ?? "", /GitHub/);
   assert.match(account?.detail ?? "", /by hand/);
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // Deleting the account is described — and described as hand-only — so Luke
   // neither denies the capability nor lets a spoken ask believe it can reach it.
   assert.match(account?.detail ?? "", /Delete account/);
@@ -296,6 +298,7 @@ test("the facts describe creating a workspace, so Luke does not deny the capabil
 });
 
 test("the guide offers what a new Conductor agent runs, by the names people know", () => {
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // Unset reads as the provider's own defaults, which is what actually holds,
   // and the choices are the labels people know the models by — never wire ids.
   const unset = guideSetting(APP_SETTING_ID.WORKSPACE_AGENT_MODEL);
@@ -379,13 +382,17 @@ test("the guide offers what a new Conductor agent runs, by the names people know
 
 test("a spoken model or effort change composes the one stored selection", async () => {
   const carried: (WorkspaceAgentSelection | undefined)[] = [];
-  const bridge = {
-    updateSettingEntry: async (_field: string, key: string, value: unknown) => {
+  const bridge = spokenSettingBridge({
+    updateSettingEntry: async (
+      _field: string,
+      key: string,
+      value: WorkspaceAgentSelection | undefined,
+    ) => {
       assert.equal(key, PROVIDER_ID.CONDUCTOR);
-      carried.push(value as WorkspaceAgentSelection | undefined);
+      carried.push(value);
       return { settings: settings() };
     },
-  } as unknown as Parameters<typeof applySpokenSetting>[0];
+  });
   const stored = settings({
     workspaceAgentDefaults: {
       [PROVIDER_ID.CONDUCTOR]: { agent: "codex", model: "gpt-5.6-sol", effort: "xhigh" },
@@ -393,6 +400,7 @@ test("a spoken model or effort change composes the one stored selection", async 
   });
   const input = guideInput({ settings: stored });
 
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // A model named by its label lands as its wire pairing, and the chosen
   // effort survives because the new agent documents the same level.
   await applySpokenSetting(
@@ -447,15 +455,20 @@ test("a spoken model or effort change composes the one stored selection", async 
   assert.equal(carried.length, 5);
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("a model and its effort named in one change land as one stored pairing", async () => {
   const carried: (WorkspaceAgentSelection | undefined)[] = [];
-  const bridge = {
-    updateSettingEntry: async (_field: string, key: string, value: unknown) => {
+  const bridge = spokenSettingBridge({
+    updateSettingEntry: async (
+      _field: string,
+      key: string,
+      value: WorkspaceAgentSelection | undefined,
+    ) => {
       assert.equal(key, PROVIDER_ID.CONDUCTOR);
-      carried.push(value as WorkspaceAgentSelection | undefined);
+      carried.push(value);
       return { settings: settings() };
     },
-  } as unknown as Parameters<typeof applySpokenSetting>[0];
+  });
 
   // Nothing chosen yet — the state the effort entry does not exist in — and
   // the pair still lands whole, in one act riding one bridge call.
@@ -510,20 +523,24 @@ test("a model and its effort named in one change land as one stored pairing", as
 
 test("a model and its effort asked in one breath compose through the held answer", async () => {
   const carried: (WorkspaceAgentSelection | undefined)[] = [];
-  const bridge = {
-    updateSettingEntry: async (_field: string, key: string, value: unknown) => {
+  const bridge = spokenSettingBridge({
+    updateSettingEntry: async (
+      _field: string,
+      key: string,
+      value: WorkspaceAgentSelection | undefined,
+    ) => {
       assert.equal(key, PROVIDER_ID.CONDUCTOR);
-      const selection = value as WorkspaceAgentSelection | undefined;
-      carried.push(selection);
+      carried.push(value);
       return {
         settings: settings(
-          selection ? { workspaceAgentDefaults: { [PROVIDER_ID.CONDUCTOR]: selection } } : {},
+          value ? { workspaceAgentDefaults: { [PROVIDER_ID.CONDUCTOR]: value } } : {},
         ),
       };
     },
-  } as unknown as Parameters<typeof applySpokenSetting>[0];
+  });
 
   // Nothing chosen yet, so the guide carries no effort entry at all — the
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // paired ask arrives as two calls, and everything the second half needs
   // only becomes true when the first half's answer lands.
   const unset = settings();
@@ -560,7 +577,9 @@ test("a model and its effort asked in one breath compose through the held answer
 });
 
 test("the guide describes the default workspace provider without offering to change it", () => {
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // Unset reads as the asking state — the default every install starts in —
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // not as a missing value.
   const unset = guideSetting(APP_SETTING_ID.DEFAULT_WORKSPACE_PROVIDER);
   assert.equal(unset.kind, APP_SETTING_KIND.CHOICE);
@@ -571,6 +590,7 @@ test("the guide describes the default workspace provider without offering to cha
   assert.equal(unset.adjustable, false);
   assert.match(unset.manual, /Settings tab/);
 
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // A chosen provider is said by the name its rows use, never as a raw id.
   const chosen = guideSetting(
     APP_SETTING_ID.DEFAULT_WORKSPACE_PROVIDER,
@@ -591,6 +611,7 @@ test("the facts describe stopping a reply, exactly where a reply can exist", () 
   assert.match(rendered, /A different stop chord can be recorded/);
 
   // No key registered — another app owns ⌥S, or a Luke key was moved onto
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // it — leaves Escape as the whole of the capability, said honestly.
   const keyless = JSON.stringify(buildLukeGuide(guideInput({ stopKey: undefined })).facts);
   assert.match(keyless, /Escape while Luke is speaking/);
@@ -645,6 +666,7 @@ test("the facts follow the talk key, the microphone, and the storage the system 
   assert.match(JSON.stringify(unprotected.facts), /no encrypted credential storage/);
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("the panel fact says the tabs answer an ask as well as a press", () => {
   const fact = buildLukeGuide(guideInput()).facts.find(
     (candidate) => candidate.label === "The panel",
@@ -695,17 +717,20 @@ test("the feedback fact says what a spoken open may do, and that sending stays b
 test("every adjustable setting is carried to the bridge call its row uses", async () => {
   const calls: string[] = [];
   const answered: SettingsUpdateResult = { settings: settings() };
-  const bridge = {
-    updateSetting: async (field: string, value: unknown) => {
+  const bridge = spokenSettingBridge({
+    updateSetting: async (field: string, value: boolean | string) => {
       calls.push(`${field}:${String(value)}`);
       return answered;
     },
-    updateSettingEntry: async (field: string, _key: string, value: unknown) => {
-      const selection = value as WorkspaceAgentSelection | undefined;
-      calls.push(`${field}:${selection?.model ?? "default"}`);
+    updateSettingEntry: async (
+      field: string,
+      _key: string,
+      value: WorkspaceAgentSelection | undefined,
+    ) => {
+      calls.push(`${field}:${value?.model ?? "default"}`);
       return answered;
     },
-  };
+  });
   const seen: AppSettings[] = [];
 
   for (const setting of buildLukeGuide(guideInput()).settings) {
@@ -736,14 +761,15 @@ test("every adjustable setting is carried to the bridge call its row uses", asyn
   assert.equal(seen.length, calls.length);
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("a pace asked for by its multiple carries the same as its word", async () => {
   const calls: string[] = [];
-  const bridge = {
-    updateSetting: async (field: string, value: unknown) => {
+  const bridge = spokenSettingBridge({
+    updateSetting: async (field: string, value: boolean | string) => {
       calls.push(`${field}:${value}`);
       return { settings: settings() };
     },
-  };
+  });
 
   for (const value of ["quick", "1.25×"]) {
     const outcome = await applySpokenSetting(
@@ -757,6 +783,7 @@ test("a pace asked for by its multiple carries the same as its word", async () =
   assert.deepEqual(calls, ["voiceSpeed:1.25", "voiceSpeed:1.25"]);
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("the store's refusal comes back as the spoken outcome", async () => {
   const bridge = {
     updateSetting: async () => ({

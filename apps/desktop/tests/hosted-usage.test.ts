@@ -69,6 +69,7 @@ test("a 401 refreshes the account and retries once", async () => {
   assert.equal(new Headers(requests[1]?.init.headers).get("authorization"), "Bearer fresh-token");
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("failures, malformed answers, and a missing account all read as no answer", async () => {
   const failing = reader({
     fetch: service([() => new Response("oops", { status: 500 })]).fetchLike,

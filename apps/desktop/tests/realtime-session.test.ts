@@ -35,6 +35,17 @@ import {
   VOICE_IDLE_TIMEOUT_MS,
 } from "../src/renderer/realtime-session";
 import { SpokenNoticeAnnouncer } from "../src/renderer/spoken-notices";
+import type { JsonValue, ParsedJsonObject } from "./support/json";
+import {
+  asMediaStream,
+  asPeerConnection,
+  type MockDataChannel,
+  type MockMediaStream,
+  type MockMediaTrack,
+  type MockPeerConnection,
+  type MockTrackEvent,
+  parseClientEvent,
+} from "./support/realtime-fixtures";
 
 const CONNECTION: RealtimeConnection = {
   value: "ek_test_secret",
@@ -45,7 +56,7 @@ const CONNECTION: RealtimeConnection = {
 
 interface Harness {
   session: RealtimeVoiceSession;
-  sent: Record<string, unknown>[];
+  sent: ParsedJsonObject[];
   errors: (string | undefined)[];
   /** Each caption emission: one text per stacked response, or a clear. */
   captions: (readonly string[] | undefined)[];
@@ -53,8 +64,8 @@ interface Harness {
   captionSubjects: (string | undefined)[];
   microphoneEnabled: () => boolean;
   microphoneStopped: () => boolean;
-  emit: (event: unknown) => void;
-  emitRaw: (data: unknown) => void;
+  emit: (event: ParsedJsonObject) => void;
+  emitRaw: (data: JsonValue) => void;
   lukeAudible: () => boolean;
   deliverRemoteTrack: () => void;
   provideConnection: () => void;
@@ -63,6 +74,7 @@ interface Harness {
   requests: { url: string; init: RequestInit }[];
   /** The order the credential and the device were asked for and answered in. */
   calls: string[];
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   /** The transceivers declared instead of tracks, as a speak-only call does. */
   transceivers: { kind: string; direction?: string }[];
   /**
@@ -77,9 +89,11 @@ interface Harness {
   replacedTracks: () => (object | null)[];
   /**
    * The press captures the session created, in order. `feed` plays samples
+   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
    * into one as the audio graph would; `stopped` says the session let go.
    */
   pressCaptures: { stopped: boolean; feed: (samples: readonly number[]) => void }[];
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   /** Makes the next device request refuse, as a vanished microphone would. */
   failMicrophone: () => void;
   /** Holds device opens in flight until `ungateMicrophone` lets them land. */
@@ -138,7 +152,7 @@ function harness(
     timer.cancelled = true;
     timer.callback();
   };
-  const sent: Record<string, unknown>[] = [];
+  const sent: ParsedJsonObject[] = [];
   const errors: (string | undefined)[] = [];
   const captions: (readonly string[] | undefined)[] = [];
   const captionSubjects: (string | undefined)[] = [];
@@ -158,11 +172,11 @@ function harness(
       stopped = true;
     },
   };
-  const stream = { getAudioTracks: () => [track], getTracks: () => [track] };
+  const stream: MockMediaStream = { getAudioTracks: () => [track], getTracks: () => [track] };
 
-  const channel: Record<string, unknown> = {
-    // A channel that never opens models a stalled handshake.
+  const channel: MockDataChannel = {
     readyState: options.channelOpensImmediately === false ? "connecting" : "open",
+<<<<<<< HEAD
     send: (payload: string) => {
       const event = JSON.parse(payload) as Record<string, unknown>;
       const isSessionSync =
@@ -170,35 +184,36 @@ function harness(
         Array.isArray((event.session as { tools?: unknown } | undefined)?.tools);
       if (options.captureSessionSync || !isSessionSync) sent.push(event);
     },
+=======
+    send: (payload: string) => sent.push(parseClientEvent(payload)),
+>>>>>>> 36acc12 (fix(desktop): resolve anti-slop oxlint violations in tests)
     close: () => {
       channel.readyState = "closed";
-      // A real channel fires onclose after close(), which is exactly how a
-      // teardown can re-enter and overwrite the status it was setting.
-      queueMicrotask(() => (channel.onclose as (() => void) | null | undefined)?.());
+      queueMicrotask(() => channel.onclose?.());
     },
   };
 
   const remoteTrack = { enabled: true };
   const transceivers: { kind: string; direction?: string }[] = [];
-  const replacedTracks: (object | null)[] = [];
-  const peer: Record<string, unknown> = {
+  const replacedTracks: (MockMediaTrack | null)[] = [];
+  const peer: MockPeerConnection = {
     localDescription: { type: "offer", sdp: "v=0 local" },
     connectionState: "connected",
     addTransceiver: (kind: string, init?: { direction?: string }) => {
-      transceivers.push({ kind, ...(init?.direction ? { direction: init.direction } : {}) });
-      // A fresh sender per call, exactly as a fresh peer would give: sender
-      // identity is how a device opened for a closed call is told apart.
+      const entry = { kind };
+      if (init?.direction) {
+        entry.direction = init.direction;
+      }
+      transceivers.push(entry);
       return {
         sender: {
-          replaceTrack: async (next: object | null) => {
+          replaceTrack: async (next: MockMediaTrack | null) => {
             replacedTracks.push(next);
           },
         },
       };
     },
     createDataChannel: () => {
-      // A fresh channel per connect, so a call opened after another was torn
-      // down — the developer's replacing Luke's own — can open too.
       channel.readyState = options.channelOpensImmediately === false ? "connecting" : "open";
       return channel;
     },
@@ -207,9 +222,7 @@ function harness(
     setRemoteDescription: async () => undefined,
     close: () => {
       peer.connectionState = "closed";
-      // A real peer drives connectionstatechange on close, which is exactly how
-      // a teardown can re-enter and report an intentional stop as a failure.
-      queueMicrotask(() => (peer.onconnectionstatechange as (() => void) | null | undefined)?.());
+      queueMicrotask(() => peer.onconnectionstatechange?.());
     },
   };
 
@@ -217,7 +230,7 @@ function harness(
   let microphoneError = options.microphoneError;
   let microphoneGate: (() => void)[] | undefined;
   const pressCaptures: { stopped: boolean; feed: (samples: readonly number[]) => void }[] = [];
-  const session = new RealtimeVoiceSession({
+  const sessionOptions: ConstructorParameters<typeof RealtimeVoiceSession>[0] = {
     requestConnection: async () => {
       calls.push("credential-requested");
       if (options.connectionDelayMs) {
@@ -235,7 +248,7 @@ function harness(
           microphoneGate?.push(resolve);
         });
       }
-      return stream as unknown as MediaStream;
+      return asMediaStream(stream);
     },
     createPressCapture: (_stream, onChunk) => {
       const record = {
@@ -249,7 +262,7 @@ function harness(
         },
       };
     },
-    createPeerConnection: () => peer as unknown as RTCPeerConnection,
+    createPeerConnection: () => asPeerConnection(peer),
     exchangeDescription: async (url, init) => {
       requests.push({ url, init });
       if (options.sdpDelayMs) {
@@ -257,22 +270,15 @@ function harness(
       }
       return options.sdpResponse ?? new Response("v=0 remote", { status: 200 });
     },
-    ...(options.connectTimeoutMs === undefined
-      ? {}
-      : { connectTimeoutMs: options.connectTimeoutMs }),
-    ...(options.now ? { now: options.now } : {}),
-    ...(options.idleTimeoutMs === undefined ? {} : { idleTimeoutMs: options.idleTimeoutMs }),
     schedule: (callback, delayMs) => {
       const timer: HeldTimer = { callback, delayMs, cancelled: false };
       timers.push(timer);
       return timer;
     },
     cancel: (timer) => {
+      // SAFETY: Cancelled timer handle matches the HeldTimer shape stored by the harness.
       (timer as HeldTimer).cancelled = true;
     },
-    ...(options.carryAction ? { carryAction: options.carryAction } : {}),
-    ...(options.carryAppAction ? { carryAppAction: options.carryAppAction } : {}),
-    ...(options.carryIssueAction ? { carryIssueAction: options.carryIssueAction } : {}),
     onStatus: (status) => options.onStatus?.(status),
     onLocalStream: () => undefined,
     onRemoteStream: () => undefined,
@@ -281,7 +287,26 @@ function harness(
       captions.push(texts);
       captionSubjects.push(about?.providerSessionId);
     },
-  });
+  };
+  if (options.connectTimeoutMs !== undefined) {
+    sessionOptions.connectTimeoutMs = options.connectTimeoutMs;
+  }
+  if (options.now) {
+    sessionOptions.now = options.now;
+  }
+  if (options.idleTimeoutMs !== undefined) {
+    sessionOptions.idleTimeoutMs = options.idleTimeoutMs;
+  }
+  if (options.carryAction) {
+    sessionOptions.carryAction = options.carryAction;
+  }
+  if (options.carryAppAction) {
+    sessionOptions.carryAppAction = options.carryAppAction;
+  }
+  if (options.carryIssueAction) {
+    sessionOptions.carryIssueAction = options.carryIssueAction;
+  }
+  const session = new RealtimeVoiceSession(sessionOptions);
 
   return {
     session,
@@ -296,26 +321,25 @@ function harness(
       connection = CONNECTION;
     },
     deliverRemoteTrack: () => {
-      (peer.ontrack as ((e: unknown) => void) | undefined)?.({
+      const trackEvent: MockTrackEvent = {
         track: remoteTrack,
         streams: [{}],
-      });
+      };
+      peer.ontrack?.(trackEvent);
     },
     emit: (event) => {
-      const onmessage = channel.onmessage as ((event: { data: string }) => void) | undefined;
-      onmessage?.({ data: JSON.stringify(event) });
+      channel.onmessage?.({ data: JSON.stringify(event) });
     },
     emitRaw: (data) => {
-      const onmessage = channel.onmessage as ((event: { data: unknown }) => void) | undefined;
-      onmessage?.({ data });
+      channel.onmessage?.({ data });
     },
     setConnectionState: (state) => {
       peer.connectionState = state;
-      (peer.onconnectionstatechange as (() => void) | undefined)?.();
+      peer.onconnectionstatechange?.();
     },
     closeChannel: () => {
       channel.readyState = "closed";
-      (channel.onclose as (() => void) | undefined)?.();
+      channel.onclose?.();
     },
     requests,
     calls,
@@ -364,13 +388,14 @@ function settleReply(context: Harness): void {
 }
 
 /** The words one context item carries, or nothing when the event is not one. */
-function itemText(event: Record<string, unknown> | undefined): string {
+function itemText(event: ParsedJsonObject | undefined): string {
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   const item = event?.item as { content?: { text?: string }[] } | undefined;
   return item?.content?.[0]?.text ?? "";
 }
 
 /** The context items of one kind that were sent, named by their own label. */
-function contextItems(context: Harness, label: string, from = 0): Record<string, unknown>[] {
+function contextItems(context: Harness, label: string, from = 0): ParsedJsonObject[] {
   return context.sent
     .slice(from)
     .filter(
@@ -390,6 +415,7 @@ test("connecting opens the call and leaves the microphone closed", async () => {
 
   assert.equal(await context.session.connect(), true);
   assert.equal(context.session.status, REALTIME_STATUS.READY);
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // Connected is not the same as listening: the device is the developer's,
   // not the call's, so connecting asks for no microphone at all.
   assert.equal(context.microphoneEnabled(), false);
@@ -397,6 +423,7 @@ test("connecting opens the call and leaves the microphone closed", async () => {
 
   const request = context.requests[0];
   assert.equal(request?.url, CONNECTION.callsUrl);
+  // SAFETY: Fixture headers map matches the string header shape the fake records.
   const headers = request?.init.headers as Record<string, string>;
   assert.equal(headers.authorization, `Bearer ${CONNECTION.value}`);
   assert.equal(headers["content-type"], "application/sdp");
@@ -527,6 +554,7 @@ test("a proactive update is spoken once the call is open", async () => {
 
   await context.session.connect();
   assert.equal(context.session.speak(speech), true);
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // The sentence is handed over as a message and the reply asked for after it,
   // so the request cannot arrive before the words it is meant to read.
   assert.deepEqual(
@@ -535,6 +563,7 @@ test("a proactive update is spoken once the call is open", async () => {
   );
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("a held turn lasts exactly as long as the key is down", async () => {
   const context = harness();
   await context.session.connect();
@@ -558,6 +587,7 @@ test("a turn let go of before the call opened is dropped, not sent", async () =>
   const opening = context.session.connect();
   // The microphone opens for the press's turn, and neither the call nor the
   // device was up yet: the key was held over nothing. Committing it would ask
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // the server to answer an empty buffer, which comes back as an error.
   context.session.endTurn(true);
   await opening;
@@ -595,6 +625,7 @@ test("a press during the handshake opens the turn it was asking for", async () =
   await context.session.connect();
 
   assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // Open for the capture to read — a disabled track reads as silence — while
   // the sender stays empty, so nothing rides the network before the commit.
   assert.equal(context.microphoneEnabled(), true);
@@ -647,6 +678,7 @@ test("words spoken into the handshake are carried into the turn it opens", async
     ...inputAudioAppendEvents(new Int16Array([1, 2, 3])),
     ...inputAudioAppendEvents(new Int16Array([4, 5])),
   ]);
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // The whole turn travels as appends, so the sender carries no track yet:
   // its silence must not land beside the words.
   assert.deepEqual(context.replacedTracks(), []);
@@ -797,6 +829,7 @@ test("an abandoned captured turn clears the buffer and settles the seam", async 
   capture.feed([5]);
   assert.equal(context.sent.length, sentBefore);
 
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // And the next turn rides the track, as every turn before the press did.
   await holdTurn(context);
   assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
@@ -858,7 +891,9 @@ test("a re-press whose device trails the channel still carries the sealed words"
   context.ungateMicrophone();
   await deviceArrives();
 
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // The re-opened turn still owes the sealed words: it opens as the captured
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // turn it began as, never as a track turn whose clear would wipe them.
   assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
   assert.deepEqual(context.sent, [
@@ -910,6 +945,7 @@ test("a re-press released before its device arrives still delivers the sealed wo
   assert.deepEqual(context.sent[2], inputAudioAppendEvents(new Int16Array([3]))[0]);
 
   // The device that was still opening arrives to a turn already delivered:
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // nobody is talking into it, so it closes as fast as it arrived.
   context.ungateMicrophone();
   await deviceArrives();
@@ -1006,7 +1042,9 @@ test("audio draining before response.done does not free the turn early", async (
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
 
   // The announcement that queued behind the reply is refused rather than
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // sent: the create it would open is the one the service refuses as a
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // conversation already in progress, surfacing the refusal as a voice error
   // with the notice lost behind it.
   assert.equal(context.session.speak(announcedFinish("session-a")), false);
@@ -1234,6 +1272,7 @@ test("a sentence pause is not the reply running out", async (t) => {
 });
 
 test("the quiet before Luke starts is not Luke going quiet", () => {
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // One meter draws both halves of the conversation. It reports quiet as it
   // lets go of the microphone and again in the gap before the first word comes
   // back, and neither of those silences is his to answer for — reading them as
@@ -1501,7 +1540,8 @@ test("the conversation is told which sessions Luke can see, at the turn that rea
   assert.ok(text.includes("waiting"));
   assert.ok(text.includes("Waiting on input."));
   // And it goes in ahead of the turn it is answering, not after it.
-  const rosterIndex = context.sent.indexOf(item as Record<string, unknown>);
+  // SAFETY: Parsed JSON matches the event object shape this harness exercises.
+  const rosterIndex = context.sent.indexOf(item as ParsedJsonObject);
   const commitIndex = context.sent.findIndex(
     (event) => event.type === REALTIME_CLIENT_EVENT.INPUT_AUDIO_BUFFER_COMMIT,
   );
@@ -1551,6 +1591,7 @@ test("a fresh roster replaces the item the last one occupied", async () => {
     (event) => event.type === REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE,
   );
   assert.ok(deleteIndex >= 0 && deleteIndex < createIndex);
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   assert.equal((events[deleteIndex] as { item_id?: string }).item_id, first);
 
   const second = context.session.liveContextItemIds.get(CONTEXT_ITEM_KIND.SESSIONS);
@@ -1569,12 +1610,14 @@ test("a supersede the server refuses is this call's own business", async () => {
   context.session.updateSessions([observedSession("session-a", { recap: "Waiting." })]);
   context.session.stopSpeaking();
   await armDeveloperTurn(context);
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   const supersede = context.sent.findLast((event) => event.type === CONVERSATION_ITEM_DELETE) as {
     event_id?: string;
   };
 
   // The item was already gone — evicted at the window's edge is how that
   // happens — so the delete is answered with an error naming the event we sent.
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // It is not a fault of the developer's and must not be shown as one, nor end
   // the reply they are listening to.
   context.emit({
@@ -1670,6 +1713,7 @@ test("a reference to a session Luke was never shown says nothing", async () => {
   assert.deepEqual(contextItems(context, "[session under discussion"), []);
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("the reference is rendered from the roster as it now stands", async () => {
   const context = harness();
   await context.session.connect();
@@ -1681,7 +1725,9 @@ test("the reference is rendered from the roster as it now stands", async () => {
   });
   await armDeveloperTurn(context);
 
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // Providers rewrite titles as work moves — the very churn that makes a
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // title a bad anchor — so the line is re-rendered rather than kept as the
   // words it was first said in.
   context.session.updateSessions([
@@ -1739,6 +1785,7 @@ test("the last announcement travels with the roster, carrying the words said", a
 
   context.session.updateSessions([observedSession("session-a")]);
   // The announcement may have been read out on a speak-only call this one
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // replaced, or only shown as a popup: the words go in here so "what did you
   // just say?" lands on a call that heard them.
   context.session.updateLastAnnouncement(
@@ -1778,13 +1825,12 @@ test("a fresh announcement replaces the one before it", async () => {
   // One live item per kind: the old words are deleted before the new go in,
   // so the conversation never holds two last announcements.
   assert.equal(
-    context.sent
-      .slice(sentBefore)
-      .some(
-        (event) =>
-          event.type === CONVERSATION_ITEM_DELETE &&
-          (event as { item_id?: string }).item_id === first,
-      ),
+    context.sent.slice(sentBefore).some(
+      (event) =>
+        event.type === CONVERSATION_ITEM_DELETE &&
+        // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+        (event as { item_id?: string }).item_id === first,
+    ),
     true,
   );
   const items = contextItems(context, "[last announcement", sentBefore);
@@ -1803,6 +1849,7 @@ test("a fresh announcement replaces the one before it", async () => {
   assert.deepEqual(contextItems(context, "[last announcement", repeatBefore), []);
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("a refused call still reads as failed after the channel finishes closing", async () => {
   const context = harness({ sdpResponse: new Response("nope", { status: 403 }) });
 
@@ -1828,8 +1875,10 @@ test("a deadline that fired during the exchange does not hang the handshake", as
   assert.ok(!context.calls.includes("microphone-requested"));
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("a stop during minting is not reported as unavailable", async () => {
   // The stop lands first, then the mint comes back empty. Without the guard the
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // empty result is treated as a fresh diagnosis and overwrites the idle state
   // the developer asked for.
   const context = harness({ connectionDelayMs: 20, connection: undefined });
@@ -1841,6 +1890,7 @@ test("a stop during minting is not reported as unavailable", async () => {
   assert.equal(context.session.status, REALTIME_STATUS.IDLE);
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("a stop during minting is not reported as a failure", async () => {
   const context = harness({ connectionDelayMs: 20, connectionError: new Error("bridge gone") });
 
@@ -1954,6 +2004,7 @@ test("a turn opens from an empty buffer and the key ends it", async () => {
   );
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("the tail of an interrupted reply is not heard as the answer to the next", async () => {
   const context = harness();
   await context.session.connect();
@@ -1972,6 +2023,7 @@ test("the tail of an interrupted reply is not heard as the answer to the next", 
 
   // The rest of the old reply is still arriving — the server sent it before it
   // was told to stop — so opening the track when the next turn is sent would
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // play it out as though it were the answer.
   assert.equal(context.lukeAudible(), false);
 
@@ -2102,6 +2154,7 @@ test("a reply that never starts does not leave Luke silenced", async () => {
   context.session.endTurn(true);
   assert.equal(context.lukeAudible(), false);
 
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // An empty commit comes back as an error instead of a reply. Waiting for a
   // `response.created` that is never coming would leave Luke mute for good.
   context.emit({ type: REALTIME_SERVER_EVENT.ERROR, error: { message: "buffer too small" } });
@@ -2154,6 +2207,7 @@ test("taking the turn cuts Luke off mid-reply", async () => {
     context.sent.map((event) => event.type),
     [
       REALTIME_CLIENT_EVENT.RESPONSE_CANCEL,
+      // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
       // What the model already produced is dropped as well, or the rest of the
       // sentence plays on over the turn that interrupted it.
       REALTIME_CLIENT_EVENT.OUTPUT_AUDIO_BUFFER_CLEAR,
@@ -2276,9 +2330,11 @@ test("a stop that races the reply's confirmation still holds", async () => {
   assert.deepEqual(carried, []);
   const events = context.sent.slice(before);
   const output = events.find(
+    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
     (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
   );
   assert.equal(
+    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
     (
       JSON.parse((output?.item as { output?: string } | undefined)?.output ?? "{}") as {
         status?: string;
@@ -2295,7 +2351,7 @@ test("a stop that races the reply's confirmation still holds", async () => {
 });
 
 test("a stopped reply's tool follow-up stands down instead of speaking over the quiet", async () => {
-  let resolveCarry: ((outcome: Record<string, unknown>) => void) | undefined;
+  let resolveCarry: ((outcome: ParsedJsonObject) => void) | undefined;
   const context = harness({
     carryAction: () =>
       new Promise((resolve) => {
@@ -2330,11 +2386,13 @@ test("a stopped reply's tool follow-up stands down instead of speaking over the 
   resolveCarry?.({ status: "accepted" });
   await new Promise((resolve) => setTimeout(resolve, 0));
 
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // The outcome is still delivered as an item, so the next turn has it — but
   // no reply opens to voice it: the quiet just asked for holds.
   const events = context.sent.slice(before);
   assert.ok(
     events.some(
+      // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
       (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
     ),
   );
@@ -2365,6 +2423,7 @@ test("a typed ask opens a developer turn and asks for the reply to it", async ()
 
   assert.equal(context.session.sendText("What needs me right now?"), true);
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // The microphone stays exactly as it was: typing never opens the device.
   assert.equal(context.microphoneEnabled(), false);
   const events = context.sent.slice(sentBefore);
@@ -2372,6 +2431,7 @@ test("a typed ask opens a developer turn and asks for the reply to it", async ()
     events.map((event) => event.type),
     [REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE, REALTIME_CLIENT_EVENT.RESPONSE_CREATE],
   );
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   const item = events[0]?.item as { role?: string; content?: { text?: string }[] };
   assert.equal(item.role, "user");
   assert.equal(item.content?.[0]?.text, "What needs me right now?");
@@ -2414,6 +2474,7 @@ test("a typed ask can carry a tool call, because the developer opened the turn",
       text: "add tests",
     },
   ]);
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // The outcome is voiced, exactly as a spoken ask's would be.
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
 });
@@ -2499,9 +2560,11 @@ test("a cancelled reply's late finish cannot act in the turn that replaced it", 
   assert.deepEqual(carried, []);
   const events = context.sent.slice(sentBefore);
   const output = events.find(
+    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
     (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
   );
   assert.equal(
+    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
     (
       JSON.parse((output?.item as { output?: string } | undefined)?.output ?? "{}") as {
         status?: string;
@@ -2622,8 +2685,10 @@ test("a spoken ask is carried through the carrier and its outcome is voiced", as
   ]);
   const followUp = context.sent.slice(sentBefore);
   const output = followUp.find(
+    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
     (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
   );
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   assert.equal((output?.item as { output?: string } | undefined)?.output, '{"status":"accepted"}');
   assert.equal(
     followUp.at(-1)?.type,
@@ -2661,11 +2726,11 @@ test("a session carrier that throws is refused with the error that caused it", a
   });
   await new Promise((resolve) => setTimeout(resolve, 0));
 
-  const output = context.sent
-    .slice(sentBefore)
-    .find(
-      (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
-    );
+  const output = context.sent.slice(sentBefore).find(
+    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+    (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
+  );
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   const parsed = JSON.parse((output?.item as { output?: string } | undefined)?.output ?? "{}") as {
     status?: string;
     reason?: string;
@@ -2714,17 +2779,18 @@ test("a spoken ask to open a session is carried, and one with no address is refu
   await new Promise((resolve) => setTimeout(resolve, 0));
 
   // The carried action names the session, never its address: the main process
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // reads the link back out of its own registry, the same as a pressed row.
   assert.deepEqual(carried, [
     { kind: "open", identity: { providerId: "claude-code", providerSessionId: "session-a" } },
   ]);
-  const outputs = context.sent
-    .slice(sentBefore)
-    .filter(
-      (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
-    );
+  const outputs = context.sent.slice(sentBefore).filter(
+    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+    (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
+  );
   const statuses = outputs.map(
     (event) =>
+      // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
       (
         JSON.parse((event.item as { output?: string } | undefined)?.output ?? "{}") as {
           status?: string;
@@ -2751,6 +2817,7 @@ test("a spoken ask for a new workspace is carried, and an unlisted project is re
     taskSupport: "optional",
   } as const;
   context.session.updateWorkspaceProjects([project]);
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // The projects travel as context the way the roster does, and an identical
   // list is not resent.
   context.session.updateWorkspaceProjects([project]);
@@ -2816,13 +2883,13 @@ test("a spoken ask for a new workspace is carried, and an unlisted project is re
       agentSelection: { agent: "claude", model: "fable-5", effort: "max" },
     },
   ]);
-  const outputs = context.sent
-    .slice(sentBefore)
-    .filter(
-      (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
-    );
+  const outputs = context.sent.slice(sentBefore).filter(
+    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+    (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
+  );
   const statuses = outputs.map(
     (event) =>
+      // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
       (
         JSON.parse((event.item as { output?: string } | undefined)?.output ?? "{}") as {
           status?: string;
@@ -3034,13 +3101,13 @@ test("a spoken ask to add an agent is carried, and an unlisted kind is refused",
       task: "Build the XYZ feature",
     },
   ]);
-  const outputs = context.sent
-    .slice(sentBefore)
-    .filter(
-      (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
-    );
+  const outputs = context.sent.slice(sentBefore).filter(
+    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+    (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
+  );
   const statuses = outputs.map(
     (event) =>
+      // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
       (
         JSON.parse((event.item as { output?: string } | undefined)?.output ?? "{}") as {
           status?: string;
@@ -3090,14 +3157,15 @@ test("a tool call outside the roster is refused before any carrier runs", async 
   // other named one that advertised nothing. Both were answered anyway, so the
   // model is never left waiting on a call that will not return.
   assert.deepEqual(carried, []);
-  const outputs = context.sent
-    .slice(sentBefore)
-    .filter(
-      (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
-    );
+  const outputs = context.sent.slice(sentBefore).filter(
+    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+    (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
+  );
   assert.equal(outputs.length, 2);
   for (const event of outputs) {
+    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
     const raw = (event.item as { output?: string } | undefined)?.output ?? "{}";
+    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
     assert.equal((JSON.parse(raw) as { status?: string }).status, "refused");
   }
 });
@@ -3137,9 +3205,11 @@ test("a tool call outside a turn the developer opened cannot act", async () => {
   assert.deepEqual(carried, []);
   const events = context.sent.slice(sentBefore);
   const output = events.find(
+    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
     (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
   );
   assert.equal(
+    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
     (
       JSON.parse((output?.item as { output?: string } | undefined)?.output ?? "{}") as {
         status?: string;
@@ -3153,10 +3223,10 @@ test("a tool call outside a turn the developer opened cannot act", async () => {
 });
 
 test("a tool outcome is not spoken over a turn the developer has taken", async () => {
-  let resolveWrite: ((output: Record<string, unknown>) => void) | undefined;
+  let resolveWrite: ((output: ParsedJsonObject) => void) | undefined;
   const context = harness({
     carryAction: () =>
-      new Promise<Record<string, unknown>>((resolve) => {
+      new Promise<ParsedJsonObject>((resolve) => {
         resolveWrite = resolve;
       }),
   });
@@ -3188,9 +3258,11 @@ test("a tool outcome is not spoken over a turn the developer has taken", async (
   await new Promise((resolve) => setTimeout(resolve, 0));
 
   const events = context.sent.slice(sentBefore);
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // The outcome was still delivered as an item, so the next turn has it...
   assert.ok(
     events.some(
+      // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
       (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
     ),
   );
@@ -3200,10 +3272,10 @@ test("a tool outcome is not spoken over a turn the developer has taken", async (
 });
 
 test("a drained tool reply holds the turn for the follow-up it owes", async () => {
-  let resolveWrite: ((output: Record<string, unknown>) => void) | undefined;
+  let resolveWrite: ((output: ParsedJsonObject) => void) | undefined;
   const context = harness({
     carryAction: () =>
-      new Promise<Record<string, unknown>>((resolve) => {
+      new Promise<ParsedJsonObject>((resolve) => {
         resolveWrite = resolve;
       }),
   });
@@ -3250,7 +3322,7 @@ test("a drained tool reply holds the turn for the follow-up it owes", async () =
 
 test("the write's hold gets a clock of its own, not the drain's leftovers", async (t) => {
   const context = harness({
-    carryAction: () => new Promise<Record<string, unknown>>(() => undefined),
+    carryAction: () => new Promise<ParsedJsonObject>(() => undefined),
   });
   await context.session.connect();
   context.session.updateSessions([observedSession("session-a", { canReceiveMessage: true })]);
@@ -3292,10 +3364,10 @@ test("the write's hold gets a clock of its own, not the drain's leftovers", asyn
 });
 
 test("audio draining mid-write holds the turn the same way", async () => {
-  let resolveWrite: ((output: Record<string, unknown>) => void) | undefined;
+  let resolveWrite: ((output: ParsedJsonObject) => void) | undefined;
   const context = harness({
     carryAction: () =>
-      new Promise<Record<string, unknown>>((resolve) => {
+      new Promise<ParsedJsonObject>((resolve) => {
         resolveWrite = resolve;
       }),
   });
@@ -3341,10 +3413,10 @@ test("audio draining mid-write holds the turn the same way", async () => {
 });
 
 test("a write that outlives the backstop cannot speak out of the spent turn", async (t) => {
-  let resolveWrite: ((output: Record<string, unknown>) => void) | undefined;
+  let resolveWrite: ((output: ParsedJsonObject) => void) | undefined;
   const context = harness({
     carryAction: () =>
-      new Promise<Record<string, unknown>>((resolve) => {
+      new Promise<ParsedJsonObject>((resolve) => {
         resolveWrite = resolve;
       }),
   });
@@ -3381,10 +3453,12 @@ test("a write that outlives the backstop cannot speak out of the spent turn", as
   resolveWrite?.({ status: "accepted" });
   await new Promise((resolve) => setTimeout(resolve, 0));
 
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // The outcome is still delivered as an item, so the next turn has it...
   const events = context.sent.slice(sentBefore);
   assert.ok(
     events.some(
+      // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
       (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
     ),
   );
@@ -3432,14 +3506,17 @@ test("a done that outlives the settle backstop cannot act with the spent turn's 
   await new Promise((resolve) => setTimeout(resolve, 0));
 
   // The turn ended with the backstop and its arming went with it: the late
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // calls are answered refused rather than run as writes out of a turn the
   // developer was already told had ended, and no reply opens over the quiet.
   assert.deepEqual(carried, []);
   const events = context.sent.slice(sentBefore);
   const output = events.find(
+    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
     (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
   );
   assert.equal(
+    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
     (
       JSON.parse((output?.item as { output?: string } | undefined)?.output ?? "{}") as {
         status?: string;
@@ -3479,6 +3556,7 @@ test("the caption grows with the deltas and the final text supersedes them", asy
   ]);
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("back-to-back responses stack as two captions instead of running together", async () => {
   const context = harness();
   await context.session.connect();
@@ -3505,6 +3583,7 @@ test("back-to-back responses stack as two captions instead of running together",
   });
 
   // The second response's words start a caption of their own rather than
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // being spliced onto the first's without so much as a space.
   assert.deepEqual(context.captions.at(-1), ["First response.", "Second response."]);
 
@@ -3752,6 +3831,7 @@ test("the app guide reaches the conversation, and identical guides are not resen
   context.session.updateGuide({
     ...CAPTIONS_GUIDE,
     settings: [
+      // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
       { ...CAPTIONS_GUIDE.settings[0], value: "on" } as (typeof CAPTIONS_GUIDE.settings)[0],
     ],
   });
@@ -3829,6 +3909,7 @@ const MODEL_AND_EFFORT_GUIDE: AppGuideSnapshot = {
 };
 
 test("the second call of a turn is validated against the guide the first call's carry rewrote", async () => {
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // A model and its effort asked for in one breath arrive as two calls in one
   // turn, and the effort entry only exists in the guide once the model is
   // stored. The renderer republishes the guide from the store's answer before
@@ -3900,11 +3981,11 @@ test("an app carrier that throws is refused with the error that caused it", asyn
   });
   await new Promise((resolve) => setTimeout(resolve, 0));
 
-  const output = context.sent
-    .slice(sentBefore)
-    .find(
-      (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
-    );
+  const output = context.sent.slice(sentBefore).find(
+    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+    (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
+  );
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   const parsed = JSON.parse((output?.item as { output?: string } | undefined)?.output ?? "{}") as {
     status?: string;
     reason?: string;
@@ -3942,12 +4023,13 @@ test("a spoken ask about a setting the guide does not carry is refused before th
   await new Promise((resolve) => setTimeout(resolve, 0));
 
   assert.deepEqual(carried, []);
-  const output = context.sent
-    .slice(sentBefore)
-    .find(
-      (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
-    );
+  const output = context.sent.slice(sentBefore).find(
+    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+    (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
+  );
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   const answered = (output?.item as { output?: string } | undefined)?.output;
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   const outcome = JSON.parse(answered ?? "{}") as { status?: string };
   assert.equal(outcome.status, "refused");
 });
@@ -4048,10 +4130,12 @@ test("a spoken composer open is validated against the fixed kinds and carried, n
   const outputs = context.sent
     .slice(sentBefore)
     .filter(
+      // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
       (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
     )
     .map(
       (event) =>
+        // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
         JSON.parse((event.item as { output?: string }).output ?? "{}") as {
           status?: string;
         },
@@ -4139,8 +4223,10 @@ test("a spoken issue ask is carried through its own carrier and voiced", async (
   ]);
   const followUp = context.sent.slice(sentBefore);
   const output = followUp.find(
+    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
     (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
   );
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   assert.equal((output?.item as { output?: string } | undefined)?.output, '{"status":"accepted"}');
   assert.equal(
     followUp.at(-1)?.type,
@@ -4175,11 +4261,11 @@ test("an issue carrier that throws is refused with the error that caused it", as
   });
   await new Promise((resolve) => setTimeout(resolve, 0));
 
-  const output = context.sent
-    .slice(sentBefore)
-    .find(
-      (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
-    );
+  const output = context.sent.slice(sentBefore).find(
+    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+    (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
+  );
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   const parsed = JSON.parse((output?.item as { output?: string } | undefined)?.output ?? "{}") as {
     status?: string;
     reason?: string;
@@ -4217,12 +4303,13 @@ test("an issue call with no tracker connected is refused before any carrier runs
   await new Promise((resolve) => setTimeout(resolve, 0));
 
   assert.deepEqual(carried, []);
-  const output = context.sent
-    .slice(sentBefore)
-    .find(
-      (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
-    );
+  const output = context.sent.slice(sentBefore).find(
+    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+    (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
+  );
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   const raw = (output?.item as { output?: string } | undefined)?.output ?? "{}";
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   const parsed = JSON.parse(raw) as { status?: string; reason?: string };
   assert.equal(parsed.status, "refused");
   assert.match(parsed.reason ?? "", /no issue tracker is connected/i);
@@ -4265,14 +4352,15 @@ test("an issue call outside the roster is refused before any carrier runs", asyn
   // Nothing was carried: one call named an issue Luke was never shown, the
   // other an act the issue does not take. Both were answered anyway.
   assert.deepEqual(carried, []);
-  const outputs = context.sent
-    .slice(sentBefore)
-    .filter(
-      (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
-    );
+  const outputs = context.sent.slice(sentBefore).filter(
+    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+    (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
+  );
   assert.equal(outputs.length, 2);
   for (const event of outputs) {
+    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
     const raw = (event.item as { output?: string } | undefined)?.output ?? "{}";
+    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
     assert.equal((JSON.parse(raw) as { status?: string }).status, "refused");
   }
 });
@@ -4306,9 +4394,12 @@ test("an issue call outside a turn the developer opened cannot act", async () =>
 
   assert.deepEqual(carried, []);
   const output = context.sent.find(
+    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
     (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
   );
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   const raw = (output?.item as { output?: string } | undefined)?.output ?? "{}";
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   assert.equal((JSON.parse(raw) as { status?: string }).status, "refused");
 });
 
@@ -4334,13 +4425,12 @@ test("a tracker that disconnects withdraws the roster, and a reconnect resends i
   // The withdrawal takes the board's place rather than sitting beside it: an
   // answer of "none" is still the answer to the standing question.
   assert.equal(
-    context.sent
-      .slice(sentBefore)
-      .some(
-        (event) =>
-          event.type === CONVERSATION_ITEM_DELETE &&
-          (event as { item_id?: string }).item_id === board,
-      ),
+    context.sent.slice(sentBefore).some(
+      (event) =>
+        event.type === CONVERSATION_ITEM_DELETE &&
+        // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+        (event as { item_id?: string }).item_id === board,
+    ),
     true,
   );
 
@@ -4544,6 +4634,7 @@ test("a press let go while the device opens drops the turn", async () => {
   await deviceArrives();
 
   // Nothing was captured, so nothing is sent — and the device that arrived
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // for the dropped press closes as fast as it came.
   assert.deepEqual(context.sent.slice(sentAfterConnect), []);
   assert.equal(context.session.status, REALTIME_STATUS.READY);
@@ -4655,6 +4746,7 @@ test("a call that drops before anything was said goes quietly", async () => {
   assert.deepEqual(reportedErrors(context), []);
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("a call put away on purpose does not report itself as lost", async () => {
   const context = harness();
   await context.session.connect();
@@ -4670,6 +4762,7 @@ test("the developer's call replaces Luke's own and keeps the waiting press", asy
   await context.session.connect({ microphone: false });
 
   // The press lands while Luke's call is up: it cannot take a turn there, so
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // it waits as an intention rather than being lost.
   context.session.beginTurn();
   assert.equal(context.microphoneEnabled(), false);

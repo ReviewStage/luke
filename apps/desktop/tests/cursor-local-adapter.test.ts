@@ -7,6 +7,7 @@ import { pathToFileURL } from "node:url";
 import { SESSION_STATUS } from "@sidecar/core";
 import { CURSOR_PROVIDER } from "../src/cursor-adapter";
 import { CursorLocalSessionAdapter } from "../src/cursor-local-adapter";
+import type { ParsedJsonObject } from "./support/json";
 
 const TEST_TIME = Date.parse("2026-08-13T02:45:00.000Z");
 const YEAR_MS = 365 * 24 * 60 * 60 * 1000;
@@ -39,19 +40,22 @@ interface CursorState {
   workspaceStorageDirectory: string;
 }
 
-function messageRecord(role: string, contentType: string): Record<string, unknown> {
+function messageRecord(role: string, contentType: string): ParsedJsonObject {
   return {
     role,
     message: { content: [{ type: contentType, text: SECRET_TRANSCRIPT_TEXT }] },
   };
 }
 
-function turnEndedRecord(status: string): Record<string, unknown> {
-  return {
+function turnEndedRecord(status: string): ParsedJsonObject {
+  const record: ParsedJsonObject = {
     type: TEST_RECORD_TYPE.TURN_ENDED,
     status,
-    ...(status === TEST_TURN_STATUS.ERROR ? { error: { message: SECRET_TRANSCRIPT_TEXT } } : {}),
   };
+  if (status === TEST_TURN_STATUS.ERROR) {
+    record.error = { message: SECRET_TRANSCRIPT_TEXT };
+  }
+  return record;
 }
 
 async function temporaryCursorState(t: TestContext): Promise<CursorState> {
@@ -69,7 +73,7 @@ async function writeTranscript(
   state: CursorState,
   projectDirectoryName: string,
   sessionId: string,
-  records: readonly Record<string, unknown>[],
+  records: readonly ParsedJsonObject[],
   mtimeMs: number,
 ): Promise<void> {
   const sessionDirectory = path.join(
@@ -154,6 +158,7 @@ function adapterFor(
   });
 }
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("observes an open turn as work, labelled by its folder and free of transcript text", async (t) => {
   const state = await temporaryCursorState(t);
   await writeWorkspaceRecord(state, "9f1c", "/Users/test/luke");

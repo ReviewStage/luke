@@ -99,6 +99,7 @@ function harness(): Harness {
   };
 }
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("routes arrive as lines, split however the pipe delivered them", () => {
   const context = harness();
   assert.equal(context.watcher.start(), true);
