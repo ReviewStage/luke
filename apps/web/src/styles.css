@@ -1052,20 +1052,28 @@
 }
 
 /* Documents
-   Prose pages read start to finish — the privacy policy and the changelog —
-   so they get a narrower measure and more vertical rhythm than the marketing
-   copy above: constrained width, a clear step between heading levels, and
-   generous paragraph spacing.
+   Generated markdown — the privacy policy and each changelog release — read
+   start to finish, so they get more vertical rhythm than the marketing copy
+   above: a clear step between heading levels and generous paragraph spacing.
 
    Plain CSS rather than utilities because the markup is generated: each page
    parses its repository markdown at build time and hands the result to
    `dangerouslySetInnerHTML`, so there is no call site to write a class on.
+   `.document` carries only the typography — the privacy page wraps it in the
+   column below, and the changelog seats it beside each release's rail.
    ------------------------------------------------------------------------- */
 
-.document {
+.document-column {
   max-width: 640px;
   margin: 0 auto;
   padding: var(--space-8) 0 var(--space-9);
+}
+
+/* The changelog aligns a release's first line with the version rail beside
+   it, so a heading's breathing room must come between elements, not above
+   the whole. */
+.document > :first-child {
+  margin-top: 0;
 }
 
 .document h1 {
@@ -1120,6 +1128,24 @@
   color: var(--accent-ink);
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+/* A pull-request reference is a technical token, and mono is what the page
+   reserves for those. */
+.document a[href*="/pull/"] {
+  font-family: var(--font-code);
+  font-size: 0.8em;
+}
+
+/* Screenshots arrive through the generated markup, so their frame is drawn
+   here: full measure, on the hairline card the rest of the site puts artwork
+   on. */
+.document img {
+  display: block;
+  width: 100%;
+  margin: var(--space-5) 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
 }
 
 .document code {
