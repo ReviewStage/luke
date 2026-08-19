@@ -469,7 +469,9 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
               (input.settings.calendarSignInAvailable
                 ? " With a Google Calendar account connected and Quiet during meetings on, " +
                   "announcements decided during a meeting wait and are read out together once " +
-                  "it ends — and Luke's face sleeps beside the housing for as long as the " +
+                  "it ends. The quiet beginning — a meeting starting, or the setting switched " +
+                  "on mid-meeting — silences Luke at once, an announcement mid-sentence " +
+                  "included — and Luke's face sleeps beside the housing for as long as the " +
                   "quiet holds, which is how the hold is seen."
                 : ""),
           },

@@ -1742,6 +1742,7 @@ export function App(): React.JSX.Element {
     voiceCaptions: settings?.voiceCaptions === true,
     voiceAvailable: settings?.voiceAvailable,
     outputSilent: outputSilent(outputAudio),
+    meetingQuiet,
     fixtureSpeaking,
     capturingShortcut: () => shortcutCapture.current,
     openSession: openSessionAloud,
