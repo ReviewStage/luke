@@ -35,7 +35,7 @@ What each provider's sessions report:
 
 | Provider | Id | Sessions | Credential | Lifecycle hook | Recap | Opens at |
 | --- | --- | --- | --- | --- | --- | --- |
-| Claude Code | `claude-code` | Local | None | `settings.json` merge | Designated away summary | — |
+| Claude Code | `claude-code` | Local | None | `settings.json` merge | Designated away summary; archived sessions omitted when local `sessions-index.json` says so | — |
 | Codex | `codex` | Local and cloud | None; cloud via the Codex CLI login | `hooks.json` merge, behind Codex's trust gate | Last agent message (local) | `codex:` thread link (local), task URL (cloud) |
 | Conductor | `conductor` | Cloud | API key | — | Final assistant message, only while idle | `conductor:` deep link |
 | Cursor | `cursor` | Local and cloud | Cloud only | — | Run result (cloud) | Agent URL (cloud) |

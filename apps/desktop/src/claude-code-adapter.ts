@@ -1,3 +1,4 @@
+import fs from "node:fs/promises";
 import path from "node:path";
 import {
   isRecord,
@@ -161,13 +162,40 @@ interface ParsedClaudeSessionTail {
   usedTool?: boolean;
 }
 
+async function archivedSessionsIn(projectDirectory: string): Promise<ReadonlyMap<string, boolean>> {
+  try {
+    const raw = JSON.parse(
+      await fs.readFile(path.join(projectDirectory, "sessions-index.json"), "utf8"),
+    );
+    if (!isRecord(raw) || !Array.isArray(raw.entries)) return new Map();
+    const archived = new Map<string, boolean>();
+    for (const entry of raw.entries) {
+      if (!isRecord(entry)) continue;
+      const sessionId = text(entry.sessionId);
+      const isArchived = entry.isArchived;
+      if (!sessionId || (isArchived !== true && isArchived !== false)) continue;
+      archived.set(sessionId, isArchived);
+    }
+    return archived;
+  } catch {
+    // Metadata is a best-effort provider signal. A missing or unreadable index
+    // leaves archive state unknown rather than treating every session as open.
+    return new Map();
+  }
+}
+
 /** Claude Code keeps a session's transcript directly in its project directory. */
 async function sessionFilesIn(projectDirectory: string): Promise<SessionFileCandidate[]> {
   const entries = await readDirectory(projectDirectory);
+  const archived = await archivedSessionsIn(projectDirectory);
   const candidates = await Promise.all(
     entries.map(async (entry) => {
       const providerSessionId = sessionIdFromFileName(entry.name, CLAUDE_SESSION_FILE_EXTENSION);
       if (!providerSessionId) return undefined;
+      // Claude's index is authoritative when it explicitly marks a session
+      // archived. Missing, invalid, or false metadata leaves the transcript
+      // visible; archive state is never inferred from CLI resume membership.
+      if (archived.get(providerSessionId) === true) return undefined;
       const candidate = await statDirectoryEntry(projectDirectory, entry.name);
       if (!candidate?.stats.isFile()) return undefined;
       return {
