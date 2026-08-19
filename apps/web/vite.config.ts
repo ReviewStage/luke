@@ -12,6 +12,7 @@ export default defineConfig({
       input: {
         main: resolveEntry("./index.html"),
         privacy: resolveEntry("./privacy.html"),
+        changelog: resolveEntry("./changelog.html"),
         "sign-in": resolveEntry("./sign-in.html"),
         consent: resolveEntry("./consent.html"),
       },

@@ -7,6 +7,7 @@ source "$SCRIPT_DIRECTORY/lib/workspace.sh"
 
 required_files=(
     AGENTS.md
+    CHANGELOG.md
     CLAUDE.md
     WORKFLOW.md
     README.md
@@ -75,6 +76,42 @@ extensionless_imports=$(grep -rEn 'from "\.\.?/[^"]*"' "$SIDECAR_REPO_ROOT/packa
 if [[ -n "$extensionless_imports" ]]; then
     printf 'error: sidecar-core relative imports must end in .js (Node ESM cannot load them compiled otherwise):\n%s\n' \
         "$extensionless_imports" >&2
+    exit 1
+fi
+
+# The changelog references its screenshots by repository path, and the page
+# serves them from the site root — a reference whose file is gone 404s
+# silently on the page and draws a broken image on GitHub. The paths are
+# word-splittable because the slug convention keeps them free of spaces.
+changelog_image_paths=$(grep -oE '\]\(apps/web/public/[^)]+\)' "$SIDECAR_REPO_ROOT/CHANGELOG.md" |
+    sed 's/^](//; s/)$//' || true)
+for image_path in $changelog_image_paths; do
+    if [[ ! -f "$SIDECAR_REPO_ROOT/$image_path" ]]; then
+        printf 'error: CHANGELOG.md references a missing screenshot: %s\n' "$image_path" >&2
+        exit 1
+    fi
+done
+
+# The changelog page splits releases on "## <version> — <YYYY-MM-DD>" and its
+# parser throws on any other shape — at module load in the browser, which no
+# build step executes. This check is what keeps a malformed heading out of a
+# visitor's tab.
+malformed_release_headings=$(grep -E '^## ' "$SIDECAR_REPO_ROOT/CHANGELOG.md" |
+    grep -vE '^## [0-9]+\.[0-9]+\.[0-9]+ — [0-9]{4}-[0-9]{2}-[0-9]{2}$' || true)
+if [[ -n "$malformed_release_headings" ]]; then
+    printf 'error: CHANGELOG.md release headings must read "## <version> — <YYYY-MM-DD>":\n%s\n' \
+        "$malformed_release_headings" >&2
+    exit 1
+fi
+
+# A release is its tag, and the tag must match apps/desktop/package.json — so
+# requiring the changelog to name the packaged version makes the version-bump
+# change carry the release's notes, which the landing page renders at
+# /changelog. See .github/RELEASE.md.
+desktop_version=$(node -p "require('$SIDECAR_REPO_ROOT/apps/desktop/package.json').version")
+if ! grep -Eq "^## ${desktop_version//./\\.}( |$)" "$SIDECAR_REPO_ROOT/CHANGELOG.md"; then
+    printf 'error: CHANGELOG.md has no entry for version %s — every release adds its notes before its tag is pushed\n' \
+        "$desktop_version" >&2
     exit 1
 fi
 

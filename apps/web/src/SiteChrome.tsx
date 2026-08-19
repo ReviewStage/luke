@@ -59,8 +59,12 @@ export function LukeMark({ className = "block h-[18px] w-5" }: MarkProps): React
 /** Shared between every page so navigation and branding never drift apart. */
 export function SiteHeader(): React.JSX.Element {
   return (
-    <header className="shell">
-      <nav className="flex h-16 items-center justify-between">
+    /* Sticky, so the changelog's long scroll keeps its way back. The bar owns
+       its ground — a translucent wash over blur with a hairline underneath —
+       because content sliding beneath an unbounded header reads as a glitch,
+       and the shell column moves inside so the wash runs the full bleed. */
+    <header className="sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur-md">
+      <nav className="shell flex h-16 items-center justify-between">
         <a
           className="inline-flex items-center gap-2 font-brand text-base font-bold tracking-[-0.01em] no-underline"
           href="/"
@@ -68,17 +72,25 @@ export function SiteHeader(): React.JSX.Element {
           <LukeMark />
           Luke
         </a>
-        {/* Icon-only, so the padding buys a comfortable hit target and a focus
-            ring with room around the mark. The matching negative margin keeps
-            the mark optically aligned with the wordmark's edge rather than
-            inset from it. */}
-        <a
-          className="-mr-1.5 inline-flex items-center rounded-md p-1.5 text-muted-foreground transition-colors duration-150 hover:text-foreground motion-reduce:transition-none"
-          href={REPOSITORY_URL}
-          aria-label="Luke on GitHub"
-        >
-          <GitHubMark className="block size-[18px]" />
-        </a>
+        <div className="flex items-center gap-4">
+          <a
+            className="text-sm font-medium text-muted-foreground no-underline transition-colors duration-150 hover:text-foreground motion-reduce:transition-none"
+            href="/changelog"
+          >
+            Changelog
+          </a>
+          {/* Icon-only, so the padding buys a comfortable hit target and a focus
+              ring with room around the mark. The matching negative margin keeps
+              the mark optically aligned with the wordmark's edge rather than
+              inset from it. */}
+          <a
+            className="-mr-1.5 inline-flex items-center rounded-md p-1.5 text-muted-foreground transition-colors duration-150 hover:text-foreground motion-reduce:transition-none"
+            href={REPOSITORY_URL}
+            aria-label="Luke on GitHub"
+          >
+            <GitHubMark className="block size-[18px]" />
+          </a>
+        </div>
       </nav>
     </header>
   );
@@ -93,6 +105,12 @@ export function SiteFooter(): React.JSX.Element {
       <div className="flex flex-wrap gap-2 [&>*+*]:before:mr-2 [&>*+*]:before:content-['·']">
         <span>Apache-2.0</span>
         <span>macOS 14+</span>
+        <a
+          className="no-underline transition-colors duration-150 hover:text-foreground motion-reduce:transition-none"
+          href="/changelog"
+        >
+          Changelog
+        </a>
         <a
           className="no-underline transition-colors duration-150 hover:text-foreground motion-reduce:transition-none"
           href="/privacy"
