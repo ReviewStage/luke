@@ -17,7 +17,7 @@ export function PrivacyPage(): React.JSX.Element {
 
       <main className="shell">
         {/* biome-ignore lint/security/noDangerouslySetInnerHtml: privacyHtml is parsed from PRIVACY.md, a repository file fixed at build time, not user input. */}
-        <article className="privacy" dangerouslySetInnerHTML={{ __html: privacyHtml }} />
+        <article className="document" dangerouslySetInnerHTML={{ __html: privacyHtml }} />
       </main>
 
       <SiteFooter />

@@ -7,6 +7,7 @@ source "$SCRIPT_DIRECTORY/lib/workspace.sh"
 
 required_files=(
     AGENTS.md
+    CHANGELOG.md
     CLAUDE.md
     WORKFLOW.md
     README.md
@@ -75,6 +76,17 @@ extensionless_imports=$(grep -rEn 'from "\.\.?/[^"]*"' "$SIDECAR_REPO_ROOT/packa
 if [[ -n "$extensionless_imports" ]]; then
     printf 'error: sidecar-core relative imports must end in .js (Node ESM cannot load them compiled otherwise):\n%s\n' \
         "$extensionless_imports" >&2
+    exit 1
+fi
+
+# A release is its tag, and the tag must match apps/desktop/package.json — so
+# requiring the changelog to name the packaged version makes the version-bump
+# change carry the release's notes, which the landing page renders at
+# /changelog. See .github/RELEASE.md.
+desktop_version=$(node -p "require('$SIDECAR_REPO_ROOT/apps/desktop/package.json').version")
+if ! grep -Eq "^## ${desktop_version//./\\.}( |$)" "$SIDECAR_REPO_ROOT/CHANGELOG.md"; then
+    printf 'error: CHANGELOG.md has no entry for version %s — every release adds its notes before its tag is pushed\n' \
+        "$desktop_version" >&2
     exit 1
 fi
 

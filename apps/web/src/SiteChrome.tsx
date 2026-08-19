@@ -95,6 +95,12 @@ export function SiteFooter(): React.JSX.Element {
         <span>macOS 14+</span>
         <a
           className="no-underline transition-colors duration-150 hover:text-foreground motion-reduce:transition-none"
+          href="/changelog"
+        >
+          Changelog
+        </a>
+        <a
+          className="no-underline transition-colors duration-150 hover:text-foreground motion-reduce:transition-none"
           href="/privacy"
         >
           Privacy

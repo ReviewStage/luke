@@ -8,7 +8,7 @@
  *
  * The page chrome around the mock is Tailwind, written at its call sites.
  * What stays in this file is what utilities cannot hold: the theme, the
- * privacy document's generated HTML, and the mock. The mock stays
+ * generated document pages' HTML, and the mock. The mock stays
  * hand-written CSS deliberately — its class names are the renderer's own and
  * it is the one part of the page that has to stay diffable against
  * `apps/desktop/src/renderer/styles/base.css` and `styles/sessions.css`.
@@ -107,7 +107,7 @@
   --font-product: -apple-system, blinkmacsystemfont, "SF Pro Display", "Segoe UI", sans-serif;
 
   /* Space scale, 4px grid. Read by the two blocks that stay plain CSS — the
-     mock and the privacy document — and mirrored by Tailwind's own scale for
+     mock and the document pages — and mirrored by Tailwind's own scale for
      everything written at a call site. */
   --space-1: 4px;
   --space-2: 8px;
@@ -1051,23 +1051,24 @@
   white-space: nowrap;
 }
 
-/* Privacy
-   A legal document read start to finish, so it gets a narrower measure and
-   more vertical rhythm than the marketing copy above: constrained width,
-   a clear step between h1/h2, and generous paragraph spacing.
+/* Documents
+   Prose pages read start to finish — the privacy policy and the changelog —
+   so they get a narrower measure and more vertical rhythm than the marketing
+   copy above: constrained width, a clear step between heading levels, and
+   generous paragraph spacing.
 
-   Plain CSS rather than utilities because the markup is generated: the page
-   parses PRIVACY.md at build time and hands the result to
+   Plain CSS rather than utilities because the markup is generated: each page
+   parses its repository markdown at build time and hands the result to
    `dangerouslySetInnerHTML`, so there is no call site to write a class on.
    ------------------------------------------------------------------------- */
 
-.privacy {
+.document {
   max-width: 640px;
   margin: 0 auto;
   padding: var(--space-8) 0 var(--space-9);
 }
 
-.privacy h1 {
+.document h1 {
   margin: 0 0 var(--space-6);
   font-size: 2rem;
   font-weight: 650;
@@ -1075,46 +1076,53 @@
   line-height: 1.15;
 }
 
-.privacy h2 {
+.document h2 {
   margin: var(--space-8) 0 var(--space-4);
   font-size: 1.125rem;
   font-weight: 650;
   letter-spacing: -0.01em;
 }
 
-.privacy p {
+.document h3 {
+  margin: var(--space-6) 0 var(--space-3);
+  font-size: 1rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.document p {
   margin: 0 0 var(--space-4);
   color: var(--muted-foreground);
 }
 
 /* Tailwind's preflight strips list markers from every `ul`. The generated
    document has real lists in it, so they come back here. */
-.privacy ul {
+.document ul {
   margin: 0 0 var(--space-4);
   padding-left: var(--space-5);
   color: var(--muted-foreground);
   list-style: disc;
 }
 
-.privacy li {
+.document li {
   margin-bottom: var(--space-2);
 }
 
-.privacy li:last-child {
+.document li:last-child {
   margin-bottom: 0;
 }
 
-.privacy strong {
+.document strong {
   color: var(--foreground);
 }
 
-.privacy a {
+.document a {
   color: var(--accent-ink);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 
-.privacy code {
+.document code {
   padding: 0.15em 0.4em;
   border-radius: var(--radius-sm);
   background: var(--muted);

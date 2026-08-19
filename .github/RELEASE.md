@@ -62,8 +62,11 @@ workflow artifact. It does not create a GitHub Release.
 
 ## Cut a release
 
-First land the version bump and packaging changes. The tag must exactly match
-`apps/desktop/package.json`; for version `0.1.0`:
+First land the version bump and packaging changes. The same change must add the
+release's entry to `CHANGELOG.md` at the repository root — the landing page renders that
+file at `/changelog`, and `scripts/repository-checks.sh` refuses a desktop version the
+changelog does not name, so a bump cannot land without its notes. The tag must exactly
+match `apps/desktop/package.json`; for version `0.1.0`:
 
 ```sh
 git tag v0.1.0
