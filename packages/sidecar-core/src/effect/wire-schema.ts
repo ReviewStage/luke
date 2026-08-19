@@ -30,20 +30,26 @@ export const WireValueSchema: Schema.Schema<WireValue> = Schema.suspend(() =>
 );
 
 /** Plain object shell matching {@link isRecord}; nested values are not validated. */
-export const PlainWireRecordSchema = Schema.Unknown.pipe(
-  Schema.filter((value: unknown): value is WireRecord => isRecord(value as UnparsedWireValue)),
+export const PlainWireRecordSchema: Schema.Schema<WireRecord> = Schema.Unknown.pipe(
+  Schema.filter((value: UnparsedWireValue): value is WireRecord => isRecord(value)),
 );
 
 /** Finite wire number matching {@link wholeNumber}'s numeric guard. */
 export const FiniteWireNumberSchema: Schema.Schema<number> = Schema.Number.pipe(
-  Schema.filter((value): value is number => Number.isFinite(value)),
+  Schema.filter((value: number): value is number => Number.isFinite(value)),
 );
 
-export function decodeUnknownOption<A>(schema: Schema.Schema<A>, value: unknown): Option.Option<A> {
+export function decodeUnknownOption<A>(
+  schema: Schema.Schema<A>,
+  value: UnparsedWireValue,
+): Option.Option<A> {
   return Schema.decodeUnknownOption(schema)(value);
 }
 
-export function decodeUnknown<A>(schema: Schema.Schema<A>, value: unknown): A | undefined {
+export function decodeUnknown<A>(
+  schema: Schema.Schema<A>,
+  value: UnparsedWireValue,
+): A | undefined {
   return Option.getOrUndefined(decodeUnknownOption(schema, value));
 }
 
@@ -64,11 +70,11 @@ export function decodeWireNumberOption(value: UnparsedWireValue): Option.Option<
 }
 
 export function decodeRecord(value: UnparsedWireValue): WireRecord | undefined {
-  return decodeUnknown(PlainWireRecordSchema as Schema.Schema<WireRecord>, value);
+  return decodeUnknown(PlainWireRecordSchema, value);
 }
 
 export function decodeRecordOption(value: UnparsedWireValue): Option.Option<WireRecord> {
-  return decodeUnknownOption(PlainWireRecordSchema as Schema.Schema<WireRecord>, value);
+  return decodeUnknownOption(PlainWireRecordSchema, value);
 }
 
 export function decodeWireValue(value: UnparsedWireValue): WireValue | undefined {
@@ -103,6 +109,7 @@ export function decodeOneLine(
 
 export function decodeRecordFromJsonLine(line: string): WireRecord | undefined {
   try {
+    // SAFETY: JSON.parse returns a runtime value; decodeRecord validates the object contract.
     const parsed = JSON.parse(line) as UnparsedWireValue;
     return decodeRecord(parsed);
   } catch (error) {

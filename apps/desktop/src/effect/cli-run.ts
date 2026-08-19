@@ -65,16 +65,6 @@ export function fromCliCommandError(error: CliCommandError): CliRunFailure {
   return new CliRunFailure({ failure: error.failure, message: error.message });
 }
 
-function mapCliError(error: unknown, binary: string): CliRunFailure {
-  if (error instanceof CliCommandError) {
-    return fromCliCommandError(error);
-  }
-  return new CliRunFailure({
-    failure: CLI_FAILURE.TRANSIENT,
-    message: `${binary} could not be run`,
-  });
-}
-
 export const cliRun = (
   binary: string,
   argv: readonly string[],
@@ -84,6 +74,14 @@ export const cliRun = (
     const run = yield* CliRunService;
     return yield* Effect.tryPromise({
       try: () => run(binary, argv, options),
-      catch: (error) => mapCliError(error, binary),
+      catch: (cause) => {
+        if (cause instanceof CliCommandError) {
+          return fromCliCommandError(cause);
+        }
+        return new CliRunFailure({
+          failure: CLI_FAILURE.TRANSIENT,
+          message: `${binary} could not be run`,
+        });
+      },
     });
   });

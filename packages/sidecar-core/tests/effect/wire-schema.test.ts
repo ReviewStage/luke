@@ -38,10 +38,12 @@ test("decodeRecord matches isRecord without validating nested values", () => {
   const nullPrototype = Object.create(null);
   assert.equal(decodeRecord(plain), plain);
   assert.equal(decodeRecord(nullPrototype), nullPrototype);
+  // SAFETY: test deliberately supplies an object with an undefined property value.
   const withUndefined = { a: undefined } as unknown as UnparsedWireValue;
   assert.equal(decodeRecord(withUndefined), withUndefined);
   assert.equal(decodeRecord([]), undefined);
   assert.equal(decodeRecord(null), undefined);
+  // SAFETY: test deliberately supplies a non-plain object to prove rejection.
   assert.equal(decodeRecord(new Date() as unknown as UnparsedWireValue), undefined);
   assert.equal(isRecord(decodeRecord(plain)), true);
 });
@@ -90,6 +92,7 @@ test("decodeNonNegativeNumber keeps the default for missing, infinite, or negati
 
 test("WireValueSchema rejects undefined property values and accepts valid trees", () => {
   assert.deepEqual(decodeWireValue({ a: 1, b: [true, null] }), { a: 1, b: [true, null] });
+  // SAFETY: test deliberately supplies an object with an undefined property value.
   assert.equal(decodeWireValue({ a: undefined } as unknown as UnparsedWireValue), undefined);
   assert.equal(Option.isNone(Schema.decodeUnknownOption(WireValueSchema)(Symbol("x"))), true);
 });

@@ -18,7 +18,7 @@ export function fromPromise<A>(
 
 export function fromPromiseWithError<A, E>(
   promise: () => Promise<A>,
-  mapError: (unknown: unknown) => E,
+  mapError: (cause: unknown) => E,
 ): Effect.Effect<A, E, never> {
   return Effect.tryPromise({
     try: promise,
