@@ -29,10 +29,10 @@ export const WireValueSchema: Schema.Schema<WireValue> = Schema.suspend(() =>
   Schema.Union(WirePrimitiveSchema, WireRecordSchema, Schema.Array(WireValueSchema)),
 );
 
-/** Plain object shell matching {@link isRecord}; nested values are not validated. */
+// SAFETY: the filter narrows unknown wire input to plain records before decodeRecord uses them.
 export const PlainWireRecordSchema: Schema.Schema<WireRecord> = Schema.Unknown.pipe(
-  Schema.filter((value: UnparsedWireValue): value is WireRecord => isRecord(value)),
-);
+  Schema.filter((value: unknown): value is WireRecord => isRecord(value as UnparsedWireValue)),
+) as Schema.Schema<WireRecord>;
 
 /** Finite wire number matching {@link wholeNumber}'s numeric guard. */
 export const FiniteWireNumberSchema: Schema.Schema<number> = Schema.Number.pipe(
