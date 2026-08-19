@@ -49,6 +49,7 @@ export {
   type SessionProvider,
   type SessionStatus,
   type SessionWorkspace,
+  isWorkspaceManagerName,
   sessionChangeNumber,
   sessionMessageText,
   UNKNOWN_WORKSPACE_LABEL,

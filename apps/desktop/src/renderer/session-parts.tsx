@@ -1,6 +1,6 @@
 import { ERRAND_TARGET, errandTargetProps } from "./luke-errand";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
-import { ProviderMark } from "./provider-marks";
+import { ProviderMark, WorkspaceManagerMark } from "./provider-marks";
 import {
   type ArrangedSessions,
   SESSION_FILTER,
@@ -154,12 +154,20 @@ function FilterIcon({ filter }: { filter: SessionFilter }): React.JSX.Element | 
   return null;
 }
 
-/** The mark for an agent, the glyph for a place, nothing for everything. */
+/** The mark for an agent or a manager, the glyph for a place, nothing for everything. */
 function FilterMark({ option }: { option: SessionFilterOption }): React.JSX.Element | null {
   if (option.providerId) {
     return <ProviderMark providerId={option.providerId} className="filter-mark" />;
   }
+  if (option.manager) {
+    return <WorkspaceManagerMark manager={option.manager} />;
+  }
   return <FilterIcon filter={option.filter} />;
+}
+
+/** Whether a chip is named by a mark rather than a word, like the rows below. */
+function marked(option: SessionFilterOption): boolean {
+  return option.providerId !== undefined || option.manager !== undefined;
 }
 
 /**
@@ -257,20 +265,20 @@ export function SessionOptions({
                 type="button"
                 key={option.filter}
                 className="filter-chip"
-                data-agent={String(option.providerId !== undefined)}
+                data-agent={String(marked(option))}
                 data-active={String(option.filter === list.filter)}
                 aria-pressed={option.filter === list.filter}
-                // An agent is named by its own mark rather than by a word, which
-                // is how every row below already names it, and four names would
-                // not fit the line beside the coarser chips. The label is still
-                // the accessible name, so it is what is announced and what a
-                // voice control is told to press.
-                aria-label={option.providerId ? `${option.label} ${option.count}` : undefined}
-                title={option.providerId ? option.label : undefined}
+                // An agent or a manager is named by its own mark rather than by
+                // a word, which is how every row below already names it, and so
+                // many names would not fit the line beside the coarser chips.
+                // The label is still the accessible name, so it is what is
+                // announced and what a voice control is told to press.
+                aria-label={marked(option) ? `${option.label} ${option.count}` : undefined}
+                title={marked(option) ? option.label : undefined}
                 onClick={() => onViewChange({ ...view, filter: option.filter })}
               >
                 <FilterMark option={option} />
-                {option.providerId ? null : option.label}
+                {marked(option) ? null : option.label}
                 <span className="filter-count">{option.count}</span>
               </button>
             ))}

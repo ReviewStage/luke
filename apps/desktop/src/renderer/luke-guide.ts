@@ -631,7 +631,8 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "Sessions lists every session that still matters — one that is working or waiting stays " +
         "at any age, a failure stays for three days, and a finished or quiet one for two — " +
         "with its state, narrowable to all, local, " +
-        "cloud, or one provider, and orderable by urgency (what needs the developer first) or " +
+        "cloud, one provider, or Orca — the sessions in worktrees the Orca app manages — and " +
+        "orderable by urgency (what needs the developer first) or " +
         "recency (what moved last first) — by its options button, or by the same ask that shows " +
         "the tab. The list is searchable by hand alone: the magnifier beside the options " +
         "button, or Command-F while the panel has the keyboard, opens a field that keeps only " +

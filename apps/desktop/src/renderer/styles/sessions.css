@@ -239,6 +239,14 @@
   height: 13px;
 }
 
+/* On a chip or the options button the manager's mark reads at the marks'
+   13px line rather than the tray name's 11px, keeping its wide proportions. */
+.filter-chip .workspace-manager-mark,
+.options-current .workspace-manager-mark {
+  width: 20px;
+  height: 13px;
+}
+
 /* The number is what the row is worth reading before anything is pressed: the
    chips are a breakdown of what is tracked first and a control second. */
 .filter-count {

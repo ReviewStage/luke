@@ -2,6 +2,7 @@ import {
   ATTENTION_DISPOSITION,
   compareSessionsByUrgency,
   isProviderId,
+  isWorkspaceManagerName,
   type NormalizedSession,
   PROVIDER_ID_LIST,
   type ProviderId,
@@ -16,20 +17,25 @@ import {
   type SessionUrgency,
   sessionChangeNumber,
   urgencyLabel,
+  WORKSPACE_MANAGER,
   type WorkspaceManagerName,
 } from "@sidecar/core";
 import type { AppBootstrap } from "../shared/contracts";
 
 /**
  * Which sessions the list draws: everything, everything running in one place,
- * or everything belonging to one agent. The two coarse values are the session
- * locations themselves and the rest are provider ids, so narrowing the list is
- * a comparison against something a row already carries rather than a second
- * vocabulary mapped onto it. The two sets cannot collide — no provider is
- * called `local` or `cloud`.
+ * everything belonging to one agent, or everything in worktrees one workspace
+ * manager arranged. The two coarse values are the session locations
+ * themselves, the agent values are provider ids, and the manager values are
+ * the managers' own names, so narrowing the list is a comparison against
+ * something a row already carries rather than a second vocabulary mapped onto
+ * it. The sets cannot collide — no provider is called `local` or `cloud`, and
+ * a manager's name is capitalized where provider ids never are.
  *
  * Location belongs to the session rather than to the agent, so an agent with
- * work in both places is one chip that answers `Local` and `Cloud` both.
+ * work in both places is one chip that answers `Local` and `Cloud` both — and
+ * a manager's chip crosses agents the same way, holding every session its
+ * worktrees hold whichever agent runs there.
  */
 export const SESSION_FILTER = {
   ALL: "all",
@@ -37,21 +43,27 @@ export const SESSION_FILTER = {
   CLOUD: SESSION_LOCATION.CLOUD,
 } as const;
 
-export type SessionFilter = (typeof SESSION_FILTER)[keyof typeof SESSION_FILTER] | ProviderId;
+export type SessionFilter =
+  | (typeof SESSION_FILTER)[keyof typeof SESSION_FILTER]
+  | ProviderId
+  | WorkspaceManagerName;
 
 function matchesFilter(session: DisplaySession, filter: SessionFilter): boolean {
   if (filter === SESSION_FILTER.ALL) return true;
   if (filter === SESSION_FILTER.LOCAL || filter === SESSION_FILTER.CLOUD) {
     return session.location === filter;
   }
+  if (isWorkspaceManagerName(filter)) {
+    return session.workspace?.manager === filter;
+  }
   return session.providerId === filter;
 }
 
 /**
  * Reads a spoken filter into the list's own vocabulary. The values are the
- * same strings the chips use — the coarse scopes and the provider ids — so a
- * validated spoken ask maps one-to-one; anything else is nothing rather than
- * a guess, and the list is left as it was.
+ * same strings the chips use — the coarse scopes, the provider ids, and the
+ * manager names — so a validated spoken ask maps one-to-one; anything else is
+ * nothing rather than a guess, and the list is left as it was.
  */
 export function sessionFilterFromSpoken(value: string): SessionFilter | undefined {
   if (
@@ -61,6 +73,7 @@ export function sessionFilterFromSpoken(value: string): SessionFilter | undefine
   ) {
     return value;
   }
+  if (isWorkspaceManagerName(value)) return value;
   return isProviderId(value) ? value : undefined;
 }
 
@@ -188,6 +201,9 @@ export interface SessionFilterOption {
    * own mark where the coarser chips carry a word.
    */
   providerId?: string;
+  /** Set when the chip stands for a workspace manager, which is likewise
+   * named by its own mark. */
+  manager?: WorkspaceManagerName;
 }
 
 /** What became of the query, reported so no narrowing is ever silent. */
@@ -461,25 +477,30 @@ const LOCATION_LABEL: Record<SessionLocation, string> = {
 
 /** The order the location chips read in: what runs here, then what runs away. */
 const LOCATION_ORDER: readonly SessionLocation[] = [SESSION_LOCATION.LOCAL, SESSION_LOCATION.CLOUD];
+const MANAGER_ORDER: readonly WorkspaceManagerName[] = Object.values(WORKSPACE_MANAGER);
 
 /**
- * All, then where a session runs, then which agent is running it — coarse to
- * fine, left to right. Each level is offered only where it is a real choice: a
- * single location says nothing All has not already said, and neither does a
- * single agent. The counts make the row a breakdown of what is tracked before
- * it is a control, which is what earns it the line it costs.
+ * All, then where a session runs, then whose worktree arranged it, then which
+ * agent is running it — coarse to fine, left to right. Each level is offered
+ * only where it is a real choice: a single location says nothing All has not
+ * already said, and neither does a single agent. The counts make the row a
+ * breakdown of what is tracked before it is a control, which is what earns it
+ * the line it costs.
  *
- * Agents are listed in the registry's own order rather than by how many
- * sessions they have, so a chip never moves out from under the pointer as
- * sessions come and go.
+ * Agents are listed in the registry's own order and managers in the build's,
+ * rather than by how many sessions each has, so a chip never moves out from
+ * under the pointer as sessions come and go.
  */
 function filterOptions(sessions: readonly DisplaySession[]): readonly SessionFilterOption[] {
   if (sessions.length === 0) return [];
 
   const locations = new Map<SessionLocation, number>();
+  const managers = new Map<WorkspaceManagerName, number>();
   const providers = new Map<ProviderId, { label: string; count: number }>();
   for (const session of sessions) {
     locations.set(session.location, (locations.get(session.location) ?? 0) + 1);
+    const manager = session.workspace?.manager;
+    if (manager) managers.set(manager, (managers.get(manager) ?? 0) + 1);
     // An agent this build has no registry entry for has no mark to draw a chip
     // with, so it is counted under All and offered under nothing else.
     if (!isProviderId(session.providerId)) continue;
@@ -498,6 +519,18 @@ function filterOptions(sessions: readonly DisplaySession[]): readonly SessionFil
           count: locations.get(location) ?? 0,
         }))
       : [];
+  // A manager has no complementary chip — unmanaged is not a way of viewing —
+  // so its chip earns the line only while it narrows: a manager holding every
+  // session says nothing All has not already said.
+  const managerOptions = MANAGER_ORDER.filter((manager) => {
+    const count = managers.get(manager) ?? 0;
+    return count > 0 && count < sessions.length;
+  }).map((manager) => ({
+    filter: manager,
+    label: manager,
+    count: managers.get(manager) ?? 0,
+    manager,
+  }));
   const providerOptions =
     providers.size > 1
       ? PROVIDER_ID_LIST.filter((providerId) => providers.has(providerId)).map((providerId) => ({
@@ -511,6 +544,7 @@ function filterOptions(sessions: readonly DisplaySession[]): readonly SessionFil
   return [
     { filter: SESSION_FILTER.ALL, label: "All", count: sessions.length },
     ...locationOptions,
+    ...managerOptions,
     ...providerOptions,
   ];
 }

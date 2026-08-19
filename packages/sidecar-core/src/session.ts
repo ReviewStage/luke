@@ -257,6 +257,10 @@ export type WorkspaceManagerName = (typeof WORKSPACE_MANAGER)[keyof typeof WORKS
 
 const WORKSPACE_MANAGER_NAMES = new Set<string>(Object.values(WORKSPACE_MANAGER));
 
+export function isWorkspaceManagerName(value: string): value is WorkspaceManagerName {
+  return WORKSPACE_MANAGER_NAMES.has(value);
+}
+
 /**
  * The place a provider groups several sessions under — a workspace holding
  * more than one chat. It is identity plus a name, nothing else: the id is what

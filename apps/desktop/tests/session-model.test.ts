@@ -11,6 +11,7 @@ import {
   SESSION_STATUS,
   SESSION_URGENCY,
   type SessionControl,
+  WORKSPACE_MANAGER,
 } from "@sidecar/core";
 import {
   actsOnWorkspace,
@@ -21,6 +22,7 @@ import {
   observedAgoLabel,
   SESSION_FILTER,
   SESSION_SORT,
+  sessionFilterFromSpoken,
   sessionListRuns,
   sessionRunKeys,
   sessionTally,
@@ -335,6 +337,12 @@ test("the filters offered run from everything to one agent, counted", () => {
     { filter: SESSION_FILTER.LOCAL, label: "Local", count: 4 },
     { filter: SESSION_FILTER.CLOUD, label: "Cloud", count: 4 },
     {
+      filter: WORKSPACE_MANAGER.ORCA,
+      label: "Orca",
+      count: 2,
+      manager: WORKSPACE_MANAGER.ORCA,
+    },
+    {
       filter: PROVIDER_ID.CLAUDE_CODE,
       label: "Claude Code",
       count: 3,
@@ -433,6 +441,61 @@ test("a filter narrows the list without changing what is tracked", () => {
   assert.equal(cloud.filter, SESSION_FILTER.CLOUD);
   assert.equal(cloud.total, 8);
   assert.equal(agent.total, 8);
+});
+
+test("a manager's chip narrows to the sessions its worktrees hold", () => {
+  const managed = arrangeSessions(FIXTURE_SESSIONS, {
+    ...DEFAULT_SESSION_VIEW,
+    filter: WORKSPACE_MANAGER.ORCA,
+  });
+
+  assert.deepEqual(
+    managed.sessions.map((session) => session.id),
+    ["orca-chat-recap", "orca-chat-tests"],
+  );
+  assert.equal(managed.filter, WORKSPACE_MANAGER.ORCA);
+  assert.equal(managed.total, 8);
+  // The spoken vocabulary is the chips' own, manager names included.
+  assert.equal(sessionFilterFromSpoken(WORKSPACE_MANAGER.ORCA), WORKSPACE_MANAGER.ORCA);
+
+  // A manager holding every session says nothing All has not already said,
+  // so its chip is left out — while the filter itself keeps matching, like a
+  // spoken narrowing to the only agent there is.
+  const allManaged = displaySessions(bootstrap(false), [
+    normalizeSession(CLAUDE_PROVIDER, {
+      providerSessionId: "claude-1",
+      title: "Session claude-1",
+      status: SESSION_STATUS.WORKING,
+      observedAt: 1_000,
+      workspace: {
+        providerWorkspaceId: "worktree-1",
+        name: "Fix login flow",
+        manager: WORKSPACE_MANAGER.ORCA,
+      },
+    }),
+    normalizeSession(CODEX_PROVIDER, {
+      providerSessionId: "codex-1",
+      title: "Session codex-1",
+      status: SESSION_STATUS.WORKING,
+      observedAt: 1_000,
+      workspace: {
+        providerWorkspaceId: "worktree-1",
+        name: "Fix login flow",
+        manager: WORKSPACE_MANAGER.ORCA,
+      },
+    }),
+  ]);
+  const options = arrangeSessions(allManaged, DEFAULT_SESSION_VIEW).options;
+  assert.equal(
+    options.find((option) => option.manager !== undefined),
+    undefined,
+  );
+  const narrowed = arrangeSessions(allManaged, {
+    ...DEFAULT_SESSION_VIEW,
+    filter: WORKSPACE_MANAGER.ORCA,
+  });
+  assert.equal(narrowed.filter, WORKSPACE_MANAGER.ORCA);
+  assert.equal(narrowed.sessions.length, 2);
 });
 
 test("a filter whose last session has left falls back to showing everything", () => {

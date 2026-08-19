@@ -104,8 +104,9 @@ export type AppToolKind = (typeof APP_TOOL_KIND)[keyof typeof APP_TOOL_KIND];
 /**
  * The whole-list scope a spoken panel ask may name. The rest of the filter
  * vocabulary is not this module's to define: a location is a session's own
- * `location`, and a provider is its `provider_id`, so a spoken filter is
- * validated against the observed roster rather than against a second list.
+ * `location`, a provider is its `provider_id`, and a workspace manager is its
+ * own name, so a spoken filter is validated against the observed roster
+ * rather than against a second list.
  */
 export const SESSION_LIST_ALL = "all";
 
