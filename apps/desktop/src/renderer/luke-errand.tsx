@@ -501,16 +501,22 @@ const RING_SPREAD = 1.16;
  * settings pages' header — covers the first strip of it, so a landing brought
  * flush with the scroller's own edge would arrive under the header rather
  * than below it. Measured off the children rather than assumed, because
- * which scroller pins what is the panel's business, not the errand's.
+ * which scroller pins what is the panel's business, not the errand's. The
+ * strip one gap below a pinned child is covered too: that is the band where
+ * rows dissolve under it, so a landing there is a landing mid-fade — and the
+ * gap is what the scroller's own scroll padding already adds for the
+ * keyboard, so the errand and a tabbed-to control agree on what clear means.
  */
 function pinnedViewTop(scroller: HTMLElement, viewTop: number): number {
-  let top = viewTop;
+  let bottom = Number.NEGATIVE_INFINITY;
   for (const child of scroller.children) {
     if (!(child instanceof HTMLElement)) continue;
     if (getComputedStyle(child).position !== "sticky") continue;
-    top = Math.max(top, child.getBoundingClientRect().bottom);
+    bottom = Math.max(bottom, child.getBoundingClientRect().bottom);
   }
-  return top;
+  if (bottom === Number.NEGATIVE_INFINITY) return viewTop;
+  const gap = Number.parseFloat(getComputedStyle(scroller).rowGap);
+  return Math.max(viewTop, bottom + (Number.isNaN(gap) ? 0 : gap));
 }
 
 /**
