@@ -34,7 +34,7 @@ import {
   type WorkspaceAgentSelection,
   workspaceProjectSelectionId,
 } from "@sidecar/core";
-
+import { Layer, ManagedRuntime } from "effect";
 import {
   app,
   BrowserWindow,
@@ -78,6 +78,10 @@ import { PanelManager } from "./panel-manager";
 import { ProductEventSender } from "./product-event-sender";
 import { type ProviderRegistration, providerRegistrations } from "./provider-registrations";
 import { runModeFor } from "./run-mode";
+import { CliLive } from "./services/cli";
+import { FilesLive } from "./services/files";
+import { HttpLive } from "./services/http";
+import { settingsStoreLive } from "./services/settings-store-service";
 import { sessionNoticeSpeech } from "./session-notifications";
 import { createSettingsHandler } from "./settings-handler";
 import { SettingsStore } from "./settings-store";
@@ -177,6 +181,12 @@ const settingsStore = new SettingsStore({
   },
   codexCloudConnection: () => codexCloudAdapter.connection(),
 });
+const effectRuntime = ManagedRuntime.make(
+  Layer.mergeAll(HttpLive, CliLive, FilesLive, settingsStoreLive(settingsStore)),
+);
+
+export { effectRuntime };
+
 const accountClient = new AccountClient({ baseUrl: ACCOUNT_BASE_URL, clientId: ACCOUNT_CLIENT_ID });
 let account: AccountSnapshot = { status: ACCOUNT_STATUS.SIGNED_OUT };
 const accountSession = new AccountSessionManager({

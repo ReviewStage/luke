@@ -18,6 +18,10 @@
     {
       "name": "anti-slop",
       "specifier": "./tools/oxlint/anti-slop/index.ts"
+    },
+    {
+      "name": "anti-slop-effect",
+      "specifier": "./tools/oxlint/anti-slop/effect/index.ts"
     }
   ],
   "rules": {
@@ -35,7 +39,10 @@
     "anti-slop/no-unknown-type-aliases": "error",
     "anti-slop/no-unsafe-dictionary-type": "error",
     "anti-slop/no-widen-then-assert": "error",
-    "anti-slop/require-safety-comment-for-type-assertion": "error"
+    "anti-slop/require-safety-comment-for-type-assertion": "error",
+    "anti-slop-effect/no-effect-runtime-outside-edges": "error",
+    "anti-slop-effect/no-promise-bridge": "error",
+    "anti-slop-effect/no-service-constructor-imports": "error"
   },
   "overrides": [
     {

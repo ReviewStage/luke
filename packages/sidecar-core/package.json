@@ -5,12 +5,16 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./effect-errors": "./src/effect-errors.ts",
     "./motion-tokens.css": "./src/motion-tokens.css"
   },
   "types": "./src/index.ts",
   "scripts": {
     "test": "tsx --test tests/**/*.test.ts",
     "typecheck": "tsc --project tsconfig.json"
+  },
+  "dependencies": {
+    "effect": "3.22.1"
   },
   "devDependencies": {
     "@types/node": "26.2.0",
