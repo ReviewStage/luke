@@ -30,7 +30,7 @@ import {
 import type { PromiseSessionRegistry } from "@sidecar/core/effect";
 import { Effect } from "effect";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from "electron";
-import { createEffectActionHandler } from "../effect-action-handler";
+import { createActionHandler } from "../action-handler";
 import type { LinearIssueTracker } from "../linear-tracker";
 import type { SettingsStore } from "../settings-store";
 import {
@@ -97,7 +97,7 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
     supersetContext,
     supersetCli,
   } = dependencies;
-  const registerAction = createEffectActionHandler({
+  const registerAction = createActionHandler({
     trustedSender,
     handle: (channel, handler) => ipcMain.handle(channel, handler),
   });
@@ -205,37 +205,52 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
   // everything else — above all a cloud session, whose conversation lives
   // with its provider — answers honestly rather than guessing at files never
   // documented.
-  ipcMain.handle(
-    channels.readSessionTranscript,
-    async (event, identityRaw: UnparsedWireValue): Promise<SessionTranscriptResult> => {
-      if (!trustedSender(event)) throw new Error("Untrusted renderer");
-      const identity = requireSessionIdentity(identityRaw, "Invalid transcript request");
-      const session = sessionRegistry.get(identity);
-      if (!session) {
-        return {
-          status: SESSION_TRANSCRIPT_RESULT_STATUS.REJECTED,
-          reason: "No observed session matches that identity.",
-        };
-      }
-      // Checked here as well as in the reader's own lookup, because one
-      // provider observes both halves: a cloud Cursor agent shares its
-      // provider id with the sessions on this machine, and only the local
-      // half has a file here to read.
-      if (session.location !== SESSION_LOCATION.LOCAL) {
-        return {
-          status: SESSION_TRANSCRIPT_RESULT_STATUS.UNSUPPORTED,
-          reason: "A cloud session's conversation lives with its provider, not on this machine.",
-        };
-      }
-      const adapter = adapterFor(identity.providerId);
-      if (!adapter) {
-        return {
-          status: SESSION_TRANSCRIPT_RESULT_STATUS.UNSUPPORTED,
-          reason: "That session's provider keeps no transcript this build can read.",
-        };
-      }
-      try {
-        const transcript = await adapter.readTranscript(identity.providerSessionId);
+  registerAction<[SessionIdentity], SessionTranscriptResult>(channels.readSessionTranscript, {
+    validate: (args) => {
+      const [rawIdentity] = args;
+      // SAFETY: IPC validate receives structured-clone args; this channel's first arg is a session identity object.
+      const identity = requireSessionIdentity(
+        unparsedWire(rawIdentity as WireBoundaryInput),
+        "Invalid transcript request",
+      );
+      return [identity];
+    },
+    act: (identity) =>
+      Effect.gen(function* () {
+        const session = sessionRegistry.get(identity);
+        if (!session) {
+          return {
+            status: SESSION_TRANSCRIPT_RESULT_STATUS.REJECTED,
+            reason: "No observed session matches that identity.",
+          };
+        }
+        // Checked here as well as in the reader's own lookup, because one
+        // provider observes both halves: a cloud Cursor agent shares its
+        // provider id with the sessions on this machine, and only the local
+        // half has a file here to read.
+        if (session.location !== SESSION_LOCATION.LOCAL) {
+          return {
+            status: SESSION_TRANSCRIPT_RESULT_STATUS.UNSUPPORTED,
+            reason: "A cloud session's conversation lives with its provider, not on this machine.",
+          };
+        }
+        const adapter = adapterFor(identity.providerId);
+        if (!adapter) {
+          return {
+            status: SESSION_TRANSCRIPT_RESULT_STATUS.UNSUPPORTED,
+            reason: "That session's provider keeps no transcript this build can read.",
+          };
+        }
+        const readResult = yield* Effect.either(
+          Effect.tryPromise(() => adapter.readTranscript(identity.providerSessionId)),
+        );
+        if (readResult._tag === "Left") {
+          return {
+            status: SESSION_TRANSCRIPT_RESULT_STATUS.REJECTED,
+            reason: "That session's transcript could not be read.",
+          };
+        }
+        const transcript = readResult.right;
         if (!transcript) {
           return {
             status: SESSION_TRANSCRIPT_RESULT_STATUS.REJECTED,
@@ -243,14 +258,12 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
           };
         }
         return { status: SESSION_TRANSCRIPT_RESULT_STATUS.READ, transcript };
-      } catch {
-        return {
-          status: SESSION_TRANSCRIPT_RESULT_STATUS.REJECTED,
-          reason: "That session's transcript could not be read.",
-        };
-      }
-    },
-  );
+      }),
+    failure: () => ({
+      status: SESSION_TRANSCRIPT_RESULT_STATUS.REJECTED,
+      reason: "That session's transcript could not be read.",
+    }),
+  });
 
   // A reply typed on a row is handed to the session's own provider, through
   // the adapter that observed it — the one component that knows the documented
@@ -259,39 +272,49 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
   // observation advertised taking messages gets one. Refusals are answers for
   // the row, never thrown: a send is the user's own act, and what became of it
   // belongs beside the field it left.
-  ipcMain.handle(
+  registerAction<[SessionIdentity, UnparsedWireValue], ProviderMessageResult>(
     channels.sendSessionMessage,
-    async (
-      event,
-      identityRaw: UnparsedWireValue,
-      text: UnparsedWireValue,
-    ): Promise<ProviderMessageResult> => {
-      if (!trustedSender(event)) throw new Error("Untrusted renderer");
-      const identity = requireSessionIdentity(identityRaw, "Invalid session message request");
-      const message = boundedField(text, sessionMessageText);
-      if (!message.ok || message.value === undefined) {
-        return {
-          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-          reason: "That message is empty or too long.",
-        };
-      }
-      const messageText = message.value;
-      const session = sessionRegistry.get(identity);
-      if (!session?.canReceiveMessage) {
-        return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
-      }
-      const managed = supersetContext(identity);
-      if (managed) return supersetCli.sendMessage(managed, messageText);
-      return Effect.runPromise(
-        performSessionAct(identity, (adapter) =>
-          Effect.tryPromise(() =>
-            adapter.sendMessage({
-              providerSessionId: identity.providerSessionId,
-              text: messageText,
-            }),
-          ),
-        ),
-      );
+    {
+      validate: (args) => {
+        const [rawIdentity, text] = args;
+        // SAFETY: IPC validate receives structured-clone args; this channel's first arg is a session identity object.
+        const identity = requireSessionIdentity(
+          unparsedWire(rawIdentity as WireBoundaryInput),
+          "Invalid session message request",
+        );
+        return [identity, text];
+      },
+      act: (identity, text) =>
+        Effect.gen(function* () {
+          const message = boundedField(text, sessionMessageText);
+          if (!message.ok || message.value === undefined) {
+            return {
+              status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+              reason: "A message has to be shorter than a document and longer than nothing.",
+            };
+          }
+          const messageText = message.value;
+          const session = sessionRegistry.get(identity);
+          if (!session?.canReceiveMessage) {
+            return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+          }
+          const managed = supersetContext(identity);
+          if (managed) {
+            return yield* Effect.tryPromise(() => supersetCli.sendMessage(managed, messageText));
+          }
+          return yield* performSessionAct(identity, (adapter) =>
+            Effect.tryPromise(() =>
+              adapter.sendMessage({
+                providerSessionId: identity.providerSessionId,
+                text: messageText,
+              }),
+            ),
+          );
+        }),
+      failure: () => ({
+        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+        reason: "The message could not be sent.",
+      }),
     },
   );
 
@@ -299,37 +322,42 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
   // renderer names must be a control the session's latest observation actually
   // advertised. The registry is what advertised it, so the registry is what
   // answers whether it stands.
-  ipcMain.handle(
-    channels.executeSessionControl,
-    async (
-      event,
-      identityRaw: UnparsedWireValue,
-      controlId: UnparsedWireValue,
-    ): Promise<ProviderControlResult> => {
-      if (!trustedSender(event)) throw new Error("Untrusted renderer");
-      const identity = requireSessionIdentity(identityRaw, "Invalid session control request");
-      if (!isWireString(controlId) || !controlId.trim()) {
+  registerAction<[SessionIdentity, string], ProviderControlResult>(channels.executeSessionControl, {
+    validate: (args) => {
+      const [rawIdentity, controlIdRaw] = args;
+      // SAFETY: IPC validate receives structured-clone args; this channel's first arg is a session identity object.
+      const identity = requireSessionIdentity(
+        unparsedWire(rawIdentity as WireBoundaryInput),
+        "Invalid session control request",
+      );
+      if (!isWireString(controlIdRaw) || !controlIdRaw.trim()) {
         throw new Error("Invalid session control request");
       }
-      const session = sessionRegistry.get(identity);
-      const control = session?.controls.find((candidate) => candidate.id === controlId);
-      if (!control) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
-      const managed = supersetContext(identity);
-      if (managed && isSupersetControlId(control.id)) {
-        return supersetCli.executeControl(managed, control.id);
-      }
-      return Effect.runPromise(
-        performSessionAct(identity, (adapter) =>
+      return [identity, controlIdRaw];
+    },
+    act: (identity, controlId) =>
+      Effect.gen(function* () {
+        const session = sessionRegistry.get(identity);
+        const control = session?.controls.find((candidate) => candidate.id === controlId);
+        if (!control) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+        const managed = supersetContext(identity);
+        if (managed && isSupersetControlId(control.id)) {
+          return yield* Effect.tryPromise(() => supersetCli.executeControl(managed, control.id));
+        }
+        return yield* performSessionAct(identity, (adapter) =>
           Effect.tryPromise(() =>
             adapter.executeControl({
               providerSessionId: identity.providerSessionId,
               control,
             }),
           ),
-        ),
-      );
-    },
-  );
+        );
+      }),
+    failure: () => ({
+      status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+      reason: "The control could not be run.",
+    }),
+  });
 
   // A standing ask runs the front half of the message gauntlet — a trusted
   // sender, a bounded text, a session the registry actually observes — and

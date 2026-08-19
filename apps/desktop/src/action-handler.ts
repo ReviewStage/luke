@@ -1,4 +1,5 @@
 import type { UnparsedWireValue } from "@sidecar/core";
+import { Cause, Effect, Exit } from "effect";
 import type { IpcMainInvokeEvent } from "electron";
 
 interface ActionHandlerHost {
@@ -11,7 +12,7 @@ interface ActionHandlerHost {
 
 interface ActionHandler<TArguments extends readonly unknown[], TResult> {
   validate: (args: readonly unknown[]) => TArguments | undefined;
-  act: (...args: TArguments) => Promise<TResult>;
+  act: (...args: TArguments) => Effect.Effect<TResult, Error, never>;
   failure: (error: Error) => TResult;
 }
 
@@ -24,12 +25,11 @@ export function createActionHandler(host: ActionHandlerHost) {
       if (!host.trustedSender(event)) throw new Error("Untrusted renderer");
       const validated = action.validate(args);
       if (!validated) return action.failure(new Error("Invalid action request"));
-      try {
-        return await action.act(...validated);
-      } catch (error) {
-        const failure = error instanceof Error ? error : new Error(String(error));
-        return action.failure(failure);
-      }
+      const exit = await Effect.runPromiseExit(action.act(...validated));
+      if (Exit.isSuccess(exit)) return exit.value;
+      const squashed = Cause.squash(exit.cause);
+      const failure = squashed instanceof Error ? squashed : new Error(String(squashed));
+      return action.failure(failure);
     });
   };
 }
