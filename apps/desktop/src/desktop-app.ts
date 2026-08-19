@@ -14,6 +14,7 @@ import {
   isProviderId,
   type MeetingInterval,
   type NormalizedSession,
+  nextMeetingBoundary,
   normalizeObservedWorkspaceProjects,
   normalizeTrackedIssue,
   type ObservedWorkspaceProject,
@@ -237,7 +238,9 @@ const CALENDAR_REFRESH_INTERVAL_MS = 5 * 60_000;
 /**
  * How often held notices ask whether the meeting holding them has ended. The
  * question is answered from meetings already in memory, so asking often costs
- * nothing — and half a minute is how late after a meeting the backlog speaks.
+ * nothing. The boundary timer is what answers on time — this tick is the net
+ * behind it, for the clocks a timer cannot promise to keep: a laptop asleep
+ * through the boundary, or a system clock moved by hand.
  */
 const HELD_NOTICE_RELEASE_INTERVAL_MS = 30_000;
 /**
@@ -246,6 +249,14 @@ const HELD_NOTICE_RELEASE_INTERVAL_MS = 30_000;
  * calendar that cannot answer is not an empty diary.
  */
 let calendarMeetings: readonly MeetingInterval[] | undefined;
+/**
+ * The timer standing at the next meeting edge — the instant the quiet can
+ * begin or end. The interval ticks bound how *stale* the quiet's answer can
+ * get; this is what makes its edges *punctual*, so a meeting's first second
+ * is already held and its last is already released, rather than either
+ * waiting on the next half-minute tick.
+ */
+let quietBoundaryTimer: NodeJS.Timeout | undefined;
 /**
  * Each connected account's calendars as last observed — what the settings
  * rows draw their choices from, and what a spoken-of or clicked selection is
@@ -262,8 +273,9 @@ const heldNotices = new SessionNoticeHold();
  * The other kind of announcement, held on the same terms: speech an answered
  * standing ask produced, already worded. It waits out a meeting exactly as a
  * status edge does — both break silence, and the quiet holds everything that
- * does. Unbidden evaluator summaries are never held: they only ever ride a
- * conversation the developer already has open, which is not silence to break.
+ * does. Unbidden evaluator summaries are never held: during the quiet they
+ * are dropped outright, because the evaluator supersedes its own decisions
+ * and speaks from a fresh review once the meeting ends.
  */
 const heldRequestSpeech = new SessionNoticeHold<AttentionSpeech>();
 /**
@@ -870,16 +882,21 @@ async function reviewSessionAttention(generation: number): Promise<void> {
     // `outcome` says whether to voice it now, which only these reviews do.
     const speech = attentionSpeechFromReviews(reviews);
     if (speech.length > 0) {
-      // An answered standing ask opens Luke's own call the way a status edge
-      // does, so the meeting quiet holds it the same way; the summaries that
-      // only ride an open conversation pass, because a developer mid-call is
-      // already talking to Luke, meeting or not. The pressable notice
-      // anchors to the spoken announcement, so it waits out the quiet with it.
+      // The quiet holds everything Luke would say unbidden. An answered
+      // standing ask waits out the meeting the way a status edge does; an
+      // unbidden evaluator summary is dropped rather than held — the
+      // evaluator supersedes its own decisions, so after the meeting it
+      // speaks from a fresh review, not a backlog. Neither rides even an
+      // open conversation: a call lingering idle after a question is not a
+      // conversation to interject into, and a reply to a turn the developer
+      // opened is not an announcement and passes untouched elsewhere. The
+      // pressable notice anchors to the spoken announcement, so it waits out
+      // the quiet with it.
       let sendable: readonly AttentionSpeech[] = speech;
       if (await announcementsQuietNow(Date.now())) {
         const held = speech.filter((item) => item.source !== ATTENTION_SPEECH_SOURCE.EVALUATOR);
         heldRequestSpeech.hold(held);
-        sendable = speech.filter((item) => item.source === ATTENTION_SPEECH_SOURCE.EVALUATOR);
+        sendable = [];
       }
       if (sendable.length > 0) {
         // Spoken once, by the one window that holds the voice: every display
@@ -963,23 +980,62 @@ function openCreatedWorkspaces(sessions: readonly NormalizedSession[]): void {
  * are consulted before the store so the common case — no calendar — costs no
  * read at all; the store's answer comes from its cached file either way,
  * never the keychain.
+ *
+ * Consulting it is also what keeps every window honest: the answer is
+ * reconciled with the broadcast state on the way out, so speech can never be
+ * decided against a fresher quiet than the one the face and the renderer's
+ * own gate are holding. Without that, an edge landing just after a meeting's
+ * end would speak over a face still drawn asleep until the next tick.
  */
 async function announcementsQuietNow(now: number): Promise<boolean> {
-  if (!calendarMeetings || activeMeetingEnd(calendarMeetings, now) === undefined) return false;
-  return settingsStore.get(APP_SETTING_SCHEMA.quietDuringMeetings.field);
+  const inMeeting =
+    calendarMeetings !== undefined && activeMeetingEnd(calendarMeetings, now) !== undefined;
+  const holding =
+    inMeeting && (await settingsStore.get(APP_SETTING_SCHEMA.quietDuringMeetings.field));
+  if (holding !== meetingQuietActive) {
+    meetingQuietActive = holding;
+    panels.broadcast(channels.meetingQuietChanged, holding);
+  }
+  return holding;
 }
 
 /**
- * Recomputes whether the quiet is holding and tells the renderer on change —
- * the face sleeps beside the housing for exactly as long as this is true.
- * Ridden by the same ticks that read the calendar and release the backlog,
- * and by the setting's own toggle, so the face never says a quiet that ended.
+ * Recomputes whether the quiet is holding — the face sleeps beside the
+ * housing for exactly as long as it is. The recompute itself broadcasts any
+ * change; this name is for the callers with nothing to say and only the face
+ * to keep current: the boundary timer, the ticks, and the setting's toggle.
  */
 async function refreshMeetingQuiet(): Promise<void> {
-  const active = await announcementsQuietNow(Date.now());
-  if (active === meetingQuietActive) return;
-  meetingQuietActive = active;
-  panels.broadcast(channels.meetingQuietChanged, active);
+  await announcementsQuietNow(Date.now());
+}
+
+/**
+ * Stands the boundary timer at the next meeting edge, from the intervals
+ * already in memory. On fire the quiet is recomputed and the backlog asked
+ * after — the same pair every tick runs — and the timer re-arms for the edge
+ * after that. Re-armed whole from every calendar pass because the pass may
+ * have moved any edge; cleared with the meetings at sign-out. `unref`ed like
+ * the ticks, so no meeting tomorrow holds the process open tonight.
+ */
+function armQuietBoundaryTimer(): void {
+  if (quietBoundaryTimer) clearTimeout(quietBoundaryTimer);
+  quietBoundaryTimer = undefined;
+  if (!calendarMeetings) return;
+  const now = Date.now();
+  const boundary = nextMeetingBoundary(calendarMeetings, now);
+  if (boundary === undefined) return;
+  // The extra millisecond puts the firing strictly past the edge, so the
+  // recompute reads the side of it the timer was armed for.
+  quietBoundaryTimer = setTimeout(
+    () => {
+      quietBoundaryTimer = undefined;
+      void refreshMeetingQuiet();
+      void releaseHeldNotices();
+      armQuietBoundaryTimer();
+    },
+    boundary - now + 1,
+  );
+  quietBoundaryTimer.unref();
 }
 
 /**
@@ -1061,6 +1117,7 @@ async function refreshCalendarMeetings(generation: number): Promise<void> {
   if (!calendarObservationLoop.isCurrent(generation)) return;
   void refreshMeetingQuiet();
   void releaseHeldNotices();
+  armQuietBoundaryTimer();
 }
 
 const observationGate = () => runMode.observesProviders && accountCapabilitiesActive();
@@ -1100,9 +1157,8 @@ const observationSupervisor = new ObservationSupervisor([
 function startCalendarObservation(): void {
   if (heldNoticeReleaseTimer) return;
   heldNoticeReleaseTimer = setInterval(() => {
-    // The quiet's edges move with the clock between calendar reads — a
-    // meeting starts, a meeting ends — so the face's answer refreshes on the
-    // release tick, not only when the feed is re-read.
+    // The boundary timer answers the meeting edges on time; this tick is the
+    // net under it, re-asking on a cadence no missed timer can silence.
     void refreshMeetingQuiet();
     void releaseHeldNotices();
   }, HELD_NOTICE_RELEASE_INTERVAL_MS);
@@ -1118,6 +1174,8 @@ function startCalendarObservation(): void {
 function stopCalendarObservation(): void {
   if (heldNoticeReleaseTimer) clearInterval(heldNoticeReleaseTimer);
   heldNoticeReleaseTimer = undefined;
+  if (quietBoundaryTimer) clearTimeout(quietBoundaryTimer);
+  quietBoundaryTimer = undefined;
   calendarMeetings = undefined;
   observedCalendars = [];
   // The reader forgets what it held for failing accounts too: a pass after

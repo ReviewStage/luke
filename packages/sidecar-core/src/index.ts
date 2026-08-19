@@ -83,6 +83,7 @@ export {
   MAXIMUM_MEETING_LENGTH_MS,
   type MeetingInterval,
   meetingsFromBusyIntervals,
+  nextMeetingBoundary,
 } from "./calendar.js";
 
 // Providers — adapters and the acts they advertise.

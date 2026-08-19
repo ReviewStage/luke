@@ -5,6 +5,7 @@ import {
   CALENDAR_LOOKAHEAD_MS,
   MAXIMUM_CALENDAR_MEETINGS,
   meetingsFromBusyIntervals,
+  nextMeetingBoundary,
 } from "../src";
 
 /** Noon UTC on a fixed Monday, so every expectation is a plain number. */
@@ -67,4 +68,25 @@ test("activeMeetingEnd answers only inside a meeting", () => {
   // An end is an end, not a last covered instant.
   assert.equal(activeMeetingEnd(meetings, 6_000), undefined);
   assert.equal(activeMeetingEnd([], 1_000), undefined);
+});
+
+test("nextMeetingBoundary names the earliest edge still ahead", () => {
+  const meetings = [
+    { startsAt: 1_000, endsAt: 2_000 },
+    { startsAt: 1_500, endsAt: 3_000 },
+    { startsAt: 5_000, endsAt: 6_000 },
+  ];
+
+  // Before anything: the first start is the next edge.
+  assert.equal(nextMeetingBoundary(meetings, 500), 1_000);
+  // Inside the overlap, the inner end is still an edge — not every edge
+  // changes the answer, but every change happens at one.
+  assert.equal(nextMeetingBoundary(meetings, 1_600), 2_000);
+  assert.equal(nextMeetingBoundary(meetings, 2_500), 3_000);
+  // The gap looks ahead to the next start; an instant is never its own edge.
+  assert.equal(nextMeetingBoundary(meetings, 3_000), 5_000);
+  assert.equal(nextMeetingBoundary(meetings, 5_500), 6_000);
+  // Past the last end there is nothing left to wait for.
+  assert.equal(nextMeetingBoundary(meetings, 6_000), undefined);
+  assert.equal(nextMeetingBoundary([], 1_000), undefined);
 });
