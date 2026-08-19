@@ -452,7 +452,7 @@ async function readCodexSessionTitles(codexHome: string): Promise<Map<string, st
  * provisional title, while the title fallback covers older rows that do not
  * carry the column's value.
  */
-export function isCodexRealtimeDelegationText(value: unknown): boolean {
+export function isCodexRealtimeDelegationText(value: string | undefined): boolean {
   return text(value)?.trimStart().startsWith(CODEX_REALTIME_DELEGATION_MARKER) === true;
 }
 
@@ -582,16 +582,17 @@ function observationFromThreadRow(
     hookEvent.event === CODEX_HOOK_EVENT.SESSION_END
       ? SESSION_COMPLETION_CAUSE.SESSION_CLOSED
       : undefined;
-  return {
+  const observation: ProviderSessionObservation = {
     providerSessionId,
     title: titleFromRow(row, sessionTitles),
-    ...(isCodexRealtimeDelegationThread(row) ? { realtimeVoice: true } : {}),
     status,
     ...(completionCause ? { completionCause } : undefined),
     observedAt,
     ...(rollout?.lastAgentMessage ? { recap: rollout.lastAgentMessage } : undefined),
     detail: detailFromRow(row, rollout),
   };
+  if (isCodexRealtimeDelegationThread(row)) observation.realtimeVoice = true;
+  return observation;
 }
 
 export function defaultCodexHome(): string {

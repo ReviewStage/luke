@@ -658,7 +658,6 @@ export function normalizeSession(
     title: boundedText(observation.title, maximumSessionTitleLength) ?? "Untitled session",
     status,
     observedAt,
-    ...(observation.realtimeVoice === true ? { realtimeVoice: true } : {}),
     location: normalizeLocation(observation.location),
     detail: normalizeSessionDetail(observation.detail),
     controls: normalizeControls(observation.controls),
@@ -668,6 +667,7 @@ export function normalizeSession(
     spawnableAgents: normalizeSpawnableAgents(observation.spawnableAgents),
     attention: normalizeAttention(attention),
   };
+  if (observation.realtimeVoice === true) session.realtimeVoice = true;
   if (completionCause) session.completionCause = completionCause;
   if (recap) session.recap = recap;
   if (spawnTarget) session.spawnTarget = spawnTarget;

@@ -441,7 +441,7 @@ export function displaySessions(
         const changeNumber = session.detail.change
           ? sessionChangeNumber(session.detail.change)
           : undefined;
-        return {
+        const displaySession: DisplaySession = {
           id: session.providerSessionId,
           title: session.title,
           providerId: session.providerId,
@@ -454,7 +454,6 @@ export function displaySessions(
           urgency,
           label: urgencyLabel(urgency),
           location: session.location,
-          ...(session.realtimeVoice ? { realtimeVoice: true } : {}),
           observedAt: session.observedAt,
           openable: session.detail.link !== undefined,
           canMessage: session.canReceiveMessage,
@@ -480,6 +479,8 @@ export function displaySessions(
               }
             : undefined),
         };
+        if (session.realtimeVoice === true) displaySession.realtimeVoice = true;
+        return displaySession;
       });
 
   return [...visible].sort(byUrgency);
