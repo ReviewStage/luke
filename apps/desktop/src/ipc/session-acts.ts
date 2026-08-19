@@ -38,6 +38,8 @@ import {
 } from "../shared/contracts";
 import { APP_SETTING_SCHEMA } from "../shared/settings-schema";
 import { isWorkspaceAgentSelection } from "../shared/workspace-agents";
+import type { SupersetCli } from "../superset-cli";
+import type { SupersetSessionContext } from "../superset-workspaces";
 
 export interface SessionActsIpcDependencies {
   ipcMain: Pick<IpcMain, "handle">;
@@ -60,6 +62,8 @@ export interface SessionActsIpcDependencies {
   trackedIssues: () => readonly TrackedIssue[] | undefined;
   issueTrackers: readonly LinearIssueTracker[];
   refreshIssues: () => void;
+  supersetContext: (identity: SessionIdentity) => SupersetSessionContext | undefined;
+  supersetCli: SupersetCli;
 }
 
 export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies): void {
@@ -80,6 +84,8 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
     trackedIssues,
     issueTrackers,
     refreshIssues,
+    supersetContext,
+    supersetCli,
   } = dependencies;
   const registerAction = createActionHandler({
     trustedSender,
@@ -235,10 +241,13 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
         };
       }
       const messageText = message.value;
-      return performSessionAct(identity, (adapter, session) => {
-        if (!session.canReceiveMessage) {
-          return Promise.resolve({ status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED });
-        }
+      const session = sessionRegistry.get(identity);
+      if (!session?.canReceiveMessage) {
+        return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+      }
+      const managed = supersetContext(identity);
+      if (managed) return supersetCli.sendMessage(managed, messageText);
+      return performSessionAct(identity, (adapter) => {
         return adapter.sendMessage({
           providerSessionId: identity.providerSessionId,
           text: messageText,
@@ -258,9 +267,12 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       if (!isSessionIdentity(identity) || typeof controlId !== "string" || !controlId.trim()) {
         throw new Error("Invalid session control request");
       }
-      return performSessionAct(identity, (adapter, session) => {
-        const control = session.controls.find((candidate) => candidate.id === controlId);
-        if (!control) return Promise.resolve({ status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED });
+      const session = sessionRegistry.get(identity);
+      const control = session?.controls.find((candidate) => candidate.id === controlId);
+      if (!control) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+      const managed = supersetContext(identity);
+      if (managed) return supersetCli.executeControl(managed, control.id);
+      return performSessionAct(identity, (adapter) => {
         return adapter.executeControl({
           providerSessionId: identity.providerSessionId,
           control,
@@ -565,6 +577,8 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
             reason: "A task has to be shorter than a document and longer than nothing.",
           };
         }
+        const managed = supersetContext(identity);
+        if (managed) return supersetCli.createAgent(managed, advertised, openingTask.value);
         const stored: WorkspaceAgentSelection | undefined = isProviderId(identity.providerId)
           ? (await settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[
               identity.providerId

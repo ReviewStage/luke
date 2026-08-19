@@ -2747,6 +2747,11 @@ export function App(): React.JSX.Element {
                 onSignIn: () => beginConsentSignIn(CONSENT_SERVICE_ID.LINEAR),
                 onDisconnect: disconnectLinear,
               },
+              superset: {
+                installed: bootstrap.supersetInstalled,
+                connected: bootstrap.supersetConnected,
+                onCopyLogin: () => navigator.clipboard.writeText("superset auth login"),
+              },
               onQuit: () => window.sidecar.quit(),
               shortcuts,
             }}

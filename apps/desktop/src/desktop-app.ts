@@ -86,6 +86,8 @@ import {
 import { CREDENTIAL_PROVIDER_ID, type CredentialProviderId } from "./shared/credential-providers";
 import { type FeedbackResult, feedbackSubmission } from "./shared/feedback";
 import { APP_SETTING_SCHEMA } from "./shared/settings-schema";
+import { SupersetCli } from "./superset-cli";
+import { SupersetWorkspaceReader, SupersetWorkspaceSnapshot } from "./superset-workspaces";
 import { UPDATE_ENDPOINT, UpdateService } from "./update-service";
 import { VoiceCapabilityAssembler } from "./voice-capability-assembler";
 
@@ -140,6 +142,13 @@ const sessionRegistry = new InMemorySessionRegistry();
 // evidence run never refreshes it, so there its answer stays the honest
 // "unknown".
 const codexCloudAdapter = new CodexCloudSessionAdapter();
+const supersetHomeDirectory =
+  process.env.SUPERSET_HOME_DIR ?? path.join(app.getPath("home"), ".superset");
+const supersetWorkspaces = new SupersetWorkspaceReader({
+  homeDirectory: supersetHomeDirectory,
+});
+const supersetCli = new SupersetCli({ homeDirectory: supersetHomeDirectory });
+let observedSupersetWorkspaces = new SupersetWorkspaceSnapshot([]);
 // `directory` and the cipher are read lazily so the store can be declared before
 // the Electron app is ready.
 const settingsStore = new SettingsStore({
@@ -601,6 +610,10 @@ function registerIpc(): void {
     const display =
       (displayId !== undefined ? panels.display(displayId) : undefined) ??
       screen.getPrimaryDisplay();
+    const [supersetInstalled, supersetConnected] = await Promise.all([
+      supersetCli.installed(),
+      supersetCli.connected(),
+    ]);
     return {
       mode: displayId !== undefined ? panels.modeFor(displayId) : panels.initialMode,
       startPeeked,
@@ -609,6 +622,8 @@ function registerIpc(): void {
       fixture,
       captureMode,
       fixtureMode,
+      supersetInstalled,
+      supersetConnected,
       accountRequired: runMode.requiresAccount,
       account,
       packaged: app.isPackaged,
@@ -743,6 +758,9 @@ function registerIpc(): void {
     trackedIssues: () => trackedIssues,
     issueTrackers,
     refreshIssues: () => void issueObservationLoop.refresh(),
+    supersetContext: (identity) =>
+      observedSupersetWorkspaces.context(identity.providerId, identity.providerSessionId),
+    supersetCli,
   });
 
   // A note to the founders travels one road: typed in the composer, validated
@@ -839,6 +857,18 @@ async function applyLocalSessionHooks(): Promise<void> {
 }
 
 async function refreshProviderSessions(generation: number): Promise<void> {
+  let supersetSnapshot = new SupersetWorkspaceSnapshot([]);
+  let supersetActionsEnabled = false;
+  try {
+    [supersetSnapshot, supersetActionsEnabled] = await Promise.all([
+      supersetWorkspaces.read(),
+      supersetCli.connected(),
+    ]);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`Superset observation failed: ${message}\n`);
+  }
+  observedSupersetWorkspaces = supersetSnapshot;
   // Providers are observed concurrently and reported independently: the
   // registry commits each provider atomically, so one that is slow or failing
   // can neither delay nor cancel the others. A network provider would
@@ -846,7 +876,9 @@ async function refreshProviderSessions(generation: number): Promise<void> {
   await Promise.all(
     orderedRegistrations.map(async ({ adapter }) => {
       try {
-        await sessionRegistry.refresh(adapter);
+        await sessionRegistry.refresh(adapter, (providerId, observations) =>
+          supersetSnapshot.enrich(providerId, observations, supersetActionsEnabled),
+        );
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         process.stderr.write(`Session observation failed (${adapter.provider.id}): ${message}\n`);

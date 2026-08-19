@@ -363,6 +363,8 @@ export interface SettingsPanelProps {
   calendar: CalendarControl;
   /** Everything the Linear block can do. */
   linear: LinearControl;
+  /** Superset is observed locally; its CLI login only gates actions. */
+  superset: SupersetControl;
   onQuit: () => void;
   shortcuts: ShortcutControl;
 }
@@ -1520,6 +1522,46 @@ export interface LinearControl {
   onDisconnect: () => Promise<string | undefined>;
 }
 
+export interface SupersetControl {
+  installed: boolean;
+  connected: boolean;
+  onCopyLogin: () => Promise<void>;
+}
+
+function SupersetIntegration({ control }: { control: SupersetControl }): React.JSX.Element | null {
+  const [copied, setCopied] = useState(false);
+  if (!control.installed) return null;
+  return (
+    <div className="credential">
+      <div className="credential-row">
+        <span className="credential-identity">
+          <span className="credential-mark">
+            <PlugIcon />
+          </span>
+          <span className="credential-name">Superset</span>
+          {control.connected ? <CheckIcon /> : null}
+        </span>
+        {!control.connected ? (
+          <span className="settings-actions">
+            <button
+              type="button"
+              className="quiet-button"
+              onClick={() => {
+                void control.onCopyLogin().then(() => setCopied(true));
+              }}
+            >
+              {copied ? "Copied" : "Copy login command"}
+            </button>
+          </span>
+        ) : null}
+      </div>
+      <p className="settings-note">
+        Workspace grouping works automatically. CLI login enables messages and workspace controls.
+      </p>
+    </div>
+  );
+}
+
 /**
  * The issue tracker: connected by signing in with Linear, never by a pasted
  * credential, and drawn at all only in a build that carries the OAuth client
@@ -1652,11 +1694,13 @@ function IntegrationsSection({
   preferences,
   calendar,
   linear,
+  superset,
 }: {
   settings: AppSettings;
   preferences: PreferenceWrites;
   calendar: CalendarControl;
   linear: LinearControl;
+  superset: SupersetControl;
 }): React.JSX.Element {
   const storageUnavailable = settings.secretStorage === SECRET_STORAGE.UNAVAILABLE;
   return (
@@ -1666,6 +1710,7 @@ function IntegrationsSection({
         Integrations
       </h2>
       <LinearIntegration settings={settings} linear={linear} />
+      <SupersetIntegration control={superset} />
       <GoogleCalendarIntegration
         settings={settings}
         calendar={calendar}
@@ -3069,6 +3114,7 @@ export function SettingsPanel({
   workspaceProviders,
   calendar,
   linear,
+  superset,
   onQuit,
   shortcuts,
 }: SettingsPanelProps): React.JSX.Element {
@@ -3193,6 +3239,7 @@ export function SettingsPanel({
             preferences={preferences}
             calendar={calendar}
             linear={linear}
+            superset={superset}
           />
           <WorkspacesSection
             settings={settings}

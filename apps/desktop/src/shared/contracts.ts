@@ -475,6 +475,10 @@ export interface AppBootstrap {
   captureMode: boolean;
   /** True when `--fixture` (or a capture run) makes the panel render fixture sessions. */
   fixtureMode: boolean;
+  /** Whether Superset's bundled CLI exists on this Mac. */
+  supersetInstalled: boolean;
+  /** Whether that CLI also has its own login configuration. */
+  supersetConnected: boolean;
   /** False for fixture and capture runs, which must stay deterministic. */
   accountRequired: boolean;
   account: AccountSnapshot;

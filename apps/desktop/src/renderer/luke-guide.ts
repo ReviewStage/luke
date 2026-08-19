@@ -206,9 +206,15 @@ function integrationsFact(settings: AppSettings): AppGuideFact {
         "reads only when meetings start and end — never their titles or who attends. Which " +
         "calendars count is chosen with the checkboxes under each account, and more accounts " +
         "can be added from the same row.";
+  const superset =
+    " Superset workspaces on this Mac are recognized automatically from Superset's local " +
+    "read-only host state, so agents from different providers group under the project and " +
+    "workspace that owns them. When Superset's CLI is logged in, those rows can send the " +
+    "developer's own message and offer Superset workspace controls; connecting the CLI is " +
+    "done by running superset auth login in a terminal, and Luke never reads its token.";
   return {
     label: "Integrations",
-    detail: `${linear}${calendar}`.trim() || "No integrations are available in this build.",
+    detail: `${linear}${calendar}${superset}`.trim(),
   };
 }
 
