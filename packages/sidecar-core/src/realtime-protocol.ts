@@ -647,12 +647,11 @@ export function parseRealtimeServerEvent(
       return parsed;
     }
     case REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA: {
-      const delta = text(event.delta);
-      if (!delta) return undefined;
+      if (!isWireString(event.delta) || event.delta.length === 0) return undefined;
       const itemId = optionalString(event.item_id);
       const parsed: ParsedRealtimeServerEvent = {
         type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
-        delta,
+        delta: event.delta,
       };
       if (itemId) parsed.itemId = itemId;
       return parsed;
