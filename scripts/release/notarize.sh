@@ -36,29 +36,54 @@ trap cleanup_key EXIT
 printf '%s' "$APPLE_API_KEY_P8_BASE64" | /usr/bin/base64 -D > "$key_path"
 chmod 600 "$key_path"
 
+notary_credentials=(
+    --key "$key_path"
+    --key-id "$APPLE_API_KEY_ID"
+    --issuer "$APPLE_API_ISSUER_ID"
+)
+
+# notarytool's own --wait crashes with SIGBUS on most runs, and the upload has
+# already reached Apple by the time it does, so resubmitting would only
+# duplicate a submission that is already queued: submit once, then poll.
 submit_exit=0
 xcrun notarytool submit "$submission_path" \
-    --key "$key_path" \
-    --key-id "$APPLE_API_KEY_ID" \
-    --issuer "$APPLE_API_ISSUER_ID" \
-    --wait \
-    --timeout 20m \
+    "${notary_credentials[@]}" \
     --output-format json > "$result_path" || submit_exit=$?
 
 cat "$result_path"
 submission_id=$(jq -r '.id // empty' "$result_path")
-status=$(jq -r '.status // empty' "$result_path")
 
-if [[ "$submit_exit" -ne 0 || "$status" != "Accepted" ]]; then
-    if [[ -n "$submission_id" ]]; then
-        printf 'Notarization failed; fetching Apple log for submission %s.\n' "$submission_id" >&2
-        xcrun notarytool log "$submission_id" \
-            --key "$key_path" \
-            --key-id "$APPLE_API_KEY_ID" \
-            --issuer "$APPLE_API_ISSUER_ID" || true
-    else
-        printf 'error: notarization failed before Apple returned a submission ID\n' >&2
+if [[ "$submit_exit" -ne 0 || -z "$submission_id" ]]; then
+    printf 'error: notarization failed before Apple returned a submission ID\n' >&2
+    exit 1
+fi
+
+poll_interval_seconds=30
+poll_attempts=40
+status=""
+
+for ((attempt = 1; attempt <= poll_attempts; attempt++)); do
+    if xcrun notarytool info "$submission_id" \
+        "${notary_credentials[@]}" \
+        --output-format json > "$result_path"; then
+        status=$(jq -r '.status // empty' "$result_path")
     fi
+    # An undocumented status is treated as still running, so an unfamiliar name
+    # costs the release a wait rather than the whole build.
+    case "$status" in
+        Accepted | Invalid | Rejected) break ;;
+    esac
+    if [[ "$attempt" -lt "$poll_attempts" ]]; then
+        sleep "$poll_interval_seconds"
+    fi
+done
+
+cat "$result_path"
+
+if [[ "$status" != "Accepted" ]]; then
+    printf 'Notarization failed with status: %s; fetching Apple log for submission %s.\n' \
+        "${status:-unknown}" "$submission_id" >&2
+    xcrun notarytool log "$submission_id" "${notary_credentials[@]}" || true
     exit 1
 fi
 
