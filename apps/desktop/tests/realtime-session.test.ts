@@ -4149,7 +4149,7 @@ test("a spoken tool call is still validated in both processes", () => {
     new URL("../src/renderer/realtime-session.ts", import.meta.url),
     "utf8",
   );
-  const main = readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
+  const main = readFileSync(new URL("../src/ipc/session-acts.ts", import.meta.url), "utf8");
 
   // The renderer validates against the roster and the guide before a carrier runs.
   assert.match(renderer, /\bsessionToolAction\b/);

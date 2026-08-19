@@ -43,6 +43,7 @@ import {
   type StoredAppSettings,
   sameSettingEntry,
 } from "./shared/settings-schema";
+import { resolveVoiceCapability } from "./voice-capability-assembler";
 
 const SETTINGS_FILE_NAME = "settings.json";
 const SETTINGS_TEMPORARY_FILE_NAME = "settings.json.tmp";
@@ -443,6 +444,14 @@ export class SettingsStore {
 
   async snapshot(): Promise<AppSettings> {
     const persisted = await this.#load();
+    const voiceCapability = resolveVoiceCapability({
+      credentialsUsable: this.#credentialsUsable,
+      keyConfigured:
+        this.#credentialsUsable &&
+        (await this.readApiKey(VOICE_CREDENTIAL_PROVIDER_ID)) !== undefined,
+      accountSignedIn: this.#credentialsUsable && (await this.readAccount()) !== undefined,
+      chosenSource: persisted.voiceSource,
+    });
     const sources = await Promise.all(
       this.#providers.map(
         async (provider) => [provider.id, (await this.#resolveApiKey(provider)).source] as const,
@@ -462,10 +471,10 @@ export class SettingsStore {
       // is the same question the voice and the pace are answered by — what would
       // actually happen — and it travels with every settings reply, so storing a
       // key is what turns voice on and deleting one is what turns it off.
-      voiceAvailable: await this.#voiceAvailable(),
+      voiceAvailable: voiceCapability.available,
       // Resolved, not stored: the panel's toggle marks what a press of the
       // talk key would actually spend, which is not always what was chosen.
-      voiceSource: await this.#resolveVoiceSource(),
+      voiceSource: voiceCapability.source,
       // Whether this build can offer the Google Calendar sign-in at all: a
       // registered OAuth client resolved, and this run would use what it
       // grants. Without one the integration is not drawn at all.
@@ -593,48 +602,17 @@ export class SettingsStore {
     return { status: ACCOUNT_STATUS.SIGNED_OUT };
   }
 
-  /**
-   * Whether the credential Luke speaks through resolved to something this run
-   * would use. A run that refuses its credentials does not ask for the key at
-   * all: reading a stored one means a Keychain decrypt, which a run that would
-   * not use it has no business asking for.
-   */
-  async #voiceAvailable(): Promise<boolean> {
-    if (!this.#credentialsUsable) return false;
-    if ((await this.readApiKey(VOICE_CREDENTIAL_PROVIDER_ID)) !== undefined) return true;
-    // A signed-in account carries the hosted allowance, so voice is on without
-    // a key of the developer's own — the same resolution the main process makes
-    // when it builds the minter.
-    return (await this.readAccount()) !== undefined;
-  }
-
-  /**
-   * Which credential Luke actually runs on, from what is stored and what the
-   * user chose. The choice can only ever withhold a key that is there in
-   * favour of an account that can serve — never the other way round: falling
-   * back from an absent account onto a stored key would start spending the
-   * developer's money because something they did not touch went missing, and
-   * a fallback that costs money is not a fallback.
-   *
-   * Which leaves one rule, in one place, read by the panel and by the minter:
-   * the account serves when it was chosen and is signed in, or when there is
-   * no key to run on; otherwise the key does.
-   */
-  async #resolveVoiceSource(): Promise<VoiceSource> {
-    if (!this.#credentialsUsable) return VOICE_SOURCE.ACCOUNT;
-    const keyed = (await this.readApiKey(VOICE_CREDENTIAL_PROVIDER_ID)) !== undefined;
-    if (!keyed) return VOICE_SOURCE.ACCOUNT;
-    const chosen = (await this.#load()).voiceSource;
-    if (chosen !== VOICE_SOURCE.ACCOUNT) return VOICE_SOURCE.KEY;
-    // Chosen, but only honoured while the allowance it names can actually
-    // answer. Signed out, the stored key is what is left, and voice keeps
-    // working the way it did before the choice existed.
-    return (await this.readAccount()) !== undefined ? VOICE_SOURCE.ACCOUNT : VOICE_SOURCE.KEY;
-  }
-
   /** Main-process only: the source the minter and the reviewer are built for. */
   async readVoiceSource(): Promise<VoiceSource> {
-    return this.#resolveVoiceSource();
+    const persisted = await this.#load();
+    return resolveVoiceCapability({
+      credentialsUsable: this.#credentialsUsable,
+      keyConfigured:
+        this.#credentialsUsable &&
+        (await this.readApiKey(VOICE_CREDENTIAL_PROVIDER_ID)) !== undefined,
+      accountSignedIn: this.#credentialsUsable && (await this.readAccount()) !== undefined,
+      chosenSource: persisted.voiceSource,
+    }).source;
   }
 
   /**
