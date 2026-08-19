@@ -235,7 +235,7 @@ export function normalizeObservedWorkspaceProjects(
     byProject.add(providerTargetId);
     byProvider.set(providerProjectId, byProject);
     seen.set(providerId, byProvider);
-    normalized.push({
+    const normalizedProject: ObservedWorkspaceProject = {
       providerId,
       providerName: project.providerName.trim() || providerId,
       providerProjectId,
@@ -245,19 +245,22 @@ export function normalizeObservedWorkspaceProjects(
       taskSupport: WORKSPACE_TASK_SUPPORT_LIST.includes(project.taskSupport)
         ? project.taskSupport
         : WORKSPACE_TASK_SUPPORT.NONE,
-      ...(providerTargetId ? { providerTargetId } : {}),
-      ...(project.targetName?.trim()
-        ? { targetName: project.targetName.trim().slice(0, maximumWorkspaceNameLength) }
-        : {}),
-      ...(project.spawnableAgents
-        ? {
-            spawnableAgents: [...new Set(project.spawnableAgents.map((agent) => agent.trim()))]
-              .filter(Boolean)
-              .slice(0, 20),
-          }
-        : {}),
-      ...(project.defaultAgent?.trim() ? { defaultAgent: project.defaultAgent.trim() } : {}),
-    });
+    };
+    if (providerTargetId) normalizedProject.providerTargetId = providerTargetId;
+    const targetName = project.targetName?.trim();
+    if (targetName) {
+      normalizedProject.targetName = targetName.slice(0, maximumWorkspaceNameLength);
+    }
+    if (project.spawnableAgents) {
+      normalizedProject.spawnableAgents = [
+        ...new Set(project.spawnableAgents.map((agent) => agent.trim())),
+      ]
+        .filter(Boolean)
+        .slice(0, 20);
+    }
+    const defaultAgent = project.defaultAgent?.trim();
+    if (defaultAgent) normalizedProject.defaultAgent = defaultAgent;
+    normalized.push(normalizedProject);
   }
   return normalized
     .sort(

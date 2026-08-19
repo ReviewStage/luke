@@ -1769,6 +1769,7 @@ test("an implicit project resolves only when the latest roster has one match", (
     [OFFERED_PROJECT, { ...OFFERED_PROJECT, providerProjectId: "proj-2" }],
   );
   assert.equal(ambiguous.kind, "refused");
+  // SAFETY: Refused session-tool actions carry a reason string this assertion inspects.
   assert.match((ambiguous as { reason?: string }).reason ?? "", /More than one listed project/);
 });
 

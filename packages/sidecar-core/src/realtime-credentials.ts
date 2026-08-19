@@ -1,4 +1,4 @@
-import { isRecord, text, type UnparsedWireValue, wholeNumber } from "./json.js";
+import { isRecord, text, type UnparsedWireValue, type WireRecord, wholeNumber } from "./json.js";
 import { PRESS_AUDIO_SAMPLE_RATE } from "./press-audio.js";
 import {
   REALTIME_CLIENT_EVENT,
@@ -108,8 +108,8 @@ export function realtimeSessionConfig(options: RealtimeSessionOptions = {}) {
 }
 
 /** Reasserts the local build's instructions and tools after any credential source opens a call. */
-export function realtimeSessionSyncEvents(): readonly Record<string, unknown>[] {
-  return [
+export function realtimeSessionSyncEvents(): readonly WireRecord[] {
+  const built = [
     {
       type: REALTIME_CLIENT_EVENT.SESSION_UPDATE,
       session: {
@@ -120,6 +120,13 @@ export function realtimeSessionSyncEvents(): readonly Record<string, unknown>[] 
       },
     },
   ];
+  const parsed: UnparsedWireValue = JSON.parse(JSON.stringify(built));
+  if (!Array.isArray(parsed)) return [];
+  const records: WireRecord[] = [];
+  for (const item of parsed) {
+    if (isRecord(item)) records.push(item);
+  }
+  return records;
 }
 
 /** Builds the request body that mints an ephemeral client secret. */
