@@ -333,13 +333,12 @@ test("the badge number counts the state its colour names", () => {
   assert.equal(tallyValue(sessionTally([])), 0);
 });
 
-test("the caption names the badge's state and counts the work behind it", () => {
+test("the caption is the badge state's own words, never a second number", () => {
   const tally = sessionTally(displaySessions(bootstrap(true), []));
 
-  assert.equal(tallyCaption(tally), "needs you · 3 working");
-  assert.equal(tallySummary(tally), "1 session needs you, 3 working");
-  assert.equal(tallyCaption({ ...tally, attention: 2 }), "need you · 3 working");
-  assert.equal(tallyCaption({ ...tally, working: 0 }), "needs you");
+  assert.equal(tallyCaption(tally), "needs you");
+  assert.equal(tallySummary(tally), "1 session needs you");
+  assert.equal(tallyCaption({ ...tally, attention: 2 }), "need you");
   assert.equal(tallyCaption({ ...tally, attention: 0, working: 3 }), "working");
   assert.equal(tallySummary({ ...tally, attention: 0, working: 3 }), "3 sessions working");
   assert.equal(tallyCaption({ ...tally, attention: 0, working: 0 }), "complete");

@@ -238,7 +238,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "pressing count among the sessions the panel lists — the ones still live or recently " +
         "settled, not every conversation on disk: how many need the developer, else how many " +
         "are working, else how many settled — wearing that state's colour, and the peek's " +
-        "caption names the state and any work still running behind it; hovering it peeks, " +
+        "caption names the state in words; hovering it peeks, " +
         "pressing it opens the panel, and Escape closes what is open. " +
         "Resting the pointer on the face itself earns one trick — most often flying off the strip " +
         "and swooping back — and another only after the pointer leaves and returns; asking the " +
