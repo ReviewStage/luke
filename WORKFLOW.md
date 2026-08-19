@@ -8,22 +8,19 @@
    would have caught a behavior bug; use visual evidence for appearance-only
    changes.
 3. Run `./scripts/check.sh` for portable-only work. For a macOS, Electron-window,
-   native-adapter, microphone, or desktop UI change, run `./scripts/verify.sh`;
-   it packages the desktop app and generates visual evidence. Inspect all PNGs.
-   For a web UI change, run `pnpm --filter @luke/web dev` and inspect the page in
-   a browser. For desktop motion changes, run `pnpm evidence:record`
-   on a physical Mac and inspect the generated MP4 or GIF before publishing it.
+   native-adapter, microphone, or desktop UI change, run `./scripts/verify.sh`
+   and inspect all PNGs. For a web UI change, run `pnpm --filter @luke/web dev`
+   and inspect the page in a browser. For desktop motion changes, run
+   `pnpm evidence:record` on a physical Mac and inspect the generated MP4 or GIF
+   before publishing it.
 4. Review the complete diff for secrets, machine-specific paths, generated
    files, unsafe IPC, unsupported provider behavior, and accidental scope
    expansion.
-5. Open a focused PR. Record commands and results in the template's Evidence
-   section. For every UI change, upload an inspected verification screenshot to
-   the PR description's Evidence section through GitHub's PR editor. For desktop
-   UI, use a PNG from `./scripts/verify.sh` in `artifacts/evidence/`; for web UI,
-   capture the page after running `pnpm --filter @luke/web dev`. CI
-   maintains the automated-evidence link there. Attach physical-device
-   screenshots or recordings through GitHub's PR editor and call out
-   physical-notch checks that remain.
+5. Open a focused PR and record commands and results in the template's Evidence
+   section. Every UI change needs an inspected verification screenshot there,
+   uploaded through GitHub's PR editor: for desktop UI, a PNG `./scripts/verify.sh`
+   wrote to `artifacts/evidence/`; for web UI, a capture of the page served by
+   `pnpm --filter @luke/web dev`.
 6. When pushing follow-up commits to an open PR, re-read the PR description and
    update it if the change made it inaccurate or incomplete. Keep the summary,
    scope, and Evidence section matching the commands and results for the current
