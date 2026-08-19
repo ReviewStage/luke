@@ -11,6 +11,7 @@ import {
   SessionProviderAdapterBase,
   type WireRecord,
 } from "@sidecar/core";
+import { runCliRun } from "./effect/adapter-runtime";
 import { CLI_CONNECTION, type CliConnection } from "./shared/contracts";
 import { unparsedWire, type WireBoundaryInput, wireRecord } from "./wire-boundary";
 
@@ -304,7 +305,7 @@ export abstract class CliSessionAdapter extends SessionProviderAdapterBase {
     }
     let result: CliRunResult;
     try {
-      result = await this.#run(this.#binary, argv, {
+      result = await runCliRun(this.#run, this.#binary, argv, {
         timeoutMs: CLI_ADAPTER_DEFAULTS.WRITE_TIMEOUT_MS,
         maximumOutputBytes: CLI_ADAPTER_DEFAULTS.MAXIMUM_OUTPUT_BYTES,
       });
@@ -332,7 +333,7 @@ export abstract class CliSessionAdapter extends SessionProviderAdapterBase {
 
   async #probeLogin(): Promise<CliConnection> {
     try {
-      const probe = await this.#run(this.#binary, this.#loginProbeArgv, {
+      const probe = await runCliRun(this.#run, this.#binary, this.#loginProbeArgv, {
         timeoutMs: CLI_ADAPTER_DEFAULTS.COMMAND_TIMEOUT_MS,
         maximumOutputBytes: CLI_ADAPTER_DEFAULTS.MAXIMUM_OUTPUT_BYTES,
       });
@@ -356,7 +357,7 @@ export abstract class CliSessionAdapter extends SessionProviderAdapterBase {
   #requestForPass(pass: number): CliReadRequest {
     return async (argv) => {
       this.#assertPassCurrent(pass);
-      const result = await this.#run(this.#binary, argv, {
+      const result = await runCliRun(this.#run, this.#binary, argv, {
         timeoutMs: CLI_ADAPTER_DEFAULTS.COMMAND_TIMEOUT_MS,
         maximumOutputBytes: CLI_ADAPTER_DEFAULTS.MAXIMUM_OUTPUT_BYTES,
       });

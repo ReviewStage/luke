@@ -25,6 +25,7 @@ import {
   type WorkspaceProject,
   workspaceNameText,
 } from "@sidecar/core";
+import { runCloudFetch, runCloudFetchRaw } from "./effect/adapter-runtime";
 import { unparsedWire, type WireBoundaryInput, wireRecord } from "./wire-boundary";
 
 const GIT_SUFFIX = ".git";
@@ -799,7 +800,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     const name = this.provider.displayName;
     let response: Response;
     try {
-      response = await this.#fetch(this.#url(route.segments, {}, route.action), {
+      response = await runCloudFetchRaw(this.#fetch, this.#url(route.segments, {}, route.action), {
         method: HTTP_METHOD.POST,
         // The same layering as a read: the provider's own headers first, the
         // credential after them so no override can replace it.
@@ -887,33 +888,26 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     const document = options.document;
     let response: Response;
     try {
-      response = await this.#fetch(this.#url(segments, query), {
-        method: document === undefined ? HTTP_METHOD.GET : HTTP_METHOD.POST,
-        headers: {
-          ...this.requestHeaders(),
-          ...this.#authorizationHeaders(apiKey),
-          ...(document === undefined ? undefined : { "Content-Type": "application/json" }),
+      response = await runCloudFetch(
+        this.#fetch,
+        this.#url(segments, query),
+        {
+          method: document === undefined ? HTTP_METHOD.GET : HTTP_METHOD.POST,
+          headers: {
+            ...this.requestHeaders(),
+            ...this.#authorizationHeaders(apiKey),
+            ...(document === undefined ? undefined : { "Content-Type": "application/json" }),
+          },
+          ...(document === undefined
+            ? undefined
+            : { body: JSON.stringify({ [READ_DOCUMENT_FIELD]: document }) }),
+          signal: AbortSignal.timeout(timeoutMs),
         },
-        ...(document === undefined
-          ? undefined
-          : { body: JSON.stringify({ [READ_DOCUMENT_FIELD]: document }) }),
-        signal: AbortSignal.timeout(timeoutMs),
-      });
-    } catch {
+        name,
+      );
+    } catch (error) {
+      if (error instanceof CloudRequestError) throw error;
       throw new CloudRequestError(CLOUD_FAILURE.TRANSIENT, `${name} request failed`);
-    }
-
-    if (response.status === HTTP_STATUS.UNAUTHORIZED || response.status === HTTP_STATUS.FORBIDDEN) {
-      throw new CloudRequestError(
-        CLOUD_FAILURE.UNAUTHORIZED,
-        `${name} rejected the configured API key`,
-      );
-    }
-    if (!response.ok) {
-      throw new CloudRequestError(
-        CLOUD_FAILURE.TRANSIENT,
-        `${name} responded with status ${response.status}`,
-      );
     }
 
     let body: WireBoundaryInput;
