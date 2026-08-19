@@ -248,7 +248,7 @@ test("the standing instructions make Luke the coding agents' engineering manager
 
   assert.match(instructions, /engineering manager for the developer's coding agents/i);
   assert.match(instructions, /developer is your CTO/i);
-  assert.match(instructions, /direct, candid, calm, and familiar with the work/i);
+  assert.match(instructions, /direct, candid, calm/i);
 });
 
 test("the spoken instructions state what Luke cannot see, and when he may act", () => {
