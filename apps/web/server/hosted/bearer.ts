@@ -1,4 +1,4 @@
-import { isRecord, text } from "../core.js";
+import { isRecord, text, type UnparsedWireValue } from "../core.js";
 
 /** The subject a signed-in OAuth userinfo answer names. */
 export interface OAuthUserInfo {
@@ -22,7 +22,7 @@ export type AuthUserInfoAnswer = AuthUserInfoFields | string | number | boolean 
 export type UserInfoEndpoint = (input: { headers: Headers }) => Promise<OAuthUserInfo | undefined>;
 
 /** Parses the auth service's raw userinfo answer at the hosted API boundary. */
-export function oauthUserInfoFromAuthAnswer(value: AuthUserInfoAnswer): OAuthUserInfo | undefined {
+export function oauthUserInfoFromAuthAnswer(value: UnparsedWireValue): OAuthUserInfo | undefined {
   if (!isRecord(value)) return undefined;
   const sub = text(value.sub);
   return sub ? { sub } : undefined;

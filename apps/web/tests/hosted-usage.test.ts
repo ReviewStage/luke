@@ -26,7 +26,8 @@ function usageDatabase(
         },
       };
     },
-  };
+    // SAFETY: Test double implements only the select chain readHostedUsage exercises.
+  } as unknown as UsageReadDatabase;
 }
 
 test("a day with spending reads back both meters without touching either", async () => {

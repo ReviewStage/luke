@@ -12,6 +12,7 @@ import {
   urgencyLabel,
 } from "@sidecar/core";
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
+import { cssCustomProperties } from "./css-custom-properties";
 import { CloudBadge, ProviderMark } from "./provider-marks";
 
 /**
@@ -337,10 +338,10 @@ export function NotchMock(): React.JSX.Element {
   const providers = WING_PROVIDERS.slice(0, overflowing ? drawnCapacity - 1 : drawnCapacity);
   const unshown = WING_PROVIDERS.length - providers.length;
 
-  const mockStyle: CSSProperties = {};
-  if (panelHeight !== undefined) {
-    mockStyle["--panel-height"] = `${panelHeight}px`;
-  }
+  const mockStyle =
+    panelHeight === undefined
+      ? undefined
+      : cssCustomProperties({ "--panel-height": `${panelHeight}px` });
 
   return (
     <div className="mock-scroll" ref={scrollSection}>

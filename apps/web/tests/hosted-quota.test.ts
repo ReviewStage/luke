@@ -50,7 +50,8 @@ function usageDatabase(row: Pick<HostedUsageInsert, "voiceCalls" | "attentionRev
         },
       };
     },
-  } satisfies UsageDatabase;
+    // SAFETY: Test double implements only the insert chain spendHostedMeter exercises.
+  } as unknown as UsageDatabase;
   return { database, calls };
 }
 

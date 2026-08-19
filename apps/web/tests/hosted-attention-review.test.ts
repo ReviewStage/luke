@@ -121,7 +121,7 @@ test("an update that fails the wire contract is refused before anything is spent
   const malformed = await handleAttentionReview(
     options({
       // SAFETY: the malformed status exercises wire validation; the cast only supplies the request helper's type.
-      request: reviewRequest({ ...UPDATE, status: "sleeping" } as AttentionPromptUpdate),
+      request: reviewRequest({ ...UPDATE, status: "sleeping" } as unknown as AttentionPromptUpdate),
       spend,
     }),
   );

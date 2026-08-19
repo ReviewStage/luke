@@ -91,7 +91,8 @@ test("seeding updates the one client identity instead of creating another", asyn
         },
       };
     },
-  } satisfies SeedDatabase;
+    // SAFETY: Test double implements only the insert chain seedDesktopOAuthClient exercises.
+  } as unknown as SeedDatabase;
 
   const now = new Date("2026-08-17T00:00:00.000Z");
   await seedDesktopOAuthClient(database, now);

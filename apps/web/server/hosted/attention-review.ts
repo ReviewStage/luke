@@ -6,6 +6,7 @@ import {
   attentionResponsesOutputText,
   attentionResponsesRequest,
   text as trimmedText,
+  type UnparsedWireValue,
 } from "../core.js";
 import {
   errorResponse,
@@ -74,7 +75,13 @@ export async function handleAttentionReview(options: AttentionReviewOptions): Pr
   }
 
   const payload: unknown = await request.json().catch(() => undefined);
-  const update = payload === undefined ? undefined : attentionPromptUpdateFromWire(payload);
+  const update =
+    payload === undefined
+      ? undefined
+      : attentionPromptUpdateFromWire(
+          // SAFETY: request.json returns a runtime value; attentionPromptUpdateFromWire validates the wire contract.
+          payload as UnparsedWireValue,
+        );
   if (!update) {
     return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
   }
@@ -101,7 +108,13 @@ export async function handleAttentionReview(options: AttentionReviewOptions): Pr
   }
 
   const body: unknown = await response.json().catch(() => undefined);
-  const text = body === undefined ? undefined : attentionResponsesOutputText(body);
+  const text =
+    body === undefined
+      ? undefined
+      : attentionResponsesOutputText(
+          // SAFETY: response.json returns a runtime value; attentionResponsesOutputText validates the wire contract.
+          body as UnparsedWireValue,
+        );
   const now = options.now ?? Date.now;
   let decision: AttentionDecision | undefined;
   if (text) {
