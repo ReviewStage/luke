@@ -74,3 +74,21 @@ export function leavesPanelForCompact(
     (next === PANEL_PRESENTATION.CAPSULE || next === PANEL_PRESENTATION.PEEK)
   );
 }
+
+/**
+ * Whether the collapse mark stands after a presentation change. Leaving the
+ * panel for a compact shape raises it; a move between the compact shapes
+ * keeps it, because a peek answering a hover mid-collapse is a width
+ * retarget on the same journey down from the panel, and dropping the mark
+ * there releases the surface from behind the content still riding. Any
+ * other shape ends the journey — the panel leads its own growth, and the
+ * slot and the composer run on the base timing.
+ */
+export function collapseMarkAfter(
+  previous: PanelPresentation,
+  next: PanelPresentation,
+  marked: boolean,
+): boolean {
+  if (leavesPanelForCompact(previous, next)) return true;
+  return marked && (next === PANEL_PRESENTATION.CAPSULE || next === PANEL_PRESENTATION.PEEK);
+}

@@ -103,8 +103,8 @@ import { applySpokenSetting, buildLukeGuide, isAppSettingId } from "./luke-guide
 import { NotchWings } from "./notch-wings";
 import { PanelBody, type SessionWriteHandlers } from "./panel-body";
 import {
+  collapseMarkAfter,
   HIT_REGION,
-  leavesPanelForCompact,
   PANEL_PRESENTATION,
   type PanelPresentation,
 } from "./panel-state";
@@ -330,7 +330,7 @@ function useLeavingPanel(presentation: PanelPresentation): boolean {
   const [previous, setPrevious] = useState(presentation);
   if (previous !== presentation) {
     setPrevious(presentation);
-    setLeaving(leavesPanelForCompact(previous, presentation));
+    setLeaving(collapseMarkAfter(previous, presentation, leaving));
   }
   useEffect(() => {
     if (!leaving) return;
