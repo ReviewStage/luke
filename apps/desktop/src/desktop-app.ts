@@ -273,8 +273,9 @@ const heldNotices = new SessionNoticeHold();
  * The other kind of announcement, held on the same terms: speech an answered
  * standing ask produced, already worded. It waits out a meeting exactly as a
  * status edge does — both break silence, and the quiet holds everything that
- * does. Unbidden evaluator summaries are never held: they only ever ride a
- * conversation the developer already has open, which is not silence to break.
+ * does. Unbidden evaluator summaries are never held: during the quiet they
+ * are dropped outright, because the evaluator supersedes its own decisions
+ * and speaks from a fresh review once the meeting ends.
  */
 const heldRequestSpeech = new SessionNoticeHold<AttentionSpeech>();
 /**
@@ -881,16 +882,21 @@ async function reviewSessionAttention(generation: number): Promise<void> {
     // `outcome` says whether to voice it now, which only these reviews do.
     const speech = attentionSpeechFromReviews(reviews);
     if (speech.length > 0) {
-      // An answered standing ask opens Luke's own call the way a status edge
-      // does, so the meeting quiet holds it the same way; the summaries that
-      // only ride an open conversation pass, because a developer mid-call is
-      // already talking to Luke, meeting or not. The pressable notice
-      // anchors to the spoken announcement, so it waits out the quiet with it.
+      // The quiet holds everything Luke would say unbidden. An answered
+      // standing ask waits out the meeting the way a status edge does; an
+      // unbidden evaluator summary is dropped rather than held — the
+      // evaluator supersedes its own decisions, so after the meeting it
+      // speaks from a fresh review, not a backlog. Neither rides even an
+      // open conversation: a call lingering idle after a question is not a
+      // conversation to interject into, and a reply to a turn the developer
+      // opened is not an announcement and passes untouched elsewhere. The
+      // pressable notice anchors to the spoken announcement, so it waits out
+      // the quiet with it.
       let sendable: readonly AttentionSpeech[] = speech;
       if (await announcementsQuietNow(Date.now())) {
         const held = speech.filter((item) => item.source !== ATTENTION_SPEECH_SOURCE.EVALUATOR);
         heldRequestSpeech.hold(held);
-        sendable = speech.filter((item) => item.source === ATTENTION_SPEECH_SOURCE.EVALUATOR);
+        sendable = [];
       }
       if (sendable.length > 0) {
         // Spoken once, by the one window that holds the voice: every display

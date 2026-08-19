@@ -471,8 +471,10 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
                   "announcements decided during a meeting wait and are read out together once " +
                   "it ends. The quiet beginning — a meeting starting, or the setting switched " +
                   "on mid-meeting — silences Luke at once, an announcement mid-sentence " +
-                  "included — and Luke's face sleeps beside the housing for as long as the " +
-                  "quiet holds, which is how the hold is seen."
+                  "included, and holds everything he would say unbidden, even on an open " +
+                  "conversation; questions asked of him still get their replies. Luke's face " +
+                  "sleeps beside the housing for as long as the quiet holds, which is how the " +
+                  "hold is seen."
                 : ""),
           },
           {
