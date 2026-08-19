@@ -10,8 +10,8 @@ import {
   PROVIDER_ACT_RESULT_STATUS,
   type ProviderControlRequest,
   type ProviderControlResult,
+  type ProviderMessageResult,
   type ProviderSessionMessage,
-  type ProviderSessionObservation,
   type ProviderWorkspaceAgentRequest,
   type ProviderWorkspaceRequest,
   type ProviderWorkspaceResult,
@@ -19,7 +19,19 @@ import {
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceProject,
 } from "../../src/providers.js";
-import { SESSION_STATUS, type SessionProvider } from "../../src/session.js";
+import {
+  type ProviderSessionObservation,
+  SESSION_CONTROL_KIND,
+  SESSION_STATUS,
+  type SessionControl,
+  type SessionProvider,
+} from "../../src/session.js";
+
+const stopControl: SessionControl = {
+  id: "stop",
+  label: "Stop",
+  kind: SESSION_CONTROL_KIND.STOP,
+};
 
 const provider: SessionProvider = { id: "cursor", displayName: "Cursor" };
 
@@ -51,7 +63,7 @@ class FakePromiseAdapter implements SessionProviderAdapter {
     return Promise.resolve({ status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED });
   }
 
-  sendMessage(_message: ProviderSessionMessage): Promise<ProviderControlResult> {
+  sendMessage(_message: ProviderSessionMessage): Promise<ProviderMessageResult> {
     return Promise.resolve({ status: PROVIDER_ACT_RESULT_STATUS.REJECTED, reason: "not allowed" });
   }
 
@@ -90,7 +102,7 @@ class FakeEffectAdapter implements EffectSessionProviderAdapter {
 
   sendMessage(
     _message: ProviderSessionMessage,
-  ): Effect.Effect<ProviderControlResult, never, never> {
+  ): Effect.Effect<ProviderMessageResult, never, never> {
     return Effect.succeed({ status: PROVIDER_ACT_RESULT_STATUS.REJECTED, reason: "not allowed" });
   }
 
@@ -128,7 +140,7 @@ test("fromPromiseAdapter and toPromiseAdapter round-trip a promise adapter", asy
   assert.deepEqual(
     await roundTripped.executeControl({
       providerSessionId: "session-1",
-      control: { kind: "stop" },
+      control: stopControl,
     }),
     {
       status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED,
@@ -162,7 +174,7 @@ test("toPromiseAdapter and fromPromiseAdapter round-trip an effect adapter", asy
   assert.deepEqual(await Effect.runPromise(roundTripped.observe()), observations);
   assert.deepEqual(
     await Effect.runPromise(
-      roundTripped.executeControl({ providerSessionId: "session-1", control: { kind: "stop" } }),
+      roundTripped.executeControl({ providerSessionId: "session-1", control: stopControl }),
     ),
     { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED },
   );
