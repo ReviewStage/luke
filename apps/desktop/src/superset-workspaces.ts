@@ -56,7 +56,13 @@ const SUPERSET_AGENT_QUERY = `
 export interface SupersetSessionContext {
   providerId: string;
   providerSessionId: string;
-  hostId: string;
+  /**
+   * The organization whose local host service recorded the session, which is
+   * what the directory under `host/` is named by. It is not a host id: the
+   * machine's own host id is written nowhere Luke reads, and every database
+   * under that directory belongs to this machine.
+   */
+  organizationId: string;
   workspaceId: string;
   workspaceName: string;
   terminalId: string;
@@ -68,7 +74,7 @@ export interface SupersetSessionContext {
 }
 
 function contextFromRow(
-  hostId: string,
+  organizationId: string,
   row: WireRecord,
   spawnableAgents: readonly string[],
 ): SupersetSessionContext | undefined {
@@ -96,7 +102,7 @@ function contextFromRow(
   const context: SupersetSessionContext = {
     providerId,
     providerSessionId,
-    hostId,
+    organizationId,
     workspaceId,
     workspaceName,
     terminalId,
@@ -107,6 +113,18 @@ function contextFromRow(
   if (branch) context.branch = branch;
   if (pullRequestUrl) context.pullRequestUrl = pullRequestUrl;
   return context;
+}
+
+/**
+ * An act reaches Superset through the CLI's own login, which serves one
+ * organization at a time, so only sessions the active organization's host
+ * service recorded can be acted on at all.
+ */
+function actableInOrganization(
+  context: SupersetSessionContext,
+  activeOrganizationId: string | undefined,
+): boolean {
+  return activeOrganizationId !== undefined && context.organizationId === activeOrganizationId;
 }
 
 export class SupersetWorkspaceSnapshot {
@@ -127,10 +145,19 @@ export class SupersetWorkspaceSnapshot {
     return this.#sessions.get(providerId)?.get(providerSessionId);
   }
 
+  actableContext(
+    providerId: string,
+    providerSessionId: string,
+    activeOrganizationId: string | undefined,
+  ): SupersetSessionContext | undefined {
+    const context = this.context(providerId, providerSessionId);
+    return context && actableInOrganization(context, activeOrganizationId) ? context : undefined;
+  }
+
   enrich(
     providerId: string,
     observations: readonly ProviderSessionObservation[],
-    actionsEnabled = false,
+    activeOrganizationId?: string,
   ): readonly ProviderSessionObservation[] {
     return observations.map((observation) => {
       const context = this.context(providerId, observation.providerSessionId);
@@ -145,7 +172,7 @@ export class SupersetWorkspaceSnapshot {
         scopeId: SUPERSET_WORKSPACE_PROVIDER_ID,
         managerName: "Superset",
       };
-      if (!actionsEnabled) {
+      if (!actableInOrganization(context, activeOrganizationId)) {
         return { ...observation, detail, workspace };
       }
       const controls = [
@@ -204,15 +231,15 @@ export class SupersetWorkspaceReader {
         entries
           .filter((entry) => entry.isDirectory())
           .map((entry) =>
-            this.#readHost(entry.name, path.join(hostDirectory, entry.name, "host.db")),
+            this.#readOrganization(entry.name, path.join(hostDirectory, entry.name, "host.db")),
           ),
       )
     ).flat();
     return new SupersetWorkspaceSnapshot(contexts);
   }
 
-  async #readHost(
-    hostId: string,
+  async #readOrganization(
+    organizationId: string,
     databasePath: string,
   ): Promise<readonly SupersetSessionContext[]> {
     const database = await openReadOnlyDatabase(this.#sqlite, databasePath);
@@ -233,7 +260,7 @@ export class SupersetWorkspaceReader {
         .flatMap((value) => {
           const row = wireRecord(value);
           if (!row) return [];
-          const context = contextFromRow(hostId, row, spawnableAgents);
+          const context = contextFromRow(organizationId, row, spawnableAgents);
           return context ? [context] : [];
         });
     } catch (error) {

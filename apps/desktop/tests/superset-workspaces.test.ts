@@ -15,8 +15,8 @@ async function temporarySupersetHome(t: TestContext): Promise<string> {
   return directory;
 }
 
-async function writeHostDatabase(home: string, hostId: string): Promise<DatabaseSync> {
-  const directory = path.join(home, "host", hostId);
+async function writeHostDatabase(home: string, organizationId: string): Promise<DatabaseSync> {
+  const directory = path.join(home, "host", organizationId);
   await fs.mkdir(directory, { recursive: true });
   return new DatabaseSync(path.join(directory, "host.db"), {});
 }
@@ -49,7 +49,7 @@ function createSchema(database: DatabaseSync): void {
 
 test("reads live host databases and enriches an exact provider session", async (t) => {
   const home = await temporarySupersetHome(t);
-  const database = await writeHostDatabase(home, "host-local");
+  const database = await writeHostDatabase(home, "org-local");
   createSchema(database);
   database.exec(`
     INSERT INTO projects VALUES ('project-1', 'Luke');
@@ -67,7 +67,7 @@ test("reads live host databases and enriches an exact provider session", async (
   assert.deepEqual(snapshot.context(PROVIDER_ID.CODEX, "session-1"), {
     providerId: PROVIDER_ID.CODEX,
     providerSessionId: "session-1",
-    hostId: "host-local",
+    organizationId: "org-local",
     workspaceId: "workspace-1",
     workspaceName: "power-vacation",
     terminalId: "terminal-1",
@@ -110,32 +110,35 @@ test("reads live host databases and enriches an exact provider session", async (
   );
 });
 
-test("keeps the newest duplicate binding across host databases", async (t) => {
+test("keeps the newest duplicate binding across organization databases", async (t) => {
   const home = await temporarySupersetHome(t);
-  for (const [hostId, updatedAt] of [
-    ["host-old", 100],
-    ["host-new", 200],
+  for (const [organizationId, updatedAt] of [
+    ["org-old", 100],
+    ["org-new", 200],
   ] as const) {
-    const database = await writeHostDatabase(home, hostId);
+    const database = await writeHostDatabase(home, organizationId);
     createSchema(database);
     database.exec(`
       INSERT INTO workspaces VALUES (
-        'workspace-${hostId}', NULL, NULL, '${hostId}', 'main', ${updatedAt}
+        'workspace-${organizationId}', NULL, NULL, '${organizationId}', 'main', ${updatedAt}
       );
       INSERT INTO terminal_agent_bindings VALUES (
-        'terminal-${hostId}', 'workspace-${hostId}', 'claude', 'shared-session', 'Stop'
+        'terminal-${organizationId}', 'workspace-${organizationId}', 'claude', 'shared-session', 'Stop'
       );
     `);
     database.close();
   }
 
   const snapshot = await new SupersetWorkspaceReader({ homeDirectory: home }).read();
-  assert.equal(snapshot.context(PROVIDER_ID.CLAUDE_CODE, "shared-session")?.hostId, "host-new");
+  assert.equal(
+    snapshot.context(PROVIDER_ID.CLAUDE_CODE, "shared-session")?.organizationId,
+    "org-new",
+  );
 });
 
-test("advertises Superset actions only after the CLI is connected", async (t) => {
+test("advertises Superset actions only for the logged-in organization", async (t) => {
   const home = await temporarySupersetHome(t);
-  const database = await writeHostDatabase(home, "host-local");
+  const database = await writeHostDatabase(home, "org-local");
   createSchema(database);
   database.exec(`
     INSERT INTO workspaces VALUES ('workspace-1', NULL, NULL, 'power-vacation', 'main', 100);
@@ -154,7 +157,17 @@ test("advertises Superset actions only after the CLI is connected", async (t) =>
   };
 
   assert.equal(snapshot.enrich(PROVIDER_ID.CODEX, [observation])[0]?.canReceiveMessage, undefined);
-  const connected = snapshot.enrich(PROVIDER_ID.CODEX, [observation], true)[0];
+  assert.equal(
+    snapshot.enrich(PROVIDER_ID.CODEX, [observation], "org-elsewhere")[0]?.canReceiveMessage,
+    undefined,
+  );
+  assert.equal(snapshot.actableContext(PROVIDER_ID.CODEX, "session-1", undefined), undefined);
+  assert.equal(snapshot.actableContext(PROVIDER_ID.CODEX, "session-1", "org-elsewhere"), undefined);
+  assert.equal(
+    snapshot.actableContext(PROVIDER_ID.CODEX, "session-1", "org-local")?.workspaceId,
+    "workspace-1",
+  );
+  const connected = snapshot.enrich(PROVIDER_ID.CODEX, [observation], "org-local")[0];
   assert.equal(connected?.canReceiveMessage, true);
   assert.deepEqual(connected?.spawnableAgents, ["claude", "codex"]);
   assert.equal(connected?.spawnTarget, "workspace-1");
@@ -169,7 +182,7 @@ test("treats missing and drifted Superset state as no enrichment", async (t) => 
   const empty = await new SupersetWorkspaceReader({ homeDirectory: home }).read();
   assert.equal(empty.context(PROVIDER_ID.CODEX, "session-1"), undefined);
 
-  const database = await writeHostDatabase(home, "host-drifted");
+  const database = await writeHostDatabase(home, "org-drifted");
   database.exec("CREATE TABLE future_workspaces (id TEXT PRIMARY KEY)");
   database.close();
   const drifted = await new SupersetWorkspaceReader({ homeDirectory: home }).read();
@@ -178,7 +191,7 @@ test("treats missing and drifted Superset state as no enrichment", async (t) => 
 
 test("does not attach unknown Superset agent kinds to a Luke provider", async (t) => {
   const home = await temporarySupersetHome(t);
-  const database = await writeHostDatabase(home, "host-local");
+  const database = await writeHostDatabase(home, "org-local");
   createSchema(database);
   database.exec(`
     INSERT INTO workspaces VALUES ('workspace-1', NULL, NULL, 'power-vacation', 'main', 100);

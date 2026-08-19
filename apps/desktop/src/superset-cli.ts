@@ -142,11 +142,15 @@ export class SupersetCli {
   }
 
   async connected(): Promise<boolean> {
-    if (!(await this.installed())) return false;
+    return (await this.activeOrganization()) !== undefined;
+  }
+
+  async activeOrganization(): Promise<string | undefined> {
+    if (!(await this.installed())) return undefined;
     try {
-      return ((await this.#organizationId())?.trim().length ?? 0) > 0;
+      return (await this.#organizationId())?.trim() || undefined;
     } catch {
-      return false;
+      return undefined;
     }
   }
 
@@ -332,6 +336,13 @@ export class SupersetCli {
     }
   }
 
+  /**
+   * The acts on an observed session pass no `--host`, which is the CLI's own
+   * default: this machine, where every host database Luke reads lives. `--host`
+   * names a machine id, and the only identifier a session carries is the
+   * organization its `host/` directory is named by; a host Superset cannot
+   * place answers "Host is not online" rather than acting.
+   */
   async sendMessage(context: SupersetSessionContext, text: string): Promise<ProviderMessageResult> {
     return this.#act(
       [
@@ -339,8 +350,6 @@ export class SupersetCli {
         "send",
         "--workspace",
         context.workspaceId,
-        "--host",
-        context.hostId,
         "--terminal",
         context.terminalId,
         "--text",
@@ -357,7 +366,7 @@ export class SupersetCli {
   ): Promise<ProviderControlResult> {
     if (controlId === SUPERSET_CONTROL_ID.OPEN_WORKSPACE) {
       return this.#act(
-        ["workspaces", "open", context.workspaceId, "--host", context.hostId, "--json"],
+        ["workspaces", "open", context.workspaceId, "--json"],
         "Superset could not open that workspace.",
       );
     }
@@ -368,8 +377,6 @@ export class SupersetCli {
           "close",
           "--workspace",
           context.workspaceId,
-          "--host",
-          context.hostId,
           "--terminal",
           context.terminalId,
           "--json",
@@ -397,8 +404,6 @@ export class SupersetCli {
         "create",
         "--workspace",
         context.workspaceId,
-        "--host",
-        context.hostId,
         "--agent",
         agent,
         "--prompt",

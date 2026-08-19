@@ -42,7 +42,7 @@ function testCliOptions(homeDirectory: string) {
 const CONTEXT: SupersetSessionContext = {
   providerId: PROVIDER_ID.CODEX,
   providerSessionId: "session-1",
-  hostId: "host-1",
+  organizationId: "org-1",
   workspaceId: "workspace-1",
   workspaceName: "power-vacation",
   terminalId: "terminal-1",
@@ -59,8 +59,10 @@ test("recognizes only controls owned by Superset", () => {
 test("login state uses only the injected organization-id answer", async (t) => {
   const home = await connectedHome(t);
   const cli = new SupersetCli(testCliOptions(home));
+  assert.equal(await cli.activeOrganization(), "org-1");
   assert.equal(await cli.connected(), true);
   await fs.writeFile(path.join(home, "config.json"), '{"organizationId":""}');
+  assert.equal(await cli.activeOrganization(), undefined);
   assert.equal(await cli.connected(), false);
   await fs.writeFile(path.join(home, "config.json"), "not json");
   assert.equal(await cli.connected(), false);
@@ -103,7 +105,7 @@ test("organization selection is refreshed and switched by exact slug", async (t)
   assert.equal(await cli.chooseOrganization("luke"), true);
 });
 
-test("message and controls use fixed arguments without a shell", async (t) => {
+test("message and controls target this machine with fixed arguments and no shell", async (t) => {
   const home = await connectedHome(t);
   const calls: Array<{ executable: string; arguments_: readonly string[] }> = [];
   const cli = new SupersetCli({
@@ -137,8 +139,6 @@ test("message and controls use fixed arguments without a shell", async (t) => {
         "send",
         "--workspace",
         "workspace-1",
-        "--host",
-        "host-1",
         "--terminal",
         "terminal-1",
         "--text",
@@ -148,7 +148,7 @@ test("message and controls use fixed arguments without a shell", async (t) => {
     },
     {
       executable: path.join(home, "bin", "superset"),
-      arguments_: ["workspaces", "open", "workspace-1", "--host", "host-1", "--json"],
+      arguments_: ["workspaces", "open", "workspace-1", "--json"],
     },
     {
       executable: path.join(home, "bin", "superset"),
@@ -157,8 +157,6 @@ test("message and controls use fixed arguments without a shell", async (t) => {
         "close",
         "--workspace",
         "workspace-1",
-        "--host",
-        "host-1",
         "--terminal",
         "terminal-1",
         "--json",
@@ -171,8 +169,6 @@ test("message and controls use fixed arguments without a shell", async (t) => {
         "create",
         "--workspace",
         "workspace-1",
-        "--host",
-        "host-1",
         "--agent",
         "claude",
         "--prompt",
