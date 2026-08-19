@@ -808,6 +808,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     // request could fail a standing call that was carrying the typed
     // conversation fine.
     if (microphoneStatus !== "granted") {
+      const pressedAt = talkPressedAt.current;
       const permission = await window.sidecar.requestMicrophone();
       setMicrophoneStatus(permission);
       if (permission !== "granted") {
@@ -818,6 +819,11 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
         );
         return;
       }
+      // The system's prompt can outlive the press that raised it. A key
+      // released — or pressed again — while it stood has no turn left to
+      // open here: opening one would put a live microphone under a key
+      // that is already up.
+      if (talkPressedAt.current !== pressedAt) return;
     }
     session.beginTurn();
     const press = talkKeyPress({ latched: false, microphoneCall: session.microphoneCall });
