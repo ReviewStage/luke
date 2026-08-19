@@ -11,7 +11,13 @@ import {
 } from "./luke-face-mood";
 import { PANEL_PRESENTATION, type PanelPresentation } from "./panel-state";
 import { ProviderMark } from "./provider-marks";
-import { type ProviderTally, type SessionTally, tallyCaption, tallySummary } from "./session-model";
+import {
+  type ProviderTally,
+  type SessionTally,
+  tallyCaption,
+  tallySummary,
+  tallyValue,
+} from "./session-model";
 import {
   LEAVING_ATTRIBUTE,
   useRoster,
@@ -363,7 +369,7 @@ export function NotchWings({
             aria-label={accountGated ? "Sign in" : tallySummary(tally)}
           >
             <span className="count-value" aria-hidden="true" ref={countValueElement}>
-              {accountGated ? "Sign in" : tally.total}
+              {accountGated ? "Sign in" : tallyValue(tally)}
             </span>
             <span className="count-caption" aria-hidden="true" ref={countCaptionElement}>
               {/* No caption while signed out: the two words are the label
