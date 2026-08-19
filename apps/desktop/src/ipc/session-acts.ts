@@ -567,38 +567,40 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       ) {
         throw new Error("Invalid workspace agent request");
       }
-      return performSessionAct(identity, async (adapter, session) => {
-        const advertised = session.spawnableAgents.find((candidate) => candidate === agent.trim());
-        if (!advertised) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
-        // A model named for this one agent must be a documented pairing of
-        // exactly the asked-for kind: the user's chosen agent is never
-        // re-decided by the model named beside it.
-        if (
-          namedModel !== undefined &&
-          !isWorkspaceAgentSelection(identity.providerId, {
-            agent: advertised,
-            model: namedModel,
-            ...(namedEffort !== undefined ? { effort: namedEffort } : {}),
-          })
-        ) {
-          throw new Error("Invalid workspace agent request");
-        }
-        const sessionName = boundedField(name, workspaceNameText);
-        if (!sessionName.ok) {
-          return {
-            status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-            reason: "A session name has to be short enough to say and longer than nothing.",
-          };
-        }
-        const openingTask = boundedField(task, sessionMessageText);
-        if (!openingTask.ok) {
-          return {
-            status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-            reason: "A task has to be shorter than a document and longer than nothing.",
-          };
-        }
-        const managed = supersetContext(identity);
-        if (managed) return supersetCli.createAgent(managed, advertised, openingTask.value);
+      const session = sessionRegistry.get(identity);
+      if (!session) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+      const advertised = session.spawnableAgents.find((candidate) => candidate === agent.trim());
+      if (!advertised) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+      // A model named for this one agent must be a documented pairing of
+      // exactly the asked-for kind: the user's chosen agent is never
+      // re-decided by the model named beside it.
+      if (
+        namedModel !== undefined &&
+        !isWorkspaceAgentSelection(identity.providerId, {
+          agent: advertised,
+          model: namedModel,
+          ...(namedEffort !== undefined ? { effort: namedEffort } : {}),
+        })
+      ) {
+        throw new Error("Invalid workspace agent request");
+      }
+      const sessionName = boundedField(name, workspaceNameText);
+      if (!sessionName.ok) {
+        return {
+          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          reason: "A session name has to be short enough to say and longer than nothing.",
+        };
+      }
+      const openingTask = boundedField(task, sessionMessageText);
+      if (!openingTask.ok) {
+        return {
+          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          reason: "A task has to be shorter than a document and longer than nothing.",
+        };
+      }
+      const managed = supersetContext(identity);
+      if (managed) return supersetCli.createAgent(managed, advertised, openingTask.value);
+      return performSessionAct(identity, async (adapter) => {
         const stored: WorkspaceAgentSelection | undefined = isProviderId(identity.providerId)
           ? (await settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[
               identity.providerId
