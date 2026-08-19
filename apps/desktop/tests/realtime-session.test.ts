@@ -832,6 +832,83 @@ test("a press landing again over sealed words re-opens the same turn", async () 
   assert.equal(resumed.stopped, true);
 });
 
+test("a re-press whose device trails the channel still carries the sealed words", async () => {
+  const context = harness({ connectionDelayMs: 10 });
+
+  context.session.beginTurn();
+  const opening = context.session.connect();
+  await deviceArrives();
+  context.pressCaptures[0]?.feed([1]);
+  // Released mid-connect: the words seal and the device rests.
+  context.session.endTurn(true);
+
+  // Pressed again — but this time the channel opens before the re-press's
+  // device has answered, so the turn's device arrives on a connected call.
+  context.gateMicrophone();
+  context.session.beginTurn();
+  assert.equal(await opening, true);
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+  context.ungateMicrophone();
+  await deviceArrives();
+
+  // The re-opened turn still owes the sealed words: it opens as the captured
+  // turn it began as, never as a track turn whose clear would wipe them.
+  assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
+  assert.deepEqual(context.sent, [
+    ...inputAudioFormatUpdateEvents(),
+    { type: REALTIME_CLIENT_EVENT.INPUT_AUDIO_BUFFER_CLEAR },
+    ...inputAudioAppendEvents(new Int16Array([1])),
+  ]);
+  const resumed = context.pressCaptures[1];
+  assert.ok(resumed);
+  resumed.feed([2]);
+  assert.deepEqual(context.sent.at(-1), inputAudioAppendEvents(new Int16Array([2]))[0]);
+
+  context.session.endTurn(true);
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+  assert.equal(context.session.turnPending, false);
+  assert.notEqual(context.replacedTracks().at(-1), null);
+});
+
+test("a re-press released before its device arrives still delivers the sealed words", async () => {
+  const context = harness({ connectionDelayMs: 10 });
+
+  context.session.beginTurn();
+  const opening = context.session.connect();
+  await deviceArrives();
+  context.pressCaptures[0]?.feed([3]);
+  context.session.endTurn(true);
+
+  context.gateMicrophone();
+  context.session.beginTurn();
+  assert.equal(await opening, true);
+  // Let go again while the re-press's device is still opening: the re-press
+  // itself captured nothing, but the sealed words it re-opened are still
+  // owed, and the press is not left standing forever behind a delivery
+  // nothing would ever trigger.
+  context.session.endTurn(true);
+
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+  assert.equal(context.session.turnPending, false);
+  assert.deepEqual(
+    context.sent.map((event) => event.type),
+    [
+      REALTIME_CLIENT_EVENT.SESSION_UPDATE,
+      REALTIME_CLIENT_EVENT.INPUT_AUDIO_BUFFER_CLEAR,
+      REALTIME_CLIENT_EVENT.INPUT_AUDIO_BUFFER_APPEND,
+      REALTIME_CLIENT_EVENT.INPUT_AUDIO_BUFFER_COMMIT,
+      REALTIME_CLIENT_EVENT.RESPONSE_CREATE,
+    ],
+  );
+  assert.deepEqual(context.sent[2], inputAudioAppendEvents(new Int16Array([3]))[0]);
+
+  // The device that was still opening arrives to a turn already delivered:
+  // nobody is talking into it, so it closes as fast as it arrived.
+  context.ungateMicrophone();
+  await deviceArrives();
+  assert.equal(context.microphoneStopped(), true);
+});
+
 test("a speak-only call captures nothing, however long a press waits", async () => {
   const context = harness();
 

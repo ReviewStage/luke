@@ -892,12 +892,17 @@ export class RealtimeVoiceSession {
       this.#releaseMicrophone();
       return;
     }
-    // A press let go of while its device was still opening held nothing to
-    // send: the turn it was owed is dropped rather than opened under a key
-    // that is already up. A press against Luke's speak-only call is a
-    // different wait — for the developer's call — and keeps its meaning.
+    // A press let go of while its device was still opening held nothing of
+    // its own to send: the turn it was owed is dropped rather than opened
+    // under a key that is already up. But a re-press re-opens a sealed turn,
+    // and the words sealed toward it are still owed — a commit delivers them
+    // now, connected as we are, and a discard lets the whole turn go. A press
+    // against Luke's speak-only call is a different wait — for the
+    // developer's call — and keeps its meaning.
     if (!this.#microphone && this.#withMicrophone) {
       this.#pendingTurn = false;
+      if (commit && this.#pressCommitPending) this.#deliverHeldTurn();
+      else this.#retirePressCapture();
       return;
     }
     this.stopListening(commit);
@@ -1045,6 +1050,18 @@ export class RealtimeVoiceSession {
       else this.#releaseMicrophone();
       return;
     }
+    if (this.#pendingTurn && this.#pressCapture) {
+      // The device arrived connected, for a re-press over sealed words — the
+      // channel opened while it was still on its way. The turn it re-opened
+      // still owes those words, and a track turn would start by clearing
+      // them: so the turn opens as the captured turn it began as, resuming
+      // capture on the device that just arrived, and the track joins the
+      // sender at the seam as every captured turn's does.
+      this.#beginPressCapture();
+      this.#pendingTurn = false;
+      this.#beginAppendsTurn();
+      return;
+    }
     const sender = this.#microphoneSender;
     if (!sender) {
       // A connected microphone call always negotiated a sender; without one
@@ -1095,12 +1112,14 @@ export class RealtimeVoiceSession {
 
   /**
    * Starts capturing the press's words, when there is a press to capture for.
-   * Harmless to ask again: it runs only while a press is waiting on a
-   * connecting microphone call with the device already open and nothing
-   * already reading it — every other moment it does nothing.
+   * Harmless to ask again: it runs only while a press holds a turn on a
+   * microphone call with the device already open and nothing already reading
+   * it — every other moment it does nothing. Its two callers are the device
+   * arriving mid-connect, and the device arriving connected for a re-press
+   * over sealed words: either way the turn it feeds travels as appends.
    */
   #beginPressCapture(): void {
-    if (!this.#withMicrophone || !this.#pendingTurn || this.isConnected) return;
+    if (!this.#withMicrophone || !this.#pendingTurn) return;
     if (this.#pressCapture?.source || this.#closed) return;
     const stream = this.#stream;
     const microphone = this.#microphone;
