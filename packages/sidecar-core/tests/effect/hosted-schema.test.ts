@@ -25,20 +25,19 @@ function mintedBody(
     omitQuota?: boolean;
   } = {},
 ): UnparsedWireValue {
-  const body: { connection: Record<string, UnparsedWireValue>; quota?: UnparsedWireValue } = {
-    connection: {
-      value: "eph-secret",
-      expiresAt: NOW + 60_000,
-      model: "gpt-realtime-2.1",
-      callsUrl: HOSTED_CALLS_URL,
-      ...overrides.connection,
-    },
+  const connection = {
+    value: "eph-secret",
+    expiresAt: NOW + 60_000,
+    model: "gpt-realtime-2.1",
+    callsUrl: HOSTED_CALLS_URL,
+    ...overrides.connection,
   };
-  if (!overrides.omitQuota) {
-    body.quota = overrides.quota ?? QUOTA;
+  if (overrides.omitQuota) {
+    // SAFETY: fixture object mirrors hosted mint wire shapes under test.
+    return { connection } as UnparsedWireValue;
   }
   // SAFETY: fixture object mirrors hosted mint wire shapes under test.
-  return body as UnparsedWireValue;
+  return { connection, quota: overrides.quota ?? QUOTA } as UnparsedWireValue;
 }
 
 test("decodeHostedQuota accepts a complete quota and soft-fails on bad input", () => {

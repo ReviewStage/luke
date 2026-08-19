@@ -8,12 +8,12 @@ import {
   decodePositiveInteger,
   decodeRecord,
   decodeRecordFromJsonLine,
+  decodeRecordOption,
   decodeText,
   decodeWholeNumber,
   decodeWireNumber,
   decodeWireString,
   decodeWireValue,
-  PlainWireRecordSchema,
   WireValueSchema,
 } from "../../src/effect/wire-schema.js";
 import { isRecord, type UnparsedWireValue } from "../../src/json.js";
@@ -97,10 +97,7 @@ test("WireValueSchema rejects undefined property values and accepts valid trees"
   assert.equal(Option.isNone(Schema.decodeUnknownOption(WireValueSchema)(Symbol("x"))), true);
 });
 
-test("PlainWireRecordSchema decodeUnknownOption matches decodeRecord", () => {
+test("decodeRecordOption matches decodeRecord", () => {
   const value = { keep: "me" };
-  assert.deepEqual(
-    Option.getOrUndefined(Schema.decodeUnknownOption(PlainWireRecordSchema)(value)),
-    decodeRecord(value),
-  );
+  assert.deepEqual(Option.getOrUndefined(decodeRecordOption(value)), decodeRecord(value));
 });

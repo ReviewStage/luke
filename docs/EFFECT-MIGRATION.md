@@ -24,10 +24,19 @@ their modules; the harness does not switch to Vitest.
 diffs `./scripts/check.sh` can gate. macOS UI validation (`./scripts/verify.sh`)
 applies only when a phase touches motion or renderer wiring.
 
+**Progress (2026-08-19):** Phases 1–7 foundation and wiring landed on
+`cursor/effect-migration-foundation-fb5e`. `@sidecar/core/effect` exports wire
+Schema, hosted Schema, session registry, provider bridges, composite adapter,
+and attention review pipeline. Desktop observation uses
+`EffectInMemorySessionRegistry` via `toPromiseSessionRegistry`; cloud/CLI base
+adapters run through Effect services; session-acts IPC uses
+`createEffectActionHandler`. Web hosted handlers have Effect wrappers. Phase 8
+(Promise facade removal) and remaining adapter/orchestration call sites remain.
+
 **Foundation already started:** `effect@3.22.1` is declared on
-`@sidecar/core`, `createEffectActionHandler` exists beside
-`createActionHandler`, and `anti-slop-effect` is registered in
-`.oxlintrc.json`. Phase 1 completes and wires what those pieces assume.
+`@sidecar/core`, `@luke/desktop`, and `@luke/web`. `createEffectActionHandler`
+exists beside `createActionHandler`, and `anti-slop-effect` is registered in
+`.oxlintrc.json`.
 
 ---
 

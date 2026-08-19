@@ -29,10 +29,15 @@ export const WireValueSchema: Schema.Schema<WireValue> = Schema.suspend(() =>
   Schema.Union(WirePrimitiveSchema, WireRecordSchema, Schema.Array(WireValueSchema)),
 );
 
-// SAFETY: the filter narrows unknown wire input to plain records before decodeRecord uses them.
-export const PlainWireRecordSchema: Schema.Schema<WireRecord> = Schema.Unknown.pipe(
-  Schema.filter((value: unknown): value is WireRecord => isRecord(value as UnparsedWireValue)),
-) as Schema.Schema<WireRecord>;
+/** Plain object shell matching {@link isRecord}; nested values are not validated. */
+export function decodeRecord(value: UnparsedWireValue): WireRecord | undefined {
+  return isRecord(value) ? value : undefined;
+}
+
+export function decodeRecordOption(value: UnparsedWireValue): Option.Option<WireRecord> {
+  const decoded = decodeRecord(value);
+  return decoded === undefined ? Option.none() : Option.some(decoded);
+}
 
 /** Finite wire number matching {@link wholeNumber}'s numeric guard. */
 export const FiniteWireNumberSchema: Schema.Schema<number> = Schema.Number.pipe(
@@ -67,14 +72,6 @@ export function decodeWireNumber(value: UnparsedWireValue): number | undefined {
 
 export function decodeWireNumberOption(value: UnparsedWireValue): Option.Option<number> {
   return decodeUnknownOption(Schema.Number, value);
-}
-
-export function decodeRecord(value: UnparsedWireValue): WireRecord | undefined {
-  return decodeUnknown(PlainWireRecordSchema, value);
-}
-
-export function decodeRecordOption(value: UnparsedWireValue): Option.Option<WireRecord> {
-  return decodeUnknownOption(PlainWireRecordSchema, value);
 }
 
 export function decodeWireValue(value: UnparsedWireValue): WireValue | undefined {

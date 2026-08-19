@@ -36,21 +36,19 @@ test("runWithCloudFetch builds a Layer that cloudFetch can use", async () => {
 });
 
 test("runCloudFetch maps CloudFetchFailure to CloudRequestError", async () => {
-  await assert.rejects(
-    () =>
-      runCloudFetch(
-        async () => new Response("", { status: HTTP_STATUS.UNAUTHORIZED }),
-        `${TEST_BASE_URL}/v1`,
-        {},
-        "Jules",
-      ),
-    (error: unknown) => {
-      assert(error instanceof CloudRequestError);
-      assert.equal(error.failure, CLOUD_FAILURE.UNAUTHORIZED);
-      assert.match(error.message, /rejected the configured API key/);
-      return true;
-    },
-  );
+  try {
+    await runCloudFetch(
+      async () => new Response("", { status: HTTP_STATUS.UNAUTHORIZED }),
+      `${TEST_BASE_URL}/v1`,
+      {},
+      "Jules",
+    );
+    assert.fail("Expected CloudRequestError");
+  } catch (error) {
+    assert(error instanceof CloudRequestError);
+    assert.equal(error.failure, CLOUD_FAILURE.UNAUTHORIZED);
+    assert.match(error.message, /rejected the configured API key/);
+  }
 });
 
 test("runCloudFetchRaw keeps non-ok responses for write handling", async () => {
@@ -83,22 +81,20 @@ test("runWithCliRun builds a Layer that cliRun can use", async () => {
 });
 
 test("runCliRun maps CliRunFailure to CliCommandError", async () => {
-  await assert.rejects(
-    () =>
-      runCliRun(
-        async () => {
-          throw new CliCommandError(CLI_FAILURE.UNAVAILABLE, "codex could not be run");
-        },
-        "codex",
-        ["login", "status"],
-        RUN_OPTIONS,
-      ),
-    (error: unknown) => {
-      assert(error instanceof CliCommandError);
-      assert.equal(error.failure, CLI_FAILURE.UNAVAILABLE);
-      return true;
-    },
-  );
+  try {
+    await runCliRun(
+      async () => {
+        throw new CliCommandError(CLI_FAILURE.UNAVAILABLE, "codex could not be run");
+      },
+      "codex",
+      ["login", "status"],
+      RUN_OPTIONS,
+    );
+    assert.fail("Expected CliCommandError");
+  } catch (error) {
+    assert(error instanceof CliCommandError);
+    assert.equal(error.failure, CLI_FAILURE.UNAVAILABLE);
+  }
 });
 
 test("JulesSessionAdapter observe() matches behavior through Effect-backed fetch", async () => {
