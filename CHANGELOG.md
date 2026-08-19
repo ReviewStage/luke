@@ -32,7 +32,7 @@
 Notable changes to Luke, newest first. Each heading is a released version and
 the date its release was published.
 
-## 0.2.0 — 2026-08-19
+## 0.2.0 — 2026-08-18
 
 ### Codex cloud tasks
 
@@ -99,7 +99,7 @@ to jump straight there.
 - Removed excessive panel animations
   ([#243](https://github.com/ReviewStage/luke/pull/243))
 
-## 0.1.1 — 2026-08-18
+## 0.1.1 — 2026-08-17
 
 ### Free daily allowance
 
@@ -163,7 +163,7 @@ meeting is over.
 - Updated the landing page download button to always fetch the latest build
   ([#183](https://github.com/ReviewStage/luke/pull/183))
 
-## 0.1.0 — 2026-08-17
+## 0.1.0 — 2026-08-16
 
 Introducing Luke: a voice agent that lives in the MacBook notch and
 watches every local and cloud coding agent session.
