@@ -825,7 +825,7 @@ test("sends bounded material and withholds what a decision does not turn on", as
 test("tuning examples are synthetic, bounded, and cover every disposition", () => {
   assert.deepEqual(
     [...new Set(ATTENTION_TUNING_EXAMPLES.map((example) => example.expected.disposition))].sort(),
-    [...Object.values(ATTENTION_DISPOSITION)].sort(),
+    Object.values(ATTENTION_DISPOSITION).sort(),
   );
 
   for (const example of ATTENTION_TUNING_EXAMPLES) {

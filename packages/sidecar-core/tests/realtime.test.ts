@@ -67,6 +67,13 @@ import {
   maximumAttentionRequestLength,
   maximumAttentionSummaryLength,
 } from "../src/attention";
+import {
+  isRecord,
+  isWireString,
+  text,
+  type UnparsedWireValue,
+  type WireRecord,
+} from "../src/json.js";
 import { maximumWorkspaceNameLength } from "../src/providers";
 import {
   maximumVoiceContextIssues,
@@ -87,6 +94,27 @@ import {
   spokenRealtimeToolCount,
 } from "../src/realtime-tools";
 import { maximumSessionMessageLength } from "../src/session";
+
+function conversationItem(event: WireRecord | undefined): WireRecord | undefined {
+  if (!event) return undefined;
+  const item = event.item;
+  return isRecord(item) ? item : undefined;
+}
+
+function conversationItemText(event: WireRecord | undefined): string {
+  const item = conversationItem(event);
+  if (!item) return "";
+  const content = item.content;
+  if (!Array.isArray(content)) return "";
+  const first = content[0];
+  return isRecord(first) && isWireString(first.text) ? first.text : "";
+}
+
+function responseField(event: WireRecord | undefined): WireRecord | undefined {
+  if (!event) return undefined;
+  const response = event.response;
+  return isRecord(response) ? response : undefined;
+}
 
 const DECIDED_AT = 1_800_000_000_000;
 const EXPIRES_AT_SECONDS = 1_800_000_060;
@@ -173,11 +201,11 @@ test("every kind of context travels as one nameable item and never as a prompt",
     assert.equal(events.length, 1);
     const [event] = events;
     assert.equal(event?.type, REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE);
-    const item = event?.item as { id?: string; role?: string };
+    const item = conversationItem(event);
     // Named on creation, which is what makes a replacement possible without
     // waiting to be told the server's own name for it.
-    assert.match(item?.id ?? "", /^luke_ctx_/);
-    assert.equal(item?.role, "user");
+    assert.match(text(item?.id) ?? "", /^luke_ctx_/);
+    assert.equal(text(item?.role), "user");
     assert.equal(
       events.some((candidate) => candidate.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE),
       false,
@@ -291,7 +319,7 @@ test("a mint response yields a credential with a millisecond expiry", () => {
 });
 
 test("a mint response outside the contract yields no credential", () => {
-  for (const payload of [
+  const payloads: UnparsedWireValue[] = [
     undefined,
     null,
     "ek_test_secret",
@@ -301,7 +329,8 @@ test("a mint response outside the contract yields no credential", () => {
     { value: "ek_test_secret", expires_at: "soon" },
     { value: "ek_test_secret", expires_at: 0 },
     { value: "ek_test_secret", expires_at: Number.NaN },
-  ]) {
+  ];
+  for (const payload of payloads) {
     assert.equal(realtimeCredentialFromResponse(payload), undefined);
   }
 });
@@ -477,15 +506,14 @@ test("a typed ask travels as the developer's own words and asks for a reply", ()
 
   assert.equal(events.length, 2);
   assert.equal(events[0]?.type, REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE);
-  const item = events[0]?.item as {
-    role?: string;
-    content?: { type?: string; text?: string }[];
-  };
-  assert.equal(item.role, "user");
-  assert.equal(item.content?.[0]?.type, "input_text");
+  const item = conversationItem(events[0]);
+  assert.equal(text(item?.role), "user");
+  const content = item?.content;
+  const firstContent = Array.isArray(content) && isRecord(content[0]) ? content[0] : undefined;
+  assert.equal(text(firstContent?.type), "input_text");
   // No label ahead of the words: labels mark what the developer did not say,
   // and a typed ask is theirs as surely as a spoken one.
-  assert.equal(item.content?.[0]?.text, "What needs me right now?");
+  assert.equal(text(firstContent?.text), "What needs me right now?");
   // The reply keeps the session's own tool_choice, unlike every turn Luke
   // opens himself: typing opens a developer turn the way a commit does.
   assert.deepEqual(events[1], { type: REALTIME_CLIENT_EVENT.RESPONSE_CREATE });
@@ -500,19 +528,16 @@ test("an empty ask opens no turn at all", () => {
 test("a typed ask is bounded like a session message", () => {
   assert.equal(maximumTypedAskLength, maximumSessionMessageLength);
   const events = typedAskEvents("x".repeat(maximumTypedAskLength + 100));
-  const item = events[0]?.item as { content?: { text?: string }[] };
-
-  assert.equal(item.content?.[0]?.text?.length, maximumTypedAskLength);
+  assert.equal(conversationItemText(events[0]).length, maximumTypedAskLength);
 });
 
-function noticeText(event: Record<string, unknown> | undefined): string {
-  const item = event?.item as { content?: { text?: string }[] } | undefined;
-  return item?.content?.[0]?.text ?? "";
+function noticeText(event: WireRecord | undefined): string {
+  return conversationItemText(event);
 }
 
-function instructionsOf(event: Record<string, unknown> | undefined): string {
-  const response = event?.response as { instructions?: string } | undefined;
-  return response?.instructions ?? "";
+function instructionsOf(event: WireRecord | undefined): string {
+  const response = responseField(event);
+  return response ? (text(response.instructions) ?? "") : "";
 }
 
 test("a proactive update is voiced as the sentence attention already approved", () => {
@@ -922,8 +947,7 @@ test("the last announcement is context, never a prompt", () => {
     events.every((event) => event.type !== REALTIME_CLIENT_EVENT.RESPONSE_CREATE),
     "remembering what was said must not open Luke's mouth",
   );
-  const item = events[0]?.item as { content?: { text?: string }[] };
-  assert.match(item.content?.[0]?.text ?? "", /^\[last announcement, sent automatically\]\n/);
+  assert.match(conversationItemText(events[0]), /^\[last announcement, sent automatically\]\n/);
 });
 
 test("the roster says what a session is doing and where, in the attention update's own fields", () => {
@@ -1094,7 +1118,7 @@ test("the session is minted with the thirteen acts and nothing wider", () => {
   const config = realtimeSessionConfig();
 
   assert.deepEqual(
-    config.tools.map((tool) => (tool as { name?: unknown }).name),
+    config.tools.map((tool) => tool.name),
     [
       REALTIME_TOOL.SEND_SESSION_MESSAGE,
       REALTIME_TOOL.RUN_SESSION_CONTROL,
@@ -1126,10 +1150,11 @@ test("a proactive turn is opened with its tools withheld", () => {
 
   const responseCreate = events.find(
     (event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE,
-  ) as { response?: { tool_choice?: unknown } };
+  );
+  const response = responseField(responseCreate);
   // A notice is something to say, never a reason to act — and not only by
   // instruction: the turn itself has nothing to act with.
-  assert.equal(responseCreate?.response?.tool_choice, "none");
+  assert.equal(response?.tool_choice, "none");
 });
 
 test("tool calls are read whole from a finished response", () => {
@@ -1264,7 +1289,7 @@ test("inbound events the conversation acts on are parsed, and nothing else is", 
     { type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, responseId: "resp-2" },
   );
 
-  for (const payload of [
+  const payloads: UnparsedWireValue[] = [
     undefined,
     null,
     3,
@@ -1275,7 +1300,8 @@ test("inbound events the conversation acts on are parsed, and nothing else is", 
     { type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_CLEARED },
     { type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA, item_id: "item-1" },
     { type: "session.updated" },
-  ]) {
+  ];
+  for (const payload of payloads) {
     assert.equal(parseRealtimeServerEvent(payload), undefined);
   }
 });
@@ -1420,8 +1446,7 @@ test("the projects context lists each project with the identity a call names", (
 
   const [event] = workspaceProjectContextEvents([OFFERED_PROJECT], "luke_ctx_workspace-projects_1");
   assert.equal(event?.type, REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE);
-  const item = (event as { item?: { content?: { text?: string }[] } }).item;
-  assert.match(item?.content?.[0]?.text ?? "", /^\[workspace projects, sent automatically\]/);
+  assert.match(conversationItemText(event), /^\[workspace projects, sent automatically\]/);
   // Context, never a prompt: nothing here may open Luke's mouth.
   assert.equal(
     workspaceProjectContextEvents([OFFERED_PROJECT], "luke_ctx_workspace-projects_1").some(
@@ -1472,8 +1497,7 @@ test("the projects context says where a nameless creation ask goes", () => {
     "luke_ctx_workspace-projects_2",
     "conductor",
   );
-  const item = (event as { item?: { content?: { text?: string }[] } }).item;
-  assert.match(item?.content?.[0]?.text ?? "", /default provider for new workspaces is Conductor/);
+  assert.match(conversationItemText(event), /default provider for new workspaces is Conductor/);
 });
 
 test("the projects context says which project a nameless ask lands in", () => {
@@ -1521,8 +1545,7 @@ test("the projects context says which project a nameless ask lands in", () => {
     undefined,
     { conductor: "proj-2" },
   );
-  const item = (event as { item?: { content?: { text?: string }[] } }).item;
-  assert.match(item?.content?.[0]?.text ?? "", /default Conductor project is acme\/other/);
+  assert.match(conversationItemText(event), /default Conductor project is acme\/other/);
 });
 
 test("a host-scoped default names only its exact target", () => {
@@ -1671,7 +1694,9 @@ test("an added agent may carry a model, only of the asked-for kind", () => {
     conductorAgentModels,
   );
   assert.equal(mismatched.kind, "refused");
-  assert.match((mismatched as { reason?: string }).reason ?? "", /cursor agent runs no model/);
+  if (mismatched.kind === "refused") {
+    assert.match(mismatched.reason ?? "", /cursor agent runs no model/);
+  }
 });
 
 test("a creation ask can only name a project Luke was shown", () => {
@@ -1903,11 +1928,10 @@ test("a tool call is answered with the outcome the provider gave", () => {
 
   assert.equal(events.length, 1);
   assert.equal(events[0]?.type, REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE);
-  const item = (events[0] as { item?: { type?: unknown; call_id?: unknown; output?: unknown } })
-    .item;
-  assert.equal(item?.type, "function_call_output");
-  assert.equal(item?.call_id, "call-1");
-  assert.equal(item?.output, '{"status":"accepted"}');
+  const item = conversationItem(events[0]);
+  assert.equal(text(item?.type), "function_call_output");
+  assert.equal(text(item?.call_id), "call-1");
+  assert.equal(text(item?.output), '{"status":"accepted"}');
   assert.deepEqual(functionCallOutputEvents("  ", { status: "accepted" }), []);
 });
 
@@ -1915,9 +1939,10 @@ test("the reply that voices an outcome cannot itself call a tool", () => {
   const [request] = functionCallFollowUpEvents();
 
   assert.equal(request?.type, REALTIME_CLIENT_EVENT.RESPONSE_CREATE);
+  const response = responseField(request);
   // The follow-up is opened to say what happened, not to act again — a tool
   // output that reads like an instruction has nothing to act with.
-  assert.equal((request as { response?: { tool_choice?: unknown } }).response?.tool_choice, "none");
+  assert.equal(response?.tool_choice, "none");
 });
 
 function actionableIssue() {

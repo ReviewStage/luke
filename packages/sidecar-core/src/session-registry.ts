@@ -29,21 +29,18 @@ type ProviderSessions = Map<string, NormalizedSession>;
 type SessionStore = Map<string, ProviderSessions>;
 
 function copySession(session: NormalizedSession): NormalizedSession {
-  return {
+  const detail: SessionDetail = { ...session.detail };
+  if (session.detail.diff) detail.diff = { ...session.detail.diff };
+  const copied: NormalizedSession = {
     ...session,
     provider: { ...session.provider },
-    // The one nested object inside a detail gets its own copy, like every
-    // other nested field here: a snapshot a caller holds must not share
-    // structure with the store.
-    detail: {
-      ...session.detail,
-      ...(session.detail.diff ? { diff: { ...session.detail.diff } } : {}),
-    },
+    detail,
     controls: session.controls.map((control) => ({ ...control })),
     spawnableAgents: [...session.spawnableAgents],
-    ...(session.workspace ? { workspace: { ...session.workspace } } : {}),
     attention: { ...session.attention },
   };
+  if (session.workspace) copied.workspace = { ...session.workspace };
+  return copied;
 }
 
 /**
@@ -58,6 +55,7 @@ function copySession(session: NormalizedSession): NormalizedSession {
 function exhaustiveSame<T extends object>(
   equality: Record<keyof T, (first: T, second: T) => boolean>,
 ): (first: T, second: T) => boolean {
+  // SAFETY: equality is exhaustive over T; each comparator is typed for the same T pair.
   const comparators = Object.values(equality) as Array<(first: T, second: T) => boolean>;
   return (first, second) => {
     for (const compare of comparators) {

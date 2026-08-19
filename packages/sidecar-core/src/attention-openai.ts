@@ -4,7 +4,7 @@ import {
   attentionInstructions,
   attentionUpdateInput,
 } from "./attention-prompt.js";
-import { isRecord, text } from "./json.js";
+import { isRecord, isWireString, text, type UnparsedWireValue } from "./json.js";
 
 /**
  * The one OpenAI Responses request an attention review may be. The desktop
@@ -47,11 +47,11 @@ export function attentionResponsesRequest(
   };
 }
 
-function outputTextFromContent(content: unknown): string {
+function outputTextFromContent(content: UnparsedWireValue): string {
   if (!Array.isArray(content)) return "";
   return content
     .map((entry) =>
-      isRecord(entry) && entry.type === RESPONSES_OUTPUT_TEXT_TYPE && typeof entry.text === "string"
+      isRecord(entry) && entry.type === RESPONSES_OUTPUT_TEXT_TYPE && isWireString(entry.text)
         ? entry.text
         : "",
     )
@@ -62,9 +62,9 @@ function outputTextFromContent(content: unknown): string {
  * Reads the structured decision out of a Responses payload without depending on
  * where a given API version places it.
  */
-export function attentionResponsesOutputText(payload: unknown): string | undefined {
+export function attentionResponsesOutputText(payload: UnparsedWireValue): string | undefined {
   if (!isRecord(payload)) return undefined;
-  if (typeof payload.output_text === "string") return text(payload.output_text);
+  if (isWireString(payload.output_text)) return text(payload.output_text);
   if (!Array.isArray(payload.output)) return undefined;
   return text(
     payload.output
@@ -78,11 +78,11 @@ export function attentionResponsesOutputText(payload: unknown): string | undefin
  * budget on reasoning returns `incomplete` with empty output, which would
  * otherwise look identical to a healthy silent pass.
  */
-export function attentionResponsesMissingReason(payload: unknown): string {
+export function attentionResponsesMissingReason(payload: UnparsedWireValue): string {
   if (!isRecord(payload)) return "";
-  const status = typeof payload.status === "string" ? payload.status : undefined;
+  const status = text(payload.status);
   const details = isRecord(payload.incomplete_details) ? payload.incomplete_details : undefined;
-  const reason = typeof details?.reason === "string" ? details.reason : undefined;
+  const reason = details ? text(details.reason) : undefined;
   if (status && reason) return ` (${status}: ${reason})`;
   if (status) return ` (${status})`;
   return "";

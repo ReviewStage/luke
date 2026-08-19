@@ -6,6 +6,8 @@
  * session are offered to the rest of the app under the same discipline.
  */
 
+import { text, type UnparsedWireValue } from "./json.js";
+
 /**
  * Stable tracker identifiers shared by the tracker client, the settings that
  * hold its credential, and the UI that draws its mark.
@@ -91,9 +93,8 @@ export const maximumIssueCommentLength = 4_000;
  * than cut when it runs long, for the same reason a session message is: a
  * truncated comment says something its author did not.
  */
-export function issueCommentText(value: unknown): string | undefined {
-  if (typeof value !== "string") return undefined;
-  const normalized = value.trim();
+export function issueCommentText(value: UnparsedWireValue): string | undefined {
+  const normalized = text(value);
   if (!normalized || normalized.length > maximumIssueCommentLength) return undefined;
   return normalized;
 }
@@ -180,7 +181,7 @@ export function normalizeTrackedIssue(
   }
   const url = issueUrl(observation.url);
 
-  return {
+  const issue: TrackedIssue = {
     trackerId,
     identifier,
     tracker: {
@@ -191,12 +192,13 @@ export function normalizeTrackedIssue(
     title: boundedText(observation.title, maximumIssueTitleLength) ?? "Untitled issue",
     stateName: boundedText(observation.stateName, maximumIssueStateNameLength) ?? "Unknown",
     observedAt,
-    ...(url ? { url } : {}),
     transitions: normalizeTransitions(observation.transitions),
     // Anything but an explicit yes is a no, so a client that has not thought
     // about comments reports an issue that cannot take one.
     canComment: observation.canComment === true,
   };
+  if (url) issue.url = url;
+  return issue;
 }
 
 /** Returns whether a tracker explicitly advertised a transition for an issue. */

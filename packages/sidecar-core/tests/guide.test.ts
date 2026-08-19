@@ -19,8 +19,24 @@ import {
   SESSION_STATUS,
 } from "../src";
 import { appToggleValue } from "../src/guide";
+import { isRecord, text, type WireRecord } from "../src/json.js";
 import { maximumFeedbackDraftLength, realtimeInstructions } from "../src/realtime-protocol";
 import { REALTIME_TOOL } from "../src/realtime-tools";
+
+function conversationItem(event: WireRecord | undefined): WireRecord | undefined {
+  if (!event) return undefined;
+  const item = event.item;
+  return isRecord(item) ? item : undefined;
+}
+
+function conversationItemText(event: WireRecord | undefined): string {
+  const item = conversationItem(event);
+  if (!item) return "";
+  const content = item.content;
+  if (!Array.isArray(content)) return "";
+  const first = content[0];
+  return isRecord(first) ? (text(first.text) ?? "") : "";
+}
 
 const GUIDE: AppGuideSnapshot = {
   facts: [
@@ -131,9 +147,9 @@ test("the guide travels as context and never opens Luke's mouth", () => {
 
   assert.equal(events.length, 1);
   assert.equal(events[0]?.type, REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE);
-  const item = events[0]?.item as { role?: string; content?: { text?: string }[] };
-  assert.equal(item.role, "user");
-  assert.match(item.content?.[0]?.text ?? "", /^\[app guide, sent automatically\]/);
+  const item = conversationItem(events[0]);
+  assert.equal(text(item?.role), "user");
+  assert.match(conversationItemText(events[0]), /^\[app guide, sent automatically\]/);
   assert.equal(
     events.some((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE),
     false,
@@ -212,11 +228,15 @@ test("a spoken change can name only a setting the guide lists, to a value it acc
 
   const badToggle = change('{"setting_id":"voice_captions","value":"sideways"}');
   assert.equal(badToggle.kind, "refused");
-  assert.match((badToggle as { reason: string }).reason, /on or off/);
+  if (badToggle.kind === "refused") {
+    assert.match(badToggle.reason, /on or off/);
+  }
 
   const badChoice = change('{"setting_id":"voice","value":"basso"}');
   assert.equal(badChoice.kind, "refused");
-  assert.match((badChoice as { reason: string }).reason, /cedar, marin/);
+  if (badChoice.kind === "refused") {
+    assert.match(badChoice.reason, /cedar, marin/);
+  }
 });
 
 test("a value and its effort named in one change are validated as the pair they are", () => {
@@ -242,17 +262,23 @@ test("a value and its effort named in one change are validated as the pair they 
   // A level the choice's own list does not carry is refused with that list.
   const wrongLevel = change('{"setting_id":"agent_model","value":"Fable 5","effort":"ultra"}');
   assert.equal(wrongLevel.kind, "refused");
-  assert.match((wrongLevel as { reason: string }).reason, /low, high, max/);
+  if (wrongLevel.kind === "refused") {
+    assert.match(wrongLevel.reason, /low, high, max/);
+  }
 
   // A choice the guide lists no levels for takes none.
   const levelless = change('{"setting_id":"agent_model","value":"Cursor Auto","effort":"high"}');
   assert.equal(levelless.kind, "refused");
-  assert.match((levelless as { reason: string }).reason, /Cursor Auto takes no effort level/);
+  if (levelless.kind === "refused") {
+    assert.match(levelless.reason, /Cursor Auto takes no effort level/);
+  }
 
   // And a setting with no levels anywhere refuses by its own name.
   const toggled = change('{"setting_id":"voice_captions","value":"on","effort":"high"}');
   assert.equal(toggled.kind, "refused");
-  assert.match((toggled as { reason: string }).reason, /Captions takes no effort level/);
+  if (toggled.kind === "refused") {
+    assert.match(toggled.reason, /Captions takes no effort level/);
+  }
 });
 
 test("a by-hand-only setting is refused with the path to it, so the refusal is the guidance", () => {
@@ -263,7 +289,9 @@ test("a by-hand-only setting is refused with the path to it, so the refusal is t
   );
 
   assert.equal(action.kind, "refused");
-  assert.match((action as { reason: string }).reason, /System Settings, under Privacy & Security/);
+  if (action.kind === "refused") {
+    assert.match(action.reason, /System Settings, under Privacy & Security/);
+  }
 });
 
 test("a spoken panel ask opens a real tab and narrows only to what is observed", () => {
@@ -353,7 +381,10 @@ test("a spoken draft is bounded like a typed ask", () => {
   );
 
   assert.equal(action.kind, "feedback");
-  assert.equal((action as { draft?: string }).draft?.length, maximumFeedbackDraftLength);
+  if (action.kind === "feedback") {
+    assert.ok(action.draft);
+    assert.equal(action.draft.length, maximumFeedbackDraftLength);
+  }
 });
 
 test("an app tool call the build does not know is refused", () => {

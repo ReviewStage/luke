@@ -7,6 +7,8 @@
  * input at all, and this module only has to bound what it keeps.
  */
 
+import { isRecord, text, type UnparsedWireValue } from "./json.js";
+
 /** One meeting as the app keeps it: an interval, with nothing about it. */
 export interface MeetingInterval {
   startsAt: number;
@@ -38,14 +40,15 @@ export const MAXIMUM_CALENDAR_MEETINGS = 200;
  * not a meeting, and only blocks that could still matter — ending after
  * `now`, starting within the look-ahead — are kept, sorted and capped.
  */
-export function meetingsFromBusyIntervals(busy: unknown, now: number): MeetingInterval[] {
+export function meetingsFromBusyIntervals(busy: UnparsedWireValue, now: number): MeetingInterval[] {
   if (!Array.isArray(busy)) return [];
   const windowEnd = now + CALENDAR_LOOKAHEAD_MS;
   const meetings: MeetingInterval[] = [];
   for (const entry of busy) {
-    if (entry === null || typeof entry !== "object") continue;
-    const { start, end } = entry as Record<string, unknown>;
-    if (typeof start !== "string" || typeof end !== "string") continue;
+    if (!isRecord(entry)) continue;
+    const start = text(entry.start);
+    const end = text(entry.end);
+    if (!start || !end) continue;
     const startsAt = Date.parse(start);
     const endsAt = Date.parse(end);
     if (!Number.isFinite(startsAt) || !Number.isFinite(endsAt)) continue;

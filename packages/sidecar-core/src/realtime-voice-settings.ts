@@ -4,6 +4,8 @@
  * mint time, so offering one would be a control that cannot work.
  */
 
+import { isWireNumber, isWireString, type UnparsedWireValue } from "./json.js";
+
 export const REALTIME_VOICE = {
   ALLOY: "alloy",
   ASH: "ash",
@@ -23,8 +25,10 @@ export type RealtimeVoice = (typeof REALTIME_VOICE)[keyof typeof REALTIME_VOICE]
 export const REALTIME_VOICE_LIST: readonly RealtimeVoice[] = Object.values(REALTIME_VOICE);
 
 /** Guards a voice arriving from storage or IPC. */
-export function isRealtimeVoice(value: unknown): value is RealtimeVoice {
-  return typeof value === "string" && REALTIME_VOICE_LIST.includes(value as RealtimeVoice);
+export function isRealtimeVoice(value: UnparsedWireValue): value is RealtimeVoice {
+  if (!isWireString(value)) return false;
+  // SAFETY: value is a string; list membership is the voice vocabulary contract check.
+  return REALTIME_VOICE_LIST.includes(value as RealtimeVoice);
 }
 
 /**
@@ -46,10 +50,10 @@ export const REALTIME_VOICE_SPEED_LIST: readonly RealtimeVoiceSpeed[] =
   Object.values(REALTIME_VOICE_SPEED);
 
 /** Guards a speed arriving from storage or IPC. */
-export function isRealtimeVoiceSpeed(value: unknown): value is RealtimeVoiceSpeed {
-  return (
-    typeof value === "number" && REALTIME_VOICE_SPEED_LIST.includes(value as RealtimeVoiceSpeed)
-  );
+export function isRealtimeVoiceSpeed(value: UnparsedWireValue): value is RealtimeVoiceSpeed {
+  if (!isWireNumber(value)) return false;
+  // SAFETY: value is a number; list membership is the speed vocabulary contract check.
+  return REALTIME_VOICE_SPEED_LIST.includes(value as RealtimeVoiceSpeed);
 }
 
 export const REALTIME_DEFAULTS = {

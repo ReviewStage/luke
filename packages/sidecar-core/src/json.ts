@@ -4,17 +4,51 @@
  * undefined, never a throw, so one bad record cannot fail an observation.
  */
 
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
+/** A JSON primitive before this build has validated field names. */
+export type WirePrimitive = string | number | boolean | null;
+
+/** A JSON object before this build has validated field names. */
+export type WireRecord = { readonly [key: string]: WireValue };
+
+/** Any value JSON can carry before this build has validated field names. */
+export type WireValue = WirePrimitive | WireRecord | readonly WireValue[];
+
+/**
+ * Anything that may arrive from outside this package before parsing.
+ * True I/O boundaries pass values here; every function below is the parser.
+ */
+export type UnparsedWireValue = WireValue | undefined;
+
+function runtimeTag(value: UnparsedWireValue): string {
+  return Object.prototype.toString.call(value);
 }
 
-export function text(value: unknown): string | undefined {
-  const normalized = typeof value === "string" ? value.trim() : "";
+/** Narrows a wire value to string without trusting a runtime typeof check. */
+export function isWireString(value: UnparsedWireValue): value is string {
+  return runtimeTag(value) === "[object String]";
+}
+
+/** Narrows a wire value to number without trusting a runtime typeof check. */
+export function isWireNumber(value: UnparsedWireValue): value is number {
+  return runtimeTag(value) === "[object Number]";
+}
+
+export function isRecord(value: UnparsedWireValue): value is WireRecord {
+  if (value === null || value === undefined) return false;
+  if (runtimeTag(value) !== "[object Object]") return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+export function text(value: UnparsedWireValue): string | undefined {
+  if (!isWireString(value)) return undefined;
+  const normalized = value.trim();
   return normalized || undefined;
 }
 
-export function wholeNumber(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+export function wholeNumber(value: UnparsedWireValue): number | undefined {
+  if (!isWireNumber(value) || !Number.isFinite(value)) return undefined;
+  return value;
 }
 
 /**
@@ -31,9 +65,10 @@ export function oneLine(value: string | undefined, maximumLength: number): strin
     : normalized;
 }
 
-export function recordFromJsonLine(line: string): Record<string, unknown> | undefined {
+export function recordFromJsonLine(line: string): WireRecord | undefined {
   try {
-    const parsed = JSON.parse(line) as unknown;
+    // SAFETY: JSON.parse returns a runtime value; isRecord validates the object contract.
+    const parsed = JSON.parse(line) as UnparsedWireValue;
     return isRecord(parsed) ? parsed : undefined;
   } catch (error) {
     if (error instanceof SyntaxError) return undefined;
@@ -51,6 +86,9 @@ export function nonNegativeNumber(value: number | undefined, fallback: number): 
   return value;
 }
 
+/** Constructor options after defaults are merged and bounds are applied. */
+export type ResolvedNumericOptions<K extends string> = { readonly [P in K]: number };
+
 /**
  * Bounds a bag of numeric constructor options against their defaults. Each
  * listed key is read from `options` and clamped by kind — a missing, infinite,
@@ -65,17 +103,23 @@ export function resolveOptions<K extends string>(
     readonly positive?: readonly K[];
     readonly nonNegative?: readonly K[];
   },
-): { [P in K]: number } {
-  const resolved: { [P in K]: number } = { ...defaults };
-  const assign = (key: K, kind: "positive" | "nonNegative"): void => {
+): ResolvedNumericOptions<K> {
+  let resolved = { ...defaults };
+  for (const key of bounds.positive ?? []) {
     const fallback = defaults[key];
-    if (typeof fallback !== "number") return;
-    resolved[key] =
-      kind === "positive"
-        ? positiveInteger(options[key], fallback)
-        : nonNegativeNumber(options[key], fallback);
-  };
-  for (const key of bounds.positive ?? []) assign(key, "positive");
-  for (const key of bounds.nonNegative ?? []) assign(key, "nonNegative");
+    if (!isWireNumber(fallback)) continue;
+    resolved = {
+      ...resolved,
+      [key]: positiveInteger(options[key], fallback),
+    };
+  }
+  for (const key of bounds.nonNegative ?? []) {
+    const fallback = defaults[key];
+    if (!isWireNumber(fallback)) continue;
+    resolved = {
+      ...resolved,
+      [key]: nonNegativeNumber(options[key], fallback),
+    };
+  }
   return resolved;
 }

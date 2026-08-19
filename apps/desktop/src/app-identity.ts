@@ -56,7 +56,10 @@ declare const PACKAGED_WITH_DEVELOPER_ID_SIGNING: boolean | undefined;
 
 /** Whether this bundle was built alongside Developer ID packaging. */
 export function buildCarriesDeveloperIdSigning(): boolean {
-  return (
-    typeof PACKAGED_WITH_DEVELOPER_ID_SIGNING === "boolean" && PACKAGED_WITH_DEVELOPER_ID_SIGNING
-  );
+  try {
+    // SAFETY: esbuild replaces this free identifier on packaged builds.
+    return PACKAGED_WITH_DEVELOPER_ID_SIGNING === true;
+  } catch {
+    return false;
+  }
 }

@@ -5,6 +5,7 @@ import {
   mentionedSessions,
   type NormalizedSession,
   normalizeSession,
+  type ProviderSessionObservation,
   SESSION_MENTION_KIND,
   SESSION_STATUS,
   type SessionProvider,
@@ -22,14 +23,15 @@ function session(
     workspace?: { providerWorkspaceId: string; name?: string };
   } = {},
 ): NormalizedSession {
-  return normalizeSession(provider, {
+  const observation: ProviderSessionObservation = {
     providerSessionId,
     title,
     status: SESSION_STATUS.WORKING,
     observedAt: overrides.observedAt ?? 100,
-    ...(overrides.workspace ? { workspace: overrides.workspace } : {}),
     detail: {},
-  });
+  };
+  if (overrides.workspace) observation.workspace = overrides.workspace;
+  return normalizeSession(provider, observation);
 }
 
 test("names the sessions the reply mentions, in the order they are heard", () => {
