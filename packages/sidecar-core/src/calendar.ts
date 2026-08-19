@@ -74,3 +74,24 @@ export function activeMeetingEnd(
   }
   return latest;
 }
+
+/**
+ * The next instant at which {@link activeMeetingEnd}'s answer can change: the
+ * earliest meeting edge — a start or an end — still ahead of `now`, or nothing
+ * with no edge ahead. Not every edge changes the answer (a meeting ending
+ * inside a longer one changes nothing), but every change happens at an edge,
+ * so a caller re-asking at each is never late — and with the list bounded,
+ * never asked often enough to cost anything.
+ */
+export function nextMeetingBoundary(
+  meetings: readonly MeetingInterval[],
+  now: number,
+): number | undefined {
+  let next: number | undefined;
+  for (const meeting of meetings) {
+    for (const edge of [meeting.startsAt, meeting.endsAt]) {
+      if (edge > now && (next === undefined || edge < next)) next = edge;
+    }
+  }
+  return next;
+}
