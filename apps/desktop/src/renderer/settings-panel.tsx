@@ -1945,7 +1945,7 @@ function VoiceSection({
                   <AttentionMark note={MICROPHONE_UNGRANTED_NOTE} />
                 )}
               </span>
-              <small>{microphoneRow.detail}</small>
+              {microphoneRow.detail ? <small>{microphoneRow.detail}</small> : undefined}
             </span>
             <span className="settings-actions">
               {microphoneRow.offerSystemSettings ? (
