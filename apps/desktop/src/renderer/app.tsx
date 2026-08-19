@@ -1160,10 +1160,14 @@ export function App(): React.JSX.Element {
   /**
    * The providers the default-workspace rows can offer: every provider
    * currently offering projects, named the way its adapter names itself, plus
-   * one holding a stored default — provider or project — that is not offering
-   * right now: the rows must show the choices they hold, or a choice could be
-   * neither seen nor cleared. Each option carries the projects its
-   * default-project row offers, on the same show-what-is-held terms.
+   * one holding a stored default provider that is not offering right now — a
+   * provider falls back to its own display name, so the row still shows a
+   * choice it can name. A project has no such name to fall back to: its label
+   * lived on the observed list that stopped listing it, and an option labelled
+   * with the stored identity would offer a raw id for a default that already
+   * steers nothing. So each option carries only the projects its provider is
+   * offering, and a default the provider stops offering is cleared by the main
+   * process rather than shown here.
    */
   const storedWorkspaceProvider = settings?.defaultWorkspaceProvider;
   const storedWorkspaceProjects = settings?.workspaceProjectDefaults;
@@ -1194,14 +1198,7 @@ export function App(): React.JSX.Element {
             ? `${project.repository} on ${project.targetName}`
             : project.repository,
         }));
-      const stored = storedWorkspaceProjects?.[id];
-      // A stored project the provider no longer offers is its own label: the
-      // repository name lived on the observed list that stopped listing it.
-      const projects =
-        stored && !offered.some((project) => project.id === stored)
-          ? [...offered, { id: stored, label: stored }]
-          : offered;
-      return { id, name, projects };
+      return { id, name, projects: offered };
     });
   }, [workspaceProjects, storedWorkspaceProvider, storedWorkspaceProjects]);
 

@@ -24,6 +24,7 @@ import {
   SessionNoticeHold,
   SessionNoticeTracker,
   type SessionProviderAdapter,
+  staleWorkspaceProjectDefaults,
   type TrackedIssue,
   type UnparsedWireValue,
   type WorkspaceAgentSelection,
@@ -445,6 +446,8 @@ let unsubscribeSessions: (() => void) | undefined;
  * Undefined until the first announcement decides what there is to compare.
  */
 let lastWorkspaceProjects: string | undefined;
+/** Invalidates an older async broadcast whenever a newer pass or stop wins. */
+let workspaceProjectsBroadcastGeneration = 0;
 
 /**
  * Announces where a workspace can be created whenever the offer changes. This
@@ -456,12 +459,53 @@ let lastWorkspaceProjects: string | undefined;
  // SAFETY: The preceding check establishes the asserted contract.
  * runs on the observation cadence as well as on every commit.
  */
-function broadcastWorkspaceProjects(): void {
-  const projects = observedWorkspaceProjects();
+async function broadcastWorkspaceProjects(): Promise<void> {
+  const generation = ++workspaceProjectsBroadcastGeneration;
+  const offeredProjects = offeredWorkspaceProjects();
+  const defaults = await settingsStore.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field);
+  if (generation !== workspaceProjectsBroadcastGeneration) return;
+  await pruneWorkspaceProjectDefaults(
+    offeredProjects,
+    defaults,
+    () => generation === workspaceProjectsBroadcastGeneration,
+  );
+  if (generation !== workspaceProjectsBroadcastGeneration) return;
+  const projects = normalizeObservedWorkspaceProjects(offeredProjects, defaults);
   const serialized = JSON.stringify(projects);
   if (serialized === lastWorkspaceProjects) return;
   lastWorkspaceProjects = serialized;
   panels.broadcast(channels.workspaceProjectsChanged, projects);
+}
+
+/**
+ * Forgets a stored default project its provider has stopped offering. Every
+ * path that reads one matches it against the offered list, so an unmatched
+ * default steers nothing while the settings row still shows a choice; the
+ * write is what makes the row and the behaviour agree again. A failed write
+ * costs only the stale entry, which the next pass tries again.
+ */
+async function pruneWorkspaceProjectDefaults(
+  projects: readonly ObservedWorkspaceProject[],
+  defaults: Readonly<Partial<Record<string, string>>> | undefined,
+  isCurrent: () => boolean,
+): Promise<void> {
+  try {
+    for (const providerId of staleWorkspaceProjectDefaults(projects, defaults)) {
+      if (!isCurrent()) return;
+      const expected = defaults?.[providerId];
+      if (expected === undefined) continue;
+      const saved = await settingsStore.clearEntryIfUnchanged(
+        APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
+        providerId,
+        expected,
+      );
+      if (!saved.cleared) continue;
+      if (!isCurrent()) return;
+      panels.broadcast(channels.settingsChanged, saved.settings);
+    }
+  } catch {
+    return;
+  }
 }
 
 function argumentValue(name: string): string | undefined {
@@ -697,7 +741,12 @@ function registerIpc(): void {
       // roster does: a panel shown no sessions is shown no asks about them.
       noticeAsks:
         runMode.observesProviders && accountCapabilitiesActive() ? attentionRequests.list() : [],
-      workspaceProjects: accountCapabilitiesActive() ? observedWorkspaceProjects() : [],
+      workspaceProjects: accountCapabilitiesActive()
+        ? normalizeObservedWorkspaceProjects(
+            offeredWorkspaceProjects(),
+            await settingsStore.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field),
+          )
+        : [],
       ...(trackedIssues && runMode.observesProviders && accountCapabilitiesActive()
         ? { issues: trackedIssues }
         : undefined),
@@ -877,21 +926,20 @@ function registerIpc(): void {
 /**
  // SAFETY: The preceding check establishes the asserted contract.
  * Where a workspace can be created right now, as the adapters offer it: each
- * capable adapter's latest project list, stamped with its provider and bounded
- * once here so the panel and the conversation are handed the same list. A
+ * capable adapter's latest project list, stamped with its provider. This full
+ * list is the source of truth for validating and pruning saved choices; the
+ * renderer and conversation receive its separately bounded projection. A
  * fixture run offers nothing, for the same reason it observes nothing.
  */
-function observedWorkspaceProjects(): readonly ObservedWorkspaceProject[] {
+function offeredWorkspaceProjects(): readonly ObservedWorkspaceProject[] {
   if (!runMode.observesProviders) return [];
-  return normalizeObservedWorkspaceProjects(
-    [...orderedRegistrations.map(({ adapter }) => adapter), supersetWorkspaceAdapter].flatMap(
-      (adapter) =>
-        adapter.workspaceProjects().map((project) => ({
-          ...project,
-          providerId: adapter.provider.id,
-          providerName: adapter.provider.displayName,
-        })),
-    ),
+  return [...orderedRegistrations.map(({ adapter }) => adapter), supersetWorkspaceAdapter].flatMap(
+    (adapter) =>
+      adapter.workspaceProjects().map((project) => ({
+        ...project,
+        providerId: adapter.provider.id,
+        providerName: adapter.provider.displayName,
+      })),
   );
 }
 
@@ -976,7 +1024,7 @@ async function refreshProviderSessions(generation: number): Promise<void> {
   if (!sessionObservationLoop.isCurrent(generation)) return;
   // The registry only spoke if the sessions themselves changed, and a pass can
   // change the project list while leaving them exactly as they were.
-  broadcastWorkspaceProjects();
+  void broadcastWorkspaceProjects();
   // Attention review runs outside the observation guard so a slow model call
   // never delays the next provider snapshot.
   void attentionObservationLoop.refresh();
@@ -1365,11 +1413,12 @@ function startSessionObservation(): void {
     openCreatedWorkspaces(snapshot.sessions);
     // A commit is the earliest a write-triggered refresh can have changed the
     // offer, so the announcement rides it rather than waiting for the timer.
-    broadcastWorkspaceProjects();
+    void broadcastWorkspaceProjects();
   });
 }
 
 function stopSessionObservation(): void {
+  workspaceProjectsBroadcastGeneration += 1;
   unsubscribeSessions?.();
   unsubscribeSessions = undefined;
   for (const { adapter } of orderedRegistrations) {

@@ -363,22 +363,27 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
     {
       label: "Creating workspaces",
       detail:
-        "Where a connected provider documents a creation endpoint — Conductor and Cursor today — " +
+        "Where a connected provider documents a creation endpoint — Conductor, Cursor, and " +
+        "Superset today — " +
         "an ask in conversation, spoken or typed, can create a new workspace in one of the " +
         "projects that provider reports, optionally under a name the developer chose, and can " +
         "hand the new agent an opening task in the developer's own words where the project takes " +
         "one. A bare ask for a new agent lands here: only an ask that itself names the existing " +
         "workspace or session the agent should join adds one beside it instead. Only reported " +
         "projects can be named, a project that needs a task cannot be created " +
-        "without one, and a provider that reports none takes no ask. An ask that names no " +
+        "without one, and a provider that reports none takes no ask. Superset asks for more than " +
+        "the others: every Superset project is listed against the host that runs it, and a new " +
+        "Superset workspace needs that host, an agent Superset currently lists for it, and an " +
+        "opening task — so a task-less ask for one is refused rather than created idle. An ask that names no " +
         "provider goes to the default workspace provider; until one is chosen Luke asks when " +
         "more than one provider could take it, and the first workspace created saves its " +
         // SAFETY: The preceding check establishes the asserted contract.
         "provider as the default — changed or cleared by hand in the Settings tab. An ask that " +
         "names no project goes the same way: each provider remembers a default project, filled " +
         "in by the first workspace created there and changed or cleared by hand on the " +
-        "Connections page, under Workspaces; until one is chosen Luke asks when the provider " +
-        "lists more than one project. What a new " +
+        "Connections page, on that provider's own row — under Cloud Agent API keys for a " +
+        "provider connected by key, and under Superset for Superset; until one is chosen Luke " +
+        "asks when the provider lists more than one project. What a new " +
         "Conductor agent runs — its model, and its effort where the model's agent takes one — " +
         "follows the choice on the Conductor row under Cloud Agent API keys, or Conductor's own " +
         "defaults while none is made. A model named in a creation ask rides that creation alone " +

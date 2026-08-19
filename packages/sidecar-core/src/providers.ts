@@ -194,6 +194,32 @@ export function workspaceProjectSelectionId(
     : project.providerProjectId;
 }
 
+/**
+ * The providers whose stored default names no project they currently offer —
+ * a choice that steers nothing, because every path that reads it matches
+ * against the offered set. Only providers present in `projects` are judged: a
+ * provider offering nothing is observing nothing, and a default must not be
+ * discarded on that silence.
+ */
+export function staleWorkspaceProjectDefaults(
+  projects: readonly ObservedWorkspaceProject[],
+  defaults: Readonly<Partial<Record<string, string>>> | undefined,
+): readonly string[] {
+  if (!defaults) return [];
+  const offered = new Map<string, Set<string>>();
+  for (const project of projects) {
+    const selections = offered.get(project.providerId) ?? new Set<string>();
+    selections.add(workspaceProjectSelectionId(project));
+    offered.set(project.providerId, selections);
+  }
+  return [...offered.entries()]
+    .filter(([providerId, selections]) => {
+      const stored = defaults[providerId];
+      return stored !== undefined && !selections.has(stored);
+    })
+    .map(([providerId]) => providerId);
+}
+
 /** A workspace name reads in one breath; anything longer is a different ask. */
 export const maximumWorkspaceNameLength = 80;
 
@@ -220,6 +246,7 @@ export function workspaceNameText(value: UnparsedWireValue): string | undefined 
  */
 export function normalizeObservedWorkspaceProjects(
   projects: readonly ObservedWorkspaceProject[],
+  preferredSelections?: Readonly<Partial<Record<string, string>>>,
 ): readonly ObservedWorkspaceProject[] {
   const seen = new Map<string, Map<string, Set<string>>>();
   const normalized: ObservedWorkspaceProject[] = [];
@@ -262,16 +289,29 @@ export function normalizeObservedWorkspaceProjects(
     if (defaultAgent) normalizedProject.defaultAgent = defaultAgent;
     normalized.push(normalizedProject);
   }
-  return normalized
-    .sort(
-      (left, right) =>
-        compareRepositoryLabels(left.repository, right.repository) ||
-        // Two providers can offer one repository label; the provider and then
-        // the id keep the order deterministic rather than arrival-dependent.
-        left.providerName.localeCompare(right.providerName) ||
-        left.providerProjectId.localeCompare(right.providerProjectId),
-    )
-    .slice(0, maximumObservedWorkspaceProjects);
+  const sorted = normalized.sort(compareWorkspaceProjects);
+  const preferred = sorted.filter(
+    (project) => preferredSelections?.[project.providerId] === workspaceProjectSelectionId(project),
+  );
+  const ordinary = sorted.filter(
+    (project) => preferredSelections?.[project.providerId] !== workspaceProjectSelectionId(project),
+  );
+  return [...preferred, ...ordinary]
+    .slice(0, maximumObservedWorkspaceProjects)
+    .sort(compareWorkspaceProjects);
+}
+
+function compareWorkspaceProjects(
+  left: ObservedWorkspaceProject,
+  right: ObservedWorkspaceProject,
+): number {
+  return (
+    compareRepositoryLabels(left.repository, right.repository) ||
+    // Two providers can offer one repository label; the provider and then the
+    // id keep the order deterministic rather than arrival-dependent.
+    left.providerName.localeCompare(right.providerName) ||
+    left.providerProjectId.localeCompare(right.providerProjectId)
+  );
 }
 
 /** Alphabetical the way a person reads labels: case-blind, digits as numbers. */

@@ -1465,6 +1465,39 @@ test("keeps one provider's default project apart from another's", async (t) => {
   });
 });
 
+test("forgetting a default no provider offers survives the reload it was written for", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const cipher = countingCipher();
+  const store = storeIn(directory, { cipher });
+  await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "proj-gone");
+  await setWorkspaceProjectDefault(store, PROVIDER_ID.CURSOR, "proj-2");
+
+  // The write the observation pass makes when a provider stops offering the
+  // project a default names. It has to reach the file, not just the snapshot:
+  // the entry it forgets is one an earlier launch wrote.
+  await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, undefined);
+
+  assert.deepEqual((await storeIn(directory).snapshot()).workspaceProjectDefaults, {
+    [PROVIDER_ID.CURSOR]: "proj-2",
+  });
+  assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
+});
+
+test("a stale cleanup cannot clear a newer project default", async (t) => {
+  const store = storeIn(await temporaryDirectory(t));
+  await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "proj-old");
+  await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "proj-new");
+
+  const stale = await store.clearEntryIfUnchanged(
+    APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
+    PROVIDER_ID.CONDUCTOR,
+    "proj-old",
+  );
+
+  assert.equal(stale.cleared, false);
+  assert.equal(stale.settings.workspaceProjectDefaults?.[PROVIDER_ID.CONDUCTOR], "proj-new");
+});
+
 test("an entry the field cannot hold is refused rather than quietly dropped", () => {
   // The map guards drop what they cannot hold, which is right when reading a
   // stored file and wrong for a write: a whole map of unholdable entries would

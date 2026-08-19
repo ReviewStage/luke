@@ -4,6 +4,7 @@ import {
   maximumObservedWorkspaceProjects,
   normalizeObservedWorkspaceProjects,
   type ObservedWorkspaceProject,
+  staleWorkspaceProjectDefaults,
   WORKSPACE_TASK_SUPPORT,
   workspaceProjectSelectionId,
 } from "../src";
@@ -107,5 +108,76 @@ test("normalizing still drops blanks and duplicates before it sorts", () => {
   assert.deepEqual(
     normalized.map((entry) => entry.repository),
     ["beta"],
+  );
+});
+
+test("a default naming no offered project is stale, host segment and all", () => {
+  const offeredProject = project({ providerProjectId: "proj-1", providerTargetId: "local" });
+  const offered = [offeredProject];
+
+  // What an earlier build stored: the project id alone, before the host that
+  // owns it joined the identity. It matches nothing offered, so it steers
+  // nothing — the whole reason the row must stop showing it.
+  assert.deepEqual(staleWorkspaceProjectDefaults(offered, { conductor: "proj-1" }), ["conductor"]);
+  assert.deepEqual(
+    staleWorkspaceProjectDefaults(offered, {
+      conductor: workspaceProjectSelectionId(offeredProject),
+    }),
+    [],
+  );
+});
+
+test("a provider offering nothing keeps the default it holds", () => {
+  // Offering nothing is observing nothing — a signed-out CLI, a cold cache at
+  // launch, a fixture run. A default must not be discarded on that silence.
+  assert.deepEqual(staleWorkspaceProjectDefaults([], { conductor: "proj-1" }), []);
+  assert.deepEqual(
+    staleWorkspaceProjectDefaults([project({ providerId: "cursor" })], { conductor: "proj-1" }),
+    [],
+  );
+});
+
+test("each provider's default is judged against its own offer alone", () => {
+  const stale = staleWorkspaceProjectDefaults(
+    [
+      project({ providerId: "conductor", providerProjectId: "proj-1" }),
+      project({ providerId: "cursor", providerProjectId: "proj-2" }),
+      project({ providerId: "superset", providerProjectId: "proj-3" }),
+    ],
+    { conductor: "proj-1", cursor: "gone", superset: undefined },
+  );
+
+  assert.deepEqual(stale, ["cursor"]);
+  assert.deepEqual(staleWorkspaceProjectDefaults([project({})], undefined), []);
+});
+
+test("a valid default beyond the bounded display roster is not stale", () => {
+  const hiddenProject = project({
+    providerProjectId: "proj-z",
+    repository: "repository-z",
+  });
+  const offered = [
+    ...Array.from({ length: maximumObservedWorkspaceProjects }, (_, index) =>
+      project({
+        providerProjectId: `proj-${String(index).padStart(2, "0")}`,
+        repository: `repository-${String(index).padStart(2, "0")}`,
+      }),
+    ),
+    hiddenProject,
+  ];
+  const stored = workspaceProjectSelectionId(hiddenProject);
+
+  assert.equal(
+    normalizeObservedWorkspaceProjects(offered).some(
+      (candidate) => workspaceProjectSelectionId(candidate) === stored,
+    ),
+    false,
+  );
+  assert.deepEqual(staleWorkspaceProjectDefaults(offered, { conductor: stored }), []);
+  assert.equal(
+    normalizeObservedWorkspaceProjects(offered, { conductor: stored }).some(
+      (candidate) => workspaceProjectSelectionId(candidate) === stored,
+    ),
+    true,
   );
 });

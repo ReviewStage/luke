@@ -465,6 +465,30 @@ export class SettingsStore {
       return next;
     });
   }
+
+  /** Clears one map entry only if it still holds the value the caller read. */
+  async clearEntryIfUnchanged<Field extends KeyedAppSettingField>(
+    field: Field,
+    key: string,
+    expected: SettingEntryValue<Field>,
+  ): Promise<SettingsUpdateResult & { cleared: boolean }> {
+    let cleared = false;
+    await this.#serialize(async () => {
+      const persisted = await this.#load();
+      // SAFETY: KeyedAppSettingField identifies fields whose stored value is a wire record.
+      const current = persisted[field] as WireRecord | undefined;
+      if (!sameSettingEntry(field, current?.[key], expected)) return;
+      const entries = { ...current };
+      delete entries[key];
+      const next: PersistedSettings = { ...persisted, version: SETTINGS_FILE_VERSION };
+      if (Object.keys(entries).length > 0) Object.assign(next, { [field]: entries });
+      else delete next[field];
+      await this.#write(next);
+      this.#loading = Promise.resolve(next);
+      cleared = true;
+    });
+    return { settings: await this.snapshot(), cleared };
+  }
   #secretStorage: SecretStorage = SECRET_STORAGE.UNKNOWN;
 
   constructor(options: SettingsStoreOptions) {
