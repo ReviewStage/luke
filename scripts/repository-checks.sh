@@ -92,6 +92,18 @@ for image_path in $changelog_image_paths; do
     fi
 done
 
+# The changelog page splits releases on "## <version> — <YYYY-MM-DD>" and its
+# parser throws on any other shape — at module load in the browser, which no
+# build step executes. This check is what keeps a malformed heading out of a
+# visitor's tab.
+malformed_release_headings=$(grep -E '^## ' "$SIDECAR_REPO_ROOT/CHANGELOG.md" |
+    grep -vE '^## [0-9]+\.[0-9]+\.[0-9]+ — [0-9]{4}-[0-9]{2}-[0-9]{2}$' || true)
+if [[ -n "$malformed_release_headings" ]]; then
+    printf 'error: CHANGELOG.md release headings must read "## <version> — <YYYY-MM-DD>":\n%s\n' \
+        "$malformed_release_headings" >&2
+    exit 1
+fi
+
 # A release is its tag, and the tag must match apps/desktop/package.json — so
 # requiring the changelog to name the packaged version makes the version-bump
 # change carry the release's notes, which the landing page renders at

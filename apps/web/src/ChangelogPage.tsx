@@ -42,8 +42,9 @@ type Release = {
 
 /**
  * The heading shape is CHANGELOG.md's contract with this page: the version
- * becomes the sticky rail and the tag link, so a heading that does not parse
- * fails the build here rather than rendering a rail with holes in it.
+ * becomes the sticky rail and the tag link. repository-checks.sh refuses a
+ * heading that does not parse — nothing executes this module before a visitor
+ * does, so the throw here is the backstop, not the gate.
  */
 const RELEASE_HEADING = /^## (\d+\.\d+\.\d+) — (\d{4}-\d{2}-\d{2})$/;
 
