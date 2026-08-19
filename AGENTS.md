@@ -39,15 +39,24 @@ Trust constraints:
   no token is read, stored, or forwarded — and the CLI answers exactly as it
   would in the user's own terminal. No shell stands between Luke and the
   binary, nothing enters an invocation's arguments beyond values the build
-  fixed, and a machine whose CLI is absent or signed out is observed as having
-  nothing, the same answer a key-observed provider gives with no key. The
+  fixed — or, for a paged read, the bounded page cursor the same read's
+  previous page handed back, as a single token — and a machine whose CLI is
+  absent or signed out is observed as having nothing, the same answer a
+  key-observed provider gives with no key. The
   login is the consent, given by the user's own hands to the provider itself,
-  and signing the CLI out withdraws it on the next pass. Writes stay bound to
-  what the CLI documents: Codex documents no way to message or steer a running
-  task, so its cloud sessions advertise none, and the honest absence stands
-  rather than an improvised control. Widening the invocation set, adding a
-  write, or observing another provider this way is a product decision, not an
-  implementation detail.
+  and signing the CLI out withdraws it on the next pass. Writes keep the shape
+  every provider write has, at one remove: the one write Luke makes through a
+  provider CLI is a new Codex cloud task the user just asked for, through the
+  CLI's own documented creation command, in an environment the latest
+  observation pass reported. The ask carries the developer's own task text as
+  a single argument behind an end-of-options separator — never through a
+  shell — under the same login, probed again at the moment of the act, and
+  the one thing read out of the answer is the created task's id, for the next
+  pass to report on its own. Codex documents no way to message or steer a
+  task already running, so its cloud sessions advertise none, and the honest
+  absence stands rather than an improvised control. Widening the invocation
+  set further, or observing another provider this way, is a product decision,
+  not an implementation detail.
 - One registration is the exception the previous rule's word "require" leaves
   room for, and it is bounded on every side: Luke may merge an observation
   hook into a provider's own user-level hook configuration — today Claude

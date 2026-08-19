@@ -212,9 +212,11 @@ function voiceSpeedWord(speed: RealtimeVoiceSpeed): string {
 }
 
 function workspaceProviderName(providerId: ProviderId): string {
-  return isCredentialProviderId(providerId)
-    ? CREDENTIAL_PROVIDERS[providerId].displayName
-    : providerId;
+  if (isCredentialProviderId(providerId)) return CREDENTIAL_PROVIDERS[providerId].displayName;
+  // The one workspace-capable provider with no credential row to take a
+  // display name from.
+  if (providerId === PROVIDER_ID.CODEX) return "Codex";
+  return providerId;
 }
 
 function settingGuideEntry(
@@ -559,6 +561,7 @@ export const APP_SETTING_SCHEMA = {
         : ASK_EACH_TIME_CHOICE,
       choices: [
         ASK_EACH_TIME_CHOICE,
+        workspaceProviderName(PROVIDER_ID.CODEX),
         workspaceProviderName(PROVIDER_ID.CONDUCTOR),
         workspaceProviderName(PROVIDER_ID.CURSOR),
       ],
