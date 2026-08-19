@@ -24,19 +24,31 @@ their modules; the harness does not switch to Vitest.
 diffs `./scripts/check.sh` can gate. macOS UI validation (`./scripts/verify.sh`)
 applies only when a phase touches motion or renderer wiring.
 
-**Progress (2026-08-19):** Phases 1–7 foundation and wiring landed on
-`cursor/effect-migration-foundation-fb5e`. `@sidecar/core/effect` exports wire
-Schema, hosted Schema, session registry, provider bridges, composite adapter,
-and attention review pipeline. Desktop observation uses
-`EffectInMemorySessionRegistry` via `toPromiseSessionRegistry`; cloud/CLI base
-adapters run through Effect services; session-acts IPC uses
-`createEffectActionHandler`. Web hosted handlers have Effect wrappers. Phase 8
-(Promise facade removal) and remaining adapter/orchestration call sites remain.
+**Progress (2026-08-19):** Phases 1–8 landed on
+`cursor/effect-migration-foundation-fb5e`.
 
-**Foundation already started:** `effect@3.22.1` is declared on
-`@sidecar/core`, `@luke/desktop`, and `@luke/web`. `createEffectActionHandler`
-exists beside `createActionHandler`, and `anti-slop-effect` is registered in
-`.oxlintrc.json`.
+- `@sidecar/core/effect` exports wire Schema, hosted Schema, session registry,
+  provider bridges, composite adapter, and attention review pipeline.
+- `InMemorySessionRegistry` delegates to `EffectInMemorySessionRegistry`; the
+  Promise `refresh()` API remains for adapter compatibility.
+- Cloud/CLI base adapters run through Effect services (`adapter-runtime.ts`).
+- All session-act IPC handlers use Effect-based `createActionHandler`.
+- Attention evaluators (`OpenAi`, `Hosted`) run through the Effect review
+  pipeline internally.
+- Web hosted handlers (`attention`, `voice-mint`, `usage`, `account-delete`)
+  expose parallel Effect entry points.
+- Renderer stays Promise-first at the preload boundary; status unions unchanged
+  on the wire.
+
+**Remaining (optional cleanup):** per-adapter Effect implementations (today
+adapters still expose Promise `observe()` with Effect used at I/O boundaries);
+migrate remaining IPC modules (settings, account, voice, window) to
+`createActionHandler`; remove deprecated `toPromiseSessionRegistry`; switch
+hosted/web API routes to call `run*` Effect helpers directly.
+
+**Foundation:** `effect@3.22.1` on `@sidecar/core`, `@luke/desktop`, and
+`@luke/web`. `createActionHandler` is Effect-only. `anti-slop-effect` is
+registered in `.oxlintrc.json`.
 
 ---
 
