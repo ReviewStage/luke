@@ -40,9 +40,13 @@ import {
   type SessionTranscriptResult,
 } from "../shared/contracts";
 import { APP_SETTING_SCHEMA } from "../shared/settings-schema";
-import { isWorkspaceAgentSelection } from "../shared/workspace-agents";
+import {
+  isWorkspaceAgentSelection,
+  parseWorkspaceAgentSelection,
+} from "../shared/workspace-agents";
 import { isSupersetControlId, type SupersetCli } from "../superset-cli";
 import type { SupersetSessionContext } from "../superset-workspaces";
+import { unparsedWire, type WireBoundaryInput, wireRecord } from "../wire-boundary";
 
 export interface SessionActsIpcDependencies {
   ipcMain: Pick<IpcMain, "handle">;
@@ -117,8 +121,13 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
     failureReason: string,
   ) =>
     registerAction<[SessionIdentity], SessionOpenResult>(channel, {
-      validate: ([identity]) => {
-        if (!isSessionIdentity(identity)) throw new Error("Invalid session open request");
+      validate: (args) => {
+        const [rawIdentity] = args;
+        // SAFETY: IPC validate receives structured-clone args; this channel's first arg is a session identity object.
+        const identity = requireSessionIdentity(
+          unparsedWire(rawIdentity as WireBoundaryInput),
+          "Invalid session open request",
+        );
         return [identity];
       },
       async act(identity) {
@@ -148,8 +157,13 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
   // but a bounded https address, and nothing reaches the tracker. A fixture
   // run observes no tracker and so opens nothing.
   registerAction<[IssueIdentity], SessionOpenResult>(channels.openIssue, {
-    validate: ([identity]) => {
-      if (!isIssueIdentity(identity)) throw new Error("Invalid issue open request");
+    validate: (args) => {
+      const [rawIdentity] = args;
+      // SAFETY: IPC validate receives structured-clone args; this channel's first arg is an issue identity object.
+      const identity = requireIssueIdentity(
+        unparsedWire(rawIdentity as WireBoundaryInput),
+        "Invalid issue open request",
+      );
       return [identity];
     },
     async act(identity) {
@@ -181,9 +195,9 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
   // documented.
   ipcMain.handle(
     channels.readSessionTranscript,
-    async (event, identity: UnparsedWireValue): Promise<SessionTranscriptResult> => {
+    async (event, identityRaw: UnparsedWireValue): Promise<SessionTranscriptResult> => {
       if (!trustedSender(event)) throw new Error("Untrusted renderer");
-      if (!isSessionIdentity(identity)) throw new Error("Invalid transcript request");
+      const identity = requireSessionIdentity(identityRaw, "Invalid transcript request");
       const session = sessionRegistry.get(identity);
       if (!session) {
         return {
@@ -237,11 +251,11 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
     channels.sendSessionMessage,
     async (
       event,
-      identity: UnparsedWireValue,
+      identityRaw: UnparsedWireValue,
       text: UnparsedWireValue,
     ): Promise<ProviderMessageResult> => {
       if (!trustedSender(event)) throw new Error("Untrusted renderer");
-      if (!isSessionIdentity(identity)) throw new Error("Invalid session message request");
+      const identity = requireSessionIdentity(identityRaw, "Invalid session message request");
       const message = boundedField(text, sessionMessageText);
       if (!message.ok || message.value === undefined) {
         return {
@@ -273,11 +287,12 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
     channels.executeSessionControl,
     async (
       event,
-      identity: UnparsedWireValue,
+      identityRaw: UnparsedWireValue,
       controlId: UnparsedWireValue,
     ): Promise<ProviderControlResult> => {
       if (!trustedSender(event)) throw new Error("Untrusted renderer");
-      if (!isSessionIdentity(identity) || !isWireString(controlId) || !controlId.trim()) {
+      const identity = requireSessionIdentity(identityRaw, "Invalid session control request");
+      if (!isWireString(controlId) || !controlId.trim()) {
         throw new Error("Invalid session control request");
       }
       const session = sessionRegistry.get(identity);
@@ -304,9 +319,9 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
   // will ever read is a promise Luke cannot keep.
   ipcMain.handle(
     channels.requestSessionNotice,
-    (event, identity: UnparsedWireValue, request: UnparsedWireValue): AttentionRequestResult => {
+    (event, identityRaw: UnparsedWireValue, request: UnparsedWireValue): AttentionRequestResult => {
       if (!trustedSender(event)) throw new Error("Untrusted renderer");
-      if (!isSessionIdentity(identity)) throw new Error("Invalid session notice request");
+      const identity = requireSessionIdentity(identityRaw, "Invalid session notice request");
       const ask = attentionRequestText(request);
       if (!ask) {
         return {
@@ -338,9 +353,9 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
 
   ipcMain.handle(
     channels.withdrawSessionNotice,
-    (event, identity: UnparsedWireValue): AttentionRequestResult => {
+    (event, identityRaw: UnparsedWireValue): AttentionRequestResult => {
       if (!trustedSender(event)) throw new Error("Untrusted renderer");
-      if (!isSessionIdentity(identity)) throw new Error("Invalid session notice request");
+      const identity = requireSessionIdentity(identityRaw, "Invalid session notice request");
       const session = sessionRegistry.get(identity);
       if (!session) {
         return {
@@ -392,7 +407,11 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       }
       // Its own statement so the guard's narrowing survives: past here the
       // named selection is a documented pairing or nothing at all.
-      if (namedSelection !== undefined && !isWorkspaceAgentSelection(providerId, namedSelection)) {
+      const parsedSelection =
+        namedSelection !== undefined
+          ? parseWorkspaceAgentSelection(providerId, namedSelection)
+          : undefined;
+      if (namedSelection !== undefined && !parsedSelection) {
         throw new Error("Invalid workspace creation request");
       }
       if (!sendsNetwork) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
@@ -434,7 +453,7 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       const stored = isProviderId(providerId)
         ? (await settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[providerId]
         : undefined;
-      const agentSelection = namedSelection ?? stored;
+      const agentSelection = parsedSelection ?? stored;
       const createRequest: Parameters<SessionProviderAdapter["createWorkspace"]>[0] = {
         providerProjectId,
       };
@@ -484,7 +503,7 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
           adapter,
           providerProjectId,
           isWireString(providerTargetId) ? providerTargetId.trim() : undefined,
-          namedSelection as WorkspaceAgentSelection | undefined,
+          parsedSelection,
           isWireString(agent) ? agent.trim() : undefined,
         );
         // The named session was consumed above; the renderer's answer stays
@@ -564,7 +583,7 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
     channels.addWorkspaceAgent,
     async (
       event,
-      identity: UnparsedWireValue,
+      identityRaw: UnparsedWireValue,
       agent: UnparsedWireValue,
       name: UnparsedWireValue,
       task: UnparsedWireValue,
@@ -572,8 +591,8 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       namedEffort: UnparsedWireValue,
     ): Promise<ProviderWorkspaceResult> => {
       if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      const identity = requireSessionIdentity(identityRaw, "Invalid workspace agent request");
       if (
-        !isSessionIdentity(identity) ||
         !isWireString(agent) ||
         !agent.trim() ||
         (name !== undefined && !isWireString(name)) ||
@@ -644,28 +663,46 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
  * terms: both halves present, and everything it names re-resolved against the
  * latest observation before anything is done with it.
  */
-function isIssueIdentity(value: UnparsedWireValue): value is IssueIdentity {
-  if (!isRecord(value)) return false;
-  // SAFETY: The preceding check establishes the asserted contract.
-  const { trackerId, identifier } = value as Partial<IssueIdentity>;
-  return (
-    isWireString(trackerId) &&
-    trackerId.trim().length > 0 &&
-    isWireString(identifier) &&
-    identifier.trim().length > 0
-  );
+function requireIssueIdentity(value: UnparsedWireValue, message: string): IssueIdentity {
+  const identity = parseIssueIdentity(value);
+  if (!identity) throw new Error(message);
+  return identity;
 }
 
-function isSessionIdentity(value: UnparsedWireValue): value is SessionIdentity {
-  if (!isRecord(value)) return false;
-  // SAFETY: The preceding check establishes the asserted contract.
-  const { providerId, providerSessionId } = value as Partial<SessionIdentity>;
-  return (
-    isWireString(providerId) &&
-    providerId.trim().length > 0 &&
-    isWireString(providerSessionId) &&
-    providerSessionId.trim().length > 0
-  );
+function requireSessionIdentity(value: UnparsedWireValue, message: string): SessionIdentity {
+  const identity = parseSessionIdentity(value);
+  if (!identity) throw new Error(message);
+  return identity;
+}
+
+function parseIssueIdentity(value: UnparsedWireValue): IssueIdentity | undefined {
+  const record = wireRecord(value);
+  if (!record) return undefined;
+  const { trackerId, identifier } = record;
+  if (
+    !isWireString(trackerId) ||
+    trackerId.trim().length === 0 ||
+    !isWireString(identifier) ||
+    identifier.trim().length === 0
+  ) {
+    return undefined;
+  }
+  return { trackerId, identifier };
+}
+
+function parseSessionIdentity(value: UnparsedWireValue): SessionIdentity | undefined {
+  const record = wireRecord(value);
+  if (!record) return undefined;
+  const { providerId, providerSessionId } = record;
+  if (
+    !isWireString(providerId) ||
+    providerId.trim().length === 0 ||
+    !isWireString(providerSessionId) ||
+    providerSessionId.trim().length === 0
+  ) {
+    return undefined;
+  }
+  return { providerId, providerSessionId };
 }
 
 function isIssueActionAsk(value: UnparsedWireValue): value is {

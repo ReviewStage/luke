@@ -72,6 +72,7 @@ import { ASK_LUKE_INPUT_ID, focusAskField } from "./ask-luke";
 import { type ConsentConnectEntry, ConsentConnectSlot } from "./consent-connect-slot";
 import type { CredentialEntry, CredentialEntryControl } from "./credential-entry";
 import { isSubmittable, removalEndsEntry } from "./credential-entry";
+import { cssCustomProperties } from "./css-custom-properties";
 import {
   armErrand,
   EMPTY_ERRAND_RUN,
@@ -204,9 +205,9 @@ function captionSizeStyle(
   padding: number,
 ): CSSProperties {
   if (!textHeight) return {};
-  return {
+  return cssCustomProperties({
     "--caption-size": `${captionBlockSize(textHeight, volumeHint, padding)}px`,
-  } satisfies CSSProperties;
+  });
 }
 
 /**
@@ -236,14 +237,14 @@ function captionBlockSize(textHeight: number, volumeHint: boolean, padding: numb
 function noticeGrowthStyle(rowsHeight: number | undefined): CSSProperties {
   if (!rowsHeight) return {};
   const growth = Math.min(SESSION_NOTICE_HEIGHT * SESSION_NOTICE_MAX_ROWS, rowsHeight + 6);
-  return { "--notice-growth": `${growth}px` } satisfies CSSProperties;
+  return cssCustomProperties({ "--notice-growth": `${growth}px` });
 }
 
 function notchStyle(display: DisplayDiagnostic): CSSProperties {
-  return {
+  return cssCustomProperties({
     "--notch-top-inset": `${display.notch.topInset}px`,
     "--notch-housing-width": `${display.notch.housingWidth}px`,
-  } satisfies CSSProperties;
+  });
 }
 
 /** The two rosters a mention chip can stand for, deciding what its press does. */
@@ -280,11 +281,11 @@ function surfaceHeightStyle(
   slotHeight: number | undefined,
   feedbackHeight: number | undefined,
 ): CSSProperties {
-  return {
-    ...(panelHeight === undefined ? undefined : { "--panel-height": `${panelHeight}px` }),
-    ...(slotHeight === undefined ? undefined : { "--slot-height": `${slotHeight}px` }),
-    ...(feedbackHeight === undefined ? undefined : { "--feedback-height": `${feedbackHeight}px` }),
-  } satisfies CSSProperties;
+  const properties: Record<string, string> = {};
+  if (panelHeight !== undefined) properties["--panel-height"] = `${panelHeight}px`;
+  if (slotHeight !== undefined) properties["--slot-height"] = `${slotHeight}px`;
+  if (feedbackHeight !== undefined) properties["--feedback-height"] = `${feedbackHeight}px`;
+  return cssCustomProperties(properties);
 }
 
 /**

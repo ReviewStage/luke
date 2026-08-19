@@ -31,7 +31,7 @@ import {
 } from "./superset";
 import { parseVoiceHotkey } from "./voice-hotkey";
 import {
-  isWorkspaceAgentSelection,
+  parseWorkspaceAgentSelection,
   workspaceAgentModelLabel,
   workspaceAgentModels,
 } from "./workspace-agents";
@@ -241,7 +241,7 @@ function settingGuideEntry(
 const valid = <Value>(value: Value): SettingGuardResult<Value> => ({ valid: true, value });
 const invalid = <Value>(value: Value): SettingGuardResult<Value> => ({ valid: false, value });
 
-function optional<Value>(
+function optional<Value extends UnparsedWireValue>(
   value: UnparsedWireValue,
   guard: (candidate: UnparsedWireValue) => candidate is Value,
 ): SettingGuardResult<Value | undefined> {
@@ -270,8 +270,9 @@ function workspaceAgentDefaults(
   }
   const defaults: Partial<Record<ProviderId, WorkspaceAgentSelection>> = {};
   for (const [providerId, selection] of Object.entries(value)) {
-    if (!isProviderId(providerId) || !isWorkspaceAgentSelection(providerId, selection)) continue;
-    defaults[providerId] = selection;
+    const parsed = parseWorkspaceAgentSelection(providerId, selection);
+    if (!isProviderId(providerId) || !parsed) continue;
+    defaults[providerId] = parsed;
   }
   return valid(Object.keys(defaults).length > 0 ? defaults : undefined);
 }
@@ -809,17 +810,21 @@ export function spokenSettingValue(
   return convert?.(value);
 }
 
-export const APP_SETTING_DEFAULTS = Object.fromEntries(
-  APP_SETTING_FIELDS.map((field) => [field, APP_SETTING_SCHEMA[field].default]),
-) satisfies {
-  readonly [Field in AppSettingField]: (typeof APP_SETTING_SCHEMA)[Field]["default"];
-};
+export const APP_SETTING_DEFAULTS = APP_SETTING_FIELDS.reduce(
+  (defaults, field) => ({ ...defaults, [field]: APP_SETTING_SCHEMA[field].default }),
+  // SAFETY: Each entry is the schema default for its field; APP_SETTING_FIELDS enumerates every field once.
+  {} as {
+    readonly [Field in AppSettingField]: (typeof APP_SETTING_SCHEMA)[Field]["default"];
+  },
+);
 
-export const SETTING_PAGE = Object.fromEntries(
-  Object.values(APP_SETTING_SCHEMA).flatMap((definition) => {
-    return definition.guideEntry.ids.map((id) => [id, definition.settingsPage]);
-  }),
-) satisfies Record<AppSettingId, SettingsPage>;
+export const SETTING_PAGE =
+  // SAFETY: Each entry maps one settings id to the page its schema declares.
+  Object.fromEntries(
+    Object.values(APP_SETTING_SCHEMA).flatMap((definition) =>
+      definition.guideEntry.ids.map((id) => [id, definition.settingsPage]),
+    ),
+  ) as Record<AppSettingId, SettingsPage>;
 
 export function settingsScopeChanged(
   settings: Pick<StoredAppSettings, AppSettingField>,

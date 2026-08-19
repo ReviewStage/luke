@@ -2,6 +2,7 @@ import { REALTIME_STATUS, type RealtimeStatus } from "@sidecar/core";
 import { useCallback, useRef, useState } from "react";
 import type { MicrophoneStatus } from "../shared/contracts";
 import { FOCUS_FRAME_LIMIT } from "./credential-entry";
+import { cssCustomProperties } from "./css-custom-properties";
 import { Keycaps } from "./keycaps";
 import { SendIcon } from "./settings-icons";
 
@@ -159,14 +160,7 @@ export function AskLuke({
   }, [ask, draft]);
 
   return (
-    <div
-      className="ask-luke-row"
-      style={
-        {
-          "--row-index": rowIndex,
-        } satisfies React.CSSProperties
-      }
-    >
+    <div className="ask-luke-row" style={cssCustomProperties({ "--row-index": rowIndex })}>
       {/* biome-ignore lint/a11y/useKeyWithClickEvents: pointer-only by design — the keyboard already lands in the field by tabbing, and the click handler only places the caret. */}
       <form
         className="ask-luke"

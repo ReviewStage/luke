@@ -48,7 +48,6 @@ function isNodeError(error: Error): error is NodeJS.ErrnoException {
  */
 export function canIgnoreSqliteError(error: Error): boolean {
   if (isNodeError(error) && error.code === "ERR_UNKNOWN_BUILTIN_MODULE") return true;
-  if (!(error instanceof Error)) return false;
   return /no such table|no such column|unable to open database file|readonly database/i.test(
     error.message,
   );
@@ -67,7 +66,12 @@ export async function openReadOnlyDatabase(
     database.enableDefensive?.(true);
     return database;
   } catch (error) {
-    if (canIgnoreSqliteError(error) || canIgnoreFilesystemError(error)) return undefined;
-    throw error;
+    if (
+      !(error instanceof Error) ||
+      (!canIgnoreSqliteError(error) && !canIgnoreFilesystemError(error))
+    ) {
+      throw error;
+    }
+    return undefined;
   }
 }

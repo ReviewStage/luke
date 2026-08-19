@@ -183,7 +183,7 @@ function readRows(
       .all(...parameters)
       .filter((row): row is OpenCodeRow => isRecord(row));
   } catch (error) {
-    if (canIgnoreSqliteError(error)) return [];
+    if (error instanceof Error && canIgnoreSqliteError(error)) return [];
     throw error;
   }
 }

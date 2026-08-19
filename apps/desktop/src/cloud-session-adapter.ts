@@ -25,6 +25,7 @@ import {
   type WorkspaceProject,
   workspaceNameText,
 } from "@sidecar/core";
+import { unparsedWire, type WireBoundaryInput, wireRecord } from "./wire-boundary";
 
 const GIT_SUFFIX = ".git";
 
@@ -339,7 +340,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
       // Anything else is a bug in this pass — a TypeError thrown by a
       // subclass's parsing is not a network blip, and must not keep serving
       // the stale snapshot with no log, counter, or hook.
-      this.#onDiagnostic?.(error);
+      this.#onDiagnostic?.(error instanceof Error ? error : new Error(String(error)));
       throw error;
     }
     return this.#observations;
@@ -915,7 +916,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
       );
     }
 
-    let body: unknown;
+    let body: WireBoundaryInput;
     try {
       body = await response.json();
     } catch {
@@ -924,13 +925,14 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
         `${name} returned an unreadable response`,
       );
     }
-    if (!isRecord(body)) {
+    const bodyRecord = wireRecord(unparsedWire(body));
+    if (!bodyRecord) {
       throw new CloudRequestError(
         CLOUD_FAILURE.TRANSIENT,
         `${name} returned an unexpected response`,
       );
     }
-    return body;
+    return bodyRecord;
   }
 }
 

@@ -1,5 +1,6 @@
 import type { FeedbackKind } from "../shared/feedback";
 import { FEEDBACK_KIND } from "../shared/feedback";
+import { cssCustomProperties } from "./css-custom-properties";
 import { FEEDBACK_COPY, type FeedbackEntryControl } from "./feedback-entry";
 import { CheckIcon, MegaphoneIcon } from "./settings-icons";
 
@@ -41,10 +42,7 @@ function FeedbackOffer({
  */
 export function FeedbackSection({ control }: { control: FeedbackEntryControl }): React.JSX.Element {
   return (
-    <section
-      className="settings-section"
-      style={{ "--row-index": 4 } satisfies React.CSSProperties}
-    >
+    <section className="settings-section" style={cssCustomProperties({ "--row-index": 4 })}>
       <h2>
         <MegaphoneIcon />
         Feedback

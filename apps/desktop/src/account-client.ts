@@ -1,4 +1,10 @@
-import { isRecord, isWireString, type UnparsedWireValue, type WireRecord } from "@sidecar/core";
+import {
+  isRecord,
+  isWireString,
+  text,
+  type UnparsedWireValue,
+  type WireRecord,
+} from "@sidecar/core";
 import type { AccountProvider } from "./shared/contracts";
 
 export interface AccountTokens {

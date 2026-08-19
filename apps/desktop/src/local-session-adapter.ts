@@ -205,8 +205,8 @@ export async function readDirectory(directoryPath: string): Promise<Dirent[]> {
   try {
     return await fs.readdir(directoryPath, { withFileTypes: true });
   } catch (error) {
-    if (canIgnoreFilesystemError(error)) return [];
-    throw error;
+    if (!(error instanceof Error) || !canIgnoreFilesystemError(error)) throw error;
+    return [];
   }
 }
 
@@ -214,8 +214,8 @@ export async function fileStats(filePath: string): Promise<Stats | undefined> {
   try {
     return await fs.stat(filePath);
   } catch (error) {
-    if (canIgnoreFilesystemError(error)) return undefined;
-    throw error;
+    if (!(error instanceof Error) || !canIgnoreFilesystemError(error)) throw error;
+    return undefined;
   }
 }
 
@@ -229,8 +229,8 @@ export async function statDirectoryEntry(
     const stats = await fs.lstat(entryPath);
     return { directoryPath: entryPath, name, stats };
   } catch (error) {
-    if (canIgnoreFilesystemError(error)) return undefined;
-    throw error;
+    if (!(error instanceof Error) || !canIgnoreFilesystemError(error)) throw error;
+    return undefined;
   }
 }
 
@@ -238,8 +238,8 @@ export async function readTextFile(filePath: string): Promise<string | undefined
   try {
     return await fs.readFile(filePath, "utf8");
   } catch (error) {
-    if (canIgnoreFilesystemError(error)) return undefined;
-    throw error;
+    if (!(error instanceof Error) || !canIgnoreFilesystemError(error)) throw error;
+    return undefined;
   }
 }
 
@@ -262,8 +262,8 @@ async function readRegion(
     await handle.read(buffer, 0, length, offset(stats.size, length));
     return buffer.toString("utf8");
   } catch (error) {
-    if (canIgnoreFilesystemError(error)) return "";
-    throw error;
+    if (!(error instanceof Error) || !canIgnoreFilesystemError(error)) throw error;
+    return "";
   } finally {
     await handle?.close();
   }

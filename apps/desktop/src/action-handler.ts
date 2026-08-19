@@ -3,9 +3,9 @@ import type { IpcMainInvokeEvent } from "electron";
 
 interface ActionHandlerHost {
   trustedSender: (event: IpcMainInvokeEvent) => boolean;
-  handle: (
+  handle: <TResult>(
     channel: string,
-    listener: (event: IpcMainInvokeEvent, ...args: UnparsedWireValue[]) => Promise<void>,
+    listener: (event: IpcMainInvokeEvent, ...args: UnparsedWireValue[]) => Promise<TResult>,
   ) => void;
 }
 
@@ -27,7 +27,8 @@ export function createActionHandler(host: ActionHandlerHost) {
       try {
         return await action.act(...validated);
       } catch (error) {
-        return action.failure(error);
+        const failure = error instanceof Error ? error : new Error(String(error));
+        return action.failure(failure);
       }
     });
   };

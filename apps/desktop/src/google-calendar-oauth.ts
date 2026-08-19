@@ -1,13 +1,14 @@
 import { randomUUID } from "node:crypto";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
-import { isWireString, type UnparsedWireValue, type WireRecord } from "@sidecar/core";
+import { isWireString, type UnparsedWireValue } from "@sidecar/core";
 // The same landing page the Luke account sign-in leaves the browser on, so
 // the two flows' tabs cannot dress differently.
 import { accountLoopbackPage, LOOPBACK_PAGE_TONE } from "./account-loopback-page";
 // The same RFC 7636 arithmetic the Luke account sign-in uses: one PKCE, two
 // flows, so neither can drift into a weaker verifier than the other.
 import { codeChallenge, createCodeVerifier } from "./account-pkce";
+import { unparsedWire, wireRecord } from "./wire-boundary";
 
 /**
  * The sign-in behind the Google Calendar row: Google's OAuth flow for an
@@ -145,9 +146,8 @@ export interface GoogleCalendarSignInOptions {
 function tokensFrom(
   payload: UnparsedWireValue,
 ): { refreshToken: string; accessToken: string } | undefined {
-  if (!isRecord(payload)) return undefined;
-  // SAFETY: The preceding check establishes the asserted contract.
-  const record = payload as WireRecord;
+  const record = wireRecord(unparsedWire(payload));
+  if (!record) return undefined;
   const refreshToken = record.refresh_token;
   const accessToken = record.access_token;
   if (!isWireString(refreshToken) || !refreshToken) return undefined;

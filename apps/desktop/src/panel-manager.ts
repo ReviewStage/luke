@@ -183,10 +183,11 @@ export class PanelManager {
    * already holds the answer in its reply and must redraw from that rather
    * than race a broadcast.
    */
-  broadcast(channel: string, payload: UnparsedWireValue, except?: WebContents): void {
+  broadcast<Payload>(channel: string, payload: Payload, except?: WebContents): void {
     for (const window of this.#windows.values()) {
       if (window.isDestroyed() || window.webContents === except) continue;
-      window.webContents.send(channel, payload);
+      // SAFETY: Main-process broadcasts carry structured-clone snapshots produced for channels fixed by this build.
+      window.webContents.send(channel, payload as UnparsedWireValue);
     }
   }
 

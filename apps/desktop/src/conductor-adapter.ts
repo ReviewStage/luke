@@ -835,7 +835,11 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
     // failure message when standing it up went wrong. A session's reported
     // error is about the turn the user is watching, so it always outranks the
     // machinery's.
-    const activity = lifecycle?.status ? CONDUCTOR_WORKSPACE_ACTIVITY[lifecycle.status] : undefined;
+    const activity =
+      lifecycle?.status === CONDUCTOR_WORKSPACE_STATUS.INITIALIZING ||
+      lifecycle?.status === CONDUCTOR_WORKSPACE_STATUS.UPDATING
+        ? CONDUCTOR_WORKSPACE_ACTIVITY[lifecycle.status]
+        : undefined;
     const error = reported?.errorMessage ?? lifecycle?.errorMessage;
     // The stop belongs to the turn and the archive to the workspace: a chat
     // mid-turn offers the stop alone — its own workspace is by definition

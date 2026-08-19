@@ -501,7 +501,7 @@ export class OpenCodeSessionAdapter extends LocalSessionAdapter {
           .all()
           .filter((row): row is OpenCodeRow => isRecord(row));
       } catch (error) {
-        if (!canIgnoreSqliteError(error)) throw error;
+        if (!(error instanceof Error) || !canIgnoreSqliteError(error)) throw error;
       }
     }
     return undefined;
@@ -559,7 +559,7 @@ export class OpenCodeSessionAdapter extends LocalSessionAdapter {
         .all(...parameters)
         .filter((row): row is OpenCodeRow => isRecord(row));
     } catch (error) {
-      if (canIgnoreSqliteError(error)) return [];
+      if (error instanceof Error && canIgnoreSqliteError(error)) return [];
       throw error;
     }
   }

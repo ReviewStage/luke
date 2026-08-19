@@ -10,11 +10,18 @@ type IpcWireArgument =
   | readonly IpcWireArgument[]
   | { readonly [key: string]: IpcWireArgument };
 
-function invoke<T>(channel: string) {
-  return (...args: IpcWireArgument[]) => {
-    // SAFETY: Each channel's renderer contract names T; Electron delivers a deserialized wire value.
-    return ipcRenderer.invoke(channel, ...args) as Promise<T>;
-  };
+function invokeMethod<Channel extends keyof AppBridge>(channel: string): AppBridge[Channel] {
+  type Method = AppBridge[Channel];
+  type MethodArguments = Parameters<Extract<Method, (...args: never) => void>>;
+  type MethodResult = ReturnType<Extract<Method, (...args: never) => void>>;
+
+  function method(...args: MethodArguments): MethodResult {
+    // SAFETY: Electron serializes structured-clone values; each channel's AppBridge contract names the parameters.
+    return ipcRenderer.invoke(channel, ...(args as IpcWireArgument[])) as MethodResult;
+  }
+
+  // SAFETY: method implements the AppBridge entry for this channel.
+  return method as Method;
 }
 
 function subscribe<T>(channel: string) {
@@ -26,43 +33,43 @@ function subscribe<T>(channel: string) {
 }
 
 const bridge: AppBridge = {
-  getBootstrap: invoke(channels.bootstrap),
-  beginSignIn: invoke(channels.beginSignIn),
-  cancelSignIn: invoke(channels.cancelSignIn),
-  signOut: invoke(channels.signOut),
-  deleteAccount: invoke(channels.deleteAccount),
-  setExpanded: invoke(channels.setExpanded),
+  getBootstrap: invokeMethod<"getBootstrap">(channels.bootstrap),
+  beginSignIn: invokeMethod<"beginSignIn">(channels.beginSignIn),
+  cancelSignIn: invokeMethod<"cancelSignIn">(channels.cancelSignIn),
+  signOut: invokeMethod<"signOut">(channels.signOut),
+  deleteAccount: invokeMethod<"deleteAccount">(channels.deleteAccount),
+  setExpanded: invokeMethod<"setExpanded">(channels.setExpanded),
   setPointerInterception: (interceptsPointer) => {
     ipcRenderer.send(channels.setPointerInterception, interceptsPointer);
   },
-  requestMicrophone: invoke(channels.requestMicrophone),
-  getMicrophoneRoute: invoke(channels.microphoneRoute),
+  requestMicrophone: invokeMethod<"requestMicrophone">(channels.requestMicrophone),
+  getMicrophoneRoute: invokeMethod<"getMicrophoneRoute">(channels.microphoneRoute),
   openMicrophoneSettings: () => ipcRenderer.send(channels.openMicrophoneSettings),
-  setProviderApiKey: invoke(channels.setProviderApiKey),
-  updateSetting: invoke(channels.updateSetting),
-  updateSettingEntry: invoke(channels.updateSettingEntry),
+  setProviderApiKey: invokeMethod<"setProviderApiKey">(channels.setProviderApiKey),
+  updateSetting: invokeMethod<"updateSetting">(channels.updateSetting),
+  updateSettingEntry: invokeMethod<"updateSettingEntry">(channels.updateSettingEntry),
   openProviderApiKeys: (providerId) => {
     ipcRenderer.send(channels.openProviderApiKeys, providerId);
   },
-  resetSettings: invoke(channels.resetSettings),
-  connectGoogleCalendar: invoke(channels.connectGoogleCalendar),
+  resetSettings: invokeMethod<"resetSettings">(channels.resetSettings),
+  connectGoogleCalendar: invokeMethod<"connectGoogleCalendar">(channels.connectGoogleCalendar),
   cancelGoogleCalendarSignIn: () => {
     ipcRenderer.send(channels.cancelGoogleCalendarSignIn);
   },
   reopenGoogleCalendarSignIn: () => {
     ipcRenderer.send(channels.reopenGoogleCalendarSignIn);
   },
-  removeCalendarAccount: invoke(channels.removeCalendarAccount),
-  setCalendarSelected: invoke(channels.setCalendarSelected),
-  connectLinear: invoke(channels.connectLinear),
+  removeCalendarAccount: invokeMethod<"removeCalendarAccount">(channels.removeCalendarAccount),
+  setCalendarSelected: invokeMethod<"setCalendarSelected">(channels.setCalendarSelected),
+  connectLinear: invokeMethod<"connectLinear">(channels.connectLinear),
   cancelLinearSignIn: () => {
     ipcRenderer.send(channels.cancelLinearSignIn);
   },
   reopenLinearSignIn: () => {
     ipcRenderer.send(channels.reopenLinearSignIn);
   },
-  disconnectLinear: invoke(channels.disconnectLinear),
-  checkForUpdates: invoke(channels.checkForUpdates),
+  disconnectLinear: invokeMethod<"disconnectLinear">(channels.disconnectLinear),
+  checkForUpdates: invokeMethod<"checkForUpdates">(channels.checkForUpdates),
   openLatestRelease: () => ipcRenderer.send(channels.openLatestRelease),
   beginSupersetSignIn: invoke(channels.beginSupersetSignIn),
   submitSupersetSignInCode: invoke(channels.submitSupersetSignInCode),
@@ -72,23 +79,27 @@ const bridge: AppBridge = {
   setVoiceExchangeActive: (active) => {
     ipcRenderer.send(channels.setVoiceExchange, active);
   },
-  openSession: invoke(channels.openSession),
-  openSessionChange: invoke(channels.openSessionChange),
-  readSessionTranscript: invoke(channels.readSessionTranscript),
-  sendSessionMessage: invoke(channels.sendSessionMessage),
-  executeSessionControl: invoke(channels.executeSessionControl),
-  requestSessionNotice: invoke(channels.requestSessionNotice),
-  withdrawSessionNotice: invoke(channels.withdrawSessionNotice),
-  createSessionWorkspace: invoke(channels.createSessionWorkspace),
-  addWorkspaceAgent: invoke(channels.addWorkspaceAgent),
-  executeIssueAction: invoke(channels.executeIssueAction),
-  openIssue: invoke(channels.openIssue),
-  sendFeedback: invoke(channels.sendFeedback),
-  summonFeedback: invoke(channels.summonFeedback),
+  openSession: invokeMethod<"openSession">(channels.openSession),
+  openSessionChange: invokeMethod<"openSessionChange">(channels.openSessionChange),
+  readSessionTranscript: invokeMethod<"readSessionTranscript">(channels.readSessionTranscript),
+  sendSessionMessage: invokeMethod<"sendSessionMessage">(channels.sendSessionMessage),
+  executeSessionControl: invokeMethod<"executeSessionControl">(channels.executeSessionControl),
+  requestSessionNotice: invokeMethod<"requestSessionNotice">(channels.requestSessionNotice),
+  withdrawSessionNotice: invokeMethod<"withdrawSessionNotice">(channels.withdrawSessionNotice),
+  createSessionWorkspace: invokeMethod<"createSessionWorkspace">(channels.createSessionWorkspace),
+  addWorkspaceAgent: invokeMethod<"addWorkspaceAgent">(channels.addWorkspaceAgent),
+  executeIssueAction: invokeMethod<"executeIssueAction">(channels.executeIssueAction),
+  openIssue: invokeMethod<"openIssue">(channels.openIssue),
+  sendFeedback: invokeMethod<"sendFeedback">(channels.sendFeedback),
+  summonFeedback: invokeMethod<"summonFeedback">(channels.summonFeedback),
   focusPanel: () => ipcRenderer.send(channels.focusPanel),
-  requestRealtimeCredential: invoke(channels.requestRealtimeCredential),
-  requestRealtimeDiagnostics: invoke(channels.requestRealtimeDiagnostics),
-  requestHostedUsage: invoke(channels.requestHostedUsage),
+  requestRealtimeCredential: invokeMethod<"requestRealtimeCredential">(
+    channels.requestRealtimeCredential,
+  ),
+  requestRealtimeDiagnostics: invokeMethod<"requestRealtimeDiagnostics">(
+    channels.requestRealtimeDiagnostics,
+  ),
+  requestHostedUsage: invokeMethod<"requestHostedUsage">(channels.requestHostedUsage),
   notifyReady: () => ipcRenderer.send(channels.rendererReady),
   quit: () => ipcRenderer.send(channels.quit),
   onLifecycle: subscribe(channels.lifecycle),

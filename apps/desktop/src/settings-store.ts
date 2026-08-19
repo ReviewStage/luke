@@ -44,6 +44,7 @@ import {
   VOICE_CREDENTIAL_PROVIDER_ID,
 } from "./shared/credential-providers";
 import {
+  APP_SETTING_DEFAULTS,
   APP_SETTING_FIELDS,
   APP_SETTING_SCHEMA,
   type AppSettingField,
@@ -346,6 +347,17 @@ function storedApiKeys(record: WireRecord, providers: readonly CredentialProvide
  * with a model this one does not know; honouring it would send a value no
  * documented endpoint takes, so it is dropped the way an unknown voice is.
  */
+function readStoredSettings(record: WireRecord): StoredAppSettings {
+  let settings = { ...APP_SETTING_DEFAULTS };
+  for (const field of APP_SETTING_FIELDS) {
+    settings = {
+      ...settings,
+      [field]: APP_SETTING_SCHEMA[field].guard(record[field]).value,
+    };
+  }
+  return settings;
+}
+
 function parsePersistedSettings(
   source: string,
   providers: readonly CredentialProvider[],
@@ -358,13 +370,8 @@ function parsePersistedSettings(
   const version = record[SETTINGS_FIELD.VERSION];
   const calendarAccounts = storedCalendarAccounts(record);
   const grants = storedGrants(record);
-  const settings = Object.fromEntries(
-    APP_SETTING_FIELDS.map((field) => [
-      field,
-      APP_SETTING_SCHEMA[field].guard(record[field]).value,
-    ]),
-  ) satisfies StoredAppSettings;
-  return {
+  const settings = readStoredSettings(record);
+  const persisted = {
     ...settings,
     version: isWireNumber(version) ? version : SETTINGS_FILE_VERSION,
     apiKeys: storedApiKeys(record, providers),
@@ -372,6 +379,8 @@ function parsePersistedSettings(
     ...(storedAccount(record) ? { account: storedAccount(record) } : undefined),
     ...(calendarAccounts.length > 0 ? { calendarAccounts } : undefined),
   };
+  // SAFETY: readStoredSettings validated every preference field before this spread.
+  return persisted as PersistedSettings;
 }
 
 /**
@@ -1106,19 +1115,14 @@ export class SettingsStore {
     try {
       source = await fs.readFile(settingsPath, "utf8");
     } catch (error) {
-      if (!canIgnoreFilesystemError(error)) throw error;
+      if (!(error instanceof Error) || !canIgnoreFilesystemError(error)) throw error;
     }
 
     let persisted: PersistedSettings = {
       version: SETTINGS_FILE_VERSION,
       apiKeys: {},
-      ...Object.fromEntries(
-        APP_SETTING_FIELDS.map((field) => [
-          field,
-          APP_SETTING_SCHEMA[field].guard(undefined).value,
-        ]),
-      ),
-    } satisfies PersistedSettings;
+      ...APP_SETTING_DEFAULTS,
+    };
     if (source) {
       try {
         persisted = parsePersistedSettings(source, this.#providers);

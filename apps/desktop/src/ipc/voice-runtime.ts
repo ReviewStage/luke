@@ -4,7 +4,11 @@ import type { HostedUsageReader } from "../hosted-usage";
 import type { PanelManager } from "../panel-manager";
 import type { RealtimeCredentialMinter } from "../realtime-minter";
 import { channels } from "../shared/contracts";
-import { CREDENTIAL_PROVIDERS, isCredentialProviderId } from "../shared/credential-providers";
+import {
+  CREDENTIAL_CONNECTION,
+  CREDENTIAL_PROVIDERS,
+  isCredentialProviderId,
+} from "../shared/credential-providers";
 
 export interface VoiceRuntimeIpcDependencies {
   ipcMain: Pick<IpcMain, "handle" | "on">;
@@ -33,8 +37,9 @@ export function registerVoiceRuntimeIpc(dependencies: VoiceRuntimeIpcDependencie
     if (!trustedSender(event) || !isCredentialProviderId(providerId)) return;
     // A provider connected by consent issues no key and publishes no page to
     // fetch one from, so there is nowhere to send anyone.
-    const apiKeysUrl = CREDENTIAL_PROVIDERS[providerId].apiKeysUrl;
-    if (apiKeysUrl) void dependencies.openExternal(apiKeysUrl);
+    const provider = CREDENTIAL_PROVIDERS[providerId];
+    if (provider.connection !== CREDENTIAL_CONNECTION.KEY) return;
+    void dependencies.openExternal(provider.apiKeysUrl);
   });
   ipcMain.on(channels.focusPanel, (event) => {
     if (!trustedSender(event)) return;

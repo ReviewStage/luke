@@ -110,7 +110,13 @@ const MODIFIER_ALIASES = {
   cmd: VOICE_HOTKEY_MODIFIER.COMMAND,
   commandorcontrol: VOICE_HOTKEY_MODIFIER.COMMAND,
   cmdorctrl: VOICE_HOTKEY_MODIFIER.COMMAND,
-};
+} satisfies Record<string, VoiceHotkeyModifier>;
+
+function modifierAlias(name: string): VoiceHotkeyModifier | undefined {
+  if (!Object.hasOwn(MODIFIER_ALIASES, name)) return undefined;
+  // SAFETY: Object.hasOwn narrows name to a key the alias table documents.
+  return MODIFIER_ALIASES[name as keyof typeof MODIFIER_ALIASES];
+}
 
 /**
  * The keys a talk key may end in: Space or a letter, because that is the whole
@@ -153,7 +159,7 @@ export function parseVoiceHotkey(value: string): string | undefined {
   let key: string | undefined;
   for (const part of value.split("+")) {
     const name = part.trim().toLowerCase();
-    const modifier = MODIFIER_ALIASES[name];
+    const modifier = modifierAlias(name);
     if (modifier) {
       held.add(modifier);
       continue;
@@ -304,7 +310,13 @@ const MODIFIER_SYMBOLS = {
   Alt: "⌥",
   Option: "⌥",
   Shift: "⇧",
-};
+} satisfies Record<string, string>;
+
+function modifierSymbol(modifier: string): string {
+  if (!Object.hasOwn(MODIFIER_SYMBOLS, modifier)) return modifier;
+  // SAFETY: Object.hasOwn narrows modifier to a key the symbol table documents.
+  return MODIFIER_SYMBOLS[modifier as keyof typeof MODIFIER_SYMBOLS];
+}
 
 /** Renders an accelerator the way macOS writes it, for the panel to show. */
 export function voiceHotkeyLabel(accelerator: string): string {
@@ -312,7 +324,9 @@ export function voiceHotkeyLabel(accelerator: string): string {
   const key = parts[parts.length - 1] ?? "";
   const modifiers = parts
     .slice(0, -1)
-    .map((modifier) => MODIFIER_SYMBOLS[modifier] ?? `${modifier}+`)
+    .map((modifier) =>
+      Object.hasOwn(MODIFIER_SYMBOLS, modifier) ? modifierSymbol(modifier) : `${modifier}+`,
+    )
     .join("");
   return `${modifiers}${key}`;
 }
@@ -330,6 +344,6 @@ export function voiceHotkeyLabel(accelerator: string): string {
 export function voiceHotkeyKeycaps(accelerator: string): readonly string[] {
   const parts = accelerator.split("+");
   const key = parts[parts.length - 1] ?? "";
-  const modifiers = parts.slice(0, -1).map((modifier) => MODIFIER_SYMBOLS[modifier] ?? modifier);
+  const modifiers = parts.slice(0, -1).map((modifier) => modifierSymbol(modifier));
   return [...modifiers, key];
 }

@@ -1,5 +1,6 @@
-import { isNewerVersion, isRecord, parseReleaseVersion, text } from "@sidecar/core";
+import { isNewerVersion, parseReleaseVersion, text } from "@sidecar/core";
 import { UPDATE_STATUS, type UpdateSnapshot } from "./shared/contracts";
+import { unparsedWire, type WireBoundaryInput, wireRecord } from "./wire-boundary";
 
 /**
  * The two addresses updating ever touches, fixed here rather than passed in,
@@ -137,14 +138,15 @@ export class UpdateService {
       this.#report(`Update check failed with status ${response.status}`);
       return { status: UPDATE_STATUS.UNREACHABLE, currentVersion: this.#currentVersion };
     }
-    let payload: unknown;
+    let payload: WireBoundaryInput | undefined;
     try {
       payload = await response.json();
     } catch {
       this.#report("Update check answered with an unreadable body");
       return { status: UPDATE_STATUS.UNREACHABLE, currentVersion: this.#currentVersion };
     }
-    const tag = isRecord(payload) ? text(payload.tag_name) : undefined;
+    const release = wireRecord(unparsedWire(payload));
+    const tag = release ? text(release.tag_name) : undefined;
     const latest = tag && parseReleaseVersion(tag) ? tag.trim().replace(/^v/, "") : undefined;
     if (!latest) {
       // A release this build cannot name is not an update it can offer.

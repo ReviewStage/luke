@@ -46,6 +46,7 @@ import {
 import type { CredentialProvider } from "../shared/credential-providers";
 import {
   CLOUD_AGENT_PROVIDER_LIST,
+  CREDENTIAL_CONNECTION,
   CREDENTIAL_PROVIDER_ID,
   CREDENTIAL_PROVIDERS,
   providerRunsSessionsInCloud,
@@ -77,6 +78,7 @@ import {
   removalStage,
   removalWithdrawable,
 } from "./credential-removal";
+import { cssCustomProperties } from "./css-custom-properties";
 import type { FeedbackEntryControl } from "./feedback-entry";
 import { FeedbackSection } from "./feedback-panel";
 import { Keycaps } from "./keycaps";
@@ -478,7 +480,10 @@ function ProviderCredential({
   const clearing = removal === REMOVAL_STAGE.CLEARING;
   const busy = clearing || (entry?.busy ?? false);
   const rejection = removalRejection ?? entry?.rejection;
-  const status = CREDENTIAL_STATUS[source];
+  const status =
+    source === CREDENTIAL_SOURCE.ENVIRONMENT
+      ? CREDENTIAL_STATUS[CREDENTIAL_SOURCE.ENVIRONMENT]
+      : undefined;
   // The pencil opens the same editor from either connected state, but it does
   // not mean the same thing: one replaces the key Luke keeps, the other stands
   // in front of one it only reads.
@@ -486,7 +491,10 @@ function ProviderCredential({
   // Most providers issue an API key. One issues something it calls by another
   // name, and a field asking for the wrong thing sends the user to the page
   // that hands out the credential Luke refuses.
-  const credential = provider.keyFormat?.label ?? "API key";
+  const credential =
+    provider.connection === CREDENTIAL_CONNECTION.KEY
+      ? (provider.keyFormat?.label ?? "API key")
+      : "API key";
   const editLabel = stored
     ? `Replace the ${provider.displayName} ${credential}`
     : `Store a ${provider.displayName} ${credential} instead of the one from the environment`;
@@ -1439,7 +1447,7 @@ function CalendarAccountRow({
             key={calendar.id}
             {...(calendar.color
               ? {
-                  style: { "--calendar-color": calendar.color } satisfies React.CSSProperties,
+                  style: cssCustomProperties({ "--calendar-color": calendar.color }),
                 }
               : undefined)}
           >

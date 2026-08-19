@@ -18,6 +18,7 @@ import {
   type UnparsedWireValue,
 } from "@sidecar/core";
 import type { RealtimeCredentialMinter } from "./realtime-minter";
+import { unparsedWire } from "./wire-boundary";
 
 const HOSTED_DEFAULTS = {
   REQUEST_TIMEOUT_MS: 10_000,
@@ -137,14 +138,16 @@ export class HostedRealtimeCredentialMinter implements RealtimeCredentialMinter 
     }
     if (!response) return undefined;
 
-    const payload: unknown = await response.json().catch(() => undefined);
+    const payload = await response.json().catch(() => undefined);
     if (!response.ok) {
-      this.#refuse(response.status, payload);
+      this.#refuse(response.status, unparsedWire(payload));
       return undefined;
     }
 
     const answer =
-      payload === undefined ? undefined : hostedMintAnswerFromWire(payload, this.#now());
+      payload === undefined
+        ? undefined
+        : hostedMintAnswerFromWire(unparsedWire(payload), this.#now());
     if (!answer) {
       this.#record(REALTIME_MINT_OUTCOME.MALFORMED_RESPONSE, "no usable hosted credential");
       return undefined;
@@ -176,7 +179,9 @@ export class HostedRealtimeCredentialMinter implements RealtimeCredentialMinter 
   #refuse(status: number, payload: UnparsedWireValue): void {
     const reason = hostedErrorFromWire(payload);
     if (status === QUOTA_STATUS && reason === HOSTED_API_ERROR.QUOTA_EXHAUSTED) {
-      this.#quota = isRecord(payload) ? hostedQuotaFromWire(payload.quota) : undefined;
+      this.#quota = isRecord(payload)
+        ? hostedQuotaFromWire(unparsedWire(payload.quota))
+        : undefined;
       this.#record(REALTIME_MINT_OUTCOME.QUOTA_EXHAUSTED);
       return;
     }
@@ -192,10 +197,6 @@ export class HostedRealtimeCredentialMinter implements RealtimeCredentialMinter 
   }
 
   async #request(token: string): Promise<Response | undefined> {
-    // The kind of call and nothing else: the token, the preferences, and the
-    // minted secret stay out of the log. The model is the service's choice, so
-    // it has no name to log until the answer arrives.
-    console.log("AI call: hosted realtime voice credential mint");
     try {
       return await this.#fetch(this.#endpoint, {
         method: "POST",

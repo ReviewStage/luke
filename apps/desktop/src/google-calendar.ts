@@ -7,7 +7,7 @@ import {
   type MeetingInterval,
   meetingsFromBusyIntervals,
   text,
-  type UnparsedWireValue,
+  type WireValue,
 } from "@sidecar/core";
 import {
   GOOGLE_TOKEN_URL,
@@ -15,6 +15,7 @@ import {
   googleCalendarSignInConfig,
 } from "./google-calendar-oauth";
 import type { AccountCalendar, ObservedAccountCalendars } from "./shared/contracts";
+import { wireRecord as readWireRecord, unparsedWire } from "./wire-boundary";
 
 /**
  * The two reads a signed-in calendar account answers, both fixed by this
@@ -170,26 +171,26 @@ export class GoogleCalendarReader {
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
     if (!response.ok) throw new Error(`Google Calendar answered ${response.status}`);
-    const payload: unknown = await response.json();
-    const items = isRecord(payload) && Array.isArray(payload.items) ? payload.items : [];
+    const payload = await response.json();
+    const parsedPayload = unparsedWire(payload);
+    const items =
+      isRecord(parsedPayload) && Array.isArray(parsedPayload.items) ? parsedPayload.items : [];
     const calendars: ListedCalendar[] = [];
     for (const item of items) {
       if (calendars.length >= MAXIMUM_ACCOUNT_CALENDARS) break;
-      if (!isRecord(item)) continue;
-      const id = text(item.id);
+      const itemRecord = readWireRecord(unparsedWire(item));
+      if (!itemRecord) continue;
+      const id = text(itemRecord.id);
       if (!id) continue;
       // The calendar's own name, for its settings row alone; the id stands in
       // when Google sent none.
-      const label = (text(item.summary) ?? id).slice(0, MAXIMUM_CALENDAR_LABEL_LENGTH);
-      // The calendar's own colour, so its checkbox is drawn the way the
-      // user's calendar app draws it. Held to one shape: a colour is the one
-      // listed value that becomes a style, so nothing freeform passes.
-      const color = text(item.backgroundColor);
+      const label = (text(itemRecord.summary) ?? id).slice(0, MAXIMUM_CALENDAR_LABEL_LENGTH);
+      const color = text(itemRecord.backgroundColor);
       calendars.push({
         id,
         label,
         ...(color && CALENDAR_COLOR_PATTERN.test(color) ? { color } : undefined),
-        primary: item.primary === true,
+        primary: itemRecord.primary === true,
       });
     }
     // Google's list order is its own; the settings rows need one that holds
@@ -248,8 +249,11 @@ export class GoogleCalendarReader {
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
     if (!response.ok) throw new Error(`Google Calendar answered ${response.status}`);
-    const payload: unknown = await response.json();
-    const calendars = isRecord(payload) && isRecord(payload.calendars) ? payload.calendars : {};
+    const payload = await response.json();
+    const responseRecord = readWireRecord(unparsedWire(payload));
+    const calendars = responseRecord
+      ? (readWireRecord(unparsedWire(responseRecord.calendars)) ?? {})
+      : {};
     // Every asked-for calendar's busy blocks, together: which calendar a
     // meeting sits on does not matter to a hold, only that the user is in it.
     // Every asked-for calendar must also have answered: Google reports a
@@ -258,14 +262,17 @@ export class GoogleCalendarReader {
     // empty diary. Read as free, one such entry would end a quiet mid-meeting
     // and dump the held announcements aloud — so the pass fails instead, and
     // the account stands what it last showed.
-    const busy: UnparsedWireValue[] = [];
+    const busy: WireValue[] = [];
     for (const id of calendarIds) {
-      const entry = calendars[id];
-      const errored = isRecord(entry) && Array.isArray(entry.errors) && entry.errors.length > 0;
-      if (!isRecord(entry) || errored || !Array.isArray(entry.busy)) {
+      const entryRecord = readWireRecord(unparsedWire(calendars[id]));
+      if (!entryRecord) {
         throw new Error(`Google Calendar could not read free/busy for "${id}"`);
       }
-      busy.push(...entry.busy);
+      const errored = Array.isArray(entryRecord.errors) && entryRecord.errors.length > 0;
+      if (errored || !Array.isArray(entryRecord.busy)) {
+        throw new Error(`Google Calendar could not read free/busy for "${id}"`);
+      }
+      busy.push(...entryRecord.busy);
     }
     return meetingsFromBusyIntervals(busy, now);
   }
@@ -303,12 +310,17 @@ export class GoogleCalendarReader {
       this.#accessTokens.delete(account.id);
       throw new Error("Google no longer honours the sign-in; connect the account again");
     }
-    const payload: unknown = await response.json();
-    const accessToken =
-      isRecord(payload) && isWireString(payload.access_token) ? payload.access_token : "";
+    const payload = await response.json();
+    const tokenRecord = readWireRecord(unparsedWire(payload));
+    let accessToken = "";
+    let expiresIn = 0;
+    if (tokenRecord) {
+      const token = tokenRecord.access_token;
+      if (isWireString(token)) accessToken = token;
+      const ttl = tokenRecord.expires_in;
+      if (isWireNumber(ttl)) expiresIn = ttl;
+    }
     if (!accessToken) throw new Error("Google answered the token refresh without a token");
-    const expiresIn =
-      isRecord(payload) && isWireNumber(payload.expires_in) ? payload.expires_in : 0;
     this.#accessTokens.set(account.id, {
       refreshToken: account.refreshToken,
       accessToken,

@@ -265,7 +265,9 @@ export function FeedbackSlot({
         </label>
         {/* What the prompt box is for, said where the prompt is written. The
             feedback kind needs no explaining, so it carries no line. */}
-        {copy.detail ? <small className="settings-note">{copy.detail}</small> : null}
+        {"detail" in copy && copy.detail ? (
+          <small className="settings-note">{copy.detail}</small>
+        ) : null}
         <textarea
           id={MESSAGE_FIELD_ID}
           ref={field}

@@ -201,16 +201,26 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
       if (!isSettingEntryKey(field, key)) throw new Error("Unknown setting entry");
       const parsed = settingEntryGuard(field, key, value);
       if (!parsed.valid) throw new Error("Invalid setting value");
+      const projectValue = parsed.value;
+      // SAFETY: settingEntryGuard validated workspace project defaults as a wire string.
+      const projectWire = projectValue as UnparsedWireValue;
       if (
         field === APP_SETTING_SCHEMA.workspaceProjectDefaults.field &&
-        isWireString(parsed.value) &&
-        !workspaceProjectOffered(key, parsed.value)
+        isWireString(projectWire)
       ) {
-        throw new Error("Unknown workspace project");
+        if (!workspaceProjectOffered(key, projectWire)) {
+          throw new Error("Unknown workspace project");
+        }
       }
       return { field, key, value: parsed.value };
     },
-    save: ({ field, key, value }) => settingsStore.setEntry(field, key, value),
+    save: ({ field, key, value }) =>
+      settingsStore.setEntry(
+        field,
+        key,
+        // SAFETY: settingEntryGuard validated the entry before it reaches the store.
+        value as UnparsedWireValue,
+      ),
     async apply(result, { field }, event) {
       if (result.reason) return;
       await applySettingSideEffect(field, result.settings[field], result.settings, event);

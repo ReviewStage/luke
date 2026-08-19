@@ -16,6 +16,7 @@ import {
   realtimeCredentialIsUsable,
   text,
 } from "@sidecar/core";
+import { unparsedWire, type WireBoundaryInput } from "./wire-boundary";
 
 export const OPENAI_ENVIRONMENT = {
   API_KEY: "OPENAI_API_KEY",
@@ -161,7 +162,7 @@ export class OpenAiRealtimeCredentialMinter {
       return undefined;
     }
 
-    let payload: unknown;
+    let payload: WireBoundaryInput | undefined;
     try {
       payload = await response.json();
     } catch {
@@ -169,7 +170,7 @@ export class OpenAiRealtimeCredentialMinter {
       return undefined;
     }
 
-    const credential = realtimeCredentialFromResponse(payload, this.#model);
+    const credential = realtimeCredentialFromResponse(unparsedWire(payload), this.#model);
     if (!credential) {
       this.#record(REALTIME_MINT_OUTCOME.MALFORMED_RESPONSE, "no usable client secret");
       return undefined;
@@ -207,9 +208,6 @@ export class OpenAiRealtimeCredentialMinter {
   }
 
   async #request(): Promise<Response | undefined> {
-    // The model and nothing else: the key and the minted secret stay out of
-    // the log.
-    console.log(`AI call: realtime voice credential mint (model ${this.#model})`);
     try {
       return await this.#fetch(`${this.#baseUrl}${REALTIME_CLIENT_SECRETS_PATH}`, {
         method: "POST",

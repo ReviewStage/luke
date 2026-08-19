@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { createServer, type Server, type ServerResponse } from "node:http";
-import { isWireString } from "@sidecar/core";
+import type { AddressInfo } from "node:net";
 import { accountLoopbackPage, LOOPBACK_PAGE_TONE } from "./account-loopback-page";
 import { codeChallenge, createCodeVerifier } from "./account-pkce";
 import type { AccountProvider } from "./shared/contracts";
@@ -68,7 +68,7 @@ function answer(
 export const SIGN_IN_CANCELLED_MESSAGE = "Sign-in was cancelled";
 
 export function isSignInCancellation(error: Error): boolean {
-  return error instanceof Error && error.message === SIGN_IN_CANCELLED_MESSAGE;
+  return error.message === SIGN_IN_CANCELLED_MESSAGE;
 }
 
 export interface AccountLoopback {
@@ -142,10 +142,12 @@ export async function startAccountLoopback(
     server.listen(0, LOOPBACK_HOST, () => resolve());
   });
   const address = server.address();
-  if (!address || isWireString(address)) {
+  if (!address) {
     await closeServer(server);
     throw new Error("Luke could not open a sign-in callback");
   }
+  // SAFETY: TCP loopback listen returns AddressInfo; Unix socket paths never arise on this host binding.
+  const { port } = address as AddressInfo;
 
   const timer = setTimeout(() => {
     reject?.(new Error("Sign-in timed out"));
@@ -156,7 +158,7 @@ export async function startAccountLoopback(
   void waitForCode.finally(() => clearTimeout(timer)).catch(() => undefined);
 
   return {
-    redirectUri: `http://${LOOPBACK_HOST}:${address.port}${CALLBACK_PATH}`,
+    redirectUri: `http://${LOOPBACK_HOST}:${port}${CALLBACK_PATH}`,
     state,
     codeVerifier,
     codeChallenge: codeChallenge(codeVerifier),

@@ -15,6 +15,7 @@ import {
   type WireRecord,
 } from "@sidecar/core";
 import { CREDENTIAL_PROVIDER_ID, CREDENTIAL_PROVIDERS } from "./shared/credential-providers";
+import { unparsedWire, wireRecord } from "./wire-boundary";
 
 // Shared with the credential registry so the key the user saves and the
 // tracker Luke reads with it can never name different things.
@@ -243,12 +244,14 @@ export class LinearIssueTracker implements IssueTrackerAdapter {
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
     if (!response.ok) throw new Error(`Linear answered ${response.status}`);
-    const payload: unknown = await response.json();
-    if (!isRecord(payload)) throw new Error("Linear answered with something other than GraphQL");
+    const payload = await response.json();
+    const wirePayload = wireRecord(unparsedWire(payload));
+    if (!wirePayload) throw new Error("Linear answered with something other than GraphQL");
+    const data = wireRecord(unparsedWire(wirePayload.data));
     return {
-      ...(isRecord(payload.data) ? { data: payload.data } : undefined),
-      ...(Array.isArray(payload.errors) && payload.errors.length > 0
-        ? { errors: payload.errors }
+      ...(data ? { data } : undefined),
+      ...(Array.isArray(wirePayload.errors) && wirePayload.errors.length > 0
+        ? { errors: wirePayload.errors }
         : undefined),
     };
   }

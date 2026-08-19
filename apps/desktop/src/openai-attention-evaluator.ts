@@ -161,9 +161,6 @@ export class OpenAiAttentionEvaluator implements AttentionEvaluator {
   }
 
   async #request(update: AttentionUpdate): Promise<Response | undefined> {
-    // The model and nothing else: the update, the key, and the decision stay
-    // out of the log.
-    console.log(`AI call: attention review (model ${this.#model})`);
     try {
       return await this.#fetch(`${this.#baseUrl}${ATTENTION_RESPONSES_PATH}`, {
         method: "POST",

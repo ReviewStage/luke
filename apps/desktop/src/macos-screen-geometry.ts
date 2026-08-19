@@ -1,8 +1,9 @@
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import type { NativeNotchGeometry } from "@sidecar/core";
-import { isRecord, isWireNumber, type UnparsedWireValue, type WireRecord } from "@sidecar/core";
+import { isWireNumber, type UnparsedWireValue } from "@sidecar/core";
 import { app } from "electron";
+import { wireRecord } from "./wire-boundary";
 
 function helperPath(): string {
   if (app.isPackaged) {
@@ -11,17 +12,30 @@ function helperPath(): string {
   return path.join(app.getAppPath(), ".build", "native", "mac-screen-geometry");
 }
 
-function isNativeGeometry(value: UnparsedWireValue): value is NativeNotchGeometry {
-  if (!isRecord(value)) return false;
+function parseNativeGeometry(value: UnparsedWireValue): NativeNotchGeometry | undefined {
+  const record = wireRecord(value);
+  if (!record) return undefined;
   // SAFETY: The preceding check establishes the asserted contract.
-  const geometry = value as WireRecord;
-  return (
-    isWireNumber(geometry.displayId) &&
-    isWireNumber(geometry.safeAreaTop) &&
-    (geometry.menuBarHeight === undefined || isWireNumber(geometry.menuBarHeight)) &&
-    isWireNumber(geometry.notchWidth) &&
-    (geometry.hasNotch === true || geometry.hasNotch === false)
-  );
+  const geometry = record;
+  if (
+    !isWireNumber(geometry.displayId) ||
+    !isWireNumber(geometry.safeAreaTop) ||
+    (geometry.menuBarHeight !== undefined && !isWireNumber(geometry.menuBarHeight)) ||
+    !isWireNumber(geometry.notchWidth) ||
+    (geometry.hasNotch !== true && geometry.hasNotch !== false)
+  ) {
+    return undefined;
+  }
+  const parsed: NativeNotchGeometry = {
+    displayId: geometry.displayId,
+    safeAreaTop: geometry.safeAreaTop,
+    notchWidth: geometry.notchWidth,
+    hasNotch: geometry.hasNotch,
+  };
+  if (geometry.menuBarHeight !== undefined) {
+    parsed.menuBarHeight = geometry.menuBarHeight;
+  }
+  return parsed;
 }
 
 export function readMacScreenGeometry(): Map<number, NativeNotchGeometry> {
@@ -32,10 +46,12 @@ export function readMacScreenGeometry(): Map<number, NativeNotchGeometry> {
       encoding: "utf8",
       timeout: 2_000,
     });
-    const decoded: unknown = JSON.parse(output);
+    const decoded = JSON.parse(output);
     if (!Array.isArray(decoded)) return new Map();
     return new Map(
-      decoded.filter(isNativeGeometry).map((geometry) => [geometry.displayId, geometry]),
+      decoded
+        .filter((entry): entry is NativeNotchGeometry => parseNativeGeometry(entry) !== undefined)
+        .map((geometry) => [geometry.displayId, geometry]),
     );
   } catch (error) {
     console.warn("AppKit notch geometry unavailable; using work-area fallback", error);

@@ -69,7 +69,7 @@ import { ObservationHookRegistry } from "./observation-hook-registry";
 import { ObservationLoop, ObservationSupervisor } from "./observation-loop";
 import { OutputVolumeWatcher } from "./output-volume";
 import { PanelManager } from "./panel-manager";
-import { providerRegistrations } from "./provider-registrations";
+import { type ProviderRegistration, providerRegistrations } from "./provider-registrations";
 import { runModeFor } from "./run-mode";
 import { sessionNoticeSpeech } from "./session-notifications";
 import { createSettingsHandler } from "./settings-handler";
@@ -197,7 +197,9 @@ const providerRegistry = providerRegistrations({
   codexCloudAdapter,
 });
 // The record enforces completeness; the shared list preserves provider order.
-const orderedRegistrations = PROVIDER_ID_LIST.map((providerId) => providerRegistry[providerId]);
+const orderedRegistrations: readonly ProviderRegistration[] = PROVIDER_ID_LIST.map(
+  (providerId) => providerRegistry[providerId],
+);
 // The issue tracker is not a session provider: its issues feed the voice
 // roster rather than the registry, so it stands beside the adapters rather
 // than among them.
@@ -742,7 +744,9 @@ function registerIpc(): void {
     registerSettingHandler,
     settingsStore,
     adapterForCredential,
-    refreshAdapter: (adapter) => sessionRegistry.refresh(adapter),
+    refreshAdapter: async (adapter) => {
+      await sessionRegistry.refresh(adapter);
+    },
     refreshIssues: () => void issueObservationLoop.refresh(),
     applyVoiceCredential,
     hotkeys,
@@ -1483,7 +1487,7 @@ export function startDesktopApp(): void {
       // same reason. A file that cannot be read leaves the duck on, the same
       // answer a file that has never said gives.
       void settingsStore.get(APP_SETTING_SCHEMA.duckOtherMedia.field).then(
-        (enabled) => mediaDuck.setEnabled(enabled),
+        (enabled) => mediaDuck.setEnabled(enabled === true),
         () => mediaDuck.setEnabled(APP_SETTING_DEFAULTS.duckOtherMedia),
       );
       // Always on, like the announcements: the timed check answers to no
@@ -1508,9 +1512,9 @@ export function startDesktopApp(): void {
       // file that cannot be read means no choice was kept — the main display,
       // the default form — and must not keep the panels from starting.
       panels.setShowOnAllDisplays(
-        await settingsStore
+        (await settingsStore
           .get(APP_SETTING_SCHEMA.showOnAllDisplays.field)
-          .catch(() => APP_SETTING_DEFAULTS.showOnAllDisplays),
+          .catch(() => APP_SETTING_DEFAULTS.showOnAllDisplays)) === true,
       );
       panels.setFormFactor(
         (await settingsStore.get(APP_SETTING_SCHEMA.formFactor.field).catch(() => undefined)) ??

@@ -1,4 +1,5 @@
 import { APP_PANEL_TAB, type AppPanelTab } from "@sidecar/core";
+import { cssCustomProperties } from "./css-custom-properties";
 import { errandTargetProps, tabErrandTarget } from "./luke-errand";
 
 /**
@@ -50,12 +51,10 @@ export function TabBar({
       className="tab-bar"
       role="tablist"
       aria-label="Panel sections"
-      style={
-        {
-          "--tab-count": PANEL_TABS.length,
-          "--tab-index": Math.max(0, activeIndex),
-        } satisfies React.CSSProperties
-      }
+      style={cssCustomProperties({
+        "--tab-count": PANEL_TABS.length,
+        "--tab-index": Math.max(0, activeIndex),
+      })}
     >
       <span className="tab-thumb" aria-hidden="true" />
       {PANEL_TABS.map((candidate) => (

@@ -1,5 +1,12 @@
 import path from "node:path";
-import { isRecord, isWireString, oneLine, text, type WireRecord } from "@sidecar/core";
+import {
+  isRecord,
+  isWireString,
+  oneLine,
+  text,
+  type UnparsedWireValue,
+  type WireRecord,
+} from "@sidecar/core";
 import { readDirectory, readTail, statDirectoryEntry, tailRecords } from "./local-session-adapter";
 import {
   boundedTranscript,

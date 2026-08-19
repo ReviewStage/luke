@@ -256,7 +256,7 @@ async function rolloutPathForThread(request: CodexTranscriptRequest): Promise<st
       const rolloutPath = isRecord(row) ? text(row.rollout_path) : undefined;
       if (rolloutPath) return rolloutPath.endsWith(".zst") ? undefined : rolloutPath;
     } catch (error) {
-      if (!canIgnoreSqliteError(error)) throw error;
+      if (!(error instanceof Error) || !canIgnoreSqliteError(error)) throw error;
     } finally {
       database.close();
     }

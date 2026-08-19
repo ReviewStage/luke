@@ -1,14 +1,13 @@
 import {
   isProviderId,
-  isRecord,
   isWireString,
   PROVIDER_ID,
   type ProviderId,
   type UnparsedWireValue,
-  type WireRecord,
   type WorkspaceAgentModels,
   type WorkspaceAgentSelection,
 } from "@sidecar/core";
+import { wireRecord } from "../wire-boundary";
 
 /**
  * The agent kinds, models, and effort levels each provider's creation
@@ -83,7 +82,11 @@ export const WORKSPACE_AGENT_MODELS = {
 
 /** The table for one provider, or nothing where none is documented. */
 export function workspaceAgentModels(providerId: string): readonly WorkspaceAgentModels[] {
-  return isProviderId(providerId) ? (WORKSPACE_AGENT_MODELS[providerId] ?? []) : [];
+  if (!isProviderId(providerId) || !Object.hasOwn(WORKSPACE_AGENT_MODELS, providerId)) {
+    return [];
+  }
+  // SAFETY: Object.hasOwn narrows providerId to a key this table documents.
+  return WORKSPACE_AGENT_MODELS[providerId as keyof typeof WORKSPACE_AGENT_MODELS] ?? [];
 }
 
 /**
@@ -115,18 +118,21 @@ export function workspaceAgentModelLabel(
 }
 
 /** Guards a selection arriving over IPC: its shape first, then the table. */
-export function isWorkspaceAgentSelection(
+export function isWorkspaceAgentSelection(providerId: string, value: UnparsedWireValue): boolean {
+  return parseWorkspaceAgentSelection(providerId, value) !== undefined;
+}
+
+export function parseWorkspaceAgentSelection(
   providerId: string,
   value: UnparsedWireValue,
-): value is WorkspaceAgentSelection {
-  if (!isRecord(value)) return false;
+): WorkspaceAgentSelection | undefined {
+  const record = wireRecord(value);
+  if (!record) return undefined;
   // SAFETY: The preceding check establishes the asserted contract.
-  const { agent, model, effort } = value as WireRecord;
-  if (!isWireString(agent) || !isWireString(model)) return false;
-  if (effort !== undefined && !isWireString(effort)) return false;
-  return isListedWorkspaceAgentModel(providerId, {
-    agent,
-    model,
-    ...(effort !== undefined ? { effort } : undefined),
-  });
+  const { agent, model, effort } = record;
+  if (!isWireString(agent) || !isWireString(model)) return undefined;
+  if (effort !== undefined && !isWireString(effort)) return undefined;
+  const selection: WorkspaceAgentSelection =
+    effort !== undefined ? { agent, model, effort } : { agent, model };
+  return isListedWorkspaceAgentModel(providerId, selection) ? selection : undefined;
 }

@@ -1,6 +1,10 @@
 import { useEffect, useRef } from "react";
 import type { CredentialSource } from "../shared/contracts";
-import { CREDENTIAL_PROVIDERS, providerRunsSessionsInCloud } from "../shared/credential-providers";
+import {
+  CREDENTIAL_CONNECTION,
+  CREDENTIAL_PROVIDERS,
+  providerRunsSessionsInCloud,
+} from "../shared/credential-providers";
 import {
   CREDENTIAL_PLACEHOLDER,
   type CredentialEntryControl,
@@ -80,11 +84,9 @@ export function KeySlot({
   if (!entry) return null;
 
   const provider = CREDENTIAL_PROVIDERS[entry.providerId];
-  // Most providers issue an API key. One issues something it calls by another
-  // name, and a field asking for the wrong thing sends someone to the page that
-  // hands out the credential Luke refuses — so the slot names it, exactly as the
-  // line it opened from does.
-  const credential = provider.keyFormat?.label ?? "API key";
+  if (provider.connection !== CREDENTIAL_CONNECTION.KEY) return null;
+
+  const credential = "keyFormat" in provider ? (provider.keyFormat?.label ?? "API key") : "API key";
   // Holding a key is what brings the confirm out; being able to send it is what
   // makes it pressable. They differ while one is being written, and the button
   // has to stay on screen to say so.

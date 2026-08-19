@@ -27,6 +27,7 @@ import {
   tailRecords,
   workspaceLabel,
 } from "./local-session-adapter";
+import { unparsedWire, type WireBoundaryInput, wireRecord } from "./wire-boundary";
 
 /** A turn Cursor failed records its own reason, which is transcript content. */
 const CURSOR_TURN_FAILED_MESSAGE = "The turn failed";
@@ -117,7 +118,7 @@ function canonicalProjectName(value: string): string {
 }
 
 function folderPathFromWorkspaceRecord(source: string): string | undefined {
-  let parsed: unknown;
+  let parsed: WireBoundaryInput;
   try {
     // SAFETY: The preceding check establishes the asserted contract.
     parsed = JSON.parse(source);
@@ -125,9 +126,10 @@ function folderPathFromWorkspaceRecord(source: string): string | undefined {
     if (error instanceof SyntaxError) return undefined;
     throw error;
   }
-  if (!isRecord(parsed)) return undefined;
+  const record = wireRecord(unparsedWire(parsed));
+  if (!record) return undefined;
   // SAFETY: The preceding check establishes the asserted contract.
-  const folder = (parsed as WireRecord)[CURSOR_WORKSPACE_FIELD.FOLDER];
+  const folder = record[CURSOR_WORKSPACE_FIELD.FOLDER];
   if (!isWireString(folder)) return undefined;
   try {
     return fileURLToPath(folder);

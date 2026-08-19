@@ -239,7 +239,6 @@ function SessionRowActions({
   return (
     <div className="row-actions">
       {session.canMessage ? (
-        // biome-ignore lint/a11y/noStaticElementInteractions: the click is swallowed, not handled — the pill is where the row's open-on-press must not reach.
         // biome-ignore lint/a11y/useKeyWithClickEvents: pointer-only by design — the keyboard already lands in the field by tabbing, and the click handler only stops the row's open and places the caret.
         <form
           className="row-compose"
@@ -537,8 +536,6 @@ function SessionRow({
     // and a reader press, and its click bubbles here rather than opening twice
     // — while every control below swallows its own click, so the only presses
     // that open are the ones that meant the session itself.
-    // biome-ignore lint/a11y/useKeyWithClickEvents: the row's keyboard path is the first line's real button, whose activation bubbles to this handler.
-    // biome-ignore lint/a11y/noStaticElementInteractions: same press target as the button it wraps, widened to the row's own surface.
     <article
       {...shared}
       data-actions="true"

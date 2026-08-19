@@ -6,10 +6,10 @@ import {
   HOSTED_SERVICE_PATH,
   hostedQuotaFromWire,
   hostedReviewAnswerFromWire,
-  isRecord,
   positiveInteger,
   text,
 } from "@sidecar/core";
+import { unparsedWire, wireRecord } from "./wire-boundary";
 
 const HOSTED_DEFAULTS = {
   REQUEST_TIMEOUT_MS: 15_000,
@@ -123,9 +123,11 @@ export class HostedAttentionEvaluator implements AttentionEvaluator {
       return undefined;
     }
 
-    const payload: unknown = await response.json().catch(() => undefined);
+    const payload = await response.json().catch(() => undefined);
     const answer =
-      payload === undefined ? undefined : hostedReviewAnswerFromWire(payload, this.#now());
+      payload === undefined
+        ? undefined
+        : hostedReviewAnswerFromWire(unparsedWire(payload), this.#now());
     if (!answer) {
       this.#report("Hosted attention review answered outside the decision contract");
       return undefined;
@@ -139,8 +141,9 @@ export class HostedAttentionEvaluator implements AttentionEvaluator {
    * reviewed once the quiet ends, exactly like the keyed evaluator's 429.
    */
   async #quiet(response: Response): Promise<void> {
-    const payload: unknown = await response.json().catch(() => undefined);
-    const quota = isRecord(payload) ? hostedQuotaFromWire(payload.quota) : undefined;
+    const payload = await response.json().catch(() => undefined);
+    const record = wireRecord(unparsedWire(payload));
+    const quota = record ? hostedQuotaFromWire(unparsedWire(record.quota)) : undefined;
     const resetsAt = quota?.resetsAt;
     this.#quietUntil =
       resetsAt !== undefined && resetsAt > this.#now()
@@ -153,10 +156,6 @@ export class HostedAttentionEvaluator implements AttentionEvaluator {
   }
 
   async #request(token: string, update: AttentionUpdate): Promise<Response | undefined> {
-    // The kind of call and nothing else: the update, the token, and the
-    // decision stay out of the log. The model is the service's choice, so it
-    // has no name to log.
-    console.log("AI call: hosted attention review");
     try {
       return await this.#fetch(this.#endpoint, {
         method: "POST",

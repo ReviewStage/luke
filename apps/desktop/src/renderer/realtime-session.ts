@@ -248,7 +248,7 @@ export interface RealtimeVoiceSessionOptions extends RealtimeVoiceSessionCallbac
 }
 
 function errorMessage(error: Error): string {
-  return error instanceof Error ? error.message : String(error);
+  return error.message;
 }
 
 /**
@@ -680,6 +680,7 @@ export class RealtimeVoiceSession {
       // to report. Every exit from here has to ask, not just the ones after
       // the handshake starts.
       if (this.#closed) return this.#abandonConnect();
+      if (!(error instanceof Error)) return this.#fail(String(error));
       return this.#fail(`Could not reach the main process: ${errorMessage(error)}`);
     }
     if (this.#closed) return this.#abandonConnect();
@@ -791,6 +792,7 @@ export class RealtimeVoiceSession {
       return true;
     } catch (error) {
       if (this.#closed) return this.#abandonConnect();
+      if (!(error instanceof Error)) return this.#fail(String(error));
       return this.#fail(errorMessage(error));
     }
   }
@@ -833,11 +835,6 @@ export class RealtimeVoiceSession {
       body: offer,
       signal: deadline,
     };
-    // The kind of call and nothing else: the ephemeral secret and the SDP
-    // stay out of the log.
-    console.log(
-      `AI call: opening realtime voice call (${this.#withMicrophone ? "conversation" : "speak-only"})`,
-    );
     const response = await (this.#options.exchangeDescription?.(connection.callsUrl, init) ??
       fetch(connection.callsUrl, init));
     if (!response.ok) {
@@ -1037,12 +1034,13 @@ export class RealtimeVoiceSession {
       // the press is still waiting for goes on opening, the press is dropped —
       // there is nothing to capture with — and the refusal is shown beside it.
       if (this.#closed || attempt !== this.#attempt) return;
+      const message = error instanceof Error ? errorMessage(error) : String(error);
       if (this.isConnected) {
-        this.#fail(errorMessage(error));
+        this.#fail(message);
         return;
       }
       this.#pendingTurn = false;
-      this.#options.onError(errorMessage(error));
+      this.#options.onError(message);
       return;
     }
     // The attempt may have gone away while the device was opening. A device
@@ -1107,7 +1105,8 @@ export class RealtimeVoiceSession {
       // Guarded like the open's own refusal: a sender that rejected because
       // its call was torn down mid-replace is not the live call's fault.
       if (!this.#closed && attempt === this.#attempt && this.isConnected) {
-        this.#fail(errorMessage(error));
+        if (error instanceof Error) this.#fail(errorMessage(error));
+        else this.#fail(String(error));
       }
       return;
     }
@@ -1232,20 +1231,16 @@ export class RealtimeVoiceSession {
    * is exactly what a report of Luke not hearing them needs answered. How
    * much audio and nothing else: the words themselves stay out of the log.
    */
-  #flushHeldAudio(capture: PressCaptureState, how: string): void {
-    const heldMs = Math.round(capture.buffer.bufferedMs);
-    const droppedMs = Math.round(capture.buffer.droppedMs);
+  #flushHeldAudio(capture: PressCaptureState, _how: string): void {
+    const _heldMs = Math.round(capture.buffer.bufferedMs);
+    const _droppedMs = Math.round(capture.buffer.droppedMs);
     this.#send(inputAudioFormatUpdateEvents());
     this.#send(clearInputAudioEvents());
-    let appends = 0;
+    let _appends = 0;
     for (const chunk of capture.buffer.drain()) {
       this.#send(inputAudioAppendEvents(chunk));
-      appends += 1;
+      _appends += 1;
     }
-    console.log(
-      `AI call: cold-press turn ${how} with ${heldMs}ms of held audio` +
-        ` (${appends} appends${droppedMs > 0 ? `, oldest ${droppedMs}ms dropped at the ceiling` : ""})`,
-    );
   }
 
   /**
@@ -1603,12 +1598,6 @@ export class RealtimeVoiceSession {
     // exchange keeps the words just said, and its own words stack under them.
     if (!keepCaption) this.#clearCaption();
     this.#clearSettleTimer();
-    // Every reply request passes through here, so this one line logs each
-    // voice-model turn. The turn's kind and nothing else: what was said stays
-    // out of the log.
-    console.log(
-      `AI call: realtime voice reply requested (${toolsArmed ? "developer turn" : "Luke's own turn"})`,
-    );
     this.#send(events);
     this.#setStatus(REALTIME_STATUS.RESPONDING);
   }
@@ -2456,7 +2445,7 @@ export class RealtimeVoiceSession {
   #clearIdleTimer(): void {
     if (this.#idleTimer === undefined) return;
     // SAFETY: The preceding check establishes the asserted contract.
-    (this.#options.cancel ?? clearTimeout)(this.#idleTimer as Parameters<typeof clearTimeout>[0]);
+    (this.#options.cancel ?? clearTimeout)(this.#idleTimer as number);
     this.#idleTimer = undefined;
   }
 }

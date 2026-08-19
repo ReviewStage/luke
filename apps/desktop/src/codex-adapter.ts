@@ -578,7 +578,7 @@ export class CodexSessionAdapter extends LocalSessionAdapter {
           .all(now - SESSION_ROSTER_RETENTION_MS.SETTLED_MS)
           .filter((row): row is CodexThreadRow => isRecord(row));
       } catch (error) {
-        if (canIgnoreSqliteError(error)) continue;
+        if (error instanceof Error && canIgnoreSqliteError(error)) continue;
         throw error;
       } finally {
         database.close();

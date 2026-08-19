@@ -1,7 +1,6 @@
 import { execFile } from "node:child_process";
 import path from "node:path";
 import {
-  isRecord,
   isWireNumber,
   PROVIDER_ACT_RESULT_STATUS,
   type ProviderActResult,
@@ -13,6 +12,7 @@ import {
   type WireRecord,
 } from "@sidecar/core";
 import { CLI_CONNECTION, type CliConnection } from "./shared/contracts";
+import { unparsedWire, type WireBoundaryInput, wireRecord } from "./wire-boundary";
 
 /**
  * How a CLI-observed provider fails. Unavailable means there is nothing to
@@ -231,7 +231,7 @@ export abstract class CliSessionAdapter extends SessionProviderAdapterBase {
       // Anything else is a bug in this pass — a TypeError thrown by a
       // subclass's parsing is not a flaky command, and must not keep serving
       // the stale snapshot with no log, counter, or hook.
-      this.#onDiagnostic?.(error);
+      this.#onDiagnostic?.(error instanceof Error ? error : new Error(String(error)));
       throw error;
     }
     return this.#observations;
@@ -365,16 +365,17 @@ export abstract class CliSessionAdapter extends SessionProviderAdapterBase {
       if (result.exitCode !== 0) {
         throw new CliCommandError(CLI_FAILURE.TRANSIENT, `${name} CLI answered with a failure`);
       }
-      let body: unknown;
+      let body: WireBoundaryInput;
       try {
         body = JSON.parse(result.stdout);
       } catch {
         throw new CliCommandError(CLI_FAILURE.TRANSIENT, `${name} CLI answered unreadably`);
       }
-      if (!isRecord(body)) {
+      const bodyRecord = wireRecord(unparsedWire(body));
+      if (!bodyRecord) {
         throw new CliCommandError(CLI_FAILURE.TRANSIENT, `${name} CLI answered unexpectedly`);
       }
-      return body;
+      return bodyRecord;
     };
   }
 

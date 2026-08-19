@@ -251,7 +251,7 @@ export class SpokenNoticeAnnouncer {
   #cancelRetry(): void {
     if (this.#retryTimer === undefined) return;
     // SAFETY: The preceding check establishes the asserted contract.
-    (this.#options.cancel ?? clearTimeout)(this.#retryTimer as Parameters<typeof clearTimeout>[0]);
+    (this.#options.cancel ?? clearTimeout)(this.#retryTimer as number);
     this.#retryTimer = undefined;
   }
 
@@ -268,7 +268,7 @@ export class SpokenNoticeAnnouncer {
   #cancelLinger(): void {
     if (this.#lingerTimer === undefined) return;
     // SAFETY: The preceding check establishes the asserted contract.
-    (this.#options.cancel ?? clearTimeout)(this.#lingerTimer as Parameters<typeof clearTimeout>[0]);
+    (this.#options.cancel ?? clearTimeout)(this.#lingerTimer as number);
     this.#lingerTimer = undefined;
   }
 
