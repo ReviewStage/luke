@@ -856,7 +856,17 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       latched: talkLatched.current,
     });
     if (release === TALK_KEY_RELEASE.LATCH) {
-      talkLatched.current = true;
+      // A latch keeps a turn open past the release, so it needs a turn to
+      // keep: pending counts — the tap-to-open flow latches while its call is
+      // still on the way — but a press that opened none, because the
+      // permission prompt or a failed device swallowed it, must not latch, or
+      // the next press would read as the end of a turn nobody is holding.
+      if (
+        voiceSession.current?.turnPending === true ||
+        voiceStatusNow() === REALTIME_STATUS.LISTENING
+      ) {
+        talkLatched.current = true;
+      }
       return;
     }
     talkLatched.current = false;
@@ -874,7 +884,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     ) {
       setTalkOpening(false);
     }
-  }, []);
+  }, [voiceStatusNow]);
 
   /**
    * A typed ask to Luke himself. It rides the same call the talk key opens
