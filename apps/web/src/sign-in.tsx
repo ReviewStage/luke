@@ -33,7 +33,7 @@ function SignIn(): React.JSX.Element {
     void authClient.signIn.social({ provider }).then((result) => {
       if (!result.error) return;
       setPending(undefined);
-      setFailure("Sign-in could not start. Please try again.");
+      setFailure("Sign-in could not start. Try again.");
     });
   }, [provider]);
 
@@ -44,7 +44,7 @@ function SignIn(): React.JSX.Element {
     const result = await authClient.signIn.social({ provider });
     if (result.error) {
       setPending(undefined);
-      setFailure("Sign-in could not start. Please try again.");
+      setFailure("Sign-in could not start. Try again.");
     }
   };
 
