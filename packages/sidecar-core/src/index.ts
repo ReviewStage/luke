@@ -253,6 +253,7 @@ export {
   type RealtimeConnection,
   type RealtimeDiagnostics,
   type RealtimeMintOutcome,
+  type RealtimeSessionOptions,
   realtimeClientSecretRequest,
   realtimeCredentialFromResponse,
   realtimeCredentialIsUsable,
