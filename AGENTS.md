@@ -452,6 +452,29 @@ Rules the guide must keep:
   whether a provider is connected. The guide leaves the machine, so nothing in
   it may carry a key, a key's shape, or an environment variable's value.
 
+## Provider capability documentation
+
+`PROVIDERS.md` is the one place the per-provider capability surface is written
+down for a reader: what each provider connection observes, what a session row
+can say, and which acts each provider takes. The code cannot state that in one
+place — an adapter has a capability exactly when it overrides the method, so
+the truth is spread across every adapter — which is why the document exists,
+and why it can drift.
+
+**When you change what a provider can do, update `PROVIDERS.md` in the same
+change.** That means adding or removing a provider or tracker, widening or
+narrowing what an adapter observes, adding or dropping a control, a message
+path, a workspace act, a recap source, or a hook, or changing how a credential
+connects. The levers that exist are narrow: `scripts/provider-docs.test.mjs`
+refuses a provider or tracker id the document does not name, and
+`scripts/repository-checks.sh` requires the file to exist. Everything subtler
+— a stale endpoint, a control the document still claims, a boundary the code
+no longer keeps — has no lever, so the rule is stated here: a capability the
+document does not describe is one a reader will not know Luke has, and a stale
+entry describes a Luke that does not exist. `PRIVACY.md` and the README's
+integration table cover the same connections at different altitudes; a change
+that touches one usually touches all three.
+
 ## Code comments
 
 No unnecessary comments. Make the code obvious and immediately understandable

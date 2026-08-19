@@ -251,6 +251,7 @@ See [WORKFLOW.md](WORKFLOW.md) for the issue-to-pull-request workflow.
 
 ## Documentation
 
+- [Provider capabilities](PROVIDERS.md)
 - [Privacy details](PRIVACY.md)
 - [Maintainer release guide](.github/RELEASE.md)
 

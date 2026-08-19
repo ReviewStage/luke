@@ -10,6 +10,7 @@ required_files=(
     CLAUDE.md
     WORKFLOW.md
     README.md
+    PROVIDERS.md
     package.json
     pnpm-lock.yaml
     pnpm-workspace.yaml
