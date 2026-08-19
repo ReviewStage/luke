@@ -36,7 +36,7 @@ the date its release was published.
 
 ### Free daily allowance
 
-Luke's voice runs on an included daily allowance. Want more? Connect your own
+Luke's voice runs on an included daily allowance. Or you can connect your own
 OpenAI key.
 ([#182](https://github.com/ReviewStage/luke/pull/182),
 [#204](https://github.com/ReviewStage/luke/pull/204),
@@ -46,7 +46,7 @@ OpenAI key.
 
 ### Google Calendar
 
-Luke reads when your meetings start and end, and holds his updates until the
+Luke reads when your meetings start and end and holds his updates until the
 meeting is over.
 ([#195](https://github.com/ReviewStage/luke/pull/195))
 
@@ -98,12 +98,12 @@ meeting is over.
 
 ## 0.1.0 — 2026-08-17
 
-The first release: Luke is a voice agent that lives in the MacBook notch and
+Introducing Luke: a voice agent that lives in the MacBook notch and
 watches every local and cloud coding agent session.
 
 ### One panel for every agent
 
-One panel shows every coding agent working for you — Claude Code, Codex,
+One panel shows every coding agent working for you: Claude Code, Codex,
 Cursor, and OpenCode on your Mac, and Conductor, Cursor, Devin, Google Jules,
 and GitHub Copilot in the cloud. Filter, sort, or search the list, and click a
 session to open it where it runs.
@@ -129,9 +129,9 @@ agents, and reads and acts on Linear issues.
 
 ### Announcements
 
-Luke speaks up when a session starts waiting, hits an error, or finishes —
-captions on screen, Music and Spotify quieted while he talks, and a clickable
-chip naming the session. Ask him to "tell me when this finishes" and he will.
+Luke speaks up when a session starts waiting, hits an error, or finishes. He can show
+captions on screen, turn down Music and Spotify while he talks, and display a clickable
+chip naming the session. Ask him to "tell me when this session finishes" and he will.
 ([#97](https://github.com/ReviewStage/luke/pull/97),
 [#149](https://github.com/ReviewStage/luke/pull/149),
 [#173](https://github.com/ReviewStage/luke/pull/173))
@@ -146,8 +146,8 @@ chip naming the session. Ask him to "tell me when this finishes" and he will.
   ([#35](https://github.com/ReviewStage/luke/pull/35),
   [#51](https://github.com/ReviewStage/luke/pull/51))
 - Added settings for showing Luke in the menu bar and Dock, the display he
-  stands on, his voice and pace, and editable shortcuts
-- Added a feedback panel — send the founders a note or a prompt straight from
-  Luke ([#87](https://github.com/ReviewStage/luke/pull/87))
+  sits on, his voice and pace, and editable shortcuts
+- Added a form to send the founders feedback or submit a prompt
+  ([#87](https://github.com/ReviewStage/luke/pull/87))
 - Added sign-in with Google or GitHub
   ([#161](https://github.com/ReviewStage/luke/pull/161))
