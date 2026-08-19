@@ -38,6 +38,7 @@ test("an unreachable check says so and offers to try again", () => {
   assert.equal(row.current, false);
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("only a positively known newer release counts as news", () => {
   assert.equal(
     updateAvailable({

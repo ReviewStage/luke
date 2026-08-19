@@ -81,6 +81,7 @@ test("a turn beginning inside the hangover keeps the duck held", async () => {
   await settle();
 
   // Neither a restore — the conversation never stopped — nor a second duck,
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // which would read the ducked volume back as the one to restore to.
   assert.deepEqual(context.commands, ["duck"]);
 

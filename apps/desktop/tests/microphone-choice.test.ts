@@ -43,6 +43,7 @@ test("a shut lid keeps the headset microphone, muffled beats degraded", () => {
   assert.equal(microphoneConstraints(shut, DEVICES).deviceId, undefined);
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("a desktop with no lid to read counts as open", () => {
   const unknown = { ...BLUETOOTH_DEFAULT, lid: LID_STATE.UNKNOWN };
   assert.equal(preferredBuiltInLabel(unknown), "MacBook Pro Microphone");
@@ -80,6 +81,7 @@ test("no route, no built-in, or no matching device all mean the default", () => 
 
 test("the opener pins the preferred device and reports what it asked for", async () => {
   const asked: MediaTrackConstraints[] = [];
+  // SAFETY: Fixture audio stream implements only the MediaStream surface the session opens.
   const stream = {} as MediaStream;
 
   const result = await openPreferredMicrophone({
@@ -98,6 +100,7 @@ test("the opener pins the preferred device and reports what it asked for", async
 
 test("a pinned device that vanished falls back to the default, not a refusal", async () => {
   const asked: MediaTrackConstraints[] = [];
+  // SAFETY: Fixture audio stream implements only the MediaStream surface the session opens.
   const stream = {} as MediaStream;
 
   const result = await openPreferredMicrophone({
@@ -117,6 +120,7 @@ test("a pinned device that vanished falls back to the default, not a refusal", a
 
 test("an unreadable route is the browser's default, never a gate", async () => {
   const asked: MediaTrackConstraints[] = [];
+  // SAFETY: Fixture audio stream implements only the MediaStream surface the session opens.
   const stream = {} as MediaStream;
 
   const result = await openPreferredMicrophone({
@@ -146,6 +150,7 @@ test("a default already on the Mac's microphone never enumerates at all", async 
       enumerated += 1;
       return DEVICES;
     },
+    // SAFETY: Fixture audio stream implements only the MediaStream surface the session opens.
     open: async () => ({}) as MediaStream,
   });
 

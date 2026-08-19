@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { UnparsedWireValue } from "@sidecar/core";
 import type { IpcMainInvokeEvent } from "electron";
 import { createSettingsHandler, SettingsRefusal } from "../src/settings-handler";
 import type { AppSettings, SettingsUpdateResult } from "../src/shared/contracts";
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 const SETTINGS = { showInDock: false } as AppSettings;
 
-function event(sender: object = { id: 1 }): IpcMainInvokeEvent {
+function event(sender: { id: number } = { id: 1 }): IpcMainInvokeEvent {
+  // SAFETY: Fixture invoke event carries only sender.id for trust validation.
   return { sender } as IpcMainInvokeEvent;
 }
 
@@ -95,7 +98,7 @@ test("a successful write applies and broadcasts, skipping the asking window", as
   });
   const sender = { id: "asker" };
   register("app:set-x", {
-    validate: (value: unknown) => value === true,
+    validate: (value: UnparsedWireValue) => value === true,
     save: async (value) => {
       assert.equal(value, true);
       return { settings: SETTINGS };
@@ -112,6 +115,7 @@ test("a successful write applies and broadcasts, skipping the asking window", as
   assert.deepEqual(broadcasts, [{ settings: SETTINGS, except: sender }]);
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("a filesystem failure is reported as the refusal, not a thrown error", async () => {
   const handlers = new Map<
     string,

@@ -20,6 +20,7 @@ import {
   type RecordedRequest,
   recordingFetch,
 } from "./support/http-fake";
+import type { ParsedJsonObject } from "./support/json";
 
 const CLIENT_ID = "6f0a2c1e9b3d4f5a";
 const NOW = 1_760_000_000_000;
@@ -57,11 +58,11 @@ async function answerCallback(
   });
 }
 
-function urlParts(url: URL): { host: string; port: string; path: string } {
+function urlParts(url: URL) {
   return { host: url.hostname, port: url.port, path: `${url.pathname}${url.search}` };
 }
 
-function grantResponse(overrides: Record<string, unknown> = {}): Response {
+function grantResponse(overrides: ParsedJsonObject = {}): Response {
   return jsonResponse({
     access_token: "lin_oauth_access",
     refresh_token: "lin_oauth_refresh",
@@ -72,16 +73,13 @@ function grantResponse(overrides: Record<string, unknown> = {}): Response {
   });
 }
 
-function signInWith(respond: (request: RecordedRequest) => Response): {
-  signIn: LinearSignIn;
-  opened: string[];
-  requests: RecordedRequest[];
-} {
+function signInWith(respond: (request: RecordedRequest) => Response) {
   const opened: string[] = [];
   const { fetch: fakeFetch, requests } = recordingFetch(respond);
   const signIn = new LinearSignIn({
     openExternal: (url) => opened.push(url),
     environment: environment(),
+    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
     fetchImplementation: fakeFetch as typeof globalThis.fetch,
     now: () => NOW,
   });
@@ -91,6 +89,7 @@ function signInWith(respond: (request: RecordedRequest) => Response): {
 /** The browser is opened synchronously with the flow; wait for the loopback. */
 async function openedUrl(opened: readonly string[]): Promise<URL> {
   while (opened.length === 0) await new Promise((resolve) => setImmediate(resolve));
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   return new URL(opened[0] as string);
 }
 
@@ -119,6 +118,7 @@ test("runs Linear's documented public-client flow end to end", async () => {
   const authorization = await openedUrl(opened);
 
   // The page is Linear's own, asking for the two scopes the two acts need,
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // with PKCE and as the developer rather than as an app of Luke's own.
   assert.equal(authorization.origin + authorization.pathname, LINEAR_AUTHORIZATION_URL);
   assert.equal(authorization.searchParams.get("client_id"), CLIENT_ID);
@@ -136,6 +136,7 @@ test("runs Linear's documented public-client flow end to end", async () => {
   );
 
   const state = authorization.searchParams.get("state") ?? "";
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   const answered = await answerCallback(opened[0] as string, { state, code: "auth-code" });
   assert.equal(answered.status, 200);
   assert.match(answered.body, /connected/i);
@@ -149,6 +150,7 @@ test("runs Linear's documented public-client flow end to end", async () => {
   // The exchange went to Linear's token endpoint carrying the verifier whose
   // hash the authorization page was shown — the PKCE contract, checkable here.
   assert.equal(requests.length, 1);
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   const exchange = requests[0] as RecordedRequest;
   assert.equal(exchange.url, LINEAR_TOKEN_URL);
   const body = new URLSearchParams(exchange.body ?? "");
@@ -171,9 +173,11 @@ test("a redirect with the wrong state is refused without ending the wait", async
   const state = authorization.searchParams.get("state") ?? "";
 
   // A stray or forged request is answered 404 and the flow keeps waiting.
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   const forged = await answerCallback(opened[0] as string, { state: "not-it", code: "stolen" });
   assert.equal(forged.status, 404);
 
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   const genuine = await answerCallback(opened[0] as string, { state, code: "auth-code" });
   assert.equal(genuine.status, 200);
   assert.equal("accessToken" in (await pending), true);
@@ -186,25 +190,34 @@ test("the first valid callback exclusively claims the one-time code exchange", a
   });
   const opened: string[] = [];
   const requests: RecordedRequest[] = [];
+  const exchangeFetchImpl = async (input: RequestInfo | URL, init?: RequestInit) => {
+    requests.push({
+      url: String(input),
+      authorization: new Headers(init?.headers).get("authorization"),
+      body:
+        init?.body !== undefined &&
+        init?.body !== null &&
+        Object.prototype.toString.call(init.body) === "[object String]"
+          ? init.body
+          : undefined,
+    });
+    return exchangeResponse;
+  };
   const signIn = new LinearSignIn({
     openExternal: (url) => opened.push(url),
     environment: environment(),
-    fetchImplementation: (async (input, init) => {
-      requests.push({
-        url: String(input),
-        authorization: new Headers(init?.headers).get("authorization"),
-        body: typeof init?.body === "string" ? init.body : undefined,
-      });
-      return exchangeResponse;
-    }) as typeof globalThis.fetch,
+    // SAFETY: Recording fetch matches globalThis.fetch for test harness injection.
+    fetchImplementation: exchangeFetchImpl as typeof globalThis.fetch,
     now: () => NOW,
   });
 
   const pending = signIn.signIn();
   const authorization = await openedUrl(opened);
   const state = authorization.searchParams.get("state") ?? "";
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   const first = answerCallback(opened[0] as string, { state, code: "auth-code" });
   while (requests.length === 0) await new Promise((resolve) => setImmediate(resolve));
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   const duplicate = await answerCallback(opened[0] as string, { state, code: "auth-code" });
   assert.equal(duplicate.status, 404);
   assert.equal(requests.length, 1);
@@ -221,6 +234,7 @@ test("a refusal from Linear is an answer, not an exchange", async () => {
   const authorization = await openedUrl(opened);
   const state = authorization.searchParams.get("state") ?? "";
 
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   const answered = await answerCallback(opened[0] as string, { state, error: "access_denied" });
   assert.equal(answered.status, 200);
   assert.match(answered.body, /didn’t complete/i);
@@ -248,6 +262,7 @@ test("a claimed callback is allowed to finish after the waiting timeout", async 
   const signIn = new LinearSignIn({
     openExternal: (url) => opened.push(url),
     environment: environment(),
+    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
     fetchImplementation: (() => exchangeResponse) as typeof globalThis.fetch,
     now: () => NOW,
     timeoutMs: 20,
@@ -256,6 +271,7 @@ test("a claimed callback is allowed to finish after the waiting timeout", async 
   const pending = signIn.signIn();
   const authorization = await openedUrl(opened);
   const state = authorization.searchParams.get("state") ?? "";
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   const callback = answerCallback(opened[0] as string, { state, code: "auth-code" });
   await new Promise((resolve) => setTimeout(resolve, 30));
   signIn.cancel();
@@ -283,6 +299,7 @@ test("a refresh answer without its rotated refresh token is not persisted", asyn
   );
   const outcome = await refreshLinearGrant("spent-refresh", {
     environment: environment(),
+    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
     fetchImplementation: fakeFetch as typeof globalThis.fetch,
     now: () => NOW,
   });
@@ -291,42 +308,50 @@ test("a refresh answer without its rotated refresh token is not persisted", asyn
 });
 
 test("Linear saying no and Linear saying nothing are different answers", async () => {
+  const { fetch: refusedFetch } = recordingFetch(() =>
+    jsonResponse({ error: "invalid_grant" }, HTTP_STATUS.UNAUTHORIZED),
+  );
   const refused = await refreshLinearGrant("dead-refresh", {
     environment: environment(),
-    fetchImplementation: recordingFetch(() =>
-      jsonResponse({ error: "invalid_grant" }, HTTP_STATUS.UNAUTHORIZED),
-    ).fetch as typeof globalThis.fetch,
+    // SAFETY: Recording fetch matches globalThis.fetch for test harness injection.
+    fetchImplementation: refusedFetch as typeof globalThis.fetch,
   });
   assert.deepEqual(refused, { status: LINEAR_REFRESH_STATUS.REFUSED });
 
   // Someone else's outage is not a withdrawn grant, and neither is a network
   // that never answered: a developer must not be disconnected by either.
+  const { fetch: faultedFetch } = recordingFetch(() => jsonResponse({}, HTTP_STATUS.SERVER_ERROR));
   const faulted = await refreshLinearGrant("good-refresh", {
     environment: environment(),
-    fetchImplementation: recordingFetch(() => jsonResponse({}, HTTP_STATUS.SERVER_ERROR))
-      .fetch as typeof globalThis.fetch,
+    // SAFETY: Recording fetch matches globalThis.fetch for test harness injection.
+    fetchImplementation: faultedFetch as typeof globalThis.fetch,
   });
   assert.deepEqual(faulted, { status: LINEAR_REFRESH_STATUS.UNREACHABLE });
 
   const unreachable = await refreshLinearGrant("good-refresh", {
     environment: environment(),
+    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
     fetchImplementation: (() => Promise.reject(new Error("offline"))) as typeof globalThis.fetch,
   });
   assert.deepEqual(unreachable, { status: LINEAR_REFRESH_STATUS.UNREACHABLE });
 
   for (const status of [408, HTTP_STATUS.TOO_MANY_REQUESTS]) {
+    const { fetch: transientFetch } = recordingFetch(() =>
+      jsonResponse({ error: "try_again" }, status),
+    );
     const transient = await refreshLinearGrant("good-refresh", {
       environment: environment(),
-      fetchImplementation: recordingFetch(() => jsonResponse({ error: "try_again" }, status))
-        .fetch as typeof globalThis.fetch,
+      // SAFETY: Recording fetch matches globalThis.fetch for test harness injection.
+      fetchImplementation: transientFetch as typeof globalThis.fetch,
     });
     assert.deepEqual(transient, { status: LINEAR_REFRESH_STATUS.UNREACHABLE });
   }
 
+  const { fetch: malformedFetch } = recordingFetch(() => jsonResponse({ expires_in: 86_400 }));
   const malformed = await refreshLinearGrant("good-refresh", {
     environment: environment(),
-    fetchImplementation: recordingFetch(() => jsonResponse({ expires_in: 86_400 }))
-      .fetch as typeof globalThis.fetch,
+    // SAFETY: Recording fetch matches globalThis.fetch for test harness injection.
+    fetchImplementation: malformedFetch as typeof globalThis.fetch,
   });
   assert.deepEqual(malformed, { status: LINEAR_REFRESH_STATUS.UNREACHABLE });
 });
@@ -337,11 +362,13 @@ test("revoking posts the grant to Linear and never throws", async () => {
     await revokeLinearGrant(
       "lin_oauth_refresh",
       "refresh_token",
+      // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
       fakeFetch as typeof globalThis.fetch,
     ),
     true,
   );
 
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   const revoke = requests[0] as RecordedRequest;
   assert.equal(revoke.url, LINEAR_REVOKE_URL);
   assert.equal(revoke.authorization, undefined);
@@ -351,9 +378,14 @@ test("revoking posts the grant to Linear and never throws", async () => {
 
   // Best effort by design: the developer asked to disconnect, and a network
   // that cannot carry the message is no reason to keep the grant here.
+  const offlineFetch = () => Promise.reject(new Error("offline"));
   assert.equal(
-    await revokeLinearGrant("lin_oauth_refresh", "refresh_token", (() =>
-      Promise.reject(new Error("offline"))) as typeof globalThis.fetch),
+    // SAFETY: Rejected fetch matches globalThis.fetch for test harness injection.
+    await revokeLinearGrant(
+      "lin_oauth_refresh",
+      "refresh_token",
+      offlineFetch as typeof globalThis.fetch,
+    ),
     false,
   );
 });

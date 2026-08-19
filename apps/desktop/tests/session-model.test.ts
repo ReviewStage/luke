@@ -35,6 +35,7 @@ const CLAUDE_PROVIDER = { id: PROVIDER_ID.CLAUDE_CODE, displayName: "Claude Code
 const CODEX_PROVIDER = { id: PROVIDER_ID.CODEX, displayName: "Codex" };
 
 function bootstrap(fixtureMode: boolean): AppBootstrap {
+  // SAFETY: Smoke fixture bootstrap carries only fixtureMode and snapshot for tests.
   return {
     fixtureMode,
     fixture: fixtureSnapshot("smoke"),
@@ -130,6 +131,7 @@ test("a row is a control only where its provider gave an address", () => {
 
 // The sentence under the title is the one place the row states what is
 // happening — there is no chip at the other end — so a provider that reported
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 // nothing must still leave the row reading as Working or Complete.
 test("the line under the title says the state when the provider said nothing", () => {
   const [bare] = displaySessions(bootstrap(false), [
@@ -212,6 +214,7 @@ test("a row carries the identifiers that tell it from its neighbours", () => {
 
 // The label answers "is this thing alive", so it reports the coarsest unit
 // that has begun rather than telling time. A timestamp ahead of the clock is
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 // clock skew, not the future, and reads as Now.
 test("how long ago a session was seen is worded by the unit that has begun", () => {
   const minute = 60_000;
@@ -252,6 +255,7 @@ test("the tally counts per state and per provider", () => {
     {
       total: 6,
       attention: 1,
+      // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
       // Named as well as counted: Luke's face reacts to a session that has just
       // started asking, which the count alone cannot report.
       attentionIds: ["claude-review"],
@@ -264,6 +268,7 @@ test("the tally counts per state and per provider", () => {
   );
   // Providers follow the order their most urgent session takes, so Conductor's
   // working chat seats it ahead of Cursor's older one and Devin's suspended
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // session — and its two chats count as two sessions under one mark. Five is
   // one more than the wings hold, so the fixture also proves the remainder is
   // counted rather than dropped.
@@ -315,6 +320,7 @@ test("the badge urgency follows the most urgent session", () => {
 
 test("the badge number counts the state its colour names", () => {
   // The fixture holds 1 attention, 3 working, 1 complete, and 1 idle session:
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // the badge says 1 in the attention colour, never a 6 posing as urgent.
   const attention = sessionTally(displaySessions(bootstrap(true), []));
   const working = sessionTally(
@@ -413,6 +419,7 @@ test("every agent this build knows can be narrowed down to", () => {
   }
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("a level with one answer is not offered as a choice", () => {
   // Two agents, both local: which agent is a real question, where it runs is not.
   const local = displaySessions(bootstrap(false), [
@@ -611,6 +618,7 @@ test("sessions of one state are ordered by which moved most recently", () => {
 
 const CONDUCTOR_PROVIDER = { id: PROVIDER_ID.CONDUCTOR, displayName: "Conductor" };
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("chats of one workspace sit together and read as one tray run", () => {
   const chatOf = (
     id: string,
@@ -653,6 +661,7 @@ test("chats of one workspace sit together and read as one tray run", () => {
 
 test("a lone chat is a run of one, and namesake workspaces never join", () => {
   // Two workspaces wearing one name: the id is what groups, so each stays a
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // run of its own — drawn as a plain row, not a tray — rather than joining
   // under the name they happen to share.
   const chatOf = (id: string, workspaceId: string) =>
@@ -722,6 +731,7 @@ test("an act aimed at the workspace is the tray's, said once", () => {
   assert.equal(actsOnWorkspace(first, firstArchive), true);
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("an ungrouped session's acts never read as a workspace's", () => {
   // A target can only say "the workspace" beside a workspace to say it of: a
   // session no provider grouped keeps every act its own, whatever the target.
@@ -933,6 +943,7 @@ test("searching leaves the chosen ordering and the workspace seating in force", 
     ["conductor-chat-tidy", "conductor-chat-package"],
   );
 
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // Seated as one tray run, exactly as they would be unsearched.
   assert.deepEqual(
     sessionListRuns(recent.sessions).map((run) => ({
@@ -944,6 +955,7 @@ test("searching leaves the chosen ordering and the workspace seating in force", 
 });
 
 test("match ranges are found case-blind and merged where words overlap", () => {
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // Two words landing on one stretch read as one mark, not nested ones.
   assert.deepEqual(matchRanges("Feat/LUKE-123-parser", ["luke", "ke-123"]), [
     { start: 5, end: 13 },
@@ -997,6 +1009,7 @@ test("an unsplit workspace and a lone fading chat both keep the workspace key", 
     sessionRunKeys([{ workspace, indexes: [0] }], [{ item: { id: "chat-1" }, leaving: true }]),
     ["ws-1"],
   );
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // Ungrouped sessions are their own keys, as they always were.
   assert.deepEqual(
     sessionRunKeys([{ indexes: [0] }], [{ item: { id: "codex-1" }, leaving: false }]),

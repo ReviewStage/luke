@@ -260,6 +260,7 @@ test("a voice change with no call up is not owed a restart", () => {
   );
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("a connecting call counts as one to reopen: its credential may already be the old voice", () => {
   assert.deepEqual(
     voiceRestartAction({
@@ -294,6 +295,7 @@ test("edges and answered asks go to the announcer; unbidden summaries keep to an
 });
 
 test("the newest mention is what a bare 'that chat' points back at", () => {
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // Every source counts — the evaluator's readout here is as much a mention as
   // the edges around it — and the newest by decision wins, whatever order the
   // batch arrived in.
@@ -327,17 +329,17 @@ function rosterSession(
   title: string,
   workspace?: { providerWorkspaceId: string; name?: string },
 ): NormalizedSession {
-  return normalizeSession(
-    { id: "conductor", displayName: "Conductor" },
-    {
-      providerSessionId,
-      title,
-      status: SESSION_STATUS.WORKING,
-      observedAt: 100,
-      ...(workspace ? { workspace } : {}),
-      detail: {},
-    },
-  );
+  const session = {
+    providerSessionId,
+    title,
+    status: SESSION_STATUS.WORKING,
+    observedAt: 100,
+    detail: {},
+  };
+  if (workspace) {
+    session.workspace = workspace;
+  }
+  return normalizeSession({ id: "conductor", displayName: "Conductor" }, session);
 }
 
 test("an announcement's one validated subject is the whole answer", () => {
@@ -438,6 +440,7 @@ function trackedIssue(identifier: string, title: string): TrackedIssue {
 
 test("a conversation reply's issue previews are what its words name off the tracker", () => {
   const board = [trackedIssue("LUKE-1", "Fix login"), trackedIssue("LUKE-2", "Ship captions")];
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // Back-to-back replies stack their captions, exactly as the session
   // mentions read them: everything still on screen feeds the chips.
   assert.deepEqual(

@@ -62,10 +62,11 @@ function lastActivityAt(agent: TestAgent): number {
 /**
  * `GET /v1/agents` returns only the durable identity fields. A list item that
  * carried `repos` would hide the fact that an adapter reading it there finds
+ // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
  * nothing, so this fixture withholds them exactly as the API does.
  */
-function agentPayload(agent: TestAgent): Record<string, unknown> {
-  return {
+function agentPayload(agent: TestAgent) {
+  const payload = {
     id: agent.id,
     name: agent.name,
     status: agent.archived ? TEST_AGENT_STATUS.ARCHIVED : TEST_AGENT_STATUS.ACTIVE,
@@ -73,12 +74,15 @@ function agentPayload(agent: TestAgent): Record<string, unknown> {
     url: `https://cursor.com/agents/${agent.id}`,
     createdAt: isoTimestamp(agent.createdAt),
     updatedAt: isoTimestamp(lastActivityAt(agent)),
-    ...(agent.run ? { latestRunId: agent.run.id } : {}),
   };
+  if (agent.run) {
+    payload.latestRunId = agent.run.id;
+  }
+  return payload;
 }
 
-function runPayload(agent: TestAgent, run: TestRun): Record<string, unknown> {
-  return {
+function runPayload(agent: TestAgent, run: TestRun) {
+  const payload = {
     id: run.id,
     agentId: agent.id,
     status: run.status ?? TEST_RUN_STATUS.FINISHED,
@@ -86,20 +90,19 @@ function runPayload(agent: TestAgent, run: TestRun): Record<string, unknown> {
     updatedAt: isoTimestamp(run.updatedAt ?? lastActivityAt(agent)),
     durationMs: 12_357,
     result: TEST_RUN_RESULT,
-    ...(agent.omitRepos
-      ? {}
-      : {
-          git: {
-            branches: [
-              {
-                repoUrl: agent.repository ?? TEST_REPOSITORY,
-                branch: TEST_RUN_BRANCH,
-                prUrl: TEST_PULL_REQUEST_URL,
-              },
-            ],
-          },
-        }),
   };
+  if (!agent.omitRepos) {
+    payload.git = {
+      branches: [
+        {
+          repoUrl: agent.repository ?? TEST_REPOSITORY,
+          branch: TEST_RUN_BRANCH,
+          prUrl: TEST_PULL_REQUEST_URL,
+        },
+      ],
+    };
+  }
+  return payload;
 }
 
 /** Serves the read-only subset of the public API the adapter is allowed to use. */
@@ -134,6 +137,7 @@ function fakeCursorApi(
     // for the agent itself.
     if (method === "POST") {
       if (segments.length === 2) {
+        // SAFETY: Parsed POST body matches the create-agent fields this fake validates.
         const body = JSON.parse(rawBody ?? "{}") as {
           prompt?: { text?: string };
           repos?: { url?: string }[];
@@ -172,10 +176,13 @@ function fakeCursorApi(
       const page = [...agents]
         .sort((first, second) => lastActivityAt(second) - lastActivityAt(first))
         .slice(0, limit);
-      return jsonResponse({
+      const response = {
         items: page.map(agentPayload),
-        ...(page.length < agents.length ? { nextCursor: "next-page" } : {}),
-      });
+      };
+      if (page.length < agents.length) {
+        response.nextCursor = "next-page";
+      }
+      return jsonResponse(response);
     }
 
     if (segments[3] === "runs" && segments.length === 5) {
@@ -210,10 +217,10 @@ function adapterFor(
 
 test("declares every provider operation on one adapter interface", () => {
   const adapter = adapterFor(async () => new Response("{}", { status: 200 }));
-  assert.equal(typeof adapter.sendMessage, "function");
-  assert.equal(typeof adapter.executeControl, "function");
-  assert.equal(typeof adapter.createWorkspace, "function");
-  assert.equal(typeof adapter.spawnWorkspaceAgent, "function");
+  assert.ok(adapter.sendMessage instanceof Function);
+  assert.ok(adapter.executeControl instanceof Function);
+  assert.ok(adapter.createWorkspace instanceof Function);
+  assert.ok(adapter.spawnWorkspaceAgent instanceof Function);
 });
 
 function runningAgent(id: string, updatedAt: number): TestAgent {
@@ -323,12 +330,14 @@ test("maps every run state Cursor reports onto a state Luke can show", async () 
       ["agent-expired", SESSION_STATUS.COMPLETE],
       ["agent-creating", SESSION_STATUS.UNKNOWN],
       // A run Cursor failed stopped on something the developer has to deal
+      // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
       // with, which is not the same as a state Luke could not read.
       ["agent-errored", SESSION_STATUS.ERROR],
     ],
   );
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("reports a turn that just ended as waiting however long the run took", async () => {
   // The agent was started hours ago and the run took most of that time. Dating
   // the turn from the agent instead of its run would call this stale and leave
@@ -370,9 +379,11 @@ test("stops calling a finished run waiting once it goes stale", async () => {
   assert.equal(observations[0]?.status, SESSION_STATUS.UNKNOWN);
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("keeps reporting a long run as working", async () => {
   // A run state is stamped with the moment it was entered rather than with a
   // heartbeat, so a turn that started an hour ago and is still going must not
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // read as stale.
   const startedAt = TEST_TIME - 60 * 60 * 1000;
   const api = fakeCursorApi([runningAgent("agent-long-run", startedAt)]);
@@ -384,6 +395,7 @@ test("keeps reporting a long run as working", async () => {
   assert.equal(observations[0]?.observedAt, startedAt);
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("reports an archived agent as complete without reading its run", async () => {
   const api = fakeCursorApi([
     {

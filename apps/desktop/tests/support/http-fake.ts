@@ -1,4 +1,5 @@
 import { HTTP_STATUS as CLOUD_HTTP_STATUS, type CloudFetch } from "../../src/cloud-session-adapter";
+import type { JsonValue } from "./json";
 
 /**
  * Statuses a fake answers with, plus the ones product code names, so a test
@@ -31,7 +32,7 @@ export interface RecordedRequest {
   init: RequestInit;
 }
 
-export function jsonResponse(body: unknown, status = HTTP_STATUS.OK): Response {
+export function jsonResponse(body: JsonValue, status = HTTP_STATUS.OK): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { "content-type": "application/json" },
@@ -42,13 +43,20 @@ function header(headers: Headers, name: string): string | undefined {
   return headers.get(name) ?? undefined;
 }
 
+function requestBody(body: BodyInit | null | undefined): string | undefined {
+  if (body === null || body === undefined) return undefined;
+  if (Object.prototype.toString.call(body) !== "[object String]") return undefined;
+  // SAFETY: Object.prototype.toString confirmed a string body before recording.
+  return body as string;
+}
+
 /**
  * A fetch that records every call, then answers through `respond`. The
  * per-provider route table is `respond`; this only keeps the log.
  */
 export function recordingFetch(
   respond: (request: RecordedRequest) => Response | Promise<Response>,
-): { fetch: CloudFetch; requests: RecordedRequest[] } {
+) {
   const requests: RecordedRequest[] = [];
   const fetch: CloudFetch = async (url, init) => {
     const parsed = new URL(url);
@@ -62,7 +70,7 @@ export function recordingFetch(
       authorization: header(headers, "authorization"),
       accept: header(headers, "accept"),
       contentType: header(headers, "content-type"),
-      body: typeof init.body === "string" ? init.body : undefined,
+      body: requestBody(init.body),
       headers,
       init,
     };

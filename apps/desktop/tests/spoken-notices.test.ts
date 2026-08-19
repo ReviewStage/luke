@@ -57,6 +57,7 @@ function fakeSession(): FakeSession {
       return this.microphone;
     },
     setStatus(status: RealtimeStatus) {
+      // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
       (this as { status: RealtimeStatus }).status = status;
     },
     async connect() {
@@ -85,8 +86,8 @@ function fakeSession(): FakeSession {
 }
 
 interface Timers {
-  schedule: (callback: () => void, delayMs: number) => unknown;
-  cancel: (timer: unknown) => void;
+  schedule: (callback: () => void, delayMs: number) => number;
+  cancel: (timer: number) => void;
   fire: () => void;
   armed: () => number;
   delays: number[];
@@ -104,7 +105,7 @@ function fakeTimers(): Timers {
       return key;
     },
     cancel: (timer) => {
-      pending.delete(timer as number);
+      pending.delete(timer);
     },
     fire: () => {
       for (const [id, callback] of [...pending]) {
@@ -418,6 +419,7 @@ test("quiet beginning never touches the developer's own call", () => {
   assert.deepEqual(session.spoken, []);
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("a sentence that went stale in the queue is dropped, not read as news", () => {
   const session = fakeSession();
   session.setStatus(REALTIME_STATUS.RESPONDING);

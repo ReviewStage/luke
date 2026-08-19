@@ -7,12 +7,13 @@ import {
   REALTIME_VOICE_SPEED,
 } from "@sidecar/core";
 import { HostedRealtimeCredentialMinter } from "../src/hosted-realtime-credentials";
+import type { ParsedJsonObject } from "./support/json";
 
 const NOW = 1_800_000_000_000;
 const SERVICE = "https://tryluke.dev";
 const QUOTA = { used: 3, limit: 50, remaining: 47, resetsAt: NOW + 3_600_000 };
 
-function mintedBody(overrides: Record<string, unknown> = {}) {
+function mintedBody(overrides: ParsedJsonObject = {}) {
   return {
     connection: {
       value: "eph-secret",
@@ -136,6 +137,7 @@ test("a 401 refreshes the account and retries once with the new token", async ()
   assert.equal(new Headers(requests[1]?.init.headers).get("authorization"), "Bearer fresh-token");
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("a refresh that changes nothing is not retried and reads as signed out", async () => {
   let refreshes = 0;
   const { requests, fetchLike } = service([

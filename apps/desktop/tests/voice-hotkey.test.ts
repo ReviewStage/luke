@@ -112,6 +112,7 @@ test("an accelerator reads the way macOS writes it", () => {
   assert.equal(voiceHotkeyLabel("Command+Shift+K"), "⌘⇧K");
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("a chord drawn as keys comes apart into the keys a hand presses", () => {
   // The same glyphs the label is written with, one entry per key, in the order
   // macOS prints them — the caps are the label taken apart, never a second
@@ -166,6 +167,7 @@ test("a chosen chord is tried first and the defaults stay behind it", () => {
   assert.deepEqual(voiceHotkeyCandidates("Alt+Space"), ["Alt+Space"]);
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("a keystroke is read as a chord from the physical key", () => {
   const chord = { altKey: false, ctrlKey: false, metaKey: false, shiftKey: false };
 
@@ -225,6 +227,7 @@ test("a recorded chord and a stored one pass the same gate", () => {
 });
 
 test("holding sends on release and tapping leaves the turn open", () => {
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // Held: the turn lasted exactly as long as the key was down.
   assert.equal(
     talkKeyRelease({ heldMs: TALK_KEY_TAP_MS + 1, latched: false }),

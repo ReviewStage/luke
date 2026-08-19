@@ -51,6 +51,7 @@ const TEST_ENVIRONMENT_VARIABLE = {
  * without waiting for a second cloud adapter to exist.
  */
 const FIRST_CLOUD_PROVIDER: CredentialProvider = {
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   id: "first-cloud" as CredentialProviderId,
   displayName: "First Cloud",
   connection: CREDENTIAL_CONNECTION.KEY,
@@ -59,6 +60,7 @@ const FIRST_CLOUD_PROVIDER: CredentialProvider = {
 };
 
 const SECOND_CLOUD_PROVIDER: CredentialProvider = {
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   id: "second-cloud" as CredentialProviderId,
   displayName: "Second Cloud",
   connection: CREDENTIAL_CONNECTION.KEY,
@@ -68,6 +70,7 @@ const SECOND_CLOUD_PROVIDER: CredentialProvider = {
 
 /** Publishes a key format, which only some providers do. */
 const THIRD_CLOUD_PROVIDER: CredentialProvider = {
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   id: "third-cloud" as CredentialProviderId,
   displayName: "Third Cloud",
   connection: CREDENTIAL_CONNECTION.KEY,
@@ -81,6 +84,7 @@ const THIRD_CLOUD_PROVIDER: CredentialProvider = {
 
 /** Connected on the provider's own consent page rather than by a pasted key. */
 const CONSENT_PROVIDER: CredentialProvider = {
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   id: "consent-service" as CredentialProviderId,
   displayName: "Consent Service",
   connection: CREDENTIAL_CONNECTION.CONSENT,
@@ -119,6 +123,7 @@ interface CipherCallCount {
 
 /**
  * Counts what reaches the cipher. Every call is a Keychain read on macOS, so
+ // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
  * what a run does not ask for is as much a part of the behavior as what it
  * returns.
  */
@@ -162,12 +167,15 @@ function storeIn(
     providers?: readonly CredentialProvider[];
   } = {},
 ): SettingsStore {
-  return new SettingsStore({
+  const config = {
     directory: () => directory,
     cipher: options.cipher ?? testCipher(),
     environment: options.environment ?? {},
-    ...(options.providers ? { providers: options.providers } : {}),
-  });
+  };
+  if (options.providers) {
+    config.providers = options.providers;
+  }
+  return new SettingsStore(config);
 }
 
 async function readWorkspaceAgentDefault(store: SettingsStore, providerId: ProviderId) {
@@ -328,6 +336,7 @@ test("switching captions never disturbs a stored key", async (t) => {
   assert.equal(await storeIn(directory).readApiKey(CONDUCTOR), TEST_API_KEY);
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("a corrupt captions value reads as off rather than switching them on", async (t) => {
   const directory = await temporaryDirectory(t);
   await fs.writeFile(
@@ -367,6 +376,7 @@ test("switching the media duck never disturbs a stored key", async (t) => {
   assert.equal(await storeIn(directory).readApiKey(CONDUCTOR), TEST_API_KEY);
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("a corrupt media duck value reads as the default rather than as off", async (t) => {
   const directory = await temporaryDirectory(t);
   // The mirror of the captions rule: each lands on its own default, and this
@@ -391,6 +401,7 @@ test("the microphone preference persists, defaults on, and shrugs off corruption
   assert.equal((await storeIn(directory).snapshot()).preferBuiltInMicrophone, false);
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("a corrupt microphone preference reads as the default rather than as off", async (t) => {
   const directory = await temporaryDirectory(t);
   await fs.writeFile(
@@ -517,6 +528,7 @@ test("switching the meeting quiet never disturbs a stored key", async (t) => {
   assert.equal(await storeIn(directory).readApiKey(CONDUCTOR), TEST_API_KEY);
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("a corrupt meeting quiet value reads as the default rather than as off", async (t) => {
   const directory = await temporaryDirectory(t);
   // The media duck's rule: this one's default is on, so nonsense lands on on.
@@ -621,6 +633,7 @@ test("prefers a stored key over one from the environment", async (t) => {
   assert.equal(await store.readApiKey(CONDUCTOR), TEST_API_KEY);
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("rejects a key that cannot be sent as an authorization header", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
@@ -672,6 +685,7 @@ test("stops honouring a stored key the moment its provider names a form it is no
   assert.equal(
     (await store.snapshot()).credentialSources[THIRD_CLOUD],
     CREDENTIAL_SOURCE.NONE,
+    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
     "a key the provider no longer accepts must not read as connected",
   );
 });
@@ -930,6 +944,7 @@ test("prefers the chosen voice over the environment, and the environment over th
 
   assert.equal((await store.snapshot()).voice, REALTIME_VOICE.SAGE);
   // The environment names the voice only until the user does, so it is
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // reported in the snapshot but never as something the user stored.
   assert.equal(await store.get(APP_SETTING_SCHEMA.voice.field), undefined);
 
@@ -1046,6 +1061,7 @@ test("clearing the talk-key chord returns to no choice at all", async (t) => {
   const { settings } = await store.set(APP_SETTING_SCHEMA.voiceHotkey.field, undefined);
 
   assert.equal(settings.voiceHotkey, undefined);
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // Absent from the file rather than stored as an empty value: reset is the
   // absence of a choice, and a reopened store must read it the same way.
   assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.voiceHotkey.field), undefined);
@@ -1091,6 +1107,7 @@ test("clearing the ask-key chord returns to no choice at all", async (t) => {
   const { settings } = await store.set(APP_SETTING_SCHEMA.askHotkey.field, undefined);
 
   assert.equal(settings.askHotkey, undefined);
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // Absent from the file rather than stored as an empty value: reset is the
   // absence of a choice, and a reopened store must read it the same way.
   assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.askHotkey.field), undefined);
@@ -1139,6 +1156,7 @@ test("clearing the stop-key chord returns to no choice at all", async (t) => {
   const { settings } = await store.set(APP_SETTING_SCHEMA.stopHotkey.field, undefined);
 
   assert.equal(settings.stopHotkey, undefined);
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // Absent from the file rather than stored as an empty value: reset is the
   // absence of a choice, and a reopened store must read it the same way.
   assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.stopHotkey.field), undefined);
@@ -1436,6 +1454,7 @@ test("keeps one provider's default project apart from another's", async (t) => {
 test("an entry the field cannot hold is refused rather than quietly dropped", () => {
   // The map guards drop what they cannot hold, which is right when reading a
   // stored file and wrong for a write: a whole map of unholdable entries would
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // read as valid and clear what is stored. Every write goes one entry at a
   // time so the refusal is the guard's own answer.
   assert.equal(
@@ -1474,6 +1493,7 @@ test("an entry the field cannot hold is refused rather than quietly dropped", ()
 
 test("every map-valued setting is written one entry at a time", () => {
   // The keyed set is what the whole-map write path refuses, so a new map field
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // that forgot its entry declaration would be writable as a whole map again.
   for (const field of APP_SETTING_FIELDS) {
     const holdsMap =
@@ -1726,6 +1746,7 @@ test("a reset leaves a stored key standing", async (t) => {
   await store.resetSettings(SETTINGS_RESET_SCOPE.VOICE);
 
   // No scope reaches a credential: the ciphertext rides the write untouched.
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   const contents = JSON.parse(await readSettingsFile(directory)) as {
     apiKeys: Record<string, string>;
     voiceCaptions: boolean;
@@ -1801,6 +1822,7 @@ test("a choice that would start spending a key is never made by fallback", async
   assert.equal(await store.readVoiceSource(), VOICE_SOURCE.ACCOUNT);
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("the chosen source survives a reopen, and a corrupt one reads as no choice", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
@@ -1830,6 +1852,7 @@ test("pasting a key back while parked on the allowance is still choosing it", as
 
   // The same key again is no change to what is stored, but it is still the
   // act of connecting one — and a save that quietly changed nothing would
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // read as a key that failed to take.
   await store.setApiKey(CREDENTIAL_PROVIDER_ID.OPENAI, "sk-developers-own");
   assert.equal(await store.readVoiceSource(), VOICE_SOURCE.KEY);

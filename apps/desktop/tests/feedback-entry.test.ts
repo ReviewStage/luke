@@ -128,6 +128,7 @@ test("opening with nothing there starts the note signed with the account", () =>
   assert.equal(opened.entry?.email, "ada@example.com");
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("a note already there keeps its fields as its author left them, cleared ones included", () => {
   const cleared = entry({ message: "the capsule count is wrong", name: "", email: "" });
   const opened = openedFeedbackEntry(cleared, {

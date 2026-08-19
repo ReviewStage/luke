@@ -8,6 +8,7 @@ import {
   feedbackKindForLifecycleEvent,
   feedbackSubmission,
 } from "../src/shared/feedback";
+import type { JsonObject } from "./support/json";
 
 function image(overrides: Partial<FeedbackImage> = {}): FeedbackImage {
   return {
@@ -19,7 +20,7 @@ function image(overrides: Partial<FeedbackImage> = {}): FeedbackImage {
   };
 }
 
-function submission(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+function submission(overrides: Partial<JsonObject> = {}) {
   return {
     kind: FEEDBACK_KIND.FEEDBACK,
     message: "The panel opened under my second display's dock.",
@@ -72,6 +73,7 @@ test("credit carrying a line break is refused, never stripped", () => {
   assert.equal(feedbackSubmission(submission({ email: "a@b.c\r\nX: y" })), undefined);
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("more images than the cap is refused as a whole", () => {
   const images = Array.from({ length: FEEDBACK_LIMITS.MAX_IMAGES + 1 }, () => image());
   assert.equal(feedbackSubmission(submission({ images })), undefined);

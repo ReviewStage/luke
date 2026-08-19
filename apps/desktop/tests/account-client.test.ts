@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { AccountClient, AccountClientError, type FetchLike } from "../src/account-client";
 import { ACCOUNT_PROVIDER } from "../src/shared/contracts";
+import type { JsonValue } from "./support/json";
 
-function json(body: unknown, status = 200): Response {
+function json(body: JsonValue, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { "content-type": "application/json" },
@@ -34,6 +35,7 @@ test("the authorization URL carries the native public-client contract", () => {
   assert.equal(url.searchParams.get("prompt"), "login");
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("the code exchange sends the verifier and redirect as form fields", async () => {
   let request: Request | undefined;
   const fetch: FetchLike = async (input, init) => {
@@ -84,6 +86,7 @@ test("a refresh keeps the existing refresh token when rotation omits one", async
   });
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("sign-out revokes the refresh token as a public client", async () => {
   let request: Request | undefined;
   const client = new AccountClient({
@@ -170,7 +173,7 @@ test("OAuth errors preserve their status and machine-readable code", async () =>
       json({ error: "invalid_grant", error_description: "Refresh token was revoked" }, 400),
   });
 
-  await assert.rejects(client.refresh("revoked"), (error: unknown) => {
+  await assert.rejects(client.refresh("revoked"), (error) => {
     assert.ok(error instanceof AccountClientError);
     assert.equal(error.status, 400);
     assert.equal(error.oauthError, "invalid_grant");

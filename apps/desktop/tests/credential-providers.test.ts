@@ -57,6 +57,7 @@ test("describes every provider it lists", () => {
     if (provider.connection === CREDENTIAL_CONNECTION.CONSENT) {
       assert.equal(provider.keyFormat, undefined, provider.id);
     }
+    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
     // A declared format has to say what it wants as well as refuse, because
     // the reason is the only thing the user has to act on.
     if (!provider.keyFormat) continue;

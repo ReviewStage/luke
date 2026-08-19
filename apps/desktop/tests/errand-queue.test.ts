@@ -54,6 +54,7 @@ function settings(captions: boolean): AppSettings {
   };
 }
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 /** A settings change, as the carrier arms one. */
 function settingAct(
   target: PendingErrand["targets"][number],
@@ -61,14 +62,17 @@ function settingAct(
   hold: ErrandHold,
   opening = false,
 ): PendingErrand {
-  return {
+  const act: PendingErrand = {
     targets: [target],
     tab: PANEL_TAB.SETTINGS,
-    ...(page === undefined ? {} : { page }),
     opening,
     borrowsPanel: true,
     hold,
   };
+  if (page !== undefined) {
+    act.page = page;
+  }
+  return act;
 }
 
 /** Arms every act of one reply, in the order the calls were answered. */
@@ -129,6 +133,7 @@ test("each act's change is drawn on its own tap, and never on another's", () => 
 
 test("a flight that never reached its control still draws what it was holding", () => {
   // No tap landed, so nothing was released — and a hold nobody releases leaves
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // a switch showing the wrong state for as long as the panel is open.
   const only = settingAct(APP_SETTING_ID.VOICE_CAPTIONS, SETTINGS_VIEW.VOICE, {
     settings: CAPTIONS_ON,
@@ -196,6 +201,7 @@ test("a settings push takes every held snapshot with it and leaves the held view
 });
 
 test("an act with nowhere to land leaves the run to the next one", () => {
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // The guide's ids travel as plain text, so an act can name a control this
   // build does not draw. It is over the moment it is taken up.
   const nowhere: PendingErrand = {

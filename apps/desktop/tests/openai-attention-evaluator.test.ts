@@ -12,6 +12,7 @@ import {
   openAiAttentionEvaluator,
 } from "../src/openai-attention-evaluator";
 import { type RecordedRequest, recordingFetch } from "./support/http-fake";
+import type { ParsedJsonObject } from "./support/json";
 
 const DECIDED_AT = 1_800_000_000_000;
 const API_KEY = "test-openai-key";
@@ -33,7 +34,7 @@ function update(overrides: Partial<AttentionUpdate> = {}): AttentionUpdate {
   };
 }
 
-function structuredResponse(decision: Record<string, unknown>): Response {
+function structuredResponse(decision: ParsedJsonObject): Response {
   return Response.json({
     output: [
       {
@@ -44,10 +45,7 @@ function structuredResponse(decision: Record<string, unknown>): Response {
   });
 }
 
-function evaluatorWith(respond: (request: RecordedRequest) => Promise<Response> | Response): {
-  evaluator: OpenAiAttentionEvaluator;
-  requests: RecordedRequest[];
-} {
+function evaluatorWith(respond: (request: RecordedRequest) => Promise<Response> | Response) {
   const { fetch, requests } = recordingFetch(respond);
   const evaluator = new OpenAiAttentionEvaluator({
     apiKey: API_KEY,
@@ -57,9 +55,10 @@ function evaluatorWith(respond: (request: RecordedRequest) => Promise<Response> 
   return { evaluator, requests };
 }
 
-function requestBody(request: RecordedRequest): Record<string, unknown> {
-  assert.equal(typeof request.body, "string");
-  return JSON.parse(String(request.body)) as Record<string, unknown>;
+function requestBody(request: RecordedRequest): ParsedJsonObject {
+  assert.equal(Object.prototype.toString.call(request.body), "[object String]");
+  // SAFETY: Parsed JSON matches the event object shape this harness exercises.
+  return JSON.parse(String(request.body)) as ParsedJsonObject;
 }
 
 function silenceStderr(t: TestContext): void {
@@ -68,7 +67,7 @@ function silenceStderr(t: TestContext): void {
 
 function recordStderr(t: TestContext): string[] {
   const written: string[] = [];
-  t.mock.method(process.stderr, "write", (chunk: unknown) => {
+  t.mock.method(process.stderr, "write", (chunk: string | Uint8Array) => {
     written.push(String(chunk));
     return true;
   });
@@ -112,10 +111,12 @@ test("requests a strict structured decision and never asks the API to retain it"
     "store",
     "text",
   ]);
-  const format = (body.text as { format: Record<string, unknown> }).format;
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+  const format = (body.text as { format: ParsedJsonObject }).format;
   assert.equal(format.type, "json_schema");
   assert.equal(format.strict, true);
   assert.equal(format.name, "attention_decision");
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   assert.deepEqual((format.schema as { required: string[] }).required, [
     "disposition",
     "summary",
@@ -178,6 +179,7 @@ test("a rate limit quiets requests for the cooldown instead of retrying at full 
   assert.equal(await evaluator.evaluate(update()), undefined);
   assert.equal(requests.length, 1);
 
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // The cooldown over, requests resume and the quiet reads as lifted.
   now += 1;
   assert.equal(evaluator.quietUntil(), undefined);

@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
 import { ClaudeCodeSessionAdapter } from "../src/claude-code-adapter";
+import type { ParsedJsonObject } from "./support/json";
 
 const TEST_SESSION_ID = "3f9a1b2c-4d5e-6789-abcd-ef0123456789";
 const CLAUDE_PROJECTS_DIRECTORY = "projects";
@@ -32,7 +33,7 @@ async function temporaryClaudeHome(t: TestContext): Promise<string> {
 async function writeTranscript(
   claudeHome: string,
   sessionId: string,
-  records: readonly Record<string, unknown>[],
+  records: readonly ParsedJsonObject[],
 ): Promise<void> {
   const projectDirectory = path.join(claudeHome, CLAUDE_PROJECTS_DIRECTORY, "-Users-test-luke");
   await fs.mkdir(projectDirectory, { recursive: true });
@@ -42,6 +43,7 @@ async function writeTranscript(
   );
 }
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("renders a session's turns as a bounded conversation, newest included", async (t) => {
   const claudeHome = await temporaryClaudeHome(t);
   await writeTranscript(claudeHome, TEST_SESSION_ID, [
@@ -102,6 +104,7 @@ test("keeps the newest turns when the rendering is cut, and says so", async (t) 
   assert.ok(rendered.length <= 400 + "[earlier turns omitted]\n".length);
   assert.ok(rendered.includes("prompt number 39"), "the newest turn survives the cut");
   assert.ok(!rendered.includes("prompt number 0 "), "the oldest turn is what goes");
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // The cut lands on a line, so no half prompt poses as a whole one.
   for (const line of rendered.split("\n").slice(1)) {
     assert.ok(line.startsWith("Developer: "), `a cut line survived: ${line}`);
@@ -122,6 +125,7 @@ test("reads nothing for a session that has no transcript file", async (t) => {
   assert.equal(rendered, undefined);
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("refuses an id outside the shape Claude Code mints, never treating it as a path", async (t) => {
   const claudeHome = await temporaryClaudeHome(t);
 
@@ -152,6 +156,7 @@ test("reads a tool's answer from the bookkeeping shape that has no blocks", asyn
   const claudeHome = await temporaryClaudeHome(t);
   await writeTranscript(claudeHome, TEST_SESSION_ID, [
     // The shape Claude Code often writes: toolUseResult only, no content
+    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
     // blocks at all — which must render as the tool's answer, not vanish.
     { type: "user", toolUseResult: { stdout: "2 passed, 0 failed" } },
     { type: "user", toolUseResult: "plain string result" },

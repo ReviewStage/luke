@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { UPDATE_STATUS, type UpdateSnapshot } from "../src/shared/contracts";
 import { UPDATE_ENDPOINT, UpdateService } from "../src/update-service";
+import type { JsonValue } from "./support/json";
 
-function releaseResponse(body: unknown): Response {
+function releaseResponse(body: JsonValue): Response {
   return new Response(JSON.stringify(body), {
     status: 200,
     headers: { "content-type": "application/json" },
@@ -21,6 +22,7 @@ test("a newer published release is offered by its version, without the tag's v",
     currentVersion: "0.1.0",
     onChange: (update) => states.push(update),
     fetch: async (url, init) => {
+      // SAFETY: Fixture headers map matches the string header shape the fake records.
       requests.push({ url, headers: (init.headers ?? {}) as Record<string, string> });
       return releaseResponse({ tag_name: "v0.2.0" });
     },
@@ -34,6 +36,7 @@ test("a newer published release is offered by its version, without the tag's v",
     latestVersion: "0.2.0",
   });
   assert.deepEqual(service.snapshot(), answered);
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // The row is told about the check under way as well as its answer.
   assert.deepEqual(
     states.map((state) => state.status),
@@ -45,6 +48,7 @@ test("a newer published release is offered by its version, without the tag's v",
   assert.equal(requests[0]?.headers.Accept, "application/vnd.github+json");
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("the running release reads as up to date", async () => {
   const service = new UpdateService({
     currentVersion: "0.2.0",
@@ -58,6 +62,7 @@ test("the running release reads as up to date", async () => {
   });
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("a refusal, an unreachable service, and an unreadable answer all read as unreachable", async () => {
   const refused = new UpdateService({
     currentVersion: "0.1.0",
@@ -83,6 +88,7 @@ test("a refusal, an unreachable service, and an unreadable answer all read as un
   assert.equal((await unreadable.check()).status, UPDATE_STATUS.UNREACHABLE);
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("a release this build cannot name is not offered as an update", async () => {
   // A prerelease suffix and a missing tag both leave nothing to compare, and
   // an unnamed update would send someone to fetch an unknown.

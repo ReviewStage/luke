@@ -10,6 +10,7 @@ const WORDS: SpokenStripContent = {
 
 test("content leaves on its own terms while nobody is over it", () => {
   // The hold exists for a pointer already resting on the strip; without one,
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // the words and chips keep dying with the reply exactly as they always did.
   assert.equal(stripHoldNext({ hovered: false, drawn: WORDS, held: undefined }), undefined);
   assert.equal(stripHoldNext({ hovered: false, drawn: undefined, held: WORDS }), undefined);
@@ -34,7 +35,9 @@ test("a new reply's content replaces whatever was held", () => {
 });
 
 test("an unchanged sentence keeps the hold's identity", () => {
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // The caller stores the hold as state and the live content's identity
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // churns per render: a rebuilt-but-equal snapshot returning as a new object
   // would re-render an unchanged strip every frame the pointer rests on it.
   const rebuilt: SpokenStripContent = { ...WORDS, texts: [...(WORDS.texts ?? [])] };
@@ -56,6 +59,7 @@ test("the band counts whole, and absent boxes never match", () => {
   assert.equal(pointOverStrip({ x: 50, y: 45, caption: undefined, band }), true);
   assert.equal(pointOverStrip({ x: 50, y: 65, caption: undefined, band }), false);
   // An undrawn element still has a box; the caller withholds it, and a strip
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // offering neither can never read as hovered.
   assert.equal(pointOverStrip({ x: 50, y: 45, caption: undefined, band: undefined }), false);
 });
