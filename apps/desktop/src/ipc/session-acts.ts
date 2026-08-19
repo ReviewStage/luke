@@ -56,6 +56,7 @@ export interface SessionActsIpcDependencies {
     adapter: SessionProviderAdapter,
     providerProjectId: string,
     selection: WorkspaceAgentSelection | undefined,
+    agent: string | undefined,
   ) => Promise<void>;
   expectCreatedWorkspace: (identity: SessionIdentity, now: number) => void;
   openCreatedWorkspaces: () => void;
@@ -356,6 +357,8 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       event,
       providerId: unknown,
       providerProjectId: unknown,
+      providerTargetId: unknown,
+      agent: unknown,
       name: unknown,
       task: unknown,
       namedSelection: unknown,
@@ -366,6 +369,8 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
         !providerId.trim() ||
         typeof providerProjectId !== "string" ||
         !providerProjectId.trim() ||
+        (providerTargetId !== undefined && typeof providerTargetId !== "string") ||
+        (agent !== undefined && typeof agent !== "string") ||
         (name !== undefined && typeof name !== "string") ||
         (task !== undefined && typeof task !== "string")
       ) {
@@ -383,7 +388,13 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       }
       const offered = adapter
         .workspaceProjects()
-        .some((project) => project.providerProjectId === providerProjectId);
+        .some(
+          (project) =>
+            project.providerProjectId === providerProjectId &&
+            project.providerTargetId === providerTargetId &&
+            (!project.spawnableAgents ||
+              (!!agent && project.spawnableAgents.includes(agent.trim()))),
+        );
       if (!offered) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
       const workspaceName = boundedField(name, workspaceNameText);
       if (!workspaceName.ok) {
@@ -412,6 +423,8 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       const agentSelection = namedSelection ?? stored;
       const result = await adapter.createWorkspace({
         providerProjectId,
+        ...(providerTargetId ? { providerTargetId } : {}),
+        ...(agent?.trim() ? { agent: agent.trim() } : {}),
         ...(workspaceName.value ? { name: workspaceName.value } : {}),
         ...(openingTask.value ? { task: openingTask.value } : {}),
         ...(agentSelection ? { agentSelection } : {}),
@@ -452,11 +465,14 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
           adapter,
           providerProjectId,
           namedSelection as WorkspaceAgentSelection | undefined,
+          agent?.trim(),
         );
         // The named session was consumed above; the renderer's answer stays
         // what became of the ask, so nothing rides this boundary that the
         // roster will not report on its own.
-        return { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED };
+        return result.warning
+          ? { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED, warning: result.warning }
+          : { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED };
       }
       return result;
     },

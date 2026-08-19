@@ -586,6 +586,8 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
             window.sidecar.createSessionWorkspace(
               act.providerId,
               act.providerProjectId,
+              act.providerTargetId,
+              act.agent,
               act.name,
               act.task,
               act.agentSelection,

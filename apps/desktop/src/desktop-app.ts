@@ -87,7 +87,11 @@ import {
 import { CREDENTIAL_PROVIDER_ID, type CredentialProviderId } from "./shared/credential-providers";
 import { type FeedbackResult, feedbackSubmission } from "./shared/feedback";
 import { APP_SETTING_SCHEMA } from "./shared/settings-schema";
-import { SupersetCli } from "./superset-cli";
+import {
+  SUPERSET_WORKSPACE_PROVIDER_ID,
+  SupersetCli,
+  SupersetWorkspaceAdapter,
+} from "./superset-cli";
 import { SupersetSignIn } from "./superset-sign-in";
 import { SupersetWorkspaceReader, SupersetWorkspaceSnapshot } from "./superset-workspaces";
 import { UPDATE_ENDPOINT, UpdateService } from "./update-service";
@@ -150,6 +154,7 @@ const supersetWorkspaces = new SupersetWorkspaceReader({
   homeDirectory: supersetHomeDirectory,
 });
 const supersetCli = new SupersetCli({ homeDirectory: supersetHomeDirectory });
+const supersetWorkspaceAdapter = new SupersetWorkspaceAdapter(supersetCli);
 let observedSupersetWorkspaces = new SupersetWorkspaceSnapshot([]);
 // `directory` and the cipher are read lazily so the store can be declared before
 // the Electron app is ready.
@@ -529,6 +534,7 @@ async function applyVoiceCredential(): Promise<void> {
 }
 
 function adapterFor(providerId: string) {
+  if (providerId === SUPERSET_WORKSPACE_PROVIDER_ID) return supersetWorkspaceAdapter;
   return isProviderId(providerId) ? providerRegistry[providerId].adapter : undefined;
 }
 
@@ -553,9 +559,10 @@ async function rememberWorkspaceDefaults(
   adapter: SessionProviderAdapter,
   providerProjectId: string,
   namedSelection: WorkspaceAgentSelection | undefined,
+  agent: string | undefined,
 ): Promise<void> {
-  if (!isProviderId(adapter.provider.id)) return;
   const providerId = adapter.provider.id;
+  if (!isProviderId(providerId) && providerId !== SUPERSET_WORKSPACE_PROVIDER_ID) return;
   try {
     if (
       (await settingsStore.get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field)) === undefined
@@ -564,6 +571,14 @@ async function rememberWorkspaceDefaults(
         APP_SETTING_SCHEMA.defaultWorkspaceProvider.field,
         providerId,
       );
+      panels.broadcast(channels.settingsChanged, saved.settings);
+    }
+    if (
+      providerId === SUPERSET_WORKSPACE_PROVIDER_ID &&
+      agent !== undefined &&
+      (await settingsStore.get(APP_SETTING_SCHEMA.supersetAgentDefault.field)) === undefined
+    ) {
+      const saved = await settingsStore.set(APP_SETTING_SCHEMA.supersetAgentDefault.field, agent);
       panels.broadcast(channels.settingsChanged, saved.settings);
     }
     // The project the workspace landed in becomes that provider's default on
@@ -590,6 +605,7 @@ async function rememberWorkspaceDefaults(
     // choice made by hand while the provider was answering is already
     // held, and must not lose to the request it overlapped.
     if (
+      isProviderId(providerId) &&
       namedSelection !== undefined &&
       (await settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[providerId] ===
         undefined
@@ -845,12 +861,13 @@ function registerIpc(): void {
 function observedWorkspaceProjects(): readonly ObservedWorkspaceProject[] {
   if (!runMode.observesProviders) return [];
   return normalizeObservedWorkspaceProjects(
-    orderedRegistrations.flatMap(({ adapter }) =>
-      adapter.workspaceProjects().map((project) => ({
-        ...project,
-        providerId: adapter.provider.id,
-        providerName: adapter.provider.displayName,
-      })),
+    [...orderedRegistrations.map(({ adapter }) => adapter), supersetWorkspaceAdapter].flatMap(
+      (adapter) =>
+        adapter.workspaceProjects().map((project) => ({
+          ...project,
+          providerId: adapter.provider.id,
+          providerName: adapter.provider.displayName,
+        })),
     ),
   );
 }
@@ -890,9 +907,13 @@ async function refreshProviderSessions(generation: number): Promise<void> {
   let supersetSnapshot = new SupersetWorkspaceSnapshot([]);
   let supersetActionsEnabled = false;
   try {
+    const supersetAgentDefault = await settingsStore.get(
+      APP_SETTING_SCHEMA.supersetAgentDefault.field,
+    );
     [supersetSnapshot, supersetActionsEnabled] = await Promise.all([
       supersetWorkspaces.read(),
       supersetCli.connected(),
+      supersetWorkspaceAdapter.refresh(supersetAgentDefault),
     ]);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

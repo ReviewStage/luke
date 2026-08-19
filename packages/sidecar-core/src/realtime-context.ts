@@ -147,7 +147,11 @@ export function sessionContextText(
         // name: an internal workspace id identifies nothing out loud, so an
         // unnamed workspace goes unmentioned rather than leaking the id off
         // the machine, the same rule the attention update follows.
-        ...(session.workspace?.name ? [`a chat in workspace ${session.workspace.name}`] : []),
+        ...(session.workspace?.name
+          ? [
+              `a chat in workspace ${session.workspace.name}${session.workspace.managerName ? ` managed by ${session.workspace.managerName}` : ""}`,
+            ]
+          : []),
         session.status,
         sessionAgeText(session.observedAt, now),
         ...sessionAboutText(session),
@@ -496,7 +500,7 @@ export function workspaceProjectContextText(
     "Projects a new workspace can be created in:",
     ...listed.map(
       (project) =>
-        `- ${project.providerName} — ${project.repository} [provider_id=${project.providerId} project_id=${project.providerProjectId}]; ${TASK_SUPPORT_TEXT[project.taskSupport]}`,
+        `- ${project.providerName} — ${project.repository}${project.targetName ? ` on ${project.targetName}` : ""} [provider_id=${project.providerId} project_id=${project.providerProjectId}${project.providerTargetId ? ` target_id=${project.providerTargetId}` : ""}]; ${TASK_SUPPORT_TEXT[project.taskSupport]}${project.spawnableAgents?.length ? `; agents: ${project.spawnableAgents.join(", ")}${project.defaultAgent ? `; default agent: ${project.defaultAgent}` : ""}` : ""}`,
     ),
     ...workspaceDefaultProviderLines(listed, defaultProviderId),
     ...workspaceDefaultProjectLines(listed, defaultProjectIds),

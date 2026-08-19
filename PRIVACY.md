@@ -149,6 +149,15 @@ CLI is Superset's cloud client and its own telemetry and privacy terms apply to
 commands it runs. Without its login, these actions do not appear and local
 observation continues unchanged.
 
+A developer-opened conversation may also ask Luke to create a Superset
+workspace. Luke first asks the CLI for accessible hosts, their projects, and
+configured agent presets, retains only bounded identifiers and labels for the
+current observation, and validates the requested host, project, and agent in
+both processes. It invokes `workspaces create` directly with the developer's
+opening task and a generated bounded branch, then may invoke `workspaces open`
+for the workspace identifier Superset returned. No arbitrary CLI command or
+argument is exposed to the model.
+
 One provider file per provider is the exception to "does not modify", and it
 is configuration rather than session data: Luke merges an observation hook
 into Claude Code's user-level `settings.json` and Codex's user-level

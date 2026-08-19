@@ -6,7 +6,6 @@ import {
   FIXTURE_EPOCH_MS,
   type HostedUsageAnswer,
   type IssueIdentity,
-  isProviderId,
   MOTION_DURATION_MS,
   type NormalizedSession,
   type ObservedWorkspaceProject,
@@ -1090,7 +1089,7 @@ export function App(): React.JSX.Element {
   // creation makes on its own, offered by hand so the choice can be changed
   // or returned to asking each time.
   const changeDefaultWorkspaceProvider = useCallback(
-    async (providerId: ProviderId | undefined) =>
+    async (providerId: string | undefined) =>
       applySettingsReply(
         await window.sidecar.updateSetting(
           APP_SETTING_SCHEMA.defaultWorkspaceProvider.field,
@@ -1125,13 +1124,21 @@ export function App(): React.JSX.Element {
   // write the first creation there makes on its own, offered by hand so the
   // choice can be changed or returned to the first creation.
   const changeWorkspaceProjectDefault = useCallback(
-    async (providerId: ProviderId, providerProjectId: string | undefined) =>
+    async (providerId: string, providerProjectId: string | undefined) =>
       applySettingsReply(
         await window.sidecar.updateSettingEntry(
           APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
           providerId,
           providerProjectId,
         ),
+      ),
+    [applySettingsReply],
+  );
+
+  const changeSupersetAgentDefault = useCallback(
+    async (agent: string | undefined) =>
+      applySettingsReply(
+        await window.sidecar.updateSetting(APP_SETTING_SCHEMA.supersetAgentDefault.field, agent),
       ),
     [applySettingsReply],
   );
@@ -1163,7 +1170,7 @@ export function App(): React.JSX.Element {
       const offered = workspaceProjects
         .filter((project) => project.providerId === id)
         .map((project) => ({ id: project.providerProjectId, label: project.repository }));
-      const stored = isProviderId(id) ? storedWorkspaceProjects?.[id] : undefined;
+      const stored = storedWorkspaceProjects?.[id];
       // A stored project the provider no longer offers is its own label: the
       // repository name lived on the observed list that stopped listing it.
       const projects =
@@ -2806,6 +2813,17 @@ export function App(): React.JSX.Element {
                 held: credentialHeld.current || consentConnectHeld.current,
                 connecting: supersetSignInHeld.current,
                 onConnect: beginSupersetSignIn,
+                agents: [
+                  ...new Set(
+                    workspaceProjects
+                      .filter((project) => project.providerId === "superset")
+                      .flatMap((project) => project.spawnableAgents ?? []),
+                  ),
+                ],
+                ...((settings ?? bootstrap.settings).supersetAgentDefault
+                  ? { defaultAgent: (settings ?? bootstrap.settings).supersetAgentDefault }
+                  : {}),
+                onDefaultAgentChange: changeSupersetAgentDefault,
               },
               onQuit: () => window.sidecar.quit(),
               shortcuts,

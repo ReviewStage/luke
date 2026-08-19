@@ -340,7 +340,7 @@ export interface AppSettings {
    * the first workspace the user actually creates saves its provider here, so
    * the default is always a choice they made rather than one made for them.
    */
-  defaultWorkspaceProvider?: ProviderId;
+  defaultWorkspaceProvider?: string;
   /**
    * The agent kind and model new workspaces start with, per provider, each
    * entry absent while that provider's own defaults stand. Keyed by provider
@@ -358,7 +358,9 @@ export interface AppSettings {
    * rather than build-fixed, so the value is the provider's own project id,
    * and it steers an ask only while its provider still offers that project.
    */
-  workspaceProjectDefaults?: Readonly<Partial<Record<ProviderId, string>>>;
+  workspaceProjectDefaults?: Readonly<Record<string, string>>;
+  /** The configured Superset agent used when a creation ask names none. */
+  supersetAgentDefault?: string;
 }
 
 /**
@@ -783,6 +785,8 @@ export interface AppBridge {
   createSessionWorkspace(
     providerId: string,
     providerProjectId: string,
+    providerTargetId?: string,
+    agent?: string,
     name?: string,
     task?: string,
     /**

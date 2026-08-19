@@ -732,6 +732,26 @@ test("a chat carries its workspace in the roster, so siblings read apart out lou
   assert.doesNotMatch(sessionContextText([ungrouped]), /workspace/);
 });
 
+test("the roster identifies sessions managed by Superset", () => {
+  const chat = normalizeSession(
+    { id: "codex", displayName: "Codex" },
+    {
+      providerSessionId: "chat-1",
+      title: "Fix workspace creation",
+      status: SESSION_STATUS.WORKING,
+      observedAt: DECIDED_AT,
+      workspace: {
+        providerWorkspaceId: "workspace-1",
+        name: "power-vacation",
+        scopeId: "superset",
+        managerName: "Superset",
+      },
+    },
+  );
+
+  assert.match(sessionContextText([chat]), /managed by Superset/);
+});
+
 test("an empty roster says so rather than implying Luke sees nothing at all", () => {
   assert.match(sessionContextText([]), /No coding-agent sessions/);
 });
@@ -1697,6 +1717,25 @@ test("a creation ask can only name a project Luke was shown", () => {
     ]),
   ];
   for (const refusal of refusals) assert.equal(refusal.kind, "refused");
+});
+
+test("an implicit project resolves only when the latest roster has one match", () => {
+  assert.deepEqual(
+    sessionToolAction(
+      messageCall('{"provider_id":"conductor"}', REALTIME_TOOL.CREATE_WORKSPACE),
+      [],
+      [OFFERED_PROJECT],
+    ),
+    { kind: "create-workspace", providerId: "conductor", providerProjectId: "proj-1" },
+  );
+
+  const ambiguous = sessionToolAction(
+    messageCall('{"provider_id":"conductor"}', REALTIME_TOOL.CREATE_WORKSPACE),
+    [],
+    [OFFERED_PROJECT, { ...OFFERED_PROJECT, providerProjectId: "proj-2" }],
+  );
+  assert.equal(ambiguous.kind, "refused");
+  assert.match((ambiguous as { reason?: string }).reason ?? "", /More than one listed project/);
 });
 
 test("another agent can only be added as a kind the session's own entry lists", () => {

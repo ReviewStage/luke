@@ -150,6 +150,7 @@ export class SupersetWorkspaceSnapshot {
           providerWorkspaceId: context.workspaceId,
           name: context.workspaceName,
           scopeId: SUPERSET_WORKSPACE_SCOPE_ID,
+          managerName: "Superset",
         },
         ...(actionsEnabled
           ? {

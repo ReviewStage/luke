@@ -250,6 +250,7 @@ export {
   realtimeCredentialFromResponse,
   realtimeCredentialIsUsable,
   realtimeMintExplanation,
+  realtimeSessionSyncEvents,
 } from "./realtime-credentials.js";
 export {
   appGuideContextEvents,

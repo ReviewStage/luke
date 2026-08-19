@@ -225,9 +225,7 @@ export interface PreferenceWrites {
    * answers with why when it refuses, and the row is where that answer
    * belongs.
    */
-  onDefaultWorkspaceProviderChange: (
-    providerId: ProviderId | undefined,
-  ) => Promise<string | undefined>;
+  onDefaultWorkspaceProviderChange: (providerId: string | undefined) => Promise<string | undefined>;
   /**
    * Chooses the agent kind and model one provider starts new workspaces with,
    * or returns to that provider's own defaults when omitted. The store
@@ -245,7 +243,7 @@ export interface PreferenceWrites {
    * belongs.
    */
   onWorkspaceProjectDefaultChange: (
-    providerId: ProviderId,
+    providerId: string,
     providerProjectId: string | undefined,
   ) => Promise<string | undefined>;
   /**
@@ -1528,6 +1526,9 @@ export interface SupersetControl {
   held: boolean;
   connecting: boolean;
   onConnect: () => void;
+  agents: readonly string[];
+  defaultAgent?: string;
+  onDefaultAgentChange: (agent: string | undefined) => Promise<string | undefined>;
 }
 
 function SupersetIntegration({ control }: { control: SupersetControl }): React.JSX.Element | null {
@@ -1556,8 +1557,28 @@ function SupersetIntegration({ control }: { control: SupersetControl }): React.J
         ) : null}
       </div>
       <p className="settings-note">
-        Workspace grouping works automatically. Connecting enables messages and workspace controls.
+        Workspace grouping works automatically. Connecting enables messages, controls, and new
+        sessions.
       </p>
+      {control.connected && control.agents.length > 0 ? (
+        <SelectRow
+          label="New Superset sessions run"
+          ariaLabel="Default agent for new Superset sessions"
+          detail="Used when a creation ask does not name an agent. Your first successful choice sets it."
+          changed={control.defaultAgent !== undefined}
+          value={control.defaultAgent ?? PROVIDER_DEFAULT_VALUE}
+          options={[
+            { value: PROVIDER_DEFAULT_VALUE, label: "Ask each time" },
+            ...control.agents.map((agent) => ({ value: agent, label: agent })),
+          ]}
+          parse={(raw) =>
+            raw === PROVIDER_DEFAULT_VALUE || control.agents.includes(raw) ? raw : undefined
+          }
+          onChange={(agent) =>
+            control.onDefaultAgentChange(agent === PROVIDER_DEFAULT_VALUE ? undefined : agent)
+          }
+        />
+      ) : null}
     </div>
   );
 }
@@ -2135,7 +2156,7 @@ function WorkspacesSection({
           if (raw === ASK_EACH_TIME) return raw;
           // The set is the one this row offered, so anything else arriving
           // out of the select is a broken control rather than a choice.
-          if (isProviderId(raw) && workspaceProviders.some((option) => option.id === raw)) {
+          if (workspaceProviders.some((option) => option.id === raw)) {
             return raw;
           }
           return undefined;
@@ -2176,7 +2197,7 @@ function WorkspaceProjectRow({
   const providerId = provider.id;
   // A provider this build cannot store a choice for, or one with no projects
   // to choose between, has nothing for the row to say.
-  if (!isProviderId(providerId) || provider.projects.length === 0) return null;
+  if (provider.projects.length === 0) return null;
   const stored = settings.workspaceProjectDefaults?.[providerId];
   return (
     <SelectRow

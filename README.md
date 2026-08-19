@@ -58,7 +58,9 @@ Visit [tryluke.dev](https://tryluke.dev) to see Luke in action.
 
 Superset enrichment needs no connection: Luke reads Superset's live local host
 database in read-only mode and joins agents by their exact session identifiers.
-When the Superset CLI has its own login, workspace controls and messages appear;
+When the Superset CLI has its own login, workspace controls, messages, and new
+workspace creation appear. Luke lists only the hosts, projects, and agent
+presets Superset currently reports and validates a creation against that list;
 Luke never reads or stores that login. Connect from Luke's Settings and finish
 Superset's own sign-in flow in the browser, then explicitly paste its one-time
 code into Luke. Superset's CLI still exchanges the code, stores the login, and
@@ -133,6 +135,9 @@ typed on its row, or requested of Luke in a conversation you opened. For a
 Superset-managed session, Luke may hand that message to Superset's documented
 `terminals send` command under Superset's own CLI login; it invokes the
 executable directly rather than typing into a terminal.
+The same direct-user-act rule covers creating a Superset workspace with one of
+its currently listed agent presets. Luke generates a bounded branch name from
+the requested work and asks Superset to open the workspace after creation.
 
 ## Talking to Luke
 

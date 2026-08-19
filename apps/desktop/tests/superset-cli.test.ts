@@ -162,3 +162,101 @@ test("a CLI failure becomes a bounded rejection", async (t) => {
     reason: "Superset could not deliver that message.",
   });
 });
+
+test("discovers host-scoped projects and creates a workspace with a generated branch", async (t) => {
+  const home = await connectedHome(t);
+  const commands: readonly string[][] = [];
+  const mutableCommands = commands as string[][];
+  const cli = new SupersetCli({
+    homeDirectory: home,
+    uniqueId: () => "deadbeef-0000-0000-0000-000000000000",
+    query: async (_executable, arguments_) => {
+      if (arguments_[0] === "hosts") return "[]";
+      if (arguments_[0] === "projects") {
+        return JSON.stringify([{ id: "project-1", name: "Luke", path: "/private/path" }]);
+      }
+      if (arguments_[0] === "agents") {
+        return JSON.stringify([
+          { id: "agent-1", presetId: "codex", label: "Codex" },
+          { id: "agent-2", presetId: "claude", label: "Claude" },
+        ]);
+      }
+      if (arguments_[0] === "workspaces") {
+        mutableCommands.push([...arguments_]);
+        return JSON.stringify({ workspaceId: "workspace-new" });
+      }
+      return "[]";
+    },
+    run: async (_executable, arguments_) => {
+      mutableCommands.push([...arguments_]);
+    },
+  });
+
+  assert.deepEqual(await cli.workspaceProjects("codex"), [
+    {
+      providerProjectId: "project-1",
+      repository: "Luke",
+      taskSupport: "required",
+      providerTargetId: "local",
+      targetName: "This Mac",
+      spawnableAgents: ["codex", "claude"],
+      defaultAgent: "codex",
+    },
+  ]);
+  assert.deepEqual(
+    await cli.createWorkspace({
+      providerProjectId: "project-1",
+      providerTargetId: "local",
+      agent: "codex",
+      task: "Fix the panel transitions",
+    }),
+    { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED },
+  );
+  assert.deepEqual(mutableCommands, [
+    [
+      "workspaces",
+      "create",
+      "--local",
+      "--project",
+      "project-1",
+      "--name",
+      "luke-fix-the-panel-transitions-deadbeef",
+      "--branch",
+      "luke-fix-the-panel-transitions-deadbeef",
+      "--agent",
+      "codex",
+      "--prompt",
+      "Fix the panel transitions",
+      "--json",
+    ],
+    ["workspaces", "open", "workspace-new", "--json"],
+  ]);
+});
+
+test("workspace creation reports Superset's bounded first error line", async (t) => {
+  const home = await connectedHome(t);
+  const cli = new SupersetCli({
+    homeDirectory: home,
+    query: async (_executable, arguments_) => {
+      if (arguments_[0] === "hosts") return "[]";
+      if (arguments_[0] === "projects") return JSON.stringify([{ id: "project-1", name: "Luke" }]);
+      if (arguments_[0] === "agents") return JSON.stringify([{ presetId: "codex" }]);
+      throw Object.assign(new Error("command included private arguments"), {
+        stderr: `\u001b[31mError: Branch names cannot begin with that prefix.\u001b[0m\n${"x".repeat(500)}`,
+      });
+    },
+  });
+
+  assert.deepEqual(
+    await cli.createWorkspace({
+      providerProjectId: "project-1",
+      providerTargetId: "local",
+      agent: "codex",
+      task: "private task text",
+    }),
+    {
+      status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+      reason: "Branch names cannot begin with that prefix.",
+    },
+  );
+});

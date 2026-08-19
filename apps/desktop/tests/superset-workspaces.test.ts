@@ -104,6 +104,7 @@ test("reads live host databases and enriches an exact provider session", async (
           providerWorkspaceId: "workspace-1",
           name: "power-vacation",
           scopeId: SUPERSET_WORKSPACE_SCOPE_ID,
+          managerName: "Superset",
         },
       },
     ],

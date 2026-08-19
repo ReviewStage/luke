@@ -273,6 +273,8 @@ export interface SessionWorkspace {
    * providers under one workspace of its own.
    */
   scopeId?: string;
+  /** The bounded product name shown when an orchestrator owns this workspace. */
+  managerName?: string;
   name?: string;
 }
 
@@ -574,10 +576,12 @@ function normalizeWorkspace(workspace: SessionWorkspace | undefined): SessionWor
   );
   if (!providerWorkspaceId) return undefined;
   const scopeId = boundedText(workspace?.scopeId, maximumSessionDetailLength);
+  const managerName = boundedText(workspace?.managerName, maximumSessionDetailLength);
   const name = boundedText(workspace?.name, maximumSessionTitleLength);
   return {
     providerWorkspaceId,
     ...(scopeId ? { scopeId } : {}),
+    ...(managerName ? { managerName } : {}),
     ...(name ? { name } : {}),
   };
 }
