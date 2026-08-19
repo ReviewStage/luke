@@ -27,7 +27,13 @@ function copySession(session: NormalizedSession): NormalizedSession {
   return {
     ...session,
     provider: { ...session.provider },
-    detail: { ...session.detail },
+    // The one nested object inside a detail gets its own copy, like every
+    // other nested field here: a snapshot a caller holds must not share
+    // structure with the store.
+    detail: {
+      ...session.detail,
+      ...(session.detail.diff ? { diff: { ...session.detail.diff } } : {}),
+    },
     controls: session.controls.map((control) => ({ ...control })),
     spawnableAgents: [...session.spawnableAgents],
     ...(session.workspace ? { workspace: { ...session.workspace } } : {}),
@@ -93,6 +99,15 @@ const sameDetail = exhaustiveSame<SessionDetail>({
   error: (first, second) => first.error === second.error,
   link: (first, second) => first.link === second.link,
   change: (first, second) => first.change === second.change,
+  diff: (first, second) =>
+    sameOptional(
+      first.diff,
+      second.diff,
+      (a, b) =>
+        a.filesChanged === b.filesChanged &&
+        a.linesAdded === b.linesAdded &&
+        a.linesRemoved === b.linesRemoved,
+    ),
 });
 
 const sameControl = exhaustiveSame<SessionControl>({

@@ -44,6 +44,7 @@ export {
   type SessionControlKind,
   type SessionCompletionCause,
   type SessionDetail,
+  type SessionDiffSummary,
   type SessionIdentity,
   type SessionLocation,
   type SessionProvider,

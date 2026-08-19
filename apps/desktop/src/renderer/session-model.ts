@@ -10,6 +10,7 @@ import {
   SESSION_STATUS,
   SESSION_URGENCY,
   type SessionControlKind,
+  type SessionDiffSummary,
   type SessionListSort,
   type SessionLocation,
   type SessionNoticeAsk,
@@ -134,6 +135,12 @@ export interface DisplaySession {
   branch?: string;
   /** Read on the provider mark's hover, never spent on a line of the row. */
   model?: string;
+  /**
+   * The size of the session's change, already worded for the row — the counts
+   * are the provider's, the words are the surface's. Beside the checkout on
+   * the place line, because both say what the work touched.
+   */
+  diff?: string;
   urgency: SessionUrgency;
   label: string;
   location: SessionLocation;
@@ -273,6 +280,16 @@ function sessionDetail(session: NormalizedSession, urgency: SessionUrgency): str
     session.recap ??
     urgencyLabel(urgency)
   );
+}
+
+/**
+ * The size of a change in the words a row spends on it. The counts are the
+ * provider's own; only the wording is the surface's, and the minus is the
+ * real minus sign so the two figures read as a diff rather than arithmetic.
+ */
+export function sessionDiffLabel(diff: SessionDiffSummary): string {
+  const files = `${diff.filesChanged} ${diff.filesChanged === 1 ? "file" : "files"}`;
+  return `${files} +${diff.linesAdded} −${diff.linesRemoved}`;
 }
 
 /**
@@ -422,6 +439,7 @@ export function displaySessions(
           repository: session.detail.repository,
           branch: session.detail.branch,
           model: session.detail.model,
+          ...(session.detail.diff ? { diff: sessionDiffLabel(session.detail.diff) } : {}),
           urgency,
           label: urgencyLabel(urgency),
           location: session.location,

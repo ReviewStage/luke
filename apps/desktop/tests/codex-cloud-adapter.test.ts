@@ -30,6 +30,7 @@ interface TestTask {
   environmentLabel?: string;
   omitEnvironmentLabel?: boolean;
   updatedAt: number;
+  summary?: { files_changed: number; lines_added: number; lines_removed: number };
 }
 
 function taskPayload(task: TestTask): Record<string, unknown> {
@@ -46,7 +47,7 @@ function taskPayload(task: TestTask): Record<string, unknown> {
     ...(task.omitEnvironmentLabel
       ? {}
       : { environment_label: task.environmentLabel ?? "reviewstage/luke" }),
-    summary: { files_changed: 3, lines_added: 12, lines_removed: 4 },
+    summary: task.summary ?? { files_changed: 3, lines_added: 12, lines_removed: 4 },
     is_review: false,
     attempt_total: 1,
   };
@@ -497,4 +498,33 @@ test("a sweep stops at its page bound however deep the history goes", async () =
   await adapterFor(run).observe();
 
   assert.equal(invocations.filter((invocation) => invocation.argv[1] === "list").length, 5);
+});
+
+test("carries the CLI's diff counts and leaves a zero summary unreported", async () => {
+  const { run } = fakeCodexCli({
+    tasks: [
+      { id: "task-ready", status: TEST_STATUS.READY, updatedAt: TEST_TIME },
+      {
+        id: "task-pending",
+        status: TEST_STATUS.PENDING,
+        updatedAt: TEST_TIME - 1,
+        summary: { files_changed: 0, lines_added: 0, lines_removed: 0 },
+      },
+    ],
+  });
+
+  const observations = await adapterFor(run).observe();
+
+  assert.deepEqual(observations[0]?.detail?.diff, {
+    filesChanged: 3,
+    linesAdded: 12,
+    linesRemoved: 4,
+  });
+  // The zero summary of a task still working rides to the normalizer, which
+  // drops it — the adapter reports the provider's counts, nothing more.
+  assert.deepEqual(observations[1]?.detail?.diff, {
+    filesChanged: 0,
+    linesAdded: 0,
+    linesRemoved: 0,
+  });
 });
