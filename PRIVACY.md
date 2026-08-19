@@ -105,6 +105,13 @@ Luke never modifies the running app.
   the fact of a failed turn rather than the reason Cursor recorded for it. A
   session is labelled by the folder it runs in, which Luke reads from Cursor's
   own record of that folder, not from the chat's generated name.
+- For Superset, Luke discovers each `host/<host-id>/host.db`, opens it in
+  read-only defensive mode, and reads project and workspace names, branches,
+  pull-request links, terminal identifiers, configured agent kinds, lifecycle
+  events, and the agent's own session identifier. That identifier is joined
+  exactly to a session Luke already observed; Luke does not infer membership
+  from a filesystem path. Missing files and unknown schemas mean no Superset
+  context, never an on-screen failure. The stale legacy `local.db` is not read.
 
 Luke processes bounded fields needed to identify and display a session:
 provider and session identifiers, provider-generated titles, the workspace
@@ -118,6 +125,19 @@ provider hooks or plugins. Observed fields are held in memory for the local
 display. Observation itself never controls a provider session; see Optional
 cloud-provider reads and Optional issue-tracker reads and spoken acts below
 for the narrow, user-requested writes Luke makes elsewhere.
+
+Superset observation never invokes its CLI and sends nothing to Superset. If
+Superset's CLI executable and its own `config.json` login both exist, Luke may
+offer controls on the exact workspaces and terminals the latest database pass
+  reported. Luke asks macOS's property-list utility whether the CLI config names
+  an active organization and receives only that identifier; Luke never opens
+  the config or receives its credential fields. A message or control runs only from the developer's press or a turn
+the developer opened, invokes the CLI executable directly without a shell, and
+passes only the observed host, workspace and terminal identifiers plus the
+developer's own message. Luke never reads, copies, or stores the CLI token. The
+CLI is Superset's cloud client and its own telemetry and privacy terms apply to
+commands it runs. Without its login, these actions do not appear and local
+observation continues unchanged.
 
 One provider file per provider is the exception to "does not modify", and it
 is configuration rather than session data: Luke merges an observation hook

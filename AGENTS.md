@@ -27,6 +27,12 @@ Trust constraints:
 - Never write provider transcripts or session-state files. Reading them is what
   Luke is for; writing to them is never.
 - Never inject terminal input, simulate keystrokes, or request Accessibility.
+  A message the developer explicitly sends through Superset's documented
+  `terminals send` command is not terminal injection: Superset owns the
+  terminal and its authenticated endpoint, the observed binding identifies
+  the exact target, and Luke invokes it directly without a shell. It remains
+  bound by the same direct-user-act and latest-roster validation as every
+  other session message.
 - Product behavior must not require provider MCP, plugins, hooks, wrappers,
   credentials, or live sessions. A provider whose sessions exist only in a cloud
   service may read a user-supplied API key, but it must observe nothing until
