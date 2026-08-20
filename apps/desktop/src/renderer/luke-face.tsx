@@ -14,7 +14,7 @@ interface LukeFaceProps {
 }
 
 /** Nothing beyond the smile and the eyes, which is what a still face draws. */
-const RESTING_PARTS = { brows: false, lids: false, sleepZ: false, hushMark: false } as const;
+const RESTING_PARTS = { brows: false, lids: false, sleepZ: false } as const;
 
 /** The monoline stroke every drawn line of the face shares. */
 const STROKE = {
@@ -125,21 +125,6 @@ export function LukeFace({ motion, repeat = false }: LukeFaceProps): React.JSX.E
             </g>
           ))
         : null}
-
-      {/* Outside the layers for the same reason the z's are: the bubble
-          hangs beside the head, not on it. The breathe animates the group,
-          so the outline and the bar can only ever fade as one mark. */}
-      {parts.hushMark ? (
-        <g className="luke-face-part luke-face-hush-mark" transform={FACE_ART.HUSH_MARK.transform}>
-          <path
-            d={FACE_ART.HUSH_MARK.bubble}
-            {...STROKE}
-            strokeWidth={FACE_ART.HUSH_MARK.width}
-            strokeLinejoin="round"
-          />
-          <path d={FACE_ART.HUSH_MARK.bar} {...STROKE} strokeWidth={FACE_ART.HUSH_MARK.width} />
-        </g>
-      ) : null}
     </svg>
   );
 }

@@ -148,38 +148,13 @@ const zGlyph = ({ x, y, size, start }) => {
   );
 };
 
-// The struck-through speech bubble beside a hushed head, where the sleeper's
-// z's rise, so the two states share an address and differ in what they say:
-// z's on closed lids mean not watching, a barred bubble over open eyes means
-// watching but out of voice for the day. It breathes opacity in place rather
-// than travelling: a glyph that drifted like the z's would read as sleep.
-// Unlike the z's, its first frame is its most visible one, because a paused
-// loop — a capture run, reduced motion — must still show the hush: it is a
-// state, not a motion.
-const HUSH_MARK = { x: 181, y: 54, w: 30, h: 22, r: 7 };
-const HUSH_MARK_WIDTH = 3.5;
-const HUSH_MARK_DURATION = 5.2;
-const HUSH_MARK_OPACITY = [0.85, 0.55, 0.85];
-// The bubble as one monoline outline in the z's own stroke, its tail toward
-// the head it belongs to, and the bar as a second stroke across it.
-const hushMarkBubbleD = () => {
-  const x = HUSH_MARK.w / 2;
-  const y = HUSH_MARK.h / 2;
-  const r = HUSH_MARK.r;
-  const arc = (ex, ey) => `A ${r} ${r} 0 0 1 ${fmt(ex)} ${fmt(ey)}`;
-  return (
-    `M ${fmt(-x + r)} ${fmt(-y)} H ${fmt(x - r)} ${arc(x, -y + r)} V ${fmt(y - r)} ` +
-    `${arc(x - r, y)} H -3 L -10 ${fmt(y + 6)} L -8 ${fmt(y)} ${arc(-x, y - r)} ` +
-    `V ${fmt(-y + r)} ${arc(-x + r, -y)} Z`
-  );
-};
-const hushMarkBarD = () => `M ${fmt(-HUSH_MARK.w / 2 + 3)} 13 L ${fmt(HUSH_MARK.w / 2 - 3)} -13`;
-const hushMarkTransform = () => `translate(${HUSH_MARK.x} ${HUSH_MARK.y})`;
-const hushMarkGlyph = () =>
-  `<g transform="${hushMarkTransform()}">` +
-  `<animate attributeName="opacity" values="${HUSH_MARK_OPACITY.join(";")}" dur="${HUSH_MARK_DURATION}s" repeatCount="indefinite"/>` +
-  `<path d="${hushMarkBubbleD()}" stroke="currentColor" stroke-width="${HUSH_MARK_WIDTH}" stroke-linecap="round" stroke-linejoin="round" fill="none"/>` +
-  `<path d="${hushMarkBarD()}" stroke="currentColor" stroke-width="${HUSH_MARK_WIDTH}" stroke-linecap="round" fill="none"/></g>`;
+// How faded a hushed face draws, everywhere the face draws: nothing
+// corner-sized reads at menu-bar scale, so the state is carried by the ink
+// itself — the grayed-out idiom every UI says "present but unavailable"
+// with, over eyes that stay open and blinking. A `dim` on a motion reaches
+// both outputs from this one number, so the app's face and the standalone
+// SVG cannot disagree about how quiet the hush looks.
+const HUSH_DIM = 0.45;
 
 // Composes the face. opts: { eyes, extra } override the defaults.
 function face(opts = {}) {
@@ -398,10 +373,9 @@ const MOTIONS = {
   // keeps watching. The eyes stay open on a slow single blink — a hush that
   // closed them would read as a sidecar that stopped watching, which is the
   // one thing this state must not say — the head holds a shade of the
-  // sleeper's droop so the quiet reads on the silhouette, and the silenced
-  // crescent breathes beside the head where the sleeper's z's rise.
+  // sleeper's droop, and the whole face dims to the grayed-out idiom's ink.
   hushed: {
-    moment: "voice spent for the day (awake and quiet, barred bubble)",
+    moment: "voice spent for the day (awake, grayed out)",
     layers: [{ type: "rotate", pivot: [120, 150], hold: 4 }],
     eyes: {
       kind: "blink",
@@ -409,7 +383,7 @@ const MOTIONS = {
       keyTimes: [0, 0.6, 0.64, 0.68, 1],
       dur: 5.2,
     },
-    hushMark: true,
+    dim: HUSH_DIM,
   },
   // One full pirouette with an ease-out landing, then a long rest.
   refresh: {
@@ -706,7 +680,6 @@ function motionCycleMs(motion) {
     ...(motion.eyes?.dur ? [motion.eyes.dur] : []),
     ...(motion.brows?.dur ? [motion.brows.dur] : []),
     ...(motion.sleepZ ? [SLEEP_Z_DURATION] : []),
-    ...(motion.hushMark ? [HUSH_MARK_DURATION] : []),
   ];
   return Math.round(Math.max(...durations, 0) * 1000);
 }
@@ -765,7 +738,7 @@ function motionSvg(motion) {
     body = wrapAnim(body, animT(layer.type, values, layer.dur, opts));
   }
   if (motion.sleepZ) body += SLEEP_Z.map(zGlyph).join("");
-  if (motion.hushMark) body += hushMarkGlyph();
+  if (motion.dim !== undefined) body = `<g opacity="${motion.dim}">${body}</g>`;
   return body;
 }
 
@@ -824,6 +797,12 @@ function motionCss(name, motion) {
     blocks.push(block);
     rules.push(rule);
   };
+
+  // A dim is a state, not an animation: it holds through pauses and reduced
+  // motion, which is exactly why it can carry the hush where a loop cannot.
+  if (motion.dim !== undefined) {
+    rules.push(`${selector} {\n  opacity: ${motion.dim};\n}`);
+  }
 
   motion.layers.forEach((layer, index) => {
     const target = `${selector} .luke-face-layer-${index + 1}`;
@@ -886,14 +865,6 @@ function faceMotionCss() {
       (z, index) => `.luke-face-z-${index + 1} {\n  animation-name: luke-sleep-z-${index + 1};\n}`,
     ),
   ];
-  const hushBlock = cssKeyframes(
-    "luke-hush-mark",
-    HUSH_MARK_OPACITY.map((opacity, index) => ({
-      at: index / (HUSH_MARK_OPACITY.length - 1),
-      declaration: `opacity: ${opacity};`,
-    })),
-  );
-  const hushRule = `.luke-face-hush-mark {\n  animation-name: luke-hush-mark;\n  animation-duration: ${HUSH_MARK_DURATION}s;\n}`;
   return [
     "/* Generated by design/generate-brand-assets.mjs. Do not edit by hand: change",
     "   the motion table in that script and re-run it.",
@@ -910,12 +881,6 @@ function faceMotionCss() {
     "   loop — a capture run, reduced motion — shows no z at all. */",
     "",
     [...zBlocks, ...zRules].join("\n\n"),
-    "",
-    "/* The hushed bubble breathes in place, and its first frame is its most",
-    "   visible one: paused, the hush still shows, because it is a state rather",
-    "   than a motion. */",
-    "",
-    [hushBlock, hushRule].join("\n\n"),
     "",
   ].join("\n");
 }
@@ -935,7 +900,6 @@ function faceArtModule() {
       `brows: ${Boolean(motion.brows)}`,
       `lids: ${motion.eyes?.kind === "lids"}`,
       `sleepZ: ${Boolean(motion.sleepZ)}`,
-      `hushMark: ${Boolean(motion.hushMark)}`,
     ];
     return [name, `{ ${tsList(flags)} }`];
   });
@@ -974,14 +938,6 @@ export const FACE_ART = {
 ${SLEEP_Z.map((z) => `    { x: ${z.x}, y: ${z.y}, path: "${zGlyphD(z.size)}" },`).join("\n")}
   ],
   SLEEP_Z_WIDTH: ${SLEEP_Z_WIDTH},
-  /** The struck-through bubble a hushed face wears where the sleeper's z's rise. */
-  HUSH_MARK: {
-    transform: "${hushMarkTransform()}",
-    bubble:
-      "${hushMarkBubbleD()}",
-    bar: "${hushMarkBarD()}",
-    width: ${HUSH_MARK_WIDTH},
-  },
 } as const;
 
 /** Every motion the artwork defines, whether or not the app has a moment for it. */
@@ -999,10 +955,7 @@ ${tsRecord(MOTION_NAMES.map((name) => [name, motionCycleMs(MOTIONS[name])]))}
 /** What a motion needs drawn beyond the resting smile and eyes. */
 export const FACE_MOTION_PARTS = {
 ${tsRecord(parts)}
-} as const satisfies Record<
-  FaceMotion,
-  { brows: boolean; lids: boolean; sleepZ: boolean; hushMark: boolean }
->;
+} as const satisfies Record<FaceMotion, { brows: boolean; lids: boolean; sleepZ: boolean }>;
 `;
 }
 

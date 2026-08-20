@@ -34,14 +34,6 @@ export const FACE_ART = {
     { x: 166, y: 44, path: "M 0 0 H 6 L 0 6 H 6" },
   ],
   SLEEP_Z_WIDTH: 3.5,
-  /** The struck-through bubble a hushed face wears where the sleeper's z's rise. */
-  HUSH_MARK: {
-    transform: "translate(181 54)",
-    bubble:
-      "M -8 -11 H 8 A 7 7 0 0 1 15 -4 V 4 A 7 7 0 0 1 8 11 H -3 L -10 17 L -8 11 A 7 7 0 0 1 -15 4 V -4 A 7 7 0 0 1 -8 -11 Z",
-    bar: "M -12 13 L 12 -13",
-    width: 3.5,
-  },
 } as const;
 
 /** Every motion the artwork defines, whether or not the app has a moment for it. */
@@ -104,31 +96,28 @@ export const FACE_MOTION_CYCLE_MS = {
 
 /** What a motion needs drawn beyond the resting smile and eyes. */
 export const FACE_MOTION_PARTS = {
-  talking: { brows: false, lids: false, sleepZ: false, hushMark: false },
-  yes: { brows: false, lids: false, sleepZ: false, hushMark: false },
-  error: { brows: false, lids: false, sleepZ: false, hushMark: false },
-  reviewing: { brows: false, lids: false, sleepZ: false, hushMark: false },
-  success: { brows: false, lids: false, sleepZ: false, hushMark: false },
-  listening: { brows: false, lids: false, sleepZ: false, hushMark: false },
-  idle: { brows: false, lids: false, sleepZ: false, hushMark: false },
-  notification: { brows: true, lids: false, sleepZ: false, hushMark: false },
-  wink: { brows: false, lids: false, sleepZ: false, hushMark: false },
-  sleeping: { brows: false, lids: true, sleepZ: true, hushMark: false },
-  hushed: { brows: false, lids: false, sleepZ: false, hushMark: true },
-  refresh: { brows: false, lids: false, sleepZ: false, hushMark: false },
-  boop: { brows: false, lids: false, sleepZ: false, hushMark: false },
-  monitoring: { brows: false, lids: false, sleepZ: false, hushMark: false },
-  appear: { brows: false, lids: false, sleepZ: false, hushMark: false },
-  attention: { brows: false, lids: false, sleepZ: false, hushMark: false },
-  floating: { brows: false, lids: false, sleepZ: false, hushMark: false },
-  hiding: { brows: false, lids: false, sleepZ: false, hushMark: false },
-  flyoff: { brows: false, lids: false, sleepZ: false, hushMark: false },
-  tease: { brows: true, lids: false, sleepZ: false, hushMark: false },
-  waiting: { brows: false, lids: false, sleepZ: false, hushMark: false },
-  shimmy: { brows: false, lids: false, sleepZ: false, hushMark: false },
-  dizzy: { brows: false, lids: false, sleepZ: false, hushMark: false },
-  glance: { brows: false, lids: false, sleepZ: false, hushMark: false },
-} as const satisfies Record<
-  FaceMotion,
-  { brows: boolean; lids: boolean; sleepZ: boolean; hushMark: boolean }
->;
+  talking: { brows: false, lids: false, sleepZ: false },
+  yes: { brows: false, lids: false, sleepZ: false },
+  error: { brows: false, lids: false, sleepZ: false },
+  reviewing: { brows: false, lids: false, sleepZ: false },
+  success: { brows: false, lids: false, sleepZ: false },
+  listening: { brows: false, lids: false, sleepZ: false },
+  idle: { brows: false, lids: false, sleepZ: false },
+  notification: { brows: true, lids: false, sleepZ: false },
+  wink: { brows: false, lids: false, sleepZ: false },
+  sleeping: { brows: false, lids: true, sleepZ: true },
+  hushed: { brows: false, lids: false, sleepZ: false },
+  refresh: { brows: false, lids: false, sleepZ: false },
+  boop: { brows: false, lids: false, sleepZ: false },
+  monitoring: { brows: false, lids: false, sleepZ: false },
+  appear: { brows: false, lids: false, sleepZ: false },
+  attention: { brows: false, lids: false, sleepZ: false },
+  floating: { brows: false, lids: false, sleepZ: false },
+  hiding: { brows: false, lids: false, sleepZ: false },
+  flyoff: { brows: false, lids: false, sleepZ: false },
+  tease: { brows: true, lids: false, sleepZ: false },
+  waiting: { brows: false, lids: false, sleepZ: false },
+  shimmy: { brows: false, lids: false, sleepZ: false },
+  dizzy: { brows: false, lids: false, sleepZ: false },
+  glance: { brows: false, lids: false, sleepZ: false },
+} as const satisfies Record<FaceMotion, { brows: boolean; lids: boolean; sleepZ: boolean }>;

@@ -490,7 +490,7 @@
   animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
 }
 
-/* hushed — voice spent for the day (awake and quiet, barred bubble) */
+/* hushed — voice spent for the day (awake, grayed out) */
 
 @keyframes luke-hushed-eyes {
   0% {
@@ -512,6 +512,10 @@
   100% {
     transform: scaleY(1);
   }
+}
+
+.luke-face[data-motion="hushed"] {
+  opacity: 0.45;
 }
 
 .luke-face[data-motion="hushed"] .luke-face-layer-1 {
@@ -1270,27 +1274,4 @@
 
 .luke-face-z-3 {
   animation-name: luke-sleep-z-3;
-}
-
-/* The hushed bubble breathes in place, and its first frame is its most
-   visible one: paused, the hush still shows, because it is a state rather
-   than a motion. */
-
-@keyframes luke-hush-mark {
-  0% {
-    opacity: 0.85;
-  }
-
-  50% {
-    opacity: 0.55;
-  }
-
-  100% {
-    opacity: 0.85;
-  }
-}
-
-.luke-face-hush-mark {
-  animation-name: luke-hush-mark;
-  animation-duration: 5.2s;
 }

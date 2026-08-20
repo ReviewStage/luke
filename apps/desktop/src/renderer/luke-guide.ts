@@ -249,8 +249,8 @@ function voiceKeyFact(settings: AppSettings, voiceAvailable: boolean): AppGuideF
         ? `Voice and session review run on the signed-in Luke account's daily allowance. A ` +
           `key of the developer's own runs them unmetered instead, billed by OpenAI. When a ` +
           `day's allowance is spent, watching continues unmetered and only voice pauses until ` +
-          `the reset: the face beside the housing stays awake but hushes, wearing a small ` +
-          `struck-through speech bubble, and a caption where replies land says when voice ` +
+          `the reset: the face beside the housing stays awake but grays out to half ink, ` +
+          `and a caption where replies land says when voice ` +
           `returns — once at the ` +
           `run-out, again whenever the composer is reached for or an ask is refused. `
         : source === CREDENTIAL_SOURCE.NONE
