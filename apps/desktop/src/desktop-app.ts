@@ -1469,6 +1469,7 @@ const sessionObservationLoop = new ObservationLoop({
   gate: observationGate,
   intervalMs: SESSION_REFRESH_INTERVAL_MS,
   run: refreshProviderSessions,
+  runEffect: (effect) => effectRuntime.runPromise(effect),
   // A pass is also when the Codex CLI login can have changed hands, and no
   // settings save stands behind that to announce it.
   afterRun: () => {
@@ -1480,16 +1481,19 @@ const attentionObservationLoop = new ObservationLoop({
   gate: () => observationGate() && voiceCapabilities.attentionReviewer !== undefined,
   intervalMs: SESSION_REFRESH_INTERVAL_MS,
   run: reviewSessionAttention,
+  runEffect: (effect) => effectRuntime.runPromise(effect),
 });
 const issueObservationLoop = new ObservationLoop({
   gate: observationGate,
   intervalMs: ISSUE_REFRESH_INTERVAL_MS,
   run: refreshTrackedIssues,
+  runEffect: (effect) => effectRuntime.runPromise(effect),
 });
 const calendarObservationLoop = new ObservationLoop({
   gate: observationGate,
   intervalMs: CALENDAR_REFRESH_INTERVAL_MS,
   run: refreshCalendarMeetings,
+  runEffect: (effect) => effectRuntime.runPromise(effect),
 });
 const observationSupervisor = new ObservationSupervisor([
   sessionObservationLoop,

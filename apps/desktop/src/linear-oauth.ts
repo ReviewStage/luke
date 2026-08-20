@@ -7,7 +7,7 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/core";
-import { type Context, Deferred, Duration, Effect, Exit } from "effect";
+import { type Context, Deferred, Duration, Effect, Exit, Fiber } from "effect";
 // The same landing page the Luke account sign-in leaves the browser on, so no
 // two of Luke's consent trips dress their tabs differently.
 import { accountLoopbackPage, LOOPBACK_PAGE_TONE } from "./account-loopback-page";
@@ -244,6 +244,7 @@ export class LinearSignIn {
       const outcomeDeferred = yield* Deferred.make<LinearSignInOutcome>();
       let redirectUri = "";
       let callbackClaimed = false;
+      let clearWaitingTimeout: () => Effect.Effect<void> = () => Effect.void;
 
       const bound = yield* this.#bindLoopback(http, (request, response) =>
         this.#handleCallback(request, response, {
@@ -256,6 +257,7 @@ export class LinearSignIn {
           setCallbackClaimed: () => {
             callbackClaimed = true;
           },
+          clearWaitingTimeout: () => clearWaitingTimeout(),
           finish: (outcome) => Deferred.succeed(outcomeDeferred, outcome),
         }),
       );
@@ -277,6 +279,16 @@ export class LinearSignIn {
       authorization.searchParams.set("state", state);
 
       const timeoutMs = this.#options.timeoutMs ?? SIGN_IN_TIMEOUT_MS;
+      const waitingTimeout = yield* Effect.fork(
+        Effect.sleep(Duration.millis(timeoutMs)).pipe(
+          Effect.andThen(
+            Deferred.succeed(outcomeDeferred, {
+              reason: "Sign-in timed out. Try again from the Linear row.",
+            }),
+          ),
+        ),
+      );
+      clearWaitingTimeout = () => Fiber.interrupt(waitingTimeout);
       this.#abandon = () => {
         Deferred.unsafeDone(outcomeDeferred, Exit.succeed({ reason: "Sign-in was cancelled." }));
       };
@@ -284,14 +296,7 @@ export class LinearSignIn {
 
       try {
         this.#options.openExternal(authorization.toString());
-        return yield* Deferred.await(outcomeDeferred).pipe(
-          Effect.timeout(Duration.millis(timeoutMs)),
-          Effect.catchAll(() =>
-            Effect.succeed({
-              reason: "Sign-in timed out. Try again from the Linear row.",
-            } satisfies LinearSignInOutcome),
-          ),
-        );
+        return yield* Deferred.await(outcomeDeferred).pipe(Effect.ensuring(clearWaitingTimeout()));
       } finally {
         yield* http.closeServer(server);
         yield* http.closeAllConnections(server);
@@ -334,6 +339,7 @@ export class LinearSignIn {
       getRedirectUri: () => string;
       getCallbackClaimed: () => boolean;
       setCallbackClaimed: () => void;
+      clearWaitingTimeout: () => Effect.Effect<void>;
       finish: (outcome: LinearSignInOutcome) => Effect.Effect<void>;
     },
   ): Effect.Effect<void, LoopbackFailure> {
@@ -348,6 +354,7 @@ export class LinearSignIn {
         return;
       }
       options.setCallbackClaimed();
+      yield* options.clearWaitingTimeout();
       this.#abandon = undefined;
       const refused = url.searchParams.get("error");
       const code = url.searchParams.get("code");

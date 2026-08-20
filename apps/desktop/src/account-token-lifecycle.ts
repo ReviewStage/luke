@@ -19,24 +19,31 @@ export function singleFlight<R = unknown>(
   const shared = Ref.unsafeMake<Deferred.Deferred<void, unknown> | undefined>(undefined);
   const lock = Effect.unsafeMakeSemaphore(1);
   return () =>
-    lock.withPermits(1)(
-      Effect.gen(function* () {
-        const current = yield* Ref.get(shared);
-        if (current) return yield* Deferred.await(current);
-        const created = yield* Deferred.make<void, unknown>();
-        yield* Ref.set(shared, created);
-        yield* Effect.forkDaemon(
-          run().pipe(
-            Effect.matchEffect({
-              onFailure: (error) => Deferred.fail(created, error),
-              onSuccess: () => Deferred.succeed(created, undefined),
-            }),
-            Effect.ensuring(Ref.set(shared, undefined)),
-          ),
-        );
-        return yield* Deferred.await(created);
-      }),
-    );
+    Effect.gen(function* () {
+      const existing = yield* Ref.get(shared);
+      if (existing) return yield* Deferred.await(existing);
+
+      const flight = yield* lock.withPermits(1)(
+        Effect.gen(function* () {
+          const current = yield* Ref.get(shared);
+          if (current) return current;
+          const created = yield* Deferred.make<void, unknown>();
+          yield* Ref.set(shared, created);
+          yield* Effect.forkDaemon(
+            run().pipe(
+              Effect.matchEffect({
+                onFailure: (error) => Deferred.fail(created, error),
+                onSuccess: () => Deferred.succeed(created, undefined),
+              }),
+              Effect.ensuring(Ref.set(shared, undefined)),
+            ),
+          );
+          return created;
+        }),
+      );
+
+      return yield* Deferred.await(flight);
+    });
 }
 
 /** Like {@link singleFlight}, but shares the successful result with concurrent callers. */
@@ -46,24 +53,31 @@ export function singleFlightResult<A, R = unknown>(
   const shared = Ref.unsafeMake<Deferred.Deferred<A, unknown> | undefined>(undefined);
   const lock = Effect.unsafeMakeSemaphore(1);
   return () =>
-    lock.withPermits(1)(
-      Effect.gen(function* () {
-        const current = yield* Ref.get(shared);
-        if (current) return yield* Deferred.await(current);
-        const created = yield* Deferred.make<A, unknown>();
-        yield* Ref.set(shared, created);
-        yield* Effect.forkDaemon(
-          run().pipe(
-            Effect.matchEffect({
-              onFailure: (error) => Deferred.fail(created, error),
-              onSuccess: (value) => Deferred.succeed(created, value),
-            }),
-            Effect.ensuring(Ref.set(shared, undefined)),
-          ),
-        );
-        return yield* Deferred.await(created);
-      }),
-    );
+    Effect.gen(function* () {
+      const existing = yield* Ref.get(shared);
+      if (existing) return yield* Deferred.await(existing);
+
+      const flight = yield* lock.withPermits(1)(
+        Effect.gen(function* () {
+          const current = yield* Ref.get(shared);
+          if (current) return current;
+          const created = yield* Deferred.make<A, unknown>();
+          yield* Ref.set(shared, created);
+          yield* Effect.forkDaemon(
+            run().pipe(
+              Effect.matchEffect({
+                onFailure: (error) => Deferred.fail(created, error),
+                onSuccess: (value) => Deferred.succeed(created, value),
+              }),
+              Effect.ensuring(Ref.set(shared, undefined)),
+            ),
+          );
+          return created;
+        }),
+      );
+
+      return yield* Deferred.await(flight);
+    });
 }
 
 /** Ensures credentials rejected before sign-in completes do not outlive the failed attempt. */

@@ -71,6 +71,7 @@ export class HostedAttentionEvaluator implements AttentionEvaluator {
   readonly #refreshAccount: () => Effect.Effect<void, unknown, unknown>;
   readonly #now: () => number;
   readonly #requestTimeoutMs: number;
+  #quietUntilMs = 0;
 
   constructor(options: HostedAttentionEvaluatorOptions) {
     const baseUrl = text(options.serviceBaseUrl);
@@ -99,6 +100,12 @@ export class HostedAttentionEvaluator implements AttentionEvaluator {
     update: AttentionUpdate,
   ): Effect.Effect<AttentionDecision | undefined, AttentionRateLimited, Http> {
     return Effect.gen(this, function* () {
+      const now = this.#now();
+      const quietUntil = this.#quietUntilMs;
+      if (now < quietUntil) {
+        return yield* Effect.fail(new AttentionRateLimited({ retryAfterMs: quietUntil - now }));
+      }
+
       const token = yield* this.#readAccessToken();
       if (!token) return undefined;
 
@@ -162,6 +169,7 @@ export class HostedAttentionEvaluator implements AttentionEvaluator {
         resetsAt !== undefined && resetsAt > now
           ? resetsAt - now
           : HOSTED_DEFAULTS.RATE_LIMIT_COOLDOWN_MS;
+      this.#quietUntilMs = now + waitMs;
       this.#report(
         `Hosted attention reviews are out of today's allowance; pausing for ${Math.round(waitMs / 1000)}s`,
       );

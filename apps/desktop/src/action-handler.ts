@@ -1,7 +1,11 @@
 import type { UnparsedWireValue } from "@sidecar/core";
 import { Cause, type Effect, Exit } from "effect";
 import type { IpcMainInvokeEvent } from "electron";
-import { type DesktopEffect, effectRuntime } from "./desktop-app";
+
+export interface ActionEffectRuntime {
+  runPromiseExit<A, E>(effect: Effect.Effect<A, E, unknown>): Promise<Exit.Exit<A, E>>;
+  runPromise<A, E>(effect: Effect.Effect<A, E, unknown>): Promise<A>;
+}
 
 interface ActionHandlerHost {
   trustedSender: (event: IpcMainInvokeEvent) => boolean;
@@ -17,7 +21,7 @@ interface ActionHandler<TArguments extends readonly unknown[], TResult> {
   failure: (error: Error) => TResult;
 }
 
-export function createActionHandler(host: ActionHandlerHost) {
+export function createActionHandler(host: ActionHandlerHost, runtime: ActionEffectRuntime) {
   return <TArguments extends readonly unknown[], TResult>(
     channel: string,
     action: ActionHandler<TArguments, TResult>,
@@ -26,17 +30,14 @@ export function createActionHandler(host: ActionHandlerHost) {
       if (!host.trustedSender(event)) throw new Error("Untrusted renderer");
       const validated = action.validate(args);
       if (!validated) return Promise.resolve(action.failure(new Error("Invalid action request")));
-      // SAFETY: action.act satisfies DesktopServices at the IPC composition root.
-      return effectRuntime
-        .runPromiseExit(action.act(...validated) as DesktopEffect<TResult, Error>)
-        .then((exit) => {
-          if (Exit.isFailure(exit)) {
-            const error = Cause.squash(exit.cause);
-            const failure = error instanceof Error ? error : new Error(String(error));
-            return action.failure(failure);
-          }
-          return exit.value;
-        });
+      return runtime.runPromiseExit(action.act(...validated)).then((exit) => {
+        if (Exit.isFailure(exit)) {
+          const error = Cause.squash(exit.cause);
+          const failure = error instanceof Error ? error : new Error(String(error));
+          return action.failure(failure);
+        }
+        return exit.value;
+      });
     });
   };
 }
@@ -44,6 +45,7 @@ export function createActionHandler(host: ActionHandlerHost) {
 /** Runs a validated Effect at the IPC edge; non-edge modules return the Effect only. */
 export function registerEffectInvoke<A, E>(
   host: ActionHandlerHost,
+  runtime: ActionEffectRuntime,
   channel: string,
   handler: (
     event: IpcMainInvokeEvent,
@@ -52,7 +54,6 @@ export function registerEffectInvoke<A, E>(
 ): void {
   host.handle(channel, (event, ...args) => {
     if (!host.trustedSender(event)) throw new Error("Untrusted renderer");
-    // SAFETY: The IPC handler satisfies DesktopServices at the composition root.
-    return effectRuntime.runPromise(handler(event, ...args) as DesktopEffect<A, E>);
+    return runtime.runPromise(handler(event, ...args));
   });
 }

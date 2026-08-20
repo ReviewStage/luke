@@ -96,6 +96,7 @@ export class OpenAiAttentionEvaluator implements AttentionEvaluator {
   readonly #now: () => number;
   readonly #requestTimeoutMs: number;
   readonly #maximumOutputTokens: number;
+  #quietUntilMs = 0;
 
   constructor(options: OpenAiAttentionEvaluatorOptions) {
     const apiKey = text(options.apiKey);
@@ -132,12 +133,19 @@ export class OpenAiAttentionEvaluator implements AttentionEvaluator {
     update: AttentionUpdate,
   ): Effect.Effect<AttentionDecision | undefined, AttentionRateLimited, Http> {
     return Effect.gen(this, function* () {
+      const now = this.#now();
+      const quietUntil = this.#quietUntilMs;
+      if (now < quietUntil) {
+        return yield* Effect.fail(new AttentionRateLimited({ retryAfterMs: quietUntil - now }));
+      }
+
       const response = yield* this.#request(update);
       if (!response) return undefined;
 
       if (!response.ok) {
         if (response.status === OPENAI_RATE_LIMIT_STATUS) {
           const waitMs = rateLimitWaitMs(response);
+          this.#quietUntilMs = now + waitMs;
           this.#report(
             `OpenAI attention requests are rate limited; pausing reviews for ${Math.round(waitMs / 1000)}s`,
           );

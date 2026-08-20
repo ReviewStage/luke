@@ -342,10 +342,18 @@ export class SupersetCli {
       if (!(yield* this.connected())) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
       const queryOutcome = yield* Effect.either(this.#query(this.executable, arguments_, 30_000));
       if (queryOutcome._tag === "Left") {
+        const left = queryOutcome.left;
+        const stderr = left.stderr;
         return {
           status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
           reason: supersetFailureReason(
-            unparsedWire(`Superset exited with status ${queryOutcome.left.exitCode ?? "unknown"}.`),
+            stderr !== undefined
+              ? unparsedWire({ stderr })
+              : unparsedWire(
+                  `Superset exited with status ${
+                    left instanceof CliFailure ? (left.exitCode ?? "unknown") : "unknown"
+                  }.`,
+                ),
           ),
         };
       }

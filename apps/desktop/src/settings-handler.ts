@@ -77,6 +77,9 @@ export function createSettingsHandler(deps: SettingsHandlerDeps) {
               }),
             ),
           );
+          if (result.reason !== undefined) {
+            return result;
+          }
           const applied = spec.apply?.(result, value, event);
           if (Effect.isEffect(applied)) yield* applied;
           deps.broadcast(result.settings, event.sender);

@@ -72,7 +72,16 @@ export function openReadOnlyDatabase(
     const stats = yield* optionalStat(filePath);
     if (!stats?.isFile()) return undefined;
 
-    const module = yield* sqlite();
+    const module = yield* sqlite().pipe(
+      Effect.catchAll((error) => {
+        if (error instanceof Error && canIgnoreSqliteError(error)) {
+          return Effect.succeed(undefined);
+        }
+        return Effect.fail(error);
+      }),
+    );
+    if (!module) return undefined;
+
     return yield* Effect.try({
       try: () => {
         const database = new module.DatabaseSync(filePath, { readOnly: true });

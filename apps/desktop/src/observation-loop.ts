@@ -1,15 +1,16 @@
-import type { Effect } from "effect";
-import { effectRuntime } from "./desktop-app";
+import { Effect } from "effect";
 
 export interface ObservationLoopOptions {
   gate: () => boolean;
   intervalMs: number;
   run: (generation: number) => Effect.Effect<void>;
   afterRun?: () => void;
+  runEffect?: (effect: Effect.Effect<void>) => Promise<void>;
 }
 
 export class ObservationLoop {
   readonly #options: ObservationLoopOptions;
+  readonly #runEffect: (effect: Effect.Effect<void>) => Promise<void>;
   #generation = 0;
   #running = false;
   #queued = false;
@@ -17,6 +18,8 @@ export class ObservationLoop {
 
   constructor(options: ObservationLoopOptions) {
     this.#options = options;
+    this.#runEffect =
+      options.runEffect ?? ((effect) => Effect.runPromise(effect.pipe(Effect.orDie)));
   }
 
   get generation(): number {
@@ -41,20 +44,20 @@ export class ObservationLoop {
     this.#timer = undefined;
   }
 
-  refresh(): void {
-    if (!this.#options.gate()) return;
+  refresh(): Promise<void> {
+    if (!this.#options.gate()) return Promise.resolve();
     if (this.#running) {
       this.#queued = true;
-      return;
+      return Promise.resolve();
     }
     const generation = this.#generation;
     this.#running = true;
-    void effectRuntime.runPromise(this.#options.run(generation)).finally(() => {
+    return this.#runEffect(this.#options.run(generation)).finally(() => {
       this.#running = false;
       if (this.isCurrent(generation)) this.#options.afterRun?.();
       if (this.#queued) {
         this.#queued = false;
-        this.refresh();
+        void this.refresh();
       }
     });
   }

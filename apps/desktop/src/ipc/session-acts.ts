@@ -37,6 +37,7 @@ import {
 import { Effect } from "effect";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from "electron";
 import { createActionHandler } from "../action-handler";
+import { effectRuntime } from "../desktop-app";
 import type { LinearIssueTracker } from "../linear-tracker";
 import type { SettingsStore } from "../settings-store";
 import {
@@ -108,10 +109,13 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
     runEffect,
     openExternalEffect,
   } = dependencies;
-  const registerAction = createActionHandler({
-    trustedSender,
-    handle: (channel, handler) => ipcMain.handle(channel, handler),
-  });
+  const registerAction = createActionHandler(
+    {
+      trustedSender,
+      handle: (channel, handler) => ipcMain.handle(channel, handler),
+    },
+    effectRuntime,
+  );
   /**
    * Counts an act that actually landed. It takes the result rather than
    * sitting inside `performSessionAct`, because a Superset-managed session
