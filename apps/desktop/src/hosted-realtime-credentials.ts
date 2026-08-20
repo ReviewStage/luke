@@ -34,14 +34,14 @@ export interface HostedRealtimeCredentialOptions {
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
   /** The signed-in account's current access token, read fresh for every mint. */
-  readAccessToken: () => Effect.Effect<string | undefined>;
+  readAccessToken: () => Effect.Effect<string | undefined, unknown, unknown>;
   /**
    * Asks the account lifecycle to refresh its tokens. Access tokens outlive a
    * mint by an hour at most while the app runs for days, so a 401 here is
    * routine — the mint retries once with whatever the refresh produced, and
    * only a second refusal is reported.
    */
-  refreshAccount: () => Effect.Effect<void>;
+  refreshAccount: () => Effect.Effect<void, unknown, unknown>;
   voice?: string;
   speed?: number;
   now?: () => number;
@@ -63,8 +63,8 @@ function withoutTrailingSlash(value: string): string {
  */
 export class HostedRealtimeCredentialMinter implements RealtimeCredentialMinter {
   readonly #endpoint: string;
-  readonly #readAccessToken: () => Effect.Effect<string | undefined>;
-  readonly #refreshAccount: () => Effect.Effect<void>;
+  readonly #readAccessToken: () => Effect.Effect<string | undefined, unknown, unknown>;
+  readonly #refreshAccount: () => Effect.Effect<void, unknown, unknown>;
   /** The voice from construction, which a cleared setting falls back to. */
   readonly #configuredVoice: string | undefined;
   #voice: string | undefined;
@@ -118,7 +118,11 @@ export class HostedRealtimeCredentialMinter implements RealtimeCredentialMinter 
     return Effect.gen(this, function* () {
       this.#lastAttemptAt = this.#now();
 
-      const token = yield* this.#readAccessToken();
+      const token = yield* this.#readAccessToken() as Effect.Effect<
+        string | undefined,
+        never,
+        Http
+      >;
       if (!token) {
         this.#record(REALTIME_MINT_OUTCOME.NOT_SIGNED_IN, "no access token");
         return undefined;
@@ -126,8 +130,14 @@ export class HostedRealtimeCredentialMinter implements RealtimeCredentialMinter 
 
       let response = yield* this.#request(token);
       if (response?.status === UNAUTHORIZED_STATUS) {
-        yield* this.#refreshAccount().pipe(Effect.catchAll(() => Effect.void));
-        const refreshed = yield* this.#readAccessToken();
+        yield* (this.#refreshAccount() as Effect.Effect<void, never, Http>).pipe(
+          Effect.catchAll(() => Effect.void),
+        );
+        const refreshed = yield* this.#readAccessToken() as Effect.Effect<
+          string | undefined,
+          never,
+          Http
+        >;
         if (refreshed && refreshed !== token) {
           response = yield* this.#request(refreshed);
         }

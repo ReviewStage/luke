@@ -1,5 +1,6 @@
 import { isNewerVersion, parseReleaseVersion, text } from "@sidecar/core";
 import { Effect } from "effect";
+import { singleFlightResult } from "./account-token-lifecycle";
 import { Http } from "./services/http";
 import { UPDATE_STATUS, type UpdateSnapshot } from "./shared/contracts";
 import { unparsedWire, type WireBoundaryInput, wireRecord } from "./wire-boundary";
@@ -42,7 +43,7 @@ export interface UpdateServiceOptions {
   onChange: (update: UpdateSnapshot) => void;
   requestTimeoutMs?: number;
   intervalMs?: number;
-  runEffect: <A, E>(effect: Effect.Effect<A, E, unknown>) => Promise<A>;
+  runEffect: <A, E>(effect: Effect.Effect<A, E, unknown>) => void;
 }
 
 /**
@@ -61,8 +62,8 @@ export class UpdateService {
   readonly #requestTimeoutMs: number;
   readonly #intervalMs: number;
   readonly #runEffect: UpdateServiceOptions["runEffect"];
+  readonly #checkOnce: () => Effect.Effect<UpdateSnapshot, unknown, Http>;
   #snapshot: UpdateSnapshot;
-  #inFlight: Promise<UpdateSnapshot> | undefined;
   #timer: NodeJS.Timeout | undefined;
 
   constructor(options: UpdateServiceOptions) {
@@ -72,6 +73,7 @@ export class UpdateService {
     this.#intervalMs = options.intervalMs ?? UPDATE_CHECK_DEFAULTS.INTERVAL_MS;
     this.#runEffect = options.runEffect;
     this.#snapshot = { status: UPDATE_STATUS.UNKNOWN, currentVersion: this.#currentVersion };
+    this.#checkOnce = singleFlightResult(() => this.#read());
   }
 
   snapshot(): UpdateSnapshot {
@@ -83,24 +85,17 @@ export class UpdateService {
    * the new asker too, rather than doubling the request — the timer and the
    * row's button land on the same read.
    */
-  check(): Promise<UpdateSnapshot> {
-    this.#inFlight ??= this.#runEffect(this.#read())
-      .catch((error): UpdateSnapshot => {
-        // A throw anywhere in the read must not leave a dead check parked in
-        // flight, where every later ask would reuse the failure and the row
-        // would say "checking" forever. It lands on the same honest answer an
-        // unreachable service gives, and the next ask is a fresh read.
-        this.#report(
-          `Update check failed: ${error instanceof Error ? error.name : "unknown error"}`,
-        );
-        return { status: UPDATE_STATUS.UNREACHABLE, currentVersion: this.#currentVersion };
-      })
-      .then((snapshot) => {
-        this.#inFlight = undefined;
-        this.#move(snapshot);
-        return snapshot;
-      });
-    return this.#inFlight;
+  check(): Effect.Effect<UpdateSnapshot, never, Http> {
+    return this.#checkOnce().pipe(
+      Effect.catchAll(() => {
+        this.#report("Update check failed");
+        return Effect.succeed({
+          status: UPDATE_STATUS.UNREACHABLE,
+          currentVersion: this.#currentVersion,
+        });
+      }),
+      Effect.tap((snapshot) => Effect.sync(() => this.#move(snapshot))),
+    );
   }
 
   /**
@@ -110,8 +105,8 @@ export class UpdateService {
    */
   start(): void {
     if (this.#timer) return;
-    void this.check();
-    this.#timer = setInterval(() => void this.check(), this.#intervalMs);
+    this.#runEffect(this.check());
+    this.#timer = setInterval(() => this.#runEffect(this.check()), this.#intervalMs);
     this.#timer.unref();
   }
 

@@ -71,7 +71,7 @@ function speakDecision(summary = SPOKEN_SUMMARY): AttentionDecision {
 }
 
 function evaluatorReturning(decision: AttentionDecision | undefined): {
-  evaluate: (update: AttentionUpdate) => Effect.Effect<AttentionDecision | undefined, unknown>;
+  evaluate: (update: AttentionUpdate) => Effect.Effect<AttentionDecision | undefined, never, never>;
 } & {
   readonly updates: AttentionUpdate[];
 } {

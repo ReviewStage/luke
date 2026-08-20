@@ -24,18 +24,18 @@ const codex: SessionProvider = { id: "codex", displayName: "Codex" };
 
 class TestProviderAdapter extends SessionProviderAdapterBase {
   readonly provider: SessionProvider;
-  readonly #observations: () => Effect.Effect<readonly ProviderSessionObservation[], unknown>;
+  readonly #observations: () => Effect.Effect<readonly ProviderSessionObservation[], never, never>;
 
   constructor(
     provider: SessionProvider,
-    observations: () => Effect.Effect<readonly ProviderSessionObservation[], unknown>,
+    observations: () => Effect.Effect<readonly ProviderSessionObservation[], never, never>,
   ) {
     super();
     this.provider = provider;
     this.#observations = observations;
   }
 
-  observe(): Effect.Effect<readonly ProviderSessionObservation[], unknown> {
+  observe(): Effect.Effect<readonly ProviderSessionObservation[], never, never> {
     return this.#observations();
   }
 }

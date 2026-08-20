@@ -55,10 +55,14 @@ export function resolveVoiceCapability(input: VoiceCapabilityInput): VoiceCapabi
 }
 
 interface VoiceSettings {
-  readVoiceSource(): Promise<VoiceSource>;
-  readApiKey(providerId: typeof VOICE_CREDENTIAL_PROVIDER_ID): Promise<string | undefined>;
-  get<Field extends AppSettingField>(field: Field): Promise<AppSettingValue<Field>>;
-  readAccount(): Effect.Effect<{ accessToken: string } | undefined>;
+  readVoiceSource(): Effect.Effect<VoiceSource, unknown, unknown>;
+  readApiKey(
+    providerId: typeof VOICE_CREDENTIAL_PROVIDER_ID,
+  ): Effect.Effect<string | undefined, unknown, unknown>;
+  get<Field extends AppSettingField>(
+    field: Field,
+  ): Effect.Effect<AppSettingValue<Field>, unknown, unknown>;
+  readAccount(): Effect.Effect<{ accessToken: string } | undefined, unknown, unknown>;
 }
 
 export interface VoiceCapabilityAssemblerOptions {
@@ -66,7 +70,7 @@ export interface VoiceCapabilityAssemblerOptions {
   credentialsUsable: () => boolean;
   accountSignedIn: () => boolean;
   hostedServiceBaseUrl: string;
-  refreshAccount: () => Effect.Effect<void>;
+  refreshAccount: () => Effect.Effect<void, unknown, unknown>;
   currentSession: (identity: SessionIdentity) => NormalizedSession | undefined;
   noticeRequestFor: (identity: SessionIdentity) => string | undefined;
   fetch?: typeof fetch;
@@ -110,58 +114,65 @@ export class VoiceCapabilityAssembler {
     return this.#voiceSource;
   }
 
-  async apply(): Promise<void> {
-    const credentialsUsable = this.#options.credentialsUsable();
-    const voiceSource = await this.#options.settings.readVoiceSource();
-    const apiKey =
-      credentialsUsable && voiceSource === VOICE_SOURCE.KEY
-        ? await this.#options.settings.readApiKey(VOICE_CREDENTIAL_PROVIDER_ID)
+  apply(): Effect.Effect<void, unknown, unknown> {
+    return Effect.gen(this, function* () {
+      const credentialsUsable = this.#options.credentialsUsable();
+      const voiceSource = yield* this.#options.settings.readVoiceSource();
+      const apiKey =
+        credentialsUsable && voiceSource === VOICE_SOURCE.KEY
+          ? yield* this.#options.settings.readApiKey(VOICE_CREDENTIAL_PROVIDER_ID)
+          : undefined;
+      const policy = resolveVoiceCapability({
+        credentialsUsable,
+        keyConfigured: apiKey !== undefined,
+        accountSignedIn: this.#options.accountSignedIn(),
+        chosenSource: voiceSource,
+      });
+      const seams = {
+        serviceBaseUrl: this.#options.hostedServiceBaseUrl,
+        readAccessToken: () =>
+          this.#options.settings.readAccount().pipe(
+            Effect.map((account) => account?.accessToken),
+            Effect.catchAll(() => Effect.succeed(undefined)),
+          ) as Effect.Effect<string | undefined>,
+        refreshAccount: this.#options.refreshAccount,
+      };
+      const evaluator = apiKey
+        ? openAiAttentionEvaluator(apiKey)
+        : policy.useHosted
+          ? new HostedAttentionEvaluator(seams)
+          : undefined;
+      this.#attentionReviewer = evaluator
+        ? new SessionAttentionReviewer({
+            evaluator,
+            currentSession: this.#options.currentSession,
+            noticeRequestFor: this.#options.noticeRequestFor,
+          })
         : undefined;
-    const policy = resolveVoiceCapability({
-      credentialsUsable,
-      keyConfigured: apiKey !== undefined,
-      accountSignedIn: this.#options.accountSignedIn(),
-      chosenSource: voiceSource,
+      const voice = yield* this.#options.settings
+        .get(APP_SETTING_SCHEMA.voice.field)
+        .pipe(Effect.catchAll(() => Effect.succeed(undefined)));
+      const speed = yield* this.#options.settings
+        .get(APP_SETTING_SCHEMA.voiceSpeed.field)
+        .pipe(Effect.catchAll(() => Effect.succeed(undefined)));
+      const preferences = {
+        ...(voice ? { voice } : undefined),
+        ...(speed ? { speed } : undefined),
+      };
+      this.#realtimeCredentials = apiKey
+        ? openAiRealtimeCredentials(apiKey, preferences)
+        : policy.useHosted
+          ? new HostedRealtimeCredentialMinter({ ...seams, ...preferences })
+          : undefined;
+      this.#unavailableDiagnostics = unavailableRealtimeDiagnostics({
+        fixtureMode: !credentialsUsable,
+        apiKeyConfigured: apiKey !== undefined,
+      });
+      this.#hostedUsageReader = policy.useHosted ? new HostedUsageReader(seams) : undefined;
+      this.#voiceSource = policy.source;
+      if (policy.useHosted) this.#warmHostedVoice();
+      this.#report(apiKey !== undefined);
     });
-    const seams = {
-      serviceBaseUrl: this.#options.hostedServiceBaseUrl,
-      readAccessToken: () =>
-        this.#options.settings.readAccount().pipe(Effect.map((account) => account?.accessToken)),
-      refreshAccount: this.#options.refreshAccount,
-    };
-    const evaluator = apiKey
-      ? openAiAttentionEvaluator(apiKey)
-      : policy.useHosted
-        ? new HostedAttentionEvaluator(seams)
-        : undefined;
-    this.#attentionReviewer = evaluator
-      ? new SessionAttentionReviewer({
-          evaluator,
-          currentSession: this.#options.currentSession,
-          noticeRequestFor: this.#options.noticeRequestFor,
-        })
-      : undefined;
-    const [voice, speed] = await Promise.all([
-      this.#options.settings.get(APP_SETTING_SCHEMA.voice.field).catch(() => undefined),
-      this.#options.settings.get(APP_SETTING_SCHEMA.voiceSpeed.field).catch(() => undefined),
-    ]);
-    const preferences = {
-      ...(voice ? { voice } : undefined),
-      ...(speed ? { speed } : undefined),
-    };
-    this.#realtimeCredentials = apiKey
-      ? openAiRealtimeCredentials(apiKey, preferences)
-      : policy.useHosted
-        ? new HostedRealtimeCredentialMinter({ ...seams, ...preferences })
-        : undefined;
-    this.#unavailableDiagnostics = unavailableRealtimeDiagnostics({
-      fixtureMode: !credentialsUsable,
-      apiKeyConfigured: apiKey !== undefined,
-    });
-    this.#hostedUsageReader = policy.useHosted ? new HostedUsageReader(seams) : undefined;
-    this.#voiceSource = policy.source;
-    if (policy.useHosted) this.#warmHostedVoice();
-    this.#report(apiKey !== undefined);
   }
 
   #warmHostedVoice(): void {

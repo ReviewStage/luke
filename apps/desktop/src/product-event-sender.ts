@@ -10,6 +10,7 @@ import {
   text,
 } from "@sidecar/core";
 import { Effect } from "effect";
+import { singleFlight } from "./account-token-lifecycle";
 import { Http } from "./services/http";
 
 const PRODUCT_EVENT_DEFAULTS = {
@@ -42,12 +43,12 @@ export interface ProductEventSenderOptions {
   /** `runMode.sendsNetwork`. False makes every record a no-op. */
   sends: boolean;
   readAccessToken: () => Effect.Effect<string | undefined>;
-  refreshAccount: () => Effect.Effect<void>;
+  refreshAccount: () => Effect.Effect<void, unknown, unknown>;
   now?: () => number;
   requestTimeoutMs?: number;
   flushIntervalMs?: number;
   queueLimit?: number;
-  runEffect: <A, E>(effect: Effect.Effect<A, E, unknown>) => Promise<A>;
+  runEffect: <A, E>(effect: Effect.Effect<A, E, unknown>) => void;
 }
 
 function withoutTrailingSlash(value: string): string {
@@ -77,7 +78,7 @@ export class ProductEventSender {
   readonly #appVersion: string;
   readonly #sends: boolean;
   readonly #readAccessToken: () => Effect.Effect<string | undefined>;
-  readonly #refreshAccount: () => Effect.Effect<void>;
+  readonly #refreshAccount: () => Effect.Effect<void, unknown, unknown>;
   readonly #now: () => number;
   readonly #requestTimeoutMs: number;
   readonly #flushIntervalMs: number;
@@ -89,7 +90,7 @@ export class ProductEventSender {
   #sharing = false;
   #sharingKnown = false;
   #timer: NodeJS.Timeout | undefined;
-  #inFlight: Promise<void> | undefined;
+  readonly #flushOnce: () => Effect.Effect<void, unknown, unknown>;
 
   constructor(options: ProductEventSenderOptions) {
     const baseUrl = text(options.serviceBaseUrl);
@@ -110,6 +111,7 @@ export class ProductEventSender {
       PRODUCT_EVENT_DEFAULTS.FLUSH_INTERVAL_MS,
     );
     this.#queueLimit = positiveInteger(options.queueLimit, PRODUCT_EVENT_DEFAULTS.QUEUE_LIMIT);
+    this.#flushOnce = singleFlight(() => this.#send());
   }
 
   /** The build's version, so an emitter never has to hold it to report it. */
@@ -187,7 +189,7 @@ export class ProductEventSender {
     }
     this.record(PRODUCT_EVENT.USAGE_SHARING_STOP, {});
     this.#sharing = false;
-    void this.flush();
+    this.#runEffect(this.flush());
   }
 
   /** Starts the timed flush. The timer never holds the process open. */
@@ -202,7 +204,7 @@ export class ProductEventSender {
       // whole case this event exists for, and marking it only at launch would
       // make it a second, worse copy of `app:launch`.
       this.markDayActive();
-      void this.flush();
+      this.#runEffect(this.flush());
     }, this.#flushIntervalMs);
     this.#timer.unref();
   }
@@ -218,23 +220,15 @@ export class ProductEventSender {
    * failure is a count nobody has, which is the trade this whole pipeline
    * makes.
    */
-  flush(): Promise<void> {
-    this.#inFlight ??= this.#runEffect(this.#send()).then(
-      () => {
-        this.#inFlight = undefined;
-      },
-      () => {
-        this.#inFlight = undefined;
-      },
-    );
-    return this.#inFlight;
+  flush(): Effect.Effect<void, unknown, unknown> {
+    return this.#flushOnce().pipe(Effect.catchAll(() => Effect.void));
   }
 
   #allowed(): boolean {
     return this.#sends && this.#sharing;
   }
 
-  #send(): Effect.Effect<void, unknown, Http> {
+  #send(): Effect.Effect<void, unknown, unknown> {
     return Effect.gen(this, function* () {
       if (this.#queue.length === 0) return;
       const token = yield* this.#readAccessToken();

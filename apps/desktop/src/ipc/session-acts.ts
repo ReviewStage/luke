@@ -37,7 +37,6 @@ import {
 import { Effect } from "effect";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from "electron";
 import { createActionHandler } from "../action-handler";
-import { runDesktopEffect } from "../effect-runtime";
 import type { LinearIssueTracker } from "../linear-tracker";
 import type { SettingsStore } from "../settings-store";
 import {
@@ -82,6 +81,8 @@ export interface SessionActsIpcDependencies {
   supersetContext: (identity: SessionIdentity) => SupersetSessionContext | undefined;
   supersetCli: SupersetCli;
   recordProductEvent: RecordProductEvent;
+  runEffect: <A, E>(effect: Effect.Effect<A, E, unknown>) => Promise<A>;
+  openExternalEffect: (url: string) => Effect.Effect<void, Error, unknown>;
 }
 
 export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies): void {
@@ -89,7 +90,6 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
     ipcMain,
     trustedSender,
     sessionRegistry,
-    openExternal,
     adapterFor,
     attentionReviewer,
     attentionRequests,
@@ -105,6 +105,8 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
     supersetContext,
     supersetCli,
     recordProductEvent,
+    runEffect,
+    openExternalEffect,
   } = dependencies;
   const registerAction = createActionHandler({
     trustedSender,
@@ -145,9 +147,9 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
     if (!session) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
     const adapter = adapterFor(identity.providerId);
     if (!adapter) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
-    const result = await runDesktopEffect(act(adapter, session));
+    const result = await runEffect(act(adapter, session));
     if (result.status === PROVIDER_ACT_RESULT_STATUS.ACCEPTED) {
-      void runDesktopEffect(sessionRegistry.refresh(adapter));
+      void runEffect(sessionRegistry.refresh(adapter));
     }
     return countSessionAct(adapter.provider.id, counted, result);
   }
@@ -167,10 +169,10 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
         return [identity];
       },
       act(identity) {
-        return Effect.promise(async () => {
+        return Effect.gen(function* () {
           const url = address(identity);
           if (!url) return { status: SESSION_OPEN_RESULT_STATUS.UNSUPPORTED };
-          await openExternal(url);
+          yield* openExternalEffect(url);
           if (isProviderId(identity.providerId)) {
             recordProductEvent(PRODUCT_EVENT.SESSION_ACT_SEND, {
               provider_id: identity.providerId,
@@ -211,14 +213,14 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       return [identity];
     },
     act(identity) {
-      return Effect.promise(async () => {
+      return Effect.gen(function* () {
         const url = trackedIssues()?.find(
           (candidate) =>
             candidate.trackerId === identity.trackerId &&
             candidate.identifier === identity.identifier,
         )?.url;
         if (!url) return { status: SESSION_OPEN_RESULT_STATUS.UNSUPPORTED };
-        await openExternal(url);
+        yield* openExternalEffect(url);
         return { status: SESSION_OPEN_RESULT_STATUS.OPENED };
       });
     },
@@ -269,9 +271,7 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
         };
       }
       try {
-        const transcript = await runDesktopEffect(
-          adapter.readTranscript(identity.providerSessionId),
-        );
+        const transcript = await runEffect(adapter.readTranscript(identity.providerSessionId));
         if (!transcript) {
           return {
             status: SESSION_TRANSCRIPT_RESULT_STATUS.REJECTED,
@@ -327,7 +327,7 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
         return countSessionAct(
           identity.providerId,
           PRODUCT_SESSION_ACT.MESSAGE_SEND,
-          await supersetCli.sendMessage(managed, messageText),
+          await runEffect(supersetCli.sendMessage(managed, messageText)),
         );
       }
       return performSessionAct(identity, PRODUCT_SESSION_ACT.MESSAGE_SEND, (adapter) => {
@@ -363,7 +363,7 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
         return countSessionAct(
           identity.providerId,
           PRODUCT_SESSION_ACT.CONTROL_RUN,
-          await supersetCli.executeControl(managed, control.id),
+          await runEffect(supersetCli.executeControl(managed, control.id)),
         );
       }
       return performSessionAct(identity, PRODUCT_SESSION_ACT.CONTROL_RUN, (adapter) => {
@@ -515,7 +515,9 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       // the stored one when it was written — and the adapter holds whichever
       // rides to its own table again before anything reaches the network.
       const stored = isProviderId(providerId)
-        ? (await settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[providerId]
+        ? (await runEffect(settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field)))?.[
+            providerId
+          ]
         : undefined;
       const agentSelection = parsedSelection ?? stored;
       const createRequest: Parameters<SessionProviderAdapter["createWorkspace"]>[0] = {
@@ -530,7 +532,7 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       if (workspaceName.value) createRequest.name = workspaceName.value;
       if (openingTask.value) createRequest.task = openingTask.value;
       if (agentSelection) createRequest.agentSelection = agentSelection;
-      const result = await runDesktopEffect(adapter.createWorkspace(createRequest));
+      const result = await runEffect(adapter.createWorkspace(createRequest));
       // A workspace that landed is a session the panel should be showing, so
       // the next look must actually ask rather than serve the cache. A
       // rejection refreshes too: a workspace can stand with its opening task
@@ -554,7 +556,7 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
           // against here, and future commits carry every later arrival.
           openCreatedWorkspaces();
         }
-        void runDesktopEffect(sessionRegistry.refresh(adapter));
+        void runEffect(sessionRegistry.refresh(adapter));
       }
       // The first workspace that actually lands chooses the default provider,
       // so a later ask that names none has somewhere unsurprising to go. Only
@@ -610,7 +612,7 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
           (candidate) => candidate.id === action.transition?.id,
         );
         if (!transition) return { status: TRACKER_ACTION_RESULT_STATUS.UNSUPPORTED };
-        result = await runDesktopEffect(
+        result = await runEffect(
           tracker.execute({
             kind: ISSUE_ACTION_KIND.SET_STATE,
             trackerIssueId: issue.trackerIssueId,
@@ -626,7 +628,7 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
             reason: "That comment is empty or too long.",
           };
         }
-        result = await runDesktopEffect(
+        result = await runEffect(
           tracker.execute({
             kind: ISSUE_ACTION_KIND.COMMENT,
             trackerIssueId: issue.trackerIssueId,
@@ -713,15 +715,15 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
         return countSessionAct(
           identity.providerId,
           PRODUCT_SESSION_ACT.AGENT_ADD,
-          await supersetCli.createAgent(managed, advertised, openingTask.value),
+          await runEffect(supersetCli.createAgent(managed, advertised, openingTask.value)),
         );
       }
       return performSessionAct(identity, PRODUCT_SESSION_ACT.AGENT_ADD, (adapter) =>
         Effect.gen(function* () {
           const stored: WorkspaceAgentSelection | undefined = isProviderId(identity.providerId)
-            ? (yield* Effect.promise(() =>
-                settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field),
-              ))?.[identity.providerId]
+            ? (yield* settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[
+                identity.providerId
+              ]
             : undefined;
           const fallback = stored?.agent === advertised ? stored : undefined;
           const model = namedModel ?? fallback?.model;

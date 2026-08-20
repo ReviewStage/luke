@@ -1,8 +1,5 @@
-import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import fs from "node:fs/promises";
 import path from "node:path";
-import { promisify } from "node:util";
 import {
   isRecord,
   PROVIDER_ACT_RESULT_STATUS,
@@ -17,8 +14,10 @@ import {
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceProject,
 } from "@sidecar/core";
+import { CLI_FAILURE, CliFailure } from "@sidecar/core/effect-errors";
 import { Effect } from "effect";
-import { canIgnoreFilesystemError } from "./local-session-adapter";
+import { Cli } from "./services/cli";
+import { Files } from "./services/files";
 import {
   SUPERSET_WORKSPACE_PROVIDER_ID,
   type SupersetOrganizationChoice,
@@ -35,15 +34,16 @@ export function isSupersetControlId(controlId: string): boolean {
   return Object.values(SUPERSET_CONTROL_ID).some((candidate) => candidate === controlId);
 }
 
-const execFileAsync = promisify(execFile);
 const SUPERSET_QUERY_OUTPUT_LIMIT = 64 * 1024;
 const SUPERSET_ORGANIZATION_LIMIT = 20;
 const SUPERSET_TARGET_LIMIT = 20;
 const SUPERSET_PROJECT_LIMIT = 50;
 const SUPERSET_FAILURE_REASON_LIMIT = 300;
 const SUPERSET_PROJECT_REFRESH_INTERVAL_MS = 60_000;
+const SUPERSET_COMMAND_TIMEOUT_MS = 30_000;
 const LOCAL_TARGET_ID = "local";
 const ANSI_ESCAPE_PATTERN = new RegExp(`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`, "gu");
+const SUPERSET_PROVIDER = "superset";
 
 function supersetFailureReason(error: UnparsedWireValue): string {
   const record = wireRecord(error);
@@ -72,21 +72,51 @@ function supersetFailureReason(error: UnparsedWireValue): string {
 export type SupersetCommandRunner = (
   executable: string,
   arguments_: readonly string[],
-) => Promise<void>;
+) => Effect.Effect<void, CliFailure, Cli>;
 
 export type SupersetQueryRunner = (
   executable: string,
   arguments_: readonly string[],
   timeoutMs: number,
-) => Promise<string>;
+) => Effect.Effect<string, CliFailure, Cli>;
 
-async function defaultCommandRunner(
+function defaultCommandRunner(
   executable: string,
   arguments_: readonly string[],
-): Promise<void> {
-  await execFileAsync(executable, [...arguments_], {
-    timeout: 30_000,
-    windowsHide: true,
+): Effect.Effect<void, CliFailure, Cli> {
+  return Effect.gen(function* () {
+    const cli = yield* Cli;
+    const result = yield* cli.run(executable, arguments_, {
+      timeoutMs: SUPERSET_COMMAND_TIMEOUT_MS,
+      maximumOutputBytes: SUPERSET_QUERY_OUTPUT_LIMIT,
+      provider: SUPERSET_PROVIDER,
+    });
+    if (result.exitCode !== 0) {
+      return yield* Effect.fail(
+        new CliFailure({ failure: CLI_FAILURE.TRANSIENT, provider: SUPERSET_PROVIDER }),
+      );
+    }
+  });
+}
+
+function defaultQueryRunner(
+  executable: string,
+  arguments_: readonly string[],
+  timeoutMs: number,
+): Effect.Effect<string, CliFailure, Cli> {
+  return Effect.gen(function* () {
+    const cli = yield* Cli;
+    const result = yield* cli.run(executable, arguments_, {
+      timeoutMs,
+      maximumOutputBytes: SUPERSET_QUERY_OUTPUT_LIMIT,
+      provider: SUPERSET_PROVIDER,
+    });
+    if (result.exitCode !== 0) {
+      const failure = new Error("Superset command failed") as Error & { stderr?: string };
+      failure.stderr = result.stdout;
+      return yield* Effect.fail(failure as unknown as CliFailure);
+    }
+    return result.stdout;
   });
 }
 
@@ -95,7 +125,7 @@ export interface SupersetCliOptions {
   run?: SupersetCommandRunner;
   query?: SupersetQueryRunner;
   uniqueId?: () => string;
-  organizationId?: () => Promise<string | undefined>;
+  organizationId?: () => Effect.Effect<string | undefined, never, Cli>;
 }
 
 export class SupersetCli {
@@ -103,7 +133,7 @@ export class SupersetCli {
   readonly #run: SupersetCommandRunner;
   readonly #query: SupersetQueryRunner;
   readonly #uniqueId: () => string;
-  readonly #organizationId: () => Promise<string | undefined>;
+  readonly #organizationId: () => Effect.Effect<string | undefined, never, Cli>;
 
   constructor(options: SupersetCliOptions) {
     this.#homeDirectory = options.homeDirectory;
@@ -111,229 +141,271 @@ export class SupersetCli {
     this.#uniqueId = options.uniqueId ?? randomUUID;
     this.#organizationId =
       options.organizationId ??
-      (async () => {
-        const { stdout } = await execFileAsync(
-          "/usr/bin/plutil",
-          [
-            "-extract",
-            "organizationId",
-            "raw",
-            "-o",
-            "-",
-            path.join(this.#homeDirectory, "config.json"),
-          ],
-          { timeout: 2_000, windowsHide: true },
-        );
-        return stdout;
-      });
-    this.#query =
-      options.query ??
-      (async (executable, arguments_, timeoutMs) => {
-        const { stdout } = await execFileAsync(executable, [...arguments_], {
-          maxBuffer: SUPERSET_QUERY_OUTPUT_LIMIT,
-          timeout: timeoutMs,
-          windowsHide: true,
-        });
-        return stdout;
-      });
+      (() =>
+        Effect.gen(function* () {
+          const cli = yield* Cli;
+          const result = yield* cli
+            .run(
+              "/usr/bin/plutil",
+              [
+                "-extract",
+                "organizationId",
+                "raw",
+                "-o",
+                "-",
+                path.join(options.homeDirectory, "config.json"),
+              ],
+              {
+                timeoutMs: 2_000,
+                maximumOutputBytes: SUPERSET_QUERY_OUTPUT_LIMIT,
+                provider: SUPERSET_PROVIDER,
+              },
+            )
+            .pipe(Effect.catchAll(() => Effect.succeed({ exitCode: 1, stdout: "" })));
+          return result.exitCode === 0 ? result.stdout : undefined;
+        }));
+    this.#query = options.query ?? defaultQueryRunner;
   }
 
   get executable(): string {
     return path.join(this.#homeDirectory, "bin", "superset");
   }
 
-  async connected(): Promise<boolean> {
-    if (!(await this.installed())) return false;
-    try {
-      return ((await this.#organizationId())?.trim().length ?? 0) > 0;
-    } catch {
-      return false;
-    }
+  connected(): Effect.Effect<boolean, never, Cli | Files> {
+    return Effect.gen(this, function* () {
+      if (!(yield* this.installed())) return false;
+      const organization = yield* this.#organizationId().pipe(
+        Effect.catchAll(() => Effect.succeed(undefined)),
+      );
+      return (organization?.trim().length ?? 0) > 0;
+    });
   }
 
-  async installed(): Promise<boolean> {
-    try {
-      return (await fs.stat(this.executable)).isFile();
-    } catch (error) {
-      if (error instanceof Error && canIgnoreFilesystemError(error)) return false;
-      throw error;
-    }
+  installed(): Effect.Effect<boolean, never, Files> {
+    return Effect.gen(this, function* () {
+      const files = yield* Files;
+      const stats = yield* files
+        .stat(this.executable)
+        .pipe(Effect.catchAll(() => Effect.succeed(undefined)));
+      return stats?.isFile() ?? false;
+    });
   }
 
-  async chooseOrganization(slug: string): Promise<boolean> {
-    const choices = await this.organizations();
-    const choice = choices.find((organization) => organization.slug === slug);
-    if (!choice) return false;
-    try {
-      await this.#query(this.executable, ["organization", "switch", choice.slug, "--json"], 30_000);
-      return this.connected();
-    } catch {
-      return false;
-    }
+  chooseOrganization(slug: string): Effect.Effect<boolean, never, Cli | Files> {
+    return Effect.gen(this, function* () {
+      const choices = yield* this.organizations();
+      const choice = choices.find((organization) => organization.slug === slug);
+      if (!choice) return false;
+      yield* this.#query(
+        this.executable,
+        ["organization", "switch", choice.slug, "--json"],
+        30_000,
+      ).pipe(Effect.catchAll(() => Effect.void));
+      return yield* this.connected();
+    });
   }
 
-  async organizations(): Promise<readonly SupersetOrganizationChoice[]> {
-    try {
-      const output = await this.#query(this.executable, ["organization", "list", "--json"], 30_000);
-      const parsed = unparsedWire(JSON.parse(output));
-      const envelope = wireRecord(parsed);
-      const values = Array.isArray(parsed)
-        ? parsed
-        : envelope && Array.isArray(envelope.data)
-          ? envelope.data
-          : [];
-      return values.slice(0, SUPERSET_ORGANIZATION_LIMIT).flatMap((value) => {
-        if (!isRecord(value)) return [];
-        const id = text(value.id);
-        const name = text(value.name);
-        const slug = text(value.slug);
-        return id &&
-          id.length <= 128 &&
-          name &&
-          name.length <= 120 &&
-          slug &&
-          /^[a-z0-9][a-z0-9-]{0,79}$/u.test(slug)
-          ? [{ id, name, slug }]
-          : [];
-      });
-    } catch {
-      return [];
-    }
-  }
-
-  async workspaceProjects(defaultAgent?: string): Promise<readonly WorkspaceProject[]> {
-    if (!(await this.connected())) return [];
-    const remoteHosts = await this.#records(["hosts", "list", "--json"]);
-    const targets = [
-      { id: LOCAL_TARGET_ID, name: "This Mac", arguments_: ["--local"] as const },
-      ...remoteHosts.slice(0, SUPERSET_TARGET_LIMIT).flatMap((host) => {
-        const id = text(host.machineId) ?? text(host.id);
-        const name = text(host.name) ?? text(host.displayName) ?? text(host.hostname) ?? id;
-        return id && name ? [{ id, name, arguments_: ["--host", id] as const }] : [];
-      }),
-    ];
-    const projects = await Promise.all(
-      targets.map(async (target) => {
-        const [projectRows, agentRows] = await Promise.all([
-          this.#records(["projects", "list", ...target.arguments_, "--json"]),
-          this.#records(["agents", "list", ...target.arguments_, "--json"]),
-        ]);
-        const agents = [
-          ...new Set(
-            agentRows.flatMap((row) => {
-              const presetId = text(row.presetId);
-              return presetId ? [presetId] : [];
-            }),
-          ),
-        ];
-        const selectedDefault =
-          defaultAgent && agents.includes(defaultAgent) ? defaultAgent : undefined;
-        return projectRows.slice(0, SUPERSET_PROJECT_LIMIT).flatMap((row) => {
-          const id = text(row.id);
-          const name = text(row.name);
-          if (!id || !name) return [];
-          const project: WorkspaceProject = {
-            providerProjectId: id,
-            repository: name,
-            taskSupport: WORKSPACE_TASK_SUPPORT.REQUIRED,
-            providerTargetId: target.id,
-            targetName: target.name,
-            spawnableAgents: agents,
-          };
-          if (selectedDefault) {
-            project.defaultAgent = selectedDefault;
-          }
-          return [project];
-        });
-      }),
-    );
-    return projects.flat();
-  }
-
-  async createWorkspace(request: ProviderWorkspaceRequest): Promise<ProviderWorkspaceResult> {
-    if (!request.providerTargetId || !request.agent || !request.task) {
-      return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-        reason: "A Superset workspace needs a host, an agent, and an opening task.",
-      };
-    }
-    const offered = (await this.workspaceProjects()).some(
-      (project) =>
-        project.providerProjectId === request.providerProjectId &&
-        project.providerTargetId === request.providerTargetId &&
-        project.spawnableAgents?.includes(request.agent ?? ""),
-    );
-    if (!offered) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
-    const branch = this.#branchName(request.name ?? request.task);
-    const name = request.name ?? branch;
-    const targetArguments =
-      request.providerTargetId === LOCAL_TARGET_ID
-        ? ["--local"]
-        : ["--host", request.providerTargetId];
-    const arguments_ = [
-      "workspaces",
-      "create",
-      ...targetArguments,
-      "--project",
-      request.providerProjectId,
-      "--name",
-      name,
-      "--branch",
-      branch,
-      "--agent",
-      request.agent,
-      "--prompt",
-      request.task,
-      "--json",
-    ];
-    if (!(await this.connected())) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
-    try {
-      const output = await this.#query(this.executable, arguments_, 30_000);
-      const parsed = unparsedWire(JSON.parse(output));
-      const workspaceRecord = wireRecord(parsed);
-      const workspaceId = workspaceRecord
-        ? (text(workspaceRecord.workspaceId) ?? text(workspaceRecord.id))
-        : undefined;
-      if (!workspaceId) return { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED };
+  organizations(): Effect.Effect<readonly SupersetOrganizationChoice[], never, Cli> {
+    return Effect.gen(this, function* () {
+      const output = yield* this.#query(
+        this.executable,
+        ["organization", "list", "--json"],
+        30_000,
+      ).pipe(Effect.catchAll(() => Effect.succeed("")));
+      if (!output) return [];
       try {
-        await this.#run(this.executable, [
-          "workspaces",
-          "open",
-          workspaceId,
-          ...(request.providerTargetId === LOCAL_TARGET_ID
-            ? []
-            : ["--host", request.providerTargetId]),
-          "--json",
-        ]);
-        return { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED };
+        const parsed = unparsedWire(JSON.parse(output));
+        const envelope = wireRecord(parsed);
+        const values = Array.isArray(parsed)
+          ? parsed
+          : envelope && Array.isArray(envelope.data)
+            ? envelope.data
+            : [];
+        return values.slice(0, SUPERSET_ORGANIZATION_LIMIT).flatMap((value) => {
+          if (!isRecord(value)) return [];
+          const id = text(value.id);
+          const name = text(value.name);
+          const slug = text(value.slug);
+          return id &&
+            id.length <= 128 &&
+            name &&
+            name.length <= 120 &&
+            slug &&
+            /^[a-z0-9][a-z0-9-]{0,79}$/u.test(slug)
+            ? [{ id, name, slug }]
+            : [];
+        });
       } catch {
+        return [];
+      }
+    });
+  }
+
+  workspaceProjects(
+    defaultAgent?: string,
+  ): Effect.Effect<readonly WorkspaceProject[], never, Cli | Files> {
+    return Effect.gen(this, function* () {
+      if (!(yield* this.connected())) return [];
+      const remoteHosts = yield* this.#records(["hosts", "list", "--json"]);
+      const targets = [
+        { id: LOCAL_TARGET_ID, name: "This Mac", arguments_: ["--local"] as const },
+        ...remoteHosts.slice(0, SUPERSET_TARGET_LIMIT).flatMap((host) => {
+          const id = text(host.machineId) ?? text(host.id);
+          const name = text(host.name) ?? text(host.displayName) ?? text(host.hostname) ?? id;
+          return id && name ? [{ id, name, arguments_: ["--host", id] as const }] : [];
+        }),
+      ];
+      const projects = yield* Effect.all(
+        targets.map((target) =>
+          Effect.gen(this, function* () {
+            const [projectRows, agentRows] = yield* Effect.all([
+              this.#records(["projects", "list", ...target.arguments_, "--json"]),
+              this.#records(["agents", "list", ...target.arguments_, "--json"]),
+            ]);
+            const agents = [
+              ...new Set(
+                agentRows.flatMap((row) => {
+                  const presetId = text(row.presetId);
+                  return presetId ? [presetId] : [];
+                }),
+              ),
+            ];
+            const selectedDefault =
+              defaultAgent && agents.includes(defaultAgent) ? defaultAgent : undefined;
+            return projectRows.slice(0, SUPERSET_PROJECT_LIMIT).flatMap((row) => {
+              const id = text(row.id);
+              const name = text(row.name);
+              if (!id || !name) return [];
+              const project: WorkspaceProject = {
+                providerProjectId: id,
+                repository: name,
+                taskSupport: WORKSPACE_TASK_SUPPORT.REQUIRED,
+                providerTargetId: target.id,
+                targetName: target.name,
+                spawnableAgents: agents,
+              };
+              if (selectedDefault) {
+                project.defaultAgent = selectedDefault;
+              }
+              return [project];
+            });
+          }),
+        ),
+      );
+      return projects.flat();
+    });
+  }
+
+  createWorkspace(
+    request: ProviderWorkspaceRequest,
+  ): Effect.Effect<ProviderWorkspaceResult, never, Cli | Files> {
+    return Effect.gen(this, function* () {
+      if (!request.providerTargetId || !request.agent || !request.task) {
+        return {
+          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          reason: "A Superset workspace needs a host, an agent, and an opening task.",
+        };
+      }
+      const offered = (yield* this.workspaceProjects()).some(
+        (project) =>
+          project.providerProjectId === request.providerProjectId &&
+          project.providerTargetId === request.providerTargetId &&
+          project.spawnableAgents?.includes(request.agent ?? ""),
+      );
+      if (!offered) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+      const branch = this.#branchName(request.name ?? request.task);
+      const name = request.name ?? branch;
+      const targetArguments =
+        request.providerTargetId === LOCAL_TARGET_ID
+          ? ["--local"]
+          : ["--host", request.providerTargetId];
+      const arguments_ = [
+        "workspaces",
+        "create",
+        ...targetArguments,
+        "--project",
+        request.providerProjectId,
+        "--name",
+        name,
+        "--branch",
+        branch,
+        "--agent",
+        request.agent,
+        "--prompt",
+        request.task,
+        "--json",
+      ];
+      if (!(yield* this.connected())) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+      const output = yield* this.#query(this.executable, arguments_, 30_000).pipe(
+        Effect.catchAll((error) =>
+          Effect.succeed({
+            failed: true as const,
+            error,
+          }),
+        ),
+      );
+      if (typeof output === "object" && output !== null && "failed" in output) {
+        const { error } = output as { failed: true; error: unknown };
+        if (error instanceof Error && "stderr" in error) {
+          return {
+            status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+            reason: supersetFailureReason(
+              unparsedWire({
+                // SAFETY: execFile failures attach stderr to the thrown Error object.
+                stderr: (error as Error & { stderr?: UnparsedWireValue }).stderr,
+              }),
+            ),
+          };
+        }
+        return {
+          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          reason: supersetFailureReason(
+            unparsedWire(error instanceof Error ? error.message : String(error)),
+          ),
+        };
+      }
+      const parsed = (() => {
+        try {
+          return unparsedWire(JSON.parse(output as string));
+        } catch {
+          return undefined;
+        }
+      })();
+      if (!parsed) {
         return {
           status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED,
           warning: "The workspace was created, but Superset could not open it.",
         };
       }
-    } catch (error) {
-      if (error instanceof Error && "stderr" in error) {
-        return {
-          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-          reason: supersetFailureReason(
-            unparsedWire({
-              // SAFETY: execFile failures attach stderr to the thrown Error object.
-              stderr: (error as Error & { stderr?: UnparsedWireValue }).stderr,
-            }),
-          ),
-        };
-      }
+      const workspaceRecord = wireRecord(parsed);
+      const workspaceId = workspaceRecord
+        ? (text(workspaceRecord.workspaceId) ?? text(workspaceRecord.id))
+        : undefined;
+      if (!workspaceId) return { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED };
+      const opened = yield* this.#run(this.executable, [
+        "workspaces",
+        "open",
+        workspaceId,
+        ...(request.providerTargetId === LOCAL_TARGET_ID
+          ? []
+          : ["--host", request.providerTargetId]),
+        "--json",
+      ]).pipe(
+        Effect.as(true),
+        Effect.catchAll(() => Effect.succeed(false)),
+      );
+      if (opened) return { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED };
       return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-        reason: supersetFailureReason(
-          unparsedWire(error instanceof Error ? error.message : String(error)),
-        ),
+        status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED,
+        warning: "The workspace was created, but Superset could not open it.",
       };
-    }
+    });
   }
 
-  async sendMessage(context: SupersetSessionContext, text: string): Promise<ProviderMessageResult> {
+  sendMessage(
+    context: SupersetSessionContext,
+    messageText: string,
+  ): Effect.Effect<ProviderMessageResult, never, Cli | Files> {
     return this.#act(
       [
         "terminals",
@@ -345,17 +417,17 @@ export class SupersetCli {
         "--terminal",
         context.terminalId,
         "--text",
-        text,
+        messageText,
         "--json",
       ],
       "Superset could not deliver that message.",
     );
   }
 
-  async executeControl(
+  executeControl(
     context: SupersetSessionContext,
     controlId: string,
-  ): Promise<ProviderControlResult> {
+  ): Effect.Effect<ProviderControlResult, never, Cli | Files> {
     if (controlId === SUPERSET_CONTROL_ID.OPEN_WORKSPACE) {
       return this.#act(
         ["workspaces", "open", context.workspaceId, "--host", context.hostId, "--json"],
@@ -378,19 +450,19 @@ export class SupersetCli {
         "Superset could not close that terminal.",
       );
     }
-    return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+    return Effect.succeed({ status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED });
   }
 
-  async createAgent(
+  createAgent(
     context: SupersetSessionContext,
     agent: string,
     task: string | undefined,
-  ): Promise<ProviderWorkspaceResult> {
+  ): Effect.Effect<ProviderWorkspaceResult, never, Cli | Files> {
     if (!task) {
-      return {
+      return Effect.succeed({
         status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
         reason: "A Superset agent needs an opening task.",
-      };
+      });
     }
     return this.#act(
       [
@@ -410,34 +482,43 @@ export class SupersetCli {
     );
   }
 
-  async #act(arguments_: readonly string[], reason: string): Promise<ProviderControlResult> {
-    if (!(await this.connected())) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
-    try {
-      await this.#run(this.executable, arguments_);
+  #act(
+    arguments_: readonly string[],
+    reason: string,
+  ): Effect.Effect<ProviderControlResult, never, Cli | Files> {
+    return Effect.gen(this, function* () {
+      if (!(yield* this.connected())) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+      yield* this.#run(this.executable, arguments_);
       return { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED };
-    } catch {
-      return { status: PROVIDER_ACT_RESULT_STATUS.REJECTED, reason };
-    }
+    }).pipe(
+      Effect.catchAll(() =>
+        Effect.succeed({ status: PROVIDER_ACT_RESULT_STATUS.REJECTED, reason }),
+      ),
+    );
   }
 
-  async #records(arguments_: readonly string[]): Promise<readonly WireRecord[]> {
-    try {
-      const parsed = unparsedWire(
-        JSON.parse(await this.#query(this.executable, arguments_, 30_000)),
+  #records(arguments_: readonly string[]): Effect.Effect<readonly WireRecord[], never, Cli> {
+    return Effect.gen(this, function* () {
+      const output = yield* this.#query(this.executable, arguments_, 30_000).pipe(
+        Effect.catchAll(() => Effect.succeed("")),
       );
-      const envelope = wireRecord(parsed);
-      const values = Array.isArray(parsed)
-        ? parsed
-        : envelope && Array.isArray(envelope.data)
-          ? envelope.data
-          : [];
-      return values.flatMap((value) => {
-        const record = wireRecord(value);
-        return record ? [record] : [];
-      });
-    } catch {
-      return [];
-    }
+      if (!output) return [];
+      try {
+        const parsed = unparsedWire(JSON.parse(output));
+        const envelope = wireRecord(parsed);
+        const values = Array.isArray(parsed)
+          ? parsed
+          : envelope && Array.isArray(envelope.data)
+            ? envelope.data
+            : [];
+        return values.flatMap((value) => {
+          const record = wireRecord(value);
+          return record ? [record] : [];
+        });
+      } catch {
+        return [];
+      }
+    });
   }
 
   #branchName(source: string): string {
@@ -464,28 +545,33 @@ export class SupersetWorkspaceAdapter extends SessionProviderAdapterBase {
     this.#cli = cli;
   }
 
-  observe(): Effect.Effect<readonly never[], unknown, unknown> {
+  observe(): Effect.Effect<readonly never[], never, never> {
     return Effect.succeed([]);
   }
 
-  async refresh(defaultAgent: string | undefined, connected: boolean): Promise<void> {
-    if (!connected) {
-      this.#projects = [];
-      this.#projectsRefreshedAt = undefined;
+  refresh(
+    defaultAgent: string | undefined,
+    connected: boolean,
+  ): Effect.Effect<void, never, Cli | Files> {
+    return Effect.gen(this, function* () {
+      if (!connected) {
+        this.#projects = [];
+        this.#projectsRefreshedAt = undefined;
+        this.#defaultAgent = defaultAgent;
+        return;
+      }
+      const now = Date.now();
+      if (
+        defaultAgent === this.#defaultAgent &&
+        this.#projectsRefreshedAt !== undefined &&
+        now - this.#projectsRefreshedAt < SUPERSET_PROJECT_REFRESH_INTERVAL_MS
+      ) {
+        return;
+      }
+      this.#projects = yield* this.#cli.workspaceProjects(defaultAgent);
       this.#defaultAgent = defaultAgent;
-      return;
-    }
-    const now = Date.now();
-    if (
-      defaultAgent === this.#defaultAgent &&
-      this.#projectsRefreshedAt !== undefined &&
-      now - this.#projectsRefreshedAt < SUPERSET_PROJECT_REFRESH_INTERVAL_MS
-    ) {
-      return;
-    }
-    this.#projects = await this.#cli.workspaceProjects(defaultAgent);
-    this.#defaultAgent = defaultAgent;
-    this.#projectsRefreshedAt = this.#projects.length > 0 ? now : undefined;
+      this.#projectsRefreshedAt = this.#projects.length > 0 ? now : undefined;
+    });
   }
 
   override workspaceProjects(): readonly WorkspaceProject[] {
@@ -494,7 +580,7 @@ export class SupersetWorkspaceAdapter extends SessionProviderAdapterBase {
 
   override createWorkspace(
     request: ProviderWorkspaceRequest,
-  ): Effect.Effect<ProviderWorkspaceResult, unknown, unknown> {
-    return Effect.promise(() => this.#cli.createWorkspace(request));
+  ): Effect.Effect<ProviderWorkspaceResult, never, Cli | Files> {
+    return this.#cli.createWorkspace(request);
   }
 }

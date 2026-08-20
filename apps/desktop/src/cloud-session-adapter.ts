@@ -103,7 +103,7 @@ export const CLOUD_ADAPTER_DEFAULTS = {
 
 export interface CloudAdapterOptions {
   /** Resolves the credential at observation time so a settings change applies immediately. */
-  readApiKey: () => Effect.Effect<string | undefined>;
+  readApiKey: () => Effect.Effect<string | undefined, unknown, Http>;
   baseUrl?: string;
   now?: () => number;
   minimumRefreshIntervalMs?: number;
@@ -234,7 +234,7 @@ function resolveBaseUrl(profile: CloudAdapterProfile, configured: string | undef
 export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
   readonly provider: SessionProvider;
 
-  readonly #readApiKey: () => Effect.Effect<string | undefined>;
+  readonly #readApiKey: () => Effect.Effect<string | undefined, unknown, Http>;
   readonly #baseUrl: string;
   readonly #authorizationHeaders: (apiKey: string) => Readonly<Record<string, string>>;
   readonly #now: () => number;

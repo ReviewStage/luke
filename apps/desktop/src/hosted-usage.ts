@@ -18,8 +18,8 @@ const UNAUTHORIZED_STATUS = 401;
 export interface HostedUsageReaderOptions {
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
-  readAccessToken: () => Effect.Effect<string | undefined, never, never>;
-  refreshAccount: () => Effect.Effect<void, never, never>;
+  readAccessToken: () => Effect.Effect<string | undefined, unknown, Http>;
+  refreshAccount: () => Effect.Effect<void, unknown, unknown>;
   requestTimeoutMs?: number;
 }
 
@@ -37,8 +37,8 @@ function withoutTrailingSlash(value: string): string {
  */
 export class HostedUsageReader {
   readonly #endpoint: string;
-  readonly #readAccessToken: () => Effect.Effect<string | undefined, never, never>;
-  readonly #refreshAccount: () => Effect.Effect<void, never, never>;
+  readonly #readAccessToken: () => Effect.Effect<string | undefined, unknown, Http>;
+  readonly #refreshAccount: () => Effect.Effect<void, unknown, unknown>;
   readonly #requestTimeoutMs: number;
 
   constructor(options: HostedUsageReaderOptions) {
@@ -53,15 +53,25 @@ export class HostedUsageReader {
     );
   }
 
-  read(): Effect.Effect<HostedUsageAnswer | undefined, never, Http> {
+  read(): Effect.Effect<HostedUsageAnswer | undefined, unknown, Http> {
     return Effect.gen(this, function* () {
-      const token = yield* this.#readAccessToken();
+      const token = yield* this.#readAccessToken() as Effect.Effect<
+        string | undefined,
+        never,
+        Http
+      >;
       if (!token) return undefined;
 
       let response = yield* this.#request(token);
       if (response?.status === UNAUTHORIZED_STATUS) {
-        yield* this.#refreshAccount().pipe(Effect.catchAll(() => Effect.void));
-        const refreshed = yield* this.#readAccessToken();
+        yield* (this.#refreshAccount() as Effect.Effect<void, never, Http>).pipe(
+          Effect.catchAll(() => Effect.void),
+        );
+        const refreshed = yield* this.#readAccessToken() as Effect.Effect<
+          string | undefined,
+          never,
+          Http
+        >;
         if (refreshed && refreshed !== token) {
           response = yield* this.#request(refreshed);
         }

@@ -13,13 +13,14 @@ import {
   startAccountLoopback,
 } from "./account-loopback";
 import { singleFlight, withIssuedAccountTokens } from "./account-token-lifecycle";
+import type { FileFailure, Files } from "./services/files";
 import type { StoredAccount } from "./settings-store";
 import { ACCOUNT_STATUS, type AccountProvider, type AccountSnapshot } from "./shared/contracts";
 
 export interface AccountSessionStore {
-  readAccount(): Promise<StoredAccount | undefined>;
-  setAccount(account: StoredAccount): Promise<AccountSnapshot>;
-  clearAccount(): Promise<AccountSnapshot>;
+  readAccount(): Effect.Effect<StoredAccount | undefined, FileFailure, Files>;
+  setAccount(account: StoredAccount): Effect.Effect<AccountSnapshot, FileFailure | Error, Files>;
+  clearAccount(): Effect.Effect<AccountSnapshot, FileFailure, Files>;
 }
 
 export interface AccountSessionManagerOptions {
@@ -27,16 +28,16 @@ export interface AccountSessionManagerOptions {
   store: AccountSessionStore;
   hostedServiceBaseUrl: string;
   requiresAccount: boolean;
-  openExternal: (url: string) => Promise<void>;
-  startCapabilities: () => Promise<void>;
-  stopCapabilities: () => Promise<void>;
+  openExternal: (url: string) => Effect.Effect<void, never, never>;
+  startCapabilities: () => Effect.Effect<void, never, never>;
+  stopCapabilities: () => Effect.Effect<void, never, never>;
   onChange: (account: AccountSnapshot) => void;
   runEffect: <A, E>(effect: Effect.Effect<A, E, unknown>) => Promise<A>;
 }
 
 export class AccountSessionManager {
   readonly #options: AccountSessionManagerOptions;
-  readonly refreshOnce: () => Promise<void>;
+  readonly refreshOnce: () => Effect.Effect<void, unknown, unknown>;
   #account: AccountSnapshot = { status: ACCOUNT_STATUS.SIGNED_OUT };
   #generation = 0;
   #signInRunning: Promise<AccountSnapshot> | undefined;
@@ -45,7 +46,7 @@ export class AccountSessionManager {
   constructor(options: AccountSessionManagerOptions) {
     this.#options = options;
     const flight = singleFlight(() => this.#refreshEffect());
-    this.refreshOnce = () => options.runEffect(flight());
+    this.refreshOnce = flight;
   }
 
   get snapshot(): AccountSnapshot {
@@ -60,31 +61,37 @@ export class AccountSessionManager {
     this.#cancelSignIn?.();
   }
 
-  async signOut(options: { revokeRemote?: boolean } = {}): Promise<AccountSnapshot> {
-    this.#generation += 1;
-    this.#account = { status: ACCOUNT_STATUS.SIGNED_OUT };
-    this.#options.onChange(this.#account);
-    const stored = options.revokeRemote ? await this.#options.store.readAccount() : undefined;
-    const clearing = this.#options.store.clearAccount();
-    await this.#options.stopCapabilities();
-    this.#account = await clearing;
-    this.#options.onChange(this.#account);
-    if (stored?.refreshToken) {
-      await this.#options.runEffect(
-        this.#options.client.revoke(stored.refreshToken).pipe(
+  signOut(
+    options: { revokeRemote?: boolean } = {},
+  ): Effect.Effect<AccountSnapshot, unknown, unknown> {
+    return Effect.gen(this, function* () {
+      this.#generation += 1;
+      this.#account = { status: ACCOUNT_STATUS.SIGNED_OUT };
+      this.#options.onChange(this.#account);
+      const stored = options.revokeRemote ? yield* this.#options.store.readAccount() : undefined;
+      const clearing = yield* this.#options.store.clearAccount();
+      yield* this.#options.stopCapabilities();
+      this.#account = clearing;
+      this.#options.onChange(this.#account);
+      if (stored?.refreshToken) {
+        yield* this.#options.client.revoke(stored.refreshToken).pipe(
           Effect.catchAll((error) => {
             const message = error instanceof Error ? error.message : String(error);
             process.stderr.write(`Account token revocation failed: ${message}\n`);
             return Effect.void;
           }),
-        ),
-      );
-    }
-    return this.#account;
+        );
+      }
+      return this.#account;
+    });
+  }
+
+  signOutForIpc(options: { revokeRemote?: boolean } = {}): Promise<AccountSnapshot> {
+    return this.#options.runEffect(this.signOut(options));
   }
 
   async deleteEverywhere(): Promise<AccountSnapshot> {
-    const stored = await this.#options.store.readAccount();
+    const stored = await this.#options.runEffect(this.#options.store.readAccount());
     if (!stored) throw new Error("No stored account credential to delete with");
     try {
       await this.#options.runEffect(this.#deleteHosted(stored.accessToken));
@@ -97,12 +104,12 @@ export class AccountSessionManager {
       await this.#storeCurrent(generation, { ...stored, ...tokens });
       await this.#options.runEffect(this.#deleteHosted(tokens.accessToken));
     }
-    return this.signOut();
+    return this.#options.runEffect(this.signOut());
   }
 
   #refreshEffect(): Effect.Effect<void, unknown, unknown> {
     return Effect.gen(this, function* () {
-      const stored = yield* Effect.promise(() => this.#options.store.readAccount());
+      const stored = yield* this.#options.store.readAccount();
       if (!stored || !this.#options.requiresAccount) return;
       const generation = this.#generation;
       const identity = yield* this.#options.client
@@ -111,9 +118,7 @@ export class AccountSessionManager {
       if (identity._tag === "Right") {
         if (!sameIdentity(stored, identity.right)) {
           if (
-            !(yield* Effect.promise(() =>
-              this.#storeCurrent(generation, mergedIdentity(stored, identity.right)),
-            ))
+            !(yield* this.#storeCurrentEffect(generation, mergedIdentity(stored, identity.right)))
           ) {
             return;
           }
@@ -134,14 +139,12 @@ export class AccountSessionManager {
           accountFailureAction(refreshError) === ACCOUNT_FAILURE_ACTION.SIGN_OUT &&
           this.#isCurrent(generation)
         ) {
-          yield* Effect.promise(() => this.signOut());
+          yield* this.signOut();
         }
         return;
       }
       const tokens = refreshed.right;
-      if (
-        !(yield* Effect.promise(() => this.#storeCurrent(generation, { ...stored, ...tokens })))
-      ) {
+      if (!(yield* this.#storeCurrentEffect(generation, { ...stored, ...tokens }))) {
         return;
       }
       const verified = yield* this.#options.client
@@ -149,8 +152,9 @@ export class AccountSessionManager {
         .pipe(Effect.either);
       if (verified._tag === "Left") return;
       if (
-        !(yield* Effect.promise(() =>
-          this.#storeCurrent(generation, mergedIdentity({ ...stored, ...tokens }, verified.right)),
+        !(yield* this.#storeCurrentEffect(
+          generation,
+          mergedIdentity({ ...stored, ...tokens }, verified.right),
         ))
       ) {
         return;
@@ -178,12 +182,14 @@ export class AccountSessionManager {
         loopback = activeLoopback;
         this.#cancelSignIn = () => activeLoopback.cancel();
         if (cancelled) activeLoopback.cancel();
-        await this.#options.openExternal(
-          this.#options.client.authorizeUrl({
-            redirectUri: activeLoopback.redirectUri,
-            state: activeLoopback.state,
-            codeChallenge: activeLoopback.codeChallenge,
-          }),
+        await this.#options.runEffect(
+          this.#options.openExternal(
+            this.#options.client.authorizeUrl({
+              redirectUri: activeLoopback.redirectUri,
+              state: activeLoopback.state,
+              codeChallenge: activeLoopback.codeChallenge,
+            }),
+          ),
         );
         const code = await this.#options.runEffect(activeLoopback.waitForCode);
         await this.#options.runEffect(
@@ -197,14 +203,10 @@ export class AccountSessionManager {
             use: (tokens) =>
               Effect.gen(this, function* () {
                 const identity = yield* this.#options.client.userInfo(tokens.accessToken, provider);
-                if (
-                  !(yield* Effect.promise(() =>
-                    this.#storeCurrent(generation, { ...tokens, ...identity }),
-                  ))
-                ) {
+                if (!(yield* this.#storeCurrentEffect(generation, { ...tokens, ...identity }))) {
                   return yield* Effect.fail(new Error(SIGN_IN_CANCELLED_MESSAGE));
                 }
-                yield* Effect.promise(() => this.#options.startCapabilities());
+                yield* this.#options.startCapabilities();
                 if (!this.#isCurrent(generation)) {
                   return yield* Effect.fail(new Error(SIGN_IN_CANCELLED_MESSAGE));
                 }
@@ -214,12 +216,12 @@ export class AccountSessionManager {
               const message = error instanceof Error ? error.message : String(error);
               process.stderr.write(`Rejected account token revocation failed: ${message}\n`);
             },
-          }) as Effect.Effect<void, unknown, unknown>,
+          }) as Effect.Effect<void, unknown, unknown>, // SAFETY: withIssuedAccountTokens use callback is typed against Http while options widen to unknown.
         );
         this.#options.onChange(this.#account);
         return this.#account;
       } catch (error) {
-        if (this.#isCurrent(generation)) await this.signOut();
+        if (this.#isCurrent(generation)) await this.signOutForIpc();
         if (error instanceof Error && isSignInCancellation(error)) return this.#account;
         throw error;
       } finally {
@@ -231,13 +233,22 @@ export class AccountSessionManager {
     return this.#signInRunning;
   }
 
+  #storeCurrentEffect(
+    generation: number,
+    stored: StoredAccount,
+  ): Effect.Effect<boolean, unknown, unknown> {
+    return Effect.gen(this, function* () {
+      if (!this.#isCurrent(generation)) return false;
+      const next = yield* this.#options.store.setAccount(stored);
+      if (!this.#isCurrent(generation)) return false;
+      this.#account = next;
+      this.#options.onChange(this.#account);
+      return true;
+    });
+  }
+
   async #storeCurrent(generation: number, stored: StoredAccount): Promise<boolean> {
-    if (!this.#isCurrent(generation)) return false;
-    const next = await this.#options.store.setAccount(stored);
-    if (!this.#isCurrent(generation)) return false;
-    this.#account = next;
-    this.#options.onChange(this.#account);
-    return true;
+    return this.#options.runEffect(this.#storeCurrentEffect(generation, stored));
   }
 
   #isCurrent(generation: number): boolean {

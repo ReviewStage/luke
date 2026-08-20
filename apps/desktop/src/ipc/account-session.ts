@@ -23,7 +23,7 @@ export function registerAccountSessionIpc(dependencies: AccountSessionIpcDepende
   });
   ipcMain.handle(channels.signOut, async (event) => {
     if (!trustedSender(event)) throw new Error("Untrusted renderer");
-    return accountSession.signOut({ revokeRemote: true });
+    return accountSession.signOutForIpc({ revokeRemote: true });
   });
   ipcMain.handle(channels.deleteAccount, async (event) => {
     if (!trustedSender(event)) throw new Error("Untrusted renderer");

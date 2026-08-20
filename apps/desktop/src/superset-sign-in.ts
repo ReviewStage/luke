@@ -1,4 +1,5 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
+import { Effect } from "effect";
 import { SUPERSET_SIGN_IN_STAGE, type SupersetSignInSnapshot } from "./shared/contracts";
 import type { SupersetCli } from "./superset-cli";
 
@@ -15,8 +16,9 @@ type LoginChild = Pick<
 
 export interface SupersetSignInOptions {
   cli: SupersetCli;
-  openExternal: (url: string) => Promise<void>;
+  openExternal: (url: string) => Effect.Effect<void, never, never>;
   onChange: (snapshot: SupersetSignInSnapshot) => void;
+  runEffect: <A, E>(effect: Effect.Effect<A, E, unknown>) => void;
   spawnLogin?: (executable: string, arguments_: readonly string[]) => LoginChild;
   timeoutMs?: number;
 }
@@ -60,8 +62,9 @@ export function validSupersetSignInCode(code: string): boolean {
 
 export class SupersetSignIn {
   readonly #cli: SupersetCli;
-  readonly #openExternal: (url: string) => Promise<void>;
+  readonly #openExternal: (url: string) => Effect.Effect<void, never, never>;
   readonly #onChange: (snapshot: SupersetSignInSnapshot) => void;
+  readonly #runEffect: SupersetSignInOptions["runEffect"];
   readonly #spawnLogin: NonNullable<SupersetSignInOptions["spawnLogin"]>;
   readonly #timeoutMs: number;
   #child: LoginChild | undefined;
@@ -75,6 +78,7 @@ export class SupersetSignIn {
     this.#cli = options.cli;
     this.#openExternal = options.openExternal;
     this.#onChange = options.onChange;
+    this.#runEffect = options.runEffect;
     this.#spawnLogin =
       options.spawnLogin ??
       ((executable, arguments_) =>
@@ -90,66 +94,72 @@ export class SupersetSignIn {
     return this.#state;
   }
 
-  async begin(): Promise<SupersetSignInSnapshot> {
-    if (this.#child || this.#starting) return this.#state;
-    if (
-      this.#state.stage !== SUPERSET_SIGN_IN_STAGE.IDLE &&
-      this.#state.stage !== SUPERSET_SIGN_IN_STAGE.FAILURE
-    ) {
-      return this.#state;
-    }
-    this.#starting = true;
-    const attempt = ++this.#attempt;
-    if (!(await this.#cli.installed())) {
-      this.#starting = false;
-      if (attempt !== this.#attempt) return this.#state;
-      return this.#fail("Superset is not available on this Mac.");
-    }
-    if (attempt !== this.#attempt) {
-      this.#starting = false;
-      return this.#state;
-    }
+  begin(): Effect.Effect<
+    SupersetSignInSnapshot,
+    never,
+    import("./services/cli").Cli | import("./services/files").Files
+  > {
+    return Effect.gen(this, function* () {
+      if (this.#child || this.#starting) return this.#state;
+      if (
+        this.#state.stage !== SUPERSET_SIGN_IN_STAGE.IDLE &&
+        this.#state.stage !== SUPERSET_SIGN_IN_STAGE.FAILURE
+      ) {
+        return this.#state;
+      }
+      this.#starting = true;
+      const attempt = ++this.#attempt;
+      if (!(yield* this.#cli.installed())) {
+        this.#starting = false;
+        if (attempt !== this.#attempt) return this.#state;
+        return this.#fail("Superset is not available on this Mac.");
+      }
+      if (attempt !== this.#attempt) {
+        this.#starting = false;
+        return this.#state;
+      }
 
-    this.#authorizationUrl = undefined;
-    this.#set(snapshot(SUPERSET_SIGN_IN_STAGE.BROWSER_CODE));
-    let child: LoginChild;
-    try {
-      child = this.#spawnLogin(this.#cli.executable, ["auth", "login", "--json"]);
-    } catch {
+      this.#authorizationUrl = undefined;
+      this.#set(snapshot(SUPERSET_SIGN_IN_STAGE.BROWSER_CODE));
+      let child: LoginChild;
+      try {
+        child = this.#spawnLogin(this.#cli.executable, ["auth", "login", "--json"]);
+      } catch {
+        this.#starting = false;
+        return this.#fail("Superset sign-in could not start.");
+      }
+      this.#child = child;
       this.#starting = false;
-      return this.#fail("Superset sign-in could not start.");
-    }
-    this.#child = child;
-    this.#starting = false;
-    let stdoutTail = "";
-    let stderrTail = "";
-    const inspect = (chunk: Buffer, stream: "stdout" | "stderr") => {
-      if (attempt !== this.#attempt || this.#authorizationUrl) return;
-      const next = `${stream === "stdout" ? stdoutTail : stderrTail}${String(chunk)}`.slice(
-        -OUTPUT_TAIL_LIMIT,
-      );
-      if (stream === "stdout") stdoutTail = next;
-      else stderrTail = next;
-      const found = authorizationUrl(next);
-      if (!found) return;
-      this.#authorizationUrl = found;
-      void this.#openExternal(found);
-    };
-    child.stdout.on("data", (chunk) => inspect(chunk, "stdout"));
-    child.stderr.on("data", (chunk) => inspect(chunk, "stderr"));
-    child.stdin.on("error", () => {
-      if (attempt === this.#attempt) this.#fail("Superset did not accept that sign-in code.");
+      let stdoutTail = "";
+      let stderrTail = "";
+      const inspect = (chunk: Buffer, stream: "stdout" | "stderr") => {
+        if (attempt !== this.#attempt || this.#authorizationUrl) return;
+        const next = `${stream === "stdout" ? stdoutTail : stderrTail}${String(chunk)}`.slice(
+          -OUTPUT_TAIL_LIMIT,
+        );
+        if (stream === "stdout") stdoutTail = next;
+        else stderrTail = next;
+        const found = authorizationUrl(next);
+        if (!found) return;
+        this.#authorizationUrl = found;
+        this.#runEffect(this.#openExternal(found));
+      };
+      child.stdout.on("data", (chunk) => inspect(chunk, "stdout"));
+      child.stderr.on("data", (chunk) => inspect(chunk, "stderr"));
+      child.stdin.on("error", () => {
+        if (attempt === this.#attempt) this.#fail("Superset did not accept that sign-in code.");
+      });
+      child.once("error", () => {
+        if (attempt === this.#attempt) this.#fail("Superset sign-in could not start.");
+      });
+      child.once("close", () => this.#runEffect(this.#finish(attempt)));
+      this.#timeout = setTimeout(() => {
+        if (attempt !== this.#attempt) return;
+        this.#stopChild();
+        this.#fail("Superset sign-in timed out. Try again when you’re ready.");
+      }, this.#timeoutMs);
+      return this.#state;
     });
-    child.once("error", () => {
-      if (attempt === this.#attempt) this.#fail("Superset sign-in could not start.");
-    });
-    child.once("close", () => void this.#finish(attempt));
-    this.#timeout = setTimeout(() => {
-      if (attempt !== this.#attempt) return;
-      this.#stopChild();
-      this.#fail("Superset sign-in timed out. Try again when you’re ready.");
-    }, this.#timeoutMs);
-    return this.#state;
   }
 
   submitCode(code: string): SupersetSignInSnapshot {
@@ -168,7 +178,9 @@ export class SupersetSignIn {
   }
 
   reopen(): void {
-    if (this.#authorizationUrl && this.#child) void this.#openExternal(this.#authorizationUrl);
+    if (this.#authorizationUrl && this.#child) {
+      this.#runEffect(this.#openExternal(this.#authorizationUrl));
+    }
   }
 
   cancel(): void {
@@ -183,39 +195,51 @@ export class SupersetSignIn {
     this.cancel();
   }
 
-  async chooseOrganization(slug: string): Promise<SupersetSignInSnapshot> {
-    if (this.#state.stage !== SUPERSET_SIGN_IN_STAGE.ORGANIZATION) return this.#state;
-    const attempt = ++this.#attempt;
-    this.#set(snapshot(SUPERSET_SIGN_IN_STAGE.EXCHANGING));
-    const connected = await this.#cli.chooseOrganization(slug);
-    if (attempt !== this.#attempt) return this.#state;
-    if (connected) {
-      this.#set(snapshot(SUPERSET_SIGN_IN_STAGE.CONNECTED));
-    } else {
-      this.#fail("Superset could not select that organization.");
-    }
-    return this.#state;
+  chooseOrganization(
+    slug: string,
+  ): Effect.Effect<
+    SupersetSignInSnapshot,
+    never,
+    import("./services/cli").Cli | import("./services/files").Files
+  > {
+    return Effect.gen(this, function* () {
+      if (this.#state.stage !== SUPERSET_SIGN_IN_STAGE.ORGANIZATION) return this.#state;
+      const attempt = ++this.#attempt;
+      this.#set(snapshot(SUPERSET_SIGN_IN_STAGE.EXCHANGING));
+      const connected = yield* this.#cli.chooseOrganization(slug);
+      if (attempt !== this.#attempt) return this.#state;
+      if (connected) {
+        this.#set(snapshot(SUPERSET_SIGN_IN_STAGE.CONNECTED));
+      } else {
+        this.#fail("Superset could not select that organization.");
+      }
+      return this.#state;
+    });
   }
 
-  async #finish(attempt: number): Promise<void> {
-    if (attempt !== this.#attempt) return;
-    this.#clearChild();
-    this.#starting = true;
-    const connected = await this.#cli.connected();
-    if (attempt !== this.#attempt) return;
-    if (connected) {
+  #finish(
+    attempt: number,
+  ): Effect.Effect<void, never, import("./services/cli").Cli | import("./services/files").Files> {
+    return Effect.gen(this, function* () {
+      if (attempt !== this.#attempt) return;
+      this.#clearChild();
+      this.#starting = true;
+      const connected = yield* this.#cli.connected();
+      if (attempt !== this.#attempt) return;
+      if (connected) {
+        this.#starting = false;
+        this.#set(snapshot(SUPERSET_SIGN_IN_STAGE.CONNECTED));
+        return;
+      }
+      const organizations = yield* this.#cli.organizations();
+      if (attempt !== this.#attempt) return;
       this.#starting = false;
-      this.#set(snapshot(SUPERSET_SIGN_IN_STAGE.CONNECTED));
-      return;
-    }
-    const organizations = await this.#cli.organizations();
-    if (attempt !== this.#attempt) return;
-    this.#starting = false;
-    if (organizations.length > 0) {
-      this.#set(snapshot(SUPERSET_SIGN_IN_STAGE.ORGANIZATION, { organizations }));
-      return;
-    }
-    this.#fail("Superset sign-in did not finish.");
+      if (organizations.length > 0) {
+        this.#set(snapshot(SUPERSET_SIGN_IN_STAGE.ORGANIZATION, { organizations }));
+        return;
+      }
+      this.#fail("Superset sign-in did not finish.");
+    });
   }
 
   #fail(failure: string): SupersetSignInSnapshot {

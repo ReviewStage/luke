@@ -12,7 +12,7 @@ import {
   type UnparsedWireValue,
 } from "@sidecar/core";
 import { AttentionRateLimited } from "@sidecar/core/effect-errors";
-import { Duration, Effect, Ref, Schedule } from "effect";
+import { Duration, Effect, Schedule } from "effect";
 import { Http } from "./services/http";
 
 /* The key is not read here: it is the stored credential the settings store
@@ -75,13 +75,11 @@ function parsedJson(textValue: string): UnparsedWireValue | undefined {
   }
 }
 
-function rateLimitWaitMs(response: Response, now: number, quietUntil: number): number {
+function rateLimitWaitMs(response: Response): number {
   const retryAfterSeconds = Number(response.headers.get(OPENAI_RETRY_AFTER_HEADER));
-  const waitMs =
-    Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
-      ? retryAfterSeconds * 1000
-      : ATTENTION_RATE_LIMIT_COOLDOWN_MS;
-  return Math.max(waitMs, quietUntil - now);
+  return Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
+    ? retryAfterSeconds * 1000
+    : ATTENTION_RATE_LIMIT_COOLDOWN_MS;
 }
 
 /**
@@ -98,7 +96,6 @@ export class OpenAiAttentionEvaluator implements AttentionEvaluator {
   readonly #now: () => number;
   readonly #requestTimeoutMs: number;
   readonly #maximumOutputTokens: number;
-  readonly #quietUntil: Ref.Ref<number>;
 
   constructor(options: OpenAiAttentionEvaluatorOptions) {
     const apiKey = text(options.apiKey);
@@ -115,7 +112,6 @@ export class OpenAiAttentionEvaluator implements AttentionEvaluator {
       options.maximumOutputTokens,
       OPENAI_DEFAULTS.MAXIMUM_OUTPUT_TOKENS,
     );
-    this.#quietUntil = Ref.unsafeMake(0);
   }
 
   get model(): string {
@@ -136,19 +132,12 @@ export class OpenAiAttentionEvaluator implements AttentionEvaluator {
     update: AttentionUpdate,
   ): Effect.Effect<AttentionDecision | undefined, AttentionRateLimited, Http> {
     return Effect.gen(this, function* () {
-      const now = this.#now();
-      const quietUntil = yield* Ref.get(this.#quietUntil);
-      if (now < quietUntil) {
-        return yield* Effect.fail(new AttentionRateLimited({ retryAfterMs: quietUntil - now }));
-      }
-
       const response = yield* this.#request(update);
       if (!response) return undefined;
 
       if (!response.ok) {
         if (response.status === OPENAI_RATE_LIMIT_STATUS) {
-          const waitMs = rateLimitWaitMs(response, now, quietUntil);
-          yield* Ref.set(this.#quietUntil, now + waitMs);
+          const waitMs = rateLimitWaitMs(response);
           this.#report(
             `OpenAI attention requests are rate limited; pausing reviews for ${Math.round(waitMs / 1000)}s`,
           );
