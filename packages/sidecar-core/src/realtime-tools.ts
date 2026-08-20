@@ -284,23 +284,22 @@ type RealtimeToolSpec = SessionToolSpec | IssueToolSpec | AppToolSpec;
 const SESSION_IDENTITY_PARAMETERS = {
   provider_id: {
     type: "string",
-    description: "The provider_id of the session, exactly as the roster lists it.",
+    description: "The session provider ID.",
   },
   provider_session_id: {
     type: "string",
-    description: "The provider_session_id of the session, exactly as the roster lists it.",
+    description: "The session ID.",
   },
 } as const;
 
 const ISSUE_IDENTITY_PARAMETERS = {
   tracker_id: {
     type: "string",
-    description: "The tracker_id of the issue, exactly as the issue roster lists it.",
+    description: "The tracker ID.",
   },
   issue_id: {
     type: "string",
-    description:
-      "The issue_id of the issue, exactly as the issue roster lists it, such as LUKE-123.",
+    description: "The issue ID.",
   },
 } as const;
 
@@ -896,16 +895,14 @@ export const REALTIME_TOOLS = {
     name: "send_session_message",
     family: REALTIME_TOOL_FAMILY.SESSION,
     schema: {
-      description:
-        "Send a message the developer just asked you to send to one observed session. " +
-        "Only sessions the roster marks as taking messages can receive one.",
+      description: "Send a message to an observed session.",
       parameters: {
         type: "object",
         properties: {
           ...SESSION_IDENTITY_PARAMETERS,
           text: {
             type: "string",
-            description: "The message, in the developer's own words or their clear intent.",
+            description: "The message to send.",
           },
         },
         required: ["provider_id", "provider_session_id", "text"],
@@ -917,18 +914,14 @@ export const REALTIME_TOOLS = {
     name: "run_session_control",
     family: REALTIME_TOOL_FAMILY.SESSION,
     schema: {
-      description:
-        "Run a control one observed session advertises, such as stopping its current run, " +
-        "archiving the settled workspace around it, or deleting a settled workspace whose " +
-        "manager keeps no archive. " +
-        "Only controls the roster lists for that session exist.",
+      description: "Run a control advertised by an observed session.",
       parameters: {
         type: "object",
         properties: {
           ...SESSION_IDENTITY_PARAMETERS,
           control_id: {
             type: "string",
-            description: "The control's id, exactly as the roster lists it in parentheses.",
+            description: "The control ID.",
           },
         },
         required: ["provider_id", "provider_session_id", "control_id"],
@@ -940,9 +933,7 @@ export const REALTIME_TOOLS = {
     name: "open_session",
     family: REALTIME_TOOL_FAMILY.SESSION,
     schema: {
-      description:
-        "Open one observed session on the developer's screen, the same as pressing its row. " +
-        "Only sessions the roster marks as able to be opened have somewhere to open.",
+      description: "Open an observed session.",
       parameters: {
         type: "object",
         properties: { ...SESSION_IDENTITY_PARAMETERS },
@@ -955,19 +946,14 @@ export const REALTIME_TOOLS = {
     name: "request_session_notice",
     family: REALTIME_TOOL_FAMILY.SESSION,
     schema: {
-      description:
-        "Keep the developer's ask to hear about one observed session later, in their own words " +
-        "— told when it finishes, warned if it fails, whatever they asked. Luke's background " +
-        "review speaks when an update satisfies it. One ask stands per session; a new one " +
-        "replaces it.",
+      description: "Remember a request to be notified about an observed session.",
       parameters: {
         type: "object",
         properties: {
           ...SESSION_IDENTITY_PARAMETERS,
           request: {
             type: "string",
-            description:
-              "What the developer asked to hear about, in their own words or their clear intent.",
+            description: "What to notify the user about.",
           },
         },
         required: ["provider_id", "provider_session_id", "request"],
@@ -979,9 +965,7 @@ export const REALTIME_TOOLS = {
     name: "withdraw_session_notice",
     family: REALTIME_TOOL_FAMILY.SESSION,
     schema: {
-      description:
-        "Let go of the standing ask kept for one observed session, when the developer no longer " +
-        "wants to hear about it.",
+      description: "Remove a notification request for an observed session.",
       parameters: {
         type: "object",
         properties: { ...SESSION_IDENTITY_PARAMETERS },
@@ -994,10 +978,7 @@ export const REALTIME_TOOLS = {
     name: "read_session_transcript",
     family: REALTIME_TOOL_FAMILY.SESSION,
     schema: {
-      description:
-        "Read the recent transcript of one observed local session, to answer what it has been " +
-        "doing, what it said, or where it is stuck. Reading happens on this machine, performs " +
-        "nothing, and reaches no provider.",
+      description: "Read the recent transcript of an observed local session.",
       parameters: {
         type: "object",
         properties: { ...SESSION_IDENTITY_PARAMETERS },
@@ -1010,56 +991,41 @@ export const REALTIME_TOOLS = {
     name: "create_workspace",
     family: REALTIME_TOOL_FAMILY.SESSION,
     schema: {
-      description:
-        "Create a new workspace — a new agent — the developer just asked for, in one project " +
-        "a provider listed. An ask for a new agent means this unless its own words name the " +
-        "existing workspace or session the agent should join. Only projects the " +
-        "[workspace projects] context lists exist.",
+      description: "Create a workspace for a new agent.",
       parameters: {
         type: "object",
         properties: {
           provider_id: {
             type: "string",
-            description: "The provider_id of the project, exactly as the projects list gives it.",
+            description: "The provider ID.",
           },
           project_id: {
             type: "string",
-            description: "The project_id, exactly as the projects list gives it.",
+            description: "The project ID.",
           },
           target_id: {
             type: "string",
-            description:
-              "The target_id of the host, exactly as the projects list gives it, when present.",
+            description: "The target ID.",
           },
           agent: {
             type: "string",
-            description:
-              "The agent kind to start, exactly as the projects list gives it; omit only when the list names a default.",
+            description: "The agent kind.",
           },
           name: {
             type: "string",
-            description:
-              "A short name for the workspace, only when the developer chose one; " +
-              "the provider names it otherwise.",
+            description: "An optional workspace name.",
           },
           task: {
             type: "string",
-            description:
-              "What the developer asked the new agent to work on, in their own words or their " +
-              "clear intent. Required where the projects list says a task is needed; omitted " +
-              "where it says the project takes none.",
+            description: "An optional opening task.",
           },
           model: {
             type: "string",
-            description:
-              "The model for the new agent, exactly as the app guide's model setting lists it, " +
-              "only when the developer named one for this creation; the settings decide otherwise.",
+            description: "An optional model.",
           },
           effort: {
             type: "string",
-            description:
-              "The effort level riding that model, exactly as the guide lists it, only when the " +
-              "developer named both; never without a model.",
+            description: "An optional effort level.",
           },
         },
         required: [],
@@ -1071,41 +1037,30 @@ export const REALTIME_TOOLS = {
     name: "add_workspace_agent",
     family: REALTIME_TOOL_FAMILY.SESSION,
     schema: {
-      description:
-        "Start another agent in the workspace one observed session runs in, only when the " +
-        "developer's own words named that workspace or session; a bare ask for a new agent " +
-        "creates a workspace instead. Only sessions whose roster entry lists new agents can " +
-        "take one, only as an agent kind it lists.",
+      description: "Add an agent to an observed workspace.",
       parameters: {
         type: "object",
         properties: {
           ...SESSION_IDENTITY_PARAMETERS,
           agent: {
             type: "string",
-            description: "The kind of agent, exactly as the roster lists it under new agents.",
+            description: "The agent kind.",
           },
           name: {
             type: "string",
-            description:
-              "A short name for the new agent's session, only when the developer chose one.",
+            description: "An optional agent name.",
           },
           task: {
             type: "string",
-            description:
-              "What the developer asked the new agent to work on, in their own words or their " +
-              "clear intent, when they gave it something to start on.",
+            description: "An optional opening task.",
           },
           model: {
             type: "string",
-            description:
-              "The model for the new agent, exactly as the app guide's model setting lists it, " +
-              "only when the developer named one for this agent; the settings decide otherwise.",
+            description: "An optional model.",
           },
           effort: {
             type: "string",
-            description:
-              "The effort level riding that model, exactly as the guide lists it, only when the " +
-              "developer named both; never without a model.",
+            description: "An optional effort level.",
           },
         },
         required: ["provider_id", "provider_session_id", "agent"],
@@ -1161,16 +1116,14 @@ export const REALTIME_TOOLS = {
     name: "update_issue_state",
     family: REALTIME_TOOL_FAMILY.ISSUE,
     schema: {
-      description:
-        "Move one tracked issue to a state the developer just asked for. " +
-        "Only issues the issue roster lists exist, and only the states it lists for one.",
+      description: "Update a tracked issue's state.",
       parameters: {
         type: "object",
         properties: {
           ...ISSUE_IDENTITY_PARAMETERS,
           state: {
             type: "string",
-            description: "The target state's name, exactly as the issue roster lists it.",
+            description: "The target state.",
           },
         },
         required: ["tracker_id", "issue_id", "state"],
@@ -1182,16 +1135,14 @@ export const REALTIME_TOOLS = {
     name: "comment_on_issue",
     family: REALTIME_TOOL_FAMILY.ISSUE,
     schema: {
-      description:
-        "Add a comment the developer just asked you to add to one tracked issue. " +
-        "Only issues the issue roster marks as taking comments can receive one.",
+      description: "Add a comment to a tracked issue.",
       parameters: {
         type: "object",
         properties: {
           ...ISSUE_IDENTITY_PARAMETERS,
           body: {
             type: "string",
-            description: "The comment, in the developer's own words or their clear intent.",
+            description: "The comment to add.",
           },
         },
         required: ["tracker_id", "issue_id", "body"],
@@ -1203,27 +1154,21 @@ export const REALTIME_TOOLS = {
     name: "change_app_setting",
     family: REALTIME_TOOL_FAMILY.APP,
     schema: {
-      description:
-        "Change one of Luke's own settings the developer just asked for. " +
-        "Only settings the app guide marks as changeable by voice can be changed.",
+      description: "Change a Luke setting.",
       parameters: {
         type: "object",
         properties: {
           setting_id: {
             type: "string",
-            description: "The setting_id, exactly as the app guide lists it.",
+            description: "The setting ID.",
           },
           value: {
             type: "string",
-            description:
-              "The new value: on or off for a switch, or one of the choices the guide lists.",
+            description: "The new value.",
           },
           effort: {
             type: "string",
-            description:
-              "The effort level riding the new value, only when the developer named both and " +
-              "the guide lists levels for that choice — a model and its effort are one change, " +
-              "not two; never on any other setting.",
+            description: "An optional effort level.",
           },
         },
         required: ["setting_id", "value"],
@@ -1235,30 +1180,23 @@ export const REALTIME_TOOLS = {
     name: "show_panel",
     family: REALTIME_TOOL_FAMILY.APP,
     schema: {
-      description:
-        "Show Luke's own panel on the developer's screen, the same as pressing the capsule — or, " +
-        "when the panel is already open, switch it to the named tab, the same as pressing that tab. " +
-        "It can open the sessions list — narrowed to one provider or location, ordered by urgency or recency — or the settings tab.",
+      description: "Show Luke's panel.",
       parameters: {
         type: "object",
         properties: {
           tab: {
             type: "string",
             enum: Object.values(APP_PANEL_TAB),
-            description: "Which tab to open or switch to. Defaults to sessions.",
+            description: "The tab to show.",
           },
           filter: {
             type: "string",
-            description:
-              "Narrows the session list: all, local, cloud, voice for realtime voice chats, " +
-              "the provider_id of one observed provider, or superset for the sessions whose " +
-              "workspaces Superset manages. Only meaningful on the sessions tab.",
+            description: "An optional session-list filter.",
           },
           sort: {
             type: "string",
             enum: Object.values(SESSION_LIST_SORT),
-            description:
-              "Reorders the session list: urgency puts what needs the developer first, recency puts what moved last first. Only meaningful on the sessions tab.",
+            description: "An optional session-list sort order.",
           },
         },
         required: [],
@@ -1270,22 +1208,18 @@ export const REALTIME_TOOLS = {
     name: "open_feedback_composer",
     family: REALTIME_TOOL_FAMILY.APP,
     schema: {
-      description:
-        "Open the composer for a note the developer sends the founders by hand. " +
-        "It opens and may draft; it never sends — the developer edits and presses Send themselves.",
+      description: "Open the feedback composer.",
       parameters: {
         type: "object",
         properties: {
           kind: {
             type: "string",
             enum: Object.values(FEEDBACK_COMPOSER_KIND),
-            description:
-              "What the note is: feedback about Luke, or a prompt for the founders. A refused ask offered onward is a prompt.",
+            description: "The feedback type.",
           },
           draft: {
             type: "string",
-            description:
-              "Optional starting text: the developer's own ask, in their words. Never words they did not say.",
+            description: "An optional draft.",
           },
         },
         required: ["kind"],

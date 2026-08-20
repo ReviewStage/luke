@@ -241,19 +241,6 @@ test("the standing instructions make Luke the coding agents' engineering manager
   assert.match(instructions, /engineering manager for the developer's coding agents/i);
 });
 
-test("a bare ask for a new agent defaults to a new workspace", () => {
-  // The tool schemas define the default without duplicating it in the
-  // standing instructions.
-  assert.match(
-    REALTIME_TOOLS.CREATE_WORKSPACE.schema.description,
-    /unless its own words name the existing workspace or session/,
-  );
-  assert.match(
-    REALTIME_TOOLS.ADD_WORKSPACE_AGENT.schema.description,
-    /bare ask for a new agent creates a workspace instead/,
-  );
-});
-
 test("a mint response yields a credential with a millisecond expiry", () => {
   const credential = realtimeCredentialFromResponse({
     value: "ek_test_secret",
