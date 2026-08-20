@@ -32,6 +32,24 @@
 Notable changes to Luke, newest first. Each heading is a released version and
 the date its release was published.
 
+## 0.3.3 — 2026-08-20
+
+### Improvements
+
+- Luke marks your sessions held by cmux and opens their exact pane
+  ([#332](https://github.com/ReviewStage/luke/pull/332))
+- Luke keeps your session filter choices across closings and restarts
+  ([#336](https://github.com/ReviewStage/luke/pull/336))
+- Luke groups your local Orca agents under their worktrees
+  ([#333](https://github.com/ReviewStage/luke/pull/333))
+
+### Fixes
+
+- Fixed a stopped voice reply being trimmed past the end of its audio
+  ([#335](https://github.com/ReviewStage/luke/pull/335))
+- Fixed Spotify volume restoration being skipped when the app is installed in
+  its current location ([#329](https://github.com/ReviewStage/luke/pull/329))
+
 ## 0.3.2 — 2026-08-20
 
 ### Improvements
