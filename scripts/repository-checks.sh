@@ -69,6 +69,35 @@ find "$SIDECAR_REPO_ROOT/scripts" -type f -name '*.sh' -print0 |
 
 git -C "$SIDECAR_REPO_ROOT" diff --check
 
+# The Node major is stated in more than one place because different readers look
+# in different files, so they have to agree. `.nvmrc` is what local shells and
+# CI read — the workflows name it as `node-version-file` — and Vercel reads
+# neither it nor the root manifest: it takes `engines.node` from the deployed
+# app and overrides its own dashboard setting with it. A stale `engines`
+# therefore fails nothing and announces nothing local, and quietly ships
+# production on a major no test ever ran on, which is how `22.x` outlived the
+# move to 24. `.nvmrc` is the source; every declared major is checked against it.
+nvmrc_major=$(sed -E 's/^v?([0-9]+).*$/\1/' "$SIDECAR_REPO_ROOT/.nvmrc" | head -1)
+engines_drift=""
+for manifest in "$SIDECAR_REPO_ROOT/package.json" \
+    "$SIDECAR_REPO_ROOT"/apps/*/package.json \
+    "$SIDECAR_REPO_ROOT"/packages/*/package.json; do
+    declared=$(node -e 'const n = require(process.argv[1]).engines?.node; if (n) process.stdout.write(n)' \
+        "$manifest")
+    if [[ -z "$declared" ]]; then
+        continue
+    fi
+    declared_major=$(printf '%s' "$declared" | grep -oE '[0-9]+' | head -1)
+    if [[ "$declared_major" != "$nvmrc_major" ]]; then
+        engines_drift+="${manifest#"$SIDECAR_REPO_ROOT/"}: engines.node \"$declared\" is not Node $nvmrc_major"$'\n'
+    fi
+done
+if [[ -n "$engines_drift" ]]; then
+    printf 'error: every engines.node must name the Node major .nvmrc pins (%s):\n%s' \
+        "$nvmrc_major" "$engines_drift" >&2
+    exit 1
+fi
+
 # The brand artwork has one source and three sets of committed outputs cut from
 # it: the SVGs, the face the renderer draws, and the motions it plays. If the
 # copies no longer match the source, one of them is telling a story the artwork
