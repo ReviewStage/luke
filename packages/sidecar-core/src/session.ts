@@ -297,6 +297,8 @@ export interface ProviderSessionObservation {
   /** Why a completed row became complete, when the provider can distinguish it. */
   completionCause?: SessionCompletionCause;
   observedAt: number;
+  /** Whether this session is a realtime voice/delegation chat. */
+  realtimeVoice?: boolean;
   /** Omitted by an adapter that reads sessions off this machine. */
   location?: SessionLocation;
   /**
@@ -343,6 +345,8 @@ export interface NormalizedSession extends SessionIdentity {
   status: SessionStatus;
   completionCause?: SessionCompletionCause;
   observedAt: number;
+  /** Whether this session is a realtime voice/delegation chat. */
+  realtimeVoice?: boolean;
   location: SessionLocation;
   recap?: string;
   detail: SessionDetail;
@@ -663,6 +667,7 @@ export function normalizeSession(
     spawnableAgents: normalizeSpawnableAgents(observation.spawnableAgents),
     attention: normalizeAttention(attention),
   };
+  if (observation.realtimeVoice === true) session.realtimeVoice = true;
   if (completionCause) session.completionCause = completionCause;
   if (recap) session.recap = recap;
   if (spawnTarget) session.spawnTarget = spawnTarget;

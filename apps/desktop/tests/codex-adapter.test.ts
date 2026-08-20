@@ -5,7 +5,11 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
 import { InMemorySessionRegistry, SESSION_COMPLETION_CAUSE, SESSION_STATUS } from "@sidecar/core";
-import { CODEX_PROVIDER, CodexSessionAdapter } from "../src/codex-adapter";
+import {
+  CODEX_PROVIDER,
+  CodexSessionAdapter,
+  isCodexRealtimeDelegationText,
+} from "../src/codex-adapter";
 import type { ParsedJsonObject } from "./support/json";
 
 const TEST_TIME = Date.parse("2026-08-11T23:45:00.000Z");
@@ -288,6 +292,30 @@ test("keeps a legitimate title that resembles a delegation marker", async (t) =>
   const observations = await adapter.observe();
 
   assert.equal(observations[0]?.title, "<codex_delegation> <source_thread_id>not-a-uuid");
+});
+
+test("recognizes the realtime delegation marker in Codex text", () => {
+  assert.equal(isCodexRealtimeDelegationText("<realtime_delegation> <input>hello</input>"), true);
+  assert.equal(isCodexRealtimeDelegationText("a named chat"), false);
+});
+
+test("keeps realtime delegation sessions suppressed after Codex names the chat", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  await writeCodexState(codexHome, [
+    {
+      id: "codex-realtime-delegation",
+      cwd: "/Users/test/luke",
+      observedAt: TEST_TIME - 1_000,
+      title: "What sessions do we have open?",
+      firstUserMessage: "<realtime_delegation> <input>What sessions do we have open</input>",
+    },
+  ]);
+
+  const adapter = new CodexSessionAdapter({ codexHome, now: () => TEST_TIME });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.title, "What sessions do we have open?");
+  assert.equal(observation?.realtimeVoice, true);
 });
 
 test("addresses a Codex thread by the id Codex files it under", async (t) => {

@@ -516,6 +516,25 @@ html[data-keyboard="true"] button.session-row:focus-visible {
   width: 8.5px;
 }
 
+.row-mark .audio-badge {
+  right: -2px;
+  bottom: -1px;
+  width: 13px;
+  height: 13px;
+}
+
+.row-mark .audio-badge svg {
+  width: 8.5px;
+}
+
+/* Cloud and audio are both badges on the same session. Keep the wave visible
+   over the cloud while preserving the shared corner and their overlap. */
+.row-mark-audio .audio-badge {
+  right: 3px;
+  bottom: 3px;
+  z-index: 1;
+}
+
 .row-copy {
   display: flex;
   min-width: 0;

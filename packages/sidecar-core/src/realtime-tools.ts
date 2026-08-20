@@ -114,6 +114,7 @@ export type AppToolKind = (typeof APP_TOOL_KIND)[keyof typeof APP_TOOL_KIND];
  * validated against the observed roster rather than against a second list.
  */
 export const SESSION_LIST_ALL = "all";
+export const SESSION_LIST_VOICE = "voice";
 
 /** What one validated tool call asks for, ready for the bridge that carries it. */
 export type SessionToolAction =
@@ -731,6 +732,10 @@ function panelFilterAction(
   if (filter === SESSION_LOCATION.LOCAL || filter === SESSION_LOCATION.CLOUD) {
     if (sessions.some((session) => session.location === filter)) return { filter };
     return { reason: `No ${filter} sessions are observed right now.` };
+  }
+  if (filter === SESSION_LIST_VOICE) {
+    if (sessions.some((session) => session.realtimeVoice === true)) return { filter };
+    return { reason: "No voice sessions are observed right now." };
   }
   if (sessions.some((session) => session.providerId === filter)) return { filter };
   return { reason: "No observed session belongs to that provider." };

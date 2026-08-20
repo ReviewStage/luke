@@ -10,7 +10,7 @@ import {
   type SessionSort,
   type SessionView,
 } from "./session-model";
-import { CloudIcon, LaptopIcon, OptionsIcon } from "./settings-icons";
+import { CloudIcon, LaptopIcon, OptionsIcon, VoiceIcon } from "./settings-icons";
 
 /**
  * Rides beside a branch name to say which kind of identifier it is: a branch
@@ -152,6 +152,7 @@ export const SESSION_OPTIONS_BUTTON_ID = "session-options-button";
 function FilterIcon({ filter }: { filter: SessionFilter }): React.JSX.Element | null {
   if (filter === SESSION_FILTER.LOCAL) return <LaptopIcon />;
   if (filter === SESSION_FILTER.CLOUD) return <CloudIcon />;
+  if (filter === SESSION_FILTER.VOICE) return <VoiceIcon />;
   return null;
 }
 

@@ -15,6 +15,7 @@ import {
   REALTIME_CLIENT_EVENT,
   type RealtimeFunctionCall,
   SESSION_LIST_SORT,
+  SESSION_LIST_VOICE,
   SESSION_LOCATION,
   SESSION_STATUS,
 } from "../src";
@@ -95,7 +96,7 @@ function call(name: string, argumentsJson: string): RealtimeFunctionCall {
   return { name, callId: "call-1", argumentsJson };
 }
 
-function observedConductorSession() {
+function observedConductorSession(realtimeVoice = false) {
   return normalizeSession(
     { id: "conductor", displayName: "Conductor" },
     {
@@ -104,6 +105,7 @@ function observedConductorSession() {
       status: SESSION_STATUS.WORKING,
       observedAt: 1_800_000_000_000,
       location: SESSION_LOCATION.CLOUD,
+      ...(realtimeVoice ? { realtimeVoice: true } : undefined),
     },
   );
 }
@@ -317,11 +319,26 @@ test("a spoken panel ask opens a real tab and narrows only to what is observed",
     filter: "cloud",
   });
 
+  assert.deepEqual(show('{"filter":"voice"}'), {
+    kind: "refused",
+    reason: "No voice sessions are observed right now.",
+  });
+
   assert.equal(show('{"tab":"about"}').kind, "refused");
   // A narrowing that would show nothing is refused rather than applied: the
   // panel would fall back to everything, and the sentence would be wrong.
   assert.equal(show('{"filter":"local"}').kind, "refused");
   assert.equal(show('{"filter":"codex"}').kind, "refused");
+
+  const voiceShow = (argumentsJson: string) =>
+    appToolAction(call(REALTIME_TOOL.SHOW_PANEL, argumentsJson), GUIDE, [
+      observedConductorSession(true),
+    ]);
+  assert.deepEqual(voiceShow('{"filter":"voice"}'), {
+    kind: "panel",
+    tab: APP_PANEL_TAB.SESSIONS,
+    filter: SESSION_LIST_VOICE,
+  });
 });
 
 test("a spoken panel ask can reorder the list in the panel's own two words", () => {

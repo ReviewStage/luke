@@ -356,6 +356,19 @@ export function CloudIcon(): React.JSX.Element {
   );
 }
 
+/** Realtime voice sessions: the familiar filled Material Symbols graphic_eq shape. */
+export function VoiceIcon(): React.JSX.Element {
+  return (
+    <Glyph className="filter-icon">
+      <path
+        d="M6 18q-.825 0-1.412-.587Q4 16.825 4 16V8q0-.825.588-1.412Q5.175 6 6 6t1.413.588Q8 7.175 8 8v8q0 .825-.587 1.413Q6.825 18 6 18Zm6 4q-.825 0-1.412-.587Q10 20.825 10 20V4q0-.825.588-1.412Q11.175 2 12 2t1.413.588Q14 3.175 14 4v16q0 .825-.587 1.413Q12.825 22 12 22Zm6-4q-.825 0-1.412-.587Q16 16.825 16 16V8q0-.825.588-1.412Q17.175 6 18 6t1.413.588Q20 7.175 20 8v8q0 .825-.587 1.413Q18.825 18 18 18Z"
+        fill="currentColor"
+        stroke="none"
+      />
+    </Glyph>
+  );
+}
+
 /**
  * The stop glyph every chat surface uses: a filled, slightly rounded square.
  * Filled rather than stroked, because at control size a stroked square reads

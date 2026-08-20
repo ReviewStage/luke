@@ -15,7 +15,7 @@ import {
 } from "../shared/contracts";
 import { type AskHandler, AskLuke } from "./ask-luke";
 import { PANEL_TAB, type PanelTab, TabBar } from "./panel-tabs";
-import { CloudBadge, ProviderMark } from "./provider-marks";
+import { AudioBadge, CloudBadge, ProviderMark } from "./provider-marks";
 import {
   type ArrangedSessions,
   actsOnWorkspace,
@@ -466,12 +466,17 @@ function SessionRow({
   const content = (
     <>
       <span
-        className="row-mark"
+        className={
+          session.realtimeVoice && session.location === SESSION_LOCATION.CLOUD
+            ? "row-mark row-mark-audio"
+            : "row-mark"
+        }
         title={session.model ? `${session.provider} · ${session.model}` : session.provider}
       >
         <span className="visually-hidden">{session.provider}</span>
         <ProviderMark providerId={session.providerId} />
         {session.location === SESSION_LOCATION.CLOUD ? <CloudBadge /> : null}
+        {session.realtimeVoice ? <AudioBadge /> : null}
       </span>
       <span className="row-copy">
         <strong>

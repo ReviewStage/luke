@@ -1081,7 +1081,9 @@ async function reviewSessionAttention(generation: number): Promise<void> {
     // an update about each one to OpenAI on every launch, hundreds of requests
     // rate-limiting the same key the voice opens calls with.
     const reviews = await attentionReviewer.review(
-      rosterRelevantSessions(sessionRegistry.list(), Date.now()),
+      rosterRelevantSessions(sessionRegistry.list(), Date.now()).filter(
+        (session) => session.realtimeVoice !== true,
+      ),
     );
     if (!attentionObservationLoop.isCurrent(generation)) return;
     for (const review of reviews) {
@@ -1144,7 +1146,10 @@ async function announceSessionNotices(sessions: readonly NormalizedSession[]): P
   // that a deterministic alert is never traded away on a model's judgment.
   // Fed before anything is awaited, so passes reach the tracker in order —
   // the retain above included.
-  const notices = sessionNoticeTracker.notices(sessions, now);
+  const notices = sessionNoticeTracker.notices(
+    sessions.filter((session) => session.realtimeVoice !== true),
+    now,
+  );
   if (notices.length === 0) return;
   // No voice, nothing to say it with: without a Realtime credential the
   // renderer cannot open a call, and the panel still shows every state. The
