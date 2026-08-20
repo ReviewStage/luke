@@ -246,8 +246,10 @@ legacy JSON storage), skipping subagent and archived rows.
 it manages are observed by their own providers' adapters, and Superset's
 local state groups them into its workspaces and labels them with its project,
 branch, and pull-request context. Connecting is the CLI's own `auth login`,
-run at the developer's press on the Superset row, and the CLI owns the
-credential throughout; disconnecting is its `auth logout`. While connected,
+run at the developer's press on the Superset row — the Connect a disconnected
+row offers, or the pencil a connected row keeps for signing in again, which
+is how the CLI switches organizations — and the CLI owns the credential
+throughout; disconnecting is its `auth logout`. While connected,
 Superset-managed rows take acts through the CLI's documented commands, each
 invoked directly without a shell, each only as the direct product of a
 developer-opened turn, and each carrying only observed identifiers beside the
