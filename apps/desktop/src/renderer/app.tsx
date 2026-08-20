@@ -133,7 +133,7 @@ import {
 } from "./session-model";
 import { parsePixels } from "./session-motion";
 import { SESSION_OPTIONS_BUTTON_ID, SESSION_OPTIONS_ID } from "./session-parts";
-import { focusSearchField } from "./session-search";
+import { focusSearchField, SESSION_SEARCH_INPUT_ID } from "./session-search";
 import type {
   MicrophoneControl,
   PreferenceWrites,
@@ -141,6 +141,7 @@ import type {
   SupersetControl,
   UpdateControl,
 } from "./settings-panel";
+import { SETTINGS_SEARCH_INPUT_ID } from "./settings-search";
 import {
   credentialSettingsPage,
   PANEL_STAND_DOWN,
@@ -375,6 +376,10 @@ export function App(): React.JSX.Element {
   const [sessionView, setSessionView] = useState<SessionView>(DEFAULT_SESSION_VIEW);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  // The settings search's field, on the sessions search's own terms: the
+  // magnifier beside the tab bar answers for it, and its query lives with the
+  // field in the settings panel — closing here is what lets that query go.
+  const [settingsSearchOpen, setSettingsSearchOpen] = useState(false);
   // The latest is needed from the spoken-settings carrier, which cannot wait
   // a render: two changes asked for in one breath arrive as two calls in one
   // turn, and the second composes against whatever the first just stored.
@@ -673,7 +678,12 @@ export function App(): React.JSX.Element {
       feedbackHeld.current ||
       consentConnectHeld.current ||
       supersetSignInHeld.current,
-    onNotPanel: () => setOptionsOpen(false),
+    onNotPanel: () => {
+      setOptionsOpen(false);
+      // The settings search closes with the shape it was opened on, taking
+      // its query with it: no search survives the panel closing.
+      setSettingsSearchOpen(false);
+    },
     onCapsuleList: () => {
       // A search is a question about the list as it was, so it closes with
       // the panel on the same terms the filter does — a remembered query
@@ -1582,15 +1592,15 @@ export function App(): React.JSX.Element {
   }, [cancelHover, changeMode, changeTab, presentationOf]);
 
   /**
-   * The search summons, from its button or Command-F. It lands on the Sessions
-   * tab whatever is showing — the field it opens is that list's — and the
-   * caret follows the same frame-by-frame seek the ask field needs, because
-   * the field may not be drawn until React has answered.
+   * The session search summons, from its magnifier or Command-F over the
+   * Sessions tab. It lands on that tab — the field it opens is that list's —
+   * and the caret follows the same frame-by-frame seek the ask field needs,
+   * because the field may not be drawn until React has answered.
    */
   const openSearch = useCallback(() => {
     changeTab(PANEL_TAB.SESSIONS);
     setSearchOpen(true);
-    focusSearchField();
+    focusSearchField(SESSION_SEARCH_INPUT_ID);
   }, [changeTab]);
 
   /**
@@ -1602,6 +1612,25 @@ export function App(): React.JSX.Element {
     setSearchOpen(false);
     setSessionView((view) => (view.query === "" ? view : { ...view, query: "" }));
   }, []);
+
+  /**
+   * The settings search summons, from its magnifier beside the tab bar. The
+   * field lives at the head of the front page, so opening from one of the
+   * pages returns there first — the field it opens is that page's — and the
+   * caret follows the same frame-by-frame seek the session search needs.
+   */
+  const openSettingsSearch = useCallback(() => {
+    setSettingsView(SETTINGS_VIEW.ROOT);
+    setSettingsSearchOpen(true);
+    focusSearchField(SETTINGS_SEARCH_INPUT_ID);
+  }, [setSettingsView]);
+
+  /**
+   * Closing the settings search lets go of its query on the session search's
+   * own terms: the query lives with the field in the settings panel, which
+   * clears it the render it finds the field closed.
+   */
+  const closeSettingsSearch = useCallback(() => setSettingsSearchOpen(false), []);
 
   /**
    * The panel standing back down once an errand it stood up is over. The same
@@ -2440,10 +2469,14 @@ export function App(): React.JSX.Element {
       // Find, the way every macOS list answers it. Claimed on the same terms
       // as Command-comma: only while the panel has the keyboard. The lowercase
       // key is deliberate — with Shift held this is some other app's chord.
+      // The key answers for whichever tab is showing: each tab has a search
+      // of its own, and a chord that turned the tab under the press would
+      // search something other than what was being looked at.
       if (event.key === "f" && (event.metaKey || event.ctrlKey)) {
         if (presentation !== PANEL_PRESENTATION.PANEL) return;
         event.preventDefault();
-        openSearch();
+        if (tab === PANEL_TAB.SETTINGS) openSettingsSearch();
+        else openSearch();
         return;
       }
       if (event.key !== "Escape") return;
@@ -2491,7 +2524,8 @@ export function App(): React.JSX.Element {
       else if (tab === PANEL_TAB.SESSIONS && searchOpen) closeSearch();
       else if (tab === PANEL_TAB.SETTINGS && settingsView !== SETTINGS_VIEW.ROOT) {
         setSettingsView(SETTINGS_VIEW.ROOT);
-      } else if (tab === PANEL_TAB.SETTINGS) changeTab(PANEL_TAB.SESSIONS);
+      } else if (tab === PANEL_TAB.SETTINGS && settingsSearchOpen) closeSettingsSearch();
+      else if (tab === PANEL_TAB.SETTINGS) changeTab(PANEL_TAB.SESSIONS);
       else void changeMode(false);
     };
     window.addEventListener("keydown", handleKey);
@@ -2504,12 +2538,15 @@ export function App(): React.JSX.Element {
     changeMode,
     changeTab,
     closeSearch,
+    closeSettingsSearch,
     dismissFeedback,
     discardListening,
     openSearch,
+    openSettingsSearch,
     optionsOpen,
     presentation,
     searchOpen,
+    settingsSearchOpen,
     setSettingsView,
     settingsView,
     signInWaitNow,
@@ -2812,6 +2849,10 @@ export function App(): React.JSX.Element {
             searchOpen={searchOpen}
             onSearchToggle={() => (searchOpen ? closeSearch() : openSearch())}
             onSearchClose={closeSearch}
+            settingsSearchOpen={settingsSearchOpen}
+            onSettingsSearchToggle={() =>
+              settingsSearchOpen ? closeSettingsSearch() : openSettingsSearch()
+            }
             tab={tab}
             onTabChange={changeTab}
             settings={{
@@ -2883,6 +2924,8 @@ export function App(): React.JSX.Element {
               })(),
               onQuit: () => window.sidecar.quit(),
               shortcuts,
+              searchOpen: settingsSearchOpen,
+              onSearchClose: closeSettingsSearch,
               // The same hold the ask field and the session search report
               // through: one caret anywhere in the panel is hands being here.
               onSearchEngaged: changeAskEngagement,

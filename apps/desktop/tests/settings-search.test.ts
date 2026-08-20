@@ -4,6 +4,7 @@ import { PANEL_FORM_FACTOR, REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sideca
 import {
   type SettingsSearchEntry,
   type SettingsSearchInput,
+  type SettingsSearchOutcome,
   searchSettings,
   settingsSearchEntries,
 } from "../src/renderer/settings-search";
@@ -88,19 +89,25 @@ function labels(entries: readonly SettingsSearchEntry[]): readonly string[] {
   return entries.map((entry) => entry.label);
 }
 
+/** The kept rows across every group, in the order the groups draw them. */
+function found(outcome: SettingsSearchOutcome | undefined): readonly SettingsSearchEntry[] {
+  assert.ok(outcome, "the query is a search");
+  return outcome.groups.flatMap((group) => group.items);
+}
+
 test("every setting the guide lists is findable on the page its schema names", () => {
   // The corpus is built from the same guide entries the voice conversation is
   // handed, so a setting Luke can describe is a setting the search can find —
   // under its guide label, on its schema page, carrying its own id as the
-  // landing mark.
+  // landing anchor.
   const input = everythingDrawn();
   const entries = settingsSearchEntries(input);
   for (const setting of settingGuideEntries(input.settings)) {
     assert.ok(isAppSettingId(setting.id), `${setting.id} is a schema id`);
-    const found = entries.find((entry) => entry.label === setting.label);
-    assert.ok(found, `the corpus offers ${setting.label}`);
-    assert.equal(found.page, SETTING_PAGE[setting.id], setting.label);
-    assert.equal(found.target, setting.id, setting.label);
+    const entry = entries.find((candidate) => candidate.id === setting.id);
+    assert.ok(entry, `the corpus offers ${setting.label}`);
+    assert.equal(entry.label, setting.label, setting.id);
+    assert.equal(entry.page, SETTING_PAGE[setting.id], setting.label);
   }
 });
 
@@ -140,13 +147,14 @@ test("a row a page is not drawing is not offered", () => {
   // what a key-shaped query finds, because its toggle is where a key begins.
   const hosted = settingsSearchEntries(searchInput());
   assert.ok(!labels(hosted).includes("OpenAI API key"));
-  const openai = searchSettings(hosted, "openai");
-  assert.ok(openai);
-  assert.ok(labels(openai.results).includes("What Luke runs on"));
+  assert.ok(labels(found(searchSettings(hosted, "openai"))).includes("What Luke runs on"));
 });
 
-test("labels are unique, so a result names exactly one row", () => {
+test("ids and labels are unique, so a result names exactly one row", () => {
+  // The id is the drawn list's key and the landing's anchor; the label is
+  // what a reader tells results apart by. Neither may collide.
   const entries = settingsSearchEntries(everythingDrawn());
+  assert.equal(new Set(entries.map((entry) => entry.id)).size, entries.length);
   assert.equal(new Set(labels(entries)).size, entries.length);
 });
 
@@ -157,68 +165,81 @@ test("a query narrows by every word, case-blind, and a blank query is no search"
 
   const dock = searchSettings(entries, "DOCK");
   assert.ok(dock);
-  assert.deepEqual(labels(dock.results), ["Show Luke in the Dock"]);
+  assert.deepEqual(labels(found(dock)), ["Show Luke in the Dock"]);
+  assert.equal(dock.matched, 1);
   assert.equal(dock.searched, entries.length);
 
-  // Both words must land: "quiet" alone finds two rows, "quiet music" one.
-  const quiet = searchSettings(entries, "quiet");
-  assert.ok(quiet);
-  assert.ok(labels(quiet.results).includes("Quiet Music and Spotify"));
-  assert.ok(labels(quiet.results).includes("Quiet during meetings"));
-  const quietMusic = searchSettings(entries, "quiet music");
-  assert.ok(quietMusic);
-  assert.deepEqual(labels(quietMusic.results), ["Quiet Music and Spotify"]);
+  // Both words must land: "quiet" alone finds several rows, "quiet music" one.
+  const quiet = labels(found(searchSettings(entries, "quiet")));
+  assert.ok(quiet.includes("Quiet Music and Spotify"));
+  assert.ok(quiet.includes("Quiet during meetings"));
+  assert.deepEqual(labels(found(searchSettings(entries, "quiet music"))), [
+    "Quiet Music and Spotify",
+  ]);
 
   // A description is part of the haystack, so a row is found by what it does.
-  const bluetooth = searchSettings(entries, "bluetooth");
-  assert.ok(bluetooth);
-  assert.ok(labels(bluetooth.results).includes("Prefer the Mac's microphone"));
+  const bluetooth = labels(found(searchSettings(entries, "bluetooth")));
+  assert.ok(bluetooth.includes("Prefer the Mac's microphone"));
 
   const captions = searchSettings(entries, "captions");
-  assert.ok(captions);
-  assert.equal(captions.results[0]?.page, SETTINGS_VIEW.VOICE);
+  assert.equal(found(captions)[0]?.page, SETTINGS_VIEW.VOICE);
+});
+
+test("the kept rows come back grouped under their pages, in the pages' order", () => {
+  const entries = settingsSearchEntries(everythingDrawn());
+
+  // "shortcut" lands only on the Keyboard shortcuts page, so one group holds
+  // the three key rows.
+  const shortcuts = searchSettings(entries, "shortcut");
+  assert.ok(shortcuts);
+  assert.equal(shortcuts.groups.length, 1);
+  assert.equal(shortcuts.groups[0]?.page, SETTINGS_VIEW.SHORTCUTS);
+  assert.deepEqual(labels(shortcuts.groups[0]?.items ?? []), [
+    "Talk to Luke",
+    "Ask Luke",
+    "Stop Luke",
+  ]);
+  assert.equal(shortcuts.matched, 3);
+
+  // "key" lands on the front page and two others; the groups keep the front
+  // page's own order, front page first.
+  const keys = searchSettings(entries, "key");
+  assert.ok(keys);
+  assert.equal(keys.groups[0]?.page, SETTINGS_VIEW.ROOT);
+  const pages = keys.groups.map((group) => group.page);
+  assert.deepEqual(
+    pages,
+    [SETTINGS_VIEW.ROOT, SETTINGS_VIEW.SHORTCUTS, SETTINGS_VIEW.CONNECTIONS],
+    "groups follow the nav's order",
+  );
 });
 
 test("the rows that are not settings are found by what they are", () => {
   const entries = settingsSearchEntries(everythingDrawn());
 
-  const shortcuts = searchSettings(entries, "shortcut");
-  assert.ok(shortcuts);
-  assert.deepEqual(labels(shortcuts.results), ["Talk to Luke", "Ask Luke", "Stop Luke"]);
-  for (const entry of shortcuts.results) {
-    assert.equal(entry.page, SETTINGS_VIEW.SHORTCUTS);
-  }
-
   // Every key row answers to "api key": the voice key on the front page and
   // each cloud agent's under Connections.
-  const keys = searchSettings(entries, "api key");
-  assert.ok(keys);
-  assert.ok(labels(keys.results).includes("OpenAI API key"));
+  const keys = labels(found(searchSettings(entries, "api key")));
+  assert.ok(keys.includes("OpenAI API key"));
   for (const provider of CLOUD_AGENT_PROVIDER_LIST) {
-    assert.ok(labels(keys.results).includes(provider.displayName), provider.displayName);
+    assert.ok(keys.includes(provider.displayName), provider.displayName);
   }
 
-  const signOut = searchSettings(entries, "sign out");
-  assert.ok(signOut);
-  assert.ok(labels(signOut.results).includes("Sign out"));
-  assert.equal(
-    signOut.results.find((entry) => entry.label === "Sign out")?.page,
-    SETTINGS_VIEW.ROOT,
-  );
+  const signOut = found(searchSettings(entries, "sign out"));
+  assert.equal(signOut.find((entry) => entry.label === "Sign out")?.page, SETTINGS_VIEW.ROOT);
 });
 
 test("a page's own name finds everything the page holds", () => {
   // Each entry carries its page's word in its haystack, so someone who only
-  // remembers where a row lives can still get there.
+  // remembers where a row lives can still get there — the whole page comes
+  // back as one group.
   const entries = settingsSearchEntries(everythingDrawn());
   const connections = searchSettings(entries, "connections");
   assert.ok(connections);
-  assert.ok(connections.results.length > 0);
-  for (const entry of connections.results) {
-    assert.equal(entry.page, SETTINGS_VIEW.CONNECTIONS);
-  }
+  assert.equal(connections.groups.length, 1);
+  assert.equal(connections.groups[0]?.page, SETTINGS_VIEW.CONNECTIONS);
   assert.equal(
-    connections.results.length,
+    connections.matched,
     entries.filter((entry) => entry.page === SETTINGS_VIEW.CONNECTIONS).length,
   );
 });

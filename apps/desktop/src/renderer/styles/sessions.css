@@ -326,21 +326,12 @@
   }
 }
 
-/* The same pill worn on the Settings front page, where finding a row starts.
-   It stands in that page's arrival stack (base.css lists it with the
-   sections), so it must not also run the pill's own entrance: `both` fills
-   forward, and a filled opacity would hold the pill drawn over a shape that
-   is closing. The transition restates the stack's arrival pair beside the
-   pill's own hover answer, the way `.session-row` does, because one
-   `transition` list is all an element gets. No bottom margin — the page's own
-   gap already spaces the stack. */
+/* The same pill worn at the head of the Settings front page, where finding a
+   row starts. Its stand carries the pin and the ground (settings.css); the
+   pill itself gives up only its margin, because the page's own gap already
+   spaces the stack. */
 .session-search.settings-search {
   margin-bottom: 0;
-  animation: none;
-  transition:
-    opacity var(--duration-exit) var(--motion-exit) var(--row-delay),
-    transform var(--duration-shape) var(--spring) var(--row-delay),
-    border-color var(--duration-hover) ease;
 }
 
 /* Focus answers in the panel's own neutral voice: searching is neither a

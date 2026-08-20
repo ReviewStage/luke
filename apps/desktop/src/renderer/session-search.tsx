@@ -22,17 +22,18 @@ const SEARCH_PLACEHOLDER = "Search sessions…";
 export const SESSION_SEARCH_INPUT_ID = "session-search-input";
 
 /**
- * Puts the caret in the search field, waiting out its arrival on the way — the
+ * Puts the caret in a search field, waiting out its arrival on the way — the
  * same frame-by-frame seek the ask field needs, because the key can arrive
  * with Settings showing and the field not yet drawn. What is already typed is
  * selected rather than kept, so a repeated summons types the next question
- * over the last one instead of appending to it.
+ * over the last one instead of appending to it. The field is named by the
+ * caller, because the settings search opens its own field the same way.
  */
-export function focusSearchField(): () => void {
+export function focusSearchField(fieldId: string): () => void {
   let frame = 0;
   let frames = 0;
   const take = () => {
-    const element = document.getElementById(SESSION_SEARCH_INPUT_ID);
+    const element = document.getElementById(fieldId);
     if (element instanceof HTMLInputElement && getComputedStyle(element).visibility === "visible") {
       element.focus({ preventScroll: true });
       element.select();

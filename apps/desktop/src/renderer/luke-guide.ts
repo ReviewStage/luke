@@ -299,7 +299,8 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "their title, status line, branch, repository, workspace, agent, or model, and counts " +
         "what it left. A search matching nothing offers the matches a filter is hiding rather " +
         "than pretending there are none. Escape clears the query and then closes the field; " +
-        "no spoken ask can search, and no search survives the panel closing.",
+        "no spoken ask can search, and no search survives the panel closing. Command-F answers " +
+        "for whichever tab is showing: the sessions list here, the settings search on Settings.",
     },
     {
       label: "Workspaces in the list",
@@ -326,12 +327,13 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
     {
       label: "Searching settings",
       detail:
-        "A search field at the head of the Settings front page finds any row across the pages " +
-        "— a setting by its name or what it does, a provider, a shortcut, a way out. Typing " +
-        "swaps the front page for the matching rows, each naming its page, and pressing one " +
-        "opens that page with the keyboard on the row's own control where it has one. Escape " +
-        "clears the query and then lets go of the field. The search is by hand alone: no " +
-        "spoken ask can search, and no query survives the panel closing.",
+        "The magnifier beside the tab bar — or Command-F — while Settings is showing opens a " +
+        "search field pinned at the head of the front page. It finds any row across the pages — a page " +
+        "itself, a setting by its name or what it does, a provider, a shortcut, a way out. " +
+        "Typing swaps the front page for the matches, grouped under the page that holds each; " +
+        "pressing a page opens it, and pressing a row opens its page and takes the view to the " +
+        "row itself. Escape clears the query and then closes the field. The search is by hand " +
+        "alone: no spoken ask can search, and no search survives the panel closing.",
     },
     {
       label: "What a settings page marks",

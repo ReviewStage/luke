@@ -180,6 +180,73 @@
   flex-basis: 100%;
 }
 
+/* The search pill's stand: pinned to the scroller's top edge the way a page's
+   header is, in the surface's own fill so the rows slide under it rather than
+   through it — the pill is rounded, and the corners it does not cover would
+   otherwise show a row passing. The dissolve band below is the header's, for
+   the header's reason. */
+.settings-search-stand {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  flex: 0 0 auto;
+  background: var(--surface-fill);
+}
+
+.settings-search-stand::after {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  left: 0;
+  height: var(--settings-gap);
+  background: linear-gradient(to bottom, var(--surface-fill), transparent);
+  content: "";
+  pointer-events: none;
+}
+
+/* What keyboard scrolling has to clear while the pill is pinned, on the
+   header's own terms. `--settings-search-height` is the pill's measured rest
+   height: its input line plus the pill's padding and border. */
+.settings:has(> .settings-search-stand) {
+  --settings-search-height: 34px;
+
+  scroll-padding-top: calc(var(--settings-search-height) + var(--settings-gap));
+}
+
+/* A found row nested under the page that holds it, the way macOS System
+   Settings nests them: indented to the head's own text, so the group reads
+   as one page's answers. A front-page row stands headless and unindented —
+   the search is made from the front page, which needs no row naming it. */
+.settings-result[data-nested="true"] {
+  padding-left: 42px;
+}
+
+/* The small mark a found row wears when the row itself wears one — a
+   provider's, or a front-page section's glyph. Inline with the name rather
+   than in a plate: the plate is the page head's, and two plates deep would
+   read as two pages. The marks take the credential rows' own sizes, so a
+   provider reads at the same weight here as on the line the result leads to. */
+.settings-result-mark {
+  display: flex;
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+}
+
+.settings-result-mark .provider-mark {
+  width: 13px;
+  height: 13px;
+}
+
+.settings-result-mark .settings-icon {
+  width: 13px;
+  height: 13px;
+  opacity: 1;
+}
+
 /* The front page's list of pages. The rows sit at a menu's spacing rather
    than a form's — each is one name, so the 9px a section keeps between rows
    of copy would read as gaps, not as calm — and the card's own padding plus
