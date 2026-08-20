@@ -18,8 +18,7 @@ export class ObservationLoop {
 
   constructor(options: ObservationLoopOptions) {
     this.#options = options;
-    this.#runEffect =
-      options.runEffect ?? ((effect) => Effect.runPromise(effect.pipe(Effect.orDie)));
+    this.#runEffect = options.runEffect ?? ((effect) => Effect.runPromise(effect));
   }
 
   get generation(): number {
