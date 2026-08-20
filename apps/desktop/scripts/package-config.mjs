@@ -92,12 +92,35 @@ export function signingModeDefine(env) {
   };
 }
 
+/**
+ * The updater config electron-updater reads from the bundle's own Resources.
+ * Setting the feed at runtime does not spare the file: before every download
+ * the updater reads `updaterCacheDirName` from it (AppUpdater's
+ * downloadUpdate path), so a bundle without one fails with ENOENT the moment
+ * a newer build is found. electron-builder writes this file automatically;
+ * a packager build must write it itself. The URL must equal
+ * `UPDATE_ENDPOINT.UPDATE_FEED_URL` in src/update-service.ts — a packaging
+ * test holds the two together.
+ */
+export const APP_UPDATE_CONFIG_FILE_NAME = "app-update.yml";
+export const APP_UPDATE_FEED_URL = "https://github.com/ReviewStage/luke/releases/latest/download/";
+
+export function appUpdateConfig() {
+  return [
+    "provider: generic",
+    `url: ${APP_UPDATE_FEED_URL}`,
+    "updaterCacheDirName: luke-updater",
+    "",
+  ].join("\n");
+}
+
 export function createPackagerOptions({
   appRoot,
   outputRoot,
   helperPaths,
   iconPath,
   licensePath,
+  appUpdateConfigPath,
   entitlementsPath,
   signing,
   version,
@@ -116,7 +139,7 @@ export function createPackagerOptions({
     overwrite: true,
     prune: false,
     icon: iconPath,
-    extraResource: [...helperPaths, licensePath],
+    extraResource: [...helperPaths, licensePath, appUpdateConfigPath],
     extendInfo: {
       CFBundleDisplayName: "Luke",
       LSMinimumSystemVersion: MACOS_DEPLOYMENT_TARGET,

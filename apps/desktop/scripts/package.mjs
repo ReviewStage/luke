@@ -4,6 +4,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { packager } from "@electron/packager";
 import {
+  APP_UPDATE_CONFIG_FILE_NAME,
+  appUpdateConfig,
   createPackagerOptions,
   ICONSET_SOURCES,
   iconutilArguments,
@@ -27,6 +29,7 @@ const helperPaths = NATIVE_HELPERS.map((helper) =>
 const iconsetPath = path.join(appRoot, ".build", "luke.iconset");
 const iconPath = path.join(appRoot, ".build", "Luke.icns");
 const licensePath = path.join(appRoot, ".build", LICENSE_RESOURCE_NAME);
+const appUpdateConfigPath = path.join(appRoot, ".build", APP_UPDATE_CONFIG_FILE_NAME);
 const entitlementsPath = path.join(appRoot, "native", "macos", "entitlements.plist");
 const desktopPackage = JSON.parse(fs.readFileSync(path.join(appRoot, "package.json"), "utf8"));
 const signing = resolveSigningMode(process.env);
@@ -41,6 +44,7 @@ for (const helperPath of helperPaths) {
 
 fs.mkdirSync(path.dirname(licensePath), { recursive: true });
 fs.copyFileSync(path.join(repoRoot, "LICENSE"), licensePath);
+fs.writeFileSync(appUpdateConfigPath, appUpdateConfig());
 const brandIconDirectory = path.join(repoRoot, "design", "brand", "icon");
 fs.rmSync(iconsetPath, { recursive: true, force: true });
 fs.mkdirSync(iconsetPath, { recursive: true });
@@ -62,6 +66,7 @@ const appPaths = await packager(
     helperPaths,
     iconPath,
     licensePath,
+    appUpdateConfigPath,
     entitlementsPath,
     signing,
     version: desktopPackage.version,
@@ -75,6 +80,17 @@ if (!fs.existsSync(appPath)) throw new Error(`Packaged app was not found: ${appP
 const packagedLicensePath = path.join(appPath, "Contents", "Resources", LICENSE_RESOURCE_NAME);
 if (!fs.existsSync(packagedLicensePath)) {
   throw new Error(`Packaged app is missing the Luke license: ${packagedLicensePath}`);
+}
+// A bundle without this file updates itself to nothing: the failure surfaces
+// only on a packaged build finding a newer release, which no test run does.
+const packagedUpdateConfigPath = path.join(
+  appPath,
+  "Contents",
+  "Resources",
+  APP_UPDATE_CONFIG_FILE_NAME,
+);
+if (!fs.existsSync(packagedUpdateConfigPath)) {
+  throw new Error(`Packaged app is missing its updater config: ${packagedUpdateConfigPath}`);
 }
 const infoPlistPath = path.join(appPath, "Contents", "Info.plist");
 const bundleIconFile = execFileSync(
