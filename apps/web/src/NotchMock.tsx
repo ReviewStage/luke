@@ -199,6 +199,65 @@ function CheckGlyph(): React.JSX.Element {
   );
 }
 
+const DOCK_APPS = ["finder", "safari", "messages", "calendar", "terminal", "settings"] as const;
+
+/**
+ * The Mac around Luke. These are deliberately decorative rather than an
+ * interactive imitation: the landing page is showing where the product
+ * lives, not offering a tiny second operating system to operate.
+ */
+function DesktopChrome(): React.JSX.Element {
+  return (
+    <div className="desktop-chrome" aria-hidden="true">
+      <div className="mac-menu-bar">
+        <div className="mac-menu-left">
+          <span className="apple-mark">●</span>
+          <strong>Finder</strong>
+          <span>File</span>
+          <span>Edit</span>
+          <span>View</span>
+          <span>Go</span>
+          <span>Window</span>
+          <span>Help</span>
+        </div>
+        <div className="mac-menu-right">
+          <span className="menu-status menu-battery" />
+          <span className="menu-status menu-wifi" />
+          <span className="menu-control-center">⌁</span>
+          <span>Tue Aug 19</span>
+          <span>9:41 AM</span>
+        </div>
+      </div>
+
+      <div className="desktop-items">
+        <div className="desktop-item">
+          <span className="desktop-folder" />
+          <span>Luke</span>
+        </div>
+        <div className="desktop-item">
+          <span className="desktop-drive" />
+          <span>Macintosh HD</span>
+        </div>
+      </div>
+
+      <div className="mac-dock">
+        {DOCK_APPS.map((app) => (
+          <span className="dock-slot" data-app={app} key={app}>
+            <span className="dock-icon" />
+          </span>
+        ))}
+        <span className="dock-divider" />
+        <span className="dock-slot" data-app="downloads">
+          <span className="dock-icon" />
+        </span>
+        <span className="dock-slot" data-app="trash">
+          <span className="dock-icon" />
+        </span>
+      </div>
+    </div>
+  );
+}
+
 /** One session, drawn exactly as the renderer's `SessionRow` draws a fixture row. */
 function MockSessionRow({
   session,
@@ -352,6 +411,7 @@ export function NotchMock(): React.JSX.Element {
             a drag cannot select text nobody can see. */}
         <div className="mock" data-mode={mode} role="img" aria-label={MOCK_LABEL} style={mockStyle}>
           <span className="mock-frame" />
+          <DesktopChrome />
 
           {/* Capsule, peek and panel are all this one shape at different sizes,
               so the surface is never cross-faded — it is only ever resized. */}
