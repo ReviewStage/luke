@@ -1,423 +1,236 @@
 # Provider capabilities
 
-What Luke can see and do differs for every provider it connects to, and the
-code cannot state that surface in one place: an adapter has a capability
-exactly when it overrides the method, so the truth is spread across every
-adapter. This document is the one written-down capability surface — what each
-connection observes, what a session row can say, and which acts each provider
-takes — for anyone deciding what Luke can do before reading eight adapters.
-[AGENTS.md](AGENTS.md#provider-capability-documentation) states how it is kept
-current; [PRIVACY.md](PRIVACY.md) covers the same connections from the data's
-point of view and binds harder wherever the two could disagree.
+Luke tells agents from apps: an **agent** is a session provider — the thing a
+conversation belongs to — and an **app** holds agent sessions without becoming
+their provider, the way a Codex chat stays a Codex chat inside Conductor or
+Superset. This document is the one written-down answer to what Luke **reads**
+and what he may **write**, per agent and per app.
+[packages/providers/AGENTS.md](../packages/providers/AGENTS.md#provider-capability-documentation)
+states how it is kept current; [PRIVACY.md](../PRIVACY.md) covers the same
+connections from the data's point of view and binds harder wherever the two
+could disagree.
 
 ## Where a capability lives in code
 
-- `packages/session/src/providers.ts` defines `SessionProviderAdapter`.
-  `SessionProviderAdapterBase` answers unsupported — or none — for every act,
-  so an adapter has a capability exactly when it overrides the method; there
-  is no separate flags object to drift from the behavior.
-- What a session can take right now is advertised per observation:
-  `ProviderSessionObservation` in `packages/session/src/session.ts`
-  carries `canReceiveMessage`, `controls`, `spawnableAgents`, `workspace`,
-  `recap`, `location`, and the address a row press opens. Every act is
-  validated against the latest observation in the renderer and again in the
-  main process, so the observed roster is the outer bound of what any ask can
-  do.
-- The agent kinds and models offerable when creating a workspace or adding an
-  agent are the build-fixed table in
-  `packages/session/src/workspace-agents.ts`; credential shapes and
-  connection kinds live in `packages/credentials/src/credential-providers.ts`;
-  adapters wire in through `packages/providers/src/registrations.ts`.
+- `packages/session/src/providers.ts` defines `SessionProviderAdapter`. The
+  base answers unsupported — or none — for every act, so an adapter has a
+  capability exactly when it overrides the method; there is no flags object to
+  drift from the behavior.
+- What a session can take right now rides its latest
+  `ProviderSessionObservation` (`packages/session/src/session.ts`). Every act
+  is validated against that observation in the renderer and again in the main
+  process, so the observed roster is the outer bound of what any ask can do.
+- Apps are the `SESSION_APPLICATION_ID` set in the same file; offerable agent
+  kinds and models are the table in
+  `packages/session/src/workspace-agents.ts`; credential shapes live in
+  `packages/credentials/src/credential-providers.ts`; adapters wire in through
+  `packages/providers/src/registrations.ts`, with each transcript reader at
+  `packages/providers/src/<agent>/transcript.ts`.
 
-## Session providers at a glance
+## Agents
 
-What each provider's sessions report:
+An agent's local and cloud surfaces are observed separately and can do
+different things, so each surface gets its own row.
 
-| Provider | Id | Sessions | Credential | Lifecycle hook | Recap | Opens at |
-| --- | --- | --- | --- | --- | --- | --- |
-| Claude Code | `claude-code` | Local | None | `settings.json` merge | Designated away summary; archived sessions omitted when local `sessions-index.json` says so | — |
-| Codex | `codex` | Local and cloud | None; cloud via the Codex CLI login | `hooks.json` merge, behind Codex's trust gate | Last agent message (local) | `codex:` thread link (local), task URL (cloud) |
-| Conductor | `conductor` | Cloud | API key | — | Final assistant message, only while idle | `conductor:` deep link |
-| Cursor | `cursor` | Local and cloud | Cloud only | — | Run result (cloud) | Agent URL (cloud) |
-| Devin | `devin` | Local and cloud | Cloud only | — | — | Session URL (cloud) |
-| GitHub Copilot | `copilot` | Cloud | Fine-grained PAT | — | — | Task page URL |
-| Jules | `jules` | Cloud | API key | — | — | Session URL |
-| OpenCode | `opencode` | Local | None | — | — | Share URL, once shared |
+What Luke reads:
 
-What each provider's sessions can take — every act only when the latest
-observation advertised it, and only as the direct product of a turn the
-developer opened:
-
-| Provider | Message | Controls | New workspace | Add agent | Rename | Transcript readout |
-| --- | --- | --- | --- | --- | --- | --- |
-| Claude Code | — | — | — | — | — | Yes |
-| Codex | — | — | Yes, task required (cloud) | — | — | Yes, local sessions |
-| Conductor | While idle or working | `cancel-turn`, `archive-workspace` | Yes, task optional | Yes | Workspace and chat | — |
-| Cursor | After a finished run | `cancel-run`, `archive-agent` | Yes, task required | — | — | Yes, local sessions |
-| Devin | While running or suspended | `archive-session` | — | — | — | Yes, local sessions |
-| GitHub Copilot | — | — | — | — | — | — |
-| Jules | In four documented states | `approve-plan` | — | — | — | — |
-| OpenCode | — | — | — | — | — | Yes |
-
-Sessions Superset manages also take its workspace-level acts — including a
-workspace rename — through its CLI; see
-[Integrations beyond sessions](#integrations-beyond-sessions).
-
-Superset management widens local rows past this table: a session Superset's
-host state binds to one of its terminals gains an address to open at, and —
-with the CLI logged in — the message path, control, and agent adds described
-under [Integrations beyond sessions](#integrations-beyond-sessions), whatever
-its own provider takes.
+| Agent | Surface | Reads | Recap | Transcript readout | Opens at |
+| --- | --- | --- | --- | --- | --- |
+| Claude Code (`claude-code`) | Local | Session files under `~/.claude/projects/` | Designated away summary | Yes | — |
+| Codex (`codex`) | Local | Session index and rollout files under `~/.codex` | Last agent message, or the turn's error | Yes | `codex:` thread |
+| Codex | Cloud | The user's own Codex CLI, under its ChatGPT login | — | — | `chatgpt.com` task page |
+| Conductor (`conductor`) | Cloud | `api.conductor.build`, under an API key | Final assistant message, while idle | — | `conductor:` deep link |
+| Cursor (`cursor`) | Local | Agent transcripts under `~/.cursor/projects/` | — | Yes | — |
+| Cursor | Cloud | `api.cursor.com`, under `CURSOR_API_KEY` | Run result | — | Agent URL |
+| Devin (`devin`) | Local | The Devin CLI's session database | — | Yes | — |
+| Devin | Cloud | `api.devin.ai`, under a `cog_` access token | — | — | Session URL |
+| GitHub Copilot (`copilot`) | Cloud | `api.github.com`, under a fine-grained PAT | — | — | Task page URL |
+| Jules (`jules`) | Cloud | `jules.googleapis.com`, under an API key | — | — | Session URL |
+| OpenCode (`opencode`) | Local | The OpenCode database | — | Yes | Share URL, once shared |
 
 Transcript readout is Luke reading a local session's conversation aloud — or
-into his composer — when asked about that session; a cloud session's
-conversation lives with its provider and is never fetched. Every provider's
-rows also carry the shared observation fields where the provider writes them:
-title, status, repository, branch, model, current tool activity, error, a
-change link such as a pull request, and the size of the change as its
-provider counts it — files touched, lines added and removed — drawn beside
-the checkout. Codex cloud tasks are the one source of those counts today.
+into his composer — when asked; a cloud session's conversation lives with its
+provider and is never fetched. Every row also carries the shared fields where
+its provider writes them: title, status, repository, branch, model, current
+tool activity, error, a change link such as a pull request, and the change's
+size as the provider counts it.
 
-## Claude Code
+What Luke may write — every act only when the latest observation advertised
+it, and only as the direct product of a turn the developer opened:
 
-Local sessions, no credential. Luke reads bounded tails of the session JSONL
-files under `~/.claude/projects/` (honoring `CLAUDE_CONFIG_DIR`), and never
-writes them. The one provider-side write is the observation hook merged into
-the user-level `settings.json`, which records a fixed status token per
-session — start, prompt, stop, stop failure, permission notification, session
-end — into a spool under Luke's own application data.
+| Agent | Surface | Message | Controls | Workspace acts | Hook merge |
+| --- | --- | --- | --- | --- | --- |
+| Claude Code | Local | — | — | — | `settings.json` |
+| Codex | Local | — | — | — | `hooks.json` |
+| Codex | Cloud | — | — | New task (prompt required) | — |
+| Conductor | Cloud | While idle or working | Cancel turn, archive workspace | New workspace (task optional), add agent, rename workspace or chat | — |
+| Cursor | Local | — | — | — | — |
+| Cursor | Cloud | After a finished run | Cancel run, archive agent | New agent (prompt required) | — |
+| Devin | Local | — | — | — | — |
+| Devin | Cloud | While running or suspended | Archive session | — | — |
+| GitHub Copilot | Cloud | — | — | — | — |
+| Jules | Cloud | In four documented states | Approve plan | — | — |
+| OpenCode | Local | — | — | — | — |
 
-- Recap: only the away summary the provider itself designated; Luke never
-  composes one from the assistant tail.
-- Rows carry activity from the current tool call, repository, branch, model,
-  API errors, and a pull-request change link.
-- No address to open, no message path, no controls, no workspace acts.
-- Transcript readout: yes (`packages/providers/src/claude-code/transcript.ts`).
+A hook merge is the one write a local surface makes: an observation hook
+merged into the provider's own user-level configuration, recording fixed
+per-session status tokens — start, prompt, stop and its failure, permission,
+end — into a spool under Luke's own application data. An app can widen a
+local row past this table: a Superset-managed chat gains an address, a message
+path, and workspace acts through Superset's CLI — see [Apps](#apps).
 
-## Codex
+### Agent notes
 
-Local sessions need no credential. Luke reads the read-only session index in
-`state_5.sqlite` under `~/.codex` (honoring `CODEX_HOME`), skipping archived
-threads — a chat filed away in Codex's own UI is not a row — then bounded
-tails of each thread's rollout file. The observation hook merges into `hooks.json`
-and runs only after Codex's own review gate shows it to the user and they
-trust it; its events match Claude Code's minus stop failure.
+The bounds the tables cannot carry:
 
-Cloud tasks are the one CLI-observed surface: Codex documents no key-scoped
-API, so observation runs the user's own Codex CLI — `codex login status` by
-exit code alone, then `codex cloud list --json` — under the ChatGPT login the
-user already gave that CLI. No token is read, stored, or forwarded, and a
-machine whose CLI is absent or signed out is observed as having nothing. The
-newest page is the roster; every few minutes a bounded walk of further pages,
-following the CLI's own cursor, gathers the environments in recent use so
-they can be offered for creation. The Connections page draws the login state
-as a read-only row.
+- **Claude Code** — bounded tails only, honoring `CLAUDE_CONFIG_DIR`, never
+  written. The recap is only the summary the provider itself designated — Luke
+  never composes one — and archived sessions are omitted when the local
+  `sessions-index.json` says so.
+- **Codex, local** — the read-only index in `state_5.sqlite` (honoring
+  `CODEX_HOME`), skipping threads archived in Codex's own UI, then bounded
+  rollout tails. Each thread also carries a ChatGPT app association with its
+  own `codex:` address. A thread spawned by another is its own row, linked by
+  the `parent_thread_id` Codex persists, and a delegated chat is labelled by a
+  name Codex actually keeps — never the raw marker. While a Codex realtime
+  voice conversation is live over a thread, it and the chats it delegated are
+  neither announced nor attention-evaluated, and nothing from inside it is
+  replayed. The hook merge runs only after Codex's own review gate shows it to
+  the user and they trust it.
+- **Codex, cloud** — Codex documents no key-scoped API, so observation runs
+  the user's own CLI — `codex login status` by exit code alone, then
+  `codex cloud list --json` — and no token is read, stored, or forwarded; an
+  absent or signed-out CLI is observed as having nothing. Rows are labelled by
+  the environment's repository — the prompt-derived title is discarded as
+  transcript content. The one write is a new task through
+  `codex cloud exec --env` in an environment the latest observation reported:
+  the prompt is the whole creation, a chosen name is refused because Codex
+  names tasks itself, and only the created task's id is read back. Codex
+  documents no way to message or steer a running task, so the honest absence
+  stands.
+- **Conductor** — beside the session roster, one fixed read-only SQL document
+  over the transcripts view yields each chat's agent kind and recap tail.
+  Conductor hosts agents rather than being one: a chat whose kind maps to
+  Claude Code, Codex, Cursor, or OpenCode reports that agent as its identity,
+  with the Conductor mark riding as an app association. Archive is offered
+  once every open chat in the workspace was seen settled; renames go to a name
+  the developer chose; a new workspace takes its agent, model, and effort from
+  the build's table. Conductor on this Mac is an app — see [Apps](#apps).
+- **Cursor, local** — rows report turn state and failure without Cursor's
+  reason, which is not stored, and the readout renders what Cursor wrote down,
+  which excludes tool outputs.
+- **Cursor, cloud** — cancel and archive are never offered at once; a message
+  is a follow-up run, only after the latest run finished on an unarchived
+  agent; the new agent's task is required because Cursor cannot make an idle
+  workspace.
+- **Devin** — the local database has no address, no recap, and no error
+  detail; the cloud archive is offered only once the turn positively settled.
+- **GitHub Copilot** — fully read-only by design.
+- **Jules** — the one provider authenticated by Google's API-key header; a
+  message is taken while planning, in progress, awaiting plan approval, or
+  awaiting user feedback, and titles fall back to the repository label.
+- **OpenCode** — honors `OPENCODE_DB`, falling back through the XDG data path
+  and the legacy JSON storage; subagent and archived rows are skipped.
 
-- Recap (local): the last agent message from the rollout tail; a failed turn
-  reports its error instead. Cloud tasks carry none.
-- Cloud rows are labelled by the environment's repository — the prompt-derived
-  task title is discarded as transcript content — and map `pending` to
-  working, `ready` and `applied` to complete, and `error` to a failure.
-- Opens at `codex://threads/<id>` locally; a cloud task opens its
-  `chatgpt.com` page.
-- Every local thread also carries a ChatGPT app association with that same
-  thread address — OpenAI's desktop app documents the route — so the small
-  ChatGPT mark after a row's title is a button that opens the exact thread.
-- Sub-agents: a thread spawned by another is its own row with its own status,
-  linked to its parent by the exact `parent_thread_id` Codex persists in the
-  thread's structured source (with the older delegation markers still
-  honored), which is also how a Conductor-hosted parent's association reaches
-  the sub-agent's row.
-- New workspace (cloud): a task started with `codex cloud exec --env`, in an
-  environment the latest observation reported, by id where the list reports
-  one and by label otherwise. The opening task is required — the prompt is
-  the whole creation — a chosen name is refused because Codex names tasks
-  itself, and the one thing read from the answer is the created task's id.
-- No message path and no controls: Codex documents no way to message or steer
-  a task already running, so the honest absence stands.
-- Realtime voice: the rollout tail also says whether a Codex realtime voice
-  conversation is live over a local thread — the world-state snapshots Codex
-  persists carry a `realtime` section, and a delegated turn's
-  `<realtime_delegation>` marker says the same when the snapshot has scrolled
-  past the bounded tail. A thread the developer is speaking with produces no
-  spoken announcements and is left out of attention evaluation while the
-  conversation holds; announcements resume with the first edge after it
-  closes, and nothing from inside it is replayed. A chat born from a realtime
-  delegation is never announced at all, and a chat another conversation
-  delegated — linked back to its source by the delegation marker in the first
-  user message it was born with, so the link survives Codex naming the chat —
-  holds its announcements the same way for as long as the source's voice is
-  live.
-- Delegated chats are labelled by a name Codex actually keeps, never the raw
-  marker: the chat's own newest entry in Codex's `session_index.jsonl` — read
-  as a bounded tail, only on a pass that saw a marker, honoring entries that
-  clear a name — then the source conversation's title or indexed name, then
-  the workspace.
-- Transcript readout: yes for local sessions
-  (`packages/providers/src/codex/transcript.ts`); a cloud task's conversation lives
-  with its provider and is never fetched.
+## Apps
 
-## Conductor
+An app's chats are observed by their own agents' adapters; the app's own state
+is read solely for where those sessions live. Matching is by exact provider
+session id — never by title or filesystem path — and an absent app, an
+unreadable file, or a schema this build does not know means no annotation.
 
-Cloud sessions under a user-supplied API key; nothing is observed without one.
-Luke reads projects, workspaces, sessions, and their statuses from
-`api.conductor.build`, plus one fixed read-only SQL document over the
-transcripts view for each session's agent kind and recap tail. Conductor
-hosts agents rather than being one, so a chat whose agent kind maps to an
-agent this build knows — Claude Code, Codex, Cursor, OpenCode — reports that
-agent as its identity: the row leads with the agent's own mark under the
-cloud badge, the agent's chip and search words match it, and the Conductor
-letter mark rides after the title as an app association whose press opens the
-chat's own deep link. A chat whose agent kind this build cannot map keeps the
-Conductor mark and the kind rides the model label instead. Conductor reports
-`workspace` with itself as manager, so its chats group into a tray named by
-the workspace and carrying the Conductor mark once in its header, and its
-sessions are the ones that list `spawnableAgents`.
+| App | Reads | Adds to matched rows | Writes |
+| --- | --- | --- | --- |
+| ChatGPT | Nothing | A mark opening the exact Codex thread | None |
+| cmux | Hook-session stores under `~/.cmuxterm` | Mark, exact `cmux:` pane address | None |
+| Conductor | Local session index (`conductor.db`) | Mark, workspace grouping | None |
+| Orca | Hook-status cache and worktree names | Mark, worktree grouping | None |
+| Superset | Host state (`host.db`) | Mark, grouping, `superset:` workspace address | Message, open workspace, close terminal, add agent, new workspace, rename, delete workspace — through its CLI, while logged in |
 
-Local Conductor workspaces are an annotation rather than a session provider:
-see [Integrations beyond sessions](#integrations-beyond-sessions).
+### App notes
 
-- Message: while a session is idle or working.
-- Controls: `cancel-turn` mid-turn; `archive-workspace` once every open chat
-  in the workspace was seen settled.
-- New workspace: in any project the latest pass reported, with an optional
-  opening task delivered as the first message, and an agent, model, and
-  effort chosen from the build's table.
-- Add agent: another chat in an observed workspace, as one of the kinds its
-  row's latest observation listed.
-- Rename: the workspace behind an observed row, through
-  `POST …/workspaces/{id}/rename`, or the chat itself, through
-  `POST …/sessions/{id}/rename` — each to a name the developer chose. Every
-  open workspace and chat advertises it — the filed-away ones are never
-  observed — and the workspace target rides each chat's latest observation
-  like a control's.
-- Recap: the final assistant message's tail, only while the chat is idle.
-- Opens through its `conductor:` deep link. No transcript readout — the
-  conversation lives with the provider.
+- **ChatGPT** — nothing of OpenAI's is observed; the mark exists because
+  OpenAI's desktop app documents the route to the exact thread.
+- **cmux** — the stores (honoring `CMUX_AGENT_HOOK_STATE_DIR`) exist only
+  where cmux's own agent hooks do — Claude Code's is injected by cmux's
+  wrapper, the others only after the user runs `cmux hooks setup` — so a
+  session cmux never recorded is honestly unannotated, and a store for an
+  agent Luke has no provider for is not read. Only the three identifiers that
+  place a session in cmux's windows are read. The pane address stands in as
+  the row's own link where no other manager gave it one; no grouping, because
+  cmux names its workspaces only by identifier; no writes, because cmux's
+  control socket is password-guarded and undocumented for outside callers.
+- **Conductor** — the index at
+  `~/Library/Application Support/com.conductor.app/conductor.db` is never used
+  to open an agent transcript, and a schema that predates workspaces annotates
+  without grouping. Conductor documents no exact address or message endpoint
+  for a local chat, so the association adds no open or send control.
+- **Orca** — reads the hook-status cache
+  (`~/Library/Application Support/orca/agent-hooks/last-status.json`) and the
+  worktree names in `orca-data.json`; the cache's conversational fields — the
+  last prompt, a message preview, a tool's input — are never read. A sub-agent
+  inherits through its provider's own parent record, and a chat another
+  manager already groups keeps that workspace with the Orca mark on the row
+  alone.
+- **Superset** — every act runs the CLI's documented command, invoked directly
+  without a shell, in a developer-opened turn, carrying only observed
+  identifiers beside the developer's own words; the login serves one
+  organization at a time, so only rows its own host database recorded offer
+  any act. Rename is `workspaces update` with `--name` alone — never the
+  command's other flags. Delete (`workspaces delete`, the observed workspace
+  id its single argument) is permanent — Superset documents no archive — and
+  takes every chat in the workspace, so it is offered only on a row positively
+  seen settled, carried once on a grouped tray's header, and an archive-worded
+  ask is taken and reported as the delete it is. Connect and Disconnect are
+  the CLI's own `auth login` and `auth logout` at the developer's press on the
+  Superset row; the CLI owns the credential throughout, and signing out
+  withdraws every act while observation continues unchanged.
 
-## Cursor
+## Other connections
 
-Two observers under one provider id. The local half reads bounded tails of
-`~/.cursor/projects/<project>/agent-transcripts/*.jsonl`, labeling workspaces
-from Cursor's own workspace storage; it reports turn state and failure —
-without Cursor's reason, which is not stored — and offers no address and no
-recap. Transcript readout renders what Cursor wrote down, which excludes tool
-outputs. The cloud half reads agents and their latest runs from
-`api.cursor.com` under `CURSOR_API_KEY`, with the repository list on its own
-slower cadence.
+| Connection | Reads | Writes |
+| --- | --- | --- |
+| Linear (`linear`) | The user's assigned issues, under an OAuth grant | Move an issue to an advertised state; add a comment |
+| Google Calendar | Calendar list and free/busy instants, per signed-in account | None |
+| Apple Calendar (`apple-calendar`) | This Mac's calendar list and event instants, behind macOS's own consent | None |
+| OpenAI and the hosted account | Nothing — credentials for voice and the attention review only | None |
+| The updater | This repository's release manifest, unauthenticated | Installs the verified download at a quit |
 
-- Message: a follow-up run, only after the latest run finished on an
-  unarchived agent.
-- Controls: `cancel-run` while a run is underway; `archive-agent` once the
-  latest run positively settled. Never both at once.
-- New workspace: a cloud agent in any repository the latest pass listed; the
-  opening task is required because Cursor cannot make an idle workspace.
-- Recap: the run result. Opens at the agent's URL; the run's pull request is
-  the change link.
-
-## Devin
-
-Two observers under one provider id. The local half reads the Devin CLI's
-read-only session database, reporting activity, repository, and model — no
-address, no recap, no error detail. Transcript readout: yes, from the same
-database. The cloud half reads the organization's sessions from
-`api.devin.ai` v3 under a `cog_`-prefixed personal access token.
-
-- Message: while a session is running or suspended and not archived.
-- Controls: `archive-session`, offered only once the turn positively settled.
-- Opens at the session URL; the pull request is the change link.
-- No workspace acts, no recap.
-
-## GitHub Copilot
-
-Cloud agent tasks under a fine-grained personal access token, read from
-`api.github.com`. The connection is fully read-only by design: no message
-path, no controls, no workspace acts, no recap, no transcript readout. Rows
-carry repository and branch, and open at the task's page URL.
-
-## Jules
-
-Cloud sessions under a user-supplied API key, read from
-`jules.googleapis.com` — the one provider authenticated by Google's API-key
-header rather than a bearer token.
-
-- Message: while a session is planning, in progress, awaiting plan approval,
-  or awaiting user feedback.
-- Controls: `approve-plan`, only while the plan awaits approval.
-- Opens at the session URL. No workspace acts, no recap, no transcript
-  readout. Titles fall back to the repository label.
-
-## OpenCode
-
-Local sessions, no credential. Luke reads the read-only OpenCode database
-(honoring `OPENCODE_DB`, falling back through the XDG data path and the
-legacy JSON storage), skipping subagent and archived rows.
-
-- No hook, no recap, no message path, no controls, no workspace acts.
-- Opens at the session's share URL, once the user has shared it.
-- Rows carry tool activity, repository, model, and turn failures.
-- Transcript readout: yes (`packages/providers/src/opencode/transcript.ts`).
-
-## Integrations beyond sessions
-
-**Superset** is an orchestrator rather than a session provider: the sessions
-it manages are observed by their own providers' adapters, and Superset's
-local state groups them into its workspaces and labels them with its project,
-branch, and pull-request context. Connecting is the CLI's own `auth login`,
-run at the developer's press on the Superset row — the Connect a disconnected
-row offers, or the pencil a connected row keeps for signing in again, which
-is how the CLI switches organizations — and the CLI owns the credential
-throughout; disconnecting is its `auth logout`. While connected,
-Superset-managed rows take acts through the CLI's documented commands, each
-invoked directly without a shell, each only as the direct product of a
-developer-opened turn, and each carrying only observed identifiers beside the
-developer's own words: a message (`terminals send`), opening a workspace
-(`workspaces open`), closing a terminal (`terminals close`), another agent
-with its opening task (`agents create`), a new workspace in a listed project
-with a host, agent, and opening task (`workspaces create`), and renaming an
-observed workspace (`workspaces update` with `--name` alone). Nothing else of
-the CLI is invoked.
-
-**Conductor on this Mac** is the same shape as Superset at the observation
-end, with no act at all: Luke reads Conductor's read-only local session index
-(`~/Library/Application Support/com.conductor.app/conductor.db`), matching
-its sessions to local Claude Code, Codex, Cursor, and OpenCode rows by exact
-provider session id — never by title — and never opening any agent
-transcript through it. A matched row gains the Conductor app association,
-groups under its Conductor workspace — a tray named by the workspace,
-carrying the Conductor mark once in its header, exactly as a Superset
-workspace does — and answers the Conductor filter chip. A Codex sub-agent
-spawned inside a matched chat inherits the association and workspace through
-Codex's own persisted parent-thread record. An absent app or an older schema
-means no annotation, and a schema that predates workspaces still annotates
-without grouping. Conductor documents no exact address or message endpoint
-for a local chat, so the association adds no open or send control.
-
-**Orca on this machine** is the same shape as Conductor: an orchestrator app
-whose sessions are observed by their own providers' adapters, annotated from
-Orca's own local state, with no act at all. Luke reads two of Orca's files
-read-only — the hook-status cache
-(`~/Library/Application Support/orca/agent-hooks/last-status.json`), whose
-entries bind a provider-owned session id to the Orca worktree hosting it, and
-the worktree display names out of its state file (`orca-data.json`) — and
-matches bindings to local Claude Code, Codex, Cursor, Devin, and OpenCode
-rows by exact provider session id, never by title or filesystem path. The
-hook-status cache also carries conversational fields — the last prompt, a
-message preview, a tool's input — and none of them are read. A matched row
-gains the Orca app association, groups under its Orca worktree — named as
-Orca names it, or by the worktree's folder where Orca has not — and answers
-the Orca filter chip; a sub-agent spawned inside a matched chat inherits the
-association and workspace through its provider's own persisted parent record,
-and a chat another manager already groups keeps that manager's workspace with
-the Orca association on the row alone. An absent app, an unreadable file, or
-a hook-status version this build does not know means no annotation. Orca
-registers no per-worktree address and documents no message endpoint for a
-hosted chat, so the association adds no open or send control.
-
-**cmux on this Mac** is the same shape as Conductor, one file format over:
-Luke reads the read-only hook-session stores cmux's own CLI writes under its
-state directory (`~/.cmuxterm/<agent>-hook-sessions.json`, honoring
-`CMUX_AGENT_HOOK_STATE_DIR`), matching its sessions to local Claude Code,
-Codex, Cursor, and OpenCode rows by exact provider session id — never by
-title — and reading of each record only the three identifiers that place the
-session in cmux's own windows. cmux tracks more agent kinds than Luke
-observes; a store for an agent Luke has no provider for is not read. The
-stores exist only where cmux's own agent hooks do: cmux injects Claude Code's
-automatically through its Claude wrapper, but records Codex, Cursor, and
-OpenCode sessions only after the user has run cmux's own `cmux hooks setup`
-(or `cmux hooks <agent> install`) — a session cmux never recorded is honestly
-unannotated, not inferred from a pane or a path. A
-matched row gains the cmux app association and answers the cmux filter chip,
-and — because cmux registers the `cmux://` scheme for its released builds —
-the association carries the pane's exact
-`cmux://workspace/<id>/surface/<id>` address, composed on this machine from
-the observed identifiers. That address also stands in as the row's own link
-where no other manager gave it one, so pressing the row lands in the exact
-cmux pane the agent runs in. A sub-agent inherits its nearest cmux-known
-ancestor's association. cmux names its workspaces only by identifier, so a
-matched row never groups under cmux, and cmux's control socket is
-password-guarded and undocumented for outside callers, so the association
-adds no message path and no controls.
-
-**Linear** (`linear`) is connected by the tracker's own consent page — OAuth
-with PKCE over a loopback redirect, never a typed key or an environment
-variable — and reads one fixed GraphQL document for the user's assigned
-issues. Each issue advertises its available state transitions and whether it
-takes a comment, and the two acts — moving an issue to an advertised state,
-adding a comment — run only as the direct product of a developer-opened turn,
-validated against the observed issue roster in the renderer and again in the
-main process. Disconnecting revokes the grant with Linear as well as deleting
-it locally.
-
-**Google Calendar** is the same consent shape with no write path at all:
-per-account grants read the calendar list and free/busy intervals — start and
-end instants only, so titles cannot even travel. The intervals drive exactly
-one behavior: while a meeting covers now and Quiet during meetings is on,
-spoken announcements hold and the face sleeps.
-
-**Apple Calendar** (`apple-calendar`) is the same read taken locally, with no
-credential at all: a native EventKit helper, behind macOS's own consent
-dialog, reads this Mac's calendar list and the start and end instants of
-events on the calendars the user chose. EventKit publishes no free/busy, so
-the narrowing happens in the helper — titles, attendees, and notes die inside
-its process, and intervals are all that ever reach Luke. One connection at
-most, because the Mac's Calendar already aggregates every account macOS
-holds; disconnecting deletes the stored choice, and the system grant stays
-the user's own in System Settings. The intervals drive the same one behavior
-the Google intervals do, pooled with them.
-
-**Superset** is a workspace manager rather than a session provider: Luke
-reads its local host state (`host/<organization-id>/host.db`) read-only, joins each
-terminal-agent binding to a session another provider already observes, and
-groups those rows under the Superset workspace that owns them — enriched with
-the project, branch, and pull-request link Superset records. Each managed row
-also carries its workspace's own address, `superset://v2-workspace/<id>`,
-composed on this machine from the observed workspace id — the same deep link
-Superset's CLI fires for `workspaces open` — so opening a managed chat is a
-row press like any other: the address goes to the operating system, nothing
-reaches Superset, and no CLI login is needed. Superset documents one address
-per workspace, so chats sharing a workspace open the same place, and a
-session whose own provider reported an address keeps that one instead. With
-Superset's CLI installed and logged in — the login serves one organization at
-a time, so only rows that organization's own host database recorded offer any
-act — a managed row takes the developer's
-message through `terminals send` and offers one control, Delete workspace
-(`superset-delete-workspace`) — Superset documents no archive, so the delete
-is permanent and takes the whole workspace with every chat in it, which is
-why it is offered only on a row positively seen settled, never one still
-working or unreadable, and why grouped chats carry it once on the tray's own
-header. It runs `workspaces delete` with the observed workspace id as its
-single argument, and an archive-worded ask is taken as this delete — the one
-removal Superset takes — with the outcome said as the delete it is. A managed
-row can start another agent in its workspace
-through `agents create`, and a new workspace can be created in a project and
-host the CLI currently lists, with an agent it lists and an opening task,
-through `workspaces create` — followed by the one `workspaces open` the
-creation itself asks for. Signing the CLI out withdraws every act — in a
-terminal, or by disconnecting from Superset's row on the Connections page,
-which runs the CLI's own `auth logout`; observation, and the addresses it
-yields, continue unchanged.
-
-**OpenAI and the hosted account** carry voice and the optional attention
-review. They are credential-only — nothing of theirs is ever observed as a
-session — and the hosted account's daily allowance runs both until a
-user-supplied OpenAI key takes over.
-
-**The updater** is the one thing on the network with no user key:
-electron-updater reads this repository's release manifest from a feed address
-fixed by the build, unauthenticated and carrying nothing about the user. A
-newer build found by any check downloads at once from the same release,
-checksum-verified against the manifest and signature-verified against the
-running app, and installs only at a quit — the Updates row's restart press,
-or the next quit. A failure falls back to the releases page in the browser.
+- **Linear** — connected by the tracker's own consent page, OAuth with PKCE
+  over a loopback redirect — never a typed key or an environment variable —
+  and present only in a build carrying a registered OAuth client. One fixed
+  GraphQL document reads the issues; each issue advertises its available state
+  transitions and whether it takes a comment, the two acts run only as the
+  direct product of a developer-opened turn, validated against the observed
+  issue roster in the renderer and again in the main process, and
+  disconnecting revokes the grant with Linear as well as deleting it locally.
+- **Google Calendar** — the same consent shape with no write path: start and
+  end instants only, so titles cannot even travel. The intervals drive exactly
+  one behavior — while a meeting covers now and Quiet during meetings is on,
+  spoken announcements hold and the face sleeps.
+- **Apple Calendar** — the same read taken locally, with no credential at all:
+  a native EventKit helper, behind macOS's own consent dialog, reads this
+  Mac's calendar list and the start and end instants of events on the
+  calendars the user chose. EventKit publishes no free/busy, so the narrowing
+  happens in the helper — titles, attendees, and notes die inside its process,
+  and intervals are all that ever reach Luke. One connection at most, because
+  the Mac's Calendar already aggregates every account macOS holds;
+  disconnecting deletes the stored choice, and the system grant stays the
+  user's own in System Settings. The intervals are pooled with Google's and
+  drive the same one behavior.
+- **The updater** — the feed address is fixed by the build and the fetch
+  carries nothing about the user; a newer build downloads from the same
+  release, checksum-verified against the manifest and signature-verified
+  against the running app, and a failure falls back to the releases page in
+  the browser.
 
 ## Keeping this document current
 
-When a change adds a provider, widens or narrows what an adapter observes or
-may do, or changes how a credential connects, this document changes in the
-same commit. `scripts/provider-docs.test.mjs` refuses a provider or tracker
-id this file does not name, and `scripts/repository-checks.sh` requires the
-file to exist; everything subtler than an id's presence rests on the rule in
-[AGENTS.md](AGENTS.md#provider-capability-documentation). Widening any
-capability described here is a product decision, not an implementation
-detail.
+When a change adds an agent or app, widens or narrows what an adapter observes
+or may do, or changes how a credential connects, this document changes in the
+same commit. `scripts/provider-docs.test.mjs` refuses a provider or tracker id
+this file does not name, and `scripts/repository-checks.sh` requires the file
+to exist; everything subtler than an id's presence rests on the rule in
+[packages/providers/AGENTS.md](../packages/providers/AGENTS.md#provider-capability-documentation).
+Widening any capability described here is a product decision, not an
+implementation detail.
