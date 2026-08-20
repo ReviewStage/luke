@@ -266,14 +266,14 @@ test("the spoken instructions state what Luke cannot see, and when he may act", 
   // Spoken references stay human: a hash or an id is noise read aloud.
   assert.match(instructions, /identifiers no one says aloud/i);
   // A broad "what are we working on?" spans the roster: Luke answers across
-  // every observed session rather than asking the developer to pick one.
-  assert.match(instructions, /about every observed session/i);
+  // every agent he watches rather than asking the developer to pick one.
+  assert.match(instructions, /about every agent you watch/i);
   // A bare "that chat" has a stated resolution order — this conversation's own
   // most recent mention, then the session under discussion — so the reference
   // is followed rather than guessed at.
   assert.match(instructions, /\[session under discussion\]/);
   assert.match(instructions, /named most recently/);
-  assert.match(instructions, /"it", "that chat", or "that session"/);
+  assert.match(instructions, /"it", "that agent", "that chat", or "that session"/);
   assert.match(instructions, /kept ask is already true when accepted/);
   // Back-to-back replies must not repeat each other, and an act the developer
   // asked for is not narrated twice: no announced intent, and a success is
