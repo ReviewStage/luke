@@ -45,6 +45,7 @@ import {
   realtimeClientSecretRequest,
   realtimeCredentialFromResponse,
   realtimeCredentialIsUsable,
+  realtimeSessionSyncEvents,
   sessionContextEvents,
   sessionContextText,
   sessionToolAction,
@@ -150,6 +151,15 @@ test("the minted session closes the microphone until push-to-talk opens it", () 
   // An always-open microphone is the one thing a desk-side sidecar must not have.
   assert.equal(config.audio.input.turn_detection, null);
   assert.equal(realtimeClientSecretRequest().session.type, REALTIME_SESSION_TYPE);
+});
+
+test("the minted session asks for the developer's spoken words back as text", () => {
+  // The audio already travels to this same service to be heard at all; the
+  // transcription only hands the text back, so the history can hold both
+  // halves of the exchange.
+  assert.deepEqual(realtimeSessionConfig().audio.input.transcription, {
+    model: REALTIME_DEFAULTS.TRANSCRIPTION_MODEL,
+  });
 });
 
 test("the minted session chooses how it gives way at the edge of the window", () => {
@@ -322,12 +332,6 @@ test("every offered pace is recognized and anything else is refused", () => {
   }
 });
 
-test("nothing asks the API for a transcript it will not show", () => {
-  const config = realtimeSessionConfig();
-
-  assert.equal("transcription" in config.audio.input, false);
-});
-
 test("a reply can be stopped by the developer taking the turn", () => {
   // Cancelling is only half of it. The model generates faster than it speaks,
   // so the rest of the sentence has already been sent by the time anyone talks
@@ -402,6 +406,18 @@ test("the keyed mint pins the same input format the appends travel as", () => {
   assert.deepEqual(config.audio.input.format, {
     type: "audio/pcm",
     rate: PRESS_AUDIO_SAMPLE_RATE,
+  });
+});
+
+test("the session sync asks every call for the developer's words back", () => {
+  // The hosted mint composes its session on the service, so the sync the
+  // channel opens with is the one place every call — hosted or keyed — can be
+  // asked to transcribe the developer's spoken turns.
+  const [sync] = realtimeSessionSyncEvents();
+
+  assert.ok(sync && isRecord(sync.session));
+  assert.deepEqual(sync.session.audio, {
+    input: { transcription: { model: REALTIME_DEFAULTS.TRANSCRIPTION_MODEL } },
   });
 });
 
@@ -1169,6 +1185,17 @@ test("inbound events the conversation acts on are parsed, and nothing else is", 
     }),
     { type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STARTED, responseId: "resp-1" },
   );
+  assert.deepEqual(
+    parseRealtimeServerEvent({
+      type: REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_COMPLETED,
+      item_id: "item-2",
+      transcript: "how is the checkout agent doing?",
+    }),
+    {
+      type: REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_COMPLETED,
+      transcript: "how is the checkout agent doing?",
+    },
+  );
   assert.deepEqual(parseRealtimeServerEvent({ type: REALTIME_SERVER_EVENT.RESPONSE_DONE }), {
     type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
     calls: [],
@@ -1207,6 +1234,8 @@ test("inbound events the conversation acts on are parsed, and nothing else is", 
     {},
     { type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_CLEARED },
     { type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA, item_id: "item-1" },
+    // A transcription that came back empty said nothing worth acting on.
+    { type: REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_COMPLETED, transcript: "  " },
     { type: "session.updated" },
   ];
   for (const payload of payloads) {

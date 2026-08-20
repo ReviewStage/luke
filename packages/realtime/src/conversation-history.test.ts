@@ -12,6 +12,7 @@ import {
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
   conversationHistoryText,
+  insertSpokenAskEntry,
   maximumConversationEntries,
   maximumConversationEntryLength,
   sessionActConversationEntry,
@@ -164,6 +165,78 @@ test("the rendering reads oldest first and says who each line speaks for", () =>
   // session, and only while the roster still observes it.
   assert.match(lines[1] ?? "", /\[provider_id=claude-code provider_session_id=session-a\]$/);
   assert.match(lines[4] ?? "", /\[provider_id=claude-code provider_session_id=session-a\]$/);
+});
+
+test("a spoken ask reads as the developer's own words, said rather than typed", () => {
+  const entries = insertSpokenAskEntry([], "how is the checkout agent doing?", undefined);
+
+  const text = conversationHistoryText(entries, []);
+
+  assert.ok(text);
+  assert.match(text, /^- the developer said: "how is the checkout agent doing\?"$/m);
+});
+
+test("a spoken ask lands at its turn's own mark, not where its transcription did", () => {
+  // A completed exchange already stands, and its last entry is the mark the
+  // next spoken turn commits over. The turn's reply outruns the
+  // transcription; the ask still lands between the old exchange and the new
+  // reply — where the turn actually was.
+  const priorReply: ConversationEntry = {
+    kind: CONVERSATION_ENTRY_KIND.REPLY,
+    words: "The checkout work is done.",
+  };
+  const exchange: readonly ConversationEntry[] = [
+    { kind: CONVERSATION_ENTRY_KIND.SPOKEN_ASK, words: "how is checkout going?" },
+    priorReply,
+    { kind: CONVERSATION_ENTRY_KIND.ACT, words: 'sent a message to "checkout-service": "go"' },
+    { kind: CONVERSATION_ENTRY_KIND.REPLY, words: "Sent it over." },
+  ];
+
+  const placed = insertSpokenAskEntry(exchange, "ask that chat to ship it", priorReply);
+
+  assert.deepEqual(
+    placed.map((entry) => entry.words),
+    [
+      "how is checkout going?",
+      "The checkout work is done.",
+      "ask that chat to ship it",
+      'sent a message to "checkout-service": "go"',
+      "Sent it over.",
+    ],
+  );
+
+  // A transcription that beats the reply finds nothing behind its mark and
+  // lands at the end — the order everything was said in.
+  const onTime = insertSpokenAskEntry(exchange.slice(0, 2), "and what broke?", priorReply);
+  assert.deepEqual(
+    onTime.map((entry) => entry.words),
+    ["how is checkout going?", "The checkout work is done.", "and what broke?"],
+  );
+
+  // A turn committed against an empty history belongs at the very front, and
+  // so does one whose mark the bounds have already retired: both are older
+  // than everything recorded since.
+  const first = insertSpokenAskEntry(exchange, "the very first ask", undefined);
+  assert.equal(first[0]?.words, "the very first ask");
+  const retired = insertSpokenAskEntry(exchange, "an ancient ask", {
+    kind: CONVERSATION_ENTRY_KIND.REPLY,
+    words: "long evicted",
+  });
+  assert.equal(retired[0]?.words, "an ancient ask");
+
+  // The same flattening and bounds as an append: nothing left, nothing placed.
+  assert.deepEqual(insertSpokenAskEntry(exchange, "   ", priorReply), exchange);
+  let full: readonly ConversationEntry[] = [];
+  for (let index = 0; index < maximumConversationEntries; index += 1) {
+    full = appendConversationEntry(full, {
+      kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
+      words: `line ${index}`,
+    });
+  }
+  assert.equal(
+    insertSpokenAskEntry(full, "one more", full.at(-1)).length,
+    maximumConversationEntries,
+  );
 });
 
 test("a line whose session left the roster keeps its words and drops the identity", () => {

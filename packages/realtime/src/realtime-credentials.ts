@@ -99,6 +99,10 @@ export function realtimeSessionConfig(options: RealtimeSessionOptions = {}) {
         // call and never reads this.
         format: { type: "audio/pcm", rate: PRESS_AUDIO_SAMPLE_RATE },
         turn_detection: null,
+        // The developer's spoken turns come back as text, so their own words
+        // can enter the conversation history beside Luke's. The audio already
+        // travels to this same service to be heard at all.
+        transcription: { model: REALTIME_DEFAULTS.TRANSCRIPTION_MODEL },
       },
       output: {
         voice: trimmedText(options.voice) ?? REALTIME_DEFAULTS.VOICE,
@@ -113,7 +117,12 @@ export function realtimeSessionConfig(options: RealtimeSessionOptions = {}) {
   };
 }
 
-/** Reasserts the local build's instructions and tools after any credential source opens a call. */
+/**
+ * Reasserts the local build's instructions and tools after any credential
+ * source opens a call. The transcription rides along for the same reason: the
+ * hosted mint composes its session on the service, so the one place every
+ * call can be asked to hand the developer's words back is the call itself.
+ */
 export function realtimeSessionSyncEvents(): readonly WireRecord[] {
   const built = [
     {
@@ -123,6 +132,7 @@ export function realtimeSessionSyncEvents(): readonly WireRecord[] {
         instructions: realtimeInstructions(),
         tools: realtimeToolDefinitions(),
         tool_choice: "auto",
+        audio: { input: { transcription: { model: REALTIME_DEFAULTS.TRANSCRIPTION_MODEL } } },
       },
     },
   ];

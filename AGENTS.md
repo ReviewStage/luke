@@ -359,7 +359,8 @@ What Luke may show:
   issues, or a transcript rendering, which travel only on conversations the
   developer opens, and the rendering only in the turn that asked for it. A
   developer-opened conversation also carries a bounded history of the recent
-  exchange itself — the developer's typed asks, the words Luke already spoke
+  exchange itself — the developer's own asks, typed or spoken and handed back
+  as text by the same service that heard them, the words Luke already spoke
   or announced, and the acts he carried at the developer's ask — so the one
   conversation survives the calls that transport it: an announcement read out
   on Luke's own call, or a call retired idle, is still remembered by the next

@@ -5,6 +5,7 @@ export {
   type ConversationEntry,
   type ConversationEntryKind,
   conversationHistoryText,
+  insertSpokenAskEntry,
   maximumConversationEntries,
   maximumConversationEntryLength,
   sessionActConversationEntry,

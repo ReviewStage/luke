@@ -10,6 +10,7 @@ import {
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
   dispatchByKind,
+  insertSpokenAskEntry,
   REALTIME_STATUS,
   type RealtimeStatus,
   type RealtimeVoice,
@@ -567,6 +568,39 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     voiceSession.current?.updateConversation(conversationRef.current);
   }, []);
 
+  /**
+   * Where the spoken turn now owed a transcription belongs in the history:
+   * the entry the history ended with at the moment the turn committed —
+   * everything recorded after that mark is the turn's own produce. Marked at
+   * the commit edge, consumed by the transcription, and overwritten by the
+   * next commit, so a transcription that never arrives leaves nothing stale
+   * standing.
+   */
+  const spokenTurnMarkRef = useRef<{ after: ConversationEntry | undefined } | undefined>(undefined);
+  /** The status an edge is read against, for the commit mark above. */
+  const previousVoiceStatus = useRef<RealtimeStatus>(REALTIME_STATUS.IDLE);
+
+  /**
+   * Records a spoken ask where its turn happened rather than where its
+   * transcription landed: the words come back on the service's own clock,
+   * sometimes after the reply they asked for has ended, and an exchange
+   * stored in reverse would be re-fed in reverse to every later call. A
+   * transcription with no mark to land on — a turn delivered without a
+   * listening edge — appends plainly, which is the order said in the common
+   * case of the words beating the reply.
+   */
+  const rememberSpokenAsk = useCallback((transcript: string) => {
+    const mark = spokenTurnMarkRef.current;
+    spokenTurnMarkRef.current = undefined;
+    conversationRef.current = mark
+      ? insertSpokenAskEntry(conversationRef.current, transcript, mark.after)
+      : appendConversationEntry(conversationRef.current, {
+          kind: CONVERSATION_ENTRY_KIND.SPOKEN_ASK,
+          words: transcript,
+        });
+    voiceSession.current?.updateConversation(conversationRef.current);
+  }, []);
+
   const ensureVoiceSession = useCallback((): RealtimeVoiceSession => {
     voiceSession.current ??= new RealtimeVoiceSession({
       requestConnection: () => window.sidecar.requestRealtimeCredential(),
@@ -657,9 +691,13 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
         if (about || spokeTranscript) return;
         rememberConversationEntry({ kind: CONVERSATION_ENTRY_KIND.REPLY, words: texts.join(" ") });
       },
+      // The developer's spoken words, back from the service that heard them,
+      // placed where their turn happened: the thread holds both halves of
+      // the exchange, in the order they were said.
+      onSpokenAsk: rememberSpokenAsk,
     });
     return voiceSession.current;
-  }, [rememberConversationEntry, setVoiceStatus]);
+  }, [rememberConversationEntry, rememberSpokenAsk, setVoiceStatus]);
 
   /**
    * The announcer that lets Luke speak into silence: it queues the notices the
@@ -1051,6 +1089,17 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     if (voiceStatus === REALTIME_STATUS.LISTENING) {
       transcriptSpokenRef.current = false;
     }
+    // A spoken turn committing — the microphone closing into a reply — is the
+    // moment its ask belongs at: the words come back later, on the
+    // transcription's own clock, and this mark is what lets them land where
+    // the turn actually was rather than behind a reply that outran them.
+    if (
+      previousVoiceStatus.current === REALTIME_STATUS.LISTENING &&
+      voiceStatus === REALTIME_STATUS.RESPONDING
+    ) {
+      spokenTurnMarkRef.current = { after: conversationRef.current.at(-1) };
+    }
+    previousVoiceStatus.current = voiceStatus;
     // Any settled status ends the wait the press started, however it ended:
     // listening takes the meter live, ready means the turn was dropped
     // mid-handshake, and a failure has its own message to show. Unless the

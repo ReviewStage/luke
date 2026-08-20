@@ -7,7 +7,8 @@
  * and re-fed to whichever call the developer opens next.
  *
  * Every line already traveled to the voice service once, on the call that
- * said it: the developer's own typed asks, the words Luke spoke or announced,
+ * said it: the developer's own asks — typed, or spoken and handed back as
+ * text by the service that heard them — the words Luke spoke or announced,
  * and the acts he carried at the developer's ask. Nothing else may enter —
  * not a roster, not a transcript rendering, not an outcome a provider
  * answered with — and the record lives in memory alone, dying with the app.
@@ -21,6 +22,8 @@ import { type CarriedSessionAction, dispatchByKind, SESSION_TOOL_KIND } from "./
 export const CONVERSATION_ENTRY_KIND = {
   /** The developer's own words, typed into Luke's composer. */
   TYPED_ASK: "typed-ask",
+  /** The developer's own spoken turn, as the voice service transcribed it. */
+  SPOKEN_ASK: "spoken-ask",
   /** The words Luke spoke as a conversation reply. */
   REPLY: "reply",
   /** The bounded announcement payload Luke put in front of the developer. */
@@ -68,11 +71,43 @@ export function appendConversationEntry(
   entries: readonly ConversationEntry[],
   entry: ConversationEntry,
 ): readonly ConversationEntry[] {
-  const words = entry.words.replace(/\s+/g, " ").trim().slice(0, maximumConversationEntryLength);
+  const words = boundedEntryWords(entry.words);
   if (!words) return entries;
   const appended: ConversationEntry = { kind: entry.kind, words };
   if (entry.identity) appended.identity = entry.identity;
   return [...entries, appended].slice(-maximumConversationEntries);
+}
+
+/** One flattening and one bound for every line, however it enters. */
+function boundedEntryWords(words: string): string {
+  return words.replace(/\s+/g, " ").trim().slice(0, maximumConversationEntryLength);
+}
+
+/**
+ * Places a spoken ask where its turn actually happened. The transcription
+ * arrives on the service's own clock — usually while the reply is still being
+ * spoken, sometimes after it has ended — and a plain append would then store
+ * Luke's answer ahead of the developer's question, re-feeding a reversed
+ * exchange to the next call. The place is the caller's mark, not a guess
+ * against the entries: `after` is the entry the history ended with at the
+ * moment the spoken turn committed — everything behind it is that turn's own
+ * produce — or nothing for a turn committed against an empty history, which
+ * belongs at the very front. A mark the bounds have already retired lands
+ * there too: an ask older than everything left comes before all of it.
+ */
+export function insertSpokenAskEntry(
+  entries: readonly ConversationEntry[],
+  words: string,
+  after: ConversationEntry | undefined,
+): readonly ConversationEntry[] {
+  const bounded = boundedEntryWords(words);
+  if (!bounded) return entries;
+  // indexOf answers -1 for a retired mark, so the ask lands at the front —
+  // exactly where an entry older than the whole history belongs.
+  const at = after ? entries.indexOf(after) + 1 : 0;
+  const placed = [...entries];
+  placed.splice(at, 0, { kind: CONVERSATION_ENTRY_KIND.SPOKEN_ASK, words: bounded });
+  return placed.slice(-maximumConversationEntries);
 }
 
 /**
@@ -149,6 +184,7 @@ export function sessionActConversationEntry(
  */
 const CONVERSATION_ENTRY_LEAD = {
   [CONVERSATION_ENTRY_KIND.TYPED_ASK]: "the developer typed",
+  [CONVERSATION_ENTRY_KIND.SPOKEN_ASK]: "the developer said",
   [CONVERSATION_ENTRY_KIND.REPLY]: "Luke said",
   [CONVERSATION_ENTRY_KIND.ANNOUNCEMENT]: "Luke announced",
   [CONVERSATION_ENTRY_KIND.ACT]: "at the developer's ask, Luke",
