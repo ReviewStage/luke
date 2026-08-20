@@ -97,6 +97,8 @@ interface Harness {
   captionSubjects: (string | undefined)[];
   /** The words each ended reply left behind, with its announced subject. */
   replyEndings: { texts: readonly string[]; about: string | undefined }[];
+  /** The developer's spoken turns, as the service handed them back. */
+  spokenAsks: string[];
   microphoneEnabled: () => boolean;
   microphoneStopped: () => boolean;
   emit: (event: JsonValue) => void;
@@ -199,6 +201,7 @@ function harness(
   const captions: (readonly string[] | undefined)[] = [];
   const captionSubjects: (string | undefined)[] = [];
   const replyEndings: { texts: readonly string[]; about: string | undefined }[] = [];
+  const spokenAsks: string[] = [];
   const requests: { url: string; init: RequestInit }[] = [];
   const calls: string[] = [];
   let enabled = false;
@@ -336,6 +339,9 @@ function harness(
         );
       }
     },
+    onSpokenAsk: (transcript) => {
+      spokenAsks.push(transcript);
+    },
   };
   if (options.connectTimeoutMs !== undefined) {
     sessionOptions.connectTimeoutMs = options.connectTimeoutMs;
@@ -364,6 +370,7 @@ function harness(
     captions,
     captionSubjects,
     replyEndings,
+    spokenAsks,
     microphoneEnabled: () => enabled,
     microphoneStopped: () => stopped,
     lukeAudible: () => remoteTrack.enabled,
@@ -1914,6 +1921,35 @@ test("a reply ending at teardown writes nothing back into the retired call", asy
   await armDeveloperTurn(context);
 
   assert.deepEqual(contextItems(context, "[recent conversation", sentBefore), []);
+});
+
+test("the developer's spoken words come back only from their own call", async () => {
+  const context = harness();
+  await context.session.connect();
+
+  context.emit({
+    type: REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_COMPLETED,
+    item_id: "item-1",
+    transcript: "how is the checkout agent doing?",
+  });
+
+  assert.deepEqual(context.spokenAsks, ["how is the checkout agent doing?"]);
+});
+
+test("a speak-only call has no spoken turns to hand back", async () => {
+  const context = harness();
+  await context.session.connect({ microphone: false });
+
+  // The speak-only shape offers no microphone, so a transcription arriving on
+  // it speaks for nobody: the guard keeps a stray event from ever writing a
+  // developer line into the history.
+  context.emit({
+    type: REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_COMPLETED,
+    item_id: "item-1",
+    transcript: "how is the checkout agent doing?",
+  });
+
+  assert.deepEqual(context.spokenAsks, []);
 });
 
 test("a reply hands its words back as it ends, whole and once", async () => {

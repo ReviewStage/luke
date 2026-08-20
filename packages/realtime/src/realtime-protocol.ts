@@ -119,6 +119,13 @@ export const REALTIME_SERVER_EVENT = {
   RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA: "response.output_audio_transcript.delta",
   /** The reply's complete text, which supersedes whatever the deltas built. */
   RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DONE: "response.output_audio_transcript.done",
+  /**
+   * The developer's own spoken turn, as the service transcribed it. It
+   * arrives on its own clock — transcription runs beside the reply, not ahead
+   * of it — and it is the one way their spoken words come back as text at
+   * all, so the conversation history can hold both halves of the exchange.
+   */
+  INPUT_AUDIO_TRANSCRIPTION_COMPLETED: "conversation.item.input_audio_transcription.completed",
   RESPONSE_DONE: "response.done",
   ERROR: "error",
 } as const;
@@ -510,6 +517,10 @@ export type ParsedRealtimeServerEvent =
       itemId?: string;
       transcript: string;
     }
+  | {
+      type: typeof REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_COMPLETED;
+      transcript: string;
+    }
   | { type: typeof REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED; responseId?: string }
   | { type: typeof REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STARTED; responseId?: string }
   | {
@@ -644,6 +655,16 @@ export function parseRealtimeServerEvent(
       };
       if (itemId) parsed.itemId = itemId;
       return parsed;
+    }
+    case REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_COMPLETED: {
+      // A transcription that came back empty said nothing worth a history
+      // line, and a failed one arrives as its own event this parser ignores.
+      const transcript = text(event.transcript);
+      if (!transcript) return undefined;
+      return {
+        type: REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_COMPLETED,
+        transcript,
+      };
     }
     case REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED: {
       // The drain names the response it drained. An old reply's buffer can

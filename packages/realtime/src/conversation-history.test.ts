@@ -166,6 +166,18 @@ test("the rendering reads oldest first and says who each line speaks for", () =>
   assert.match(lines[4] ?? "", /\[provider_id=claude-code provider_session_id=session-a\]$/);
 });
 
+test("a spoken ask reads as the developer's own words, said rather than typed", () => {
+  const entries = appendConversationEntry([], {
+    kind: CONVERSATION_ENTRY_KIND.SPOKEN_ASK,
+    words: "how is the checkout agent doing?",
+  });
+
+  const text = conversationHistoryText(entries, []);
+
+  assert.ok(text);
+  assert.match(text, /^- the developer said: "how is the checkout agent doing\?"$/m);
+});
+
 test("a line whose session left the roster keeps its words and drops the identity", () => {
   const entries = appendConversationEntry([], {
     kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,

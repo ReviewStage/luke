@@ -60,4 +60,11 @@ export const REALTIME_DEFAULTS = {
   MODEL: "gpt-realtime-2.1",
   VOICE: REALTIME_VOICE.CEDAR,
   SPEED: REALTIME_VOICE_SPEED.NORMAL,
+  /**
+   * What transcribes the developer's spoken turns, so their own words can
+   * enter the conversation history beside Luke's. The audio already travels
+   * to the same service to be heard at all; this only asks it to hand the
+   * text back.
+   */
+  TRANSCRIPTION_MODEL: "gpt-4o-mini-transcribe",
 } as const;

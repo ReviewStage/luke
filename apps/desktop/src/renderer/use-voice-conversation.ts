@@ -657,6 +657,11 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
         if (about || spokeTranscript) return;
         rememberConversationEntry({ kind: CONVERSATION_ENTRY_KIND.REPLY, words: texts.join(" ") });
       },
+      // The developer's spoken words, back from the service that heard them:
+      // recorded like a typed ask, so the thread holds both halves of the
+      // exchange whichever way the developer asked.
+      onSpokenAsk: (transcript) =>
+        rememberConversationEntry({ kind: CONVERSATION_ENTRY_KIND.SPOKEN_ASK, words: transcript }),
     });
     return voiceSession.current;
   }, [rememberConversationEntry, setVoiceStatus]);

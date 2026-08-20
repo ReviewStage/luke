@@ -233,6 +233,14 @@ export interface RealtimeVoiceSessionCallbacks {
    * heard); the caller records them so the thread survives the call.
    */
   onReplyEnded?(texts: readonly string[], about: SessionIdentity | undefined): void;
+  /**
+   * The developer's own spoken turn, as the voice service transcribed it. It
+   * arrives on the transcription's clock — often after the reply to it has
+   * already begun — and only from the developer's own call: a speak-only call
+   * offers no microphone, so it has no spoken turns to hand back. The caller
+   * records the words so the thread holds both halves of the exchange.
+   */
+  onSpokenAsk?(transcript: string): void;
 }
 
 /**
@@ -2249,6 +2257,12 @@ export class RealtimeVoiceSession {
           this.#clearSettleTimer();
           this.#armSettleTimer();
         }
+        return;
+      case REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_COMPLETED:
+        // Only the developer's own call has spoken turns to hand back; the
+        // guard is belt to the speak-only shape's suspenders, so a stray
+        // event on Luke's own call can never write a developer line.
+        if (this.#withMicrophone) this.#options.onSpokenAsk?.(event.transcript);
         return;
       case REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED:
         this.#audioEndingsReported = true;
