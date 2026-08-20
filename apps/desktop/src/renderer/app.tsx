@@ -1615,15 +1615,15 @@ export function App(): React.JSX.Element {
 
   /**
    * The settings search summons, from its magnifier beside the tab bar. The
-   * field lives at the head of the front page, so opening from one of the
-   * pages returns there first — the field it opens is that page's — and the
+   * field opens at the head of whichever settings page is showing — the
+   * search reads across every page wherever it is opened from, so there is
+   * no reason to take anyone away from the page they were on — and the
    * caret follows the same frame-by-frame seek the session search needs.
    */
   const openSettingsSearch = useCallback(() => {
-    setSettingsView(SETTINGS_VIEW.ROOT);
     setSettingsSearchOpen(true);
     focusSearchField(SETTINGS_SEARCH_INPUT_ID);
-  }, [setSettingsView]);
+  }, []);
 
   /**
    * Closing the settings search lets go of its query on the session search's
@@ -2522,10 +2522,12 @@ export function App(): React.JSX.Element {
       // from elsewhere in the panel, and it closes the field outright.
       if (optionsOpen) setOptionsOpen(false);
       else if (tab === PANEL_TAB.SESSIONS && searchOpen) closeSearch();
+      // The search field stands on whichever page it was opened over, so it
+      // is the nearer layer than the page itself.
+      else if (tab === PANEL_TAB.SETTINGS && settingsSearchOpen) closeSettingsSearch();
       else if (tab === PANEL_TAB.SETTINGS && settingsView !== SETTINGS_VIEW.ROOT) {
         setSettingsView(SETTINGS_VIEW.ROOT);
-      } else if (tab === PANEL_TAB.SETTINGS && settingsSearchOpen) closeSettingsSearch();
-      else if (tab === PANEL_TAB.SETTINGS) changeTab(PANEL_TAB.SESSIONS);
+      } else if (tab === PANEL_TAB.SETTINGS) changeTab(PANEL_TAB.SESSIONS);
       else void changeMode(false);
     };
     window.addEventListener("keydown", handleKey);

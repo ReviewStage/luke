@@ -45,8 +45,10 @@ import {
  * Searching the Settings tab.
  *
  * The pages hold more rows than anyone remembers the address of, so the tab
- * bar carries a magnifier that opens a search field pinned at the head of the
- * front page. The corpus is everything the pages currently offer: the stored
+ * bar carries a magnifier that opens a search field pinned at the head of
+ * whichever settings page is showing — the search reads across every page
+ * wherever it is opened from. The corpus is everything the pages currently
+ * offer: the stored
  * settings come from the same guide entries the voice conversation is handed
  * — one description of each setting, so the search and Luke's own account of
  * himself cannot drift apart — and the rows that are not settings (a
@@ -533,10 +535,10 @@ export function SettingsSearchButton({
 
 /**
  * The search field: the sessions list's own pill, worn by class rather than
- * copied, pinned at the head of the front page so a scrolled page keeps the
- * field in hand — the same standing the session list's pill has above its
- * scroller. The count is the pill's honesty about how far the query narrowed
- * what the pages offer.
+ * copied, pinned at the head of whichever page it was opened over so a
+ * scrolled page keeps the field in hand — the same standing the session
+ * list's pill has above its scroller. The count is the pill's honesty about
+ * how far the query narrowed what the pages offer.
  *
  * Escape unwinds one layer at a time, the way it does everywhere else in the
  * panel: a held query is cleared first, and only an empty field closes the
@@ -629,10 +631,10 @@ export function SettingsSearch({
  * What a query left, read the way macOS System Settings reads it: each page
  * that holds a match leads its group — glyph, name, and the chevron that
  * promises a page — with the kept rows nested beneath it, each saying why it
- * matched. The front page's rows stand headless at the top, because a search
- * made from the front page needs no row saying where the front page is. An
- * emptied search says so rather than going blank — there is no filter hiding
- * matches here, so there is nothing to offer but the words.
+ * matched. The front page's rows stand headless at the top, because the
+ * front page is home rather than a destination worth naming. An emptied
+ * search says so rather than going blank — there is no filter hiding matches
+ * here, so there is nothing to offer but the words.
  */
 export function SettingsSearchResults({
   search,

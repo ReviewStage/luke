@@ -328,12 +328,13 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
       label: "Searching settings",
       detail:
         "The magnifier beside the tab bar — or Command-F — while Settings is showing opens a " +
-        "search field pinned at the head of the front page. It finds any row across the pages — a page " +
-        "itself, a setting by its name or what it does, a provider, a shortcut, a way out. " +
-        "Typing swaps the front page for the matches, grouped under the page that holds each; " +
-        "pressing a page opens it, and pressing a row opens its page and takes the view to the " +
-        "row itself. Escape clears the query and then closes the field. The search is by hand " +
-        "alone: no spoken ask can search, and no search survives the panel closing.",
+        "search field pinned at the head of whichever settings page is showing, and the search " +
+        "always reads across every page. It finds any row — a page itself, a setting by its " +
+        "name or what it does, a provider, a shortcut, a way out. Typing swaps the page for " +
+        "the matches, grouped under the page that holds each; pressing a page opens it, and " +
+        "pressing a row opens its page and takes the view to the row itself. Escape clears " +
+        "the query, then closes the field, then leaves the page. The search is by hand alone: " +
+        "no spoken ask can search, and no search survives the panel closing.",
     },
     {
       label: "What a settings page marks",

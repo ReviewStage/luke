@@ -204,6 +204,12 @@
   pointer-events: none;
 }
 
+/* On a page with a pinned header the stand pins below it, past the header's
+   own dissolve band, so the two never trade paint at the same edge. */
+.settings:has(> .settings-header) > .settings-search-stand {
+  top: calc(var(--settings-header-height) + var(--settings-gap));
+}
+
 /* What keyboard scrolling has to clear while the pill is pinned, on the
    header's own terms. `--settings-search-height` is the pill's measured rest
    height: its input line plus the pill's padding and border. */
@@ -211,6 +217,17 @@
   --settings-search-height: 34px;
 
   scroll-padding-top: calc(var(--settings-search-height) + var(--settings-gap));
+}
+
+/* Both pinned at once: the header, its gap, the pill, and the pill's gap are
+   all above the first row a keyboard scroll may land on. */
+.settings:has(> .settings-header):has(> .settings-search-stand) {
+  scroll-padding-top: calc(
+    var(--settings-header-height) +
+    var(--settings-gap) +
+    var(--settings-search-height) +
+    var(--settings-gap)
+  );
 }
 
 /* A found row nested under the page that holds it, the way macOS System

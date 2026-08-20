@@ -3331,10 +3331,11 @@ export function SettingsPanel({
         />
       ) : null}
 
-      {view === SETTINGS_VIEW.ROOT && settings && searchOpen ? (
-        /* Finding leads the front page, because the front page is the index:
-           the field stands pinned above everything it can find, and a typed
-           query swaps the sections below it for the rows it kept. */
+      {settings && searchOpen ? (
+        /* The field opens at the head of whichever page is showing — under
+           the page's own pinned header, above the front page's sections —
+           and a typed query swaps the page below it for the rows it kept,
+           read across every page wherever the field was opened from. */
         <SettingsSearch
           query={searchQuery}
           search={search}
@@ -3344,7 +3345,7 @@ export function SettingsPanel({
         />
       ) : null}
 
-      {view === SETTINGS_VIEW.ROOT && search ? (
+      {search ? (
         <SettingsSearchResults
           search={search}
           pageIcon={(page) => SETTINGS_PAGE[page].icon}
@@ -3398,15 +3399,15 @@ export function SettingsPanel({
         </>
       ) : null}
 
-      {view === SETTINGS_VIEW.VOICE && settings ? (
+      {view === SETTINGS_VIEW.VOICE && settings && !search ? (
         <VoiceSection settings={settings} preferences={preferences} microphone={microphone} />
       ) : null}
 
-      {view === SETTINGS_VIEW.APPEARANCE && settings ? (
+      {view === SETTINGS_VIEW.APPEARANCE && settings && !search ? (
         <AppearanceSection settings={settings} preferences={preferences} />
       ) : null}
 
-      {view === SETTINGS_VIEW.SHORTCUTS ? (
+      {view === SETTINGS_VIEW.SHORTCUTS && !search ? (
         <ShortcutSection
           shortcuts={shortcuts}
           {...(settings ? { settings } : undefined)}
@@ -3414,7 +3415,7 @@ export function SettingsPanel({
         />
       ) : null}
 
-      {view === SETTINGS_VIEW.CONNECTIONS && settings ? (
+      {view === SETTINGS_VIEW.CONNECTIONS && settings && !search ? (
         <>
           <CredentialsSection
             settings={settings}
