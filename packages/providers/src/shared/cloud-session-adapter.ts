@@ -900,10 +900,17 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
         signal: AbortSignal.timeout(CLOUD_ADAPTER_DEFAULTS.REQUEST_TIMEOUT_MS),
       });
     } catch {
+      // A thrown fetch cannot say which side of the wire failed: a connection
+      // that never opened sent nothing, but a timeout or a reset while the
+      // answer was coming back leaves a request the provider may have already
+      // acted on. So the refusal hedges rather than claims, and the refresh
+      // that follows must actually ask, so a write that did land is reconciled
+      // against the provider instead of the cache still advertising it.
+      this.#lastAttemptAt = Number.NEGATIVE_INFINITY;
       return {
         outcome: {
           status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-          reason: `${name} could not be reached, so nothing was sent.`,
+          reason: `${name} did not answer, so the request may not have landed.`,
         },
       };
     }

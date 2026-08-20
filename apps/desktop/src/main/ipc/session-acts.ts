@@ -150,7 +150,12 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
     const adapter = adapterFor(identity.providerId);
     if (!adapter) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
     const result = await act(adapter, session);
-    if (result.status === PROVIDER_ACT_RESULT_STATUS.ACCEPTED) {
+    // A rejection refreshes like an acceptance: a write whose answer never
+    // arrived may still have landed, so the roster must catch up with the
+    // provider rather than keep advertising what it may have already taken. A
+    // rejection that never reached the network is answered from the adapter's
+    // cache anyway.
+    if (result.status !== PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED) {
       void sessionRegistry.refresh(adapter);
     }
     return countSessionAct(adapter.provider.id, counted, result);
@@ -753,7 +758,7 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
         const fallback = stored?.agent === advertised ? stored : undefined;
         const model = namedModel ?? fallback?.model;
         const effort = namedModel !== undefined ? namedEffort : fallback?.effort;
-        const result = await adapter.spawnWorkspaceAgent({
+        return adapter.spawnWorkspaceAgent({
           providerSessionId: identity.providerSessionId,
           agent: advertised,
           ...(sessionName.value ? { name: sessionName.value } : undefined),
@@ -761,10 +766,6 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
           ...(model ? { model } : undefined),
           ...(effort ? { effort } : undefined),
         });
-        if (result.status === PROVIDER_ACT_RESULT_STATUS.REJECTED) {
-          void sessionRegistry.refresh(adapter);
-        }
-        return result;
       });
     },
   );
