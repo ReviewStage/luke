@@ -2390,7 +2390,7 @@ test("a stop after the reply's audio ran out leaves nothing to trim", async () =
   // turn holds and a stop can still land on it. Every word already reached the
   // room: there is nothing to correct, and a trim measured on the wall clock
   // would ask past the audio's end and be refused.
-  context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED });
+  context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED, response_id: "resp-1" });
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
   const before = context.sent.length;
 
@@ -2402,6 +2402,59 @@ test("a stop after the reply's audio ran out leaves nothing to trim", async () =
       .some((event) => event.type === REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_TRUNCATE),
   );
   assert.equal(context.session.status, REALTIME_STATUS.READY);
+});
+
+test("a stale drain from the spoken half does not skip the follow-up's trim", async () => {
+  let clock = 1_000;
+  const context = harness({ now: () => clock, carryAction: async () => ({ status: "sent" }) });
+  await context.session.connect();
+  context.deliverRemoteTrack();
+  context.session.updateSessions([observedSession("session-a", { canReceiveMessage: true })]);
+  await armDeveloperTurn(context);
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-1" } });
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED, item: { id: "spoken" } });
+  context.session.reportRemoteAudioActive();
+
+  // The reply calls a tool, its follow-up is asked for, and only then does the
+  // spoken half's buffer report itself empty: the drain is the old reply's,
+  // arriving after the follow-up already owns the turn.
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      id: "resp-1",
+      output: [
+        {
+          type: "function_call",
+          name: "send_session_message",
+          call_id: "call-1",
+          arguments:
+            '{"provider_id":"claude-code","provider_session_id":"session-a","text":"run the tests"}',
+        },
+      ],
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED, response_id: "resp-1" });
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-2" } });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED,
+    item: { id: "follow_up" },
+  });
+  clock = 2_000;
+  context.session.reportRemoteAudioActive();
+  clock = 2_800;
+  const before = context.sent.length;
+
+  // A stop mid-follow-up still owes the record a trim: the words cut off were
+  // the follow-up's own, and the stale drain spoke for audio it never played.
+  assert.equal(context.session.stopSpeaking(), true);
+
+  const truncate = context.sent
+    .slice(before)
+    .find((event) => event.type === REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_TRUNCATE);
+  assert.ok(truncate, "the follow-up's record is corrected despite the spoken half's drain");
+  assert.equal(truncate?.item_id, "follow_up");
+  assert.equal(truncate?.audio_end_ms, 800);
 });
 
 test("a stop after response.done clears playback without cancelling finished generation", async () => {

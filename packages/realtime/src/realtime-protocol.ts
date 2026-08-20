@@ -492,7 +492,7 @@ export type ParsedRealtimeServerEvent =
       itemId?: string;
       transcript: string;
     }
-  | { type: typeof REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED }
+  | { type: typeof REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED; responseId?: string }
   | {
       type: typeof REALTIME_SERVER_EVENT.RESPONSE_DONE;
       responseId?: string;
@@ -626,8 +626,17 @@ export function parseRealtimeServerEvent(
       if (itemId) parsed.itemId = itemId;
       return parsed;
     }
-    case REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED:
-      return { type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED };
+    case REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED: {
+      // The drain names the response it drained. An old reply's buffer can
+      // empty after its follow-up was already asked for, and a drain read as
+      // the current reply's would end a turn under audio it never played.
+      const responseId = optionalString(event.response_id);
+      const parsed: ParsedRealtimeServerEvent = {
+        type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED,
+      };
+      if (responseId) parsed.responseId = responseId;
+      return parsed;
+    }
     case REALTIME_SERVER_EVENT.RESPONSE_DONE: {
       const responseId = optionalString(recordField(event, "response")?.id);
       const hasAudio = audioFromDone(event);

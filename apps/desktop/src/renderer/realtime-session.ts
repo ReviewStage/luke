@@ -513,12 +513,18 @@ export class RealtimeVoiceSession {
    */
   #responseOutstanding = false;
   /**
-   * Whether the reply's audio ran out while the server still owed its
-   * `done`. The ending the drain would have made is remembered here and
-   * lands when the `done` arrives, so the turn still closes on the second of
-   * the two events whichever order they come in.
+   * The reply whose audio ran out while the server still owed the turn its
+   * `done`, or false while audio is still owed. The ending the drain would
+   * have made is remembered here and lands when the `done` arrives, so the
+   * turn still closes on the second of the two events whichever order they
+   * come in. The drain keeps the name of the response the server said
+   * drained, because it can be an old reply's arriving late — a tool turn's
+   * spoken half empties after its follow-up was already asked for — and a
+   * stale drain read as the current reply's would end the follow-up under
+   * Luke's own voice, or skip the trim a stop mid-follow-up still owes the
+   * record.
    */
-  #audioDrained = false;
+  #audioDrained: { responseId: string | undefined } | false = false;
   /**
    * Whether an armed reply's calls are being answered and the follow-up
    * voicing their outcomes is still owed. The turn holds through the writes
@@ -1737,12 +1743,26 @@ export class RealtimeVoiceSession {
   #truncateEvents(truncationEventId: string): readonly WireRecord[] {
     const itemId = this.#responseItemId;
     const audibleSince = this.#audibleSince;
-    if (!itemId || audibleSince === undefined || this.#audioDrained) return [];
+    if (!itemId || audibleSince === undefined || this.#currentReplyDrained()) return [];
     return truncateResponseEvents({
       itemId,
       audioEndMs: this.#now() - audibleSince,
       truncationEventId,
     });
+  }
+
+  /**
+   * Whether the reply now under way has played out every word it generated.
+   * Only a drain that is attributably this reply's own says so: an old
+   * reply's late drain speaks for audio the current reply never played. A
+   * drain that named no reply keeps the old reading — it is nearly always
+   * the current one's, and reading it as another's would hold the turn to
+   * the settle backstop.
+   */
+  #currentReplyDrained(): boolean {
+    if (this.#audioDrained === false) return false;
+    const { responseId } = this.#audioDrained;
+    return responseId === undefined || responseId === this.#activeResponseId;
   }
 
   #now(): number {
@@ -2254,7 +2274,7 @@ export class RealtimeVoiceSession {
         // way, the READY an ending would offer is the same edge, and the
         // `done` already gave the hold a clock of its own.
         if (this.#responseOutstanding || this.#followUpPending) {
-          this.#audioDrained = true;
+          this.#audioDrained = { responseId: event.responseId };
           this.#armSettleTimer();
           return;
         }
@@ -2300,7 +2320,7 @@ export class RealtimeVoiceSession {
           // The spoken half's audio already drained — its ending deferred to
           // this `done`, and a reply owing no follow-up ends here, exactly
           // as the drain would have ended it.
-          if (fresh && this.#audioDrained) this.#finishResponse();
+          if (fresh && this.#currentReplyDrained()) this.#finishResponse();
           return;
         }
         if (!fresh) return;
@@ -2322,7 +2342,7 @@ export class RealtimeVoiceSession {
         // The server said the audio ran out before it said the reply was
         // over. That ending waited for this `done` — the conversation held
         // an active response until it — and lands now.
-        if (this.#audioDrained) {
+        if (this.#currentReplyDrained()) {
           this.#finishResponse();
           return;
         }
