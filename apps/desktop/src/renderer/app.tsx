@@ -56,13 +56,13 @@ import {
   SESSION_OPEN_RESULT_STATUS,
   SUPERSET_SIGN_IN_STAGE,
   SUPERSET_WORKSPACE_PROVIDER_ID,
+  VOICE_SOURCE,
 } from "../shared/contracts";
 import type { CredentialProviderId } from "../shared/credential-providers";
 import {
   CREDENTIAL_PROVIDER_LIST,
   CREDENTIAL_PROVIDERS,
   isCredentialProviderId,
-  VOICE_CREDENTIAL_PROVIDER,
 } from "../shared/credential-providers";
 import type { FeedbackImage, FeedbackKind } from "../shared/feedback";
 import { FEEDBACK_KIND, FEEDBACK_LIMITS, feedbackKindForLifecycleEvent } from "../shared/feedback";
@@ -2628,15 +2628,14 @@ export function App(): React.JSX.Element {
       })
       .catch(() => undefined);
     // An empty answer means two different things, told apart by the settings
-    // in hand: with no allowance in play — a key connected, or voice off — it
+    // in hand: with no allowance in play — the key chosen, or voice off — it
     // clears the numbers, because an allowance no longer bought must not keep
     // being shown; while the account is still hosted it is a failed refresh,
     // and the meters keep the last read rather than collapsing to prose over
-    // one dropped request.
+    // one dropped request. Hosted is the resolved source's answer, because a
+    // stored key parked behind the account toggle is still a connected one.
     const snapshot = settings ?? bootstrap.settings;
-    const hostedNow =
-      snapshot.voiceAvailable &&
-      snapshot.credentialSources[VOICE_CREDENTIAL_PROVIDER.id] === CREDENTIAL_SOURCE.NONE;
+    const hostedNow = snapshot.voiceAvailable && snapshot.voiceSource === VOICE_SOURCE.ACCOUNT;
     void window.sidecar
       .requestHostedUsage()
       .then((usage) => {
@@ -2676,11 +2675,12 @@ export function App(): React.JSX.Element {
 
   // Whether voice runs on the account's included allowance right now — the
   // gate every spent-day surface shares, so a key user or a signed-out launch
-  // never wears a meter they do not have.
+  // never wears a meter they do not have. Read off the resolved source, not
+  // the key's absence: a stored key parked behind the account toggle is still
+  // a connected credential, and the allowance is still what a press spends.
   const voiceSettings = settings ?? bootstrap?.settings;
   const hostedVoiceNow =
-    voiceSettings?.voiceAvailable === true &&
-    voiceSettings.credentialSources[VOICE_CREDENTIAL_PROVIDER.id] === CREDENTIAL_SOURCE.NONE;
+    voiceSettings?.voiceAvailable === true && voiceSettings.voiceSource === VOICE_SOURCE.ACCOUNT;
   const voiceReading = hostedVoiceReading({
     hosted: hostedVoiceNow,
     usage: hostedUsage?.voice,
@@ -2924,9 +2924,16 @@ export function App(): React.JSX.Element {
             onOpenSession={openSession}
             writes={sessionWrites}
             ask={askLuke}
-            onAskEngaged={changeAskEngagement}
+            // Reaching for the composer during a spent day is answered before
+            // a keystroke: the caret arriving re-announces the spent caption
+            // on the strip below, the same sentence the run-out was told with,
+            // so the state is read where the reply would land rather than
+            // discovered by an ask being refused.
+            onAskEngaged={(engaged) => {
+              changeAskEngagement(engaged);
+              if (engaged && voiceSpentNote) announceVoiceNotice(voiceSpentNote);
+            }}
             {...(shownAskHotkey ? { askShortcut: shownAskHotkey } : undefined)}
-            {...(voiceSpentNote ? { askNotice: voiceSpentNote } : undefined)}
             offerOptions={offerOptions}
             optionsOpen={optionsOpen}
             onOptionsToggle={() => setOptionsOpen((open) => !open)}

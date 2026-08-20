@@ -947,7 +947,14 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       }
       const spent =
         session.status === REALTIME_STATUS.UNAVAILABLE ? await spentAllowanceNote() : undefined;
-      return askRefusal(session.status, spent);
+      const refusal = askRefusal(session.status, spent);
+      // The refusal lands where the reply would have: on the caption strip,
+      // in the notice tone, the same way a talk-key press against a spent
+      // allowance is answered. The composer draws no line of its own — one
+      // mechanism, one look — and a failure's red already on the strip
+      // outranks this, so the two never fight for the box.
+      setVoiceNotice(refusal);
+      return refusal;
     },
     [ensureVoiceSession, spentAllowanceNote, startConversation],
   );

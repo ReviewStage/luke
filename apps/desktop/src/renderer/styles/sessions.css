@@ -1144,17 +1144,3 @@ html[data-keyboard="true"] button.row-main:focus-visible {
     opacity: 0.45;
   }
 }
-
-/* Why the ask could not go, said once under the pill and replaced by typing.
-   A sent ask draws nothing here: the reply beginning is the confirmation. It
-   wears the attention orange the session rows warn in rather than the muted
-   gray of a hint: a refusal is news, and in gray it reads as decoration —
-   or, worse, not at all, leaving the unanswered ask looking like a fault. */
-.ask-luke-refusal {
-  overflow: hidden;
-  padding: 0 14px;
-  color: var(--state-attention);
-  font-size: 10px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
