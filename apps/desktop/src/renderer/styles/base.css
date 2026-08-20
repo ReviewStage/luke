@@ -39,6 +39,7 @@
   --mark-linear: #5e6ad2;
   --mark-opencode: #ffffff;
   --mark-opencode-block: #5a5858;
+  --mark-orca: #ffffff;
   --mark-superset-top: #b9b7b5;
   --mark-superset-bottom: #858483;
 
@@ -881,6 +882,16 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 .provider-mark[data-mark="opencode"] {
   color: var(--mark-opencode);
   transform: scale(0.94);
+}
+
+/* Orca's whale mark is half again as wide as it is tall, so fitted to the
+   box's width it carries less ink than the square marks; a modest uniform
+   scale brings it to their optical weight without touching the proportion.
+   Orca publishes the silhouette in the light form its own dark surface uses,
+   like Copilot, Cursor, and Devin. */
+.provider-mark[data-mark="orca"] {
+  color: var(--mark-orca);
+  transform: scale(1.18);
 }
 
 /* Superset's bracket mark is two and a half times as wide as it is tall, and

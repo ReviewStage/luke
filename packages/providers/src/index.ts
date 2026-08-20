@@ -4,6 +4,11 @@ export {
   ConductorSessionApplicationSnapshot,
 } from "./conductor/session-applications.js";
 export { ObservationHookRegistry } from "./hook-registry.js";
+export {
+  defaultOrcaDataDirectory,
+  OrcaWorkspaceReader,
+  OrcaWorkspaceSnapshot,
+} from "./orca/workspaces.js";
 export { type ProviderRegistration, providerRegistrations } from "./registrations.js";
 export { canIgnoreFilesystemError, readDirectory } from "./shared/local-session-adapter.js";
 export {

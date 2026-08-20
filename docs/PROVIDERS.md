@@ -293,6 +293,27 @@ means no annotation, and a schema that predates workspaces still annotates
 without grouping. Conductor documents no exact address or message endpoint
 for a local chat, so the association adds no open or send control.
 
+**Orca on this machine** is the same shape as Conductor: an orchestrator app
+whose sessions are observed by their own providers' adapters, annotated from
+Orca's own local state, with no act at all. Luke reads two of Orca's files
+read-only — the hook-status cache
+(`~/Library/Application Support/orca/agent-hooks/last-status.json`), whose
+entries bind a provider-owned session id to the Orca worktree hosting it, and
+the worktree display names out of its state file (`orca-data.json`) — and
+matches bindings to local Claude Code, Codex, Cursor, Devin, and OpenCode
+rows by exact provider session id, never by title or filesystem path. The
+hook-status cache also carries conversational fields — the last prompt, a
+message preview, a tool's input — and none of them are read. A matched row
+gains the Orca app association, groups under its Orca worktree — named as
+Orca names it, or by the worktree's folder where Orca has not — and answers
+the Orca filter chip; a sub-agent spawned inside a matched chat inherits the
+association and workspace through its provider's own persisted parent record,
+and a chat another manager already groups keeps that manager's workspace with
+the Orca association on the row alone. An absent app, an unreadable file, or
+a hook-status version this build does not know means no annotation. Orca
+registers no per-worktree address and documents no message endpoint for a
+hosted chat, so the association adds no open or send control.
+
 **Linear** (`linear`) is connected by the tracker's own consent page — OAuth
 with PKCE over a loopback redirect, never a typed key or an environment
 variable — and reads one fixed GraphQL document for the user's assigned
