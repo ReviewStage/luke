@@ -466,7 +466,11 @@ function SessionRow({
   const content = (
     <>
       <span
-        className={session.realtimeVoice ? "row-mark row-mark-audio" : "row-mark"}
+        className={
+          session.realtimeVoice && session.location === SESSION_LOCATION.CLOUD
+            ? "row-mark row-mark-audio"
+            : "row-mark"
+        }
         title={session.model ? `${session.provider} · ${session.model}` : session.provider}
       >
         <span className="visually-hidden">{session.provider}</span>
