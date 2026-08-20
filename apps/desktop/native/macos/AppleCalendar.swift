@@ -171,9 +171,10 @@ private func declinedByUser(_ event: EKEvent) -> Bool {
 }
 
 /// The busy intervals of the chosen calendars: each event's start and end and
-/// nothing else. All-day entries and events marked free are not meetings —
-/// a birthday must not silence an afternoon — and neither is one the user
-/// declined.
+/// nothing else. All-day entries, events marked free, and cancelled events
+/// are not meetings — a birthday must not silence an afternoon, and neither
+/// may a meeting that is not happening — and one the user declined is not
+/// theirs.
 private func busyIntervals(
     _ store: EKEventStore, from start: Date, to end: Date, calendars: [EKCalendar]
 ) -> [ReportedInterval] {
@@ -184,7 +185,10 @@ private func busyIntervals(
     var intervals: [ReportedInterval] = []
     for event in store.events(matching: predicate) {
         if intervals.count >= MAXIMUM_REPORTED_EVENTS { break }
-        if event.isAllDay || event.availability == .free || declinedByUser(event) { continue }
+        if event.isAllDay || event.availability == .free || event.status == .canceled
+            || declinedByUser(event) {
+            continue
+        }
         guard let startDate = event.startDate, let endDate = event.endDate else { continue }
         intervals.append(
             ReportedInterval(

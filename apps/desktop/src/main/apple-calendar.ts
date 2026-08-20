@@ -282,12 +282,14 @@ export class AppleCalendarReader {
     try {
       const observation = await this.#observeConnection(connection);
       // What the next failing pass stands: a clean read's lists, or a
-      // refusal's emptiness — a transient failure after a withdrawal must
-      // not resurrect what the withdrawal already took.
+      // refusal's emptiness with its `revoked` — a transient failure after a
+      // withdrawal must not resurrect what the withdrawal already took, nor
+      // dress the row back up as connected.
       this.#lastObservation = {
         accountId: observation.accountId,
         calendars: observation.calendars,
         meetings: observation.meetings,
+        ...(observation.revoked ? { revoked: true } : undefined),
       };
       return observation;
     } catch (error) {
@@ -299,6 +301,7 @@ export class AppleCalendarReader {
         accountId: APPLE_CALENDAR_ID,
         calendars: this.#lastObservation?.calendars ?? [],
         meetings: this.#lastObservation?.meetings ?? [],
+        ...(this.#lastObservation?.revoked ? { revoked: true } : undefined),
         failure: `${APPLE_CALENDAR_ID}: ${message}`,
       };
     }

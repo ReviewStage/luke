@@ -145,12 +145,15 @@ test("access withdrawn empties the calendar rather than standing what it held", 
   assert.match(withdrawn?.failure ?? "", /System Settings/);
   assert.deepEqual(withdrawn?.meetings, []);
   assert.deepEqual(withdrawn?.calendars, []);
+  assert.equal(withdrawn?.revoked, true);
 
-  // A transient failure after the withdrawal stands the emptiness, never
-  // resurrecting what the withdrawal already took.
+  // A transient failure after the withdrawal stands the emptiness — and the
+  // withdrawal itself — never resurrecting what it took, nor dressing the
+  // row back up as connected.
   answer = () => new Error("helper went away");
   const failed = await reader.observe();
   assert.deepEqual(failed?.meetings, []);
+  assert.equal(failed?.revoked, true);
   assert.match(failed?.failure ?? "", /helper went away/);
 });
 
