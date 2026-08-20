@@ -249,11 +249,27 @@ test("does not attach unknown Superset agent kinds to a Luke provider", async (t
   database.exec(`
     INSERT INTO workspaces VALUES ('workspace-1', NULL, NULL, 'power-vacation', 'main', 100);
     INSERT INTO terminal_agent_bindings VALUES (
-      'terminal-1', 'workspace-1', 'gemini', 'session-1', 'Start'
+      'terminal-1', 'workspace-1', 'mystery-agent', 'session-1', 'Start'
     );
   `);
   database.close();
 
   const snapshot = await new SupersetWorkspaceReader({ homeDirectory: home }).read();
   assert.equal(snapshot.context(PROVIDER_ID.CODEX, "session-1"), undefined);
+});
+
+test("attaches Superset's Gemini terminals to Gemini CLI rows", async (t) => {
+  const home = await temporarySupersetHome(t);
+  const database = await writeHostDatabase(home, "host-local");
+  createSchema(database);
+  database.exec(`
+    INSERT INTO workspaces VALUES ('workspace-1', NULL, NULL, 'power-vacation', 'main', 100);
+    INSERT INTO terminal_agent_bindings VALUES (
+      'terminal-1', 'workspace-1', 'gemini', 'session-1', 'Start'
+    );
+  `);
+  database.close();
+
+  const snapshot = await new SupersetWorkspaceReader({ homeDirectory: home }).read();
+  assert.equal(snapshot.context(PROVIDER_ID.GEMINI_CLI, "session-1")?.workspaceId, "workspace-1");
 });

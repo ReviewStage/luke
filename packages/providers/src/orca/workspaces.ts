@@ -39,6 +39,7 @@ const ORCA_AGENT_TYPE = {
   CODEX: "codex",
   CURSOR: "cursor",
   DEVIN: "devin",
+  GEMINI: "gemini",
   OPENCODE: "opencode",
 } as const;
 
@@ -55,6 +56,7 @@ export const ORCA_AGENT_BY_TYPE = {
   [ORCA_AGENT_TYPE.CODEX]: { id: PROVIDER_ID.CODEX, displayName: "Codex" },
   [ORCA_AGENT_TYPE.CURSOR]: { id: PROVIDER_ID.CURSOR, displayName: "Cursor" },
   [ORCA_AGENT_TYPE.DEVIN]: { id: PROVIDER_ID.DEVIN, displayName: "Devin" },
+  [ORCA_AGENT_TYPE.GEMINI]: { id: PROVIDER_ID.GEMINI_CLI, displayName: "Gemini CLI" },
   [ORCA_AGENT_TYPE.OPENCODE]: { id: PROVIDER_ID.OPENCODE, displayName: "OpenCode" },
 } as const satisfies Readonly<Record<OrcaAgentType, SessionProvider>>;
 

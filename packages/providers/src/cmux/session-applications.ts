@@ -26,6 +26,7 @@ const CMUX_AGENT_STORE = {
   CLAUDE: "claude",
   CODEX: "codex",
   CURSOR: "cursor",
+  GEMINI: "gemini",
   OPENCODE: "opencode",
 } as const;
 
@@ -41,6 +42,7 @@ const CMUX_PROVIDER_BY_STORE = {
   [CMUX_AGENT_STORE.CLAUDE]: PROVIDER_ID.CLAUDE_CODE,
   [CMUX_AGENT_STORE.CODEX]: PROVIDER_ID.CODEX,
   [CMUX_AGENT_STORE.CURSOR]: PROVIDER_ID.CURSOR,
+  [CMUX_AGENT_STORE.GEMINI]: PROVIDER_ID.GEMINI_CLI,
   [CMUX_AGENT_STORE.OPENCODE]: PROVIDER_ID.OPENCODE,
 } as const satisfies Readonly<Record<CmuxAgentStore, string>>;
 

@@ -293,7 +293,8 @@ is said back to you under the field you typed in.
   Orca.
 - For the cmux terminal on this Mac, Luke opens the small hook-session stores
   cmux's own CLI writes (`~/.cmuxterm/<agent>-hook-sessions.json`, for the
-  Claude Code, Codex, Cursor, and OpenCode agents Luke observes) read-only
+  Claude Code, Codex, Cursor, Gemini CLI, and OpenCode agents Luke observes)
+  read-only
   and reads of each record exactly three identifiers: the agent's own session
   id and the cmux workspace and pane ids holding it. The titles, notification
   text, working directories, transcript paths, and launch commands those

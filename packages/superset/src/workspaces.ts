@@ -24,6 +24,7 @@ const SUPERSET_AGENT_PROVIDER = {
   codex: PROVIDER_ID.CODEX,
   copilot: PROVIDER_ID.COPILOT,
   cursor: PROVIDER_ID.CURSOR,
+  gemini: PROVIDER_ID.GEMINI_CLI,
   opencode: PROVIDER_ID.OPENCODE,
 } as const satisfies Readonly<Record<string, string>>;
 

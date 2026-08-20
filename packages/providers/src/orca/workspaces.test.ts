@@ -17,6 +17,7 @@ const TEST_ORCA_AGENT_TYPE = {
   CODEX: "codex",
   CURSOR: "cursor",
   DEVIN: "devin",
+  GEMINI: "gemini",
   OPENCODE: "opencode",
 } as const;
 
@@ -129,7 +130,13 @@ test("indexes supported provider session ids from Orca's hook status", async (t)
     }),
     "tab-6:leaf-1": hookStatusEntry({
       sessionId: "gemini-local",
-      agentType: "gemini",
+      agentType: TEST_ORCA_AGENT_TYPE.GEMINI,
+      worktreeId: TEST_WORKTREE_ID,
+      receivedAt: 1,
+    }),
+    "tab-9:leaf-1": hookStatusEntry({
+      sessionId: "unmapped-local",
+      agentType: "antigravity",
       worktreeId: TEST_WORKTREE_ID,
       receivedAt: 1,
     }),
@@ -151,13 +158,14 @@ test("indexes supported provider session ids from Orca's hook status", async (t)
     [PROVIDER_ID.CODEX, "codex-local"],
     [PROVIDER_ID.CURSOR, "cursor-local"],
     [PROVIDER_ID.DEVIN, "devin-local"],
+    [PROVIDER_ID.GEMINI_CLI, "gemini-local"],
     [PROVIDER_ID.OPENCODE, "opencode-local"],
   ] as const) {
     assert.equal(snapshot.has(providerId, providerSessionId), true);
   }
 
   assert.equal(snapshot.has(PROVIDER_ID.CLAUDE_CODE, "codex-local"), false);
-  assert.equal(snapshot.has(PROVIDER_ID.CLAUDE_CODE, "gemini-local"), false);
+  assert.equal(snapshot.has(PROVIDER_ID.CLAUDE_CODE, "unmapped-local"), false);
   assert.equal(snapshot.has(PROVIDER_ID.CLAUDE_CODE, "claude-unhoused"), false);
 });
 
