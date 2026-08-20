@@ -8,6 +8,7 @@ import type {
   NormalizedSession,
   ObservedWorkspaceProject,
   PanelFormFactor,
+  ProviderActResult,
   ProviderControlResult,
   ProviderId,
   ProviderMessageResult,
@@ -870,6 +871,22 @@ export interface AppBridge {
     effort?: string,
   ): Promise<ProviderWorkspaceResult>;
   /**
+   * Renames the workspace an observed session runs in, to a name the user
+   * just chose. The renderer names a session it is already drawing and never
+   * the workspace itself: the main process validates the ask against its
+   * registry — only a session whose latest observation advertised a rename
+   * target takes one — and the adapter resolves the workspace from its own
+   * last pass before the provider's documented endpoint is called.
+   */
+  renameSessionWorkspace(identity: SessionIdentity, name: string): Promise<ProviderActResult>;
+  /**
+   * Renames an observed session itself — the chat, where the workspace rename
+   * above renames the group around it — under the same gauntlet: only a
+   * session whose latest observation advertised renaming takes one, judged by
+   * the main process against its own registry.
+   */
+  renameSession(identity: SessionIdentity, name: string): Promise<ProviderActResult>;
+  /**
    * Carries one spoken issue act to the tracker that can take it. The renderer
    * names an issue and a transition it was shown; the main process resolves
    * both against its own latest observation before the tracker client sees
@@ -1032,6 +1049,8 @@ export const channels = {
   withdrawSessionNotice: "app:withdraw-session-notice",
   createSessionWorkspace: "app:create-session-workspace",
   addWorkspaceAgent: "app:add-workspace-agent",
+  renameSessionWorkspace: "app:rename-session-workspace",
+  renameSession: "app:rename-session",
   executeIssueAction: "app:execute-issue-action",
   openIssue: "app:open-issue",
   sendFeedback: "app:send-feedback",

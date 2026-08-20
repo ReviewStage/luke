@@ -239,7 +239,7 @@ test("a refused delete is read back with the event it names", () => {
 
 test("the standing instructions count the tools from the table", () => {
   const instructions = realtimeInstructions();
-  assert.equal(Object.keys(REALTIME_TOOLS).length, 13);
+  assert.equal(Object.keys(REALTIME_TOOLS).length, 15);
   assert.match(instructions, new RegExp(`You have ${spokenRealtimeToolCount()} tools:`));
 });
 
@@ -1116,7 +1116,7 @@ test("a resting-point update is voiced just like a blocking one", () => {
   assert.equal(speech[0]?.disposition, ATTENTION_DISPOSITION.SPEAK_AT_TURN_END);
 });
 
-test("the session is minted with the thirteen acts and nothing wider", () => {
+test("the session is minted with the fifteen acts and nothing wider", () => {
   const config = realtimeSessionConfig();
 
   assert.deepEqual(
@@ -1130,6 +1130,8 @@ test("the session is minted with the thirteen acts and nothing wider", () => {
       REALTIME_TOOL.READ_SESSION_TRANSCRIPT,
       REALTIME_TOOL.CREATE_WORKSPACE,
       REALTIME_TOOL.ADD_WORKSPACE_AGENT,
+      REALTIME_TOOL.RENAME_WORKSPACE,
+      REALTIME_TOOL.RENAME_SESSION,
       REALTIME_TOOL.UPDATE_ISSUE_STATE,
       REALTIME_TOOL.COMMENT_ON_ISSUE,
       REALTIME_TOOL.CHANGE_APP_SETTING,
@@ -1850,6 +1852,103 @@ test("another agent can only be added as a kind the session's own entry lists", 
       ),
       roster,
     ),
+  ];
+  for (const refusal of refusals) assert.equal(refusal.kind, "refused");
+});
+
+test("a workspace can only be renamed where the session's own entry says so", () => {
+  const renameable = normalizeSession(
+    { id: "conductor", displayName: "Conductor" },
+    {
+      providerSessionId: "chat-1",
+      title: "bucharest-v1",
+      status: SESSION_STATUS.WAITING,
+      observedAt: DECIDED_AT,
+      renameTarget: "workspace-1",
+    },
+  );
+  const roster = [renameable, actionableSession()];
+  const identity = '"provider_id":"conductor","provider_session_id":"chat-1"';
+
+  // The roster says the workspace can be renamed; the target itself stays on
+  // the machine, resolved from observed state where the act is performed.
+  assert.match(sessionContextText(roster), /workspace can be renamed/);
+  assert.doesNotMatch(sessionContextText(roster), /workspace-1/);
+
+  assert.deepEqual(
+    sessionToolAction(
+      messageCall(`{${identity},"name":"Payments rollout"}`, REALTIME_TOOL.RENAME_WORKSPACE),
+      roster,
+    ),
+    {
+      kind: "rename-workspace",
+      identity: { providerId: "conductor", providerSessionId: "chat-1" },
+      name: "Payments rollout",
+    },
+  );
+
+  const refusals = [
+    // A session whose entry advertises no rename takes no such ask.
+    sessionToolAction(
+      messageCall(
+        '{"provider_id":"devin","provider_session_id":"devin-1","name":"Payments rollout"}',
+        REALTIME_TOOL.RENAME_WORKSPACE,
+      ),
+      roster,
+    ),
+    // The name keeps its bound.
+    sessionToolAction(
+      messageCall(
+        `{${identity},"name":"${"a".repeat(maximumWorkspaceNameLength + 1)}"}`,
+        REALTIME_TOOL.RENAME_WORKSPACE,
+      ),
+      roster,
+    ),
+    // An ask with no name to rename to is no ask at all.
+    sessionToolAction(messageCall(`{${identity}}`, REALTIME_TOOL.RENAME_WORKSPACE), roster),
+  ];
+  for (const refusal of refusals) assert.equal(refusal.kind, "refused");
+});
+
+test("a chat can only be renamed where its own entry says so", () => {
+  const renameable = normalizeSession(
+    { id: "conductor", displayName: "Conductor" },
+    {
+      providerSessionId: "chat-1",
+      title: "bucharest-v1",
+      status: SESSION_STATUS.WAITING,
+      observedAt: DECIDED_AT,
+      canRename: true,
+    },
+  );
+  const roster = [renameable, actionableSession()];
+  const identity = '"provider_id":"conductor","provider_session_id":"chat-1"';
+
+  assert.match(sessionContextText(roster), /chat can be renamed/);
+
+  assert.deepEqual(
+    sessionToolAction(
+      messageCall(`{${identity},"name":"Payments audit"}`, REALTIME_TOOL.RENAME_SESSION),
+      roster,
+    ),
+    {
+      kind: "rename-session",
+      identity: { providerId: "conductor", providerSessionId: "chat-1" },
+      name: "Payments audit",
+    },
+  );
+
+  const refusals = [
+    // A chat whose entry advertises no rename takes no such ask.
+    sessionToolAction(
+      messageCall(
+        '{"provider_id":"devin","provider_session_id":"devin-1","name":"Payments audit"}',
+        REALTIME_TOOL.RENAME_SESSION,
+      ),
+      roster,
+    ),
+    // An ask with no name to rename to is no ask at all.
+    sessionToolAction(messageCall(`{${identity}}`, REALTIME_TOOL.RENAME_SESSION), roster),
   ];
   for (const refusal of refusals) assert.equal(refusal.kind, "refused");
 });

@@ -38,7 +38,14 @@ Trust constraints:
   preset returned by the CLI's latest read, and only through the documented
   `workspaces create` command invoked directly without a shell. Luke supplies
   the developer's opening task and a bounded generated branch, then may call
-  `workspaces open` for the identifier that creation returned. The connection
+  `workspaces open` for the identifier that creation returned. Renaming a
+  workspace is the same exception narrower still: only in a developer-opened
+  turn, only on a workspace behind an observed roster row, and only through
+  the documented `workspaces update` command invoked directly without a
+  shell, carrying nothing but that workspace's observed id and host and the
+  developer's own bounded new name behind `--name` — never the command's
+  other flags, which link and unlink tasks this exception does not authorize
+  touching. The connection
   itself is bounded the same way at both ends: Connect runs the CLI's own
   `auth login` and Disconnect its documented `auth logout` — each only at the
   developer's press on the Superset row, each invoked directly with arguments

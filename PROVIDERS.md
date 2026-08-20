@@ -48,16 +48,20 @@ What each provider's sessions can take — every act only when the latest
 observation advertised it, and only as the direct product of a turn the
 developer opened:
 
-| Provider | Message | Controls | New workspace | Add agent | Transcript readout |
-| --- | --- | --- | --- | --- | --- |
-| Claude Code | — | — | — | — | Yes |
-| Codex | — | — | Yes, task required (cloud) | — | Yes, local sessions |
-| Conductor | While idle or working | `cancel-turn`, `archive-workspace` | Yes, task optional | Yes | — |
-| Cursor | After a finished run | `cancel-run`, `archive-agent` | Yes, task required | — | Yes, local sessions |
-| Devin | While running or suspended | `archive-session` | — | — | Yes, local sessions |
-| GitHub Copilot | — | — | — | — | — |
-| Jules | In four documented states | `approve-plan` | — | — | — |
-| OpenCode | — | — | — | — | Yes |
+| Provider | Message | Controls | New workspace | Add agent | Rename | Transcript readout |
+| --- | --- | --- | --- | --- | --- | --- |
+| Claude Code | — | — | — | — | — | Yes |
+| Codex | — | — | Yes, task required (cloud) | — | — | Yes, local sessions |
+| Conductor | While idle or working | `cancel-turn`, `archive-workspace` | Yes, task optional | Yes | Workspace and chat | — |
+| Cursor | After a finished run | `cancel-run`, `archive-agent` | Yes, task required | — | — | Yes, local sessions |
+| Devin | While running or suspended | `archive-session` | — | — | — | Yes, local sessions |
+| GitHub Copilot | — | — | — | — | — | — |
+| Jules | In four documented states | `approve-plan` | — | — | — | — |
+| OpenCode | — | — | — | — | — | Yes |
+
+Sessions Superset manages also take its workspace-level acts — including a
+workspace rename — through its CLI; see
+[Integrations beyond sessions](#integrations-beyond-sessions).
 
 Transcript readout is Luke reading a local session's conversation aloud — or
 into his composer — when asked about that session; a cloud session's
@@ -157,6 +161,12 @@ named by the workspace, and the one provider whose sessions list
   effort chosen from the build's table.
 - Add agent: another chat in an observed workspace, as one of the kinds its
   row's latest observation listed.
+- Rename: the workspace behind an observed row, through
+  `POST …/workspaces/{id}/rename`, or the chat itself, through
+  `POST …/sessions/{id}/rename` — each to a name the developer chose. Every
+  open workspace and chat advertises it — the filed-away ones are never
+  observed — and the workspace target rides each chat's latest observation
+  like a control's.
 - Recap: the final assistant message's tail, only while the chat is idle.
 - Opens through its `conductor:` deep link. No transcript readout — the
   conversation lives with the provider.
@@ -225,6 +235,22 @@ legacy JSON storage), skipping subagent and archived rows.
 - Transcript readout: yes (`apps/desktop/src/opencode-transcript.ts`).
 
 ## Integrations beyond sessions
+
+**Superset** is an orchestrator rather than a session provider: the sessions
+it manages are observed by their own providers' adapters, and Superset's
+local state groups them into its workspaces and labels them with its project,
+branch, and pull-request context. Connecting is the CLI's own `auth login`,
+run at the developer's press on the Superset row, and the CLI owns the
+credential throughout; disconnecting is its `auth logout`. While connected,
+Superset-managed rows take acts through the CLI's documented commands, each
+invoked directly without a shell, each only as the direct product of a
+developer-opened turn, and each carrying only observed identifiers beside the
+developer's own words: a message (`terminals send`), opening a workspace
+(`workspaces open`), closing a terminal (`terminals close`), another agent
+with its opening task (`agents create`), a new workspace in a listed project
+with a host, agent, and opening task (`workspaces create`), and renaming an
+observed workspace (`workspaces update` with `--name` alone). Nothing else of
+the CLI is invoked.
 
 **Linear** (`linear`) is connected by the tracker's own consent page — OAuth
 with PKCE over a loopback redirect, never a typed key or an environment

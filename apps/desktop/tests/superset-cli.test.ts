@@ -164,6 +164,10 @@ test("message and controls use fixed arguments without a shell", async (t) => {
     (await cli.createAgent(CONTEXT, "claude", "Review the change")).status,
     PROVIDER_ACT_RESULT_STATUS.ACCEPTED,
   );
+  assert.equal(
+    (await cli.renameWorkspace(CONTEXT, "Payments rollout")).status,
+    PROVIDER_ACT_RESULT_STATUS.ACCEPTED,
+  );
   assert.deepEqual(calls, [
     {
       executable: path.join(home, "bin", "superset"),
@@ -215,7 +219,49 @@ test("message and controls use fixed arguments without a shell", async (t) => {
         "--json",
       ],
     },
+    {
+      executable: path.join(home, "bin", "superset"),
+      // No `--json` rides the rename: `workspaces update` does not document
+      // it, and nothing reads the output.
+      arguments_: [
+        "workspaces",
+        "update",
+        "workspace-1",
+        "--host",
+        "host-1",
+        "--name",
+        "Payments rollout",
+      ],
+    },
   ]);
+});
+
+test("a refused rename answers with the CLI's own bounded error line", async (t) => {
+  const home = await connectedHome(t);
+  const cli = new SupersetCli({
+    ...testCliOptions(home),
+    run: async () => {
+      throw Object.assign(new Error("exit 1"), {
+        stderr: "error: unknown option '--host'\nusage: superset workspaces update <id>\n",
+      });
+    },
+  });
+
+  assert.deepEqual(await cli.renameWorkspace(CONTEXT, "Payments rollout"), {
+    status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+    reason: "unknown option '--host'",
+  });
+
+  const silent = new SupersetCli({
+    ...testCliOptions(home),
+    run: async () => {
+      throw new Error("exit 1");
+    },
+  });
+  assert.deepEqual(await silent.renameWorkspace(CONTEXT, "Payments rollout"), {
+    status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+    reason: "Superset could not rename that workspace.",
+  });
 });
 
 test("a CLI failure becomes a bounded rejection", async (t) => {

@@ -81,6 +81,21 @@ export interface SessionProviderAdapter {
   spawnWorkspaceAgent(request: ProviderWorkspaceAgentRequest): Promise<ProviderWorkspaceResult>;
 
   /**
+   * Renames the workspace an observed session already runs in, under the same
+   * rules and one more: the session's latest observation must have advertised
+   * a rename target, so a rename only ever lands on a workspace its provider
+   * documents renaming.
+   */
+  renameWorkspace(request: ProviderWorkspaceRenameRequest): Promise<ProviderActResult>;
+
+  /**
+   * Renames an observed session itself — the chat, where `renameWorkspace`
+   * renames the workspace around it — only for a session whose latest
+   * observation advertised `canRename`.
+   */
+  renameSession(request: ProviderSessionRenameRequest): Promise<ProviderActResult>;
+
+  /**
    * Renders one observed session's own transcript, read from the provider's
    * file on this machine, into a bounded conversation kept nowhere. The read
    * performs nothing and reaches no provider; an adapter whose stored shape
@@ -428,6 +443,29 @@ export interface ProviderWorkspaceAgentRequest {
 }
 
 /**
+ * A user-asked request to rename the workspace an observed session already
+ * runs in. The session names the workspace — the adapter resolves the target
+ * from its own latest observation, never from the request — and the name is
+ * the user's own choice, bounded like the one a creation carries.
+ */
+export interface ProviderWorkspaceRenameRequest {
+  providerSessionId: string;
+  /** The new name, exactly as the user chose it. */
+  name: string;
+}
+
+/**
+ * A user-asked request to rename one observed session itself — the chat,
+ * where `ProviderWorkspaceRenameRequest` renames the workspace around it —
+ * under the same rules.
+ */
+export interface ProviderSessionRenameRequest {
+  providerSessionId: string;
+  /** The new name, exactly as the user chose it. */
+  name: string;
+}
+
+/**
  * The explicit answers an adapter gives for acts its provider does not
  * document: unsupported for every write, no projects, and no transcript.
  * Concrete adapters override only the acts their provider routes, and an
@@ -456,6 +494,14 @@ export abstract class SessionProviderAdapterBase implements SessionProviderAdapt
   async spawnWorkspaceAgent(
     _request: ProviderWorkspaceAgentRequest,
   ): Promise<ProviderWorkspaceResult> {
+    return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+  }
+
+  async renameWorkspace(_request: ProviderWorkspaceRenameRequest): Promise<ProviderActResult> {
+    return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+  }
+
+  async renameSession(_request: ProviderSessionRenameRequest): Promise<ProviderActResult> {
     return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
   }
 

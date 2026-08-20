@@ -637,6 +637,10 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
               act.model,
               act.effort,
             ),
+          [SESSION_TOOL_KIND.RENAME_WORKSPACE]: (act) =>
+            window.sidecar.renameSessionWorkspace(act.identity, act.name),
+          [SESSION_TOOL_KIND.RENAME_SESSION]: (act) =>
+            window.sidecar.renameSession(act.identity, act.name),
           [SESSION_TOOL_KIND.OPEN]: (act) => optionsRef.current.openSession(act.identity),
           [SESSION_TOOL_KIND.READ_TRANSCRIPT]: (act) =>
             window.sidecar.readSessionTranscript(act.identity),

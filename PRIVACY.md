@@ -109,7 +109,7 @@ The events are, in full:
 | `tracker:connect` | Linear was connected |
 | `calendar:connect` | a Google Calendar account was connected |
 | `session:observe` | once per provider per UTC day, that observation is happening |
-| `session:act_send` | a message, control, open, transcript read, workspace creation, or added agent was accepted |
+| `session:act_send` | a message, control, open, transcript read, workspace creation, workspace rename, chat rename, or added agent was accepted |
 | `issue:act_send` | an issue state move or comment was accepted |
 | `voice:call_start` | a Realtime credential was minted for a call |
 | `voice:announcement_speak` | a session announcement was spoken |
@@ -245,7 +245,11 @@ configured agent presets, retains only bounded identifiers and labels for the
 current observation, and validates the requested host, project, and agent in
 both processes. It invokes `workspaces create` directly with the developer's
 opening task and a generated bounded branch, then may invoke `workspaces open`
-for the workspace identifier Superset returned. No arbitrary CLI command or
+for the workspace identifier Superset returned. A developer-opened
+conversation may also ask Luke to rename a Superset workspace already
+observed: Luke invokes `workspaces update` directly with that workspace's
+observed id and host and the developer's own bounded new name behind
+`--name`, and nothing else. No arbitrary CLI command or
 argument is exposed to the model.
 
 One provider file per provider is the exception to "does not modify", and it
@@ -321,8 +325,9 @@ ask for the act it performs — a message typed on a session's row or asked for
 out loud, a control a session's provider advertised (such as cancelling a
 Conductor turn), a new workspace: a Conductor workspace in one of the
 projects Conductor reports, or a Cursor agent in a repository Cursor lists —
-or another agent started in the workspace an observed Conductor session runs
-in — each through the provider's own documented endpoint under the same key,
+another agent started in the workspace an observed Conductor session runs
+in, or a rename giving an observed Conductor session — or the workspace it
+runs in — the name you chose — each through the provider's own documented endpoint under the same key,
 and each validated against what the latest observation actually reported. A new
 workspace can carry the opening task you gave its agent, in your words; that
 text goes to the provider the same way a message to an existing session does,

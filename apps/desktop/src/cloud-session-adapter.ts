@@ -7,7 +7,9 @@ import {
   type ProviderMessageResult,
   type ProviderSessionMessage,
   type ProviderSessionObservation,
+  type ProviderSessionRenameRequest,
   type ProviderWorkspaceAgentRequest,
+  type ProviderWorkspaceRenameRequest,
   type ProviderWorkspaceRequest,
   type ProviderWorkspaceResult,
   positiveInteger,
@@ -87,6 +89,7 @@ export const CLOUD_FAILURE = {
 const WRITE_SUBJECT = {
   SESSION: "session",
   PROJECT: "project",
+  WORKSPACE: "workspace",
 } as const;
 
 type WriteSubject = (typeof WRITE_SUBJECT)[keyof typeof WRITE_SUBJECT];
@@ -476,6 +479,100 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
   protected workspaceAgentRoute(
     _spawnTarget: string,
     _request: ProviderWorkspaceAgentRequest,
+  ): CloudWriteRoute | undefined {
+    return undefined;
+  }
+
+  /**
+   * Renames the workspace one observed session runs in, through the
+   * provider's documented endpoint. The same refusals guard it that guard a
+   * message: a session the last pass did not observe, one whose observation
+   * advertised no rename target, a name outside its bound, and a missing
+   * credential all answer without touching the network.
+   */
+  override async renameWorkspace(
+    request: ProviderWorkspaceRenameRequest,
+  ): Promise<ProviderActResult> {
+    const observation = this.#observations.find(
+      (candidate) => candidate.providerSessionId === request.providerSessionId,
+    );
+    // The advertised target — not the caller's word — is what the route is
+    // built from, so a rename only ever lands on the workspace the last pass
+    // promised.
+    if (!observation?.renameTarget) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+
+    const name = workspaceNameText(request.name);
+    if (!name) {
+      return {
+        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+        reason: "That workspace name is empty or too long.",
+      };
+    }
+
+    // The route is built in the same synchronous step as the validation, from
+    // the observation's own rename target: a pass landing while the key is
+    // read must not be able to swap the snapshot between the check and the
+    // route.
+    const route = this.workspaceRenameRoute(observation.renameTarget, name);
+    if (!route) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+
+    const apiKey = await this.#readApiKey().catch(() => undefined);
+    if (!apiKey) return this.#missingKeyRejection();
+    return this.#postWrite(apiKey, route, WRITE_SUBJECT.WORKSPACE);
+  }
+
+  /**
+   * Where this provider's documented workspace-rename endpoint lives and what
+   * it takes. The target handed in is the observation's own `renameTarget`,
+   * so the route is built from what the provider itself promised. The default
+   * is that a provider renames nothing, the same way a read-only adapter
+   * stays read-only by writing nothing.
+   */
+  protected workspaceRenameRoute(
+    _renameTarget: string,
+    _name: string,
+  ): CloudWriteRoute | undefined {
+    return undefined;
+  }
+
+  /**
+   * Renames one observed session itself — the chat, where `renameWorkspace`
+   * renames the workspace around it — through the provider's documented
+   * endpoint. The same refusals guard it: a session the last pass did not
+   * observe, one whose observation did not advertise `canRename`, a name
+   * outside its bound, and a missing credential all answer without touching
+   * the network.
+   */
+  override async renameSession(request: ProviderSessionRenameRequest): Promise<ProviderActResult> {
+    const observation = this.#observations.find(
+      (candidate) => candidate.providerSessionId === request.providerSessionId,
+    );
+    if (!observation?.canRename) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+
+    const name = workspaceNameText(request.name);
+    if (!name) {
+      return {
+        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+        reason: "That session name is empty or too long.",
+      };
+    }
+
+    const route = this.sessionRenameRoute(request.providerSessionId, name);
+    if (!route) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+
+    const apiKey = await this.#readApiKey().catch(() => undefined);
+    if (!apiKey) return this.#missingKeyRejection();
+    return this.#postWrite(apiKey, route);
+  }
+
+  /**
+   * Where this provider's documented session-rename endpoint lives and what
+   * it takes. The default is that a provider renames nothing, the same way a
+   * read-only adapter stays read-only by writing nothing.
+   */
+  protected sessionRenameRoute(
+    _providerSessionId: string,
+    _name: string,
   ): CloudWriteRoute | undefined {
     return undefined;
   }

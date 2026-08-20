@@ -93,6 +93,8 @@ const bridge: AppBridge = {
   withdrawSessionNotice: invokeMethod<"withdrawSessionNotice">(channels.withdrawSessionNotice),
   createSessionWorkspace: invokeMethod<"createSessionWorkspace">(channels.createSessionWorkspace),
   addWorkspaceAgent: invokeMethod<"addWorkspaceAgent">(channels.addWorkspaceAgent),
+  renameSessionWorkspace: invokeMethod<"renameSessionWorkspace">(channels.renameSessionWorkspace),
+  renameSession: invokeMethod<"renameSession">(channels.renameSession),
   executeIssueAction: invokeMethod<"executeIssueAction">(channels.executeIssueAction),
   openIssue: invokeMethod<"openIssue">(channels.openIssue),
   sendFeedback: invokeMethod<"sendFeedback">(channels.sendFeedback),

@@ -420,6 +420,17 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "names the same agent kind. A session whose entry lists no new agents takes no such ask.",
     },
     {
+      label: "Renaming workspaces and chats",
+      detail:
+        "Where a provider documents it, an ask in conversation, spoken or typed, can rename " +
+        "what is observed, to a name in the developer's own words: a Conductor or " +
+        "Superset-managed workspace, or a Conductor chat on its own. An ask that names the " +
+        "workspace renames the workspace; one about the chat renames the chat. Only sessions " +
+        "whose roster entry says the workspace can be renamed — or the chat can — take one; " +
+        "the tray and the provider's own surface pick the new name up on the next observation. " +
+        "A session whose entry says neither takes no such ask.",
+    },
+    {
       label: "Archiving",
       detail:
         "Where a provider documents an archive endpoint — a Conductor workspace, a Cursor " +
