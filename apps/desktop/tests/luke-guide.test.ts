@@ -304,6 +304,20 @@ test("the facts describe creating a workspace, so Luke does not deny the capabil
   assert.match(rendered, /opening task/);
 });
 
+test("the facts describe renaming workspaces and chats, so Luke does not deny the capability", () => {
+  const rendered = JSON.stringify(buildLukeGuide(guideInput()).facts);
+
+  assert.match(rendered, /Renaming workspaces and chats/);
+  // The refusal shape rides with the offer: only a session whose roster entry
+  // advertises a rename takes one.
+  assert.match(rendered, /roster entry says the workspace can be renamed/);
+  assert.match(rendered, /says neither takes no such ask/);
+  // Both surfaces that can rename are named, and the disambiguation the
+  // conversation applies is the one the guide teaches.
+  assert.match(rendered, /Superset-managed workspace, or a Conductor chat/);
+  assert.match(rendered, /one about the chat renames the chat/);
+});
+
 test("the guide offers what a new Conductor agent runs, by the names people know", () => {
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // Unset reads as the provider's own defaults, which is what actually holds,

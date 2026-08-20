@@ -164,6 +164,10 @@ test("message and controls use fixed arguments without a shell", async (t) => {
     (await cli.createAgent(CONTEXT, "claude", "Review the change")).status,
     PROVIDER_ACT_RESULT_STATUS.ACCEPTED,
   );
+  assert.equal(
+    (await cli.renameWorkspace(CONTEXT, "Payments rollout")).status,
+    PROVIDER_ACT_RESULT_STATUS.ACCEPTED,
+  );
   assert.deepEqual(calls, [
     {
       executable: path.join(home, "bin", "superset"),
@@ -212,6 +216,19 @@ test("message and controls use fixed arguments without a shell", async (t) => {
         "claude",
         "--prompt",
         "Review the change",
+        "--json",
+      ],
+    },
+    {
+      executable: path.join(home, "bin", "superset"),
+      arguments_: [
+        "workspaces",
+        "update",
+        "workspace-1",
+        "--host",
+        "host-1",
+        "--name",
+        "Payments rollout",
         "--json",
       ],
     },

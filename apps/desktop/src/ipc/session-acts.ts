@@ -725,6 +725,79 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       });
     },
   );
+
+  // Renaming a workspace runs the gauntlet a control does: the session the
+  // renderer names must have advertised a rename target on its latest
+  // observation. The registry is what advertised it, so the registry is what
+  // answers whether it stands; the adapter then resolves the workspace from
+  // its own last pass, never from the request.
+  ipcMain.handle(
+    channels.renameSessionWorkspace,
+    async (
+      event,
+      identityRaw: UnparsedWireValue,
+      name: UnparsedWireValue,
+    ): Promise<ProviderActResult> => {
+      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      const identity = requireSessionIdentity(identityRaw, "Invalid workspace rename request");
+      // Unlike a creation's optional name, a rename with nothing to rename to
+      // is no ask at all, so an absent name is refused with the same words an
+      // oversized one earns.
+      const workspaceName = workspaceNameText(name);
+      if (!workspaceName) {
+        return {
+          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          reason: "That workspace name is empty or too long.",
+        };
+      }
+      const session = sessionRegistry.get(identity);
+      if (!session?.renameTarget) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+      const managed = supersetContext(identity);
+      if (managed) {
+        return countSessionAct(
+          identity.providerId,
+          PRODUCT_SESSION_ACT.WORKSPACE_RENAME,
+          await supersetCli.renameWorkspace(managed, workspaceName),
+        );
+      }
+      return performSessionAct(identity, PRODUCT_SESSION_ACT.WORKSPACE_RENAME, (adapter) =>
+        adapter.renameWorkspace({
+          providerSessionId: identity.providerSessionId,
+          name: workspaceName,
+        }),
+      );
+    },
+  );
+
+  // Renaming a chat itself runs the same gauntlet one notch narrower: only a
+  // session whose latest observation advertised `canRename` takes one, and
+  // the registry that advertised it is what answers whether it stands.
+  ipcMain.handle(
+    channels.renameSession,
+    async (
+      event,
+      identityRaw: UnparsedWireValue,
+      name: UnparsedWireValue,
+    ): Promise<ProviderActResult> => {
+      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      const identity = requireSessionIdentity(identityRaw, "Invalid session rename request");
+      const sessionName = workspaceNameText(name);
+      if (!sessionName) {
+        return {
+          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          reason: "That session name is empty or too long.",
+        };
+      }
+      const session = sessionRegistry.get(identity);
+      if (!session?.canRename) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+      return performSessionAct(identity, PRODUCT_SESSION_ACT.SESSION_RENAME, (adapter) =>
+        adapter.renameSession({
+          providerSessionId: identity.providerSessionId,
+          name: sessionName,
+        }),
+      );
+    },
+  );
 }
 
 /**

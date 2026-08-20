@@ -7,6 +7,7 @@ import {
   type ProviderMessageResult,
   type ProviderSessionMessage,
   type ProviderSessionObservation,
+  type ProviderWorkspaceRenameRequest,
   type ProviderWorkspaceRequest,
   type ProviderWorkspaceResult,
   SESSION_LOCATION,
@@ -298,4 +299,41 @@ test("answers unsupported when no observer offers workspace creation", async () 
   assert.deepEqual(await adapter.createWorkspace({ providerProjectId: "proj-1" }), {
     status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED,
   });
+});
+
+test("carries a rename past observers that have never seen the session", async () => {
+  const renamed: ProviderWorkspaceRenameRequest[] = [];
+  const adapter = new CompositeSessionProviderAdapter({
+    provider: cursor,
+    adapters: [
+      // The local observer renames nothing at all, and must not stop an ask.
+      observerOf(cursor, [observation("local-session")]),
+      Object.assign(new TestProviderAdapter(cursor, async () => []), {
+        renameWorkspace: async (request: ProviderWorkspaceRenameRequest) => {
+          renamed.push(request);
+          return { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED };
+        },
+      }),
+    ],
+  });
+
+  const result = await adapter.renameWorkspace({
+    providerSessionId: "cloud-agent",
+    name: "Payments rollout",
+  });
+
+  assert.deepEqual(result, { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED });
+  assert.deepEqual(renamed, [{ providerSessionId: "cloud-agent", name: "Payments rollout" }]);
+});
+
+test("answers unsupported when no observer can rename a workspace", async () => {
+  const adapter = new CompositeSessionProviderAdapter({
+    provider: cursor,
+    adapters: [observerOf(cursor, [observation("local-session")])],
+  });
+
+  assert.deepEqual(
+    await adapter.renameWorkspace({ providerSessionId: "local-session", name: "Payments" }),
+    { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED },
+  );
 });

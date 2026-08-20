@@ -93,6 +93,8 @@ export const PRODUCT_SESSION_ACT = {
   SESSION_OPEN: "session_open",
   TRANSCRIPT_READ: "transcript_read",
   WORKSPACE_CREATE: "workspace_create",
+  WORKSPACE_RENAME: "workspace_rename",
+  SESSION_RENAME: "session_rename",
   AGENT_ADD: "agent_add",
 } as const;
 

@@ -168,6 +168,9 @@ export class SupersetWorkspaceSnapshot {
           canReceiveMessage: true,
           spawnableAgents: context.spawnableAgents,
           spawnTarget: context.workspaceId,
+          // Superset documents renaming any workspace it manages, so the
+          // target rides the advertisement the way the spawn target does.
+          renameTarget: context.workspaceId,
           controls,
         };
       }
@@ -176,6 +179,7 @@ export class SupersetWorkspaceSnapshot {
         detail,
         workspace,
         canReceiveMessage: true,
+        renameTarget: context.workspaceId,
         controls,
       };
     });

@@ -153,9 +153,11 @@ const sameSession = exhaustiveSame<NormalizedSession>({
   detail: (first, second) => sameDetail(first.detail, second.detail),
   controls: (first, second) => sameItems(first.controls, second.controls, sameControl),
   canReceiveMessage: (first, second) => first.canReceiveMessage === second.canReceiveMessage,
+  canRename: (first, second) => first.canRename === second.canRename,
   spawnableAgents: (first, second) =>
     sameItems(first.spawnableAgents, second.spawnableAgents, Object.is),
   spawnTarget: (first, second) => first.spawnTarget === second.spawnTarget,
+  renameTarget: (first, second) => first.renameTarget === second.renameTarget,
   workspace: (first, second) => sameOptional(first.workspace, second.workspace, sameWorkspace),
   attention: (first, second) => sameAttention(first.attention, second.attention),
 });

@@ -86,6 +86,8 @@ export const SESSION_TOOL_KIND = {
   READ_TRANSCRIPT: "read-transcript",
   CREATE_WORKSPACE: "create-workspace",
   ADD_AGENT: "add-agent",
+  RENAME_WORKSPACE: "rename-workspace",
+  RENAME_SESSION: "rename-session",
 } as const;
 
 export type SessionToolKind = (typeof SESSION_TOOL_KIND)[keyof typeof SESSION_TOOL_KIND];
@@ -145,6 +147,18 @@ export type SessionToolAction =
       model?: string;
       /** The effort riding that model, when the developer named both. */
       effort?: string;
+    }
+  | {
+      kind: typeof SESSION_TOOL_KIND.RENAME_WORKSPACE;
+      identity: SessionIdentity;
+      /** The workspace's new name, exactly as the developer chose it. */
+      name: string;
+    }
+  | {
+      kind: typeof SESSION_TOOL_KIND.RENAME_SESSION;
+      identity: SessionIdentity;
+      /** The chat's new name, exactly as the developer chose it. */
+      name: string;
     }
   | { kind: "refused"; reason: string };
 
@@ -667,6 +681,47 @@ function validateAddWorkspaceAgent(
   return action;
 }
 
+function validateRenameWorkspace(
+  parsed: WireRecord,
+  context: SessionToolContext,
+): SessionToolAction {
+  const found = sessionFromArguments(parsed, context.sessions);
+  if ("kind" in found) return found;
+  const { session, identity } = found;
+  // Only a session whose roster entry advertised renaming has a workspace a
+  // rename can land on. The action carries the identity and the name, never
+  // the target: the main process resolves the workspace from its own
+  // registry, the same way an open never carries an address.
+  if (!session.renameTarget) {
+    return { kind: "refused", reason: "That session's workspace cannot be renamed." };
+  }
+  const name = workspaceNameText(parsed.name);
+  if (!name) {
+    return {
+      kind: "refused",
+      reason: `A workspace name has to be under ${maximumWorkspaceNameLength} characters and longer than nothing.`,
+    };
+  }
+  return { kind: SESSION_TOOL_KIND.RENAME_WORKSPACE, identity, name };
+}
+
+function validateRenameSession(parsed: WireRecord, context: SessionToolContext): SessionToolAction {
+  const found = sessionFromArguments(parsed, context.sessions);
+  if ("kind" in found) return found;
+  const { session, identity } = found;
+  if (!session.canRename) {
+    return { kind: "refused", reason: "That chat cannot be renamed." };
+  }
+  const name = workspaceNameText(parsed.name);
+  if (!name) {
+    return {
+      kind: "refused",
+      reason: `A chat name has to be under ${maximumWorkspaceNameLength} characters and longer than nothing.`,
+    };
+  }
+  return { kind: SESSION_TOOL_KIND.RENAME_SESSION, identity, name };
+}
+
 function validateUpdateIssueState(parsed: WireRecord, context: IssueToolContext): IssueToolAction {
   const found = issueFromArguments(parsed, context.issues);
   if ("kind" in found) return found;
@@ -1056,6 +1111,50 @@ export const REALTIME_TOOLS = {
       },
     },
     validate: validateAddWorkspaceAgent,
+  },
+  RENAME_WORKSPACE: {
+    name: "rename_workspace",
+    family: REALTIME_TOOL_FAMILY.SESSION,
+    schema: {
+      description:
+        "Rename the workspace one observed session runs in, to a name the developer just " +
+        "chose — their own words, never a name composed for them. Only sessions whose roster " +
+        "entry says the workspace can be renamed take one.",
+      parameters: {
+        type: "object",
+        properties: {
+          ...SESSION_IDENTITY_PARAMETERS,
+          name: {
+            type: "string",
+            description: "The workspace's new name, exactly as the developer chose it.",
+          },
+        },
+        required: ["provider_id", "provider_session_id", "name"],
+      },
+    },
+    validate: validateRenameWorkspace,
+  },
+  RENAME_SESSION: {
+    name: "rename_session",
+    family: REALTIME_TOOL_FAMILY.SESSION,
+    schema: {
+      description:
+        "Rename one observed chat itself — not the workspace around it — to a name the " +
+        "developer just chose, in their own words. Only chats whose roster entry says they can " +
+        "be renamed take one; an ask that names the workspace renames the workspace instead.",
+      parameters: {
+        type: "object",
+        properties: {
+          ...SESSION_IDENTITY_PARAMETERS,
+          name: {
+            type: "string",
+            description: "The chat's new name, exactly as the developer chose it.",
+          },
+        },
+        required: ["provider_id", "provider_session_id", "name"],
+      },
+    },
+    validate: validateRenameSession,
   },
   UPDATE_ISSUE_STATE: {
     name: "update_issue_state",

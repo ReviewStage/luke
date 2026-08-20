@@ -401,6 +401,31 @@ export class SupersetCli {
     return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
   }
 
+  /**
+   * Renames one observed workspace through the CLI's documented
+   * `workspaces update` command, carrying only the observed identifiers and
+   * the developer's own name behind `--name` — never the command's other
+   * flags, which link and unlink tasks this integration does not touch.
+   */
+  async renameWorkspace(
+    context: SupersetSessionContext,
+    name: string,
+  ): Promise<ProviderControlResult> {
+    return this.#act(
+      [
+        "workspaces",
+        "update",
+        context.workspaceId,
+        "--host",
+        context.hostId,
+        "--name",
+        name,
+        "--json",
+      ],
+      "Superset could not rename that workspace.",
+    );
+  }
+
   async createAgent(
     context: SupersetSessionContext,
     agent: string,

@@ -154,10 +154,12 @@ test("advertises Superset actions only after the CLI is connected", async (t) =>
   };
 
   assert.equal(snapshot.enrich(PROVIDER_ID.CODEX, [observation])[0]?.canReceiveMessage, undefined);
+  assert.equal(snapshot.enrich(PROVIDER_ID.CODEX, [observation])[0]?.renameTarget, undefined);
   const connected = snapshot.enrich(PROVIDER_ID.CODEX, [observation], true)[0];
   assert.equal(connected?.canReceiveMessage, true);
   assert.deepEqual(connected?.spawnableAgents, ["claude", "codex"]);
   assert.equal(connected?.spawnTarget, "workspace-1");
+  assert.equal(connected?.renameTarget, "workspace-1");
   assert.deepEqual(
     connected?.controls?.map((control) => control.id),
     [SUPERSET_CONTROL_ID.OPEN_WORKSPACE, SUPERSET_CONTROL_ID.CLOSE_TERMINAL],

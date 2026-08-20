@@ -316,6 +316,13 @@ export interface ProviderSessionObservation {
    */
   canReceiveMessage?: boolean;
   /**
+   * Set only by an adapter whose provider documents renaming this session
+   * itself, through the provider's own API, under the same absent-means-no
+   * rule. The chat's own name is what this renames; the workspace around it
+   * advertises its rename separately, as `renameTarget`.
+   */
+  canRename?: boolean;
+  /**
    * The kinds of agent this session's provider documents starting alongside it
    * — in the same workspace — named exactly as the provider's creation
    * endpoint takes them. Absent means none: only an adapter whose provider
@@ -331,6 +338,14 @@ export interface ProviderSessionObservation {
    * promised it, the way state an adapter kept on the side could.
    */
   spawnTarget?: string;
+  /**
+   * The provider-owned identifier of the workspace a rename lands on, present
+   * only when the provider documents renaming the workspace around this
+   * session. Like `spawnTarget`, it rides the advertisement so it is replaced
+   * with every observation and can never outlive the snapshot that promised
+   * it, the way state an adapter kept on the side could.
+   */
+  renameTarget?: string;
   /** The workspace this session is one chat of, when its provider nests them. */
   workspace?: SessionWorkspace;
 }
@@ -353,10 +368,14 @@ export interface NormalizedSession extends SessionIdentity {
   controls: readonly SessionControl[];
   /** Whether this session's provider will take a message for it right now. */
   canReceiveMessage: boolean;
+  /** Whether this session's provider documents renaming the chat itself. */
+  canRename: boolean;
   /** The agents that can be started alongside this session, or none. */
   spawnableAgents: readonly string[];
   /** Where a started agent lands, when narrower than the session itself. */
   spawnTarget?: string;
+  /** The workspace a rename lands on, when its provider documents renaming it. */
+  renameTarget?: string;
   /** The workspace this session is one chat of, when its provider nests them. */
   workspace?: SessionWorkspace;
   attention: AttentionDecision;
@@ -646,6 +665,7 @@ export function normalizeSession(
   const completionCause = normalizeCompletionCause(observation.completionCause, status);
   const recap = boundedText(observation.recap, maximumSessionRecapLength);
   const spawnTarget = boundedText(observation.spawnTarget, maximumSessionDetailLength);
+  const renameTarget = boundedText(observation.renameTarget, maximumSessionDetailLength);
   const workspace = normalizeWorkspace(observation.workspace);
 
   const session: NormalizedSession = {
@@ -664,6 +684,7 @@ export function normalizeSession(
     // Anything but an explicit yes is a no, so an adapter that has not thought
     // about messaging reports a session that cannot be messaged.
     canReceiveMessage: observation.canReceiveMessage === true,
+    canRename: observation.canRename === true,
     spawnableAgents: normalizeSpawnableAgents(observation.spawnableAgents),
     attention: normalizeAttention(attention),
   };
@@ -671,6 +692,7 @@ export function normalizeSession(
   if (completionCause) session.completionCause = completionCause;
   if (recap) session.recap = recap;
   if (spawnTarget) session.spawnTarget = spawnTarget;
+  if (renameTarget) session.renameTarget = renameTarget;
   if (workspace) session.workspace = workspace;
   return session;
 }

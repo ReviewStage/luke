@@ -131,13 +131,20 @@ function fakeConductorApi(api: TestApi) {
           }));
         return jsonResponse({ rows, rowCount: rows.length, truncated: false });
       }
-      // The four documented writers: a prompt for one session, a cancel for
-      // the turn it is working, a new workspace in one project, and an
-      // archive for one workspace.
+      // The six documented writers: a prompt for one session, a cancel for
+      // the turn it is working, a new workspace in one project, an archive
+      // for one workspace, and a rename for one workspace or one chat.
       if (segments[1] === "workspaces" && segments.length === 4 && segments[3] === "archive") {
         const workspace = api.workspaces.find((candidate) => candidate.id === segments[2]);
         if (!workspace) return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
         return jsonResponse({ workspaceId: workspace.id, status: "archived" });
+      }
+      if (segments[1] === "workspaces" && segments.length === 4 && segments[3] === "rename") {
+        const workspace = api.workspaces.find((candidate) => candidate.id === segments[2]);
+        // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+        const body = JSON.parse(rawBody ?? "{}") as { name?: string };
+        if (!workspace || !body.name) return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
+        return jsonResponse({ workspaceId: workspace.id, name: body.name });
       }
       if (segments[1] === "workspaces" && segments.length === 2) {
         // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
@@ -184,6 +191,12 @@ function fakeConductorApi(api: TestApi) {
       }
       if (writer === "cancel") {
         return jsonResponse({ sessionId: session.id, status: "idle", canceledQueuedMessages: 0 });
+      }
+      if (writer === "rename") {
+        // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+        const body = JSON.parse(rawBody ?? "{}") as { name?: string };
+        if (!body.name) return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
+        return jsonResponse({ sessionId: session.id, name: body.name });
       }
       return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
     }
@@ -1618,6 +1631,161 @@ test("refuses to archive a workspace no row advertised, before any request exist
   });
 
   assert.deepEqual(result, { status: "unsupported" });
+  assert.equal(api.requests.length, requestsBefore);
+});
+
+test("renames the workspace behind an observed row through Conductor's rename endpoint", async () => {
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [ownedWorkspace("workspace-active", TEST_TIME - 30_000)],
+    sessions: [
+      {
+        id: "session-idle",
+        workspaceId: "workspace-active",
+        name: TEST_SESSION_NAME,
+        status: TEST_CONDUCTOR_STATUS.IDLE,
+        statusUpdatedAt: TEST_TIME - 5_000,
+      },
+    ],
+  });
+  const adapter = adapterFor(api.fetch);
+  const observations = await adapter.observe();
+
+  // Every open workspace is renameable, so the target rides every chat's
+  // advertisement the way the spawn target does.
+  assert.equal(observations[0]?.renameTarget, "workspace-active");
+
+  const result = await adapter.renameWorkspace({
+    providerSessionId: "session-idle",
+    name: "Payments rollout",
+  });
+
+  assert.deepEqual(result, { status: "accepted" });
+  const write = api.requests.at(-1);
+  assert.equal(write?.method, "POST");
+  assert.equal(write?.pathname, "/v0/workspaces/workspace-active/rename");
+  assert.equal(write?.authorization, `Bearer ${TEST_API_KEY}`);
+  assert.deepEqual(JSON.parse(write?.body ?? "{}"), { name: "Payments rollout" });
+});
+
+test("renames an observed chat itself through Conductor's session rename endpoint", async () => {
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [ownedWorkspace("workspace-active", TEST_TIME - 30_000)],
+    sessions: [
+      {
+        id: "session-idle",
+        workspaceId: "workspace-active",
+        name: TEST_SESSION_NAME,
+        status: TEST_CONDUCTOR_STATUS.IDLE,
+        statusUpdatedAt: TEST_TIME - 5_000,
+      },
+    ],
+  });
+  const adapter = adapterFor(api.fetch);
+  const observations = await adapter.observe();
+
+  // Any open chat is renameable, whatever its turn is doing.
+  assert.equal(observations[0]?.canRename, true);
+
+  const result = await adapter.renameSession({
+    providerSessionId: "session-idle",
+    name: "Payments audit",
+  });
+
+  assert.deepEqual(result, { status: "accepted" });
+  const write = api.requests.at(-1);
+  assert.equal(write?.method, "POST");
+  assert.equal(write?.pathname, "/v0/sessions/session-idle/rename");
+  assert.deepEqual(JSON.parse(write?.body ?? "{}"), { name: "Payments audit" });
+});
+
+test("refuses a chat rename for a session no pass observed, before any request exists", async () => {
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [ownedWorkspace("workspace-active", TEST_TIME - 30_000)],
+    sessions: [
+      {
+        id: "session-idle",
+        workspaceId: "workspace-active",
+        name: TEST_SESSION_NAME,
+        status: TEST_CONDUCTOR_STATUS.IDLE,
+        statusUpdatedAt: TEST_TIME - 5_000,
+      },
+    ],
+  });
+  const adapter = adapterFor(api.fetch);
+  await adapter.observe();
+  const requestsBefore = api.requests.length;
+
+  const result = await adapter.renameSession({
+    providerSessionId: "session-unseen",
+    name: "Payments audit",
+  });
+
+  assert.deepEqual(result, { status: "unsupported" });
+  assert.equal(api.requests.length, requestsBefore);
+});
+
+test("refuses a rename for a session no pass observed, before any request exists", async () => {
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [ownedWorkspace("workspace-active", TEST_TIME - 30_000)],
+    sessions: [
+      {
+        id: "session-idle",
+        workspaceId: "workspace-active",
+        name: TEST_SESSION_NAME,
+        status: TEST_CONDUCTOR_STATUS.IDLE,
+        statusUpdatedAt: TEST_TIME - 5_000,
+      },
+    ],
+  });
+  const adapter = adapterFor(api.fetch);
+  await adapter.observe();
+  const requestsBefore = api.requests.length;
+
+  const result = await adapter.renameWorkspace({
+    providerSessionId: "session-unseen",
+    name: "Payments rollout",
+  });
+
+  assert.deepEqual(result, { status: "unsupported" });
+  assert.equal(api.requests.length, requestsBefore);
+});
+
+test("refuses a rename name outside its bound, before any request exists", async () => {
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [ownedWorkspace("workspace-active", TEST_TIME - 30_000)],
+    sessions: [
+      {
+        id: "session-idle",
+        workspaceId: "workspace-active",
+        name: TEST_SESSION_NAME,
+        status: TEST_CONDUCTOR_STATUS.IDLE,
+        statusUpdatedAt: TEST_TIME - 5_000,
+      },
+    ],
+  });
+  const adapter = adapterFor(api.fetch);
+  await adapter.observe();
+  const requestsBefore = api.requests.length;
+
+  const result = await adapter.renameWorkspace({
+    providerSessionId: "session-idle",
+    name: "n".repeat(81),
+  });
+
+  assert.deepEqual(result, {
+    status: "rejected",
+    reason: "That workspace name is empty or too long.",
+  });
   assert.equal(api.requests.length, requestsBefore);
 });
 

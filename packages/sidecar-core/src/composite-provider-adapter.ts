@@ -5,7 +5,9 @@ import {
   type ProviderControlResult,
   type ProviderMessageResult,
   type ProviderSessionMessage,
+  type ProviderSessionRenameRequest,
   type ProviderWorkspaceAgentRequest,
+  type ProviderWorkspaceRenameRequest,
   type ProviderWorkspaceRequest,
   type ProviderWorkspaceResult,
   type SessionProviderAdapter,
@@ -102,6 +104,18 @@ export class CompositeSessionProviderAdapter extends SessionProviderAdapterBase 
     request: ProviderWorkspaceAgentRequest,
   ): Promise<ProviderWorkspaceResult> {
     return this.#dispatchAct((adapter) => adapter.spawnWorkspaceAgent(request));
+  }
+
+  /** A rename finds the observer holding its workspace the same way. */
+  override async renameWorkspace(
+    request: ProviderWorkspaceRenameRequest,
+  ): Promise<ProviderActResult> {
+    return this.#dispatchAct((adapter) => adapter.renameWorkspace(request));
+  }
+
+  /** A chat's own rename finds the observer holding the session the same way. */
+  override async renameSession(request: ProviderSessionRenameRequest): Promise<ProviderActResult> {
+    return this.#dispatchAct((adapter) => adapter.renameSession(request));
   }
 
   override async readTranscript(providerSessionId: string): Promise<string | undefined> {

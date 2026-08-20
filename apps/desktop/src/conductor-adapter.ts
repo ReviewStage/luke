@@ -49,9 +49,12 @@ const CONDUCTOR_DEFAULT_API_URL = "https://api.conductor.build";
  * while it is idle, steered into the running turn while it works —
  * `POST …/sessions/{id}/cancel`, which stops the current turn,
  * `POST /v0/workspaces`, which is its documented way to create a workspace in
- * a project the user already connected, and
+ * a project the user already connected,
  * `POST …/workspaces/{id}/archive`, which is its documented way to file a
- * workspace away.
+ * workspace away, and
+ * `POST …/workspaces/{id}/rename` and `POST …/sessions/{id}/rename`, which
+ * are its documented ways to give a workspace or a chat the name the user
+ * just chose.
  */
 const CONDUCTOR_ROUTE = {
   IDENTITY: ["me"],
@@ -64,6 +67,7 @@ const CONDUCTOR_ROUTE_SEGMENT = {
   ARCHIVE: "archive",
   CANCEL: "cancel",
   MESSAGES: "messages",
+  RENAME: "rename",
   SESSIONS: "sessions",
   STATUS: "status",
   V0: "v0",
@@ -73,6 +77,11 @@ const CONDUCTOR_ROUTE_SEGMENT = {
 /** The body `POST …/sessions/{id}/messages` documents. */
 const CONDUCTOR_MESSAGE_FIELD = {
   MESSAGE: "message",
+} as const;
+
+/** The one field both rename endpoints document: the new name itself. */
+const CONDUCTOR_RENAME_FIELD = {
+  NAME: "name",
 } as const;
 
 /**
@@ -400,10 +409,12 @@ interface ConductorSession {
  * workspace is the unit Conductor's own surface shows, but the chat is the
  * thing a press opens and a write reaches, and a workspace holding two chats
  * in two states is two facts, not one. The writes it supports are a
- * user-typed prompt, a stop for the running turn, and an archive for the
- * settled workspace around a chat, each through Conductor's own endpoint on a
- * chat that advertised it, and a new workspace in a project the latest pass
- * listed, through Conductor's documented creation endpoint.
+ * user-typed prompt, a stop for the running turn, an archive for the
+ * settled workspace around a chat, and a rename giving a chat — or the
+ * workspace around it — the name the user just chose, each through
+ * Conductor's own endpoint on a chat that advertised it, and a new workspace
+ * in a project the latest pass listed, through Conductor's documented
+ * creation endpoint.
  */
 export class ConductorSessionAdapter extends CloudSessionAdapter {
   #userId: string | undefined;
@@ -477,6 +488,33 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
             }
           : undefined),
       },
+    };
+  }
+
+  protected override workspaceRenameRoute(renameTarget: string, name: string): CloudWriteRoute {
+    // The workspace to rename is the observation's own advertised target, so
+    // a rename lands on the workspace of the row the user acted on, under the
+    // credential that observed it.
+    return {
+      segments: [
+        CONDUCTOR_ROUTE_SEGMENT.V0,
+        CONDUCTOR_ROUTE_SEGMENT.WORKSPACES,
+        renameTarget,
+        CONDUCTOR_ROUTE_SEGMENT.RENAME,
+      ],
+      body: { [CONDUCTOR_RENAME_FIELD.NAME]: name },
+    };
+  }
+
+  protected override sessionRenameRoute(providerSessionId: string, name: string): CloudWriteRoute {
+    return {
+      segments: [
+        CONDUCTOR_ROUTE_SEGMENT.V0,
+        CONDUCTOR_ROUTE_SEGMENT.SESSIONS,
+        providerSessionId,
+        CONDUCTOR_ROUTE_SEGMENT.RENAME,
+      ],
+      body: { [CONDUCTOR_RENAME_FIELD.NAME]: name },
     };
   }
 
@@ -876,6 +914,9 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
       canReceiveMessage:
         reported?.status === CONDUCTOR_SESSION_STATUS.IDLE ||
         reported?.status === CONDUCTOR_SESSION_STATUS.WORKING,
+      // Renaming is documented for any open chat, whatever its turn is doing,
+      // so it is not gated on the reported status the way a message is.
+      canRename: true,
       // Another agent lands in the workspace around this row, whatever state
       // the row's own chat is in: the workspace was observed this pass, and
       // that is the thing the creation endpoint takes. Its id rides the
@@ -883,6 +924,11 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
       // snapshot that promised it.
       spawnableAgents: CONDUCTOR_SPAWNABLE_AGENTS,
       spawnTarget: session.workspace.id,
+      // A rename is documented for any open workspace, and every workspace
+      // here is open — the filed-away ones never made it past the lifecycle
+      // read — so the target rides every chat's advertisement the way the
+      // spawn target does.
+      renameTarget: session.workspace.id,
       ...(controls.length > 0 ? { controls } : undefined),
       ...(recap ? { recap } : undefined),
       detail: {
