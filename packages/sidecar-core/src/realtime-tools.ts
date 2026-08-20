@@ -722,7 +722,9 @@ function appSettingValue(setting: AppGuideSetting, value: UnparsedWireValue): st
  * Validates a spoken session-list filter against the sessions actually being
  * observed. A filter that would show nothing is refused rather than applied:
  * the panel would quietly fall back to showing everything, and Luke would have
- * reported a narrowing that never happened.
+ * reported a narrowing that never happened. A workspace manager's scope id —
+ * the one a session's workspace carries when an orchestrator owns it — is a
+ * filter on the same terms as a provider id: the two share no namespace.
  */
 function panelFilterAction(
   filter: string,
@@ -737,8 +739,14 @@ function panelFilterAction(
     if (sessions.some((session) => session.realtimeVoice === true)) return { filter };
     return { reason: "No voice sessions are observed right now." };
   }
-  if (sessions.some((session) => session.providerId === filter)) return { filter };
-  return { reason: "No observed session belongs to that provider." };
+  if (
+    sessions.some(
+      (session) => session.providerId === filter || session.workspace?.scopeId === filter,
+    )
+  ) {
+    return { filter };
+  }
+  return { reason: "No observed session belongs to that provider or workspace manager." };
 }
 
 function validateChangeAppSetting(parsed: WireRecord, context: AppToolContext): AppToolAction {
@@ -1142,7 +1150,9 @@ export const REALTIME_TOOLS = {
           filter: {
             type: "string",
             description:
-              "Narrows the session list: all, local, cloud, or the provider_id of one observed provider. Only meaningful on the sessions tab.",
+              "Narrows the session list: all, local, cloud, voice for realtime voice chats, " +
+              "the provider_id of one observed provider, or superset for the sessions whose " +
+              "workspaces Superset manages. Only meaningful on the sessions tab.",
           },
           sort: {
             type: "string",

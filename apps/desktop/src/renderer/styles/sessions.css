@@ -239,6 +239,14 @@
   height: 13px;
 }
 
+/* Superset's bracket mark is two and a half times as wide as it is tall.
+   Fitted whole into the square box the agent marks fill it would draw five
+   pixels tall, so its box takes the mark's own proportion instead and the
+   chip reads at the same optical weight as its neighbours. */
+.filter-mark[data-mark="superset"] {
+  width: 24px;
+}
+
 /* The number is what the row is worth reading before anything is pressed: the
    chips are a breakdown of what is tracked first and a control second. */
 .filter-count {
