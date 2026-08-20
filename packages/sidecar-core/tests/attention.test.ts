@@ -7,7 +7,6 @@ import {
   type AttentionDecision,
   type AttentionUpdate,
   attentionDecisionFromModel,
-  attentionInstructions,
   attentionUpdateInput,
   type NormalizedSession,
   normalizeSession,
@@ -27,7 +26,6 @@ import {
   maximumAttentionRequestLength,
   maximumAttentionSummaryLength,
 } from "../src/attention";
-import { ATTENTION_TUNING_EXAMPLES } from "../src/attention-examples";
 
 const claude: SessionProvider = { id: "claude-code", displayName: "Claude Code" };
 const codex: SessionProvider = { id: "codex", displayName: "Codex" };
@@ -822,36 +820,12 @@ test("sends bounded material and withholds what a decision does not turn on", as
   assert.ok(!input.includes("providerSessionId"));
 });
 
-test("tuning examples are synthetic, bounded, and cover every disposition", () => {
-  assert.deepEqual(
-    [...new Set(ATTENTION_TUNING_EXAMPLES.map((example) => example.expected.disposition))].sort(),
-    Object.values(ATTENTION_DISPOSITION).sort(),
-  );
-
-  for (const example of ATTENTION_TUNING_EXAMPLES) {
-    const decision = attentionDecisionFromModel(example.expected, DECIDED_AT);
-    assert.ok(decision, `${example.name} must satisfy the decision contract`);
-    assert.equal(decision.disposition, example.expected.disposition);
-    assert.ok((example.expected.summary ?? "").length <= maximumAttentionSummaryLength);
-    assert.ok(!example.update.title.includes("/"), "examples use workspace names, not paths");
-  }
-});
-
-test("instructions carry the decision contract and the tuning examples", () => {
-  const instructions = attentionInstructions();
+test("the decision schema carries the disposition contract", () => {
   const schemaDescription = ATTENTION_DECISION_SCHEMA.properties.disposition.description;
   for (const disposition of Object.values(ATTENTION_DISPOSITION)) {
     const guidance = `${disposition}: ${DISPOSITION_GUIDANCE[disposition]}`;
-    assert.ok(instructions.includes(guidance));
     assert.ok(schemaDescription.includes(guidance));
   }
-  for (const example of ATTENTION_TUNING_EXAMPLES) {
-    assert.ok(instructions.includes(example.name));
-    assert.ok(instructions.includes(attentionUpdateInput(example.update)));
-  }
-  assert.ok(instructions.includes(String(maximumAttentionSummaryLength)));
-  // Spoken summaries stay human: a hash or an id is noise read aloud.
-  assert.match(instructions, /identifiers no one says aloud/i);
   assert.deepEqual(ATTENTION_DECISION_SCHEMA.properties.disposition.enum, [
     ATTENTION_DISPOSITION.SILENT,
     ATTENTION_DISPOSITION.SPEAK_DURING_TURN,
