@@ -273,6 +273,17 @@ const MENTION_CHIP_KIND = {
 } as const;
 
 /**
+ * One app mark trailing a session chip's name: the same associations the
+ * session's own row wears, answering where the chat is also held. Copied onto
+ * the chip rather than looked up at draw time, so the band held through its
+ * fade-out keeps wearing them after the roster moves on.
+ */
+type MentionChipApplication = {
+  id: string;
+  name: string;
+};
+
+/**
  * One pressable chip of the notice band: the mark and words it draws, and the
  * identity its press hands to the main process — where it is validated
  * against the observed roster again before any address reaches the system.
@@ -286,6 +297,7 @@ type MentionChip =
       markId: string;
       title: string;
       identity: SessionIdentity;
+      applications: readonly MentionChipApplication[];
     }
   | {
       kind: typeof MENTION_CHIP_KIND.ISSUE;
@@ -2020,18 +2032,27 @@ export function App(): React.JSX.Element {
         mention.kind === SESSION_MENTION_KIND.WORKSPACE && session.workspace?.name !== undefined
           ? session.workspace.name
           : session.title;
+      // The chip's mark is the agent having the conversation, the same
+      // identity the session's own row leads with.
+      const markId = session.agent?.id ?? session.providerId;
       return [
         {
           kind: MENTION_CHIP_KIND.SESSION,
           id: session.providerSessionId,
-          // The chip's mark is the agent having the conversation, the same
-          // identity the session's own row leads with.
-          markId: session.agent?.id ?? session.providerId,
+          markId,
           title,
           identity: {
             providerId: session.providerId,
             providerSessionId: session.providerSessionId,
           },
+          applications: session.applications.flatMap((application) =>
+            // An app the leading mark already stands for — a provider that is
+            // itself the app, standing in where no agent was reported — would
+            // draw the same mark twice on one chip.
+            application.id === markId
+              ? []
+              : [{ id: application.id, name: application.displayName }],
+          ),
         },
       ];
     }),
@@ -3345,6 +3366,24 @@ export function App(): React.JSX.Element {
             >
               <ProviderMark providerId={mention.markId} />
               <span className="session-notice-name">{mention.title}</span>
+              {/* The app marks the session's row already wears, saying where
+                  the chat is also held. Bare marks, never presses of their
+                  own: the chip is one press, and it stays the row press. */}
+              {mention.kind === MENTION_CHIP_KIND.SESSION && mention.applications.length > 0 ? (
+                <span className="session-notice-applications">
+                  {mention.applications.map((application) => (
+                    <span
+                      key={application.id}
+                      className="session-notice-application"
+                      role="img"
+                      aria-label={`Also in ${application.name}`}
+                      title={application.name}
+                    >
+                      <ProviderMark providerId={application.id} />
+                    </span>
+                  ))}
+                </span>
+              ) : null}
             </button>
           ))}
         </span>
