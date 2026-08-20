@@ -30,6 +30,7 @@ import {
   sessionListRuns,
   sessionRunKeys,
   sessionTally,
+  spokenSearchOutcome,
   tallyCaption,
   tallySummary,
   tallyValue,
@@ -1198,6 +1199,79 @@ test("a query is read against everything the row can say", () => {
       `query: ${query}`,
     );
   }
+});
+
+test("a query finds a session by its status word, even under a busy detail line", () => {
+  const rows = displaySessions(bootstrap(false), [
+    normalizeSession(CLAUDE_PROVIDER, {
+      providerSessionId: "busy",
+      title: "Rework the parser",
+      status: SESSION_STATUS.WORKING,
+      observedAt: 1_000,
+      detail: { activity: "Running the tests" },
+    }),
+    normalizeSession(CODEX_PROVIDER, {
+      providerSessionId: "stuck",
+      title: "Fix the login flow",
+      status: SESSION_STATUS.WAITING,
+      observedAt: 2_000,
+      detail: { activity: "Holding for an approval" },
+    }),
+  ]);
+
+  // Both detail lines are spent on the provider's own words, so the status
+  // word appears nowhere the row draws — the query still answers for the
+  // state, and answers for it alone: "working" leaves the waiting row out.
+  const working = arrangeSessions(rows, { ...DEFAULT_SESSION_VIEW, query: "working" });
+  assert.deepEqual(
+    working.sessions.map((session) => session.id),
+    ["busy"],
+  );
+
+  const waiting = arrangeSessions(rows, { ...DEFAULT_SESSION_VIEW, query: "needs you" });
+  assert.deepEqual(
+    waiting.sessions.map((session) => session.id),
+    ["stuck"],
+  );
+});
+
+test("a spoken search is told exactly what the list will show", () => {
+  const rows = displaySessions(bootstrap(false), [
+    normalizeSession(CLAUDE_PROVIDER, {
+      providerSessionId: "parser",
+      title: "Rework the parser",
+      status: SESSION_STATUS.WORKING,
+      observedAt: 1_000,
+    }),
+    normalizeSession(CODEX_PROVIDER, {
+      providerSessionId: "login",
+      title: "Fix the login flow",
+      status: SESSION_STATUS.WORKING,
+      observedAt: 2_000,
+    }),
+  ]);
+
+  assert.deepEqual(spokenSearchOutcome(rows, { ...DEFAULT_SESSION_VIEW, query: "parser" }), {
+    matches: 1,
+  });
+  // An emptied search answers with its honest zero rather than a refusal —
+  // and when the filter in force is what hides the matches, the note says so
+  // the way the list's own empty state does.
+  assert.deepEqual(spokenSearchOutcome(rows, { ...DEFAULT_SESSION_VIEW, query: "zanzibar" }), {
+    matches: 0,
+    note: "No sessions match those words.",
+  });
+  assert.deepEqual(
+    spokenSearchOutcome(rows, {
+      ...DEFAULT_SESSION_VIEW,
+      filters: [PROVIDER_ID.CODEX],
+      query: "parser",
+    }),
+    {
+      matches: 0,
+      note: "No shown sessions match, but the filter in force hides 1 session that would.",
+    },
+  );
 });
 
 test("a blank query is no search at all", () => {

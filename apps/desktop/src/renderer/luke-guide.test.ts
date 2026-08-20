@@ -748,23 +748,23 @@ test("the panel fact says the tabs answer an ask as well as a press", () => {
   assert.ok(guide.facts.some((candidate) => candidate.label === "The Settings tab"));
 });
 
-test("the guide describes the search, and says it is by hand alone", () => {
+test("the guide describes the search, its three ways in, and their shared bound", () => {
   const fact = buildLukeGuide(guideInput()).facts.find(
     (candidate) => candidate.label === "Searching sessions",
   );
 
   assert.ok(fact);
   // A capability the guide does not describe is one Luke will deny having —
-  // and a search Luke claimed he could run himself would be a capability the
-  // spoken tools deliberately do not have.
-  assert.match(fact.detail, /searchable by hand alone/);
+  // and the spoken way in must be described with its bound, because the
+  // refusal Luke voices beside a one-session list is itself the guidance.
   assert.match(fact.detail, /magnifier/);
   assert.match(fact.detail, /Command-F/);
+  assert.match(fact.detail, /asking Luke to search out loud/);
+  assert.match(fact.detail, /reaches no further than the magnifier/);
   assert.match(
     fact.detail,
-    /title, status line, branch, repository, workspace, agent, associated app, or model/,
+    /title, status word or status line, branch, repository, workspace, agent, associated app, or model/,
   );
-  assert.match(fact.detail, /no spoken ask can search/);
   assert.match(fact.detail, /no search survives the panel closing/);
 });
 

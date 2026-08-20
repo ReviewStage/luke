@@ -348,12 +348,14 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
     {
       label: "Searching sessions",
       detail:
-        "The list is searchable by hand alone: the magnifier beside the options button, or " +
-        "Command-F while the panel has the keyboard. It keeps rows saying every typed word in " +
-        "their title, status line, branch, repository, workspace, agent, associated app, or model, and counts " +
+        "The list is searchable three ways: the magnifier beside the options button, Command-F " +
+        "while the panel has the keyboard, or asking Luke to search out loud — a spoken search " +
+        "fills the same field and reaches no further than the magnifier, which is only offered " +
+        "beside a list of more than one session. It keeps rows saying every typed word in " +
+        "their title, status word or status line, branch, repository, workspace, agent, associated app, or model, and counts " +
         "what it left. A search matching nothing offers the matches a filter is hiding rather " +
         "than pretending there are none. Escape clears the query and then closes the field; " +
-        "no spoken ask can search, and no search survives the panel closing. Command-F answers " +
+        "no search survives the panel closing. Command-F answers " +
         "for whichever tab is showing: the sessions list here, the settings search on Settings.",
     },
     {

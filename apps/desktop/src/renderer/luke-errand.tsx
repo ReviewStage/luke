@@ -81,6 +81,7 @@ export const ERRAND_TARGET = {
   SESSIONS_TAB: "tab-sessions",
   SETTINGS_TAB: "tab-settings",
   LIST_OPTIONS: "list-options",
+  LIST_SEARCH: "list-search",
 } as const;
 
 export type ErrandTarget = AppSettingId | (typeof ERRAND_TARGET)[keyof typeof ERRAND_TARGET];
@@ -131,10 +132,15 @@ export function errandTargets(action: AppToolAction): readonly ErrandTarget[] {
   const tab = tabErrandTarget(action.tab);
   // A narrowing or a re-ordering is the news; the tab is only where it
   // happened, and it may not have changed at all.
-  if (action.filters !== undefined || action.sort !== undefined) {
-    return [ERRAND_TARGET.LIST_OPTIONS, tab];
-  }
-  return [tab];
+  const narrowed =
+    action.filters !== undefined || action.sort !== undefined
+      ? [ERRAND_TARGET.LIST_OPTIONS, tab]
+      : [tab];
+  // A search is signed on the magnifier that opens its field, ahead of
+  // whatever else the same ask changed: the field appearing is the loudest
+  // thing the act does, so the magnifier is where the tap reads as its cause.
+  if (action.query !== undefined) return [ERRAND_TARGET.LIST_SEARCH, ...narrowed];
+  return narrowed;
 }
 
 /**

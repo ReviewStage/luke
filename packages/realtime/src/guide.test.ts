@@ -370,6 +370,49 @@ test("a spoken panel ask can combine filters, on the axes the chips combine on",
   });
 });
 
+test("a spoken panel ask can search, only where the list offers a search at all", () => {
+  const pair = [
+    observedConductorSession(),
+    normalizeSession(
+      { id: "codex", displayName: "Codex" },
+      {
+        providerSessionId: "local-1",
+        title: "Rework the parser",
+        status: SESSION_STATUS.WORKING,
+        observedAt: 1_800_000_000_000,
+      },
+    ),
+  ];
+  const show = (argumentsJson: string, sessions = pair) =>
+    appToolAction(call(REALTIME_TOOL.SHOW_PANEL, argumentsJson), GUIDE, sessions);
+
+  assert.deepEqual(show('{"query":" parser build "}'), {
+    kind: "panel",
+    tab: APP_PANEL_TAB.SESSIONS,
+    query: "parser build",
+  });
+  // A search rides the same ask as a narrowing and an ordering, and the words
+  // are not judged here: a query matching nothing is the list's own honest
+  // answer, where a filter showing nothing would be a stale choice.
+  assert.deepEqual(show('{"filters":["conductor"],"sort":"recency","query":"zanzibar"}'), {
+    kind: "panel",
+    tab: APP_PANEL_TAB.SESSIONS,
+    filters: ["conductor"],
+    sort: SESSION_LIST_SORT.RECENCY,
+    query: "zanzibar",
+  });
+  // A blank query is no search, the way a blank draft is no draft.
+  assert.deepEqual(show('{"query":"   "}'), { kind: "panel", tab: APP_PANEL_TAB.SESSIONS });
+
+  // The magnifier is only offered beside a list with more than one session,
+  // and a spoken search reaches no further than the hand's own control.
+  assert.deepEqual(show('{"query":"parser"}', [observedConductorSession()]), {
+    kind: "refused",
+    reason: "The list offers a search only when more than one session is observed.",
+  });
+  assert.equal(show('{"query":"parser"}', []).kind, "refused");
+});
+
 test("a spoken panel ask can reorder the list in the panel's own two words", () => {
   const sessions = [observedConductorSession()];
   const show = (argumentsJson: string) =>
