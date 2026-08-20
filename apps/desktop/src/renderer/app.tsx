@@ -375,6 +375,11 @@ export function App(): React.JSX.Element {
   // lifecycle subscription to every sign-in change.
   const [account, setAccount, accountNow] = useStateWithRef<AccountSnapshot | undefined>(undefined);
   const [sessions, setSessions] = useState<readonly NormalizedSession[]>([]);
+  // Whether the roster above has been read at all yet. It only ever settles —
+  // the bootstrap can say a reading already happened, and any push is one —
+  // so a bootstrap replying "not yet" after a push raced past it clobbers
+  // nothing, and the wing stops saying "loading" the moment either arrives.
+  const [sessionsSettled, setSessionsSettled] = useState(false);
   const [noticeAsks, setNoticeAsks] = useState<readonly SessionNoticeAsk[]>([]);
   const [workspaceProjects, setWorkspaceProjects] = useState<readonly ObservedWorkspaceProject[]>(
     [],
@@ -2308,6 +2313,7 @@ export function App(): React.JSX.Element {
     void window.sidecar.getBootstrap().then((value) => {
       setBootstrap(value);
       setSessions(value.sessions);
+      if (value.sessionsSettled) setSessionsSettled(true);
       setNoticeAsks(value.noticeAsks);
       // Only fill in what no push has said yet: the bootstrap snapshot is
       // older than any change that raced past it, and the main process will
@@ -2369,7 +2375,12 @@ export function App(): React.JSX.Element {
       }
     });
     const removeDisplay = window.sidecar.onDisplayChanged(setDisplay);
-    const removeSessions = window.sidecar.onSessionsChanged(setSessions);
+    const removeSessions = window.sidecar.onSessionsChanged((next) => {
+      setSessions(next);
+      // Any publish is a reading: the main process broadcasts even an empty
+      // first pass, so hearing one at all means Luke has looked.
+      setSessionsSettled(true);
+    });
     const removeNoticeAsks = window.sidecar.onNoticeAsksChanged(setNoticeAsks);
     const removeSupersetSignIn = window.sidecar.onSupersetSignInChanged((next) => {
       setSupersetConnected(next.stage === SUPERSET_SIGN_IN_STAGE.CONNECTED);
@@ -3152,6 +3163,7 @@ export function App(): React.JSX.Element {
         voiceOpening={talkOpening}
         meetingQuiet={meetingQuiet}
         voiceSpent={voiceSpentNote !== undefined}
+        sessionsSettled={sessionsSettled}
         presentation={presentation}
         housingWidth={display.notch.housingWidth}
         accountGated={accountGated}

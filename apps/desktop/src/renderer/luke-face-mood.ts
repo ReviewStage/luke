@@ -29,6 +29,12 @@ export interface FaceContext {
    * anything a model decided.
    */
   voiceSpent: boolean;
+  /**
+   * Whether the roster has been read at all yet. Until the first reading
+   * lands, an empty total means "not looked yet" rather than "nothing to
+   * watch", and the two must not wear the same face.
+   */
+  settled: boolean;
   attention: readonly string[];
   working: number;
   complete: number;
@@ -110,8 +116,12 @@ export function restingMotion(context: FaceContext): FaceMotion | undefined {
   // what a rest must do. Speech still outranks it: a developer who opens a
   // turn mid-meeting is talking to a face, not to a pillow.
   if (context.meetingQuiet) return FACE_MOTION.SLEEPING;
-  // Nothing to watch at all, which is a different thing from nothing happening.
-  if (context.total === 0) return FACE_MOTION.SLEEPING;
+  // Nothing to watch at all, which is a different thing from nothing
+  // happening — and different again from not having looked yet. Until the
+  // first roster reading lands, the zero is the reading's absence, and Luke
+  // waits for it awake and still: falling asleep at launch would report an
+  // empty desk he has not actually seen.
+  if (context.total === 0 && context.settled) return FACE_MOTION.SLEEPING;
   // The day's voice is spent. Ranked below both sleeps: a meeting's hold and
   // an empty roster each say more about this moment than the meter does. It
   // stays true until the quota's own reset, which is what a rest must do —
@@ -402,7 +412,7 @@ export function useFaceMotion(context: FaceContext, still: boolean, hovered = fa
   const [gesture, setGesture] = useState<PlayingGesture>();
   const plays = useRef(0);
   const observed = useRef(observedFace(context));
-  const { total, complete, attention, working } = context;
+  const { total, complete, attention, working, settled } = context;
 
   // Which pool the next moment is drawn from, held in a ref rather than read in
   // the waiting effect below: work starting and stopping is exactly the churn
@@ -421,16 +431,24 @@ export function useFaceMotion(context: FaceContext, still: boolean, hovered = fa
   // often than anything actually changes; what makes that free is that the
   // comparison is against the sessions seen last time rather than against the
   // last render.
+  // The first reading to settle is a baseline, not news: its sessions were
+  // already running before Luke looked, so greeting them would announce
+  // arrivals that never happened — the same reason the very first render
+  // seeds silently. Tracked against the settling seen last time, like the
+  // observations, so nothing else changing can replay the exemption.
+  const settledBefore = useRef(settled);
   useEffect(() => {
     const previous = observed.current;
     const current = observedFace({ attention, complete, total });
     observed.current = current;
-    if (still) return;
+    const firstReading = settled && !settledBefore.current;
+    settledBefore.current = settled;
+    if (still || firstReading) return;
     const noticed = noticedMotion(previous, current);
     if (noticed === undefined) return;
     plays.current += 1;
     setGesture({ motion: noticed, play: plays.current });
-  }, [attention, complete, total, still]);
+  }, [attention, complete, total, still, settled]);
 
   // The artwork plays each motion once and leaves the face at the pose it
   // started from, so this is only the bookkeeping that catches up with it: the

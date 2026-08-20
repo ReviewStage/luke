@@ -26,6 +26,7 @@ function context(overrides: Partial<FaceContext> = {}): FaceContext {
     microphoneLive: false,
     meetingQuiet: false,
     voiceSpent: false,
+    settled: true,
     attention: [],
     working: 0,
     complete: 0,
@@ -100,6 +101,23 @@ test("a meeting the calendar is holding through puts the face to sleep", () => {
     restingMotion(context({ meetingQuiet: true, microphoneLive: true })),
     FACE_MOTION.LISTENING,
   );
+});
+
+test("a roster not yet read holds the face awake rather than asleep", () => {
+  // At launch the zero is the reading's absence, not an empty desk: the face
+  // waits still until the first roster lands, and only a settled zero sleeps.
+  assert.equal(restingMotion(context({ settled: false })), undefined);
+  assert.equal(restingMotion(context()), FACE_MOTION.SLEEPING);
+  // The meeting's sleep reports the calendar's hold, not the roster, so it
+  // does not wait for one; and speech is speech whatever has been read.
+  assert.equal(
+    restingMotion(context({ settled: false, meetingQuiet: true })),
+    FACE_MOTION.SLEEPING,
+  );
+  assert.equal(restingMotion(context({ settled: false, speaking: true })), FACE_MOTION.TALKING);
+  // A spent meter is about the voice, not the roster: hushed says it honestly
+  // while the first reading is still on its way.
+  assert.equal(restingMotion(context({ settled: false, voiceSpent: true })), FACE_MOTION.HUSHED);
 });
 
 test("a spent voice hushes an awake face, and everything else outranks it", () => {

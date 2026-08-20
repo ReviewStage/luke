@@ -566,6 +566,14 @@ export interface AppBootstrap {
   update: UpdateSnapshot;
   sessions: readonly NormalizedSession[];
   /**
+   * Whether `sessions` reflects a roster Luke has actually read. False only
+   * while a live run's first observation pass is still on its way, so an
+   * empty list can say "not looked yet" rather than "nothing to watch"; every
+   * later reading arrives over `onSessionsChanged`, whose first delivery is
+   * itself the settling signal.
+   */
+  sessionsSettled: boolean;
+  /**
    * The standing asks the developer has made about sessions, so a panel that
    * opens late still marks the rows Luke is listening for. The words are the
    * developer's own and never a provider's.
