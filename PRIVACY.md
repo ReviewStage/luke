@@ -235,8 +235,10 @@ and the next observation pass reports the signed-out state.
 
 Luke asks macOS's property-list utility whether the CLI config names an active
 organization and receives only that identifier; Luke never opens the config or
-receives its credential fields. A message or control runs only from the developer's press or a turn
-the developer opened, invokes the CLI executable directly without a shell, and
+receives its credential fields. The login serves one organization at a time,
+so acts are offered only on the workspaces that organization's own host
+database recorded. A message or control runs only from the developer's press
+or a turn the developer opened, invokes the CLI executable directly without a shell, and
 passes only the observed workspace and terminal identifiers plus the
 developer's own message — the terminal lives on this machine, which is the
 CLI's own default, so no host identifier travels at all. The one control

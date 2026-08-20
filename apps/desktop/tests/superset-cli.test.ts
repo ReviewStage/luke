@@ -42,6 +42,7 @@ function testCliOptions(homeDirectory: string) {
 const CONTEXT: SupersetSessionContext = {
   providerId: PROVIDER_ID.CODEX,
   providerSessionId: "session-1",
+  organizationId: "org-1",
   workspaceId: "workspace-1",
   workspaceName: "power-vacation",
   terminalId: "terminal-1",
@@ -57,8 +58,10 @@ test("recognizes only controls owned by Superset", () => {
 test("login state uses only the injected organization-id answer", async (t) => {
   const home = await connectedHome(t);
   const cli = new SupersetCli(testCliOptions(home));
+  assert.equal(await cli.activeOrganization(), "org-1");
   assert.equal(await cli.connected(), true);
   await fs.writeFile(path.join(home, "config.json"), '{"organizationId":""}');
+  assert.equal(await cli.activeOrganization(), undefined);
   assert.equal(await cli.connected(), false);
   await fs.writeFile(path.join(home, "config.json"), "not json");
   assert.equal(await cli.connected(), false);

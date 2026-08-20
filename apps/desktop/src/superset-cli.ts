@@ -141,11 +141,15 @@ export class SupersetCli {
   }
 
   async connected(): Promise<boolean> {
-    if (!(await this.installed())) return false;
+    return (await this.activeOrganization()) !== undefined;
+  }
+
+  async activeOrganization(): Promise<string | undefined> {
+    if (!(await this.installed())) return undefined;
     try {
-      return ((await this.#organizationId())?.trim().length ?? 0) > 0;
+      return (await this.#organizationId())?.trim() || undefined;
     } catch {
-      return false;
+      return undefined;
     }
   }
 

@@ -286,7 +286,9 @@ row press like any other: the address goes to the operating system, nothing
 reaches Superset, and no CLI login is needed. Superset documents one address
 per workspace, so chats sharing a workspace open the same place, and a
 session whose own provider reported an address keeps that one instead. With
-Superset's CLI installed and logged in, a managed row takes the developer's
+Superset's CLI installed and logged in — the login serves one organization at
+a time, so only rows that organization's own host database recorded offer any
+act — a managed row takes the developer's
 message through `terminals send` and offers one control, Delete workspace
 (`superset-delete-workspace`) — Superset documents no archive, so the delete
 is permanent and takes the whole workspace with every chat in it, which is

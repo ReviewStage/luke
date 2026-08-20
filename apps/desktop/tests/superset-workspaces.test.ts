@@ -67,6 +67,7 @@ test("reads live host databases and enriches an exact provider session", async (
   assert.deepEqual(snapshot.context(PROVIDER_ID.CODEX, "session-1"), {
     providerId: PROVIDER_ID.CODEX,
     providerSessionId: "session-1",
+    organizationId: "host-local",
     workspaceId: "workspace-1",
     workspaceName: "power-vacation",
     terminalId: "terminal-1",
@@ -179,7 +180,7 @@ test("advertises Superset actions only after the CLI is connected", async (t) =>
   // wrote the host state is the scheme's handler, so a signed-out CLI still
   // leaves every managed chat somewhere to open.
   assert.equal(observed?.detail?.link, "superset://v2-workspace/workspace-1");
-  const connected = snapshot.enrich(PROVIDER_ID.CODEX, [observation], true)[0];
+  const connected = snapshot.enrich(PROVIDER_ID.CODEX, [observation], "host-local")[0];
   assert.equal(connected?.canReceiveMessage, true);
   assert.deepEqual(connected?.spawnableAgents, ["claude", "codex"]);
   assert.equal(connected?.spawnTarget, "workspace-1");
@@ -197,9 +198,23 @@ test("advertises Superset actions only after the CLI is connected", async (t) =>
   // Deleting is unrecoverable, so a row still working — or one whose state
   // could not be read — is never offered it.
   for (const status of [SESSION_STATUS.WORKING, SESSION_STATUS.UNKNOWN]) {
-    const busy = snapshot.enrich(PROVIDER_ID.CODEX, [{ ...observation, status }], true)[0];
+    const busy = snapshot.enrich(PROVIDER_ID.CODEX, [{ ...observation, status }], "host-local")[0];
     assert.deepEqual(busy?.controls, []);
   }
+
+  // The CLI's login serves one organization at a time, so a workspace another
+  // organization's host service recorded advertises nothing actable — and the
+  // act router answers no context for it — while observation itself stays.
+  const otherOrg = snapshot.enrich(PROVIDER_ID.CODEX, [observation], "org-other")[0];
+  assert.equal(otherOrg?.canReceiveMessage, undefined);
+  assert.equal(otherOrg?.controls, undefined);
+  assert.equal(otherOrg?.detail?.link, "superset://v2-workspace/workspace-1");
+  assert.equal(snapshot.actableContext(PROVIDER_ID.CODEX, "session-1", "org-other"), undefined);
+  assert.equal(snapshot.actableContext(PROVIDER_ID.CODEX, "session-1", undefined), undefined);
+  assert.equal(
+    snapshot.actableContext(PROVIDER_ID.CODEX, "session-1", "host-local")?.workspaceId,
+    "workspace-1",
+  );
 });
 
 test("treats missing and drifted Superset state as no enrichment", async (t) => {

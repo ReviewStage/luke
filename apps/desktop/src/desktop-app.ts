@@ -162,7 +162,7 @@ const supersetWorkspaces = new SupersetWorkspaceReader({
 const supersetCli = new SupersetCli({ homeDirectory: supersetHomeDirectory });
 const supersetWorkspaceAdapter = new SupersetWorkspaceAdapter(supersetCli);
 let observedSupersetWorkspaces = new SupersetWorkspaceSnapshot([]);
-let observedSupersetActionsEnabled = false;
+let observedSupersetOrganization: string | undefined;
 // `directory` and the cipher are read lazily so the store can be declared before
 // the Electron app is ready.
 const settingsStore = new SettingsStore({
@@ -914,9 +914,11 @@ function registerIpc(): void {
     issueTrackers,
     refreshIssues: () => void issueObservationLoop.refresh(),
     supersetContext: (identity) =>
-      observedSupersetActionsEnabled
-        ? observedSupersetWorkspaces.context(identity.providerId, identity.providerSessionId)
-        : undefined,
+      observedSupersetWorkspaces.actableContext(
+        identity.providerId,
+        identity.providerSessionId,
+        observedSupersetOrganization,
+      ),
     supersetCli,
     recordProductEvent,
   });
@@ -1016,24 +1018,28 @@ async function applyLocalSessionHooks(): Promise<void> {
 }
 
 async function refreshProviderSessions(generation: number): Promise<void> {
-  const actionsWereEnabled = observedSupersetActionsEnabled;
+  const actionsWereEnabled = observedSupersetOrganization !== undefined;
   let supersetSnapshot = new SupersetWorkspaceSnapshot([]);
-  let supersetActionsEnabled = false;
+  let supersetOrganization: string | undefined;
   try {
     const supersetAgentDefault = await settingsStore.get(
       APP_SETTING_SCHEMA.supersetAgentDefault.field,
     );
-    [supersetSnapshot, supersetActionsEnabled] = await Promise.all([
+    [supersetSnapshot, supersetOrganization] = await Promise.all([
       supersetWorkspaces.read(),
-      supersetCli.connected(),
+      supersetCli.activeOrganization(),
     ]);
-    await supersetWorkspaceAdapter.refresh(supersetAgentDefault, supersetActionsEnabled);
+    await supersetWorkspaceAdapter.refresh(
+      supersetAgentDefault,
+      supersetOrganization !== undefined,
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     process.stderr.write(`Superset observation failed: ${message}\n`);
   }
   observedSupersetWorkspaces = supersetSnapshot;
-  observedSupersetActionsEnabled = supersetActionsEnabled;
+  observedSupersetOrganization = supersetOrganization;
+  const supersetActionsEnabled = supersetOrganization !== undefined;
   if (actionsWereEnabled !== supersetActionsEnabled) {
     if (supersetActionsEnabled) {
       panels.broadcast(channels.supersetSignInChanged, {
@@ -1054,7 +1060,7 @@ async function refreshProviderSessions(generation: number): Promise<void> {
     orderedRegistrations.map(async ({ adapter }) => {
       try {
         await sessionRegistry.refresh(adapter, (providerId, observations) =>
-          supersetSnapshot.enrich(providerId, observations, supersetActionsEnabled),
+          supersetSnapshot.enrich(providerId, observations, supersetOrganization),
         );
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
