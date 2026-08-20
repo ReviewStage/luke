@@ -36,7 +36,8 @@ function senderWith(
     runEffect: (effect) => runWithHttp(effect, fetch),
     ...overrides,
   });
-  return { sender, requests };
+  const flush = () => runWithHttp(sender.flush(), fetch);
+  return { sender, requests, fetch, flush };
 }
 
 /** The armed sender every test that is not about arming starts from. */
@@ -50,26 +51,26 @@ function sharingSender(
 }
 
 test("a run that sends no network queues nothing and asks for nothing", async () => {
-  const { sender, requests } = sharingSender({ sends: false });
+  const { sender, requests, flush } = sharingSender({ sends: false });
   sender.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: APP_VERSION });
   sender.markDayActive();
   sender.record(PRODUCT_EVENT.ACCOUNT_SIGN_IN, {});
-  await sender.flush();
+  await flush();
   assert.deepEqual(requests, []);
 });
 
 test("nothing is queued before the settings file has answered", async () => {
-  const { sender, requests } = senderWith();
+  const { sender, requests, flush } = senderWith();
   sender.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: APP_VERSION });
-  await sender.flush();
+  await flush();
   assert.deepEqual(requests, []);
 });
 
 test("a flush posts one bearer-authenticated batch and empties the queue", async () => {
-  const { sender, requests } = sharingSender();
+  const { sender, requests, flush } = sharingSender();
   sender.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: APP_VERSION });
   sender.record(PRODUCT_EVENT.ACCOUNT_SIGN_IN, {});
-  await sender.flush();
+  await flush();
 
   assert.equal(requests.length, 1);
   assert.equal(requests[0].url, ENDPOINT);
@@ -80,19 +81,19 @@ test("a flush posts one bearer-authenticated batch and empties the queue", async
     { name: PRODUCT_EVENT.ACCOUNT_SIGN_IN, at: NOON, properties: {} },
   ]);
 
-  await sender.flush();
+  await flush();
   assert.equal(requests.length, 1);
 });
 
 test("arming records no transition; turning it off records one stop and then goes quiet", async () => {
-  const { sender, requests } = senderWith();
+  const { sender, requests, flush } = senderWith();
   sender.setSharing(true);
   sender.setSharing(true);
-  await sender.flush();
+  await flush();
   assert.deepEqual(requests, []);
 
   sender.setSharing(false);
-  await sender.flush();
+  await flush();
   assert.equal(requests.length, 1);
   assert.deepEqual(sentEvents(requests[0]), [
     { name: PRODUCT_EVENT.USAGE_SHARING_STOP, at: NOON, properties: {} },
@@ -100,11 +101,11 @@ test("arming records no transition; turning it off records one stop and then goe
 
   sender.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: APP_VERSION });
   sender.markDayActive();
-  await sender.flush();
+  await flush();
   assert.equal(requests.length, 1);
 
   sender.setSharing(true);
-  await sender.flush();
+  await flush();
   assert.equal(requests.length, 2);
   assert.deepEqual(sentEvents(requests[1]), [
     { name: PRODUCT_EVENT.USAGE_SHARING_RESUME, at: NOON, properties: {} },
@@ -132,9 +133,10 @@ test("a 401 refreshes and retries once, and the same token twice does not", asyn
     now: () => NOON,
     runEffect: (effect) => runWithHttp(effect, fetch),
   });
+  const flush = () => runWithHttp(sender.flush(), fetch);
   sender.setSharing(true);
   sender.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: APP_VERSION });
-  await sender.flush();
+  await flush();
 
   assert.equal(refreshes, 1);
   assert.deepEqual(
@@ -148,7 +150,7 @@ test("a 401 refreshes and retries once, and the same token twice does not", asyn
   );
   stuck.sender.setSharing(true);
   stuck.sender.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: APP_VERSION });
-  await stuck.sender.flush();
+  await stuck.flush();
   assert.equal(stuck.requests.length, 1);
 });
 
@@ -165,13 +167,14 @@ test("a failed send drops its batch rather than retrying it behind the next one"
     now: () => NOON,
     runEffect: (effect) => runWithHttp(effect, fetch),
   });
+  const flush = () => runWithHttp(sender.flush(), fetch);
   sender.setSharing(true);
   sender.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: APP_VERSION });
-  await sender.flush();
+  await flush();
   assert.equal(requests.length, 1);
 
   sender.record(PRODUCT_EVENT.ACCOUNT_SIGN_IN, {});
-  await sender.flush().catch(() => assert.fail("a flush must never throw"));
+  await flush().catch(() => assert.fail("a flush must never throw"));
   assert.equal(requests.length, 2);
   assert.deepEqual(sentEvents(requests[1]), [
     { name: PRODUCT_EVENT.ACCOUNT_SIGN_IN, at: NOON, properties: {} },
@@ -190,26 +193,27 @@ test("signed out the queue waits rather than being spent", async () => {
     now: () => NOON,
     runEffect: (effect) => runWithHttp(effect, fetch),
   });
+  const flush = () => runWithHttp(sender.flush(), fetch);
   sender.setSharing(true);
   sender.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: APP_VERSION });
-  await sender.flush();
+  await flush();
   assert.deepEqual(requests, []);
 
   token = "token-1";
-  await sender.flush();
+  await flush();
   assert.equal(requests.length, 1);
   assert.equal(sentEvents(requests[0]).length, 1);
 });
 
 test("past the queue limit the oldest go and the newest stay", async () => {
-  const { sender, requests } = sharingSender({ queueLimit: 3 });
+  const { sender, requests, flush } = sharingSender({ queueLimit: 3 });
   for (const providerId of ["claude-code", "codex", "conductor", "cursor"] as const) {
     sender.record(PRODUCT_EVENT.SESSION_ACT_SEND, {
       provider_id: providerId,
       session_act: "message_send",
     });
   }
-  await sender.flush();
+  await flush();
 
   assert.deepEqual(
     sentEvents(requests[0]).map((event) => event.properties.provider_id),
@@ -218,29 +222,29 @@ test("past the queue limit the oldest go and the newest stay", async () => {
 });
 
 test("a batch past the wire limit is left for the next flush rather than refused", async () => {
-  const { sender, requests } = sharingSender();
+  const { sender, requests, flush } = sharingSender();
   for (let index = 0; index < 60; index += 1) {
     sender.record(PRODUCT_EVENT.ACCOUNT_SIGN_IN, {});
   }
-  await sender.flush();
+  await flush();
   assert.equal(sentEvents(requests[0]).length, 50);
-  await sender.flush();
+  await flush();
   assert.equal(sentEvents(requests[1]).length, 10);
 });
 
 test("the day marker records once a day, and again once the day has turned", async () => {
   let now = NOON;
-  const { sender, requests } = sharingSender({ now: () => now });
+  const { sender, requests, flush } = sharingSender({ now: () => now });
   sender.markDayActive();
   sender.markDayActive();
   now = NOON + 6 * 60 * 60 * 1000;
   sender.markDayActive();
-  await sender.flush();
+  await flush();
   assert.equal(sentEvents(requests[0]).length, 1);
 
   now = NOON + DAY_MS;
   sender.markDayActive();
-  await sender.flush();
+  await flush();
   assert.deepEqual(sentEvents(requests[1]), [
     {
       name: PRODUCT_EVENT.APP_DAY_ACTIVE,
@@ -251,14 +255,14 @@ test("the day marker records once a day, and again once the day has turned", asy
 });
 
 test("an observation is counted once per provider per day, in buckets", async () => {
-  const { sender, requests } = sharingSender();
+  const { sender, requests, flush } = sharingSender();
   for (const providerId of ["codex", "codex", "claude-code"] as const) {
     sender.recordOncePerDay(PRODUCT_EVENT.SESSION_OBSERVE, providerId, {
       provider_id: providerId,
       session_count: PRODUCT_SESSION_COUNT_BUCKET.FEW,
     });
   }
-  await sender.flush();
+  await flush();
 
   assert.deepEqual(
     sentEvents(requests[0]).map((event) => event.properties),
@@ -270,7 +274,7 @@ test("an observation is counted once per provider per day, in buckets", async ()
 });
 
 test("a call site handing a value outside the allowlist queues nothing", async () => {
-  const { sender, requests } = sharingSender();
+  const { sender, requests, flush } = sharingSender();
   // SAFETY: the point of the test is the runtime guard, so the compile-time
   // one is stepped around exactly as a mis-typed emitter would step around it.
   const smuggler = sender as unknown as {
@@ -281,7 +285,7 @@ test("a call site handing a value outside the allowlist queues nothing", async (
     session_count: 137,
   });
   smuggler.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: "/Users/me/luke" });
-  await sender.flush();
+  await flush();
   assert.deepEqual(requests, []);
 });
 
@@ -313,10 +317,10 @@ test("a run left open marks each day it crosses, not only its launch day", async
 });
 
 test("stopping drops what was queued rather than holding the quit open", async () => {
-  const { sender, requests } = sharingSender();
+  const { sender, requests, flush } = sharingSender();
   sender.start();
   sender.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: APP_VERSION });
   sender.stop();
-  await sender.flush();
+  await flush();
   assert.deepEqual(requests, []);
 });

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { Effect } from "effect";
 import { ObservationLoop, ObservationSupervisor } from "../src/observation-loop";
 
 function deferred() {
@@ -10,16 +11,20 @@ function deferred() {
   return { promise, resolve };
 }
 
+const runEffect = (effect: Effect.Effect<void>) => Effect.runPromise(effect);
+
 test("coalesces overlapping refreshes into one immediate follow-up", async () => {
   const first = deferred();
   const generations: number[] = [];
   const loop = new ObservationLoop({
     gate: () => true,
     intervalMs: 60_000,
-    run: async (generation) => {
-      generations.push(generation);
-      if (generations.length === 1) await first.promise;
-    },
+    run: (generation) =>
+      Effect.gen(function* () {
+        generations.push(generation);
+        if (generations.length === 1) yield* Effect.promise(() => first.promise);
+      }),
+    runEffect,
   });
 
   const running = loop.refresh();
@@ -38,7 +43,8 @@ test("stop invalidates work already in flight and prevents gated work", async ()
   const loop = new ObservationLoop({
     gate: () => enabled,
     intervalMs: 60_000,
-    run: () => pending.promise,
+    run: () => Effect.promise(() => pending.promise),
+    runEffect,
   });
 
   const generation = loop.generation;
@@ -53,7 +59,7 @@ test("stop invalidates work already in flight and prevents gated work", async ()
 });
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-test("supervisor starts and stops every loop as one lifecycle", () => {
+test("supervisor starts and stops every loop as one lifecycle", async () => {
   let enabled = true;
   const events: string[] = [];
   const loops = ["sessions", "issues"].map(
@@ -61,15 +67,18 @@ test("supervisor starts and stops every loop as one lifecycle", () => {
       new ObservationLoop({
         gate: () => enabled,
         intervalMs: 60_000,
-        run: async () => {
-          events.push(name);
-        },
+        run: () =>
+          Effect.sync(() => {
+            events.push(name);
+          }),
+        runEffect,
       }),
   );
   const supervisor = new ObservationSupervisor(loops);
 
   supervisor.setEnabled(true);
   supervisor.setEnabled(true);
+  await new Promise((resolve) => setImmediate(resolve));
   enabled = false;
   supervisor.setEnabled(false);
   assert.deepEqual(events, ["sessions", "issues"]);
@@ -79,7 +88,7 @@ test("supervisor starts and stops every loop as one lifecycle", () => {
   );
 });
 
-test("supervisor arms the loops when the gate opens after the first enable", () => {
+test("supervisor arms the loops when the gate opens after the first enable", async () => {
   let enabled = false;
   const events: string[] = [];
   const loops = ["sessions", "issues"].map(
@@ -87,9 +96,11 @@ test("supervisor arms the loops when the gate opens after the first enable", () 
       new ObservationLoop({
         gate: () => enabled,
         intervalMs: 60_000,
-        run: async () => {
-          events.push(name);
-        },
+        run: () =>
+          Effect.sync(() => {
+            events.push(name);
+          }),
+        runEffect,
       }),
   );
   const supervisor = new ObservationSupervisor(loops);
@@ -98,6 +109,7 @@ test("supervisor arms the loops when the gate opens after the first enable", () 
   assert.deepEqual(events, []);
   enabled = true;
   supervisor.setEnabled(true);
+  await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(events, ["sessions", "issues"]);
   supervisor.setEnabled(false);
 });
@@ -109,8 +121,9 @@ test("a pass that outlives its stop does not run the after-run hook", async () =
   const loop = new ObservationLoop({
     gate: () => enabled,
     intervalMs: 60_000,
-    run: () => pending.promise,
+    run: () => Effect.promise(() => pending.promise),
     afterRun: () => hooks.push(1),
+    runEffect,
   });
 
   const running = loop.refresh();

@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { Effect } from "effect";
 import { LinearCredentials } from "../src/linear-credentials";
 import type { LinearGrant } from "../src/linear-oauth";
+import { runWithHttp } from "./support/effect-http";
 import {
   HTTP_STATUS,
   jsonResponse,
@@ -19,15 +21,17 @@ function grantStore(initial: LinearGrant | undefined) {
   const state = { grant: initial, writes: 0, forgets: 0 };
   return {
     state,
-    readGrant: async () => state.grant,
-    writeGrant: async (grant: LinearGrant) => {
-      state.grant = grant;
-      state.writes += 1;
-    },
-    forgetGrant: async () => {
-      state.grant = undefined;
-      state.forgets += 1;
-    },
+    readGrant: () => Effect.succeed(state.grant),
+    writeGrant: (grant: LinearGrant) =>
+      Effect.sync(() => {
+        state.grant = grant;
+        state.writes += 1;
+      }),
+    forgetGrant: () =>
+      Effect.sync(() => {
+        state.grant = undefined;
+        state.forgets += 1;
+      }),
   };
 }
 
@@ -41,11 +45,20 @@ function credentialsFor(
     writeGrant: store.writeGrant,
     forgetGrant: store.forgetGrant,
     environment: ENVIRONMENT,
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    fetchImplementation: fakeFetch as typeof globalThis.fetch,
     now: () => NOW,
   });
-  return { credentials, requests };
+  return { credentials, requests, fakeFetch };
+}
+
+function accessToken(
+  credentials: LinearCredentials,
+  fetchLike: typeof fetch,
+): Promise<string | undefined> {
+  return runWithHttp(credentials.accessToken(), fetchLike);
+}
+
+function disconnect(credentials: LinearCredentials, fetchLike: typeof fetch): Promise<void> {
+  return runWithHttp(credentials.disconnect(), fetchLike);
 }
 
 function renewed(): Response {
@@ -58,9 +71,9 @@ function renewed(): Response {
 
 test("nothing connected sends nothing", async () => {
   const store = grantStore(undefined);
-  const { credentials, requests } = credentialsFor(store, () => renewed());
+  const { credentials, requests, fakeFetch } = credentialsFor(store, () => renewed());
 
-  assert.equal(await credentials.accessToken(), undefined);
+  assert.equal(await accessToken(credentials, fakeFetch), undefined);
   assert.deepEqual(requests, []);
 });
 
@@ -70,9 +83,9 @@ test("a token still good is spent rather than renewed", async () => {
     refreshToken: "current-refresh",
     expiresAt: NOW + HOUR_MS,
   });
-  const { credentials, requests } = credentialsFor(store, () => renewed());
+  const { credentials, requests, fakeFetch } = credentialsFor(store, () => renewed());
 
-  assert.equal(await credentials.accessToken(), "current-access");
+  assert.equal(await accessToken(credentials, fakeFetch), "current-access");
   // A rotation is a cost: spending one for a token that had an hour left
   // would burn the grant's only refresh token for nothing.
   assert.deepEqual(requests, []);
@@ -84,9 +97,9 @@ test("a lapsed token is renewed, and the renewal is stored before it is used", a
     refreshToken: "current-refresh",
     expiresAt: NOW - HOUR_MS,
   });
-  const { credentials, requests } = credentialsFor(store, () => renewed());
+  const { credentials, requests, fakeFetch } = credentialsFor(store, () => renewed());
 
-  assert.equal(await credentials.accessToken(), "renewed-access");
+  assert.equal(await accessToken(credentials, fakeFetch), "renewed-access");
   assert.equal(requests.length, 1);
   assert.equal(new URLSearchParams(requests[0]?.body ?? "").get("grant_type"), "refresh_token");
   // Linear consumed the old refresh token, so a renewal that reached nobody's
@@ -105,13 +118,15 @@ test("two asks at once spend one rotation between them", async () => {
     refreshToken: "current-refresh",
     expiresAt: NOW - HOUR_MS,
   });
-  const { credentials, requests } = credentialsFor(store, () => renewed());
+  const { credentials, requests, fakeFetch } = credentialsFor(store, () => renewed());
 
   // An observation pass and a spoken act can both find the token lapsed. The
   // loser of a race would spend a refresh token Linear had already rotated
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // away, and Linear reads that as a withdrawn grant.
-  const [first, second] = await Promise.all([credentials.accessToken(), credentials.accessToken()]);
+  const [first, second] = await Promise.all([
+    accessToken(credentials, fakeFetch),
+    accessToken(credentials, fakeFetch),
+  ]);
   assert.equal(first, "renewed-access");
   assert.equal(second, "renewed-access");
   assert.equal(requests.length, 1);
@@ -123,10 +138,10 @@ test("Linear refusing the renewal disconnects; a network that cannot answer does
     refreshToken: "dead-refresh",
     expiresAt: NOW - HOUR_MS,
   });
-  const { credentials: refusedCredentials } = credentialsFor(refused, () =>
+  const { credentials: refusedCredentials, fakeFetch: refusedFetch } = credentialsFor(refused, () =>
     jsonResponse({ error: "invalid_grant" }, HTTP_STATUS.UNAUTHORIZED),
   );
-  assert.equal(await refusedCredentials.accessToken(), undefined);
+  assert.equal(await accessToken(refusedCredentials, refusedFetch), undefined);
   // The row goes back to offering a connection, which is the only thing that
   // helps: no number of further passes will revive a withdrawn grant.
   assert.equal(refused.state.forgets, 1);
@@ -137,10 +152,10 @@ test("Linear refusing the renewal disconnects; a network that cannot answer does
     refreshToken: "good-refresh",
     expiresAt: NOW - HOUR_MS,
   });
-  const { credentials: offlineCredentials } = credentialsFor(offline, () =>
+  const { credentials: offlineCredentials, fakeFetch: offlineFetch } = credentialsFor(offline, () =>
     jsonResponse({}, HTTP_STATUS.SERVER_ERROR),
   );
-  assert.equal(await offlineCredentials.accessToken(), undefined);
+  assert.equal(await accessToken(offlineCredentials, offlineFetch), undefined);
   // The grant is exactly where it was: a closed laptop is not a disconnection.
   assert.equal(offline.state.forgets, 0);
   assert.equal(offline.state.grant?.refreshToken, "good-refresh");
@@ -152,17 +167,19 @@ test("a transient renewal failure can still use an access token until it lapses"
     refreshToken: "good-refresh",
     expiresAt: NOW + 30_000,
   });
-  const { credentials } = credentialsFor(store, () => jsonResponse({}, HTTP_STATUS.SERVER_ERROR));
+  const { credentials, fakeFetch } = credentialsFor(store, () =>
+    jsonResponse({}, HTTP_STATUS.SERVER_ERROR),
+  );
 
-  assert.equal(await credentials.accessToken(), "nearly-lapsed-access");
+  assert.equal(await accessToken(credentials, fakeFetch), "nearly-lapsed-access");
   assert.equal(store.state.forgets, 0);
 });
 
 test("a lapsed grant with nothing to renew it is let go", async () => {
   const store = grantStore({ accessToken: "stale-access", expiresAt: NOW - HOUR_MS });
-  const { credentials, requests } = credentialsFor(store, () => renewed());
+  const { credentials, requests, fakeFetch } = credentialsFor(store, () => renewed());
 
-  assert.equal(await credentials.accessToken(), undefined);
+  assert.equal(await accessToken(credentials, fakeFetch), undefined);
   // Nothing to send, so nothing is sent; the row says connect rather than
   // sitting there failing every pass.
   assert.deepEqual(requests, []);
@@ -175,9 +192,11 @@ test("disconnecting revokes at Linear and forgets here either way", async () => 
     refreshToken: "current-refresh",
     expiresAt: NOW + HOUR_MS,
   });
-  const { credentials, requests } = credentialsFor(store, () => jsonResponse({}, HTTP_STATUS.OK));
+  const { credentials, requests, fakeFetch } = credentialsFor(store, () =>
+    jsonResponse({}, HTTP_STATUS.OK),
+  );
 
-  await credentials.disconnect();
+  await disconnect(credentials, fakeFetch);
   const revokeBody = new URLSearchParams(requests[0]?.body ?? "");
   assert.equal(revokeBody.get("token"), "current-refresh");
   assert.equal(revokeBody.get("token_type_hint"), "refresh_token");
@@ -188,10 +207,13 @@ test("disconnecting revokes at Linear and forgets here either way", async () => 
     refreshToken: "current-refresh",
     expiresAt: NOW + HOUR_MS,
   });
-  const { credentials: stubbornCredentials } = credentialsFor(stubborn, () => {
-    throw new Error("offline");
-  });
-  await stubbornCredentials.disconnect();
+  const { credentials: stubbornCredentials, fakeFetch: stubbornFetch } = credentialsFor(
+    stubborn,
+    () => {
+      throw new Error("offline");
+    },
+  );
+  await disconnect(stubbornCredentials, stubbornFetch);
   // The developer asked to disconnect. A network that cannot carry the
   // revocation is no reason to keep the grant on this machine.
   assert.equal(stubborn.state.grant, undefined);
@@ -226,18 +248,16 @@ test("disconnecting while a refresh is in flight cannot restore the grant", asyn
     writeGrant: store.writeGrant,
     forgetGrant: store.forgetGrant,
     environment: ENVIRONMENT,
-    // SAFETY: Recording fetch matches globalThis.fetch for test harness injection.
-    fetchImplementation: refreshFetchImpl as typeof globalThis.fetch,
     now: () => NOW,
   });
 
-  const access = credentials.accessToken();
+  const access = accessToken(credentials, refreshFetchImpl as typeof globalThis.fetch);
   while (requests.length === 0) await new Promise((resolve) => setImmediate(resolve));
-  const disconnect = credentials.disconnect();
+  const disconnecting = disconnect(credentials, refreshFetchImpl as typeof globalThis.fetch);
   while (requests.length < 2) await new Promise((resolve) => setImmediate(resolve));
   finishRefresh?.(renewed());
 
-  await disconnect;
+  await disconnecting;
   assert.equal(await access, undefined);
   assert.equal(store.state.grant, undefined);
   assert.equal(store.state.writes, 0);
@@ -272,18 +292,19 @@ test("a refresh cannot start while disconnect is revoking the grant", async () =
     writeGrant: store.writeGrant,
     forgetGrant: store.forgetGrant,
     environment: ENVIRONMENT,
-    // SAFETY: Recording fetch matches globalThis.fetch for test harness injection.
-    fetchImplementation: revokeFetchImpl as typeof globalThis.fetch,
     now: () => NOW,
   });
 
-  const disconnect = credentials.disconnect();
+  const disconnecting = disconnect(credentials, revokeFetchImpl as typeof globalThis.fetch);
   while (requests.length === 0) await new Promise((resolve) => setImmediate(resolve));
 
-  assert.equal(await credentials.accessToken(), undefined);
+  assert.equal(
+    await accessToken(credentials, revokeFetchImpl as typeof globalThis.fetch),
+    undefined,
+  );
   assert.equal(requests.length, 1);
   finishRevocation?.(jsonResponse({}, HTTP_STATUS.OK));
-  await disconnect;
+  await disconnecting;
   assert.equal(store.state.grant, undefined);
   assert.equal(store.state.writes, 0);
 });

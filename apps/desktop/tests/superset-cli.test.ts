@@ -4,6 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
 import { isRecord, PROVIDER_ACT_RESULT_STATUS, PROVIDER_ID, text } from "@sidecar/core";
+import { CLI_FAILURE, CliFailure } from "@sidecar/core/effect-errors";
+import { Effect } from "effect";
 import {
   isSupersetControlId,
   SUPERSET_CONTROL_ID,
@@ -11,6 +13,7 @@ import {
   SupersetWorkspaceAdapter,
 } from "../src/superset-cli";
 import type { SupersetSessionContext } from "../src/superset-workspaces";
+import { runLocalEffect } from "./support/run-effect";
 
 async function connectedHome(t: TestContext): Promise<string> {
   const home = await fs.mkdtemp(path.join(os.tmpdir(), "luke-superset-cli-"));
@@ -26,16 +29,17 @@ async function connectedHome(t: TestContext): Promise<string> {
 function testCliOptions(homeDirectory: string) {
   return {
     homeDirectory,
-    organizationId: async () => {
-      try {
-        const parsed: unknown = JSON.parse(
-          await fs.readFile(path.join(homeDirectory, "config.json"), "utf8"),
-        );
-        return isRecord(parsed) ? text(parsed.organizationId) : undefined;
-      } catch {
-        return undefined;
-      }
-    },
+    organizationId: () =>
+      Effect.tryPromise(async () => {
+        try {
+          const parsed: unknown = JSON.parse(
+            await fs.readFile(path.join(homeDirectory, "config.json"), "utf8"),
+          );
+          return isRecord(parsed) ? text(parsed.organizationId) : undefined;
+        } catch {
+          return undefined;
+        }
+      }),
   };
 }
 
@@ -59,11 +63,11 @@ test("recognizes only controls owned by Superset", () => {
 test("login state uses only the injected organization-id answer", async (t) => {
   const home = await connectedHome(t);
   const cli = new SupersetCli(testCliOptions(home));
-  assert.equal(await cli.connected(), true);
+  assert.equal(await runLocalEffect(cli.connected()), true);
   await fs.writeFile(path.join(home, "config.json"), '{"organizationId":""}');
-  assert.equal(await cli.connected(), false);
+  assert.equal(await runLocalEffect(cli.connected()), false);
   await fs.writeFile(path.join(home, "config.json"), "not json");
-  assert.equal(await cli.connected(), false);
+  assert.equal(await runLocalEffect(cli.connected()), false);
 });
 
 test("a missing CLI login exposes no Superset actions", async (t) => {
@@ -71,11 +75,11 @@ test("a missing CLI login exposes no Superset actions", async (t) => {
   t.after(async () => fs.rm(home, { recursive: true, force: true }));
   const cli = new SupersetCli({
     ...testCliOptions(home),
-    run: async () => assert.fail("an unavailable CLI must not run"),
+    run: () => Effect.sync(() => assert.fail("an unavailable CLI must not run")),
   });
 
-  assert.equal(await cli.connected(), false);
-  assert.deepEqual(await cli.sendMessage(CONTEXT, "hello"), {
+  assert.equal(await runLocalEffect(cli.connected()), false);
+  assert.deepEqual(await runLocalEffect(cli.sendMessage(CONTEXT, "hello")), {
     status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED,
   });
 });
@@ -91,16 +95,17 @@ test("organization selection is refreshed and switched by exact slug", async (t)
   ];
   const cli = new SupersetCli({
     ...testCliOptions(home),
-    query: async (_executable, arguments_) => {
-      if (arguments_[1] === "list") return JSON.stringify({ data: organizations });
-      await fs.writeFile(path.join(home, "config.json"), '{"organizationId":"org-2"}');
-      return "{}";
-    },
+    query: (_executable, arguments_) =>
+      Effect.tryPromise(async () => {
+        if (arguments_[1] === "list") return JSON.stringify({ data: organizations });
+        await fs.writeFile(path.join(home, "config.json"), '{"organizationId":"org-2"}');
+        return "{}";
+      }),
   });
 
-  assert.deepEqual(await cli.organizations(), organizations);
-  assert.equal(await cli.chooseOrganization("invented"), false);
-  assert.equal(await cli.chooseOrganization("luke"), true);
+  assert.deepEqual(await runLocalEffect(cli.organizations()), organizations);
+  assert.equal(await runLocalEffect(cli.chooseOrganization("invented")), false);
+  assert.equal(await runLocalEffect(cli.chooseOrganization("luke")), true);
 });
 
 test("message and controls use fixed arguments without a shell", async (t) => {
@@ -108,25 +113,26 @@ test("message and controls use fixed arguments without a shell", async (t) => {
   const calls: Array<{ executable: string; arguments_: readonly string[] }> = [];
   const cli = new SupersetCli({
     ...testCliOptions(home),
-    run: async (executable, arguments_) => {
-      calls.push({ executable, arguments_ });
-    },
+    run: (executable, arguments_) =>
+      Effect.sync(() => {
+        calls.push({ executable, arguments_ });
+      }),
   });
 
   assert.equal(
-    (await cli.sendMessage(CONTEXT, "ship it")).status,
+    (await runLocalEffect(cli.sendMessage(CONTEXT, "ship it"))).status,
     PROVIDER_ACT_RESULT_STATUS.ACCEPTED,
   );
   assert.equal(
-    (await cli.executeControl(CONTEXT, SUPERSET_CONTROL_ID.OPEN_WORKSPACE)).status,
+    (await runLocalEffect(cli.executeControl(CONTEXT, SUPERSET_CONTROL_ID.OPEN_WORKSPACE))).status,
     PROVIDER_ACT_RESULT_STATUS.ACCEPTED,
   );
   assert.equal(
-    (await cli.executeControl(CONTEXT, SUPERSET_CONTROL_ID.CLOSE_TERMINAL)).status,
+    (await runLocalEffect(cli.executeControl(CONTEXT, SUPERSET_CONTROL_ID.CLOSE_TERMINAL))).status,
     PROVIDER_ACT_RESULT_STATUS.ACCEPTED,
   );
   assert.equal(
-    (await cli.createAgent(CONTEXT, "claude", "Review the change")).status,
+    (await runLocalEffect(cli.createAgent(CONTEXT, "claude", "Review the change"))).status,
     PROVIDER_ACT_RESULT_STATUS.ACCEPTED,
   );
   assert.deepEqual(calls, [
@@ -187,12 +193,11 @@ test("a CLI failure becomes a bounded rejection", async (t) => {
   const home = await connectedHome(t);
   const cli = new SupersetCli({
     ...testCliOptions(home),
-    run: async () => {
-      throw new Error("secret provider output");
-    },
+    run: () =>
+      Effect.fail(new CliFailure({ failure: CLI_FAILURE.TRANSIENT, provider: "superset" })),
   });
 
-  assert.deepEqual(await cli.sendMessage(CONTEXT, "hello"), {
+  assert.deepEqual(await runLocalEffect(cli.sendMessage(CONTEXT, "hello")), {
     status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
     reason: "Superset could not deliver that message.",
   });
@@ -206,29 +211,31 @@ test("discovers host-scoped projects and creates a workspace with a generated br
   const cli = new SupersetCli({
     ...testCliOptions(home),
     uniqueId: () => "deadbeef-0000-0000-0000-000000000000",
-    query: async (_executable, arguments_) => {
-      if (arguments_[0] === "hosts") return "[]";
-      if (arguments_[0] === "projects") {
-        return JSON.stringify([{ id: "project-1", name: "Luke", path: "/private/path" }]);
-      }
-      if (arguments_[0] === "agents") {
-        return JSON.stringify([
-          { id: "agent-1", presetId: "codex", label: "Codex" },
-          { id: "agent-2", presetId: "claude", label: "Claude" },
-        ]);
-      }
-      if (arguments_[0] === "workspaces") {
+    query: (_executable, arguments_) =>
+      Effect.sync(() => {
+        if (arguments_[0] === "hosts") return "[]";
+        if (arguments_[0] === "projects") {
+          return JSON.stringify([{ id: "project-1", name: "Luke", path: "/private/path" }]);
+        }
+        if (arguments_[0] === "agents") {
+          return JSON.stringify([
+            { id: "agent-1", presetId: "codex", label: "Codex" },
+            { id: "agent-2", presetId: "claude", label: "Claude" },
+          ]);
+        }
+        if (arguments_[0] === "workspaces") {
+          mutableCommands.push([...arguments_]);
+          return JSON.stringify({ workspaceId: "workspace-new" });
+        }
+        return "[]";
+      }),
+    run: (_executable, arguments_) =>
+      Effect.sync(() => {
         mutableCommands.push([...arguments_]);
-        return JSON.stringify({ workspaceId: "workspace-new" });
-      }
-      return "[]";
-    },
-    run: async (_executable, arguments_) => {
-      mutableCommands.push([...arguments_]);
-    },
+      }),
   });
 
-  assert.deepEqual(await cli.workspaceProjects("codex"), [
+  assert.deepEqual(await runLocalEffect(cli.workspaceProjects("codex")), [
     {
       providerProjectId: "project-1",
       repository: "Luke",
@@ -240,12 +247,14 @@ test("discovers host-scoped projects and creates a workspace with a generated br
     },
   ]);
   assert.deepEqual(
-    await cli.createWorkspace({
-      providerProjectId: "project-1",
-      providerTargetId: "local",
-      agent: "codex",
-      task: "Fix the panel transitions",
-    }),
+    await runLocalEffect(
+      cli.createWorkspace({
+        providerProjectId: "project-1",
+        providerTargetId: "local",
+        agent: "codex",
+        task: "Fix the panel transitions",
+      }),
+    ),
     { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED },
   );
   assert.deepEqual(mutableCommands, [
@@ -274,19 +283,20 @@ test("reuses recently discovered workspace projects", async (t) => {
   let projectQueries = 0;
   const cli = new SupersetCli({
     ...testCliOptions(home),
-    query: async (_executable, arguments_) => {
-      if (arguments_[0] === "projects") {
-        projectQueries += 1;
-        return JSON.stringify([{ id: "project-1", name: "Luke" }]);
-      }
-      if (arguments_[0] === "agents") return JSON.stringify([{ presetId: "codex" }]);
-      return "[]";
-    },
+    query: (_executable, arguments_) =>
+      Effect.sync(() => {
+        if (arguments_[0] === "projects") {
+          projectQueries += 1;
+          return JSON.stringify([{ id: "project-1", name: "Luke" }]);
+        }
+        if (arguments_[0] === "agents") return JSON.stringify([{ presetId: "codex" }]);
+        return "[]";
+      }),
   });
   const adapter = new SupersetWorkspaceAdapter(cli);
 
-  await adapter.refresh("codex", true);
-  await adapter.refresh("codex", true);
+  await runLocalEffect(adapter.refresh("codex", true));
+  await runLocalEffect(adapter.refresh("codex", true));
 
   assert.equal(projectQueries, 1);
   assert.equal(adapter.workspaceProjects()[0]?.defaultAgent, "codex");
@@ -297,19 +307,20 @@ test("retries workspace discovery after an empty result", async (t) => {
   let projectQueries = 0;
   const cli = new SupersetCli({
     ...testCliOptions(home),
-    query: async (_executable, arguments_) => {
-      if (arguments_[0] === "projects") {
-        projectQueries += 1;
-        return projectQueries === 1 ? "[]" : JSON.stringify([{ id: "project-1", name: "Luke" }]);
-      }
-      if (arguments_[0] === "agents") return JSON.stringify([{ presetId: "codex" }]);
-      return "[]";
-    },
+    query: (_executable, arguments_) =>
+      Effect.sync(() => {
+        if (arguments_[0] === "projects") {
+          projectQueries += 1;
+          return projectQueries === 1 ? "[]" : JSON.stringify([{ id: "project-1", name: "Luke" }]);
+        }
+        if (arguments_[0] === "agents") return JSON.stringify([{ presetId: "codex" }]);
+        return "[]";
+      }),
   });
   const adapter = new SupersetWorkspaceAdapter(cli);
 
-  await adapter.refresh("codex", true);
-  await adapter.refresh("codex", true);
+  await runLocalEffect(adapter.refresh("codex", true));
+  await runLocalEffect(adapter.refresh("codex", true));
 
   assert.equal(projectQueries, 2);
   assert.equal(adapter.workspaceProjects()[0]?.providerProjectId, "project-1");
@@ -319,29 +330,30 @@ test("creates on an observed remote host and preserves success when opening fail
   const home = await connectedHome(t);
   const cli = new SupersetCli({
     ...testCliOptions(home),
-    query: async (_executable, arguments_) => {
-      if (arguments_[0] === "hosts") return JSON.stringify([{ id: "host-1", name: "Studio" }]);
-      if (arguments_[0] === "projects") {
-        return arguments_.includes("host-1")
-          ? JSON.stringify([{ id: "project-1", name: "Luke" }])
-          : "[]";
-      }
-      if (arguments_[0] === "agents") {
-        return arguments_.includes("host-1") ? JSON.stringify([{ presetId: "codex" }]) : "[]";
-      }
-      if (arguments_[0] === "workspaces") {
-        assert.deepEqual(arguments_.slice(0, 5), [
-          "workspaces",
-          "create",
-          "--host",
-          "host-1",
-          "--project",
-        ]);
-        return JSON.stringify({ workspaceId: "workspace-new" });
-      }
-      return "[]";
-    },
-    run: async (_executable, arguments_) => {
+    query: (_executable, arguments_) =>
+      Effect.sync(() => {
+        if (arguments_[0] === "hosts") return JSON.stringify([{ id: "host-1", name: "Studio" }]);
+        if (arguments_[0] === "projects") {
+          return arguments_.includes("host-1")
+            ? JSON.stringify([{ id: "project-1", name: "Luke" }])
+            : "[]";
+        }
+        if (arguments_[0] === "agents") {
+          return arguments_.includes("host-1") ? JSON.stringify([{ presetId: "codex" }]) : "[]";
+        }
+        if (arguments_[0] === "workspaces") {
+          assert.deepEqual(arguments_.slice(0, 5), [
+            "workspaces",
+            "create",
+            "--host",
+            "host-1",
+            "--project",
+          ]);
+          return JSON.stringify({ workspaceId: "workspace-new" });
+        }
+        return "[]";
+      }),
+    run: (_executable, arguments_) => {
       assert.deepEqual(arguments_, [
         "workspaces",
         "open",
@@ -350,17 +362,19 @@ test("creates on an observed remote host and preserves success when opening fail
         "host-1",
         "--json",
       ]);
-      throw new Error("Superset is not reachable");
+      return Effect.fail(new CliFailure({ failure: CLI_FAILURE.TRANSIENT, provider: "superset" }));
     },
   });
 
   assert.deepEqual(
-    await cli.createWorkspace({
-      providerProjectId: "project-1",
-      providerTargetId: "host-1",
-      agent: "codex",
-      task: "Review the branch",
-    }),
+    await runLocalEffect(
+      cli.createWorkspace({
+        providerProjectId: "project-1",
+        providerTargetId: "host-1",
+        agent: "codex",
+        task: "Review the branch",
+      }),
+    ),
     {
       status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED,
       warning: "The workspace was created, but Superset could not open it.",
@@ -372,23 +386,32 @@ test("workspace creation reports Superset's bounded first error line", async (t)
   const home = await connectedHome(t);
   const cli = new SupersetCli({
     ...testCliOptions(home),
-    query: async (_executable, arguments_) => {
-      if (arguments_[0] === "hosts") return "[]";
-      if (arguments_[0] === "projects") return JSON.stringify([{ id: "project-1", name: "Luke" }]);
-      if (arguments_[0] === "agents") return JSON.stringify([{ presetId: "codex" }]);
-      throw Object.assign(new Error("command included private arguments"), {
-        stderr: `\u001b[31mError: Branch names cannot begin with that prefix.\u001b[0m\n${"x".repeat(500)}`,
-      });
+    query: (_executable, arguments_) => {
+      if (arguments_[0] === "hosts") return Effect.succeed("[]");
+      if (arguments_[0] === "projects") {
+        return Effect.succeed(JSON.stringify([{ id: "project-1", name: "Luke" }]));
+      }
+      if (arguments_[0] === "agents")
+        return Effect.succeed(JSON.stringify([{ presetId: "codex" }]));
+      return Effect.fail(
+        new CliFailure({
+          failure: CLI_FAILURE.TRANSIENT,
+          provider: "superset",
+          stderr: `\u001b[31mError: Branch names cannot begin with that prefix.\u001b[0m\n${"x".repeat(500)}`,
+        }),
+      );
     },
   });
 
   assert.deepEqual(
-    await cli.createWorkspace({
-      providerProjectId: "project-1",
-      providerTargetId: "local",
-      agent: "codex",
-      task: "private task text",
-    }),
+    await runLocalEffect(
+      cli.createWorkspace({
+        providerProjectId: "project-1",
+        providerTargetId: "local",
+        agent: "codex",
+        task: "private task text",
+      }),
+    ),
     {
       status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
       reason: "Branch names cannot begin with that prefix.",

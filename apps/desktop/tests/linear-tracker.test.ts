@@ -132,12 +132,12 @@ test("a failed or malformed read is an error, never a quieter roster", async () 
     accessToken: "linear-access-token",
     status: HTTP_STATUS.SERVER_ERROR,
   });
-  await assert.rejects(() => run(failed.tracker.observe()));
+  await assert.rejects(() => failed.run(failed.tracker.observe()));
 
   const errored = trackerWith([{ errors: [{ message: "rate limited" }] }], {
     accessToken: "linear-access-token",
   });
-  await assert.rejects(() => run(errored.tracker.observe()));
+  await assert.rejects(() => errored.run(errored.tracker.observe()));
 });
 
 test("moving an issue posts the one documented write and reads its answer", async () => {

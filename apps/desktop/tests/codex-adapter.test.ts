@@ -5,8 +5,10 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
 import { InMemorySessionRegistry, SESSION_COMPLETION_CAUSE, SESSION_STATUS } from "@sidecar/core";
+import { Effect } from "effect";
 import { CODEX_PROVIDER, CodexSessionAdapter } from "../src/codex-adapter";
 import type { ParsedJsonObject } from "./support/json";
+import { runLocalEffect } from "./support/run-effect";
 
 const TEST_TIME = Date.parse("2026-08-11T23:45:00.000Z");
 const CODEX_STATE_DATABASE = "state_5.sqlite";
@@ -166,7 +168,7 @@ test("observes a Codex thread under the name Codex gave it", async (t) => {
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60_000,
   });
-  const observations = await adapter.observe();
+  const observations = await runLocalEffect(adapter.observe());
 
   assert.deepEqual(adapter.provider, CODEX_PROVIDER);
   assert.equal(observations.length, 1);
@@ -200,7 +202,7 @@ test("addresses a Codex thread by the id Codex files it under", async (t) => {
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60_000,
   });
-  const observations = await adapter.observe();
+  const observations = await runLocalEffect(adapter.observe());
 
   assert.equal(observations[0]?.detail?.link, "codex://threads/codex%20thread%2Fone%3Ftwo");
 });
@@ -233,7 +235,7 @@ test("reports a finished Codex turn as waiting for its developer", async (t) => 
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60_000,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.WAITING);
   assert.equal(observation?.recap, "Released 0.1.6 and merged the PR.");
@@ -265,7 +267,7 @@ test("reports a running Codex turn as working with the call it is making", async
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60_000,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.WORKING);
   assert.equal(observation?.recap, undefined);
@@ -298,7 +300,7 @@ test("names a call whose argument Codex passes as a list of tokens", async (t) =
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60_000,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   assert.equal(observation?.detail?.activity, "run: notch geometry inset");
 });
@@ -328,7 +330,7 @@ test("names a call by its tool alone when no argument reads as a phrase", async 
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60_000,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   assert.equal(observation?.detail?.activity, "update_plan");
 });
@@ -358,7 +360,7 @@ test("drops the previous turn's call when a new Codex turn starts", async (t) =>
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60_000,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.WORKING);
   assert.equal(observation?.detail?.activity, undefined);
@@ -384,7 +386,7 @@ test("reports a Codex turn that stopped on an error", async (t) => {
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60_000,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.ERROR);
   assert.equal(observation?.detail?.error, "stream disconnected before completion");
@@ -415,7 +417,7 @@ test("reports a failed turn's error instead of its parting words", async (t) => 
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60_000,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.ERROR);
   assert.equal(observation?.detail?.error, "exceeded usage quota");
@@ -446,7 +448,7 @@ test("keeps a failed Codex turn at error past the freshness decay", async (t) =>
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60 * 60 * 1000,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.ERROR);
 });
@@ -468,7 +470,7 @@ test("drops the previous turn's error when a new Codex turn starts", async (t) =
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60_000,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.WORKING);
   assert.equal(observation?.detail?.error, undefined);
@@ -490,7 +492,7 @@ test("bounds a Codex error to one row-sized line", async (t) => {
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60_000,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   assert.equal(observation?.detail?.error, `${"x".repeat(79)}…`);
 });
@@ -514,7 +516,7 @@ test("holds a long Codex turn at working however stale its row is", async (t) =>
     activeSessionFreshnessMs: 15 * 60 * 1000,
     maximumSessionAgeMs: 60 * 60 * 1000,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.WORKING);
 });
@@ -536,7 +538,7 @@ test("observes Codex sessions from an explicit SQLite home", async (t) => {
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60_000,
   });
-  const observations = await adapter.observe();
+  const observations = await runLocalEffect(adapter.observe());
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.providerSessionId, "codex-sqlite-home");
@@ -566,7 +568,7 @@ test("observes Codex sessions from configured sqlite_home", async (t) => {
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60_000,
   });
-  const observations = await adapter.observe();
+  const observations = await runLocalEffect(adapter.observe());
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.providerSessionId, "codex-configured-home");
@@ -596,7 +598,7 @@ test("observes Codex sessions from CODEX_SQLITE_HOME", async (t) => {
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60_000,
   });
-  const observations = await adapter.observe();
+  const observations = await runLocalEffect(adapter.observe());
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.providerSessionId, "codex-env-home");
@@ -634,7 +636,7 @@ test("prefers configured sqlite_home over CODEX_SQLITE_HOME", async (t) => {
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60_000,
   });
-  const observations = await adapter.observe();
+  const observations = await runLocalEffect(adapter.observe());
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.providerSessionId, "codex-configured-home");
@@ -656,7 +658,7 @@ test("observes Codex sessions from the default sqlite subdirectory", async (t) =
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60_000,
   });
-  const observations = await adapter.observe();
+  const observations = await runLocalEffect(adapter.observe());
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.providerSessionId, "codex-default-sqlite");
@@ -679,7 +681,7 @@ test("falls back when a higher-priority Codex database has an unusable schema", 
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60_000,
   });
-  const observations = await adapter.observe();
+  const observations = await runLocalEffect(adapter.observe());
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.providerSessionId, "codex-legacy-valid");
@@ -702,7 +704,7 @@ test("keeps stale unarchived Codex sessions unknown instead of inventing activit
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60 * 60 * 1000,
   });
-  const observations = await adapter.observe();
+  const observations = await runLocalEffect(adapter.observe());
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.status, SESSION_STATUS.UNKNOWN);
@@ -744,7 +746,7 @@ test("hides archived Codex threads however recently they were touched", async (t
     codexHome,
     now: () => TEST_TIME,
   });
-  const observations = await adapter.observe();
+  const observations = await runLocalEffect(adapter.observe());
 
   assert.deepEqual(
     observations.map((observation) => ({
@@ -779,7 +781,7 @@ test("a thread archived between passes leaves the roster and stays gone", async 
   const adapter = new CodexSessionAdapter({ codexHome, now: () => TEST_TIME });
   const registry = new InMemorySessionRegistry();
 
-  await registry.refresh(adapter);
+  await runLocalEffect(registry.refresh(adapter));
   assert.deepEqual(
     registry.list().map((session) => session.providerSessionId),
     ["codex-live"],
@@ -796,7 +798,7 @@ test("a thread archived between passes leaves the roster and stays gone", async 
     database.close();
   }
 
-  await registry.refresh(adapter);
+  await runLocalEffect(registry.refresh(adapter));
   assert.deepEqual(registry.list(), []);
 });
 
@@ -807,7 +809,7 @@ test("returns an empty snapshot when Codex has no local state database", async (
     now: () => TEST_TIME,
   });
 
-  assert.deepEqual(await adapter.observe(), []);
+  assert.deepEqual(await runLocalEffect(adapter.observe()), []);
 });
 
 test("returns an empty snapshot when node sqlite is unavailable", async (t) => {
@@ -826,12 +828,16 @@ test("returns an empty snapshot when node sqlite is unavailable", async (t) => {
   const adapter = new CodexSessionAdapter({
     codexHome,
     now: () => TEST_TIME,
-    sqlite: async () => {
-      throw error;
-    },
+    sqlite: () =>
+      Effect.try({
+        try: () => {
+          throw error;
+        },
+        catch: (thrown) => thrown as Error,
+      }),
   });
 
-  assert.deepEqual(await adapter.observe(), []);
+  assert.deepEqual(await runLocalEffect(adapter.observe()), []);
 });
 
 // ---------------------------------------------------------------------------
@@ -883,7 +889,7 @@ test("a permission request the database cannot show turns the row to waiting", a
     hookEventsDirectory: () => spool,
     now: () => TEST_TIME,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.WAITING);
   // The event also dates the session: the spool is written only by Luke's own
@@ -913,7 +919,7 @@ test("a session-end event settles a row the rollout would leave waiting", async 
     hookEventsDirectory: () => spool,
     now: () => TEST_TIME,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.COMPLETE);
   assert.equal(observation?.completionCause, SESSION_COMPLETION_CAUSE.SESSION_CLOSED);
@@ -944,7 +950,7 @@ test("a stop event keeps a finished turn waiting past the freshness decay", asyn
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60 * 60 * 1000,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.WAITING);
 });
@@ -978,7 +984,7 @@ test("a stop event does not talk a failed turn out of its error", async (t) => {
     hookEventsDirectory: () => spool,
     now: () => TEST_TIME,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.ERROR);
   assert.equal(observation?.detail?.error, "exceeded usage quota");
@@ -1001,7 +1007,7 @@ test("an event the thread has moved past refines nothing", async (t) => {
     hookEventsDirectory: () => spool,
     now: () => TEST_TIME,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.WORKING);
   assert.equal(observation?.observedAt, TEST_TIME - 60_000);
@@ -1025,7 +1031,7 @@ test("a prompt event reads a fresh turn as working before the rollout shows it",
     hookEventsDirectory: () => spool,
     now: () => TEST_TIME,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.WORKING);
 });
@@ -1047,7 +1053,7 @@ test("a notification the thread has answered stands down at once", async (t) => 
     hookEventsDirectory: () => spool,
     now: () => TEST_TIME,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.WORKING);
 });
@@ -1063,7 +1069,7 @@ test("a spool that cannot be read costs only the refinement", async (t) => {
     hookEventsDirectory: () => path.join(codexHome, "no-such-spool"),
     now: () => TEST_TIME,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.WORKING);
 });
@@ -1093,7 +1099,7 @@ test("a permission hold that outlives the freshness window never reads as work",
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60 * 60 * 1000,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.UNKNOWN);
 });

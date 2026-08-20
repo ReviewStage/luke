@@ -6,9 +6,11 @@ import path from "node:path";
 import { PassThrough } from "node:stream";
 import test, { type TestContext } from "node:test";
 import { isRecord, text } from "@sidecar/core";
+import { Effect } from "effect";
 import { SUPERSET_SIGN_IN_STAGE } from "../src/shared/contracts";
 import { SupersetCli } from "../src/superset-cli";
 import { SupersetSignIn, validSupersetSignInCode } from "../src/superset-sign-in";
+import { runLocalEffect } from "./support/run-effect";
 
 class FakeChild extends EventEmitter {
   readonly stdin = new PassThrough();
@@ -33,22 +35,27 @@ async function homeWithCli(t: TestContext): Promise<string> {
 function testCliOptions(homeDirectory: string) {
   return {
     homeDirectory,
-    organizationId: async () => {
-      try {
-        const parsed: unknown = JSON.parse(
-          await fs.readFile(path.join(homeDirectory, "config.json"), "utf8"),
-        );
-        return isRecord(parsed) ? text(parsed.organizationId) : undefined;
-      } catch {
-        return undefined;
-      }
-    },
+    organizationId: () =>
+      Effect.tryPromise(async () => {
+        try {
+          const parsed: unknown = JSON.parse(
+            await fs.readFile(path.join(homeDirectory, "config.json"), "utf8"),
+          );
+          return isRecord(parsed) ? text(parsed.organizationId) : undefined;
+        } catch {
+          return undefined;
+        }
+      }),
   };
 }
 
 function testCli(homeDirectory: string): SupersetCli {
   return new SupersetCli(testCliOptions(homeDirectory));
 }
+
+const runEffect = <A, E>(effect: Effect.Effect<A, E, unknown>) => {
+  void runLocalEffect(effect as Effect.Effect<A, E, import("../src/services/files").Files>);
+};
 
 async function turn(): Promise<void> {
   await new Promise<void>((resolve) => setImmediate(resolve));
@@ -72,8 +79,9 @@ test("login streams a pinned authorization URL and submits one bounded code", as
   });
   const signIn = new SupersetSignIn({
     cli: testCli(home),
-    openExternal: async (url) => opened.push(url),
+    openExternal: (url) => Effect.sync(() => opened.push(url)),
     onChange: () => undefined,
+    runEffect,
     spawnLogin: (executable, arguments_) => {
       assert.equal(executable, path.join(home, "bin", "superset"));
       assert.deepEqual(arguments_, ["auth", "login", "--json"]);
@@ -81,7 +89,7 @@ test("login streams a pinned authorization URL and submits one bounded code", as
     },
   });
 
-  assert.equal((await signIn.begin()).stage, SUPERSET_SIGN_IN_STAGE.BROWSER_CODE);
+  assert.equal((await runLocalEffect(signIn.begin())).stage, SUPERSET_SIGN_IN_STAGE.BROWSER_CODE);
   child.stdout.write("Open https://api.super");
   child.stdout.write("set.sh/api/auth/oauth2/authorize?attempt=one\nignored secret output");
   await turn();
@@ -101,19 +109,21 @@ test("only the pinned Superset HTTPS host can be opened or reopened", async (t) 
   const opened: string[] = [];
   const signIn = new SupersetSignIn({
     cli: testCli(home),
-    openExternal: async (url) => opened.push(url),
+    openExternal: (url) => Effect.sync(() => opened.push(url)),
     onChange: () => undefined,
+    runEffect,
     spawnLogin: () => child,
   });
-  await signIn.begin();
+  await runLocalEffect(signIn.begin());
   child.stderr.write(
     "https://evil.example/auth https://api.superset.sh.evil.example/api/auth/oauth2/authorize https://api.superset.sh/not-oauth",
   );
   signIn.reopen();
   assert.deepEqual(opened, []);
   child.stderr.write(" https://api.superset.sh/api/auth/oauth2/authorize?attempt=two");
-  await turn();
+  await waitFor(() => opened.length === 1);
   signIn.reopen();
+  await waitFor(() => opened.length === 2);
   assert.deepEqual(opened, [
     "https://api.superset.sh/api/auth/oauth2/authorize?attempt=two",
     "https://api.superset.sh/api/auth/oauth2/authorize?attempt=two",
@@ -130,11 +140,12 @@ test("codes require one separator, stay bounded, and can arrive before the URL",
   });
   const signIn = new SupersetSignIn({
     cli: testCli(home),
-    openExternal: async () => undefined,
+    openExternal: () => Effect.void,
     onChange: () => undefined,
+    runEffect,
     spawnLogin: () => child,
   });
-  await signIn.begin();
+  await runLocalEffect(signIn.begin());
   assert.equal(validSupersetSignInCode("missing"), false);
   assert.equal(validSupersetSignInCode(`a#${"b".repeat(511)}`), false);
   assert.equal(validSupersetSignInCode("a#b#c"), false);
@@ -149,14 +160,17 @@ test("duplicate starts share one attempt and cancellation kills its exact child"
   let spawns = 0;
   const signIn = new SupersetSignIn({
     cli: testCli(home),
-    openExternal: async () => undefined,
+    openExternal: () => Effect.void,
     onChange: () => undefined,
+    runEffect,
     spawnLogin: () => {
       spawns += 1;
       return child;
     },
   });
-  await Promise.all([signIn.begin(), signIn.begin()]);
+
+  await runLocalEffect(signIn.begin());
+  await runLocalEffect(signIn.begin());
   assert.equal(spawns, 1);
   signIn.cancel();
   assert.equal(child.killed, true);
@@ -170,12 +184,13 @@ test("process failure, timeout, and shutdown end without exposing CLI output", a
     const states: string[] = [];
     const signIn = new SupersetSignIn({
       cli: testCli(home),
-      openExternal: async () => undefined,
+      openExternal: () => Effect.void,
       onChange: (state) => states.push(JSON.stringify(state)),
+      runEffect,
       spawnLogin: () => child,
       timeoutMs: ending === "timeout" ? 1 : 60_000,
     });
-    await signIn.begin();
+    await runLocalEffect(signIn.begin());
     child.stderr.write("token=must-not-cross-the-boundary");
     if (ending === "error") child.emit("error", new Error("secret output"));
     if (ending === "shutdown") signIn.shutdown();
@@ -198,20 +213,22 @@ test("zero organizations fail; listed organizations are offered and revalidated"
   let listed = organizations;
   const cli = new SupersetCli({
     ...testCliOptions(home),
-    query: async (_executable, arguments_) => {
-      if (arguments_[1] === "list") return JSON.stringify({ data: listed });
-      await fs.writeFile(path.join(home, "config.json"), '{"organizationId":"org-1"}');
-      return "{}";
-    },
+    query: (_executable, arguments_) =>
+      Effect.tryPromise(async () => {
+        if (arguments_[1] === "list") return JSON.stringify({ data: listed });
+        await fs.writeFile(path.join(home, "config.json"), '{"organizationId":"org-1"}');
+        return "{}";
+      }),
   });
   const first = new FakeChild();
   const signIn = new SupersetSignIn({
     cli,
-    openExternal: async () => undefined,
+    openExternal: () => Effect.void,
     onChange: () => undefined,
+    runEffect,
     spawnLogin: () => first,
   });
-  await signIn.begin();
+  await runLocalEffect(signIn.begin());
   first.emit("close", 1);
   await waitFor(() => signIn.current().stage === SUPERSET_SIGN_IN_STAGE.ORGANIZATION);
   assert.deepEqual(signIn.current(), {
@@ -219,17 +236,21 @@ test("zero organizations fail; listed organizations are offered and revalidated"
     organizations,
   });
   listed = [];
-  assert.equal((await signIn.chooseOrganization("acme")).stage, SUPERSET_SIGN_IN_STAGE.FAILURE);
+  assert.equal(
+    (await runLocalEffect(signIn.chooseOrganization("acme"))).stage,
+    SUPERSET_SIGN_IN_STAGE.FAILURE,
+  );
 
   const second = new FakeChild();
   listed = [];
   const empty = new SupersetSignIn({
     cli,
-    openExternal: async () => undefined,
+    openExternal: () => Effect.void,
     onChange: () => undefined,
+    runEffect,
     spawnLogin: () => second,
   });
-  await empty.begin();
+  await runLocalEffect(empty.begin());
   second.emit("close", 1);
   await waitFor(() => empty.current().stage === SUPERSET_SIGN_IN_STAGE.FAILURE);
   assert.equal(empty.current().stage, SUPERSET_SIGN_IN_STAGE.FAILURE);

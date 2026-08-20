@@ -6,6 +6,7 @@ import {
   type AttentionUpdate,
   SESSION_STATUS,
 } from "@sidecar/core";
+import { Effect } from "effect";
 import {
   ATTENTION_RATE_LIMIT_COOLDOWN_MS,
   OpenAiAttentionEvaluator,
@@ -53,7 +54,12 @@ function evaluatorWith(respond: (request: RecordedRequest) => Promise<Response> 
     now: () => DECIDED_AT,
   });
   const evaluate = (attentionUpdate: ReturnType<typeof update>) =>
-    runWithHttp(evaluator.evaluate(attentionUpdate), fetch);
+    runWithHttp(
+      evaluator
+        .evaluate(attentionUpdate)
+        .pipe(Effect.catchTag("AttentionRateLimited", () => Effect.succeed(undefined))),
+      fetch,
+    );
   return { evaluator, requests, evaluate };
 }
 
@@ -168,7 +174,12 @@ test("a rate limit quiets requests for the cooldown instead of retrying at full 
   const { fetch, requests } = recordingFetch(() => new Response("rate limited", { status: 429 }));
   const evaluator = new OpenAiAttentionEvaluator({ apiKey: API_KEY, now: () => now });
   const evaluate = (attentionUpdate: ReturnType<typeof update>) =>
-    runWithHttp(evaluator.evaluate(attentionUpdate), fetch);
+    runWithHttp(
+      evaluator
+        .evaluate(attentionUpdate)
+        .pipe(Effect.catchTag("AttentionRateLimited", () => Effect.succeed(undefined))),
+      fetch,
+    );
 
   assert.equal(await evaluate(update()), undefined);
   assert.equal(requests.length, 1);
@@ -193,7 +204,12 @@ test("a rate limit that names its own wait is taken at its word", async (t) => {
   const evaluator = new OpenAiAttentionEvaluator({ apiKey: API_KEY, now: () => now });
 
   const evaluateAt = (attentionUpdate: ReturnType<typeof update>) =>
-    runWithHttp(evaluator.evaluate(attentionUpdate), fetch);
+    runWithHttp(
+      evaluator
+        .evaluate(attentionUpdate)
+        .pipe(Effect.catchTag("AttentionRateLimited", () => Effect.succeed(undefined))),
+      fetch,
+    );
 
   assert.equal(await evaluateAt(update()), undefined);
   now += 4_999;

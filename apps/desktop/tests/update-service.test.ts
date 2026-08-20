@@ -22,18 +22,20 @@ function serviceWith(options: {
   fetch: typeof fetch;
   intervalMs?: number;
 }) {
-  return new UpdateService({
+  const service = new UpdateService({
     currentVersion: options.currentVersion,
     onChange: options.onChange,
     intervalMs: options.intervalMs,
     runEffect: (effect) => runWithHttp(effect, options.fetch),
   });
+  const check = () => runWithHttp(service.check(), options.fetch);
+  return { service, check };
 }
 
 test("a newer published release is offered by its version, without the tag's v", async () => {
   const requests: { url: string; headers: Record<string, string> }[] = [];
   const states: UpdateSnapshot[] = [];
-  const service = serviceWith({
+  const { service, check } = serviceWith({
     currentVersion: "0.1.0",
     onChange: (update) => states.push(update),
     fetch: async (url, init) => {
@@ -43,7 +45,7 @@ test("a newer published release is offered by its version, without the tag's v",
     },
   });
 
-  const answered = await service.check();
+  const answered = await check();
 
   assert.deepEqual(answered, {
     status: UPDATE_STATUS.UPDATE_AVAILABLE,
@@ -65,13 +67,13 @@ test("a newer published release is offered by its version, without the tag's v",
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("the running release reads as up to date", async () => {
-  const service = serviceWith({
+  const { check } = serviceWith({
     currentVersion: "0.2.0",
     onChange: () => undefined,
     fetch: async () => releaseResponse({ tag_name: "v0.2.0" }),
   });
 
-  assert.deepEqual(await service.check(), {
+  assert.deepEqual(await check(), {
     status: UPDATE_STATUS.UP_TO_DATE,
     currentVersion: "0.2.0",
   });
@@ -125,7 +127,7 @@ test("a release this build cannot name is not offered as an update", async () =>
 test("the timer and the button share a check already in flight", async () => {
   let requests = 0;
   let release: ((response: Response) => void) | undefined;
-  const service = serviceWith({
+  const { check } = serviceWith({
     currentVersion: "0.1.0",
     onChange: () => undefined,
     fetch: () => {
@@ -136,8 +138,9 @@ test("the timer and the button share a check already in flight", async () => {
     },
   });
 
-  const first = service.check();
-  const second = service.check();
+  const first = check();
+  const second = check();
+  while (requests === 0) await new Promise((resolve) => setImmediate(resolve));
   release?.(releaseResponse({ tag_name: "v0.1.1" }));
 
   assert.equal((await first).status, UPDATE_STATUS.UPDATE_AVAILABLE);
@@ -145,8 +148,8 @@ test("the timer and the button share a check already in flight", async () => {
   assert.equal(requests, 1);
 
   // A finished check is let go of, so the next ask is a fresh read.
-  const third = service.check();
-  assert.equal(requests, 2);
+  const third = check();
+  while (requests < 2) await new Promise((resolve) => setImmediate(resolve));
   release?.(releaseResponse({ tag_name: "v0.1.1" }));
   await third;
 });
@@ -156,7 +159,7 @@ test("a listener that throws neither fails the check nor jams the next one", asy
   // park a dead check in flight — the row would say "checking" forever and
   // every later ask would reuse the failure.
   let requests = 0;
-  const service = serviceWith({
+  const { service, check } = serviceWith({
     currentVersion: "0.1.0",
     onChange: () => {
       throw new Error("window already torn down");
@@ -167,18 +170,18 @@ test("a listener that throws neither fails the check nor jams the next one", asy
     },
   });
 
-  const first = await service.check();
+  const first = await check();
   assert.equal(first.status, UPDATE_STATUS.UPDATE_AVAILABLE);
   assert.equal(service.snapshot().status, UPDATE_STATUS.UPDATE_AVAILABLE);
 
-  const second = await service.check();
+  const second = await check();
   assert.equal(second.status, UPDATE_STATUS.UPDATE_AVAILABLE);
   assert.equal(requests, 2);
 });
 
 test("the timed check starts at once and stops when asked", async () => {
   let requests = 0;
-  const service = serviceWith({
+  const { service } = serviceWith({
     currentVersion: "0.1.0",
     onChange: () => undefined,
     intervalMs: 10,

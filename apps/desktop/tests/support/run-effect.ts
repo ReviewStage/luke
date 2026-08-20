@@ -31,6 +31,7 @@ export function cliLayerFromRun(run: CliRunForTest): Layer.Layer<Cli> {
         Promise.resolve(run(binary, argv))
           .then((result) => resume(Effect.succeed(result)))
           .catch((error) => {
+            // SAFETY: Node spawn errors expose code on ErrnoException; only that field is read.
             const exitCode = (error as NodeJS.ErrnoException & { code?: unknown }).code;
             if (isWireNumber(exitCode)) {
               resume(Effect.succeed({ exitCode, stdout: "" }));
@@ -40,6 +41,7 @@ export function cliLayerFromRun(run: CliRunForTest): Layer.Layer<Cli> {
               Effect.fail(
                 new CliFailure({
                   failure:
+                    // SAFETY: Node spawn errors expose code on ErrnoException; only ENOENT is classified.
                     (error as NodeJS.ErrnoException).code === "ENOENT"
                       ? CLI_FAILURE.UNAVAILABLE
                       : CLI_FAILURE.TRANSIENT,
@@ -57,6 +59,15 @@ export function runCliEffect<A, E>(
   run: CliRunForTest,
 ): Promise<A> {
   return Effect.runPromise(effect.pipe(Effect.provide(cliLayerFromRun(run))));
+}
+
+export function runCliWithFiles<A, E>(
+  effect: Effect.Effect<A, E, Cli | Files>,
+  run: CliRunForTest,
+): Promise<A> {
+  return Effect.runPromise(
+    effect.pipe(Effect.provide(Layer.mergeAll(cliLayerFromRun(run), FilesLive))),
+  );
 }
 
 /** @deprecated Prefer runLocalEffect or runHttpEffect at the call site. */

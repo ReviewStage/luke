@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { UnparsedWireValue } from "@sidecar/core";
+import { Effect } from "effect";
 import type { IpcMainInvokeEvent } from "electron";
 import { createSettingsHandler, SettingsRefusal } from "../src/settings-handler";
 import type { AppSettings, SettingsUpdateResult } from "../src/shared/contracts";
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 const SETTINGS = { showInDock: false } as AppSettings;
+
+const runEffect = <A, E>(effect: Effect.Effect<A, E, unknown>) => Effect.runPromise(effect);
 
 function event(sender: { id: number } = { id: 1 }): IpcMainInvokeEvent {
   // SAFETY: Fixture invoke event carries only sender.id for trust validation.
@@ -21,10 +24,11 @@ test("an untrusted sender is refused before validate or save run", async () => {
   >();
   const register = createSettingsHandler({
     trustedSender: () => false,
-    snapshot: async () => SETTINGS,
+    snapshot: () => Effect.succeed(SETTINGS),
     broadcast: () => {
       calls.push("broadcast");
     },
+    runEffect,
     handle: (channel, listener) => {
       handlers.set(channel, listener);
     },
@@ -34,13 +38,13 @@ test("an untrusted sender is refused before validate or save run", async () => {
       calls.push("validate");
       return true;
     },
-    save: async () => {
+    save: () => {
       calls.push("save");
-      return { settings: SETTINGS };
+      return Effect.succeed({ settings: SETTINGS });
     },
     refusal: "Could not save.",
   });
-  await assert.rejects(() => handlers.get("app:set-x")?.(event()), /Untrusted renderer/);
+  await assert.rejects(async () => handlers.get("app:set-x")?.(event()), /Untrusted renderer/);
   assert.deepEqual(calls, []);
 });
 
@@ -52,10 +56,11 @@ test("a SettingsRefusal leaves without a write, a side effect, or a broadcast", 
   >();
   const register = createSettingsHandler({
     trustedSender: () => true,
-    snapshot: async () => SETTINGS,
+    snapshot: () => Effect.succeed(SETTINGS),
     broadcast: () => {
       calls.push("broadcast");
     },
+    runEffect,
     handle: (channel, listener) => {
       handlers.set(channel, listener);
     },
@@ -66,9 +71,9 @@ test("a SettingsRefusal leaves without a write, a side effect, or a broadcast", 
         settings: SETTINGS,
         reason: "That chord is reserved for the talk key.",
       }),
-    save: async () => {
+    save: () => {
       calls.push("save");
-      return { settings: SETTINGS };
+      return Effect.succeed({ settings: SETTINGS });
     },
     apply: () => {
       calls.push("apply");
@@ -88,10 +93,11 @@ test("a successful write applies and broadcasts, skipping the asking window", as
   >();
   const register = createSettingsHandler({
     trustedSender: () => true,
-    snapshot: async () => SETTINGS,
+    snapshot: () => Effect.succeed(SETTINGS),
     broadcast: (settings, except) => {
       broadcasts.push({ settings, except });
     },
+    runEffect,
     handle: (channel, listener) => {
       handlers.set(channel, listener);
     },
@@ -99,11 +105,11 @@ test("a successful write applies and broadcasts, skipping the asking window", as
   const sender = { id: "asker" };
   register("app:set-x", {
     validate: (value: UnparsedWireValue) => value === true,
-    save: async (value) => {
+    save: (value) => {
       assert.equal(value, true);
-      return { settings: SETTINGS };
+      return Effect.succeed({ settings: SETTINGS });
     },
-    apply: async (result, value) => {
+    apply: (result, value) => {
       assert.equal(value, true);
       assert.equal(result.settings, SETTINGS);
     },
@@ -123,19 +129,18 @@ test("a filesystem failure is reported as the refusal, not a thrown error", asyn
   >();
   const register = createSettingsHandler({
     trustedSender: () => true,
-    snapshot: async () => SETTINGS,
+    snapshot: () => Effect.succeed(SETTINGS),
     broadcast: () => {
       throw new Error("must not broadcast a failed write");
     },
+    runEffect,
     handle: (channel, listener) => {
       handlers.set(channel, listener);
     },
   });
   register("app:set-x", {
     validate: () => true,
-    save: async () => {
-      throw new Error("EACCES");
-    },
+    save: () => Effect.fail(new Error("EACCES")),
     refusal: "Could not save that setting on this system.",
   });
   const result = await handlers.get("app:set-x")?.(event());

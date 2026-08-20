@@ -5,9 +5,11 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
 import { SESSION_STATUS } from "@sidecar/core";
+import { Effect } from "effect";
 import { DEVIN_PROVIDER } from "../src/devin-adapter";
 import { DevinLocalSessionAdapter } from "../src/devin-local-adapter";
 import type { ParsedJsonObject } from "./support/json";
+import { runLocalEffect } from "./support/run-effect";
 
 const TEST_TIME = Date.parse("2026-08-18T21:30:00.000Z");
 const DEVIN_DATABASE = "sessions.db";
@@ -297,7 +299,7 @@ test("observes a Devin session under the name Devin gave it", async (t) => {
   );
 
   const adapter = new DevinLocalSessionAdapter({ cliDirectory, now: () => TEST_TIME });
-  const observations = await adapter.observe();
+  const observations = await runLocalEffect(adapter.observe());
 
   assert.deepEqual(adapter.provider, DEVIN_PROVIDER);
   assert.equal(observations.length, 1);
@@ -326,7 +328,7 @@ test("falls back to the workspace while Devin has not named the session", async 
   ]);
 
   const adapter = new DevinLocalSessionAdapter({ cliDirectory, now: () => TEST_TIME });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   assert.equal(observation?.title, "luke");
   // A session with no messages yet has just been started.
@@ -374,10 +376,12 @@ test("reports a settled Devin turn as waiting for its developer", async (t) => {
   );
 
   const adapter = new DevinLocalSessionAdapter({ cliDirectory, now: () => TEST_TIME });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.WAITING);
-  assert.ok(!JSON.stringify(await adapter.observe()).includes(SECRET_TRANSCRIPT_TEXT));
+  assert.ok(
+    !JSON.stringify(await runLocalEffect(adapter.observe())).includes(SECRET_TRANSCRIPT_TEXT),
+  );
 });
 
 test("ages a settled turn nobody has come back to into unknown", async (t) => {
@@ -413,7 +417,7 @@ test("ages a settled turn nobody has come back to into unknown", async (t) => {
   );
 
   const adapter = new DevinLocalSessionAdapter({ cliDirectory, now: () => TEST_TIME });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.UNKNOWN);
 });
@@ -444,7 +448,7 @@ test("ages an open turn a killed process left behind into unknown", async (t) =>
   );
 
   const adapter = new DevinLocalSessionAdapter({ cliDirectory, now: () => TEST_TIME });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.UNKNOWN);
 });
@@ -521,11 +525,13 @@ test("names the open tool call a working session is running", async (t) => {
   );
 
   const adapter = new DevinLocalSessionAdapter({ cliDirectory, now: () => TEST_TIME });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.WORKING);
   assert.equal(observation?.detail?.activity, "Run ./scripts/check.sh");
-  assert.ok(!JSON.stringify(await adapter.observe()).includes(SECRET_TRANSCRIPT_TEXT));
+  assert.ok(
+    !JSON.stringify(await runLocalEffect(adapter.observe())).includes(SECRET_TRANSCRIPT_TEXT),
+  );
 });
 
 test("follows the main chain rather than a rewound session's abandoned branch", async (t) => {
@@ -571,7 +577,7 @@ test("follows the main chain rather than a rewound session's abandoned branch", 
   );
 
   const adapter = new DevinLocalSessionAdapter({ cliDirectory, now: () => TEST_TIME });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.WORKING);
 });
@@ -593,7 +599,7 @@ test("leaves hidden sessions off the roster", async (t) => {
   ]);
 
   const adapter = new DevinLocalSessionAdapter({ cliDirectory, now: () => TEST_TIME });
-  const observations = await adapter.observe();
+  const observations = await runLocalEffect(adapter.observe());
 
   assert.deepEqual(
     observations.map((observation) => observation.providerSessionId),
@@ -612,7 +618,7 @@ test("reads a database from before the title and hidden migrations", async (t) =
   ]);
 
   const adapter = new DevinLocalSessionAdapter({ cliDirectory, now: () => TEST_TIME });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   assert.equal(observation?.providerSessionId, "early-install");
   assert.equal(observation?.title, "luke");
@@ -621,14 +627,14 @@ test("reads a database from before the title and hidden migrations", async (t) =
 test("observes nothing where the Devin CLI has never run", async (t) => {
   const cliDirectory = path.join(await temporaryCliDirectory(t), "missing");
   const adapter = new DevinLocalSessionAdapter({ cliDirectory, now: () => TEST_TIME });
-  assert.deepEqual(await adapter.observe(), []);
+  assert.deepEqual(await runLocalEffect(adapter.observe()), []);
 });
 
 test("observes nothing from a database this build cannot read", async (t) => {
   const cliDirectory = await temporaryCliDirectory(t);
   await writeMalformedDevinState(cliDirectory);
   const adapter = new DevinLocalSessionAdapter({ cliDirectory, now: () => TEST_TIME });
-  assert.deepEqual(await adapter.observe(), []);
+  assert.deepEqual(await runLocalEffect(adapter.observe()), []);
 });
 
 test("observes nothing where the runtime has no sqlite module", async (t) => {
@@ -640,13 +646,18 @@ test("observes nothing where the runtime has no sqlite module", async (t) => {
   const adapter = new DevinLocalSessionAdapter({
     cliDirectory,
     now: () => TEST_TIME,
-    sqlite: async () => {
+    sqlite: () => {
       const error: NodeJS.ErrnoException = new Error("No such built-in module: node:sqlite");
       error.code = TEST_SQLITE_ERROR.UNKNOWN_BUILTIN_MODULE;
-      throw error;
+      return Effect.try({
+        try: () => {
+          throw error;
+        },
+        catch: (thrown) => thrown as Error,
+      });
     },
   });
-  assert.deepEqual(await adapter.observe(), []);
+  assert.deepEqual(await runLocalEffect(adapter.observe()), []);
 });
 
 test("honors the CLI's own database override", async (t) => {
@@ -671,7 +682,7 @@ test("honors the CLI's own database override", async (t) => {
   });
 
   const adapter = new DevinLocalSessionAdapter({ cliDirectory, now: () => TEST_TIME });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   assert.equal(observation?.providerSessionId, "relocated");
 });

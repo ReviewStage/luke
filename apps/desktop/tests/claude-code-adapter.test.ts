@@ -6,6 +6,7 @@ import test, { type TestContext } from "node:test";
 import { isRosterRelevant, SESSION_COMPLETION_CAUSE, SESSION_STATUS } from "@sidecar/core";
 import { CLAUDE_CODE_PROVIDER, ClaudeCodeSessionAdapter } from "../src/claude-code-adapter";
 import type { ParsedJsonObject } from "./support/json";
+import { runLocalEffect } from "./support/run-effect";
 
 const TEST_TIME = Date.parse("2026-08-11T23:45:00.000Z");
 const SECRET_TRANSCRIPT_TEXT = "SECRET_TRANSCRIPT_TEXT";
@@ -70,7 +71,7 @@ test("observes a Claude Code session file and labels it by its workspace", async
     claudeHome,
     now: () => TEST_TIME,
   });
-  const observations = await adapter.observe();
+  const observations = await runLocalEffect(adapter.observe());
 
   assert.deepEqual(adapter.provider, CLAUDE_CODE_PROVIDER);
   assert.equal(observations.length, 1);
@@ -102,7 +103,7 @@ test("keeps stale user-tail sessions unknown instead of inventing activity", asy
     claudeHome,
     now: () => TEST_TIME,
   });
-  const observations = await adapter.observe();
+  const observations = await runLocalEffect(adapter.observe());
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.status, SESSION_STATUS.UNKNOWN);
@@ -129,7 +130,7 @@ test("keeps stale assistant-tail sessions from staying in attention", async (t) 
     claudeHome,
     now: () => TEST_TIME,
   });
-  const observations = await adapter.observe();
+  const observations = await runLocalEffect(adapter.observe());
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.status, SESSION_STATUS.UNKNOWN);
@@ -161,7 +162,7 @@ test("ignores trailing system records when finding Claude session status", async
     claudeHome,
     now: () => TEST_TIME,
   });
-  const observations = await adapter.observe();
+  const observations = await runLocalEffect(adapter.observe());
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.status, SESSION_STATUS.WAITING);
@@ -196,7 +197,7 @@ test("treats fresh assistant tool use as active work", async (t) => {
     claudeHome,
     now: () => TEST_TIME,
   });
-  const observations = await adapter.observe();
+  const observations = await runLocalEffect(adapter.observe());
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
@@ -240,7 +241,7 @@ test("keeps fresh sessions active when a large tail has no complete status event
     now: () => TEST_TIME,
     readTailBytes: 128,
   });
-  const observations = await adapter.observe();
+  const observations = await runLocalEffect(adapter.observe());
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
@@ -257,7 +258,7 @@ test("re-reads a transcript once it has been written to again", async (t) => {
   );
 
   const adapter = new ClaudeCodeSessionAdapter({ claudeHome, now: () => TEST_TIME });
-  const [before] = await adapter.observe();
+  const [before] = await runLocalEffect(adapter.observe());
   await writeSessionFile(
     claudeHome,
     "-Users-test-luke",
@@ -265,7 +266,7 @@ test("re-reads a transcript once it has been written to again", async (t) => {
     [{ type: TEST_CLAUDE_EVENT_TYPE.RESULT, cwd: "/Users/test/luke" }],
     TEST_TIME - 5_000,
   );
-  const [after] = await adapter.observe();
+  const [after] = await runLocalEffect(adapter.observe());
 
   // The same adapter serves both passes, so the second one must notice the
   // new mtime and re-read rather than serving the first parse back.
@@ -286,7 +287,7 @@ test("serves an untouched transcript from its previous parse", async (t) => {
   );
 
   const adapter = new ClaudeCodeSessionAdapter({ claudeHome, now: () => TEST_TIME });
-  const [before] = await adapter.observe();
+  const [before] = await runLocalEffect(adapter.observe());
   // Same mtime, different content: only a write Claude Code actually made —
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // which moves the mtime — may cost a read, so the parse is served as it was.
@@ -297,7 +298,7 @@ test("serves an untouched transcript from its previous parse", async (t) => {
     [{ type: TEST_CLAUDE_EVENT_TYPE.ASSISTANT, cwd: "/Users/test/luke" }],
     TEST_TIME - 20_000,
   );
-  const [after] = await adapter.observe();
+  const [after] = await runLocalEffect(adapter.observe());
 
   assert.equal(before?.status, SESSION_STATUS.COMPLETE);
   assert.equal(after?.status, SESSION_STATUS.COMPLETE);
@@ -331,7 +332,7 @@ test("keeps old sessions and preserves the newest duplicate provider id", async 
     claudeHome,
     now: () => TEST_TIME,
   });
-  const observations = await adapter.observe();
+  const observations = await runLocalEffect(adapter.observe());
 
   assert.deepEqual(
     observations.map((observation) => ({
@@ -387,7 +388,7 @@ test("surfaces the generated title, branch, model, and the tool being run", asyn
     claudeHome,
     now: () => TEST_TIME,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   assert.equal(observation?.title, "Revamp the notch panel");
   assert.equal(observation?.status, SESSION_STATUS.WORKING);
@@ -431,7 +432,7 @@ test("reports a failed request as an error once the retries are spent", async (t
     claudeHome,
     now: () => TEST_TIME,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.ERROR);
   assert.equal(observation?.detail?.error, "429 rate limit exceeded");
@@ -468,7 +469,7 @@ test("stays working through a retry the session is still backing off from", asyn
     claudeHome,
     now: () => TEST_TIME,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   // Claude Code records every backoff, not only the attempt that gives up.
   // Interrupting on the first would be an interruption about nothing.
@@ -501,7 +502,7 @@ test("keeps a spent failure at error after it goes stale", async (t) => {
     claudeHome,
     now: () => TEST_TIME,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   // The row would otherwise show the failure text under an "Idle" chip, and
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
@@ -538,7 +539,7 @@ test("clears a recorded error once the session gets past it", async (t) => {
     claudeHome,
     now: () => TEST_TIME,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.WORKING);
   assert.equal(observation?.detail?.error, undefined);
@@ -574,7 +575,7 @@ test("recovers a title from a session too long to hold one in its tail", async (
     // Small enough that the title is far behind the tail the status comes from.
     readTailBytes: 256,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   assert.equal(observation?.title, "Graduate the L-face identity");
   assert.equal(observation?.status, SESSION_STATUS.WAITING);
@@ -608,7 +609,7 @@ test("carries the away recap Claude Code writes for a developer who stepped out"
     claudeHome,
     now: () => TEST_TIME,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.WAITING);
   assert.equal(
@@ -664,7 +665,7 @@ test("drops the previous turn's recap when a new prompt opens a turn", async (t)
     claudeHome,
     now: () => TEST_TIME,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.WAITING);
   assert.equal(observation?.recap, "The second turn's recap.");
@@ -694,7 +695,7 @@ test("reports no recap for a turn whose closing words are all it wrote", async (
     claudeHome,
     now: () => TEST_TIME,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   // The closing message is the transcript itself, not a recap Claude Code wrote
   // about the session, and a recap reaches the attention evaluator.
@@ -754,7 +755,7 @@ test("stops reporting a tool once the turn that ran it has ended", async (t) => 
     claudeHome,
     now: () => TEST_TIME,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   // The row prefers activity over the recap, so a tool left behind here would
   // hide what the session actually wants to say.
@@ -799,7 +800,7 @@ test("keeps reporting a tool between one call and the next", async (t) => {
     claudeHome,
     now: () => TEST_TIME,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.WORKING);
   assert.equal(observation?.detail?.activity, "Bash: Run the macOS packaging check");
@@ -812,7 +813,7 @@ test("returns an empty snapshot when Claude Code has no local project directory"
     now: () => TEST_TIME,
   });
 
-  assert.deepEqual(await adapter.observe(), []);
+  assert.deepEqual(await runLocalEffect(adapter.observe()), []);
 });
 
 test("dates a touched transcript by its own records rather than the touch", async (t) => {
@@ -845,7 +846,7 @@ test("dates a touched transcript by its own records rather than the touch", asyn
     claudeHome,
     now: () => TEST_TIME,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   // Three hours old by its own clock, so the row must say so — and a session
   // that old has left the freshness window however recently it was touched.
@@ -874,7 +875,7 @@ test("keeps a touch from making a long-settled session look recent", async (t) =
     claudeHome,
     now: () => TEST_TIME,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   // A session is never hidden for being old, but the touch must not stand in
   // for work: the row reports the transcript's own clock, weeks back, and a
@@ -897,7 +898,7 @@ test("falls back to the file's date when the tail carries no timestamp", async (
     claudeHome,
     now: () => TEST_TIME,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   assert.equal(observation?.observedAt, TEST_TIME - 5_000);
 });
@@ -934,7 +935,7 @@ test("reads past a tail of appended bookkeeping to the conversation's own clock"
     now: () => TEST_TIME,
     readTailBytes: 256,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   // A tail holding only bookkeeping says nothing about when the conversation
   // last moved, and the touch must not answer for it: the second, deeper read
@@ -984,7 +985,7 @@ test("keeps a bookkeeping record's timestamp from re-dating the conversation", a
     claudeHome,
     now: () => TEST_TIME,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   // Only the conversation's own records may date the session: a settled turn
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
@@ -1062,7 +1063,7 @@ test("a permission prompt the transcript cannot show turns the row to waiting", 
     hookEventsDirectory: () => spool,
     now: () => TEST_TIME,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.WAITING);
   // The event also dates the session: the spool is written only by Luke's own
@@ -1094,7 +1095,7 @@ test("a session-end event settles a row the tail would leave waiting", async (t)
     hookEventsDirectory: () => spool,
     now: () => TEST_TIME,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.COMPLETE);
   assert.equal(observation?.completionCause, SESSION_COMPLETION_CAUSE.SESSION_CLOSED);
@@ -1128,7 +1129,7 @@ test("a stop-failure event reports the error the tail was still suppressing", as
     hookEventsDirectory: () => spool,
     now: () => TEST_TIME,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.ERROR);
 });
@@ -1159,7 +1160,7 @@ test("a stop event keeps a finished turn waiting past the freshness decay", asyn
     hookEventsDirectory: () => spool,
     now: () => TEST_TIME,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.WAITING);
 });
@@ -1183,7 +1184,7 @@ test("an event the transcript has moved past refines nothing", async (t) => {
     hookEventsDirectory: () => spool,
     now: () => TEST_TIME,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.WORKING);
   assert.equal(observation?.observedAt, Date.parse("2026-08-11T23:44:00.000Z"));
@@ -1213,7 +1214,7 @@ test("a stop event does not unsay a result the transcript recorded", async (t) =
     hookEventsDirectory: () => spool,
     now: () => TEST_TIME,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.COMPLETE);
 });
@@ -1243,7 +1244,7 @@ test("a session-start event bumps the clock without deciding the status", async 
     hookEventsDirectory: () => spool,
     now: () => TEST_TIME,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   // Freshened by the resume, the tail's own verdict — a turn that ended is
   // holding for the developer — stands again.
@@ -1266,7 +1267,7 @@ test("a spool that cannot be read costs only the refinement", async (t) => {
     hookEventsDirectory: () => path.join(claudeHome, "no-such-spool"),
     now: () => TEST_TIME,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.WORKING);
 });
@@ -1290,7 +1291,7 @@ test("a notification the transcript has answered stands down at once", async (t)
     hookEventsDirectory: () => spool,
     now: () => TEST_TIME,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runLocalEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.WORKING);
 });

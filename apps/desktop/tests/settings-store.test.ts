@@ -32,6 +32,7 @@ import {
   isKeyedAppSettingField,
   settingEntryGuard,
 } from "../src/shared/settings-schema";
+import { runLocalEffect } from "./support/run-effect";
 
 const TEST_API_KEY = "conductor-live-key";
 const SETTINGS_FILE_NAME = "settings.json";
@@ -179,7 +180,9 @@ function storeIn(
 }
 
 async function readWorkspaceAgentDefault(store: SettingsStore, providerId: ProviderId) {
-  return (await store.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[providerId];
+  return (await runLocalEffect(store.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field)))?.[
+    providerId
+  ];
 }
 
 async function setWorkspaceAgentDefault(
@@ -187,11 +190,15 @@ async function setWorkspaceAgentDefault(
   providerId: ProviderId,
   selection: WorkspaceAgentSelection | undefined,
 ) {
-  return store.setEntry(APP_SETTING_SCHEMA.workspaceAgentDefaults.field, providerId, selection);
+  return runLocalEffect(
+    store.setEntry(APP_SETTING_SCHEMA.workspaceAgentDefaults.field, providerId, selection),
+  );
 }
 
 async function readWorkspaceProjectDefault(store: SettingsStore, providerId: ProviderId) {
-  return (await store.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field))?.[providerId];
+  return (await runLocalEffect(store.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field)))?.[
+    providerId
+  ];
 }
 
 async function setWorkspaceProjectDefault(
@@ -199,10 +206,12 @@ async function setWorkspaceProjectDefault(
   providerId: ProviderId,
   providerProjectId: string | undefined,
 ) {
-  return store.setEntry(
-    APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
-    providerId,
-    providerProjectId,
+  return runLocalEffect(
+    store.setEntry(
+      APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
+      providerId,
+      providerProjectId,
+    ),
   );
 }
 
@@ -214,7 +223,7 @@ test("stores an API key encrypted, private to the owner, and never in a snapshot
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
 
-  const { settings, reason } = await store.setApiKey(CONDUCTOR, TEST_API_KEY);
+  const { settings, reason } = await runLocalEffect(store.setApiKey(CONDUCTOR, TEST_API_KEY));
   const contents = await readSettingsFile(directory);
   const stats = await fs.stat(path.join(directory, SETTINGS_FILE_NAME));
 
@@ -224,7 +233,7 @@ test("stores an API key encrypted, private to the owner, and never in a snapshot
   assert.equal(contents.includes(TEST_API_KEY), false, "the key was written in plaintext");
   assert.equal(stats.mode & 0o777, 0o600);
   assert.equal(JSON.stringify(settings).includes(TEST_API_KEY), false);
-  assert.equal(await store.readApiKey(CONDUCTOR), TEST_API_KEY);
+  assert.equal(await runLocalEffect(store.readApiKey(CONDUCTOR)), TEST_API_KEY);
 });
 
 test("round-trips an encrypted account without exposing either token in snapshots", async (t) => {
@@ -238,7 +247,7 @@ test("round-trips an encrypted account without exposing either token in snapshot
     provider: "github" as const,
   };
 
-  const snapshot = await store.setAccount(account);
+  const snapshot = await runLocalEffect(store.setAccount(account));
   const contents = await readSettingsFile(directory);
   const reopened = storeIn(directory);
 
@@ -248,11 +257,13 @@ test("round-trips an encrypted account without exposing either token in snapshot
     name: account.name,
     provider: account.provider,
   });
-  assert.deepEqual(await reopened.readAccount(), account);
+  assert.deepEqual(await runLocalEffect(reopened.readAccount()), account);
   assert.equal(contents.includes(account.accessToken), false);
   assert.equal(contents.includes(account.refreshToken), false);
-  assert.equal(JSON.stringify(await reopened.accountSnapshot()).includes("token-secret"), false);
-  assert.equal(JSON.stringify(await reopened.snapshot()).includes("token-secret"), false);
+  assert.equal(
+    JSON.stringify(await runLocalEffect(reopened.snapshot())).includes("token-secret"),
+    false,
+  );
 });
 
 test("decrypts once and re-decrypts only after the key changes", async (t) => {
@@ -270,28 +281,28 @@ test("decrypts once and re-decrypts only after the key changes", async (t) => {
       },
     },
   });
-  await store.setApiKey(CONDUCTOR, TEST_API_KEY);
+  await runLocalEffect(store.setApiKey(CONDUCTOR, TEST_API_KEY));
 
   const afterStore = decryptions;
-  for (let read = 0; read < 5; read += 1) await store.readApiKey(CONDUCTOR);
+  for (let read = 0; read < 5; read += 1) await runLocalEffect(store.readApiKey(CONDUCTOR));
   const afterReads = decryptions;
-  await store.setApiKey(CONDUCTOR, "conductor-replacement-key");
-  await store.readApiKey(CONDUCTOR);
+  await runLocalEffect(store.setApiKey(CONDUCTOR, "conductor-replacement-key"));
+  await runLocalEffect(store.readApiKey(CONDUCTOR));
 
   assert.equal(afterReads, afterStore, "a repeated read decrypted again");
   assert.ok(decryptions > afterReads, "a replaced key was not re-read");
-  assert.equal(await store.readApiKey(CONDUCTOR), "conductor-replacement-key");
+  assert.equal(await runLocalEffect(store.readApiKey(CONDUCTOR)), "conductor-replacement-key");
 });
 
 test("reads a stored key back from a new store instance", async (t) => {
   const directory = await temporaryDirectory(t);
-  await storeIn(directory).setApiKey(CONDUCTOR, TEST_API_KEY);
+  await runLocalEffect(storeIn(directory).setApiKey(CONDUCTOR, TEST_API_KEY));
 
   const reopened = storeIn(directory);
 
-  assert.equal(await reopened.readApiKey(CONDUCTOR), TEST_API_KEY);
+  assert.equal(await runLocalEffect(reopened.readApiKey(CONDUCTOR)), TEST_API_KEY);
   assert.equal(
-    (await reopened.snapshot()).credentialSources[CONDUCTOR],
+    (await runLocalEffect(reopened.snapshot())).credentialSources[CONDUCTOR],
     CREDENTIAL_SOURCE.ENCRYPTED_FILE,
   );
 });
@@ -299,12 +310,12 @@ test("reads a stored key back from a new store instance", async (t) => {
 test("clears a stored key", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
-  await store.setApiKey(CONDUCTOR, TEST_API_KEY);
+  await runLocalEffect(store.setApiKey(CONDUCTOR, TEST_API_KEY));
 
-  const { settings } = await store.setApiKey(CONDUCTOR, undefined);
+  const { settings } = await runLocalEffect(store.setApiKey(CONDUCTOR, undefined));
 
   assert.equal(settings.credentialSources[CONDUCTOR], CREDENTIAL_SOURCE.NONE);
-  assert.equal(await store.readApiKey(CONDUCTOR), undefined);
+  assert.equal(await runLocalEffect(store.readApiKey(CONDUCTOR)), undefined);
   assert.equal((await readSettingsFile(directory)).includes(CONDUCTOR), false);
 });
 
@@ -315,11 +326,11 @@ test("captions are off until switched on, and the choice survives a reopen", asy
   const cipher = countingCipher();
   const store = storeIn(directory, { cipher });
 
-  assert.equal((await store.snapshot()).voiceCaptions, false);
-  const enabled = await store.set(APP_SETTING_SCHEMA.voiceCaptions.field, true);
+  assert.equal((await runLocalEffect(store.snapshot())).voiceCaptions, false);
+  const enabled = await runLocalEffect(store.set(APP_SETTING_SCHEMA.voiceCaptions.field, true));
 
   assert.equal(enabled.settings.voiceCaptions, true);
-  assert.equal((await storeIn(directory).snapshot()).voiceCaptions, true);
+  assert.equal((await runLocalEffect(storeIn(directory).snapshot())).voiceCaptions, true);
   assert.equal(cipher.calls.isAvailable, 0);
   assert.equal(cipher.calls.encrypt, 0);
 });
@@ -327,13 +338,13 @@ test("captions are off until switched on, and the choice survives a reopen", asy
 test("switching captions never disturbs a stored key", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
-  await store.setApiKey(CONDUCTOR, TEST_API_KEY);
+  await runLocalEffect(store.setApiKey(CONDUCTOR, TEST_API_KEY));
 
-  await store.set(APP_SETTING_SCHEMA.voiceCaptions.field, true);
-  const off = await store.set(APP_SETTING_SCHEMA.voiceCaptions.field, false);
+  await runLocalEffect(store.set(APP_SETTING_SCHEMA.voiceCaptions.field, true));
+  const off = await runLocalEffect(store.set(APP_SETTING_SCHEMA.voiceCaptions.field, false));
 
   assert.equal(off.settings.voiceCaptions, false);
-  assert.equal(await storeIn(directory).readApiKey(CONDUCTOR), TEST_API_KEY);
+  assert.equal(await runLocalEffect(storeIn(directory).readApiKey(CONDUCTOR)), TEST_API_KEY);
 });
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
@@ -345,7 +356,7 @@ test("a corrupt captions value reads as off rather than switching them on", asyn
     "utf8",
   );
 
-  assert.equal((await storeIn(directory).snapshot()).voiceCaptions, false);
+  assert.equal((await runLocalEffect(storeIn(directory).snapshot())).voiceCaptions, false);
 });
 
 test("other media is quieted until asked otherwise, and the choice survives a reopen", async (t) => {
@@ -355,11 +366,11 @@ test("other media is quieted until asked otherwise, and the choice survives a re
   const cipher = countingCipher();
   const store = storeIn(directory, { cipher });
 
-  assert.equal((await store.snapshot()).duckOtherMedia, true);
-  const disabled = await store.set(APP_SETTING_SCHEMA.duckOtherMedia.field, false);
+  assert.equal((await runLocalEffect(store.snapshot())).duckOtherMedia, true);
+  const disabled = await runLocalEffect(store.set(APP_SETTING_SCHEMA.duckOtherMedia.field, false));
 
   assert.equal(disabled.settings.duckOtherMedia, false);
-  assert.equal((await storeIn(directory).snapshot()).duckOtherMedia, false);
+  assert.equal((await runLocalEffect(storeIn(directory).snapshot())).duckOtherMedia, false);
   assert.equal(cipher.calls.isAvailable, 0);
   assert.equal(cipher.calls.encrypt, 0);
 });
@@ -367,13 +378,13 @@ test("other media is quieted until asked otherwise, and the choice survives a re
 test("switching the media duck never disturbs a stored key", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
-  await store.setApiKey(CONDUCTOR, TEST_API_KEY);
+  await runLocalEffect(store.setApiKey(CONDUCTOR, TEST_API_KEY));
 
-  await store.set(APP_SETTING_SCHEMA.duckOtherMedia.field, false);
-  const on = await store.set(APP_SETTING_SCHEMA.duckOtherMedia.field, true);
+  await runLocalEffect(store.set(APP_SETTING_SCHEMA.duckOtherMedia.field, false));
+  const on = await runLocalEffect(store.set(APP_SETTING_SCHEMA.duckOtherMedia.field, true));
 
   assert.equal(on.settings.duckOtherMedia, true);
-  assert.equal(await storeIn(directory).readApiKey(CONDUCTOR), TEST_API_KEY);
+  assert.equal(await runLocalEffect(storeIn(directory).readApiKey(CONDUCTOR)), TEST_API_KEY);
 });
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
@@ -387,18 +398,23 @@ test("a corrupt media duck value reads as the default rather than as off", async
     "utf8",
   );
 
-  assert.equal((await storeIn(directory).snapshot()).duckOtherMedia, true);
+  assert.equal((await runLocalEffect(storeIn(directory).snapshot())).duckOtherMedia, true);
 });
 
 test("the microphone preference persists, defaults on, and shrugs off corruption", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
 
-  assert.equal((await store.snapshot()).preferBuiltInMicrophone, true);
-  const disabled = await store.set(APP_SETTING_SCHEMA.preferBuiltInMicrophone.field, false);
+  assert.equal((await runLocalEffect(store.snapshot())).preferBuiltInMicrophone, true);
+  const disabled = await runLocalEffect(
+    store.set(APP_SETTING_SCHEMA.preferBuiltInMicrophone.field, false),
+  );
 
   assert.equal(disabled.settings.preferBuiltInMicrophone, false);
-  assert.equal((await storeIn(directory).snapshot()).preferBuiltInMicrophone, false);
+  assert.equal(
+    (await runLocalEffect(storeIn(directory).snapshot())).preferBuiltInMicrophone,
+    false,
+  );
 });
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
@@ -410,17 +426,17 @@ test("a corrupt microphone preference reads as the default rather than as off", 
     "utf8",
   );
 
-  assert.equal((await storeIn(directory).snapshot()).preferBuiltInMicrophone, true);
+  assert.equal((await runLocalEffect(storeIn(directory).snapshot())).preferBuiltInMicrophone, true);
 });
 
 test("a calendar account stores its grant encrypted and survives a reopen", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
 
-  assert.deepEqual(await store.readCalendarAccounts(), []);
-  const stored = await store.addCalendarAccount("dev@example.com", "1//grant-from-sign-in", [
-    "dev@example.com",
-  ]);
+  assert.deepEqual(await runLocalEffect(store.readCalendarAccounts()), []);
+  const stored = await runLocalEffect(
+    store.addCalendarAccount("dev@example.com", "1//grant-from-sign-in", ["dev@example.com"]),
+  );
 
   assert.equal(stored.reason, undefined);
   assert.deepEqual(stored.settings.calendarAccounts, [
@@ -431,7 +447,7 @@ test("a calendar account stores its grant encrypted and survives a reopen", asyn
   assert.equal(persisted.calendarAccounts[0].token, sealed("1//grant-from-sign-in"));
   assert.ok(!JSON.stringify(persisted).includes("1//grant-from-sign-in"));
   // The account outlives the run that stored it, grant and choices together.
-  assert.deepEqual(await storeIn(directory).readCalendarAccounts(), [
+  assert.deepEqual(await runLocalEffect(storeIn(directory).readCalendarAccounts()), [
     {
       id: "dev@example.com",
       refreshToken: "1//grant-from-sign-in",
@@ -444,13 +460,19 @@ test("accounts stand side by side, and reconnecting one keeps its choices", asyn
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
 
-  await store.addCalendarAccount("work@example.com", "1//work-grant", ["work@example.com"]);
-  await store.addCalendarAccount("home@example.com", "1//home-grant", ["home@example.com"]);
-  await store.setCalendarSelected("work@example.com", "team-calendar", true);
+  await runLocalEffect(
+    store.addCalendarAccount("work@example.com", "1//work-grant", ["work@example.com"]),
+  );
+  await runLocalEffect(
+    store.addCalendarAccount("home@example.com", "1//home-grant", ["home@example.com"]),
+  );
+  await runLocalEffect(store.setCalendarSelected("work@example.com", "team-calendar", true));
   // Signing into work again replaces the grant, not the user's choices.
-  await store.addCalendarAccount("work@example.com", "1//fresh-work-grant", ["work@example.com"]);
+  await runLocalEffect(
+    store.addCalendarAccount("work@example.com", "1//fresh-work-grant", ["work@example.com"]),
+  );
 
-  const accounts = await store.readCalendarAccounts();
+  const accounts = await runLocalEffect(store.readCalendarAccounts());
   assert.deepEqual(accounts, [
     {
       id: "work@example.com",
@@ -468,18 +490,24 @@ test("accounts stand side by side, and reconnecting one keeps its choices", asyn
 test("selection changes one calendar on one account, and removal takes the grant with it", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
-  await store.addCalendarAccount("dev@example.com", "1//grant", ["dev@example.com"]);
+  await runLocalEffect(
+    store.addCalendarAccount("dev@example.com", "1//grant", ["dev@example.com"]),
+  );
 
-  await store.setCalendarSelected("dev@example.com", "team-calendar", true);
-  await store.setCalendarSelected("dev@example.com", "dev@example.com", false);
-  const unknown = await store.setCalendarSelected("nobody@example.com", "team-calendar", true);
+  await runLocalEffect(store.setCalendarSelected("dev@example.com", "team-calendar", true));
+  await runLocalEffect(store.setCalendarSelected("dev@example.com", "dev@example.com", false));
+  const unknown = await runLocalEffect(
+    store.setCalendarSelected("nobody@example.com", "team-calendar", true),
+  );
   assert.equal(unknown.reason, "That calendar account is not connected.");
 
-  assert.deepEqual((await store.readCalendarAccounts())[0]?.selectedCalendarIds, ["team-calendar"]);
+  assert.deepEqual((await runLocalEffect(store.readCalendarAccounts()))[0]?.selectedCalendarIds, [
+    "team-calendar",
+  ]);
 
-  const removed = await store.removeCalendarAccount("dev@example.com");
+  const removed = await runLocalEffect(store.removeCalendarAccount("dev@example.com"));
   assert.deepEqual(removed.settings.calendarAccounts, []);
-  assert.deepEqual(await store.readCalendarAccounts(), []);
+  assert.deepEqual(await runLocalEffect(store.readCalendarAccounts()), []);
   // Nothing empty is written down: a file with no accounts carries no field.
   assert.equal(JSON.parse(await readSettingsFile(directory)).calendarAccounts, undefined);
 });
@@ -488,13 +516,15 @@ test("a calendar account never disturbs a stored key, nor a key an account", asy
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
 
-  await store.setApiKey(CONDUCTOR, TEST_API_KEY);
-  await store.addCalendarAccount("dev@example.com", "1//grant", ["dev@example.com"]);
-  await store.setApiKey(CONDUCTOR, undefined);
+  await runLocalEffect(store.setApiKey(CONDUCTOR, TEST_API_KEY));
+  await runLocalEffect(
+    store.addCalendarAccount("dev@example.com", "1//grant", ["dev@example.com"]),
+  );
+  await runLocalEffect(store.setApiKey(CONDUCTOR, undefined));
 
   const reopened = storeIn(directory);
-  assert.equal(await reopened.readApiKey(CONDUCTOR), undefined);
-  assert.equal((await reopened.readCalendarAccounts()).length, 1);
+  assert.equal(await runLocalEffect(reopened.readApiKey(CONDUCTOR)), undefined);
+  assert.equal((await runLocalEffect(reopened.readCalendarAccounts())).length, 1);
 });
 
 test("announcements wait out meetings until asked otherwise, and the choice survives a reopen", async (t) => {
@@ -505,13 +535,18 @@ test("announcements wait out meetings until asked otherwise, and the choice surv
   const cipher = countingCipher();
   const store = storeIn(directory, { cipher });
 
-  assert.equal((await store.snapshot()).quietDuringMeetings, true);
-  assert.equal(await store.get(APP_SETTING_SCHEMA.quietDuringMeetings.field), true);
-  const disabled = await store.set(APP_SETTING_SCHEMA.quietDuringMeetings.field, false);
+  assert.equal((await runLocalEffect(store.snapshot())).quietDuringMeetings, true);
+  assert.equal(await runLocalEffect(store.get(APP_SETTING_SCHEMA.quietDuringMeetings.field)), true);
+  const disabled = await runLocalEffect(
+    store.set(APP_SETTING_SCHEMA.quietDuringMeetings.field, false),
+  );
 
   assert.equal(disabled.settings.quietDuringMeetings, false);
-  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.quietDuringMeetings.field), false);
-  assert.equal((await storeIn(directory).snapshot()).quietDuringMeetings, false);
+  assert.equal(
+    await runLocalEffect(storeIn(directory).get(APP_SETTING_SCHEMA.quietDuringMeetings.field)),
+    false,
+  );
+  assert.equal((await runLocalEffect(storeIn(directory).snapshot())).quietDuringMeetings, false);
   assert.equal(cipher.calls.isAvailable, 0);
   assert.equal(cipher.calls.encrypt, 0);
 });
@@ -519,13 +554,13 @@ test("announcements wait out meetings until asked otherwise, and the choice surv
 test("switching the meeting quiet never disturbs a stored key", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
-  await store.setApiKey(CONDUCTOR, TEST_API_KEY);
+  await runLocalEffect(store.setApiKey(CONDUCTOR, TEST_API_KEY));
 
-  await store.set(APP_SETTING_SCHEMA.quietDuringMeetings.field, false);
-  const on = await store.set(APP_SETTING_SCHEMA.quietDuringMeetings.field, true);
+  await runLocalEffect(store.set(APP_SETTING_SCHEMA.quietDuringMeetings.field, false));
+  const on = await runLocalEffect(store.set(APP_SETTING_SCHEMA.quietDuringMeetings.field, true));
 
   assert.equal(on.settings.quietDuringMeetings, true);
-  assert.equal(await storeIn(directory).readApiKey(CONDUCTOR), TEST_API_KEY);
+  assert.equal(await runLocalEffect(storeIn(directory).readApiKey(CONDUCTOR)), TEST_API_KEY);
 });
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
@@ -538,7 +573,7 @@ test("a corrupt meeting quiet value reads as the default rather than as off", as
     "utf8",
   );
 
-  assert.equal((await storeIn(directory).snapshot()).quietDuringMeetings, true);
+  assert.equal((await runLocalEffect(storeIn(directory).snapshot())).quietDuringMeetings, true);
 });
 
 test("usage sharing is on in a file that never mentions it, and survives a round trip", async (t) => {
@@ -552,23 +587,26 @@ test("usage sharing is on in a file that never mentions it, and survives a round
   );
 
   const store = storeIn(directory);
-  assert.equal((await store.snapshot()).shareUsageData, true);
-  assert.equal(await store.get(APP_SETTING_SCHEMA.shareUsageData.field), true);
+  assert.equal((await runLocalEffect(store.snapshot())).shareUsageData, true);
+  assert.equal(await runLocalEffect(store.get(APP_SETTING_SCHEMA.shareUsageData.field)), true);
 
-  const stopped = await store.set(APP_SETTING_SCHEMA.shareUsageData.field, false);
+  const stopped = await runLocalEffect(store.set(APP_SETTING_SCHEMA.shareUsageData.field, false));
   assert.equal(stopped.settings.shareUsageData, false);
-  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.shareUsageData.field), false);
+  assert.equal(
+    await runLocalEffect(storeIn(directory).get(APP_SETTING_SCHEMA.shareUsageData.field)),
+    false,
+  );
 });
 
 test("no reset scope reaches usage sharing", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
-  await store.set(APP_SETTING_SCHEMA.shareUsageData.field, false);
+  await runLocalEffect(store.set(APP_SETTING_SCHEMA.shareUsageData.field, false));
 
   for (const scope of Object.values(SETTINGS_RESET_SCOPE)) {
-    await store.resetSettings(scope);
+    await runLocalEffect(store.resetSettings(scope));
     assert.equal(
-      (await store.snapshot()).shareUsageData,
+      (await runLocalEffect(store.snapshot())).shareUsageData,
       false,
       `${scope} must not restore data sharing`,
     );
@@ -582,23 +620,23 @@ test("keeps each provider's key, environment fallback, and reported source separ
     environment: { [TEST_ENVIRONMENT_VARIABLE.SECOND_CLOUD_API_KEY]: "second-cloud-environment" },
   });
 
-  await store.setApiKey(FIRST_CLOUD, "first-cloud-key");
-  const settings = await store.snapshot();
+  await runLocalEffect(store.setApiKey(FIRST_CLOUD, "first-cloud-key"));
+  const settings = await runLocalEffect(store.snapshot());
 
   assert.equal(settings.credentialSources[FIRST_CLOUD], CREDENTIAL_SOURCE.ENCRYPTED_FILE);
   assert.equal(settings.credentialSources[SECOND_CLOUD], CREDENTIAL_SOURCE.ENVIRONMENT);
-  assert.equal(await store.readApiKey(FIRST_CLOUD), "first-cloud-key");
-  assert.equal(await store.readApiKey(SECOND_CLOUD), "second-cloud-environment");
+  assert.equal(await runLocalEffect(store.readApiKey(FIRST_CLOUD)), "first-cloud-key");
+  assert.equal(await runLocalEffect(store.readApiKey(SECOND_CLOUD)), "second-cloud-environment");
 
   // Storing and then clearing one provider's key leaves the other untouched.
-  await store.setApiKey(SECOND_CLOUD, "second-cloud-key");
-  assert.equal(await store.readApiKey(FIRST_CLOUD), "first-cloud-key");
-  await store.setApiKey(FIRST_CLOUD, undefined);
+  await runLocalEffect(store.setApiKey(SECOND_CLOUD, "second-cloud-key"));
+  assert.equal(await runLocalEffect(store.readApiKey(FIRST_CLOUD)), "first-cloud-key");
+  await runLocalEffect(store.setApiKey(FIRST_CLOUD, undefined));
 
-  assert.equal(await store.readApiKey(SECOND_CLOUD), "second-cloud-key");
-  assert.equal(await store.readApiKey(FIRST_CLOUD), undefined);
+  assert.equal(await runLocalEffect(store.readApiKey(SECOND_CLOUD)), "second-cloud-key");
+  assert.equal(await runLocalEffect(store.readApiKey(FIRST_CLOUD)), undefined);
   assert.equal(
-    (await store.snapshot()).credentialSources[FIRST_CLOUD],
+    (await runLocalEffect(store.snapshot())).credentialSources[FIRST_CLOUD],
     CREDENTIAL_SOURCE.NONE,
     "a provider with no key must report nothing",
   );
@@ -611,12 +649,12 @@ test("keeps both keys when two providers are saved at once", async (t) => {
   const store = storeIn(directory, { providers: TEST_PROVIDERS });
 
   await Promise.all([
-    store.setApiKey(FIRST_CLOUD, "first-cloud-key"),
-    store.setApiKey(SECOND_CLOUD, "second-cloud-key"),
+    runLocalEffect(store.setApiKey(FIRST_CLOUD, "first-cloud-key")),
+    runLocalEffect(store.setApiKey(SECOND_CLOUD, "second-cloud-key")),
   ]);
 
-  assert.equal(await store.readApiKey(FIRST_CLOUD), "first-cloud-key");
-  assert.equal(await store.readApiKey(SECOND_CLOUD), "second-cloud-key");
+  assert.equal(await runLocalEffect(store.readApiKey(FIRST_CLOUD)), "first-cloud-key");
+  assert.equal(await runLocalEffect(store.readApiKey(SECOND_CLOUD)), "second-cloud-key");
   assert.deepEqual(JSON.parse(await readSettingsFile(directory)), {
     version: 2,
     apiKeys: {
@@ -634,16 +672,16 @@ test("keeps both keys when two providers are saved at once", async (t) => {
     showOnAllDisplays: false,
   });
   const reopened = storeIn(directory, { providers: TEST_PROVIDERS });
-  assert.equal(await reopened.readApiKey(FIRST_CLOUD), "first-cloud-key");
-  assert.equal(await reopened.readApiKey(SECOND_CLOUD), "second-cloud-key");
+  assert.equal(await runLocalEffect(reopened.readApiKey(FIRST_CLOUD)), "first-cloud-key");
+  assert.equal(await runLocalEffect(reopened.readApiKey(SECOND_CLOUD)), "second-cloud-key");
 });
 
 test("reports nothing for a provider this store does not know", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory, { providers: [FIRST_CLOUD_PROVIDER] });
 
-  assert.equal(await store.readApiKey(SECOND_CLOUD), undefined);
-  assert.equal((await store.snapshot()).credentialSources[SECOND_CLOUD], undefined);
+  assert.equal(await runLocalEffect(store.readApiKey(SECOND_CLOUD)), undefined);
+  assert.equal((await runLocalEffect(store.snapshot())).credentialSources[SECOND_CLOUD], undefined);
 });
 
 test("falls back to an API key from the environment", async (t) => {
@@ -652,10 +690,10 @@ test("falls back to an API key from the environment", async (t) => {
     environment: { [TEST_ENVIRONMENT_VARIABLE.API_TOKEN]: `  ${TEST_API_KEY}  ` },
   });
 
-  const settings = await store.snapshot();
+  const settings = await runLocalEffect(store.snapshot());
 
   assert.equal(settings.credentialSources[CONDUCTOR], CREDENTIAL_SOURCE.ENVIRONMENT);
-  assert.equal(await store.readApiKey(CONDUCTOR), TEST_API_KEY);
+  assert.equal(await runLocalEffect(store.readApiKey(CONDUCTOR)), TEST_API_KEY);
 });
 
 test("prefers a stored key over one from the environment", async (t) => {
@@ -663,9 +701,9 @@ test("prefers a stored key over one from the environment", async (t) => {
   const store = storeIn(directory, {
     environment: { [TEST_ENVIRONMENT_VARIABLE.API_KEY]: "conductor-environment-key" },
   });
-  await store.setApiKey(CONDUCTOR, TEST_API_KEY);
+  await runLocalEffect(store.setApiKey(CONDUCTOR, TEST_API_KEY));
 
-  assert.equal(await store.readApiKey(CONDUCTOR), TEST_API_KEY);
+  assert.equal(await runLocalEffect(store.readApiKey(CONDUCTOR)), TEST_API_KEY);
 });
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
@@ -673,10 +711,19 @@ test("rejects a key that cannot be sent as an authorization header", async (t) =
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
 
-  assert.match((await store.setApiKey(CONDUCTOR, "short")).reason ?? "", /too short/);
-  assert.match((await store.setApiKey(CONDUCTOR, "key with spaces")).reason ?? "", /unsupported/);
-  assert.match((await store.setApiKey(CONDUCTOR, "k".repeat(513))).reason ?? "", /too long/);
-  assert.equal(await store.readApiKey(CONDUCTOR), undefined);
+  assert.match(
+    (await runLocalEffect(store.setApiKey(CONDUCTOR, "short"))).reason ?? "",
+    /too short/,
+  );
+  assert.match(
+    (await runLocalEffect(store.setApiKey(CONDUCTOR, "key with spaces"))).reason ?? "",
+    /unsupported/,
+  );
+  assert.match(
+    (await runLocalEffect(store.setApiKey(CONDUCTOR, "k".repeat(513)))).reason ?? "",
+    /too long/,
+  );
+  assert.equal(await runLocalEffect(store.readApiKey(CONDUCTOR)), undefined);
   await assert.rejects(() => readSettingsFile(directory), /ENOENT/);
 });
 
@@ -690,19 +737,22 @@ test("holds a key only in the form its provider says it issues", async (t) => {
     environment: { [TEST_ENVIRONMENT_VARIABLE.THIRD_CLOUD_API_KEY]: "legacy-third-cloud-key" },
   });
 
-  const refused = await store.setApiKey(THIRD_CLOUD, "legacy-third-cloud-key");
+  const refused = await runLocalEffect(store.setApiKey(THIRD_CLOUD, "legacy-third-cloud-key"));
 
   assert.match(refused.reason ?? "", /start with current_/);
-  assert.equal(await store.readApiKey(THIRD_CLOUD), undefined);
+  assert.equal(await runLocalEffect(store.readApiKey(THIRD_CLOUD)), undefined);
   // The same rule holds a key read from the environment, so a shell profile is
   // not a way around it.
   assert.equal(refused.settings.credentialSources[THIRD_CLOUD], CREDENTIAL_SOURCE.NONE);
 
-  const accepted = await store.setApiKey(THIRD_CLOUD, "current_third-cloud-key");
+  const accepted = await runLocalEffect(store.setApiKey(THIRD_CLOUD, "current_third-cloud-key"));
   assert.equal(accepted.reason, undefined);
-  assert.equal(await store.readApiKey(THIRD_CLOUD), "current_third-cloud-key");
+  assert.equal(await runLocalEffect(store.readApiKey(THIRD_CLOUD)), "current_third-cloud-key");
   // A provider that publishes no format still takes whatever it issues.
-  assert.equal((await store.setApiKey(FIRST_CLOUD, "legacy-third-cloud-key")).reason, undefined);
+  assert.equal(
+    (await runLocalEffect(store.setApiKey(FIRST_CLOUD, "legacy-third-cloud-key"))).reason,
+    undefined,
+  );
 });
 
 test("stops honouring a stored key the moment its provider names a form it is not", async (t) => {
@@ -716,9 +766,9 @@ test("stops honouring a stored key the moment its provider names a form it is no
 
   const store = storeIn(directory, { providers: TEST_PROVIDERS });
 
-  assert.equal(await store.readApiKey(THIRD_CLOUD), undefined);
+  assert.equal(await runLocalEffect(store.readApiKey(THIRD_CLOUD)), undefined);
   assert.equal(
-    (await store.snapshot()).credentialSources[THIRD_CLOUD],
+    (await runLocalEffect(store.snapshot())).credentialSources[THIRD_CLOUD],
     CREDENTIAL_SOURCE.NONE,
     // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
     "a key the provider no longer accepts must not read as connected",
@@ -729,7 +779,7 @@ test("refuses to store a key when encrypted storage is unavailable", async (t) =
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory, { cipher: testCipher(false) });
 
-  const { settings, reason } = await store.setApiKey(CONDUCTOR, TEST_API_KEY);
+  const { settings, reason } = await runLocalEffect(store.setApiKey(CONDUCTOR, TEST_API_KEY));
 
   assert.match(reason ?? "", /unavailable/);
   assert.equal(settings.secretStorage, SECRET_STORAGE.UNAVAILABLE);
@@ -742,9 +792,9 @@ test("asks the cipher nothing on a launch with no key to protect", async (t) => 
   const cipher = countingCipher();
   const store = storeIn(directory, { cipher });
 
-  const settings = await store.snapshot();
+  const settings = await runLocalEffect(store.snapshot());
 
-  assert.equal(await store.readApiKey(CONDUCTOR), undefined);
+  assert.equal(await runLocalEffect(store.readApiKey(CONDUCTOR)), undefined);
   assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
   // Nothing has asked, so nothing is claimed either way.
   assert.equal(settings.secretStorage, SECRET_STORAGE.UNKNOWN);
@@ -755,7 +805,7 @@ test("asks the cipher nothing to clear a key", async (t) => {
   const cipher = countingCipher();
   const store = storeIn(directory, { cipher });
 
-  const { settings, reason } = await store.setApiKey(CONDUCTOR, undefined);
+  const { settings, reason } = await runLocalEffect(store.setApiKey(CONDUCTOR, undefined));
 
   assert.equal(reason, undefined);
   assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
@@ -767,9 +817,9 @@ test("asks once when a key is stored and reports that answer from then on", asyn
   const cipher = countingCipher();
   const store = storeIn(directory, { cipher });
 
-  const { settings } = await store.setApiKey(CONDUCTOR, TEST_API_KEY);
-  const afterwards = await store.snapshot();
-  await store.setApiKey(CONDUCTOR, `${TEST_API_KEY}-rotated`);
+  const { settings } = await runLocalEffect(store.setApiKey(CONDUCTOR, TEST_API_KEY));
+  const afterwards = await runLocalEffect(store.snapshot());
+  await runLocalEffect(store.setApiKey(CONDUCTOR, `${TEST_API_KEY}-rotated`));
 
   assert.equal(settings.secretStorage, SECRET_STORAGE.AVAILABLE);
   assert.equal(afterwards.secretStorage, SECRET_STORAGE.AVAILABLE);
@@ -779,11 +829,11 @@ test("asks once when a key is stored and reports that answer from then on", asyn
 
 test("decrypts a stored key without asking whether storage is available", async (t) => {
   const directory = await temporaryDirectory(t);
-  await storeIn(directory).setApiKey(CONDUCTOR, TEST_API_KEY);
+  await runLocalEffect(storeIn(directory).setApiKey(CONDUCTOR, TEST_API_KEY));
   const cipher = countingCipher();
   const store = storeIn(directory, { cipher });
 
-  assert.equal(await store.readApiKey(CONDUCTOR), TEST_API_KEY);
+  assert.equal(await runLocalEffect(store.readApiKey(CONDUCTOR)), TEST_API_KEY);
   // Recovering a key the user has is the one reason to reach the Keychain on a
   // launch, and it is reason enough on its own.
   assert.equal(cipher.calls.decrypt, 1);
@@ -792,7 +842,7 @@ test("decrypts a stored key without asking whether storage is available", async 
 
 test("ignores a stored key that can no longer be decrypted", async (t) => {
   const directory = await temporaryDirectory(t);
-  await storeIn(directory).setApiKey(CONDUCTOR, TEST_API_KEY);
+  await runLocalEffect(storeIn(directory).setApiKey(CONDUCTOR, TEST_API_KEY));
   await fs.writeFile(
     path.join(directory, SETTINGS_FILE_NAME),
     JSON.stringify({
@@ -803,8 +853,11 @@ test("ignores a stored key that can no longer be decrypted", async (t) => {
 
   const store = storeIn(directory);
 
-  assert.equal(await store.readApiKey(CONDUCTOR), undefined);
-  assert.equal((await store.snapshot()).credentialSources[CONDUCTOR], CREDENTIAL_SOURCE.NONE);
+  assert.equal(await runLocalEffect(store.readApiKey(CONDUCTOR)), undefined);
+  assert.equal(
+    (await runLocalEffect(store.snapshot())).credentialSources[CONDUCTOR],
+    CREDENTIAL_SOURCE.NONE,
+  );
 });
 
 test("keeps a Conductor key stored by an earlier version working", async (t) => {
@@ -815,15 +868,15 @@ test("keeps a Conductor key stored by an earlier version working", async (t) => 
   );
   const store = storeIn(directory);
 
-  assert.equal(await store.readApiKey(CONDUCTOR), TEST_API_KEY);
+  assert.equal(await runLocalEffect(store.readApiKey(CONDUCTOR)), TEST_API_KEY);
   assert.equal(
-    (await store.snapshot()).credentialSources[CONDUCTOR],
+    (await runLocalEffect(store.snapshot())).credentialSources[CONDUCTOR],
     CREDENTIAL_SOURCE.ENCRYPTED_FILE,
   );
 
   // The migrated key moves under its provider id the next time settings are
   // written, and the version 1 field does not survive that write.
-  await store.setApiKey(CONDUCTOR, "conductor-replacement-key");
+  await runLocalEffect(store.setApiKey(CONDUCTOR, "conductor-replacement-key"));
   const persisted: unknown = JSON.parse(await readSettingsFile(directory));
 
   assert.deepEqual(persisted, {
@@ -837,7 +890,10 @@ test("keeps a Conductor key stored by an earlier version working", async (t) => 
     shareUsageData: true,
     showOnAllDisplays: false,
   });
-  assert.equal(await storeIn(directory).readApiKey(CONDUCTOR), "conductor-replacement-key");
+  assert.equal(
+    await runLocalEffect(storeIn(directory).readApiKey(CONDUCTOR)),
+    "conductor-replacement-key",
+  );
 });
 
 test("carries a key belonging to a provider this build does not know", async (t) => {
@@ -848,7 +904,7 @@ test("carries a key belonging to a provider this build does not know", async (t)
     JSON.stringify({ version: 2, apiKeys: { "later-cloud": sealed("later-cloud-key") } }),
   );
 
-  await storeIn(directory).setApiKey(CONDUCTOR, TEST_API_KEY);
+  await runLocalEffect(storeIn(directory).setApiKey(CONDUCTOR, TEST_API_KEY));
   const persisted: unknown = JSON.parse(await readSettingsFile(directory));
 
   assert.deepEqual(persisted, {
@@ -872,7 +928,7 @@ test("drops the retired menu bar preference on the next settings write", async (
   );
   const store = storeIn(directory);
 
-  await store.set(APP_SETTING_SCHEMA.showInDock.field, true);
+  await runLocalEffect(store.set(APP_SETTING_SCHEMA.showInDock.field, true));
 
   const persisted = JSON.parse(await readSettingsFile(directory));
   assert.equal(persisted.showInMenuBar, undefined);
@@ -883,9 +939,11 @@ test("keeps Luke out of the Dock until asked, and remembers the answer", async (
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
 
-  assert.equal((await store.snapshot()).showInDock, false);
+  assert.equal((await runLocalEffect(store.snapshot())).showInDock, false);
 
-  const { settings, reason } = await store.set(APP_SETTING_SCHEMA.showInDock.field, true);
+  const { settings, reason } = await runLocalEffect(
+    store.set(APP_SETTING_SCHEMA.showInDock.field, true),
+  );
 
   assert.equal(reason, undefined);
   assert.equal(settings.showInDock, true);
@@ -901,7 +959,7 @@ test("keeps Luke out of the Dock until asked, and remembers the answer", async (
     showOnAllDisplays: false,
   });
   // The choice outlives the run that heard it.
-  assert.equal((await storeIn(directory).snapshot()).showInDock, true);
+  assert.equal((await runLocalEffect(storeIn(directory).snapshot())).showInDock, true);
 });
 
 test("changes the Dock preference without touching the cipher", async (t) => {
@@ -911,7 +969,7 @@ test("changes the Dock preference without touching the cipher", async (t) => {
   const cipher = countingCipher();
   const store = storeIn(directory, { cipher });
 
-  const { settings } = await store.set(APP_SETTING_SCHEMA.showInDock.field, true);
+  const { settings } = await runLocalEffect(store.set(APP_SETTING_SCHEMA.showInDock.field, true));
 
   assert.equal(settings.showInDock, true);
   assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
@@ -934,7 +992,7 @@ test("decides the Dock icon from the file alone, never the keychain", async (t) 
   const cipher = countingCipher();
   const store = storeIn(directory, { cipher });
 
-  assert.equal(await store.get(APP_SETTING_SCHEMA.showInDock.field), true);
+  assert.equal(await runLocalEffect(store.get(APP_SETTING_SCHEMA.showInDock.field)), true);
   assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
 });
 
@@ -945,15 +1003,15 @@ test("keeps Luke out of the Dock when the file says something a boolean is not",
     JSON.stringify({ version: 2, apiKeys: {}, showInDock: "always" }),
   );
 
-  assert.equal((await storeIn(directory).snapshot()).showInDock, false);
+  assert.equal((await runLocalEffect(storeIn(directory).snapshot())).showInDock, false);
 });
 
 test("reports the default voice until one is chosen", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
 
-  assert.equal((await store.snapshot()).voice, REALTIME_DEFAULTS.VOICE);
-  assert.equal(await store.get(APP_SETTING_SCHEMA.voice.field), undefined);
+  assert.equal((await runLocalEffect(store.snapshot())).voice, REALTIME_DEFAULTS.VOICE);
+  assert.equal(await runLocalEffect(store.get(APP_SETTING_SCHEMA.voice.field)), undefined);
 });
 
 test("stores the chosen voice plainly and reads it back from a new store instance", async (t) => {
@@ -961,9 +1019,8 @@ test("stores the chosen voice plainly and reads it back from a new store instanc
   const cipher = countingCipher();
   const store = storeIn(directory, { cipher });
 
-  const { settings, reason } = await store.set(
-    APP_SETTING_SCHEMA.voice.field,
-    REALTIME_VOICE.MARIN,
+  const { settings, reason } = await runLocalEffect(
+    store.set(APP_SETTING_SCHEMA.voice.field, REALTIME_VOICE.MARIN),
   );
 
   assert.equal(reason, undefined);
@@ -971,7 +1028,10 @@ test("stores the chosen voice plainly and reads it back from a new store instanc
   // A preference is not a credential, so choosing one never reaches the
   // Keychain — and never raises its permission dialog.
   assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
-  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.voice.field), REALTIME_VOICE.MARIN);
+  assert.equal(
+    await runLocalEffect(storeIn(directory).get(APP_SETTING_SCHEMA.voice.field)),
+    REALTIME_VOICE.MARIN,
+  );
 });
 
 test("prefers the chosen voice over the environment, and the environment over the default", async (t) => {
@@ -980,17 +1040,17 @@ test("prefers the chosen voice over the environment, and the environment over th
     environment: { LUKE_REALTIME_VOICE: REALTIME_VOICE.SAGE },
   });
 
-  assert.equal((await store.snapshot()).voice, REALTIME_VOICE.SAGE);
+  assert.equal((await runLocalEffect(store.snapshot())).voice, REALTIME_VOICE.SAGE);
   // The environment names the voice only until the user does, so it is
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // reported in the snapshot but never as something the user stored.
-  assert.equal(await store.get(APP_SETTING_SCHEMA.voice.field), undefined);
+  assert.equal(await runLocalEffect(store.get(APP_SETTING_SCHEMA.voice.field)), undefined);
 
-  await store.set(APP_SETTING_SCHEMA.voice.field, REALTIME_VOICE.MARIN);
-  assert.equal((await store.snapshot()).voice, REALTIME_VOICE.MARIN);
+  await runLocalEffect(store.set(APP_SETTING_SCHEMA.voice.field, REALTIME_VOICE.MARIN));
+  assert.equal((await runLocalEffect(store.snapshot())).voice, REALTIME_VOICE.MARIN);
 
-  await store.set(APP_SETTING_SCHEMA.voice.field, undefined);
-  assert.equal((await store.snapshot()).voice, REALTIME_VOICE.SAGE);
+  await runLocalEffect(store.set(APP_SETTING_SCHEMA.voice.field, undefined));
+  assert.equal((await runLocalEffect(store.snapshot())).voice, REALTIME_VOICE.SAGE);
 });
 
 test("ignores a stored or environment voice this build does not offer", async (t) => {
@@ -1001,16 +1061,16 @@ test("ignores a stored or environment voice this build does not offer", async (t
   );
   const store = storeIn(directory, { environment: { LUKE_REALTIME_VOICE: "baritone" } });
 
-  assert.equal(await store.get(APP_SETTING_SCHEMA.voice.field), undefined);
-  assert.equal((await store.snapshot()).voice, REALTIME_DEFAULTS.VOICE);
+  assert.equal(await runLocalEffect(store.get(APP_SETTING_SCHEMA.voice.field)), undefined);
+  assert.equal((await runLocalEffect(store.snapshot())).voice, REALTIME_DEFAULTS.VOICE);
 });
 
 test("reports the natural pace until one is chosen", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
 
-  assert.equal((await store.snapshot()).voiceSpeed, REALTIME_DEFAULTS.SPEED);
-  assert.equal(await store.get(APP_SETTING_SCHEMA.voiceSpeed.field), undefined);
+  assert.equal((await runLocalEffect(store.snapshot())).voiceSpeed, REALTIME_DEFAULTS.SPEED);
+  assert.equal(await runLocalEffect(store.get(APP_SETTING_SCHEMA.voiceSpeed.field)), undefined);
 });
 
 test("stores the chosen pace plainly and reads it back from a new store instance", async (t) => {
@@ -1018,9 +1078,8 @@ test("stores the chosen pace plainly and reads it back from a new store instance
   const cipher = countingCipher();
   const store = storeIn(directory, { cipher });
 
-  const { settings, reason } = await store.set(
-    APP_SETTING_SCHEMA.voiceSpeed.field,
-    REALTIME_VOICE_SPEED.QUICK,
+  const { settings, reason } = await runLocalEffect(
+    store.set(APP_SETTING_SCHEMA.voiceSpeed.field, REALTIME_VOICE_SPEED.QUICK),
   );
 
   assert.equal(reason, undefined);
@@ -1029,7 +1088,7 @@ test("stores the chosen pace plainly and reads it back from a new store instance
   // Keychain — and never raises its permission dialog.
   assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
   assert.equal(
-    await storeIn(directory).get(APP_SETTING_SCHEMA.voiceSpeed.field),
+    await runLocalEffect(storeIn(directory).get(APP_SETTING_SCHEMA.voiceSpeed.field)),
     REALTIME_VOICE_SPEED.QUICK,
   );
 });
@@ -1040,14 +1099,14 @@ test("prefers the chosen pace over the environment, and the environment over the
     environment: { LUKE_REALTIME_SPEED: String(REALTIME_VOICE_SPEED.SLOW) },
   });
 
-  assert.equal((await store.snapshot()).voiceSpeed, REALTIME_VOICE_SPEED.SLOW);
-  assert.equal(await store.get(APP_SETTING_SCHEMA.voiceSpeed.field), undefined);
+  assert.equal((await runLocalEffect(store.snapshot())).voiceSpeed, REALTIME_VOICE_SPEED.SLOW);
+  assert.equal(await runLocalEffect(store.get(APP_SETTING_SCHEMA.voiceSpeed.field)), undefined);
 
-  await store.set(APP_SETTING_SCHEMA.voiceSpeed.field, REALTIME_VOICE_SPEED.FAST);
-  assert.equal((await store.snapshot()).voiceSpeed, REALTIME_VOICE_SPEED.FAST);
+  await runLocalEffect(store.set(APP_SETTING_SCHEMA.voiceSpeed.field, REALTIME_VOICE_SPEED.FAST));
+  assert.equal((await runLocalEffect(store.snapshot())).voiceSpeed, REALTIME_VOICE_SPEED.FAST);
 
-  await store.set(APP_SETTING_SCHEMA.voiceSpeed.field, undefined);
-  assert.equal((await store.snapshot()).voiceSpeed, REALTIME_VOICE_SPEED.SLOW);
+  await runLocalEffect(store.set(APP_SETTING_SCHEMA.voiceSpeed.field, undefined));
+  assert.equal((await runLocalEffect(store.snapshot())).voiceSpeed, REALTIME_VOICE_SPEED.SLOW);
 });
 
 test("ignores a stored or environment pace this build does not offer", async (t) => {
@@ -1058,16 +1117,16 @@ test("ignores a stored or environment pace this build does not offer", async (t)
   );
   const store = storeIn(directory, { environment: { LUKE_REALTIME_SPEED: "0.1" } });
 
-  assert.equal(await store.get(APP_SETTING_SCHEMA.voiceSpeed.field), undefined);
-  assert.equal((await store.snapshot()).voiceSpeed, REALTIME_DEFAULTS.SPEED);
+  assert.equal(await runLocalEffect(store.get(APP_SETTING_SCHEMA.voiceSpeed.field)), undefined);
+  assert.equal((await runLocalEffect(store.snapshot())).voiceSpeed, REALTIME_DEFAULTS.SPEED);
 });
 
 test("reports no talk-key chord until one is chosen", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
 
-  assert.equal(await store.get(APP_SETTING_SCHEMA.voiceHotkey.field), undefined);
-  assert.equal((await store.snapshot()).voiceHotkey, undefined);
+  assert.equal(await runLocalEffect(store.get(APP_SETTING_SCHEMA.voiceHotkey.field)), undefined);
+  assert.equal((await runLocalEffect(store.snapshot())).voiceHotkey, undefined);
 });
 
 test("stores the chosen talk-key chord plainly and reads it back from a new store instance", async (t) => {
@@ -1075,9 +1134,8 @@ test("stores the chosen talk-key chord plainly and reads it back from a new stor
   const cipher = countingCipher();
   const store = storeIn(directory, { cipher });
 
-  const { settings, reason } = await store.set(
-    APP_SETTING_SCHEMA.voiceHotkey.field,
-    "Shift+Command+L",
+  const { settings, reason } = await runLocalEffect(
+    store.set(APP_SETTING_SCHEMA.voiceHotkey.field, "Shift+Command+L"),
   );
 
   assert.equal(reason, undefined);
@@ -1086,7 +1144,7 @@ test("stores the chosen talk-key chord plainly and reads it back from a new stor
   // Keychain — and never raises its permission dialog.
   assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
   assert.equal(
-    await storeIn(directory).get(APP_SETTING_SCHEMA.voiceHotkey.field),
+    await runLocalEffect(storeIn(directory).get(APP_SETTING_SCHEMA.voiceHotkey.field)),
     "Shift+Command+L",
   );
 });
@@ -1095,14 +1153,19 @@ test("clearing the talk-key chord returns to no choice at all", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
 
-  await store.set(APP_SETTING_SCHEMA.voiceHotkey.field, "Shift+Command+L");
-  const { settings } = await store.set(APP_SETTING_SCHEMA.voiceHotkey.field, undefined);
+  await runLocalEffect(store.set(APP_SETTING_SCHEMA.voiceHotkey.field, "Shift+Command+L"));
+  const { settings } = await runLocalEffect(
+    store.set(APP_SETTING_SCHEMA.voiceHotkey.field, undefined),
+  );
 
   assert.equal(settings.voiceHotkey, undefined);
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // Absent from the file rather than stored as an empty value: reset is the
   // absence of a choice, and a reopened store must read it the same way.
-  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.voiceHotkey.field), undefined);
+  assert.equal(
+    await runLocalEffect(storeIn(directory).get(APP_SETTING_SCHEMA.voiceHotkey.field)),
+    undefined,
+  );
 });
 
 test("ignores a stored talk-key chord this build cannot register", async (t) => {
@@ -1115,8 +1178,8 @@ test("ignores a stored talk-key chord this build cannot register", async (t) => 
 
   // A hand-edited chord the registrars would refuse is dropped rather than
   // carried: honouring it would claim a key nothing was ever told about.
-  assert.equal(await store.get(APP_SETTING_SCHEMA.voiceHotkey.field), undefined);
-  assert.equal((await store.snapshot()).voiceHotkey, undefined);
+  assert.equal(await runLocalEffect(store.get(APP_SETTING_SCHEMA.voiceHotkey.field)), undefined);
+  assert.equal((await runLocalEffect(store.snapshot())).voiceHotkey, undefined);
 });
 
 test("stores the chosen ask-key chord on the talk key's terms and reads it back", async (t) => {
@@ -1124,31 +1187,41 @@ test("stores the chosen ask-key chord on the talk key's terms and reads it back"
   const cipher = countingCipher();
   const store = storeIn(directory, { cipher });
 
-  assert.equal(await store.get(APP_SETTING_SCHEMA.askHotkey.field), undefined);
-  assert.equal((await store.snapshot()).askHotkey, undefined);
+  assert.equal(await runLocalEffect(store.get(APP_SETTING_SCHEMA.askHotkey.field)), undefined);
+  assert.equal((await runLocalEffect(store.snapshot())).askHotkey, undefined);
 
-  const { settings, reason } = await store.set(APP_SETTING_SCHEMA.askHotkey.field, "Control+Alt+K");
+  const { settings, reason } = await runLocalEffect(
+    store.set(APP_SETTING_SCHEMA.askHotkey.field, "Control+Alt+K"),
+  );
 
   assert.equal(reason, undefined);
   assert.equal(settings.askHotkey, "Control+Alt+K");
   // A preference is not a credential, so choosing one never reaches the
   // Keychain — and never raises its permission dialog.
   assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
-  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.askHotkey.field), "Control+Alt+K");
+  assert.equal(
+    await runLocalEffect(storeIn(directory).get(APP_SETTING_SCHEMA.askHotkey.field)),
+    "Control+Alt+K",
+  );
 });
 
 test("clearing the ask-key chord returns to no choice at all", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
 
-  await store.set(APP_SETTING_SCHEMA.askHotkey.field, "Control+Alt+K");
-  const { settings } = await store.set(APP_SETTING_SCHEMA.askHotkey.field, undefined);
+  await runLocalEffect(store.set(APP_SETTING_SCHEMA.askHotkey.field, "Control+Alt+K"));
+  const { settings } = await runLocalEffect(
+    store.set(APP_SETTING_SCHEMA.askHotkey.field, undefined),
+  );
 
   assert.equal(settings.askHotkey, undefined);
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // Absent from the file rather than stored as an empty value: reset is the
   // absence of a choice, and a reopened store must read it the same way.
-  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.askHotkey.field), undefined);
+  assert.equal(
+    await runLocalEffect(storeIn(directory).get(APP_SETTING_SCHEMA.askHotkey.field)),
+    undefined,
+  );
 });
 
 test("ignores a stored ask-key chord this build cannot register", async (t) => {
@@ -1161,8 +1234,8 @@ test("ignores a stored ask-key chord this build cannot register", async (t) => {
 
   // A hand-edited chord the registrar would refuse is dropped rather than
   // carried: honouring it would claim a key nothing was ever told about.
-  assert.equal(await store.get(APP_SETTING_SCHEMA.askHotkey.field), undefined);
-  assert.equal((await store.snapshot()).askHotkey, undefined);
+  assert.equal(await runLocalEffect(store.get(APP_SETTING_SCHEMA.askHotkey.field)), undefined);
+  assert.equal((await runLocalEffect(store.snapshot())).askHotkey, undefined);
 });
 
 test("stores the chosen stop-key chord on the other keys' terms and reads it back", async (t) => {
@@ -1170,12 +1243,11 @@ test("stores the chosen stop-key chord on the other keys' terms and reads it bac
   const cipher = countingCipher();
   const store = storeIn(directory, { cipher });
 
-  assert.equal(await store.get(APP_SETTING_SCHEMA.stopHotkey.field), undefined);
-  assert.equal((await store.snapshot()).stopHotkey, undefined);
+  assert.equal(await runLocalEffect(store.get(APP_SETTING_SCHEMA.stopHotkey.field)), undefined);
+  assert.equal((await runLocalEffect(store.snapshot())).stopHotkey, undefined);
 
-  const { settings, reason } = await store.set(
-    APP_SETTING_SCHEMA.stopHotkey.field,
-    "Control+Alt+X",
+  const { settings, reason } = await runLocalEffect(
+    store.set(APP_SETTING_SCHEMA.stopHotkey.field, "Control+Alt+X"),
   );
 
   assert.equal(reason, undefined);
@@ -1183,21 +1255,29 @@ test("stores the chosen stop-key chord on the other keys' terms and reads it bac
   // A preference is not a credential, so choosing one never reaches the
   // Keychain — and never raises its permission dialog.
   assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
-  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.stopHotkey.field), "Control+Alt+X");
+  assert.equal(
+    await runLocalEffect(storeIn(directory).get(APP_SETTING_SCHEMA.stopHotkey.field)),
+    "Control+Alt+X",
+  );
 });
 
 test("clearing the stop-key chord returns to no choice at all", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
 
-  await store.set(APP_SETTING_SCHEMA.stopHotkey.field, "Control+Alt+X");
-  const { settings } = await store.set(APP_SETTING_SCHEMA.stopHotkey.field, undefined);
+  await runLocalEffect(store.set(APP_SETTING_SCHEMA.stopHotkey.field, "Control+Alt+X"));
+  const { settings } = await runLocalEffect(
+    store.set(APP_SETTING_SCHEMA.stopHotkey.field, undefined),
+  );
 
   assert.equal(settings.stopHotkey, undefined);
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // Absent from the file rather than stored as an empty value: reset is the
   // absence of a choice, and a reopened store must read it the same way.
-  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.stopHotkey.field), undefined);
+  assert.equal(
+    await runLocalEffect(storeIn(directory).get(APP_SETTING_SCHEMA.stopHotkey.field)),
+    undefined,
+  );
 });
 
 test("ignores a stored stop-key chord this build cannot register", async (t) => {
@@ -1210,50 +1290,67 @@ test("ignores a stored stop-key chord this build cannot register", async (t) => 
 
   // A hand-edited chord the registrar would refuse is dropped rather than
   // carried: honouring it would claim a key nothing was ever told about.
-  assert.equal(await store.get(APP_SETTING_SCHEMA.stopHotkey.field), undefined);
-  assert.equal((await store.snapshot()).stopHotkey, undefined);
+  assert.equal(await runLocalEffect(store.get(APP_SETTING_SCHEMA.stopHotkey.field)), undefined);
+  assert.equal((await runLocalEffect(store.snapshot())).stopHotkey, undefined);
 });
 
 test("the three Luke keys survive each other's writes", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
 
-  await store.set(APP_SETTING_SCHEMA.voiceHotkey.field, "Control+Alt+Space");
-  await store.set(APP_SETTING_SCHEMA.askHotkey.field, "Control+Alt+K");
-  await store.set(APP_SETTING_SCHEMA.stopHotkey.field, "Control+Alt+X");
+  await runLocalEffect(store.set(APP_SETTING_SCHEMA.voiceHotkey.field, "Control+Alt+Space"));
+  await runLocalEffect(store.set(APP_SETTING_SCHEMA.askHotkey.field, "Control+Alt+K"));
+  await runLocalEffect(store.set(APP_SETTING_SCHEMA.stopHotkey.field, "Control+Alt+X"));
 
   const reopened = storeIn(directory);
-  assert.equal(await reopened.get(APP_SETTING_SCHEMA.voiceHotkey.field), "Control+Alt+Space");
-  assert.equal(await reopened.get(APP_SETTING_SCHEMA.askHotkey.field), "Control+Alt+K");
-  assert.equal(await reopened.get(APP_SETTING_SCHEMA.stopHotkey.field), "Control+Alt+X");
+  assert.equal(
+    await runLocalEffect(reopened.get(APP_SETTING_SCHEMA.voiceHotkey.field)),
+    "Control+Alt+Space",
+  );
+  assert.equal(
+    await runLocalEffect(reopened.get(APP_SETTING_SCHEMA.askHotkey.field)),
+    "Control+Alt+K",
+  );
+  assert.equal(
+    await runLocalEffect(reopened.get(APP_SETTING_SCHEMA.stopHotkey.field)),
+    "Control+Alt+X",
+  );
 });
 
 test("the talk-key chord and a stored key survive each other's writes", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
 
-  await store.setApiKey(CONDUCTOR, TEST_API_KEY);
-  await store.set(APP_SETTING_SCHEMA.voiceHotkey.field, "Control+Alt+Space");
-  await store.setApiKey(CONDUCTOR, "conductor-replacement-key");
+  await runLocalEffect(store.setApiKey(CONDUCTOR, TEST_API_KEY));
+  await runLocalEffect(store.set(APP_SETTING_SCHEMA.voiceHotkey.field, "Control+Alt+Space"));
+  await runLocalEffect(store.setApiKey(CONDUCTOR, "conductor-replacement-key"));
 
   const reopened = storeIn(directory);
-  assert.equal(await reopened.readApiKey(CONDUCTOR), "conductor-replacement-key");
-  assert.equal(await reopened.get(APP_SETTING_SCHEMA.voiceHotkey.field), "Control+Alt+Space");
+  assert.equal(await runLocalEffect(reopened.readApiKey(CONDUCTOR)), "conductor-replacement-key");
+  assert.equal(
+    await runLocalEffect(reopened.get(APP_SETTING_SCHEMA.voiceHotkey.field)),
+    "Control+Alt+Space",
+  );
 });
 
 test("keeps Luke to the main display until asked, and remembers the answer", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
 
-  assert.equal((await store.snapshot()).showOnAllDisplays, false);
-  assert.equal(await store.get(APP_SETTING_SCHEMA.showOnAllDisplays.field), false);
+  assert.equal((await runLocalEffect(store.snapshot())).showOnAllDisplays, false);
+  assert.equal(await runLocalEffect(store.get(APP_SETTING_SCHEMA.showOnAllDisplays.field)), false);
 
-  const { settings, reason } = await store.set(APP_SETTING_SCHEMA.showOnAllDisplays.field, true);
+  const { settings, reason } = await runLocalEffect(
+    store.set(APP_SETTING_SCHEMA.showOnAllDisplays.field, true),
+  );
 
   assert.equal(reason, undefined);
   assert.equal(settings.showOnAllDisplays, true);
   // The choice outlives the run that heard it.
-  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.showOnAllDisplays.field), true);
+  assert.equal(
+    await runLocalEffect(storeIn(directory).get(APP_SETTING_SCHEMA.showOnAllDisplays.field)),
+    true,
+  );
 });
 
 test("changes the displays preference without touching the cipher", async (t) => {
@@ -1263,7 +1360,9 @@ test("changes the displays preference without touching the cipher", async (t) =>
   const cipher = countingCipher();
   const store = storeIn(directory, { cipher });
 
-  const { settings } = await store.set(APP_SETTING_SCHEMA.showOnAllDisplays.field, true);
+  const { settings } = await runLocalEffect(
+    store.set(APP_SETTING_SCHEMA.showOnAllDisplays.field, true),
+  );
 
   assert.equal(settings.showOnAllDisplays, true);
   assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
@@ -1276,26 +1375,28 @@ test("keeps Luke to the main display when the file says something a boolean is n
     JSON.stringify({ version: 2, apiKeys: {}, showOnAllDisplays: "every one of them" }),
   );
 
-  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.showOnAllDisplays.field), false);
+  assert.equal(
+    await runLocalEffect(storeIn(directory).get(APP_SETTING_SCHEMA.showOnAllDisplays.field)),
+    false,
+  );
 });
 
 test("draws the bubble until a form is chosen, and remembers the choice", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
 
-  assert.equal((await store.snapshot()).formFactor, PANEL_FORM_FACTOR.BUBBLE);
-  assert.equal(await store.get(APP_SETTING_SCHEMA.formFactor.field), undefined);
+  assert.equal((await runLocalEffect(store.snapshot())).formFactor, PANEL_FORM_FACTOR.BUBBLE);
+  assert.equal(await runLocalEffect(store.get(APP_SETTING_SCHEMA.formFactor.field)), undefined);
 
-  const { settings, reason } = await store.set(
-    APP_SETTING_SCHEMA.formFactor.field,
-    PANEL_FORM_FACTOR.NOTCH,
+  const { settings, reason } = await runLocalEffect(
+    store.set(APP_SETTING_SCHEMA.formFactor.field, PANEL_FORM_FACTOR.NOTCH),
   );
 
   assert.equal(reason, undefined);
   assert.equal(settings.formFactor, PANEL_FORM_FACTOR.NOTCH);
   // The choice outlives the run that heard it.
   assert.equal(
-    await storeIn(directory).get(APP_SETTING_SCHEMA.formFactor.field),
+    await runLocalEffect(storeIn(directory).get(APP_SETTING_SCHEMA.formFactor.field)),
     PANEL_FORM_FACTOR.NOTCH,
   );
 });
@@ -1305,9 +1406,8 @@ test("changes the form without touching the cipher", async (t) => {
   const cipher = countingCipher();
   const store = storeIn(directory, { cipher });
 
-  const { settings } = await store.set(
-    APP_SETTING_SCHEMA.formFactor.field,
-    PANEL_FORM_FACTOR.NOTCH,
+  const { settings } = await runLocalEffect(
+    store.set(APP_SETTING_SCHEMA.formFactor.field, PANEL_FORM_FACTOR.NOTCH),
   );
 
   assert.equal(settings.formFactor, PANEL_FORM_FACTOR.NOTCH);
@@ -1321,8 +1421,14 @@ test("ignores a stored form this build does not draw", async (t) => {
     JSON.stringify({ version: 2, apiKeys: {}, formFactor: "hexagon" }),
   );
 
-  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.formFactor.field), undefined);
-  assert.equal((await storeIn(directory).snapshot()).formFactor, PANEL_FORM_FACTOR.BUBBLE);
+  assert.equal(
+    await runLocalEffect(storeIn(directory).get(APP_SETTING_SCHEMA.formFactor.field)),
+    undefined,
+  );
+  assert.equal(
+    (await runLocalEffect(storeIn(directory).snapshot())).formFactor,
+    PANEL_FORM_FACTOR.BUBBLE,
+  );
 });
 
 test("asks each time until a default workspace provider is chosen, and remembers the choice", async (t) => {
@@ -1331,27 +1437,31 @@ test("asks each time until a default workspace provider is chosen, and remembers
 
   // Unset on purpose: the default is always a choice the user made — by hand
   // or by their first creation — never one made for them.
-  assert.equal((await store.snapshot()).defaultWorkspaceProvider, undefined);
-  assert.equal(await store.get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field), undefined);
+  assert.equal((await runLocalEffect(store.snapshot())).defaultWorkspaceProvider, undefined);
+  assert.equal(
+    await runLocalEffect(store.get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field)),
+    undefined,
+  );
 
-  const { settings, reason } = await store.set(
-    APP_SETTING_SCHEMA.defaultWorkspaceProvider.field,
-    PROVIDER_ID.CONDUCTOR,
+  const { settings, reason } = await runLocalEffect(
+    store.set(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field, PROVIDER_ID.CONDUCTOR),
   );
 
   assert.equal(reason, undefined);
   assert.equal(settings.defaultWorkspaceProvider, PROVIDER_ID.CONDUCTOR);
   // The choice outlives the run that heard it.
   assert.equal(
-    await storeIn(directory).get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field),
+    await runLocalEffect(storeIn(directory).get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field)),
     PROVIDER_ID.CONDUCTOR,
   );
 
   // Clearing is returning to asking each time, not storing an answer.
-  const cleared = await store.set(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field, undefined);
+  const cleared = await runLocalEffect(
+    store.set(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field, undefined),
+  );
   assert.equal(cleared.settings.defaultWorkspaceProvider, undefined);
   assert.equal(
-    await storeIn(directory).get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field),
+    await runLocalEffect(storeIn(directory).get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field)),
     undefined,
   );
 });
@@ -1361,9 +1471,8 @@ test("changes the default workspace provider without touching the cipher", async
   const cipher = countingCipher();
   const store = storeIn(directory, { cipher });
 
-  const { settings } = await store.set(
-    APP_SETTING_SCHEMA.defaultWorkspaceProvider.field,
-    PROVIDER_ID.CURSOR,
+  const { settings } = await runLocalEffect(
+    store.set(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field, PROVIDER_ID.CURSOR),
   );
 
   assert.equal(settings.defaultWorkspaceProvider, PROVIDER_ID.CURSOR);
@@ -1378,31 +1487,38 @@ test("ignores a stored default provider this build does not know", async (t) => 
   );
 
   assert.equal(
-    await storeIn(directory).get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field),
+    await runLocalEffect(storeIn(directory).get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field)),
     undefined,
   );
-  assert.equal((await storeIn(directory).snapshot()).defaultWorkspaceProvider, undefined);
+  assert.equal(
+    (await runLocalEffect(storeIn(directory).snapshot())).defaultWorkspaceProvider,
+    undefined,
+  );
 });
 
 test("stores Superset workspace and agent defaults without touching credentials", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
 
-  await store.set(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field, "superset");
-  await store.setEntry(APP_SETTING_SCHEMA.workspaceProjectDefaults.field, "superset", "project-1");
-  const { settings } = await store.set(APP_SETTING_SCHEMA.supersetAgentDefault.field, "codex");
+  await runLocalEffect(store.set(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field, "superset"));
+  await runLocalEffect(
+    store.setEntry(APP_SETTING_SCHEMA.workspaceProjectDefaults.field, "superset", "project-1"),
+  );
+  const { settings } = await runLocalEffect(
+    store.set(APP_SETTING_SCHEMA.supersetAgentDefault.field, "codex"),
+  );
 
   assert.equal(settings.defaultWorkspaceProvider, "superset");
   assert.equal(settings.workspaceProjectDefaults?.superset, "project-1");
   assert.equal(settings.supersetAgentDefault, "codex");
-  assert.equal((await storeIn(directory).snapshot()).supersetAgentDefault, "codex");
+  assert.equal((await runLocalEffect(storeIn(directory).snapshot())).supersetAgentDefault, "codex");
 });
 
 test("starts new workspaces on the provider's defaults until a pairing is chosen", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
 
-  assert.equal((await store.snapshot()).workspaceAgentDefaults, undefined);
+  assert.equal((await runLocalEffect(store.snapshot())).workspaceAgentDefaults, undefined);
   assert.equal(await readWorkspaceAgentDefault(store, PROVIDER_ID.CONDUCTOR), undefined);
 
   const chosen = { agent: "claude", model: "sonnet", effort: "max" };
@@ -1448,7 +1564,7 @@ test("lets the first creation choose each provider's project until one is chosen
 
   // Unset on purpose, the provider default's own terms: the default is always
   // a choice the user made — by hand or by their first creation there.
-  assert.equal((await store.snapshot()).workspaceProjectDefaults, undefined);
+  assert.equal((await runLocalEffect(store.snapshot())).workspaceProjectDefaults, undefined);
   assert.equal(await readWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR), undefined);
 
   const { settings, reason } = await setWorkspaceProjectDefault(
@@ -1515,7 +1631,7 @@ test("forgetting a default no provider offers survives the reload it was written
   // the entry it forgets is one an earlier launch wrote.
   await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, undefined);
 
-  assert.deepEqual((await storeIn(directory).snapshot()).workspaceProjectDefaults, {
+  assert.deepEqual((await runLocalEffect(storeIn(directory).snapshot())).workspaceProjectDefaults, {
     [PROVIDER_ID.CURSOR]: "proj-2",
   });
   assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
@@ -1526,10 +1642,12 @@ test("a stale cleanup cannot clear a newer project default", async (t) => {
   await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "proj-old");
   await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "proj-new");
 
-  const stale = await store.clearEntryIfUnchanged(
-    APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
-    PROVIDER_ID.CONDUCTOR,
-    "proj-old",
+  const stale = await runLocalEffect(
+    store.clearEntryIfUnchanged(
+      APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
+      PROVIDER_ID.CONDUCTOR,
+      "proj-old",
+    ),
   );
 
   assert.equal(stale.cleared, false);
@@ -1601,7 +1719,7 @@ test("overlapping default projects each survive the other's write", async (t) =>
     setWorkspaceProjectDefault(store, PROVIDER_ID.CURSOR, "proj-2"),
   ]);
 
-  assert.deepEqual((await storeIn(directory).snapshot()).workspaceProjectDefaults, {
+  assert.deepEqual((await runLocalEffect(storeIn(directory).snapshot())).workspaceProjectDefaults, {
     [PROVIDER_ID.CONDUCTOR]: "proj-1",
     [PROVIDER_ID.CURSOR]: "proj-2",
   });
@@ -1619,7 +1737,7 @@ test("an overlapping clear forgets its own entry and no other", async (t) => {
     setWorkspaceProjectDefault(store, PROVIDER_ID.CURSOR, "proj-2"),
   ]);
 
-  assert.deepEqual((await storeIn(directory).snapshot()).workspaceProjectDefaults, {
+  assert.deepEqual((await runLocalEffect(storeIn(directory).snapshot())).workspaceProjectDefaults, {
     [PROVIDER_ID.CURSOR]: "proj-2",
   });
 });
@@ -1645,7 +1763,7 @@ test("ignores stored default projects this store cannot hold", async (t) => {
 
   const store = storeIn(directory);
   assert.equal(await readWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR), undefined);
-  assert.equal((await store.snapshot()).workspaceProjectDefaults, undefined);
+  assert.equal((await runLocalEffect(store.snapshot())).workspaceProjectDefaults, undefined);
 });
 
 test("ignores a stored pairing this build's table does not list", async (t) => {
@@ -1668,20 +1786,23 @@ test("ignores a stored pairing this build's table does not list", async (t) => {
 
   const store = storeIn(directory);
   assert.equal(await readWorkspaceAgentDefault(store, PROVIDER_ID.CONDUCTOR), undefined);
-  assert.equal((await store.snapshot()).workspaceAgentDefaults, undefined);
+  assert.equal((await runLocalEffect(store.snapshot())).workspaceAgentDefaults, undefined);
 });
 
 test("the voice and a stored key survive each other's writes", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
 
-  await store.setApiKey(CONDUCTOR, TEST_API_KEY);
-  await store.set(APP_SETTING_SCHEMA.voice.field, REALTIME_VOICE.MARIN);
-  await store.setApiKey(CONDUCTOR, "conductor-replacement-key");
+  await runLocalEffect(store.setApiKey(CONDUCTOR, TEST_API_KEY));
+  await runLocalEffect(store.set(APP_SETTING_SCHEMA.voice.field, REALTIME_VOICE.MARIN));
+  await runLocalEffect(store.setApiKey(CONDUCTOR, "conductor-replacement-key"));
 
   const reopened = storeIn(directory);
-  assert.equal(await reopened.readApiKey(CONDUCTOR), "conductor-replacement-key");
-  assert.equal(await reopened.get(APP_SETTING_SCHEMA.voice.field), REALTIME_VOICE.MARIN);
+  assert.equal(await runLocalEffect(reopened.readApiKey(CONDUCTOR)), "conductor-replacement-key");
+  assert.equal(
+    await runLocalEffect(reopened.get(APP_SETTING_SCHEMA.voice.field)),
+    REALTIME_VOICE.MARIN,
+  );
 });
 
 test("recovers from a corrupt settings file", async (t) => {
@@ -1689,21 +1810,23 @@ test("recovers from a corrupt settings file", async (t) => {
   await fs.writeFile(path.join(directory, SETTINGS_FILE_NAME), "{ not json");
   const store = storeIn(directory);
 
-  const { settings } = await store.setApiKey(CONDUCTOR, TEST_API_KEY);
+  const { settings } = await runLocalEffect(store.setApiKey(CONDUCTOR, TEST_API_KEY));
 
   assert.equal(settings.credentialSources[CONDUCTOR], CREDENTIAL_SOURCE.ENCRYPTED_FILE);
-  assert.equal(await store.readApiKey(CONDUCTOR), TEST_API_KEY);
+  assert.equal(await runLocalEffect(store.readApiKey(CONDUCTOR)), TEST_API_KEY);
 });
 
 test("a voice reset forgets the voice, pace, captions, and duck in one act", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
-  await store.set(APP_SETTING_SCHEMA.voice.field, REALTIME_VOICE.MARIN);
-  await store.set(APP_SETTING_SCHEMA.voiceSpeed.field, REALTIME_VOICE_SPEED.QUICK);
-  await store.set(APP_SETTING_SCHEMA.voiceCaptions.field, true);
-  await store.set(APP_SETTING_SCHEMA.duckOtherMedia.field, false);
+  await runLocalEffect(store.set(APP_SETTING_SCHEMA.voice.field, REALTIME_VOICE.MARIN));
+  await runLocalEffect(store.set(APP_SETTING_SCHEMA.voiceSpeed.field, REALTIME_VOICE_SPEED.QUICK));
+  await runLocalEffect(store.set(APP_SETTING_SCHEMA.voiceCaptions.field, true));
+  await runLocalEffect(store.set(APP_SETTING_SCHEMA.duckOtherMedia.field, false));
 
-  const { settings, reason } = await store.resetSettings(SETTINGS_RESET_SCOPE.VOICE);
+  const { settings, reason } = await runLocalEffect(
+    store.resetSettings(SETTINGS_RESET_SCOPE.VOICE),
+  );
 
   assert.equal(reason, undefined);
   assert.equal(settings.voice, REALTIME_DEFAULTS.VOICE);
@@ -1712,8 +1835,14 @@ test("a voice reset forgets the voice, pace, captions, and duck in one act", asy
   assert.equal(settings.duckOtherMedia, true);
   // The choices are forgotten rather than restated, so a default that moves
   // in a later build moves these settings with it.
-  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.voice.field), undefined);
-  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.voiceSpeed.field), undefined);
+  assert.equal(
+    await runLocalEffect(storeIn(directory).get(APP_SETTING_SCHEMA.voice.field)),
+    undefined,
+  );
+  assert.equal(
+    await runLocalEffect(storeIn(directory).get(APP_SETTING_SCHEMA.voiceSpeed.field)),
+    undefined,
+  );
 });
 
 test("a voice reset returns to the environment's voice where one stands behind the choice", async (t) => {
@@ -1721,31 +1850,36 @@ test("a voice reset returns to the environment's voice where one stands behind t
   const store = storeIn(directory, {
     environment: { LUKE_REALTIME_VOICE: REALTIME_VOICE.SAGE },
   });
-  await store.set(APP_SETTING_SCHEMA.voice.field, REALTIME_VOICE.MARIN);
+  await runLocalEffect(store.set(APP_SETTING_SCHEMA.voice.field, REALTIME_VOICE.MARIN));
 
-  const { settings } = await store.resetSettings(SETTINGS_RESET_SCOPE.VOICE);
+  const { settings } = await runLocalEffect(store.resetSettings(SETTINGS_RESET_SCOPE.VOICE));
 
   // Forgetting the choice is the reset's whole meaning: what stands afterwards
   // is whatever would have stood had none been made.
   assert.equal(settings.voice, REALTIME_VOICE.SAGE);
-  assert.equal(await store.get(APP_SETTING_SCHEMA.voice.field), undefined);
+  assert.equal(await runLocalEffect(store.get(APP_SETTING_SCHEMA.voice.field)), undefined);
 });
 
 test("an appearance reset returns Luke's stances without touching the voice page", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
-  await store.set(APP_SETTING_SCHEMA.showInDock.field, true);
-  await store.set(APP_SETTING_SCHEMA.showOnAllDisplays.field, true);
-  await store.set(APP_SETTING_SCHEMA.formFactor.field, PANEL_FORM_FACTOR.NOTCH);
-  await store.set(APP_SETTING_SCHEMA.voice.field, REALTIME_VOICE.MARIN);
+  await runLocalEffect(store.set(APP_SETTING_SCHEMA.showInDock.field, true));
+  await runLocalEffect(store.set(APP_SETTING_SCHEMA.showOnAllDisplays.field, true));
+  await runLocalEffect(store.set(APP_SETTING_SCHEMA.formFactor.field, PANEL_FORM_FACTOR.NOTCH));
+  await runLocalEffect(store.set(APP_SETTING_SCHEMA.voice.field, REALTIME_VOICE.MARIN));
 
-  const { settings, reason } = await store.resetSettings(SETTINGS_RESET_SCOPE.APPEARANCE);
+  const { settings, reason } = await runLocalEffect(
+    store.resetSettings(SETTINGS_RESET_SCOPE.APPEARANCE),
+  );
 
   assert.equal(reason, undefined);
   assert.equal(settings.showInDock, false);
   assert.equal(settings.showOnAllDisplays, false);
   assert.equal(settings.formFactor, PANEL_FORM_FACTOR.BUBBLE);
-  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.formFactor.field), undefined);
+  assert.equal(
+    await runLocalEffect(storeIn(directory).get(APP_SETTING_SCHEMA.formFactor.field)),
+    undefined,
+  );
   // One scope's reset is that scope's alone.
   assert.equal(settings.voice, REALTIME_VOICE.MARIN);
 });
@@ -1753,30 +1887,45 @@ test("an appearance reset returns Luke's stances without touching the voice page
 test("a shortcuts reset forgets all three chords at once", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
-  await store.set(APP_SETTING_SCHEMA.voiceHotkey.field, "Shift+Command+L");
-  await store.set(APP_SETTING_SCHEMA.askHotkey.field, "Control+Alt+K");
-  await store.set(APP_SETTING_SCHEMA.stopHotkey.field, "Control+Alt+X");
+  await runLocalEffect(store.set(APP_SETTING_SCHEMA.voiceHotkey.field, "Shift+Command+L"));
+  await runLocalEffect(store.set(APP_SETTING_SCHEMA.askHotkey.field, "Control+Alt+K"));
+  await runLocalEffect(store.set(APP_SETTING_SCHEMA.stopHotkey.field, "Control+Alt+X"));
 
-  const { settings, reason } = await store.resetSettings(SETTINGS_RESET_SCOPE.SHORTCUTS);
+  const { settings, reason } = await runLocalEffect(
+    store.resetSettings(SETTINGS_RESET_SCOPE.SHORTCUTS),
+  );
 
   assert.equal(reason, undefined);
   assert.equal(settings.voiceHotkey, undefined);
   assert.equal(settings.askHotkey, undefined);
   assert.equal(settings.stopHotkey, undefined);
-  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.voiceHotkey.field), undefined);
-  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.askHotkey.field), undefined);
-  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.stopHotkey.field), undefined);
+  assert.equal(
+    await runLocalEffect(storeIn(directory).get(APP_SETTING_SCHEMA.voiceHotkey.field)),
+    undefined,
+  );
+  assert.equal(
+    await runLocalEffect(storeIn(directory).get(APP_SETTING_SCHEMA.askHotkey.field)),
+    undefined,
+  );
+  assert.equal(
+    await runLocalEffect(storeIn(directory).get(APP_SETTING_SCHEMA.stopHotkey.field)),
+    undefined,
+  );
 });
 
 test("a workspaces reset forgets the provider and project defaults but never the agent pairing", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
   const pairing = { agent: "claude", model: "sonnet" };
-  await store.set(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field, PROVIDER_ID.CONDUCTOR);
+  await runLocalEffect(
+    store.set(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field, PROVIDER_ID.CONDUCTOR),
+  );
   await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "proj-1");
   await setWorkspaceAgentDefault(store, PROVIDER_ID.CONDUCTOR, pairing);
 
-  const { settings, reason } = await store.resetSettings(SETTINGS_RESET_SCOPE.WORKSPACES);
+  const { settings, reason } = await runLocalEffect(
+    store.resetSettings(SETTINGS_RESET_SCOPE.WORKSPACES),
+  );
 
   assert.equal(reason, undefined);
   assert.equal(settings.defaultWorkspaceProvider, undefined);
@@ -1790,7 +1939,9 @@ test("a reset of settings already at their defaults writes nothing", async (t) =
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
 
-  const { settings, reason } = await store.resetSettings(SETTINGS_RESET_SCOPE.VOICE);
+  const { settings, reason } = await runLocalEffect(
+    store.resetSettings(SETTINGS_RESET_SCOPE.VOICE),
+  );
 
   assert.equal(reason, undefined);
   assert.equal(settings.voice, REALTIME_DEFAULTS.VOICE);
@@ -1803,9 +1954,9 @@ test("a reset never touches the cipher", async (t) => {
   const directory = await temporaryDirectory(t);
   const cipher = countingCipher();
   const store = storeIn(directory, { cipher });
-  await store.set(APP_SETTING_SCHEMA.voiceCaptions.field, true);
+  await runLocalEffect(store.set(APP_SETTING_SCHEMA.voiceCaptions.field, true));
 
-  await store.resetSettings(SETTINGS_RESET_SCOPE.VOICE);
+  await runLocalEffect(store.resetSettings(SETTINGS_RESET_SCOPE.VOICE));
 
   // A preference is not a credential, so resetting a page of them never
   // reaches the Keychain — and never raises its permission dialog.
@@ -1828,7 +1979,7 @@ test("a reset leaves a stored key standing", async (t) => {
   );
   const store = storeIn(directory);
 
-  await store.resetSettings(SETTINGS_RESET_SCOPE.VOICE);
+  await runLocalEffect(store.resetSettings(SETTINGS_RESET_SCOPE.VOICE));
 
   // No scope reaches a credential: the ciphertext rides the write untouched.
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
@@ -1838,7 +1989,7 @@ test("a reset leaves a stored key standing", async (t) => {
   };
   assert.deepEqual(contents.apiKeys, { [CONDUCTOR]: sealed(TEST_API_KEY) });
   assert.equal(contents.voiceCaptions, false);
-  assert.equal(await store.readApiKey(CONDUCTOR), TEST_API_KEY);
+  assert.equal(await runLocalEffect(store.readApiKey(CONDUCTOR)), TEST_API_KEY);
 });
 
 /** A signed-in account, which is what makes the free allowance answerable. */
@@ -1852,69 +2003,69 @@ const TEST_ACCOUNT = {
 
 test("with no key stored there is only one source to run on", async (t) => {
   const store = storeIn(await temporaryDirectory(t));
-  await store.setAccount(TEST_ACCOUNT);
+  await runLocalEffect(store.setAccount(TEST_ACCOUNT));
 
-  assert.equal(await store.readVoiceSource(), VOICE_SOURCE.ACCOUNT);
-  assert.equal((await store.snapshot()).voiceSource, VOICE_SOURCE.ACCOUNT);
+  assert.equal(await runLocalEffect(store.readVoiceSource()), VOICE_SOURCE.ACCOUNT);
+  assert.equal((await runLocalEffect(store.snapshot())).voiceSource, VOICE_SOURCE.ACCOUNT);
 
   // Choosing the key with none stored changes nothing about what runs: there
   // is nothing there to spend, and a resolution that answered otherwise would
   // send the minter to a credential that does not exist.
-  await store.set(APP_SETTING_SCHEMA.voiceSource.field, VOICE_SOURCE.KEY);
-  assert.equal(await store.readVoiceSource(), VOICE_SOURCE.ACCOUNT);
+  await runLocalEffect(store.set(APP_SETTING_SCHEMA.voiceSource.field, VOICE_SOURCE.KEY));
+  assert.equal(await runLocalEffect(store.readVoiceSource()), VOICE_SOURCE.ACCOUNT);
 });
 
 test("connecting the voice key chooses it, and the allowance can take it back", async (t) => {
   const store = storeIn(await temporaryDirectory(t));
-  await store.setAccount(TEST_ACCOUNT);
-  await store.setApiKey(CREDENTIAL_PROVIDER_ID.OPENAI, "sk-developers-own");
+  await runLocalEffect(store.setAccount(TEST_ACCOUNT));
+  await runLocalEffect(store.setApiKey(CREDENTIAL_PROVIDER_ID.OPENAI, "sk-developers-own"));
 
   // Connecting is choosing: someone who pastes a key means to use it, and a
   // stored preference quietly ignoring it would look like the save failed.
-  assert.equal(await store.readVoiceSource(), VOICE_SOURCE.KEY);
+  assert.equal(await runLocalEffect(store.readVoiceSource()), VOICE_SOURCE.KEY);
 
   // And back again, with the key still stored — the whole point of the
   // choice: changing sources never costs a credential.
-  await store.set(APP_SETTING_SCHEMA.voiceSource.field, VOICE_SOURCE.ACCOUNT);
-  assert.equal(await store.readVoiceSource(), VOICE_SOURCE.ACCOUNT);
+  await runLocalEffect(store.set(APP_SETTING_SCHEMA.voiceSource.field, VOICE_SOURCE.ACCOUNT));
+  assert.equal(await runLocalEffect(store.readVoiceSource()), VOICE_SOURCE.ACCOUNT);
   assert.equal(
-    (await store.snapshot()).credentialSources[CREDENTIAL_PROVIDER_ID.OPENAI],
+    (await runLocalEffect(store.snapshot())).credentialSources[CREDENTIAL_PROVIDER_ID.OPENAI],
     CREDENTIAL_SOURCE.ENCRYPTED_FILE,
     "parking on the allowance keeps the key",
   );
   // Voice is still on: what changed is whose credential answers, not whether
   // one does.
-  assert.equal((await store.snapshot()).voiceAvailable, true);
+  assert.equal((await runLocalEffect(store.snapshot())).voiceAvailable, true);
 });
 
 test("a choice that would start spending a key is never made by fallback", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
-  await store.setAccount(TEST_ACCOUNT);
-  await store.setApiKey(CREDENTIAL_PROVIDER_ID.OPENAI, "sk-developers-own");
-  await store.set(APP_SETTING_SCHEMA.voiceSource.field, VOICE_SOURCE.ACCOUNT);
-  assert.equal(await store.readVoiceSource(), VOICE_SOURCE.ACCOUNT);
+  await runLocalEffect(store.setAccount(TEST_ACCOUNT));
+  await runLocalEffect(store.setApiKey(CREDENTIAL_PROVIDER_ID.OPENAI, "sk-developers-own"));
+  await runLocalEffect(store.set(APP_SETTING_SCHEMA.voiceSource.field, VOICE_SOURCE.ACCOUNT));
+  assert.equal(await runLocalEffect(store.readVoiceSource()), VOICE_SOURCE.ACCOUNT);
 
   // Signed out, the allowance they chose cannot answer. The stored key is
   // what is left, so voice keeps working — the fallback that costs nothing
   // is the account's, and this one only runs when the free half has gone.
-  await store.clearAccount();
-  assert.equal(await store.readVoiceSource(), VOICE_SOURCE.KEY);
+  await runLocalEffect(store.clearAccount());
+  assert.equal(await runLocalEffect(store.readVoiceSource()), VOICE_SOURCE.KEY);
 
   // Signing back in returns them to what they chose: the preference was
   // stored, not spent.
-  await store.setAccount(TEST_ACCOUNT);
-  assert.equal(await store.readVoiceSource(), VOICE_SOURCE.ACCOUNT);
+  await runLocalEffect(store.setAccount(TEST_ACCOUNT));
+  assert.equal(await runLocalEffect(store.readVoiceSource()), VOICE_SOURCE.ACCOUNT);
 });
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("the chosen source survives a reopen, and a corrupt one reads as no choice", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
-  await store.setAccount(TEST_ACCOUNT);
-  await store.setApiKey(CREDENTIAL_PROVIDER_ID.OPENAI, "sk-developers-own");
-  await store.set(APP_SETTING_SCHEMA.voiceSource.field, VOICE_SOURCE.ACCOUNT);
-  assert.equal(await storeIn(directory).readVoiceSource(), VOICE_SOURCE.ACCOUNT);
+  await runLocalEffect(store.setAccount(TEST_ACCOUNT));
+  await runLocalEffect(store.setApiKey(CREDENTIAL_PROVIDER_ID.OPENAI, "sk-developers-own"));
+  await runLocalEffect(store.set(APP_SETTING_SCHEMA.voiceSource.field, VOICE_SOURCE.ACCOUNT));
+  assert.equal(await runLocalEffect(storeIn(directory).readVoiceSource()), VOICE_SOURCE.ACCOUNT);
 
   // A source this build does not offer is dropped rather than carried, and
   // dropping it lands where no choice lands: whichever credential is there,
@@ -1925,33 +2076,35 @@ test("the chosen source survives a reopen, and a corrupt one reads as no choice"
     JSON.stringify({ ...contents, voiceSource: "someone-elses-account" }),
     "utf8",
   );
-  assert.equal(await storeIn(directory).readVoiceSource(), VOICE_SOURCE.KEY);
+  assert.equal(await runLocalEffect(storeIn(directory).readVoiceSource()), VOICE_SOURCE.KEY);
 });
 
 test("pasting a key back while parked on the allowance is still choosing it", async (t) => {
   const store = storeIn(await temporaryDirectory(t));
-  await store.setAccount(TEST_ACCOUNT);
-  await store.setApiKey(CREDENTIAL_PROVIDER_ID.OPENAI, "sk-developers-own");
-  await store.set(APP_SETTING_SCHEMA.voiceSource.field, VOICE_SOURCE.ACCOUNT);
-  assert.equal(await store.readVoiceSource(), VOICE_SOURCE.ACCOUNT);
+  await runLocalEffect(store.setAccount(TEST_ACCOUNT));
+  await runLocalEffect(store.setApiKey(CREDENTIAL_PROVIDER_ID.OPENAI, "sk-developers-own"));
+  await runLocalEffect(store.set(APP_SETTING_SCHEMA.voiceSource.field, VOICE_SOURCE.ACCOUNT));
+  assert.equal(await runLocalEffect(store.readVoiceSource()), VOICE_SOURCE.ACCOUNT);
 
   // The same key again is no change to what is stored, but it is still the
   // act of connecting one — and a save that quietly changed nothing would
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // read as a key that failed to take.
-  await store.setApiKey(CREDENTIAL_PROVIDER_ID.OPENAI, "sk-developers-own");
-  assert.equal(await store.readVoiceSource(), VOICE_SOURCE.KEY);
+  await runLocalEffect(store.setApiKey(CREDENTIAL_PROVIDER_ID.OPENAI, "sk-developers-own"));
+  assert.equal(await runLocalEffect(store.readVoiceSource()), VOICE_SOURCE.KEY);
 });
 
 test("a grant is stored encrypted, and read back only in the main process", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory, { providers: TEST_PROVIDERS });
 
-  const { settings } = await store.setGrant(CONSENT_SERVICE, {
-    accessToken: "granted-access",
-    refreshToken: "granted-refresh",
-    expiresAt: 1_760_000_000_000,
-  });
+  const { settings } = await runLocalEffect(
+    store.setGrant(CONSENT_SERVICE, {
+      accessToken: "granted-access",
+      refreshToken: "granted-refresh",
+      expiresAt: 1_760_000_000_000,
+    }),
+  );
 
   // The row says connected the way every other credential's row does.
   assert.equal(settings.credentialSources[CONSENT_SERVICE], CREDENTIAL_SOURCE.ENCRYPTED_FILE);
@@ -1966,7 +2119,7 @@ test("a grant is stored encrypted, and read back only in the main process", asyn
   assert.equal(file.grants[CONSENT_SERVICE].expiresAt, 1_760_000_000_000);
   assert.doesNotMatch(file.grants[CONSENT_SERVICE].tokenCipher, /granted-access/);
 
-  assert.deepEqual(await store.readGrant(CONSENT_SERVICE), {
+  assert.deepEqual(await runLocalEffect(store.readGrant(CONSENT_SERVICE)), {
     accessToken: "granted-access",
     refreshToken: "granted-refresh",
     expiresAt: 1_760_000_000_000,
@@ -1974,20 +2127,25 @@ test("a grant is stored encrypted, and read back only in the main process", asyn
 
   // A stored grant outlives the process that made it.
   const reopened = storeIn(directory, { providers: TEST_PROVIDERS });
-  assert.equal((await reopened.readGrant(CONSENT_SERVICE))?.accessToken, "granted-access");
+  assert.equal(
+    (await runLocalEffect(reopened.readGrant(CONSENT_SERVICE)))?.accessToken,
+    "granted-access",
+  );
 });
 
 test("clearing a grant leaves nothing behind, and keys alone", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory, { providers: TEST_PROVIDERS });
-  await store.setApiKey(FIRST_CLOUD, "first-cloud-key");
-  await store.setGrant(CONSENT_SERVICE, { accessToken: "granted-access", expiresAt: 1 });
+  await runLocalEffect(store.setApiKey(FIRST_CLOUD, "first-cloud-key"));
+  await runLocalEffect(
+    store.setGrant(CONSENT_SERVICE, { accessToken: "granted-access", expiresAt: 1 }),
+  );
 
-  const { settings } = await store.clearGrant(CONSENT_SERVICE);
+  const { settings } = await runLocalEffect(store.clearGrant(CONSENT_SERVICE));
   assert.equal(settings.credentialSources[CONSENT_SERVICE], CREDENTIAL_SOURCE.NONE);
-  assert.equal(await store.readGrant(CONSENT_SERVICE), undefined);
+  assert.equal(await runLocalEffect(store.readGrant(CONSENT_SERVICE)), undefined);
   // Disconnecting one service never disturbs another's credential.
-  assert.equal(await store.readApiKey(FIRST_CLOUD), "first-cloud-key");
+  assert.equal(await runLocalEffect(store.readApiKey(FIRST_CLOUD)), "first-cloud-key");
   assert.doesNotMatch(await readSettingsFile(directory), /granted-access/);
 });
 
@@ -2008,13 +2166,13 @@ test("a key left by a build that asked for one is dropped, never carried", async
   );
   const store = storeIn(directory, { providers: TEST_PROVIDERS });
 
-  const settings = await store.snapshot();
+  const settings = await runLocalEffect(store.snapshot());
   assert.equal(settings.credentialSources[CONSENT_SERVICE], CREDENTIAL_SOURCE.NONE);
-  assert.equal(await store.readApiKey(CONSENT_SERVICE), undefined);
+  assert.equal(await runLocalEffect(store.readApiKey(CONSENT_SERVICE)), undefined);
 
   // A provider this build does know, and knows takes no key, has its key let
   // go on the next write — a credential Luke will not use is not one to keep.
-  await store.setApiKey(FIRST_CLOUD, "replaced-key");
+  await runLocalEffect(store.setApiKey(FIRST_CLOUD, "replaced-key"));
   const file = JSON.parse(await readSettingsFile(directory));
   assert.equal(file.apiKeys[CONSENT_SERVICE], undefined);
   assert.ok(file.apiKeys[FIRST_CLOUD]);

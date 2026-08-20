@@ -73,7 +73,12 @@ function evaluate(
   fetchLike: typeof fetch,
   attentionUpdate: AttentionUpdate = UPDATE,
 ) {
-  return runWithHttp(hosted.evaluate(attentionUpdate), fetchLike);
+  return runWithHttp(
+    hosted
+      .evaluate(attentionUpdate)
+      .pipe(Effect.catchTag("AttentionRateLimited", () => Effect.succeed(undefined))),
+    fetchLike,
+  );
 }
 
 test("sends only what the prompt reads — never the session's identifiers or clock", async () => {

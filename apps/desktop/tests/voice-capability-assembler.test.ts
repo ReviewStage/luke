@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { Effect } from "effect";
 import { VOICE_SOURCE } from "../src/shared/contracts";
 import {
   resolveVoiceCapability,
@@ -56,11 +57,15 @@ function settingsFor(options: {
   key?: string;
 }) {
   return {
-    readVoiceSource: async () => options.source,
-    readApiKey: async () => options.key,
-    get: async () => undefined,
-    readAccount: async () => undefined,
+    readVoiceSource: () => Effect.succeed(options.source),
+    readApiKey: () => Effect.succeed(options.key),
+    get: () => Effect.succeed(undefined),
+    readAccount: () => Effect.succeed(undefined),
   };
+}
+
+function runApply(assembler: VoiceCapabilityAssembler): Promise<void> {
+  return Effect.runPromise(assembler.apply());
 }
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
@@ -70,24 +75,24 @@ test("the assembler builds and clears the keyed voice capabilities as one unit",
   const assembler = new VoiceCapabilityAssembler({
     settings: {
       ...settingsFor({ source: VOICE_SOURCE.KEY }),
-      readApiKey: async () => key,
+      readApiKey: () => Effect.succeed(key),
     },
     credentialsUsable: () => true,
     accountSignedIn: () => false,
     hostedServiceBaseUrl: "https://example.test",
-    refreshAccount: async () => undefined,
+    refreshAccount: () => Effect.void,
     currentSession: () => undefined,
     noticeRequestFor: () => undefined,
     report: (message) => reports.push(message),
   });
 
-  await assembler.apply();
+  await runApply(assembler);
   assert.ok(assembler.realtimeCredentials);
   assert.ok(assembler.attentionReviewer);
   assert.equal(assembler.hostedUsageReader, undefined);
 
   key = undefined;
-  await assembler.apply();
+  await runApply(assembler);
   assert.equal(assembler.realtimeCredentials, undefined);
   assert.equal(assembler.attentionReviewer, undefined);
   assert.match(reports.at(-1) ?? "", /unavailable/);
@@ -98,21 +103,22 @@ test("the assembler keeps fixture runs credential-free without reading a key", a
   const assembler = new VoiceCapabilityAssembler({
     settings: {
       ...settingsFor({ source: VOICE_SOURCE.KEY }),
-      readApiKey: async () => {
-        keyReads += 1;
-        return "must-not-be-read";
-      },
+      readApiKey: () =>
+        Effect.sync(() => {
+          keyReads += 1;
+          return "must-not-be-read";
+        }),
     },
     credentialsUsable: () => false,
     accountSignedIn: () => true,
     hostedServiceBaseUrl: "https://example.test",
-    refreshAccount: async () => undefined,
+    refreshAccount: () => Effect.void,
     currentSession: () => undefined,
     noticeRequestFor: () => undefined,
     report: () => undefined,
   });
 
-  await assembler.apply();
+  await runApply(assembler);
   assert.equal(keyReads, 0);
   assert.equal(assembler.realtimeCredentials, undefined);
   assert.equal(assembler.hostedUsageReader, undefined);

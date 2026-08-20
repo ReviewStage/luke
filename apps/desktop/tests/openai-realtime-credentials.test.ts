@@ -12,6 +12,7 @@ import {
   openAiRealtimeCredentials,
   unavailableRealtimeDiagnostics,
 } from "../src/openai-realtime-credentials";
+import { runWithHttp } from "./support/effect-http";
 import { recordingFetch } from "./support/http-fake";
 import type { ParsedJsonObject } from "./support/json";
 
@@ -45,13 +46,13 @@ function minter(responses: readonly (Response | Error)[], options: { now?: () =>
     now: options.now ?? (() => NOW),
     fetch,
   });
-  return { minter: instance, requests };
+  return { minter: instance, requests, fetch };
 }
 
 test("minting posts the realtime session to the client-secrets endpoint", async () => {
-  const { minter: instance, requests } = minter([mintResponse()]);
+  const { minter: instance, requests, fetch } = minter([mintResponse()]);
 
-  const credential = await instance.mint();
+  const credential = await runWithHttp(instance.mint(), fetch);
 
   assert.equal(credential?.value, "ek_test_secret");
   assert.equal(credential?.expiresAt, EXPIRES_AT_SECONDS * 1000);
@@ -73,9 +74,9 @@ test("minting posts the realtime session to the client-secrets endpoint", async 
 });
 
 test("the standing key authorizes the mint and never appears in the response", async () => {
-  const { minter: instance, requests } = minter([mintResponse()]);
+  const { minter: instance, requests, fetch } = minter([mintResponse()]);
 
-  const credential = await instance.mint();
+  const credential = await runWithHttp(instance.mint(), fetch);
 
   // SAFETY: Fixture headers map matches the string header shape the fake records.
   const headers = requests[0]?.init.headers as Record<string, string>;
@@ -86,22 +87,22 @@ test("the standing key authorizes the mint and never appears in the response", a
 });
 
 test("every call is minted its own credential, never a reused one", async () => {
-  const { minter: instance, requests } = minter([mintResponse(), mintResponse()]);
+  const { minter: instance, requests, fetch } = minter([mintResponse(), mintResponse()]);
 
   // The service has been seen to refuse a reused secret at the calls endpoint
   // (status 401) even inside its stated expiry, so a secret answers only the
   // call it was minted for.
-  assert.equal((await instance.mint())?.value, "ek_test_secret");
-  assert.equal((await instance.mint())?.value, "ek_test_secret");
+  assert.equal((await runWithHttp(instance.mint(), fetch))?.value, "ek_test_secret");
+  assert.equal((await runWithHttp(instance.mint(), fetch))?.value, "ek_test_secret");
   assert.equal(requests.length, 2);
 });
 
 test("changing the voice mints the next credential for the new one", async () => {
-  const { minter: instance, requests } = minter([mintResponse(), mintResponse()]);
-  await instance.mint();
+  const { minter: instance, requests, fetch } = minter([mintResponse(), mintResponse()]);
+  await runWithHttp(instance.mint(), fetch);
 
   instance.setVoice(REALTIME_VOICE.MARIN);
-  await instance.mint();
+  await runWithHttp(instance.mint(), fetch);
 
   assert.equal(requests.length, 2);
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
@@ -122,11 +123,11 @@ test("clearing the voice returns to the one the minter was built with", () => {
 });
 
 test("changing the pace mints the next credential for the new one", async () => {
-  const { minter: instance, requests } = minter([mintResponse(), mintResponse()]);
-  await instance.mint();
+  const { minter: instance, requests, fetch } = minter([mintResponse(), mintResponse()]);
+  await runWithHttp(instance.mint(), fetch);
 
   instance.setSpeed(REALTIME_VOICE_SPEED.FAST);
-  await instance.mint();
+  await runWithHttp(instance.mint(), fetch);
 
   assert.equal(requests.length, 2);
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
@@ -157,20 +158,21 @@ test("every failure path leaves the voice experience unavailable", async () => {
     mintResponse({ expires_at: NOW / 1000 - 1 }),
     new Error("network unreachable"),
   ]) {
-    const { minter: instance } = minter([response]);
-    assert.equal(await instance.mint(), undefined);
+    const { minter: instance, fetch } = minter([response]);
+    assert.equal(await runWithHttp(instance.mint(), fetch), undefined);
   }
 });
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("a failed mint is not cached as a usable credential", async () => {
-  const { minter: instance, requests } = minter([
-    new Response("", { status: 500 }),
-    mintResponse(),
-  ]);
+  const {
+    minter: instance,
+    requests,
+    fetch,
+  } = minter([new Response("", { status: 500 }), mintResponse()]);
 
-  assert.equal(await instance.mint(), undefined);
-  assert.equal((await instance.mint())?.value, "ek_test_secret");
+  assert.equal(await runWithHttp(instance.mint(), fetch), undefined);
+  assert.equal((await runWithHttp(instance.mint(), fetch))?.value, "ek_test_secret");
   assert.equal(requests.length, 2);
 });
 
@@ -263,10 +265,10 @@ test("a voice from the environment that Luke does not offer is not minted", () =
 });
 
 test("diagnostics name why a mint failed without carrying the key", async () => {
-  const { minter: instance } = minter([new Response("", { status: 401 })]);
+  const { minter: instance, fetch } = minter([new Response("", { status: 401 })]);
 
   assert.equal(instance.diagnostics().lastOutcome, REALTIME_MINT_OUTCOME.NOT_ATTEMPTED);
-  await instance.mint();
+  await runWithHttp(instance.mint(), fetch);
 
   const report = instance.diagnostics();
   assert.equal(report.lastOutcome, REALTIME_MINT_OUTCOME.HTTP_ERROR);
@@ -289,16 +291,16 @@ test("each mint failure reports its own distinguishable outcome", async () => {
   ] as const;
 
   for (const [response, expected] of cases) {
-    const { minter: instance } = minter([response]);
-    await instance.mint();
+    const { minter: instance, fetch } = minter([response]);
+    await runWithHttp(instance.mint(), fetch);
     assert.equal(instance.diagnostics().lastOutcome, expected);
   }
 });
 
 test("a successful mint reports success", async () => {
-  const { minter: instance } = minter([mintResponse()]);
+  const { minter: instance, fetch } = minter([mintResponse()]);
 
-  await instance.mint();
+  await runWithHttp(instance.mint(), fetch);
 
   assert.equal(instance.diagnostics().lastOutcome, REALTIME_MINT_OUTCOME.SUCCEEDED);
 });
