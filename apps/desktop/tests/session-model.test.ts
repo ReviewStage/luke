@@ -716,6 +716,81 @@ test("an orchestrator workspace groups sessions from different providers", () =>
   );
 });
 
+// Superset is a level of its own between where a session runs and which agent
+// runs it: the same agent answers its own chip and the Superset chip when
+// Superset manages its workspace.
+test("sessions Superset manages earn a chip and can be narrowed to", () => {
+  const workspace = {
+    providerWorkspaceId: "workspace-superset",
+    scopeId: "superset",
+    name: "power-vacation",
+  };
+  const rows = displaySessions(bootstrap(false), [
+    normalizeSession(CLAUDE_PROVIDER, {
+      providerSessionId: "claude-managed",
+      title: "Claude",
+      status: SESSION_STATUS.WORKING,
+      observedAt: 2_000,
+      workspace,
+    }),
+    liveSession(CODEX_PROVIDER, "codex-loose", SESSION_STATUS.WORKING, 1_000),
+  ]);
+  const list = arrangeSessions(rows, DEFAULT_SESSION_VIEW);
+
+  assert.deepEqual(list.options, [
+    { filter: SESSION_FILTER.ALL, label: "All", count: 2 },
+    {
+      filter: SESSION_FILTER.SUPERSET,
+      label: "Superset",
+      count: 1,
+      providerId: SESSION_FILTER.SUPERSET,
+    },
+    {
+      filter: PROVIDER_ID.CLAUDE_CODE,
+      label: "Claude Code",
+      count: 1,
+      providerId: PROVIDER_ID.CLAUDE_CODE,
+    },
+    { filter: PROVIDER_ID.CODEX, label: "Codex", count: 1, providerId: PROVIDER_ID.CODEX },
+  ]);
+
+  const narrowed = arrangeSessions(rows, {
+    ...DEFAULT_SESSION_VIEW,
+    filter: SESSION_FILTER.SUPERSET,
+  });
+  assert.equal(narrowed.filter, SESSION_FILTER.SUPERSET);
+  assert.deepEqual(
+    narrowed.sessions.map((session) => session.id),
+    ["claude-managed"],
+  );
+  assert.equal(narrowed.total, 2);
+
+  // The spoken vocabulary is the chips' own, so the same word narrows by voice.
+  assert.equal(sessionFilterFromSpoken("superset"), SESSION_FILTER.SUPERSET);
+});
+
+// A Superset chip counting every session narrows nothing, like a lone
+// location or a lone agent — the agents below it are still a real choice.
+test("a Superset chip counting every session is not offered", () => {
+  const managed = (provider: typeof CLAUDE_PROVIDER, id: string) =>
+    normalizeSession(provider, {
+      providerSessionId: id,
+      title: `Session ${id}`,
+      status: SESSION_STATUS.WORKING,
+      observedAt: 1_000,
+      workspace: { providerWorkspaceId: "workspace-superset", scopeId: "superset" },
+    });
+  const rows = displaySessions(bootstrap(false), [
+    managed(CLAUDE_PROVIDER, "claude-managed"),
+    managed(CODEX_PROVIDER, "codex-managed"),
+  ]);
+
+  assert.deepEqual(
+    arrangeSessions(rows, DEFAULT_SESSION_VIEW).options.map((option) => option.filter),
+    [SESSION_FILTER.ALL, PROVIDER_ID.CLAUDE_CODE, PROVIDER_ID.CODEX],
+  );
+});
+
 test("a lone chat is a run of one, and namesake workspaces never join", () => {
   // Two workspaces wearing one name: the id is what groups, so each stays a
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.

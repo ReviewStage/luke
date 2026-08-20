@@ -4093,6 +4093,54 @@ test("a spoken panel ask is validated against the roster and carried", async () 
   await new Promise((resolve) => setTimeout(resolve, 0));
 
   assert.deepEqual(carried.at(-1), { kind: "panel", tab: "settings" });
+
+  // A workspace manager's scope is validated against the same roster: with no
+  // observed session under Superset the narrowing is refused rather than
+  // carried, and Luke never reports a narrowing that never happened.
+  await armDeveloperTurn(context);
+  const askedBefore = carried.length;
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      output: [
+        {
+          type: "function_call",
+          name: "show_panel",
+          call_id: "call-guide-5",
+          arguments: '{"filter":"superset"}',
+        },
+      ],
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(carried.length, askedBefore);
+
+  context.session.updateSessions([
+    observedSession("session-a", {
+      workspace: {
+        providerWorkspaceId: "workspace-1",
+        scopeId: "superset",
+        name: "power-vacation",
+      },
+    }),
+  ]);
+  await armDeveloperTurn(context);
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      output: [
+        {
+          type: "function_call",
+          name: "show_panel",
+          call_id: "call-guide-6",
+          arguments: '{"filter":"superset"}',
+        },
+      ],
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.deepEqual(carried.at(-1), { kind: "panel", tab: "sessions", filter: "superset" });
 });
 
 test("a spoken composer open is validated against the fixed kinds and carried, never sent", async () => {

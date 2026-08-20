@@ -156,7 +156,7 @@ function FilterIcon({ filter }: { filter: SessionFilter }): React.JSX.Element | 
   return null;
 }
 
-/** The mark for an agent, the glyph for a place, nothing for everything. */
+/** The mark for a brand — agent or Superset — the glyph for a place, nothing for everything. */
 function FilterMark({ option }: { option: SessionFilterOption }): React.JSX.Element | null {
   if (option.providerId) {
     return <ProviderMark providerId={option.providerId} className="filter-mark" />;

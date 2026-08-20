@@ -19,23 +19,29 @@ import {
   urgencyLabel,
 } from "@sidecar/core";
 import type { AppBootstrap } from "../shared/contracts";
+import { SUPERSET_WORKSPACE_PROVIDER_ID } from "../shared/superset";
 
 /**
  * Which sessions the list draws: everything, everything running in one place,
- * or everything belonging to one agent. The coarse values are session
- * locations plus the realtime voice kind, and the rest are provider ids, so
- * narrowing the list is a comparison against something a row already carries
- * rather than a second vocabulary mapped onto it. The values cannot collide —
- * no provider is called `local`, `cloud`, or `voice`.
+ * every realtime voice chat, everything Superset manages, or everything
+ * belonging to one agent. The coarse values are the session locations, the
+ * realtime voice kind, and the Superset workspace scope itself, and the rest
+ * are provider ids, so narrowing the list is a comparison against something a
+ * row already carries rather than a second vocabulary mapped onto it. The
+ * values cannot collide — no provider is called `local`, `cloud`, `voice`, or
+ * `superset`.
  *
  * Location belongs to the session rather than to the agent, so an agent with
- * work in both places is one chip that answers `Local` and `Cloud` both.
+ * work in both places is one chip that answers `Local` and `Cloud` both — and
+ * Superset belongs to the workspace rather than to the agent, so the same
+ * agent answers its own chip and the Superset chip when Superset manages it.
  */
 export const SESSION_FILTER = {
   ALL: "all",
   LOCAL: SESSION_LOCATION.LOCAL,
   CLOUD: SESSION_LOCATION.CLOUD,
   VOICE: "voice",
+  SUPERSET: SUPERSET_WORKSPACE_PROVIDER_ID,
 } as const;
 
 export type SessionFilter = (typeof SESSION_FILTER)[keyof typeof SESSION_FILTER] | ProviderId;
@@ -46,6 +52,9 @@ function matchesFilter(session: DisplaySession, filter: SessionFilter): boolean 
     return session.location === filter;
   }
   if (filter === SESSION_FILTER.VOICE) return session.realtimeVoice === true;
+  if (filter === SESSION_FILTER.SUPERSET) {
+    return session.workspace?.scopeId === SESSION_FILTER.SUPERSET;
+  }
   return session.providerId === filter;
 }
 
@@ -60,7 +69,8 @@ export function sessionFilterFromSpoken(value: string): SessionFilter | undefine
     value === SESSION_FILTER.ALL ||
     value === SESSION_FILTER.LOCAL ||
     value === SESSION_FILTER.CLOUD ||
-    value === SESSION_FILTER.VOICE
+    value === SESSION_FILTER.VOICE ||
+    value === SESSION_FILTER.SUPERSET
   ) {
     return value;
   }
@@ -196,8 +206,9 @@ export interface SessionFilterOption {
   label: string;
   count: number;
   /**
-   * Set when the chip stands for one agent, so the row can draw that agent's
-   * own mark where the coarser chips carry a word.
+   * Set when the chip stands for one brand — an agent, or the Superset
+   * workspace manager — so the row can draw that brand's own mark where the
+   * coarser chips carry a word.
    */
   providerId?: string;
 }
@@ -497,11 +508,13 @@ const LOCATION_ORDER: readonly SessionLocation[] = [SESSION_LOCATION.LOCAL, SESS
 const VOICE_FILTER_OPTION = { filter: SESSION_FILTER.VOICE, label: "Voice" } as const;
 
 /**
- * All, then where a session runs, then whether it is voice, then which agent is
- * running it — coarse to fine, left to right. Each level is offered only where
- * it is a real choice: a single location, voice kind, or agent says nothing
- * All has not already said. The counts make the row a breakdown of what is
- * tracked before it is a control, which is what earns it the line it costs.
+ * All, then where a session runs, then whether it is voice, then whether
+ * Superset manages it, then which agent is running it — coarse to fine, left
+ * to right. Each level is offered only where it is a real choice: a single
+ * location, voice kind, or agent says nothing All has not already said, and a
+ * Voice or Superset chip counting every session — or none — narrows nothing.
+ * The counts make the row a breakdown of what is tracked before it is a
+ * control, which is what earns it the line it costs.
  *
  * Agents are listed in the registry's own order rather than by how many
  * sessions they have, so a chip never moves out from under the pointer as
@@ -513,9 +526,11 @@ function filterOptions(sessions: readonly DisplaySession[]): readonly SessionFil
   const locations = new Map<SessionLocation, number>();
   const providers = new Map<ProviderId, { label: string; count: number }>();
   let voiceCount = 0;
+  let managed = 0;
   for (const session of sessions) {
     locations.set(session.location, (locations.get(session.location) ?? 0) + 1);
     if (session.realtimeVoice === true) voiceCount += 1;
+    if (session.workspace?.scopeId === SESSION_FILTER.SUPERSET) managed += 1;
     // An agent this build has no registry entry for has no mark to draw a chip
     // with, so it is counted under All and offered under nothing else.
     if (!isProviderId(session.providerId)) continue;
@@ -533,6 +548,17 @@ function filterOptions(sessions: readonly DisplaySession[]): readonly SessionFil
           label: LOCATION_LABEL[location],
           count: locations.get(location) ?? 0,
         }))
+      : [];
+  const managedOptions =
+    managed > 0 && managed < sessions.length
+      ? [
+          {
+            filter: SESSION_FILTER.SUPERSET,
+            label: "Superset",
+            count: managed,
+            providerId: SUPERSET_WORKSPACE_PROVIDER_ID,
+          },
+        ]
       : [];
   const providerOptions =
     providers.size > 1
@@ -552,6 +578,7 @@ function filterOptions(sessions: readonly DisplaySession[]): readonly SessionFil
     { filter: SESSION_FILTER.ALL, label: "All", count: sessions.length },
     ...locationOptions,
     ...voiceOptions,
+    ...managedOptions,
     ...providerOptions,
   ];
 }

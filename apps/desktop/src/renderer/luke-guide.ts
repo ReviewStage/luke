@@ -287,8 +287,10 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
       detail:
         "Lists every session that still matters: one working or waiting stays at any age, a " +
         "failure for three days, a finished or quiet one for two. Narrowable to all, local, " +
-        "cloud, or one provider, and orderable by urgency or recency — by its options button, " +
-        "or by the same ask that shows the tab. A row can be opened, messaged, or controlled " +
+        "cloud, voice chats, the sessions whose workspaces Superset manages, or one provider, " +
+        "and orderable " +
+        "by urgency or recency — by its options button, or by the same ask that shows the tab. " +
+        "A row can be opened, messaged, or controlled " +
         "where its provider allows. A session whose provider reported a pull request grows a " +
         "chip that opens it in the browser. A row the developer asked Luke to listen for wears " +
         "a listening mark beside its age. Luke's own composer at the foot takes a typed ask.",
