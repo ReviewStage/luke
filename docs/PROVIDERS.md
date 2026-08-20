@@ -26,6 +26,9 @@ could disagree.
   `packages/credentials/src/credential-providers.ts`; adapters wire in through
   `packages/providers/src/registrations.ts`, with each transcript reader at
   `packages/providers/src/<agent>/transcript.ts`.
+- The ids the code knows these by: agents `claude-code`, `codex`, `conductor`,
+  `copilot`, `cursor`, `devin`, `jules`, and `opencode`; the Linear tracker
+  `linear`; the Apple Calendar connection `apple-calendar`.
 
 ## Agents
 
@@ -36,17 +39,17 @@ What Luke reads:
 
 | Agent | Surface | Reads | Recap | Transcript readout | Opens at |
 | --- | --- | --- | --- | --- | --- |
-| Claude Code (`claude-code`) | Local | Session files under `~/.claude/projects/` | Designated away summary | Yes | — |
-| Codex (`codex`) | Local | Session index and rollout files under `~/.codex` | Last agent message, or the turn's error | Yes | `codex:` thread |
+| Claude Code | Local | Session files under `~/.claude/projects/` | Designated away summary | Yes | — |
+| Codex | Local | Session index and rollout files under `~/.codex` | Last agent message, or the turn's error | Yes | `codex:` thread |
 | Codex | Cloud | The user's own Codex CLI, under its ChatGPT login | — | — | `chatgpt.com` task page |
-| Conductor (`conductor`) | Cloud | `api.conductor.build`, under an API key | Final assistant message, while idle | — | `conductor:` deep link |
-| Cursor (`cursor`) | Local | Agent transcripts under `~/.cursor/projects/` | — | Yes | — |
+| Conductor | Cloud | `api.conductor.build`, under an API key | Final assistant message, while idle | — | `conductor:` deep link |
+| Cursor | Local | Agent transcripts under `~/.cursor/projects/` | — | Yes | — |
 | Cursor | Cloud | `api.cursor.com`, under `CURSOR_API_KEY` | Run result | — | Agent URL |
-| Devin (`devin`) | Local | The Devin CLI's session database | — | Yes | — |
+| Devin | Local | The Devin CLI's session database | — | Yes | — |
 | Devin | Cloud | `api.devin.ai`, under a `cog_` access token | — | — | Session URL |
-| GitHub Copilot (`copilot`) | Cloud | `api.github.com`, under a fine-grained PAT | — | — | Task page URL |
-| Jules (`jules`) | Cloud | `jules.googleapis.com`, under an API key | — | — | Session URL |
-| OpenCode (`opencode`) | Local | The OpenCode database | — | Yes | Share URL, once shared |
+| GitHub Copilot | Cloud | `api.github.com`, under a fine-grained PAT | — | — | Task page URL |
+| Jules | Cloud | `jules.googleapis.com`, under an API key | — | — | Session URL |
+| OpenCode | Local | The OpenCode database | — | Yes | Share URL, once shared |
 
 Transcript readout is Luke reading a local session's conversation aloud — or
 into his composer — when asked; a cloud session's conversation lives with its
@@ -190,9 +193,9 @@ unreadable file, or a schema this build does not know means no annotation.
 
 | Connection | Reads | Writes |
 | --- | --- | --- |
-| Linear (`linear`) | The user's assigned issues, under an OAuth grant | Move an issue to an advertised state; add a comment |
+| Linear | The user's assigned issues, under an OAuth grant | Move an issue to an advertised state; add a comment |
 | Google Calendar | Calendar list and free/busy instants, per signed-in account | None |
-| Apple Calendar (`apple-calendar`) | This Mac's calendar list and event instants, behind macOS's own consent | None |
+| Apple Calendar | This Mac's calendar list and event instants, behind macOS's own consent | None |
 | OpenAI and the hosted account | Nothing — credentials for voice and the attention review only | None |
 | The updater | This repository's release manifest, unauthenticated | Installs the verified download at a quit |
 
