@@ -4,8 +4,11 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
+  APP_UPDATE_CONFIG_FILE_NAME,
+  APP_UPDATE_FEED_URL,
   APPLE_EVENTS_USAGE_DESCRIPTION,
   addonCompilerArguments,
+  appUpdateConfig,
   createPackagerOptions,
   ICONSET_SOURCES,
   iconutilArguments,
@@ -47,11 +50,38 @@ function packagerOptions(signing = resolveSigningMode({})) {
     ],
     iconPath,
     licensePath: `/repo/apps/desktop/.build/${LICENSE_RESOURCE_NAME}`,
+    appUpdateConfigPath: `/repo/apps/desktop/.build/${APP_UPDATE_CONFIG_FILE_NAME}`,
     entitlementsPath,
     signing,
     version: "0.3.1",
   });
 }
+
+test("the bundle carries the updater config electron-updater reads before every download", () => {
+  // Setting the feed at runtime does not spare app-update.yml: the download
+  // step reads updaterCacheDirName from the bundle's own Resources, so a
+  // package without it finds an update and then fails with ENOENT.
+  assert.ok(
+    packagerOptions().extraResource.some((resourcePath) =>
+      resourcePath.endsWith(APP_UPDATE_CONFIG_FILE_NAME),
+    ),
+  );
+  const config = appUpdateConfig();
+  assert.ok(config.includes("provider: generic"));
+  assert.ok(config.includes(`url: ${APP_UPDATE_FEED_URL}`));
+  assert.ok(config.includes("updaterCacheDirName: luke-updater"));
+
+  // The bundled config and the runtime feed must name the same address, or a
+  // packaged build would read one feed and cache under another's rules.
+  const updateService = fs.readFileSync(
+    path.join(repoRoot, "apps", "desktop", "src", "update-service.ts"),
+    "utf8",
+  );
+  assert.ok(
+    updateService.includes(`UPDATE_FEED_URL: "${APP_UPDATE_FEED_URL}"`),
+    "src/update-service.ts UPDATE_ENDPOINT.UPDATE_FEED_URL must equal APP_UPDATE_FEED_URL",
+  );
+});
 
 test("workspace package versions agree on v0.3.1", () => {
   const packagePaths = [
