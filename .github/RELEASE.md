@@ -1,13 +1,14 @@
 # Releasing Luke for macOS
 
-The release workflow builds, signs, notarizes, staples, and validates an arm64 macOS app. It
-then creates `Luke-X.Y.Z-macos-arm64.zip` with a matching `.sha256` file, and a notarized
-`Luke-X.Y.Z-arm64.dmg` with its own `.sha256` plus a version-free copy named `Luke.dmg` —
-the asset the website's download button reaches through
-`releases/latest/download/Luke.dmg`, which is why its name must never change. Beside them
-it writes a version-free `latest-mac.yml`, the electron-updater manifest the app updates
-from through `releases/latest/download/latest-mac.yml` — the manifest names the zip beside
-it and carries its sha512, so its name must never change either.
+The release workflow builds, signs, notarizes, staples, and validates an arm64 macOS app
+with electron-builder. It creates `Luke-X.Y.Z-macos-arm64.zip` with a matching
+`.sha256` file, and a notarized `Luke-X.Y.Z-arm64.dmg` with its own `.sha256` plus a
+version-free copy named `Luke.dmg` — the asset the website's download button reaches
+through `releases/latest/download/Luke.dmg`, which is why its name must never change.
+Beside them electron-builder writes a version-free `latest-mac.yml`, the electron-updater
+manifest the app updates from through `releases/latest/download/latest-mac.yml` — the
+manifest names the zip beside it with a relative URL and carries its sha512, so its name
+must never change either.
 
 Pushing a `vX.Y.Z` tag publishes or updates a GitHub Release. A manual
 `workflow_dispatch` run performs the same release rehearsal without publishing; its zip,
@@ -106,7 +107,7 @@ Developer ID identity and a stored `luke-notary` notarytool profile
 ```sh
 export LUKE_CODESIGN_IDENTITY='Developer ID Application: …'
 export GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET='GOCSPX-…'   # from the Google Cloud console
-pnpm release:macos                    # signs, notarizes, staples; writes the DMG and zip
+pnpm release:macos:builder            # signs, notarizes, staples; writes the DMG, zip, and manifest
 git tag v0.1.1 && git push origin v0.1.1
 ./scripts/release/publish-github.sh   # creates the release and uploads every asset
 ```
@@ -117,14 +118,20 @@ variable rather than shipping a DMG the integration is silently missing from. It
 same value the Actions secret holds; take it from the Luke project's Desktop OAuth
 client under **APIs & Services → Credentials**.
 
-The builder writes both distribution artifacts under `artifacts/release/`, and the
-publish script is what knows the asset set: the versioned DMG and zip with their
+Electron-builder writes the distribution artifacts under `artifacts/release-builder/`,
+and the publish script is what knows the asset set: the versioned DMG and zip with their
 checksums, plus the version-free `Luke.dmg` the website's download link depends on and
 the version-free `latest-mac.yml` the app updates from. It
 refuses to publish when the tag does not match `apps/desktop/package.json`, and it
 creates a published, non-draft release — the `releases/latest` link and the app's own
 update check both ignore drafts and prereleases, so a draft is a release nobody can
 reach. Re-running it is safe: assets are replaced with `--clobber`.
+
+During the electron-builder rollout, `pnpm release:macos` still runs the legacy
+@electron/packager pipeline into `artifacts/release/` for hardware parity checks. To
+publish that output during a rollback rehearsal, run
+`./scripts/release/publish-github.sh --legacy-packager`; do not use that flag for the
+normal release path.
 
 Afterwards, confirm the three consumers see the build:
 

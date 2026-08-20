@@ -4,6 +4,13 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
+  createElectronBuilderConfig,
+  ELECTRON_BUILDER_UPDATE_CACHE_DIR_NAME,
+  ELECTRON_BUILDER_UPDATE_FEED_URL,
+  ELECTRON_BUILDER_UPDATE_PUBLISH_CONFIG,
+} from "../apps/desktop/scripts/electron-builder-config.mjs";
+import {
+  APP_UPDATE_CACHE_DIR_NAME,
   APP_UPDATE_CONFIG_FILE_NAME,
   APP_UPDATE_FEED_URL,
   APPLE_EVENTS_USAGE_DESCRIPTION,
@@ -61,6 +68,10 @@ function packagerOptions(signing = resolveSigningMode({})) {
   });
 }
 
+function builderConfig(env = {}) {
+  return createElectronBuilderConfig(env);
+}
+
 test("the bundle carries the updater config electron-updater reads before every download", () => {
   // Setting the feed at runtime does not spare app-update.yml: the download
   // step reads updaterCacheDirName from the bundle's own Resources, so a
@@ -73,7 +84,7 @@ test("the bundle carries the updater config electron-updater reads before every 
   const config = appUpdateConfig();
   assert.ok(config.includes("provider: generic"));
   assert.ok(config.includes(`url: ${APP_UPDATE_FEED_URL}`));
-  assert.ok(config.includes("updaterCacheDirName: luke-updater"));
+  assert.ok(config.includes(`updaterCacheDirName: ${APP_UPDATE_CACHE_DIR_NAME}`));
 
   // The bundled config and the runtime feed must name the same address, or a
   // packaged build would read one feed and cache under another's rules.
@@ -135,12 +146,57 @@ test("the app answers to one name in the bundle and in Electron", () => {
   assert.equal(options.extendInfo.CFBundleDisplayName, manifest.productName);
 });
 
+test("electron-builder answers to the same application identity", () => {
+  const manifest = JSON.parse(
+    fs.readFileSync(path.join(repoRoot, "apps", "desktop", "package.json"), "utf8"),
+  );
+  const config = builderConfig();
+
+  assert.equal(config.productName, manifest.productName);
+  assert.equal(config.mac.executableName, manifest.productName);
+  assert.equal(config.mac.extendInfo.CFBundleName, manifest.productName);
+  assert.equal(config.mac.extendInfo.CFBundleDisplayName, manifest.productName);
+  assert.equal(config.appId, "dev.reviewstage.luke");
+});
+
+test("electron-builder generates the updater config electron-updater reads before downloads", () => {
+  const config = builderConfig();
+  const [appUpdatePublishConfig] = config.publish;
+  const updateService = fs.readFileSync(
+    path.join(repoRoot, "apps", "desktop", "src", "main", "update-service.ts"),
+    "utf8",
+  );
+
+  assert.deepEqual(appUpdatePublishConfig, ELECTRON_BUILDER_UPDATE_PUBLISH_CONFIG);
+  assert.equal(ELECTRON_BUILDER_UPDATE_FEED_URL, APP_UPDATE_FEED_URL);
+  assert.equal(ELECTRON_BUILDER_UPDATE_CACHE_DIR_NAME, APP_UPDATE_CACHE_DIR_NAME);
+  assert.equal(appUpdatePublishConfig.provider, "generic");
+  assert.equal(appUpdatePublishConfig.url, APP_UPDATE_FEED_URL);
+  assert.equal(appUpdatePublishConfig.updaterCacheDirName, APP_UPDATE_CACHE_DIR_NAME);
+  assert.equal(config.extraMetadata.name, "luke");
+  assert.equal(`${config.extraMetadata.name}-updater`, APP_UPDATE_CACHE_DIR_NAME);
+  assert.ok(
+    updateService.includes(`UPDATE_FEED_URL: "${APP_UPDATE_FEED_URL}"`),
+    "src/main/update-service.ts UPDATE_ENDPOINT.UPDATE_FEED_URL must match app-update.yml",
+  );
+});
+
 test("packaging is pinned to Apple Silicon", () => {
   const options = packagerOptions();
+  const config = builderConfig();
 
   assert.equal(options.platform, "darwin");
   assert.equal(options.arch, PACKAGED_ARCHITECTURE);
   assert.equal(PACKAGED_ARCHITECTURE, "arm64");
+  assert.equal(config.mac.target, "default");
+  const versionMacro = "$" + "{version}";
+  const archMacro = "$" + "{arch}";
+  const extensionMacro = "$" + "{ext}";
+  assert.equal(
+    config.mac.artifactName,
+    `Luke-${versionMacro}-macos-${archMacro}.${extensionMacro}`,
+  );
+  assert.equal(config.dmg.artifactName, `Luke-${versionMacro}-${archMacro}.${extensionMacro}`);
   assert.equal(
     packagedAppExecutable("/repo"),
     path.join(
@@ -159,11 +215,14 @@ test("packaging is pinned to Apple Silicon", () => {
 
 test("packaging declares the macOS deployment target", () => {
   const options = packagerOptions();
+  const config = builderConfig();
   const compilerArguments = swiftCompilerArguments("source.swift", "helper");
 
   assert.equal(MACOS_DEPLOYMENT_TARGET, "14.0");
   assert.equal(SWIFT_TARGET_TRIPLE, "arm64-apple-macos14.0");
   assert.equal(options.extendInfo.LSMinimumSystemVersion, MACOS_DEPLOYMENT_TARGET);
+  assert.equal(config.mac.minimumSystemVersion, MACOS_DEPLOYMENT_TARGET);
+  assert.equal(config.mac.extendInfo.LSMinimumSystemVersion, MACOS_DEPLOYMENT_TARGET);
   assert.deepEqual(compilerArguments.slice(0, 4), [
     "swiftc",
     "-parse-as-library",
@@ -174,6 +233,9 @@ test("packaging declares the macOS deployment target", () => {
 
 test("every native helper is built and shipped, or neither happens", () => {
   const shipped = packagerOptions().extraResource;
+  const config = builderConfig();
+  const builderShipped = config.extraResources.slice(0, NATIVE_HELPERS.length);
+  const builderBinaries = config.mac.binaries;
 
   for (const helper of NATIVE_HELPERS) {
     assert.ok(
@@ -181,6 +243,17 @@ test("every native helper is built and shipped, or neither happens", () => {
       // A helper built but not bundled is a feature that works in development
       // and is simply absent from the app someone downloads.
       `${helper.binary} reaches the bundle`,
+    );
+    assert.ok(
+      builderShipped.some((resourcePath) => resourcePath.endsWith(helper.bundle ?? helper.binary)),
+      `${helper.binary} reaches the electron-builder bundle`,
+    );
+    const signedPath = helper.bundle
+      ? path.join(helper.bundle, "Contents", "MacOS", helper.binary)
+      : helper.binary;
+    assert.ok(
+      builderBinaries.some((resourcePath) => resourcePath.endsWith(signedPath)),
+      `${helper.binary} is signed by electron-builder`,
     );
     // A spawned helper is a Swift executable; an in-process addon is
     // Objective-C, loaded through Node-API, and named so the loader can tell.
@@ -204,9 +277,11 @@ test("the calendar helper's bundle names itself Luke and carries the usage sente
   // different things depending on which binary asked.
   const plist = appleCalendarHelperInfoPlist();
   const extendInfo = packagerOptions().extendInfo;
+  const builderExtendInfo = builderConfig().mac.extendInfo;
   for (const key of CALENDARS_USAGE_KEYS) {
     assert.ok(plist.includes(`<key>${key}</key>`));
     assert.equal(extendInfo[key], CALENDARS_USAGE_DESCRIPTION);
+    assert.equal(builderExtendInfo[key], CALENDARS_USAGE_DESCRIPTION);
   }
   assert.ok(plist.includes(CALENDARS_USAGE_DESCRIPTION));
   assert.ok(plist.includes("<key>CFBundleIdentifier</key>"));
@@ -243,12 +318,18 @@ test("the talk key is compiled against the framework that reads it", () => {
 
 test("packaging includes the Luke license and approved microphone description", () => {
   const options = packagerOptions();
+  const config = builderConfig();
+  const licenseResource = config.extraResources.at(-1);
 
   assert.equal(LICENSE_RESOURCE_NAME, "LUKE-LICENSE.txt");
   assert.equal(
     options.extraResource.some((resourcePath) => resourcePath.endsWith(LICENSE_RESOURCE_NAME)),
     true,
   );
+  assert.deepEqual(licenseResource, {
+    from: path.join(repoRoot, "apps", "desktop", ".build", LICENSE_RESOURCE_NAME),
+    to: LICENSE_RESOURCE_NAME,
+  });
   // Spelled out rather than compared to the constant alone: this is the sentence
   // macOS shows when it asks for the microphone, so a change to it is a change
   // to what the user consented to and should not pass unnoticed.
@@ -257,10 +338,12 @@ test("packaging includes the Luke license and approved microphone description", 
     "Luke uses the microphone for spoken conversation. Audio from a turn you start is sent to OpenAI to answer it, and is never recorded or written to disk.",
   );
   assert.equal(options.extendInfo.NSMicrophoneUsageDescription, MICROPHONE_USAGE_DESCRIPTION);
+  assert.equal(config.mac.extendInfo.NSMicrophoneUsageDescription, MICROPHONE_USAGE_DESCRIPTION);
 });
 
 test("packaging includes the approved Apple Events description", () => {
   const options = packagerOptions();
+  const config = builderConfig();
 
   // Spelled out for the same reason the microphone's is: this is the sentence
   // macOS shows when it asks whether Luke may speak to Music or Spotify, so a
@@ -270,10 +353,15 @@ test("packaging includes the approved Apple Events description", () => {
     "Luke turns Music and Spotify down while you are having a spoken conversation, and back up afterwards. He never pauses them, and reads nothing beyond whether each is playing and how loud.",
   );
   assert.equal(options.extendInfo.NSAppleEventsUsageDescription, APPLE_EVENTS_USAGE_DESCRIPTION);
+  assert.equal(config.mac.extendInfo.NSAppleEventsUsageDescription, APPLE_EVENTS_USAGE_DESCRIPTION);
 });
 
 test("packaging uses the generated Luke application icon", () => {
+  const config = builderConfig();
+  const builderIconPath = path.join(repoRoot, "apps", "desktop", ".build", "Luke.icns");
+
   assert.equal(packagerOptions().icon, iconPath);
+  assert.equal(config.mac.icon, builderIconPath);
 });
 
 test("the iconset maps every required macOS size to a consistent source PNG", () => {
@@ -329,16 +417,24 @@ test("signing configuration separates ad-hoc and Developer ID modes", () => {
   const adHocSigning = resolveSigningMode({});
   assert.deepEqual(adHocSigning, { mode: SIGNING_MODE.AD_HOC });
   assert.equal("osxSign" in packagerOptions(adHocSigning), false);
+  assert.equal(builderConfig().mac.identity, "-");
 
   const identity = "Developer ID Application: X (TEAM)";
   const developerIdSigning = resolveSigningMode({ LUKE_CODESIGN_IDENTITY: identity });
   const developerIdOptions = packagerOptions(developerIdSigning);
+  const developerIdBuilder = builderConfig({ LUKE_CODESIGN_IDENTITY: identity });
   assert.deepEqual(developerIdSigning, { mode: SIGNING_MODE.DEVELOPER_ID, identity });
   assert.equal(developerIdOptions.osxSign.identity, identity);
+  assert.equal(developerIdBuilder.mac.identity, identity);
+  assert.equal(developerIdBuilder.mac.hardenedRuntime, true);
+  assert.equal(developerIdBuilder.mac.gatekeeperAssess, false);
+  assert.equal(developerIdBuilder.mac.notarize, false);
   assert.deepEqual(developerIdOptions.osxSign.optionsForFile(), {
     hardenedRuntime: true,
     entitlements: entitlementsPath,
   });
+  assert.equal(developerIdBuilder.mac.entitlements, entitlementsPath);
+  assert.equal(developerIdBuilder.mac.entitlementsInherit, entitlementsPath);
 });
 
 test("the baked signing define mirrors the signing mode and carries no identity", () => {

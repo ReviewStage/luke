@@ -17,6 +17,7 @@
     "oxlint": "./scripts/oxlint.sh",
     "package": "pnpm --filter @luke/desktop package",
     "prepare": "husky",
+    "release:macos:builder": "./scripts/release-macos-builder.sh",
     "release:macos": "./scripts/release-macos.sh",
     "start": "pnpm --filter @luke/desktop start",
     "test": "pnpm test:harness && pnpm --recursive --if-present run test",

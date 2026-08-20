@@ -3,9 +3,15 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import {
+  createElectronBuilderConfig,
+  ELECTRON_BUILDER_GITHUB_PUBLISH_CONFIG,
+  ELECTRON_BUILDER_UPDATE_PUBLISH_CONFIG,
+} from "../apps/desktop/scripts/electron-builder-config.mjs";
 import { PACKAGED_ARCHITECTURE } from "../apps/desktop/scripts/package-layout.mjs";
 import {
   awaitNotarizationDecision,
+  builderReleaseArtifactDirectory,
   codesignDisplayArguments,
   DMG_MOUNT_POINT,
   DMG_STAGING_ENTRIES,
@@ -46,11 +52,19 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 
 test("manual releases install the locked dependencies before checking the workspace", () => {
   const releaseScript = fs.readFileSync(path.join(repoRoot, "scripts", "release-macos.sh"), "utf8");
+  const builderReleaseScript = fs.readFileSync(
+    path.join(repoRoot, "scripts", "release-macos-builder.sh"),
+    "utf8",
+  );
   const bootstrapCall = releaseScript.indexOf('"$SCRIPT_DIRECTORY/bootstrap.sh"');
   const checkCall = releaseScript.indexOf('"$SCRIPT_DIRECTORY/check.sh"');
+  const builderBootstrapCall = builderReleaseScript.indexOf('"$SCRIPT_DIRECTORY/bootstrap.sh"');
+  const builderCheckCall = builderReleaseScript.indexOf('"$SCRIPT_DIRECTORY/check.sh"');
 
   assert.notEqual(bootstrapCall, -1);
   assert.ok(bootstrapCall < checkCall);
+  assert.notEqual(builderBootstrapCall, -1);
+  assert.ok(builderBootstrapCall < builderCheckCall);
 });
 
 test("release DMG names include the desktop version and packaged architecture", () => {
@@ -271,6 +285,8 @@ test("release DMG attach cleanup does not mask a plist parsing failure", async (
 });
 
 test("release DMG store layout is branded and bounded", () => {
+  const builderConfig = createElectronBuilderConfig();
+
   assert.deepEqual(dmgStoreLayout("/Volumes/Luke"), {
     version: 1,
     backgroundPath: "/Volumes/Luke/.background/background.tiff",
@@ -294,6 +310,31 @@ test("release DMG store layout is branded and bounded", () => {
   assert.equal(DMG_WINDOW.BOUNDS.WIDTH, DMG_WINDOW.BACKGROUND.PNG.WIDTH);
   assert.equal(DMG_WINDOW.BOUNDS.HEIGHT, DMG_WINDOW.BACKGROUND.PNG.HEIGHT);
   assert.ok(DMG_WINDOW.BACKGROUND.DIRECTORY.startsWith("."));
+  assert.equal(builderConfig.dmg.title, "Luke");
+  assert.equal(builderConfig.dmg.background.endsWith("background.tiff"), true);
+  assert.equal(builderConfig.dmg.iconSize, DMG_WINDOW.ICON_SIZE);
+  assert.equal(builderConfig.dmg.iconTextSize, DMG_WINDOW.TEXT_SIZE);
+  assert.equal(builderConfig.dmg.sign, true);
+  assert.deepEqual(builderConfig.dmg.window, {
+    x: DMG_WINDOW.BOUNDS.LEFT,
+    y: DMG_WINDOW.BOUNDS.BOTTOM,
+    width: DMG_WINDOW.BOUNDS.WIDTH,
+    height: DMG_WINDOW.BOUNDS.HEIGHT,
+  });
+  assert.deepEqual(builderConfig.dmg.contents, [
+    {
+      x: DMG_WINDOW.POSITIONS.APP.X,
+      y: DMG_WINDOW.POSITIONS.APP.Y,
+      type: "file",
+      path: "Luke.app",
+    },
+    {
+      x: DMG_WINDOW.POSITIONS.APPLICATIONS.X,
+      y: DMG_WINDOW.POSITIONS.APPLICATIONS.Y,
+      type: "link",
+      path: "/Applications",
+    },
+  ]);
 });
 
 test("the DMG volume wears the app's own icon under the installer's name", () => {
@@ -477,8 +518,11 @@ test("release notarization commands use the local keychain profile", () => {
 
 test("neither notarization path asks notarytool to wait", () => {
   const credentials = { source: NOTARY_CREDENTIAL_SOURCE.KEYCHAIN_PROFILE };
+  const builderConfig = createElectronBuilderConfig();
+
   assert.ok(!notarySubmitArguments("/tmp/Luke.dmg", credentials).includes("--wait"));
   assert.ok(!notarySubmitArguments("/tmp/Luke.dmg", credentials).includes("--timeout"));
+  assert.equal(builderConfig.mac.notarize, false);
 
   const notarizeScript = fs.readFileSync(
     path.join(repoRoot, "scripts", "release", "notarize.sh"),
@@ -571,6 +615,23 @@ test("a notarization status Apple never returns is bounded like any other", asyn
 
 test("release artifacts stay under the repository artifacts directory", () => {
   assert.equal(releaseArtifactDirectory("/repo"), path.join("/repo", "artifacts", "release"));
+  assert.equal(
+    builderReleaseArtifactDirectory("/repo"),
+    path.join("/repo", "artifacts", "release-builder"),
+  );
+});
+
+test("electron-builder release output is stable and publishable by GitHub", () => {
+  const config = createElectronBuilderConfig();
+
+  assert.equal(config.directories.output, builderReleaseArtifactDirectory(repoRoot));
+  assert.deepEqual(config.publish, [
+    ELECTRON_BUILDER_UPDATE_PUBLISH_CONFIG,
+    ELECTRON_BUILDER_GITHUB_PUBLISH_CONFIG,
+  ]);
+  assert.equal(config.generateUpdatesFilesForAllChannels, true);
+  assert.equal(config.afterSign.name, "notarizeElectronBuilderApp");
+  assert.equal(config.afterAllArtifactBuild.name, "finalizeElectronBuilderArtifacts");
 });
 
 test("release verification covers signing, Gatekeeper, stapling, and disk image integrity", () => {
