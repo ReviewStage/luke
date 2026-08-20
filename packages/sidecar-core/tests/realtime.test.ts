@@ -235,6 +235,7 @@ test("the standing instructions make Luke the coding agents' engineering manager
   const instructions = realtimeInstructions();
 
   assert.match(instructions, /engineering manager for the developer's coding agents/i);
+  assert.match(instructions, /start with the answer; do not repeat the user's request/i);
 });
 
 test("a mint response yields a credential with a millisecond expiry", () => {
