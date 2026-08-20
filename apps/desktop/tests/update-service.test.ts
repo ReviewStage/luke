@@ -1,184 +1,264 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { UPDATE_STATUS, type UpdateSnapshot } from "../src/shared/contracts";
-import { UPDATE_ENDPOINT, UpdateService } from "../src/update-service";
-import type { JsonValue } from "./support/json";
-
-function releaseResponse(body: JsonValue): Response {
-  return new Response(JSON.stringify(body), {
-    status: 200,
-    headers: { "content-type": "application/json" },
-  });
-}
+import {
+  type UpdaterEngineEvents,
+  UpdateService,
+  type UpdateServiceOptions,
+} from "../src/update-service";
 
 function sleep(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
-test("a newer published release is offered by its version, without the tag's v", async () => {
-  const requests: { url: string; headers: Record<string, string> }[] = [];
-  const states: UpdateSnapshot[] = [];
-  const service = new UpdateService({
+/** An engine whose lifecycle fires only when the test says so. */
+function fakeEngine() {
+  const calls = { checks: 0, installs: 0, cacheClears: 0 };
+  let events: UpdaterEngineEvents | undefined;
+  let rejectNextCheck: string | undefined;
+  return {
+    calls,
+    fire: (): UpdaterEngineEvents => {
+      assert.ok(events, "the service wires the engine at construction");
+      return events;
+    },
+    rejectNextCheckWith: (message: string) => {
+      rejectNextCheck = message;
+    },
+    engine: {
+      wire: (next: UpdaterEngineEvents) => {
+        events = next;
+      },
+      checkForUpdates: async () => {
+        calls.checks += 1;
+        if (rejectNextCheck) {
+          const message = rejectNextCheck;
+          rejectNextCheck = undefined;
+          throw new Error(message);
+        }
+      },
+      quitAndInstall: () => {
+        calls.installs += 1;
+      },
+      clearCachedUpdate: async () => {
+        calls.cacheClears += 1;
+      },
+    },
+  };
+}
+
+function service(options: Partial<UpdateServiceOptions> & { states?: UpdateSnapshot[] }) {
+  const states = options.states ?? [];
+  return new UpdateService({
     currentVersion: "0.1.0",
     onChange: (update) => states.push(update),
-    fetch: async (url, init) => {
-      // SAFETY: Fixture headers map matches the string header shape the fake records.
-      requests.push({ url, headers: (init.headers ?? {}) as Record<string, string> });
-      return releaseResponse({ tag_name: "v0.2.0" });
-    },
+    report: () => undefined,
+    ...options,
   });
+}
 
-  const answered = await service.check();
+test("a found update downloads at once and installs only at the one restart press", async () => {
+  const { calls, fire, engine } = fakeEngine();
+  const states: UpdateSnapshot[] = [];
+  const updates = service({ engine, states });
 
-  assert.deepEqual(answered, {
-    status: UPDATE_STATUS.UPDATE_AVAILABLE,
+  // Installing before anything is downloaded is ignored, not a crash.
+  updates.install();
+  assert.equal(calls.installs, 0);
+
+  const checked = updates.check();
+  fire().onChecking();
+  fire().onAvailable("0.2.0");
+  assert.deepEqual(await checked, {
+    status: UPDATE_STATUS.DOWNLOADING,
     currentVersion: "0.1.0",
+    installSupported: true,
     latestVersion: "0.2.0",
   });
-  assert.deepEqual(service.snapshot(), answered);
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  // The row is told about the check under way as well as its answer.
+
+  fire().onProgress({ percent: 40, transferredBytes: 40, totalBytes: 100 });
+  assert.deepEqual(updates.snapshot().status === UPDATE_STATUS.DOWNLOADING && updates.snapshot(), {
+    status: UPDATE_STATUS.DOWNLOADING,
+    currentVersion: "0.1.0",
+    installSupported: true,
+    latestVersion: "0.2.0",
+    progress: { percent: 40, transferredBytes: 40, totalBytes: 100 },
+  });
+
+  fire().onDownloaded("0.2.0");
+  assert.equal(updates.snapshot().status, UPDATE_STATUS.READY);
+
+  // Only the first press reaches the engine: repeat presses while Squirrel
+  // stages the swap race to replace the binary and can lose the update.
+  updates.install();
+  updates.install();
+  assert.equal(calls.installs, 1);
   assert.deepEqual(
     states.map((state) => state.status),
-    [UPDATE_STATUS.CHECKING, UPDATE_STATUS.UPDATE_AVAILABLE],
+    [
+      UPDATE_STATUS.CHECKING,
+      UPDATE_STATUS.CHECKING,
+      UPDATE_STATUS.DOWNLOADING,
+      UPDATE_STATUS.DOWNLOADING,
+      UPDATE_STATUS.READY,
+    ],
   );
-  // One read, of the fixed address, spoken in GitHub's documented media type.
-  assert.equal(requests.length, 1);
-  assert.equal(requests[0]?.url, UPDATE_ENDPOINT.LATEST_RELEASE_URL);
-  assert.equal(requests[0]?.headers.Accept, "application/vnd.github+json");
 });
 
-// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-test("the running release reads as up to date", async () => {
-  const service = new UpdateService({
+test("nothing newer is idle with the up-to-date mark, never an error", async () => {
+  const { fire, engine } = fakeEngine();
+  const updates = service({ engine });
+
+  const checked = updates.check();
+  fire().onNotAvailable();
+  assert.deepEqual(await checked, {
+    status: UPDATE_STATUS.IDLE,
+    currentVersion: "0.1.0",
+    installSupported: true,
+    upToDate: true,
+  });
+});
+
+test("a network failure is silence for the next timed check; anything else is the error row", async () => {
+  const { calls, fire, engine, rejectNextCheckWith } = fakeEngine();
+  const updates = service({ engine });
+
+  // The engine's error event mid-download, transient: back to idle, unmarked.
+  fire().onAvailable("0.2.0");
+  fire().onError("net::ERR_INTERNET_DISCONNECTED");
+  assert.deepEqual(updates.snapshot(), {
+    status: UPDATE_STATUS.IDLE,
+    currentVersion: "0.1.0",
+    installSupported: true,
+    upToDate: false,
+  });
+  assert.equal(calls.cacheClears, 0);
+
+  // A real failure lands on the error row, still naming the newer build, and
+  // drops the cached download a corrupt archive would otherwise pin forever.
+  fire().onAvailable("0.2.0");
+  fire().onError("sha512 checksum mismatch");
+  assert.deepEqual(updates.snapshot(), {
+    status: UPDATE_STATUS.ERROR,
+    currentVersion: "0.1.0",
+    installSupported: true,
+    latestVersion: "0.2.0",
+  });
+  assert.equal(calls.cacheClears, 1);
+
+  // A check whose own promise rejects answers the same two ways.
+  rejectNextCheckWith("ENOTFOUND api.github.com");
+  assert.equal((await updates.check()).status, UPDATE_STATUS.IDLE);
+  rejectNextCheckWith("cannot parse update info");
+  assert.equal((await updates.check()).status, UPDATE_STATUS.ERROR);
+});
+
+test("an error mid-install releases the guard so the next ready build can install", async () => {
+  const { calls, fire, engine } = fakeEngine();
+  const updates = service({ engine });
+
+  fire().onDownloaded("0.2.0");
+  updates.install();
+  assert.equal(calls.installs, 1);
+
+  // Squirrel surfaced an error instead of quitting: the guard must release,
+  // or the row's restart press is dead for the rest of the run.
+  fire().onError("could not stage the update");
+  fire().onDownloaded("0.2.0");
+  updates.install();
+  assert.equal(calls.installs, 2);
+});
+
+test("no check moves the row while a download in flight or in hand holds it", async () => {
+  const { calls, fire, engine } = fakeEngine();
+  const updates = service({ engine });
+
+  fire().onAvailable("0.2.0");
+  const midDownload = calls.checks;
+  assert.equal((await updates.check()).status, UPDATE_STATUS.DOWNLOADING);
+  assert.equal(calls.checks, midDownload, "a timed tick mid-download never reaches the feed");
+
+  fire().onDownloaded("0.2.0");
+  assert.equal((await updates.check()).status, UPDATE_STATUS.READY);
+  assert.equal(calls.checks, midDownload, "a build in hand is never traded for a re-check");
+});
+
+test("without an engine nothing checks, downloads, or installs", async () => {
+  const { calls } = fakeEngine();
+  const updates = service({});
+
+  assert.deepEqual(await updates.check(), {
+    status: UPDATE_STATUS.IDLE,
+    currentVersion: "0.1.0",
+    installSupported: false,
+    upToDate: false,
+  });
+  updates.install();
+  updates.start();
+  await sleep(10);
+  assert.equal(calls.checks, 0);
+  assert.equal(calls.installs, 0);
+});
+
+test("the timed check starts at once and stops when asked", async () => {
+  const { calls, engine } = fakeEngine();
+  const updates = service({ engine, intervalMs: 10 });
+
+  updates.start();
+  await sleep(45);
+  assert.ok(calls.checks >= 2, `expected the timer to have checked again, saw ${calls.checks}`);
+
+  updates.stop();
+  const settled = calls.checks;
+  await sleep(30);
+  assert.equal(calls.checks, settled);
+});
+
+test("the first launch after an install says what happened before checking again", async () => {
+  const { calls, engine } = fakeEngine();
+  let stored: string | undefined = "0.1.0";
+  const states: UpdateSnapshot[] = [];
+  const updates = new UpdateService({
     currentVersion: "0.2.0",
-    onChange: () => undefined,
-    fetch: async () => releaseResponse({ tag_name: "v0.2.0" }),
+    onChange: (update) => states.push(update),
+    report: () => undefined,
+    engine,
+    lastRunVersion: {
+      read: () => stored,
+      write: (version) => {
+        stored = version;
+      },
+    },
+    justUpdatedFirstCheckDelayMs: 30,
+    intervalMs: 60_000,
   });
 
-  assert.deepEqual(await service.check(), {
-    status: UPDATE_STATUS.UP_TO_DATE,
+  updates.start();
+  assert.deepEqual(updates.snapshot(), {
+    status: UPDATE_STATUS.UPDATED,
     currentVersion: "0.2.0",
+    installSupported: true,
+    previousVersion: "0.1.0",
   });
+  assert.equal(stored, "0.2.0");
+  // The confirmation holds until the delayed first check overwrites it.
+  assert.equal(calls.checks, 0);
+  await sleep(60);
+  assert.ok(calls.checks >= 1);
+  updates.stop();
 });
 
-// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-test("a refusal, an unreachable service, and an unreadable answer all read as unreachable", async () => {
-  const refused = new UpdateService({
-    currentVersion: "0.1.0",
-    onChange: () => undefined,
-    fetch: async () => new Response("", { status: 503 }),
-  });
-  assert.equal((await refused.check()).status, UPDATE_STATUS.UNREACHABLE);
-
-  const unreachable = new UpdateService({
-    currentVersion: "0.1.0",
-    onChange: () => undefined,
-    fetch: async () => {
-      throw new Error("offline");
-    },
-  });
-  assert.equal((await unreachable.check()).status, UPDATE_STATUS.UNREACHABLE);
-
-  const unreadable = new UpdateService({
-    currentVersion: "0.1.0",
-    onChange: () => undefined,
-    fetch: async () => new Response("not json", { status: 200 }),
-  });
-  assert.equal((await unreadable.check()).status, UPDATE_STATUS.UNREACHABLE);
-});
-
-// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-test("a release this build cannot name is not offered as an update", async () => {
-  // A prerelease suffix and a missing tag both leave nothing to compare, and
-  // an unnamed update would send someone to fetch an unknown.
-  const prerelease = new UpdateService({
-    currentVersion: "0.1.0",
-    onChange: () => undefined,
-    fetch: async () => releaseResponse({ tag_name: "v0.2.0-beta.1" }),
-  });
-  assert.equal((await prerelease.check()).status, UPDATE_STATUS.UNREACHABLE);
-
-  const unnamed = new UpdateService({
-    currentVersion: "0.1.0",
-    onChange: () => undefined,
-    fetch: async () => releaseResponse({}),
-  });
-  assert.equal((await unnamed.check()).status, UPDATE_STATUS.UNREACHABLE);
-});
-
-test("the timer and the button share a check already in flight", async () => {
-  let requests = 0;
-  let release: ((response: Response) => void) | undefined;
-  const service = new UpdateService({
-    currentVersion: "0.1.0",
-    onChange: () => undefined,
-    fetch: () => {
-      requests += 1;
-      return new Promise((resolve) => {
-        release = resolve;
-      });
-    },
-  });
-
-  const first = service.check();
-  const second = service.check();
-  release?.(releaseResponse({ tag_name: "v0.1.1" }));
-
-  assert.equal((await first).status, UPDATE_STATUS.UPDATE_AVAILABLE);
-  assert.equal((await second).status, UPDATE_STATUS.UPDATE_AVAILABLE);
-  assert.equal(requests, 1);
-
-  // A finished check is let go of, so the next ask is a fresh read.
-  const third = service.check();
-  assert.equal(requests, 2);
-  release?.(releaseResponse({ tag_name: "v0.1.1" }));
-  await third;
-});
-
-test("a listener that throws neither fails the check nor jams the next one", async () => {
-  // The broadcast can outlive the window it reaches. A throw there must not
-  // park a dead check in flight — the row would say "checking" forever and
-  // every later ask would reuse the failure.
-  let requests = 0;
-  const service = new UpdateService({
+test("a listener that throws does not fail the transition", () => {
+  const { fire, engine } = fakeEngine();
+  const updates = new UpdateService({
     currentVersion: "0.1.0",
     onChange: () => {
       throw new Error("window already torn down");
     },
-    fetch: async () => {
-      requests += 1;
-      return releaseResponse({ tag_name: "v0.2.0" });
-    },
+    report: () => undefined,
+    engine,
   });
 
-  const first = await service.check();
-  assert.equal(first.status, UPDATE_STATUS.UPDATE_AVAILABLE);
-  assert.equal(service.snapshot().status, UPDATE_STATUS.UPDATE_AVAILABLE);
-
-  const second = await service.check();
-  assert.equal(second.status, UPDATE_STATUS.UPDATE_AVAILABLE);
-  assert.equal(requests, 2);
-});
-
-test("the timed check starts at once and stops when asked", async () => {
-  let requests = 0;
-  const service = new UpdateService({
-    currentVersion: "0.1.0",
-    onChange: () => undefined,
-    intervalMs: 10,
-    fetch: async () => {
-      requests += 1;
-      return releaseResponse({ tag_name: "v0.1.0" });
-    },
-  });
-
-  service.start();
-  await sleep(35);
-  assert.ok(requests >= 2, `expected the timer to have checked again, saw ${requests}`);
-
-  service.stop();
-  const settled = requests;
-  await sleep(30);
-  assert.equal(requests, settled);
+  fire().onAvailable("0.2.0");
+  assert.equal(updates.snapshot().status, UPDATE_STATUS.DOWNLOADING);
 });

@@ -25,9 +25,11 @@ import {
   notarySubmitArguments,
   parseHdiutilAttachPlist,
   RELEASE_LATEST_DMG_FILE_NAME,
+  RELEASE_UPDATE_FEED_FILE_NAME,
   releaseArtifactDirectory,
   releaseDmgFileName,
   releaseSignatureMatchesIdentity,
+  releaseUpdateManifest,
   releaseZipFileName,
   resolveNotaryCredentials,
   resolveReleaseSigning,
@@ -298,6 +300,35 @@ test("release zip names include the desktop version and packaged architecture", 
 test("the latest-DMG asset name carries no version, so its download URL never moves", () => {
   assert.equal(RELEASE_LATEST_DMG_FILE_NAME, "Luke.dmg");
   assert.ok(!RELEASE_LATEST_DMG_FILE_NAME.includes(PACKAGED_ARCHITECTURE));
+});
+
+test("the update manifest names the archive beside it, hashed whole", () => {
+  // The manifest name carries no version — the app reads it through
+  // releases/latest — and the archive URL inside is the bare file name, so
+  // electron-updater resolves it against the same release the manifest came
+  // from: yesterday's manifest can never hand it today's archive.
+  assert.equal(RELEASE_UPDATE_FEED_FILE_NAME, "latest-mac.yml");
+  const manifest = releaseUpdateManifest({
+    version: "0.3.0",
+    sha512: "c2hhLWZpdmUtdHdlbHZl",
+    size: 12345,
+    releaseDate: "2026-08-20T00:00:00.000Z",
+  });
+  const zipName = releaseZipFileName("0.3.0");
+  assert.equal(
+    manifest,
+    [
+      "version: 0.3.0",
+      "files:",
+      `  - url: ${zipName}`,
+      "    sha512: c2hhLWZpdmUtdHdlbHZl",
+      "    size: 12345",
+      `path: ${zipName}`,
+      "sha512: c2hhLWZpdmUtdHdlbHZl",
+      "releaseDate: '2026-08-20T00:00:00.000Z'",
+      "",
+    ].join("\n"),
+  );
 });
 
 test("notary credentials come from the keychain profile unless a key file is provided whole", () => {

@@ -185,40 +185,82 @@ export interface ObservedAccountCalendars {
  * only way back would be deleting it.
  */
 /**
- // SAFETY: The preceding check establishes the asserted contract.
- * Where the app stands against the latest published release, as last learned.
- * `UNKNOWN` is the state before any check has answered — at launch, and
- // SAFETY: The preceding check establishes the asserted contract.
- * forever in a run that sends no network — and must be drawn as an offer to
- // SAFETY: The preceding check establishes the asserted contract.
- * check rather than as an answer.
+ * Where the updater stands, in the states electron-updater's own lifecycle
+ * moves through. `IDLE` is both "nothing learned yet" and "nothing newer" —
+ * `upToDate` on the snapshot says which, so the row never poses an unasked
+ * question as an answer. A check that finds a newer build downloads it at
+ * once, so there is no standing "available" state: the news arrives as
+ * `DOWNLOADING`. `UPDATED` is transient — the first launch after an install
+ * confirms what just happened. `ERROR` must be drawn as the way back to the
+ * browser, never as a dead end.
  */
 export const UPDATE_STATUS = {
-  UNKNOWN: "unknown",
+  IDLE: "idle",
   CHECKING: "checking",
-  UP_TO_DATE: "up-to-date",
-  UPDATE_AVAILABLE: "update-available",
-  UNREACHABLE: "unreachable",
+  DOWNLOADING: "downloading",
+  READY: "ready",
+  UPDATED: "updated",
+  ERROR: "error",
 } as const;
 
 export type UpdateStatus = (typeof UPDATE_STATUS)[keyof typeof UPDATE_STATUS];
 
+/** How far along a download is, as electron-updater reports it. */
+export interface UpdateProgress {
+  percent: number;
+  transferredBytes: number;
+  totalBytes: number;
+}
+
 /**
- * What the update row draws from. The latest version travels only on the one
- * state that learned it, and no address ever travels: the page an update is
- * fetched from is fixed in the main process, so nothing a check read can
- * steer where a press goes.
+ * What the update row draws from. The latest version travels only on the
+ * states that learned it, and no address ever travels: the manifest updates
+ * are fetched from and the page a failure falls back to are both fixed in
+ * the main process, so nothing a check read can steer where a press goes.
+ * `installSupported` says whether this build can replace itself in place —
+ * only a signed, packaged build running live can — so every other run's row
+ * offers the browser instead of an install that must fail. An error's text
+ * stays in the main process's log; the row words failures itself.
  */
 export type UpdateSnapshot =
-  | { status: typeof UPDATE_STATUS.UNKNOWN; currentVersion: string }
-  | { status: typeof UPDATE_STATUS.CHECKING; currentVersion: string }
-  | { status: typeof UPDATE_STATUS.UP_TO_DATE; currentVersion: string }
   | {
-      status: typeof UPDATE_STATUS.UPDATE_AVAILABLE;
+      status: typeof UPDATE_STATUS.IDLE;
       currentVersion: string;
+      installSupported: boolean;
+      /** True only after a check positively answered "nothing newer". */
+      upToDate: boolean;
+    }
+  | {
+      status: typeof UPDATE_STATUS.CHECKING;
+      currentVersion: string;
+      installSupported: boolean;
+    }
+  | {
+      status: typeof UPDATE_STATUS.DOWNLOADING;
+      currentVersion: string;
+      installSupported: boolean;
+      latestVersion: string;
+      progress?: UpdateProgress;
+    }
+  | {
+      status: typeof UPDATE_STATUS.READY;
+      currentVersion: string;
+      installSupported: boolean;
       latestVersion: string;
     }
-  | { status: typeof UPDATE_STATUS.UNREACHABLE; currentVersion: string };
+  | {
+      status: typeof UPDATE_STATUS.UPDATED;
+      currentVersion: string;
+      installSupported: boolean;
+      /** The version this build replaced, for the row to name the arrival. */
+      previousVersion: string;
+    }
+  | {
+      status: typeof UPDATE_STATUS.ERROR;
+      currentVersion: string;
+      installSupported: boolean;
+      latestVersion?: string;
+    };
 
 /** Renderer-safe settings. Credentials are never sent to a renderer. */
 export interface AppSettings {
@@ -687,15 +729,25 @@ export interface AppBridge {
    */
   resetSettings(scope: SettingsResetScope): Promise<SettingsUpdateResult>;
   /**
-   * Asks GitHub for the latest release name, right now, because the row's
-   * button was pressed. The answer is the same snapshot the broadcast
-   * carries, so the row that asked and every other window agree.
+   * Asks the release manifest for the latest build, right now, because the
+   * row's button was pressed. A newer build found by any check downloads at
+   * once, so the answer may already say `downloading`. The answer is the same
+   * snapshot the broadcast carries, so the row that asked and every other
+   * window agree; a build that cannot install answers with its standing
+   * snapshot and sends nothing.
    */
   checkForUpdates(): Promise<UpdateSnapshot>;
   /**
-   * Opens the latest release's page in the default browser. The renderer
-   * names an intent and never an address — the page is fixed in the main
-   * process, so nothing an update check read can steer where this goes.
+   * Restarts the app into the downloaded release. Meaningful only once the
+   * snapshot says `ready`; any other state — including an install already
+   * under way — ignores it.
+   */
+  installUpdate(): void;
+  /**
+   * Opens the latest release's page in the default browser — the way to a
+   * newer build where installing in place is impossible or has failed. The
+   * renderer names an intent and never an address — the page is fixed in the
+   * main process, so nothing an update check read can steer where this goes.
    */
   openLatestRelease(): void;
   /** Starts Superset's own OAuth login in one directly spawned CLI child. */
@@ -1028,6 +1080,7 @@ export const channels = {
   calendarsChanged: "app:calendars-changed",
   meetingQuietChanged: "app:meeting-quiet-changed",
   checkForUpdates: "app:check-for-updates",
+  installUpdate: "app:install-update",
   openLatestRelease: "app:open-latest-release",
   beginSupersetSignIn: "app:begin-superset-sign-in",
   submitSupersetSignInCode: "app:submit-superset-sign-in-code",

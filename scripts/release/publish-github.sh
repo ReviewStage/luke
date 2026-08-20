@@ -4,10 +4,10 @@ set -euo pipefail
 # Publishes a manual macOS release from what pnpm release:macos just built.
 # The asset set is load-bearing on both ends and encoded here so a by-hand
 # release cannot break either: the version-free Luke.dmg is what the website's
-# download link reaches through releases/latest, and the app's own update
-# check reads the latest release's tag name — so the release must be a
-# published, non-draft, non-prerelease one whose tag matches the desktop
-# version exactly.
+# download link reaches through releases/latest, and the version-free
+# latest-mac.yml is the electron-updater manifest the app updates from — so
+# the release must be a published, non-draft, non-prerelease one whose tag
+# matches the desktop version exactly.
 
 SCRIPT_DIRECTORY=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIRECTORY/../.." && pwd)
@@ -18,6 +18,7 @@ TAG="v$VERSION"
 DMG_ASSET_NAME=$(node -e "import('./apps/desktop/scripts/release-config.mjs').then((config) => process.stdout.write(config.releaseDmgFileName(process.argv[1])))" "$VERSION")
 ZIP_ASSET_NAME=$(node -e "import('./apps/desktop/scripts/release-config.mjs').then((config) => process.stdout.write(config.releaseZipFileName(process.argv[1])))" "$VERSION")
 LATEST_DMG_ASSET_NAME=$(node -e "import('./apps/desktop/scripts/release-config.mjs').then((config) => process.stdout.write(config.RELEASE_LATEST_DMG_FILE_NAME))")
+UPDATE_FEED_ASSET_NAME=$(node -e "import('./apps/desktop/scripts/release-config.mjs').then((config) => process.stdout.write(config.RELEASE_UPDATE_FEED_FILE_NAME))")
 ARTIFACT_DIRECTORY="artifacts/release"
 DMG_PATH="$ARTIFACT_DIRECTORY/$DMG_ASSET_NAME"
 ZIP_PATH="$ARTIFACT_DIRECTORY/$ZIP_ASSET_NAME"
@@ -41,6 +42,7 @@ trap 'rm -rf "$staging_directory"' EXIT
 cp "$DMG_PATH" "$staging_directory/$DMG_ASSET_NAME"
 cp "$DMG_PATH" "$staging_directory/$LATEST_DMG_ASSET_NAME"
 cp "$ZIP_PATH" "$staging_directory/$ZIP_ASSET_NAME"
+node apps/desktop/scripts/write-update-feed.mjs "$staging_directory/$UPDATE_FEED_ASSET_NAME"
 (
     cd "$staging_directory"
     shasum -a 256 "$DMG_ASSET_NAME" > "$DMG_ASSET_NAME.sha256"
@@ -59,6 +61,7 @@ gh release upload "$TAG" \
     "$staging_directory/$LATEST_DMG_ASSET_NAME" \
     "$staging_directory/$ZIP_ASSET_NAME" \
     "$staging_directory/$ZIP_ASSET_NAME.sha256" \
+    "$staging_directory/$UPDATE_FEED_ASSET_NAME" \
     --clobber
 
 printf 'Published %s. The website reaches this build at:\n' "$TAG"

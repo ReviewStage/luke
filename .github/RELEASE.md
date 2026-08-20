@@ -4,7 +4,10 @@ The release workflow builds, signs, notarizes, staples, and validates an arm64 m
 then creates `Luke-X.Y.Z-macos-arm64.zip` with a matching `.sha256` file, and a notarized
 `Luke-X.Y.Z-arm64.dmg` with its own `.sha256` plus a version-free copy named `Luke.dmg` —
 the asset the website's download button reaches through
-`releases/latest/download/Luke.dmg`, which is why its name must never change.
+`releases/latest/download/Luke.dmg`, which is why its name must never change. Beside them
+it writes a version-free `latest-mac.yml`, the electron-updater manifest the app updates
+from through `releases/latest/download/latest-mac.yml` — the manifest names the zip beside
+it and carries its sha512, so its name must never change either.
 
 Pushing a `vX.Y.Z` tag publishes or updates a GitHub Release. A manual
 `workflow_dispatch` run performs the same release rehearsal without publishing; its zip,
@@ -116,16 +119,18 @@ client under **APIs & Services → Credentials**.
 
 The builder writes both distribution artifacts under `artifacts/release/`, and the
 publish script is what knows the asset set: the versioned DMG and zip with their
-checksums, plus the version-free `Luke.dmg` the website's download link depends on. It
+checksums, plus the version-free `Luke.dmg` the website's download link depends on and
+the version-free `latest-mac.yml` the app updates from. It
 refuses to publish when the tag does not match `apps/desktop/package.json`, and it
 creates a published, non-draft release — the `releases/latest` link and the app's own
 update check both ignore drafts and prereleases, so a draft is a release nobody can
 reach. Re-running it is safe: assets are replaced with `--clobber`.
 
-Afterwards, confirm the two consumers see the build:
+Afterwards, confirm the three consumers see the build:
 
 ```sh
 curl -sI -o /dev/null -w '%{http_code}\n' \
   https://github.com/ReviewStage/luke/releases/latest/download/Luke.dmg
 curl -s https://api.github.com/repos/ReviewStage/luke/releases/latest | grep tag_name
+curl -sL https://github.com/ReviewStage/luke/releases/latest/download/latest-mac.yml
 ```

@@ -12,6 +12,7 @@ import {
   fixtureSnapshot,
   InMemorySessionRegistry,
   isProviderId,
+  isRecord,
   isWireString,
   type MeetingInterval,
   type NormalizedSession,
@@ -30,6 +31,7 @@ import {
   type SessionProviderAdapter,
   staleWorkspaceProjectDefaults,
   type TrackedIssue,
+  text,
   type UnparsedWireValue,
   type WorkspaceAgentSelection,
   workspaceProjectSelectionId,
@@ -100,6 +102,7 @@ import { APP_SETTING_SCHEMA } from "./shared/settings-schema";
 import { SupersetCli, SupersetWorkspaceAdapter } from "./superset-cli";
 import { SupersetSignIn } from "./superset-sign-in";
 import { SupersetWorkspaceReader, SupersetWorkspaceSnapshot } from "./superset-workspaces";
+import { createElectronUpdaterEngine } from "./update-installer";
 import { UPDATE_ENDPOINT, UpdateService } from "./update-service";
 import { VoiceCapabilityAssembler } from "./voice-capability-assembler";
 
@@ -346,12 +349,43 @@ const voiceCapabilities = new VoiceCapabilityAssembler({
 // anything the renderer does — and only this process may run a helper.
 const mediaDuck = new MediaDuckController();
 const feedbackDelivery = feedbackDeliveryFromEnvironment();
-// Learns whether a newer release exists, and nothing else. It lives here
-// rather than in a renderer because the timer must survive every window, and
-// what it learns reaches them all through the same broadcast settings use.
+// Keeps the running build current: a timed check reads the release manifest,
+// a newer build downloads at once, and the install lands at the quit the
+// user asks for. It lives here rather than in a renderer because the timer
+// must survive every window, only this process may run the updater, and what
+// it learns reaches them all through the same broadcast settings use.
+// Squirrel can only replace a signed, packaged build, and a fixture or
+// evidence run must not fetch, so every other run carries no engine and its
+// row offers the browser instead. The last-run version lives in its own file
+// so the first launch after an install can say what just happened.
+const lastRunVersionPath = () => path.join(app.getPath("userData"), "last-run-version.json");
 const updateService = new UpdateService({
   currentVersion: app.getVersion(),
   onChange: (update) => panels.broadcast(channels.updateChanged, update),
+  engine:
+    app.isPackaged && runMode.sendsNetwork && process.platform === "darwin"
+      ? createElectronUpdaterEngine()
+      : undefined,
+  lastRunVersion: {
+    read: () => {
+      try {
+        const stored: UnparsedWireValue = JSON.parse(fs.readFileSync(lastRunVersionPath(), "utf8"));
+        return isRecord(stored) ? text(stored.version) : undefined;
+      } catch {
+        // A missing or unreadable file is the first launch: nothing to confirm.
+        return undefined;
+      }
+    },
+    write: (version) => {
+      try {
+        fs.writeFileSync(lastRunVersionPath(), `${JSON.stringify({ version })}\n`);
+      } catch (error) {
+        process.stderr.write(
+          `Could not persist the last-run version: ${error instanceof Error ? error.message : String(error)}\n`,
+        );
+      }
+    },
+  },
 });
 // Counts how Luke's own features are used. It lives here rather than in a
 // renderer because every emit site is already in this process and the timer
@@ -868,17 +902,25 @@ function registerIpc(): void {
   });
 
   // The row's button. Answered rather than fire-and-forget so the row that
-  // asked and the broadcast never disagree; a run that sends no network
-  // answers with the standing snapshot rather than make a request it must not.
+  // asked and the broadcast never disagree; a run without an engine answers
+  // with the standing snapshot rather than make a request it must not.
   ipcMain.handle(channels.checkForUpdates, (event) => {
     if (!trustedSender(event)) throw new Error("Untrusted renderer");
-    if (!runMode.sendsNetwork) return updateService.snapshot();
     return updateService.check();
   });
 
-  // The newest release's page, in the browser. The address is fixed here like
-  // the microphone pane's, so nothing an update check read can steer where a
-  // press goes.
+  // The restart into a downloaded build. The service ignores the ask unless
+  // its own snapshot says one is ready — and ignores a repeat while Squirrel
+  // stages the swap — so a stray send installs nothing.
+  ipcMain.on(channels.installUpdate, (event) => {
+    if (!trustedSender(event)) return;
+    updateService.install();
+  });
+
+  // The newest release's page, in the browser — the way to a build where
+  // installing in place is impossible or has failed. The address is fixed
+  // here like the microphone pane's, so nothing an update check read can
+  // steer where a press goes.
   ipcMain.on(channels.openLatestRelease, (event) => {
     if (!trustedSender(event)) return;
     void shell.openExternal(UPDATE_ENDPOINT.LATEST_RELEASE_PAGE_URL);
