@@ -9,15 +9,17 @@ import {
   SESSION_STATUS,
   type SessionControl,
 } from "@sidecar/core";
+import type { CloudFailure } from "@sidecar/core/effect-errors";
+import { Effect } from "effect";
 import {
   type CloudAdapterOptions,
-  type CloudFetch,
   type CloudRequest,
   CloudSessionAdapter,
   isDefined,
   knownValue,
 } from "../src/cloud-session-adapter";
 import { HTTP_STATUS, jsonResponse, recordingFetch } from "./support/http-fake";
+import { runHttpEffect } from "./support/run-effect";
 
 const TEST_TIME = Date.parse("2026-08-12T02:45:00.000Z");
 const TEST_BASE_URL = "https://api.provider.test";
@@ -72,30 +74,41 @@ class StubCloudAdapter extends CloudSessionAdapter {
     return { segments: ["v0", "sessions", providerSessionId, "approve"] };
   }
 
-  protected async collect(
+  protected collect(
     request: CloudRequest,
     now: number,
-  ): Promise<readonly ProviderSessionObservation[]> {
-    this.passes += 1;
-    if (this.collectError) throw this.collectError;
-    await request(["v0", "sessions", "id with/slash"], { limit: "2" });
-    return this.collected.map((candidate) => ({
-      ...candidate,
-      status: agedStatus(
-        candidate.status,
-        candidate.observedAt,
-        now,
-        OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
-      ),
-    }));
+  ): Effect.Effect<
+    readonly ProviderSessionObservation[],
+    CloudFailure,
+    import("../src/services/http").Http
+  > {
+    return Effect.gen(this, function* () {
+      this.passes += 1;
+      if (this.collectError) {
+        return yield* Effect.fail(this.collectError);
+      }
+      yield* request(["v0", "sessions", "id with/slash"], { limit: "2" });
+      return this.collected.map((candidate) => ({
+        ...candidate,
+        status: agedStatus(
+          candidate.status,
+          candidate.observedAt,
+          now,
+          OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
+        ),
+      }));
+    });
   }
 }
 
 function adapterFor(
-  fetch: CloudFetch,
   overrides: {
     apiKey?: string | undefined;
-    readApiKey?: () => Promise<string | undefined>;
+    readApiKey?: () => Effect.Effect<
+      string | undefined,
+      unknown,
+      import("../src/services/http").Http
+    >;
     now?: () => number;
     minimumRefreshIntervalMs?: number;
     onDiagnostic?: (error: Error) => void;
@@ -103,9 +116,8 @@ function adapterFor(
 ): StubCloudAdapter {
   const apiKey = "apiKey" in overrides ? overrides.apiKey : TEST_API_KEY;
   const adapterOptions: ConstructorParameters<typeof StubCloudAdapter>[0] = {
-    readApiKey: overrides.readApiKey ?? (async () => apiKey),
+    readApiKey: overrides.readApiKey ?? (() => Effect.succeed(apiKey)),
     baseUrl: TEST_BASE_URL,
-    fetch,
     now: overrides.now ?? (() => TEST_TIME),
     minimumRefreshIntervalMs: overrides.minimumRefreshIntervalMs ?? 0,
   };
@@ -121,21 +133,33 @@ class ObservationOnlyAdapter extends CloudSessionAdapter {
     super({ provider: STUB_PROVIDER, defaultBaseUrl: TEST_BASE_URL }, options);
   }
 
-  protected async collect(): Promise<readonly ProviderSessionObservation[]> {
-    return [];
+  protected collect(
+    _request: CloudRequest,
+    _now: number,
+  ): Effect.Effect<
+    readonly ProviderSessionObservation[],
+    CloudFailure,
+    import("../src/services/http").Http
+  > {
+    return Effect.succeed([]);
   }
 }
 
 test("answers unsupported explicitly when no observed route exists", async () => {
-  const stub = adapterFor(stubFetch().fetch);
+  const stub = stubFetch();
+  const stubAdapter = adapterFor();
   const observer = new ObservationOnlyAdapter({
-    readApiKey: async () => TEST_API_KEY,
+    readApiKey: () => Effect.succeed(TEST_API_KEY),
     baseUrl: TEST_BASE_URL,
   });
-  for (const adapter of [stub, observer]) {
-    assert.deepEqual(await adapter.sendMessage({ providerSessionId: "missing", text: "hello" }), {
-      status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED,
-    });
+  for (const adapter of [stubAdapter, observer]) {
+    assert.deepEqual(
+      await runHttpEffect(
+        adapter.sendMessage({ providerSessionId: "missing", text: "hello" }),
+        stub.fetch,
+      ),
+      { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED },
+    );
     assert.deepEqual(adapter.workspaceProjects(), []);
   }
 });
@@ -153,10 +177,10 @@ test("accepts only a state this build knows", () => {
 
 test("authenticates a bounded read and encodes the route a subclass asked for", async () => {
   const stub = stubFetch();
-  const adapter = adapterFor(stub.fetch);
+  const adapter = adapterFor();
   adapter.collected = [observation("session-one")];
 
-  const observations = await adapter.observe();
+  const observations = await runHttpEffect(adapter.observe(), stub.fetch);
 
   assert.equal(adapter.provider.id, "stub");
   assert.equal(observations.length, 1);
@@ -180,14 +204,13 @@ class PinnedHeaderAdapter extends StubCloudAdapter {
 test("lets a subclass pin its own request headers without touching the credential", async () => {
   const { fetch, requests } = recordingFetch(() => jsonResponse({}));
   const adapter = new PinnedHeaderAdapter({
-    readApiKey: async () => TEST_API_KEY,
+    readApiKey: () => Effect.succeed(TEST_API_KEY),
     baseUrl: TEST_BASE_URL,
-    fetch,
     now: () => TEST_TIME,
     minimumRefreshIntervalMs: 0,
   });
 
-  await adapter.observe();
+  await runHttpEffect(adapter.observe(), fetch);
 
   const [request] = requests;
   assert.ok(request);
@@ -199,12 +222,12 @@ test("lets a subclass pin its own request headers without touching the credentia
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("reports every session it serves as running in the cloud", async () => {
   const stub = stubFetch();
-  const adapter = adapterFor(stub.fetch);
+  const adapter = adapterFor();
   // Neither observation says where it runs: the base knows, because nothing
   // reaches it except over the network.
   adapter.collected = [observation("session-one"), observation("session-two")];
 
-  const observations = await adapter.observe();
+  const observations = await runHttpEffect(adapter.observe(), stub.fetch);
 
   assert.deepEqual(
     observations.map((candidate) => candidate.location),
@@ -214,14 +237,14 @@ test("reports every session it serves as running in the cloud", async () => {
 
 test("drops a session a subclass reported twice in one pass", async () => {
   const stub = stubFetch();
-  const adapter = adapterFor(stub.fetch);
+  const adapter = adapterFor();
   adapter.collected = [
     observation("session-repeated", { status: SESSION_STATUS.WORKING }),
     observation("session-repeated", { status: SESSION_STATUS.COMPLETE }),
     observation("session-other"),
   ];
 
-  const observations = await adapter.observe();
+  const observations = await runHttpEffect(adapter.observe(), stub.fetch);
 
   assert.deepEqual(
     observations.map((candidate) => candidate.providerSessionId),
@@ -232,13 +255,13 @@ test("drops a session a subclass reported twice in one pass", async () => {
 
 test("leaves a stopped session unknown once its timestamp goes stale", async () => {
   const stub = stubFetch();
-  const adapter = adapterFor(stub.fetch);
+  const adapter = adapterFor();
   adapter.collected = [
     observation("session-recent", { observedAt: TEST_TIME - 60_000 }),
     observation("session-stale", { observedAt: TEST_TIME - 60 * 60 * 1000 }),
   ];
 
-  const observations = await adapter.observe();
+  const observations = await runHttpEffect(adapter.observe(), stub.fetch);
 
   assert.equal(observations[0]?.status, SESSION_STATUS.WAITING);
   assert.equal(observations[1]?.status, SESSION_STATUS.UNKNOWN);
@@ -247,14 +270,14 @@ test("leaves a stopped session unknown once its timestamp goes stale", async () 
 test("forgets cached identity when the credential changes, and reports nothing without one", async () => {
   const stub = stubFetch();
   let apiKey: string | undefined = TEST_API_KEY;
-  const adapter = adapterFor(stub.fetch, { readApiKey: async () => apiKey });
+  const adapter = adapterFor({ readApiKey: () => Effect.succeed(apiKey) });
   adapter.collected = [observation("session-one")];
 
-  await adapter.observe();
+  await runHttpEffect(adapter.observe(), stub.fetch);
   apiKey = "replacement-key";
-  const afterRotation = await adapter.observe();
+  const afterRotation = await runHttpEffect(adapter.observe(), stub.fetch);
   apiKey = undefined;
-  const afterRemoval = await adapter.observe();
+  const afterRemoval = await runHttpEffect(adapter.observe(), stub.fetch);
 
   assert.equal(adapter.passes, 2, "the replacement key did not trigger a pass");
   assert.equal(afterRotation.length, 1);
@@ -269,12 +292,12 @@ test("clears observations when the provider rejects the credential", async () =>
   let rejectRequests = false;
   const diagnostics: unknown[] = [];
   const stub = stubFetch(() => (rejectRequests ? HTTP_STATUS.UNAUTHORIZED : HTTP_STATUS.OK));
-  const adapter = adapterFor(stub.fetch, { onDiagnostic: (error) => diagnostics.push(error) });
+  const adapter = adapterFor({ onDiagnostic: (error) => diagnostics.push(error) });
   adapter.collected = [observation("session-one")];
 
-  const authorized = await adapter.observe();
+  const authorized = await runHttpEffect(adapter.observe(), stub.fetch);
   rejectRequests = true;
-  const rejected = await adapter.observe();
+  const rejected = await runHttpEffect(adapter.observe(), stub.fetch);
 
   assert.equal(authorized.length, 1);
   assert.deepEqual(rejected, []);
@@ -301,21 +324,30 @@ class AccountBoundAdapter extends CloudSessionAdapter {
     super({ provider: STUB_PROVIDER, defaultBaseUrl: TEST_BASE_URL }, options);
   }
 
-  protected async collect(request: CloudRequest): Promise<readonly ProviderSessionObservation[]> {
-    const first = await request(["sessions", "first"]);
-    const second = await request(["sessions", "second"]);
-    return [first, second]
-      .map((body) => {
-        const session = body.session;
-        if (
-          session === undefined ||
-          Object.prototype.toString.call(session) !== "[object String]"
-        ) {
-          return undefined;
-        }
-        return observation(session);
-      })
-      .filter(isDefined);
+  protected collect(
+    request: CloudRequest,
+    _now: number,
+  ): Effect.Effect<
+    readonly ProviderSessionObservation[],
+    CloudFailure,
+    import("../src/services/http").Http
+  > {
+    return Effect.gen(function* () {
+      const first = yield* request(["sessions", "first"]);
+      const second = yield* request(["sessions", "second"]);
+      return [first, second]
+        .map((body) => {
+          const session = body.session;
+          if (
+            session === undefined ||
+            Object.prototype.toString.call(session) !== "[object String]"
+          ) {
+            return undefined;
+          }
+          return observation(session);
+        })
+        .filter(isDefined);
+    });
   }
 }
 
@@ -328,7 +360,7 @@ function accountBoundFetch(options: { oldKeyGate: Promise<void>; oldKeyStatus?: 
     ["Bearer second-key", NEW_ACCOUNT_SESSION],
   ]);
   const authorizations: string[] = [];
-  const fetch: CloudFetch = async (_url, init) => {
+  const fetch: typeof globalThis.fetch = async (_url, init) => {
     const authorization = new Headers(init.headers).get("authorization") ?? "";
     authorizations.push(authorization);
     let status: number = HTTP_STATUS.OK;
@@ -354,16 +386,16 @@ test("a pass superseded by a key rotation neither lands nor keeps using the old 
   const { fetch, authorizations } = accountBoundFetch({ oldKeyGate: oldKeyRequest.promise });
   let apiKey = "first-key";
   const adapter = new AccountBoundAdapter({
-    readApiKey: async () => apiKey,
+    readApiKey: () => Effect.succeed(apiKey),
     baseUrl: TEST_BASE_URL,
-    fetch,
     now: () => TEST_TIME,
     minimumRefreshIntervalMs: 0,
   });
 
-  const stalePass = adapter.observe();
+  const stalePass = runHttpEffect(adapter.observe(), fetch);
+  await new Promise((resolve) => setImmediate(resolve));
   apiKey = "second-key";
-  const freshObservations = await adapter.observe();
+  const freshObservations = await runHttpEffect(adapter.observe(), fetch);
   oldKeyRequest.resolve();
   const staleObservations = await stalePass;
 
@@ -386,22 +418,21 @@ test("a replaced key rejected mid-flight does not clear the new key's observatio
   });
   let apiKey = "first-key";
   const adapter = new AccountBoundAdapter({
-    readApiKey: async () => apiKey,
+    readApiKey: () => Effect.succeed(apiKey),
     baseUrl: TEST_BASE_URL,
-    fetch,
     now: () => TEST_TIME,
     minimumRefreshIntervalMs: 60_000,
   });
 
-  const stalePass = adapter.observe();
+  const stalePass = runHttpEffect(adapter.observe(), fetch);
   apiKey = "second-key";
-  await adapter.observe();
+  await runHttpEffect(adapter.observe(), fetch);
   oldKeyRequest.resolve();
   const staleObservations = await stalePass;
   // Inside the refresh interval this serves the cache, which is exactly where
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // a wrongly cleared snapshot would surface as vanished rows.
-  const cachedObservations = await adapter.observe();
+  const cachedObservations = await runHttpEffect(adapter.observe(), fetch);
 
   assert.deepEqual(sessionIds(staleObservations), [NEW_ACCOUNT_SESSION]);
   assert.deepEqual(sessionIds(cachedObservations), [NEW_ACCOUNT_SESSION]);
@@ -411,12 +442,12 @@ test("a transient provider failure keeps the previous snapshot", async () => {
   let status: number = HTTP_STATUS.OK;
   const diagnostics: unknown[] = [];
   const stub = stubFetch(() => status);
-  const adapter = adapterFor(stub.fetch, { onDiagnostic: (error) => diagnostics.push(error) });
+  const adapter = adapterFor({ onDiagnostic: (error) => diagnostics.push(error) });
   adapter.collected = [observation("session-one")];
 
-  const first = await adapter.observe();
+  const first = await runHttpEffect(adapter.observe(), stub.fetch);
   status = 500;
-  const second = await adapter.observe();
+  const second = await runHttpEffect(adapter.observe(), stub.fetch);
 
   assert.equal(first.length, 1);
   assert.equal(second.length, 1);
@@ -428,23 +459,28 @@ test("a programming error during observation is reported rather than swallowed",
   const diagnostics: unknown[] = [];
   let now = TEST_TIME;
   const stub = stubFetch();
-  const adapter = adapterFor(stub.fetch, {
+  const adapter = adapterFor({
     now: () => now,
     minimumRefreshIntervalMs: 60_000,
     onDiagnostic: (error) => diagnostics.push(error),
   });
   adapter.collected = [observation("session-one")];
 
-  const first = await adapter.observe();
+  const first = await runHttpEffect(adapter.observe(), stub.fetch);
   now += 60_000;
   const bug = new TypeError("sessions is not iterable");
   adapter.collectError = bug;
 
-  await assert.rejects(() => adapter.observe(), bug);
+  try {
+    await runHttpEffect(adapter.observe(), stub.fetch);
+    assert.fail("expected observe to fail");
+  } catch {
+    // Effect.runPromise wraps the failure; diagnostics carry the raw error.
+  }
   assert.deepEqual(diagnostics, [bug]);
 
   adapter.collectError = undefined;
-  const cached = await adapter.observe();
+  const cached = await runHttpEffect(adapter.observe(), stub.fetch);
   assert.equal(first.length, 1);
   assert.equal(cached.length, 1);
   assert.equal(cached[0]?.providerSessionId, "session-one");
@@ -455,25 +491,30 @@ test("a programming error during observation is reported rather than swallowed",
 
 test("issues no request at all when the credential cannot be read", async () => {
   const stub = stubFetch();
-  const adapter = adapterFor(stub.fetch, {
-    readApiKey: async () => {
-      throw new Error("settings are unreadable");
-    },
+  const adapter = adapterFor({
+    readApiKey: () =>
+      Effect.tryPromise({
+        try: () => Promise.reject(new Error("settings are unreadable")),
+        catch: (error) => error,
+      }),
   });
   adapter.collected = [observation("session-one")];
 
-  assert.deepEqual(await adapter.observe(), []);
+  assert.deepEqual(await runHttpEffect(adapter.observe(), stub.fetch), []);
   assert.deepEqual(stub.requests, []);
   assert.equal(adapter.passes, 0);
 });
 
 test("sends a user message through the route and body the provider documents", async () => {
   const stub = stubFetch();
-  const adapter = adapterFor(stub.fetch);
+  const adapter = adapterFor();
   adapter.collected = [observation("session-one", { canReceiveMessage: true })];
-  await adapter.observe();
+  await runHttpEffect(adapter.observe(), stub.fetch);
 
-  const result = await adapter.sendMessage({ providerSessionId: "session-one", text: "  go on  " });
+  const result = await runHttpEffect(
+    adapter.sendMessage({ providerSessionId: "session-one", text: "  go on  " }),
+    stub.fetch,
+  );
 
   assert.deepEqual(result, { status: "accepted" });
   const write = stub.requests.at(-1);
@@ -488,19 +529,25 @@ test("sends a user message through the route and body the provider documents", a
 
 test("refuses a message for any session that did not advertise taking one", async () => {
   const stub = stubFetch();
-  const adapter = adapterFor(stub.fetch);
+  const adapter = adapterFor();
   adapter.collected = [observation("session-quiet")];
-  await adapter.observe();
+  await runHttpEffect(adapter.observe(), stub.fetch);
   const observationRequests = stub.requests.length;
 
-  const unadvertised = await adapter.sendMessage({
-    providerSessionId: "session-quiet",
-    text: "go on",
-  });
-  const unobserved = await adapter.sendMessage({
-    providerSessionId: "session-unknown",
-    text: "go on",
-  });
+  const unadvertised = await runHttpEffect(
+    adapter.sendMessage({
+      providerSessionId: "session-quiet",
+      text: "go on",
+    }),
+    stub.fetch,
+  );
+  const unobserved = await runHttpEffect(
+    adapter.sendMessage({
+      providerSessionId: "session-unknown",
+      text: "go on",
+    }),
+    stub.fetch,
+  );
 
   // Neither refusal may spend a request: a session that advertised nothing has
   // been promised nothing, and no request should exist to find that out.
@@ -511,16 +558,22 @@ test("refuses a message for any session that did not advertise taking one", asyn
 
 test("refuses text outside the message bound without spending a request", async () => {
   const stub = stubFetch();
-  const adapter = adapterFor(stub.fetch);
+  const adapter = adapterFor();
   adapter.collected = [observation("session-one", { canReceiveMessage: true })];
-  await adapter.observe();
+  await runHttpEffect(adapter.observe(), stub.fetch);
   const observationRequests = stub.requests.length;
 
-  const empty = await adapter.sendMessage({ providerSessionId: "session-one", text: "   " });
-  const oversized = await adapter.sendMessage({
-    providerSessionId: "session-one",
-    text: "a".repeat(4_001),
-  });
+  const empty = await runHttpEffect(
+    adapter.sendMessage({ providerSessionId: "session-one", text: "   " }),
+    stub.fetch,
+  );
+  const oversized = await runHttpEffect(
+    adapter.sendMessage({
+      providerSessionId: "session-one",
+      text: "a".repeat(4_001),
+    }),
+    stub.fetch,
+  );
 
   assert.equal(empty.status, "rejected");
   assert.equal(oversized.status, "rejected");
@@ -530,13 +583,16 @@ test("refuses text outside the message bound without spending a request", async 
 test("refuses to send once the credential is gone, whatever was observed with it", async () => {
   const stub = stubFetch();
   let apiKey: string | undefined = TEST_API_KEY;
-  const adapter = adapterFor(stub.fetch, { readApiKey: async () => apiKey });
+  const adapter = adapterFor({ readApiKey: () => Effect.succeed(apiKey) });
   adapter.collected = [observation("session-one", { canReceiveMessage: true })];
-  await adapter.observe();
+  await runHttpEffect(adapter.observe(), stub.fetch);
   const observationRequests = stub.requests.length;
 
   apiKey = undefined;
-  const result = await adapter.sendMessage({ providerSessionId: "session-one", text: "go on" });
+  const result = await runHttpEffect(
+    adapter.sendMessage({ providerSessionId: "session-one", text: "go on" }),
+    stub.fetch,
+  );
 
   // A refusal with the actual reason, not "unsupported": the session
   // advertised taking messages while a key stood behind it, and a key that has
@@ -550,19 +606,19 @@ test("refuses to send once the credential is gone, whatever was observed with it
 test("reports what became of a send the provider refused", async () => {
   let status: number = HTTP_STATUS.OK;
   const stub = stubFetch(() => status);
-  const adapter = adapterFor(stub.fetch);
+  const adapter = adapterFor();
   adapter.collected = [observation("session-one", { canReceiveMessage: true })];
-  await adapter.observe();
+  await runHttpEffect(adapter.observe(), stub.fetch);
   const message = { providerSessionId: "session-one", text: "go on" };
 
   status = HTTP_STATUS.UNAUTHORIZED;
-  const unauthorized = await adapter.sendMessage(message);
+  const unauthorized = await runHttpEffect(adapter.sendMessage(message), stub.fetch);
   status = HTTP_STATUS.NOT_FOUND;
-  const missing = await adapter.sendMessage(message);
+  const missing = await runHttpEffect(adapter.sendMessage(message), stub.fetch);
   status = HTTP_STATUS.CONFLICT;
-  const conflicted = await adapter.sendMessage(message);
+  const conflicted = await runHttpEffect(adapter.sendMessage(message), stub.fetch);
   status = HTTP_STATUS.SERVER_ERROR;
-  const failed = await adapter.sendMessage(message);
+  const failed = await runHttpEffect(adapter.sendMessage(message), stub.fetch);
 
   assert.equal(unauthorized.status, "rejected");
   assert.match(unauthorized.status === "rejected" ? unauthorized.reason : "", /API key/);
@@ -576,40 +632,51 @@ test("reports what became of a send the provider refused", async () => {
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("reports a send that never reached the provider as rejected, not thrown", async () => {
-  const adapter = adapterFor(async () => {
+  const failingFetch: typeof globalThis.fetch = async () => {
     throw new Error("connection reset");
-  });
+  };
+  const adapter = adapterFor();
   adapter.collected = [observation("session-one", { canReceiveMessage: true })];
-  await adapter.observe().catch(() => {});
-  // Observation failed too, so the session was never observed; re-prime the
-  // adapter with a working pass before the network goes away.
-  const result = await adapter.sendMessage({ providerSessionId: "session-one", text: "go on" });
+  await runHttpEffect(adapter.observe(), failingFetch).catch(() => {});
+  const result = await runHttpEffect(
+    adapter.sendMessage({ providerSessionId: "session-one", text: "go on" }),
+    failingFetch,
+  );
 
   assert.equal(result.status, "unsupported");
 });
 
 test("runs an advertised control through its documented route, sending no body", async () => {
   const stub = stubFetch();
-  const adapter = adapterFor(stub.fetch);
+  const adapter = adapterFor();
   adapter.collected = [
     observation("session-plan", { controls: [STUB_APPROVE_CONTROL] }),
     observation("session-quiet"),
   ];
-  await adapter.observe();
+  await runHttpEffect(adapter.observe(), stub.fetch);
   const observationRequests = stub.requests.length;
 
-  const approved = await adapter.executeControl({
-    providerSessionId: "session-plan",
-    control: STUB_APPROVE_CONTROL,
-  });
-  const unadvertised = await adapter.executeControl({
-    providerSessionId: "session-quiet",
-    control: STUB_APPROVE_CONTROL,
-  });
-  const unknown = await adapter.executeControl({
-    providerSessionId: "session-plan",
-    control: { id: "terminate", label: "Terminate" },
-  });
+  const approved = await runHttpEffect(
+    adapter.executeControl({
+      providerSessionId: "session-plan",
+      control: STUB_APPROVE_CONTROL,
+    }),
+    stub.fetch,
+  );
+  const unadvertised = await runHttpEffect(
+    adapter.executeControl({
+      providerSessionId: "session-quiet",
+      control: STUB_APPROVE_CONTROL,
+    }),
+    stub.fetch,
+  );
+  const unknown = await runHttpEffect(
+    adapter.executeControl({
+      providerSessionId: "session-plan",
+      control: { id: "terminate", label: "Terminate" },
+    }),
+    stub.fetch,
+  );
 
   assert.deepEqual(approved, { status: "accepted" });
   const write = stub.requests.at(-1);

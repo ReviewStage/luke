@@ -335,7 +335,7 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
       // pass-scoped request, because passes keep coming while it runs and each
       // would discard exactly the slow answer this exists for; only a
       // credential change may do that.
-      yield* Effect.fork(this.#refreshRepositories(now));
+      yield* Effect.forkDaemon(this.#refreshRepositories(now));
 
       const body = yield* request(CURSOR_ROUTE.AGENTS, {
         [CURSOR_QUERY.LIMIT]: String(CURSOR_ADAPTER_DEFAULTS.AGENT_PAGE_SIZE),

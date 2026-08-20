@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { SESSION_STATUS } from "@sidecar/core";
-import type { CloudFetch } from "../src/cloud-session-adapter";
+import { Effect } from "effect";
 import { CONDUCTOR_PROVIDER, ConductorSessionAdapter } from "../src/conductor-adapter";
 import { describeCloudAdapterContract } from "./support/cloud-adapter-contract";
 import { HTTP_STATUS, jsonResponse, recordingFetch } from "./support/http-fake";
+import { runHttpEffect } from "./support/run-effect";
 
 const TEST_TIME = Date.parse("2026-08-12T02:45:00.000Z");
 const TEST_BASE_URL = "https://api.conductor.test";
@@ -246,26 +247,28 @@ function fakeConductorApi(api: TestApi) {
 }
 
 function adapterFor(
-  fetch: CloudFetch,
   overrides: {
     apiKey?: string | undefined;
-    readApiKey?: () => Promise<string | undefined>;
+    readApiKey?: () => Effect.Effect<
+      string | undefined,
+      unknown,
+      import("../src/services/http").Http
+    >;
     now?: () => number;
     minimumRefreshIntervalMs?: number;
   } = {},
 ): ConductorSessionAdapter {
   const apiKey = "apiKey" in overrides ? overrides.apiKey : TEST_API_KEY;
   return new ConductorSessionAdapter({
-    readApiKey: overrides.readApiKey ?? (async () => apiKey),
+    readApiKey: overrides.readApiKey ?? (() => Effect.succeed(apiKey)),
     baseUrl: TEST_BASE_URL,
-    fetch,
     now: overrides.now ?? (() => TEST_TIME),
     minimumRefreshIntervalMs: overrides.minimumRefreshIntervalMs ?? 0,
   });
 }
 
 test("declares every provider operation on one adapter interface", () => {
-  const adapter = adapterFor(async () => new Response("{}", { status: 200 }));
+  const adapter = adapterFor();
   assert.ok(adapter.sendMessage instanceof Function);
   assert.ok(adapter.executeControl instanceof Function);
   assert.ok(adapter.createWorkspace instanceof Function);
@@ -308,7 +311,8 @@ describeCloudAdapterContract("Conductor", (options) => {
     return api.fetch(url, init);
   };
   return {
-    adapter: adapterFor(fetch, options),
+    adapter: adapterFor(options),
+    fetch,
     requestCount: () => api.requests.length,
     credentials: () =>
       api.requests
@@ -334,7 +338,7 @@ test("observes cloud sessions the signed-in user created, under their own names"
     ],
   });
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
 
   assert.deepEqual(CONDUCTOR_PROVIDER, { id: "conductor", displayName: "Conductor" });
   assert.equal(observations.length, 1);
@@ -396,7 +400,7 @@ test("reports an idle session as waiting and an errored session with its reason"
     ],
   });
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
 
   assert.equal(observations.length, 2);
   assert.equal(observations[0]?.status, SESSION_STATUS.WAITING);
@@ -428,7 +432,7 @@ test("words a workspace still being built onto its rows, ready and asleep say no
     ],
   });
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
   const byId = new Map(observations.map((entry) => [entry.providerSessionId, entry]));
 
   // A workspace being stood up or rebuilt is why its chat sits quiet, so the
@@ -476,7 +480,7 @@ test("reports the failure that kept a workspace from coming up, behind the chat'
     ],
   });
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
   const byId = new Map(observations.map((entry) => [entry.providerSessionId, entry]));
 
   assert.equal(
@@ -508,7 +512,7 @@ test("a failed lifecycle read costs the workspace's words, never the pass", asyn
     ],
   });
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
   const byId = new Map(observations.map((entry) => [entry.providerSessionId, entry]));
 
   assert.equal(observations.length, 1);
@@ -560,7 +564,7 @@ test("reads a settled chat's parting words from the transcripts view as its reca
     ],
   });
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
 
   assert.equal(observations.length, 2);
   const idle = observations.find((candidate) => candidate.providerSessionId === IDLE_SESSION_UUID);
@@ -626,7 +630,7 @@ test("keeps parting words off a chat that is still working or newly failed", asy
     ],
   });
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
 
   assert.equal(observations.length, 2);
   for (const observation of observations) {
@@ -671,7 +675,7 @@ test("reports no recap for a tail it cannot attribute to the agent", async () =>
     ],
   });
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
 
   assert.equal(observations.length, 2);
   for (const observation of observations) {
@@ -696,7 +700,7 @@ test("cuts a recap at the recap bound", async () => {
     ],
   });
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
 
   assert.equal(observations[0]?.recap?.length, 500);
 });
@@ -729,7 +733,7 @@ test("keeps a session id that is not a UUID out of the read document", async () 
     ],
   });
 
-  await adapterFor(api.fetch).observe();
+  await runHttpEffect(adapterFor().observe(), api.fetch);
 
   const reads = api.requests.filter((request) => request.pathname === "/v0/sql");
   assert.equal(reads.length, 1);
@@ -751,7 +755,7 @@ test("keeps a session id that is not a UUID out of the read document", async () 
       },
     ],
   });
-  await adapterFor(uuidlessApi.fetch).observe();
+  await runHttpEffect(adapterFor().observe(), uuidlessApi.fetch);
   assert.equal(
     uuidlessApi.requests.every((request) => request.method === "GET"),
     true,
@@ -778,7 +782,7 @@ test("a refused transcripts read costs the recap and agent kind, never the pass"
     sqlHttpStatus: HTTP_STATUS.SERVER_ERROR,
   });
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.status, SESSION_STATUS.WAITING);
@@ -805,7 +809,7 @@ test("a refused transcripts read costs the recap and agent kind, never the pass"
     sqlHttpStatus: HTTP_STATUS.UNAUTHORIZED,
   });
 
-  const scopedKeyObservations = await adapterFor(scopedKeyApi.fetch).observe();
+  const scopedKeyObservations = await runHttpEffect(adapterFor().observe(), scopedKeyApi.fetch);
 
   assert.equal(scopedKeyObservations.length, 1);
   assert.equal(scopedKeyObservations[0]?.status, SESSION_STATUS.WAITING);
@@ -840,7 +844,7 @@ test("reports every chat in a workspace, each grouped under it", async () => {
     ],
   });
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
   const byId = new Map(observations.map((entry) => [entry.providerSessionId, entry]));
 
   assert.equal(observations.length, 2);
@@ -878,7 +882,7 @@ test("does not carry a past failure into a session that recovered", async () => 
     ],
   });
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
 
   // `lastError` is the last failure a session ever had, not its current state,
   // and the row puts an error ahead of everything else on it.
@@ -902,7 +906,7 @@ test("keeps an errored session errored after it goes stale", async () => {
     ],
   });
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
 
   // A failure does not heal by going stale, unlike an idle chat.
   assert.equal(observations[0]?.status, SESSION_STATUS.ERROR);
@@ -934,7 +938,7 @@ test("titles each chat by its own name and its group by the workspace's", async 
     ],
   });
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
 
   assert.deepEqual(
     observations.map((observation) => observation.title),
@@ -974,7 +978,7 @@ test("leaves a filed-away chat off the roster while its workspace stays", async 
     ],
   });
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
 
   assert.deepEqual(
     observations.map((candidate) => candidate.providerSessionId),
@@ -1014,7 +1018,7 @@ test("keeps reporting a long turn as working", async () => {
     ],
   });
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
@@ -1052,7 +1056,7 @@ test("does not treat a long-idle chat as waiting because its workspace is busy",
     ],
   });
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
 
   assert.equal(observations[0]?.providerSessionId, "session-abandoned");
   assert.equal(observations[0]?.status, SESSION_STATUS.UNKNOWN);
@@ -1089,7 +1093,7 @@ test("ignores workspaces created by another user and workspaces without a creato
     ],
   });
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
 
   assert.deepEqual(observations, []);
   assert.equal(
@@ -1108,7 +1112,7 @@ test("keeps a workspace untouched since the day before yesterday", async () => {
     ],
   });
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
 
   assert.deepEqual(
     observations.map((candidate) => candidate.providerSessionId),
@@ -1133,7 +1137,7 @@ test("observes every workspace and chat the pages hold", async () => {
     })),
   });
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
 
   assert.deepEqual(
     observations.map((observation) => observation.providerSessionId),
@@ -1168,7 +1172,7 @@ test("lets a crowded workspace keep every chat beside its quiet neighbour", asyn
     ],
   });
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
   const observedIds = observations.map((observation) => observation.providerSessionId);
 
   // A crowded workspace costs no one anything: all of its chats are rows, and
@@ -1200,7 +1204,7 @@ test("keeps only the open chats of a workspace that also holds filed-away ones",
     ],
   });
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
 
   // The filed-away chats earn no rows; the one still open is the workspace's
   // only voice, and it reports its own state.
@@ -1229,11 +1233,12 @@ test("clears observations when Conductor rejects the API key", async () => {
   let rejectRequests = false;
   const gatedFetch: CloudFetch = async (url, init) =>
     rejectRequests ? jsonResponse({}, HTTP_STATUS.UNAUTHORIZED) : api.fetch(url, init);
-  const adapter = adapterFor(gatedFetch);
+  const fetch = gatedFetch;
+  const adapter = adapterFor();
 
-  const authorized = await adapter.observe();
+  const authorized = await runHttpEffect(adapter.observe(), fetch);
   rejectRequests = true;
-  const rejected = await adapter.observe();
+  const rejected = await runHttpEffect(adapter.observe(), fetch);
 
   assert.equal(authorized.length, 1);
   assert.deepEqual(rejected, []);
@@ -1261,7 +1266,7 @@ test("keeps observing when one session's status cannot be read", async () => {
     ],
   });
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
   const byId = new Map(observations.map((entry) => [entry.providerSessionId, entry]));
 
   // One chat's unreadable status costs nobody a row: the readable sibling
@@ -1310,7 +1315,7 @@ test("advertises a message for any open chat, a stop mid-turn, and an archive on
     ],
   });
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
   const byId = new Map(observations.map((entry) => [entry.providerSessionId, entry]));
 
   assert.equal(byId.get("session-idle")?.canReceiveMessage, true);
@@ -1357,7 +1362,7 @@ test("keeps the archive off every chat of a workspace while a sibling works", as
     ],
   });
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
   const byId = new Map(observations.map((entry) => [entry.providerSessionId, entry]));
 
   // The idle chat's own turn is settled, but the workspace an archive acts on
@@ -1384,7 +1389,7 @@ test("keeps the archive off a workspace whose chat's state could not be read", a
     ],
   });
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
 
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // An unread status is not a settled one: the chat stands as unknown rather
@@ -1427,7 +1432,7 @@ test("leaves a filed-away workspace and its chats off the roster entirely", asyn
     ],
   });
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
 
   assert.deepEqual(
     observations.map((candidate) => candidate.providerSessionId),
@@ -1468,7 +1473,7 @@ test("leaves a workspace whose lifecycle stands archived off the roster", async 
     ],
   });
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
 
   assert.deepEqual(
     observations.map((candidate) => candidate.providerSessionId),
@@ -1501,13 +1506,17 @@ test("hands a user prompt to Conductor's documented message endpoint", async () 
       },
     ],
   });
-  const adapter = adapterFor(api.fetch);
-  await adapter.observe();
+  const fetch = api.fetch;
+  const adapter = adapterFor();
+  await runHttpEffect(adapter.observe(), fetch);
 
-  const result = await adapter.sendMessage({
-    providerSessionId: "session-idle",
-    text: "Rebase onto main before continuing",
-  });
+  const result = await runHttpEffect(
+    adapter.sendMessage({
+      providerSessionId: "session-idle",
+      text: "Rebase onto main before continuing",
+    }),
+    fetch,
+  );
 
   assert.deepEqual(result, { status: "accepted" });
   const write = api.requests.at(-1);
@@ -1534,13 +1543,17 @@ test("stops a working turn through Conductor's cancel endpoint, sending no body"
       },
     ],
   });
-  const adapter = adapterFor(api.fetch);
-  await adapter.observe();
+  const fetch = api.fetch;
+  const adapter = adapterFor();
+  await runHttpEffect(adapter.observe(), fetch);
 
-  const result = await adapter.executeControl({
-    providerSessionId: "session-working",
-    control: { id: "cancel-turn", label: "Stop this turn", kind: "stop" },
-  });
+  const result = await runHttpEffect(
+    adapter.executeControl({
+      providerSessionId: "session-working",
+      control: { id: "cancel-turn", label: "Stop this turn", kind: "stop" },
+    }),
+    fetch,
+  );
 
   assert.deepEqual(result, { status: "accepted" });
   const write = api.requests.at(-1);
@@ -1566,15 +1579,19 @@ test("archives the workspace the user saw through Conductor's archive endpoint, 
       },
     ],
   });
-  const adapter = adapterFor(api.fetch);
-  await adapter.observe();
+  const fetch = api.fetch;
+  const adapter = adapterFor();
+  await runHttpEffect(adapter.observe(), fetch);
 
   // Deliberately without a target: the route must be built from the control
   // the adapter itself advertised, never from the caller's copy of it.
-  const result = await adapter.executeControl({
-    providerSessionId: "session-idle",
-    control: { id: "archive-workspace", label: "Archive" },
-  });
+  const result = await runHttpEffect(
+    adapter.executeControl({
+      providerSessionId: "session-idle",
+      control: { id: "archive-workspace", label: "Archive" },
+    }),
+    fetch,
+  );
 
   assert.deepEqual(result, { status: "accepted" });
   const write = api.requests.at(-1);
@@ -1601,21 +1618,25 @@ test("refuses to archive a workspace no row advertised, before any request exist
       },
     ],
   });
-  const adapter = adapterFor(api.fetch);
-  await adapter.observe();
+  const fetch = api.fetch;
+  const adapter = adapterFor();
+  await runHttpEffect(adapter.observe(), fetch);
   const requestsBefore = api.requests.length;
 
   // A working workspace advertised only the turn's stop, so an archive ask
   // has nothing behind it and no request exists — whatever target the caller
   // writes into their copy of the control.
-  const result = await adapter.executeControl({
-    providerSessionId: "session-working",
-    control: {
-      id: "archive-workspace",
-      label: "Archive",
-      target: "workspace-active",
-    },
-  });
+  const result = await runHttpEffect(
+    adapter.executeControl({
+      providerSessionId: "session-working",
+      control: {
+        id: "archive-workspace",
+        label: "Archive",
+        target: "workspace-active",
+      },
+    }),
+    fetch,
+  );
 
   assert.deepEqual(result, { status: "unsupported" });
   assert.equal(api.requests.length, requestsBefore);
@@ -1629,12 +1650,13 @@ test("offers the projects the last pass listed as places a workspace can be crea
     workspaces: [],
     sessions: [],
   });
-  const adapter = adapterFor(api.fetch);
+  const fetch = api.fetch;
+  const adapter = adapterFor();
 
   // Nothing is offered before observation, or after the credential goes: the
   // offer is the last pass's own project list and nothing longer-lived.
   assert.deepEqual(adapter.workspaceProjects(), []);
-  await adapter.observe();
+  await runHttpEffect(adapter.observe(), fetch);
   assert.deepEqual(adapter.workspaceProjects(), [
     // Conductor makes an idle workspace happily, so the task is optional.
     { providerProjectId: LUKE_PROJECT.id, repository: "luke", taskSupport: "optional" },
@@ -1648,13 +1670,17 @@ test("creates a workspace through Conductor's documented creation endpoint", asy
     workspaces: [],
     sessions: [],
   });
-  const adapter = adapterFor(api.fetch);
-  await adapter.observe();
+  const fetch = api.fetch;
+  const adapter = adapterFor();
+  await runHttpEffect(adapter.observe(), fetch);
 
-  const named = await adapter.createWorkspace({
-    providerProjectId: LUKE_PROJECT.id,
-    name: "fix the notch panel",
-  });
+  const named = await runHttpEffect(
+    adapter.createWorkspace({
+      providerProjectId: LUKE_PROJECT.id,
+      name: "fix the notch panel",
+    }),
+    fetch,
+  );
 
   // The acceptance names the session the response did, so the surface can
   // open the workspace once observation reports it — an id, never an address.
@@ -1671,7 +1697,10 @@ test("creates a workspace through Conductor's documented creation endpoint", asy
   // Left unnamed, the ask carries no name at all: Conductor generates one, and
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // an empty field is not the same request as an absent one.
-  const unnamed = await adapter.createWorkspace({ providerProjectId: LUKE_PROJECT.id });
+  const unnamed = await runHttpEffect(
+    adapter.createWorkspace({ providerProjectId: LUKE_PROJECT.id }),
+    fetch,
+  );
   assert.deepEqual(unnamed, { status: "accepted", providerSessionId: "session-new" });
   assert.deepEqual(JSON.parse(api.requests.at(-1)?.body ?? ""), { projectId: LUKE_PROJECT.id });
 });
@@ -1684,10 +1713,14 @@ test("an acceptance whose response names no session stays a plain acceptance", a
     sessions: [],
     createWithoutSessionId: true,
   });
-  const adapter = adapterFor(api.fetch);
-  await adapter.observe();
+  const fetch = api.fetch;
+  const adapter = adapterFor();
+  await runHttpEffect(adapter.observe(), fetch);
 
-  const result = await adapter.createWorkspace({ providerProjectId: LUKE_PROJECT.id });
+  const result = await runHttpEffect(
+    adapter.createWorkspace({ providerProjectId: LUKE_PROJECT.id }),
+    fetch,
+  );
 
   // Nothing named means nothing to wait on: the workspace stands unopened
   // rather than correlated by a guess.
@@ -1701,16 +1734,20 @@ test("a chosen agent and model ride the creation, and an unlisted pairing does n
     workspaces: [],
     sessions: [],
   });
-  const adapter = adapterFor(api.fetch);
-  await adapter.observe();
+  const fetch = api.fetch;
+  const adapter = adapterFor();
+  await runHttpEffect(adapter.observe(), fetch);
 
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // A selection the build's table lists is sent exactly as documented, the
   // effort riding along when one was chosen.
-  const chosen = await adapter.createWorkspace({
-    providerProjectId: LUKE_PROJECT.id,
-    agentSelection: { agent: "claude", model: "sonnet", effort: "max" },
-  });
+  const chosen = await runHttpEffect(
+    adapter.createWorkspace({
+      providerProjectId: LUKE_PROJECT.id,
+      agentSelection: { agent: "claude", model: "sonnet", effort: "max" },
+    }),
+    fetch,
+  );
   assert.deepEqual(chosen, { status: "accepted", providerSessionId: "session-new" });
   assert.deepEqual(JSON.parse(api.requests.at(-1)?.body ?? ""), {
     projectId: LUKE_PROJECT.id,
@@ -1720,10 +1757,13 @@ test("a chosen agent and model ride the creation, and an unlisted pairing does n
   });
 
   // No effort chosen sends none, so Conductor's default effort stands.
-  const effortless = await adapter.createWorkspace({
-    providerProjectId: LUKE_PROJECT.id,
-    agentSelection: { agent: "claude", model: "sonnet" },
-  });
+  const effortless = await runHttpEffect(
+    adapter.createWorkspace({
+      providerProjectId: LUKE_PROJECT.id,
+      agentSelection: { agent: "claude", model: "sonnet" },
+    }),
+    fetch,
+  );
   assert.deepEqual(effortless, { status: "accepted", providerSessionId: "session-new" });
   assert.deepEqual(JSON.parse(api.requests.at(-1)?.body ?? ""), {
     projectId: LUKE_PROJECT.id,
@@ -1738,10 +1778,13 @@ test("a chosen agent and model ride the creation, and an unlisted pairing does n
     { agent: "claude", model: "gpt-5.5" },
     { agent: "claude", model: "sonnet", effort: "ultra" },
   ]) {
-    const unlisted = await adapter.createWorkspace({
-      providerProjectId: LUKE_PROJECT.id,
-      agentSelection,
-    });
+    const unlisted = await runHttpEffect(
+      adapter.createWorkspace({
+        providerProjectId: LUKE_PROJECT.id,
+        agentSelection,
+      }),
+      fetch,
+    );
     assert.deepEqual(unlisted, { status: "accepted", providerSessionId: "session-new" });
     assert.deepEqual(JSON.parse(api.requests.at(-1)?.body ?? ""), {
       projectId: LUKE_PROJECT.id,
@@ -1751,7 +1794,7 @@ test("a chosen agent and model ride the creation, and an unlisted pairing does n
   // No choice at all sends no agent and no model, so Conductor's own
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // defaults decide — an absent field is not the same request as a guessed one.
-  await adapter.createWorkspace({ providerProjectId: LUKE_PROJECT.id });
+  await runHttpEffect(adapter.createWorkspace({ providerProjectId: LUKE_PROJECT.id }), fetch);
   assert.deepEqual(JSON.parse(api.requests.at(-1)?.body ?? ""), {
     projectId: LUKE_PROJECT.id,
   });
@@ -1764,21 +1807,28 @@ test("refuses a creation ask for a project the last pass did not list", async ()
     workspaces: [],
     sessions: [],
   });
-  const adapter = adapterFor(api.fetch);
-  await adapter.observe();
+  const fetch = api.fetch;
+  const adapter = adapterFor();
+  await runHttpEffect(adapter.observe(), fetch);
   const requestsBefore = api.requests.length;
 
-  const unlisted = await adapter.createWorkspace({ providerProjectId: "project-unknown" });
+  const unlisted = await runHttpEffect(
+    adapter.createWorkspace({ providerProjectId: "project-unknown" }),
+    fetch,
+  );
 
   // No request exists for a project observation did not see.
   assert.deepEqual(unlisted, { status: "unsupported" });
   assert.equal(api.requests.length, requestsBefore);
 
   // A name outside its bound is refused before a request exists too.
-  const overlong = await adapter.createWorkspace({
-    providerProjectId: LUKE_PROJECT.id,
-    name: "a".repeat(200),
-  });
+  const overlong = await runHttpEffect(
+    adapter.createWorkspace({
+      providerProjectId: LUKE_PROJECT.id,
+      name: "a".repeat(200),
+    }),
+    fetch,
+  );
   assert.equal(overlong.status, "rejected");
   assert.equal(api.requests.length, requestsBefore);
 });
@@ -1790,13 +1840,17 @@ test("hands an opening task to the first session the creation response names", a
     workspaces: [],
     sessions: [],
   });
-  const adapter = adapterFor(api.fetch);
-  await adapter.observe();
+  const fetch = api.fetch;
+  const adapter = adapterFor();
+  await runHttpEffect(adapter.observe(), fetch);
 
-  const result = await adapter.createWorkspace({
-    providerProjectId: LUKE_PROJECT.id,
-    task: "Add a smoke test for the panel motion",
-  });
+  const result = await runHttpEffect(
+    adapter.createWorkspace({
+      providerProjectId: LUKE_PROJECT.id,
+      task: "Add a smoke test for the panel motion",
+    }),
+    fetch,
+  );
 
   assert.deepEqual(result, { status: "accepted", providerSessionId: "session-new" });
   // Two documented writes, in order: the creation, then the message to
@@ -1820,13 +1874,17 @@ test("reports a workspace whose task could not be delivered as exactly that", as
     sessions: [],
     createWithoutSessionId: true,
   });
-  const adapter = adapterFor(api.fetch);
-  await adapter.observe();
+  const fetch = api.fetch;
+  const adapter = adapterFor();
+  await runHttpEffect(adapter.observe(), fetch);
 
-  const result = await adapter.createWorkspace({
-    providerProjectId: LUKE_PROJECT.id,
-    task: "Add a smoke test",
-  });
+  const result = await runHttpEffect(
+    adapter.createWorkspace({
+      providerProjectId: LUKE_PROJECT.id,
+      task: "Add a smoke test",
+    }),
+    fetch,
+  );
 
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // The workspace stands, so claiming failure outright would be as wrong as
@@ -1860,20 +1918,24 @@ test("starts another agent in the workspace behind an observed row", async () =>
       },
     ],
   });
-  const adapter = adapterFor(api.fetch);
-  const observations = await adapter.observe();
+  const fetch = api.fetch;
+  const adapter = adapterFor();
+  const observations = await runHttpEffect(adapter.observe(), fetch);
 
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // The roster row says which agents its workspace can take, exactly as the
   // endpoint takes them.
   assert.deepEqual(observations[0]?.spawnableAgents, ["claude", "codex", "cursor"]);
 
-  const result = await adapter.spawnWorkspaceAgent({
-    providerSessionId: "session-idle",
-    agent: "codex",
-    name: "xyz feature",
-    task: "Build the XYZ feature",
-  });
+  const result = await runHttpEffect(
+    adapter.spawnWorkspaceAgent({
+      providerSessionId: "session-idle",
+      agent: "codex",
+      name: "xyz feature",
+      task: "Build the XYZ feature",
+    }),
+    fetch,
+  );
 
   assert.deepEqual(result, { status: "accepted" });
   const write = api.requests.at(-1);
@@ -1906,17 +1968,21 @@ test("a stored model rides a new agent only as the pairing the table lists", asy
       },
     ],
   });
-  const adapter = adapterFor(api.fetch);
-  await adapter.observe();
+  const fetch = api.fetch;
+  const adapter = adapterFor();
+  await runHttpEffect(adapter.observe(), fetch);
 
   // A model documented for the asked-for agent kind rides along, its effort
   // beside it when one was chosen.
-  const listed = await adapter.spawnWorkspaceAgent({
-    providerSessionId: "session-idle",
-    agent: "codex",
-    model: "gpt-5.6-sol",
-    effort: "ultra",
-  });
+  const listed = await runHttpEffect(
+    adapter.spawnWorkspaceAgent({
+      providerSessionId: "session-idle",
+      agent: "codex",
+      model: "gpt-5.6-sol",
+      effort: "ultra",
+    }),
+    fetch,
+  );
   assert.deepEqual(listed, { status: "accepted" });
   assert.deepEqual(JSON.parse(api.requests.at(-1)?.body ?? ""), {
     workspaceId: "workspace-active",
@@ -1933,11 +1999,14 @@ test("a stored model rides a new agent only as the pairing the table lists", asy
     { model: "sonnet" },
     { model: "gpt-5.6-sol", effort: "not-a-level" },
   ] as const) {
-    const mismatched = await adapter.spawnWorkspaceAgent({
-      providerSessionId: "session-idle",
-      agent: "codex",
-      ...stored,
-    });
+    const mismatched = await runHttpEffect(
+      adapter.spawnWorkspaceAgent({
+        providerSessionId: "session-idle",
+        agent: "codex",
+        ...stored,
+      }),
+      fetch,
+    );
     assert.deepEqual(mismatched, { status: "accepted" });
     assert.deepEqual(JSON.parse(api.requests.at(-1)?.body ?? ""), {
       workspaceId: "workspace-active",
@@ -1961,20 +2030,27 @@ test("refuses to start an agent the row never listed, before any request exists"
       },
     ],
   });
-  const adapter = adapterFor(api.fetch);
-  await adapter.observe();
+  const fetch = api.fetch;
+  const adapter = adapterFor();
+  await runHttpEffect(adapter.observe(), fetch);
   const requestsBefore = api.requests.length;
 
   // An agent kind the observation did not list, and a session the pass did
   // not emit, are both nowhere to land.
-  const unlisted = await adapter.spawnWorkspaceAgent({
-    providerSessionId: "session-idle",
-    agent: "acp",
-  });
-  const unobserved = await adapter.spawnWorkspaceAgent({
-    providerSessionId: "session-unseen",
-    agent: "claude",
-  });
+  const unlisted = await runHttpEffect(
+    adapter.spawnWorkspaceAgent({
+      providerSessionId: "session-idle",
+      agent: "acp",
+    }),
+    fetch,
+  );
+  const unobserved = await runHttpEffect(
+    adapter.spawnWorkspaceAgent({
+      providerSessionId: "session-unseen",
+      agent: "claude",
+    }),
+    fetch,
+  );
 
   assert.deepEqual(unlisted, { status: "unsupported" });
   assert.deepEqual(unobserved, { status: "unsupported" });

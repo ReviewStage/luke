@@ -1,4 +1,7 @@
-import { HTTP_STATUS as CLOUD_HTTP_STATUS, type CloudFetch } from "../../src/cloud-session-adapter";
+import { HTTP_STATUS as CLOUD_HTTP_STATUS } from "../../src/cloud-session-adapter";
+
+export type CloudFetch = typeof globalThis.fetch;
+
 import type { JsonValue } from "./json";
 
 /**

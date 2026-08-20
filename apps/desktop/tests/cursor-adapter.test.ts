@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { SESSION_STATUS } from "@sidecar/core";
-import type { CloudFetch } from "../src/cloud-session-adapter";
+import { Effect } from "effect";
 import { CURSOR_PROVIDER, CursorSessionAdapter } from "../src/cursor-adapter";
 import { describeCloudAdapterContract } from "./support/cloud-adapter-contract";
 import { HTTP_STATUS, jsonResponse, recordingFetch } from "./support/http-fake";
+import { runHttpEffect } from "./support/run-effect";
 
 const TEST_TIME = Date.parse("2026-08-12T02:45:00.000Z");
 const TEST_BASE_URL = "https://api.cursor.test";
@@ -197,26 +198,28 @@ function fakeCursorApi(
 }
 
 function adapterFor(
-  fetch: CloudFetch,
   overrides: {
     apiKey?: string | undefined;
-    readApiKey?: () => Promise<string | undefined>;
+    readApiKey?: () => Effect.Effect<
+      string | undefined,
+      unknown,
+      import("../src/services/http").Http
+    >;
     now?: () => number;
     minimumRefreshIntervalMs?: number;
   } = {},
 ): CursorSessionAdapter {
   const apiKey = "apiKey" in overrides ? overrides.apiKey : TEST_API_KEY;
   return new CursorSessionAdapter({
-    readApiKey: overrides.readApiKey ?? (async () => apiKey),
+    readApiKey: overrides.readApiKey ?? (() => Effect.succeed(apiKey)),
     baseUrl: TEST_BASE_URL,
-    fetch,
     now: overrides.now ?? (() => TEST_TIME),
     minimumRefreshIntervalMs: overrides.minimumRefreshIntervalMs ?? 0,
   });
 }
 
 test("declares every provider operation on one adapter interface", () => {
-  const adapter = adapterFor(async () => new Response("{}", { status: 200 }));
+  const adapter = adapterFor();
   assert.ok(adapter.sendMessage instanceof Function);
   assert.ok(adapter.executeControl instanceof Function);
   assert.ok(adapter.createWorkspace instanceof Function);
@@ -235,12 +238,13 @@ function runningAgent(id: string, updatedAt: number): TestAgent {
 
 describeCloudAdapterContract("Cursor", (options) => {
   const api = fakeCursorApi([runningAgent("contract-agent", TEST_TIME - 1_000)]);
-  const fetch: CloudFetch = async (url, init) => {
+  const fetch: typeof globalThis.fetch = async (url, init) => {
     if (options.failRequests()) throw new Error("network unreachable");
     return api.fetch(url, init);
   };
   return {
-    adapter: adapterFor(fetch, options),
+    adapter: adapterFor(options),
+    fetch,
     requestCount: () => api.requests.length,
     credentials: () =>
       api.requests
@@ -261,7 +265,7 @@ test("observes a running agent under the name Cursor gave it", async () => {
     },
   ]);
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
 
   assert.deepEqual(CURSOR_PROVIDER, { id: "cursor", displayName: "Cursor" });
   assert.equal(observations.length, 1);
@@ -288,9 +292,9 @@ test("observes a running agent under the name Cursor gave it", async () => {
   // named. Nothing else.
   assert.deepEqual(
     api.requests.map((request) => request.pathname),
-    ["/v1/repositories", "/v1/agents", "/v1/agents/agent-running/runs/run-running"],
+    ["/v1/agents", "/v1/repositories", "/v1/agents/agent-running/runs/run-running"],
   );
-  assert.equal(api.requests[1]?.search, "?limit=100");
+  assert.equal(api.requests[0]?.search, "?limit=100");
   assert.equal(
     api.requests.every(
       (request) => request.method === "GET" && request.authorization === `Bearer ${TEST_API_KEY}`,
@@ -319,7 +323,7 @@ test("maps every run state Cursor reports onto a state Luke can show", async () 
     })),
   );
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
 
   assert.deepEqual(
     observations.map((observation) => [observation.providerSessionId, observation.status]),
@@ -352,7 +356,7 @@ test("reports a turn that just ended as waiting however long the run took", asyn
     },
   ]);
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.status, SESSION_STATUS.WAITING);
@@ -374,7 +378,7 @@ test("stops calling a finished run waiting once it goes stale", async () => {
     },
   ]);
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
 
   assert.equal(observations[0]?.status, SESSION_STATUS.UNKNOWN);
 });
@@ -388,7 +392,7 @@ test("keeps reporting a long run as working", async () => {
   const startedAt = TEST_TIME - 60 * 60 * 1000;
   const api = fakeCursorApi([runningAgent("agent-long-run", startedAt)]);
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
@@ -408,14 +412,14 @@ test("reports an archived agent as complete without reading its run", async () =
     },
   ]);
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.status, SESSION_STATUS.COMPLETE);
   assert.equal(observations[0]?.observedAt, TEST_TIME - 20_000);
   assert.deepEqual(
     api.requests.map((request) => request.pathname),
-    ["/v1/repositories", "/v1/agents"],
+    ["/v1/agents", "/v1/repositories"],
   );
 });
 
@@ -424,13 +428,13 @@ test("leaves an agent that has never run unknown without reading a run", async (
     { id: "agent-unrun", name: TEST_AGENT_NAME, createdAt: TEST_TIME - 5_000 },
   ]);
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.status, SESSION_STATUS.UNKNOWN);
   assert.deepEqual(
     api.requests.map((request) => request.pathname),
-    ["/v1/repositories", "/v1/agents"],
+    ["/v1/agents", "/v1/repositories"],
   );
 });
 
@@ -444,7 +448,7 @@ test("leaves a run state this build does not know unknown", async () => {
     },
   ]);
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.status, SESSION_STATUS.UNKNOWN);
@@ -462,7 +466,7 @@ test("keeps observing when one agent's run cannot be read", async () => {
     runningAgent("agent-readable", TEST_TIME - 2_000),
   ]);
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
 
   assert.equal(observations.length, 2);
   assert.equal(observations[0]?.status, SESSION_STATUS.UNKNOWN);
@@ -472,7 +476,7 @@ test("keeps observing when one agent's run cannot be read", async () => {
 test("keeps an agent untouched since the day before yesterday", async () => {
   const api = fakeCursorApi([runningAgent("agent-last-week", TEST_TIME - 48 * 60 * 60 * 1000)]);
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
 
   assert.deepEqual(
     observations.map((observation) => observation.providerSessionId),
@@ -502,7 +506,7 @@ test("takes an agent's repository from the run, because a list page carries none
     },
   ]);
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
 
   assert.equal(observations[0]?.detail?.repository, "sidecar");
   // A run that has pushed nothing names no repository, and the agent is still
@@ -516,7 +520,7 @@ test("falls back to a neutral label for an agent with no name at all", async () 
     { id: "agent-nameless", name: "", omitRepos: true, createdAt: TEST_TIME - 1_000 },
   ]);
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
 
   assert.equal(observations[0]?.title, "Cloud agent");
 });
@@ -534,7 +538,7 @@ test("reports every agent the page holds, the ones that can still change first",
     runningAgent("agent-running-older", TEST_TIME - 3_000),
   ]);
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
 
   assert.deepEqual(
     observations.map((observation) => observation.providerSessionId),
@@ -543,7 +547,7 @@ test("reports every agent the page holds, the ones that can still change first",
 });
 
 test("drops an agent it cannot place in time without losing the rest of the pass", async () => {
-  const fetch: CloudFetch = async () =>
+  const fetch: typeof globalThis.fetch = async () =>
     jsonResponse({
       items: [
         { name: TEST_AGENT_NAME, status: TEST_AGENT_STATUS.ACTIVE },
@@ -559,7 +563,7 @@ test("drops an agent it cannot place in time without losing the rest of the pass
       ],
     });
 
-  const observations = await adapterFor(fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), fetch);
 
   assert.deepEqual(
     observations.map((observation) => observation.providerSessionId),
@@ -570,13 +574,14 @@ test("drops an agent it cannot place in time without losing the rest of the pass
 test("clears observations when Cursor rejects the API key", async () => {
   const api = fakeCursorApi([runningAgent("agent-running", TEST_TIME - 1_000)]);
   let rejectRequests = false;
-  const gatedFetch: CloudFetch = async (url, init) =>
+  const gatedFetch: typeof globalThis.fetch = async (url, init) =>
     rejectRequests ? jsonResponse({}, HTTP_STATUS.UNAUTHORIZED) : api.fetch(url, init);
-  const adapter = adapterFor(gatedFetch);
+  const fetch = gatedFetch;
+  const adapter = adapterFor();
 
-  const authorized = await adapter.observe();
+  const authorized = await runHttpEffect(adapter.observe(), fetch);
   rejectRequests = true;
-  const rejected = await adapter.observe();
+  const rejected = await runHttpEffect(adapter.observe(), fetch);
 
   assert.equal(authorized.length, 1);
   assert.deepEqual(rejected, []);
@@ -610,7 +615,7 @@ test("advertises a follow-up only for an agent whose run has finished", async ()
     },
   ]);
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
   const byId = new Map(observations.map((entry) => [entry.providerSessionId, entry]));
 
   assert.equal(byId.get("agent-finished")?.canReceiveMessage, true);
@@ -635,13 +640,17 @@ test("advertises a follow-up only for an agent whose run has finished", async ()
 
 test("hands a follow-up to Cursor's documented run endpoint", async () => {
   const api = fakeCursorApi([finishedAgent("agent-finished", TEST_TIME - 1_000)]);
-  const adapter = adapterFor(api.fetch);
-  await adapter.observe();
+  const fetch = api.fetch;
+  const adapter = adapterFor();
+  await runHttpEffect(adapter.observe(), fetch);
 
-  const result = await adapter.sendMessage({
-    providerSessionId: "agent-finished",
-    text: "Also add troubleshooting steps",
-  });
+  const result = await runHttpEffect(
+    adapter.sendMessage({
+      providerSessionId: "agent-finished",
+      text: "Also add troubleshooting steps",
+    }),
+    fetch,
+  );
 
   assert.deepEqual(result, { status: "accepted" });
   const write = api.requests.at(-1);
@@ -655,16 +664,20 @@ test("hands a follow-up to Cursor's documented run endpoint", async () => {
 
 test("stops the run the user saw through Cursor's cancel endpoint, sending no body", async () => {
   const api = fakeCursorApi([runningAgent("agent-running", TEST_TIME - 1_000)]);
-  const adapter = adapterFor(api.fetch);
-  await adapter.observe();
+  const fetch = api.fetch;
+  const adapter = adapterFor();
+  await runHttpEffect(adapter.observe(), fetch);
   // Deliberately without a target: the route must be built from the control
   // the adapter itself advertised, never from the caller's copy of it.
   const cancelControl = { id: "cancel-run", label: "Stop this run", kind: "stop" };
 
-  const result = await adapter.executeControl({
-    providerSessionId: "agent-running",
-    control: cancelControl,
-  });
+  const result = await runHttpEffect(
+    adapter.executeControl({
+      providerSessionId: "agent-running",
+      control: cancelControl,
+    }),
+    fetch,
+  );
 
   assert.deepEqual(result, { status: "accepted" });
   const write = api.requests.at(-1);
@@ -686,7 +699,7 @@ test("keeps the archive off an agent whose run could not be read", async () => {
     { id: "agent-never-ran", name: TEST_AGENT_NAME, createdAt: TEST_TIME - 2_000 },
   ]);
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
   const byId = new Map(observations.map((entry) => [entry.providerSessionId, entry]));
 
   // A run that could not be read is not known to have stopped, so that agent
@@ -701,13 +714,17 @@ test("keeps the archive off an agent whose run could not be read", async () => {
 
 test("files a settled agent away through Cursor's archive endpoint, sending no body", async () => {
   const api = fakeCursorApi([finishedAgent("agent-finished", TEST_TIME - 1_000)]);
-  const adapter = adapterFor(api.fetch);
-  await adapter.observe();
+  const fetch = api.fetch;
+  const adapter = adapterFor();
+  await runHttpEffect(adapter.observe(), fetch);
 
-  const result = await adapter.executeControl({
-    providerSessionId: "agent-finished",
-    control: { id: "archive-agent", label: "Archive" },
-  });
+  const result = await runHttpEffect(
+    adapter.executeControl({
+      providerSessionId: "agent-finished",
+      control: { id: "archive-agent", label: "Archive" },
+    }),
+    fetch,
+  );
 
   assert.deepEqual(result, { status: "accepted" });
   const write = api.requests.at(-1);
@@ -721,16 +738,20 @@ test("files a settled agent away through Cursor's archive endpoint, sending no b
 
 test("refuses to archive an agent whose row never advertised it", async () => {
   const api = fakeCursorApi([runningAgent("agent-running", TEST_TIME - 1_000)]);
-  const adapter = adapterFor(api.fetch);
-  await adapter.observe();
+  const fetch = api.fetch;
+  const adapter = adapterFor();
+  await runHttpEffect(adapter.observe(), fetch);
   const requestsBefore = api.requests.length;
 
   // A running agent advertised only its stop, so an archive ask has nothing
   // behind it and no request exists.
-  const result = await adapter.executeControl({
-    providerSessionId: "agent-running",
-    control: { id: "archive-agent", label: "Archive" },
-  });
+  const result = await runHttpEffect(
+    adapter.executeControl({
+      providerSessionId: "agent-running",
+      control: { id: "archive-agent", label: "Archive" },
+    }),
+    fetch,
+  );
 
   assert.deepEqual(result, { status: "unsupported" });
   assert.equal(api.requests.length, requestsBefore);
@@ -739,10 +760,11 @@ test("refuses to archive an agent whose row never advertised it", async () => {
 test("offers the repositories Cursor lists, on a cadence far below the observation pass", async () => {
   const api = fakeCursorApi([], { repositories: [TEST_REPOSITORY] });
   let now = TEST_TIME;
-  const adapter = adapterFor(api.fetch, { now: () => now });
+  const fetch = api.fetch;
+  const adapter = adapterFor({ now: () => now });
 
   assert.deepEqual(adapter.workspaceProjects(), []);
-  await adapter.observe();
+  await runHttpEffect(adapter.observe(), fetch);
   // The offer rides beside the pass, so let it land before asserting on it.
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.deepEqual(adapter.workspaceProjects(), [
@@ -757,22 +779,26 @@ test("offers the repositories Cursor lists, on a cadence far below the observati
     api.requests.filter((request) => request.pathname === "/v1/repositories").length;
   assert.equal(repositoryReads(), 1);
   now += 60_000;
-  await adapter.observe();
+  await runHttpEffect(adapter.observe(), fetch);
   assert.equal(repositoryReads(), 1);
 });
 
 test("launches a new agent through Cursor's documented creation endpoint", async () => {
   const api = fakeCursorApi([], { repositories: [TEST_REPOSITORY] });
-  const adapter = adapterFor(api.fetch);
-  await adapter.observe();
+  const fetch = api.fetch;
+  const adapter = adapterFor();
+  await runHttpEffect(adapter.observe(), fetch);
   // The offer rides beside the pass, so let it land before asserting on it.
   await new Promise((resolve) => setTimeout(resolve, 0));
 
-  const result = await adapter.createWorkspace({
-    providerProjectId: TEST_REPOSITORY,
-    name: "readme touch-up",
-    task: "Add a README with setup instructions",
-  });
+  const result = await runHttpEffect(
+    adapter.createWorkspace({
+      providerProjectId: TEST_REPOSITORY,
+      name: "readme touch-up",
+      task: "Add a README with setup instructions",
+    }),
+    fetch,
+  );
 
   // The acceptance names the agent the launch response did, so the surface
   // can open it once observation reports it — an id, never an address.
@@ -790,21 +816,28 @@ test("launches a new agent through Cursor's documented creation endpoint", async
 
 test("refuses a creation ask Cursor cannot take before any request exists", async () => {
   const api = fakeCursorApi([], { repositories: [TEST_REPOSITORY] });
-  const adapter = adapterFor(api.fetch);
-  await adapter.observe();
+  const fetch = api.fetch;
+  const adapter = adapterFor();
+  await runHttpEffect(adapter.observe(), fetch);
   // The offer rides beside the pass, so let it land before asserting on it.
   await new Promise((resolve) => setTimeout(resolve, 0));
   const requestsBefore = api.requests.length;
 
   // No task, no agent: Cursor documents no way to create one idle.
-  const taskless = await adapter.createWorkspace({ providerProjectId: TEST_REPOSITORY });
+  const taskless = await runHttpEffect(
+    adapter.createWorkspace({ providerProjectId: TEST_REPOSITORY }),
+    fetch,
+  );
   assert.equal(taskless.status, "rejected");
 
   // A repository Cursor did not list is nowhere to create, however real.
-  const unlisted = await adapter.createWorkspace({
-    providerProjectId: "https://github.com/reviewstage/unlisted",
-    task: "Add a README",
-  });
+  const unlisted = await runHttpEffect(
+    adapter.createWorkspace({
+      providerProjectId: "https://github.com/reviewstage/unlisted",
+      task: "Add a README",
+    }),
+    fetch,
+  );
   assert.deepEqual(unlisted, { status: "unsupported" });
   assert.equal(api.requests.length, requestsBefore);
 });
@@ -818,13 +851,14 @@ test("a repository answer that outlives its pass still lands", async () => {
     repositories: [TEST_REPOSITORY],
     gateFirstRepositoriesRead: gate,
   });
-  const adapter = adapterFor(api.fetch);
+  const fetch = api.fetch;
+  const adapter = adapterFor();
 
   // The slow read starts on the first pass and is still in flight while more
   // passes come and go — the very case the wide deadline exists for, so a
   // newer pass must not discard its answer.
-  await adapter.observe();
-  await adapter.observe();
+  await runHttpEffect(adapter.observe(), fetch);
+  await runHttpEffect(adapter.observe(), fetch);
   release();
   await new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -844,13 +878,14 @@ test("a repository answer never lands across a credential change", async () => {
     gateFirstRepositoriesRead: gate,
   });
   let apiKey: string | undefined = TEST_API_KEY;
-  const adapter = adapterFor(api.fetch, { readApiKey: async () => apiKey });
+  const fetch = api.fetch;
+  const adapter = adapterFor({ readApiKey: () => Effect.succeed(apiKey) });
 
-  await adapter.observe();
+  await runHttpEffect(adapter.observe(), fetch);
   // The key is removed while the slow read is in flight: whatever it answers
   // belongs to a credential that no longer stands, and must not be kept.
   apiKey = undefined;
-  await adapter.observe();
+  await runHttpEffect(adapter.observe(), fetch);
   release();
   await new Promise((resolve) => setTimeout(resolve, 0));
 

@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { PROVIDER_ACT_RESULT_STATUS, SESSION_STATUS } from "@sidecar/core";
-import type { CloudFetch } from "../src/cloud-session-adapter";
+import { Effect } from "effect";
 import { COPILOT_PROVIDER, CopilotSessionAdapter } from "../src/copilot-adapter";
 import { describeCloudAdapterContract } from "./support/cloud-adapter-contract";
 import { HTTP_STATUS, jsonResponse, recordingFetch } from "./support/http-fake";
+import { runHttpEffect } from "./support/run-effect";
 
 const TEST_TIME = Date.parse("2026-08-13T02:45:00.000Z");
 const TEST_BASE_URL = "https://github.test";
@@ -106,19 +107,21 @@ function fakeAgentTasksApi(tasks: readonly TestTask[]) {
 }
 
 function adapterFor(
-  fetch: CloudFetch,
   overrides: {
     apiKey?: string | undefined;
-    readApiKey?: () => Promise<string | undefined>;
+    readApiKey?: () => Effect.Effect<
+      string | undefined,
+      unknown,
+      import("../src/services/http").Http
+    >;
     now?: () => number;
     minimumRefreshIntervalMs?: number;
   } = {},
 ): CopilotSessionAdapter {
   const apiKey = "apiKey" in overrides ? overrides.apiKey : TEST_API_KEY;
   return new CopilotSessionAdapter({
-    readApiKey: overrides.readApiKey ?? (async () => apiKey),
+    readApiKey: overrides.readApiKey ?? (() => Effect.succeed(apiKey)),
     baseUrl: TEST_BASE_URL,
-    fetch,
     now: overrides.now ?? (() => TEST_TIME),
     minimumRefreshIntervalMs: overrides.minimumRefreshIntervalMs ?? 0,
   });
@@ -130,12 +133,13 @@ function workingTask(id: string, updatedAt: number): TestTask {
 
 describeCloudAdapterContract("Copilot", (options) => {
   const api = fakeAgentTasksApi([workingTask("contract-task", TEST_TIME - 1_000)]);
-  const fetch: CloudFetch = async (url, init) => {
+  const fetch: typeof globalThis.fetch = async (url, init) => {
     if (options.failRequests()) throw new Error("network unreachable");
     return api.fetch(url, init);
   };
   return {
-    adapter: adapterFor(fetch, options),
+    adapter: adapterFor(options),
+    fetch,
     requestCount: () => api.requests.length,
     credentials: () =>
       api.requests
@@ -145,10 +149,17 @@ describeCloudAdapterContract("Copilot", (options) => {
 });
 
 test("answers through the shared adapter interface while routing no writes", async () => {
-  const adapter = adapterFor(fakeAgentTasksApi([]).fetch);
-  assert.deepEqual(await adapter.sendMessage({ providerSessionId: "missing", text: "hello" }), {
-    status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED,
-  });
+  const { fetch } = fakeAgentTasksApi([]);
+  const adapter = adapterFor();
+  assert.deepEqual(
+    await runHttpEffect(
+      adapter.sendMessage({ providerSessionId: "missing", text: "hello" }),
+      fetch,
+    ),
+    {
+      status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED,
+    },
+  );
   assert.deepEqual(adapter.workspaceProjects(), []);
 });
 
@@ -162,7 +173,7 @@ test("observes a task in progress without exposing prompt-derived text", async (
     },
   ]);
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
 
   assert.deepEqual(COPILOT_PROVIDER, { id: "copilot", displayName: "Copilot" });
   assert.equal(observations.length, 1);
@@ -188,7 +199,7 @@ test("reads the whole pass with one pinned, GitHub-typed list call", async () =>
     workingTask("task-two", TEST_TIME - 2_000),
   ]);
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
 
   assert.equal(observations.length, 2);
   assert.deepEqual(
@@ -226,7 +237,7 @@ test("maps every state GitHub reports onto a state Luke can show", async () => {
     })),
   );
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
 
   assert.deepEqual(
     observations.map((observation) => [observation.providerSessionId, observation.status]),
@@ -254,7 +265,7 @@ test("keeps reporting a long turn as working", async () => {
   const startedAt = TEST_TIME - 60 * 60 * 1000;
   const api = fakeAgentTasksApi([workingTask("task-long-turn", startedAt)]);
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
 
   assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
   assert.equal(observations[0]?.observedAt, startedAt);
@@ -271,7 +282,7 @@ test("stops calling a task that asked for the user waiting once it goes stale", 
     },
   ]);
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
 
   assert.equal(observations[0]?.status, SESSION_STATUS.UNKNOWN);
 });
@@ -287,7 +298,7 @@ test("keeps a completed task complete however long ago it finished", async () =>
     },
   ]);
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
 
   assert.equal(observations[0]?.status, SESSION_STATUS.COMPLETE);
 });
@@ -304,7 +315,7 @@ test("reports a task the user filed away as settled whatever it was doing", asyn
     },
   ]);
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
 
   assert.equal(observations[0]?.status, SESSION_STATUS.COMPLETE);
 });
@@ -312,7 +323,7 @@ test("reports a task the user filed away as settled whatever it was doing", asyn
 test("keeps a task untouched since the day before yesterday", async () => {
   const api = fakeAgentTasksApi([workingTask("task-last-week", TEST_TIME - 48 * 60 * 60 * 1000)]);
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
 
   assert.deepEqual(
     observations.map((observation) => observation.providerSessionId),
@@ -327,7 +338,7 @@ test("orders the pass itself rather than trusting the order GitHub answers in", 
     workingTask("task-middle", TEST_TIME - 2_000),
   ]);
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
 
   assert.deepEqual(
     observations.map((observation) => observation.providerSessionId),
@@ -341,7 +352,7 @@ test("labels a task by its repository, and by neither its name nor nothing", asy
     { id: "task-addressless", omitUrl: true, omitArtifacts: true, createdAt: TEST_TIME - 2_000 },
   ]);
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), api.fetch);
 
   // The repository is read from the task's own API address — the list
   // projection names the repository only by a numeric id.
@@ -353,7 +364,7 @@ test("labels a task by its repository, and by neither its name nor nothing", asy
 });
 
 test("drops a task it cannot place in time without losing the rest of the pass", async () => {
-  const fetch: CloudFetch = async () =>
+  const fetch: typeof globalThis.fetch = async () =>
     jsonResponse({
       tasks: [
         { state: TEST_STATE.IN_PROGRESS },
@@ -362,7 +373,7 @@ test("drops a task it cannot place in time without losing the rest of the pass",
       ],
     });
 
-  const observations = await adapterFor(fetch).observe();
+  const observations = await runHttpEffect(adapterFor().observe(), fetch);
 
   assert.deepEqual(
     observations.map((observation) => observation.providerSessionId),
@@ -373,13 +384,14 @@ test("drops a task it cannot place in time without losing the rest of the pass",
 test("clears observations when GitHub rejects the token", async () => {
   const api = fakeAgentTasksApi([workingTask("task-in-progress", TEST_TIME - 1_000)]);
   let rejectRequests = false;
-  const gatedFetch: CloudFetch = async (url, init) =>
+  const gatedFetch: typeof globalThis.fetch = async (url, init) =>
     rejectRequests ? jsonResponse({}, HTTP_STATUS.UNAUTHORIZED) : api.fetch(url, init);
-  const adapter = adapterFor(gatedFetch);
+  const fetch = gatedFetch;
+  const adapter = adapterFor();
 
-  const authorized = await adapter.observe();
+  const authorized = await runHttpEffect(adapter.observe(), fetch);
   rejectRequests = true;
-  const rejected = await adapter.observe();
+  const rejected = await runHttpEffect(adapter.observe(), fetch);
 
   assert.equal(authorized.length, 1);
   assert.deepEqual(rejected, []);
