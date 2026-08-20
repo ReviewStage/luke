@@ -39,6 +39,7 @@ export class CliFailure extends Data.TaggedError("CliFailure")<{
   readonly failure: CliFailureKind;
   readonly exitCode?: number;
   readonly provider: string;
+  readonly stderr?: string;
 }> {}
 
 export class AccountClientFailure extends Data.TaggedError("AccountClientFailure")<{

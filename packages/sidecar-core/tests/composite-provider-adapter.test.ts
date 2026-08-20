@@ -18,24 +18,29 @@ import {
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceProject,
 } from "../src";
+import { runTestEffect } from "./support/run-effect";
 
 const cursor: SessionProvider = { id: "cursor", displayName: "Cursor" };
 const codex: SessionProvider = { id: "codex", displayName: "Codex" };
 
 class TestProviderAdapter extends SessionProviderAdapterBase {
   readonly provider: SessionProvider;
-  readonly #observations: () => Effect.Effect<readonly ProviderSessionObservation[], never, never>;
+  readonly #observations: () => Effect.Effect<
+    readonly ProviderSessionObservation[],
+    unknown,
+    unknown
+  >;
 
   constructor(
     provider: SessionProvider,
-    observations: () => Effect.Effect<readonly ProviderSessionObservation[], never, never>,
+    observations: () => Effect.Effect<readonly ProviderSessionObservation[], unknown, unknown>,
   ) {
     super();
     this.provider = provider;
     this.#observations = observations;
   }
 
-  observe(): Effect.Effect<readonly ProviderSessionObservation[], never, never> {
+  observe(): Effect.Effect<readonly ProviderSessionObservation[], unknown, unknown> {
     return this.#observations();
   }
 }
@@ -75,7 +80,7 @@ test("reports every observer's sessions as one provider snapshot", async () => {
     ],
   });
 
-  const observations = await Effect.runPromise(adapter.observe());
+  const observations = await runTestEffect(adapter.observe());
 
   assert.equal(adapter.provider, cursor);
   assert.deepEqual(
@@ -99,7 +104,7 @@ test("leaves each half of a provider saying where its own sessions run", async (
   // One provider mark, two places. Merging under one id must not make the
   // sessions on this machine read as though they ran in a datacentre.
   const registry = new InMemorySessionRegistry();
-  await Effect.runPromise(registry.refresh(adapter));
+  await runTestEffect(registry.refresh(adapter));
   const locations = new Map(
     registry.list().map((session) => [session.providerSessionId, session.location]),
   );
@@ -116,20 +121,20 @@ test("keeps a session two observers both reached from being reported twice", asy
     ],
   });
 
-  const observations = await Effect.runPromise(adapter.observe());
+  const observations = await runTestEffect(adapter.observe());
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.title, "Cursor: luke");
   // The registry rejects a snapshot that names one session twice, so this is
   // what keeps a provider observed in two places from failing its own refresh.
   const registry = new InMemorySessionRegistry();
-  assert.equal((await Effect.runPromise(registry.refresh(adapter))).sessions.length, 1);
+  assert.equal((await runTestEffect(registry.refresh(adapter))).sessions.length, 1);
 });
 
 test("fails the pass when one observer fails, rather than retiring its sessions", async () => {
   const registry = new InMemorySessionRegistry();
   const healthy = observerOf(cursor, [observation("local-session")]);
-  await Effect.runPromise(
+  await runTestEffect(
     registry.refresh(
       new CompositeSessionProviderAdapter({ provider: cursor, adapters: [healthy] }),
     ),
@@ -140,8 +145,8 @@ test("fails the pass when one observer fails, rather than retiring its sessions"
     adapters: [healthy, failingObserver(cursor)],
   });
 
-  await assert.rejects(() => Effect.runPromise(adapter.observe()), /unreadable/);
-  await assert.rejects(() => Effect.runPromise(registry.refresh(adapter)), /unreadable/);
+  await assert.rejects(() => runTestEffect(adapter.observe()), /unreadable/);
+  await assert.rejects(() => runTestEffect(registry.refresh(adapter)), /unreadable/);
   assert.deepEqual(
     registry.list().map((session) => session.providerSessionId),
     ["local-session"],
@@ -183,7 +188,7 @@ test("carries a message past observers that have never seen the session", async 
     ],
   });
 
-  const result = await Effect.runPromise(
+  const result = await runTestEffect(
     adapter.sendMessage({ providerSessionId: "cloud-agent", text: "go on" }),
   );
 
@@ -207,7 +212,7 @@ test("lets the observer that holds the session refuse for itself", async () => {
     ],
   });
 
-  const result = await Effect.runPromise(
+  const result = await runTestEffect(
     adapter.sendMessage({ providerSessionId: "cloud-agent", text: "go on" }),
   );
 
@@ -223,7 +228,7 @@ test("answers unsupported when no observer can carry a message", async () => {
     adapters: [observerOf(cursor, [observation("local-session")])],
   });
 
-  const result = await Effect.runPromise(
+  const result = await runTestEffect(
     adapter.sendMessage({ providerSessionId: "local-session", text: "go on" }),
   );
 
@@ -291,7 +296,7 @@ test("offers every observer's projects and carries a creation ask to the one tha
     },
   ]);
 
-  const result = await Effect.runPromise(adapter.createWorkspace({ providerProjectId: "proj-2" }));
+  const result = await runTestEffect(adapter.createWorkspace({ providerProjectId: "proj-2" }));
 
   assert.deepEqual(result, { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED });
   assert.deepEqual(created, [{ providerProjectId: "proj-2" }]);
@@ -304,10 +309,7 @@ test("answers unsupported when no observer offers workspace creation", async () 
   });
 
   assert.deepEqual(adapter.workspaceProjects(), []);
-  assert.deepEqual(
-    await Effect.runPromise(adapter.createWorkspace({ providerProjectId: "proj-1" })),
-    {
-      status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED,
-    },
-  );
+  assert.deepEqual(await runTestEffect(adapter.createWorkspace({ providerProjectId: "proj-1" })), {
+    status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED,
+  });
 });

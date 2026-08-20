@@ -31,6 +31,7 @@ import {
 } from "../src/attention";
 import { ATTENTION_TUNING_EXAMPLES } from "../src/attention-examples";
 import { AttentionRateLimited } from "../src/effect-errors.js";
+import { runTestEffect } from "./support/run-effect";
 
 const claude: SessionProvider = { id: "claude-code", displayName: "Claude Code" };
 const codex: SessionProvider = { id: "codex", displayName: "Codex" };
@@ -89,7 +90,7 @@ async function reviewSessions(
   reviewer: SessionAttentionReviewer,
   sessions: readonly NormalizedSession[],
 ): Promise<readonly AttentionReview[]> {
-  return Effect.runPromise(reviewer.review(sessions));
+  return runTestEffect(reviewer.review(sessions));
 }
 
 test("derives an update only when a session reports something new", () => {
@@ -549,7 +550,7 @@ test("re-checks every decision after the slowest evaluation in the pass lands", 
     now: () => DECIDED_AT,
   });
 
-  const pass = Effect.runPromise(reviewer.review([waitingSession, slowSession]));
+  const pass = runTestEffect(reviewer.review([waitingSession, slowSession]));
   // Let the answered session's evaluation finish completely, so the pass is
   // held open only by the slow sibling.
   await new Promise((resolve) => setImmediate(resolve));
@@ -769,7 +770,7 @@ test("keeps one evaluation in flight per session", async () => {
   });
 
   const working = session(claude, "review");
-  const inFlight = Effect.runPromise(reviewer.review([working]));
+  const inFlight = runTestEffect(reviewer.review([working]));
   await Promise.resolve();
 
   const waiting = session(claude, "review", { status: SESSION_STATUS.WAITING });
