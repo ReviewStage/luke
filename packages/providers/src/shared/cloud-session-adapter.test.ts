@@ -570,18 +570,28 @@ test("reports what became of a send the provider refused", async () => {
   assert.match(failed.status === "rejected" ? failed.reason : "", /500/);
 });
 
-// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-test("reports a send that never reached the provider as rejected, not thrown", async () => {
-  const adapter = adapterFor(async () => {
-    throw new Error("connection reset");
+test("reports an unanswered send as indeterminate and makes the next refresh ask", async () => {
+  let failWrites = false;
+  const { fetch } = recordingFetch((request) => {
+    if (failWrites && request.method === "POST") throw new Error("connection reset");
+    return jsonResponse({});
   });
+  const adapter = adapterFor(fetch, { minimumRefreshIntervalMs: 60_000 });
   adapter.collected = [observation("session-one", { canReceiveMessage: true })];
-  await adapter.observe().catch(() => {});
-  // Observation failed too, so the session was never observed; re-prime the
-  // adapter with a working pass before the network goes away.
+  await adapter.observe();
+
+  failWrites = true;
   const result = await adapter.sendMessage({ providerSessionId: "session-one", text: "go on" });
 
-  assert.equal(result.status, "unsupported");
+  // A thrown fetch cannot say whether the request landed — the provider may
+  // have taken it and only the answer was lost — so the refusal must hedge
+  // rather than claim nothing was sent.
+  assert.equal(result.status, "rejected");
+  assert.match(result.status === "rejected" ? result.reason : "", /may not have landed/);
+  // And because it may have landed, the next refresh asks the provider
+  // instead of serving the cache for the rest of the interval.
+  await adapter.observe();
+  assert.equal(adapter.passes, 2);
 });
 
 test("runs an advertised control through its documented route, sending no body", async () => {
