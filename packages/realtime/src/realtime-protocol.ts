@@ -411,6 +411,7 @@ const PROACTIVE_SPEECH_INSTRUCTIONS = [
 
 const STATUS_EDGE_INSTRUCTIONS = [
   "Summarize the status update in the last message in one or two short sentences, then stop.",
+  'Name the session by its title — never a bare "the session", which leaves the developer guessing which one.',
 ].join("\n");
 
 export const maximumNoticeContextLength = 1_400;
