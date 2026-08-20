@@ -1920,8 +1920,12 @@ export function App(): React.JSX.Element {
   const liveStripText = voiceErrorNotice ?? voiceNoticeShown;
   const liveCaptionTexts =
     lukeCaptions ?? (liveStripText === undefined ? undefined : [liveStripText]);
+  // Words is the resting tone, kept even when nothing is drawn: a chips-only
+  // frame still snapshots into the strip hold, and one that defaulted to a
+  // coloured tone would paint the empty caption as a status line under a
+  // pointer that is only holding chips.
   const captionLiveTone: CaptionTone =
-    lukeCaptions !== undefined
+    lukeCaptions !== undefined || liveStripText === undefined
       ? CAPTION_TONE.WORDS
       : voiceErrorNotice !== undefined
         ? CAPTION_TONE.ERROR
@@ -2696,6 +2700,25 @@ export function App(): React.JSX.Element {
     voiceCallSettled && voiceReading?.remaining === 0
       ? hostedVoiceSpentNote(quotaResetsWhen(voiceReading.resetsAt, Date.now()))
       : undefined;
+
+  // A reset is a moment on a clock, not an event anything else is bound to
+  // raise: an idle capsule may see no render between midnight and morning,
+  // and a spent face left standing into the fresh day would be the very lie
+  // this state exists to prevent. So the reading schedules its own rollover —
+  // one timer at its own resetsAt — and the render it forces finds the
+  // reading expired and lifts every surface at once.
+  const [, forceQuotaRollover] = useState(0);
+  const voiceResetsAt = voiceReading?.resetsAt;
+  useEffect(() => {
+    if (voiceResetsAt === undefined) return;
+    // A slack second past the boundary, so a clock answering exactly at the
+    // reset cannot re-arm a zero-length timer against the same reading.
+    const timer = window.setTimeout(
+      () => forceQuotaRollover((tick) => tick + 1),
+      Math.max(0, voiceResetsAt - Date.now()) + 1_000,
+    );
+    return () => window.clearTimeout(timer);
+  }, [voiceResetsAt]);
 
   // The run-out is told once, at the moment it happens: the meter was seen
   // running this session and now stands spent with no call open. A launch
