@@ -184,7 +184,12 @@ test("observes an open turn as work, labelled by its folder and free of transcri
   assert.equal(observations[0]?.observedAt, TEST_TIME - 5_000);
   assert.equal(observations[0]?.controls, undefined);
   assert.equal(observations[0]?.recap, undefined);
-  assert.deepEqual(observations[0]?.detail, { repository: "luke" });
+  // The address is the same /agent route Cursor's own deep-link handler
+  // resolves, composed from the observed composer id alone.
+  assert.deepEqual(observations[0]?.detail, {
+    repository: "luke",
+    link: "cursor://anysphere.cursor-deeplink/agent?id=0b1f4b0e-2c5a-4d1e-9a3c-6d5f7e8a9b0c",
+  });
   // Nothing says this session runs anywhere but here, which is what leaves it
   // local once the registry normalizes it.
   assert.equal(observations[0]?.location, undefined);
@@ -227,6 +232,7 @@ test("tells a turn that finished from one that failed", async (t) => {
   // The failure is reported; the reason Cursor recorded for it is not.
   assert.deepEqual(observations[1]?.detail, {
     repository: "luke",
+    link: "cursor://anysphere.cursor-deeplink/agent?id=session-failed",
     error: "The turn failed",
   });
   assert.equal(JSON.stringify(observations).includes(SECRET_TRANSCRIPT_TEXT), false);

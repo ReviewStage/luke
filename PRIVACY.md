@@ -250,7 +250,10 @@ is said back to you under the field you typed in.
   end and how it ended. Observation does not read message content, and reports
   the fact of a failed turn rather than the reason Cursor recorded for it. A
   session is labelled by the folder it runs in, which Luke reads from Cursor's
-  own record of that folder, not from the chat's generated name.
+  own record of that folder, not from the chat's generated name. Each row
+  carries the chat's `cursor://` address, composed on this machine from the
+  chat's own observed identifier; opening it hands that address to macOS like
+  any row press, and nothing is sent to Cursor.
 - For Superset, Luke discovers each `host/<organization-id>/host.db`, opens it
   in read-only defensive mode, and reads three fixed queries' worth of rows:
   from the terminal-to-agent bindings, each workspace's name, identifier,

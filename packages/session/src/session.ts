@@ -257,6 +257,7 @@ export const SESSION_LINK_SCHEME = {
   CMUX: "cmux:",
   CODEX: "codex:",
   CONDUCTOR: "conductor:",
+  CURSOR: "cursor:",
   SUPERSET: "superset:",
 } as const;
 

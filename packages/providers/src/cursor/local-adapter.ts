@@ -278,20 +278,30 @@ function statusFromTurn(
 }
 
 /**
- * What Cursor knows about a local session beyond its state: the folder, and
- * that a turn failed. Cursor records why it failed, but that reason is written
- * from the turn itself, so the fact of the failure is reported and its wording
- * is not — the same fixed line the cloud half reports for a failed run.
- *
- * No address, unlike the cloud half, which reports the agent's own page. Cursor
- * registers `cursor://` for its windows but publishes no route to a chat: its
- * handler answers a prompt, a command, a rule, and a background agent, and none
- * of them is a chat that already exists. The folder the chat was held in is not
- * the chat, so it is not offered as one.
+ * The address of one chat in Cursor's own app — the same `/agent` route
+ * Cursor's deep-link handler resolves for its cloud agents, which also
+ * resolves a local chat by its composer id: the id Cursor names the
+ * transcript directory after, so the address is composed on this machine
+ * from the observed id and handed to the operating system, reaching Cursor's
+ * write paths never. The route opens the exact chat whether Cursor is
+ * running or not; a link Cursor cannot resolve draws Cursor's own
+ * not-found notice rather than acting on anything.
  */
-function detailFor(label: string, status: SessionStatus): SessionDetail {
+export function cursorChatLink(providerSessionId: string): string {
+  return `cursor://anysphere.cursor-deeplink/agent?id=${encodeURIComponent(providerSessionId)}`;
+}
+
+/**
+ * What Cursor knows about a local session beyond its state: the folder, that
+ * a turn failed, and the chat's own address. Cursor records why a turn
+ * failed, but that reason is written from the turn itself, so the fact of the
+ * failure is reported and its wording is not — the same fixed line the cloud
+ * half reports for a failed run.
+ */
+function detailFor(label: string, status: SessionStatus, providerSessionId: string): SessionDetail {
   return {
     repository: label,
+    link: cursorChatLink(providerSessionId),
     ...(status === SESSION_STATUS.ERROR ? { error: CURSOR_TURN_FAILED_MESSAGE } : undefined),
   };
 }
@@ -396,7 +406,7 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
       // written is the only account Cursor keeps of when this session last did
       // anything.
       observedAt: candidate.mtimeMs,
-      detail: detailFor(label, status),
+      detail: detailFor(label, status, candidate.providerSessionId),
     };
   }
 }
