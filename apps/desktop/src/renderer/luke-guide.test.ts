@@ -50,6 +50,7 @@ function settings(overrides: Partial<AppSettings> = {}): AppSettings {
       duckOtherMedia: true,
       quietDuringMeetings: true,
       calendarSignInAvailable: false,
+      appleCalendarAvailable: false,
       linearSignInAvailable: false,
       calendarAccounts: [],
       showOnAllDisplays: false,
@@ -198,6 +199,7 @@ test("the facts say what is connected, never what connects it", () => {
   // the guide says nothing about either — a capability the guide describes is
   // one Luke will claim to have.
   assert.doesNotMatch(rendered, /Google Calendar/);
+  assert.doesNotMatch(rendered, /Apple Calendar/);
   assert.doesNotMatch(rendered, /Linear/);
 
   // A build carrying the Linear registration describes the tracker: that it
@@ -236,6 +238,28 @@ test("the facts say what is connected, never what connects it", () => {
   );
   assert.match(connected, /Google Calendar \(2 accounts connected\)/);
   assert.match(connected, /checkboxes under each account/);
+
+  // A Mac build describes Apple Calendar: connected by macOS's own ask
+  // rather than a sign-in, and reading times, never titles.
+  const appleOffered = JSON.stringify(
+    buildLukeGuide(guideInput({ settings: settings({ appleCalendarAvailable: true }) })).facts,
+  );
+  assert.match(appleOffered, /Apple Calendar \(not connected\)/);
+  assert.match(appleOffered, /macOS's own calendar-access ask/);
+  assert.match(appleOffered, /never their titles/);
+
+  const appleConnected = JSON.stringify(
+    buildLukeGuide(
+      guideInput({
+        settings: settings({
+          appleCalendarAvailable: true,
+          appleCalendar: { id: "apple-calendar", selectedCalendarIds: ["work"] },
+        }),
+      }),
+    ).facts,
+  );
+  assert.match(appleConnected, /Apple Calendar \(connected\)/);
+  assert.match(appleConnected, /System Settings/);
   // The voice key stands in a fact of its own, placed where its row actually
   // lives: the What Luke runs on section, not the Voice page or the
   // Integrations section. With voice available and no key

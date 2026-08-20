@@ -32,6 +32,7 @@ import type {
   SessionIdentity,
   WorkspaceAgentSelection,
 } from "@sidecar/session";
+import type { AppleCalendarAccess } from "./apple-calendar";
 import type {
   AppSettingField,
   AppSettingValue,
@@ -117,12 +118,16 @@ export const SECRET_STORAGE = {
 export type SecretStorage = (typeof SECRET_STORAGE)[keyof typeof SECRET_STORAGE];
 
 /**
- * One connected Google Calendar account as a renderer may know it: which
- * account, and which of its calendars the user chose to count. The grant
- * behind it stays in the main process, like every credential.
+ * One connected calendar source as a renderer may know it: which account,
+ * and which of its calendars the user chose to count. For Google the grant
+ * behind it stays in the main process, like every credential; for Apple
+ * Calendar there is no grant to keep — it lives with macOS.
  */
 export interface CalendarAccount {
-  /** The account's primary calendar id — its address, which is its name. */
+  /**
+   * The account's primary calendar id — its address, which is its name — or
+   * the fixed Apple Calendar id for the one source this Mac itself holds.
+   */
   id: string;
   selectedCalendarIds: readonly string[];
 }
@@ -274,6 +279,19 @@ export interface AppSettings {
    * chose to count. Empty until a sign-in lands one.
    */
   calendarAccounts: readonly CalendarAccount[];
+  /**
+   * Whether this build can offer the Apple Calendar connection: a Mac whose
+   * own Calendar there is to read, in a run that would read it. No OAuth
+   * client gates it — the grant lives with macOS — so this answers for the
+   * platform the way `calendarSignInAvailable` answers for a registration.
+   */
+  appleCalendarAvailable: boolean;
+  /**
+   * The Apple Calendar connection with the calendars the user chose to
+   * count, absent while not connected. One source at most: this Mac's own
+   * Calendar already aggregates every account macOS holds.
+   */
+  appleCalendar?: CalendarAccount;
   /**
    * Whether Luke stands in the Dock as well as at the notch. Off by default:
    * an accessory app is what Luke ships as, so an icon among the user's apps
@@ -722,6 +740,44 @@ export interface AppBridge {
   /** Disconnects one calendar account, deleting its stored grant. */
   removeCalendarAccount(accountId: string): Promise<SettingsUpdateResult>;
   /**
+   * Connects this Mac's own Calendar. The main process asks macOS for full
+   * calendar access — the system's own consent dialog, raised by a helper
+   * that reports each event's start and end instants and nothing else — and
+   * stores only the fact of the connection and the seeded calendar choice.
+   * The renderer asks for the act and receives only the settings snapshot.
+   */
+  connectAppleCalendar(): Promise<SettingsUpdateResult>;
+  /**
+   * Disconnects this Mac's Calendar: observation stops and the stored choice
+   * is deleted. The system grant is macOS's own, withdrawable in System
+   * Settings under Privacy & Security, Calendars.
+   */
+  disconnectAppleCalendar(): Promise<SettingsUpdateResult>;
+  /**
+   * How far macOS currently lets the calendar read go, without prompting.
+   * The connect press consults it so the panel stands down only for a
+   * consent dialog that will actually appear.
+   */
+  appleCalendarAccessStatus(): Promise<AppleCalendarAccess>;
+  /**
+   * Ends a connect still waiting on the user — the dialog, or the System
+   * Settings switch the refused ask opened. The wait ends where it stands; a
+   * switch flipped after this lands nothing until the next Connect.
+   */
+  cancelAppleCalendarConnect(): void;
+  /**
+   * Opens Privacy & Security's Calendars pane in System Settings, where the
+   * system's own grant lives: a denied ask can only be undone there, by the
+   * user's own hand. The renderer names an intent and never an address.
+   */
+  openCalendarSettings(): void;
+  /**
+   * Runs one calendar observation pass now, because the row's refresh was
+   * pressed — so a calendar created a moment ago appears without waiting out
+   * the interval. The same read-only pass the timer runs, and nothing more.
+   */
+  refreshCalendars(): Promise<void>;
+  /**
    * Runs the Linear sign-in, on exactly the terms the calendar's runs on:
    * Linear's own consent page in the user's browser, the code back over a
    * loopback that never leaves the machine, and the grant stored encrypted by
@@ -1007,6 +1063,12 @@ export const channels = {
   cancelGoogleCalendarSignIn: "app:cancel-google-calendar-sign-in",
   reopenGoogleCalendarSignIn: "app:reopen-google-calendar-sign-in",
   removeCalendarAccount: "app:remove-calendar-account",
+  connectAppleCalendar: "app:connect-apple-calendar",
+  disconnectAppleCalendar: "app:disconnect-apple-calendar",
+  appleCalendarAccessStatus: "app:apple-calendar-access-status",
+  cancelAppleCalendarConnect: "app:cancel-apple-calendar-connect",
+  openCalendarSettings: "app:open-calendar-settings",
+  refreshCalendars: "app:refresh-calendars",
   connectLinear: "app:connect-linear",
   cancelLinearSignIn: "app:cancel-linear-sign-in",
   reopenLinearSignIn: "app:reopen-linear-sign-in",

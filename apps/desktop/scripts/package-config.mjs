@@ -14,6 +14,67 @@ export const MICROPHONE_USAGE_DESCRIPTION =
 // to them, and what is not.
 export const APPLE_EVENTS_USAGE_DESCRIPTION =
   "Luke turns Music and Spotify down while you are having a spoken conversation, and back up afterwards. He never pauses them, and reads nothing beyond whether each is playing and how loud.";
+// The sentence macOS shows when it asks for full calendar access — the only
+// access EventKit reads under — so it is what consent is given against: one
+// sentence naming exactly what is read.
+export const CALENDARS_USAGE_DESCRIPTION =
+  "This app requires access to your calendar to read event start and end times.";
+
+/**
+ * Every key macOS may look the calendar sentence up under: the full-access
+ * and write-only keys EventKit's macOS 14 access levels document, and the
+ * legacy key TCC's own prompt machinery has always used. All carry the same
+ * sentence, in both bundles that can be asked — the app's Info.plist and the
+ * helper bundle's — so the dialog can never say two different things
+ * depending on which binary asked.
+ */
+export const CALENDARS_USAGE_KEYS = [
+  "NSCalendarsFullAccessUsageDescription",
+  "NSCalendarsWriteOnlyAccessUsageDescription",
+  "NSCalendarsUsageDescription",
+];
+
+/**
+ * The Info.plist of the calendar helper's own minimal bundle. The helper
+ * answers to TCC as itself, so this plist is what the consent dialog is
+ * judged against and drawn from: EventKit looks the usage sentence up here
+ * before TCC ever hears the question, and the dialog and System Settings
+ * name the asker by the display name here — "Luke", where a bare binary
+ * would be named by its filename. The sentence is the same constant the
+ * app's Info.plist carries, so the dialog can never say two different
+ * things depending on which binary asked.
+ */
+export function appleCalendarHelperInfoPlist() {
+  const usageEntries = CALENDARS_USAGE_KEYS.map(
+    (key) => `\t<key>${key}</key>\n\t<string>${CALENDARS_USAGE_DESCRIPTION}</string>`,
+  ).join("\n");
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+\t<key>CFBundleExecutable</key>
+\t<string>Luke</string>
+\t<key>CFBundleIdentifier</key>
+\t<string>dev.reviewstage.luke.apple-calendar</string>
+\t<key>CFBundleInfoDictionaryVersion</key>
+\t<string>6.0</string>
+\t<key>CFBundleName</key>
+\t<string>Luke</string>
+\t<key>CFBundleDisplayName</key>
+\t<string>Luke</string>
+\t<key>CFBundleIconFile</key>
+\t<string>Luke.icns</string>
+\t<key>CFBundlePackageType</key>
+\t<string>APPL</string>
+\t<key>LSMinimumSystemVersion</key>
+\t<string>${MACOS_DEPLOYMENT_TARGET}</string>
+\t<key>LSUIElement</key>
+\t<true/>
+${usageEntries}
+</dict>
+</plist>
+`;
+}
 // The bundle carries one icon for every mode, so the icns is cut from the dark
 // tile — space black reads on either desktop. The running app swaps the Dock
 // image between the light and dark tiles itself; see applyDockIcon in main.ts.
@@ -145,6 +206,7 @@ export function createPackagerOptions({
       LSMinimumSystemVersion: MACOS_DEPLOYMENT_TARGET,
       LSUIElement: true,
       NSAppleEventsUsageDescription: APPLE_EVENTS_USAGE_DESCRIPTION,
+      ...Object.fromEntries(CALENDARS_USAGE_KEYS.map((key) => [key, CALENDARS_USAGE_DESCRIPTION])),
       NSMicrophoneUsageDescription: MICROPHONE_USAGE_DESCRIPTION,
       NSPrefersDisplaySafeAreaCompatibilityMode: false,
     },

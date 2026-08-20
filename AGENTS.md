@@ -236,7 +236,25 @@ Trust constraints:
   as the hold stands — a clock read against observed intervals, never
   anything a model wrote, and holding is the whole power: a calendar entry
   can delay an announcement and put a drawn face to sleep, never create,
-  reword, or act on one.
+  reword, or act on one. This Mac's own Calendar is read under the same rule
+  with no credential at all, through a native helper behind macOS's own
+  consent dialog — the dialog is the connection, and nothing is stored but
+  the fact of it and the user's calendar choices. EventKit publishes no
+  free/busy, so full calendar access is the grant the system asks for, and
+  the helper is where the narrowing happens: an event is read for its start
+  and end instants alone, and every other field — title, attendees, notes —
+  dies inside the helper process, so intervals and the calendar list are all
+  that ever reach Luke. The helper's commands are fixed by the build; nothing
+  enters an invocation's arguments beyond the window's two instants and the
+  calendar ids the user's stored choice names, intersected inside the helper
+  with the list the same read produced; and a read never raises the dialog.
+  A grant withdrawn in System Settings empties what Luke holds on the next
+  pass — nothing keeps standing on consent taken back — while a read that
+  merely failed stands what it last showed, because a crashed helper says
+  nothing about the user's intent. Disconnecting deletes the stored choice, and the
+  grant stays the user's own in System Settings, withdrawable there like
+  every system permission. The intervals pool with the signed-in accounts'
+  and decide nothing more than theirs do.
 - Quieting other media is bounded the way the talk key is: a native helper that
   can do one narrow thing. While a spoken exchange is live, Luke may lower the
   volume of the players the helper names — Music and Spotify, through their own

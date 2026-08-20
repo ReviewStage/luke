@@ -42,7 +42,8 @@ import {
   type PanelFormFactor,
 } from "@sidecar/surface";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
+import { APPLE_CALENDAR_ID, APPLE_CALENDAR_NAME } from "#shared/apple-calendar";
 import type {
   AccountCalendar,
   AccountSnapshot,
@@ -121,6 +122,7 @@ import {
   PlugIcon,
   PopUpIcon,
   PowerIcon,
+  RefreshIcon,
   ResetIcon,
   ShieldIcon,
   SpeakerIcon,
@@ -382,6 +384,8 @@ export interface SettingsPanelProps {
   workspaceProviders: readonly WorkspaceProviderOption[];
   /** Everything the Google Calendar block can do. */
   calendar: CalendarControl;
+  /** Everything the Apple Calendar block can do. */
+  appleCalendar: AppleCalendarControl;
   /** Everything the Linear block can do. */
   linear: LinearControl;
   /** Superset is observed locally; its CLI login only gates actions. */
@@ -1408,28 +1412,154 @@ export interface CalendarControl {
     calendarId: string,
     selected: boolean,
   ) => Promise<string | undefined>;
+  /**
+   * Runs one calendar observation pass now, over every source. Block-level
+   * because the pass is, though only the Apple row draws the button today.
+   */
+  onRefresh: () => Promise<void>;
 }
 
 /**
- * One connected account: its address, the trash that disconnects it, and a
- * checkbox per calendar its list offered — checked meaning its meetings hold
- * announcements. The names drawn here are the user's own calendar names, on
- * the user's own screen, read under the list scope the sign-in asked for.
+ * Which of a connection's calendars count, one checkbox each — checked
+ * meaning its meetings hold announcements — drawn in the calendar's own
+ * colour where the list carried one, the panel's working accent where it did
+ * not, and sectioned by source where the list reported sources, the way
+ * Calendar.app sections its sidebar. A calendar the selection names but the
+ * list no longer offers simply is not drawn — and never reaches a read
+ * either way. The names drawn here are the user's own calendar names, on the
+ * user's own screen.
+ */
+function CalendarChoices({
+  account,
+  calendars,
+  disabled,
+  onToggle,
+}: {
+  account: CalendarAccount;
+  calendars: readonly AccountCalendar[];
+  disabled: boolean;
+  onToggle: (calendarId: string, selected: boolean) => void;
+}): React.JSX.Element {
+  return (
+    <>
+      {calendars.map((calendar, index) => {
+        const selected = account.selectedCalendarIds.includes(calendar.id);
+        const opensGroup =
+          calendar.group !== undefined && calendar.group !== calendars[index - 1]?.group;
+        return (
+          <Fragment key={calendar.id}>
+            {opensGroup ? <p className="calendar-group">{calendar.group}</p> : null}
+            <label
+              className="calendar-choice"
+              {...(calendar.color
+                ? { style: cssCustomProperties({ "--calendar-color": calendar.color }) }
+                : undefined)}
+            >
+              <input
+                type="checkbox"
+                checked={selected}
+                disabled={disabled}
+                aria-label={`Count meetings on ${calendar.label}`}
+                onChange={() => onToggle(calendar.id, !selected)}
+              />
+              <span className="calendar-choice-name">{calendar.label}</span>
+            </label>
+          </Fragment>
+        );
+      })}
+    </>
+  );
+}
+
+/**
+ * The trash that disconnects a calendar connection, and the confirm that
+ * stands in for it: the two share one grid cell, exactly as the credential
+ * rows' do, so asking the question never re-shapes the line. Disconnecting
+ * asks first, exactly like deleting a key: nothing here can hand a grant
+ * back, so a remove taken on the first press would cost a consent flow to
+ * undo.
+ */
+function CalendarDisconnect({
+  name,
+  busy,
+  asking,
+  onAsk,
+  onSettle,
+  onRemove,
+  children,
+}: {
+  /** Whose disconnect this is, for the labels a hand or a reader needs. */
+  name: string;
+  busy: boolean;
+  asking: boolean;
+  onAsk: () => void;
+  onSettle: () => void;
+  onRemove: () => void;
+  /** Controls drawn beside the trash, hidden with it while the confirm asks. */
+  children?: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <span className="credential-actions">
+      <span
+        className="settings-actions credential-controls"
+        data-drawn={String(!asking)}
+        aria-hidden={asking}
+        inert={asking}
+      >
+        {children}
+        <button
+          type="button"
+          className="icon-button credential-remove"
+          disabled={busy}
+          aria-label={`Disconnect ${name}`}
+          /* The ellipsis is the promise that it asks first. */
+          title="Disconnect…"
+          onClick={onAsk}
+        >
+          <TrashIcon />
+        </button>
+      </span>
+      <fieldset
+        className="settings-actions credential-confirm"
+        aria-label={`Disconnect ${name}?`}
+        data-drawn={String(asking)}
+        aria-hidden={!asking}
+        inert={!asking}
+        onKeyDown={(event) => {
+          if (event.key !== "Escape" || busy) return;
+          event.stopPropagation();
+          onSettle();
+        }}
+      >
+        <button type="button" className="quiet-button" disabled={busy} onClick={onSettle}>
+          Cancel
+        </button>
+        <button type="button" className="danger-button" disabled={busy} onClick={onRemove}>
+          {busy ? "Disconnecting…" : "Disconnect"}
+        </button>
+      </fieldset>
+    </span>
+  );
+}
+
+/**
+ * One connected Google account: its address, the trash that disconnects it,
+ * and the checkboxes choosing which of its calendars count.
  */
 function CalendarAccountRow({
   account,
   calendars,
+  failure,
   onRemove,
   onToggle,
 }: {
   account: CalendarAccount;
   calendars: readonly AccountCalendar[];
+  /** Why the latest pass could not read the account, when it could not. */
+  failure?: string;
   onRemove: () => Promise<string | undefined>;
   onToggle: (calendarId: string, selected: boolean) => Promise<string | undefined>;
 }): React.JSX.Element {
-  // Disconnecting asks first, exactly like deleting a key: nothing here can
-  // hand the grant back, so a remove taken on the first press would cost a
-  // trip through Google's consent to undo.
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
   const [rejection, setRejection] = useState<string>();
@@ -1451,167 +1581,261 @@ function CalendarAccountRow({
     <div className="calendar-account">
       <div className="calendar-account-row">
         <span className="calendar-account-name">{account.id}</span>
-        {/* The trash and the confirm that stands in for it share one grid
-            cell, exactly as the credential rows' do: the cell is as wide and
-            as tall as the larger of the two whichever is showing, so asking
-            the question never re-shapes the line. */}
-        <span className="credential-actions">
-          <span
-            className="settings-actions credential-controls"
-            data-drawn={String(!asking)}
-            aria-hidden={asking}
-            inert={asking}
-          >
-            <button
-              type="button"
-              className="icon-button credential-remove"
-              disabled={busy}
-              aria-label={`Disconnect ${account.id}`}
-              /* The ellipsis is the promise that it asks first. */
-              title="Disconnect…"
-              onClick={() => {
-                setRejection(undefined);
-                setAsking(true);
-              }}
-            >
-              <TrashIcon />
-            </button>
-          </span>
-          <fieldset
-            className="settings-actions credential-confirm"
-            aria-label={`Disconnect ${account.id}?`}
-            data-drawn={String(asking)}
-            aria-hidden={!asking}
-            inert={!asking}
-            onKeyDown={(event) => {
-              if (event.key !== "Escape" || busy) return;
-              event.stopPropagation();
-              setAsking(false);
-            }}
-          >
-            <button
-              type="button"
-              className="quiet-button"
-              disabled={busy}
-              onClick={() => setAsking(false)}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="danger-button"
-              disabled={busy}
-              onClick={() => void removeAccount()}
-            >
-              {busy ? "Disconnecting…" : "Disconnect"}
-            </button>
-          </fieldset>
-        </span>
+        <CalendarDisconnect
+          name={account.id}
+          busy={busy}
+          asking={asking}
+          onAsk={() => {
+            setRejection(undefined);
+            setAsking(true);
+          }}
+          onSettle={() => setAsking(false)}
+          onRemove={() => void removeAccount()}
+        />
       </div>
-      {/* Which of the account's calendars count, one checkbox each — drawn in
-          the calendar's own colour where Google listed one, the panel's
-          working accent where it did not. A calendar the selection names but
-          the list no longer offers simply is not drawn — and never reaches a
-          read either way. */}
-      {calendars.map((calendar) => {
-        const selected = account.selectedCalendarIds.includes(calendar.id);
-        return (
-          <label
-            className="calendar-choice"
-            key={calendar.id}
-            {...(calendar.color
-              ? {
-                  style: cssCustomProperties({ "--calendar-color": calendar.color }),
-                }
-              : undefined)}
-          >
-            <input
-              type="checkbox"
-              checked={selected}
-              disabled={busy}
-              aria-label={`Count meetings on ${calendar.label}`}
-              onChange={() => void toggleCalendar(calendar.id, !selected)}
-            />
-            <span className="calendar-choice-name">{calendar.label}</span>
-          </label>
-        );
-      })}
-      {rejection ? (
-        <p className="error-message" role="alert">
-          {rejection}
-        </p>
-      ) : null}
+      <CalendarChoices
+        account={account}
+        calendars={calendars}
+        disabled={busy}
+        onToggle={(calendarId, selected) => void toggleCalendar(calendarId, selected)}
+      />
+      {/* An act just refused, else what the latest pass reported — a revoked
+          grant surfaces on its own row, not in a log. */}
+      {(rejection ?? failure) ? <p className="error-message">{rejection ?? failure}</p> : null}
     </div>
   );
 }
 
+/** Everything the Apple Calendar row can do, wired above the panel. */
+export interface AppleCalendarControl {
+  /** This Mac's calendars, as last observed. */
+  choices: readonly AccountCalendar[];
+  /** True while another entry holds the slot, which refuses a second act. */
+  held: boolean;
+  /** True while the system's consent dialog is up. */
+  connecting: boolean;
+  /** Stands the panel down so macOS's own dialog is not covered by it. */
+  onSignIn: () => void;
+  onDisconnect: () => Promise<string | undefined>;
+  onToggleCalendar: (calendarId: string, selected: boolean) => Promise<string | undefined>;
+  /**
+   * True when the System Settings switch has been turned off: the stored
+   * connection stands, but the row offers Connect again — reconnecting is
+   * the only act left, and refresh or disconnect would both be acts on a
+   * grant that is gone.
+   */
+  revoked: boolean;
+}
+
 /**
- * The calendar integration: connected by signing in with Google, never by a
- * pasted credential, and drawn at all only in a build that carries the OAuth
- * client the sign-in runs on — a row whose one act cannot run is not a row.
+ * This Mac's own Calendar as one row: the header carries the connection's
+ * whole surface — Connect while there is no usable grant, else the refresh
+ * and the trash — and the calendar checkboxes sit directly beneath, because
+ * one connection needs no second line naming it.
  */
-function GoogleCalendarIntegration({
+function AppleCalendarRow({
+  account,
+  appleCalendar,
+  onRefresh,
+}: {
+  /** The stored connection, absent while not connected. */
+  account: CalendarAccount | undefined;
+  appleCalendar: AppleCalendarControl;
+  /** Runs one observation pass now, so a calendar just created appears. */
+  onRefresh: () => Promise<void>;
+}): React.JSX.Element {
+  const [asking, setAsking] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [rejection, setRejection] = useState<string>();
+  const [refreshing, setRefreshing] = useState(false);
+  // A withdrawn grant reads as not connected: the stored choice stands for a
+  // reconnect, but every affordance returns to the beginning.
+  const connected = account !== undefined && !appleCalendar.revoked;
+
+  const disconnect = async () => {
+    setBusy(true);
+    setRejection(await appleCalendar.onDisconnect());
+    setBusy(false);
+    setAsking(false);
+  };
+
+  const toggleCalendar = async (calendarId: string, selected: boolean) => {
+    setBusy(true);
+    setRejection(await appleCalendar.onToggleCalendar(calendarId, selected));
+    setBusy(false);
+  };
+
+  const refresh = async () => {
+    setRefreshing(true);
+    try {
+      await onRefresh();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="credential-row" {...searchAnchorProps(APPLE_CALENDAR_ID)}>
+        <span className="credential-identity">
+          <span className="credential-mark">
+            <ProviderMark providerId={APPLE_CALENDAR_ID} />
+          </span>
+          <span className="credential-name">{APPLE_CALENDAR_NAME}</span>
+          {connected ? <CheckIcon /> : null}
+        </span>
+        {connected ? (
+          <CalendarDisconnect
+            name={APPLE_CALENDAR_NAME}
+            busy={busy}
+            asking={asking}
+            onAsk={() => {
+              setRejection(undefined);
+              setAsking(true);
+            }}
+            onSettle={() => setAsking(false)}
+            onRemove={() => void disconnect()}
+          >
+            {/* A calendar made a moment ago appears on the next pass; this
+                is the next pass, asked for by hand. */}
+            <button
+              type="button"
+              className="icon-button"
+              data-spinning={String(refreshing)}
+              disabled={refreshing || busy}
+              aria-label="Refresh the calendar list"
+              title="Refresh"
+              onClick={() => void refresh()}
+            >
+              <RefreshIcon />
+            </button>
+          </CalendarDisconnect>
+        ) : (
+          <span className="settings-actions">
+            {/* The system's consent dialog does the connecting: the same
+                word every other integration's row uses. The panel stands
+                down to the slot for it, because Luke floats above the
+                dialog macOS is about to show. */}
+            <button
+              type="button"
+              className="quiet-button"
+              disabled={appleCalendar.held || appleCalendar.connecting}
+              aria-label="Connect this Mac's calendars"
+              title={appleCalendar.held ? HELD_TITLE : undefined}
+              onClick={appleCalendar.onSignIn}
+            >
+              {appleCalendar.connecting ? "Waiting for macOS…" : "Connect"}
+            </button>
+          </span>
+        )}
+      </div>
+      {connected && account ? (
+        <CalendarChoices
+          account={account}
+          calendars={appleCalendar.choices}
+          disabled={busy}
+          onToggle={(calendarId, selected) => void toggleCalendar(calendarId, selected)}
+        />
+      ) : null}
+      {/* Only an act just refused: a pass that could not read surfaces as
+          the row's own state — a withdrawn grant is the Connect button
+          standing again — never as standing red text. */}
+      {rejection ? <p className="error-message">{rejection}</p> : null}
+    </>
+  );
+}
+
+/**
+ * The calendar integrations, drawn as one block because they are one
+ * capability: two ways into the same meetings — this Mac's own Calendar
+ * behind macOS's consent dialog, and Google accounts behind Google's consent
+ * page — sharing one line about what is read and the quiet switch the
+ * intervals exist to drive. Each row appears only in a build that can offer
+ * it, and the block only when either can.
+ */
+function CalendarIntegrations({
   settings,
   calendar,
+  appleCalendar,
   preferences,
 }: {
   settings: AppSettings;
   calendar: CalendarControl;
+  appleCalendar: AppleCalendarControl;
   preferences: PreferenceWrites;
 }): React.JSX.Element | null {
-  if (!settings.calendarSignInAvailable) return null;
+  if (!settings.calendarSignInAvailable && !settings.appleCalendarAvailable) return null;
   const accounts = settings.calendarAccounts;
+  const connected = accounts.length > 0 || settings.appleCalendar !== undefined;
+
   return (
-    <div className="credential" {...searchAnchorProps(GOOGLE_CALENDAR_ID)}>
-      <div className="credential-row">
-        <span className="credential-identity">
-          <span className="credential-mark">
-            <ProviderMark providerId={GOOGLE_CALENDAR_ID} />
-          </span>
-          <span className="credential-name">{GOOGLE_CALENDAR_NAME}</span>
-          {accounts.length > 0 ? <CheckIcon /> : null}
-        </span>
-        <span className="settings-actions">
-          {/* The consent page does the connecting: the same word every other
-              integration's row uses, and a second account is the same act
-              worded for what it adds. */}
-          <button
-            type="button"
-            className="quiet-button"
-            disabled={calendar.held || calendar.connecting}
-            aria-label={
-              accounts.length > 0
-                ? "Add another Google account"
-                : "Connect Google Calendar by signing in"
-            }
-            title={calendar.held ? HELD_TITLE : undefined}
-            onClick={calendar.onSignIn}
-          >
-            {calendar.connecting
-              ? "Waiting for Google…"
-              : accounts.length > 0
-                ? "Add account"
-                : "Connect"}
-          </button>
-        </span>
-      </div>
-      {accounts.map((account) => (
-        <CalendarAccountRow
-          key={account.id}
-          account={account}
-          calendars={
-            calendar.choices.find((choice) => choice.accountId === account.id)?.calendars ?? []
-          }
-          onRemove={() => calendar.onRemoveAccount(account.id)}
-          onToggle={(calendarId, selected) =>
-            calendar.onToggleCalendar(account.id, calendarId, selected)
-          }
+    <div className="credential">
+      {settings.appleCalendarAvailable ? (
+        <AppleCalendarRow
+          account={settings.appleCalendar}
+          appleCalendar={appleCalendar}
+          onRefresh={calendar.onRefresh}
         />
-      ))}
+      ) : null}
+      {settings.calendarSignInAvailable ? (
+        <>
+          <div className="credential-row" {...searchAnchorProps(GOOGLE_CALENDAR_ID)}>
+            <span className="credential-identity">
+              <span className="credential-mark">
+                <ProviderMark providerId={GOOGLE_CALENDAR_ID} />
+              </span>
+              <span className="credential-name">{GOOGLE_CALENDAR_NAME}</span>
+              {accounts.length > 0 ? <CheckIcon /> : null}
+            </span>
+            <span className="settings-actions">
+              {/* The consent page does the connecting: the same word every
+                  other integration's row uses, and a second account is the
+                  same act worded for what it adds. */}
+              <button
+                type="button"
+                className="quiet-button"
+                disabled={calendar.held || calendar.connecting}
+                aria-label={
+                  accounts.length > 0
+                    ? "Add another Google account"
+                    : "Connect Google Calendar by signing in"
+                }
+                title={calendar.held ? HELD_TITLE : undefined}
+                onClick={calendar.onSignIn}
+              >
+                {calendar.connecting
+                  ? "Waiting for Google…"
+                  : accounts.length > 0
+                    ? "Add account"
+                    : "Connect"}
+              </button>
+            </span>
+          </div>
+          {accounts.map((account) => {
+            const observed = calendar.choices.find((choice) => choice.accountId === account.id);
+            return (
+              <CalendarAccountRow
+                key={account.id}
+                account={account}
+                calendars={observed?.calendars ?? []}
+                {...(observed?.failure ? { failure: observed.failure } : {})}
+                onRemove={() => calendar.onRemoveAccount(account.id)}
+                onToggle={(calendarId, selected) =>
+                  calendar.onToggleCalendar(account.id, calendarId, selected)
+                }
+              />
+            );
+          })}
+        </>
+      ) : null}
+      <p className="settings-note">
+        Luke reads when your meetings start and end — never their titles — and can hold
+        announcements until they finish.
+      </p>
       {/* The quiet is a fact about the calendars above it, so it appears with
-          the first account and leaves with the last — a switch gating what a
-          disconnected calendar cannot do would be a control over nothing. */}
-      {accounts.length > 0 ? (
+          the first connection and leaves with the last — a switch gating what
+          a disconnected calendar cannot do would be a control over nothing. */}
+      {connected ? (
         <SwitchRow
           label="Quiet during meetings"
           ariaLabel="Hold announcements while a calendar meeting is on"
@@ -1943,11 +2167,13 @@ function IntegrationsSection({
   settings,
   preferences,
   calendar,
+  appleCalendar,
   linear,
 }: {
   settings: AppSettings;
   preferences: PreferenceWrites;
   calendar: CalendarControl;
+  appleCalendar: AppleCalendarControl;
   linear: LinearControl;
 }): React.JSX.Element {
   const storageUnavailable = settings.secretStorage === SECRET_STORAGE.UNAVAILABLE;
@@ -1958,9 +2184,10 @@ function IntegrationsSection({
         Integrations
       </h2>
       <LinearIntegration settings={settings} linear={linear} />
-      <GoogleCalendarIntegration
+      <CalendarIntegrations
         settings={settings}
         calendar={calendar}
+        appleCalendar={appleCalendar}
         preferences={preferences}
       />
       {/* The same refusal the agents' section explains: a Connect stilled by
@@ -3324,6 +3551,7 @@ export function SettingsPanel({
   panelOpen,
   workspaceProviders,
   calendar,
+  appleCalendar,
   linear,
   superset,
   onQuit,
@@ -3532,6 +3760,7 @@ export function SettingsPanel({
             settings={settings}
             preferences={preferences}
             calendar={calendar}
+            appleCalendar={appleCalendar}
             linear={linear}
           />
         </>

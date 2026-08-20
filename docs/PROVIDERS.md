@@ -355,6 +355,17 @@ end instants only, so titles cannot even travel. The intervals drive exactly
 one behavior: while a meeting covers now and Quiet during meetings is on,
 spoken announcements hold and the face sleeps.
 
+**Apple Calendar** (`apple-calendar`) is the same read taken locally, with no
+credential at all: a native EventKit helper, behind macOS's own consent
+dialog, reads this Mac's calendar list and the start and end instants of
+events on the calendars the user chose. EventKit publishes no free/busy, so
+the narrowing happens in the helper — titles, attendees, and notes die inside
+its process, and intervals are all that ever reach Luke. One connection at
+most, because the Mac's Calendar already aggregates every account macOS
+holds; disconnecting deletes the stored choice, and the system grant stays
+the user's own in System Settings. The intervals drive the same one behavior
+the Google intervals do, pooled with them.
+
 **Superset** is a workspace manager rather than a session provider: Luke
 reads its local host state (`host/<organization-id>/host.db`) read-only, joins each
 terminal-agent binding to a session another provider already observes, and

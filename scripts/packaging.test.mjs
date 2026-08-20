@@ -9,6 +9,9 @@ import {
   APPLE_EVENTS_USAGE_DESCRIPTION,
   addonCompilerArguments,
   appUpdateConfig,
+  appleCalendarHelperInfoPlist,
+  CALENDARS_USAGE_DESCRIPTION,
+  CALENDARS_USAGE_KEYS,
   createPackagerOptions,
   ICONSET_SOURCES,
   iconutilArguments,
@@ -41,6 +44,7 @@ function packagerOptions(signing = resolveSigningMode({})) {
     appRoot: "/repo/apps/desktop",
     outputRoot: "/repo/apps/desktop/out",
     helperPaths: [
+      "/repo/apps/desktop/.build/native/Luke.app",
       "/repo/apps/desktop/.build/native/mac-media-duck",
       "/repo/apps/desktop/.build/native/mac-microphone-route",
       "/repo/apps/desktop/.build/native/mac-output-volume",
@@ -173,7 +177,7 @@ test("every native helper is built and shipped, or neither happens", () => {
 
   for (const helper of NATIVE_HELPERS) {
     assert.ok(
-      shipped.some((resourcePath) => resourcePath.endsWith(helper.binary)),
+      shipped.some((resourcePath) => resourcePath.endsWith(helper.bundle ?? helper.binary)),
       // A helper built but not bundled is a feature that works in development
       // and is simply absent from the app someone downloads.
       `${helper.binary} reaches the bundle`,
@@ -184,6 +188,32 @@ test("every native helper is built and shipped, or neither happens", () => {
     assert.equal(helper.binary.endsWith(".node"), helper.source.endsWith(".m"));
     assert.ok(helper.frameworks.length > 0);
   }
+});
+
+test("the calendar helper's bundle names itself Luke and carries the usage sentences", () => {
+  // The helper answers to TCC as itself, so its bundle's Info.plist is what
+  // the consent dialog is judged against and named from — and macOS may fall
+  // back to the process name or the folder's basename, so the executable and
+  // the bundle folder are both named Luke.
+  const calendarHelper = NATIVE_HELPERS.find((helper) => helper.source === "AppleCalendar.swift");
+  assert.equal(calendarHelper?.bundle, "Luke.app");
+  assert.equal(calendarHelper?.binary, "Luke");
+
+  // Every key macOS may look the sentence up under, in the helper and the
+  // app alike; the same sentence everywhere, so the dialog can never say two
+  // different things depending on which binary asked.
+  const plist = appleCalendarHelperInfoPlist();
+  const extendInfo = packagerOptions().extendInfo;
+  for (const key of CALENDARS_USAGE_KEYS) {
+    assert.ok(plist.includes(`<key>${key}</key>`));
+    assert.equal(extendInfo[key], CALENDARS_USAGE_DESCRIPTION);
+  }
+  assert.ok(plist.includes(CALENDARS_USAGE_DESCRIPTION));
+  assert.ok(plist.includes("<key>CFBundleIdentifier</key>"));
+  assert.ok(plist.includes("<key>CFBundleExecutable</key>\n\t<string>Luke</string>"));
+  assert.ok(plist.includes("<key>CFBundleDisplayName</key>\n\t<string>Luke</string>"));
+  // The System Settings consent row draws the bundle's own icon.
+  assert.ok(plist.includes("<key>CFBundleIconFile</key>\n\t<string>Luke.icns</string>"));
 });
 
 test("the stationary window addon is compiled as a loadable Node-API module", () => {

@@ -47,6 +47,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { APPLE_CALENDAR_ACCESS, APPLE_CALENDAR_ID } from "#shared/apple-calendar";
 import { CONSENT_SERVICE_ID, type ConsentServiceId } from "#shared/consent-services";
 import type {
   AccountProvider,
@@ -191,6 +192,35 @@ import {
  * the line is gone before anyone wonders whether it is stuck.
  */
 const FEEDBACK_NOTICE_MS = 6_000;
+
+/**
+ * The bridge acts behind each consent service's wait: the documented connect
+ * the slot's send runs, the main-process side a mid-wait cancel must stop,
+ * and — for the browser flows alone — the way a lost tab reopens. One row
+ * per service, so a fourth service is a fourth row rather than a fourth
+ * branch at every dispatch site.
+ */
+const CONSENT_ACTS = {
+  [CONSENT_SERVICE_ID.APPLE_CALENDAR]: {
+    connect: () => window.sidecar.connectAppleCalendar(),
+    cancel: () => window.sidecar.cancelAppleCalendarConnect(),
+  },
+  [CONSENT_SERVICE_ID.GOOGLE_CALENDAR]: {
+    connect: () => window.sidecar.connectGoogleCalendar(),
+    cancel: () => window.sidecar.cancelGoogleCalendarSignIn(),
+    reopen: () => window.sidecar.reopenGoogleCalendarSignIn(),
+  },
+  [CONSENT_SERVICE_ID.LINEAR]: {
+    connect: () => window.sidecar.connectLinear(),
+    cancel: () => window.sidecar.cancelLinearSignIn(),
+    reopen: () => window.sidecar.reopenLinearSignIn(),
+  },
+} as const satisfies Readonly<
+  Record<
+    ConsentServiceId,
+    { connect: () => Promise<SettingsUpdateResult>; cancel: () => void; reopen?: () => void }
+  >
+>;
 
 /**
  * The composer kind a spoken open names, matched to the composer's own. The
@@ -898,6 +928,19 @@ export function App(): React.JSX.Element {
     [applySettingsReply],
   );
 
+  const disconnectAppleCalendar = useCallback(
+    async () => applySettingsReply(await window.sidecar.disconnectAppleCalendar()),
+    [applySettingsReply],
+  );
+
+  const toggleAppleCalendarSelected = useCallback(
+    async (calendarId: string, selected: boolean) =>
+      applySettingsReply(
+        await window.sidecar.setCalendarSelected(APPLE_CALENDAR_ID, calendarId, selected),
+      ),
+    [applySettingsReply],
+  );
+
   const disconnectLinear = useCallback(
     async () => applySettingsReply(await window.sidecar.disconnectLinear()),
     [applySettingsReply],
@@ -921,11 +964,8 @@ export function App(): React.JSX.Element {
     isSendable: (entry): entry is ConsentConnectEntry => entry !== undefined && !entry.busy,
     send: async (sending) => {
       // Which service is being connected decides which documented act runs,
-      // and nothing else does: the entry names one of the two the build knows.
-      const result =
-        sending.serviceId === CONSENT_SERVICE_ID.LINEAR
-          ? await window.sidecar.connectLinear()
-          : await window.sidecar.connectGoogleCalendar();
+      // and nothing else does: the entry names a row of the acts table.
+      const result = await CONSENT_ACTS[sending.serviceId].connect();
       applySettings(result.settings);
       return result.reason ? { rejection: result.reason } : {};
     },
@@ -956,14 +996,44 @@ export function App(): React.JSX.Element {
     [consentConnect.begin, consentConnect.commit],
   );
 
-  const cancelConsentSignIn = useCallback(() => {
-    // Mid-wait, the loopback must stop listening too; after a failure there
-    // is nothing left to stop.
-    const waiting = consentConnect.latest();
-    if (waiting?.busy) {
-      if (waiting.serviceId === CONSENT_SERVICE_ID.LINEAR) window.sidecar.cancelLinearSignIn();
-      else window.sidecar.cancelGoogleCalendarSignIn();
+  /** True while a granted-already connect runs on the row, dialog-free. */
+  const [appleCalendarBusy, setAppleCalendarBusy] = useState(false);
+
+  /**
+   * Connecting this Mac's Calendar stands the panel down only when macOS is
+   * actually about to ask: with the grant already standing, the dialog never
+   * appears, and a stand-down would flash the slot for a single frame — so
+   * the press probes the status first and connects in place when it can.
+   */
+  const connectAppleCalendar = useCallback(async () => {
+    setAppleCalendarBusy(true);
+    let granted = false;
+    try {
+      granted = (await window.sidecar.appleCalendarAccessStatus()) === APPLE_CALENDAR_ACCESS.FULL;
+      if (granted) applySettingsReply(await window.sidecar.connectAppleCalendar());
+    } finally {
+      setAppleCalendarBusy(false);
     }
+    if (!granted) beginConsentSignIn(CONSENT_SERVICE_ID.APPLE_CALENDAR);
+  }, [applySettingsReply, beginConsentSignIn]);
+
+  /** The Mac's own entry in the latest calendars broadcast, for its block. */
+  const appleCalendarObserved = calendars.find((choice) => choice.accountId === APPLE_CALENDAR_ID);
+
+  /**
+   * Whether another entry holds the one slot, which refuses this service's
+   * Connect: a key mid-paste, or a different service's consent wait.
+   */
+  const slotHeldExcept = (serviceId: ConsentServiceId) =>
+    credentialsEntry.entry !== undefined ||
+    (consentConnect.entry !== undefined && consentConnect.entry.serviceId !== serviceId);
+
+  const cancelConsentSignIn = useCallback(() => {
+    // Mid-wait, the flow's main-process side must stop listening too — a
+    // browser flow's loopback, or Apple's System Settings watch; after a
+    // failure there is nothing left to stop.
+    const waiting = consentConnect.latest();
+    if (waiting?.busy) CONSENT_ACTS[waiting.serviceId].cancel();
     consentConnect.cancel();
   }, [consentConnect.cancel, consentConnect.latest]);
 
@@ -3105,18 +3175,26 @@ export function App(): React.JSX.Element {
               workspaceProviders: workspaceProviderOptions,
               calendar: {
                 choices: calendars,
-                held:
-                  credentialsEntry.entry !== undefined ||
-                  consentConnect.entry?.serviceId === CONSENT_SERVICE_ID.LINEAR,
+                held: slotHeldExcept(CONSENT_SERVICE_ID.GOOGLE_CALENDAR),
                 connecting: consentConnect.entry?.serviceId === CONSENT_SERVICE_ID.GOOGLE_CALENDAR,
                 onSignIn: () => beginConsentSignIn(CONSENT_SERVICE_ID.GOOGLE_CALENDAR),
                 onRemoveAccount: removeCalendarAccount,
                 onToggleCalendar: toggleCalendarSelected,
+                onRefresh: () => window.sidecar.refreshCalendars(),
+              },
+              appleCalendar: {
+                choices: appleCalendarObserved?.calendars ?? [],
+                held: slotHeldExcept(CONSENT_SERVICE_ID.APPLE_CALENDAR),
+                connecting:
+                  appleCalendarBusy ||
+                  consentConnect.entry?.serviceId === CONSENT_SERVICE_ID.APPLE_CALENDAR,
+                onSignIn: () => void connectAppleCalendar(),
+                onDisconnect: disconnectAppleCalendar,
+                onToggleCalendar: toggleAppleCalendarSelected,
+                revoked: appleCalendarObserved?.revoked === true,
               },
               linear: {
-                held:
-                  credentialsEntry.entry !== undefined ||
-                  consentConnect.entry?.serviceId === CONSENT_SERVICE_ID.GOOGLE_CALENDAR,
+                held: slotHeldExcept(CONSENT_SERVICE_ID.LINEAR),
                 connecting: consentConnect.entry?.serviceId === CONSENT_SERVICE_ID.LINEAR,
                 onSignIn: () => beginConsentSignIn(CONSENT_SERVICE_ID.LINEAR),
                 onDisconnect: disconnectLinear,
@@ -3181,12 +3259,14 @@ export function App(): React.JSX.Element {
             onReopen={() => {
               // The page reopened is the one the waiting flow built, named by
               // the service the entry says is waiting — no address from here.
-              if (consentConnect.latest()?.serviceId === CONSENT_SERVICE_ID.LINEAR) {
-                window.sidecar.reopenLinearSignIn();
-              } else {
-                window.sidecar.reopenGoogleCalendarSignIn();
-              }
+              // A wait with no page to reopen has no act in its row, and the
+              // slot draws no button for it either.
+              const waiting = consentConnect.latest()?.serviceId;
+              if (!waiting) return;
+              const acts = CONSENT_ACTS[waiting];
+              if ("reopen" in acts) acts.reopen();
             }}
+            onOpenSystemSettings={() => window.sidecar.openCalendarSettings()}
             measure={connectElement}
           />
           {supersetSignInHeld.current ? (

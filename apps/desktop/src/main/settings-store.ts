@@ -16,8 +16,14 @@ import {
   isWireNumber,
   isWireString,
   type UnparsedWireValue,
+  unparsedWire,
   type WireRecord,
+  wireRecord as readWireRecord,
 } from "@sidecar/wire";
+// The reader owns the shape it is fed: what this store resolves a stored
+// connection into is exactly what `readAppleCalendarConnection` promises it.
+import type { AppleCalendarConnection } from "./apple-calendar";
+import { APPLE_CALENDAR_ID } from "#shared/apple-calendar";
 import {
   ACCOUNT_PROVIDER,
   ACCOUNT_STATUS,
@@ -71,6 +77,7 @@ const SETTINGS_FILE_MODE = 0o600;
 const SETTINGS_FIELD = {
   ACCOUNT: "account",
   API_KEYS: "apiKeys",
+  APPLE_CALENDAR: "appleCalendar",
   CALENDAR_ACCOUNTS: "calendarAccounts",
   GRANTS: "grants",
   LEGACY_CONDUCTOR_API_KEY: "conductorApiKey",
@@ -113,6 +120,13 @@ export interface SettingsStoreOptions {
    */
   credentialsUsable?: boolean;
   /**
+   * Whether this build can offer the Apple Calendar connection: a Mac to
+   * read. No client or key gates it — the grant lives with macOS — so the
+   * platform is the whole question, asked as an option so the store never
+   * reads the platform itself and tests can answer it either way.
+   */
+  appleCalendarSupported?: boolean;
+  /**
    * What the latest observation pass learned about the Codex CLI's login. It
    * rides the settings snapshot beside `credentialSources` because it answers
    * the same question for a provider whose connection is not a key — but the
@@ -151,6 +165,12 @@ interface PersistedSettings extends StoredAppSettings {
    * Absent from the file while none are connected.
    */
   calendarAccounts?: readonly PersistedCalendarAccount[];
+  /**
+   * The Apple Calendar connection: present exactly while connected, holding
+   * only the calendar ids the user chose to count. No credential rides with
+   * it — the grant lives with macOS, withdrawable in System Settings.
+   */
+  appleCalendar?: { calendars: readonly string[] };
 }
 
 interface ResolvedApiKey {
@@ -209,6 +229,35 @@ function calendarIdentifierText(value: UnparsedWireValue): string | undefined {
   return normalized;
 }
 
+/**
+ * A stored selection as this store will keep it: well-formed ids, bounded
+ * count. Every path that writes one — parsed from disk or handed in — passes
+ * this one gate.
+ */
+function sanitizedCalendarIds(value: UnparsedWireValue): readonly string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) => calendarIdentifierText(unparsedWire(entry)))
+    .filter((entry): entry is string => entry !== undefined)
+    .slice(0, MAXIMUM_SELECTED_CALENDARS);
+}
+
+/**
+ * The selection after one calendar's toggle, or nothing to write — the same
+ * edit for every source, stated once. Nothing to write is a toggle to the
+ * value already held, or one past the cap.
+ */
+function toggledCalendarSelection(
+  held: readonly string[],
+  id: string,
+  selected: boolean,
+): readonly string[] | undefined {
+  if (held.includes(id) === selected) return undefined;
+  const calendars = held.filter((candidate) => candidate !== id);
+  if (selected) calendars.push(id);
+  return calendars.length > MAXIMUM_SELECTED_CALENDARS ? undefined : calendars;
+}
+
 /** Reads the stored calendar accounts, keeping only well-formed entries. */
 function storedCalendarAccounts(record: WireRecord): readonly PersistedCalendarAccount[] {
   const persisted = record[SETTINGS_FIELD.CALENDAR_ACCOUNTS];
@@ -221,15 +270,16 @@ function storedCalendarAccounts(record: WireRecord): readonly PersistedCalendarA
     const accountId = calendarIdentifierText(id);
     if (!accountId || !isWireString(token) || !token) continue;
     if (accounts.some((held) => held.id === accountId)) continue;
-    const selected = Array.isArray(calendars)
-      ? calendars
-          .map(calendarIdentifierText)
-          .filter((value): value is string => value !== undefined)
-          .slice(0, MAXIMUM_SELECTED_CALENDARS)
-      : [];
-    accounts.push({ id: accountId, token, calendars: selected });
+    accounts.push({ id: accountId, token, calendars: sanitizedCalendarIds(calendars) });
   }
   return accounts;
+}
+
+/** The stored Apple Calendar connection; its presence is the connection. */
+function storedAppleCalendar(record: WireRecord): PersistedSettings["appleCalendar"] {
+  const held = readWireRecord(record[SETTINGS_FIELD.APPLE_CALENDAR]);
+  if (!held) return undefined;
+  return { calendars: sanitizedCalendarIds(held.calendars) };
 }
 
 /**
@@ -359,6 +409,7 @@ function parsePersistedSettings(
   const record = parsed;
   const version = record[SETTINGS_FIELD.VERSION];
   const calendarAccounts = storedCalendarAccounts(record);
+  const appleCalendar = storedAppleCalendar(record);
   const grants = storedGrants(record);
   const settings = readStoredSettings(record);
   const persisted = {
@@ -368,6 +419,7 @@ function parsePersistedSettings(
     ...(Object.keys(grants).length > 0 ? { grants } : undefined),
     ...(storedAccount(record) ? { account: storedAccount(record) } : undefined),
     ...(calendarAccounts.length > 0 ? { calendarAccounts } : undefined),
+    ...(appleCalendar ? { appleCalendar } : undefined),
   };
   // SAFETY: readStoredSettings validated every preference field before this spread.
   return persisted as PersistedSettings;
@@ -384,6 +436,7 @@ export class SettingsStore {
   readonly #environment: NodeJS.ProcessEnv;
   readonly #providers: readonly CredentialProvider[];
   readonly #credentialsUsable: boolean;
+  readonly #appleCalendarSupported: boolean;
   readonly #codexCloudConnection: () => CliConnection;
   #loading: Promise<PersistedSettings> | undefined;
   #resolved = new Map<CredentialProviderId, ResolvedApiKey>();
@@ -486,6 +539,7 @@ export class SettingsStore {
     this.#environment = options.environment ?? process.env;
     this.#providers = options.providers ?? CREDENTIAL_PROVIDER_LIST;
     this.#credentialsUsable = options.credentialsUsable ?? true;
+    this.#appleCalendarSupported = options.appleCalendarSupported ?? process.platform === "darwin";
     this.#codexCloudConnection = options.codexCloudConnection ?? (() => CLI_CONNECTION.UNKNOWN);
   }
 
@@ -538,12 +592,26 @@ export class SettingsStore {
       // is not drawn rather than drawn refusing.
       linearSignInAvailable:
         this.#credentialsUsable && linearSignInConfig(this.#environment) !== undefined,
+      // Whether this build can offer the Apple Calendar connection: a Mac to
+      // read, and a run that would use what macOS grants. No client gates it
+      // the way the sign-ins are gated — the grant lives with the system.
+      appleCalendarAvailable: this.#credentialsUsable && this.#appleCalendarSupported,
       // The accounts without their grants: which are connected and which
       // calendars count is the renderer's to draw; the tokens never travel.
       calendarAccounts: (persisted.calendarAccounts ?? []).map((account) => ({
         id: account.id,
         selectedCalendarIds: account.calendars,
       })),
+      // The Apple Calendar connection on the same terms: the fact and the
+      // chosen calendars, with nothing behind them to keep from travelling.
+      ...(persisted.appleCalendar
+        ? {
+            appleCalendar: {
+              id: APPLE_CALENDAR_ID,
+              selectedCalendarIds: persisted.appleCalendar.calendars,
+            },
+          }
+        : undefined),
       showInDock: persisted.showInDock,
       // Resolved the way the minter resolves it, so the panel marks the voice
       // that would actually be heard.
@@ -873,12 +941,7 @@ export class SettingsStore {
       const account: PersistedCalendarAccount = {
         id,
         token,
-        calendars: held
-          ? held.calendars
-          : selectedCalendarIds
-              .map(calendarIdentifierText)
-              .filter((value): value is string => value !== undefined)
-              .slice(0, MAXIMUM_SELECTED_CALENDARS),
+        calendars: held ? held.calendars : sanitizedCalendarIds(unparsedWire(selectedCalendarIds)),
       };
       const calendarAccounts = held
         ? existing.map((candidate) => (candidate.id === id ? account : candidate))
@@ -901,7 +964,9 @@ export class SettingsStore {
   }
 
   /**
-   * Chooses whether one of an account's calendars counts toward meetings.
+   * Chooses whether one of a connection's calendars counts toward meetings —
+   * the Google accounts and this Mac's connection through one door, routed
+   * by the account id, so no caller has to know the two are stored apart.
    * Whether the calendar exists is answered where the list lives — the main
    * process validates a selection against its latest observation — so only
    * the value's shape is held here.
@@ -913,21 +978,27 @@ export class SettingsStore {
   ): Promise<SettingsUpdateResult> {
     const id = calendarIdentifierText(calendarId);
     if (!id) return { settings: await this.snapshot(), reason: "That is not a calendar id." };
-    let unknownAccount = false;
+    let missing: string | undefined;
     await this.#serialize(async () => {
       const persisted = await this.#load();
+      if (accountId === APPLE_CALENDAR_ID) {
+        const held = persisted.appleCalendar;
+        if (!held) {
+          missing = "Apple Calendar is not connected.";
+          return;
+        }
+        const calendars = toggledCalendarSelection(held.calendars, id, selected);
+        if (calendars) await this.#writeAppleCalendar(persisted, { calendars });
+        return;
+      }
       const existing = persisted.calendarAccounts ?? [];
       const held = existing.find((account) => account.id === accountId);
       if (!held) {
-        unknownAccount = true;
+        missing = "That calendar account is not connected.";
         return;
       }
-      const calendars = held.calendars.filter((candidate) => candidate !== id);
-      if (selected) calendars.push(id);
-      if (calendars.length > MAXIMUM_SELECTED_CALENDARS) return;
-      if (calendars.length === held.calendars.length && held.calendars.includes(id) === selected) {
-        return;
-      }
+      const calendars = toggledCalendarSelection(held.calendars, id, selected);
+      if (!calendars) return;
       const calendarAccounts = existing.map((account) =>
         account.id === accountId ? { ...account, calendars } : account,
       );
@@ -935,7 +1006,7 @@ export class SettingsStore {
     });
     return {
       settings: await this.snapshot(),
-      ...(unknownAccount ? { reason: "That calendar account is not connected." } : undefined),
+      ...(missing ? { reason: missing } : undefined),
     };
   }
 
@@ -960,6 +1031,57 @@ export class SettingsStore {
     }
     this.#resolvedCalendarAccounts = accounts;
     return accounts;
+  }
+
+  /**
+   * Connects this Mac's Calendar. Nothing secret is stored — the grant lives
+   * with macOS — only the fact of the connection and the calendar ids the
+   * user chose to count. Connecting while already connected keeps the held
+   * choices: the choices are the user's, and asking again is not a fresh
+   * mind about them.
+   */
+  async connectAppleCalendar(
+    selectedCalendarIds: readonly string[],
+  ): Promise<SettingsUpdateResult> {
+    await this.#serialize(async () => {
+      const persisted = await this.#load();
+      if (persisted.appleCalendar) return;
+      await this.#writeAppleCalendar(persisted, {
+        calendars: sanitizedCalendarIds(unparsedWire(selectedCalendarIds)),
+      });
+    });
+    return { settings: await this.snapshot() };
+  }
+
+  /**
+   * Disconnects this Mac's Calendar. Only the connection is Luke's to delete:
+   * the system grant stays macOS's, withdrawable in System Settings.
+   */
+  async disconnectAppleCalendar(): Promise<SettingsUpdateResult> {
+    await this.#serialize(async () => {
+      const persisted = await this.#load();
+      if (!persisted.appleCalendar) return;
+      await this.#writeAppleCalendar(persisted, undefined);
+    });
+    return { settings: await this.snapshot() };
+  }
+
+  /** The connection as the reader is fed it; absent means never run the helper. */
+  async readAppleCalendarConnection(): Promise<AppleCalendarConnection | undefined> {
+    const held = (await this.#load()).appleCalendar;
+    return held ? { selectedCalendarIds: held.calendars } : undefined;
+  }
+
+  /** One place writes the connection, like the account list beside it. */
+  async #writeAppleCalendar(
+    persisted: PersistedSettings,
+    appleCalendar: PersistedSettings["appleCalendar"],
+  ): Promise<void> {
+    const next: PersistedSettings = { ...persisted, version: SETTINGS_FILE_VERSION };
+    if (appleCalendar) next.appleCalendar = appleCalendar;
+    else delete next.appleCalendar;
+    await this.#write(next);
+    this.#loading = Promise.resolve(next);
   }
 
   /** One place writes the account list, so the cache can never outlive it. */

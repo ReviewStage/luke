@@ -584,14 +584,28 @@ answers with busy intervals only — a title or an attendee cannot travel in
 that response at all. The query names only calendar ids the same pass's list
 reported. Events themselves are never read: Luke holds no event scope.
 
-What the intervals gate is bounded and entirely on this machine: while a
-meeting is on and the "Quiet during meetings" switch is enabled, Luke's spoken
-announcements wait and are read out after the meeting ends, and the face drawn
-beside the housing sleeps for as long as that hold stands. Holding is the whole
-power — a calendar entry can delay an announcement and put a drawn face to
-sleep, never create one, reword one, or act on one. Nothing about the calendar
-leaves the machine — meeting times are never sent to the voice service, the
-attention evaluator, or anywhere else.
+Apple Calendar — this Mac's own Calendar app — is read entirely locally, and
+only after you connect it in Settings. Connecting raises macOS's own calendar
+consent dialog; no browser opens, no credential exists, and Luke stores only
+the fact of the connection and which calendars you chose. macOS grants
+calendar reads whole events, so the narrowing happens inside the helper
+process that does the reading: each event is read for its start and end
+instants alone, and titles, attendees, and notes never leave that process —
+Luke's own main process sees intervals and the calendar list (ids, names, and
+colours, drawn in Settings and persisted nowhere), nothing more. No request
+of any kind leaves the machine. Disconnecting in Luke deletes the stored
+choice; the system grant remains yours to withdraw in System Settings under
+Privacy & Security, Calendars.
+
+What the intervals — Google's and Apple Calendar's alike — gate is bounded
+and entirely on this machine: while a meeting is on and the "Quiet during
+meetings" switch is enabled, Luke's spoken announcements wait and are read
+out after the meeting ends, and the face drawn beside the housing sleeps for
+as long as that hold stands. Holding is the whole power — a calendar entry
+can delay an announcement and put a drawn face to sleep, never create one,
+reword one, or act on one. Nothing about the calendar leaves the machine —
+meeting times are never sent to the voice service, the attention evaluator,
+or anywhere else.
 
 ## Local display and microphone
 

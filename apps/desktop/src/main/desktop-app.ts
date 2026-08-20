@@ -86,6 +86,8 @@ import {
   shell,
   systemPreferences,
 } from "electron";
+import { AppleCalendarReader } from "./apple-calendar";
+import { APPLE_CALENDAR_ACCESS, APPLE_CALENDAR_ID } from "#shared/apple-calendar";
 import {
   ACCOUNT_STATUS,
   type AccountSnapshot,
@@ -290,6 +292,11 @@ const googleCalendar = new GoogleCalendarReader({
 const googleCalendarSignIn = new GoogleCalendarSignIn({
   openExternal: (url) => void shell.openExternal(url),
 });
+// This Mac's own Calendar, read beside the Google accounts through the
+// EventKit helper. Not connected means the helper is never run at all.
+const appleCalendar = new AppleCalendarReader({
+  readConnection: () => settingsStore.readAppleCalendarConnection(),
+});
 /** A diary changes at the pace of hands too; five minutes is current. */
 const CALENDAR_REFRESH_INTERVAL_MS = 5 * 60_000;
 /**
@@ -321,6 +328,17 @@ let quietBoundaryTimer: NodeJS.Timeout | undefined;
  */
 let observedCalendars: readonly ObservedAccountCalendars[] = [];
 let heldNoticeReleaseTimer: NodeJS.Timeout | undefined;
+/**
+ * How often the System Settings switch is asked about between passes. Each
+ * probe is a fresh helper process on purpose: EventKit answers a running
+ * process's authorization from state it read at launch, so only a fresh
+ * process can be trusted about where the switch stands now. Ten seconds is
+ * the longest consent taken back keeps holding anything.
+ */
+const APPLE_ACCESS_POLL_INTERVAL_MS = 10_000;
+let appleAccessPollTimer: NodeJS.Timeout | undefined;
+/** Whether the last access probe failed, so only the edges reach the log. */
+let appleAccessProbeFailing = false;
 // Notices decided while a meeting is on wait here, in the main process: the
 // hold has to outlive any renderer, and this is the one place notices are
 // decided. What releases them is the clock against observed intervals —
@@ -904,8 +922,10 @@ function registerIpc(): void {
     settingsStore,
     calendar: googleCalendar,
     signIn: googleCalendarSignIn,
+    appleCalendar,
     observedCalendars: () => observedCalendars,
-    refresh: () => void calendarObservationLoop.refresh(),
+    refresh: () => calendarObservationLoop.refresh(),
+    openExternal: (url) => void shell.openExternal(url),
     recordProductEvent,
   });
 
@@ -1428,19 +1448,32 @@ async function releaseHeldNotices(): Promise<void> {
  */
 async function refreshCalendarMeetings(generation: number): Promise<void> {
   try {
-    const observations = await googleCalendar.observe();
+    // The two sources answer side by side and neither waits on the other's
+    // failure: each already stands its own last-good observation.
+    const [observations, appleObservation] = await Promise.all([
+      googleCalendar.observe(),
+      appleCalendar.observe(),
+    ]);
     // A pass that outlived its stop is no longer ours to report: the stop
     // cleared the meetings, the calendars, and the quiet, and letting a read
     // that was already in flight land would put the calendar — and a sleeping
     // face — back after a sign-out.
     if (!calendarObservationLoop.isCurrent(generation)) return;
-    calendarMeetings = observations?.flatMap((account) => [...account.meetings]);
-    observedCalendars = (observations ?? []).map(({ accountId, calendars }) => ({
+    const accounts = [...(observations ?? []), ...(appleObservation ? [appleObservation] : [])];
+    // Undefined only while nothing is connected at all — one connected source
+    // is already a calendar, and a quiet it can declare.
+    calendarMeetings =
+      observations === undefined && appleObservation === undefined
+        ? undefined
+        : accounts.flatMap((account) => [...account.meetings]);
+    observedCalendars = accounts.map(({ accountId, calendars, failure, revoked }) => ({
       accountId,
       calendars,
+      ...(failure ? { failure } : undefined),
+      ...(revoked ? { revoked } : undefined),
     }));
     panels.broadcast(channels.calendarsChanged, observedCalendars);
-    for (const account of observations ?? []) {
+    for (const account of accounts) {
       if (account.failure) {
         process.stderr.write(`Calendar observation failed: ${account.failure}\n`);
       }
@@ -1491,6 +1524,42 @@ const observationSupervisor = new ObservationSupervisor([
   calendarObservationLoop,
 ]);
 
+/**
+ * Notices the System Settings switch moving between passes: macOS posts no
+ * notification for a consent change, so the poll is the whole mechanism — a
+ * status probe that reads nothing but the access word, and a full pass run
+ * whenever that word disagrees with the state the panel is drawn from. The
+ * comparison is against the latest pass's own answer rather than a private
+ * baseline on purpose: a baseline can start wrong and stay wrong silently,
+ * where a disagreement with the drawn state is re-found every ten seconds
+ * until a pass has reconciled it.
+ */
+async function pollAppleCalendarAccess(): Promise<void> {
+  // Not connected, no probe — the same silence the observation keeps.
+  if (!(await settingsStore.readAppleCalendarConnection())) return;
+  let access: string | undefined;
+  try {
+    access = await appleCalendar.status();
+  } catch (error) {
+    // A probe that failed says nothing about the switch — but must say so
+    // once, or a watch that stopped watching is indistinguishable from a
+    // switch that never moved.
+    if (!appleAccessProbeFailing) {
+      const message = error instanceof Error ? error.message : String(error);
+      process.stderr.write(`Calendar access probe failed: ${message}\n`);
+    }
+  }
+  appleAccessProbeFailing = access === undefined;
+  if (access === undefined) return;
+  const drawnRevoked =
+    observedCalendars.find((account) => account.accountId === APPLE_CALENDAR_ID)?.revoked === true;
+  const probeRevoked = access !== APPLE_CALENDAR_ACCESS.FULL;
+  if (probeRevoked !== drawnRevoked) {
+    process.stderr.write(`Calendar access now reads ${access}; running a pass.\n`);
+    void calendarObservationLoop.refresh();
+  }
+}
+
 function startCalendarObservation(): void {
   if (heldNoticeReleaseTimer) return;
   heldNoticeReleaseTimer = setInterval(() => {
@@ -1500,6 +1569,12 @@ function startCalendarObservation(): void {
     void releaseHeldNotices();
   }, HELD_NOTICE_RELEASE_INTERVAL_MS);
   heldNoticeReleaseTimer.unref();
+  if (process.platform === "darwin" && runMode.observesProviders) {
+    appleAccessPollTimer = setInterval(() => {
+      void pollAppleCalendarAccess();
+    }, APPLE_ACCESS_POLL_INTERVAL_MS);
+    appleAccessPollTimer.unref();
+  }
 }
 
 /**
@@ -1511,13 +1586,17 @@ function startCalendarObservation(): void {
 function stopCalendarObservation(): void {
   if (heldNoticeReleaseTimer) clearInterval(heldNoticeReleaseTimer);
   heldNoticeReleaseTimer = undefined;
+  if (appleAccessPollTimer) clearInterval(appleAccessPollTimer);
+  appleAccessPollTimer = undefined;
+  appleAccessProbeFailing = false;
   if (quietBoundaryTimer) clearTimeout(quietBoundaryTimer);
   quietBoundaryTimer = undefined;
   calendarMeetings = undefined;
   observedCalendars = [];
-  // The reader forgets what it held for failing accounts too: a pass after
+  // The readers forget what they held for failing accounts too: a pass after
   // signing back in starts from nothing, not from an era this stop ended.
   googleCalendar.forget();
+  appleCalendar.forget();
   heldNotices.release();
   heldRequestSpeech.release();
   panels.broadcast(channels.calendarsChanged, observedCalendars);

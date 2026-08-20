@@ -75,6 +75,18 @@ export function TrashIcon(): React.JSX.Element {
   );
 }
 
+/** Two arrows chasing each other: reads the list again, right now. */
+export function RefreshIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M20.8 5.2v4.6h-4.6" />
+      <path d="M3.2 18.8v-4.6h4.6" />
+      <path d="M4.5 9.8a7.8 7.8 0 0 1 12.9-2.9l3.4 2.9" />
+      <path d="M19.5 14.2a7.8 7.8 0 0 1-12.9 2.9l-3.4-2.9" />
+    </Glyph>
+  );
+}
+
 /** An arrow turning back on itself: returns a setting to its default. */
 export function ResetIcon(): React.JSX.Element {
   return (

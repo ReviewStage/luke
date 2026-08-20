@@ -865,6 +865,13 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   transform: scale(1.22);
 }
 
+/* The Apple Calendar mark carries its own colours, like Google Calendar's, so
+   no colour is set here; its tile fills the box edge to edge and takes the
+   full-bleed marks' scale. */
+.provider-mark[data-mark="apple-calendar"] {
+  transform: scale(0.94);
+}
+
 /* Google Calendar's product icon carries its own published colours, so no
    colour is set here; it fills its box the way Codex and Cursor do and takes
    the same scale they do. */

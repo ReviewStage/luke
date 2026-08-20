@@ -165,6 +165,7 @@ function storeIn(
     cipher?: SecretCipher;
     environment?: NodeJS.ProcessEnv;
     providers?: readonly CredentialProvider[];
+    appleCalendarSupported?: boolean;
   } = {},
 ): SettingsStore {
   const config: SettingsStoreOptions = {
@@ -174,6 +175,9 @@ function storeIn(
   };
   if (options.providers) {
     config.providers = options.providers;
+  }
+  if (options.appleCalendarSupported !== undefined) {
+    config.appleCalendarSupported = options.appleCalendarSupported;
   }
   return new SettingsStore(config);
 }
@@ -551,6 +555,58 @@ test("selection changes one calendar on one account, and removal takes the grant
   assert.deepEqual(await store.readCalendarAccounts(), []);
   // Nothing empty is written down: a file with no accounts carries no field.
   assert.equal(JSON.parse(await readSettingsFile(directory)).calendarAccounts, undefined);
+});
+
+test("the Apple Calendar connection stores only the choice and survives a reopen", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory, { appleCalendarSupported: true });
+
+  assert.equal(await store.readAppleCalendarConnection(), undefined);
+  assert.equal((await store.snapshot()).appleCalendar, undefined);
+  assert.equal((await store.snapshot()).appleCalendarAvailable, true);
+
+  const connected = await store.connectAppleCalendar(["home", "work"]);
+  assert.equal(connected.reason, undefined);
+  assert.deepEqual(connected.settings.appleCalendar, {
+    id: "apple-calendar",
+    selectedCalendarIds: ["home", "work"],
+  });
+  // Nothing secret is at rest: the file carries the choice and no token, so
+  // nothing here ever reaches the cipher.
+  const persisted = JSON.parse(await readSettingsFile(directory));
+  assert.deepEqual(persisted.appleCalendar, { calendars: ["home", "work"] });
+  // The connection outlives the run that stored it.
+  assert.deepEqual(
+    await storeIn(directory, { appleCalendarSupported: true }).readAppleCalendarConnection(),
+    { selectedCalendarIds: ["home", "work"] },
+  );
+});
+
+test("connecting Apple Calendar again keeps the held choices, and selection edits them", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory, { appleCalendarSupported: true });
+  await store.connectAppleCalendar(["default-calendar"]);
+  // Asking to connect while connected is not a fresh mind about the choices.
+  await store.connectAppleCalendar(["another"]);
+  // The Apple selection goes through the same door as every account's,
+  // routed by the fixed id, so callers never learn it is stored apart.
+  await store.setCalendarSelected("apple-calendar", "team", true);
+  await store.setCalendarSelected("apple-calendar", "default-calendar", false);
+  assert.deepEqual(await store.readAppleCalendarConnection(), { selectedCalendarIds: ["team"] });
+
+  const disconnected = await store.disconnectAppleCalendar();
+  assert.equal(disconnected.settings.appleCalendar, undefined);
+  assert.equal(await store.readAppleCalendarConnection(), undefined);
+  const idle = await store.setCalendarSelected("apple-calendar", "team", true);
+  assert.equal(idle.reason, "Apple Calendar is not connected.");
+  // Nothing empty is written down: a disconnected file carries no field.
+  assert.equal(JSON.parse(await readSettingsFile(directory)).appleCalendar, undefined);
+});
+
+test("Apple Calendar is not offered where there is no Mac calendar to read", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const snapshot = await storeIn(directory, { appleCalendarSupported: false }).snapshot();
+  assert.equal(snapshot.appleCalendarAvailable, false);
 });
 
 test("a calendar account never disturbs a stored key, nor a key an account", async (t) => {

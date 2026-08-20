@@ -50,6 +50,7 @@ function settings(captions: boolean): AppSettings {
     quietDuringMeetings: true,
     calendarSignInAvailable: false,
     linearSignInAvailable: false,
+    appleCalendarAvailable: false,
     voiceAvailable: false,
     voiceSource: VOICE_SOURCE.ACCOUNT,
     preferBuiltInMicrophone: false,
