@@ -36,21 +36,22 @@ export const DMG_STAGING_ENTRIES = [
 // custom-icon bit is set, which can only happen on a mounted volume — see
 // volumeCustomIconArguments.
 export const DMG_VOLUME_ICON_FILE_NAME = ".VolumeIcon.icns";
-// The volume's icon is the installer icon — the face on a drive silhouette —
-// never the app's own squircle, for the same reason the volume is not named
-// bare "Luke". Cut from the dark set like the app's bundle icon: one volume
-// icon has to serve both desktop modes.
+// The volume's icon is the installer icon — the app icon badged onto an
+// aluminum drive slab — never the app's own squircle alone, for the same
+// reason the volume is not named bare "Luke". The artwork has no light/dark
+// pair: the drive is hardware silver and its badge is the bundle icon, which
+// already serves both desktop modes.
 export const INSTALLER_ICONSET_SOURCES = Object.freeze({
-  "icon_16x16.png": "luke-installer-icon-dark-16.png",
-  "icon_16x16@2x.png": "luke-installer-icon-dark-32.png",
-  "icon_32x32.png": "luke-installer-icon-dark-32.png",
-  "icon_32x32@2x.png": "luke-installer-icon-dark-64.png",
-  "icon_128x128.png": "luke-installer-icon-dark-128.png",
-  "icon_128x128@2x.png": "luke-installer-icon-dark-256.png",
-  "icon_256x256.png": "luke-installer-icon-dark-256.png",
-  "icon_256x256@2x.png": "luke-installer-icon-dark-512.png",
-  "icon_512x512.png": "luke-installer-icon-dark-512.png",
-  "icon_512x512@2x.png": "luke-installer-icon-dark-1024.png",
+  "icon_16x16.png": "luke-installer-icon-16.png",
+  "icon_16x16@2x.png": "luke-installer-icon-32.png",
+  "icon_32x32.png": "luke-installer-icon-32.png",
+  "icon_32x32@2x.png": "luke-installer-icon-64.png",
+  "icon_128x128.png": "luke-installer-icon-128.png",
+  "icon_128x128@2x.png": "luke-installer-icon-256.png",
+  "icon_256x256.png": "luke-installer-icon-256.png",
+  "icon_256x256@2x.png": "luke-installer-icon-512.png",
+  "icon_512x512.png": "luke-installer-icon-512.png",
+  "icon_512x512@2x.png": "luke-installer-icon-1024.png",
 });
 
 export function releaseDmgFileName(version) {

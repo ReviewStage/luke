@@ -19,8 +19,10 @@ cd design/brand
 for m in light dark; do
   for s in 16 32 64 128 256 512 1024; do
     rsvg-convert -w $s -h $s icon/luke-icon-$m.svg -o icon/luke-icon-$m-$s.png
-    rsvg-convert -w $s -h $s icon/luke-installer-icon-$m.svg -o icon/luke-installer-icon-$m-$s.png
   done
+done
+for s in 16 32 64 128 256 512 1024; do
+  rsvg-convert -w $s -h $s icon/luke-installer-icon.svg -o icon/luke-installer-icon-$s.png
 done
 for m in light dark; do
   rsvg-convert -w 1024 -h 1024 mark/luke-mark-square-$m.svg -o mark/luke-mark-square-$m-1024.png
@@ -43,10 +45,12 @@ rsvg-convert -w 1200 -h 630 social/luke-og-card.svg -o ../../apps/web/public/luk
 `app.dock.setIcon`. The Dock tile is swapped between the two mode icons as the
 theme changes.
 
-`icon/luke-installer-icon-dark-*.png` are cut into the release DMG's volume
-icon (`.VolumeIcon.icns`): the same face on a drive silhouette rather than the
-app's squircle, so the mounted "Luke Installer" volume cannot pass for the
-Luke.app beside it.
+`icon/luke-installer-icon-*.png` are cut into the release DMG's volume icon
+(`.VolumeIcon.icns`): the app icon badged onto an aluminum drive slab, so the
+mounted "Luke Installer" volume reads as the hardware holding Luke rather
+than as the Luke.app beside it. It has no light/dark pair — the drive is
+hardware silver, and its badge is the bundle icon, which already serves both
+modes.
 
 The notch panel draws the face itself rather than loading these SVGs, because it
 needs two things a baked asset cannot give it: `currentColor`, so it can take the

@@ -1102,38 +1102,51 @@ const bbox = faceBBox();
 const glyphScale = (224 * 0.58) / bbox.w;
 const gx = 120 - bbox.cx * glyphScale;
 const gy = 120 - bbox.cy * glyphScale;
+const iconTileArt = (tile) =>
+  `<rect x="8" y="8" width="224" height="224" rx="52" fill="url(#tile)"/>` +
+  `<g color="${tile.ink}" transform="translate(${fmt(gx)} ${fmt(gy)}) scale(${fmt(glyphScale)})">${face()}</g>`;
 for (const [mode, tile] of Object.entries(TILES)) {
   const icon =
     `${svgOpen(240, 240)}<defs><linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">` +
     `<stop offset="0" stop-color="${tile.gradient[0]}"/><stop offset="1" stop-color="${tile.gradient[1]}"/></linearGradient></defs>` +
-    `<rect x="8" y="8" width="224" height="224" rx="52" fill="url(#tile)"/>` +
-    `<g color="${tile.ink}" transform="translate(${fmt(gx)} ${fmt(gy)}) scale(${fmt(glyphScale)})">${face()}</g></svg>`;
+    `${iconTileArt(tile)}</svg>`;
   emit(`icon/luke-icon-${mode}.svg`, icon.replaceAll("currentColor", tile.ink), "Luke app icon");
 }
 
-// Installer volume icon, one per mode: the same face on a drive-proportioned
-// tile — the disk-image convention of badging the mark onto a drive
-// silhouette — so the volume a mounted DMG puts on the desktop cannot pass
-// for the Luke.app sitting beside it. The drive carries no indicator light:
-// the face is dots and strokes, and any lone dot beside it reads as a stray
-// eye. The face keeps a glyph share near the app icon's, measured against
-// the drive's height because that is the drive tile's tight side.
-const DRIVE = { x: 8, y: 60, w: 224, h: 120, r: 32 };
-const driveScale = (DRIVE.h * 0.66) / bbox.h;
-const driveGx = 120 - bbox.cx * driveScale;
-const driveGy = DRIVE.y + DRIVE.h / 2 - bbox.cy * driveScale;
-for (const [mode, tile] of Object.entries(TILES)) {
-  const installerIcon =
-    `${svgOpen(240, 240)}<defs><linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">` +
-    `<stop offset="0" stop-color="${tile.gradient[0]}"/><stop offset="1" stop-color="${tile.gradient[1]}"/></linearGradient></defs>` +
-    `<rect x="${DRIVE.x}" y="${DRIVE.y}" width="${DRIVE.w}" height="${DRIVE.h}" rx="${DRIVE.r}" fill="url(#tile)"/>` +
-    `<g color="${tile.ink}" transform="translate(${fmt(driveGx)} ${fmt(driveGy)}) scale(${fmt(driveScale)})">${face()}</g></svg>`;
-  emit(
-    `icon/luke-installer-icon-${mode}.svg`,
-    installerIcon.replaceAll("currentColor", tile.ink),
-    "Luke installer volume icon",
-  );
-}
+// Installer volume icon: the app icon badged onto an aluminum drive slab —
+// the disk-image convention Finder and the polished DMGs share, hardware
+// carrying the app — so the volume a mounted DMG puts on the desktop reads
+// as the thing holding Luke, never as Luke himself. The badge is the bundle
+// icon exactly (the dark tile, which already serves both desktop modes), and
+// brushed aluminum is hardware with no mode of its own, so there is one
+// installer icon rather than a light/dark pair. The slab's visible top edge
+// is what gives it depth; the small light on the front face is the drive's
+// activity light, hardware-grey so it cannot read as one of the face's eyes.
+const DRIVE = {
+  top: { x: 18, y: 62, w: 204, h: 32, r: 16, gradient: ["#fafafc", "#d3d3da"] },
+  face: { x: 10, y: 78, w: 220, h: 110, r: 22, gradient: ["#e9e9ee", "#b3b3bc"] },
+  light: { cx: 205, cy: 133, r: 5, fill: "#8e8e93" },
+  badge: { x: 84, y: 97, scale: 0.3 },
+};
+const driveTile = TILES.dark;
+const installerIcon =
+  `${svgOpen(240, 240)}<defs>` +
+  `<linearGradient id="drive-top" x1="0" y1="0" x2="0" y2="1">` +
+  `<stop offset="0" stop-color="${DRIVE.top.gradient[0]}"/><stop offset="1" stop-color="${DRIVE.top.gradient[1]}"/></linearGradient>` +
+  `<linearGradient id="drive-face" x1="0" y1="0" x2="0" y2="1">` +
+  `<stop offset="0" stop-color="${DRIVE.face.gradient[0]}"/><stop offset="1" stop-color="${DRIVE.face.gradient[1]}"/></linearGradient>` +
+  `<linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">` +
+  `<stop offset="0" stop-color="${driveTile.gradient[0]}"/><stop offset="1" stop-color="${driveTile.gradient[1]}"/></linearGradient>` +
+  `</defs>` +
+  `<rect x="${DRIVE.top.x}" y="${DRIVE.top.y}" width="${DRIVE.top.w}" height="${DRIVE.top.h}" rx="${DRIVE.top.r}" fill="url(#drive-top)"/>` +
+  `<rect x="${DRIVE.face.x}" y="${DRIVE.face.y}" width="${DRIVE.face.w}" height="${DRIVE.face.h}" rx="${DRIVE.face.r}" fill="url(#drive-face)"/>` +
+  `<circle cx="${DRIVE.light.cx}" cy="${DRIVE.light.cy}" r="${DRIVE.light.r}" fill="${DRIVE.light.fill}"/>` +
+  `<g transform="translate(${DRIVE.badge.x} ${DRIVE.badge.y}) scale(${DRIVE.badge.scale})">${iconTileArt(driveTile)}</g></svg>`;
+emit(
+  "icon/luke-installer-icon.svg",
+  installerIcon.replaceAll("currentColor", driveTile.ink),
+  "Luke installer volume icon",
+);
 
 // Square mark: the static mark's own tight fill — the face's bounding box
 // padded by the same 6 units, squared by its larger side — with the corners
