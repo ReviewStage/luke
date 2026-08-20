@@ -141,6 +141,38 @@ test("reads live host databases and enriches an exact provider session", async (
   );
 });
 
+test("binds Cursor's agents CLI under Superset's own name for it", async (t) => {
+  const home = await temporarySupersetHome(t);
+  const database = await writeHostDatabase(home, "host-local");
+  createSchema(database);
+  // Superset records the app's agents as `cursor` and the `agents` CLI as
+  // `cursor-agent`; both are Cursor sessions to Luke.
+  database.exec(`
+    INSERT INTO workspaces VALUES (
+      'workspace-1', NULL, NULL, 'square-geometry', 'main', 200
+    );
+    INSERT INTO terminal_agent_bindings VALUES (
+      'terminal-1', 'workspace-1', 'cursor-agent', 'cli-session', 'Start'
+    );
+  `);
+  database.close();
+
+  const snapshot = await new SupersetWorkspaceReader({ homeDirectory: home }).read();
+  const context = snapshot.context(PROVIDER_ID.CURSOR, "cli-session");
+  assert.equal(context?.workspaceId, "workspace-1");
+  assert.equal(
+    snapshot.enrich(PROVIDER_ID.CURSOR, [
+      {
+        providerSessionId: "cli-session",
+        title: "square-geometry",
+        status: SESSION_STATUS.WORKING,
+        observedAt: 100,
+      },
+    ])[0]?.detail?.link,
+    "superset://v2-workspace/workspace-1?terminalId=terminal-1",
+  );
+});
+
 test("keeps the newest duplicate binding across host databases", async (t) => {
   const home = await temporarySupersetHome(t);
   for (const [organizationId, updatedAt] of [

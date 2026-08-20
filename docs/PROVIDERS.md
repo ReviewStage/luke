@@ -43,7 +43,7 @@ What Luke reads:
 | Codex | Local | Session index and rollout files under `~/.codex` | Last agent message, or the turn's error | Yes | `codex:` thread |
 | Codex | Cloud | The user's own Codex CLI, under its ChatGPT login | — | — | `chatgpt.com` task page |
 | Conductor | Cloud | `api.conductor.build`, under an API key | Final assistant message, while idle | — | `conductor:` deep link |
-| Cursor | Local | Agent transcripts under `~/.cursor/projects/` | — | Yes | `cursor:` chat deep link |
+| Cursor | Local | Agent transcripts under `~/.cursor/projects/` | — | Yes | `cursor:` chat deep link, for the app's own chats |
 | Cursor | Cloud | `api.cursor.com`, under `CURSOR_API_KEY` | Run result | — | Agent URL |
 | Devin | Local | The Devin CLI's session database | — | Yes | — |
 | Devin | Cloud | `api.devin.ai`, under a `cog_` access token | — | — | Session URL |
@@ -118,12 +118,18 @@ The bounds the tables cannot carry:
   the build's table. Conductor on this Mac is an app — see [Apps](#apps).
 - **Cursor, local** — rows report turn state and failure without Cursor's
   reason, which is not stored, and the readout renders what Cursor wrote down,
-  which excludes tool outputs. Each row's address,
-  `cursor://anysphere.cursor-deeplink/agent?id=<chat>`, is composed on this
-  machine from the chat's own observed id — the same route Cursor's deep-link
-  handler resolves — and opens the exact chat whether Cursor is running or
-  not; a chat Cursor cannot resolve draws Cursor's own not-found notice
-  rather than acting on anything.
+  which excludes tool outputs. A chat the app itself holds carries its own
+  address, `cursor://anysphere.cursor-deeplink/agent?id=<chat>`, composed on
+  this machine from the chat's observed id — the same route Cursor's
+  deep-link handler resolves — and it opens the exact chat whether Cursor is
+  running or not. Whether the app holds a chat is read from Cursor's own
+  index as the presence of the chat's key alone, because the values are the
+  conversations. Cursor's `agents` CLI writes transcripts beside the app's
+  without registering them in any window, so a CLI chat keeps no provider
+  address — an app that manages its terminal stands its own in, the way
+  cmux, Superset, and Conductor rows already do, and a CLI chat in an
+  unmanaged terminal honestly opens nowhere, like every other
+  terminal-only agent.
 - **Cursor, cloud** — cancel and archive are never offered at once; a message
   is a follow-up run, only after the latest run finished on an unarchived
   agent; the new agent's task is required because Cursor cannot make an idle
