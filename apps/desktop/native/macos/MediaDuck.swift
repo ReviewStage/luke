@@ -71,7 +71,9 @@ private let MEDIA_DUCK_COMMAND = (duck: "duck", restore: "restore")
 
 private func emit(_ line: String) {
     guard let payload = "\(line)\n".data(using: .utf8) else { return }
-    FileHandle.standardOutput.write(payload)
+    // A diagnostic that cannot be delivered — the parent and its pipe already
+    // gone — must not take the restore down with it.
+    try? FileHandle.standardOutput.write(contentsOf: payload)
 }
 
 /// One Apple Event, or nothing. A player that refuses — consent denied, the
@@ -135,6 +137,16 @@ private struct MediaDuckCommand {
     static var ducked: [String: DuckedPlayer] = [:]
 
     static func main() {
+        // The signals that quit the app must not quit the helper: Luke and
+        // this process share a group, so the Ctrl+C or teardown that ends a
+        // terminal run reaches both, and a helper killed mid-duck restores
+        // nothing. Stdin closing stays the one exit, and it always restores;
+        // SIGPIPE joins the list so a restore whose diagnostic has no pipe
+        // left to land in still runs to the end.
+        signal(SIGINT, SIG_IGN)
+        signal(SIGTERM, SIG_IGN)
+        signal(SIGHUP, SIG_IGN)
+        signal(SIGPIPE, SIG_IGN)
         FileHandle.standardInput.readabilityHandler = { handle in
             let data = handle.availableData
             DispatchQueue.main.async {
