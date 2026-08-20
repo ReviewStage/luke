@@ -125,6 +125,7 @@ import {
   UserIcon,
 } from "./settings-icons";
 import {
+  defaultProjectRowId,
   landOnSettingsRow,
   SETTINGS_SEARCH_ROW,
   SettingsSearch,
@@ -2304,6 +2305,9 @@ function WorkspaceProjectRow({
   // A provider this build cannot store a choice for, or one with no projects
   // to choose between, has nothing for the row to say.
   if (provider.projects.length === 0) return null;
+  // Several providers draw this row, so each anchors by its own provider —
+  // absent where the search's table does not name one.
+  const anchor = defaultProjectRowId(providerId);
   const stored = settings.workspaceProjectDefaults?.[providerId];
   // A stored default the provider has stopped offering is on its way out: the
   // main process clears it on the same observation, and until that write lands
@@ -2316,7 +2320,7 @@ function WorkspaceProjectRow({
   return (
     <SelectRow
       label="Default project"
-      anchor={SETTINGS_SEARCH_ROW.DEFAULT_PROJECT}
+      {...(anchor ? { anchor } : undefined)}
       ariaLabel={`The project a nameless ask creates ${provider.name} workspaces in`}
       changed={shown !== PROJECT_ASK_EACH_TIME}
       value={shown}
@@ -3263,7 +3267,9 @@ export function SettingsPanel({
               connected: superset.connected,
               agentsOffered: superset.agents.length > 0,
             },
-            defaultProjectOffered: workspaceProviders.some((option) => option.projects.length > 0),
+            workspaceProjects: workspaceProviders
+              .filter((option) => option.projects.length > 0)
+              .map((option) => ({ id: option.id, name: option.name })),
           }),
           searchQuery,
         )

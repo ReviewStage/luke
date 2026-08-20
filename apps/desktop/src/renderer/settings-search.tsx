@@ -15,7 +15,7 @@ import {
   SETTING_PAGE,
   settingGuideEntries,
 } from "../shared/settings-schema";
-import { SUPERSET_WORKSPACE_PROVIDER_ID } from "../shared/superset";
+import { SUPERSET_WORKSPACE_PROVIDER_ID, type WorkspaceProviderId } from "../shared/superset";
 import { workspaceAgentModels } from "../shared/workspace-agents";
 import { FOCUS_FRAME_LIMIT } from "./credential-entry";
 import { ERRAND_TARGET_ATTRIBUTE } from "./luke-errand";
@@ -103,8 +103,29 @@ export const SETTINGS_SEARCH_ROW = {
   ASK_KEY: "ask-key",
   STOP_KEY: "stop-key",
   CODEX_CLOUD: "codex-cloud",
-  DEFAULT_PROJECT: "default-project",
 } as const;
+
+/**
+ * Each provider's Default project row, by the provider it belongs to: several
+ * providers draw one, so a shared id would land a press on whichever row
+ * happens to stand first. A literal table rather than a composed string, and
+ * deliberately only the providers that create workspaces today — a provider
+ * it does not name draws its row unfound rather than mislanding a press, and
+ * widening it is one line beside the capability that widened.
+ */
+const DEFAULT_PROJECT_ROW_ID = {
+  [PROVIDER_ID.CONDUCTOR]: "default-project-conductor",
+  [PROVIDER_ID.CODEX]: "default-project-codex",
+  [PROVIDER_ID.CURSOR]: "default-project-cursor",
+  [SUPERSET_WORKSPACE_PROVIDER_ID]: "default-project-superset",
+} as const satisfies Partial<Record<WorkspaceProviderId, string>>;
+
+/** The anchor a provider's Default project row wears, if the table names it. */
+export function defaultProjectRowId(providerId: WorkspaceProviderId): string | undefined {
+  if (!Object.hasOwn(DEFAULT_PROJECT_ROW_ID, providerId)) return undefined;
+  // SAFETY: hasOwn narrows the id to the table's own keys.
+  return DEFAULT_PROJECT_ROW_ID[providerId as keyof typeof DEFAULT_PROJECT_ROW_ID];
+}
 
 /** One row a query can find, and where pressing it leads. */
 export interface SettingsSearchEntry {
@@ -136,8 +157,8 @@ export interface SettingsSearchInput {
   accountDrawn: boolean;
   /** The Superset row is drawn while installed; its agent row needs more. */
   superset: { installed: boolean; connected: boolean; agentsOffered: boolean };
-  /** Whether any provider offers projects, which draws a Default project row. */
-  defaultProjectOffered: boolean;
+  /** The providers currently offering projects, each drawing a Default project row. */
+  workspaceProjects: readonly { id: WorkspaceProviderId; name: string }[];
 }
 
 /**
@@ -354,14 +375,20 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           haystack: [GOOGLE_CALENDAR_NAME, "meetings account sign in connect integration"],
         }
       : undefined,
-    input.defaultProjectOffered
-      ? {
-          id: SETTINGS_SEARCH_ROW.DEFAULT_PROJECT,
-          label: "Default project",
+    // One entry per provider drawing a Default project row, named for its
+    // provider so the results can be told apart, each landing on its own row.
+    ...input.workspaceProjects.flatMap((provider): SettingsSearchEntry[] => {
+      const id = defaultProjectRowId(provider.id);
+      if (!id) return [];
+      return [
+        {
+          id,
+          label: `${provider.name} default project`,
           page: SETTINGS_VIEW.CONNECTIONS,
-          haystack: ["Default project", "workspace creation ask each time"],
-        }
-      : undefined,
+          haystack: [`${provider.name} default project`, "workspace creation ask each time"],
+        },
+      ];
+    }),
   ];
   return entries.filter((entry): entry is SettingsSearchEntry => entry !== undefined);
 }
