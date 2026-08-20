@@ -291,7 +291,7 @@ test("an ask to open a workspace never stalls on which chat is meant", () => {
   // of them carries identically. Messages and controls still need the chat.
   assert.match(instructions, /An ask to open a workspace is never ambiguous/);
   assert.match(instructions, /without asking which chat is meant/);
-  assert.match(instructions, /To message or control one, say which chat is meant/);
+  assert.match(instructions, /to message or control one, say which agent is meant/);
 });
 
 test("a bare ask for a new agent defaults to a new workspace", () => {
