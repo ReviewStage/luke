@@ -14,10 +14,8 @@ Canonical commands:
 - `./scripts/check.sh` — run portable repository, type, test, and build checks
 - `./scripts/test-macos.sh` — package and validate the macOS app
 - `./scripts/verify.sh` — complete macOS validation plus visual evidence
-- `pnpm release:macos:builder` — create a local signed, notarized, and verified
+- `pnpm release:macos` — create a local signed, notarized, and verified
   electron-builder DMG, zip, and update manifest
-- `pnpm release:macos` — create the legacy packager DMG and zip during builder
-  parity testing
 - `./scripts/run.sh` — launch the app against live sessions, replacing any
   running instance (`--fixture smoke` for fixture data, `--keep-running` to keep
   the running instance)

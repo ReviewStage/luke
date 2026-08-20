@@ -19,7 +19,7 @@ import {
   SIGNING_MODE,
 } from "./package-config.mjs";
 import { NATIVE_HELPERS } from "./package-layout.mjs";
-import { builderReleaseArtifactDirectory } from "./release-config.mjs";
+import { builderReleaseArtifactDirectory, RELEASE_VOLUME_NAME } from "./release-config.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(scriptDirectory, "..");
@@ -113,7 +113,7 @@ export function createElectronBuilderConfig(env = process.env) {
     },
     dmg: {
       artifactName: `Luke-\${version}-\${arch}.\${ext}`,
-      title: productName,
+      title: RELEASE_VOLUME_NAME,
       background: packageAssets.dmgBackgroundPath,
       iconSize: DMG_WINDOW.ICON_SIZE,
       iconTextSize: DMG_WINDOW.TEXT_SIZE,
@@ -129,7 +129,7 @@ export function createElectronBuilderConfig(env = process.env) {
           x: DMG_WINDOW.POSITIONS.APP.X,
           y: DMG_WINDOW.POSITIONS.APP.Y,
           type: "file",
-          path: `${productName}.app`,
+          name: `${productName}.app`,
         },
         {
           x: DMG_WINDOW.POSITIONS.APPLICATIONS.X,

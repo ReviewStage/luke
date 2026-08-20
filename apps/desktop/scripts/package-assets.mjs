@@ -3,11 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { DMG_WINDOW } from "../../../design/dmg-window.mjs";
 import { buildAppIcon } from "./app-icon.mjs";
-import {
-  APP_UPDATE_CONFIG_FILE_NAME,
-  appUpdateConfig,
-  LICENSE_RESOURCE_NAME,
-} from "./package-config.mjs";
+import { LICENSE_RESOURCE_NAME } from "./package-config.mjs";
 import { NATIVE_HELPERS } from "./package-layout.mjs";
 
 export function packageAssetPaths({ appRoot }) {
@@ -16,7 +12,6 @@ export function packageAssetPaths({ appRoot }) {
   );
   const iconPath = path.join(appRoot, ".build", "Luke.icns");
   const licensePath = path.join(appRoot, ".build", LICENSE_RESOURCE_NAME);
-  const appUpdateConfigPath = path.join(appRoot, ".build", APP_UPDATE_CONFIG_FILE_NAME);
   const entitlementsPath = path.join(appRoot, "native", "macos", "entitlements.plist");
   const dmgBackgroundPath = path.join(
     appRoot,
@@ -29,7 +24,6 @@ export function packageAssetPaths({ appRoot }) {
     helperPaths,
     iconPath,
     licensePath,
-    appUpdateConfigPath,
     entitlementsPath,
     dmgBackgroundPath,
   };
@@ -46,7 +40,6 @@ export function preparePackageAssets({ repoRoot, paths }) {
 
   fs.mkdirSync(path.dirname(paths.licensePath), { recursive: true });
   fs.copyFileSync(path.join(repoRoot, "LICENSE"), paths.licensePath);
-  fs.writeFileSync(paths.appUpdateConfigPath, appUpdateConfig());
   buildAppIcon(paths.appRoot, repoRoot);
 }
 

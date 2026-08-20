@@ -1,6 +1,13 @@
 import { spawn } from "node:child_process";
+import { createRequire } from "node:module";
 import path from "node:path";
-import { app } from "electron";
+
+interface ElectronApp {
+  readonly isPackaged: boolean;
+  getAppPath(): string;
+}
+
+const requireElectron = createRequire(__filename);
 
 /**
  * The two words the helper takes. It holds the player-facing knowledge — which
@@ -39,6 +46,8 @@ function spawnMediaDuckHelper(): MediaDuckProcess | undefined {
   // The helper speaks to Music and Spotify through Apple Events, which only
   // macOS has; elsewhere the setting can be held but never acts.
   if (process.platform !== "darwin") return undefined;
+  // SAFETY: Electron's main-process module exports the app path APIs this helper needs.
+  const { app } = requireElectron("electron") as { app: ElectronApp };
   const helperPath = app.isPackaged
     ? path.join(process.resourcesPath, "mac-media-duck")
     : path.join(app.getAppPath(), ".build", "native", "mac-media-duck");

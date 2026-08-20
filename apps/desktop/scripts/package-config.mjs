@@ -1,4 +1,4 @@
-import { PACKAGED_ARCHITECTURE, packageIgnorePatterns } from "./package-layout.mjs";
+import { PACKAGED_ARCHITECTURE } from "./package-layout.mjs";
 
 export { PACKAGED_ARCHITECTURE };
 
@@ -158,74 +158,11 @@ export function signingModeDefine(env) {
  * Setting the feed at runtime does not spare the file: before every download
  * the updater reads `updaterCacheDirName` from it (AppUpdater's
  * downloadUpdate path), so a bundle without one fails with ENOENT the moment
- * a newer build is found. electron-builder writes this file automatically;
- * a packager build must write it itself. The URL must equal
- * `UPDATE_ENDPOINT.UPDATE_FEED_URL` in src/update-service.ts — a packaging
- * test holds the two together.
+ * a newer build is found. electron-builder writes this file from the generic
+ * publish config. The URL must equal `UPDATE_ENDPOINT.UPDATE_FEED_URL` in
+ * src/update-service.ts, and the cache directory must stay `luke-updater` so
+ * downloaded updates from the pre-builder transition are not orphaned.
  */
 export const APP_UPDATE_CONFIG_FILE_NAME = "app-update.yml";
 export const APP_UPDATE_FEED_URL = "https://github.com/ReviewStage/luke/releases/latest/download/";
 export const APP_UPDATE_CACHE_DIR_NAME = "luke-updater";
-
-export function appUpdateConfig() {
-  return [
-    "provider: generic",
-    `url: ${APP_UPDATE_FEED_URL}`,
-    `updaterCacheDirName: ${APP_UPDATE_CACHE_DIR_NAME}`,
-    "",
-  ].join("\n");
-}
-
-export function createPackagerOptions({
-  appRoot,
-  outputRoot,
-  helperPaths,
-  iconPath,
-  licensePath,
-  appUpdateConfigPath,
-  entitlementsPath,
-  signing,
-  version,
-}) {
-  const options = {
-    dir: appRoot,
-    out: outputRoot,
-    name: "Luke",
-    executableName: "Luke",
-    appBundleId: "dev.reviewstage.luke",
-    appCategoryType: "public.app-category.developer-tools",
-    platform: "darwin",
-    arch: PACKAGED_ARCHITECTURE,
-    appVersion: version,
-    asar: true,
-    overwrite: true,
-    prune: false,
-    icon: iconPath,
-    extraResource: [...helperPaths, licensePath, appUpdateConfigPath],
-    extendInfo: {
-      CFBundleDisplayName: "Luke",
-      LSMinimumSystemVersion: MACOS_DEPLOYMENT_TARGET,
-      LSUIElement: true,
-      NSAppleEventsUsageDescription: APPLE_EVENTS_USAGE_DESCRIPTION,
-      ...Object.fromEntries(CALENDARS_USAGE_KEYS.map((key) => [key, CALENDARS_USAGE_DESCRIPTION])),
-      NSMicrophoneUsageDescription: MICROPHONE_USAGE_DESCRIPTION,
-      NSPrefersDisplaySafeAreaCompatibilityMode: false,
-    },
-    ignore: packageIgnorePatterns,
-  };
-
-  if (signing.mode === SIGNING_MODE.DEVELOPER_ID) {
-    return {
-      ...options,
-      osxSign: {
-        identity: signing.identity,
-        optionsForFile: () => ({
-          hardenedRuntime: true,
-          entitlements: entitlementsPath,
-        }),
-      },
-    };
-  }
-
-  return options;
-}

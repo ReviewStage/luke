@@ -107,7 +107,7 @@ Developer ID identity and a stored `luke-notary` notarytool profile
 ```sh
 export LUKE_CODESIGN_IDENTITY='Developer ID Application: …'
 export GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET='GOCSPX-…'   # from the Google Cloud console
-pnpm release:macos:builder            # signs, notarizes, staples; writes the DMG, zip, and manifest
+pnpm release:macos                    # signs, notarizes, staples; writes the DMG, zip, and manifest
 git tag v0.1.1 && git push origin v0.1.1
 ./scripts/release/publish-github.sh   # creates the release and uploads every asset
 ```
@@ -126,12 +126,6 @@ refuses to publish when the tag does not match `apps/desktop/package.json`, and 
 creates a published, non-draft release — the `releases/latest` link and the app's own
 update check both ignore drafts and prereleases, so a draft is a release nobody can
 reach. Re-running it is safe: assets are replaced with `--clobber`.
-
-During the electron-builder rollout, `pnpm release:macos` still runs the legacy
-@electron/packager pipeline into `artifacts/release/` for hardware parity checks. To
-publish that output during a rollback rehearsal, run
-`./scripts/release/publish-github.sh --legacy-packager`; do not use that flag for the
-normal release path.
 
 Afterwards, confirm the three consumers see the build:
 

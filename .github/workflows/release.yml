@@ -126,7 +126,7 @@ jobs:
           printf '%s' "$APPLE_API_KEY_P8_BASE64" | /usr/bin/base64 -D > "$APPLE_API_KEY_PATH"
           chmod 600 "$APPLE_API_KEY_PATH"
           export APPLE_API_KEY_PATH
-          pnpm --filter @luke/desktop release:builder
+          pnpm --filter @luke/desktop release
 
       - name: Verify signed application
         run: |

@@ -17,7 +17,6 @@
     "oxlint": "./scripts/oxlint.sh",
     "package": "pnpm --filter @luke/desktop package",
     "prepare": "husky",
-    "release:macos:builder": "./scripts/release-macos-builder.sh",
     "release:macos": "./scripts/release-macos.sh",
     "start": "pnpm --filter @luke/desktop start",
     "test": "pnpm test:harness && pnpm --recursive --if-present run test",
@@ -26,9 +25,6 @@
   },
   "lint-staged": {
     "*.{js,jsx,mjs,ts,tsx,json,md,css}": "biome check --write --no-errors-on-unmatched"
-  },
-  "optionalDependencies": {
-    "ds-store": "0.1.6"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.8",

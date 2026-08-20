@@ -21,8 +21,10 @@ required_files=(
     .husky/pre-commit
     tsconfig.base.json
     apps/desktop/package.json
-    apps/desktop/scripts/package.mjs
-    apps/desktop/scripts/release.mjs
+    apps/desktop/electron-builder.ts
+    apps/desktop/scripts/electron-builder-config.mjs
+    apps/desktop/scripts/electron-builder-hooks.mjs
+    apps/desktop/scripts/prepare-builder-assets.mjs
     apps/desktop/native/macos/ScreenGeometry.swift
     apps/desktop/native/macos/TalkKey.swift
     apps/web/drizzle.config.ts

@@ -12,17 +12,6 @@ import { PACKAGED_ARCHITECTURE } from "../apps/desktop/scripts/package-layout.mj
 import {
   awaitNotarizationDecision,
   builderReleaseArtifactDirectory,
-  codesignDisplayArguments,
-  DMG_MOUNT_POINT,
-  DMG_STAGING_ENTRIES,
-  DMG_VOLUME_ICON_FILE_NAME,
-  dmgCodesignArguments,
-  dmgStoreLayout,
-  dmgVerificationCommands,
-  hdiutilAttachArguments,
-  hdiutilConvertArguments,
-  hdiutilCreateArguments,
-  hdiutilDetachArguments,
   NOTARY_CREDENTIAL_SOURCE,
   NOTARY_POLL_INTERVAL_MS,
   NOTARY_POLL_TIMEOUT_MS,
@@ -30,21 +19,13 @@ import {
   notaryInfoArguments,
   notaryLogArguments,
   notarySubmitArguments,
-  parseHdiutilAttachPlist,
   RELEASE_LATEST_DMG_FILE_NAME,
   RELEASE_UPDATE_FEED_FILE_NAME,
   RELEASE_VOLUME_NAME,
-  releaseArtifactDirectory,
   releaseDmgFileName,
-  releaseSignatureMatchesIdentity,
-  releaseUpdateManifest,
   releaseZipFileName,
   resolveNotaryCredentials,
-  resolveReleaseSigning,
   stapleArguments,
-  tiffutilHiDpiArguments,
-  volumeCustomIconArguments,
-  withMountedDmg,
 } from "../apps/desktop/scripts/release-config.mjs";
 import { DMG_WINDOW } from "../design/dmg-window.mjs";
 
@@ -52,19 +33,13 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 
 test("manual releases install the locked dependencies before checking the workspace", () => {
   const releaseScript = fs.readFileSync(path.join(repoRoot, "scripts", "release-macos.sh"), "utf8");
-  const builderReleaseScript = fs.readFileSync(
-    path.join(repoRoot, "scripts", "release-macos-builder.sh"),
-    "utf8",
-  );
   const bootstrapCall = releaseScript.indexOf('"$SCRIPT_DIRECTORY/bootstrap.sh"');
   const checkCall = releaseScript.indexOf('"$SCRIPT_DIRECTORY/check.sh"');
-  const builderBootstrapCall = builderReleaseScript.indexOf('"$SCRIPT_DIRECTORY/bootstrap.sh"');
-  const builderCheckCall = builderReleaseScript.indexOf('"$SCRIPT_DIRECTORY/check.sh"');
+  const desktopReleaseCall = releaseScript.indexOf("pnpm --filter @luke/desktop release");
 
   assert.notEqual(bootstrapCall, -1);
   assert.ok(bootstrapCall < checkCall);
-  assert.notEqual(builderBootstrapCall, -1);
-  assert.ok(builderBootstrapCall < builderCheckCall);
+  assert.ok(checkCall < desktopReleaseCall);
 });
 
 test("release DMG names include the desktop version and packaged architecture", () => {
@@ -79,254 +54,36 @@ test("release DMG names include the desktop version and packaged architecture", 
   );
 });
 
-test("release signing requires a Developer ID identity", () => {
-  assert.throws(() => resolveReleaseSigning({}), /LUKE_CODESIGN_IDENTITY/);
-  assert.throws(
-    () => resolveReleaseSigning({ LUKE_CODESIGN_IDENTITY: "  " }),
-    /LUKE_CODESIGN_IDENTITY/,
-  );
-  assert.deepEqual(
-    resolveReleaseSigning({ LUKE_CODESIGN_IDENTITY: "Developer ID Application: Example" }),
-    {
-      identity: "Developer ID Application: Example",
-    },
-  );
+test("release zip names include the desktop version and packaged architecture", () => {
+  assert.equal(releaseZipFileName("0.1.0"), "Luke-0.1.0-macos-arm64.zip");
 });
 
-test("release signing accepts readable identities and SHA-1 certificate hashes", () => {
-  assert.equal(
-    releaseSignatureMatchesIdentity({
-      identity: "Developer ID Application: Example (TEAMID)",
-      authority: "Developer ID Application: Example (TEAMID)",
-      certificateSha1: "unused",
-    }),
-    true,
-  );
-  assert.equal(
-    releaseSignatureMatchesIdentity({
-      identity: "3E4A41C54E100FFC57BC2C6AA19409467994D4B5",
-      authority: "Developer ID Application: Example (TEAMID)",
-      certificateSha1: "3e4a41c54e100ffc57bc2c6aa19409467994d4b5",
-    }),
-    true,
-  );
-  assert.equal(
-    releaseSignatureMatchesIdentity({
-      identity: "3E4A41C54E100FFC57BC2C6AA19409467994D4B5",
-      authority: "Developer ID Application: Example (TEAMID)",
-      certificateSha1: "0000000000000000000000000000000000000000",
-    }),
-    false,
-  );
-  assert.equal(
-    releaseSignatureMatchesIdentity({
-      identity: "3E4A41C54E100FFC57BC2C6AA19409467994D4B5",
-      authority: "Developer ID Application: Example (TEAMID)",
-    }),
-    false,
-  );
+test("the latest-DMG asset name carries no version, so its download URL never moves", () => {
+  assert.equal(RELEASE_LATEST_DMG_FILE_NAME, "Luke.dmg");
+  assert.ok(!RELEASE_LATEST_DMG_FILE_NAME.includes(PACKAGED_ARCHITECTURE));
 });
 
-test("release certificate extraction attaches the output prefix to the codesign flag", () => {
-  assert.deepEqual(codesignDisplayArguments("/tmp/certificate", "/tmp/Luke.app"), [
-    "--display",
-    "--verbose=2",
-    "--extract-certificates=/tmp/certificate",
-    "/tmp/Luke.app",
-  ]);
-});
+test("electron-builder owns the branded DMG layout", () => {
+  const config = createElectronBuilderConfig();
 
-test("release DMG layout and hdiutil arguments are deterministic", () => {
-  assert.deepEqual(DMG_STAGING_ENTRIES, [
-    { name: "Luke.app", kind: "application" },
-    { name: "Applications", kind: "symlink", target: "/Applications" },
-  ]);
-  assert.deepEqual(
-    hdiutilCreateArguments({
-      stagingDirectory: "/tmp/staging",
-      imagePath: "/tmp/Luke-rw.dmg",
-    }),
-    [
-      "create",
-      "-volname",
-      "Luke Installer",
-      "-srcfolder",
-      "/tmp/staging",
-      "-fs",
-      "APFS",
-      "-format",
-      "UDRW",
-      "-ov",
-      "/tmp/Luke-rw.dmg",
-    ],
-  );
-});
-
-test("release DMG mount, conversion, and background arguments are deterministic", () => {
-  const attachArguments = hdiutilAttachArguments("/tmp/Luke-rw.dmg");
-  assert.deepEqual(attachArguments, [
-    "attach",
-    "/tmp/Luke-rw.dmg",
-    "-readwrite",
-    "-noverify",
-    "-noautoopen",
-    "-nobrowse",
-    "-mountpoint",
-    "/Volumes/Luke Installer",
-    "-plist",
-  ]);
-  // The layout writer does not need Finder, so keep Finder from creating a competing .DS_Store.
-  assert.equal(attachArguments.includes("-nobrowse"), true);
-  assert.equal(DMG_MOUNT_POINT, "/Volumes/Luke Installer");
-  assert.deepEqual(hdiutilDetachArguments("/Volumes/Luke"), ["detach", "/Volumes/Luke"]);
-  assert.deepEqual(hdiutilDetachArguments("/Volumes/Luke", { force: true }), [
-    "detach",
-    "/Volumes/Luke",
-    "-force",
-  ]);
-  assert.deepEqual(
-    hdiutilConvertArguments({
-      imagePath: "/tmp/Luke-rw.dmg",
-      dmgPath: "/repo/artifacts/Luke.dmg",
-    }),
-    [
-      "convert",
-      "/tmp/Luke-rw.dmg",
-      "-format",
-      "UDZO",
-      "-imagekey",
-      "zlib-level=9",
-      "-ov",
-      "-o",
-      "/repo/artifacts/Luke.dmg",
-    ],
-  );
-  assert.deepEqual(
-    tiffutilHiDpiArguments({
-      pngPath: "/repo/background.png",
-      png2xPath: "/repo/background@2x.png",
-      tiffPath: "/tmp/background.tiff",
-    }),
-    [
-      "-cathidpicheck",
-      "/repo/background.png",
-      "/repo/background@2x.png",
-      "-out",
-      "/tmp/background.tiff",
-    ],
-  );
-});
-
-test("release DMG attach parsing selects the mounted system entity", () => {
-  const plist = `<?xml version="1.0" encoding="UTF-8"?>
-<plist version="1.0"><dict><key>system-entities</key><array>
-  <dict><key>dev-entry</key><string>/dev/disk4</string><key>content-hint</key><string>GUID_partition_scheme</string></dict>
-  <dict><key>dev-entry</key><string>/dev/disk4s1</string><key>content-hint</key><string>Apple_APFS</string></dict>
-  <dict><key>dev-entry</key><string>/dev/disk5s1</string><key>mount-point</key><string>/Volumes/Luke</string></dict>
-</array></dict></plist>`;
-  assert.deepEqual(parseHdiutilAttachPlist(plist), {
-    mountPoint: "/Volumes/Luke",
-    device: "/dev/disk5s1",
-  });
-  assert.throws(
-    () => parseHdiutilAttachPlist("<plist><dict></dict></plist>"),
-    /<plist><dict><\/dict><\/plist>/,
-  );
-});
-
-test("release DMG attach parsing decodes each XML entity once", () => {
-  const plist = `<plist><dict><key>system-entities</key><array>
-  <dict><key>dev-entry</key><string>/dev/disk&amp;lt;5</string><key>mount-point</key><string>/Volumes/Luke &amp; Test</string></dict>
-</array></dict></plist>`;
-
-  assert.deepEqual(parseHdiutilAttachPlist(plist), {
-    mountPoint: "/Volumes/Luke & Test",
-    device: "/dev/disk&lt;5",
-  });
-});
-
-test("release DMG attach cleanup runs when plist parsing fails", async () => {
-  const detachedMountPoints = [];
-  let usedMountPoint = false;
-
-  await assert.rejects(
-    withMountedDmg({
-      attach: () => "<plist><dict></dict></plist>",
-      detach: (mountPoint) => detachedMountPoints.push(mountPoint),
-      use: () => {
-        usedMountPoint = true;
-      },
-    }),
-    /hdiutil did not report a mounted volume/,
-  );
-
-  assert.deepEqual(detachedMountPoints, [DMG_MOUNT_POINT]);
-  assert.equal(usedMountPoint, false);
-});
-
-test("release DMG attach cleanup does not mask a plist parsing failure", async () => {
-  const detachError = new Error("detach failed");
-  let releaseError;
-
-  try {
-    await withMountedDmg({
-      attach: () => "<plist><dict></dict></plist>",
-      detach: () => {
-        throw detachError;
-      },
-      use: () => assert.fail("an invalid attach response must not be used"),
-    });
-  } catch (error) {
-    releaseError = error;
-  }
-
-  assert.match(releaseError.message, /hdiutil did not report a mounted volume/);
-  assert.equal(releaseError.cause, detachError);
-});
-
-test("release DMG store layout is branded and bounded", () => {
-  const builderConfig = createElectronBuilderConfig();
-
-  assert.deepEqual(dmgStoreLayout("/Volumes/Luke"), {
-    version: 1,
-    backgroundPath: "/Volumes/Luke/.background/background.tiff",
-    iconSize: 128,
-    textSize: 12,
-    window: { x: 200, y: 120, width: 660, height: 400 },
-    icons: [
-      { name: "Luke.app", X: 165, Y: 185 },
-      { name: "Applications", X: 495, Y: 185 },
-    ],
-  });
-
-  assert.ok(DMG_WINDOW.POSITIONS.APP.X < DMG_WINDOW.POSITIONS.APPLICATIONS.X);
-  for (const position of Object.values(DMG_WINDOW.POSITIONS)) {
-    assert.ok(position.X > 0 && position.X < DMG_WINDOW.BACKGROUND.PNG.WIDTH);
-    assert.ok(position.Y > 0 && position.Y < DMG_WINDOW.BACKGROUND.PNG.HEIGHT);
-  }
-  assert.ok(
-    DMG_WINDOW.POSITIONS.APPLICATIONS.X - DMG_WINDOW.POSITIONS.APP.X > DMG_WINDOW.ICON_SIZE,
-  );
-  assert.equal(DMG_WINDOW.BOUNDS.WIDTH, DMG_WINDOW.BACKGROUND.PNG.WIDTH);
-  assert.equal(DMG_WINDOW.BOUNDS.HEIGHT, DMG_WINDOW.BACKGROUND.PNG.HEIGHT);
-  assert.ok(DMG_WINDOW.BACKGROUND.DIRECTORY.startsWith("."));
-  assert.equal(builderConfig.dmg.title, "Luke");
-  assert.equal(builderConfig.dmg.background.endsWith("background.tiff"), true);
-  assert.equal(builderConfig.dmg.iconSize, DMG_WINDOW.ICON_SIZE);
-  assert.equal(builderConfig.dmg.iconTextSize, DMG_WINDOW.TEXT_SIZE);
-  assert.equal(builderConfig.dmg.sign, true);
-  assert.deepEqual(builderConfig.dmg.window, {
+  assert.equal(RELEASE_VOLUME_NAME, "Luke Installer");
+  assert.equal(config.dmg.title, RELEASE_VOLUME_NAME);
+  assert.equal(config.dmg.background.endsWith("background.tiff"), true);
+  assert.equal(config.dmg.iconSize, DMG_WINDOW.ICON_SIZE);
+  assert.equal(config.dmg.iconTextSize, DMG_WINDOW.TEXT_SIZE);
+  assert.equal(config.dmg.sign, true);
+  assert.deepEqual(config.dmg.window, {
     x: DMG_WINDOW.BOUNDS.LEFT,
     y: DMG_WINDOW.BOUNDS.BOTTOM,
     width: DMG_WINDOW.BOUNDS.WIDTH,
     height: DMG_WINDOW.BOUNDS.HEIGHT,
   });
-  assert.deepEqual(builderConfig.dmg.contents, [
+  assert.deepEqual(config.dmg.contents, [
     {
       x: DMG_WINDOW.POSITIONS.APP.X,
       y: DMG_WINDOW.POSITIONS.APP.Y,
       type: "file",
-      path: "Luke.app",
+      name: "Luke.app",
     },
     {
       x: DMG_WINDOW.POSITIONS.APPLICATIONS.X,
@@ -337,70 +94,19 @@ test("release DMG store layout is branded and bounded", () => {
   ]);
 });
 
-test("the DMG volume wears the app's own icon under the installer's name", () => {
-  // Finder reads a volume icon from this exact hidden name at the root, and
-  // only once the root's custom-icon bit is set — so staging the file without
-  // setting the bit, or the reverse, is a generic disk icon with no other sign.
-  assert.equal(DMG_VOLUME_ICON_FILE_NAME, ".VolumeIcon.icns");
-  assert.deepEqual(volumeCustomIconArguments("/Volumes/Luke Installer"), [
-    "SetFile",
-    "-a",
-    "C",
-    "/Volumes/Luke Installer",
-  ]);
-
-  // The name is what tells the installer apart from the installed app: the
-  // volume wears Luke's own icon, so a volume also named bare "Luke" would be
-  // indistinguishable from the Luke.app beside it.
-  assert.equal(RELEASE_VOLUME_NAME, "Luke Installer");
-
-  const releaseScript = fs.readFileSync(
-    path.join(repoRoot, "apps", "desktop", "scripts", "release.mjs"),
+test("the update manifest asset name stays fixed while electron-builder writes its contents", () => {
+  const workflow = fs.readFileSync(
+    path.join(repoRoot, ".github", "workflows", "release.yml"),
     "utf8",
   );
-  assert.ok(releaseScript.includes("DMG_VOLUME_ICON_FILE_NAME"));
-  assert.ok(releaseScript.includes("volumeCustomIconArguments(mountPoint)"));
-  // The staged icon comes from the packaged bundle itself, not the .build
-  // intermediate, so the volume can never wear an icon the app does not.
-  assert.ok(releaseScript.includes("CFBundleIconFile"));
-});
+  const archiveMacro = "$" + "{archive}";
 
-test("release zip names include the desktop version and packaged architecture", () => {
-  assert.equal(releaseZipFileName("0.1.0"), "Luke-0.1.0-macos-arm64.zip");
-});
-
-test("the latest-DMG asset name carries no version, so its download URL never moves", () => {
-  assert.equal(RELEASE_LATEST_DMG_FILE_NAME, "Luke.dmg");
-  assert.ok(!RELEASE_LATEST_DMG_FILE_NAME.includes(PACKAGED_ARCHITECTURE));
-});
-
-test("the update manifest names the archive beside it, hashed whole", () => {
-  // The manifest name carries no version — the app reads it through
-  // releases/latest — and the archive URL inside is the bare file name, so
-  // electron-updater resolves it against the same release the manifest came
-  // from: yesterday's manifest can never hand it today's archive.
   assert.equal(RELEASE_UPDATE_FEED_FILE_NAME, "latest-mac.yml");
-  const manifest = releaseUpdateManifest({
-    version: "0.3.0",
-    sha512: "c2hhLWZpdmUtdHdlbHZl",
-    size: 12345,
-    releaseDate: "2026-08-20T00:00:00.000Z",
-  });
-  const zipName = releaseZipFileName("0.3.0");
-  assert.equal(
-    manifest,
-    [
-      "version: 0.3.0",
-      "files:",
-      `  - url: ${zipName}`,
-      "    sha512: c2hhLWZpdmUtdHdlbHZl",
-      "    size: 12345",
-      `path: ${zipName}`,
-      "sha512: c2hhLWZpdmUtdHdlbHZl",
-      "releaseDate: '2026-08-20T00:00:00.000Z'",
-      "",
-    ].join("\n"),
-  );
+  assert.ok(workflow.includes(`if (!manifest.includes(\`url: ${archiveMacro}\`))`));
+  assert.ok(workflow.includes(`if (!manifest.includes(\`path: ${archiveMacro}\`))`));
+  assert.ok(workflow.includes("if (/https?:\\/\\//.test(manifest))"));
+  assert.ok(workflow.includes("if (!/sha512: \\S+/.test(manifest))"));
+  assert.ok(workflow.includes("if (!/size: \\d+/.test(manifest))"));
 });
 
 test("notary credentials come from the keychain profile unless a key file is provided whole", () => {
@@ -508,42 +214,20 @@ test("release notarization commands use the local keychain profile", () => {
     "luke-notary",
   ]);
   assert.deepEqual(stapleArguments("/tmp/Luke.dmg"), ["stapler", "staple", "/tmp/Luke.dmg"]);
-  assert.deepEqual(dmgCodesignArguments("Developer ID Application: Example", "/tmp/Luke.dmg"), [
-    "--sign",
-    "Developer ID Application: Example",
-    "--timestamp",
-    "/tmp/Luke.dmg",
-  ]);
 });
 
 test("neither notarization path asks notarytool to wait", () => {
   const credentials = { source: NOTARY_CREDENTIAL_SOURCE.KEYCHAIN_PROFILE };
   const builderConfig = createElectronBuilderConfig();
+  const hooks = fs.readFileSync(
+    path.join(repoRoot, "apps", "desktop", "scripts", "electron-builder-hooks.mjs"),
+    "utf8",
+  );
 
   assert.ok(!notarySubmitArguments("/tmp/Luke.dmg", credentials).includes("--wait"));
   assert.ok(!notarySubmitArguments("/tmp/Luke.dmg", credentials).includes("--timeout"));
   assert.equal(builderConfig.mac.notarize, false);
-
-  const notarizeScript = fs.readFileSync(
-    path.join(repoRoot, "scripts", "release", "notarize.sh"),
-    "utf8",
-  );
-  // The rationale comment names the flag it removed, so only uncommented lines count.
-  assert.ok(!/^[^#\n]*--wait\b/m.test(notarizeScript));
-  assert.ok(!/^[^#\n]*--timeout\b/m.test(notarizeScript));
-  assert.ok(notarizeScript.includes("notarytool info"));
-});
-
-test("the CI notarization path polls the submission id, not the submit exit status", () => {
-  const notarizeScript = fs.readFileSync(
-    path.join(repoRoot, "scripts", "release", "notarize.sh"),
-    "utf8",
-  );
-
-  // notarytool can fail after the upload lands, so only a missing id may end
-  // the run before the poll — the JS path continues from that stdout the same way.
-  assert.ok(notarizeScript.includes('if [[ -z "$submission_id" ]]; then'));
-  assert.ok(!/\$submit_exit"?\s+-ne\s+0\s*\|\|/.test(notarizeScript));
+  assert.ok(hooks.includes("notaryInfoArguments(submission.id, credentials)"));
 });
 
 test("notarization polling settles on each status Apple reports", async () => {
@@ -614,7 +298,6 @@ test("a notarization status Apple never returns is bounded like any other", asyn
 });
 
 test("release artifacts stay under the repository artifacts directory", () => {
-  assert.equal(releaseArtifactDirectory("/repo"), path.join("/repo", "artifacts", "release"));
   assert.equal(
     builderReleaseArtifactDirectory("/repo"),
     path.join("/repo", "artifacts", "release-builder"),
@@ -634,23 +317,38 @@ test("electron-builder release output is stable and publishable by GitHub", () =
   assert.equal(config.afterAllArtifactBuild.name, "finalizeElectronBuilderArtifacts");
 });
 
+test("manual publishing uploads only electron-builder's release asset set", () => {
+  const publishScript = fs.readFileSync(
+    path.join(repoRoot, "scripts", "release", "publish-github.sh"),
+    "utf8",
+  );
+
+  assert.ok(publishScript.includes("builderReleaseArtifactDirectory"));
+  assert.ok(publishScript.includes("$LATEST_DMG_PATH"));
+  assert.ok(publishScript.includes("$UPDATE_FEED_PATH"));
+  assert.ok(publishScript.includes("$DMG_PATH.sha256"));
+  assert.ok(publishScript.includes("$ZIP_PATH.sha256"));
+  assert.equal(publishScript.includes(`--${"legacy"}-${"packager"}`), false);
+  assert.equal(publishScript.includes(`write-${"update"}-feed`), false);
+});
+
 test("release verification covers signing, Gatekeeper, stapling, and disk image integrity", () => {
-  // release.mjs intentionally uses entries [0] and [3] when notarization is skipped.
-  assert.deepEqual(dmgVerificationCommands("/tmp/Luke.dmg"), [
-    { command: "codesign", arguments: ["--verify", "--strict", "/tmp/Luke.dmg"] },
-    {
-      command: "spctl",
-      arguments: [
-        "--assess",
-        "--type",
-        "open",
-        "--context",
-        "context:primary-signature",
-        "-vv",
-        "/tmp/Luke.dmg",
-      ],
-    },
-    { command: "xcrun", arguments: ["stapler", "validate", "/tmp/Luke.dmg"] },
-    { command: "hdiutil", arguments: ["verify", "/tmp/Luke.dmg"] },
-  ]);
+  const workflow = fs.readFileSync(
+    path.join(repoRoot, ".github", "workflows", "release.yml"),
+    "utf8",
+  );
+
+  assert.ok(workflow.includes('codesign --verify --deep --strict --verbose=2 "$APP_PATH"'));
+  assert.ok(workflow.includes('grep -q "Authority=Developer ID Application"'));
+  assert.ok(workflow.includes("spctl --assess --type execute -vv"));
+  assert.ok(workflow.includes('xcrun stapler validate "$APP_PATH"'));
+  assert.ok(workflow.includes('codesign --verify --strict "$DIST_DIR/$DMG_ASSET_NAME"'));
+  assert.ok(workflow.includes("spctl --assess --type open --context context:primary-signature"));
+  assert.ok(workflow.includes('xcrun stapler validate "$DIST_DIR/$DMG_ASSET_NAME"'));
+  assert.ok(workflow.includes('hdiutil verify "$DIST_DIR/$DMG_ASSET_NAME"'));
+  assert.ok(workflow.includes('shasum -a 256 -c "$CHECKSUM_NAME"'));
+  assert.ok(workflow.includes('shasum -a 256 -c "$DMG_CHECKSUM_NAME"'));
+  assert.ok(
+    workflow.includes('cmp "$DIST_DIR/$DMG_ASSET_NAME" "$DIST_DIR/$LATEST_DMG_ASSET_NAME"'),
+  );
 });

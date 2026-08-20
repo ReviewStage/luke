@@ -11,9 +11,9 @@ sidecar_require_macos
 cd "$SIDECAR_REPO_ROOT"
 pnpm package
 
-PACKAGED_APP=$(find "$SIDECAR_DESKTOP_APP_ROOT/out" -type d -path '*/Luke.app' -print -quit)
-if [[ -z "$PACKAGED_APP" ]]; then
-    printf 'error: Electron Packager did not produce Luke.app\n' >&2
+PACKAGED_APP=$(node -e "import('./apps/desktop/scripts/package-layout.mjs').then((layout) => process.stdout.write(layout.packagedAppPath(process.cwd())))")
+if [[ ! -d "$PACKAGED_APP" ]]; then
+    printf 'error: electron-builder did not produce Luke.app at %s\n' "$PACKAGED_APP" >&2
     exit 1
 fi
 for helper in mac-screen-geometry mac-talk-key; do
