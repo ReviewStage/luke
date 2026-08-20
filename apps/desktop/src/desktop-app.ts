@@ -796,6 +796,12 @@ function registerIpc(): void {
         runMode.observesProviders && accountCapabilitiesActive()
           ? rosterRelevantSessions(sessionRegistry.snapshot().sessions, Date.now())
           : [],
+      // A live run's roster has settled once it has been broadcast at all —
+      // the first pass publishes even an empty reading — so before that, the
+      // empty list above means "not looked yet" and the face must not sleep
+      // on it. A fixture run never broadcasts and its sessions travel in the
+      // fixture itself, so it is settled from the start.
+      sessionsSettled: !runMode.observesProviders || lastRosterRevision !== -1,
       // Asks are about observed sessions, so they ride the same gate the
       // roster does: a panel shown no sessions is shown no asks about them.
       noticeAsks:

@@ -375,6 +375,11 @@ export function App(): React.JSX.Element {
   // lifecycle subscription to every sign-in change.
   const [account, setAccount, accountNow] = useStateWithRef<AccountSnapshot | undefined>(undefined);
   const [sessions, setSessions] = useState<readonly NormalizedSession[]>([]);
+  // Whether the roster above has been read at all yet. It only ever settles —
+  // the bootstrap can say a reading already happened, and any push is one —
+  // so a bootstrap replying "not yet" after a push raced past it clobbers
+  // nothing, and the wing stops saying "loading" the moment either arrives.
+  const [sessionsSettled, setSessionsSettled] = useState(false);
   const [noticeAsks, setNoticeAsks] = useState<readonly SessionNoticeAsk[]>([]);
   const [workspaceProjects, setWorkspaceProjects] = useState<readonly ObservedWorkspaceProject[]>(
     [],
@@ -2196,6 +2201,19 @@ export function App(): React.JSX.Element {
     (onChange) => window.sidecar.onWorkspaceProjectsChanged(onChange),
     setWorkspaceProjects,
   );
+  // The roster itself rides the same rule, and settling rides with it: any
+  // push is a reading — the main process broadcasts even an empty first
+  // pass — so an older bootstrap snapshot can neither clobber a roster that
+  // raced past it nor leave the settled flag standing over a blank it
+  // reintroduced.
+  const acceptSessionsBootstrap = useBootstrapRacedChannel(
+    (onChange) =>
+      window.sidecar.onSessionsChanged((pushed) => {
+        setSessionsSettled(true);
+        onChange(pushed);
+      }),
+    setSessions,
+  );
   // Straight to the conversation rather than through state: no panel
   // surface draws the issue roster, so a re-render would be work for nobody.
   const acceptIssuesBootstrap = useBootstrapRacedChannel(
@@ -2307,7 +2325,8 @@ export function App(): React.JSX.Element {
     const bootstrapGeneration = modeGenerationOf();
     void window.sidecar.getBootstrap().then((value) => {
       setBootstrap(value);
-      setSessions(value.sessions);
+      acceptSessionsBootstrap(value.sessions);
+      if (value.sessionsSettled) setSessionsSettled(true);
       setNoticeAsks(value.noticeAsks);
       // Only fill in what no push has said yet: the bootstrap snapshot is
       // older than any change that raced past it, and the main process will
@@ -2369,7 +2388,6 @@ export function App(): React.JSX.Element {
       }
     });
     const removeDisplay = window.sidecar.onDisplayChanged(setDisplay);
-    const removeSessions = window.sidecar.onSessionsChanged(setSessions);
     const removeNoticeAsks = window.sidecar.onNoticeAsksChanged(setNoticeAsks);
     const removeSupersetSignIn = window.sidecar.onSupersetSignInChanged((next) => {
       setSupersetConnected(next.stage === SUPERSET_SIGN_IN_STAGE.CONNECTED);
@@ -2384,7 +2402,6 @@ export function App(): React.JSX.Element {
       cancelHover();
       removeLifecycle();
       removeDisplay();
-      removeSessions();
       removeNoticeAsks();
       removeSupersetSignIn();
       void stopMicrophone();
@@ -2396,6 +2413,7 @@ export function App(): React.JSX.Element {
     acceptMeetingQuietBootstrap,
     acceptOutputAudioBootstrap,
     acceptProjectsBootstrap,
+    acceptSessionsBootstrap,
     acceptSettingsBootstrap,
     acceptUpdateBootstrap,
     applyAuthoritativeMode,
@@ -2787,6 +2805,13 @@ export function App(): React.JSX.Element {
   // Luke is watching, not what the panel is currently showing — but it reads
   // in the list's own sort, so the wing's marks sit in the order the rows do.
   const tally = sessionTally(visibleSessions, sessionView.sort);
+  // The capsule button announces the same fact the badge draws: until the
+  // first roster reading lands, an unread zero is "checking", never "none
+  // tracked" — assistive tech must not hear a claim the wing is not making.
+  const tallyAnnouncement =
+    !accountGated && !sessionsSettled && tally.total === 0
+      ? "Checking for sessions"
+      : tallySummary(tally);
   const list = arrangeSessions(visibleSessions, sessionView);
   // Dropping an emptied filter is a change of view, not a way of drawing one.
   // Left in state it would lie dormant behind an All that only looks chosen,
@@ -3153,6 +3178,7 @@ export function App(): React.JSX.Element {
         voiceOpening={talkOpening}
         meetingQuiet={meetingQuiet}
         voiceSpent={voiceSpentNote !== undefined}
+        sessionsSettled={sessionsSettled}
         presentation={presentation}
         housingWidth={display.notch.housingWidth}
         accountGated={accountGated}
@@ -3298,7 +3324,7 @@ export function App(): React.JSX.Element {
           className="compact-hover-target"
           data-hit-region={HIT_REGION.CAPSULE}
           aria-expanded={panelOpen}
-          aria-label={`${tallySummary(tally)}. ${panelOpen ? "Close" : "Open"} the panel`}
+          aria-label={`${tallyAnnouncement}. ${panelOpen ? "Close" : "Open"} the panel`}
           // Keeps the press from moving focus here at all, so nothing is drawn
           // around the notch strip and a focused settings field keeps the caret.
           onMouseDown={(event) => event.preventDefault()}

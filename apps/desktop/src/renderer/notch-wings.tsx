@@ -48,6 +48,13 @@ interface NotchWingsProps {
   meetingQuiet: boolean;
   /** Whether today's voice allowance is spent with no call open — the face hushes on it. */
   voiceSpent: boolean;
+  /**
+   * Whether the roster has been read at all yet. Until it has, the wing is
+   * loading rather than empty: the face waits awake instead of sleeping on a
+   * zero that only means "not looked yet", and the badge says it is checking
+   * rather than counting nothing.
+   */
+  sessionsSettled: boolean;
   presentation: PanelPresentation;
   housingWidth: number;
   /**
@@ -201,6 +208,7 @@ export function NotchWings({
   voiceOpening,
   meetingQuiet,
   voiceSpent,
+  sessionsSettled,
   presentation,
   housingWidth,
   accountGated,
@@ -240,6 +248,7 @@ export function NotchWings({
       }),
       meetingQuiet,
       voiceSpent,
+      settled: sessionsSettled,
       attention: tally.attentionIds,
       working: tally.working,
       complete: tally.complete,
@@ -290,6 +299,11 @@ export function NotchWings({
     countWidths.caption,
     accountGated,
   );
+  // The badge must not count a roster nobody has read: until the first
+  // reading lands it says it is checking, because "0 none tracked" is a
+  // claim about the desk and "still looking" is not. The sign-in label
+  // outranks it — a gated Luke is not checking anything.
+  const rosterLoading = !accountGated && !sessionsSettled && tally.total === 0;
 
   return (
     <>
@@ -378,16 +392,24 @@ export function NotchWings({
             data-sign-in={String(accountGated)}
             role="status"
             aria-live="polite"
-            aria-label={accountGated ? "Sign in" : tallySummary(tally)}
+            aria-label={
+              accountGated
+                ? "Sign in"
+                : rosterLoading
+                  ? "Checking for sessions"
+                  : tallySummary(tally)
+            }
           >
             <span className="count-value" aria-hidden="true" ref={countValueElement}>
-              {accountGated ? "Sign in" : tallyValue(tally)}
+              {accountGated ? "Sign in" : rosterLoading ? "…" : tallyValue(tally)}
             </span>
             <span className="count-caption" aria-hidden="true" ref={countCaptionElement}>
               {/* No caption while signed out: the two words are the label
                   entire, and with nothing beside them the fit keeps their
-                  natural size inside the peek's side. */}
-              {accountGated ? null : tallyCaption(tally)}
+                  natural size inside the peek's side. Nor while checking —
+                  the ellipsis is the whole report until there is a count to
+                  put words beside. */}
+              {accountGated || rosterLoading ? null : tallyCaption(tally)}
             </span>
           </span>
         </div>
