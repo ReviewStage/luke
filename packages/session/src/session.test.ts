@@ -53,6 +53,27 @@ test("a settled or quiet session stays while its ending is news and then leaves"
   }
 });
 
+test("a standing row never ages out, however old its own timestamp", () => {
+  const standing = normalizeSession(
+    { id: "superset", displayName: "Superset" },
+    {
+      providerSessionId: "workspace-1",
+      title: "power-vacation",
+      status: SESSION_STATUS.COMPLETE,
+      observedAt: TEST_NOW - 100 * DAY_MS,
+      standing: true,
+    },
+  );
+  // Its provider re-reports it while it exists and drops it when it is gone,
+  // so retention has nothing to age out — unlike the settled chat beside it.
+  assert.equal(standing.standing, true);
+  assert.equal(isRosterRelevant(standing, TEST_NOW), true);
+  assert.equal(
+    isRosterRelevant(session("run:1", SESSION_STATUS.COMPLETE, TEST_NOW - 100 * DAY_MS), TEST_NOW),
+    false,
+  );
+});
+
 test("filters a roster to the sessions still worth a row, keeping their order", () => {
   const workedForever = session("run:working", SESSION_STATUS.WORKING, TEST_NOW - 100 * DAY_MS);
   const finishedToday = session("run:finished-today", SESSION_STATUS.COMPLETE, TEST_NOW - 1_000);

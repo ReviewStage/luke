@@ -161,6 +161,7 @@ const sameSession = exhaustiveSame<NormalizedSession>({
   observedAt: (first, second) => first.observedAt === second.observedAt,
   realtimeVoice: (first, second) => first.realtimeVoice === second.realtimeVoice,
   realtimeVoiceLive: (first, second) => first.realtimeVoiceLive === second.realtimeVoiceLive,
+  standing: (first, second) => first.standing === second.standing,
   location: (first, second) => first.location === second.location,
   agent: (first, second) => sameOptional(first.agent, second.agent, sameProvider),
   recap: (first, second) => first.recap === second.recap,

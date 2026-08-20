@@ -252,15 +252,20 @@ is said back to you under the field you typed in.
   session is labelled by the folder it runs in, which Luke reads from Cursor's
   own record of that folder, not from the chat's generated name.
 - For Superset, Luke discovers each `host/<organization-id>/host.db`, opens it
-  in read-only defensive mode, and reads two fixed queries' worth of rows: from
-  the terminal-to-agent bindings, each workspace's name, identifier, branch,
-  last-updated timestamp, pull-request link, project name, terminal identifier,
-  and the agent's own session identifier; and from the host's agent
-  configuration, the identifiers of the agent presets it has. That identifier
+  in read-only defensive mode, and reads three fixed queries' worth of rows:
+  from the terminal-to-agent bindings, each workspace's name, identifier,
+  branch, last-updated timestamp, pull-request link, project name, terminal
+  identifier, and the agent's own session identifier; from the host's agent
+  configuration, the identifiers of the agent presets it has; and from the
+  workspaces themselves, the same workspace fields for each unarchived
+  worktree with no agent terminal at all, which the panel shows as its own
+  idle row — the main checkout and anything Superset archived are never read
+  out. A binding's identifier
   is joined exactly to a session Luke already observed; Luke does not infer
   membership from a filesystem path. Missing files and unknown schemas mean no
   Superset context, never an on-screen failure. The stale legacy `local.db` is
-  not read. A managed session's row carries its workspace's `superset://`
+  not read. A managed session's or idle workspace's row carries its
+  workspace's `superset://`
   address, composed on this machine from the observed workspace identifier;
   opening it hands that address to macOS like any row press, and nothing is
   sent to Superset.
@@ -356,7 +361,9 @@ passes only the observed workspace and terminal identifiers plus the
 developer's own message — the terminal lives on this machine, which is the
 CLI's own default, so no host identifier travels at all. The one control
 offered today is Delete workspace, on a row whose work was positively seen
-settled: it runs Superset's own `workspaces delete` with the observed workspace
+settled — a chat's row once its turn ended, or the standing row of a
+workspace with no agent terminal at all, which is settled by construction:
+it runs Superset's own `workspaces delete` with the observed workspace
 id as its single argument, and Superset documents no archive or restore, so it
 permanently removes that workspace and every terminal in it. Luke never reads,
 copies, or stores the CLI token. The CLI is Superset's cloud client and its own

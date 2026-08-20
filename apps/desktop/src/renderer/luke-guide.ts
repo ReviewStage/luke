@@ -222,13 +222,19 @@ function integrationsFact(settings: AppSettings): AppGuideFact {
     "read-only host state, so agents from different providers group under the project and " +
     "workspace that owns them. Every grouped chat carries its workspace's own Superset " +
     "and terminal identifiers, so a chat with no native address opens at its exact terminal " +
-    "in Superset — pressed, or asked of Luke — with no login needed. When Superset's CLI is " +
-    "logged in, those rows can also send the " +
-    "developer's own message, offer Delete workspace once their work settled — Superset " +
+    "in Superset — pressed, or asked of Luke — with no login needed. A worktree workspace " +
+    "with no agent chat at all stands as its own idle row — titled by the workspace, opening " +
+    "in Superset on press, staying however long it has sat idle, which is how a stale " +
+    "workspace is found and cleaned up; the main checkout and workspaces Superset already " +
+    "archived draw no row. When Superset's CLI is " +
+    "logged in, chat rows can also send the " +
+    "developer's own message, every Superset row offers Delete workspace once its work " +
+    "settled — an agentless workspace row counts as settled by construction — Superset " +
     "keeps no archive, so deleting is permanent and takes the whole workspace with every " +
     "chat in it, and a row still working is never offered it; a single chat cannot be " +
     "closed or removed on its own, so deleting the settled workspace is the one removal " +
-    "a Superset row takes, and an ask to archive one means exactly this delete — and " +
+    "a Superset row takes, and an ask to archive one means exactly this delete. Those rows " +
+    "also rename the workspace and start another agent in it, and a conversation ask can " +
     "create a new workspace " +
     "with an agent in a project and host Superset currently lists; connect from Luke's " +
     "Settings, finish Superset's own sign-in flow in the browser, and paste its one-time code " +

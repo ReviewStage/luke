@@ -20,6 +20,7 @@ export {
   defaultSqliteModule,
   numberFromRow,
   openReadOnlyDatabase,
+  type SqliteDatabase,
   type SqliteModuleLoader,
   textFromRow,
 } from "./shared/local-sqlite.js";

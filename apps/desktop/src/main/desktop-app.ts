@@ -1127,6 +1127,7 @@ async function refreshProviderSessions(generation: number): Promise<void> {
     await supersetWorkspaceAdapter.refresh(
       supersetAgentDefault,
       supersetOrganization !== undefined,
+      supersetSnapshot.workspaceRowObservations(supersetOrganization),
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -1154,8 +1155,8 @@ async function refreshProviderSessions(generation: number): Promise<void> {
   // registry commits each provider atomically, so one that is slow or failing
   // can neither delay nor cancel the others. A network provider would
   // otherwise hold up the local ones for as long as its requests take.
-  await Promise.all(
-    orderedRegistrations.map(async ({ adapter }) => {
+  await Promise.all([
+    ...orderedRegistrations.map(async ({ adapter }) => {
       try {
         // Superset claims its workspaces first and Conductor next — the
         // precedence that stood before Orca joined, so no existing tray moves
@@ -1182,7 +1183,20 @@ async function refreshProviderSessions(generation: number): Promise<void> {
         process.stderr.write(`Session observation failed (${adapter.provider.id}): ${message}\n`);
       }
     }),
-  );
+    // The chatless Superset workspaces, as rows of the workspace provider.
+    // No transform rides this refresh: the snapshot decorated them already,
+    // so an act path's plain refresh commits exactly this shape.
+    (async () => {
+      try {
+        await sessionRegistry.refresh(supersetWorkspaceAdapter);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        process.stderr.write(
+          `Session observation failed (${supersetWorkspaceAdapter.provider.id}): ${message}\n`,
+        );
+      }
+    })(),
+  ]);
   if (!sessionObservationLoop.isCurrent(generation)) return;
   // The registry only spoke if the sessions themselves changed, and a pass can
   // change the project list while leaving them exactly as they were.

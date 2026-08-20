@@ -94,9 +94,14 @@ export function sessionRosterRetentionMs(status: SessionStatus): number {
 
 /** Whether a session's status still earns it a place on the roster. */
 export function isRosterRelevant(
-  session: Pick<NormalizedSession, "status" | "observedAt">,
+  session: Pick<NormalizedSession, "status" | "observedAt" | "standing">,
   now: number,
 ): boolean {
+  // Retention ages out history — settled chats whose files linger after the
+  // work ended. A standing session is not history: its provider re-reports it
+  // while the thing it names still exists and stops the moment it is gone, so
+  // there is nothing here to age out, however old its own timestamp grows.
+  if (session.standing) return true;
   return now - session.observedAt <= sessionRosterRetentionMs(session.status);
 }
 
@@ -358,6 +363,15 @@ export interface ProviderSessionObservation {
    * conversation does. Absent means none observed.
    */
   realtimeVoiceLive?: boolean;
+  /**
+   * Whether this row reports a thing that currently stands rather than a
+   * conversation that happened: the adapter re-reports it on every pass for as
+   * long as it exists and drops it the pass after it is gone, so roster
+   * retention never ages it out. `observedAt` then carries the provider's own
+   * timestamp for the thing itself, however old, without costing the row its
+   * place. Absent means the row is history like any other.
+   */
+  standing?: boolean;
   /** Omitted by an adapter that reads sessions off this machine. */
   location?: SessionLocation;
   /**
@@ -435,6 +449,8 @@ export interface NormalizedSession extends SessionIdentity {
   realtimeVoice?: boolean;
   /** Whether a realtime voice conversation is live over this session right now. */
   realtimeVoiceLive?: boolean;
+  /** Whether this row reports a thing that currently stands, exempt from retention. */
+  standing?: boolean;
   location: SessionLocation;
   /** The agent behind this session, when its provider hosts rather than is it. */
   agent?: SessionProvider;
@@ -821,6 +837,7 @@ export function normalizeSession(
   };
   if (observation.realtimeVoice === true) session.realtimeVoice = true;
   if (observation.realtimeVoiceLive === true) session.realtimeVoiceLive = true;
+  if (observation.standing === true) session.standing = true;
   if (parentProviderSessionId && parentProviderSessionId !== providerSessionId) {
     session.parentProviderSessionId = parentProviderSessionId;
   }
