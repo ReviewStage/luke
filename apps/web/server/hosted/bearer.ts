@@ -1,4 +1,4 @@
-import { isRecord, text, type UnparsedWireValue } from "../core";
+import { isRecord, text, type UnparsedWireValue } from "../core.js";
 
 /** The subject a signed-in OAuth userinfo answer names. */
 export interface OAuthUserInfo {

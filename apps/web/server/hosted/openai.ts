@@ -5,7 +5,7 @@
  * off, the same kill switch the feedback endpoint uses.
  */
 
-import type { attentionResponsesRequest, realtimeClientSecretRequest } from "../core";
+import type { attentionResponsesRequest, realtimeClientSecretRequest } from "../core.js";
 
 export const HOSTED_OPENAI_ENVIRONMENT = {
   API_KEY: "OPENAI_API_KEY",

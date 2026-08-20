@@ -1,9 +1,9 @@
-import { auth } from "../../server/auth";
-import { getDatabase } from "../../server/db/index";
-import { hostedUserId, oauthUserInfoFromAuthAnswer } from "../../server/hosted/bearer";
-import { HOSTED_OPENAI_ENVIRONMENT } from "../../server/hosted/openai";
-import { HOSTED_METER, spendHostedMeter } from "../../server/hosted/quota";
-import { handleVoiceMint } from "../../server/hosted/voice-mint";
+import { auth } from "../../server/auth.js";
+import { getDatabase } from "../../server/db/index.js";
+import { hostedUserId, oauthUserInfoFromAuthAnswer } from "../../server/hosted/bearer.js";
+import { HOSTED_OPENAI_ENVIRONMENT } from "../../server/hosted/openai.js";
+import { HOSTED_METER, spendHostedMeter } from "../../server/hosted/quota.js";
+import { handleVoiceMint } from "../../server/hosted/voice-mint.js";
 
 /**
  * Mints one ephemeral Realtime credential for the signed-in desktop, on the

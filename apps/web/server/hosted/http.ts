@@ -1,4 +1,4 @@
-import type { HostedApiError, HostedQuota } from "../core";
+import type { HostedApiError, HostedQuota } from "../core.js";
 
 /**
  * The response vocabulary the hosted endpoints share. Every answer is JSON,
@@ -7,7 +7,7 @@ import type { HostedApiError, HostedQuota } from "../core";
  * clients validate against, so an error slug cannot drift between the two.
  */
 
-export { HOSTED_API_ERROR, type HostedApiError } from "../core";
+export { HOSTED_API_ERROR, type HostedApiError } from "../core.js";
 
 export const HOSTED_HTTP_STATUS = {
   OK: 200,

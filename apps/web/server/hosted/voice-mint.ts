@@ -12,10 +12,10 @@ import {
   realtimeCredentialIsUsable,
   text as trimmedText,
   type UnparsedWireValue,
-} from "../core";
-import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http";
-import { type FetchLike, HOSTED_OPENAI_DEFAULTS, postOpenAi } from "./openai";
-import type { HostedSpend } from "./quota";
+} from "../core.js";
+import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
+import { type FetchLike, HOSTED_OPENAI_DEFAULTS, postOpenAi } from "./openai.js";
+import type { HostedSpend } from "./quota.js";
 
 /**
  * Mints one ephemeral Realtime credential on Luke's own key for a signed-in
