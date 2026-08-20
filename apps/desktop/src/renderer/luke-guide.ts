@@ -222,7 +222,9 @@ function integrationsFact(settings: AppSettings): AppGuideFact {
     "address, so it opens in Superset like any other row — pressed, or asked of Luke — with " +
     "no login needed; Superset keeps one address per workspace, so chats sharing one open " +
     "the same place. When Superset's CLI is logged in, those rows can also send the " +
-    "developer's own message, close their terminal, and create a new workspace " +
+    "developer's own message, offer Delete workspace once their work settled — Superset " +
+    "keeps no archive, so deleting is permanent and takes the whole workspace with every " +
+    "chat in it, and a row still working is never offered it — and create a new workspace " +
     "with an agent in a project and host Superset currently lists; connect from Luke's " +
     "Settings, finish Superset's own sign-in flow in the browser, and paste its one-time code " +
     "into Luke. Superset's CLI exchanges that code, stores the login, and switches organizations; " +

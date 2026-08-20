@@ -49,9 +49,16 @@ Trust constraints:
   itself is bounded the same way at both ends: Connect runs the CLI's own
   `auth login` and Disconnect its documented `auth logout` — each only at the
   developer's press on the Superset row, each invoked directly with arguments
-  fixed by the build, and the CLI owns the credential throughout. This does
-  not authorize arbitrary Superset CLI commands, deletion, tasks, automations,
-  account changes, or settings changes.
+  fixed by the build, and the CLI owns the credential throughout. One deletion
+  is authorized, as the control a managed row advertises and nothing wider:
+  deleting the workspace behind that row, through the documented
+  `workspaces delete` command with the observed workspace id as its single
+  argument, invoked directly without a shell, only as the direct product of
+  the control's own press or a developer-opened turn, and advertised only on
+  a row positively seen settled — never one still working or unreadable,
+  because the delete is unrecoverable and takes every sibling chat's terminal
+  with it. This does not authorize any other Superset CLI command, deletion
+  of anything else, tasks, automations, account changes, or settings changes.
 - Product behavior must not require provider MCP, plugins, hooks, wrappers,
   credentials, or live sessions. A provider whose sessions exist only in a cloud
   service may read a user-supplied API key, but it must observe nothing until

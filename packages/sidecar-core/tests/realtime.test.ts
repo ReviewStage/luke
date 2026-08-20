@@ -733,10 +733,14 @@ test("session context carries only bounded, redacted fields", () => {
       status: SESSION_STATUS.WORKING,
       observedAt: DECIDED_AT,
       detail: { link: "superset://v2-workspace/workspace-1" },
+      controls: [
+        { id: "superset-delete-workspace", label: "Delete workspace", target: "workspace-1" },
+      ],
     },
   );
   const managedText = sessionContextText([managed]);
   assert.match(managedText, /can be opened/);
+  assert.match(managedText, /Delete workspace \(superset-delete-workspace\)/);
   assert.doesNotMatch(managedText, /superset:/);
 });
 

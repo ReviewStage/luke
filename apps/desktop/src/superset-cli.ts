@@ -26,7 +26,7 @@ import type { SupersetSessionContext } from "./superset-workspaces";
 import { unparsedWire, wireRecord } from "./wire-boundary";
 
 export const SUPERSET_CONTROL_ID = {
-  CLOSE_TERMINAL: "superset-close-terminal",
+  DELETE_WORKSPACE: "superset-delete-workspace",
 } as const;
 
 export function isSupersetControlId(controlId: string): boolean {
@@ -386,18 +386,12 @@ export class SupersetCli {
     context: SupersetSessionContext,
     controlId: string,
   ): Promise<ProviderControlResult> {
-    if (controlId === SUPERSET_CONTROL_ID.CLOSE_TERMINAL) {
+    // The one deletion the agent guide authorizes: the observed workspace id
+    // as the command's single argument, nothing else ever deleted.
+    if (controlId === SUPERSET_CONTROL_ID.DELETE_WORKSPACE) {
       return this.#act(
-        [
-          "terminals",
-          "close",
-          "--workspace",
-          context.workspaceId,
-          "--terminal",
-          context.terminalId,
-          "--json",
-        ],
-        "Superset could not close that terminal.",
+        ["workspaces", "delete", context.workspaceId, "--json"],
+        "Superset could not delete that workspace.",
       );
     }
     return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };

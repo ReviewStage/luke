@@ -1,5 +1,10 @@
 import path from "node:path";
-import { PROVIDER_ID, type ProviderSessionObservation, type WireRecord } from "@sidecar/core";
+import {
+  PROVIDER_ID,
+  type ProviderSessionObservation,
+  SESSION_STATUS,
+  type WireRecord,
+} from "@sidecar/core";
 import { readDirectory } from "./local-session-adapter";
 import {
   canIgnoreSqliteError,
@@ -170,12 +175,26 @@ export class SupersetWorkspaceSnapshot {
       if (!actionsEnabled) {
         return { ...observation, detail, workspace };
       }
+      // Deleting the workspace is unrecoverable and takes every sibling
+      // chat's terminal with it, so it is offered only on a row positively
+      // seen settled — never one still working, or one whose state could not
+      // be read. The workspace id rides as the control's target, which is
+      // both what the press deletes and what seats the control once on a
+      // tray's own header when several chats share the workspace.
+      const settled =
+        observation.status !== SESSION_STATUS.WORKING &&
+        observation.status !== SESSION_STATUS.UNKNOWN;
       const controls = [
         ...(observation.controls ?? []),
-        {
-          id: SUPERSET_CONTROL_ID.CLOSE_TERMINAL,
-          label: "Close terminal",
-        },
+        ...(settled
+          ? [
+              {
+                id: SUPERSET_CONTROL_ID.DELETE_WORKSPACE,
+                label: "Delete workspace",
+                target: context.workspaceId,
+              },
+            ]
+          : []),
       ];
       if (context.spawnableAgents.length > 0) {
         return {

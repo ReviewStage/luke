@@ -287,8 +287,13 @@ reaches Superset, and no CLI login is needed. Superset documents one address
 per workspace, so chats sharing a workspace open the same place, and a
 session whose own provider reported an address keeps that one instead. With
 Superset's CLI installed and logged in, a managed row takes the developer's
-message through `terminals send` and offers one control, Close terminal
-(`superset-close-terminal`); it can start another agent in its workspace
+message through `terminals send` and offers one control, Delete workspace
+(`superset-delete-workspace`) — Superset documents no archive, so the delete
+is permanent and takes the whole workspace with every chat in it, which is
+why it is offered only on a row positively seen settled, never one still
+working or unreadable, and why grouped chats carry it once on the tray's own
+header. It runs `workspaces delete` with the observed workspace id as its
+single argument; it can start another agent in its workspace
 through `agents create`, and a new workspace can be created in a project and
 host the CLI currently lists, with an agent it lists and an opening task,
 through `workspaces create` — followed by the one `workspaces open` the

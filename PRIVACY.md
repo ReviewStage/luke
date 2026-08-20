@@ -239,7 +239,11 @@ receives its credential fields. A message or control runs only from the develope
 the developer opened, invokes the CLI executable directly without a shell, and
 passes only the observed workspace and terminal identifiers plus the
 developer's own message — the terminal lives on this machine, which is the
-CLI's own default, so no host identifier travels at all. Luke never reads, copies, or stores the CLI token. The
+CLI's own default, so no host identifier travels at all. The one control
+offered today is Delete workspace, on a row whose work was positively seen
+settled: it runs Superset's own `workspaces delete` with the observed
+workspace id as its single argument, and Superset documents no archive or
+restore, so it permanently removes that workspace and every terminal in it. Luke never reads, copies, or stores the CLI token. The
 CLI is Superset's cloud client and its own telemetry and privacy terms apply to
 commands it runs. Without its login, these actions do not appear and local
 observation continues unchanged.

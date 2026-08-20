@@ -167,7 +167,7 @@ test("advertises Superset actions only after the CLI is connected", async (t) =>
   const observation = {
     providerSessionId: "session-1",
     title: "Implement integration",
-    status: SESSION_STATUS.WORKING,
+    status: SESSION_STATUS.WAITING,
     observedAt: 100,
   };
 
@@ -184,10 +184,22 @@ test("advertises Superset actions only after the CLI is connected", async (t) =>
   assert.deepEqual(connected?.spawnableAgents, ["claude", "codex"]);
   assert.equal(connected?.spawnTarget, "workspace-1");
   assert.equal(connected?.renameTarget, "workspace-1");
-  assert.deepEqual(
-    connected?.controls?.map((control) => control.id),
-    [SUPERSET_CONTROL_ID.CLOSE_TERMINAL],
-  );
+  // The delete carries the workspace it acts on as its target — what the
+  // press deletes, and what seats the control on a tray's header.
+  assert.deepEqual(connected?.controls, [
+    {
+      id: SUPERSET_CONTROL_ID.DELETE_WORKSPACE,
+      label: "Delete workspace",
+      target: "workspace-1",
+    },
+  ]);
+
+  // Deleting is unrecoverable, so a row still working — or one whose state
+  // could not be read — is never offered it.
+  for (const status of [SESSION_STATUS.WORKING, SESSION_STATUS.UNKNOWN]) {
+    const busy = snapshot.enrich(PROVIDER_ID.CODEX, [{ ...observation, status }], true)[0];
+    assert.deepEqual(busy?.controls, []);
+  }
 });
 
 test("treats missing and drifted Superset state as no enrichment", async (t) => {

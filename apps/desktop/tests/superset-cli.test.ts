@@ -50,7 +50,7 @@ const CONTEXT: SupersetSessionContext = {
 };
 
 test("recognizes only controls owned by Superset", () => {
-  assert.equal(isSupersetControlId(SUPERSET_CONTROL_ID.CLOSE_TERMINAL), true);
+  assert.equal(isSupersetControlId(SUPERSET_CONTROL_ID.DELETE_WORKSPACE), true);
   assert.equal(isSupersetControlId("provider-native-control"), false);
 });
 
@@ -151,7 +151,7 @@ test("message and controls use fixed arguments without a shell", async (t) => {
     PROVIDER_ACT_RESULT_STATUS.ACCEPTED,
   );
   assert.equal(
-    (await cli.executeControl(CONTEXT, SUPERSET_CONTROL_ID.CLOSE_TERMINAL)).status,
+    (await cli.executeControl(CONTEXT, SUPERSET_CONTROL_ID.DELETE_WORKSPACE)).status,
     PROVIDER_ACT_RESULT_STATUS.ACCEPTED,
   );
   // The one workspace-opening invocation left is the follow-through on a
@@ -187,16 +187,10 @@ test("message and controls use fixed arguments without a shell", async (t) => {
       ],
     },
     {
+      // The one deletion the agent guide authorizes: the observed workspace
+      // id as the command's single argument.
       executable: path.join(home, "bin", "superset"),
-      arguments_: [
-        "terminals",
-        "close",
-        "--workspace",
-        "workspace-1",
-        "--terminal",
-        "terminal-1",
-        "--json",
-      ],
+      arguments_: ["workspaces", "delete", "workspace-1", "--json"],
     },
     {
       executable: path.join(home, "bin", "superset"),
