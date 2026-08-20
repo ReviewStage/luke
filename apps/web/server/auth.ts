@@ -2,10 +2,14 @@ import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { betterAuth } from "better-auth";
 import { jwt, lastLoginMethod } from "better-auth/plugins";
-import { ACCOUNT_TOKEN_STORAGE, denyOAuthClientPrivileges, JWT_KEY_STORAGE } from "./auth-policy";
-import { getDatabase } from "./db/index";
-import * as schema from "./db/schema";
-import { DESKTOP_OAUTH_CLIENT } from "./desktop-oauth-client";
+import {
+  ACCOUNT_TOKEN_STORAGE,
+  denyOAuthClientPrivileges,
+  JWT_KEY_STORAGE,
+} from "./auth-policy.js";
+import { getDatabase } from "./db/index.js";
+import * as schema from "./db/schema.js";
+import { DESKTOP_OAUTH_CLIENT } from "./desktop-oauth-client.js";
 
 export const DESKTOP_OAUTH_CLIENT_ID = DESKTOP_OAUTH_CLIENT.id;
 

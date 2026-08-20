@@ -1,8 +1,8 @@
-import { auth } from "../server/auth";
-import { getDatabase } from "../server/db/index";
-import { hostedUserId, oauthUserInfoFromAuthAnswer } from "../server/hosted/bearer";
-import { readHostedUsage } from "../server/hosted/quota";
-import { handleUsage } from "../server/hosted/usage";
+import { auth } from "../server/auth.js";
+import { getDatabase } from "../server/db/index.js";
+import { hostedUserId, oauthUserInfoFromAuthAnswer } from "../server/hosted/bearer.js";
+import { readHostedUsage } from "../server/hosted/quota.js";
+import { handleUsage } from "../server/hosted/usage.js";
 
 /**
  * Reads today's allowance standing for the signed-in desktop. The logic lives

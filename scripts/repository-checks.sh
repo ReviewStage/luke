@@ -99,18 +99,27 @@ if [[ -n "$generic_safety" ]]; then
     exit 1
 fi
 
-# Every relative import inside a package must carry its .js extension.
-# Vercel's builder compiles the packages' TypeScript into the web functions but
+# Every relative import the Vercel builder compiles must carry its .js
+# extension. The builder compiles this TypeScript into the web functions but
 # leaves the specifiers alone, and Node's ESM loader refuses an extensionless
 # one at run time — a break the build cannot see and production reports only as
 # FUNCTION_INVOCATION_FAILED. The desktop's esbuild and the web's Vite both
 # accept the .js form, so the stricter spelling costs the other consumers
-# nothing. Checked across every package rather than one, so a new package
-# cannot silently opt out of the rule that keeps the functions loadable.
-extensionless_imports=$(grep -rEn 'from "\.\.?/[^"]*"' "$SIDECAR_REPO_ROOT"/packages/*/src |
+# nothing.
+#
+# The function sources are checked alongside the packages because the builder
+# treats them identically: `apps/web/api` and `apps/web/server` are the entry
+# points of the very graph the doors in `server/core.ts` exist to pull in, so a
+# rule enforced on the packages alone leaves the two directories nearest the
+# failure uncovered. Side-effect imports count — a door is spelled `import "…"`
+# with no names, and an extensionless one fails exactly the same way.
+extensionless_imports=$(grep -rEn '(from|import) "\.\.?/[^"]*"' \
+    "$SIDECAR_REPO_ROOT"/packages/*/src \
+    "$SIDECAR_REPO_ROOT"/apps/web/api \
+    "$SIDECAR_REPO_ROOT"/apps/web/server |
     grep -vE '\.(js|css)"' || true)
 if [[ -n "$extensionless_imports" ]]; then
-    printf 'error: relative imports inside packages/ must end in .js (Node ESM cannot load them compiled otherwise):\n%s\n' \
+    printf 'error: relative imports in packages/ and the web function sources must end in .js (Node ESM cannot load them compiled otherwise):\n%s\n' \
         "$extensionless_imports" >&2
     exit 1
 fi

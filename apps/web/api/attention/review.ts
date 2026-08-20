@@ -1,9 +1,9 @@
-import { auth } from "../../server/auth";
-import { getDatabase } from "../../server/db/index";
-import { handleAttentionReview } from "../../server/hosted/attention-review";
-import { hostedUserId, oauthUserInfoFromAuthAnswer } from "../../server/hosted/bearer";
-import { HOSTED_OPENAI_ENVIRONMENT } from "../../server/hosted/openai";
-import { HOSTED_METER, spendHostedMeter } from "../../server/hosted/quota";
+import { auth } from "../../server/auth.js";
+import { getDatabase } from "../../server/db/index.js";
+import { handleAttentionReview } from "../../server/hosted/attention-review.js";
+import { hostedUserId, oauthUserInfoFromAuthAnswer } from "../../server/hosted/bearer.js";
+import { HOSTED_OPENAI_ENVIRONMENT } from "../../server/hosted/openai.js";
+import { HOSTED_METER, spendHostedMeter } from "../../server/hosted/quota.js";
 
 /**
  * Reviews one bounded session update for the signed-in desktop, on the key

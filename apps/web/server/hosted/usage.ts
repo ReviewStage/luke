@@ -1,5 +1,5 @@
-import type { HostedUsageAnswer } from "../core";
-import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http";
+import type { HostedUsageAnswer } from "../core.js";
+import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
 
 /**
  * Answers where today's allowance stands, spending nothing. This is the one
