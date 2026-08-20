@@ -1160,10 +1160,12 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
 
   // The announcer paces itself by the session's status: READY is when a queued
   // sentence can speak and when an empty queue starts the walk toward closing
-  // the call Luke opened for himself.
+  // the call Luke opened for himself. Built through ensure so the status
+  // history is already standing when the first notice arrives — the grace
+  // window after a reply needs to know one just ended.
   useEffect(() => {
-    announcer.current?.onStatus(voiceStatus);
-  }, [voiceStatus]);
+    ensureAnnouncer().onStatus(voiceStatus);
+  }, [ensureAnnouncer, voiceStatus]);
 
   // The meeting quiet reaching the announcer. Quiet beginning is built
   // through ensure, so it stands even before the first notice would have

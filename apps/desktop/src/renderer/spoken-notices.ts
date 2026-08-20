@@ -37,6 +37,16 @@ export const ANNOUNCER_RETRY_DELAY_MS = 20_000;
 export const MAXIMUM_CONNECT_ATTEMPTS = 3;
 
 /**
+ * How long the developer keeps the floor once Luke has answered them. A reply
+ * invites the next ask, and an announcement speaking into that pause takes
+ * the very turn the developer was about to open — so the queue waits, and
+ * only a pause the developer leaves empty is announced into. Luke's own
+ * announcements chain without waiting: the readout is already his turn, and
+ * a backlog read one sentence per window would outlive its own news.
+ */
+export const ANNOUNCER_GRACE_MS = 10_000;
+
+/**
  * The slice of the voice session the announcer drives. `microphoneCall` is the
  * ownership question: true means the call up or coming is the developer's own,
  * which the announcer may speak on but must never close.
@@ -89,6 +99,12 @@ export interface SpokenNoticeAnnouncerOptions {
  * The meeting quiet reaches it through {@link setMeetingQuiet}: quiet
  * beginning silences it at once — the announcement mid-sentence on Luke's
  * own call included — and holds it silent until the quiet ends.
+ *
+ * On the developer's own call, a reply Luke just gave them holds the whole
+ * backlog for {@link ANNOUNCER_GRACE_MS}: the pause after an answer is where
+ * the developer's next ask lives, and an announcement speaking into it takes
+ * that turn from them. Luke's own announcements chain without the wait — the
+ * readout is already his turn.
  */
 export class SpokenNoticeAnnouncer {
   readonly #options: SpokenNoticeAnnouncerOptions;
@@ -101,6 +117,13 @@ export class SpokenNoticeAnnouncer {
   #rideQueue: AttentionSpeech[] = [];
   /** Whether the call now up is one this announcer opened, and so must close. */
   #ownsCall = false;
+  /** The last status seen, which tells a reply's READY from a connect's. */
+  #lastStatus: RealtimeStatus | undefined;
+  /** Whether the reply now under way — or just ended — is one this announcer spoke. */
+  #ownReply = false;
+  /** Until when the developer keeps the floor, as the injected clock reads it. */
+  #holdUntil = 0;
+  #holdTimer: unknown;
   #lingerTimer: unknown;
   /** How many times the backlog now queued has tried to open Luke's own call. */
   #connectAttempts = 0;
@@ -131,6 +154,7 @@ export class SpokenNoticeAnnouncer {
     this.#rideQueue = [];
     this.#connectAttempts = 0;
     this.#cancelRetry();
+    this.#cancelHold();
     this.#cancelLinger();
     if (!this.#ownsCall) return;
     this.#ownsCall = false;
@@ -177,13 +201,35 @@ export class SpokenNoticeAnnouncer {
    * linger toward closing Luke's own call.
    */
   onStatus(status: RealtimeStatus): void {
+    const previous = this.#lastStatus;
+    this.#lastStatus = status;
     // The developer's call replaced or absorbed Luke's; nothing here may
     // close it, however it ends.
     if (this.#options.session().microphoneCall) {
       this.#ownsCall = false;
       this.#cancelLinger();
     }
+    // The developer taking the turn is the very act the floor was theirs for,
+    // and whatever reply follows is an answer to them, not a readout.
+    if (status === REALTIME_STATUS.LISTENING) {
+      this.#ownReply = false;
+      return;
+    }
     if (status === REALTIME_STATUS.READY) {
+      const own = this.#ownReply;
+      this.#ownReply = false;
+      // A reply to the developer invites their next ask, and an announcement
+      // speaking into that pause takes the very turn they were about to
+      // open: the floor stays the developer's for the grace window, and only
+      // a pause they leave empty is announced into. Only a READY that ends a
+      // reply holds the floor — one that opens the call has answered nothing.
+      if (
+        !own &&
+        previous === REALTIME_STATUS.RESPONDING &&
+        this.#options.session().microphoneCall
+      ) {
+        this.#holdUntil = (this.#options.now?.() ?? Date.now()) + ANNOUNCER_GRACE_MS;
+      }
       this.#flush();
       return;
     }
@@ -193,6 +239,10 @@ export class SpokenNoticeAnnouncer {
       status === REALTIME_STATUS.UNAVAILABLE
     ) {
       this.#cancelLinger();
+      // The conversation the floor was being held for is gone with the call.
+      this.#cancelHold();
+      this.#holdUntil = 0;
+      this.#ownReply = false;
       this.#ownsCall = false;
       // The call a summary was riding is gone, and it may ride no other:
       // what it said is still standing in the panel.
@@ -223,6 +273,13 @@ export class SpokenNoticeAnnouncer {
       return;
     }
     if (session.isConnected) {
+      // The developer keeps the floor for the grace window after Luke answers
+      // them; the backlog comes back when the window closes.
+      const floorHeld = this.#holdUntil - now;
+      if (floorHeld > 0 && session.microphoneCall) {
+        this.#armHold(floorHeld);
+        return;
+      }
       // One reply at a time: the first speak takes the turn and the second is
       // refused, so the loop stops itself and READY resumes it. Notices go
       // first — the developer asked to hear them — and a summary rides only
@@ -230,11 +287,13 @@ export class SpokenNoticeAnnouncer {
       while (this.#queue.length > 0) {
         const next = this.#queue[0];
         if (!next || !session.speak(next)) break;
+        this.#ownReply = true;
         this.#queue.shift();
       }
       while (this.#queue.length === 0 && this.#rideQueue.length > 0) {
         const next = this.#rideQueue[0];
         if (!next || !session.speak(next)) break;
+        this.#ownReply = true;
         this.#rideQueue.shift();
       }
       // A backlog waiting on a refused speak is normally resumed by the READY
@@ -298,6 +357,24 @@ export class SpokenNoticeAnnouncer {
       this.#retryTimer = undefined;
       this.#flush();
     }, ANNOUNCER_RETRY_DELAY_MS);
+  }
+
+  /** Comes back for the backlog once the developer's floor window closes. */
+  #armHold(delayMs: number): void {
+    this.#holdTimer ??= (this.#options.schedule ?? setTimeout)(() => {
+      this.#holdTimer = undefined;
+      this.#flush();
+    }, delayMs);
+  }
+
+  #cancelHold(): void {
+    if (this.#holdTimer === undefined) return;
+    // SAFETY: The handle is whatever `schedule ?? setTimeout` returned, and the
+    // fallbacks are paired — a handle from `setTimeout` can only reach
+    // `clearTimeout`. The cast satisfies that signature; nothing reads it as a
+    // number.
+    (this.#options.cancel ?? clearTimeout)(this.#holdTimer as number);
+    this.#holdTimer = undefined;
   }
 
   #cancelRetry(): void {

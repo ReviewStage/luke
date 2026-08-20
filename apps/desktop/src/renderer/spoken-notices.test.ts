@@ -4,6 +4,7 @@ import type { RealtimeStatus, ScheduledTimer } from "@sidecar/realtime";
 import { ATTENTION_SPEECH_SOURCE, type AttentionSpeech, REALTIME_STATUS } from "@sidecar/realtime";
 import { ATTENTION_DISPOSITION } from "@sidecar/session";
 import {
+  ANNOUNCER_GRACE_MS,
   ANNOUNCER_LINGER_MS,
   ANNOUNCER_RETRY_DELAY_MS,
   type AnnouncerSession,
@@ -590,4 +591,123 @@ test("a summary that went stale in the wait is dropped, not read as news", () =>
   session.setStatus(REALTIME_STATUS.READY);
   subject.onStatus(REALTIME_STATUS.READY);
   assert.deepEqual<AttentionSpeech[]>(session.spoken, []);
+});
+
+test("an announcement waits out the developer's floor after Luke answers them", () => {
+  const session = fakeSession();
+  session.microphone = true;
+  const timers = fakeTimers();
+  let now = 1_000;
+  const subject = announcer(session, timers, () => now);
+
+  // A full exchange: the developer asks, Luke answers, the reply ends.
+  session.setStatus(REALTIME_STATUS.LISTENING);
+  subject.onStatus(REALTIME_STATUS.LISTENING);
+  session.setStatus(REALTIME_STATUS.RESPONDING);
+  subject.onStatus(REALTIME_STATUS.RESPONDING);
+
+  // News arrives mid-reply and again right after: the pause belongs to the
+  // developer's next ask, not to the backlog.
+  subject.enqueue([speech("a")]);
+  session.setStatus(REALTIME_STATUS.READY);
+  subject.onStatus(REALTIME_STATUS.READY);
+  assert.deepEqual<AttentionSpeech[]>(session.spoken, []);
+
+  // Half the window passes in silence; a straggler still may not speak.
+  now = 1_000 + ANNOUNCER_GRACE_MS / 2;
+  subject.enqueue([speech("b")]);
+  assert.deepEqual<AttentionSpeech[]>(session.spoken, []);
+
+  // The developer left the pause empty; the backlog takes it.
+  now = 1_000 + ANNOUNCER_GRACE_MS;
+  timers.fire();
+  assert.deepEqual(
+    session.spoken.map((item) => item.providerSessionId),
+    ["a"],
+  );
+
+  // And chains without a second window: the readout is already Luke's turn.
+  session.setStatus(REALTIME_STATUS.READY);
+  subject.onStatus(REALTIME_STATUS.READY);
+  assert.deepEqual(
+    session.spoken.map((item) => item.providerSessionId),
+    ["a", "b"],
+  );
+});
+
+test("the developer speaking inside the window keeps the floor theirs", () => {
+  const session = fakeSession();
+  session.microphone = true;
+  const timers = fakeTimers();
+  let now = 1_000;
+  const subject = announcer(session, timers, () => now);
+
+  session.setStatus(REALTIME_STATUS.RESPONDING);
+  subject.onStatus(REALTIME_STATUS.RESPONDING);
+  subject.enqueueRide([summarySpeech("s")]);
+  session.setStatus(REALTIME_STATUS.READY);
+  subject.onStatus(REALTIME_STATUS.READY);
+  assert.deepEqual<AttentionSpeech[]>(session.spoken, []);
+
+  // The developer takes the turn inside the window — the grace did its job —
+  // and Luke's answer to them ends with a fresh window, not a spent one.
+  now = 1_000 + ANNOUNCER_GRACE_MS / 2;
+  session.setStatus(REALTIME_STATUS.LISTENING);
+  subject.onStatus(REALTIME_STATUS.LISTENING);
+  session.setStatus(REALTIME_STATUS.RESPONDING);
+  subject.onStatus(REALTIME_STATUS.RESPONDING);
+  session.setStatus(REALTIME_STATUS.READY);
+  subject.onStatus(REALTIME_STATUS.READY);
+  timers.fire();
+  assert.deepEqual<AttentionSpeech[]>(session.spoken, []);
+
+  // Only the pause after the second answer, left empty, is spoken into.
+  now = 1_000 + ANNOUNCER_GRACE_MS / 2 + ANNOUNCER_GRACE_MS;
+  timers.fire();
+  assert.deepEqual(
+    session.spoken.map((item) => item.providerSessionId),
+    ["s"],
+  );
+});
+
+test("the retry clock respects the developer's floor", () => {
+  const session = fakeSession();
+  session.microphone = true;
+  session.setStatus(REALTIME_STATUS.RESPONDING);
+  const timers = fakeTimers();
+  let now = 1_000;
+  const subject = announcer(session, timers, () => now);
+
+  subject.onStatus(REALTIME_STATUS.RESPONDING);
+  subject.enqueue([speech("a")]);
+  session.setStatus(REALTIME_STATUS.READY);
+  subject.onStatus(REALTIME_STATUS.READY);
+
+  // Every armed clock firing inside the window still finds the floor held.
+  now = 1_000 + ANNOUNCER_GRACE_MS - 1;
+  timers.fire();
+  assert.deepEqual<AttentionSpeech[]>(session.spoken, []);
+
+  now = 1_000 + ANNOUNCER_GRACE_MS;
+  timers.fire();
+  assert.deepEqual(
+    session.spoken.map((item) => item.providerSessionId),
+    ["a"],
+  );
+});
+
+test("a notice on Luke's own call speaks without the developer's window", async () => {
+  const session = fakeSession();
+  const timers = fakeTimers();
+  const subject = announcer(session, timers);
+
+  // Nobody is conversing: the window guards the developer's next ask, and
+  // on Luke's own call there is no ask to guard.
+  subject.enqueue([speech("a")]);
+  await Promise.resolve();
+  subject.onStatus(REALTIME_STATUS.READY);
+  assert.deepEqual(
+    session.spoken.map((item) => item.providerSessionId),
+    ["a"],
+  );
 });
