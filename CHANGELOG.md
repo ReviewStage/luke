@@ -32,6 +32,13 @@
 Notable changes to Luke, newest first. Each heading is a released version and
 the date its release was published.
 
+## 0.3.1 — 2026-08-19
+
+### Fixes
+
+- Fixed Luke falling asleep at launch before the first session roster arrived
+  ([#319](https://github.com/ReviewStage/luke/pull/319))
+
 ## 0.3.0 — 2026-08-19
 
 ### Superset workspaces

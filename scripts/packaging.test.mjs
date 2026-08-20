@@ -49,11 +49,11 @@ function packagerOptions(signing = resolveSigningMode({})) {
     licensePath: `/repo/apps/desktop/.build/${LICENSE_RESOURCE_NAME}`,
     entitlementsPath,
     signing,
-    version: "0.3.0",
+    version: "0.3.1",
   });
 }
 
-test("workspace package versions agree on v0.3.0", () => {
+test("workspace package versions agree on v0.3.1", () => {
   const packagePaths = [
     "package.json",
     "apps/desktop/package.json",
@@ -66,7 +66,7 @@ test("workspace package versions agree on v0.3.0", () => {
 
   assert.deepEqual(
     versions.map(({ version }) => version),
-    packagePaths.map(() => "0.3.0"),
+    packagePaths.map(() => "0.3.1"),
   );
 });
 
