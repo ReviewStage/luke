@@ -47,6 +47,10 @@ private let APPLE_CALENDAR_COMMAND = (
 /// of disclaiming again. Never a command of its own.
 private let DISCLAIMED_MARKER = "--disclaimed"
 
+/// The disclaimed child the wrapper is waiting out, global because a signal
+/// handler may capture nothing and must still find it.
+private var disclaimedChild: pid_t = 0
+
 /// The one private call in this repository, declared rather than imported
 /// because Apple ships no header for it: it marks a spawn attribute so the
 /// child becomes its own TCC responsible process instead of inheriting the
@@ -246,6 +250,16 @@ private struct AppleCalendarCommand {
         defer { for argument in argv { free(argument) } }
         var pid: pid_t = 0
         guard posix_spawn(&pid, path, nil, &attributes, argv, environ) == 0 else { return 1 }
+        disclaimedChild = pid
+        // A timeout upstream signals this wrapper alone, so the wrapper walks
+        // its child out with it: an EventKit process — its consent dialog
+        // included — must not outlive the call that owns it.
+        for terminal in [SIGTERM, SIGINT, SIGHUP] {
+            signal(terminal) { _ in
+                if disclaimedChild > 0 { kill(disclaimedChild, SIGTERM) }
+                _exit(1)
+            }
+        }
         var status: Int32 = 0
         guard waitpid(pid, &status, 0) == pid else { return 1 }
         // WIFEXITED/WEXITSTATUS by hand; the macros do not reach Swift.
