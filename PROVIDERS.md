@@ -292,8 +292,10 @@ message through `terminals send` and offers one control, Close terminal
 through `agents create`, and a new workspace can be created in a project and
 host the CLI currently lists, with an agent it lists and an opening task,
 through `workspaces create` — followed by the one `workspaces open` the
-creation itself asks for. Signing the CLI out withdraws every act;
-observation, and the addresses it yields, continue unchanged.
+creation itself asks for. Signing the CLI out withdraws every act — in a
+terminal, or by disconnecting from Superset's row on the Connections page,
+which runs the CLI's own `auth logout`; observation, and the addresses it
+yields, continue unchanged.
 
 **OpenAI and the hosted account** carry voice and the optional attention
 review. They are credential-only — nothing of theirs is ever observed as a

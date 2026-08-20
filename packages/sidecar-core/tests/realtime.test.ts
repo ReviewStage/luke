@@ -283,6 +283,17 @@ test("the spoken instructions state what Luke cannot see, and when he may act", 
   assert.match(instructions, /never restate the intent or the result/);
 });
 
+test("an ask to open a workspace never stalls on which chat is meant", () => {
+  const instructions = realtimeInstructions();
+
+  // Chats in one managed workspace share the workspace's address, so an open
+  // has nothing to disambiguate: asking "which chat?" would refuse an act any
+  // of them carries identically. Messages and controls still need the chat.
+  assert.match(instructions, /An ask to open a workspace is never ambiguous/);
+  assert.match(instructions, /without asking which chat is meant/);
+  assert.match(instructions, /To message or control one, say which chat is meant/);
+});
+
 test("a bare ask for a new agent defaults to a new workspace", () => {
   const instructions = realtimeInstructions();
 
