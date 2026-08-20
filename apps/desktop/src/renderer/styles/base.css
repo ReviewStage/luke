@@ -28,6 +28,9 @@
      by the chips, row tints, and count badge instead, so the two colour
      systems never compete for the same pixel. */
   --mark-claude-code: #d97757;
+  --mark-cmux-left: #12c7f5;
+  --mark-cmux-middle: #2d8cff;
+  --mark-cmux-right: #6c5cff;
   --mark-codex-top: #b1a7ff;
   --mark-codex-middle: #7a9dff;
   --mark-codex-bottom: #3941ff;
@@ -830,6 +833,12 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 
 .provider-mark[data-mark="chatgpt"] {
   transform: scale(0.94);
+}
+
+/* cmux's chevron sits centred in its published canvas at half the canvas's
+   height, so it is scaled up to the height the full-bleed marks reach. */
+.provider-mark[data-mark="cmux"] {
+  transform: scale(1.9);
 }
 
 .provider-mark[data-mark="conductor"] {

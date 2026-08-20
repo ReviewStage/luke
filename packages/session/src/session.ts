@@ -193,6 +193,7 @@ export interface SessionProvider {
  */
 export const SESSION_APPLICATION_ID = {
   CHATGPT: "chatgpt",
+  CMUX: "cmux",
   CONDUCTOR: "conductor",
   ORCA: "orca",
   SUPERSET: "superset",
@@ -248,6 +249,7 @@ export interface SessionIdentity {
  */
 export const SESSION_LINK_SCHEME = {
   HTTPS: "https:",
+  CMUX: "cmux:",
   CODEX: "codex:",
   CONDUCTOR: "conductor:",
   SUPERSET: "superset:",

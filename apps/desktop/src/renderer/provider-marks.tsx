@@ -11,6 +11,7 @@ import { SUPERSET_WORKSPACE_PROVIDER_ID } from "@sidecar/superset/vocabulary";
 import {
   CLAUDE_CODE_PATH,
   CLOUD_BADGE_PATH,
+  CMUX_PATH,
   CODEX_PATH,
   CONDUCTOR_MARK_PATHS,
   COPILOT_PATH,
@@ -39,7 +40,9 @@ import { useId } from "react";
  * the renderer stays asset-free and the marks scale with the surface.
  *
  * Each is the provider's own mark, reproduced rather than redrawn — Claude Code
- * via Simple Icons (CC0-1.0, sourced from code.claude.com), Codex via
+ * via Simple Icons (CC0-1.0, sourced from code.claude.com), cmux's chevron
+ * verbatim from the icon cmux.com serves as its own site mark, keeping the
+ * horizontal gradient the icon draws it with, Codex via
  * @lobehub/icons (MIT), Conductor's letter mark verbatim from the published
  * brand kit at https://www.conductor.build/brandkit, Copilot via Simple Icons
  * (MIT, sourced from https://primer.style/foundations/icons/copilot-24),
@@ -76,6 +79,39 @@ function ClaudeCodeMark({ className }: MarkProps): React.JSX.Element {
       focusable="false"
     >
       <path fill="currentColor" d={CLAUDE_CODE_PATH} />
+    </svg>
+  );
+}
+
+function CmuxMark({ className }: MarkProps): React.JSX.Element {
+  // cmux's chevron is a horizontal gradient rather than a flat colour, so it
+  // needs its own paint server. `useId` keeps the reference unique when
+  // several rows render the mark at once.
+  const gradientId = `cmux-mark-${useId()}`;
+
+  return (
+    <svg
+      className={className}
+      data-mark={SESSION_APPLICATION_ID.CMUX}
+      viewBox="0 0 256 256"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <defs>
+        <linearGradient
+          id={gradientId}
+          gradientUnits="userSpaceOnUse"
+          x1="91"
+          x2="179"
+          y1="128"
+          y2="128"
+        >
+          <stop stopColor="var(--mark-cmux-left, #12c7f5)" />
+          <stop offset="0.52" stopColor="var(--mark-cmux-middle, #2d8cff)" />
+          <stop offset="1" stopColor="var(--mark-cmux-right, #6c5cff)" />
+        </linearGradient>
+      </defs>
+      <path fill={`url(#${gradientId})`} d={CMUX_PATH} />
     </svg>
   );
 }
@@ -340,6 +376,7 @@ export type MarkId =
 const PROVIDER_MARKS = {
   [PROVIDER_ID.CLAUDE_CODE]: ClaudeCodeMark,
   [SESSION_APPLICATION_ID.CHATGPT]: ChatGptMark,
+  [SESSION_APPLICATION_ID.CMUX]: CmuxMark,
   [PROVIDER_ID.CODEX]: CodexMark,
   [PROVIDER_ID.CONDUCTOR]: ConductorMark,
   [PROVIDER_ID.COPILOT]: CopilotMark,
