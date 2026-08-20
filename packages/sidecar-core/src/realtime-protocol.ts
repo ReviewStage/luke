@@ -154,6 +154,13 @@ export function realtimeInstructions(): string {
   return REALTIME_INSTRUCTION_HEAD.join("\n");
 }
 
+/** Clears audio already queued for playback, naming the request for error correlation. */
+export function clearOutputAudioEvents(eventId: string): readonly WireRecord[] {
+  const clearEventId = trimmedText(eventId);
+  if (!clearEventId) return [];
+  return [{ type: REALTIME_CLIENT_EVENT.OUTPUT_AUDIO_BUFFER_CLEAR, event_id: clearEventId }];
+}
+
 /**
  * Builds the events that stop a reply the developer is talking over.
  *
@@ -163,10 +170,16 @@ export function realtimeInstructions(): string {
  * output buffer is what drops that, and doing it second means the server is not
  * still filling the buffer as it empties it.
  */
-export function cancelResponseEvents(): readonly WireRecord[] {
+export function cancelResponseEvents(input: {
+  cancellationEventId: string;
+  clearEventId: string;
+}): readonly WireRecord[] {
+  const cancellationEventId = trimmedText(input.cancellationEventId);
+  const clearEvents = clearOutputAudioEvents(input.clearEventId);
+  if (!cancellationEventId || clearEvents.length === 0) return [];
   return [
-    { type: REALTIME_CLIENT_EVENT.RESPONSE_CANCEL },
-    { type: REALTIME_CLIENT_EVENT.OUTPUT_AUDIO_BUFFER_CLEAR },
+    { type: REALTIME_CLIENT_EVENT.RESPONSE_CANCEL, event_id: cancellationEventId },
+    ...clearEvents,
   ];
 }
 
@@ -474,7 +487,13 @@ export type ParsedRealtimeServerEvent =
    * says. It is what lets a caller tell an error meant for the developer from
    * the answer to something it asked for itself.
    */
-  | { type: typeof REALTIME_SERVER_EVENT.ERROR; message: string; eventId?: string };
+  | {
+      type: typeof REALTIME_SERVER_EVENT.ERROR;
+      message: string;
+      eventId?: string;
+      errorType?: string;
+      errorCode?: string;
+    };
 
 function optionalString(value: UnparsedWireValue): string | undefined {
   return text(value);
@@ -608,11 +627,15 @@ export function parseRealtimeServerEvent(
       const error = recordField(event, "error");
       const message = optionalString(error?.message);
       const eventId = optionalString(error?.event_id);
+      const errorType = optionalString(error?.type);
+      const errorCode = optionalString(error?.code);
       const parsed: ParsedRealtimeServerEvent = {
         type: REALTIME_SERVER_EVENT.ERROR,
         message: message ?? "The voice service reported an error.",
       };
       if (eventId) parsed.eventId = eventId;
+      if (errorType) parsed.errorType = errorType;
+      if (errorCode) parsed.errorCode = errorCode;
       return parsed;
     }
     default:

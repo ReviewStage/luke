@@ -2274,6 +2274,81 @@ test("a stop cuts the reply where it stands and opens nothing in its place", asy
   assert.equal(context.lukeAudible(), true);
 });
 
+test("a stop does not surface the server refusing its already-finished cancellation", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.deliverRemoteTrack();
+  await holdTurn(context);
+  context.session.endTurn(true);
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-1" } });
+
+  assert.equal(context.session.stopSpeaking(), true);
+  const cancellation = context.sent.findLast(
+    (event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CANCEL,
+  );
+
+  // Generation can finish at the service while its buffered audio is still
+  // playing here. The local stop still succeeded, so the refusal of its now
+  // redundant cancel is not a failure the developer can or should act on.
+  context.emit({
+    type: REALTIME_SERVER_EVENT.ERROR,
+    error: {
+      type: "invalid_request_error",
+      message: "Cancellation failed: no active response found",
+      event_id: cancellation?.event_id,
+    },
+  });
+
+  assert.deepEqual(reportedErrors(context), []);
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+});
+
+test("a stop after response.done clears playback without cancelling finished generation", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.deliverRemoteTrack();
+  await holdTurn(context);
+  context.session.endTurn(true);
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-1" } });
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_DONE, response: { id: "resp-1" } });
+  const before = context.sent.length;
+
+  assert.equal(context.session.stopSpeaking(), true);
+
+  const events = context.sent.slice(before);
+  assert.equal(
+    events.some((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CANCEL),
+    false,
+  );
+  const clear = events.find(
+    (event) => event.type === REALTIME_CLIENT_EVENT.OUTPUT_AUDIO_BUFFER_CLEAR,
+  );
+  assert.match(String(clear?.event_id), /^output_audio_clear_/);
+});
+
+test("a real error answering the stop's cancellation is still surfaced", async () => {
+  const context = harness();
+  await context.session.connect();
+  await holdTurn(context);
+  context.session.endTurn(true);
+
+  assert.equal(context.session.stopSpeaking(), true);
+  const cancellation = context.sent.findLast(
+    (event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CANCEL,
+  );
+  context.emit({
+    type: REALTIME_SERVER_EVENT.ERROR,
+    error: {
+      type: "server_error",
+      code: "realtime_unavailable",
+      message: "Cancellation could not be processed.",
+      event_id: cancellation?.event_id,
+    },
+  });
+
+  assert.deepEqual(reportedErrors(context), ["Cancellation could not be processed."]);
+});
+
 test("a stop with nothing being spoken reports so and sends nothing", async () => {
   const context = harness();
   await context.session.connect();

@@ -214,6 +214,7 @@ test("a refused delete is read back with the event it names", () => {
     type: REALTIME_SERVER_EVENT.ERROR,
     error: {
       type: "invalid_request_error",
+      code: "item_not_found",
       message: "Item with id 'luke_ctx_sessions_1' not found.",
       event_id: "luke_supersede_2",
     },
@@ -221,6 +222,8 @@ test("a refused delete is read back with the event it names", () => {
 
   assert.equal(parsed?.type, REALTIME_SERVER_EVENT.ERROR);
   assert.equal(parsed?.eventId, "luke_supersede_2");
+  assert.equal(parsed?.errorType, "invalid_request_error");
+  assert.equal(parsed?.errorCode, "item_not_found");
   assert.match(parsed?.message ?? "", /not found/);
 
   const deleted = parseRealtimeServerEvent({
@@ -325,9 +328,19 @@ test("a reply can be stopped by the developer taking the turn", () => {
   // Cancelling is only half of it. The model generates faster than it speaks,
   // so the rest of the sentence has already been sent by the time anyone talks
   // over it, and only emptying the output buffer stops that being heard.
+  const events = cancelResponseEvents({
+    cancellationEventId: "response_cancel_1",
+    clearEventId: "output_audio_clear_1",
+  });
   assert.deepEqual(
-    cancelResponseEvents().map((event) => event.type),
+    events.map((event) => event.type),
     [REALTIME_CLIENT_EVENT.RESPONSE_CANCEL, REALTIME_CLIENT_EVENT.OUTPUT_AUDIO_BUFFER_CLEAR],
+  );
+  assert.equal(events[0]?.event_id, "response_cancel_1");
+  assert.equal(events[1]?.event_id, "output_audio_clear_1");
+  assert.deepEqual(
+    cancelResponseEvents({ cancellationEventId: " ", clearEventId: "output_audio_clear_2" }),
+    [],
   );
 });
 
