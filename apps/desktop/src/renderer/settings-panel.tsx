@@ -1714,6 +1714,24 @@ function SupersetIntegration({
               >
                 <TrashIcon />
               </button>
+              {/* The pencil is the credential rows' word for editing a
+                  connection that already stands. Here the connection is the
+                  CLI's own login, so editing it is signing in again — the
+                  same act the Connect button runs, which is how the CLI
+                  switches organizations. */}
+              <button
+                type="button"
+                className="icon-button"
+                disabled={busy || control.held || control.connecting}
+                aria-label="Sign in to Superset again"
+                title={control.held ? HELD_TITLE : "Sign in again"}
+                onClick={() => {
+                  setRejection(undefined);
+                  control.onConnect();
+                }}
+              >
+                <PencilIcon />
+              </button>
             </span>
             <fieldset
               className="settings-actions credential-confirm"

@@ -232,8 +232,9 @@ function integrationsFact(settings: AppSettings): AppGuideFact {
     "Settings, finish Superset's own sign-in flow in the browser, and paste its one-time code " +
     "into Luke. Superset's CLI exchanges that code, stores the login, and switches organizations; " +
     "Luke never reads its token or clipboard. Superset's row sits under Providers on the " +
-    "Connections page, and disconnecting from it runs the CLI's own sign-out, clearing the " +
-    "login the CLI stored. The default agent for a creation ask that names " +
+    "Connections page; while connected it keeps a pencil that runs the same sign-in again — " +
+    "the CLI's way of switching organizations — and disconnecting from it runs the CLI's own " +
+    "sign-out, clearing the login the CLI stored. The default agent for a creation ask that names " +
     "none is chosen under Superset in Settings; until one is chosen, Luke asks.";
   return {
     label: "Integrations",
