@@ -1111,47 +1111,6 @@ for (const [mode, tile] of Object.entries(TILES)) {
   emit(`icon/luke-icon-${mode}.svg`, icon.replaceAll("currentColor", tile.ink), "Luke app icon");
 }
 
-// Installer volume icon: the official generic external-drive shape — the
-// portrait white body and grey top cap Finder gives a volume — carrying the
-// bare face in hardware grey, the way Chrome's installer volume carries its
-// mark. No tile behind the glyph and no brand ink: the drive is the subject,
-// and a full-color mark would read as the app itself. One artwork, no
-// light/dark pair — hardware has no mode.
-const DRIVE = {
-  x: 52,
-  w: 136,
-  top: 20,
-  seam: 48,
-  bottom: 220,
-  r: 14,
-  body: ["#f7f7f8", "#e8e8eb"],
-  cap: ["#dbdbde", "#cfcfd3"],
-  edge: "#c6c6cb",
-  glyph: "#aeaeb4",
-  light: { cx: 172, cy: 202, r: 4, fill: "#c2c2c7" },
-};
-const driveRight = DRIVE.x + DRIVE.w;
-const driveGlyphScale = (DRIVE.w * 0.6) / bbox.w;
-const driveGx = 120 - bbox.cx * driveGlyphScale;
-const driveGy = (DRIVE.seam + DRIVE.bottom) / 2 - bbox.cy * driveGlyphScale;
-const installerIcon =
-  `${svgOpen(240, 240)}<defs>` +
-  `<linearGradient id="drive-cap" x1="0" y1="0" x2="0" y2="1">` +
-  `<stop offset="0" stop-color="${DRIVE.cap[0]}"/><stop offset="1" stop-color="${DRIVE.cap[1]}"/></linearGradient>` +
-  `<linearGradient id="drive-body" x1="0" y1="0" x2="0" y2="1">` +
-  `<stop offset="0" stop-color="${DRIVE.body[0]}"/><stop offset="1" stop-color="${DRIVE.body[1]}"/></linearGradient>` +
-  `</defs>` +
-  `<path d="M ${DRIVE.x} ${DRIVE.seam} V ${DRIVE.top + DRIVE.r} Q ${DRIVE.x} ${DRIVE.top} ${DRIVE.x + DRIVE.r} ${DRIVE.top} H ${driveRight - DRIVE.r} Q ${driveRight} ${DRIVE.top} ${driveRight} ${DRIVE.top + DRIVE.r} V ${DRIVE.seam} Z" fill="url(#drive-cap)"/>` +
-  `<path d="M ${DRIVE.x} ${DRIVE.seam} H ${driveRight} V ${DRIVE.bottom - DRIVE.r} Q ${driveRight} ${DRIVE.bottom} ${driveRight - DRIVE.r} ${DRIVE.bottom} H ${DRIVE.x + DRIVE.r} Q ${DRIVE.x} ${DRIVE.bottom} ${DRIVE.x} ${DRIVE.bottom - DRIVE.r} Z" fill="url(#drive-body)"/>` +
-  `<rect x="${DRIVE.x}" y="${DRIVE.top}" width="${DRIVE.w}" height="${DRIVE.bottom - DRIVE.top}" rx="${DRIVE.r}" fill="none" stroke="${DRIVE.edge}" stroke-width="2"/>` +
-  `<circle cx="${DRIVE.light.cx}" cy="${DRIVE.light.cy}" r="${DRIVE.light.r}" fill="${DRIVE.light.fill}"/>` +
-  `<g color="${DRIVE.glyph}" transform="translate(${fmt(driveGx)} ${fmt(driveGy)}) scale(${fmt(driveGlyphScale)})">${face()}</g></svg>`;
-emit(
-  "icon/luke-installer-icon.svg",
-  installerIcon.replaceAll("currentColor", DRIVE.glyph),
-  "Luke installer volume icon",
-);
-
 // Square mark: the static mark's own tight fill — the face's bounding box
 // padded by the same 6 units, squared by its larger side — with the corners
 // left square, one per mode, tiled and transparent. The tiled pair carries

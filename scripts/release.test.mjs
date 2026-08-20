@@ -3,7 +3,6 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { ICONSET_SOURCES } from "../apps/desktop/scripts/package-config.mjs";
 import { PACKAGED_ARCHITECTURE } from "../apps/desktop/scripts/package-layout.mjs";
 import {
   awaitNotarizationDecision,
@@ -18,7 +17,6 @@ import {
   hdiutilConvertArguments,
   hdiutilCreateArguments,
   hdiutilDetachArguments,
-  INSTALLER_ICONSET_SOURCES,
   NOTARY_CREDENTIAL_SOURCE,
   NOTARY_POLL_INTERVAL_MS,
   NOTARY_POLL_TIMEOUT_MS,
@@ -298,7 +296,7 @@ test("release DMG store layout is branded and bounded", () => {
   assert.ok(DMG_WINDOW.BACKGROUND.DIRECTORY.startsWith("."));
 });
 
-test("the DMG volume wears the installer icon, not the app's own", () => {
+test("the DMG volume wears the app's own icon under the installer's name", () => {
   // Finder reads a volume icon from this exact hidden name at the root, and
   // only once the root's custom-icon bit is set — so staging the file without
   // setting the bit, or the reverse, is a generic disk icon with no other sign.
@@ -310,16 +308,10 @@ test("the DMG volume wears the installer icon, not the app's own", () => {
     "/Volumes/Luke Installer",
   ]);
 
-  // The volume is named and dressed as the installer, never as the app: a
-  // volume called "Luke" wearing Luke's icon is indistinguishable from the
-  // Luke.app beside it. Every iconset entry is a committed installer-icon
-  // asset — the face on the generic drive shape, one artwork for both modes.
+  // The name is what tells the installer apart from the installed app: the
+  // volume wears Luke's own icon, so a volume also named bare "Luke" would be
+  // indistinguishable from the Luke.app beside it.
   assert.equal(RELEASE_VOLUME_NAME, "Luke Installer");
-  assert.deepEqual(Object.keys(INSTALLER_ICONSET_SOURCES), Object.keys(ICONSET_SOURCES));
-  for (const sourceName of Object.values(INSTALLER_ICONSET_SOURCES)) {
-    assert.match(sourceName, /^luke-installer-icon-\d+\.png$/);
-    assert.ok(fs.existsSync(path.join(repoRoot, "design", "brand", "icon", sourceName)));
-  }
 
   const releaseScript = fs.readFileSync(
     path.join(repoRoot, "apps", "desktop", "scripts", "release.mjs"),
@@ -327,8 +319,9 @@ test("the DMG volume wears the installer icon, not the app's own", () => {
   );
   assert.ok(releaseScript.includes("DMG_VOLUME_ICON_FILE_NAME"));
   assert.ok(releaseScript.includes("volumeCustomIconArguments(mountPoint)"));
-  assert.ok(releaseScript.includes("INSTALLER_ICONSET_SOURCES"));
-  assert.ok(releaseScript.includes("iconutilArguments"));
+  // The staged icon comes from the packaged bundle itself, not the .build
+  // intermediate, so the volume can never wear an icon the app does not.
+  assert.ok(releaseScript.includes("CFBundleIconFile"));
 });
 
 test("release zip names include the desktop version and packaged architecture", () => {

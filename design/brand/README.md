@@ -21,9 +21,6 @@ for m in light dark; do
     rsvg-convert -w $s -h $s icon/luke-icon-$m.svg -o icon/luke-icon-$m-$s.png
   done
 done
-for s in 16 32 64 128 256 512 1024; do
-  rsvg-convert -w $s -h $s icon/luke-installer-icon.svg -o icon/luke-installer-icon-$s.png
-done
 for m in light dark; do
   rsvg-convert -w 1024 -h 1024 mark/luke-mark-square-$m.svg -o mark/luke-mark-square-$m-1024.png
   rsvg-convert -w 1024 -h 1024 mark/luke-mark-square-transparent-$m.svg -o mark/luke-mark-square-transparent-$m-1024.png
@@ -44,13 +41,6 @@ rsvg-convert -w 1200 -h 630 social/luke-og-card.svg -o ../../apps/web/public/luk
 `icon/luke-icon-{light,dark}-512.png` are copied into `dist/icon/` and handed to
 `app.dock.setIcon`. The Dock tile is swapped between the two mode icons as the
 theme changes.
-
-`icon/luke-installer-icon-*.png` are cut into the release DMG's volume icon
-(`.VolumeIcon.icns`): the face in hardware grey on the generic macOS
-external-drive shape — the convention installer volumes share — so the
-mounted "Luke Installer" volume reads as the hardware holding Luke rather
-than as the Luke.app beside it. It has no light/dark pair: it is drawn as
-hardware, and hardware has no mode.
 
 The notch panel draws the face itself rather than loading these SVGs, because it
 needs two things a baked asset cannot give it: `currentColor`, so it can take the
