@@ -226,7 +226,8 @@ function integrationsFact(settings: AppSettings): AppGuideFact {
     "keeps no archive, so deleting is permanent and takes the whole workspace with every " +
     "chat in it, and a row still working is never offered it; a single chat cannot be " +
     "closed or removed on its own, so deleting the settled workspace is the one removal " +
-    "a Superset row takes — and create a new workspace " +
+    "a Superset row takes, and an ask to archive one means exactly this delete — and " +
+    "create a new workspace " +
     "with an agent in a project and host Superset currently lists; connect from Luke's " +
     "Settings, finish Superset's own sign-in flow in the browser, and paste its one-time code " +
     "into Luke. Superset's CLI exchanges that code, stores the login, and switches organizations; " +
@@ -467,8 +468,9 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "resumed. A row mid-turn — or one whose state could not be read — offers no archive, a " +
         "session whose roster entry lists no archive control takes no such ask, and local " +
         "sessions — which Luke only reads — are never archived. A Superset-managed workspace " +
-        "has no archive either: its one removal is the Delete workspace control, permanent " +
-        "and offered only once its work settled.",
+        "keeps no archive, so an ask to archive one is taken as the one removal it does take " +
+        "— its Delete workspace control, offered only once its work settled — and Luke words " +
+        "the outcome as the delete it is: permanent, never filed away.",
     },
     {
       label: "Standing asks about sessions",

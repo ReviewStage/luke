@@ -293,7 +293,9 @@ is permanent and takes the whole workspace with every chat in it, which is
 why it is offered only on a row positively seen settled, never one still
 working or unreadable, and why grouped chats carry it once on the tray's own
 header. It runs `workspaces delete` with the observed workspace id as its
-single argument; it can start another agent in its workspace
+single argument, and an archive-worded ask is taken as this delete — the one
+removal Superset takes — with the outcome said as the delete it is. A managed
+row can start another agent in its workspace
 through `agents create`, and a new workspace can be created in a project and
 host the CLI currently lists, with an agent it lists and an opening task,
 through `workspaces create` — followed by the one `workspaces open` the

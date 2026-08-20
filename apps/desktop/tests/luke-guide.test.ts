@@ -304,13 +304,17 @@ test("the facts describe creating a workspace, so Luke does not deny the capabil
   assert.match(rendered, /opening task/);
 
   // The one removal a Superset row takes is deleting its settled workspace,
-  // and the guide says both halves out loud: what the delete is — permanent,
-  // the whole workspace, never a working row — and that a single chat cannot
-  // be closed on its own, so the refusal Luke voices is itself the guidance.
+  // and the guide says every half out loud: what the delete is — permanent,
+  // the whole workspace, never a working row — that a single chat cannot be
+  // closed on its own, so the refusal Luke voices is itself the guidance,
+  // and that the developer's own word for tidying, archive, is taken as the
+  // delete rather than refused over vocabulary.
   assert.match(rendered, /Delete workspace once their work settled/);
   assert.match(rendered, /deleting is permanent/);
   assert.match(rendered, /single chat cannot be closed or removed on its own/);
-  assert.match(rendered, /Superset-managed workspace has no archive either/);
+  assert.match(rendered, /ask to archive one means exactly this delete/);
+  assert.match(rendered, /ask to archive one is taken as the one removal it does take/);
+  assert.match(rendered, /permanent, never filed away/);
 });
 
 test("the facts describe renaming workspaces and chats, so Luke does not deny the capability", () => {
