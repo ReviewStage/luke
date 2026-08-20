@@ -504,18 +504,33 @@ function titleFromRow(row: CodexThreadRow, names: CodexThreadNameSources): strin
   const title = oneLine(textFromRow(row, CODEX_THREAD_COLUMN.TITLE), maximumSessionTitleLength);
   const workspace = workspaceLabel(textFromRow(row, CODEX_THREAD_COLUMN.CWD));
   if (!title) return workspace;
-  const ownName = names.indexNames.get(textFromRow(row, CODEX_THREAD_COLUMN.ID) ?? "");
+  const ownName = indexedName(names, textFromRow(row, CODEX_THREAD_COLUMN.ID));
   const sourceThreadId = CODEX_DELEGATION_TITLE.exec(title)?.[1];
   if (sourceThreadId) {
     return (
       ownName ??
       names.rowTitles.get(sourceThreadId) ??
-      names.indexNames.get(sourceThreadId) ??
+      indexedName(names, sourceThreadId) ??
       workspace
     );
   }
   if (isCodexRealtimeDelegationText(title)) return ownName ?? workspace;
   return title;
+}
+
+/**
+ * The newest indexed name for a thread, unless that name is itself delegation
+ * scaffolding: the marker leaking into the index is still not a name, so every
+ * candidate passes the same test the title failed.
+ */
+function indexedName(
+  names: CodexThreadNameSources,
+  threadId: string | undefined,
+): string | undefined {
+  const name = names.indexNames.get(threadId ?? "");
+  if (name === undefined) return undefined;
+  if (CODEX_DELEGATION_TITLE.test(name) || isCodexRealtimeDelegationText(name)) return undefined;
+  return name;
 }
 
 /**

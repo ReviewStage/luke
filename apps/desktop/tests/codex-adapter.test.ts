@@ -376,6 +376,33 @@ test("a name the index has since cleared no longer resolves a delegation", async
   assert.equal(observations[0]?.title, "delegated-repository");
 });
 
+test("a marker that leaked into the name index is still not a name", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  await writeCodexSessionIndex(codexHome, [
+    { id: TEST_SOURCE_THREAD_ID, threadName: "Fix Luke voice announcements" },
+    // Codex indexed the delegated chat's own synthetic title; preferring it
+    // would put the raw marker back on the row the resolution exists to name.
+    { id: "codex-delegated", threadName: TEST_DELEGATION_TITLE },
+  ]);
+  await writeCodexState(codexHome, [
+    {
+      id: "codex-delegated",
+      cwd: "/Users/test/luke",
+      observedAt: TEST_TIME - 1_000,
+      title: TEST_DELEGATION_TITLE,
+    },
+  ]);
+
+  const adapter = new CodexSessionAdapter({
+    codexHome,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60_000,
+  });
+  const observations = await adapter.observe();
+
+  assert.equal(observations[0]?.title, "Fix Luke voice announcements");
+});
+
 test("a realtime delegation title with no source resolves to the workspace", async (t) => {
   const codexHome = await temporaryCodexHome(t);
   await writeCodexState(codexHome, [
