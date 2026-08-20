@@ -299,6 +299,13 @@ export interface ProviderSessionObservation {
   observedAt: number;
   /** Whether this session is a realtime voice/delegation chat. */
   realtimeVoice?: boolean;
+  /**
+   * Whether a realtime voice conversation is live over this session right now,
+   * read from the provider's own persisted state. Where `realtimeVoice` names
+   * what the chat is, this names what is happening to it, and it ends when the
+   * conversation does. Absent means none observed.
+   */
+  realtimeVoiceLive?: boolean;
   /** Omitted by an adapter that reads sessions off this machine. */
   location?: SessionLocation;
   /**
@@ -347,6 +354,8 @@ export interface NormalizedSession extends SessionIdentity {
   observedAt: number;
   /** Whether this session is a realtime voice/delegation chat. */
   realtimeVoice?: boolean;
+  /** Whether a realtime voice conversation is live over this session right now. */
+  realtimeVoiceLive?: boolean;
   location: SessionLocation;
   recap?: string;
   detail: SessionDetail;
@@ -668,6 +677,7 @@ export function normalizeSession(
     attention: normalizeAttention(attention),
   };
   if (observation.realtimeVoice === true) session.realtimeVoice = true;
+  if (observation.realtimeVoiceLive === true) session.realtimeVoiceLive = true;
   if (completionCause) session.completionCause = completionCause;
   if (recap) session.recap = recap;
   if (spawnTarget) session.spawnTarget = spawnTarget;

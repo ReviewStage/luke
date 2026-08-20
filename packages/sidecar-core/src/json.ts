@@ -33,6 +33,11 @@ export function isWireNumber(value: UnparsedWireValue): value is number {
   return runtimeTag(value) === "[object Number]";
 }
 
+/** Narrows a wire value to boolean without trusting a runtime typeof check. */
+export function isWireBoolean(value: UnparsedWireValue): value is boolean {
+  return runtimeTag(value) === "[object Boolean]";
+}
+
 export function isRecord(value: UnparsedWireValue): value is WireRecord {
   if (value === null || value === undefined) return false;
   if (runtimeTag(value) !== "[object Object]") return false;

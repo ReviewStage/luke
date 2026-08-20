@@ -158,6 +158,12 @@ export class SessionNoticeTracker {
       }
       provider.set(session.providerSessionId, state);
 
+      // A session the developer is speaking with announces nothing: its turn
+      // boundaries are the rhythm of a conversation being heard first-hand,
+      // and a voice reading them out would talk over the very exchange it is
+      // reporting. The edge is still tracked, so the conversation ending never
+      // replays what happened inside it — only a fresh edge after it speaks.
+      if (session.realtimeVoiceLive === true) continue;
       // First sight seeds silently; an unchanged status is not an edge.
       if (!previous || previous.status === session.status) continue;
       if (session.completionCause === SESSION_COMPLETION_CAUSE.SESSION_CLOSED) continue;

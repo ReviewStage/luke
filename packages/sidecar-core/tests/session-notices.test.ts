@@ -32,6 +32,7 @@ function session(
     recap?: string;
     workspace?: string;
     canReceiveMessage?: boolean;
+    realtimeVoiceLive?: boolean;
     completionCause?: (typeof SESSION_COMPLETION_CAUSE)[keyof typeof SESSION_COMPLETION_CAUSE];
   } = {},
 ): NormalizedSession {
@@ -50,6 +51,9 @@ function session(
   if (overrides.canReceiveMessage !== undefined) {
     observation.canReceiveMessage = overrides.canReceiveMessage;
   }
+  if (overrides.realtimeVoiceLive !== undefined) {
+    observation.realtimeVoiceLive = overrides.realtimeVoiceLive;
+  }
   if (overrides.error || overrides.repository || overrides.branch) {
     const detail = observation.detail ?? {};
     if (overrides.error) detail.error = overrides.error;
@@ -59,6 +63,60 @@ function session(
   }
   return normalizeSession(provider, observation);
 }
+
+test("a session under a live voice conversation announces nothing while it holds", () => {
+  const tracker = new SessionNoticeTracker();
+  tracker.notices(
+    [session(claude, "spoken", SESSION_STATUS.WORKING, { realtimeVoiceLive: true })],
+    1_000,
+  );
+
+  // Each delegated turn settling would otherwise be a waiting banner, and a
+  // failed one an error banner, spoken over the very conversation they belong to.
+  assert.deepEqual(
+    tracker.notices(
+      [session(claude, "spoken", SESSION_STATUS.WAITING, { realtimeVoiceLive: true })],
+      2_000,
+    ),
+    [],
+  );
+  assert.deepEqual(
+    tracker.notices(
+      [
+        session(claude, "spoken", SESSION_STATUS.ERROR, {
+          realtimeVoiceLive: true,
+          error: "sandbox denied",
+        }),
+      ],
+      3_000,
+    ),
+    [],
+  );
+});
+
+test("the voice conversation ending never replays the edges it covered", () => {
+  const tracker = new SessionNoticeTracker();
+  tracker.notices(
+    [session(claude, "spoken", SESSION_STATUS.WORKING, { realtimeVoiceLive: true })],
+    1_000,
+  );
+  tracker.notices(
+    [session(claude, "spoken", SESSION_STATUS.WAITING, { realtimeVoiceLive: true })],
+    2_000,
+  );
+
+  // The conversation closed with the session still waiting: nothing moved, so
+  // there is no news to read out after the fact.
+  assert.deepEqual(tracker.notices([session(claude, "spoken", SESSION_STATUS.WAITING)], 3_000), []);
+
+  // A fresh edge after the conversation speaks like any other session's.
+  tracker.notices([session(claude, "spoken", SESSION_STATUS.WORKING)], 4_000);
+  const notices = tracker.notices([session(claude, "spoken", SESSION_STATUS.COMPLETE)], 5_000);
+  assert.deepEqual(
+    notices.map((notice) => [notice.providerSessionId, notice.status]),
+    [["spoken", SESSION_NOTICE_STATUS.COMPLETE]],
+  );
+});
 
 test("first sight seeds silently, and only a change of status is news", () => {
   const tracker = new SessionNoticeTracker();
