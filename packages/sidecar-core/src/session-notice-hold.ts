@@ -25,10 +25,9 @@ interface HeldForSession {
  *   is still standing in the panel, which has shown the state the whole time.
  *
  * Whether a released notice is still worth saying is the caller's question to
- * answer against its own current roster — the hold cannot see one. Generic
- * over what is held, because two kinds of announcement wait out a meeting:
- * the status-edge notices, held as fields, and the already-worded speech an
- * answered standing ask produced.
+ * answer against its own current roster — the hold cannot see one. It is
+ * generic over what is held so each caller can preserve its own announcement
+ * shape.
  */
 export class SessionNoticeHold<Notice extends HeldForSession = SessionNotice> {
   #held: Notice[] = [];

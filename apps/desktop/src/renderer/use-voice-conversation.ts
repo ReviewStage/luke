@@ -256,14 +256,10 @@ export function voiceRestartAction(input: {
 }
 
 /**
- * The sources entitled to be heard without a call already open: a status edge
- * — raised deterministically, carrying the update's bounded fields for the
- * voice to word — and an evaluator answer to a standing ask the developer
- * made themselves. Both go to the announcer, which may open a speak-only call
- * of Luke's own to say them.
+ * The evaluator answer to a standing ask the developer made themselves may
+ * open a speak-only call of Luke's own to say it.
  */
 const ANNOUNCER_SPEECH_SOURCES: ReadonlySet<string> = new Set([
-  ATTENTION_SPEECH_SOURCE.STATUS_EDGE,
   ATTENTION_SPEECH_SOURCE.NOTICE_REQUEST,
 ]);
 

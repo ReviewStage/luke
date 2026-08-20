@@ -1041,8 +1041,8 @@ function announcedFinish(id: string): AttentionSpeech {
     providerId: "claude-code",
     providerSessionId: id,
     disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
-    source: ATTENTION_SPEECH_SOURCE.STATUS_EDGE,
-    summary: `session: '${id}'; event: finished`,
+    source: ATTENTION_SPEECH_SOURCE.NOTICE_REQUEST,
+    summary: `${id} finished.`,
     decidedAt: Date.now(),
   };
 }
@@ -1780,7 +1780,7 @@ function announcementSpeech(summary: string) {
     providerId: "claude-code",
     providerSessionId: "session-a",
     disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
-    source: ATTENTION_SPEECH_SOURCE.STATUS_EDGE,
+    source: ATTENTION_SPEECH_SOURCE.NOTICE_REQUEST,
     summary,
     decidedAt: 1_800_000_000_000,
   };
@@ -3704,8 +3704,8 @@ test("an announcement's caption names its session; a conversation's names none",
     providerId: "claude-code",
     providerSessionId: "session-a",
     disposition: ATTENTION_DISPOSITION.SPEAK_DURING_TURN,
-    source: ATTENTION_SPEECH_SOURCE.STATUS_EDGE,
-    summary: "session: 'checkout'; event: finished",
+    source: ATTENTION_SPEECH_SOURCE.NOTICE_REQUEST,
+    summary: "Checkout finished.",
     decidedAt: 1_800_000_000_000,
   });
   context.emit({
@@ -4533,7 +4533,7 @@ test("a speak-only call reads a notice out but refuses a typed ask", async () =>
       providerId: "claude-code",
       providerSessionId: "session-a",
       disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
-      source: ATTENTION_SPEECH_SOURCE.STATUS_EDGE,
+      source: ATTENTION_SPEECH_SOURCE.NOTICE_REQUEST,
       summary: "Claude Code finished checkout-service.",
       decidedAt: 1_800_000_000_000,
     }),

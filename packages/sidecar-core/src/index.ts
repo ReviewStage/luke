@@ -222,7 +222,6 @@ export {
   functionCallOutputEvents,
   inputAudioAppendEvents,
   inputAudioFormatUpdateEvents,
-  maximumNoticeContextLength,
   outputSpeedUpdateEvents,
   parseRealtimeServerEvent,
   proactiveSpeechEvents,
