@@ -871,13 +871,12 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   transform: scale(0.94);
 }
 
-/* Superset's bracket mark is two and a half times as wide as it is tall, so
-   fitted to the box's width it carries far less ink than the square marks; it
-   is scaled up until its weight sits beside theirs, and the overhang past the
-   box is empty margin in every place a mark is drawn. */
-.provider-mark[data-mark="superset"] {
-  transform: scale(1.3);
-}
+/* Superset's bracket mark is two and a half times as wide as it is tall, and
+   it takes no scale at all: a credential row pulls its mark box left until a
+   mark fitted to the box's width sits flush with the identity's clip
+   boundary, so any overhang past the box is cut, not empty margin. Fitted to
+   the width, the glyph carries less ink than the square marks — that is the
+   published proportion, shown whole rather than enlarged and clipped. */
 
 /* The work is happening somewhere the user cannot see. The badge overhangs the
    mark's box rather than sitting inside it, so it reads as attached to the mark
