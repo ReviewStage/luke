@@ -280,6 +280,18 @@ is said back to you under the field you typed in.
   re-parsed only when they change on disk, an absent app, unreadable file, or
   unknown format version means no annotation, and nothing is ever sent to
   Orca.
+- For the cmux terminal on this Mac, Luke opens the small hook-session stores
+  cmux's own CLI writes (`~/.cmuxterm/<agent>-hook-sessions.json`, for the
+  Claude Code, Codex, Cursor, and OpenCode agents Luke observes) read-only
+  and reads of each record exactly three identifiers: the agent's own session
+  id and the cmux workspace and pane ids holding it. The titles, notification
+  text, working directories, transcript paths, and launch commands those
+  stores also hold are never read, the session id is joined exactly to a
+  session Luke already observed on this machine — never inferred from a title
+  or a path — and the matched row gains the cmux mark and the pane's
+  `cmux://` address, composed on this machine from the two observed ids.
+  An absent app or an unreadable store means no annotation, and nothing is
+  ever sent to cmux.
 
 Luke processes bounded fields needed to identify and display a session:
 provider and session identifiers, provider-generated titles, the workspace

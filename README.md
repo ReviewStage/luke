@@ -53,6 +53,7 @@ under **Share usage data** in Settings.
 | Provider | Local | Cloud |
 | --- | :---: | :---: |
 | Claude Code | ✅ | |
+| cmux | ✅ | |
 | Codex | ✅ | ✅ |
 | Conductor | | ✅ |
 | GitHub Copilot | | ✅ |

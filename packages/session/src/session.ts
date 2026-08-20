@@ -193,6 +193,7 @@ export interface SessionProvider {
  */
 export const SESSION_APPLICATION_ID = {
   CHATGPT: "chatgpt",
+  CMUX: "cmux",
   CONDUCTOR: "conductor",
   ORCA: "orca",
   SUPERSET: "superset",
@@ -248,6 +249,7 @@ export interface SessionIdentity {
  */
 export const SESSION_LINK_SCHEME = {
   HTTPS: "https:",
+  CMUX: "cmux:",
   CODEX: "codex:",
   CONDUCTOR: "conductor:",
   SUPERSET: "superset:",
@@ -457,8 +459,13 @@ export interface NormalizedSession extends SessionIdentity {
 }
 
 export const maximumSessionTitleLength = 160;
-/** Enough for overlapping app surfaces without allowing an unbounded roster decoration. */
-export const maximumSessionApplications = 4;
+/**
+ * Every app this build can recognize at once, and no more: the bound exists to
+ * refuse an unbounded roster decoration, not to drop the newest association on
+ * a chat every manager holds, so it follows the value set rather than sitting
+ * on a literal the next app silently overflows.
+ */
+export const maximumSessionApplications = SESSION_APPLICATION_ID_LIST.length;
 /** An agent kind is a short identifier, never a sentence. */
 export const maximumSpawnableAgentLength = 40;
 /** How many kinds of agent one session may offer to start. */

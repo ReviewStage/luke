@@ -292,7 +292,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "Lists every session that still matters: one working or waiting stays at any age, a " +
         "failure for three days, a finished or quiet one for two. The options button opens " +
         "filter rows by axis — location (local, cloud), kind (voice chats), app (Conductor, " +
-        "ChatGPT, Orca, Superset), and agent — where several chips can be pressed at once: choices " +
+        "ChatGPT, Orca, Superset, cmux), and agent — where several chips can be pressed at once: choices " +
         "on one row widen each other and choices across rows narrow, so Codex beside " +
         "Conductor means Codex chats associated with Conductor. The sheet stays open while " +
         "chips toggle, and the options button wears the narrowing while the sheet is closed. " +
@@ -314,17 +314,23 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "also appears. Luke recognizes Conductor locally from Conductor's read-only session " +
         "index; when a Codex chat there spawns a sub-agent, Codex's exact parent-thread " +
         "record carries that Conductor association to the sub-agent's separate row. Luke " +
-        "recognizes Superset from its read-only host state, and Orca from its read-only " +
-        "hook-status cache, grouping chats under the Orca worktree that hosts them. A local " +
-        "Codex chat also names " +
+        "recognizes Superset from its read-only host state, Orca from its read-only " +
+        "hook-status cache, grouping chats under the Orca worktree that hosts them, and the " +
+        "cmux terminal from the read-only session stores cmux's own CLI writes — which exist " +
+        "only where cmux's own agent hooks are installed: Claude Code's automatically, Codex, " +
+        "Cursor, and OpenCode only after cmux's `cmux hooks setup`, so a session cmux never " +
+        "recorded carries no cmux mark. A local Codex chat also names " +
         "ChatGPT because OpenAI's desktop app documents the exact Codex thread address Luke " +
         "already opens. More than one app mark may appear on one row; none replaces the agent " +
         "or changes local versus cloud. An app mark with an exact address is a button: " +
-        "ChatGPT opens that Codex thread, Superset opens its bound terminal, and a Conductor " +
+        "ChatGPT opens that Codex thread, Superset opens its bound terminal, cmux opens the " +
+        "exact terminal pane the agent runs in — and stands in as the row's own destination " +
+        "when no other app gave it one — and a Conductor " +
         "cloud chat's Conductor mark opens that exact chat. The row body still opens its " +
         "preferred exact destination. A local Conductor chat or an Orca worktree exposes no " +
         "documented exact address or message endpoint, so each of those marks identifies the " +
-        "association but adds no open or send control.",
+        "association but adds no open or send control; a cmux chat takes no message or " +
+        "control through cmux either — its mark opens the pane, nothing more.",
     },
     {
       label: "Searching sessions",

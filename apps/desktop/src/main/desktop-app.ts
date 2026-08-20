@@ -26,6 +26,8 @@ import { fixtureSnapshot } from "@sidecar/fixtures";
 import { normalizeTrackedIssue, type TrackedIssue } from "@sidecar/issues";
 import { ObservationLoop, ObservationSupervisor } from "@sidecar/observation";
 import {
+  CmuxSessionApplicationReader,
+  CmuxSessionApplicationSnapshot,
   CodexCloudSessionAdapter,
   ConductorSessionApplicationReader,
   ConductorSessionApplicationSnapshot,
@@ -171,6 +173,13 @@ const codexCloudAdapter = new CodexCloudSessionAdapter();
 const conductorSessionApplications = new ConductorSessionApplicationReader();
 const orcaWorkspaces = new OrcaWorkspaceReader({
   dataDirectory: process.env.ORCA_USER_DATA_PATH ?? defaultOrcaDataDirectory(),
+});
+// cmux's CLI honors the same variable for its own state directory, so a
+// developer pointing cmux elsewhere points Luke's observation with it.
+const cmuxSessionApplications = new CmuxSessionApplicationReader({
+  ...(process.env.CMUX_AGENT_HOOK_STATE_DIR
+    ? { stateDirectory: process.env.CMUX_AGENT_HOOK_STATE_DIR }
+    : undefined),
 });
 const supersetHomeDirectory =
   process.env.SUPERSET_HOME_DIR ?? path.join(app.getPath("home"), ".superset");
@@ -1080,6 +1089,11 @@ async function refreshProviderSessions(generation: number): Promise<void> {
     process.stderr.write(`Orca application observation failed: ${message}\n`);
     return new OrcaWorkspaceSnapshot();
   });
+  const cmuxSnapshotPromise = cmuxSessionApplications.read().catch((error) => {
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`cmux application observation failed: ${message}\n`);
+    return new CmuxSessionApplicationSnapshot();
+  });
   let supersetSnapshot = new SupersetWorkspaceSnapshot([]);
   let supersetOrganization: string | undefined;
   try {
@@ -1102,6 +1116,7 @@ async function refreshProviderSessions(generation: number): Promise<void> {
   observedSupersetOrganization = supersetOrganization;
   const conductorSnapshot = await conductorSnapshotPromise;
   const orcaSnapshot = await orcaSnapshotPromise;
+  const cmuxSnapshot = await cmuxSnapshotPromise;
   const supersetActionsEnabled = supersetOrganization !== undefined;
   if (actionsWereEnabled !== supersetActionsEnabled) {
     if (supersetActionsEnabled) {
@@ -1126,13 +1141,19 @@ async function refreshProviderSessions(generation: number): Promise<void> {
         // precedence that stood before Orca joined, so no existing tray moves
         // — and Orca defers to both: one chat is grouped by exactly one
         // manager however many of them hold it, and a chat only Orca holds
-        // still groups under its worktree.
+        // still groups under its worktree. cmux runs last and claims no
+        // workspace at all: it only adds its own association, and its pane
+        // address stands in as the row's link only where none of the
+        // managers before it gave one.
         await sessionRegistry.refresh(adapter, (providerId, observations) =>
-          orcaSnapshot.enrich(
+          cmuxSnapshot.enrich(
             providerId,
-            conductorSnapshot.enrich(
+            orcaSnapshot.enrich(
               providerId,
-              supersetSnapshot.enrich(providerId, observations, supersetOrganization),
+              conductorSnapshot.enrich(
+                providerId,
+                supersetSnapshot.enrich(providerId, observations, supersetOrganization),
+              ),
             ),
           ),
         );

@@ -314,6 +314,31 @@ a hook-status version this build does not know means no annotation. Orca
 registers no per-worktree address and documents no message endpoint for a
 hosted chat, so the association adds no open or send control.
 
+**cmux on this Mac** is the same shape as Conductor, one file format over:
+Luke reads the read-only hook-session stores cmux's own CLI writes under its
+state directory (`~/.cmuxterm/<agent>-hook-sessions.json`, honoring
+`CMUX_AGENT_HOOK_STATE_DIR`), matching its sessions to local Claude Code,
+Codex, Cursor, and OpenCode rows by exact provider session id — never by
+title — and reading of each record only the three identifiers that place the
+session in cmux's own windows. cmux tracks more agent kinds than Luke
+observes; a store for an agent Luke has no provider for is not read. The
+stores exist only where cmux's own agent hooks do: cmux injects Claude Code's
+automatically through its Claude wrapper, but records Codex, Cursor, and
+OpenCode sessions only after the user has run cmux's own `cmux hooks setup`
+(or `cmux hooks <agent> install`) — a session cmux never recorded is honestly
+unannotated, not inferred from a pane or a path. A
+matched row gains the cmux app association and answers the cmux filter chip,
+and — because cmux registers the `cmux://` scheme for its released builds —
+the association carries the pane's exact
+`cmux://workspace/<id>/surface/<id>` address, composed on this machine from
+the observed identifiers. That address also stands in as the row's own link
+where no other manager gave it one, so pressing the row lands in the exact
+cmux pane the agent runs in. A sub-agent inherits its nearest cmux-known
+ancestor's association. cmux names its workspaces only by identifier, so a
+matched row never groups under cmux, and cmux's control socket is
+password-guarded and undocumented for outside callers, so the association
+adds no message path and no controls.
+
 **Linear** (`linear`) is connected by the tracker's own consent page — OAuth
 with PKCE over a loopback redirect, never a typed key or an environment
 variable — and reads one fixed GraphQL document for the user's assigned
