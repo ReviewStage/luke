@@ -32,6 +32,61 @@
 Notable changes to Luke, newest first. Each heading is a released version and
 the date its release was published.
 
+## 0.3.0 — 2026-08-19
+
+### Superset workspaces
+
+Luke connects to Superset and puts its managed workspaces alongside every
+other coding-agent session. You can create, open, rename, message, and delete
+settled workspaces without leaving Luke.
+([#274](https://github.com/ReviewStage/luke/pull/274),
+[#299](https://github.com/ReviewStage/luke/pull/299),
+[#309](https://github.com/ReviewStage/luke/pull/309),
+[#310](https://github.com/ReviewStage/luke/pull/310),
+[#312](https://github.com/ReviewStage/luke/pull/312),
+[#316](https://github.com/ReviewStage/luke/pull/316))
+
+### Improvements
+
+- You can search Settings
+  ([#305](https://github.com/ReviewStage/luke/pull/305))
+- Luke keeps himself current from the Updates row
+  ([#284](https://github.com/ReviewStage/luke/pull/284))
+- Luke stays silent for sessions waiting on automation
+  ([#298](https://github.com/ReviewStage/luke/pull/298))
+- Luke hides archived Claude Code and local Codex sessions
+  ([#295](https://github.com/ReviewStage/luke/pull/295),
+  [#297](https://github.com/ReviewStage/luke/pull/297))
+- Luke's voice and interface speak more directly about agents and their work
+  ([#290](https://github.com/ReviewStage/luke/pull/290),
+  [#296](https://github.com/ReviewStage/luke/pull/296),
+  [#307](https://github.com/ReviewStage/luke/pull/307),
+  [#313](https://github.com/ReviewStage/luke/pull/313))
+- Settings makes a spent free voice allowance clear everywhere
+  ([#308](https://github.com/ReviewStage/luke/pull/308))
+
+### Fixes
+
+- Fixed a typed ask requesting microphone permission
+  ([#294](https://github.com/ReviewStage/luke/pull/294))
+- Fixed the panel closing when its shape receded past the pointer
+  ([#293](https://github.com/ReviewStage/luke/pull/293))
+- Fixed delegated Codex chat titles and announcements
+  ([#303](https://github.com/ReviewStage/luke/pull/303),
+  [#304](https://github.com/ReviewStage/luke/pull/304),
+  [#306](https://github.com/ReviewStage/luke/pull/306))
+- Fixed voice stop cancellation races
+  ([#315](https://github.com/ReviewStage/luke/pull/315))
+- Fixed the Superset sign-in code field looking unlike the other key slots
+  ([#317](https://github.com/ReviewStage/luke/pull/317))
+
+### Miscellaneous
+
+- Added PostHog analytics setup
+  ([#289](https://github.com/ReviewStage/luke/pull/289))
+- Added anti-slop Oxlint rules across the repository
+  ([#286](https://github.com/ReviewStage/luke/pull/286))
+
 ## 0.2.0 — 2026-08-18
 
 ### Codex cloud tasks
