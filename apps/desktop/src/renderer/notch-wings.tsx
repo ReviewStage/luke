@@ -1,6 +1,6 @@
-import { CAPSULE_SIDE_WIDTH, PANEL_WIDTH, peekWidth } from "@sidecar/core";
+import { CAPSULE_SIDE_WIDTH, PANEL_WIDTH, peekWidth } from "@sidecar/surface";
+import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { cssCustomProperties } from "./css-custom-properties";
 import { errandOriginProps } from "./luke-errand";
 import { LukeFace } from "./luke-face";
 import {

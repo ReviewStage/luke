@@ -1,29 +1,43 @@
+import type { SessionNoticeAsk } from "@sidecar/attention";
+import type { CredentialProviderId } from "@sidecar/credentials";
+import {
+  CREDENTIAL_PROVIDER_LIST,
+  CREDENTIAL_PROVIDERS,
+  isCredentialProviderId,
+} from "@sidecar/credentials";
+import type { FeedbackImage, FeedbackKind } from "@sidecar/feedback";
+import { FEEDBACK_KIND, FEEDBACK_LIMITS, feedbackKindForLifecycleEvent } from "@sidecar/feedback";
+import { FIXTURE_EPOCH_MS } from "@sidecar/fixtures";
+import { FEEDBACK_COMPOSER_KIND } from "@sidecar/guide";
+import type { HostedUsageAnswer } from "@sidecar/hosted";
+import type { IssueIdentity } from "@sidecar/issues";
 import {
   APP_TOOL_KIND,
   dispatchByKind,
-  FEEDBACK_COMPOSER_KIND,
-  FIXTURE_EPOCH_MS,
-  type HostedUsageAnswer,
-  type IssueIdentity,
-  MOTION_DURATION_MS,
-  type NormalizedSession,
-  type ObservedWorkspaceProject,
-  type PanelFormFactor,
-  type ProviderId,
   REALTIME_STATUS,
   type RealtimeDiagnostics,
   type RealtimeVoice,
   type RealtimeVoiceSpeed,
+} from "@sidecar/realtime";
+import {
+  type NormalizedSession,
+  type ObservedWorkspaceProject,
+  type ProviderId,
   SESSION_MENTION_KIND,
-  SESSION_NOTICE_HEIGHT,
-  SESSION_NOTICE_MAX_ROWS,
   type SessionApplicationId,
   type SessionIdentity,
-  type SessionNoticeAsk,
-  VOICE_CAPTION_MAX_HEIGHT,
   type WorkspaceAgentSelection,
   workspaceProjectSelectionId,
-} from "@sidecar/core";
+} from "@sidecar/session";
+import { APP_SETTING_SCHEMA, voiceHotkeyLabel, voiceHotkeyToShow } from "@sidecar/settings";
+import {
+  MOTION_DURATION_MS,
+  type PanelFormFactor,
+  SESSION_NOTICE_HEIGHT,
+  SESSION_NOTICE_MAX_ROWS,
+  VOICE_CAPTION_MAX_HEIGHT,
+} from "@sidecar/surface";
+import { cssCustomProperties } from "@sidecar/surface/react-css";
 import {
   type CSSProperties,
   useCallback,
@@ -33,7 +47,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { CONSENT_SERVICE_ID, type ConsentServiceId } from "../shared/consent-services";
+import { CONSENT_SERVICE_ID, type ConsentServiceId } from "#shared/consent-services";
 import type {
   AccountProvider,
   AccountSnapshot,
@@ -49,7 +63,7 @@ import type {
   UpdateSnapshot,
   VoiceSource,
   WorkspaceProviderId,
-} from "../shared/contracts";
+} from "#shared/contracts";
 import {
   ACCOUNT_STATUS,
   CREDENTIAL_SOURCE,
@@ -58,22 +72,11 @@ import {
   SUPERSET_SIGN_IN_STAGE,
   SUPERSET_WORKSPACE_PROVIDER_ID,
   VOICE_SOURCE,
-} from "../shared/contracts";
-import type { CredentialProviderId } from "../shared/credential-providers";
-import {
-  CREDENTIAL_PROVIDER_LIST,
-  CREDENTIAL_PROVIDERS,
-  isCredentialProviderId,
-} from "../shared/credential-providers";
-import type { FeedbackImage, FeedbackKind } from "../shared/feedback";
-import { FEEDBACK_KIND, FEEDBACK_LIMITS, feedbackKindForLifecycleEvent } from "../shared/feedback";
-import { APP_SETTING_SCHEMA } from "../shared/settings-schema";
-import { voiceHotkeyLabel, voiceHotkeyToShow } from "../shared/voice-hotkey";
+} from "#shared/contracts";
 import { ASK_LUKE_INPUT_ID, focusAskField } from "./ask-luke";
 import { type ConsentConnectEntry, ConsentConnectSlot } from "./consent-connect-slot";
 import type { CredentialEntry, CredentialEntryControl } from "./credential-entry";
 import { isSubmittable, removalEndsEntry } from "./credential-entry";
-import { cssCustomProperties } from "./css-custom-properties";
 import {
   armErrand,
   EMPTY_ERRAND_RUN,

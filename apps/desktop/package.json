@@ -5,17 +5,59 @@
   "private": true,
   "description": "Luke desktop application",
   "main": "dist/main.js",
+  "imports": {
+    "#main/*": [
+      "./src/main/*.ts",
+      "./src/main/*"
+    ],
+    "#preload/*": [
+      "./src/preload/*.ts",
+      "./src/preload/*"
+    ],
+    "#renderer/*": [
+      "./src/renderer/*.ts",
+      "./src/renderer/*"
+    ],
+    "#shared/*": [
+      "./src/shared/*.ts",
+      "./src/shared/*"
+    ],
+    "#testing/*": [
+      "./src/testing/*.ts",
+      "./src/testing/*"
+    ]
+  },
   "scripts": {
     "build": "node scripts/build.mjs",
     "build:native": "node scripts/build-native.mjs",
     "package": "pnpm build:native && pnpm build && node scripts/package.mjs",
     "start": "pnpm build:native && pnpm build && electron .",
-    "test": "tsx --test tests/**/*.test.ts",
+    "test": "tsx --test 'src/**/*.test.ts'",
     "typecheck": "tsc --project tsconfig.json"
   },
   "devDependencies": {
     "@electron/packager": "20.2.1",
-    "@sidecar/core": "workspace:*",
+    "@sidecar/account": "workspace:*",
+    "@sidecar/analytics": "workspace:*",
+    "@sidecar/attention": "workspace:*",
+    "@sidecar/calendar": "workspace:*",
+    "@sidecar/credentials": "workspace:*",
+    "@sidecar/feedback": "workspace:*",
+    "@sidecar/fixtures": "workspace:*",
+    "@sidecar/guide": "workspace:*",
+    "@sidecar/hosted": "workspace:*",
+    "@sidecar/issues": "workspace:*",
+    "@sidecar/observation": "workspace:*",
+    "@sidecar/providers": "workspace:*",
+    "@sidecar/realtime": "workspace:*",
+    "@sidecar/session": "workspace:*",
+    "@sidecar/settings": "workspace:*",
+    "@sidecar/superset": "workspace:*",
+    "@sidecar/surface": "workspace:*",
+    "@sidecar/trackers": "workspace:*",
+    "@sidecar/update": "workspace:*",
+    "@sidecar/voice": "workspace:*",
+    "@sidecar/wire": "workspace:*",
     "@types/node": "26.2.0",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",

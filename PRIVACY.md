@@ -95,7 +95,7 @@ see is the data centre's, not yours.
 **No free text reaches the event stream.** An event is one name from a fixed
 list, and each of its properties is one value from a fixed set, a version
 number, or a bucket — enforced by a single validator in
-`packages/sidecar-core/src/product-events.ts` that both the desktop and the
+`packages/analytics/src/product-events.ts` that both the desktop and the
 service run, and that builds each event from the allowlist rather than copying
 what arrived. A session title, branch, repository path, recap, prompt, tool
 output, error line, file name, or anything typed or spoken has no shape it

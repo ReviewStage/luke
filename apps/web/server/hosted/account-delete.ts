@@ -1,4 +1,4 @@
-import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
+import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http";
 
 /**
  * Deletes the signed-in user's account. The bearer token is the whole

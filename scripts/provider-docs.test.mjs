@@ -5,7 +5,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const documentation = fs.readFileSync(path.join(repositoryRoot, "PROVIDERS.md"), "utf8");
+const documentation = fs.readFileSync(path.join(repositoryRoot, "docs", "PROVIDERS.md"), "utf8");
 
 // Harness tests run on plain Node and cannot import TypeScript, so the value
 // sets are read out of their sources by shape. The match is anchored to the
@@ -22,26 +22,20 @@ function valueSetValues(sourcePath, constantName) {
   return values;
 }
 
-test("PROVIDERS.md names every session provider id", () => {
-  for (const providerId of valueSetValues(
-    "packages/sidecar-core/src/providers.ts",
-    "PROVIDER_ID",
-  )) {
+test("docs/PROVIDERS.md names every session provider id", () => {
+  for (const providerId of valueSetValues("packages/session/src/providers.ts", "PROVIDER_ID")) {
     assert.ok(
       documentation.includes(`\`${providerId}\``),
-      `PROVIDERS.md does not name provider \`${providerId}\` — document its capabilities`,
+      `docs/PROVIDERS.md does not name provider \`${providerId}\` — document its capabilities`,
     );
   }
 });
 
-test("PROVIDERS.md names every issue tracker id", () => {
-  for (const trackerId of valueSetValues(
-    "packages/sidecar-core/src/issues.ts",
-    "ISSUE_TRACKER_ID",
-  )) {
+test("docs/PROVIDERS.md names every issue tracker id", () => {
+  for (const trackerId of valueSetValues("packages/issues/src/issues.ts", "ISSUE_TRACKER_ID")) {
     assert.ok(
       documentation.includes(`\`${trackerId}\``),
-      `PROVIDERS.md does not name tracker \`${trackerId}\` — document its capabilities`,
+      `docs/PROVIDERS.md does not name tracker \`${trackerId}\` — document its capabilities`,
     );
   }
 });

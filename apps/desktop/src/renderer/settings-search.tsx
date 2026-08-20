@@ -1,22 +1,24 @@
-import { PROVIDER_ID } from "@sidecar/core";
-import { Fragment, useRef } from "react";
-import type { AppSettings } from "../shared/contracts";
-import { CREDENTIAL_SOURCE, VOICE_SOURCE } from "../shared/contracts";
+import { GOOGLE_CALENDAR_ID, GOOGLE_CALENDAR_NAME } from "@sidecar/calendar/vocabulary";
 import {
   CLOUD_AGENT_PROVIDER_LIST,
   CREDENTIAL_PROVIDER_ID,
   VOICE_CREDENTIAL_PROVIDER,
-} from "../shared/credential-providers";
-import { GOOGLE_CALENDAR_ID, GOOGLE_CALENDAR_NAME } from "../shared/google-calendar";
+} from "@sidecar/credentials";
+import { PROVIDER_ID, workspaceAgentModels } from "@sidecar/session";
 import {
   APP_SETTING_ID,
   type AppSettingId,
   isAppSettingId,
   SETTING_PAGE,
   settingGuideEntries,
-} from "../shared/settings-schema";
-import { SUPERSET_WORKSPACE_PROVIDER_ID, type WorkspaceProviderId } from "../shared/superset";
-import { workspaceAgentModels } from "../shared/workspace-agents";
+} from "@sidecar/settings";
+import {
+  SUPERSET_WORKSPACE_PROVIDER_ID,
+  type WorkspaceProviderId,
+} from "@sidecar/superset/vocabulary";
+import { Fragment, useRef } from "react";
+import type { AppSettings } from "#shared/contracts";
+import { CREDENTIAL_SOURCE, VOICE_SOURCE } from "#shared/contracts";
 import { FOCUS_FRAME_LIMIT } from "./credential-entry";
 import { ERRAND_TARGET_ATTRIBUTE } from "./luke-errand";
 import { ProviderMark } from "./provider-marks";

@@ -1,3 +1,13 @@
+import { GOOGLE_CALENDAR_ID } from "@sidecar/calendar/vocabulary";
+import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials";
+import { ISSUE_TRACKER_ID, type IssueTrackerId } from "@sidecar/issues";
+import {
+  PROVIDER_ID,
+  type ProviderId,
+  SESSION_APPLICATION_ID,
+  type SessionApplicationId,
+} from "@sidecar/session";
+import { SUPERSET_WORKSPACE_PROVIDER_ID } from "@sidecar/superset/vocabulary";
 import {
   CLAUDE_CODE_PATH,
   CLOUD_BADGE_PATH,
@@ -7,28 +17,19 @@ import {
   CURSOR_PATH,
   DEVIN_PATH,
   GOOGLE_CALENDAR_MARK_LAYERS,
-  ISSUE_TRACKER_ID,
-  type IssueTrackerId,
   JULES_PATH,
   LINEAR_PATH,
   OPENAI_PATH,
   OPENCODE_BLOCK_PATH,
   OPENCODE_FRAME_PATH,
-  PROVIDER_ID,
-  type ProviderId,
-  SESSION_APPLICATION_ID,
-  type SessionApplicationId,
   SUPERSET_PATH,
-} from "@sidecar/core";
+} from "@sidecar/surface";
 import { useId } from "react";
-import { CREDENTIAL_PROVIDER_ID } from "../shared/credential-providers";
-import { GOOGLE_CALENDAR_ID } from "../shared/google-calendar";
-import { SUPERSET_WORKSPACE_PROVIDER_ID } from "../shared/superset";
 
 /**
  * The provider marks, and the one badge that rides them.
  *
- * Path data is generated into `@sidecar/core` from
+ * Path data is generated into `@sidecar/surface` from
  * `design/generate-surface-shared.mjs` so the marketing mock cannot ship a
  * different geometry. The React that traces it stays here: the desktop ships
  * marks the mock does not.

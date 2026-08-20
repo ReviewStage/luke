@@ -1,33 +1,33 @@
+import type { SessionNoticeAsk } from "@sidecar/attention";
+import { type AppGuideSnapshot, EMPTY_APP_GUIDE } from "@sidecar/guide";
+import { mentionedIssues, type TrackedIssue } from "@sidecar/issues";
 import {
-  type AppGuideSnapshot,
   ATTENTION_SPEECH_SOURCE,
   type AttentionSpeech,
   type CarriedSessionAction,
   dispatchByKind,
-  EMPTY_APP_GUIDE,
-  mentionedIssues,
-  mentionedSessions,
-  type NormalizedSession,
-  type ObservedWorkspaceProject,
   REALTIME_STATUS,
   type RealtimeStatus,
   type RealtimeVoice,
   type RealtimeVoiceSpeed,
-  SESSION_MENTION_KIND,
   SESSION_TOOL_KIND,
+} from "@sidecar/realtime";
+import {
+  mentionedSessions,
+  type NormalizedSession,
+  type ObservedWorkspaceProject,
+  SESSION_MENTION_KIND,
   type SessionIdentity,
   type SessionMention,
-  type SessionNoticeAsk,
-  type TrackedIssue,
-} from "@sidecar/core";
+} from "@sidecar/session";
+import { TALK_KEY_RELEASE, talkKeyRelease } from "@sidecar/settings";
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   MicrophoneStatus,
   SessionOpenResult,
   VoiceHotkeyState,
   WorkspaceProviderId,
-} from "../shared/contracts";
-import { TALK_KEY_RELEASE, talkKeyRelease } from "../shared/voice-hotkey";
+} from "#shared/contracts";
 import { askRefusal } from "./ask-luke";
 import { voiceQuotaSpentNote } from "./microphone-access";
 import { openPreferredMicrophone } from "./microphone-choice";

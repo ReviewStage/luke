@@ -37,9 +37,69 @@ importers:
       '@electron/packager':
         specifier: 20.2.1
         version: 20.2.1
-      '@sidecar/core':
+      '@sidecar/account':
         specifier: workspace:*
-        version: link:../../packages/sidecar-core
+        version: link:../../packages/account
+      '@sidecar/analytics':
+        specifier: workspace:*
+        version: link:../../packages/analytics
+      '@sidecar/attention':
+        specifier: workspace:*
+        version: link:../../packages/attention
+      '@sidecar/calendar':
+        specifier: workspace:*
+        version: link:../../packages/calendar
+      '@sidecar/credentials':
+        specifier: workspace:*
+        version: link:../../packages/credentials
+      '@sidecar/feedback':
+        specifier: workspace:*
+        version: link:../../packages/feedback
+      '@sidecar/fixtures':
+        specifier: workspace:*
+        version: link:../../packages/fixtures
+      '@sidecar/guide':
+        specifier: workspace:*
+        version: link:../../packages/guide
+      '@sidecar/hosted':
+        specifier: workspace:*
+        version: link:../../packages/hosted
+      '@sidecar/issues':
+        specifier: workspace:*
+        version: link:../../packages/issues
+      '@sidecar/observation':
+        specifier: workspace:*
+        version: link:../../packages/observation
+      '@sidecar/providers':
+        specifier: workspace:*
+        version: link:../../packages/providers
+      '@sidecar/realtime':
+        specifier: workspace:*
+        version: link:../../packages/realtime
+      '@sidecar/session':
+        specifier: workspace:*
+        version: link:../../packages/session
+      '@sidecar/settings':
+        specifier: workspace:*
+        version: link:../../packages/settings
+      '@sidecar/superset':
+        specifier: workspace:*
+        version: link:../../packages/superset
+      '@sidecar/surface':
+        specifier: workspace:*
+        version: link:../../packages/surface
+      '@sidecar/trackers':
+        specifier: workspace:*
+        version: link:../../packages/trackers
+      '@sidecar/update':
+        specifier: workspace:*
+        version: link:../../packages/update
+      '@sidecar/voice':
+        specifier: workspace:*
+        version: link:../../packages/voice
+      '@sidecar/wire':
+        specifier: workspace:*
+        version: link:../../packages/wire
       '@types/node':
         specifier: 26.2.0
         version: 26.2.0
@@ -85,9 +145,21 @@ importers:
       '@fontsource-variable/jetbrains-mono':
         specifier: 5.3.0
         version: 5.3.0
-      '@sidecar/core':
+      '@sidecar/attention':
         specifier: workspace:*
-        version: link:../../packages/sidecar-core
+        version: link:../../packages/attention
+      '@sidecar/fixtures':
+        specifier: workspace:*
+        version: link:../../packages/fixtures
+      '@sidecar/realtime':
+        specifier: workspace:*
+        version: link:../../packages/realtime
+      '@sidecar/session':
+        specifier: workspace:*
+        version: link:../../packages/session
+      '@sidecar/surface':
+        specifier: workspace:*
+        version: link:../../packages/surface
       '@tailwindcss/vite':
         specifier: 4.3.3
         version: 4.3.3(vite@7.3.1(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.12)(yaml@2.9.0))
@@ -144,7 +216,462 @@ importers:
         specifier: 7.3.1
         version: 7.3.1(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.12)(yaml@2.9.0)
 
-  packages/sidecar-core:
+  packages/account:
+    dependencies:
+      '@sidecar/hosted':
+        specifier: workspace:*
+        version: link:../hosted
+      '@sidecar/oauth':
+        specifier: workspace:*
+        version: link:../oauth
+      '@sidecar/wire':
+        specifier: workspace:*
+        version: link:../wire
+    devDependencies:
+      '@types/node':
+        specifier: 26.2.0
+        version: 26.2.0
+      tsx:
+        specifier: 4.23.12
+        version: 4.23.12
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+
+  packages/analytics:
+    dependencies:
+      '@sidecar/guide':
+        specifier: workspace:*
+        version: link:../guide
+      '@sidecar/hosted':
+        specifier: workspace:*
+        version: link:../hosted
+      '@sidecar/issues':
+        specifier: workspace:*
+        version: link:../issues
+      '@sidecar/session':
+        specifier: workspace:*
+        version: link:../session
+      '@sidecar/update':
+        specifier: workspace:*
+        version: link:../update
+      '@sidecar/wire':
+        specifier: workspace:*
+        version: link:../wire
+    devDependencies:
+      '@types/node':
+        specifier: 26.2.0
+        version: 26.2.0
+      tsx:
+        specifier: 4.23.12
+        version: 4.23.12
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+
+  packages/attention:
+    dependencies:
+      '@sidecar/session':
+        specifier: workspace:*
+        version: link:../session
+      '@sidecar/wire':
+        specifier: workspace:*
+        version: link:../wire
+    devDependencies:
+      '@types/node':
+        specifier: 26.2.0
+        version: 26.2.0
+      tsx:
+        specifier: 4.23.12
+        version: 4.23.12
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+
+  packages/calendar:
+    dependencies:
+      '@sidecar/oauth':
+        specifier: workspace:*
+        version: link:../oauth
+      '@sidecar/wire':
+        specifier: workspace:*
+        version: link:../wire
+    devDependencies:
+      '@types/node':
+        specifier: 26.2.0
+        version: 26.2.0
+      tsx:
+        specifier: 4.23.12
+        version: 4.23.12
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+
+  packages/credentials:
+    dependencies:
+      '@sidecar/issues':
+        specifier: workspace:*
+        version: link:../issues
+      '@sidecar/session':
+        specifier: workspace:*
+        version: link:../session
+      '@sidecar/wire':
+        specifier: workspace:*
+        version: link:../wire
+    devDependencies:
+      '@types/node':
+        specifier: 26.2.0
+        version: 26.2.0
+      tsx:
+        specifier: 4.23.12
+        version: 4.23.12
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+
+  packages/feedback:
+    dependencies:
+      '@sidecar/wire':
+        specifier: workspace:*
+        version: link:../wire
+    devDependencies:
+      '@types/node':
+        specifier: 26.2.0
+        version: 26.2.0
+      tsx:
+        specifier: 4.23.12
+        version: 4.23.12
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+
+  packages/fixtures:
+    dependencies:
+      '@sidecar/session':
+        specifier: workspace:*
+        version: link:../session
+      '@sidecar/surface':
+        specifier: workspace:*
+        version: link:../surface
+    devDependencies:
+      '@types/node':
+        specifier: 26.2.0
+        version: 26.2.0
+      tsx:
+        specifier: 4.23.12
+        version: 4.23.12
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+
+  packages/guide:
+    dependencies:
+      '@sidecar/wire':
+        specifier: workspace:*
+        version: link:../wire
+    devDependencies:
+      '@types/node':
+        specifier: 26.2.0
+        version: 26.2.0
+      tsx:
+        specifier: 4.23.12
+        version: 4.23.12
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+
+  packages/hosted:
+    dependencies:
+      '@sidecar/attention':
+        specifier: workspace:*
+        version: link:../attention
+      '@sidecar/realtime':
+        specifier: workspace:*
+        version: link:../realtime
+      '@sidecar/session':
+        specifier: workspace:*
+        version: link:../session
+      '@sidecar/wire':
+        specifier: workspace:*
+        version: link:../wire
+    devDependencies:
+      '@types/node':
+        specifier: 26.2.0
+        version: 26.2.0
+      tsx:
+        specifier: 4.23.12
+        version: 4.23.12
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+
+  packages/issues:
+    dependencies:
+      '@sidecar/session':
+        specifier: workspace:*
+        version: link:../session
+      '@sidecar/wire':
+        specifier: workspace:*
+        version: link:../wire
+    devDependencies:
+      '@types/node':
+        specifier: 26.2.0
+        version: 26.2.0
+      tsx:
+        specifier: 4.23.12
+        version: 4.23.12
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+
+  packages/oauth:
+    dependencies:
+      '@sidecar/surface':
+        specifier: workspace:*
+        version: link:../surface
+    devDependencies:
+      '@types/node':
+        specifier: 26.2.0
+        version: 26.2.0
+      tsx:
+        specifier: 4.23.12
+        version: 4.23.12
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+
+  packages/observation:
+    devDependencies:
+      '@types/node':
+        specifier: 26.2.0
+        version: 26.2.0
+      tsx:
+        specifier: 4.23.12
+        version: 4.23.12
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+
+  packages/providers:
+    dependencies:
+      '@sidecar/credentials':
+        specifier: workspace:*
+        version: link:../credentials
+      '@sidecar/session':
+        specifier: workspace:*
+        version: link:../session
+      '@sidecar/wire':
+        specifier: workspace:*
+        version: link:../wire
+    devDependencies:
+      '@types/node':
+        specifier: 26.2.0
+        version: 26.2.0
+      tsx:
+        specifier: 4.23.12
+        version: 4.23.12
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+
+  packages/realtime:
+    dependencies:
+      '@sidecar/attention':
+        specifier: workspace:*
+        version: link:../attention
+      '@sidecar/guide':
+        specifier: workspace:*
+        version: link:../guide
+      '@sidecar/issues':
+        specifier: workspace:*
+        version: link:../issues
+      '@sidecar/session':
+        specifier: workspace:*
+        version: link:../session
+      '@sidecar/wire':
+        specifier: workspace:*
+        version: link:../wire
+    devDependencies:
+      '@types/node':
+        specifier: 26.2.0
+        version: 26.2.0
+      tsx:
+        specifier: 4.23.12
+        version: 4.23.12
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+
+  packages/session:
+    dependencies:
+      '@sidecar/wire':
+        specifier: workspace:*
+        version: link:../wire
+    devDependencies:
+      '@types/node':
+        specifier: 26.2.0
+        version: 26.2.0
+      tsx:
+        specifier: 4.23.12
+        version: 4.23.12
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+
+  packages/settings:
+    dependencies:
+      '@sidecar/analytics':
+        specifier: workspace:*
+        version: link:../analytics
+      '@sidecar/credentials':
+        specifier: workspace:*
+        version: link:../credentials
+      '@sidecar/guide':
+        specifier: workspace:*
+        version: link:../guide
+      '@sidecar/realtime':
+        specifier: workspace:*
+        version: link:../realtime
+      '@sidecar/session':
+        specifier: workspace:*
+        version: link:../session
+      '@sidecar/superset':
+        specifier: workspace:*
+        version: link:../superset
+      '@sidecar/surface':
+        specifier: workspace:*
+        version: link:../surface
+      '@sidecar/wire':
+        specifier: workspace:*
+        version: link:../wire
+    devDependencies:
+      '@types/node':
+        specifier: 26.2.0
+        version: 26.2.0
+      tsx:
+        specifier: 4.23.12
+        version: 4.23.12
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+
+  packages/superset:
+    dependencies:
+      '@sidecar/providers':
+        specifier: workspace:*
+        version: link:../providers
+      '@sidecar/session':
+        specifier: workspace:*
+        version: link:../session
+      '@sidecar/wire':
+        specifier: workspace:*
+        version: link:../wire
+    devDependencies:
+      '@types/node':
+        specifier: 26.2.0
+        version: 26.2.0
+      tsx:
+        specifier: 4.23.12
+        version: 4.23.12
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+
+  packages/surface:
+    dependencies:
+      '@sidecar/wire':
+        specifier: workspace:*
+        version: link:../wire
+    devDependencies:
+      '@types/node':
+        specifier: 26.2.0
+        version: 26.2.0
+      '@types/react':
+        specifier: 19.2.18
+        version: 19.2.18
+      tsx:
+        specifier: 4.23.12
+        version: 4.23.12
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+
+  packages/trackers:
+    dependencies:
+      '@sidecar/credentials':
+        specifier: workspace:*
+        version: link:../credentials
+      '@sidecar/issues':
+        specifier: workspace:*
+        version: link:../issues
+      '@sidecar/oauth':
+        specifier: workspace:*
+        version: link:../oauth
+      '@sidecar/wire':
+        specifier: workspace:*
+        version: link:../wire
+    devDependencies:
+      '@types/node':
+        specifier: 26.2.0
+        version: 26.2.0
+      tsx:
+        specifier: 4.23.12
+        version: 4.23.12
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+
+  packages/update:
+    dependencies:
+      '@sidecar/wire':
+        specifier: workspace:*
+        version: link:../wire
+    devDependencies:
+      '@types/node':
+        specifier: 26.2.0
+        version: 26.2.0
+      tsx:
+        specifier: 4.23.12
+        version: 4.23.12
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+
+  packages/voice:
+    dependencies:
+      '@sidecar/attention':
+        specifier: workspace:*
+        version: link:../attention
+      '@sidecar/credentials':
+        specifier: workspace:*
+        version: link:../credentials
+      '@sidecar/hosted':
+        specifier: workspace:*
+        version: link:../hosted
+      '@sidecar/realtime':
+        specifier: workspace:*
+        version: link:../realtime
+      '@sidecar/session':
+        specifier: workspace:*
+        version: link:../session
+      '@sidecar/settings':
+        specifier: workspace:*
+        version: link:../settings
+      '@sidecar/wire':
+        specifier: workspace:*
+        version: link:../wire
+    devDependencies:
+      '@types/node':
+        specifier: 26.2.0
+        version: 26.2.0
+      tsx:
+        specifier: 4.23.12
+        version: 4.23.12
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+
+  packages/wire:
     devDependencies:
       '@types/node':
         specifier: 26.2.0

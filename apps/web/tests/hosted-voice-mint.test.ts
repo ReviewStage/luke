@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { RealtimeVoice, RealtimeVoiceSpeed } from "@sidecar/core";
-import { REALTIME_DEFAULTS, REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/core";
+import type { RealtimeVoice, RealtimeVoiceSpeed } from "@sidecar/realtime";
+import { REALTIME_DEFAULTS, REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
 import type { HostedSpend } from "../server/hosted/quota";
 import { handleVoiceMint } from "../server/hosted/voice-mint";

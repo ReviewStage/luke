@@ -74,21 +74,28 @@ test("the bundle carries the updater config electron-updater reads before every 
   // The bundled config and the runtime feed must name the same address, or a
   // packaged build would read one feed and cache under another's rules.
   const updateService = fs.readFileSync(
-    path.join(repoRoot, "apps", "desktop", "src", "update-service.ts"),
+    path.join(repoRoot, "apps", "desktop", "src", "main", "update-service.ts"),
     "utf8",
   );
   assert.ok(
     updateService.includes(`UPDATE_FEED_URL: "${APP_UPDATE_FEED_URL}"`),
-    "src/update-service.ts UPDATE_ENDPOINT.UPDATE_FEED_URL must equal APP_UPDATE_FEED_URL",
+    "src/main/update-service.ts UPDATE_ENDPOINT.UPDATE_FEED_URL must equal APP_UPDATE_FEED_URL",
   );
 });
 
 test("workspace package versions agree on v0.3.1", () => {
+  // Enumerated rather than listed, so a package added to the workspace is held
+  // to the release version without anyone remembering to name it here.
   const packagePaths = [
     "package.json",
     "apps/desktop/package.json",
     "apps/web/package.json",
-    "packages/sidecar-core/package.json",
+    ...fs
+      .readdirSync(path.join(repoRoot, "packages"), { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort()
+      .map((name) => `packages/${name}/package.json`),
   ];
   const versions = packagePaths.map((packagePath) =>
     JSON.parse(fs.readFileSync(path.join(repoRoot, packagePath), "utf8")),

@@ -1,5 +1,10 @@
-import { MOTION_DELAY_MS, MOTION_DURATION_MS } from "@sidecar/core";
-import { FACE_MOTION, FACE_MOTION_CYCLE_MS, type FaceMotion } from "./luke-face-art";
+import {
+  FACE_MOTION,
+  FACE_MOTION_CYCLE_MS,
+  type FaceMotion,
+  MOTION_DELAY_MS,
+  MOTION_DURATION_MS,
+} from "@sidecar/surface";
 
 /**
  * The moment after a send lands: Luke swoops down into the composer's shape,

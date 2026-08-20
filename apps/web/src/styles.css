@@ -3,7 +3,7 @@
  * The product has no screenshots in this repository, so the hero is a CSS
  * recreation of the real surface rather than an image. Layout, colour, and
  * type under "Notch mock" are ported from the renderer; motion tokens, mark
- * paths, and state labels are generated into `@sidecar/core` and imported
+ * paths, and state labels are generated into `@sidecar/surface` and imported
  * here, so they cannot drift from the product they advertise.
  *
  * The page chrome around the mock is Tailwind, written at its call sites.
@@ -21,7 +21,7 @@
  */
 
 @import "tailwindcss";
-@import "@sidecar/core/motion-tokens.css";
+@import "@sidecar/surface/motion-tokens.css";
 
 /* The three faces the page loads, declared beside the stack that names them
    rather than at each of the four HTML entry points. */

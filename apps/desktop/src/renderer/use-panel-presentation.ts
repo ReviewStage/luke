@@ -1,6 +1,6 @@
-import { MOTION_DURATION_MS } from "@sidecar/core";
+import { MOTION_DURATION_MS } from "@sidecar/surface";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { WindowMode } from "../shared/contracts";
+import type { WindowMode } from "#shared/contracts";
 import {
   HIT_REGION,
   HIT_REGION_ATTRIBUTE,

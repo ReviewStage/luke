@@ -1,17 +1,14 @@
 import { eq } from "drizzle-orm";
-import { auth } from "../../server/auth.js";
-import { getDatabase } from "../../server/db/index.js";
-import { user } from "../../server/db/schema.js";
-import {
-  type AccountDeleteOptions,
-  handleAccountDelete,
-} from "../../server/hosted/account-delete.js";
-import { hostedUserId, oauthUserInfoFromAuthAnswer } from "../../server/hosted/bearer.js";
+import { auth } from "../../server/auth";
+import { getDatabase } from "../../server/db/index";
+import { user } from "../../server/db/schema";
+import { type AccountDeleteOptions, handleAccountDelete } from "../../server/hosted/account-delete";
+import { hostedUserId, oauthUserInfoFromAuthAnswer } from "../../server/hosted/bearer";
 import {
   forgetPosthogPerson,
   POSTHOG_ENVIRONMENT,
   type PosthogForgetOptions,
-} from "../../server/hosted/posthog.js";
+} from "../../server/hosted/posthog";
 
 /**
  * Erases the signed-in desktop's account. The logic lives in

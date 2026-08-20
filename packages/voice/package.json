@@ -1,0 +1,28 @@
+{
+  "name": "@sidecar/voice",
+  "version": "0.3.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "tsx --test 'src/**/*.test.ts'",
+    "typecheck": "tsc --project tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/node": "26.2.0",
+    "tsx": "4.23.12",
+    "typescript": "7.0.2"
+  },
+  "dependencies": {
+    "@sidecar/attention": "workspace:*",
+    "@sidecar/credentials": "workspace:*",
+    "@sidecar/hosted": "workspace:*",
+    "@sidecar/realtime": "workspace:*",
+    "@sidecar/session": "workspace:*",
+    "@sidecar/settings": "workspace:*",
+    "@sidecar/wire": "workspace:*"
+  }
+}

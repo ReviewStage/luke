@@ -1,23 +1,47 @@
+import { GOOGLE_CALENDAR_ID, GOOGLE_CALENDAR_NAME } from "@sidecar/calendar/vocabulary";
+import type { CredentialProvider } from "@sidecar/credentials";
 import {
-  DEFAULT_PANEL_FORM_FACTOR,
-  type HostedQuota,
-  type HostedUsageAnswer,
-  isPanelFormFactor,
-  isProviderId,
+  CLOUD_AGENT_PROVIDER_LIST,
+  CREDENTIAL_CONNECTION,
+  CREDENTIAL_PROVIDER_ID,
+  CREDENTIAL_PROVIDERS,
+  providerRunsSessionsInCloud,
+  VOICE_CREDENTIAL_PROVIDER,
+} from "@sidecar/credentials";
+import type { HostedQuota, HostedUsageAnswer } from "@sidecar/hosted";
+import {
   isRealtimeVoice,
   isRealtimeVoiceSpeed,
-  PANEL_FORM_FACTOR_LIST,
-  type PanelFormFactor,
-  PROVIDER_ID,
-  type ProviderId,
   REALTIME_DEFAULTS,
   REALTIME_VOICE_LIST,
   REALTIME_VOICE_SPEED_LIST,
   type RealtimeDiagnostics,
   type RealtimeVoice,
   type RealtimeVoiceSpeed,
+} from "@sidecar/realtime";
+import {
+  isProviderId,
+  PROVIDER_ID,
+  type ProviderId,
   type WorkspaceAgentSelection,
-} from "@sidecar/core";
+  workspaceAgentModels,
+} from "@sidecar/session";
+import {
+  capturedVoiceHotkey,
+  DEFAULT_ASK_HOTKEYS,
+  DEFAULT_STOP_HOTKEYS,
+  DEFAULT_VOICE_HOTKEYS,
+  settingsScopeChanged,
+  VOICE_HOTKEY_CAPTURE,
+  voiceHotkeyLabel,
+} from "@sidecar/settings";
+import {
+  DEFAULT_PANEL_FORM_FACTOR,
+  isPanelFormFactor,
+  PANEL_FORM_FACTOR_LIST,
+  type PanelFormFactor,
+} from "@sidecar/surface";
+import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { useEffect, useRef, useState } from "react";
 import type {
   AccountCalendar,
@@ -30,7 +54,7 @@ import type {
   SettingsResetScope,
   UpdateSnapshot,
   WorkspaceProviderId,
-} from "../shared/contracts";
+} from "#shared/contracts";
 import {
   ACCOUNT_PROVIDER,
   ACCOUNT_STATUS,
@@ -43,27 +67,7 @@ import {
   SUPERSET_WORKSPACE_PROVIDER_ID,
   VOICE_SOURCE,
   type VoiceSource,
-} from "../shared/contracts";
-import type { CredentialProvider } from "../shared/credential-providers";
-import {
-  CLOUD_AGENT_PROVIDER_LIST,
-  CREDENTIAL_CONNECTION,
-  CREDENTIAL_PROVIDER_ID,
-  CREDENTIAL_PROVIDERS,
-  providerRunsSessionsInCloud,
-  VOICE_CREDENTIAL_PROVIDER,
-} from "../shared/credential-providers";
-import { GOOGLE_CALENDAR_ID, GOOGLE_CALENDAR_NAME } from "../shared/google-calendar";
-import { settingsScopeChanged } from "../shared/settings-schema";
-import {
-  capturedVoiceHotkey,
-  DEFAULT_ASK_HOTKEYS,
-  DEFAULT_STOP_HOTKEYS,
-  DEFAULT_VOICE_HOTKEYS,
-  VOICE_HOTKEY_CAPTURE,
-  voiceHotkeyLabel,
-} from "../shared/voice-hotkey";
-import { workspaceAgentModels } from "../shared/workspace-agents";
+} from "#shared/contracts";
 import {
   CREDENTIAL_PLACEHOLDER,
   type CredentialEntryControl,
@@ -79,7 +83,6 @@ import {
   removalStage,
   removalWithdrawable,
 } from "./credential-removal";
-import { cssCustomProperties } from "./css-custom-properties";
 import type { FeedbackEntryControl } from "./feedback-entry";
 import { FeedbackSection } from "./feedback-panel";
 import { Keycaps } from "./keycaps";

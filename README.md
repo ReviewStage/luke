@@ -62,7 +62,7 @@ under **Share usage data** in Settings.
 | OpenCode | ✅ | |
 | Superset | ✅ | |
 
-See [PROVIDERS.md](PROVIDERS.md) and [PRIVACY.md](PRIVACY.md) for more details.
+See [docs/PROVIDERS.md](docs/PROVIDERS.md) and [PRIVACY.md](PRIVACY.md) for more details.
 
 ## Build from source
 

@@ -1,7 +1,7 @@
-import { REALTIME_STATUS, type RealtimeStatus } from "@sidecar/core";
+import { REALTIME_STATUS, type RealtimeStatus } from "@sidecar/realtime";
+import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { useCallback, useRef, useState } from "react";
 import { FOCUS_FRAME_LIMIT } from "./credential-entry";
-import { cssCustomProperties } from "./css-custom-properties";
 import { Keycaps } from "./keycaps";
 import { SendIcon } from "./settings-icons";
 

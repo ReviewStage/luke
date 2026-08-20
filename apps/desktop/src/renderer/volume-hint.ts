@@ -1,4 +1,4 @@
-import type { OutputAudioState } from "../shared/contracts";
+import type { OutputAudioState } from "#shared/contracts";
 
 /**
  * The decisions behind the volume hint, kept pure so they can be tested: when

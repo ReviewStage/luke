@@ -1,18 +1,17 @@
+import { FIXTURE_EPOCH_MS, fixtureSnapshot } from "@sidecar/fixtures";
+import { SESSION_LOCATION } from "@sidecar/session";
 import {
   CAPSULE_SIDE_WIDTH,
   compareSessionsByUrgency,
-  FIXTURE_EPOCH_MS,
-  fixtureSnapshot,
   MOTION_DURATION_MS,
   PANEL_WIDTH,
   PEEK_SIDE_GROWTH,
-  SESSION_LOCATION,
   SESSION_URGENCY,
   type SessionUrgency,
   urgencyLabel,
-} from "@sidecar/core";
+} from "@sidecar/surface";
+import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
-import { cssCustomProperties } from "./css-custom-properties";
 import { CloudBadge, ProviderMark } from "./provider-marks";
 
 /**

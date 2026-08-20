@@ -1,8 +1,9 @@
+import type { SessionNoticeAsk } from "@sidecar/attention";
+import { type AppGuideSnapshot, appGuideContextText, EMPTY_APP_GUIDE } from "@sidecar/guide";
+import type { TrackedIssue } from "@sidecar/issues";
 import {
-  type AppGuideSnapshot,
   type AttentionSpeech,
   appGuideContextEvents,
-  appGuideContextText,
   appToolAction,
   type CarriedAppAction,
   type CarriedIssueAction,
@@ -15,7 +16,6 @@ import {
   contextItemId,
   contextSupersedeEventId,
   contextSupersedeEvents,
-  EMPTY_APP_GUIDE,
   functionCallFollowUpEvents,
   functionCallOutputEvents,
   ISSUE_TRACKER_DISCONNECTED_TEXT,
@@ -27,12 +27,9 @@ import {
   issueTrackerDisconnectedEvents,
   lastAnnouncementContextEvents,
   lastAnnouncementContextText,
-  type NormalizedSession,
-  type ObservedWorkspaceProject,
   outputSpeedUpdateEvents,
   PressAudioBuffer,
   parseRealtimeServerEvent,
-  positiveInteger,
   proactiveSpeechEvents,
   pushToTalkCommitEvents,
   REALTIME_DATA_CHANNEL,
@@ -45,24 +42,26 @@ import {
   type RealtimeToolFamily,
   realtimeSessionSyncEvents,
   realtimeToolFamily,
+  type ScheduledTimer,
   SESSION_REFERENCE_WITHDRAWN_TEXT,
-  type SessionIdentity,
-  type SessionNoticeAsk,
   sessionContextEvents,
   sessionContextText,
   sessionReferenceContextEvents,
   sessionReferenceContextText,
   sessionReferenceWithdrawnEvents,
   sessionToolAction,
-  type TrackedIssue,
   truncateResponseEvents,
   typedAskEvents,
-  type UnparsedWireValue,
-  type WireRecord,
   workspaceProjectContextEvents,
   workspaceProjectContextText,
-} from "@sidecar/core";
-import { workspaceAgentModels } from "../shared/workspace-agents";
+} from "@sidecar/realtime";
+import type {
+  NormalizedSession,
+  ObservedWorkspaceProject,
+  SessionIdentity,
+} from "@sidecar/session";
+import { workspaceAgentModels } from "@sidecar/session";
+import { positiveInteger, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
 import { MICROPHONE_PROCESSING } from "./microphone-choice";
 import {
   createPressCaptureSource,
@@ -221,6 +220,43 @@ export interface RealtimeVoiceSessionCallbacks {
   onCaption(texts: readonly string[] | undefined, about: SessionIdentity | undefined): void;
 }
 
+/**
+ * The browser pieces a call runs on, each stated as the members this file
+ * touches rather than as its whole `RTC*` type. A real connection satisfies
+ * these; the whole browser types do not work the other way, because the
+ * thirty-odd members no test can supply would mean the injection point could
+ * only ever take the real thing — which is the opposite of why it exists.
+ */
+export interface MicrophoneSender {
+  replaceTrack(next: MediaStreamTrack | null): Promise<void>;
+}
+
+export interface DataChannel {
+  readyState: RTCDataChannelState;
+  send(payload: string): void;
+  close(): void;
+  // Each handler names the event the browser really passes, because a
+  // no-argument signature would refuse the real one: a listener may take fewer
+  // arguments than it is given, never more.
+  onopen?: ((event: Event) => void) | null;
+  onclose?: ((event: Event) => void) | null;
+  onerror?: ((event: RTCErrorEvent) => void) | null;
+  onmessage?: ((event: MessageEvent<string>) => void) | null;
+}
+
+export interface PeerConnection {
+  localDescription: RTCSessionDescriptionInit | null;
+  connectionState: RTCPeerConnectionState;
+  addTransceiver(kind: string, init?: { direction?: string }): { sender: MicrophoneSender };
+  createDataChannel(label: string): DataChannel;
+  createOffer(): Promise<RTCSessionDescriptionInit>;
+  setLocalDescription(description?: RTCSessionDescriptionInit): Promise<void>;
+  setRemoteDescription(description: RTCSessionDescriptionInit): Promise<void>;
+  close(): void;
+  ontrack?: ((event: RTCTrackEvent) => void) | null;
+  onconnectionstatechange?: ((event: Event) => void) | null;
+}
+
 export interface RealtimeVoiceSessionOptions extends RealtimeVoiceSessionCallbacks {
   requestConnection(): Promise<RealtimeConnection | undefined>;
   /** Absent means Luke can only speak: every tool call is refused with a reason. */
@@ -234,7 +270,7 @@ export interface RealtimeVoiceSessionOptions extends RealtimeVoiceSessionCallbac
    * exercised without a real device or peer connection. Push-to-talk decides
    * when a microphone is live, which is worth testing directly.
    */
-  createPeerConnection?: () => RTCPeerConnection;
+  createPeerConnection?: () => PeerConnection;
   requestMicrophoneStream?: () => Promise<MediaStream>;
   /**
    * The local PCM capture a press runs while its call is still connecting.
@@ -250,8 +286,8 @@ export interface RealtimeVoiceSessionOptions extends RealtimeVoiceSessionCallbac
    */
   idleTimeoutMs?: number;
   /** The timer the idle retirement runs on, injectable for the same reason. */
-  schedule?: (callback: () => void, delayMs: number) => number | ReturnType<typeof setTimeout>;
-  cancel?: (timer: number | ReturnType<typeof setTimeout>) => void;
+  schedule?: (callback: () => void, delayMs: number) => ScheduledTimer;
+  cancel?: (timer: ScheduledTimer) => void;
   /** Injectable so a test can hold the clock a truncate measures against. */
   now?: () => number;
 }
@@ -297,8 +333,8 @@ export function quietIsLukesOwn(input: { status: RealtimeStatus; heardLuke: bool
  */
 export class RealtimeVoiceSession {
   readonly #options: RealtimeVoiceSessionOptions;
-  #peer: RTCPeerConnection | undefined;
-  #channel: RTCDataChannel | undefined;
+  #peer: PeerConnection | undefined;
+  #channel: DataChannel | undefined;
   #microphone: MediaStreamTrack | undefined;
   #stream: MediaStream | undefined;
   /**
@@ -306,7 +342,7 @@ export class RealtimeVoiceSession {
    * a released device leaves the sender on the call, silent, which is what
    * lets the next press attach a fresh track without renegotiating.
    */
-  #microphoneSender: RTCRtpSender | undefined;
+  #microphoneSender: MicrophoneSender | undefined;
   /** The device being reopened, held so two presses cannot open it twice. */
   #acquiring: Promise<void> | undefined;
   /**
@@ -580,7 +616,7 @@ export class RealtimeVoiceSession {
    * The timer that puts an idle call away, armed whenever the call settles and
    * cancelled the moment anything is being said on it.
    */
-  #idleTimer: number | ReturnType<typeof setTimeout> | undefined;
+  #idleTimer: unknown;
   /**
    * Whether the developer has taken a turn on this call. It is what makes a
    * dropped connection worth mentioning: a call that carried a conversation
@@ -687,7 +723,8 @@ export class RealtimeVoiceSession {
     }
 
     try {
-      const peer = this.#options.createPeerConnection?.() ?? new RTCPeerConnection();
+      const peer: PeerConnection =
+        this.#options.createPeerConnection?.() ?? new RTCPeerConnection();
       this.#peer = peer;
       if (this.#withMicrophone) {
         // The developer's call declares its sending half as a bare
@@ -851,7 +888,7 @@ export class RealtimeVoiceSession {
     return response.text();
   }
 
-  #waitForChannel(channel: RTCDataChannel, deadline: AbortSignal): Promise<void> {
+  #waitForChannel(channel: DataChannel, deadline: AbortSignal): Promise<void> {
     if (channel.readyState === "open") return Promise.resolve();
     // The deadline is shared with the SDP exchange and can already have fired
     // by the time this waiter is armed, in which case no future `abort` event
@@ -2477,7 +2514,11 @@ export class RealtimeVoiceSession {
 
   #clearIdleTimer(): void {
     if (this.#idleTimer === undefined) return;
-    (this.#options.cancel ?? clearTimeout)(this.#idleTimer);
+    // SAFETY: The handle is whatever `schedule ?? setTimeout` returned, and the
+    // fallbacks are paired — a handle from `setTimeout` can only reach
+    // `clearTimeout`. The cast satisfies that signature; nothing reads it as a
+    // number.
+    (this.#options.cancel ?? clearTimeout)(this.#idleTimer as number);
     this.#idleTimer = undefined;
   }
 }

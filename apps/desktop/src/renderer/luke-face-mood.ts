@@ -1,5 +1,5 @@
+import { FACE_MOTION, FACE_MOTION_CYCLE_MS, type FaceMotion } from "@sidecar/surface";
 import { type RefObject, useEffect, useRef, useState } from "react";
-import { FACE_MOTION, FACE_MOTION_CYCLE_MS, type FaceMotion } from "./luke-face-art";
 
 /**
  * Everything Luke reacts to. It is deliberately the same material the count

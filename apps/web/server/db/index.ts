@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import * as schema from "./schema.js";
+import * as schema from "./schema";
 
 /** Bounded so one warm function instance cannot monopolize Neon's pooler. */
 export const POOL_LIMITS = {

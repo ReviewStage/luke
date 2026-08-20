@@ -1,5 +1,5 @@
 import { integer, pgTable, primaryKey, text } from "drizzle-orm/pg-core";
-import { user } from "./auth-schema.js";
+import { user } from "./auth-schema";
 
 /**
  * What one signed-in user spent of the hosted allowance on one UTC day. The

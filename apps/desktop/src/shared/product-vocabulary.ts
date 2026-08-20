@@ -3,15 +3,15 @@ import {
   PRODUCT_CREDENTIAL_SOURCE,
   type ProductConnectionId,
   type ProductCredentialSource,
-} from "@sidecar/core";
-import { CREDENTIAL_PROVIDER_ID, type CredentialProviderId } from "./credential-providers";
-import { VOICE_SOURCE, type VoiceSource } from "./settings-schema";
+} from "@sidecar/analytics";
+import { CREDENTIAL_PROVIDER_ID, type CredentialProviderId } from "@sidecar/credentials";
+import { VOICE_SOURCE, type VoiceSource } from "@sidecar/settings";
 
 /**
  * How the desktop's own value sets are said in the counting vocabulary. Each
  * bridge is a total `Record`, which is the whole point: a new credential
  * provider or a third voice source does not build until the analytics
- * vocabulary in `@sidecar/core` has answered for it, rather than quietly
+ * vocabulary in `@sidecar/analytics` has answered for it, rather than quietly
  * arriving on the wire under a name nothing documents.
  */
 

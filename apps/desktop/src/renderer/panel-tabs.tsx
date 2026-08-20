@@ -1,5 +1,5 @@
-import { APP_PANEL_TAB, type AppPanelTab } from "@sidecar/core";
-import { cssCustomProperties } from "./css-custom-properties";
+import { APP_PANEL_TAB, type AppPanelTab } from "@sidecar/guide";
+import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { errandTargetProps, tabErrandTarget } from "./luke-errand";
 
 /**

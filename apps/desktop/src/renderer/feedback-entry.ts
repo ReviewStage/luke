@@ -1,6 +1,6 @@
-import { ACCOUNT_STATUS, type AccountSnapshot } from "../shared/contracts";
-import type { FeedbackImage, FeedbackKind } from "../shared/feedback";
-import { FEEDBACK_KIND, FEEDBACK_LIMITS } from "../shared/feedback";
+import type { FeedbackImage, FeedbackKind } from "@sidecar/feedback";
+import { FEEDBACK_KIND, FEEDBACK_LIMITS } from "@sidecar/feedback";
+import { ACCOUNT_STATUS, type AccountSnapshot } from "#shared/contracts";
 
 /**
  * A note to the founders being written, wherever the panel happens to be.

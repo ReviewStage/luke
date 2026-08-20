@@ -1,3 +1,4 @@
+import { PROVIDER_ID } from "@sidecar/session";
 import {
   CLAUDE_CODE_PATH,
   CLOUD_BADGE_PATH,
@@ -5,13 +6,12 @@ import {
   CONDUCTOR_MARK_PATHS,
   CURSOR_PATH,
   DEVIN_PATH,
-  PROVIDER_ID,
-} from "@sidecar/core";
+} from "@sidecar/surface";
 import { useId } from "react";
 
 /**
  * The provider marks the hero mock draws. Path data is generated into
- * `@sidecar/core` from `design/generate-surface-shared.mjs`, the same table
+ * `@sidecar/surface` from `design/generate-surface-shared.mjs`, the same table
  * the desktop renderer reads, so a provider publishing an updated mark cannot
  * land in one surface and not the other. The React that traces it stays here:
  * the mock only needs the five the smoke fixture uses, plus the badge that

@@ -1,0 +1,25 @@
+{
+  "name": "@sidecar/calendar",
+  "version": "0.3.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./observation": "./src/observation.ts",
+    "./vocabulary": "./src/vocabulary.ts"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "tsx --test 'src/**/*.test.ts'",
+    "typecheck": "tsc --project tsconfig.json"
+  },
+  "dependencies": {
+    "@sidecar/oauth": "workspace:*",
+    "@sidecar/wire": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "26.2.0",
+    "tsx": "4.23.12",
+    "typescript": "7.0.2"
+  }
+}

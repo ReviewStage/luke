@@ -1,12 +1,9 @@
-import {
-  type CredentialProviderId,
-  VOICE_CREDENTIAL_PROVIDER_ID,
-} from "../shared/credential-providers";
+import { type CredentialProviderId, VOICE_CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials";
 import {
   SETTING_PAGE,
   SETTINGS_PAGE as SETTINGS_VIEW,
   type SettingsPage as SettingsView,
-} from "../shared/settings-schema";
+} from "@sidecar/settings";
 
 export type { SettingsView };
 /**

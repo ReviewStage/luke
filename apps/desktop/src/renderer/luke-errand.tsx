@@ -1,4 +1,5 @@
-import { APP_PANEL_TAB, type AppPanelTab, type AppToolAction } from "@sidecar/core";
+import { APP_PANEL_TAB, type AppPanelTab } from "@sidecar/guide";
+import type { AppToolAction } from "@sidecar/realtime";
 import { useEffect, useRef } from "react";
 import { flushSync } from "react-dom";
 import { LukeFace } from "./luke-face";

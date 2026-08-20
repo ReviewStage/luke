@@ -9,8 +9,8 @@
 // its motions further down:
 //
 //   design/brand/**.svg                              standalone assets (SMIL)
-//   apps/desktop/src/renderer/luke-face-art.ts       the face, for the app
-//   apps/desktop/src/renderer/styles/face-motion.css the motions, as @keyframes
+//   packages/surface/src/generated/face-art.ts       the face, for both processes
+//   apps/desktop/src/renderer/styles/generated/face-motion.css  the motions, as @keyframes
 //
 // The app draws the face itself rather than loading these SVGs, because it needs
 // what a baked asset cannot give it: `currentColor` and CSS animation, so the renderer's own motion tokens
@@ -28,6 +28,7 @@ import { DMG_WINDOW } from "./dmg-window.mjs";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT = join(HERE, "brand");
 const APP_RENDERER = join(HERE, "..", "apps", "desktop", "src", "renderer");
+const SURFACE = join(HERE, "..", "packages", "surface", "src", "generated");
 
 // ---------- Palette ----------
 // Inks are named for the UI mode they serve: the dark-mode asset is light.
@@ -1279,12 +1280,14 @@ for (const name of MOTION_NAMES) {
 emitModes("luke-wordmark-talking", wordSvg(wordmark(motionSvg(MOTIONS.talking))), "LUKE — talking");
 
 // The desktop renderer's two inputs, from the same table the SVGs came from.
-put(join(APP_RENDERER, "luke-face-art.ts"), faceArtModule());
-put(join(APP_RENDERER, "styles", "face-motion.css"), faceMotionCss());
+put(join(SURFACE, "face-art.ts"), faceArtModule());
+put(join(APP_RENDERER, "styles", "generated", "face-motion.css"), faceMotionCss());
 
 if (!CHECK_ONLY) {
   process.stdout.write(`${written.length} SVGs written to design/brand/\n`);
-  process.stdout.write("luke-face-art.ts and styles/face-motion.css written to the desktop app\n");
+  process.stdout.write(
+    "face-art.ts written to @sidecar/surface and face-motion.css to the renderer\n",
+  );
 } else if (stale.length > 0) {
   process.stderr.write(
     `${stale.length} generated file(s) no longer match this script:\n${stale.join("\n")}\n` +

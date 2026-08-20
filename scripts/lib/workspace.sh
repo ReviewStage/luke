@@ -3,7 +3,6 @@
 SIDECAR_SCRIPT_DIRECTORY=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 SIDECAR_REPO_ROOT=$(CDPATH= cd -- "$SIDECAR_SCRIPT_DIRECTORY/../.." && pwd)
 SIDECAR_DESKTOP_APP_ROOT="$SIDECAR_REPO_ROOT/apps/desktop"
-SIDECAR_CORE_PACKAGE_ROOT="$SIDECAR_REPO_ROOT/packages/sidecar-core"
 SIDECAR_BUILD_ROOT="$SIDECAR_REPO_ROOT/.build"
 SIDECAR_ARTIFACT_ROOT="$SIDECAR_REPO_ROOT/artifacts"
 SIDECAR_FIXTURE_SCENARIO=smoke
@@ -18,7 +17,6 @@ SIDECAR_ELECTRON_BIN="$SIDECAR_DESKTOP_APP_ROOT/node_modules/.bin/electron"
 
 export SIDECAR_REPO_ROOT
 export SIDECAR_DESKTOP_APP_ROOT
-export SIDECAR_CORE_PACKAGE_ROOT
 export SIDECAR_BUILD_ROOT
 export SIDECAR_ARTIFACT_ROOT
 export SIDECAR_FIXTURE_SCENARIO
@@ -58,7 +56,7 @@ sidecar_wait_for_exit() {
 # The app chooses its own name at launch — the product name for a Developer ID
 # release, "<product name> Dev" for an unpackaged run, and "<product name> Test"
 # for an ad-hoc package, so differently signed builds never share a Keychain
-# entry (see apps/desktop/src/app-identity.ts). Each name keeps a lock of its own,
+# entry (see apps/desktop/src/main/app-identity.ts). Each name keeps a lock of its own,
 # so a caller replacing "the running instance" asks about all three. The product
 # name is still derived the way Electron derives its default, from the manifest:
 # `productName` when it sets one, the package name otherwise.

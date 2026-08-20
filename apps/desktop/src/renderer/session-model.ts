@@ -1,29 +1,30 @@
+import type { SessionNoticeAsk } from "@sidecar/attention";
+import { SESSION_LIST_SORT, type SessionListSort } from "@sidecar/guide";
 import {
   ATTENTION_DISPOSITION,
-  compareSessionsByUrgency,
   isProviderId,
   isSessionApplicationId,
   type NormalizedSession,
   PROVIDER_ID_LIST,
   type ProviderId,
   SESSION_APPLICATION_ID_LIST,
-  SESSION_LIST_SORT,
   SESSION_LOCATION,
   SESSION_STATUS,
-  SESSION_URGENCY,
   type SessionApplicationId,
   type SessionApplicationScope,
   type SessionControlKind,
   type SessionDiffSummary,
-  type SessionListSort,
   type SessionLocation,
-  type SessionNoticeAsk,
-  type SessionUrgency,
   sessionChangeNumber,
+} from "@sidecar/session";
+import { SUPERSET_WORKSPACE_PROVIDER_ID } from "@sidecar/superset/vocabulary";
+import {
+  compareSessionsByUrgency,
+  SESSION_URGENCY,
+  type SessionUrgency,
   urgencyLabel,
-} from "@sidecar/core";
-import type { AppBootstrap } from "../shared/contracts";
-import { SUPERSET_WORKSPACE_PROVIDER_ID } from "../shared/superset";
+} from "@sidecar/surface";
+import type { AppBootstrap } from "#shared/contracts";
 
 /**
  * One narrowing the list can hold: a place work runs, the realtime voice kind,
