@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./sign-in-stage": "./src/sign-in-stage.ts",
-    "./vocabulary": "./src/vocabulary.ts"
+    ".": "./src/index.js",
+    "./sign-in-stage": "./src/sign-in-stage.js",
+    "./vocabulary": "./src/vocabulary.js"
   },
   "types": "./src/index.ts",
   "scripts": {

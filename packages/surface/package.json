@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
+    ".": "./src/index.js",
     "./motion-tokens.css": "./src/generated/motion-tokens.css",
-    "./react-css": "./src/react-css.ts"
+    "./react-css": "./src/react-css.js"
   },
   "types": "./src/index.ts",
   "scripts": {

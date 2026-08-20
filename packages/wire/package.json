@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./testing": "./src/testing/index.ts"
+    ".": "./src/index.js",
+    "./testing": "./src/testing/index.js"
   },
   "types": "./src/index.ts",
   "scripts": {

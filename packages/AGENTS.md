@@ -35,12 +35,30 @@ at run time — a break no build sees and production reports only as
 
 ## The server reaches packages through doors, not by name
 
-`apps/web/server/core.ts` imports each package it reaches by relative path, one
-`export *` per package, for the same reason: Vercel compiles the relative graph
-but leaves `package.json` alone, so a bare `@sidecar/*` specifier resolves to a
-`./src/index.ts` that compilation has replaced with `index.js`. A package added
-to the server's import graph needs its door there, and nothing local reports its
-absence.
+`apps/web/server/core.ts` imports each package it reaches by relative path, for
+the same reason: Vercel compiles the relative graph but leaves `package.json`
+alone. Two halves follow from that, and only both together make a function
+load.
+
+Every package in the *transitive* closure needs a door, not only the ones the
+server names. The closure crosses package boundaries by bare specifier at
+almost every hop, and a package reached only through another package's imports
+is one whose sources compilation never visits. Packages the server names get
+`export *`; packages reached only through another get a bare side-effect
+import, which pulls the file into the compile graph without widening the
+export namespace, where `export *` can silently drop a name two doors both
+export.
+
+Every package's `exports` names `./src/index.js`, never `./src/index.ts`. It is
+the same rule as the one above, one level up: post-compile the `.js` target is
+literally the file, and pre-compile TypeScript, tsx, esbuild, and Vite all
+substitute the `.ts` back. A `.ts` target resolves to a file that compilation
+has replaced. `exports` is what a runtime resolver follows, so it names the
+compiled shape; `types` is what the compiler reads directly and stays `.ts`.
+
+Neither half is reported by anything local. Typecheck, `check.sh`, CI, and
+local dev all pass with a door missing or an `exports` target stale; the
+failure is a `FUNCTION_INVOCATION_FAILED` on a deployed route.
 
 ## A barrel is an all-or-nothing door
 
