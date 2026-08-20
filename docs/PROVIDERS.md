@@ -139,7 +139,7 @@ unreadable file, or a schema this build does not know means no annotation.
 | --- | --- | --- | --- |
 | ChatGPT | Nothing | A mark opening the exact Codex thread | None |
 | cmux | Hook-session stores under `~/.cmuxterm` | Mark, exact `cmux:` pane address | None |
-| Conductor | Local session index (`conductor.db`) | Mark, workspace grouping | None |
+| Conductor | Local session index (`conductor.db`) | Mark, workspace grouping, `conductor:` chat address | None |
 | Orca | Hook-status cache and worktree names | Mark, worktree grouping | None |
 | Superset | Host state (`host.db`) | Mark, grouping, `superset:` workspace address | Message, open workspace, close terminal, add agent, new workspace, rename, delete workspace — through its CLI, while logged in |
 
@@ -157,9 +157,15 @@ unreadable file, or a schema this build does not know means no annotation.
   cmux names its workspaces only by identifier; no writes, because cmux's
   control socket is password-guarded and undocumented for outside callers.
 - **Conductor** — the index is never used to open an agent transcript, and a
-  schema that predates workspaces annotates without grouping. Conductor
-  documents no exact address or message endpoint for a local chat, so the
-  association adds no open or send control.
+  schema that predates workspaces annotates without grouping. The address,
+  `conductor://workspace?id=<workspace>&session=<chat>`, is composed on this
+  machine from the observed workspace and chat ids — the same deep link
+  Conductor's own notifications fire — and stands in as the row's own link
+  where the chat's agent gave it none; a sub-agent's address is its ancestor
+  chat's, where its conversation lives in Conductor's window, and a
+  pre-workspace schema has no workspace id to address, so its rows keep none.
+  Conductor documents no message endpoint for a local chat, so the
+  association adds no send control.
 - **Orca** — the hook-status cache also carries conversational fields — the
   last prompt, a message preview, a tool's input — and none of them are ever
   read. A sub-agent

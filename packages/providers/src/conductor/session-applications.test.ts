@@ -298,9 +298,47 @@ test("groups a matched chat under its Conductor workspace like a manager", async
       id: SESSION_APPLICATION_ID.CONDUCTOR,
       displayName: "Conductor",
       scope: SESSION_APPLICATION_SCOPE.WORKSPACE,
+      link: "conductor://workspace?id=workspace-named&session=chat-named",
     },
   ]);
+  // The composed address is also the row's own press, because the chat's
+  // provider — a local one — reported none of its own.
+  assert.equal(
+    observations[0]?.detail?.link,
+    "conductor://workspace?id=workspace-named&session=chat-named",
+  );
   assert.equal(observations[1]?.workspace?.name, "kingstown");
+  assert.equal(
+    observations[1]?.detail?.link,
+    "conductor://workspace?id=workspace-plain&session=chat-plain",
+  );
+});
+
+test("a provider-reported address keeps the row press; the mark keeps its own", async (t) => {
+  const databasePath = await temporaryDatabasePath(t);
+  const database = createConductorDatabase(databasePath);
+  try {
+    writeWorkspace(database, "workspace-named", "lisbon-v2", "kingstown");
+    writeSession(
+      database,
+      "chat-named",
+      "local",
+      TEST_CONDUCTOR_AGENT_TYPE.CLAUDE,
+      "workspace-named",
+    );
+  } finally {
+    database.close();
+  }
+  const snapshot = await new ConductorSessionApplicationReader({ databasePath }).read();
+  const observations = snapshot.enrich(PROVIDER_ID.CLAUDE_CODE, [
+    { ...OBSERVED_CHAT, detail: { link: "https://example.com/session/local" } },
+  ]);
+
+  assert.equal(observations[0]?.detail?.link, "https://example.com/session/local");
+  assert.equal(
+    observations[0]?.applications?.[0]?.link,
+    "conductor://workspace?id=workspace-named&session=chat-named",
+  );
 });
 
 test("a spawned descendant inherits its ancestor's Conductor workspace", async (t) => {
@@ -331,6 +369,12 @@ test("a spawned descendant inherits its ancestor's Conductor workspace", async (
 
   assert.deepEqual(observations[1]?.workspace, observations[0]?.workspace);
   assert.deepEqual(observations[1]?.applications, observations[0]?.applications);
+  // The inherited address is the ancestor chat's, where the sub-agent's
+  // conversation actually lives in Conductor's own window.
+  assert.equal(
+    observations[1]?.detail?.link,
+    "conductor://workspace?id=workspace-parent&session=chat-parent",
+  );
 });
 
 test("keeps another manager's workspace and stays on the row instead", async (t) => {
@@ -360,13 +404,15 @@ test("keeps another manager's workspace and stays on the row instead", async (t)
   ]);
 
   // The first manager to group the chat keeps it; Conductor still identifies
-  // itself, on the row, where no tray header would carry its mark.
+  // itself, on the row, where no tray header would carry its mark — and the
+  // mark keeps the chat's own Conductor address either way.
   assert.deepEqual(observations[0]?.workspace, supersetWorkspace);
   assert.deepEqual(observations[0]?.applications, [
     {
       id: SESSION_APPLICATION_ID.CONDUCTOR,
       displayName: "Conductor",
       scope: SESSION_APPLICATION_SCOPE.SESSION,
+      link: "conductor://workspace?id=workspace-conductor&session=chat-managed",
     },
   ]);
 });
