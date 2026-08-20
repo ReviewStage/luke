@@ -59,7 +59,8 @@ export const ATTENTION_TUNING_EXAMPLES: readonly AttentionTuningExample[] = [
     },
     expected: {
       disposition: ATTENTION_DISPOSITION.SPEAK_DURING_TURN,
-      summary: "Claude Code needs to know how to round tax in checkout-service.",
+      summary:
+        "Your agent splitting the checkout total into line items needs to know how to round tax.",
       answers_ask: false,
     },
     rationale:
@@ -81,7 +82,7 @@ export const ATTENTION_TUNING_EXAMPLES: readonly AttentionTuningExample[] = [
     },
     expected: {
       disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
-      summary: "Codex published billing-api 0.4.2 and merged the release.",
+      summary: "Your agent releasing the billing client published 0.4.2 and merged the release.",
       answers_ask: false,
     },
     rationale:
@@ -129,7 +130,7 @@ export const ATTENTION_TUNING_EXAMPLES: readonly AttentionTuningExample[] = [
     },
     expected: {
       disposition: ATTENTION_DISPOSITION.SPEAK_DURING_TURN,
-      summary: "Claude Code hit a rate limit in billing-api and stopped.",
+      summary: "Your agent backfilling the subscription migration hit a rate limit and stopped.",
       answers_ask: false,
     },
     rationale:
@@ -174,8 +175,7 @@ export const ATTENTION_TUNING_EXAMPLES: readonly AttentionTuningExample[] = [
     },
     expected: {
       disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
-      summary:
-        "The payments-schema workspace you asked about finished: migration verified on staging.",
+      summary: "Your agent migrating the payments schema finished: verified on staging.",
       answers_ask: true,
     },
     rationale:
