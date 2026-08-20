@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Luke landing page",
   "engines": {
-    "node": "22.x"
+    "node": "24.x"
   },
   "scripts": {
     "auth:generate": "DATABASE_URL=${DATABASE_URL:-postgresql://schema:generate@127.0.0.1:5432/luke} pnpm dlx @better-auth/cli@1.4.21 generate --config server/auth.ts --output server/db/auth-schema.ts --yes && pnpm exec biome check --write server/db/auth-schema.ts",

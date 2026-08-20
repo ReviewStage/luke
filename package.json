@@ -5,7 +5,7 @@
   "description": "A notch-attached desktop sidecar for coding-agent sessions",
   "packageManager": "pnpm@9.15.0",
   "engines": {
-    "node": ">=22.12.0"
+    "node": ">=24.0.0"
   },
   "scripts": {
     "build": "pnpm --recursive --if-present run build",
