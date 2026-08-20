@@ -1102,49 +1102,53 @@ const bbox = faceBBox();
 const glyphScale = (224 * 0.58) / bbox.w;
 const gx = 120 - bbox.cx * glyphScale;
 const gy = 120 - bbox.cy * glyphScale;
-const iconTileArt = (tile) =>
-  `<rect x="8" y="8" width="224" height="224" rx="52" fill="url(#tile)"/>` +
-  `<g color="${tile.ink}" transform="translate(${fmt(gx)} ${fmt(gy)}) scale(${fmt(glyphScale)})">${face()}</g>`;
 for (const [mode, tile] of Object.entries(TILES)) {
   const icon =
     `${svgOpen(240, 240)}<defs><linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">` +
     `<stop offset="0" stop-color="${tile.gradient[0]}"/><stop offset="1" stop-color="${tile.gradient[1]}"/></linearGradient></defs>` +
-    `${iconTileArt(tile)}</svg>`;
+    `<rect x="8" y="8" width="224" height="224" rx="52" fill="url(#tile)"/>` +
+    `<g color="${tile.ink}" transform="translate(${fmt(gx)} ${fmt(gy)}) scale(${fmt(glyphScale)})">${face()}</g></svg>`;
   emit(`icon/luke-icon-${mode}.svg`, icon.replaceAll("currentColor", tile.ink), "Luke app icon");
 }
 
-// Installer volume icon: the app icon badged onto an aluminum drive slab —
-// the disk-image convention Finder and the polished DMGs share, hardware
-// carrying the app — so the volume a mounted DMG puts on the desktop reads
-// as the thing holding Luke, never as Luke himself. The badge is the bundle
-// icon exactly (the dark tile, which already serves both desktop modes), and
-// brushed aluminum is hardware with no mode of its own, so there is one
-// installer icon rather than a light/dark pair. The slab's visible top edge
-// is what gives it depth; the small light on the front face is the drive's
-// activity light, hardware-grey so it cannot read as one of the face's eyes.
+// Installer volume icon: the official generic external-drive shape — the
+// portrait white body and grey top cap Finder gives a volume — carrying the
+// bare face in hardware grey, the way Chrome's installer volume carries its
+// mark. No tile behind the glyph and no brand ink: the drive is the subject,
+// and a full-color mark would read as the app itself. One artwork, no
+// light/dark pair — hardware has no mode.
 const DRIVE = {
-  top: { x: 18, y: 62, w: 204, h: 32, r: 16, gradient: ["#fafafc", "#d3d3da"] },
-  face: { x: 10, y: 78, w: 220, h: 110, r: 22, gradient: ["#e9e9ee", "#b3b3bc"] },
-  light: { cx: 205, cy: 133, r: 5, fill: "#8e8e93" },
-  badge: { x: 84, y: 97, scale: 0.3 },
+  x: 52,
+  w: 136,
+  top: 20,
+  seam: 48,
+  bottom: 220,
+  r: 14,
+  body: ["#f7f7f8", "#e8e8eb"],
+  cap: ["#dbdbde", "#cfcfd3"],
+  edge: "#c6c6cb",
+  glyph: "#aeaeb4",
+  light: { cx: 172, cy: 202, r: 4, fill: "#c2c2c7" },
 };
-const driveTile = TILES.dark;
+const driveRight = DRIVE.x + DRIVE.w;
+const driveGlyphScale = (DRIVE.w * 0.6) / bbox.w;
+const driveGx = 120 - bbox.cx * driveGlyphScale;
+const driveGy = (DRIVE.seam + DRIVE.bottom) / 2 - bbox.cy * driveGlyphScale;
 const installerIcon =
   `${svgOpen(240, 240)}<defs>` +
-  `<linearGradient id="drive-top" x1="0" y1="0" x2="0" y2="1">` +
-  `<stop offset="0" stop-color="${DRIVE.top.gradient[0]}"/><stop offset="1" stop-color="${DRIVE.top.gradient[1]}"/></linearGradient>` +
-  `<linearGradient id="drive-face" x1="0" y1="0" x2="0" y2="1">` +
-  `<stop offset="0" stop-color="${DRIVE.face.gradient[0]}"/><stop offset="1" stop-color="${DRIVE.face.gradient[1]}"/></linearGradient>` +
-  `<linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">` +
-  `<stop offset="0" stop-color="${driveTile.gradient[0]}"/><stop offset="1" stop-color="${driveTile.gradient[1]}"/></linearGradient>` +
+  `<linearGradient id="drive-cap" x1="0" y1="0" x2="0" y2="1">` +
+  `<stop offset="0" stop-color="${DRIVE.cap[0]}"/><stop offset="1" stop-color="${DRIVE.cap[1]}"/></linearGradient>` +
+  `<linearGradient id="drive-body" x1="0" y1="0" x2="0" y2="1">` +
+  `<stop offset="0" stop-color="${DRIVE.body[0]}"/><stop offset="1" stop-color="${DRIVE.body[1]}"/></linearGradient>` +
   `</defs>` +
-  `<rect x="${DRIVE.top.x}" y="${DRIVE.top.y}" width="${DRIVE.top.w}" height="${DRIVE.top.h}" rx="${DRIVE.top.r}" fill="url(#drive-top)"/>` +
-  `<rect x="${DRIVE.face.x}" y="${DRIVE.face.y}" width="${DRIVE.face.w}" height="${DRIVE.face.h}" rx="${DRIVE.face.r}" fill="url(#drive-face)"/>` +
+  `<path d="M ${DRIVE.x} ${DRIVE.seam} V ${DRIVE.top + DRIVE.r} Q ${DRIVE.x} ${DRIVE.top} ${DRIVE.x + DRIVE.r} ${DRIVE.top} H ${driveRight - DRIVE.r} Q ${driveRight} ${DRIVE.top} ${driveRight} ${DRIVE.top + DRIVE.r} V ${DRIVE.seam} Z" fill="url(#drive-cap)"/>` +
+  `<path d="M ${DRIVE.x} ${DRIVE.seam} H ${driveRight} V ${DRIVE.bottom - DRIVE.r} Q ${driveRight} ${DRIVE.bottom} ${driveRight - DRIVE.r} ${DRIVE.bottom} H ${DRIVE.x + DRIVE.r} Q ${DRIVE.x} ${DRIVE.bottom} ${DRIVE.x} ${DRIVE.bottom - DRIVE.r} Z" fill="url(#drive-body)"/>` +
+  `<rect x="${DRIVE.x}" y="${DRIVE.top}" width="${DRIVE.w}" height="${DRIVE.bottom - DRIVE.top}" rx="${DRIVE.r}" fill="none" stroke="${DRIVE.edge}" stroke-width="2"/>` +
   `<circle cx="${DRIVE.light.cx}" cy="${DRIVE.light.cy}" r="${DRIVE.light.r}" fill="${DRIVE.light.fill}"/>` +
-  `<g transform="translate(${DRIVE.badge.x} ${DRIVE.badge.y}) scale(${DRIVE.badge.scale})">${iconTileArt(driveTile)}</g></svg>`;
+  `<g color="${DRIVE.glyph}" transform="translate(${fmt(driveGx)} ${fmt(driveGy)}) scale(${fmt(driveGlyphScale)})">${face()}</g></svg>`;
 emit(
   "icon/luke-installer-icon.svg",
-  installerIcon.replaceAll("currentColor", driveTile.ink),
+  installerIcon.replaceAll("currentColor", DRIVE.glyph),
   "Luke installer volume icon",
 );
 

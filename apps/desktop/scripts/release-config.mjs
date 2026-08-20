@@ -36,11 +36,10 @@ export const DMG_STAGING_ENTRIES = [
 // custom-icon bit is set, which can only happen on a mounted volume — see
 // volumeCustomIconArguments.
 export const DMG_VOLUME_ICON_FILE_NAME = ".VolumeIcon.icns";
-// The volume's icon is the installer icon — the app icon badged onto an
-// aluminum drive slab — never the app's own squircle alone, for the same
+// The volume's icon is the installer icon — the face in hardware grey on the
+// generic external-drive shape — never the app's own squircle, for the same
 // reason the volume is not named bare "Luke". The artwork has no light/dark
-// pair: the drive is hardware silver and its badge is the bundle icon, which
-// already serves both desktop modes.
+// pair: it is drawn as hardware, and hardware has no mode.
 export const INSTALLER_ICONSET_SOURCES = Object.freeze({
   "icon_16x16.png": "luke-installer-icon-16.png",
   "icon_16x16@2x.png": "luke-installer-icon-32.png",

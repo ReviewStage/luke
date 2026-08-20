@@ -46,11 +46,11 @@ rsvg-convert -w 1200 -h 630 social/luke-og-card.svg -o ../../apps/web/public/luk
 theme changes.
 
 `icon/luke-installer-icon-*.png` are cut into the release DMG's volume icon
-(`.VolumeIcon.icns`): the app icon badged onto an aluminum drive slab, so the
+(`.VolumeIcon.icns`): the face in hardware grey on the generic macOS
+external-drive shape — the convention installer volumes share — so the
 mounted "Luke Installer" volume reads as the hardware holding Luke rather
-than as the Luke.app beside it. It has no light/dark pair — the drive is
-hardware silver, and its badge is the bundle icon, which already serves both
-modes.
+than as the Luke.app beside it. It has no light/dark pair: it is drawn as
+hardware, and hardware has no mode.
 
 The notch panel draws the face itself rather than loading these SVGs, because it
 needs two things a baked asset cannot give it: `currentColor`, so it can take the

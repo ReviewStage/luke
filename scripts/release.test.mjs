@@ -313,7 +313,7 @@ test("the DMG volume wears the installer icon, not the app's own", () => {
   // The volume is named and dressed as the installer, never as the app: a
   // volume called "Luke" wearing Luke's icon is indistinguishable from the
   // Luke.app beside it. Every iconset entry is a committed installer-icon
-  // asset — the app icon badged on a drive, one artwork for both modes.
+  // asset — the face on the generic drive shape, one artwork for both modes.
   assert.equal(RELEASE_VOLUME_NAME, "Luke Installer");
   assert.deepEqual(Object.keys(INSTALLER_ICONSET_SOURCES), Object.keys(ICONSET_SOURCES));
   for (const sourceName of Object.values(INSTALLER_ICONSET_SOURCES)) {
