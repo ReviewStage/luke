@@ -357,7 +357,18 @@ What Luke may show:
   no microphone track, carries no tools, and is sent the one update's fields
   — or the one answering sentence — alone: never the roster, the guide, the
   issues, or a transcript rendering, which travel only on conversations the
-  developer opens, and the rendering only in the turn that asked for it. Its
+  developer opens, and the rendering only in the turn that asked for it. A
+  developer-opened conversation also carries a bounded history of the recent
+  exchange itself — the developer's typed asks, the words Luke already spoke
+  or announced, and the acts he carried at the developer's ask — so the one
+  conversation survives the calls that transport it: an announcement read out
+  on Luke's own call, or a call retired idle, is still remembered by the next
+  one. Every history line already traveled to the same service once, on the
+  call that said it; a transcript reading enters the history only as the fact
+  that one was read, never a word of the rendering; each line's identity is
+  the roster-validated one the words traveled with, offered only while that
+  session is still observed; and the history lives in memory alone — written
+  to no disk, dying with the app, and never sent on Luke's speak-only call. Its
   trigger is a deterministic status edge or the evaluator finding an update
   that satisfies the developer's standing ask — never a model speaking
   unbidden: while no ask stands, nothing a model decided can open Luke's own

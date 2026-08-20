@@ -7,7 +7,6 @@ import {
   REALTIME_STATUS,
   REALTIME_VOICE,
   REALTIME_VOICE_SPEED,
-  SESSION_TOOL_KIND,
 } from "@sidecar/realtime";
 import {
   ATTENTION_DISPOSITION,
@@ -20,15 +19,13 @@ import {
 import {
   activeVoiceStream,
   announcerNotices,
-  carriedSessionIdentity,
   evaluatorSummaries,
   FIXTURE_SPEAKING_CAPTION,
-  latestSpeech,
-  latestSpeechReference,
   liveSpeedApplies,
   lukeCaptionsToShow,
   replyIssueMentions,
   replyMentions,
+  speechByDecision,
   talkKeyPress,
   talkOpeningHolds,
   typedAskHolds,
@@ -316,34 +313,17 @@ test("answered asks go to the announcer; unbidden summaries keep to an open call
   assert.deepEqual(evaluatorSummaries(mixed), [summary]);
 });
 
-test("the newest mention is what a bare 'that chat' points back at", () => {
+test("a batch enters the history in the order it was decided", () => {
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // Every source counts — the evaluator's readout here is as much a mention as
-  // the standing-ask answer around it — and the newest by decision wins, whatever order the
-  // batch arrived in.
+  // the standing-ask answer around it — and the decision order holds whatever
+  // order the batch arrived in, so the history reads the way things happened.
   const older = { ...speech(ATTENTION_SPEECH_SOURCE.NOTICE_REQUEST, "checkout"), decidedAt: 1_000 };
   const newest = { ...speech(ATTENTION_SPEECH_SOURCE.EVALUATOR, "payments"), decidedAt: 3_000 };
   const newer = { ...speech(ATTENTION_SPEECH_SOURCE.NOTICE_REQUEST, "schema"), decidedAt: 2_000 };
 
-  assert.deepEqual(latestSpeechReference([older, newest, newer]), {
-    providerId: "claude-code",
-    providerSessionId: "payments",
-  });
-  // An empty batch moves the reference not at all.
-  assert.equal(latestSpeechReference([]), undefined);
-});
-
-test("the newest announcement's words are what 'what did you just say?' points back at", () => {
-  // The same pick the reference makes, carrying the whole speech: the
-  // reference answers which session, this answers what was said, and the two
-  // must never come from different items of one batch.
-  const older = { ...speech(ATTENTION_SPEECH_SOURCE.NOTICE_REQUEST, "checkout"), decidedAt: 1_000 };
-  const newest = { ...speech(ATTENTION_SPEECH_SOURCE.EVALUATOR, "payments"), decidedAt: 3_000 };
-  const newer = { ...speech(ATTENTION_SPEECH_SOURCE.NOTICE_REQUEST, "schema"), decidedAt: 2_000 };
-
-  assert.equal(latestSpeech([older, newest, newer]), newest);
-  // An empty batch keeps whatever announcement already stands.
-  assert.equal(latestSpeech([]), undefined);
+  assert.deepEqual(speechByDecision([newest, older, newer]), [older, newer, newest]);
+  assert.deepEqual(speechByDecision([]), []);
 });
 
 function rosterSession(
@@ -507,23 +487,5 @@ test("a capture run observes no tracker, so its fixture words draw no issue chip
       issues: undefined,
     }),
     [],
-  );
-});
-
-test("a carried act aims the reference at its session; a creation aims at none", () => {
-  const identity = { providerId: "claude-code", providerSessionId: "session-a" };
-
-  assert.deepEqual(carriedSessionIdentity({ kind: SESSION_TOOL_KIND.OPEN, identity }), identity);
-  assert.deepEqual(
-    carriedSessionIdentity({ kind: SESSION_TOOL_KIND.MESSAGE, identity, text: "carry on" }),
-    identity,
-  );
-  assert.equal(
-    carriedSessionIdentity({
-      kind: SESSION_TOOL_KIND.CREATE_WORKSPACE,
-      providerId: "conductor",
-      providerProjectId: "project-1",
-    }),
-    undefined,
   );
 });

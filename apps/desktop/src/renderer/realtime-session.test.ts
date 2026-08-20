@@ -6,7 +6,10 @@ import { ISSUE_TRACKER_ID, normalizeTrackedIssue, type TrackedIssue } from "@sid
 import {
   ATTENTION_SPEECH_SOURCE,
   type AttentionSpeech,
+  appendConversationEntry,
   CONTEXT_ITEM_KIND,
+  CONVERSATION_ENTRY_KIND,
+  type ConversationEntry,
   inputAudioAppendEvents,
   inputAudioFormatUpdateEvents,
   REALTIME_CLIENT_EVENT,
@@ -92,6 +95,8 @@ interface Harness {
   captions: (readonly string[] | undefined)[];
   /** The announced session each caption emission carried, by session id. */
   captionSubjects: (string | undefined)[];
+  /** The words each ended reply left behind, with its announced subject. */
+  replyEndings: { texts: readonly string[]; about: string | undefined }[];
   microphoneEnabled: () => boolean;
   microphoneStopped: () => boolean;
   emit: (event: JsonValue) => void;
@@ -171,6 +176,13 @@ function harness(
     captureSessionSync?: boolean;
     /** Lets a test ride the status edges, the way the announcer does. */
     onStatus?: (status: RealtimeStatus) => void;
+    /**
+     * Mimics the caller's history: an ended reply's words are written back
+     * into the session as a conversation update, the way the hook records
+     * them. What the write-back does to a call being torn down is exactly
+     * what the tests using this are about.
+     */
+    writeBackOnReplyEnded?: boolean;
   } = {},
 ): Harness {
   const timers: HeldTimer[] = [];
@@ -186,6 +198,7 @@ function harness(
   const errors: (string | undefined)[] = [];
   const captions: (readonly string[] | undefined)[] = [];
   const captionSubjects: (string | undefined)[] = [];
+  const replyEndings: { texts: readonly string[]; about: string | undefined }[] = [];
   const requests: { url: string; init: RequestInit }[] = [];
   const calls: string[] = [];
   let enabled = false;
@@ -312,6 +325,17 @@ function harness(
       captions.push(texts);
       captionSubjects.push(about?.providerSessionId);
     },
+    onReplyEnded: (texts, about) => {
+      replyEndings.push({ texts, about: about?.providerSessionId });
+      if (options.writeBackOnReplyEnded) {
+        session.updateConversation(
+          appendConversationEntry([], {
+            kind: CONVERSATION_ENTRY_KIND.REPLY,
+            words: texts.join(" "),
+          }),
+        );
+      }
+    },
   };
   if (options.connectTimeoutMs !== undefined) {
     sessionOptions.connectTimeoutMs = options.connectTimeoutMs;
@@ -339,6 +363,7 @@ function harness(
     errors,
     captions,
     captionSubjects,
+    replyEndings,
     microphoneEnabled: () => enabled,
     microphoneStopped: () => stopped,
     lukeAudible: () => remoteTrack.enabled,
@@ -1729,7 +1754,15 @@ test("an unchanged session roster is not resent", async () => {
   );
 });
 
-test("the session under discussion travels with the roster, carrying its identity", async () => {
+function conversationEntries(
+  ...entries: readonly ConversationEntry[]
+): readonly ConversationEntry[] {
+  let history: readonly ConversationEntry[] = [];
+  for (const entry of entries) history = appendConversationEntry(history, entry);
+  return history;
+}
+
+test("the history travels with the roster, carrying the identities its lines named", async () => {
   const context = harness();
   await context.session.connect();
 
@@ -1737,176 +1770,207 @@ test("the session under discussion travels with the roster, carrying its identit
     observedSession("session-a"),
     observedSession("session-b", { title: "Claude Code: payments" }),
   ]);
-  // The announcement this points back at named the session only by title —
-  // and may have been read out on a call this one replaced. The reference is
-  // what carries the identity into the turn that says "open that chat".
-  context.session.updateSessionReference({
-    providerId: "claude-code",
-    providerSessionId: "session-b",
-  });
+  // The announcement this line records named the session only by title — and
+  // was often read out on a call this one replaced. The history is what
+  // carries the words and the identity into the turn that says "open that
+  // chat".
+  context.session.updateConversation(
+    conversationEntries({
+      kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
+      words: "Claude Code finished payments.",
+      identity: { providerId: "claude-code", providerSessionId: "session-b" },
+    }),
+  );
+  // Remembered, not sent: the words go in at the turn that reads them.
   assert.deepEqual<ParsedJsonObject[]>(context.sent, []);
 
   await armDeveloperTurn(context);
 
-  const items = contextItems(context, "[session under discussion");
+  const items = contextItems(context, "[recent conversation");
   assert.equal(items.length, 1);
+  assert.match(itemText(items[0]), /Luke announced: "Claude Code finished payments\."/);
   assert.match(itemText(items[0]), /provider_id=claude-code provider_session_id=session-b/);
-  assert.match(itemText(items[0]), /payments/);
-  // After the roster it is resolved against, on a channel that keeps order.
+  // After the roster it is rendered against, on a channel that keeps order.
   const rosterIndex = context.sent.findIndex((event) =>
     itemText(event).startsWith("[observed session status"),
   );
   assert.ok(rosterIndex >= 0 && rosterIndex < context.sent.indexOf(items[0] ?? {}));
 });
 
-test("a reference to a session Luke was never shown says nothing", async () => {
+test("an empty history says nothing at all", async () => {
   const context = harness();
   await context.session.connect();
 
   context.session.updateSessions([observedSession("session-a")]);
-  context.session.updateSessionReference({
-    providerId: "claude-code",
-    providerSessionId: "session-unknown",
-  });
+  context.session.updateConversation([]);
   await armDeveloperTurn(context);
 
-  assert.deepEqual(contextItems(context, "[session under discussion"), []);
+  assert.deepEqual(contextItems(context, "[recent conversation"), []);
 });
 
-// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-test("the reference is rendered from the roster as it now stands", async () => {
+test("the history is rendered from the roster as it now stands", async () => {
   const context = harness();
   await context.session.connect();
 
-  context.session.updateSessions([observedSession("session-a")]);
-  context.session.updateSessionReference({
-    providerId: "claude-code",
-    providerSessionId: "session-a",
+  const history = conversationEntries({
+    kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
+    words: "Claude Code finished checkout-service.",
+    identity: { providerId: "claude-code", providerSessionId: "session-a" },
   });
-  await armDeveloperTurn(context);
-
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  // Providers rewrite titles as work moves — the very churn that makes a
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  // title a bad anchor — so the line is re-rendered rather than kept as the
-  // words it was first said in.
-  context.session.updateSessions([
-    observedSession("session-a", { title: "Claude Code: checkout-service — review" }),
-  ]);
-  context.session.stopSpeaking();
-  const sentBefore = context.sent.length;
-  await armDeveloperTurn(context);
-
-  const items = contextItems(context, "[session under discussion", sentBefore);
-  assert.equal(items.length, 1);
-  assert.match(itemText(items[0]), /checkout-service — review/);
-  assert.match(itemText(items[0]), /provider_session_id=session-a/);
-});
-
-test("a reference whose session leaves the roster is withdrawn", async () => {
-  const context = harness();
-  await context.session.connect();
-
   context.session.updateSessions([observedSession("session-a")]);
-  context.session.updateSessionReference({
-    providerId: "claude-code",
-    providerSessionId: "session-a",
-  });
+  context.session.updateConversation(history);
   await armDeveloperTurn(context);
 
+  // The words are history and keep their line; the identity is an offer to a
+  // tool call, and a session the roster no longer shows is one no call may
+  // name — so the line lets go of it rather than steering "that chat" toward
+  // a certain refusal.
   context.session.updateSessions([]);
   context.session.stopSpeaking();
   const sentBefore = context.sent.length;
   await armDeveloperTurn(context);
 
-  // The conversation held a line pointing at the session, so it is told the
-  // line no longer stands rather than left resolving "that chat" to an
-  // identity whose validation can only refuse.
-  const items = contextItems(context, "[session under discussion", sentBefore);
-  assert.equal(items.length, 1);
-  assert.match(itemText(items[0]), /no longer observed/);
-});
-
-function announcementSpeech(summary: string) {
-  return {
-    providerId: "claude-code",
-    providerSessionId: "session-a",
-    disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
-    source: ATTENTION_SPEECH_SOURCE.NOTICE_REQUEST,
-    summary,
-    decidedAt: 1_800_000_000_000,
-  };
-}
-
-test("the last announcement travels with the roster, carrying the words said", async () => {
-  const context = harness();
-  await context.session.connect();
-  const sentAfterConnect = context.sent.length;
-
-  context.session.updateSessions([observedSession("session-a")]);
-  // The announcement may have been read out on a speak-only call this one
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  // replaced, or only shown as a popup: the words go in here so "what did you
-  // just say?" lands on a call that heard them.
-  context.session.updateLastAnnouncement(
-    announcementSpeech("Claude Code finished checkout-service."),
-  );
-  // Remembered, not sent: the words go in at the turn that reads them.
-  assert.deepEqual(context.sent.slice(sentAfterConnect), []);
-
-  await armDeveloperTurn(context);
-
-  const items = contextItems(context, "[last announcement");
+  const items = contextItems(context, "[recent conversation", sentBefore);
   assert.equal(items.length, 1);
   assert.match(itemText(items[0]), /finished checkout-service/);
-  // After the roster, on a channel that keeps order.
-  const rosterIndex = context.sent.findIndex((event) =>
-    itemText(event).startsWith("[observed session status"),
-  );
-  assert.ok(rosterIndex >= 0 && rosterIndex < context.sent.indexOf(items[0] ?? {}));
+  assert.doesNotMatch(itemText(items[0]), /provider_session_id=session-a/);
 });
 
-test("a fresh announcement replaces the one before it", async () => {
+test("a fresh history line replaces the item before it", async () => {
   const context = harness();
   await context.session.connect();
 
-  context.session.updateLastAnnouncement(
-    announcementSpeech("Claude Code finished checkout-service."),
-  );
+  const first = conversationEntries({
+    kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
+    words: "Claude Code finished checkout-service.",
+  });
+  context.session.updateConversation(first);
   await armDeveloperTurn(context);
-  const first = context.session.liveContextItemIds.get(CONTEXT_ITEM_KIND.LAST_ANNOUNCEMENT);
-  assert.ok(first);
+  const firstItem = context.session.liveContextItemIds.get(CONTEXT_ITEM_KIND.CONVERSATION);
+  assert.ok(firstItem);
 
   context.session.stopSpeaking();
-  context.session.updateLastAnnouncement(announcementSpeech("Codex failed in payments."));
+  context.session.updateConversation(
+    appendConversationEntry(first, {
+      kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
+      words: "Codex failed in payments.",
+    }),
+  );
   const sentBefore = context.sent.length;
   await armDeveloperTurn(context);
 
-  // One live item per kind: the old words are deleted before the new go in,
-  // so the conversation never holds two last announcements.
+  // One live item per kind: the old record is deleted before the new goes in,
+  // so the conversation never holds two histories.
   assert.equal(
     context.sent.slice(sentBefore).some(
       (event) =>
         event.type === CONVERSATION_ITEM_DELETE &&
         // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-        (event as { item_id?: string }).item_id === first,
+        (event as { item_id?: string }).item_id === firstItem,
     ),
     true,
   );
-  const items = contextItems(context, "[last announcement", sentBefore);
+  const items = contextItems(context, "[recent conversation", sentBefore);
   assert.equal(items.length, 1);
+  assert.match(itemText(items[0]), /finished checkout-service/);
   assert.match(itemText(items[0]), /failed in payments/);
   assert.notEqual(
-    context.session.liveContextItemIds.get(CONTEXT_ITEM_KIND.LAST_ANNOUNCEMENT),
-    first,
+    context.session.liveContextItemIds.get(CONTEXT_ITEM_KIND.CONVERSATION),
+    firstItem,
   );
 
-  // The same words again are not news: nothing is resent.
+  // The same history again is not news: nothing is resent.
   context.session.stopSpeaking();
-  context.session.updateLastAnnouncement(announcementSpeech("Codex failed in payments."));
   const repeatBefore = context.sent.length;
   await armDeveloperTurn(context);
-  assert.deepEqual(contextItems(context, "[last announcement", repeatBefore), []);
+  assert.deepEqual(contextItems(context, "[recent conversation", repeatBefore), []);
+});
+
+test("a reply ending at teardown writes nothing back into the retired call", async () => {
+  const context = harness({ writeBackOnReplyEnded: true });
+  await context.session.connect();
+  context.session.updateSessions([observedSession("session-a")]);
+  await armDeveloperTurn(context);
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED,
+    item: { id: "item-1" },
+  });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
+    item_id: "item-1",
+    delta: "Half a sentence.",
+  });
+
+  // The call drops mid-reply. The words are still handed over — the caller's
+  // history keeps them — but the write-back that handover makes must land
+  // before the stores empty and leave with them, or the retired call would
+  // carry a pending item, rendered against an emptied roster, into a call
+  // whose caller has said nothing yet.
+  context.closeChannel();
+  assert.equal(context.replyEndings.length, 1);
+
+  await context.session.connect();
+  const sentBefore = context.sent.length;
+  await armDeveloperTurn(context);
+
+  assert.deepEqual(contextItems(context, "[recent conversation", sentBefore), []);
+});
+
+test("a reply hands its words back as it ends, whole and once", async () => {
+  const context = harness();
+  await context.session.connect();
+  await armDeveloperTurn(context);
+
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED,
+    item: { id: "item-1" },
+  });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
+    item_id: "item-1",
+    delta: "The checkout work is done.",
+  });
+  assert.deepEqual(context.replyEndings, []);
+
+  // However the reply ends — here the developer talking over it — its words
+  // are handed over exactly once, at the moment they are final and still
+  // known, so the caller can record them for the next call to remember.
+  context.session.stopSpeaking();
+
+  assert.deepEqual(context.replyEndings, [
+    { texts: ["The checkout work is done."], about: undefined },
+  ]);
+});
+
+test("an announcement's reply hands its subject back with the words", async () => {
+  const context = harness();
+  await context.session.connect({ microphone: false });
+
+  context.session.speak({
+    providerId: "claude-code",
+    providerSessionId: "session-a",
+    disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
+    source: ATTENTION_SPEECH_SOURCE.NOTICE_REQUEST,
+    summary: "Claude Code finished checkout-service.",
+    decidedAt: 1_800_000_000_000,
+  });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED,
+    item: { id: "item-1" },
+  });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
+    item_id: "item-1",
+    delta: "Claude Code finished checkout-service.",
+  });
+  context.session.stopSpeaking();
+
+  // The subject rides along so the caller can tell an announcement's reply —
+  // already recorded from the update that decided it — from a conversation
+  // reply that still needs a line.
+  assert.deepEqual(context.replyEndings, [
+    { texts: ["Claude Code finished checkout-service."], about: "session-a" },
+  ]);
 });
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
@@ -4965,14 +5029,14 @@ test("the rosters and the guide never travel on Luke's own call", async () => {
   const before = context.sent.length;
 
   context.session.updateSessions([observedSession("session-a")]);
-  context.session.updateSessionReference({
-    providerId: "claude-code",
-    providerSessionId: "session-a",
-  });
-  // The last announcement is under the same gate: Luke's own call is sent the
-  // one sentence it exists to say, never the context items.
-  context.session.updateLastAnnouncement(
-    announcementSpeech("Claude Code finished checkout-service."),
+  // The history is under the same gate: Luke's own call is sent the one
+  // sentence it exists to say, never the context items.
+  context.session.updateConversation(
+    conversationEntries({
+      kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
+      words: "Claude Code finished checkout-service.",
+      identity: { providerId: "claude-code", providerSessionId: "session-a" },
+    }),
   );
   context.session.updateGuide({
     facts: [{ label: "What Luke is", detail: "A sidecar." }],

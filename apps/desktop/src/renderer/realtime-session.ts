@@ -10,12 +10,15 @@ import {
   type CarriedSessionAction,
   CONTEXT_ITEM_KIND,
   type ContextItemKind,
+  type ConversationEntry,
   cancelResponseEvents,
   clearInputAudioEvents,
   clearOutputAudioEvents,
   contextItemId,
   contextSupersedeEventId,
   contextSupersedeEvents,
+  conversationContextEvents,
+  conversationHistoryText,
   functionCallFollowUpEvents,
   functionCallOutputEvents,
   ISSUE_TRACKER_DISCONNECTED_TEXT,
@@ -25,8 +28,6 @@ import {
   issueContextText,
   issueToolAction,
   issueTrackerDisconnectedEvents,
-  lastAnnouncementContextEvents,
-  lastAnnouncementContextText,
   outputSpeedUpdateEvents,
   PressAudioBuffer,
   parseRealtimeServerEvent,
@@ -43,12 +44,8 @@ import {
   realtimeSessionSyncEvents,
   realtimeToolFamily,
   type ScheduledTimer,
-  SESSION_REFERENCE_WITHDRAWN_TEXT,
   sessionContextEvents,
   sessionContextText,
-  sessionReferenceContextEvents,
-  sessionReferenceContextText,
-  sessionReferenceWithdrawnEvents,
   sessionToolAction,
   truncateResponseEvents,
   typedAskEvents,
@@ -99,14 +96,13 @@ export const VOICE_IDLE_TIMEOUT_MS = 10 * 60_000;
 
 /**
  * The order context is flushed in, so a turn's items land the same way every
- * time: what Luke can see, then which session is under discussion, then what
- * he last announced, then where he can create, then what he knows about
- * himself, then what the tracker lists.
+ * time: what Luke can see, then what was already said across calls, then
+ * where he can create, then what he knows about himself, then what the
+ * tracker lists.
  */
 const CONTEXT_FLUSH_ORDER: readonly ContextItemKind[] = [
   CONTEXT_ITEM_KIND.SESSIONS,
-  CONTEXT_ITEM_KIND.SESSION_REFERENCE,
-  CONTEXT_ITEM_KIND.LAST_ANNOUNCEMENT,
+  CONTEXT_ITEM_KIND.CONVERSATION,
   CONTEXT_ITEM_KIND.WORKSPACE_PROJECTS,
   CONTEXT_ITEM_KIND.APP_GUIDE,
   CONTEXT_ITEM_KIND.ISSUES,
@@ -228,6 +224,15 @@ export interface RealtimeVoiceSessionCallbacks {
    * conversation reply carries none.
    */
   onCaption(texts: readonly string[] | undefined, about: SessionIdentity | undefined): void;
+  /**
+   * The words a reply leaves behind at the moment it ends — finished, talked
+   * over, or the call closing under it, whichever came. `about` is the
+   * announcement subject `speak()` set, or nothing for a conversation reply.
+   * The words were already spoken toward the room (the caption runs a little
+   * ahead of the audio, so a cut reply hands over slightly more than was
+   * heard); the caller records them so the thread survives the call.
+   */
+  onReplyEnded?(texts: readonly string[], about: SessionIdentity | undefined): void;
 }
 
 /**
@@ -411,15 +416,14 @@ export class RealtimeVoiceSession {
    */
   #sessions: readonly NormalizedSession[] = [];
   /**
-   * The session under discussion, as the caller last reported it: the one Luke
-   * most recently announced or was asked to act on. Only an identity — the
-   * words a turn reads are rendered from the roster at flush time, so a
-   * renamed session is described as it is now. The caller keeps its own copy
-   * and re-reports it after a reconnect, because an announcement is often made
-   * on Luke's own speak-only call and the ask that points back at it arrives
-   * on the developer's call that replaces it.
+   * The conversation history as the caller last reported it: what was already
+   * said and done across calls, kept whole rather than as rendered text
+   * because each line's identity is offered only while the roster still
+   * observes its session — so the render happens against the roster as both
+   * now stand. The caller keeps its own copy and re-reports it after a
+   * reconnect, because the thread outlives any one call on purpose.
    */
-  #sessionReference: SessionIdentity | undefined;
+  #conversationEntries: readonly ConversationEntry[] = [];
   /**
    * The app guide as last provided, kept whole for the same reason the roster
    * is: it is what a spoken ask about Luke himself is validated against, and a
@@ -1588,8 +1592,13 @@ export class RealtimeVoiceSession {
       track.stop();
     });
     this.#stream = undefined;
+    // The reply's last words are handed over before the stores empty: the
+    // handover's write-back re-enters this session, and landing it here means
+    // the roster it renders against still stands — and everything it wrote is
+    // cleared with the rest below, so a retired call keeps nothing pending.
+    this.#clearCaption();
     this.#sessions = [];
-    this.#sessionReference = undefined;
+    this.#conversationEntries = [];
     this.#guide = EMPTY_APP_GUIDE;
     this.#workspaceProjects = [];
     this.#issues = undefined;
@@ -1615,7 +1624,6 @@ export class RealtimeVoiceSession {
     this.#responseItemId = undefined;
     this.#activeResponseId = undefined;
     this.#audibleSince = undefined;
-    this.#clearCaption();
     // Learned about this call, so it does not outlive it.
     this.#audioEndingsReported = false;
     this.#clearSettleTimer();
@@ -1801,6 +1809,11 @@ export class RealtimeVoiceSession {
     // The subject is of the reply, so the reply ending takes it too: every
     // path that ends one clears the caption through here.
     if (this.#captionSegments.length === 0 && this.#captionAbout === undefined) return;
+    // Every path that ends a reply passes here, so this is where its words
+    // are handed over before they are let go: the one moment they are both
+    // final and still known.
+    const texts = this.#captionTexts();
+    if (texts) this.#options.onReplyEnded?.(texts, this.#captionAbout);
     this.#captionSegments = [];
     this.#captionAbout = undefined;
     this.#options.onCaption(undefined, undefined);
@@ -1937,76 +1950,36 @@ export class RealtimeVoiceSession {
       sessionContextText(sessions, noticeAsks, now),
       (itemId) => sessionContextEvents(sessions, itemId, noticeAsks, now),
     );
-    // The reference is rendered from the roster, so a fresh roster re-renders
-    // it: a renamed session keeps its line true, and one that left the roster
-    // withdraws it.
-    this.#rememberSessionReference();
+    // The history is rendered against the roster, so a fresh roster re-renders
+    // it: a line whose session left the roster keeps its words and lets go of
+    // the identity no tool call may name any more.
+    this.#rememberConversation();
   }
 
   /**
-   * Tells the conversation which session is under discussion — the one Luke
-   * most recently announced to the developer or acted on at their ask. It is
-   * what lets a bare "that chat" resolve to an identity a tool call can name:
-   * the mention it points back at carried only a title, and may have been
-   * spoken on Luke's own call, which the developer's own replaced. Context on
-   * the roster's own terms, flushed with it at the turn that reads it.
+   * Tells the conversation what was already said and done across calls — the
+   * developer's typed asks, the words Luke spoke or announced, the acts he
+   * carried. It is what lets a bare "that chat" resolve on a call that never
+   * heard the words it points back at: an announcement is often read out on
+   * Luke's own speak-only call, which the developer's own press tears down,
+   * and an idle call retires with everything said on it. Context on the
+   * roster's own terms, flushed with it at the turn that reads it.
    */
-  updateSessionReference(reference: SessionIdentity | undefined): void {
-    this.#sessionReference = reference;
-    this.#rememberSessionReference();
+  updateConversation(entries: readonly ConversationEntry[]): void {
+    this.#conversationEntries = entries;
+    this.#rememberConversation();
   }
 
   /**
-   * Renders the reference against the roster as both now stand. A reference
-   * whose session is not observed points at nothing a call could name: a
-   * conversation never told of one is told nothing, and one holding a line is
-   * told the line no longer stands — the issues roster's own withdrawal rule.
+   * Renders the history against the roster as both now stand. A history with
+   * nothing in it says nothing at all — a conversation that has not begun
+   * needs no line saying so.
    */
-  #rememberSessionReference(): void {
-    const reference = this.#sessionReference;
-    const session = reference
-      ? this.#sessions.find(
-          (candidate) =>
-            candidate.providerId === reference.providerId &&
-            candidate.providerSessionId === reference.providerSessionId,
-        )
-      : undefined;
-    if (session) {
-      this.#rememberContext(
-        CONTEXT_ITEM_KIND.SESSION_REFERENCE,
-        sessionReferenceContextText(session),
-        (itemId) => sessionReferenceContextEvents(session, itemId),
-      );
-      return;
-    }
-    if (!this.#contextPending.has(CONTEXT_ITEM_KIND.SESSION_REFERENCE)) return;
-    if (!this.#contextLive.has(CONTEXT_ITEM_KIND.SESSION_REFERENCE)) {
-      this.#contextPending.delete(CONTEXT_ITEM_KIND.SESSION_REFERENCE);
-      return;
-    }
-    this.#rememberContext(
-      CONTEXT_ITEM_KIND.SESSION_REFERENCE,
-      SESSION_REFERENCE_WITHDRAWN_TEXT,
-      (itemId) => sessionReferenceWithdrawnEvents(itemId),
-    );
-  }
-
-  /**
-   * Tells the conversation what the most recent announcement said. The words
-   * were often said on Luke's own speak-only call — the very call the
-   * talk-key press tears down on its way here — so without this the
-   * developer's call is asked "what did you just say?" by someone it never
-   * said anything to. Context on the roster's own
-   * terms: remembered here, flushed only at a developer-opened turn, and
-   * carrying the same bounded payload the announcement already traveled as —
-   * the words alone, never an identity, which [session under discussion]
-   * carries beside it.
-   */
-  updateLastAnnouncement(speech: AttentionSpeech): void {
-    const text = lastAnnouncementContextText(speech);
+  #rememberConversation(): void {
+    const text = conversationHistoryText(this.#conversationEntries, this.#sessions);
     if (text === undefined) return;
-    this.#rememberContext(CONTEXT_ITEM_KIND.LAST_ANNOUNCEMENT, text, (itemId) =>
-      lastAnnouncementContextEvents(speech, itemId),
+    this.#rememberContext(CONTEXT_ITEM_KIND.CONVERSATION, text, (itemId) =>
+      conversationContextEvents(text, itemId),
     );
   }
 
