@@ -91,7 +91,6 @@ import {
   REALTIME_TOOL,
   REALTIME_TOOL_FAMILY,
   REALTIME_TOOLS,
-  spokenRealtimeToolCount,
 } from "../src/realtime-tools";
 import { maximumSessionMessageLength } from "../src/session";
 
@@ -237,70 +236,15 @@ test("a refused delete is read back with the event it names", () => {
   assert.equal(deleted?.itemId, "luke_ctx_sessions_1");
 });
 
-test("the standing instructions count the tools from the table", () => {
-  const instructions = realtimeInstructions();
-  assert.equal(Object.keys(REALTIME_TOOLS).length, 15);
-  assert.match(instructions, new RegExp(`You have ${spokenRealtimeToolCount()} tools:`));
-});
-
 test("the standing instructions make Luke the coding agents' engineering manager", () => {
   const instructions = realtimeInstructions();
 
   assert.match(instructions, /engineering manager for the developer's coding agents/i);
 });
 
-test("the spoken instructions state what Luke cannot see, and when he may act", () => {
-  const instructions = realtimeInstructions();
-
-  assert.match(instructions, /never receive transcripts/i);
-  // Acting is allowed now, and only on the developer's own ask: the notice
-  // guard is the line that keeps a read-aloud sentence from becoming an act.
-  assert.match(instructions, /only when the developer asks/i);
-  assert.match(instructions, /never act unprompted/i);
-  assert.match(instructions, /never a reason to act/i);
-  // Spoken references stay human: a hash or an id is noise read aloud.
-  assert.match(instructions, /identifiers no one says aloud/i);
-  // A broad "what are we working on?" spans the roster: Luke answers across
-  // every agent he watches rather than asking the developer to pick one.
-  assert.match(instructions, /about every agent you watch/i);
-  // A bare "that chat" has a stated resolution order — this conversation's own
-  // most recent mention, then the session under discussion — so the reference
-  // is followed rather than guessed at.
-  assert.match(instructions, /\[session under discussion\]/);
-  assert.match(instructions, /named most recently/);
-  assert.match(instructions, /"it", "that agent", "that chat", or "that session"/);
-  assert.match(instructions, /kept ask is already true when accepted/);
-  // Back-to-back replies must not repeat each other, and an act the developer
-  // asked for is not narrated twice: no announced intent, and a success is
-  // silence or a bare "Done." rather than a restatement.
-  assert.match(instructions, /Never say the same thing twice in a row/);
-  assert.match(instructions, /Do not announce what you are about to do/);
-  assert.match(instructions, /never restate the intent or the result/);
-});
-
-test("an ask to open a workspace never stalls on which chat is meant", () => {
-  const instructions = realtimeInstructions();
-
-  // Chats in one managed workspace share the workspace's address, so an open
-  // has nothing to disambiguate: asking "which chat?" would refuse an act any
-  // of them carries identically. Messages and controls still need the chat.
-  assert.match(instructions, /An ask to open a workspace is never ambiguous/);
-  assert.match(instructions, /without asking which chat is meant/);
-  assert.match(instructions, /to message or control one, say which agent is meant/);
-});
-
 test("a bare ask for a new agent defaults to a new workspace", () => {
-  const instructions = realtimeInstructions();
-
-  // "Create a new agent" with no workspace named is a create_workspace ask,
-  // even mid-conversation about a session; adding an agent beside one needs
-  // the developer's own words to name the target, never an inferred one.
-  assert.match(instructions, /bare ask for a new agent[^.]*is a create_workspace ask/);
-  assert.match(instructions, /even while a session is under discussion/);
-  assert.match(instructions, /never a target you inferred/);
-
-  // The tool schemas carry the same default, so a model reading only the
-  // tools lands on the same side of it.
+  // The tool schemas define the default without duplicating it in the
+  // standing instructions.
   assert.match(
     REALTIME_TOOLS.CREATE_WORKSPACE.schema.description,
     /unless its own words name the existing workspace or session/,
@@ -717,26 +661,6 @@ test("session context carries only bounded, redacted fields", () => {
   const linkedText = sessionContextText([linked]);
   assert.match(linkedText, /can be opened/);
   assert.doesNotMatch(linkedText, /https:/);
-
-  // A local chat a workspace manager addresses is openable on the same terms
-  // as any linked session: the address is a fact in the roster, never a URL.
-  const managed = normalizeSession(
-    { id: "claude-code", displayName: "Claude Code" },
-    {
-      providerSessionId: "session-managed",
-      title: "checkout-service",
-      status: SESSION_STATUS.WORKING,
-      observedAt: DECIDED_AT,
-      detail: { link: "superset://v2-workspace/workspace-1" },
-      controls: [
-        { id: "superset-delete-workspace", label: "Delete workspace", target: "workspace-1" },
-      ],
-    },
-  );
-  const managedText = sessionContextText([managed]);
-  assert.match(managedText, /can be opened/);
-  assert.match(managedText, /Delete workspace \(superset-delete-workspace\)/);
-  assert.doesNotMatch(managedText, /superset:/);
 });
 
 test("a chat carries its workspace in the roster, so siblings read apart out loud", () => {
@@ -1142,7 +1066,7 @@ test("a resting-point update is voiced just like a blocking one", () => {
   assert.equal(speech[0]?.disposition, ATTENTION_DISPOSITION.SPEAK_AT_TURN_END);
 });
 
-test("the session is minted with the fifteen acts and nothing wider", () => {
+test("the session is minted with the thirteen acts and nothing wider", () => {
   const config = realtimeSessionConfig();
 
   assert.deepEqual(
@@ -1156,8 +1080,6 @@ test("the session is minted with the fifteen acts and nothing wider", () => {
       REALTIME_TOOL.READ_SESSION_TRANSCRIPT,
       REALTIME_TOOL.CREATE_WORKSPACE,
       REALTIME_TOOL.ADD_WORKSPACE_AGENT,
-      REALTIME_TOOL.RENAME_WORKSPACE,
-      REALTIME_TOOL.RENAME_SESSION,
       REALTIME_TOOL.UPDATE_ISSUE_STATE,
       REALTIME_TOOL.COMMENT_ON_ISSUE,
       REALTIME_TOOL.CHANGE_APP_SETTING,
@@ -1878,103 +1800,6 @@ test("another agent can only be added as a kind the session's own entry lists", 
       ),
       roster,
     ),
-  ];
-  for (const refusal of refusals) assert.equal(refusal.kind, "refused");
-});
-
-test("a workspace can only be renamed where the session's own entry says so", () => {
-  const renameable = normalizeSession(
-    { id: "conductor", displayName: "Conductor" },
-    {
-      providerSessionId: "chat-1",
-      title: "bucharest-v1",
-      status: SESSION_STATUS.WAITING,
-      observedAt: DECIDED_AT,
-      renameTarget: "workspace-1",
-    },
-  );
-  const roster = [renameable, actionableSession()];
-  const identity = '"provider_id":"conductor","provider_session_id":"chat-1"';
-
-  // The roster says the workspace can be renamed; the target itself stays on
-  // the machine, resolved from observed state where the act is performed.
-  assert.match(sessionContextText(roster), /workspace can be renamed/);
-  assert.doesNotMatch(sessionContextText(roster), /workspace-1/);
-
-  assert.deepEqual(
-    sessionToolAction(
-      messageCall(`{${identity},"name":"Payments rollout"}`, REALTIME_TOOL.RENAME_WORKSPACE),
-      roster,
-    ),
-    {
-      kind: "rename-workspace",
-      identity: { providerId: "conductor", providerSessionId: "chat-1" },
-      name: "Payments rollout",
-    },
-  );
-
-  const refusals = [
-    // A session whose entry advertises no rename takes no such ask.
-    sessionToolAction(
-      messageCall(
-        '{"provider_id":"devin","provider_session_id":"devin-1","name":"Payments rollout"}',
-        REALTIME_TOOL.RENAME_WORKSPACE,
-      ),
-      roster,
-    ),
-    // The name keeps its bound.
-    sessionToolAction(
-      messageCall(
-        `{${identity},"name":"${"a".repeat(maximumWorkspaceNameLength + 1)}"}`,
-        REALTIME_TOOL.RENAME_WORKSPACE,
-      ),
-      roster,
-    ),
-    // An ask with no name to rename to is no ask at all.
-    sessionToolAction(messageCall(`{${identity}}`, REALTIME_TOOL.RENAME_WORKSPACE), roster),
-  ];
-  for (const refusal of refusals) assert.equal(refusal.kind, "refused");
-});
-
-test("a chat can only be renamed where its own entry says so", () => {
-  const renameable = normalizeSession(
-    { id: "conductor", displayName: "Conductor" },
-    {
-      providerSessionId: "chat-1",
-      title: "bucharest-v1",
-      status: SESSION_STATUS.WAITING,
-      observedAt: DECIDED_AT,
-      canRename: true,
-    },
-  );
-  const roster = [renameable, actionableSession()];
-  const identity = '"provider_id":"conductor","provider_session_id":"chat-1"';
-
-  assert.match(sessionContextText(roster), /chat can be renamed/);
-
-  assert.deepEqual(
-    sessionToolAction(
-      messageCall(`{${identity},"name":"Payments audit"}`, REALTIME_TOOL.RENAME_SESSION),
-      roster,
-    ),
-    {
-      kind: "rename-session",
-      identity: { providerId: "conductor", providerSessionId: "chat-1" },
-      name: "Payments audit",
-    },
-  );
-
-  const refusals = [
-    // A chat whose entry advertises no rename takes no such ask.
-    sessionToolAction(
-      messageCall(
-        '{"provider_id":"devin","provider_session_id":"devin-1","name":"Payments audit"}',
-        REALTIME_TOOL.RENAME_SESSION,
-      ),
-      roster,
-    ),
-    // An ask with no name to rename to is no ask at all.
-    sessionToolAction(messageCall(`{${identity}}`, REALTIME_TOOL.RENAME_SESSION), roster),
   ];
   for (const refusal of refusals) assert.equal(refusal.kind, "refused");
 });

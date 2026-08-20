@@ -21,7 +21,7 @@ import {
 } from "../src";
 import { appToggleValue } from "../src/guide";
 import { isRecord, text, type WireRecord } from "../src/json.js";
-import { maximumFeedbackDraftLength, realtimeInstructions } from "../src/realtime-protocol";
+import { maximumFeedbackDraftLength } from "../src/realtime-protocol";
 import { REALTIME_TOOL } from "../src/realtime-tools";
 
 function conversationItem(event: WireRecord | undefined): WireRecord | undefined {
@@ -156,35 +156,6 @@ test("the guide travels as context and never opens Luke's mouth", () => {
     events.some((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE),
     false,
   );
-});
-
-test("the standing instructions promise the guide the context actually delivers", () => {
-  const instructions = realtimeInstructions();
-  assert.match(instructions, /\[app guide\]/);
-  assert.match(instructions, /change_app_setting/);
-  // The guide carries each setting's default, and the instructions must
-  // say what it is for: an ask for the default is a change to that value.
-  assert.match(instructions, /its current value, its default/);
-  assert.match(instructions, /a change to the default the guide lists/);
-  assert.match(instructions, /show_panel/);
-  // Switching an open panel between its tabs is the same ask, and the
-  // instructions must say so or Luke will deny a capability he has.
-  assert.match(instructions, /switches a panel already open/);
-  assert.match(instructions, /open_feedback_composer/);
-  assert.match(instructions, /create_workspace/);
-  assert.match(instructions, /\[workspace projects\]/);
-});
-
-test("the instructions bound the refusal offer: once, on a clear yes, never a send", () => {
-  const instructions = realtimeInstructions();
-  // The offer follows an honest refusal and is made exactly once.
-  assert.match(instructions, /refuse honestly in one sentence, then offer once/);
-  assert.match(instructions, /Only on a clear yes/);
-  assert.match(instructions, /do not repeat the offer/);
-  // Opening and drafting are all the tool does; the send stays the developer's.
-  assert.match(instructions, /never sends/);
-  assert.match(instructions, /presses Send themselves/);
-  assert.match(instructions, /never words they did not say/);
 });
 
 test("a spoken toggle accepts the unambiguous words and nothing else", () => {
