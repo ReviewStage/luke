@@ -44,11 +44,11 @@ const SUPERSET_PROJECT_REFRESH_INTERVAL_MS = 60_000;
 const LOCAL_TARGET_ID = "local";
 const ANSI_ESCAPE_PATTERN = new RegExp(`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`, "gu");
 
-function supersetFailureReason(error: UnparsedWireValue): string {
+function supersetFailureReason(error: UnparsedWireValue, fallback: string): string {
   const record = wireRecord(error);
   const stderr = record ? text(record.stderr) : undefined;
   if (!stderr) {
-    return "Superset could not create that workspace.";
+    return fallback;
   }
   const reason = stderr
     .replace(ANSI_ESCAPE_PATTERN, "")
@@ -65,7 +65,7 @@ function supersetFailureReason(error: UnparsedWireValue): string {
     .replace(/\s+/gu, " ")
     .slice(0, SUPERSET_FAILURE_REASON_LIMIT)
     .trim();
-  return reason || "Superset could not create that workspace.";
+  return reason || fallback;
 }
 
 export type SupersetCommandRunner = (
@@ -333,21 +333,16 @@ export class SupersetCli {
         };
       }
     } catch (error) {
-      if (error instanceof Error && "stderr" in error) {
-        return {
-          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-          reason: supersetFailureReason(
-            unparsedWire({
-              // SAFETY: execFile failures attach stderr to the thrown Error object.
-              stderr: (error as Error & { stderr?: UnparsedWireValue }).stderr,
-            }),
-          ),
-        };
-      }
+      const stderr =
+        error instanceof Error && "stderr" in error
+          ? // SAFETY: execFile failures attach stderr to the thrown Error object.
+            (error as Error & { stderr?: UnparsedWireValue }).stderr
+          : undefined;
       return {
         status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
         reason: supersetFailureReason(
-          unparsedWire(error instanceof Error ? error.message : String(error)),
+          unparsedWire({ stderr }),
+          "Superset could not create that workspace.",
         ),
       };
     }
@@ -405,14 +400,19 @@ export class SupersetCli {
    * Renames one observed workspace through the CLI's documented
    * `workspaces update` command, carrying only the observed identifiers and
    * the developer's own name behind `--name` — never the command's other
-   * flags, which link and unlink tasks this integration does not touch.
+   * flags, which link and unlink tasks this integration does not touch, and
+   * no `--json`, which `workspaces update` does not document and whose
+   * output nothing here would read. A failure answers with the CLI's own
+   * bounded error line, because a rename the CLI refused is something the
+   * developer can often fix by rewording.
    */
   async renameWorkspace(
     context: SupersetSessionContext,
     name: string,
   ): Promise<ProviderControlResult> {
-    return this.#act(
-      [
+    if (!(await this.connected())) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+    try {
+      await this.#run(this.executable, [
         "workspaces",
         "update",
         context.workspaceId,
@@ -420,10 +420,22 @@ export class SupersetCli {
         context.hostId,
         "--name",
         name,
-        "--json",
-      ],
-      "Superset could not rename that workspace.",
-    );
+      ]);
+      return { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED };
+    } catch (error) {
+      const stderr =
+        error instanceof Error && "stderr" in error
+          ? // SAFETY: execFile failures attach stderr to the thrown Error object.
+            (error as Error & { stderr?: UnparsedWireValue }).stderr
+          : undefined;
+      return {
+        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+        reason: supersetFailureReason(
+          unparsedWire({ stderr }),
+          "Superset could not rename that workspace.",
+        ),
+      };
+    }
   }
 
   async createAgent(
