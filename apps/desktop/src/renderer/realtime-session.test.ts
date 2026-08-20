@@ -5194,32 +5194,18 @@ test("a device that vanishes mid-conversation fails the call at the press", asyn
   assert.ok(reportedErrors(context).some((message) => /microphone went away/i.test(message)));
 });
 
-test("a call that drops mid-conversation says so, and how to start again", async () => {
+test("a call that drops goes quietly, because the history lost nothing", async () => {
   const context = harness();
   await context.session.connect();
   context.session.updateSessions([observedSession("session-a")]);
   await armDeveloperTurn(context);
 
   // The service ends every session at an hour, so this is how a long
-  // conversation ordinarily ends rather than an exotic failure.
+  // conversation ordinarily ends rather than an exotic failure — and the
+  // conversation lives in the history, which the next press re-feeds, so a
+  // warning here would report a loss that no longer happens.
   context.closeChannel();
 
-  assert.equal(context.session.status, REALTIME_STATUS.IDLE);
-  const reported = reportedErrors(context).at(-1) ?? "";
-  assert.match(reported, /call ended/i);
-  // Silence here is what made Luke seem to have forgotten on purpose, so the
-  // line carries the way back into a conversation.
-  assert.match(reported, /talk key/i);
-});
-
-test("a call that drops before anything was said goes quietly", async () => {
-  const context = harness();
-  await context.session.connect();
-
-  context.closeChannel();
-
-  // Nothing was lost, so there is nothing to report: a notice here would be a
-  // fault shown for a conversation that never happened.
   assert.equal(context.session.status, REALTIME_STATUS.IDLE);
   assert.deepEqual(reportedErrors(context), []);
 });

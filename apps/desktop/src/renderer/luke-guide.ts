@@ -600,13 +600,14 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
             detail:
               "One conversation outlives the calls that carry it. A call opens on the first " +
               "press of the talk key or the first typed ask, stays open across as many turns as " +
-              "the developer takes, and is put away after ten minutes with nothing said on it — " +
-              "which releases the microphone rather than holding it all day. The voice service " +
+              "the developer takes, and is put away after three minutes with nothing said on " +
+              "it — which releases the microphone rather than holding it all day, and costs " +
+              "only the next handshake. The voice service " +
               "also ends any call at an hour. Either way the next press picks the conversation " +
               "back up: a bounded history of the recent exchange — what was asked, answered, " +
               "announced, and done — is kept in memory and re-fed to the new call, so Luke " +
               "remembers what was just said without writing anything to disk. A call that ends " +
-              "underneath a conversation says so, and nothing said is lost with it.",
+              "underneath a conversation ends quietly, because nothing said is lost with it.",
           },
           {
             label: "When a call fails",

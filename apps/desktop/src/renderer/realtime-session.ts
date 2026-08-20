@@ -83,16 +83,18 @@ export const REALTIME_SETTLE_TIMEOUT_MS = 20_000;
  * How long the developer's call stays open with nothing being said on it.
  *
  * The capture device never rides this clock — it opens with a press and
- * closes with the turn — so what ten minutes buys is the conversation itself:
- * the thread Luke would otherwise lose. The service ends the session at an
- * hour regardless, so the choice was never between keeping this conversation
- * and losing it — only between letting go of it deliberately and being cut
- * off mid-sentence.
+ * closes with the turn — and neither does the conversation: the history holds
+ * the thread on this side of the wire and re-feeds whichever call opens
+ * next, so retiring a call forgets nothing. What the hold buys is only the
+ * reconnect handshake, which makes this a cost knob rather than Luke's
+ * memory: an open call is a held connection and a session the service is
+ * keeping warm, paid for by the minute.
  *
- * Ten minutes is longer than any pause inside a conversation and shorter than
- * the walk to get a coffee. Coming back costs one handshake.
+ * Three minutes is longer than any pause inside a conversation — the gap
+ * that means the developer walked away, not the gap between two questions —
+ * and coming back costs one handshake.
  */
-export const VOICE_IDLE_TIMEOUT_MS = 10 * 60_000;
+export const VOICE_IDLE_TIMEOUT_MS = 3 * 60_000;
 
 /**
  * The order context is flushed in, so a turn's items land the same way every
@@ -646,13 +648,6 @@ export class RealtimeVoiceSession {
    * cancelled the moment anything is being said on it.
    */
   #idleTimer: unknown;
-  /**
-   * Whether the developer has taken a turn on this call. It is what makes a
-   * dropped connection worth mentioning: a call that carried a conversation
-   * takes the conversation with it, and Luke would otherwise answer the next
-   * question having quietly forgotten the last one.
-   */
-  #conversationBegan = false;
 
   constructor(options: RealtimeVoiceSessionOptions) {
     this.#options = options;
@@ -786,22 +781,16 @@ export class RealtimeVoiceSession {
       channel.onmessage = (event) => this.#handleServerEvent(event.data);
       channel.onclose = () => {
         if (this.#closed) return;
-        // What the call was holding has to be read before the teardown empties
-        // it. A call that carried a conversation takes the conversation with
-        // it, and the service ends every session at an hour whether or not
-        // anyone is finished talking — so this is the ordinary end of a long
-        // one, not an exotic failure.
-        const lost = this.#conversationBegan;
+        // The service ends every session at an hour whether or not anyone is
+        // finished talking, so this is the ordinary end of a long call, not
+        // an exotic failure — and it costs nothing said: the history holds
+        // the conversation on this side of the wire, and the next press
+        // re-feeds it, so quiet is the honest report rather than a warning
+        // about a thread nobody lost.
         // A channel that closes on its own still leaves the capture running,
         // so this has to release the device as thoroughly as an explicit stop.
         this.#teardown();
         this.#setStatus(REALTIME_STATUS.IDLE);
-        // Silence here is what made Luke seem to have forgotten on purpose:
-        // the next question was answered by someone who had never heard the
-        // last one, and nothing said so.
-        if (lost) {
-          this.#options.onError("The call ended. Press the talk key to start again.");
-        }
       };
 
       // One deadline covers the SDP exchange and the channel opening together.
@@ -1617,7 +1606,6 @@ export class RealtimeVoiceSession {
     this.#contextLive.clear();
     this.#pendingSupersedes.clear();
     this.#pendingInterruptions.clear();
-    this.#conversationBegan = false;
     this.#clearIdleTimer();
     this.#responseOutstanding = false;
     this.#audioDrained = false;
@@ -1657,7 +1645,6 @@ export class RealtimeVoiceSession {
     // himself get none: a readout has a sentence to say and nothing to look up,
     // and a tool follow-up is answering from what this same flush already sent.
     if (toolsArmed) {
-      this.#conversationBegan = true;
       this.#flushContext();
     }
     // The track is deliberately left as it is. A reply that was cut off left it
