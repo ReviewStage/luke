@@ -13,7 +13,6 @@ import {
 } from "@sidecar/core";
 
 /* The key is not read here: it is the stored credential the settings store
-   // SAFETY: The preceding check establishes the asserted contract.
    resolves, which reads `OPENAI_API_KEY` as its own fallback. */
 const OPENAI_ENVIRONMENT = {
   BASE_URL: "OPENAI_BASE_URL",
@@ -77,7 +76,6 @@ function parsedJson(text: string): UnparsedWireValue | undefined {
 
 /**
  * Evaluates bounded session updates with the OpenAI Responses API using the
- // SAFETY: The preceding check establishes the asserted contract.
  * shared decision contract as a strict structured-output schema. It sends only
  * the redacted update, never asks the API to retain the request, and answers
  * with nothing when the API is unavailable or replies outside the contract.
@@ -90,7 +88,6 @@ export class OpenAiAttentionEvaluator implements AttentionEvaluator {
   readonly #now: () => number;
   readonly #requestTimeoutMs: number;
   readonly #maximumOutputTokens: number;
-  // SAFETY: The preceding check establishes the asserted contract.
   /** Until when rate-limited requests stay unsent, as epoch milliseconds. */
   #quietUntil = 0;
 

@@ -143,7 +143,6 @@ export interface PanelEntry<T extends PanelEntryBase> {
   entry: T | undefined;
   latest: () => T | undefined;
   apply: (next: T | undefined) => void;
-  // SAFETY: The preceding check establishes the asserted contract.
   /** Stands the panel down to the aside shape, with this as what it holds. */
   begin: (next: T) => void;
   /** Stands the panel down without replacing what is held. */

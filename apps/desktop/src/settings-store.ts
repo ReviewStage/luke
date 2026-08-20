@@ -127,7 +127,6 @@ interface PersistedSettings extends StoredAppSettings {
    * The consent grants, by provider id, kept apart from the pasted keys
    * because what is inside is not a credential the user could type back in:
    * two tokens and the moment the shorter-lived one lapses. Carried through
-   // SAFETY: The preceding check establishes the asserted contract.
    * untouched for a provider this build does not know, exactly as a key is.
    */
   grants?: Readonly<Record<string, PersistedGrant>>;
@@ -141,7 +140,6 @@ interface PersistedSettings extends StoredAppSettings {
   };
   /**
    * The connected calendar accounts: each account's id, the grant its sign-in
-   // SAFETY: The preceding check establishes the asserted contract.
    * produced as ciphertext, and the calendar ids the user chose to count.
    * Absent from the file while none are connected.
    */
@@ -169,8 +167,7 @@ function isAccountProvider(value: UnparsedWireValue): value is AccountProvider {
 function storedAccount(record: WireRecord): PersistedSettings["account"] {
   const value = record[SETTINGS_FIELD.ACCOUNT];
   if (!isRecord(value)) return undefined;
-  // SAFETY: The preceding check establishes the asserted contract.
-  const account = value as WireRecord;
+  const account = value;
   if (
     !isWireString(account.tokenCipher) ||
     !account.tokenCipher ||
@@ -206,7 +203,6 @@ const MAXIMUM_CALENDAR_ACCOUNTS = 10;
 /** More calendars than anyone counts meetings from. */
 const MAXIMUM_SELECTED_CALENDARS = 50;
 
-// SAFETY: The preceding check establishes the asserted contract.
 /** A calendar-world identifier as this store will keep it, or nothing. */
 function calendarIdentifierText(value: UnparsedWireValue): string | undefined {
   if (!isWireString(value)) return undefined;
@@ -223,8 +219,7 @@ function storedCalendarAccounts(record: WireRecord): readonly PersistedCalendarA
   for (const entry of persisted) {
     if (accounts.length >= MAXIMUM_CALENDAR_ACCOUNTS) break;
     if (!isRecord(entry)) continue;
-    // SAFETY: The preceding check establishes the asserted contract.
-    const { id, token, calendars } = entry as WireRecord;
+    const { id, token, calendars } = entry;
     const accountId = calendarIdentifierText(id);
     if (!accountId || !isWireString(token) || !token) continue;
     if (accounts.some((held) => held.id === accountId)) continue;
@@ -260,8 +255,7 @@ function storedGrants(record: WireRecord) {
   }
   for (const [providerId, entry] of Object.entries(persisted)) {
     if (!isRecord(entry)) continue;
-    // SAFETY: The preceding check establishes the asserted contract.
-    const { tokenCipher, expiresAt } = entry as WireRecord;
+    const { tokenCipher, expiresAt } = entry;
     if (!isWireString(tokenCipher) || !tokenCipher) continue;
     // A grant whose expiry did not survive the file is treated as lapsed
     // rather than as eternal, so the next pass refreshes it before riding it.
@@ -288,7 +282,6 @@ function canIgnoreFilesystemError(error: Error): boolean {
 
 /**
  * A rejected key never reaches disk, and the reason never echoes the submitted
- // SAFETY: The preceding check establishes the asserted contract.
  * value. Most of what this rules out is a value that cannot be sent as an HTTP
  * authorization header at all. A provider that publishes more than one kind of
  * key also has the kind Luke cannot use ruled out here, so a credential that
@@ -432,9 +425,7 @@ export class SettingsStore {
    * omitted. The merge happens inside the mutation rather than in the caller so
    * one key's write cannot drop another's: a caller holding the map it read
    * before an overlapping write landed would put the stale copy back. A map
-   // SAFETY: The preceding check establishes the asserted contract.
    * left with no entries is deleted, so an emptied setting reads as unset
-   // SAFETY: The preceding check establishes the asserted contract.
    * rather than as an empty object.
    */
   async setEntry<Field extends KeyedAppSettingField>(
@@ -453,7 +444,7 @@ export class SettingsStore {
     value: UnparsedWireValue,
   ): Promise<SettingsUpdateResult> {
     return this.#setField((persisted) => {
-      // SAFETY: The preceding check establishes the asserted contract.
+      // SAFETY: KeyedAppSettingField identifies fields whose stored value is a wire record.
       const current = persisted[field] as WireRecord | undefined;
       if (sameSettingEntry(field, current?.[key], value)) return;
       const entries = { ...current };
@@ -516,7 +507,7 @@ export class SettingsStore {
       ),
     );
     return {
-      // SAFETY: The preceding check establishes the asserted contract.
+      // SAFETY: #providers contains every credential provider exactly once.
       credentialSources: Object.fromEntries(sources) as Record<
         CredentialProviderId,
         CredentialSource
@@ -596,8 +587,7 @@ export class SettingsStore {
     try {
       const tokens = JSON.parse(this.#cipher.decrypt(Buffer.from(account.tokenCipher, "base64")));
       if (!isRecord(tokens)) return undefined;
-      // SAFETY: The preceding check establishes the asserted contract.
-      const { accessToken, refreshToken } = tokens as WireRecord;
+      const { accessToken, refreshToken } = tokens;
       if (!isWireString(accessToken) || !isWireString(refreshToken)) return undefined;
       return {
         accessToken,
@@ -695,7 +685,6 @@ export class SettingsStore {
 
   /**
    * Stores one provider's key encrypted at rest, or clears it when omitted. A
-   // SAFETY: The preceding check establishes the asserted contract.
    * key the user cannot use comes back as a `reason` rather than an exception,
    * so only an unexpected filesystem failure throws.
    */
@@ -754,7 +743,6 @@ export class SettingsStore {
    * Main-process only, like the resolved keys: one provider's grant with its
    * tokens decrypted, for the reader that mints requests from it. A grant
    * that no longer decrypts — another OS account, a rotated Keychain — reads
-   // SAFETY: The preceding check establishes the asserted contract.
    * as absent, and the row it draws says to connect again.
    */
   async readGrant(providerId: CredentialProviderId): Promise<LinearGrant | undefined> {
@@ -767,7 +755,6 @@ export class SettingsStore {
 
   /**
    * Stores one provider's grant encrypted at rest. Every refresh comes back
-   // SAFETY: The preceding check establishes the asserted contract.
    * through here as well as every connection, because Linear consumes the
    * refresh token it is given: a grant refreshed and not written is a grant
    * the user has to make again.
@@ -840,8 +827,7 @@ export class SettingsStore {
     try {
       const tokens = JSON.parse(this.#cipher.decrypt(Buffer.from(held.tokenCipher, "base64")));
       if (!isRecord(tokens)) return undefined;
-      // SAFETY: The preceding check establishes the asserted contract.
-      const { accessToken, refreshToken } = tokens as WireRecord;
+      const { accessToken, refreshToken } = tokens;
       if (!isWireString(accessToken) || !accessToken) return undefined;
       return {
         accessToken,
@@ -1013,10 +999,7 @@ export class SettingsStore {
         if (definition.guard(undefined).valid) delete next[field];
         else Object.assign(next, { [field]: definition.default });
       }
-      // SAFETY: The preceding check establishes the asserted contract.
-      const changed = (Object.keys(persisted) as (keyof PersistedSettings)[]).some(
-        (field) => next[field] !== persisted[field],
-      );
+      const changed = APP_SETTING_FIELDS.some((field) => next[field] !== persisted[field]);
       return changed ? next : undefined;
     });
   }

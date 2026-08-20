@@ -36,3 +36,6 @@ export const SESSION_NOTICE_MAX_ROWS = 3;
 
 /** Expanded panel width. CSS: `--panel-width`. */
 export const PANEL_WIDTH = 620;
+
+/** Expanded panel height ceiling. CSS: `--panel-height-max`. */
+export const PANEL_MAX_HEIGHT = 520;

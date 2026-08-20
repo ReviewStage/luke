@@ -98,7 +98,6 @@ const CONDUCTOR_WORKSPACE_FIELD = {
   AGENT: "agent",
   MODEL: "model",
   EFFORT: "effort",
-  // SAFETY: The preceding check establishes the asserted contract.
   /** The first session, as `POST /v0/workspaces` names it in its response. */
   SESSION_ID: "sessionId",
 } as const;
@@ -115,7 +114,6 @@ const CONDUCTOR_SESSION_CREATE_FIELD = {
 
 /**
  * The kinds of agent Conductor's session-creation endpoint documents, named
- // SAFETY: The preceding check establishes the asserted contract.
  * exactly as it takes them — read from the build's one table of Conductor's
  * agents and models, so the kinds a roster advertises and the pairings the
  * settings row offers can never disagree. The endpoint also takes `acp`,
@@ -147,7 +145,6 @@ const CONDUCTOR_ARCHIVE_WORKSPACE_CONTROL_ID = "archive-workspace";
  * settled — a
  * workspace mid-turn has a stop to offer, not a filing away, and one whose
  * state could not be read is not known to have stopped — and the workspace it
- // SAFETY: The preceding check establishes the asserted contract.
  * acts on rides the advertisement as the control's target, so a press
  * archives the workspace the user was shown and nothing an adapter kept on
  * the side.
@@ -185,7 +182,6 @@ const CONDUCTOR_FIELD = {
   USER_ID: "userId",
 } as const;
 
-// SAFETY: The preceding check establishes the asserted contract.
 /** The columns the transcripts read asks for, named as the view answers them. */
 const CONDUCTOR_SQL_FIELD = {
   ROWS: "rows",
@@ -211,12 +207,10 @@ const CONDUCTOR_TRANSCRIPT_SPEAKER = {
   ASSISTANT: "## Assistant",
 } as const;
 
-// SAFETY: The preceding check establishes the asserted contract.
 /** A header as the transcript embeds it: its own line between two messages. */
 const CONDUCTOR_ASSISTANT_HEADER = `\n${CONDUCTOR_TRANSCRIPT_SPEAKER.ASSISTANT}\n`;
 const CONDUCTOR_USER_HEADER = `\n${CONDUCTOR_TRANSCRIPT_SPEAKER.USER}\n`;
 
-// SAFETY: The preceding check establishes the asserted contract.
 /** The header as a Postgres string literal, its newlines written as escapes. */
 function sqlHeaderLiteral(header: string): string {
   return `E'${header.replaceAll("\n", "\\n")}'`;
@@ -224,11 +218,9 @@ function sqlHeaderLiteral(header: string): string {
 
 /**
  * The one query document this adapter ever sends, fixed by this build. The
- // SAFETY: The preceding check establishes the asserted contract.
  * endpoint takes a read as a POSTed document rather than a GET, so the
  * separation is held the way the Linear tracker holds it: observation only
  * ever sends this SELECT, and nothing reaches its text but session ids the
- // SAFETY: The preceding check establishes the asserted contract.
  * same pass reported — each validated as a UUID first, so no name, title, or
  * message a provider controls can ever be spliced into the document.
  *
@@ -238,7 +230,6 @@ function sqlHeaderLiteral(header: string): string {
  * from whichever speaker header stands nearest the transcript's end, and the
  * returned tail is anchored at that header rather than cut at a fixed
  * distance: a fixed cut left any final message longer than the cut without
- // SAFETY: The preceding check establishes the asserted contract.
  * its header, which read as unattributable and silently cost most long-form
  * agents their recap. A chat whose user spoke last answers with no tail at
  * all.
@@ -272,7 +263,6 @@ type ConductorSessionStatus =
 
 /**
  * An idle Conductor session has finished its turn and is holding for the user,
- // SAFETY: The preceding check establishes the asserted contract.
  * which is what Luke reports as waiting. A session the provider reports as
  * errored stopped on something the user has to deal with, and it carries the
  * message that says what.
@@ -299,7 +289,6 @@ type ConductorWorkspaceStatus =
 /**
  * The lifecycle states worth a row's activity slot: a workspace still being
  * built or rebuilt is why its chats are quiet, and without the words a
- // SAFETY: The preceding check establishes the asserted contract.
  * just-created session reads as unaccountably idle. A ready workspace is the
  * normal case and says nothing, and a sleeping one is Conductor's own economy
  * — it wakes on the next message — so wording it would bump the recap off the
@@ -404,7 +393,6 @@ interface ConductorSession {
  * each chat's agent kind and the bounded tail its recap — the settled turn's
  * parting words — is read from; the history behind that tail is never asked
  * for, and the tail itself never leaves this adapter. Each chat is reported
- // SAFETY: The preceding check establishes the asserted contract.
  * as its own session, carrying the workspace around it as its group — the
  * workspace is the unit Conductor's own surface shows, but the chat is the
  * thing a press opens and a write reaches, and a workspace holding two chats
@@ -1083,7 +1071,6 @@ function recapFromTranscriptTail(tail: string | undefined): string | undefined {
 
 /**
  * The agent kind joins the model label — `codex · gpt-5.5 · high` — because
- // SAFETY: The preceding check establishes the asserted contract.
  * which agent runs a chat is as much its configuration as which model does.
  */
 function agentAndModelLabel(
@@ -1094,7 +1081,6 @@ function agentAndModelLabel(
   return label || undefined;
 }
 
-// SAFETY: The preceding check establishes the asserted contract.
 /** Conductor reports the model it resolved as well as the one that was asked for. */
 function modelLabel(record: WireRecord): string | undefined {
   const model = (

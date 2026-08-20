@@ -44,7 +44,6 @@ import { WAVEFORM_VOICE, type WaveformVoice } from "./waveform";
  * the wrapped form of the strip unphotographed too. It names four of the
  * fixture roster's own sessions and one of its workspaces, so the photograph
  * holds both kinds of mention chip and the band at every row it can grow to,
- // SAFETY: The preceding check establishes the asserted contract.
  * exactly as they would stand over a live reply walking the roster.
  */
 export const FIXTURE_SPEAKING_CAPTION =
@@ -225,7 +224,6 @@ export function liveSpeedApplies(
 
 /**
  * What a changed voice should do to a call already up. A call being opened
- // SAFETY: The preceding check establishes the asserted contract.
  * counts as one to reopen: its credential may already have been minted in the
  * old voice. A call that ended on its own owes nothing.
  */
@@ -289,7 +287,6 @@ export function announcerNotices(speech: readonly AttentionSpeech[]): AttentionS
 /**
  * The newest item of one batch of attention speech, by the moment it was
  * decided. Every item counts, however it reached the developer — spoken on an
- // SAFETY: The preceding check establishes the asserted contract.
  * open call, read out on Luke's own, or only shown as a popup — since each is
  * something Luke just told them. Picking the newest is arithmetic, so no
  * model output chooses what survives the batch.
@@ -322,7 +319,6 @@ export function latestSpeechReference(
 /**
  * The session one carried act is aimed at, when it is aimed at one at all. An
  * act the developer just asked of a session makes it the session under
- // SAFETY: The preceding check establishes the asserted contract.
  * discussion as surely as an announcement does — "read me that transcript"
  * is followed by "open that chat" often enough — and a workspace creation
  * aims at no session, so it moves the reference not at all.
@@ -482,7 +478,6 @@ export interface VoiceConversation {
    * The sessions the reply being spoken is about: an announcement's one
    * validated subject, or what a conversation reply names in its words — a
    * chat by its title, or a workspace by name, resolved to its freshest
-   // SAFETY: The preceding check establishes the asserted contract.
    * chat. Present exactly as long as the reply is — it is what the surface
    * anchors the pressable notices to — and independent of the captions
    * preference, which only governs whether the words are drawn.
@@ -491,7 +486,6 @@ export interface VoiceConversation {
   /**
    * The tracked issues the reply being spoken names — by identifier or by
    * whole title — on the session mentions' own terms: resolved against the
-   // SAFETY: The preceding check establishes the asserted contract.
    * observed issue roster, present exactly as long as the reply, and empty
    * for an announcement, whose one validated subject is a session. The rows
    * are the roster's own, because no panel surface holds the issue roster
@@ -527,7 +521,6 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
    * A pressed talk key still waiting for the call it asked to open. The meter
    * is drawn from this rather than from the connection, because the press is
    * the moment the developer needs answering: the handshake behind it takes
-   // SAFETY: The preceding check establishes the asserted contract.
    * seconds, and a key that visibly does nothing for that long reads as a key
    * that did nothing.
    */
@@ -891,7 +884,6 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
 
   /**
    * The talk key coming up. How long it was held is the whole of the decision:
-   // SAFETY: The preceding check establishes the asserted contract.
    * held, the turn was as long as the key was down and is sent; tapped, it
    * stays open for the question too long to hold through, and the next release
    * sends it.

@@ -334,7 +334,6 @@ async function projectSessionsDirectory(
 /**
  * Finds the newest session files across a provider's project directories. Both
  * levels are bounded and ordered by recency, so a machine with years of
- // SAFETY: The preceding check establishes the asserted contract.
  * projects costs the same pass as a machine with one. A directory's mtime does
  * not move when a file inside it is appended to, so the project bound keeps the
  * projects that most recently *started* a session; the session bound that

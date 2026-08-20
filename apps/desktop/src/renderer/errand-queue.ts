@@ -10,7 +10,6 @@ import type { SettingsView } from "./settings-views";
  *
  * A reply may carry several tool calls, and they are answered one after
  * another with nothing between them but a couple of IPC round trips — far
- // SAFETY: The preceding check establishes the asserted contract.
  * inside the beat an errand waits before it sets off. So the acts arrive as a
  * burst and the flights cannot: there is only ever one Luke on screen, one
  * panel, and one settings page drawn at a time, and each of those is something
@@ -43,7 +42,6 @@ import type { SettingsView } from "./settings-views";
  * Every function here is pure, and every hold that goes in comes out exactly
  * once — at the tap that signs it, when the flight it belonged to is over, or
  * in the flush that ends a run nobody can watch any more. A hold nobody
- // SAFETY: The preceding check establishes the asserted contract.
  * releases strands a switch showing the wrong state for as long as the panel
  * is open.
  */
@@ -116,7 +114,6 @@ export function nextErrand(run: ErrandRun) {
 }
 
 /**
- // SAFETY: The preceding check establishes the asserted contract.
  * Several holds drawn as one. The newest snapshot is the only true one — they
  * are cumulative, so the last carries every change made before it — while the
  * view patches are folded in the order they were chosen, because each names

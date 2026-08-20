@@ -70,7 +70,6 @@ const DEVIN_MESSAGE_FIELD = {
  * it can be viewed but not modified or resumed — and a Devin session is the
  * whole unit of its cloud workspace, so filing it away is this provider's
  * workspace archive. It is advertised only for a session positively observed
- // SAFETY: The preceding check establishes the asserted contract.
  * as settled: one that exited, failed, was suspended, or whose running
  * machine reports the turn is holding for the user.
  */
@@ -134,7 +133,6 @@ const DEVIN_RUNNING_DETAIL = {
 type DevinRunningDetail = (typeof DEVIN_RUNNING_DETAIL)[keyof typeof DEVIN_RUNNING_DETAIL];
 
 /**
- // SAFETY: The preceding check establishes the asserted contract.
  * A session that exited is over for good, and one Devin reports as errored
  * stopped on something it cannot pass. The rest are either on their way
  * somewhere — being created, claimed by a machine, or resuming — or dormant:
@@ -157,7 +155,6 @@ const SESSION_STATUS_BY_DEVIN_STATUS = {
 /**
  * A running session that is waiting on the user, waiting on an approval, or has
  * finished its task has stopped and is holding for the user, which is what Luke
- // SAFETY: The preceding check establishes the asserted contract.
  * reports as waiting. This is the one thing v1 could not say: it reported only
  * that a session was blocked, never that the machine was still up and the turn
  * had simply ended.
@@ -185,16 +182,13 @@ const PULL_REQUEST_PATH_SEGMENTS: ReadonlySet<string> = new Set(
 );
 
 const DEVIN_ADAPTER_DEFAULTS = {
-  // SAFETY: The preceding check establishes the asserted contract.
   /** The documented maximum, so one call reaches as deep into the history as it can. */
   SESSION_PAGE_SIZE: 200,
 } as const;
 
 /**
  * Below this a reported timestamp cannot be milliseconds — it would be 1973 —
- // SAFETY: The preceding check establishes the asserted contract.
  * so it is seconds. Devin types both `created_at` and `updated_at` as integers
- // SAFETY: The preceding check establishes the asserted contract.
  * without naming the unit, and reading one as the other would place every
  * session either far in the past or far in the future.
  */
@@ -207,7 +201,6 @@ export const DEVIN_PROVIDER: SessionProvider = {
 
 export type DevinAdapterOptions = CloudAdapterOptions;
 
-// SAFETY: The preceding check establishes the asserted contract.
 /** The person a credential belongs to, and the organization to read as them. */
 interface DevinIdentity {
   userId: string;
@@ -284,7 +277,6 @@ function sessionFromRecord(record: WireRecord, identity: DevinIdentity): DevinSe
  * state, reports nothing at all without a credential, and reports nothing for
  * a service-user credential, which names an organization rather than a person.
  * The writes it supports are a user-typed message, through Devin's own
- // SAFETY: The preceding check establishes the asserted contract.
  * message endpoint, to a session it advertised as taking one, and an archive
  * for a settled session, through Devin's own archive endpoint on a session
  * that advertised it.
@@ -328,7 +320,6 @@ export class DevinSessionAdapter extends CloudSessionAdapter {
    * and cannot disagree with it.
    *
    * The answer is cached either way, so a credential Luke cannot observe as
-   // SAFETY: The preceding check establishes the asserted contract.
    * costs one request rather than one every refresh for as long as it is
    * stored. The base clears the cache the moment the credential changes.
    */

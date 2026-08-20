@@ -9,7 +9,6 @@ const CALLBACK_PATH = "/callback";
 const LOOPBACK_HOST = "127.0.0.1";
 
 /**
- // SAFETY: The preceding check establishes the asserted contract.
  * Every answer the callback can give, drawn as the same card the landing page
  * would draw it. The words are fixed by the build; nothing the redirect
  * carried reaches the document.
@@ -78,7 +77,6 @@ export interface AccountLoopback {
   codeChallenge: string;
   waitForCode: Promise<string>;
   /**
-   // SAFETY: The preceding check establishes the asserted contract.
    * Withdraws the wait: `waitForCode` rejects as cancelled and the server
    * closes. A code that already arrived has settled the promise, so a late
    * cancel changes nothing.

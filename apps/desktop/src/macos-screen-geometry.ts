@@ -15,7 +15,6 @@ function helperPath(): string {
 function parseNativeGeometry(value: UnparsedWireValue): NativeNotchGeometry | undefined {
   const record = wireRecord(value);
   if (!record) return undefined;
-  // SAFETY: The preceding check establishes the asserted contract.
   const geometry = record;
   if (
     !isWireNumber(geometry.displayId) ||

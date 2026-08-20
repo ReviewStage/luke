@@ -126,7 +126,6 @@ const SESSION_STATUS_BY_COPILOT_STATE = {
 };
 
 const COPILOT_ADAPTER_DEFAULTS = {
-  // SAFETY: The preceding check establishes the asserted contract.
   /** The documented maximum, so one call reaches as deep into the history as it can. */
   TASK_PAGE_SIZE: 100,
   MAXIMUM_BRANCH_LABEL_LENGTH: 60,
@@ -213,7 +212,6 @@ function taskFromRecord(record: WireRecord): CopilotTask | undefined {
  * no request that can change provider state, and reports nothing at all
  * without a credential.
  *
- // SAFETY: The preceding check establishes the asserted contract.
  * Deliberately read-only where the other cloud adapters write: as of the
  * pinned API version, GitHub documents no way to message, steer, or stop an
  * existing task — the agents panel can, but its API is undocumented, and the

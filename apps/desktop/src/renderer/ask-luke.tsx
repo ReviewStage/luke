@@ -93,7 +93,6 @@ export function askRefusal(status: RealtimeStatus, quotaSpent?: string): string 
  * The panel's own composer: one pill under the session list, addressed to Luke
  * rather than to any session. Typing is the developer's half of the
  * conversation, so the pill answers in their green — the colour the meter
- // SAFETY: The preceding check establishes the asserted contract.
  * gives their voice — and the reply lands as Luke's spoken words, captioned at
  * the panel's foot directly below the field that asked.
  *
@@ -138,7 +137,6 @@ export function AskLuke({
   const [asking, setAsking] = useState(false);
   const field = useRef<HTMLTextAreaElement | null>(null);
   /**
-   // SAFETY: The preceding check establishes the asserted contract.
    * One ask at a time, as a ref rather than state for the same reason the row
    * composer holds one: disabling only lands with the next render, and a
    * second Enter inside that window would ask the same question twice.
@@ -223,7 +221,6 @@ export function AskLuke({
         {/* How the reach is learned: the keycaps surface under a hovering
             pointer and stand down once the caret is in or a draft holds the
             field — whoever they could teach already knows. Drawn only for a key
-            // SAFETY: The preceding check establishes the asserted contract.
             the system actually granted, as the separate keys a hand presses.
             Left readable: a reader announcing the caps agrees with
             aria-keyshortcuts. */}

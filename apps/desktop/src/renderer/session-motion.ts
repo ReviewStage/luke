@@ -96,7 +96,6 @@ interface ReorderList {
   /** The attribute each element of this list names itself with. */
   idAttribute: string;
   /**
-   // SAFETY: The preceding check establishes the asserted contract.
    * The attribute a group of this list's elements travels as one under, when
    * the list has such groups at all. A grouped element's own travel is only
    * its movement within the group; the group's element carries the rest.
@@ -108,10 +107,8 @@ interface ReorderList {
   translate: (px: number) => string;
   /**
    * The container's own seat along that axis, when the list wants a shove of
-   // SAFETY: The preceding check establishes the asserted contract.
    * the whole box run as one travel. Content arriving above the session list —
    * the search field — moves the container out from under every row at once;
-   // SAFETY: The preceding check establishes the asserted contract.
    * rows measured within the container read that as stillness, and the
    * container itself makes the one move. Rows translated one by one would
    * cross the scrollport's top edge and be clipped mid-flight, which is why
@@ -144,12 +141,10 @@ const SESSION_LIST: ReorderList = {
 
 /**
  * The wing's strip: marks laid along the wing, resting against the shape's far
- // SAFETY: The preceding check establishes the asserted contract.
  * edge. The wing hangs off the housing and grows that edge as the shape
  * morphs — `--wing-bound` moves the left edge of the very element `offsetLeft`
  * is measured from, and the marks move with it — so a slot's position is its
  * distance from the anchored edge instead: measured from the moving one, a
- // SAFETY: The preceding check establishes the asserted contract.
  * morph would read as stillness and the marks would jump to the new edge in
  * one frame. The distance is negated so the numbers still grow the way the
  * axis runs and the travel arithmetic stays the plan's. Measuring the slot's
@@ -173,7 +168,6 @@ const TRAVEL_EPSILON = 0.5;
  */
 export const STILL_MS = 2;
 
-// SAFETY: The preceding check establishes the asserted contract.
 /** "460ms" or "0.46s" from a computed token, taken as milliseconds. */
 export function parseMilliseconds(value: string): number {
   const trimmed = value.trim();
@@ -182,7 +176,6 @@ export function parseMilliseconds(value: string): number {
   return trimmed.endsWith("ms") ? parsed : parsed * 1000;
 }
 
-// SAFETY: The preceding check establishes the asserted contract.
 /** "7px" from a computed token, taken as pixels. */
 export function parsePixels(value: string): number {
   const parsed = Number.parseFloat(value);
@@ -497,7 +490,6 @@ export function useWingReorderMotion(): RefObject<HTMLSpanElement | null> {
 }
 
 /**
- // SAFETY: The preceding check establishes the asserted contract.
  * One slot as its list actually draws it: an occupant, and whether it is on
  * its way out. A leaving occupant still holds its slot — the gap only closes
  * once it has finished fading — but it is already gone from the model, so the

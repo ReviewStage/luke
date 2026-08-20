@@ -13,7 +13,6 @@ import {
 export const MICROPHONE_ROUTE_PROBE = "probe";
 
 export interface MicrophoneRouteEdges {
-  // SAFETY: The preceding check establishes the asserted contract.
   /** The route as read, on start, on every input change, and per probe. */
   onRoute(route: MicrophoneRoute): void;
   /** The route cannot be read — no helper, or the helper died. */

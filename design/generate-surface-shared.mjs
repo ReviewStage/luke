@@ -81,6 +81,7 @@ const SURFACE_GEOMETRY_PX = {
   // and a reply may name more sessions than one row holds.
   SESSION_NOTICE_HEIGHT: 26,
   PANEL_WIDTH: 620,
+  PANEL_MAX_HEIGHT: 520,
 };
 
 // How many chip rows the notice band may grow to before the chips scroll
@@ -257,6 +258,7 @@ function motionTokensCss() {
   --notice-size: ${px(SURFACE_GEOMETRY_PX.SESSION_NOTICE_HEIGHT)};
   --notice-max-rows: ${SESSION_NOTICE_MAX_ROWS};
   --panel-width: ${px(SURFACE_GEOMETRY_PX.PANEL_WIDTH)};
+  --panel-height-max: ${px(SURFACE_GEOMETRY_PX.PANEL_MAX_HEIGHT)};
 }
 `;
 }
@@ -298,6 +300,9 @@ export const SESSION_NOTICE_MAX_ROWS = ${SESSION_NOTICE_MAX_ROWS};
 
 /** Expanded panel width. CSS: \`--panel-width\`. */
 export const PANEL_WIDTH = ${SURFACE_GEOMETRY_PX.PANEL_WIDTH};
+
+/** Expanded panel height ceiling. CSS: \`--panel-height-max\`. */
+export const PANEL_MAX_HEIGHT = ${SURFACE_GEOMETRY_PX.PANEL_MAX_HEIGHT};
 `;
 }
 

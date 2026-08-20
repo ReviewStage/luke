@@ -33,7 +33,7 @@ export interface SqliteModule {
 export type SqliteModuleLoader = () => Promise<SqliteModule>;
 
 export async function defaultSqliteModule(): Promise<SqliteModule> {
-  // SAFETY: The preceding check establishes the asserted contract.
+  // SAFETY: SqliteModule is the exact read-only subset this adapter uses from node:sqlite.
   return (await import("node:sqlite")) as SqliteModule;
 }
 

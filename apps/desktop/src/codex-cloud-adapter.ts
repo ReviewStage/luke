@@ -38,7 +38,6 @@ import { CODEX_PROVIDER } from "./codex-adapter";
  * cadence gathers the environments in recent use; and `cloud exec --env` is
  * its documented way to start a task, the one write this adapter makes. The
  * `--` before the task text ends option parsing, so the developer's own words
- // SAFETY: The preceding check establishes the asserted contract.
  * can never read as a flag, and a page cursor rides as one `--cursor=` token
  * for the same reason.
  */
@@ -88,7 +87,6 @@ const CODEX_SUMMARY_FIELD = {
   LINES_REMOVED: "lines_removed",
 } as const;
 
-// SAFETY: The preceding check establishes the asserted contract.
 /** The CLI's documented task states, kebab-case as its JSON serializes them. */
 const CODEX_TASK_STATUS = {
   PENDING: "pending",
@@ -197,7 +195,6 @@ function createdTaskId(stdout: string): string | undefined {
  * Observes Codex cloud tasks through the Codex CLI's own documented read,
  * under the ChatGPT login the user already gave that CLI — Luke reads no
  * token and stores none, and a machine whose CLI is absent or signed out is
- // SAFETY: The preceding check establishes the asserted contract.
  * observed as having nothing. The one write is the one the user asks for: a
  * new task, through the CLI's documented `cloud exec`, in an environment the
  * latest pass reported. Codex documents no way to message or steer a task
@@ -304,9 +301,7 @@ export class CodexCloudSessionAdapter extends CliSessionAdapter {
    * Walks a bounded few pages further into the task history for the
    * environments in recent use, so one older than the newest page is still
    * offered for creation. The cursor is the one value a read hands back into
-   // SAFETY: The preceding check establishes the asserted contract.
    * an invocation: bounded, and passed as a single `--cursor=` token so it can
-   // SAFETY: The preceding check establishes the asserted contract.
    * never read as a flag of its own. A page that fails mid-sweep keeps what
    * the sweep has — the offer grows by what was actually read, and the pages
    * beyond it wait for the next sweep rather than costing the whole pass.

@@ -25,7 +25,6 @@ import {
   APP_SETTING_FIELDS,
   APP_SETTING_SCHEMA,
   type AppSettingField,
-  type AppSettingValue,
   isAppSettingField,
   isKeyedAppSettingField,
   isSettingEntryKey,
@@ -135,7 +134,6 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
 
   async function applySettingSideEffect(
     field: AppSettingField,
-    value: AppSettingValue<AppSettingField>,
     settings: AppSettings,
     event: IpcMainInvokeEvent,
     waitForDeferredEffects = false,
@@ -159,19 +157,16 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
         realtimeCredentials()?.setSpeed(settings.voiceSpeed);
         break;
       case SETTING_SIDE_EFFECT.TALK_HOTKEY:
-        // SAFETY: The preceding check establishes the asserted contract.
-        hotkeys.setChosen(HOTKEY_RANK.TALK, value as string | undefined);
+        hotkeys.setChosen(HOTKEY_RANK.TALK, settings.voiceHotkey);
         await hotkeys.reapply(HOTKEY_RANK.TALK);
         break;
       case SETTING_SIDE_EFFECT.ASK_HOTKEY:
-        // SAFETY: The preceding check establishes the asserted contract.
-        hotkeys.setChosen(HOTKEY_RANK.ASK, value as string | undefined);
+        hotkeys.setChosen(HOTKEY_RANK.ASK, settings.askHotkey);
         if (waitForDeferredEffects) await hotkeys.reapply(HOTKEY_RANK.ASK);
         else void hotkeys.reapply(HOTKEY_RANK.ASK);
         break;
       case SETTING_SIDE_EFFECT.STOP_HOTKEY:
-        // SAFETY: The preceding check establishes the asserted contract.
-        hotkeys.setChosen(HOTKEY_RANK.STOP, value as string | undefined);
+        hotkeys.setChosen(HOTKEY_RANK.STOP, settings.stopHotkey);
         if (waitForDeferredEffects) await hotkeys.reapply(HOTKEY_RANK.STOP);
         else void hotkeys.reapply(HOTKEY_RANK.STOP);
         break;
@@ -223,10 +218,10 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
       return { field, value: parsed.value };
     },
     save: ({ field, value }) => settingsStore.set(field, value),
-    async apply(result, { field, value }, event) {
+    async apply(result, { field }, event) {
       if (result.reason) return;
       recordSettingUpdate(field, result.settings);
-      await applySettingSideEffect(field, value, result.settings, event);
+      await applySettingSideEffect(field, result.settings, event);
     },
     refusal: "Could not save that setting on this system.",
   });
@@ -263,7 +258,7 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
     async apply(result, { field }, event) {
       if (result.reason) return;
       recordSettingUpdate(field, result.settings);
-      await applySettingSideEffect(field, result.settings[field], result.settings, event);
+      await applySettingSideEffect(field, result.settings, event);
     },
     refusal: "Could not save that setting on this system.",
   });
@@ -286,7 +281,7 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
       for (const field of APP_SETTING_FIELDS) {
         const definition = APP_SETTING_SCHEMA[field];
         if (!("resetScope" in definition) || definition.resetScope !== scope) continue;
-        await applySettingSideEffect(field, result.settings[field], result.settings, event, true);
+        await applySettingSideEffect(field, result.settings, event, true);
       }
     },
     refusal: "Could not reset those settings on this system.",

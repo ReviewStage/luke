@@ -1,8 +1,6 @@
 /**
- // SAFETY: The preceding check establishes the asserted contract.
  * A chord drawn as the keys it is: one cap per key, the way a keyboard has
  * them and the way developer tools print them, rather than one chip holding
- // SAFETY: The preceding check establishes the asserted contract.
  * ⌥Space as though it were a word.
  *
  * Nested `kbd` is the element's own idiom for a combination — the outer one is
@@ -17,7 +15,6 @@ export function Keycaps({
   accelerator,
   className,
 }: {
-  // SAFETY: The preceding check establishes the asserted contract.
   /** The chord as the system registered it, e.g. `Alt+Space`. */
   accelerator: string;
   /** What the surface around the caps calls them, if it needs to say. */

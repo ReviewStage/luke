@@ -97,7 +97,6 @@ const CURSOR_CANCEL_RUN_CONTROL_ID = "cancel-run";
 
 /**
  * The run-level control, advertised per session and only in the state Cursor
- // SAFETY: The preceding check establishes the asserted contract.
  * documents it for. The run it would cancel rides the advertisement as the
  * control's target, so a press stops the run the user was shown — state an
  * adapter kept on the side could outlive the snapshot that promised it, but a
@@ -184,7 +183,6 @@ const CURSOR_SETTLED_RUN_STATUSES: ReadonlySet<CursorRunStatus> = new Set([
 
 /**
  * A finished run has stopped and is holding for the user, which is what Luke
- // SAFETY: The preceding check establishes the asserted contract.
  * reports as waiting. A run that was cancelled or expired stopped for good. One
  * that is still being created, or that failed, is left unknown rather than
  * promoted to a state Luke cannot verify.
@@ -199,7 +197,6 @@ const SESSION_STATUS_BY_CURSOR_RUN_STATUS = {
 };
 
 const CURSOR_ADAPTER_DEFAULTS = {
-  // SAFETY: The preceding check establishes the asserted contract.
   /** The documented maximum, so one call reaches as deep into the history as it can. */
   AGENT_PAGE_SIZE: 100,
   MAXIMUM_REFERENCE_LABEL_LENGTH: 60,
@@ -285,7 +282,6 @@ function agentFromRecord(record: WireRecord): CursorAgent | undefined {
  * the agents the supplied key owns, observation issues no request that can
  * change provider state, and it reports nothing at all without a credential.
  * The writes it supports are a user-typed follow-up, through Cursor's own run
- // SAFETY: The preceding check establishes the asserted contract.
  * endpoint, to an agent it advertised as taking one, a stop for an active run
  * and an archive for a settled agent — each on a row that advertised it — and
  * a new agent — asked for with the user's own opening task — in a repository
@@ -293,7 +289,6 @@ function agentFromRecord(record: WireRecord): CursorAgent | undefined {
  */
 export class CursorSessionAdapter extends CloudSessionAdapter {
   /**
-   // SAFETY: The preceding check establishes the asserted contract.
    * The repositories the key may launch agents in, as Cursor last listed
    * them. They are where a new workspace — a new agent — can be created, so a
    * creation ask is honoured only against what this cache holds.
@@ -402,7 +397,6 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
    * Reads `GET /v1/repositories` on its own cadence, keeping only usable
    * entries. Every failure is swallowed here — including a rejected key, which
    * the agents read in the same pass will surface — because nothing awaits
-   // SAFETY: The preceding check establishes the asserted contract.
    * this, and an offer read must never fail a pass or escape as an unhandled
    * rejection.
    */

@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   CAPSULE_SIDE_WIDTH,
   PANEL_FORM_FACTOR,
+  PANEL_MAX_HEIGHT,
   PANEL_WIDTH,
   PEEK_MIN_WIDTH,
   PEEK_SIDE_GROWTH,
@@ -191,11 +192,11 @@ test("an expanded bubble window holds the lifted panel's shadow", () => {
   // same lift; a housing — real or simulated — keeps the panel at the edge.
   assert.equal(
     positionNotchWindow(plainDisplay, "expanded").height,
-    520 + SURFACE_MARGIN + BUBBLE_LIFT,
+    PANEL_MAX_HEIGHT + SURFACE_MARGIN + BUBBLE_LIFT,
   );
   assert.equal(
     positionNotchWindow(plainDisplay, "expanded", undefined, PANEL_FORM_FACTOR.NOTCH).height,
-    520 + SURFACE_MARGIN,
+    PANEL_MAX_HEIGHT + SURFACE_MARGIN,
   );
   assert.equal(
     positionNotchWindow(notchedDisplay, "expanded", {
@@ -205,7 +206,7 @@ test("an expanded bubble window holds the lifted panel's shadow", () => {
       notchWidth: 210,
       hasNotch: true,
     }).height,
-    520 + SURFACE_MARGIN,
+    PANEL_MAX_HEIGHT + SURFACE_MARGIN,
   );
 });
 
@@ -221,7 +222,7 @@ test("keeps the expanded panel attached to the same display edge", () => {
   assert.equal(result.x, 406);
   assert.equal(result.y, 0);
   assert.equal(result.width, PANEL_WIDTH + SURFACE_MARGIN * 2);
-  assert.equal(result.height, 520 + SURFACE_MARGIN);
+  assert.equal(result.height, PANEL_MAX_HEIGHT + SURFACE_MARGIN);
 });
 
 test("never grows a window past the display it is on", () => {

@@ -24,7 +24,6 @@ import {
  *
  * Installs from before OpenCode moved its sessions into the database keep
  * their conversations in per-part JSON files this build does not read, so a
- // SAFETY: The preceding check establishes the asserted contract.
  * legacy session answers as no transcript rather than a partial one.
  */
 

@@ -29,6 +29,16 @@ export function panelPanelId(tab: PanelTab): string {
   return tab === PANEL_TAB.SETTINGS ? "panel-view-settings" : "panel-view-sessions";
 }
 
+/** The horizontal tablist's roving-focus destination for one keyboard key. */
+export function panelTabForKey(tab: PanelTab, key: string): PanelTab | undefined {
+  if (key === "Home") return PANEL_TABS[0]?.id;
+  if (key === "End") return PANEL_TABS.at(-1)?.id;
+  if (key !== "ArrowLeft" && key !== "ArrowRight") return undefined;
+  const current = PANEL_TABS.findIndex((candidate) => candidate.id === tab);
+  const offset = key === "ArrowRight" ? 1 : -1;
+  return PANEL_TABS[(current + offset + PANEL_TABS.length) % PANEL_TABS.length]?.id;
+}
+
 export function TabBar({
   tab,
   onTabChange,
@@ -37,7 +47,6 @@ export function TabBar({
   tab: PanelTab;
   onTabChange: (tab: PanelTab) => void;
   /**
-   // SAFETY: The preceding check establishes the asserted contract.
    * News the Settings tab wears as a dot while it stands — a newer release
    * waiting to be fetched. The words are the hover's and the screen
    * reader's; the dot alone is the mark.
@@ -70,7 +79,15 @@ export function TabBar({
           data-active={String(candidate.id === tab)}
           aria-selected={candidate.id === tab}
           aria-controls={panelPanelId(candidate.id)}
+          tabIndex={candidate.id === tab ? 0 : -1}
           onClick={() => onTabChange(candidate.id)}
+          onKeyDown={(event) => {
+            const next = panelTabForKey(candidate.id, event.key);
+            if (!next) return;
+            event.preventDefault();
+            onTabChange(next);
+            event.currentTarget.ownerDocument.getElementById(panelTabId(next))?.focus();
+          }}
         >
           {candidate.label}
           {candidate.id === PANEL_TAB.SETTINGS && settingsNote ? (

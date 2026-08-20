@@ -97,18 +97,16 @@ const defaultRun: CliRun = (binary, argv, options) =>
           resolve({ exitCode: 0, stdout });
           return;
         }
-        // SAFETY: The preceding check establishes the asserted contract.
-        const exitCode = (error as NodeJS.ErrnoException & { code?: unknown }).code;
+        // SAFETY: Node's execFile callback reports command failures as ErrnoException objects.
+        const commandError = error as NodeJS.ErrnoException & { code?: unknown };
+        const exitCode = commandError.code;
         if (isWireNumber(exitCode)) {
           resolve({ exitCode, stdout });
           return;
         }
         reject(
           new CliCommandError(
-            // SAFETY: The preceding check establishes the asserted contract.
-            (error as NodeJS.ErrnoException).code === "ENOENT"
-              ? CLI_FAILURE.UNAVAILABLE
-              : CLI_FAILURE.TRANSIENT,
+            commandError.code === "ENOENT" ? CLI_FAILURE.UNAVAILABLE : CLI_FAILURE.TRANSIENT,
             `${binary} could not be run`,
           ),
         );
@@ -143,7 +141,6 @@ export interface CliAdapterProfile {
 
 /**
  * The only way a subclass reaches its provider while observing: one invocation
- // SAFETY: The preceding check establishes the asserted contract.
  * of the profile's binary, bounded in time and output, parsed as JSON, and
  * discarded past what the subclass reports. The argv a subclass passes must be
  * fixed by the build — the same rule that fixes a POSTed read document — with
@@ -157,10 +154,8 @@ export type CliReadRequest = (argv: readonly string[]) => Promise<WireRecord>;
  * survives, and bounded read-only invocations of the provider's own CLI.
  *
  * The credential never passes through Luke. The CLI holds the login the user
- // SAFETY: The preceding check establishes the asserted contract.
  * gave it for its own sake, and observation runs under it exactly as the
  * user's own terminal would — Luke reads no token, stores none, and passes
- // SAFETY: The preceding check establishes the asserted contract.
  * none. A machine whose CLI is absent or signed out is observed as having
  * nothing, the same answer a cloud provider gives with no key, so observation
  * begins and ends with the user's own login and nothing else.
@@ -261,7 +256,6 @@ export abstract class CliSessionAdapter extends SessionProviderAdapterBase {
   /**
    * The one authenticated write: a single invocation of the provider's own
    * CLI, for something the user just asked for against what the latest pass
-   // SAFETY: The preceding check establishes the asserted contract.
    * observed — a subclass validates before it builds the argv, exactly as the
    * cloud base does. The login is probed at act time rather than held from
    * the observation pass, so a CLI signed out since then refuses before

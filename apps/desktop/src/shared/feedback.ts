@@ -4,7 +4,6 @@ import { isRecord, isWireString, type UnparsedWireValue } from "@sidecar/core";
  * read differently on arrival: feedback is about Luke, and a prompt is an ask
  * Luke should have handled better. Both travel the same way — typed in the
  * panel, carried by the main process to one fixed endpoint, and forwarded from
- // SAFETY: The preceding check establishes the asserted contract.
  * there as email to the founders. Nothing observed ever rides along: a
  * submission holds only what the composer's fields showed the user — their
  * words, the signature those fields started with from their own signed-in
@@ -112,8 +111,7 @@ function decodedByteLength(base64: string): number {
 
 function feedbackImage(value: UnparsedWireValue): FeedbackImage | undefined {
   if (!isRecord(value)) return undefined;
-  // SAFETY: The preceding check establishes the asserted contract.
-  const { name, mediaType, base64 } = value as Partial<FeedbackImage>;
+  const { name, mediaType, base64 } = value;
   if (!isWireString(name) || name.trim().length === 0 || name.length > 255) return undefined;
   if (!isFeedbackImageType(mediaType)) return undefined;
   if (!isWireString(base64) || base64.length === 0) return undefined;
@@ -136,15 +134,13 @@ function optionalLine(value: UnparsedWireValue, maxLength: number): string | und
 
 /**
  * Reads a renderer message into a submission, or nothing if it is malformed.
- // SAFETY: The preceding check establishes the asserted contract.
  * This is a trust boundary: every field arrives as `unknown`, and a message
  * that fails here is a broken request rather than something a user can fix —
  * the composer enforces the same bounds with words before anything is sent.
  */
 export function feedbackSubmission(value: UnparsedWireValue): FeedbackSubmission | undefined {
   if (!isRecord(value)) return undefined;
-  // SAFETY: The preceding check establishes the asserted contract.
-  const { kind, message, name, email, images } = value as Partial<FeedbackSubmission>;
+  const { kind, message, name, email, images } = value;
   if (!isFeedbackKind(kind)) return undefined;
   if (!isWireString(message)) return undefined;
   const messageText = message.trim();

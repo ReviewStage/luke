@@ -1124,7 +1124,7 @@
 
 .error-message {
   margin: 0;
-  color: #ff8c8c;
+  color: var(--error-text);
   font-size: 10px;
 }
 

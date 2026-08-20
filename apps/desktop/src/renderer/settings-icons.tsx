@@ -147,7 +147,6 @@ export function FolderIcon(): React.JSX.Element {
 /**
  * Luke himself, still: the same mark `design/brand/luke-mark-*.svg` is cut
  * from, drawn here from the generated artwork rather than loaded, for the
- // SAFETY: The preceding check establishes the asserted contract.
  * reason the face is — it inherits `currentColor`, so it reads as a letter in
  * whatever line holds it. The only glyph in this file that is a brand mark;
  * it earns that because what it stands for is Luke, not a thing Luke does.
@@ -308,9 +307,7 @@ export function SearchIcon(): React.JSX.Element {
 }
 
 /**
- // SAFETY: The preceding check establishes the asserted contract.
  * Two sliders rather than a funnel: the control it opens holds an order as well
- // SAFETY: The preceding check establishes the asserted contract.
  * as a filter, and a funnel would promise only the second.
  */
 export function OptionsIcon(): React.JSX.Element {
@@ -343,9 +340,7 @@ export function LaptopIcon(): React.JSX.Element {
 /**
  * Work happening somewhere else. The badge on a session's mark says the same
  * thing in the same shape — two small puffs and one large over a flat base —
- // SAFETY: The preceding check establishes the asserted contract.
  * drawn here as an outline rather than a fill, because at this size it sits
- // SAFETY: The preceding check establishes the asserted contract.
  * beside the laptop and the pair has to read as one weight.
  */
 export function CloudIcon(): React.JSX.Element {
@@ -372,7 +367,6 @@ export function VoiceIcon(): React.JSX.Element {
 /**
  * The stop glyph every chat surface uses: a filled, slightly rounded square.
  * Filled rather than stroked, because at control size a stroked square reads
- // SAFETY: The preceding check establishes the asserted contract.
  * as a checkbox.
  */
 export function StopIcon(): React.JSX.Element {
@@ -412,7 +406,6 @@ export function ImageIcon(): React.JSX.Element {
 /**
  * Takes one attachment back off the note. Its own element rather than a
  * `Glyph`: at the eight pixels it is drawn at, the shared 1.9 stroke thins to
- // SAFETY: The preceding check establishes the asserted contract.
  * nothing and the X reads as a dot, so this one carries the weight it needs.
  */
 export function RemoveIcon(): React.JSX.Element {

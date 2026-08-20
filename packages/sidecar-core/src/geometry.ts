@@ -1,6 +1,7 @@
 import { isWireString, type UnparsedWireValue } from "./json.js";
 import {
   BUBBLE_LIFT,
+  PANEL_MAX_HEIGHT,
   PANEL_WIDTH,
   SESSION_NOTICE_HEIGHT,
   SESSION_NOTICE_MAX_ROWS,
@@ -93,7 +94,7 @@ export const CAPSULE_SIDE_WIDTH = 36;
 export const PEEK_SIDE_GROWTH = 88;
 export const SURFACE_MARGIN = 40;
 // BUBBLE_LIFT, VOICE_CAPTION_MAX_HEIGHT, SESSION_NOTICE_HEIGHT,
-// SESSION_NOTICE_MAX_ROWS, and PANEL_WIDTH come from the shared surface
+// SESSION_NOTICE_MAX_ROWS, PANEL_WIDTH, and PANEL_MAX_HEIGHT come from the shared surface
 // tokens, so the window the main process sizes and the shape the renderer
 // draws cannot drift. The bubble's lift is derived: the pill matches the 24pt
 // menu bar it floats beside — the 32px compact strip minus the lift on each
@@ -102,7 +103,6 @@ export const SURFACE_MARGIN = 40;
 // row the notice band can grow to below it, because a reply may name several
 // sessions under captioned speech.
 const peekSideWidth = CAPSULE_SIDE_WIDTH + PEEK_SIDE_GROWTH;
-const panelHeight = 520;
 
 /**
  * The narrowest peek any display is given: the peek's width beside the
@@ -183,7 +183,7 @@ export function positionNotchWindow(
   const height =
     mode === "expanded"
       ? Math.min(
-          panelHeight + SURFACE_MARGIN + (notch.hasNotch ? 0 : BUBBLE_LIFT),
+          PANEL_MAX_HEIGHT + SURFACE_MARGIN + (notch.hasNotch ? 0 : BUBBLE_LIFT),
           display.bounds.height,
         )
       : Math.min(

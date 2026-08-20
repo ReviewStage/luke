@@ -124,7 +124,6 @@ const SESSION_STATUS_BY_JULES_STATE = {
 };
 
 const JULES_ADAPTER_DEFAULTS = {
-  // SAFETY: The preceding check establishes the asserted contract.
   /** The documented maximum, so one call reaches as deep into the history as it can. */
   SESSION_PAGE_SIZE: 100,
   MAXIMUM_BRANCH_LABEL_LENGTH: 60,

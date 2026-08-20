@@ -67,7 +67,6 @@ const CLAUDE_SYSTEM_SUBTYPE = {
   /**
    * A recap Claude Code composes for a developer who stepped away. It is the
    * only recap this adapter reports, because it is the only one Claude Code
-   // SAFETY: The preceding check establishes the asserted contract.
    * designates as being *about* the session. The closing text of the last
    * assistant message would read similarly, but it is the message stream
    * itself, and a recap reaches the attention evaluator off-machine.
@@ -112,7 +111,6 @@ const CLAUDE_ADAPTER_DEFAULTS = {
   CLOCK_RESCUE_TAIL_BYTES: 512 * 1024,
   /**
    * How much older than the transcript's clock a hook event may run and still
-   // SAFETY: The preceding check establishes the asserted contract.
    * describe the same moment. The hook fires as a turn boundary happens and
    * the closing records land moments later under their own timestamps, so a
    * boundary's event usually trails the record it belongs with by a breath —
@@ -140,7 +138,6 @@ export interface ClaudeCodeAdapterOptions {
    * Where the observation hook spools its events, when hooks are on at all.
    * Read lazily like the cloud adapters' credentials, because the app decides
    * the path after this adapter is declared. Absent — or answering nothing —
-   // SAFETY: The preceding check establishes the asserted contract.
    * the adapter reads the transcripts alone, exactly as it always has: the
    * hooks only ever sharpen what the tail already showed.
    */
@@ -258,7 +255,6 @@ function modelFromRecord(record: WireRecord): string | undefined {
 /**
  * Reads the failure Claude Code recorded, but only once it has stopped trying.
  *
- // SAFETY: The preceding check establishes the asserted contract.
  * Claude Code writes `api_error` for every retry as it backs off, not only for
  * the one that gives up: a rate limit or a dropped connection produces a run of
  * them counting `retryAttempt` up to `maxRetries`. Reporting the first would

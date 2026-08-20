@@ -68,7 +68,6 @@ const OPENCODE_DATABASE_FILE = {
 const OPENCODE_MEMORY_DATABASE = ":memory:";
 
 /**
- // SAFETY: The preceding check establishes the asserted contract.
  * Where OpenCode kept sessions as flat JSON before v1.2.0 moved them into the
  * database. The files are left in place after the migration, so they are read
  * only when no database is usable — a machine the migration has already visited
@@ -112,7 +111,6 @@ const OPENCODE_TOOL_STATUS = {
 
 /**
  * The error OpenCode records when its own user stops a turn. It ends the turn
- // SAFETY: The preceding check establishes the asserted contract.
  * rather than wedging it, so it reads as waiting and never as a failure.
  */
 const OPENCODE_ABORT_ERROR_NAME = "MessageAbortedError";
@@ -220,7 +218,6 @@ interface OpenCodeSessionSnapshot {
   activity?: string;
 }
 
-// SAFETY: The preceding check establishes the asserted contract.
 /** OpenCode writes the session's model as JSON; older records carried an object. */
 function modelFrom(value: UnparsedWireValue): string | undefined {
   const record = isWireString(value) ? recordFromJsonLine(value) : value;
@@ -441,7 +438,6 @@ export class OpenCodeSessionAdapter extends LocalSessionAdapter {
   readonly #sqlite: SqliteModuleLoader;
   readonly #transcriptMaximumRenderedLength: number | undefined;
   /**
-   // SAFETY: The preceding check establishes the asserted contract.
    * What each legacy file said as of the mtime it was read at. Sessions are
    * never capped, so this is what keeps the no-database fallback's pass cheap:
    * a session's info file is re-read only when it has been written to, and its
@@ -631,7 +627,6 @@ export class OpenCodeSessionAdapter extends LocalSessionAdapter {
    * in creation order, so the greatest file name is the newest message and no
    * second directory pass is needed to find it. The file is re-read only when
    * a newer message exists or this one's clock has moved: OpenCode rewrites a
-   // SAFETY: The preceding check establishes the asserted contract.
    * message's file as its turn opens, aborts, fails, and completes.
    */
   async #legacyTurn(

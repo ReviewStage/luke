@@ -50,7 +50,6 @@ interface CachedAccessToken {
   expiresAt: number;
 }
 
-// SAFETY: The preceding check establishes the asserted contract.
 /** One connected account as the settings store resolves it for this reader. */
 export interface CalendarAccountCredential {
   id: string;
@@ -69,7 +68,6 @@ export interface CalendarAccountObservation extends ObservedAccountCalendars {
   failure?: string;
 }
 
-// SAFETY: The preceding check establishes the asserted contract.
 /** A calendar as the list endpoint names it, plus whether it is the primary. */
 export interface ListedCalendar extends AccountCalendar {
   primary: boolean;

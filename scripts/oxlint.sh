@@ -9,6 +9,10 @@ sidecar_require_node
 
 if [[ -r "$HOME/.nvm/nvm.sh" && -f "$SIDECAR_REPO_ROOT/.nvmrc" ]]; then
   # Oxlint's TypeScript plugin loader needs Node ^20.19.0 or >=22.18.0.
+  # pnpm forwards npm's configured install prefix into lifecycle scripts, but
+  # nvm refuses to select a runtime while that prefix is set. This process owns
+  # the runtime selection below, and oxlint does not install global packages.
+  unset npm_config_prefix
   export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
   # shellcheck disable=SC1091
   source "$NVM_DIR/nvm.sh"

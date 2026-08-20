@@ -277,7 +277,6 @@ const CALENDAR_REFRESH_INTERVAL_MS = 5 * 60_000;
  */
 const HELD_NOTICE_RELEASE_INTERVAL_MS = 30_000;
 /**
- // SAFETY: The preceding check establishes the asserted contract.
  * The meetings as last read; `undefined` says no calendar is connected, which
  * can never hold a notice. A failed pass keeps the meetings it has — a
  * calendar that cannot answer is not an empty diary.
@@ -292,7 +291,6 @@ let calendarMeetings: readonly MeetingInterval[] | undefined;
  */
 let quietBoundaryTimer: NodeJS.Timeout | undefined;
 /**
- // SAFETY: The preceding check establishes the asserted contract.
  * Each connected account's calendars as last observed — what the settings
  * rows draw their choices from, and what a spoken-of or clicked selection is
  * validated against before the store keeps it.
@@ -306,7 +304,6 @@ let heldNoticeReleaseTimer: NodeJS.Timeout | undefined;
 const heldNotices = new SessionNoticeHold();
 /**
  * The other kind of announcement, held on the same terms: speech an answered
- // SAFETY: The preceding check establishes the asserted contract.
  * standing ask produced, already worded. It waits out a meeting exactly as a
  * status edge does — both break silence, and the quiet holds everything that
  * does. Unbidden evaluator summaries are never held: during the quiet they
@@ -315,7 +312,6 @@ const heldNotices = new SessionNoticeHold();
  */
 const heldRequestSpeech = new SessionNoticeHold<AttentionSpeech>();
 /**
- // SAFETY: The preceding check establishes the asserted contract.
  * Whether the quiet is holding right now, as last computed — what the
  * renderer draws Luke's sleeping face from. Kept and broadcast on change so
  * every window agrees, and false the moment the meetings or the setting say
@@ -403,21 +399,17 @@ const productEvents = new ProductEventSender({
 const recordProductEvent: RecordProductEvent = (name, properties) =>
   productEvents.record(name, properties);
 /**
- // SAFETY: The preceding check establishes the asserted contract.
  * The output's switches as last read, and the helper that reads them. The
  * state lives here rather than in the renderer so bootstrap can carry the
  * answer a push has already delivered; `undefined` is "cannot be read", which
- // SAFETY: The preceding check establishes the asserted contract.
  * the renderer must draw as audible.
  */
 let outputAudio: OutputAudioState | undefined;
 let outputVolumeWatcher: OutputVolumeWatcher | undefined;
 /**
- // SAFETY: The preceding check establishes the asserted contract.
  * Where the developer's voice would be captured from, as last read, and the
  * helper that reads it. The state lives here so the renderer's ask can be
  * answered at once while a fresh probe rides behind it; `undefined` is
- // SAFETY: The preceding check establishes the asserted contract.
  * "cannot be read", which the renderer must take as the browser's default.
  */
 let microphoneRoute: MicrophoneRoute | undefined;
@@ -481,7 +473,6 @@ function startOutputVolumeWatch(): void {
 
 /**
  * Starts watching where the developer's voice would be captured from, under
- // SAFETY: The preceding check establishes the asserted contract.
  * the same rule as the output watch: read-only, and not in a fixture or
  * capture run. What it learns decides only which device the renderer asks the
  * browser to open when a press takes a turn.
@@ -512,10 +503,8 @@ let workspaceProjectsBroadcastGeneration = 0;
  * Announces where a workspace can be created whenever the offer changes. This
  * cannot ride the registry's own notifications alone: the registry only speaks
  * when the session snapshot changes, and a pass can change the project list
- // SAFETY: The preceding check establishes the asserted contract.
  * while leaving the sessions exactly as they were — a key just added with no
  * workspaces yet, a project connected but not yet worked in — so the check
- // SAFETY: The preceding check establishes the asserted contract.
  * runs on the observation cadence as well as on every commit.
  */
 async function broadcastWorkspaceProjects(): Promise<void> {
@@ -574,7 +563,7 @@ function argumentValue(name: string): string | undefined {
 
 function microphoneStatus(): MicrophoneStatus {
   if (process.platform !== "darwin") return "granted";
-  // SAFETY: The preceding check establishes the asserted contract.
+  // SAFETY: MicrophoneStatus mirrors Electron's documented media-access status union.
   return systemPreferences.getMediaAccessStatus("microphone") as MicrophoneStatus;
 }
 
@@ -1015,7 +1004,6 @@ function registerIpc(): void {
 }
 
 /**
- // SAFETY: The preceding check establishes the asserted contract.
  * Where a workspace can be created right now, as the adapters offer it: each
  * capable adapter's latest project list, stamped with its provider. This full
  * list is the source of truth for validating and pruning saved choices; the
@@ -1290,7 +1278,6 @@ async function announcementsQuietNow(now: number): Promise<boolean> {
 
 /**
  * Recomputes whether the quiet is holding — the face sleeps beside the
- // SAFETY: The preceding check establishes the asserted contract.
  * housing for exactly as long as it is. The recompute itself broadcasts any
  * change; this name is for the callers with nothing to say and only the face
  * to keep current: the boundary timer, the ticks, and the setting's toggle.
@@ -1330,9 +1317,7 @@ function armQuietBoundaryTimer(): void {
 
 /**
  * Says what was held once the meeting holding it has ended. Deciding to speak
- // SAFETY: The preceding check establishes the asserted contract.
  * is what happens here, so the sentences carry the release as `decidedAt` —
- // SAFETY: The preceding check establishes the asserted contract.
  * a backlog re-stamped any earlier would be dropped as stale by the renderer
  * before a word of it was read. Each notice is checked against the registry
  * first: a session that moved on while the meeting ran is no longer news, and
@@ -1493,7 +1478,6 @@ let lastRosterRevision = -1;
 let lastRosterIds = "";
 
 /**
- // SAFETY: The preceding check establishes the asserted contract.
  * Hands every panel the standing asks as they now stand, so the rows marking
  * them never describe an ask already withdrawn or let go. The words are the
  * developer's own; nothing here reaches a provider or leaves the machine.
@@ -1513,8 +1497,8 @@ function broadcastRelevantSessions(): void {
   const snapshot = sessionRegistry.snapshot();
   const roster = rosterRelevantSessions(snapshot.sessions, Date.now());
   const rosterIds = roster
-    .map((session) => `${session.providerId} ${session.providerSessionId}`)
-    .join("  ");
+    .map((session) => `${session.providerId}\0${session.providerSessionId}`)
+    .join("\0\0");
   if (snapshot.revision === lastRosterRevision && rosterIds === lastRosterIds) return;
   lastRosterRevision = snapshot.revision;
   lastRosterIds = rosterIds;

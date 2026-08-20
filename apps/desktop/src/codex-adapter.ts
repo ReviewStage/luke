@@ -68,7 +68,6 @@ const CODEX_CONFIG_KEY = {
 
 /**
  * The Codex app's own address for a local thread. Codex registers the `codex`
- // SAFETY: The preceding check establishes the asserted contract.
  * scheme for its windows and documents `threads/<thread-id>` as the route to an
  * existing local chat, keyed by the same `threads.id` this adapter reads — so
  * the row and the address it opens name one thread rather than two.
@@ -124,7 +123,6 @@ const CODEX_REALTIME_ACTIVE_KEY = "active";
 /**
  * The turn boundary. `threads` carries no status column at all, so without the
  * rollout a Codex session can only be guessed at from how recently its row was
- // SAFETY: The preceding check establishes the asserted contract.
  * touched — and could never be reported as waiting for its developer.
  */
 const CODEX_EVENT_PAYLOAD = {
@@ -178,7 +176,6 @@ const CODEX_ADAPTER_DEFAULTS = {
   MAXIMUM_ACTIVITY_LENGTH: 80,
   /**
    * How much older than the thread row's clock a hook event may run and still
-   // SAFETY: The preceding check establishes the asserted contract.
    * describe the same moment. The hook fires as a turn boundary happens and
    * Codex touches the row moments later under its own clock, so a boundary's
    * event usually trails the row it belongs with by a breath — never by more
@@ -237,7 +234,6 @@ export interface CodexAdapterOptions {
    * Where the observation hook spools its events, when hooks are on at all.
    * Read lazily like the cloud adapters' credentials, because the app decides
    * the path after this adapter is declared. Absent — or answering nothing —
-   // SAFETY: The preceding check establishes the asserted contract.
    * the adapter reads the state database and rollouts alone, exactly as it
    * always has: the hooks only ever sharpen what those already showed.
    */
@@ -245,12 +241,9 @@ export interface CodexAdapterOptions {
 }
 
 /**
- // SAFETY: The preceding check establishes the asserted contract.
  * Reads one argument as the phrase that names the work. Codex passes some of
- // SAFETY: The preceding check establishes the asserted contract.
  * them as a list rather than a string — a search's terms, a command's argv —
  * so a list of plain values is joined instead of dropped. A list of anything
- // SAFETY: The preceding check establishes the asserted contract.
  * else, such as a plan's steps, is not a phrase and is left alone.
  */
 export function argumentPhrase(value: UnparsedWireValue): string | undefined {
@@ -880,7 +873,6 @@ export class CodexSessionAdapter extends LocalSessionAdapter {
   /**
    * Reads what the observation hook last said about each thread. The spool is
    * a refinement, never a dependency: a directory that is missing, unreadable,
-   // SAFETY: The preceding check establishes the asserted contract.
    * or holding something unexpected reads as no event, and the row's own
    * verdict stands.
    */

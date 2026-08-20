@@ -118,7 +118,7 @@
   padding: 12px 14px;
   border: 1px solid var(--hairline);
   border-radius: 16px;
-  background: #111214;
+  background: var(--surface-overlay);
   box-shadow: 0 12px 26px rgba(0, 0, 0, 0.55);
   /* Arrives from the button that opened it rather than fading in place. It is
      the one thing here that is not part of the panel's own arrival, so it moves

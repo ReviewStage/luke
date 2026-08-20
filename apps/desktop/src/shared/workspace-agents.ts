@@ -128,7 +128,6 @@ export function parseWorkspaceAgentSelection(
 ): WorkspaceAgentSelection | undefined {
   const record = wireRecord(value);
   if (!record) return undefined;
-  // SAFETY: The preceding check establishes the asserted contract.
   const { agent, model, effort } = record;
   if (!isWireString(agent) || !isWireString(model)) return undefined;
   if (effort !== undefined && !isWireString(effort)) return undefined;

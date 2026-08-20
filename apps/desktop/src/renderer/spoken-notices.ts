@@ -1,10 +1,9 @@
 import type { AttentionSpeech, RealtimeStatus } from "@sidecar/core";
-import { REALTIME_STATUS, type UnparsedWireValue } from "@sidecar/core";
+import { REALTIME_STATUS } from "@sidecar/core";
 
 /**
  * How long a notice stays worth saying. News about a session is news for
  * minutes, not for whenever a long conversation happens to end: a sentence
- // SAFETY: The preceding check establishes the asserted contract.
  * older than this is dropped rather than read out as though it just happened —
  * the panel has shown the state the whole time.
  */
@@ -37,6 +36,8 @@ export const ANNOUNCER_RETRY_DELAY_MS = 20_000;
  */
 export const MAXIMUM_CONNECT_ATTEMPTS = 3;
 
+type TimerHandle = number | ReturnType<typeof setTimeout>;
+
 /**
  * The slice of the voice session the announcer drives. `microphoneCall` is the
  * ownership question: true means the call up or coming is the developer's own,
@@ -56,8 +57,8 @@ export interface AnnouncerSession {
 export interface SpokenNoticeAnnouncerOptions {
   session: () => AnnouncerSession;
   now?: () => number;
-  schedule?: (callback: () => void, delayMs: number) => ReturnType<typeof setTimeout>;
-  cancel?: (timer: UnparsedWireValue) => void;
+  schedule?: (callback: () => void, delayMs: number) => TimerHandle;
+  cancel?: (timer: TimerHandle) => void;
 }
 
 /**
@@ -87,10 +88,10 @@ export class SpokenNoticeAnnouncer {
   #queue: AttentionSpeech[] = [];
   /** Whether the call now up is one this announcer opened, and so must close. */
   #ownsCall = false;
-  #lingerTimer: unknown;
+  #lingerTimer: TimerHandle | undefined;
   /** How many times the backlog now queued has tried to open Luke's own call. */
   #connectAttempts = 0;
-  #retryTimer: unknown;
+  #retryTimer: TimerHandle | undefined;
   /** Whether the meeting quiet is holding, which silences this announcer. */
   #quiet = false;
 
@@ -108,7 +109,6 @@ export class SpokenNoticeAnnouncer {
    * in the main process for the release. The developer's own call is never
    * touched: a conversation they are holding passes, meeting or not. Quiet
    * ending needs no act here — the main process re-sends what the meeting
-   // SAFETY: The preceding check establishes the asserted contract.
    * held, and that arrives as a fresh backlog.
    */
   setMeetingQuiet(active: boolean): void {
@@ -185,8 +185,9 @@ export class SpokenNoticeAnnouncer {
     if (session.isConnected) {
       // One reply at a time: the first speak takes the turn and the second is
       // refused, so the loop stops itself and READY resumes it.
-      // SAFETY: The preceding check establishes the asserted contract.
-      while (this.#queue.length > 0 && session.speak(this.#queue[0] as AttentionSpeech)) {
+      while (this.#queue.length > 0) {
+        const next = this.#queue[0];
+        if (!next || !session.speak(next)) break;
         this.#queue.shift();
       }
       // A backlog waiting on a refused speak is normally resumed by the READY
@@ -250,8 +251,7 @@ export class SpokenNoticeAnnouncer {
 
   #cancelRetry(): void {
     if (this.#retryTimer === undefined) return;
-    // SAFETY: The preceding check establishes the asserted contract.
-    (this.#options.cancel ?? clearTimeout)(this.#retryTimer as number);
+    (this.#options.cancel ?? clearTimeout)(this.#retryTimer);
     this.#retryTimer = undefined;
   }
 
@@ -267,8 +267,7 @@ export class SpokenNoticeAnnouncer {
 
   #cancelLinger(): void {
     if (this.#lingerTimer === undefined) return;
-    // SAFETY: The preceding check establishes the asserted contract.
-    (this.#options.cancel ?? clearTimeout)(this.#lingerTimer as number);
+    (this.#options.cancel ?? clearTimeout)(this.#lingerTimer);
     this.#lingerTimer = undefined;
   }
 

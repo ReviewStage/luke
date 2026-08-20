@@ -25,7 +25,6 @@ export const TRANSCRIPT_BOUNDS = {
   /** A rendered tool call or its result: the gist, never the payload. */
   MAXIMUM_TOOL_LENGTH: 200,
   /**
-   // SAFETY: The preceding check establishes the asserted contract.
    * The whole rendering. It enters a live conversation as one tool output,
    * so it is sized for answering a question about the session, not for
    * carrying the session.

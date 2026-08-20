@@ -94,7 +94,6 @@ export function removalEndsEntry(
 export const FOCUS_FRAME_LIMIT = 60;
 
 /**
- // SAFETY: The preceding check establishes the asserted contract.
  * Hands focus to an element as soon as it can take it, and answers with the way
  * to stop waiting.
  *
@@ -122,7 +121,6 @@ export function focusWhenVisible(element: HTMLElement | null): () => void {
 }
 
 /**
- // SAFETY: The preceding check establishes the asserted contract.
  * Keeps focus on an element for as long as holding it is what that element is
  * for.
  *

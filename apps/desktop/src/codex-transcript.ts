@@ -127,10 +127,8 @@ function developerWords(words: string): string | undefined {
 function callLine(payload: WireRecord): string | undefined {
   const name = text(payload.name);
   if (!name) return undefined;
-  const parsedArguments = text(payload.arguments)
-    ? // SAFETY: The preceding check establishes the asserted contract.
-      recordFromJsonLine(payload.arguments as string)
-    : undefined;
+  const argumentText = text(payload.arguments);
+  const parsedArguments = argumentText ? recordFromJsonLine(argumentText) : undefined;
   for (const key of CODEX_CALL_ARGUMENT_KEY) {
     const detail = oneLine(
       argumentPhrase(parsedArguments?.[key]),
@@ -143,7 +141,6 @@ function callLine(payload: WireRecord): string | undefined {
 
 /**
  * The words a call answered with, wherever this build finds them. Codex wrote
- // SAFETY: The preceding check establishes the asserted contract.
  * the output as a plain string for years, then as a list of text blocks; the
  * string itself often holds one more JSON layer whose `output` key carries
  * the human-readable text of a shell call.
@@ -242,7 +239,6 @@ function linesFromRecord(record: WireRecord): string[] {
  * Finds the session's rollout file the way observation does: named by the
  * thread's own row in the state database, read through a parameterized
  * lookup, never composed from the id. A compressed rollout is left unread —
- // SAFETY: The preceding check establishes the asserted contract.
  * a bounded tail cannot be cut from it — and answers as no transcript.
  */
 async function rolloutPathForThread(request: CodexTranscriptRequest): Promise<string | undefined> {

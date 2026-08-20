@@ -249,7 +249,6 @@ export const CLOUD_AGENT_PROVIDER_LIST: readonly CredentialProvider[] =
   );
 
 /**
- // SAFETY: The preceding check establishes the asserted contract.
  * The services beyond the agents. The Integrations section draws each as its
  * own block rather than from this list — a consent row and a key row are not
  * the same line — so this stands for what belongs in that section, which is
@@ -270,7 +269,6 @@ export function providerRunsSessionsInCloud(id: CredentialProviderId): boolean {
 
 /**
  * Guards the provider id an IPC message carries. `hasOwn` rather than `in`: an
- // SAFETY: The preceding check establishes the asserted contract.
  * inherited name such as `toString` is not a provider.
  */
 export function isCredentialProviderId(value: UnparsedWireValue): value is CredentialProviderId {

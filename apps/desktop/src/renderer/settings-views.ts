@@ -4,9 +4,7 @@ import {
 } from "../shared/credential-providers";
 import {
   SETTING_PAGE,
-  // SAFETY: The preceding check establishes the asserted contract.
   SETTINGS_PAGE as SETTINGS_VIEW,
-  // SAFETY: The preceding check establishes the asserted contract.
   type SettingsPage as SettingsView,
 } from "../shared/settings-schema";
 

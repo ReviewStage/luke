@@ -69,7 +69,6 @@ export function recedeReleases(input: { recededAt: number; now: number }): boole
   return input.now - input.recededAt >= RECEDE_SETTLE_MS;
 }
 
-// SAFETY: The preceding check establishes the asserted contract.
 /** What the leave timer does when it fires, reading the shape as it is now. */
 export const POINTER_LEAVE_FIRE = {
   IGNORE: "ignore",

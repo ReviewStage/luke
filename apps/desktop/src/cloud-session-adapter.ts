@@ -84,7 +84,6 @@ export const CLOUD_FAILURE = {
   TRANSIENT: "transient",
 } as const;
 
-// SAFETY: The preceding check establishes the asserted contract.
 /** What a write acts on, as a refusal should name it. */
 const WRITE_SUBJECT = {
   SESSION: "session",
@@ -104,7 +103,6 @@ export const CLOUD_ADAPTER_DEFAULTS = {
   MINIMUM_REFRESH_INTERVAL_MS: 15 * 1000,
   REQUEST_TIMEOUT_MS: 8 * 1000,
   /**
-   // SAFETY: The preceding check establishes the asserted contract.
    * For the rare read a provider documents as slow — Cursor's repository list
    * can take tens of seconds for a large organisation. A read on this deadline
    * must never hold the observation pass; it is for work that rides beside
@@ -154,7 +152,6 @@ export interface CloudAdapterProfile {
  * authenticates, bounds, and parses the request, and it can express nothing
  * but a read, so no observation pass built on it can change provider state.
  * The deadline can be widened only to the slow bound, and only for a read the
- // SAFETY: The preceding check establishes the asserted contract.
  * provider itself documents as slow.
  *
  * A read the provider answers only at a POSTed query endpoint — Conductor's
@@ -178,9 +175,7 @@ export type CloudRequest = (
 export interface CloudWriteRoute {
   segments: readonly string[];
   /**
-   // SAFETY: The preceding check establishes the asserted contract.
    * A Google-style custom method, appended to the path as `:action` rather
-   // SAFETY: The preceding check establishes the asserted contract.
    * than as a segment: it names what the request does to the resource the
    * segments already name.
    */
@@ -705,12 +700,10 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
 
   /**
    * Where an opening task goes once the workspace exists, for a provider that
-   // SAFETY: The preceding check establishes the asserted contract.
    * documents the hand-over as its own endpoint on something the creation
    * response names. Returning nothing says the creation request already
    * carried the task; a provider whose response did not name the place the
    * task goes answers `undeliverable` with why, so a created-but-idle
-   // SAFETY: The preceding check establishes the asserted contract.
    * workspace is reported as exactly that rather than claimed complete.
    */
   protected workspaceTaskRoute(
@@ -753,9 +746,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
 
   /**
    * Clears anything a subclass cached across passes. It runs whenever the
-   // SAFETY: The preceding check establishes the asserted contract.
    * credential changes or is rejected, so nothing read as one user can be
-   // SAFETY: The preceding check establishes the asserted contract.
    * reported as another.
    */
   protected forgetCachedIdentity(): void {}
@@ -798,7 +789,6 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
    * that rides beside the passes and may outlive several — the pass-scoped
    * request would discard exactly the slow answer such a read exists for.
    * Only a credential change discards it: the read refuses to land across
-   // SAFETY: The preceding check establishes the asserted contract.
    * one, so nothing read as one user is ever kept as another's. What the
    * caller does with the answer is handed in rather than returned, so the
    * check and the write share one synchronous step and a credential cleared
