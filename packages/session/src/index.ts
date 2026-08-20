@@ -80,6 +80,11 @@ export {
   UNKNOWN_WORKSPACE_LABEL,
 } from "./session.js";
 export {
+  isSessionFilter,
+  SESSION_FILTER,
+  type SessionFilter,
+} from "./session-filter.js";
+export {
   firstWholeNameIndex,
   MAXIMUM_MENTIONED_SESSIONS,
   MINIMUM_MENTION_TITLE_LENGTH,

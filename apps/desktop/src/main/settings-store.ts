@@ -563,6 +563,7 @@ export class SettingsStore {
       showOnAllDisplays: persisted.showOnAllDisplays,
       shareUsageData: persisted.shareUsageData,
       formFactor: persisted.formFactor ?? DEFAULT_PANEL_FORM_FACTOR,
+      ...(persisted.sessionFilters ? { sessionFilters: persisted.sessionFilters } : undefined),
       ...(persisted.defaultWorkspaceProvider
         ? { defaultWorkspaceProvider: persisted.defaultWorkspaceProvider }
         : undefined),

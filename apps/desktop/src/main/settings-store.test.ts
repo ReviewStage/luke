@@ -10,7 +10,12 @@ import {
   type CredentialProviderId,
 } from "@sidecar/credentials";
 import { REALTIME_DEFAULTS, REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
-import { PROVIDER_ID, type ProviderId, type WorkspaceAgentSelection } from "@sidecar/session";
+import {
+  PROVIDER_ID,
+  type ProviderId,
+  SESSION_FILTER,
+  type WorkspaceAgentSelection,
+} from "@sidecar/session";
 import {
   APP_SETTING_FIELDS,
   APP_SETTING_SCHEMA,
@@ -406,6 +411,75 @@ test("a corrupt microphone preference reads as the default rather than as off", 
   );
 
   assert.equal((await storeIn(directory).snapshot()).preferBuiltInMicrophone, true);
+});
+
+test("the session filter selection starts unset and survives a reopen", async (t) => {
+  const directory = await temporaryDirectory(t);
+  // A view preference is not a credential, so storing it must reach the
+  // Keychain not at all.
+  const cipher = countingCipher();
+  const store = storeIn(directory, { cipher });
+
+  assert.equal((await store.snapshot()).sessionFilters, undefined);
+  const chosen = [SESSION_FILTER.LOCAL, PROVIDER_ID.CODEX];
+  const narrowed = await store.set(APP_SETTING_SCHEMA.sessionFilters.field, chosen);
+
+  assert.deepEqual(narrowed.settings.sessionFilters, chosen);
+  assert.deepEqual((await storeIn(directory).snapshot()).sessionFilters, chosen);
+  assert.equal(cipher.calls.isAvailable, 0);
+  assert.equal(cipher.calls.encrypt, 0);
+});
+
+test("clearing the session filter selection reads as unset after a reopen", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+  await store.set(APP_SETTING_SCHEMA.sessionFilters.field, [SESSION_FILTER.CLOUD]);
+
+  const cleared = await store.set(APP_SETTING_SCHEMA.sessionFilters.field, undefined);
+
+  assert.equal(cleared.settings.sessionFilters, undefined);
+  assert.equal((await storeIn(directory).snapshot()).sessionFilters, undefined);
+});
+
+test("storing the session filter selection never disturbs a stored key", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+  await store.setApiKey(CONDUCTOR, TEST_API_KEY);
+
+  await store.set(APP_SETTING_SCHEMA.sessionFilters.field, [SESSION_FILTER.VOICE]);
+
+  assert.equal(await storeIn(directory).readApiKey(CONDUCTOR), TEST_API_KEY);
+});
+
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+test("a stored selection keeps only the filters this build recognizes", async (t) => {
+  const directory = await temporaryDirectory(t);
+  await fs.writeFile(
+    path.join(directory, SETTINGS_FILE_NAME),
+    JSON.stringify({
+      version: 2,
+      apiKeys: {},
+      sessionFilters: ["local", "a-future-builds-filter", 7, "local", PROVIDER_ID.CODEX],
+    }),
+    "utf8",
+  );
+
+  assert.deepEqual((await storeIn(directory).snapshot()).sessionFilters, [
+    SESSION_FILTER.LOCAL,
+    PROVIDER_ID.CODEX,
+  ]);
+});
+
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+test("a corrupt session filter value reads as unset rather than narrowing the list", async (t) => {
+  const directory = await temporaryDirectory(t);
+  await fs.writeFile(
+    path.join(directory, SETTINGS_FILE_NAME),
+    JSON.stringify({ version: 2, apiKeys: {}, sessionFilters: "local" }),
+    "utf8",
+  );
+
+  assert.equal((await storeIn(directory).snapshot()).sessionFilters, undefined);
 });
 
 test("a calendar account stores its grant encrypted and survives a reopen", async (t) => {

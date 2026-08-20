@@ -8,12 +8,14 @@ import {
   PROVIDER_ID_LIST,
   type ProviderId,
   SESSION_APPLICATION_ID_LIST,
+  SESSION_FILTER,
   SESSION_LOCATION,
   SESSION_STATUS,
   type SessionApplicationId,
   type SessionApplicationScope,
   type SessionControlKind,
   type SessionDiffSummary,
+  type SessionFilter,
   type SessionLocation,
   sessionChangeNumber,
 } from "@sidecar/session";
@@ -27,33 +29,17 @@ import {
 import type { AppBootstrap } from "#shared/contracts";
 
 /**
- * One narrowing the list can hold: a place work runs, the realtime voice kind,
- * one app that associates with sessions, or one agent. The values are
- * identities a row already carries: its location, voice kind, app associations
- * and provider. Conductor deliberately occupies both app and provider
- * vocabularies, so its filter takes the union — native Conductor chats and
- * local chats annotated as running in Conductor — while no identity collides
- * with `local`, `cloud`, or `voice`.
- *
- * Location belongs to the session rather than to the agent, so an agent with
- * work in both places is one chip that answers `Local` and `Cloud` both — and
- * Superset belongs to the workspace rather than to the agent, so the same
- * agent answers its own chip and the Superset chip when Superset manages it.
- * A hosted chat carries its agent's identity beside its provider's, so a
- * Claude conversation in Conductor's cloud answers the Claude Code chip and
- * the Conductor chip at once.
+ * The narrowings and their vocabulary live in core so the stored selection is
+ * validated by the same set the chips draw from. What a chip answers stays a
+ * surface fact: location belongs to the session rather than to the agent, so
+ * an agent with work in both places is one chip that answers `Local` and
+ * `Cloud` both — and Superset belongs to the workspace rather than to the
+ * agent, so the same agent answers its own chip and the Superset chip when
+ * Superset manages it. A hosted chat carries its agent's identity beside its
+ * provider's, so a Claude conversation in Conductor's cloud answers the
+ * Claude Code chip and the Conductor chip at once.
  */
-export const SESSION_FILTER = {
-  LOCAL: SESSION_LOCATION.LOCAL,
-  CLOUD: SESSION_LOCATION.CLOUD,
-  VOICE: "voice",
-  SUPERSET: SUPERSET_WORKSPACE_PROVIDER_ID,
-} as const;
-
-export type SessionFilter =
-  | (typeof SESSION_FILTER)[keyof typeof SESSION_FILTER]
-  | ProviderId
-  | SessionApplicationId;
+export { SESSION_FILTER, type SessionFilter };
 
 /**
  * The independent questions the filters answer. Each filter value belongs to
@@ -188,11 +174,14 @@ export interface SessionView {
 }
 
 /**
- * What the panel opens on, every time. A filter is not remembered across a
- * closing, because a remembered one could hide the very session the capsule is
- * reporting; the order is not remembered with it, so the top row keeps matching
- * the mark the capsule kept. A search is forgotten on the same terms — it is a
- * question about the list as it was, not a standing way of viewing it.
+ * What the panel opens on before any stored view arrives. The filters are the
+ * one part of the view that outlives a closing: a chosen narrowing is a
+ * standing way of viewing the list, restored from the stored settings at
+ * launch and kept across capsule closings — and the capsule stays honest over
+ * it because its tally is taken before the list is narrowed. The order is not
+ * remembered, so the top row keeps matching the mark the capsule kept, and a
+ * search is forgotten on the same terms — it is a question about the list as
+ * it was, not a standing way of viewing it.
  */
 export const DEFAULT_SESSION_VIEW: SessionView = {
   filters: [],
