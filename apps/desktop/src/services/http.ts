@@ -26,11 +26,11 @@ export class LoopbackFailure extends Data.TaggedError("LoopbackFailure")<{
   readonly reason: string;
 }> {}
 
-function closeServer(server: Server): Promise<void> {
+function closeServerPromise(server: Server): Promise<void> {
   return new Promise((resolve) => server.close(() => resolve()));
 }
 
-export const HttpLive: Layer.Layer<Http> = Layer.succeed(Http, {
+export const httpLiveService: Context.Tag.Service<Http> = {
   request: (url, init) =>
     Effect.tryPromise({
       try: () => fetch(url, init),
@@ -79,7 +79,7 @@ export const HttpLive: Layer.Layer<Http> = Layer.succeed(Http, {
     }),
   closeServer: (server) =>
     Effect.tryPromise({
-      try: () => closeServer(server),
+      try: () => closeServerPromise(server),
       catch: (error) =>
         new LoopbackFailure({
           reason: error instanceof Error ? error.message : "loopback close failed",
@@ -89,4 +89,6 @@ export const HttpLive: Layer.Layer<Http> = Layer.succeed(Http, {
     Effect.sync(() => {
       server.closeAllConnections();
     }),
-});
+};
+
+export const HttpLive: Layer.Layer<Http> = Layer.succeed(Http, httpLiveService);

@@ -1,14 +1,25 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
+import { Effect } from "effect";
 import {
   GOOGLE_AUTHORIZATION_URL,
   GOOGLE_CALENDAR_SCOPES,
   GOOGLE_TOKEN_URL,
   GoogleCalendarSignIn,
+  type GoogleCalendarSignInOutcome,
   googleCalendarSignInConfig,
 } from "../src/google-calendar-oauth";
+import { HttpLive } from "../src/services/http";
+import { runWithHttp } from "./support/effect-http";
 import { HTTP_STATUS, type RecordedRequest, recordingFetch } from "./support/http-fake";
+
+function runSignIn(
+  signIn: GoogleCalendarSignIn,
+  fetchLike: typeof fetch = globalThis.fetch,
+): Promise<GoogleCalendarSignInOutcome> {
+  return runWithHttp(signIn.signIn(), fetchLike);
+}
 
 const CLIENT_ID = "324871084874-test.apps.googleusercontent.com";
 
@@ -67,11 +78,9 @@ test("runs the documented installed-app flow end to end", async () => {
   const signIn = new GoogleCalendarSignIn({
     openExternal: (url) => opened.push(url),
     environment: environment(),
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    fetchImplementation: fakeFetch as typeof globalThis.fetch,
   });
 
-  const pending = signIn.signIn();
+  const pending = runSignIn(signIn, fakeFetch as typeof globalThis.fetch);
   // The browser is opened synchronously with the flow's start; wait a tick
   // for the loopback to be listening and the URL to be recorded.
   while (opened.length === 0) await new Promise((resolve) => setImmediate(resolve));
@@ -116,11 +125,9 @@ test("a redirect with the wrong state is refused without ending the wait", async
   const signIn = new GoogleCalendarSignIn({
     openExternal: (url) => opened.push(url),
     environment: environment(),
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    fetchImplementation: fakeFetch as typeof globalThis.fetch,
   });
 
-  const pending = signIn.signIn();
+  const pending = runSignIn(signIn, fakeFetch as typeof globalThis.fetch);
   while (opened.length === 0) await new Promise((resolve) => setImmediate(resolve));
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   const authorization = new URL(opened[0] as string);
@@ -143,11 +150,9 @@ test("a refusal from Google is an answer, not an exchange", async () => {
   const signIn = new GoogleCalendarSignIn({
     openExternal: (url) => opened.push(url),
     environment: environment(),
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    fetchImplementation: fakeFetch as typeof globalThis.fetch,
   });
 
-  const pending = signIn.signIn();
+  const pending = runSignIn(signIn, fakeFetch as typeof globalThis.fetch);
   while (opened.length === 0) await new Promise((resolve) => setImmediate(resolve));
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   const state = new URL(opened[0] as string).searchParams.get("state") ?? "";
@@ -170,7 +175,7 @@ test("an abandoned sign-in times out instead of listening forever", async () => 
     timeoutMs: 20,
   });
 
-  const outcome = await signIn.signIn();
+  const outcome = await Effect.runPromise(signIn.signIn().pipe(Effect.provide(HttpLive)));
   assert.ok("reason" in outcome && /timed out/i.test(outcome.reason));
 });
 
@@ -180,13 +185,11 @@ test("one sign-in at a time", async () => {
   const signIn = new GoogleCalendarSignIn({
     openExternal: (url) => opened.push(url),
     environment: environment(),
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    fetchImplementation: fakeFetch as typeof globalThis.fetch,
   });
 
-  const first = signIn.signIn();
+  const first = runSignIn(signIn, fakeFetch as typeof globalThis.fetch);
   while (opened.length === 0) await new Promise((resolve) => setImmediate(resolve));
-  const second = await signIn.signIn();
+  const second = await Effect.runPromise(signIn.signIn().pipe(Effect.provide(HttpLive)));
   assert.ok("reason" in second && /already/i.test(second.reason));
 
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
@@ -202,11 +205,9 @@ test("cancelling ends the wait; a grant given after lands nowhere", async () => 
   const signIn = new GoogleCalendarSignIn({
     openExternal: (url) => opened.push(url),
     environment: environment(),
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    fetchImplementation: fakeFetch as typeof globalThis.fetch,
   });
 
-  const pending = signIn.signIn();
+  const pending = runSignIn(signIn, fakeFetch as typeof globalThis.fetch);
   while (opened.length === 0) await new Promise((resolve) => setImmediate(resolve));
   signIn.cancel();
   assert.deepEqual(await pending, { reason: "Sign-in was cancelled." });
@@ -225,15 +226,13 @@ test("a lost tab reopens the very page the flow is listening for", async () => {
   const signIn = new GoogleCalendarSignIn({
     openExternal: (url) => opened.push(url),
     environment: environment(),
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    fetchImplementation: fakeFetch as typeof globalThis.fetch,
   });
 
   // Nothing waiting, nothing to reopen.
   signIn.reopen();
   assert.deepEqual(opened, []);
 
-  const pending = signIn.signIn();
+  const pending = runSignIn(signIn, fakeFetch as typeof globalThis.fetch);
   while (opened.length === 0) await new Promise((resolve) => setImmediate(resolve));
   signIn.reopen();
   assert.equal(opened.length, 2);

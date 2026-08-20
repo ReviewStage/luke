@@ -40,7 +40,7 @@ export function registerCalendarConnectionIpc(
   registerSetting(channels.connectGoogleCalendar, {
     validate: () => undefined,
     async save() {
-      const outcome = await signIn.signIn();
+      const outcome = await runDesktopEffect(signIn.signIn());
       if ("reason" in outcome) {
         return { settings: await settingsStore.snapshot(), reason: outcome.reason };
       }

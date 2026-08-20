@@ -1,13 +1,14 @@
 import { randomUUID } from "node:crypto";
-import http from "node:http";
-import type { AddressInfo } from "node:net";
+import type { IncomingMessage, ServerResponse } from "node:http";
 import { isWireString, type UnparsedWireValue } from "@sidecar/core";
+import { type Context, Deferred, Effect } from "effect";
 // The same landing page the Luke account sign-in leaves the browser on, so
 // the two flows' tabs cannot dress differently.
 import { accountLoopbackPage, LOOPBACK_PAGE_TONE } from "./account-loopback-page";
 // The same RFC 7636 arithmetic the Luke account sign-in uses: one PKCE, two
 // flows, so neither can drift into a weaker verifier than the other.
 import { codeChallenge, createCodeVerifier } from "./account-pkce";
+import { Http, type LoopbackFailure } from "./services/http";
 import { unparsedWire, wireRecord } from "./wire-boundary";
 
 /**
@@ -145,8 +146,6 @@ export interface GoogleCalendarSignInOptions {
    */
   openExternal: (url: string) => void;
   environment?: NodeJS.ProcessEnv;
-  /** Injectable so tests exercise the exchange without a network. */
-  fetchImplementation?: typeof fetch;
   timeoutMs?: number;
 }
 
@@ -180,18 +179,27 @@ export class GoogleCalendarSignIn {
     this.#options = options;
   }
 
-  async signIn(): Promise<GoogleCalendarSignInOutcome> {
+  signIn(): Effect.Effect<GoogleCalendarSignInOutcome, never, Http> {
     const config = googleCalendarSignInConfig(this.#options.environment);
-    if (!config) return { reason: "Sign-in is not configured in this build." };
-    if (this.#running) return { reason: "A sign-in is already waiting in your browser." };
-    this.#running = true;
-    try {
-      return await this.#run(config);
-    } finally {
-      this.#running = false;
-      this.#abandon = undefined;
-      this.#reopen = undefined;
+    if (!config) return Effect.succeed({ reason: "Sign-in is not configured in this build." });
+    if (this.#running) {
+      return Effect.succeed({ reason: "A sign-in is already waiting in your browser." });
     }
+    this.#running = true;
+    return this.#run(config).pipe(
+      Effect.catchAll(() =>
+        Effect.succeed({
+          reason: "Luke could not open a sign-in callback on this machine.",
+        }),
+      ),
+      Effect.ensuring(
+        Effect.sync(() => {
+          this.#running = false;
+          this.#abandon = undefined;
+          this.#reopen = undefined;
+        }),
+      ),
+    );
   }
 
   /**
@@ -213,25 +221,91 @@ export class GoogleCalendarSignIn {
     this.#reopen?.();
   }
 
-  async #run(config: GoogleCalendarSignInConfig): Promise<GoogleCalendarSignInOutcome> {
-    const verifier = createCodeVerifier();
-    const challenge = codeChallenge(verifier);
-    const state = randomUUID();
+  #run(
+    config: GoogleCalendarSignInConfig,
+  ): Effect.Effect<GoogleCalendarSignInOutcome, LoopbackFailure, Http> {
+    return Effect.gen(this, function* () {
+      const http = yield* Http;
+      const verifier = createCodeVerifier();
+      const challenge = codeChallenge(verifier);
+      const state = randomUUID();
+      const outcomeDeferred = yield* Deferred.make<GoogleCalendarSignInOutcome>();
+      let redirectUri = "";
 
-    let finish: (outcome: GoogleCalendarSignInOutcome) => void = () => undefined;
-    const outcome = new Promise<GoogleCalendarSignInOutcome>((resolve) => {
-      finish = resolve;
+      const { server, port } = yield* http.listenLoopback({
+        host: "127.0.0.1",
+        port: 0,
+        onRequest: (request, response) =>
+          this.#handleCallback(request, response, {
+            config,
+            verifier,
+            state,
+            http,
+            getRedirectUri: () => redirectUri,
+            finish: (outcome) => Deferred.succeed(outcomeDeferred, outcome),
+          }),
+      });
+      redirectUri = `http://127.0.0.1:${port}${CALLBACK_PATH}`;
+
+      const authorization = new URL(GOOGLE_AUTHORIZATION_URL);
+      authorization.searchParams.set("client_id", config.clientId);
+      authorization.searchParams.set("redirect_uri", redirectUri);
+      authorization.searchParams.set("response_type", "code");
+      authorization.searchParams.set("scope", GOOGLE_CALENDAR_SCOPES);
+      authorization.searchParams.set("code_challenge", challenge);
+      authorization.searchParams.set("code_challenge_method", "S256");
+      // Offline access is what a refresh token is, and the consent prompt is
+      // what guarantees Google issues one rather than assuming an earlier grant.
+      authorization.searchParams.set("access_type", "offline");
+      authorization.searchParams.set("prompt", "consent");
+      authorization.searchParams.set("state", state);
+
+      const timeout = setTimeout(() => {
+        void Effect.runPromise(
+          Deferred.succeed(outcomeDeferred, {
+            reason: "Sign-in timed out. Try again from the Google Calendar row.",
+          }),
+        );
+      }, this.#options.timeoutMs ?? SIGN_IN_TIMEOUT_MS);
+      timeout.unref();
+      this.#abandon = () => {
+        void Effect.runPromise(
+          Deferred.succeed(outcomeDeferred, { reason: "Sign-in was cancelled." }),
+        );
+      };
+      this.#reopen = () => this.#options.openExternal(authorization.toString());
+
+      try {
+        this.#options.openExternal(authorization.toString());
+        return yield* Deferred.await(outcomeDeferred);
+      } finally {
+        clearTimeout(timeout);
+        yield* http.closeServer(server);
+        yield* Effect.sync(() => {
+          server.unref();
+        });
+      }
     });
-    // Assigned once the loopback has a port, before the browser is opened —
-    // no request can arrive ahead of it.
-    let redirectUri = "";
+  }
 
-    const server = http.createServer((request, response) => {
+  #handleCallback(
+    request: IncomingMessage,
+    response: ServerResponse,
+    options: {
+      config: GoogleCalendarSignInConfig;
+      verifier: string;
+      state: string;
+      http: Context.Tag.Service<Http>;
+      getRedirectUri: () => string;
+      finish: (outcome: GoogleCalendarSignInOutcome) => Effect.Effect<void>;
+    },
+  ): Effect.Effect<void, LoopbackFailure> {
+    return Effect.gen(this, function* () {
       const url = new URL(request.url ?? "/", "http://127.0.0.1");
       // Anything that is not this flow's own redirect — another path, a
       // stray request, a state this run never issued — is refused without
       // ending the wait: the real redirect may still be on its way.
-      if (url.pathname !== CALLBACK_PATH || url.searchParams.get("state") !== state) {
+      if (url.pathname !== CALLBACK_PATH || url.searchParams.get("state") !== options.state) {
         response.writeHead(404, { "content-type": "text/plain" }).end("Not found");
         return;
       }
@@ -241,66 +315,29 @@ export class GoogleCalendarSignIn {
         response
           .writeHead(200, { "content-type": "text/html; charset=utf-8" })
           .end(signInPage(false));
-        finish({ reason: "Google did not grant access." });
+        yield* options.finish({ reason: "Google did not grant access." });
         return;
       }
-      void this.#exchange(config, code, verifier, redirectUri).then((exchanged) => {
-        const granted = "refreshToken" in exchanged;
-        response
-          .writeHead(200, { "content-type": "text/html; charset=utf-8" })
-          .end(signInPage(granted));
-        finish(exchanged);
-      });
+      const exchanged = yield* this.#exchange(
+        options.config,
+        code,
+        options.verifier,
+        options.getRedirectUri(),
+      ).pipe(Effect.provideService(Http, options.http));
+      const granted = "refreshToken" in exchanged;
+      response
+        .writeHead(200, { "content-type": "text/html; charset=utf-8" })
+        .end(signInPage(granted));
+      yield* options.finish(exchanged);
     });
-
-    // The loopback answers this machine alone: Google's redirect lands in the
-    // user's own browser, which hands the code straight back across localhost.
-    await new Promise<void>((resolve, reject) => {
-      server.once("error", reject);
-      server.listen(0, "127.0.0.1", resolve);
-    });
-    // SAFETY: The preceding check establishes the asserted contract.
-    const port = (server.address() as AddressInfo).port;
-    redirectUri = `http://127.0.0.1:${port}${CALLBACK_PATH}`;
-
-    const authorization = new URL(GOOGLE_AUTHORIZATION_URL);
-    authorization.searchParams.set("client_id", config.clientId);
-    authorization.searchParams.set("redirect_uri", redirectUri);
-    authorization.searchParams.set("response_type", "code");
-    authorization.searchParams.set("scope", GOOGLE_CALENDAR_SCOPES);
-    authorization.searchParams.set("code_challenge", challenge);
-    authorization.searchParams.set("code_challenge_method", "S256");
-    // Offline access is what a refresh token is, and the consent prompt is
-    // what guarantees Google issues one rather than assuming an earlier grant.
-    authorization.searchParams.set("access_type", "offline");
-    authorization.searchParams.set("prompt", "consent");
-    authorization.searchParams.set("state", state);
-
-    const timeout = setTimeout(() => {
-      finish({ reason: "Sign-in timed out. Try again from the Google Calendar row." });
-    }, this.#options.timeoutMs ?? SIGN_IN_TIMEOUT_MS);
-    timeout.unref();
-    this.#abandon = () => finish({ reason: "Sign-in was cancelled." });
-    this.#reopen = () => this.#options.openExternal(authorization.toString());
-
-    try {
-      this.#options.openExternal(authorization.toString());
-      return await outcome;
-    } finally {
-      clearTimeout(timeout);
-      server.close();
-      // The server holds the process open only while the flow is live; a
-      // browser tab left forever must not be what keeps Luke running.
-      server.unref();
-    }
   }
 
-  async #exchange(
+  #exchange(
     config: GoogleCalendarSignInConfig,
     code: string,
     verifier: string,
     redirectUri: string,
-  ): Promise<GoogleCalendarSignInOutcome> {
+  ): Effect.Effect<GoogleCalendarSignInOutcome, never, Http> {
     const body = new URLSearchParams({
       code,
       client_id: config.clientId,
@@ -309,20 +346,24 @@ export class GoogleCalendarSignIn {
       grant_type: "authorization_code",
       code_verifier: verifier,
     });
-    try {
-      const fetchImplementation = this.#options.fetchImplementation ?? fetch;
-      const response = await fetchImplementation(GOOGLE_TOKEN_URL, {
-        method: "POST",
-        headers: { "content-type": "application/x-www-form-urlencoded" },
-        body: body.toString(),
-        signal: AbortSignal.timeout(TOKEN_REQUEST_TIMEOUT_MS),
-      });
-      if (!response.ok) return { reason: "Google refused the sign-in exchange." };
-      const tokens = tokensFrom(await response.json());
+    return Effect.gen(function* () {
+      const http = yield* Http;
+      const response = yield* http
+        .request(GOOGLE_TOKEN_URL, {
+          method: "POST",
+          headers: { "content-type": "application/x-www-form-urlencoded" },
+          body: body.toString(),
+          signal: AbortSignal.timeout(TOKEN_REQUEST_TIMEOUT_MS),
+        })
+        .pipe(Effect.catchAll(() => Effect.succeed(undefined)));
+      if (!response?.ok) return { reason: "Google refused the sign-in exchange." };
+      const payload = yield* http
+        .readJson(response)
+        .pipe(Effect.catchAll(() => Effect.succeed(undefined)));
+      const tokens =
+        payload === undefined ? undefined : tokensFrom(unparsedWire(payload as UnparsedWireValue));
       if (!tokens) return { reason: "Google answered the sign-in without a token." };
       return tokens;
-    } catch {
-      return { reason: "The sign-in exchange with Google did not complete." };
-    }
+    });
   }
 }
