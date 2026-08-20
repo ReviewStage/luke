@@ -316,8 +316,10 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "record carries that Conductor association to the sub-agent's separate row. Luke " +
         "recognizes Superset from its read-only host state, Orca from its read-only " +
         "hook-status cache, grouping chats under the Orca worktree that hosts them, and the " +
-        "cmux terminal from the read-only session stores cmux's own CLI writes. A local " +
-        "Codex chat also names " +
+        "cmux terminal from the read-only session stores cmux's own CLI writes — which exist " +
+        "only where cmux's own agent hooks are installed: Claude Code's automatically, Codex, " +
+        "Cursor, and OpenCode only after cmux's `cmux hooks setup`, so a session cmux never " +
+        "recorded carries no cmux mark. A local Codex chat also names " +
         "ChatGPT because OpenAI's desktop app documents the exact Codex thread address Luke " +
         "already opens. More than one app mark may appear on one row; none replaces the agent " +
         "or changes local versus cloud. An app mark with an exact address is a button: " +

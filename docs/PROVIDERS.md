@@ -321,7 +321,12 @@ state directory (`~/.cmuxterm/<agent>-hook-sessions.json`, honoring
 Codex, Cursor, and OpenCode rows by exact provider session id — never by
 title — and reading of each record only the three identifiers that place the
 session in cmux's own windows. cmux tracks more agent kinds than Luke
-observes; a store for an agent Luke has no provider for is not read. A
+observes; a store for an agent Luke has no provider for is not read. The
+stores exist only where cmux's own agent hooks do: cmux injects Claude Code's
+automatically through its Claude wrapper, but records Codex, Cursor, and
+OpenCode sessions only after the user has run cmux's own `cmux hooks setup`
+(or `cmux hooks <agent> install`) — a session cmux never recorded is honestly
+unannotated, not inferred from a pane or a path. A
 matched row gains the cmux app association and answers the cmux filter chip,
 and — because cmux registers the `cmux://` scheme for its released builds —
 the association carries the pane's exact
