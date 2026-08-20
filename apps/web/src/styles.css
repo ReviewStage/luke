@@ -292,8 +292,8 @@
   --hairline-strong: rgba(255, 255, 255, 0.09);
   --raised: rgba(255, 255, 255, 0.05);
   --raised-strong: rgba(255, 255, 255, 0.09);
-  --frame-top: #5251d7;
-  --frame-bottom: #152c76;
+  --frame-top: #14171c;
+  --frame-bottom: #101318;
 
   /* Provider brand colours, used only by the marks and ported with them:
      Claude Code's published coral, the vertical gradient Codex draws its mark
@@ -371,362 +371,64 @@
   z-index: 0;
   inset: 0;
   overflow: hidden;
-  border: 1px solid rgba(21, 31, 72, 0.35);
+  border: 1px solid rgba(8, 18, 31, 0.22);
   border-radius: 24px;
-  background:
-    radial-gradient(ellipse 55% 82% at 92% 42%, rgba(255, 182, 208, 0.96) 0 24%, transparent 25%),
-    radial-gradient(ellipse 62% 92% at 80% 58%, rgba(247, 91, 178, 0.92) 0 24%, transparent 25%),
-    radial-gradient(ellipse 72% 110% at 75% 86%, rgba(99, 68, 210, 0.92) 0 31%, transparent 32%),
-    radial-gradient(ellipse 48% 85% at 5% 78%, rgba(43, 197, 219, 0.76) 0 34%, transparent 35%),
-    linear-gradient(145deg, var(--frame-top) 0%, #5141b7 45%, var(--frame-bottom) 100%);
+  background: #1d3443;
   box-shadow:
-    0 30px 70px rgba(22, 28, 55, 0.2),
-    0 2px 9px rgba(22, 28, 55, 0.16);
+    0 28px 70px rgba(9, 19, 31, 0.18),
+    0 3px 12px rgba(9, 19, 31, 0.12);
 }
 
-/* A quiet but unmistakable macOS desktop surrounds the real Luke surface.
-   It is scenery, never a set of miniature controls, so it sits beneath every
-   product layer and ignores the pointer. */
-.desktop-chrome {
+/* A real photographic ground and a quiet menu bar are enough to make the
+   scene read as macOS. The image is Paul Pastourmatzis's Unsplash photograph
+   `mqO0Rf-PUMs`, cropped locally so the landing page has no runtime dependency. */
+.mac-desktop {
   position: absolute;
   z-index: 0;
   inset: 1px;
   overflow: hidden;
   border-radius: 23px;
-  color: rgba(20, 20, 28, 0.88);
+  background:
+    linear-gradient(rgba(8, 22, 34, 0.08), rgba(8, 22, 34, 0.2)),
+    url("/mac-desktop-wallpaper.jpg") center 54% / cover;
+  color: rgba(13, 19, 23, 0.9);
   pointer-events: none;
 }
 
-.desktop-chrome::before {
-  position: absolute;
-  inset: 28px 0 0;
-  background:
-    radial-gradient(ellipse 42% 80% at 104% 26%, rgba(255, 238, 244, 0.42), transparent 68%),
-    radial-gradient(ellipse 46% 60% at -5% 100%, rgba(163, 242, 244, 0.28), transparent 70%);
-  content: "";
-}
-
 .mac-menu-bar {
-  position: absolute;
-  top: 0;
-  right: 0;
-  left: 0;
   display: flex;
   height: 28px;
   align-items: center;
   justify-content: space-between;
   padding: 0 13px;
-  background: rgba(245, 242, 250, 0.72);
-  box-shadow: 0 1px rgba(255, 255, 255, 0.3);
+  background: rgba(232, 239, 242, 0.78);
+  box-shadow: 0 1px rgba(255, 255, 255, 0.34);
   font-size: 9px;
   letter-spacing: -0.1px;
-  -webkit-backdrop-filter: blur(16px) saturate(1.25);
-  backdrop-filter: blur(16px) saturate(1.25);
+  -webkit-backdrop-filter: blur(18px) saturate(1.15);
+  backdrop-filter: blur(18px) saturate(1.15);
 }
 
-.mac-menu-left,
-.mac-menu-right {
+.mac-menu-leading,
+.mac-menu-trailing {
   display: flex;
   align-items: center;
   gap: 12px;
   white-space: nowrap;
 }
 
-.mac-menu-left strong {
-  font-weight: 690;
+.mac-menu-leading strong {
+  font-weight: 680;
 }
 
-.apple-mark {
-  width: 10px;
-  overflow: hidden;
+.mac-menu-trailing {
+  gap: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.mac-apple {
   font-size: 11px;
-  transform: scaleX(0.82);
-}
-
-.menu-status {
-  position: relative;
-  display: inline-block;
-  flex: 0 0 auto;
-}
-
-.menu-battery {
-  width: 16px;
-  height: 7px;
-  border: 1px solid currentcolor;
-  border-radius: 2px;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.3);
-}
-
-.menu-battery::before {
-  position: absolute;
-  inset: 1px 3px 1px 1px;
-  border-radius: 1px;
-  background: currentcolor;
-  content: "";
-}
-
-.menu-battery::after {
-  position: absolute;
-  top: 2px;
-  right: -3px;
-  width: 2px;
-  height: 3px;
-  border-radius: 0 1px 1px 0;
-  background: currentcolor;
-  content: "";
-}
-
-.menu-wifi {
-  width: 12px;
-  height: 9px;
-  border-top: 1.5px solid currentcolor;
-  border-radius: 50%;
-}
-
-.menu-wifi::before,
-.menu-wifi::after {
-  position: absolute;
-  left: 50%;
-  border-top: 1.5px solid currentcolor;
-  border-radius: 50%;
-  content: "";
-  transform: translateX(-50%);
-}
-
-.menu-wifi::before {
-  top: 2px;
-  width: 8px;
-  height: 6px;
-}
-
-.menu-wifi::after {
-  top: 5px;
-  width: 3px;
-  height: 3px;
-}
-
-.menu-control-center {
-  font-size: 14px;
-  font-weight: 700;
   line-height: 1;
-  transform: rotate(90deg);
-}
-
-.desktop-items {
-  position: absolute;
-  top: 47px;
-  right: 15px;
-  display: grid;
-  gap: 17px;
-}
-
-.desktop-item {
-  display: grid;
-  width: 66px;
-  justify-items: center;
-  gap: 5px;
-  color: rgba(255, 255, 255, 0.98);
-  font-size: 8.5px;
-  font-weight: 570;
-  text-align: center;
-  text-shadow: 0 1px 3px rgba(19, 18, 53, 0.8);
-}
-
-.desktop-folder {
-  position: relative;
-  width: 39px;
-  height: 29px;
-  border-radius: 4px 4px 6px 6px;
-  background: linear-gradient(180deg, #72d6ff, #278fea);
-  box-shadow:
-    0 3px 8px rgba(20, 53, 124, 0.25),
-    inset 0 1px rgba(255, 255, 255, 0.55);
-}
-
-.desktop-folder::before {
-  position: absolute;
-  top: -4px;
-  left: 2px;
-  width: 17px;
-  height: 7px;
-  border-radius: 4px 4px 0 0;
-  background: #68cfff;
-  content: "";
-}
-
-.desktop-drive {
-  width: 37px;
-  height: 29px;
-  border: 1px solid rgba(48, 52, 64, 0.35);
-  border-radius: 5px;
-  background: linear-gradient(180deg, #f6f7f8, #aeb4bb);
-  box-shadow:
-    0 3px 8px rgba(20, 33, 76, 0.28),
-    inset 0 1px rgba(255, 255, 255, 0.8);
-}
-
-.desktop-drive::after {
-  display: block;
-  width: 3px;
-  height: 3px;
-  margin: 21px 0 0 29px;
-  border-radius: 50%;
-  background: #38b86d;
-  content: "";
-}
-
-.mac-dock {
-  position: absolute;
-  bottom: 9px;
-  left: 50%;
-  display: flex;
-  height: 49px;
-  align-items: center;
-  gap: 5px;
-  padding: 5px 7px;
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  border-radius: 14px;
-  background: rgba(239, 237, 246, 0.52);
-  box-shadow:
-    0 5px 18px rgba(22, 20, 57, 0.32),
-    inset 0 1px rgba(255, 255, 255, 0.55);
-  transform: translateX(-50%);
-  -webkit-backdrop-filter: blur(18px) saturate(1.35);
-  backdrop-filter: blur(18px) saturate(1.35);
-}
-
-.dock-slot,
-.dock-icon {
-  display: block;
-  width: 36px;
-  height: 36px;
-}
-
-.dock-icon {
-  position: relative;
-  overflow: hidden;
-  border-radius: 8px;
-  background: linear-gradient(145deg, #58d7ff, #1678e8);
-  box-shadow:
-    0 2px 5px rgba(19, 22, 64, 0.28),
-    inset 0 1px rgba(255, 255, 255, 0.45);
-}
-
-.dock-slot[data-app="finder"] .dock-icon {
-  background: linear-gradient(90deg, #62cfff 50%, #e4f7ff 50%);
-}
-
-.dock-slot[data-app="finder"] .dock-icon::before,
-.dock-slot[data-app="finder"] .dock-icon::after {
-  position: absolute;
-  top: 10px;
-  width: 3px;
-  height: 6px;
-  border-radius: 50%;
-  background: #17365c;
-  content: "";
-}
-
-.dock-slot[data-app="finder"] .dock-icon::before {
-  left: 9px;
-}
-.dock-slot[data-app="finder"] .dock-icon::after {
-  right: 9px;
-}
-
-.dock-slot[data-app="safari"] .dock-icon {
-  border-radius: 50%;
-  background:
-    radial-gradient(circle, #eafaff 0 51%, transparent 52%), linear-gradient(#72dcff, #1583ea);
-}
-
-.dock-slot[data-app="safari"] .dock-icon::after {
-  position: absolute;
-  inset: 9px 16px 7px;
-  background: #ed4560;
-  content: "";
-  transform: rotate(35deg);
-}
-
-.dock-slot[data-app="messages"] .dock-icon {
-  border-radius: 50%;
-  background: linear-gradient(#65e862, #22b94d);
-}
-
-.dock-slot[data-app="messages"] .dock-icon::after {
-  position: absolute;
-  inset: 8px 7px 10px;
-  border-radius: 50%;
-  background: #f8fff9;
-  content: "";
-}
-
-.dock-slot[data-app="calendar"] .dock-icon {
-  background: #fff;
-}
-.dock-slot[data-app="calendar"] .dock-icon::before {
-  display: block;
-  height: 10px;
-  background: #f34c48;
-  color: #fff;
-  content: "AUG";
-  font-size: 6px;
-  font-weight: 700;
-  line-height: 10px;
-  text-align: center;
-}
-.dock-slot[data-app="calendar"] .dock-icon::after {
-  display: block;
-  color: #202127;
-  content: "19";
-  font-size: 17px;
-  line-height: 24px;
-  text-align: center;
-}
-
-.dock-slot[data-app="terminal"] .dock-icon {
-  background: #17191e;
-}
-.dock-slot[data-app="terminal"] .dock-icon::after {
-  display: block;
-  margin: 10px 0 0 8px;
-  color: #f3f5f7;
-  content: ">_";
-  font-family: ui-monospace, monospace;
-  font-size: 13px;
-}
-
-.dock-slot[data-app="settings"] .dock-icon {
-  border-radius: 50%;
-  background: radial-gradient(circle, #3e444b 0 17%, #c7ccd1 18% 34%, #737b83 35% 58%, #c9cdd1 59%);
-}
-
-.dock-slot[data-app="downloads"] .dock-icon {
-  background: linear-gradient(#72cef8 0 24%, #e3f3fb 25%);
-}
-
-.dock-slot[data-app="downloads"] .dock-icon::after {
-  display: grid;
-  height: 27px;
-  color: #2889cf;
-  content: "↓";
-  font-size: 24px;
-  font-weight: 700;
-  place-items: center;
-}
-
-.dock-slot[data-app="trash"] .dock-icon {
-  border: 1px solid rgba(56, 68, 82, 0.25);
-  background:
-    repeating-linear-gradient(90deg, rgba(82, 139, 164, 0.18) 0 3px, transparent 3px 7px),
-    linear-gradient(#eef7f9, #b8d2da);
-}
-
-.dock-divider {
-  width: 1px;
-  height: 31px;
-  margin: 0 1px;
-  background: rgba(46, 47, 65, 0.24);
 }
 
 /* The black surface is the whole animation: one leaf element with no children
