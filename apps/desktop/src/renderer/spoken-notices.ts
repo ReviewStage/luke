@@ -77,6 +77,15 @@ export interface SpokenNoticeAnnouncerOptions {
  * A backlog that outlives its attempts is dropped, because every notice is
  * still standing in the panel.
  *
+ * An evaluator summary is a narrower passenger. It may only ride the
+ * developer's own call — never open one — so it waits here for that call's
+ * next READY edge instead of being refused against a busy turn and lost:
+ * one review pass can decide several summaries at once, and the first
+ * taking the turn left the rest nowhere to go. The wait is the call's own:
+ * a summary is dropped the moment the developer's call ends, ages out like
+ * a notice does, and yields every edge to the notices the developer asked
+ * to hear.
+ *
  * The meeting quiet reaches it through {@link setMeetingQuiet}: quiet
  * beginning silences it at once — the announcement mid-sentence on Luke's
  * own call included — and holds it silent until the quiet ends.
@@ -84,6 +93,12 @@ export interface SpokenNoticeAnnouncerOptions {
 export class SpokenNoticeAnnouncer {
   readonly #options: SpokenNoticeAnnouncerOptions;
   #queue: AttentionSpeech[] = [];
+  /**
+   * Evaluator summaries waiting for the developer's own call to pause. They
+   * may only ride that call: nothing here opens one for them, and they are
+   * dropped the moment the call they were waiting on ends.
+   */
+  #rideQueue: AttentionSpeech[] = [];
   /** Whether the call now up is one this announcer opened, and so must close. */
   #ownsCall = false;
   #lingerTimer: unknown;
@@ -113,6 +128,7 @@ export class SpokenNoticeAnnouncer {
     this.#quiet = active;
     if (!active) return;
     this.#queue = [];
+    this.#rideQueue = [];
     this.#connectAttempts = 0;
     this.#cancelRetry();
     this.#cancelLinger();
@@ -134,6 +150,24 @@ export class SpokenNoticeAnnouncer {
       this.#queue = this.#queue.slice(this.#queue.length - MAXIMUM_QUEUED_NOTICES);
     }
     this.#cancelLinger();
+    this.#flush();
+  }
+
+  /**
+   * Takes evaluator summaries, which may only ride the developer's open call.
+   * A summary arriving while Luke is mid-reply — or several deciding at once,
+   * which one review pass can produce — waits for the READY edge the queue
+   * already paces itself by, instead of being refused against the busy turn
+   * and lost. Nothing here may open a call: a summary with no developer's
+   * call to ride is dropped, still standing in the panel.
+   */
+  enqueueRide(summaries: readonly AttentionSpeech[]): void {
+    if (this.#quiet || summaries.length === 0) return;
+    if (!this.#options.session().microphoneCall) return;
+    this.#rideQueue.push(...summaries);
+    if (this.#rideQueue.length > MAXIMUM_QUEUED_NOTICES) {
+      this.#rideQueue = this.#rideQueue.slice(this.#rideQueue.length - MAXIMUM_QUEUED_NOTICES);
+    }
     this.#flush();
   }
 
@@ -160,6 +194,9 @@ export class SpokenNoticeAnnouncer {
     ) {
       this.#cancelLinger();
       this.#ownsCall = false;
+      // The call a summary was riding is gone, and it may ride no other:
+      // what it said is still standing in the panel.
+      this.#rideQueue = [];
       // The backlog survives the call it was waiting on — a developer's call
       // that ended mid-queue, or Luke's own that dropped — and the retry clock
       // is what picks it back up. The connect path arms the same clock when an
@@ -175,18 +212,30 @@ export class SpokenNoticeAnnouncer {
     const now = this.#options.now?.() ?? Date.now();
     this.#queue = this.#queue.filter((item) => now - item.decidedAt <= SPOKEN_NOTICE_MAX_AGE_MS);
     const session = this.#options.session();
-    if (this.#queue.length === 0) {
+    // A summary may only ride the developer's own call, so the call no longer
+    // being theirs takes the wait with it, and age fells the rest.
+    this.#rideQueue = session.microphoneCall
+      ? this.#rideQueue.filter((item) => now - item.decidedAt <= SPOKEN_NOTICE_MAX_AGE_MS)
+      : [];
+    if (this.#queue.length === 0 && this.#rideQueue.length === 0) {
       this.#connectAttempts = 0;
       this.#armLinger();
       return;
     }
     if (session.isConnected) {
       // One reply at a time: the first speak takes the turn and the second is
-      // refused, so the loop stops itself and READY resumes it.
+      // refused, so the loop stops itself and READY resumes it. Notices go
+      // first — the developer asked to hear them — and a summary rides only
+      // the edges the notices leave.
       while (this.#queue.length > 0) {
         const next = this.#queue[0];
         if (!next || !session.speak(next)) break;
         this.#queue.shift();
+      }
+      while (this.#queue.length === 0 && this.#rideQueue.length > 0) {
+        const next = this.#rideQueue[0];
+        if (!next || !session.speak(next)) break;
+        this.#rideQueue.shift();
       }
       // A backlog waiting on a refused speak is normally resumed by the READY
       // edge, but that edge is the session's promise, not this class's: the
@@ -197,6 +246,10 @@ export class SpokenNoticeAnnouncer {
       return;
     }
     if (session.isConnecting) return;
+    // Only a notice may open a call of Luke's own: a summary with nothing to
+    // ride was already dropped above, and opening for one would turn a
+    // passenger into a driver.
+    if (this.#queue.length === 0) return;
     // Silence, and something to say into it: open a call of Luke's own.
     this.#connectAttempts += 1;
     this.#ownsCall = true;
@@ -240,7 +293,7 @@ export class SpokenNoticeAnnouncer {
    * in {@link #retreatOrRetry} are what keep the clock from ticking forever.
    */
   #armRetry(): void {
-    if (this.#queue.length === 0) return;
+    if (this.#queue.length === 0 && this.#rideQueue.length === 0) return;
     this.#retryTimer ??= (this.#options.schedule ?? setTimeout)(() => {
       this.#retryTimer = undefined;
       this.#flush();

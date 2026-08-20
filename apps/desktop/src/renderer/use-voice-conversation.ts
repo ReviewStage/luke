@@ -1148,9 +1148,13 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       rememberLastAnnouncement(latestSpeech(speech));
       const notices = announcerNotices(speech);
       if (notices.length > 0) ensureAnnouncer().enqueue(notices);
-      const session = voiceSession.current;
-      if (!session?.microphoneCall) return;
-      for (const item of evaluatorSummaries(speech)) session.speak(item);
+      // Evaluator summaries may only ride the developer's own call. The
+      // announcer paces them by the READY edge like everything else it says,
+      // so a batch of several — or one arriving while Luke is mid-reply — is
+      // spoken as the turns free up instead of being refused and lost.
+      if (!voiceSession.current?.microphoneCall) return;
+      const summaries = evaluatorSummaries(speech);
+      if (summaries.length > 0) ensureAnnouncer().enqueueRide(summaries);
     });
   }, [ensureAnnouncer, rememberLastAnnouncement, rememberSessionReference]);
 
