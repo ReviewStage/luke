@@ -165,12 +165,13 @@ export function signingModeDefine(env) {
  */
 export const APP_UPDATE_CONFIG_FILE_NAME = "app-update.yml";
 export const APP_UPDATE_FEED_URL = "https://github.com/ReviewStage/luke/releases/latest/download/";
+export const APP_UPDATE_CACHE_DIR_NAME = "luke-updater";
 
 export function appUpdateConfig() {
   return [
     "provider: generic",
     `url: ${APP_UPDATE_FEED_URL}`,
-    "updaterCacheDirName: luke-updater",
+    `updaterCacheDirName: ${APP_UPDATE_CACHE_DIR_NAME}`,
     "",
   ].join("\n");
 }

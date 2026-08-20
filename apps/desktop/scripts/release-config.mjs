@@ -76,6 +76,10 @@ export function releaseArtifactDirectory(repoRoot) {
   return path.join(repoRoot, "artifacts", "release");
 }
 
+export function builderReleaseArtifactDirectory(repoRoot) {
+  return path.join(repoRoot, "artifacts", "release-builder");
+}
+
 export function resolveReleaseSigning(env) {
   const signing = resolveSigningMode(env);
   if (signing.mode !== SIGNING_MODE.DEVELOPER_ID) {

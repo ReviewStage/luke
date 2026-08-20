@@ -83,7 +83,7 @@ jobs:
             exit 1
           fi
 
-          DIST_DIR="$RUNNER_TEMP/luke-release-$VERSION"
+          DIST_DIR=$(node -e "import('./apps/desktop/scripts/release-config.mjs').then((config) => process.stdout.write(config.builderReleaseArtifactDirectory(process.cwd())))")
           ASSET_NAME=$(node -e "import('./apps/desktop/scripts/release-config.mjs').then((config) => process.stdout.write(config.releaseZipFileName(process.argv[1])))" "$VERSION")
           DMG_ASSET_NAME=$(node -e "import('./apps/desktop/scripts/release-config.mjs').then((config) => process.stdout.write(config.releaseDmgFileName(process.argv[1])))" "$VERSION")
           LATEST_DMG_ASSET_NAME=$(node -e "import('./apps/desktop/scripts/release-config.mjs').then((config) => process.stdout.write(config.RELEASE_LATEST_DMG_FILE_NAME))")
@@ -97,8 +97,8 @@ jobs:
             echo "DMG_CHECKSUM_NAME=$DMG_ASSET_NAME.sha256"
             echo "LATEST_DMG_ASSET_NAME=$LATEST_DMG_ASSET_NAME"
             echo "UPDATE_FEED_ASSET_NAME=$UPDATE_FEED_ASSET_NAME"
-            echo "APP_PATH=$GITHUB_WORKSPACE/apps/desktop/out/Luke-darwin-arm64/Luke.app"
-            echo "SUBMISSION_ZIP=$RUNNER_TEMP/Luke-$VERSION-notarization.zip"
+            echo "APP_PATH=$DIST_DIR/mac-arm64/Luke.app"
+            echo "UPDATE_FEED_PATH=$DIST_DIR/$UPDATE_FEED_ASSET_NAME"
           } >> "$GITHUB_ENV"
 
       - name: Bootstrap workspace
@@ -113,12 +113,20 @@ jobs:
           MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
         run: ./scripts/release/setup-keychain.sh
 
-      - name: Package signed application
+      - name: Build signed, notarized release artifacts
         env:
-          # Injected into the main-process bundle by build.mjs; a release
-          # packaged without it would ship no calendar sign-in at all.
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_KEY_P8_BASE64: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
           GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET }}
-        run: pnpm package
+        run: |
+          key_directory=$(mktemp -d "$RUNNER_TEMP/luke-notary.XXXXXX")
+          trap 'rm -rf "$key_directory"' EXIT
+          APPLE_API_KEY_PATH="$key_directory/AuthKey_$APPLE_API_KEY_ID.p8"
+          printf '%s' "$APPLE_API_KEY_P8_BASE64" | /usr/bin/base64 -D > "$APPLE_API_KEY_PATH"
+          chmod 600 "$APPLE_API_KEY_PATH"
+          export APPLE_API_KEY_PATH
+          pnpm --filter @luke/desktop release:builder
 
       - name: Verify signed application
         run: |
@@ -139,19 +147,6 @@ jobs:
             exit 1
           fi
 
-      - name: Prepare notarization submission
-        run: ditto -c -k --keepParent "$APP_PATH" "$SUBMISSION_ZIP"
-
-      - name: Notarize application
-        env:
-          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
-          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
-          APPLE_API_KEY_P8_BASE64: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
-        run: ./scripts/release/notarize.sh "$SUBMISSION_ZIP"
-
-      - name: Staple notarization ticket
-        run: xcrun stapler staple "$APP_PATH"
-
       - name: Validate notarized application
         run: |
           codesign --verify --deep --strict "$APP_PATH"
@@ -160,33 +155,41 @@ jobs:
           grep -q "source=Notarized Developer ID" <<< "$assessment"
           xcrun stapler validate "$APP_PATH"
 
-      - name: Build notarized DMG and archive
-        env:
-          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
-          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
-          APPLE_API_KEY_P8_BASE64: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
+      - name: Verify DMG, archive, and update manifest
         run: |
-          rm -f "$SUBMISSION_ZIP"
-          key_directory=$(mktemp -d "$RUNNER_TEMP/luke-notary.XXXXXX")
-          trap 'rm -rf "$key_directory"' EXIT
-          APPLE_API_KEY_PATH="$key_directory/AuthKey_$APPLE_API_KEY_ID.p8"
-          printf '%s' "$APPLE_API_KEY_P8_BASE64" | /usr/bin/base64 -D > "$APPLE_API_KEY_PATH"
-          chmod 600 "$APPLE_API_KEY_PATH"
-          export APPLE_API_KEY_PATH
-          node apps/desktop/scripts/release.mjs
+          for artifact_path in \
+            "$DIST_DIR/$ASSET_NAME" \
+            "$DIST_DIR/$CHECKSUM_NAME" \
+            "$DIST_DIR/$DMG_ASSET_NAME" \
+            "$DIST_DIR/$DMG_CHECKSUM_NAME" \
+            "$DIST_DIR/$LATEST_DMG_ASSET_NAME" \
+            "$UPDATE_FEED_PATH"; do
+            if [[ ! -f "$artifact_path" ]]; then
+              echo "error: missing release artifact: $artifact_path" >&2
+              exit 1
+            fi
+          done
 
-      - name: Stage release assets
-        run: |
-          mkdir -p "$DIST_DIR"
-          cp "artifacts/release/$ASSET_NAME" "$DIST_DIR/$ASSET_NAME"
-          cp "artifacts/release/$DMG_ASSET_NAME" "$DIST_DIR/$DMG_ASSET_NAME"
-          cp "artifacts/release/$DMG_ASSET_NAME" "$DIST_DIR/$LATEST_DMG_ASSET_NAME"
-          node apps/desktop/scripts/write-update-feed.mjs "$DIST_DIR/$UPDATE_FEED_ASSET_NAME"
+          codesign --verify --strict "$DIST_DIR/$DMG_ASSET_NAME"
+          spctl --assess --type open --context context:primary-signature -vv "$DIST_DIR/$DMG_ASSET_NAME"
+          xcrun stapler validate "$DIST_DIR/$DMG_ASSET_NAME"
+          hdiutil verify "$DIST_DIR/$DMG_ASSET_NAME"
           (
             cd "$DIST_DIR"
-            shasum -a 256 "$ASSET_NAME" > "$CHECKSUM_NAME"
-            shasum -a 256 "$DMG_ASSET_NAME" > "$DMG_CHECKSUM_NAME"
+            shasum -a 256 -c "$CHECKSUM_NAME"
+            shasum -a 256 -c "$DMG_CHECKSUM_NAME"
           )
+          cmp "$DIST_DIR/$DMG_ASSET_NAME" "$DIST_DIR/$LATEST_DMG_ASSET_NAME"
+          node <<'NODE'
+          const fs = require("node:fs");
+          const manifest = fs.readFileSync(process.env.UPDATE_FEED_PATH, "utf8");
+          const archive = process.env.ASSET_NAME;
+          if (!manifest.includes(`url: ${archive}`)) throw new Error("latest-mac.yml does not name the release zip");
+          if (!manifest.includes(`path: ${archive}`)) throw new Error("latest-mac.yml path is not the release zip");
+          if (/https?:\/\//.test(manifest)) throw new Error("latest-mac.yml must use relative archive URLs");
+          if (!/sha512: \S+/.test(manifest)) throw new Error("latest-mac.yml is missing sha512");
+          if (!/size: \d+/.test(manifest)) throw new Error("latest-mac.yml is missing size");
+          NODE
 
       - name: Publish GitHub Release
         if: ${{ github.event_name == 'push' && github.ref_type == 'tag' }}
