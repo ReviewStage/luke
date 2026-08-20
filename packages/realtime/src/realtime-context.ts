@@ -130,7 +130,8 @@ function sessionSpokenName(session: NormalizedSession): string {
  * These are the same bounded, redacted fields the attention layer already
  * sends — provider, title, status, when last seen, repository or branch,
  * current tool, reported error, and the provider's own recap — plus the
- * workspace a chat belongs to when its provider groups them, the developer's
+ * workspace a chat belongs to when its provider groups them, the apps that
+ * independently associate themselves with it, the developer's
  * standing ask where one stands, what each session can be asked to do, and the
  * identity a tool call names it by. No transcript, file path, or command output
  * is ever included.
@@ -165,6 +166,17 @@ export function sessionContextText(
         ...(session.workspace?.name
           ? [
               `a chat in workspace ${session.workspace.name}${session.workspace.managerName ? ` managed by ${session.workspace.managerName}` : ""}`,
+            ]
+          : []),
+        // An app that independently claims the session is how "my cmux Cursor
+        // session" reads apart from the agent's other rows, so each
+        // association rides by name — and only by name: the pane address
+        // behind it stays on the machine, like every other link.
+        ...(session.applications.length > 0
+          ? [
+              `associated with ${session.applications
+                .map((application) => application.displayName)
+                .join(" and ")}`,
             ]
           : []),
         session.status,
