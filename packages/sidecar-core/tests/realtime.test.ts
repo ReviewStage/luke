@@ -10,6 +10,7 @@ import {
   CONTEXT_ITEM_KIND,
   cancelResponseEvents,
   clearInputAudioEvents,
+  clearOutputAudioEvents,
   contextItemId,
   contextSupersedeEventId,
   contextSupersedeEvents,
@@ -45,6 +46,7 @@ import {
   realtimeClientSecretRequest,
   realtimeCredentialFromResponse,
   realtimeCredentialIsUsable,
+  responseCancelEventId,
   SESSION_LOCATION,
   SESSION_REFERENCE_WITHDRAWN_TEXT,
   SESSION_STATUS,
@@ -325,9 +327,24 @@ test("a reply can be stopped by the developer taking the turn", () => {
   // Cancelling is only half of it. The model generates faster than it speaks,
   // so the rest of the sentence has already been sent by the time anyone talks
   // over it, and only emptying the output buffer stops that being heard.
+  const events = cancelResponseEvents({ eventId: responseCancelEventId(3) });
   assert.deepEqual(
-    cancelResponseEvents().map((event) => event.type),
+    events.map((event) => event.type),
     [REALTIME_CLIENT_EVENT.RESPONSE_CANCEL, REALTIME_CLIENT_EVENT.OUTPUT_AUDIO_BUFFER_CLEAR],
+  );
+  // The cancel carries its name, so the error a losing race answers with is
+  // known as ours rather than reported as a fault.
+  assert.equal(events[0]?.event_id, "luke_cancel_3");
+  assert.deepEqual(cancelResponseEvents({ eventId: "   " }), []);
+});
+
+test("a reply already concluded is stopped without a cancel", () => {
+  // Generation runs ahead of speech, so a reply is routinely finished at the
+  // server while its audio still plays: there is nothing left to cancel, and
+  // asking anyway is answered with an error about a stop that worked.
+  assert.deepEqual(
+    clearOutputAudioEvents().map((event) => event.type),
+    [REALTIME_CLIENT_EVENT.OUTPUT_AUDIO_BUFFER_CLEAR],
   );
 });
 

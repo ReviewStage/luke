@@ -154,20 +154,44 @@ export function realtimeInstructions(): string {
   return REALTIME_INSTRUCTION_HEAD.join("\n");
 }
 
+/** Names the cancel itself, so the error a refused one answers with is known as ours. */
+export function responseCancelEventId(sequence: number): string {
+  return `luke_cancel_${sequence}`;
+}
+
 /**
- * Builds the events that stop a reply the developer is talking over.
+ * Builds the events that stop a reply the server has not yet concluded.
  *
  * Both are needed and in this order. Cancelling stops the model producing more
  * of the reply; it says nothing about the audio it already produced, which the
  * server has sent ahead because it generates faster than speech. Clearing the
  * output buffer is what drops that, and doing it second means the server is not
  * still filling the buffer as it empties it.
+ *
+ * A stop can race the reply's own `response.done` across the wire, and a
+ * cancel that loses finds no active response left: it is answered with an
+ * error rather than silence, which is why the event is named. The caller
+ * keeps the name and knows that answer for its own, rather than reporting it
+ * to the developer as a fault in a stop that worked.
  */
-export function cancelResponseEvents(): readonly WireRecord[] {
+export function cancelResponseEvents(input: { eventId: string }): readonly WireRecord[] {
+  if (!trimmedText(input.eventId)) return [];
   return [
-    { type: REALTIME_CLIENT_EVENT.RESPONSE_CANCEL },
+    { type: REALTIME_CLIENT_EVENT.RESPONSE_CANCEL, event_id: input.eventId },
     { type: REALTIME_CLIENT_EVENT.OUTPUT_AUDIO_BUFFER_CLEAR },
   ];
+}
+
+/**
+ * Builds the event that stops a reply the server has already concluded from
+ * being heard any further. Generation runs ahead of speech, so a reply is
+ * routinely finished at the server — its `response.done` delivered — while its
+ * audio is still playing out: by then there is nothing left to cancel, only
+ * queued audio to drop, and a cancel sent anyway is refused as having no
+ * active response to act on.
+ */
+export function clearOutputAudioEvents(): readonly WireRecord[] {
+  return [{ type: REALTIME_CLIENT_EVENT.OUTPUT_AUDIO_BUFFER_CLEAR }];
 }
 
 /**

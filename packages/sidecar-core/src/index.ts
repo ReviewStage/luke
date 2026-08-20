@@ -218,6 +218,7 @@ export {
   attentionSpeechFromReviews,
   cancelResponseEvents,
   clearInputAudioEvents,
+  clearOutputAudioEvents,
   functionCallFollowUpEvents,
   functionCallOutputEvents,
   inputAudioAppendEvents,
@@ -232,6 +233,7 @@ export {
   REALTIME_STATUS,
   type RealtimeFunctionCall,
   type RealtimeStatus,
+  responseCancelEventId,
   truncateResponseEvents,
   typedAskEvents,
 } from "./realtime-protocol.js";

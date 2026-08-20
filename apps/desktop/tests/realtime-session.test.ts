@@ -2292,6 +2292,80 @@ test("a stop with nothing being spoken reports so and sends nothing", async () =
   );
 });
 
+test("a stop after the reply finished generating sends no cancel", async () => {
+  // Generation runs ahead of speech, so most stops land after the reply's
+  // `done` has already arrived and the server holds no active response. A
+  // cancel sent then is refused as "no active response found" — an error read
+  // out to the developer as a fault in a stop that worked — when the only
+  // thing left to do is drop the queued audio and trim the record.
+  let clock = 1_000;
+  const context = harness({ now: () => clock });
+  await context.session.connect();
+  context.deliverRemoteTrack();
+  await holdTurn(context);
+  context.session.endTurn(true);
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-a" } });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED,
+    item: { id: "item_reply" },
+  });
+  context.session.reportRemoteAudioActive();
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      id: "resp-a",
+      output: [{ type: "message", content: [{ type: "output_audio" }] }],
+    },
+  });
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+  clock = 2_500;
+  const before = context.sent.length;
+
+  assert.equal(context.session.stopSpeaking(), true);
+
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+  assert.equal(context.lukeAudible(), false);
+  assert.deepEqual(
+    context.sent.slice(before).map((event) => event.type),
+    [
+      REALTIME_CLIENT_EVENT.OUTPUT_AUDIO_BUFFER_CLEAR,
+      REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_TRUNCATE,
+    ],
+  );
+  assert.deepEqual(reportedErrors(context), []);
+});
+
+test("a cancel refused because the reply was already over is not a fault", async () => {
+  // The stop can also lose the race it cannot see: the reply's `done` was on
+  // the wire when the cancel went out, so the server refuses it for want of an
+  // active response. The refusal is the quiet already holding — nothing the
+  // developer did and nothing they can act on.
+  const context = harness();
+  await context.session.connect();
+  context.deliverRemoteTrack();
+  await holdTurn(context);
+  context.session.endTurn(true);
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-a" } });
+  const before = context.sent.length;
+  assert.equal(context.session.stopSpeaking(), true);
+  const cancel = context.sent
+    .slice(before)
+    .find((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CANCEL);
+  assert.ok(cancel?.event_id, "a reply the server still holds is cancelled by name");
+
+  context.emit({
+    type: REALTIME_SERVER_EVENT.ERROR,
+    error: {
+      type: "invalid_request_error",
+      event_id: cancel?.event_id,
+      message: "Cancellation failed: no active response found",
+    },
+  });
+
+  assert.deepEqual(reportedErrors(context), []);
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+});
+
 test("a stop that races the reply's confirmation still holds", async () => {
   const carried: unknown[] = [];
   const context = harness({

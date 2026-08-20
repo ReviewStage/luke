@@ -11,6 +11,7 @@ import {
   type ContextItemKind,
   cancelResponseEvents,
   clearInputAudioEvents,
+  clearOutputAudioEvents,
   contextItemId,
   contextSupersedeEventId,
   contextSupersedeEvents,
@@ -44,6 +45,7 @@ import {
   type RealtimeToolFamily,
   realtimeSessionSyncEvents,
   realtimeToolFamily,
+  responseCancelEventId,
   SESSION_REFERENCE_WITHDRAWN_TEXT,
   type SessionIdentity,
   type SessionNoticeAsk,
@@ -118,6 +120,15 @@ const CONTEXT_FLUSH_ORDER: readonly ContextItemKind[] = [
  * two turns' worth of room for something that ordinarily clears immediately.
  */
 const MAXIMUM_PENDING_SUPERSEDES = CONTEXT_FLUSH_ORDER.length * 2;
+
+/**
+ * How many named cancels are worth remembering. Only a refused cancel is ever
+ * answered by name — one that landed in time is concluded by the reply's own
+ * `done`, and nothing ever clears its entry — so the set is evicted oldest
+ * first, with room for far more unanswered cancels than one round trip can
+ * hold.
+ */
+const MAXIMUM_PENDING_CANCELS = 8;
 
 /**
  // SAFETY: The preceding check establishes the asserted contract.
@@ -429,6 +440,16 @@ export class RealtimeVoiceSession {
    * rather than a fault to report to the developer.
    */
   #pendingSupersedes = new Map<string, string>();
+  /** Rises for every cancel named, so no two ever share a name on one call. */
+  #cancelSequence = 0;
+  /**
+   * The cancels issued that could still be answered, by the name stamped on
+   * each. A cancel is answered with an error when the response is already over
+   * — its `done` was on the wire when the developer pressed stop — and that
+   * refusal means the quiet asked for already holds: this call's own business
+   * rather than a fault to report to the developer.
+   */
+  #pendingCancels = new Set<string>();
   /**
    * Luke's own audio track. Cancelling stops the model producing more, but what
    * it already produced is on its way down the connection and keeps playing —
@@ -1389,7 +1410,24 @@ export class RealtimeVoiceSession {
     // never heard — the text runs ahead of the speech — and leaving them up
     // would show Luke finishing a sentence he was just stopped from saying.
     this.#clearCaption();
-    this.#send(cancelResponseEvents());
+    // A cancel is for a reply the server still holds. Generation runs ahead
+    // of speech, so most stops land after the reply's `done` has already
+    // arrived — nothing is left to cancel, only queued audio to drop, and a
+    // cancel sent then is refused as having no active response, the refusal
+    // read out to the developer as a fault in a stop that worked.
+    if (this.#responseOutstanding) {
+      const eventId = responseCancelEventId(this.#cancelSequence);
+      this.#cancelSequence += 1;
+      while (this.#pendingCancels.size >= MAXIMUM_PENDING_CANCELS) {
+        const [oldest] = this.#pendingCancels;
+        if (oldest === undefined) break;
+        this.#pendingCancels.delete(oldest);
+      }
+      this.#pendingCancels.add(eventId);
+      this.#send(cancelResponseEvents({ eventId }));
+    } else {
+      this.#send(clearOutputAudioEvents());
+    }
     // Then correct what Luke believes he said, or the next answer is free to
     // refer back to a sentence that never reached the room.
     this.#send(this.#truncateEvents());
@@ -1406,10 +1444,11 @@ export class RealtimeVoiceSession {
     // that opens a new developer turn arms it afresh in #startResponse; left
     // true here, the cancelled reply's late calls would find it still standing.
     this.#toolTurnArmed = false;
-    // The cancel concludes the reply at the server before anything sent after
-    // it is read — the channel is ordered — so nothing is outstanding from
-    // here, and whatever `done` the cancelled reply still sends matches no
-    // active response above.
+    // The reply is concluded at the server from here — by the cancel, read
+    // before anything sent after it on an ordered channel, or by the `done`
+    // that already arrived or beat the cancel across the wire — so nothing is
+    // outstanding, and whatever `done` the stopped reply still sends matches
+    // no active response above.
     this.#responseOutstanding = false;
     this.#audioDrained = false;
     this.#followUpPending = false;
@@ -1521,6 +1560,7 @@ export class RealtimeVoiceSession {
     this.#contextPending.clear();
     this.#contextLive.clear();
     this.#pendingSupersedes.clear();
+    this.#pendingCancels.clear();
     this.#conversationBegan = false;
     this.#clearIdleTimer();
     this.#responseOutstanding = false;
@@ -2066,6 +2106,21 @@ export class RealtimeVoiceSession {
   }
 
   /**
+   * Whether an error is one of this call's own cancels coming back refused.
+   *
+   * A stop can race the reply's own conclusion: its `done` was already on the
+   * wire when the cancel was sent, so the server finds no active response to
+   * act on and says so. The refusal means the quiet the developer asked for
+   * already held — nothing they did and nothing they can act on — and the
+   * `done` that won the race concluded the turn on its own.
+   */
+  #cancelError(event: { eventId?: string }): boolean {
+    if (event.eventId === undefined || !this.#pendingCancels.has(event.eventId)) return false;
+    this.#pendingCancels.delete(event.eventId);
+    return true;
+  }
+
+  /**
    * The context items this call currently holds, by kind — what the
    * conversation would be answered from if a turn opened now. Exposed for the
    * tests that hold this class to its one-item-per-kind promise.
@@ -2245,6 +2300,11 @@ export class RealtimeVoiceSession {
         // nothing they can act on, and reporting it would both put a fault on
         // screen and, below, end a reply that is still being spoken.
         if (this.#supersedeError(event)) return;
+        // So can a cancel that lost its race: the reply it was stopping was
+        // already over, the interrupt already settled the turn, and the turn
+        // now under way — if any — is a newer one this answer says nothing
+        // about.
+        if (this.#cancelError(event)) return;
         this.#options.onError(event.message);
         // An error can arrive *instead of* `response.done` — an empty push-to-talk
         // commit is the common case — which would otherwise leave the session
