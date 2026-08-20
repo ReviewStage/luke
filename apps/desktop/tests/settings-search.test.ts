@@ -71,7 +71,10 @@ function everythingDrawn(): SettingsSearchInput {
       credentialSources: {
         ...settings().credentialSources,
         [CREDENTIAL_PROVIDER_ID.CONDUCTOR]: CREDENTIAL_SOURCE.ENCRYPTED_FILE,
+        [CREDENTIAL_PROVIDER_ID.OPENAI]: CREDENTIAL_SOURCE.ENCRYPTED_FILE,
       },
+      // The key half live is what draws the OpenAI row on the front page.
+      voiceSource: VOICE_SOURCE.KEY,
       calendarSignInAvailable: true,
       linearSignInAvailable: true,
       calendarAccounts: [{ id: "dev@example.com", selectedCalendarIds: [] }],
@@ -125,10 +128,21 @@ test("a row a page is not drawing is not offered", () => {
     assert.ok(wide.includes(label), `${label} is offered once its row is drawn`);
   }
 
-  // The ways out belong to a signed-in account alone.
+  // The ways out — and the What Luke runs on section, key row included —
+  // belong to a signed-in account alone.
   const signedOut = labels(settingsSearchEntries(searchInput({ accountDrawn: false })));
   assert.ok(!signedOut.includes("Sign out"));
   assert.ok(!signedOut.includes("Delete account"));
+  assert.ok(!signedOut.includes("What Luke runs on"));
+  assert.ok(!signedOut.includes("OpenAI API key"));
+
+  // On the account, the key row is not drawn — the section's own entry is
+  // what a key-shaped query finds, because its toggle is where a key begins.
+  const hosted = settingsSearchEntries(searchInput());
+  assert.ok(!labels(hosted).includes("OpenAI API key"));
+  const openai = searchSettings(hosted, "openai");
+  assert.ok(openai);
+  assert.ok(labels(openai.results).includes("What Luke runs on"));
 });
 
 test("labels are unique, so a result names exactly one row", () => {

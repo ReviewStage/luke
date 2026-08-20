@@ -1,7 +1,7 @@
 import { PROVIDER_ID } from "@sidecar/core";
 import { useRef } from "react";
 import type { AppSettings } from "../shared/contracts";
-import { CREDENTIAL_SOURCE } from "../shared/contracts";
+import { CREDENTIAL_SOURCE, VOICE_SOURCE } from "../shared/contracts";
 import {
   CLOUD_AGENT_PROVIDER_LIST,
   CREDENTIAL_PROVIDER_ID,
@@ -91,6 +91,8 @@ const conductorAgentRowDrawn = (input: SettingsSearchInput): boolean =>
 const voiceControlRowDrawn = (input: SettingsSearchInput): boolean => input.voiceControlsDrawn;
 
 const SETTING_ROW_DRAWN = {
+  // The What Luke runs on section stands only over a signed-in account.
+  [APP_SETTING_ID.VOICE_SOURCE]: (input: SettingsSearchInput) => input.accountDrawn,
   // The voice controls exist only once there is a voice to control.
   [APP_SETTING_ID.VOICE]: voiceControlRowDrawn,
   [APP_SETTING_ID.VOICE_SPEED]: voiceControlRowDrawn,
@@ -151,15 +153,20 @@ const KEY_WORDS = "API key credential connect cloud agent";
  */
 function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[] {
   const entries: (SettingsSearchEntry | undefined)[] = [
-    // The front page, in the order its sections stand.
-    {
-      label: `${VOICE_CREDENTIAL_PROVIDER.displayName} API key`,
-      page: SETTINGS_VIEW.ROOT,
-      haystack: [
-        `${VOICE_CREDENTIAL_PROVIDER.displayName} API key`,
-        "credential connect voice unmetered what luke runs on",
-      ],
-    },
+    // The front page, in the order its sections stand. The key row is drawn
+    // only while the key half of What Luke runs on is the live one; on the
+    // account, the section's own entry is what a key-shaped query finds,
+    // because its toggle is where a key is begun from there.
+    input.accountDrawn && input.settings.voiceSource === VOICE_SOURCE.KEY
+      ? {
+          label: `${VOICE_CREDENTIAL_PROVIDER.displayName} API key`,
+          page: SETTINGS_VIEW.ROOT,
+          haystack: [
+            `${VOICE_CREDENTIAL_PROVIDER.displayName} API key`,
+            "credential connect voice unmetered what luke runs on",
+          ],
+        }
+      : undefined,
     {
       label: "Updates",
       page: SETTINGS_VIEW.ROOT,
