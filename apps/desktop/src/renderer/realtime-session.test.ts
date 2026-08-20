@@ -176,6 +176,13 @@ function harness(
     captureSessionSync?: boolean;
     /** Lets a test ride the status edges, the way the announcer does. */
     onStatus?: (status: RealtimeStatus) => void;
+    /**
+     * Mimics the caller's history: an ended reply's words are written back
+     * into the session as a conversation update, the way the hook records
+     * them. What the write-back does to a call being torn down is exactly
+     * what the tests using this are about.
+     */
+    writeBackOnReplyEnded?: boolean;
   } = {},
 ): Harness {
   const timers: HeldTimer[] = [];
@@ -320,6 +327,14 @@ function harness(
     },
     onReplyEnded: (texts, about) => {
       replyEndings.push({ texts, about: about?.providerSessionId });
+      if (options.writeBackOnReplyEnded) {
+        session.updateConversation(
+          appendConversationEntry([], {
+            kind: CONVERSATION_ENTRY_KIND.REPLY,
+            words: texts.join(" "),
+          }),
+        );
+      }
     },
   };
   if (options.connectTimeoutMs !== undefined) {
@@ -1869,6 +1884,36 @@ test("a fresh history line replaces the item before it", async () => {
   const repeatBefore = context.sent.length;
   await armDeveloperTurn(context);
   assert.deepEqual(contextItems(context, "[recent conversation", repeatBefore), []);
+});
+
+test("a reply ending at teardown writes nothing back into the retired call", async () => {
+  const context = harness({ writeBackOnReplyEnded: true });
+  await context.session.connect();
+  context.session.updateSessions([observedSession("session-a")]);
+  await armDeveloperTurn(context);
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED,
+    item: { id: "item-1" },
+  });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
+    item_id: "item-1",
+    delta: "Half a sentence.",
+  });
+
+  // The call drops mid-reply. The words are still handed over — the caller's
+  // history keeps them — but the write-back that handover makes must land
+  // before the stores empty and leave with them, or the retired call would
+  // carry a pending item, rendered against an emptied roster, into a call
+  // whose caller has said nothing yet.
+  context.closeChannel();
+  assert.equal(context.replyEndings.length, 1);
+
+  await context.session.connect();
+  const sentBefore = context.sent.length;
+  await armDeveloperTurn(context);
+
+  assert.deepEqual(contextItems(context, "[recent conversation", sentBefore), []);
 });
 
 test("a reply hands its words back as it ends, whole and once", async () => {

@@ -928,6 +928,10 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       }
       if (session.sendText(text)) {
         setTypedAsk(true);
+        // A new typed turn lets a leftover transcript skip go, exactly as a
+        // spoken one does — after the send, whose interrupt hands over the
+        // cut reply's words and is the flag's last rightful consumer.
+        transcriptSpokenRef.current = false;
         // The developer's own words enter the history as they were typed, so
         // the thread holds both halves of the exchange the reply answers.
         rememberConversationEntry({ kind: CONVERSATION_ENTRY_KIND.TYPED_ASK, words: text });
@@ -1039,6 +1043,13 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     // back to being the preference's to grant.
     if (!typedAskHolds(voiceStatus)) {
       setTypedAsk(false);
+    }
+    // The transcript skip belongs to the turn that read the transcript, and a
+    // reply abandoned wordless never fires the handover that consumes it — so
+    // a new spoken turn opening lets it go, or the flag would swallow the
+    // next reply from the history.
+    if (voiceStatus === REALTIME_STATUS.LISTENING) {
+      transcriptSpokenRef.current = false;
     }
     // Any settled status ends the wait the press started, however it ended:
     // listening takes the meter live, ready means the turn was dropped

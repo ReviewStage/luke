@@ -1592,6 +1592,11 @@ export class RealtimeVoiceSession {
       track.stop();
     });
     this.#stream = undefined;
+    // The reply's last words are handed over before the stores empty: the
+    // handover's write-back re-enters this session, and landing it here means
+    // the roster it renders against still stands — and everything it wrote is
+    // cleared with the rest below, so a retired call keeps nothing pending.
+    this.#clearCaption();
     this.#sessions = [];
     this.#conversationEntries = [];
     this.#guide = EMPTY_APP_GUIDE;
@@ -1619,7 +1624,6 @@ export class RealtimeVoiceSession {
     this.#responseItemId = undefined;
     this.#activeResponseId = undefined;
     this.#audibleSince = undefined;
-    this.#clearCaption();
     // Learned about this call, so it does not outlive it.
     this.#audioEndingsReported = false;
     this.#clearSettleTimer();
