@@ -20,9 +20,11 @@ import {
 } from "@sidecar/realtime";
 import {
   isProviderId,
+  isSessionFilter,
   PROVIDER_ID,
   type ProviderId,
   parseWorkspaceAgentSelection,
+  type SessionFilter,
   type WorkspaceAgentSelection,
   workspaceAgentModelLabel,
   workspaceAgentModels,
@@ -108,6 +110,8 @@ export interface StoredAppSettings {
   showOnAllDisplays: boolean;
   shareUsageData: boolean;
   formFactor?: PanelFormFactor;
+  /** The session list's chosen filter chips, absent while nothing narrows it. */
+  sessionFilters?: readonly SessionFilter[];
   defaultWorkspaceProvider?: WorkspaceProviderId;
   workspaceAgentDefaults?: Readonly<Partial<Record<ProviderId, WorkspaceAgentSelection>>>;
   workspaceProjectDefaults?: Readonly<Partial<Record<WorkspaceProviderId, string>>>;
@@ -288,6 +292,27 @@ function workspaceAgentDefaults(
     defaults[providerId] = parsed;
   }
   return valid(Object.keys(defaults).length > 0 ? defaults : undefined);
+}
+
+/**
+ * The stored chips come back only as far as this build still recognizes them:
+ * a value that names no place, kind, app, or agent here — another build's
+ * vocabulary, or a corrupted file — is dropped rather than held dormant, a
+ * repeated value narrows no further than its first, and a selection left with
+ * nothing reads as unset, which is the unnarrowed list.
+ */
+function sessionFilters(
+  value: UnparsedWireValue,
+): SettingGuardResult<StoredAppSettings["sessionFilters"]> {
+  if (value === undefined) return valid(undefined);
+  if (!Array.isArray(value)) return invalid(undefined);
+  const filters: SessionFilter[] = [];
+  for (const candidate of value) {
+    if (!isWireString(candidate) || !isSessionFilter(candidate)) continue;
+    if (filters.includes(candidate)) continue;
+    filters.push(candidate);
+  }
+  return valid(filters.length > 0 ? filters : undefined);
 }
 
 const MAXIMUM_WORKSPACE_PROJECT_ID_LENGTH = 500;
@@ -623,6 +648,21 @@ export const APP_SETTING_SCHEMA = {
     mainProcessSideEffect: SETTING_SIDE_EFFECT.FORM_FACTOR,
     spokenValue: (value: string) => (isPanelFormFactor(value) ? value : undefined),
     analytics: { id: APP_SETTING_ID.FORM_FACTOR, value: choiceAnalytics },
+  },
+  sessionFilters: {
+    field: "sessionFilters",
+    default: undefined,
+    guard: sessionFilters,
+    // The selection backs no settings row — it is the session list's own view
+    // state, stored so the chips survive the panel closing and the app
+    // restarting. With no guide ids the page below is inert; the root page is
+    // named only because a definition must name one.
+    settingsPage: SETTINGS_PAGE.ROOT,
+    // The guide covers narrowing the list through the session-filter facts and
+    // the spoken filter tool's own vocabulary; the stored selection is what
+    // those already changed, not a setting of its own to describe.
+    guideEntry: settingGuideEntry("sessionFilters", [], () => undefined),
+    mainProcessSideEffect: SETTING_SIDE_EFFECT.NONE,
   },
   defaultWorkspaceProvider: {
     field: "defaultWorkspaceProvider",

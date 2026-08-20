@@ -670,9 +670,13 @@ export function App(): React.JSX.Element {
     },
     onCapsuleList: () => {
       // A search is a question about the list as it was, so it closes with
-      // the panel on the same terms the filter does — a remembered query
-      // could hide the very session the capsule is reporting.
-      setSessionView(DEFAULT_SESSION_VIEW);
+      // the panel — a remembered query could hide the very session the
+      // capsule is reporting — and the order goes back with it, so the top
+      // row keeps matching the mark the capsule kept. The filter chips stay:
+      // a chosen narrowing is a standing way of viewing the list, and the
+      // capsule stays honest over it because its tally is taken before the
+      // list is narrowed.
+      setSessionView((current) => ({ ...DEFAULT_SESSION_VIEW, filters: current.filters }));
       setSearchOpen(false);
     },
     onCapsuleTab: () => changeTab(PANEL_TAB.SESSIONS),
@@ -791,6 +795,33 @@ export function App(): React.JSX.Element {
     },
     [applySettings],
   );
+
+  /**
+   * The selection as last stored, so only a change of selection writes.
+   * Seeded from bootstrap's snapshot rather than from nothing, because
+   * restoring the stored chips must not read as a fresh choice to store
+   * again. A ref rather than reading the settings state: a stored write's
+   * reply races the next chip press, and the last value this window sent is
+   * the only honest baseline either way.
+   */
+  const storedSessionFilters = useRef<readonly SessionFilter[] | undefined>(undefined);
+  // Every way the selection changes funnels through the view — a chip, a
+  // spoken ask, the widen button, the list correcting an emptied selection —
+  // so the store follows the view from one place. Never in a fixture or
+  // capture run, which must not write a developer's own settings file.
+  useEffect(() => {
+    if (!bootstrap || bootstrap.fixtureMode) return;
+    storedSessionFilters.current ??= bootstrap.settings.sessionFilters ?? [];
+    const filters = sessionView.filters;
+    if (sameSessionFilters(storedSessionFilters.current, filters)) return;
+    storedSessionFilters.current = filters;
+    void window.sidecar
+      .updateSetting(
+        APP_SETTING_SCHEMA.sessionFilters.field,
+        filters.length > 0 ? filters : undefined,
+      )
+      .then(applySettingsReply);
+  }, [bootstrap, sessionView.filters, applySettingsReply]);
 
   const changeVoiceCaptions = useCallback(
     async (enabled: boolean) =>
@@ -2323,6 +2354,15 @@ export function App(): React.JSX.Element {
       acceptCalendarsBootstrap(value.calendars);
       acceptMeetingQuietBootstrap(value.meetingQuiet);
       acceptSettingsBootstrap(value.settings);
+      // The stored filter chips come back with the panel: a chosen narrowing
+      // is a standing way of viewing the list, and this is the one moment it
+      // is read from the store — from here on the view leads and the store
+      // follows. Never in a fixture or capture run, whose evidence must not
+      // vary with what a developer last chose.
+      const storedFilters = value.settings.sessionFilters;
+      if (!value.fixtureMode && storedFilters !== undefined) {
+        setSessionView((current) => ({ ...current, filters: storedFilters }));
+      }
       acceptAccountBootstrap(value.account);
       acceptUpdateBootstrap(value.update);
       setDisplay(value.display);
@@ -2804,8 +2844,16 @@ export function App(): React.JSX.Element {
   // unnarrowed, and the next session to enter that state would narrow the list
   // back down to it with nothing having been pressed. Setting state here rather
   // than from an effect is what keeps that from being drawn first and corrected
-  // after.
-  if (!sameSessionFilters(list.filters, sessionView.filters)) {
+  // after. Only a roster actually read and holding sessions can prove a
+  // selection stale, though: before the first reading an empty list says "not
+  // looked yet", and an empty roster hides nothing behind a chip — either way
+  // a selection restored from the store is left to stand rather than wiped
+  // against a list that has nothing to show under any view.
+  if (
+    sessionsSettled &&
+    visibleSessions.length > 0 &&
+    !sameSessionFilters(list.filters, sessionView.filters)
+  ) {
     setSessionView({ ...sessionView, filters: list.filters });
   }
   // The sheet exists only while there is something for it to decide, and its

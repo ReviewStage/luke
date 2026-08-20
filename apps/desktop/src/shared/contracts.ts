@@ -28,6 +28,7 @@ import type {
   ProviderMessageResult,
   ProviderWorkspaceResult,
   SessionApplicationId,
+  SessionFilter,
   SessionIdentity,
   WorkspaceAgentSelection,
 } from "@sidecar/session";
@@ -361,6 +362,15 @@ export interface AppSettings {
    * gets by default. A display with a real notch answers to neither.
    */
   formFactor: PanelFormFactor;
+  /**
+   * The session list's chosen filter chips, absent while nothing narrows it.
+   * A chosen narrowing is a standing way of viewing the list, so it survives
+   * the panel closing and the app restarting; the search query and the order
+   * deliberately do not travel with it. Fixture and capture runs leave it
+   * unread, because their evidence must not vary with what a developer last
+   * chose.
+   */
+  sessionFilters?: readonly SessionFilter[];
   /**
    * The provider a conversational ask creates a new workspace in when the ask
    * names none, absent until one has been chosen. It starts unset on purpose:
