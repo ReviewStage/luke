@@ -225,6 +225,17 @@ is said back to you under the field you typed in.
   errors — not the message text, which observation never opens. Installs from
   before OpenCode moved its sessions into that database are read from its
   session and message JSON files with the same boundary.
+- For Gemini CLI, Luke finds the recent session recordings under Gemini
+  CLI's own per-project chats directories, opens bounded tails read-only, and
+  replays them in memory for the session's bookkeeping — message types,
+  timestamps, tool names and inputs, the model, the summary the CLI generated
+  about the session, and recorded errors. The words of the conversation stay
+  in the records they were parsed from, with one bounded exception: a settled
+  turn's parting words become the session's recap, the same standing as the
+  recap Codex writes, and nothing behind them is reported.
+  Luke also reads each project directory's `.project_root` marker, for the one
+  fact of which workspace the sessions belong to. Recordings from before
+  Gemini CLI's append-only format are not read at all.
 - For the Devin sessions running on this machine, Luke opens the Devin CLI's
   local session database in read-only mode and reads session records plus the
   bookkeeping of a session's newest turn — the roles along the conversation's
@@ -282,7 +293,8 @@ is said back to you under the field you typed in.
   Orca.
 - For the cmux terminal on this Mac, Luke opens the small hook-session stores
   cmux's own CLI writes (`~/.cmuxterm/<agent>-hook-sessions.json`, for the
-  Claude Code, Codex, Cursor, and OpenCode agents Luke observes) read-only
+  Claude Code, Codex, Cursor, Gemini CLI, and OpenCode agents Luke observes)
+  read-only
   and reads of each record exactly three identifiers: the agent's own session
   id and the cmux workspace and pane ids holding it. The titles, notification
   text, working directories, transcript paths, and launch commands those
@@ -377,9 +389,9 @@ trust it there; declining costs the same sharper status and nothing else.
 Cursor, "observation never opens message content" — have one bounded,
 on-demand counterpart: in a conversation you are holding with Luke, you can
 ask what a local session did, said, or is stuck on, and Luke reads that
-session's own transcript — Claude Code, Codex, OpenCode, and the Devin and
-Cursor agents running on this machine today — from the provider's own file or
-database on this machine. The
+session's own transcript — Claude Code, Codex, Gemini CLI, OpenCode, and the
+Devin and Cursor agents running on this machine today — from the provider's
+own file or database on this machine. The
 read happens when you ask, is validated against the observed roster, renders a
 bounded excerpt into that conversation's reply, and keeps nothing: no history
 is stored, watched, or indexed, and nothing is fetched from any provider.

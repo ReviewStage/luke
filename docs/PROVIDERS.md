@@ -27,8 +27,8 @@ could disagree.
   `packages/providers/src/registrations.ts`, with each transcript reader at
   `packages/providers/src/<agent>/transcript.ts`.
 - The ids the code knows these by: agents `claude-code`, `codex`, `conductor`,
-  `copilot`, `cursor`, `devin`, `jules`, and `opencode`; the Linear tracker
-  `linear`; the Apple Calendar connection `apple-calendar`.
+  `copilot`, `cursor`, `devin`, `gemini-cli`, `jules`, and `opencode`; the
+  Linear tracker `linear`; the Apple Calendar connection `apple-calendar`.
 
 ## Agents
 
@@ -47,6 +47,7 @@ What Luke reads:
 | Cursor | Cloud | `api.cursor.com`, under `CURSOR_API_KEY` | Run result | — | Agent URL |
 | Devin | Local | The Devin CLI's session database | — | Yes | — |
 | Devin | Cloud | `api.devin.ai`, under a `cog_` access token | — | — | Session URL |
+| Gemini CLI | Local | Session recordings under `~/.gemini/tmp/<project>/chats/` | Last agent message | Yes | — |
 | GitHub Copilot | Cloud | `api.github.com`, under a fine-grained PAT | — | — | Task page URL |
 | Jules | Cloud | `jules.googleapis.com`, under an API key | — | — | Session URL |
 | OpenCode | Local | The OpenCode database | — | Yes | Share URL, once shared |
@@ -71,6 +72,7 @@ it, and only as the direct product of a turn the developer opened:
 | Cursor | Cloud | After a finished run | Cancel run, archive agent | New agent (prompt required) | — |
 | Devin | Local | — | — | — | — |
 | Devin | Cloud | While running or suspended | Archive session | — | — |
+| Gemini CLI | Local | — | — | — | — |
 | GitHub Copilot | Cloud | — | — | — | — |
 | Jules | Cloud | In four documented states | Approve plan | — | — |
 | OpenCode | Local | — | — | — | — |
@@ -123,6 +125,18 @@ The bounds the tables cannot carry:
   workspace.
 - **Devin** — the local database has no address, no recap, and no error
   detail; the cloud archive is offered only once the turn positively settled.
+- **Gemini CLI** — bounded tails only (honoring `GEMINI_CLI_HOME`), never
+  written, replayed the way the CLI's own resume replays them: `$set` metadata,
+  `$rewindTo`, and a re-appended message superseding its earlier line. The
+  session clock is the recording's own message stamps, never the `lastUpdated`
+  bookkeeping the CLI appends to old sessions it merely listed. The workspace
+  label comes from the `.project_root` marker; the title from the summary the
+  CLI generates; a tool call held at `awaiting_approval` reads as waiting; the
+  recap is a cleanly settled turn's parting words and nothing mid-turn.
+  Subagent recordings stay inside the session that spawned them, and the
+  whole-JSON recordings of pre-April-2026 builds — unreadable boundedly, and
+  rewritten by the CLI itself on resume — are not read. No address, because
+  Gemini CLI publishes no route that opens a session.
 - **GitHub Copilot** — fully read-only by design.
 - **Jules** — a message is taken while planning, in progress, awaiting plan
   approval, or awaiting user feedback.

@@ -62,6 +62,7 @@ test("indexes supported provider session ids from cmux stores", async (t) => {
   await writeStore(stateDirectory, "claude", [{ sessionId: "claude-local" }]);
   await writeStore(stateDirectory, "codex", [{ sessionId: "codex-local" }]);
   await writeStore(stateDirectory, "cursor", [{ sessionId: "cursor-local" }]);
+  await writeStore(stateDirectory, "gemini", [{ sessionId: "gemini-local" }]);
   await writeStore(stateDirectory, "opencode", [{ sessionId: "opencode-local" }]);
   // An agent kind Luke has no provider for is not read at all.
   await writeStore(stateDirectory, "grok", [{ sessionId: "grok-local" }]);
@@ -71,6 +72,7 @@ test("indexes supported provider session ids from cmux stores", async (t) => {
     [PROVIDER_ID.CLAUDE_CODE, "claude-local"],
     [PROVIDER_ID.CODEX, "codex-local"],
     [PROVIDER_ID.CURSOR, "cursor-local"],
+    [PROVIDER_ID.GEMINI_CLI, "gemini-local"],
     [PROVIDER_ID.OPENCODE, "opencode-local"],
   ] as const) {
     assert.equal(snapshot.has(providerId, providerSessionId), true);

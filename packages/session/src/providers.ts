@@ -13,6 +13,7 @@ export const PROVIDER_ID = {
   COPILOT: "copilot",
   CURSOR: "cursor",
   DEVIN: "devin",
+  GEMINI_CLI: "gemini-cli",
   JULES: "jules",
   OPENCODE: "opencode",
 } as const;
