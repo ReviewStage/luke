@@ -4214,6 +4214,50 @@ test("a spoken panel ask is validated against the roster and carried", async () 
   await new Promise((resolve) => setTimeout(resolve, 0));
 
   assert.deepEqual(carried.at(-1), { kind: "panel", tab: "sessions", filter: "superset" });
+
+  // A hosted chat answers its agent's filter and its apps' filters the way
+  // its chips do: the agent behind the chat and an associated app are
+  // identities of the same standing as the provider id, so a spoken ask
+  // reaches exactly the rows the matching chip would keep.
+  context.session.updateSessions([
+    observedSession("session-a", {
+      agent: { id: "codex", displayName: "Codex" },
+      applications: [{ id: "conductor", displayName: "Conductor", scope: "session" }],
+    }),
+  ]);
+  await armDeveloperTurn(context);
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      output: [
+        {
+          type: "function_call",
+          name: "show_panel",
+          call_id: "call-guide-7",
+          arguments: '{"filter":"codex"}',
+        },
+      ],
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(carried.at(-1), { kind: "panel", tab: "sessions", filter: "codex" });
+
+  await armDeveloperTurn(context);
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      output: [
+        {
+          type: "function_call",
+          name: "show_panel",
+          call_id: "call-guide-8",
+          arguments: '{"filter":"conductor"}',
+        },
+      ],
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(carried.at(-1), { kind: "panel", tab: "sessions", filter: "conductor" });
 });
 
 test("a spoken composer open is validated against the fixed kinds and carried, never sent", async () => {
