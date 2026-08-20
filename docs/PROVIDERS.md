@@ -86,20 +86,15 @@ path, and workspace acts through Superset's CLI — see [Apps](#apps).
 
 The bounds the tables cannot carry:
 
-- **Claude Code** — bounded tails only, honoring `CLAUDE_CONFIG_DIR`, never
-  written. The recap is only the summary the provider itself designated — Luke
-  never composes one — and archived sessions are omitted when the local
-  `sessions-index.json` says so.
-- **Codex, local** — the read-only index in `state_5.sqlite` (honoring
-  `CODEX_HOME`), skipping threads archived in Codex's own UI, then bounded
-  rollout tails. Each thread also carries a ChatGPT app association with its
-  own `codex:` address. A thread spawned by another is its own row, linked by
-  the `parent_thread_id` Codex persists, and a delegated chat is labelled by a
-  name Codex actually keeps — never the raw marker. While a Codex realtime
-  voice conversation is live over a thread, it and the chats it delegated are
-  neither announced nor attention-evaluated, and nothing from inside it is
-  replayed. The hook merge runs only after Codex's own review gate shows it to
-  the user and they trust it.
+- **Claude Code** — bounded tails only, never written. The recap is only the
+  summary the provider itself designated — Luke never composes one — and
+  sessions the user archived are omitted.
+- **Codex, local** — bounded tails only, read-only, skipping threads archived
+  in Codex's own UI. While a Codex realtime voice conversation is live over a
+  thread, it and the chats it delegated are neither announced nor
+  attention-evaluated, and nothing from inside it is replayed. The hook merge
+  runs only after Codex's own review gate shows it to the user and they trust
+  it.
 - **Codex, cloud** — Codex documents no key-scoped API, so observation runs
   the user's own CLI — `codex login status` by exit code alone, then
   `codex cloud list --json` — and no token is read, stored, or forwarded; an
@@ -129,11 +124,9 @@ The bounds the tables cannot carry:
 - **Devin** — the local database has no address, no recap, and no error
   detail; the cloud archive is offered only once the turn positively settled.
 - **GitHub Copilot** — fully read-only by design.
-- **Jules** — the one provider authenticated by Google's API-key header; a
-  message is taken while planning, in progress, awaiting plan approval, or
-  awaiting user feedback, and titles fall back to the repository label.
-- **OpenCode** — honors `OPENCODE_DB`, falling back through the XDG data path
-  and the legacy JSON storage; subagent and archived rows are skipped.
+- **Jules** — a message is taken while planning, in progress, awaiting plan
+  approval, or awaiting user feedback.
+- **OpenCode** — subagent and archived rows are skipped.
 
 ## Apps
 
@@ -154,24 +147,22 @@ unreadable file, or a schema this build does not know means no annotation.
 
 - **ChatGPT** — nothing of OpenAI's is observed; the mark exists because
   OpenAI's desktop app documents the route to the exact thread.
-- **cmux** — the stores (honoring `CMUX_AGENT_HOOK_STATE_DIR`) exist only
-  where cmux's own agent hooks do — Claude Code's is injected by cmux's
-  wrapper, the others only after the user runs `cmux hooks setup` — so a
+- **cmux** — the stores exist only where cmux's own agent hooks do — Claude
+  Code's is injected by cmux's wrapper, the others only after the user runs
+  `cmux hooks setup` — so a
   session cmux never recorded is honestly unannotated, and a store for an
   agent Luke has no provider for is not read. Only the three identifiers that
   place a session in cmux's windows are read. The pane address stands in as
   the row's own link where no other manager gave it one; no grouping, because
   cmux names its workspaces only by identifier; no writes, because cmux's
   control socket is password-guarded and undocumented for outside callers.
-- **Conductor** — the index at
-  `~/Library/Application Support/com.conductor.app/conductor.db` is never used
-  to open an agent transcript, and a schema that predates workspaces annotates
-  without grouping. Conductor documents no exact address or message endpoint
-  for a local chat, so the association adds no open or send control.
-- **Orca** — reads the hook-status cache
-  (`~/Library/Application Support/orca/agent-hooks/last-status.json`) and the
-  worktree names in `orca-data.json`; the cache's conversational fields — the
-  last prompt, a message preview, a tool's input — are never read. A sub-agent
+- **Conductor** — the index is never used to open an agent transcript, and a
+  schema that predates workspaces annotates without grouping. Conductor
+  documents no exact address or message endpoint for a local chat, so the
+  association adds no open or send control.
+- **Orca** — the hook-status cache also carries conversational fields — the
+  last prompt, a message preview, a tool's input — and none of them are ever
+  read. A sub-agent
   inherits through its provider's own parent record, and a chat another
   manager already groups keeps that workspace with the Orca mark on the row
   alone.
