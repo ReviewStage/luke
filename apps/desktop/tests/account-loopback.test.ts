@@ -2,11 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { Effect } from "effect";
 import { type AccountLoopback, startAccountLoopback } from "../src/account-loopback";
-import { type Http, HttpLive } from "../src/services/http";
+import type { Http } from "../src/services/http";
 import { ACCOUNT_PROVIDER } from "../src/shared/contracts";
+import { testHttpLive } from "./support/test-http-live.js";
 
 function runWithHttp<A, E>(effect: Effect.Effect<A, E, Http>): Promise<A> {
-  return Effect.runPromise(effect.pipe(Effect.provide(HttpLive)));
+  return Effect.runPromise(effect.pipe(Effect.provide(testHttpLive)));
 }
 
 async function openLoopback(
@@ -54,8 +55,8 @@ test("a matching OAuth refusal ends the sign-in immediately", async () => {
   try {
     const callback = `${loopback.redirectUri}?state=${encodeURIComponent(loopback.state)}`;
     assert.equal((await fetch(`${callback}&error=access_denied`)).status, 400);
-    await assert.rejects(Effect.runPromise(loopback.waitForCode), /access_denied/);
     assert.equal((await fetch(`${callback}&code=too-late`)).status, 409);
+    await assert.rejects(Effect.runPromise(loopback.waitForCode), /access_denied/);
   } finally {
     await runWithHttp(loopback.close());
   }

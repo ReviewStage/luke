@@ -13,6 +13,7 @@ import { type Context, Deferred, Duration, Effect, Exit } from "effect";
 import { accountLoopbackPage, LOOPBACK_PAGE_TONE } from "./account-loopback-page";
 import { codeChallenge, createCodeVerifier } from "./account-pkce";
 import { Http, type LoopbackFailure } from "./services/http";
+import { unparsedWire, wireRecord } from "./wire-boundary";
 
 /**
  * The sign-in behind the Linear row: Linear's own OAuth flow for a public
@@ -288,7 +289,7 @@ export class LinearSignIn {
           Effect.catchAll(() =>
             Effect.succeed({
               reason: "Sign-in timed out. Try again from the Linear row.",
-            } as LinearSignInOutcome),
+            } satisfies LinearSignInOutcome),
           ),
         );
       } finally {
@@ -397,7 +398,14 @@ export class LinearSignIn {
       const payload = yield* http
         .readJson(response)
         .pipe(Effect.catchAll(() => Effect.succeed(undefined)));
-      const grant = grantFrom(payload as UnparsedWireValue, (this.#options.now ?? Date.now)());
+      if (payload === undefined) {
+        return { reason: "Linear answered the sign-in without a token." };
+      }
+      const grant = grantFrom(
+        // SAFETY: Linear token JSON matches UnparsedWireValue at this OAuth HTTP boundary.
+        payload as UnparsedWireValue,
+        (this.#options.now ?? Date.now)(),
+      );
       if (!grant) return { reason: "Linear answered the sign-in without a token." };
       return grant;
     });
@@ -487,10 +495,11 @@ export function refreshLinearGrant(
       const payload = yield* http
         .readJson(response)
         .pipe(Effect.catchAll(() => Effect.succeed(undefined)));
-      if (
-        isRecord(payload as UnparsedWireValue) &&
-        (payload as WireRecord).error === "invalid_grant"
-      ) {
+      const errorRecord = wireRecord(
+        // SAFETY: Linear OAuth error JSON matches UnparsedWireValue at this HTTP boundary.
+        unparsedWire((payload ?? null) as UnparsedWireValue),
+      );
+      if (errorRecord?.error === "invalid_grant") {
         return { status: LINEAR_REFRESH_STATUS.REFUSED };
       }
       return { status: LINEAR_REFRESH_STATUS.UNREACHABLE };
@@ -498,7 +507,11 @@ export function refreshLinearGrant(
     const payload = yield* http
       .readJson(response)
       .pipe(Effect.catchAll(() => Effect.succeed(undefined)));
-    const grant = grantFrom(payload as UnparsedWireValue, (options.now ?? Date.now)());
+    const grant = grantFrom(
+      // SAFETY: Linear refresh JSON matches UnparsedWireValue at this OAuth HTTP boundary.
+      payload as UnparsedWireValue,
+      (options.now ?? Date.now)(),
+    );
     if (!grant?.refreshToken) return { status: LINEAR_REFRESH_STATUS.UNREACHABLE };
     return { status: LINEAR_REFRESH_STATUS.RENEWED, grant };
   });

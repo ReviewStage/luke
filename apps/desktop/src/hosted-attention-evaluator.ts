@@ -106,6 +106,7 @@ export class HostedAttentionEvaluator implements AttentionEvaluator {
       if (response?.status === UNAUTHORIZED_STATUS) {
         // Routine expiry of an hour-lived token inside a day-lived app: refresh
         // and retry once, like the hosted mint.
+        // SAFETY: Account refresh runs through the Http service requirement on this path.
         yield* this.#refreshAccount() as Effect.Effect<void, never, Http>;
         const refreshed = yield* this.#readAccessToken();
         if (refreshed && refreshed !== token) {
@@ -126,7 +127,10 @@ export class HostedAttentionEvaluator implements AttentionEvaluator {
       const payload = yield* this.#payload(response);
       if (payload === undefined) return undefined;
       const answer = hostedReviewAnswerFromWire(
-        unparsedWire(payload as import("./wire-boundary").WireBoundaryInput),
+        unparsedWire(
+          // SAFETY: Hosted attention JSON matches WireBoundaryInput at this HTTP boundary.
+          payload as import("./wire-boundary").WireBoundaryInput,
+        ),
         this.#now(),
       );
       if (!answer) {
@@ -147,7 +151,10 @@ export class HostedAttentionEvaluator implements AttentionEvaluator {
       const now = this.#now();
       const payload = yield* this.#payload(response);
       const record = wireRecord(
-        unparsedWire(payload as import("./wire-boundary").WireBoundaryInput),
+        unparsedWire(
+          // SAFETY: Hosted quota JSON matches WireBoundaryInput at this HTTP boundary.
+          payload as import("./wire-boundary").WireBoundaryInput,
+        ),
       );
       const quota = record ? hostedQuotaFromWire(unparsedWire(record.quota)) : undefined;
       const resetsAt = quota?.resetsAt;

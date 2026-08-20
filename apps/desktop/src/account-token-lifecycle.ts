@@ -71,7 +71,7 @@ export function withIssuedAccountTokens<T, R>(options: {
   issue: () => Effect.Effect<AccountTokens, AccountClientFailure | CloudFailure, Http>;
   use: (tokens: AccountTokens) => Effect.Effect<T, unknown, R>;
   revoke: (refreshToken: string) => Effect.Effect<void, AccountClientFailure | CloudFailure, Http>;
-  onRevokeFailure?: (error: unknown) => void;
+  onRevokeFailure?: (error: AccountClientFailure | CloudFailure) => void;
 }): Effect.Effect<T, unknown, Http | R> {
   return Effect.gen(function* () {
     const tokens = yield* options.issue();

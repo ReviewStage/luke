@@ -80,7 +80,7 @@ import { type ProviderRegistration, providerRegistrations } from "./provider-reg
 import { runModeFor } from "./run-mode";
 import { type Cli, CliLive } from "./services/cli";
 import { type Files, FilesLive } from "./services/files";
-import { type Http, makeHttpLive } from "./services/http";
+import { type Http, HttpLive } from "./services/http";
 import { type SettingsStoreService, settingsStoreLive } from "./services/settings-store-service";
 import { sessionNoticeSpeech } from "./session-notifications";
 import { createSettingsHandler } from "./settings-handler";
@@ -178,6 +178,7 @@ export type DesktopEffectRuntime = ManagedRuntime.ManagedRuntime<DesktopServices
 export let effectRuntime: DesktopEffectRuntime;
 
 function runDesktopEffect<A, E, R>(effect: Effect.Effect<A, E, R>): Promise<A> {
+  // SAFETY: The composition root runtime provides every DesktopServices requirement.
   return effectRuntime.runPromise(effect as DesktopEffect<A, E>);
 }
 
@@ -188,7 +189,7 @@ function runRequestEffect<A, E, R>(effect: Effect.Effect<A, E, R>): void {
 function makeEffectRuntime(settingsStore: SettingsStore): DesktopEffectRuntime {
   return ManagedRuntime.make(
     Layer.mergeAll(
-      makeHttpLive(runRequestEffect),
+      HttpLive(runRequestEffect),
       CliLive,
       FilesLive,
       settingsStoreLive(settingsStore),
@@ -223,17 +224,17 @@ const accountSession = new AccountSessionManager({
     Effect.tryPromise({
       try: () => shell.openExternal(url),
       catch: (error) => (error instanceof Error ? error : new Error(String(error))),
-    }).pipe(Effect.asVoid),
+    }).pipe(Effect.catchAll(() => Effect.void)),
   startCapabilities: () =>
     Effect.tryPromise({
       try: () => startAccountCapabilities(),
       catch: (error) => (error instanceof Error ? error : new Error(String(error))),
-    }).pipe(Effect.asVoid),
+    }).pipe(Effect.catchAll(() => Effect.void)),
   stopCapabilities: () =>
     Effect.tryPromise({
       try: () => stopAccountCapabilities(),
       catch: (error) => (error instanceof Error ? error : new Error(String(error))),
-    }).pipe(Effect.asVoid),
+    }).pipe(Effect.catchAll(() => Effect.void)),
   onChange: (next) => {
     const signedIn = next.status === ACCOUNT_STATUS.SIGNED_IN;
     const wasSignedIn = account.status === ACCOUNT_STATUS.SIGNED_IN;
@@ -252,6 +253,7 @@ const observationHooks = new ObservationHookRegistry(() => app.getPath("userData
 // from three parallel lists here.
 const providerRegistry = providerRegistrations({
   readApiKey: (providerId) =>
+    // SAFETY: readApiKey failures widen to undefined while the registry keeps the Effect requirement.
     settingsStore
       .readApiKey(providerId)
       .pipe(Effect.catchAll(() => Effect.succeed(undefined))) as Effect.Effect<string | undefined>,
@@ -308,10 +310,11 @@ let trackedIssues: readonly TrackedIssue[] | undefined;
 // registry or the roster. Its meetings answer one question — is the user in a
 // meeting now — and the answer gates only when announcements are spoken.
 const googleCalendar = new GoogleCalendarReader({
-  readAccounts: () =>
+  readAccounts: (): Effect.Effect<readonly CalendarAccountCredential[], unknown, unknown> =>
+    // SAFETY: Calendar account reads that fail widen to an empty list while dropping the Files requirement.
     settingsStore
       .readCalendarAccounts()
-      .pipe(Effect.catchAll(() => Effect.succeed([]))) as unknown as Effect.Effect<
+      .pipe(Effect.catchAll(() => Effect.succeed([]))) as Effect.Effect<
       readonly CalendarAccountCredential[],
       unknown,
       unknown
@@ -430,6 +433,7 @@ const productEvents = new ProductEventSender({
   appVersion: app.getVersion(),
   sends: runMode.sendsNetwork,
   readAccessToken: () =>
+    // SAFETY: Account read failures widen to undefined while product events keep the Effect requirement.
     settingsStore.readAccount().pipe(
       Effect.map((account) => account?.accessToken),
       Effect.catchAll(() => Effect.succeed(undefined)),
@@ -699,6 +703,7 @@ async function stopAccountCapabilities(): Promise<void> {
 }
 
 async function applyVoiceCredential(): Promise<void> {
+  // SAFETY: voiceCapabilities.apply satisfies DesktopServices at the composition root.
   await runDesktopEffect(voiceCapabilities.apply() as DesktopEffect<void, unknown>);
 }
 

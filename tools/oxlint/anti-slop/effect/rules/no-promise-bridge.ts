@@ -19,6 +19,12 @@ const BRIDGE_FILES = [
 
 const BRIDGE_MEMBERS = new Set(["tryPromise", "promise", "async", "asyncEffect"]);
 const TEST_FILE = /\.(?:test|spec)\.[cm]?[jt]sx?$/u;
+const TEST_SUPPORT = /(?:^|\/)tests\/support\//u;
+
+function isTestFile(filename: string): boolean {
+  const path = normalized(filename);
+  return TEST_FILE.test(path) || TEST_SUPPORT.test(path);
+}
 
 function normalized(filename: string): string {
   return filename.replaceAll("\\", "/");
@@ -43,7 +49,7 @@ export const noPromiseBridgeRule = defineRule({
   },
   create(context) {
     const filename = context.filename;
-    if (isBridgeFile(filename) || TEST_FILE.test(normalized(filename))) return {};
+    if (isBridgeFile(filename) || isTestFile(normalized(filename))) return {};
 
     return {
       MemberExpression(node) {

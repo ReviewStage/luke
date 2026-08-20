@@ -19,7 +19,6 @@ import {
   sessionMessageText,
   text,
   UNKNOWN_WORKSPACE_LABEL,
-  type UnparsedWireValue,
   type WireRecord,
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceAgentSelection,
@@ -319,6 +318,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
           // subclass's parsing is not a network blip, and must not keep serving
           // the stale snapshot with no log, counter, or hook.
           this.#onDiagnostic?.(
+            // SAFETY: catchAll preserves the thrown value; only Error-shaped failures reach diagnostics.
             (error as unknown) instanceof Error ? error : new Error(String(error)),
           );
           return Effect.fail(error);
@@ -835,8 +835,10 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
         .pipe(
           Effect.timeout(Duration.millis(CLOUD_ADAPTER_DEFAULTS.REQUEST_TIMEOUT_MS)),
           Effect.catchTag("TimeoutException", () =>
+            // SAFETY: A timed-out write is treated as no response at this adapter boundary.
             Effect.succeed(undefined as Response | undefined),
           ),
+          // SAFETY: Transient request failures are treated as no response at this adapter boundary.
           Effect.catchAll(() => Effect.succeed(undefined as Response | undefined)),
         );
 
@@ -857,13 +859,16 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
         this.#lastAttemptAt = Number.NEGATIVE_INFINITY;
         // An unreadable body is not a failed write: the provider already said
         // yes, so only a follow-up that needed the body has anything to miss.
-        const body = yield* Effect.async<unknown, never>((resume) => {
-          response.json().then(
-            (value) => resume(Effect.succeed(value)),
-            () => resume(Effect.succeed(undefined)),
-          );
-        });
-        const parsedBody = isRecord(body as UnparsedWireValue) ? (body as WireRecord) : undefined;
+        const body = yield* http
+          .readJson(response)
+          .pipe(Effect.catchAll(() => Effect.succeed(undefined)));
+        const parsedBody =
+          body === undefined
+            ? undefined
+            : wireRecord(
+                // SAFETY: Provider write JSON matches WireBoundaryInput at this HTTP boundary.
+                unparsedWire(body as WireBoundaryInput),
+              );
         return {
           outcome: { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED },
           ...(parsedBody ? { body: parsedBody } : undefined),
@@ -974,23 +979,11 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
         );
       }
 
-      const body: WireBoundaryInput = yield* Effect.async<WireBoundaryInput, CloudFailure>(
-        (resume) => {
-          response.json().then(
-            (value) => resume(Effect.succeed(value as WireBoundaryInput)),
-            () =>
-              resume(
-                Effect.fail(
-                  new CloudFailure({
-                    failure: CLOUD_FAILURE.TRANSIENT,
-                    provider: name,
-                  }),
-                ),
-              ),
-          );
-        },
+      const body = yield* http.readJson(response);
+      const bodyRecord = wireRecord(
+        // SAFETY: Provider read JSON matches WireBoundaryInput at this HTTP boundary.
+        unparsedWire(body as WireBoundaryInput),
       );
-      const bodyRecord = wireRecord(unparsedWire(body));
       if (!bodyRecord) {
         return yield* Effect.fail(
           new CloudFailure({

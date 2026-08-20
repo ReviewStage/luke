@@ -55,6 +55,7 @@ export class HostedUsageReader {
 
   read(): Effect.Effect<HostedUsageAnswer | undefined, unknown, Http> {
     return Effect.gen(this, function* () {
+      // SAFETY: Hosted usage reads access tokens through the Http service requirement.
       const token = yield* this.#readAccessToken() as Effect.Effect<
         string | undefined,
         never,
@@ -64,9 +65,11 @@ export class HostedUsageReader {
 
       let response = yield* this.#request(token);
       if (response?.status === UNAUTHORIZED_STATUS) {
+        // SAFETY: Account refresh runs through the Http service requirement on this path.
         yield* (this.#refreshAccount() as Effect.Effect<void, never, Http>).pipe(
           Effect.catchAll(() => Effect.void),
         );
+        // SAFETY: Hosted usage re-reads access tokens through the Http service requirement.
         const refreshed = yield* this.#readAccessToken() as Effect.Effect<
           string | undefined,
           never,
@@ -85,7 +88,10 @@ export class HostedUsageReader {
       return payload === undefined
         ? undefined
         : hostedUsageAnswerFromWire(
-            unparsedWire(payload as import("./wire-boundary").WireBoundaryInput),
+            unparsedWire(
+              // SAFETY: Hosted usage JSON matches WireBoundaryInput at this HTTP boundary.
+              payload as import("./wire-boundary").WireBoundaryInput,
+            ),
           );
     });
   }

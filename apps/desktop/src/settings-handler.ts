@@ -44,10 +44,6 @@ export interface SettingsHandlerDeps {
   ) => void;
 }
 
-function isEffect<A, E, R>(value: unknown): value is Effect.Effect<A, E, R> {
-  return Effect.isEffect(value);
-}
-
 /**
  * One write path for every settings change the renderer can ask for. Trust,
  * catch, snapshot, and broadcast are identical on every channel — only what
@@ -64,7 +60,7 @@ export function createSettingsHandler(deps: SettingsHandlerDeps) {
     handle(channel, (event, ...args: UnparsedWireValue[]): Promise<SettingsUpdateResult> => {
       if (!deps.trustedSender(event)) throw new Error("Untrusted renderer");
       const validated = spec.validate(...args);
-      const validatedEffect = isEffect(validated) ? validated : Effect.succeed(validated);
+      const validatedEffect = Effect.isEffect(validated) ? validated : Effect.succeed(validated);
       return deps.runEffect(
         Effect.gen(function* () {
           const value = yield* validatedEffect;
@@ -82,7 +78,7 @@ export function createSettingsHandler(deps: SettingsHandlerDeps) {
             ),
           );
           const applied = spec.apply?.(result, value, event);
-          if (isEffect(applied)) yield* applied;
+          if (Effect.isEffect(applied)) yield* applied;
           deps.broadcast(result.settings, event.sender);
           return result;
         }),

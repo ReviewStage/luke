@@ -131,6 +131,7 @@ export class VoiceCapabilityAssembler {
       const seams = {
         serviceBaseUrl: this.#options.hostedServiceBaseUrl,
         readAccessToken: () =>
+          // SAFETY: Voice capability assembly reads account tokens through settings-store Effects.
           this.#options.settings.readAccount().pipe(
             Effect.map((account) => account?.accessToken),
             Effect.catchAll(() => Effect.succeed(undefined)),

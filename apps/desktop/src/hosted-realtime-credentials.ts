@@ -118,6 +118,7 @@ export class HostedRealtimeCredentialMinter implements RealtimeCredentialMinter 
     return Effect.gen(this, function* () {
       this.#lastAttemptAt = this.#now();
 
+      // SAFETY: Hosted mint reads access tokens through the Http service requirement.
       const token = yield* this.#readAccessToken() as Effect.Effect<
         string | undefined,
         never,
@@ -130,9 +131,11 @@ export class HostedRealtimeCredentialMinter implements RealtimeCredentialMinter 
 
       let response = yield* this.#request(token);
       if (response?.status === UNAUTHORIZED_STATUS) {
+        // SAFETY: Account refresh runs through the Http service requirement on this path.
         yield* (this.#refreshAccount() as Effect.Effect<void, never, Http>).pipe(
           Effect.catchAll(() => Effect.void),
         );
+        // SAFETY: Hosted mint re-reads access tokens through the Http service requirement.
         const refreshed = yield* this.#readAccessToken() as Effect.Effect<
           string | undefined,
           never,
@@ -151,7 +154,12 @@ export class HostedRealtimeCredentialMinter implements RealtimeCredentialMinter 
       if (!response.ok) {
         this.#refuse(
           response.status,
-          payload === undefined ? undefined : unparsedWire(payload as WireBoundaryInput),
+          payload === undefined
+            ? undefined
+            : unparsedWire(
+                // SAFETY: Hosted mint error JSON matches WireBoundaryInput at this HTTP boundary.
+                payload as WireBoundaryInput,
+              ),
         );
         return undefined;
       }
@@ -159,7 +167,13 @@ export class HostedRealtimeCredentialMinter implements RealtimeCredentialMinter 
       const answer =
         payload === undefined
           ? undefined
-          : hostedMintAnswerFromWire(unparsedWire(payload as WireBoundaryInput), this.#now());
+          : hostedMintAnswerFromWire(
+              unparsedWire(
+                // SAFETY: Hosted mint JSON matches WireBoundaryInput at this HTTP boundary.
+                payload as WireBoundaryInput,
+              ),
+              this.#now(),
+            );
       if (!answer) {
         this.#record(REALTIME_MINT_OUTCOME.MALFORMED_RESPONSE, "no usable hosted credential");
         return undefined;

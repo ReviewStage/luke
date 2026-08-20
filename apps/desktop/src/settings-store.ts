@@ -440,6 +440,7 @@ function parsePersistedSettings(
     value: UnparsedWireValue,
   ): Effect.Effect<SettingsUpdateResult, FileFailure, Files> {
     return this.#setField((persisted) => {
+      // SAFETY: Keyed settings fields persist as wire records validated on read.
       const current = persisted[field] as WireRecord | undefined;
       if (sameSettingEntry(field, current?.[key], value)) return;
       const entries = { ...current };
@@ -462,6 +463,7 @@ function parsePersistedSettings(
       yield* this.#serialize(
         Effect.gen(this, function* () {
           const persisted = yield* this.#load();
+          // SAFETY: Keyed settings fields persist as wire records validated on read.
           const current = persisted[field] as WireRecord | undefined;
           if (!sameSettingEntry(field, current?.[key], expected)) return;
           const entries = { ...current };
@@ -495,6 +497,7 @@ function parsePersistedSettings(
         ),
       );
       return {
+        // SAFETY: Effect.forEach preserves one credential source entry per provider id.
         credentialSources: Object.fromEntries(sources) as Record<
           CredentialProviderId,
           CredentialSource
@@ -551,6 +554,7 @@ function parsePersistedSettings(
       try {
         const tokens = JSON.parse(this.#cipher.decrypt(Buffer.from(account.tokenCipher, "base64")));
         if (!isRecord(tokens)) return undefined;
+        // SAFETY: Decrypted account tokens were written as a wire record with string tokens.
         const { accessToken, refreshToken } = tokens as WireRecord;
         if (!isWireString(accessToken) || !isWireString(refreshToken)) return undefined;
         return {
@@ -884,6 +888,7 @@ function parsePersistedSettings(
         if (definition.guard(undefined).valid) delete next[field];
         else Object.assign(next, { [field]: definition.default });
       }
+      // SAFETY: PersistedSettings keys are exactly the persisted settings field names.
       const changed = (Object.keys(persisted) as (keyof PersistedSettings)[]).some(
         (field) => next[field] !== persisted[field],
       );
@@ -910,6 +915,7 @@ function parsePersistedSettings(
     try {
       const tokens = JSON.parse(this.#cipher.decrypt(Buffer.from(held.tokenCipher, "base64")));
       if (!isRecord(tokens)) return undefined;
+      // SAFETY: Decrypted Linear grants were written as a wire record with string tokens.
       const { accessToken, refreshToken } = tokens as WireRecord;
       if (!isWireString(accessToken) || !accessToken) return undefined;
       return {

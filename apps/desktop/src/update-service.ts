@@ -146,7 +146,12 @@ export class UpdateService {
         this.#report("Update check answered with an unreadable body");
         return { status: UPDATE_STATUS.UNREACHABLE, currentVersion: this.#currentVersion };
       }
-      const release = wireRecord(unparsedWire(payload as WireBoundaryInput));
+      const release = wireRecord(
+        unparsedWire(
+          // SAFETY: GitHub release JSON matches WireBoundaryInput at this HTTP boundary.
+          payload as WireBoundaryInput,
+        ),
+      );
       const tag = release ? text(release.tag_name) : undefined;
       const latest = tag && parseReleaseVersion(tag) ? tag.trim().replace(/^v/, "") : undefined;
       if (!latest) {

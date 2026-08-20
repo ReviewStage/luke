@@ -145,6 +145,7 @@ export abstract class CliSessionAdapter extends SessionProviderAdapterBase {
           // subclass's parsing is not a flaky command, and must not keep serving
           // the stale snapshot with no log, counter, or hook.
           this.#onDiagnostic?.(
+            // SAFETY: catchAll preserves the thrown value; only Error-shaped failures reach diagnostics.
             (error as unknown) instanceof Error ? error : new Error(String(error)),
           );
           return Effect.fail(error);
@@ -300,6 +301,7 @@ export abstract class CliSessionAdapter extends SessionProviderAdapterBase {
         }
         let body: WireBoundaryInput;
         try {
+          // SAFETY: CLI stdout is JSON text parsed at this provider boundary before wire guards run.
           body = JSON.parse(result.stdout) as WireBoundaryInput;
         } catch {
           return yield* Effect.fail(

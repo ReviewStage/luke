@@ -10,9 +10,9 @@ import {
   type GoogleCalendarSignInOutcome,
   googleCalendarSignInConfig,
 } from "../src/google-calendar-oauth";
-import { HttpLive } from "../src/services/http";
 import { runWithHttp } from "./support/effect-http";
 import { HTTP_STATUS, type RecordedRequest, recordingFetch } from "./support/http-fake";
+import { testHttpLive } from "./support/test-http-live.js";
 
 function runSignIn(
   signIn: GoogleCalendarSignIn,
@@ -175,7 +175,7 @@ test("an abandoned sign-in times out instead of listening forever", async () => 
     timeoutMs: 20,
   });
 
-  const outcome = await Effect.runPromise(signIn.signIn().pipe(Effect.provide(HttpLive)));
+  const outcome = await Effect.runPromise(signIn.signIn().pipe(Effect.provide(testHttpLive)));
   assert.ok("reason" in outcome && /timed out/i.test(outcome.reason));
 });
 
@@ -189,7 +189,7 @@ test("one sign-in at a time", async () => {
 
   const first = runSignIn(signIn, fakeFetch as typeof globalThis.fetch);
   while (opened.length === 0) await new Promise((resolve) => setImmediate(resolve));
-  const second = await Effect.runPromise(signIn.signIn().pipe(Effect.provide(HttpLive)));
+  const second = await Effect.runPromise(signIn.signIn().pipe(Effect.provide(testHttpLive)));
   assert.ok("reason" in second && /already/i.test(second.reason));
 
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.

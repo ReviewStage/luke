@@ -112,9 +112,13 @@ function defaultQueryRunner(
       provider: SUPERSET_PROVIDER,
     });
     if (result.exitCode !== 0) {
-      const failure = new Error("Superset command failed") as Error & { stderr?: string };
-      failure.stderr = result.stdout;
-      return yield* Effect.fail(failure as unknown as CliFailure);
+      return yield* Effect.fail(
+        new CliFailure({
+          failure: CLI_FAILURE.TRANSIENT,
+          exitCode: result.exitCode,
+          provider: SUPERSET_PROVIDER,
+        }),
+      );
     }
     return result.stdout;
   });
@@ -336,37 +340,19 @@ export class SupersetCli {
         "--json",
       ];
       if (!(yield* this.connected())) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
-      const output = yield* this.#query(this.executable, arguments_, 30_000).pipe(
-        Effect.catchAll((error) =>
-          Effect.succeed({
-            failed: true as const,
-            error,
-          }),
-        ),
-      );
-      if (typeof output === "object" && output !== null && "failed" in output) {
-        const { error } = output as { failed: true; error: unknown };
-        if (error instanceof Error && "stderr" in error) {
-          return {
-            status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-            reason: supersetFailureReason(
-              unparsedWire({
-                // SAFETY: execFile failures attach stderr to the thrown Error object.
-                stderr: (error as Error & { stderr?: UnparsedWireValue }).stderr,
-              }),
-            ),
-          };
-        }
+      const queryOutcome = yield* Effect.either(this.#query(this.executable, arguments_, 30_000));
+      if (queryOutcome._tag === "Left") {
         return {
           status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
           reason: supersetFailureReason(
-            unparsedWire(error instanceof Error ? error.message : String(error)),
+            unparsedWire(`Superset exited with status ${queryOutcome.left.exitCode ?? "unknown"}.`),
           ),
         };
       }
+      const output = queryOutcome.right;
       const parsed = (() => {
         try {
-          return unparsedWire(JSON.parse(output as string));
+          return unparsedWire(JSON.parse(output));
         } catch {
           return undefined;
         }

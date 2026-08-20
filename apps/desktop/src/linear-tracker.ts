@@ -254,7 +254,10 @@ export class LinearIssueTracker implements IssueTrackerAdapter {
       if (!response.ok) return yield* Effect.fail(new Error(`Linear answered ${response.status}`));
       const payload = yield* http.readJson(response);
       const wirePayload = wireRecord(
-        unparsedWire(payload as import("./wire-boundary").WireBoundaryInput),
+        unparsedWire(
+          // SAFETY: Linear GraphQL JSON matches WireBoundaryInput at this HTTP boundary.
+          payload as import("./wire-boundary").WireBoundaryInput,
+        ),
       );
       if (!wirePayload)
         return yield* Effect.fail(new Error("Linear answered with something other than GraphQL"));

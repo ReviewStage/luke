@@ -194,7 +194,10 @@ export class OpenAiRealtimeCredentialMinter implements RealtimeCredentialMinter 
       if (payload === undefined) return undefined;
 
       const credential = realtimeCredentialFromResponse(
-        unparsedWire(payload as WireBoundaryInput),
+        unparsedWire(
+          // SAFETY: OpenAI realtime JSON matches WireBoundaryInput at this HTTP boundary.
+          payload as WireBoundaryInput,
+        ),
         this.#model,
       );
       if (!credential) {

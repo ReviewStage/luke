@@ -126,6 +126,7 @@ export class GoogleCalendarReader {
   }
 
   observe(): Effect.Effect<readonly CalendarAccountObservation[] | undefined, unknown, Http> {
+    // SAFETY: Calendar observation gen satisfies the Http requirement declared on observe().
     return Effect.gen(this, function* () {
       const accounts = yield* this.#readAccounts();
       // No accounts, no request: the calendar is not connected, which is a
@@ -179,7 +180,10 @@ export class GoogleCalendarReader {
       if (!response.ok)
         return yield* Effect.fail(new Error(`Google Calendar answered ${response.status}`));
       const payload = yield* http.readJson(response);
-      const parsedPayload = unparsedWire(payload as import("./wire-boundary").WireBoundaryInput);
+      const parsedPayload = unparsedWire(
+        // SAFETY: Google Calendar list JSON matches WireBoundaryInput at this HTTP boundary.
+        payload as import("./wire-boundary").WireBoundaryInput,
+      );
       const items =
         isRecord(parsedPayload) && Array.isArray(parsedPayload.items) ? parsedPayload.items : [];
       const calendars: ListedCalendar[] = [];
@@ -266,7 +270,10 @@ export class GoogleCalendarReader {
         return yield* Effect.fail(new Error(`Google Calendar answered ${response.status}`));
       const payload = yield* http.readJson(response);
       const responseRecord = readWireRecord(
-        unparsedWire(payload as import("./wire-boundary").WireBoundaryInput),
+        unparsedWire(
+          // SAFETY: Google Calendar free/busy JSON matches WireBoundaryInput at this HTTP boundary.
+          payload as import("./wire-boundary").WireBoundaryInput,
+        ),
       );
       const calendars = responseRecord
         ? (readWireRecord(unparsedWire(responseRecord.calendars)) ?? {})
@@ -341,7 +348,10 @@ export class GoogleCalendarReader {
       }
       const payload = yield* http.readJson(response);
       const tokenRecord = readWireRecord(
-        unparsedWire(payload as import("./wire-boundary").WireBoundaryInput),
+        unparsedWire(
+          // SAFETY: Google token refresh JSON matches WireBoundaryInput at this HTTP boundary.
+          payload as import("./wire-boundary").WireBoundaryInput,
+        ),
       );
       let accessToken = "";
       let expiresIn = 0;

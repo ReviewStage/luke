@@ -192,6 +192,7 @@ export class AccountSessionManager {
           ),
         );
         const code = await this.#options.runEffect(activeLoopback.waitForCode);
+        // SAFETY: withIssuedAccountTokens use callback is typed against Http while options widen to unknown.
         await this.#options.runEffect(
           withIssuedAccountTokens({
             issue: () =>
@@ -216,7 +217,7 @@ export class AccountSessionManager {
               const message = error instanceof Error ? error.message : String(error);
               process.stderr.write(`Rejected account token revocation failed: ${message}\n`);
             },
-          }) as Effect.Effect<void, unknown, unknown>, // SAFETY: withIssuedAccountTokens use callback is typed against Http while options widen to unknown.
+          }) as Effect.Effect<void, unknown, unknown>,
         );
         this.#options.onChange(this.#account);
         return this.#account;

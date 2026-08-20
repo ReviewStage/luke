@@ -26,6 +26,7 @@ export function createActionHandler(host: ActionHandlerHost) {
       if (!host.trustedSender(event)) throw new Error("Untrusted renderer");
       const validated = action.validate(args);
       if (!validated) return Promise.resolve(action.failure(new Error("Invalid action request")));
+      // SAFETY: action.act satisfies DesktopServices at the IPC composition root.
       return effectRuntime
         .runPromiseExit(action.act(...validated) as DesktopEffect<TResult, Error>)
         .then((exit) => {
@@ -51,6 +52,7 @@ export function registerEffectInvoke<A, E>(
 ): void {
   host.handle(channel, (event, ...args) => {
     if (!host.trustedSender(event)) throw new Error("Untrusted renderer");
+    // SAFETY: The IPC handler satisfies DesktopServices at the composition root.
     return effectRuntime.runPromise(handler(event, ...args) as DesktopEffect<A, E>);
   });
 }

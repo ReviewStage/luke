@@ -1,11 +1,13 @@
 import { CLOUD_FAILURE, CloudFailure } from "@sidecar/core/effect-errors";
 import { Effect, Layer } from "effect";
 import { type Files, FilesLive } from "../../src/services/files";
-import { Http, httpLiveService } from "../../src/services/http";
+import { buildHttpService, Http } from "../../src/services/http";
 
 export function httpLayerFromFetch(fetchLike: typeof fetch): Layer.Layer<Http> {
   return Layer.succeed(Http, {
-    ...httpLiveService,
+    ...buildHttpService((effect) => {
+      void Effect.runPromise(effect);
+    }),
     request: (url, init) =>
       Effect.tryPromise({
         try: () => fetchLike(url, init),

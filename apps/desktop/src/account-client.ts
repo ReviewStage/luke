@@ -9,6 +9,7 @@ import { AccountClientFailure, type CloudFailure } from "@sidecar/core/effect-er
 import { Effect } from "effect";
 import { Http } from "./services/http";
 import type { AccountProvider } from "./shared/contracts";
+import { unparsedWire, type WireBoundaryInput } from "./wire-boundary";
 
 export interface AccountTokens {
   accessToken: string;
@@ -53,12 +54,25 @@ function record(value: UnparsedWireValue): WireRecord | undefined {
   return isRecord(value) ? value : undefined;
 }
 
+function wireBodyFromJson(body: WireBoundaryInput): UnparsedWireValue {
+  return unparsedWire(body);
+}
+
+function readOAuthJson(response: Response): Effect.Effect<UnparsedWireValue, CloudFailure, Http> {
+  return Effect.gen(function* () {
+    const http = yield* Http;
+    const raw = yield* http.readJson(response);
+    // SAFETY: OAuth JSON responses match WireBoundaryInput at this HTTP boundary.
+    return wireBodyFromJson(raw as WireBoundaryInput);
+  });
+}
+
 function responseRecord(
-  body: unknown,
+  body: UnparsedWireValue,
   response: Response,
 ): Effect.Effect<WireRecord, AccountClientFailure> {
   if (!response.ok) {
-    const parsed = record(body as UnparsedWireValue);
+    const parsed = record(body);
     return Effect.fail(
       new AccountClientFailure({
         status: response.status,
@@ -66,7 +80,7 @@ function responseRecord(
       }),
     );
   }
-  const parsed = record(body as UnparsedWireValue);
+  const parsed = record(body);
   if (!parsed) return Effect.fail(new AccountClientFailure({}));
   return Effect.succeed(parsed);
 }
@@ -148,7 +162,7 @@ export class AccountClient {
         }),
         signal: AbortSignal.timeout(this.#timeoutMs),
       });
-      if (!response.ok) yield* responseRecord(yield* http.readJson(response), response);
+      if (!response.ok) yield* responseRecord(yield* readOAuthJson(response), response);
     });
   }
 
@@ -162,7 +176,7 @@ export class AccountClient {
         headers: { authorization: `Bearer ${accessToken}` },
         signal: AbortSignal.timeout(this.#timeoutMs),
       });
-      const body = yield* responseRecord(yield* http.readJson(response), response);
+      const body = yield* responseRecord(yield* readOAuthJson(response), response);
       if (!isWireString(body.email)) {
         return yield* Effect.fail(new AccountClientFailure({}));
       }
@@ -187,7 +201,7 @@ export class AccountClient {
         body: new URLSearchParams(fields),
         signal: AbortSignal.timeout(this.#timeoutMs),
       });
-      return yield* responseRecord(yield* http.readJson(response), response);
+      return yield* responseRecord(yield* readOAuthJson(response), response);
     });
   }
 }

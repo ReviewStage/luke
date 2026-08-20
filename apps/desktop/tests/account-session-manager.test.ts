@@ -27,21 +27,29 @@ function manager(options: { stored?: StoredAccount; revoke?: (token: string) => 
       refresh: () => Effect.succeed({ accessToken: "new-access", refreshToken: "new-refresh" }),
     } as AccountClient,
     store: {
-      readAccount: async () => stored,
-      setAccount: async (next) => {
-        stored = next;
-        return { status: ACCOUNT_STATUS.SIGNED_IN, ...next };
-      },
-      clearAccount: async () => {
-        stored = undefined;
-        return { status: ACCOUNT_STATUS.SIGNED_OUT };
-      },
+      readAccount: () => Effect.succeed(stored),
+      setAccount: (next) =>
+        Effect.sync(() => {
+          stored = next;
+          return { status: ACCOUNT_STATUS.SIGNED_IN, ...next };
+        }),
+      clearAccount: () =>
+        Effect.sync(() => {
+          stored = undefined;
+          return { status: ACCOUNT_STATUS.SIGNED_OUT };
+        }),
     },
     hostedServiceBaseUrl: "https://example.com",
     requiresAccount: true,
-    openExternal: async () => undefined,
-    startCapabilities: async () => events.push("start"),
-    stopCapabilities: async () => events.push("stop"),
+    openExternal: () => Effect.void,
+    startCapabilities: () =>
+      Effect.sync(() => {
+        events.push("start");
+      }),
+    stopCapabilities: () =>
+      Effect.sync(() => {
+        events.push("stop");
+      }),
     onChange: (account) => changes.push(account.status),
     runEffect: (effect) => Effect.runPromise(effect),
   });
@@ -57,7 +65,7 @@ test("sign out closes capabilities, clears storage, broadcasts, then revokes", a
     },
   });
   subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
-  await subject.instance.signOut({ revokeRemote: true });
+  await subject.instance.signOutForIpc({ revokeRemote: true });
   assert.deepEqual(subject.events, ["stop"]);
   assert.deepEqual(subject.changes, [ACCOUNT_STATUS.SIGNED_OUT, ACCOUNT_STATUS.SIGNED_OUT]);
   assert.deepEqual(calls, ["revoke"]);

@@ -204,7 +204,9 @@ export class OpenAiAttentionEvaluator implements AttentionEvaluator {
           return Effect.succeed(undefined);
         }),
       );
-      return payload === undefined ? undefined : (payload as UnparsedWireValue);
+      if (payload === undefined) return undefined;
+      // SAFETY: OpenAI attention JSON matches UnparsedWireValue at this HTTP boundary.
+      return payload as UnparsedWireValue;
     });
   }
 

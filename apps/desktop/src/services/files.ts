@@ -183,6 +183,7 @@ export const FilesLive: Layer.Layer<Files> = Layer.succeed(Files, {
     }),
   dynamicImport: <T>(specifier: string) =>
     Effect.tryPromise({
+      // SAFETY: The caller names the module's default export type at this dynamic import boundary.
       try: () => import(specifier) as Promise<T>,
       catch: (cause) => fromNodeFailure("dynamicImport", specifier, cause),
     }),

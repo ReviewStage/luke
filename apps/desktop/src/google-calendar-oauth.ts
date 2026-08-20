@@ -273,7 +273,7 @@ export class GoogleCalendarSignIn {
           Effect.catchAll(() =>
             Effect.succeed({
               reason: "Sign-in timed out. Try again from the Google Calendar row.",
-            } as GoogleCalendarSignInOutcome),
+            } satisfies GoogleCalendarSignInOutcome),
           ),
         );
       } finally {
@@ -358,7 +358,14 @@ export class GoogleCalendarSignIn {
         .readJson(response)
         .pipe(Effect.catchAll(() => Effect.succeed(undefined)));
       const tokens =
-        payload === undefined ? undefined : tokensFrom(unparsedWire(payload as UnparsedWireValue));
+        payload === undefined
+          ? undefined
+          : tokensFrom(
+              unparsedWire(
+                // SAFETY: Google OAuth token JSON matches UnparsedWireValue at this HTTP boundary.
+                payload as UnparsedWireValue,
+              ),
+            );
       if (!tokens) return { reason: "Google answered the sign-in without a token." };
       return tokens;
     });

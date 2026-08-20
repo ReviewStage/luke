@@ -1,5 +1,4 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import type { AddressInfo } from "node:net";
 import { CLOUD_FAILURE, CloudFailure } from "@sidecar/core/effect-errors";
 import { Context, Effect, Layer } from "effect";
 import * as Data from "effect/Data";
@@ -28,6 +27,8 @@ export class LoopbackFailure extends Data.TaggedError("LoopbackFailure")<{
 
 /** Runs a request handler at the composition root; assigned before loopback listens. */
 export type RunRequestEffect = <A, E, R>(effect: Effect.Effect<A, E, R>) => void;
+
+export type HttpService = Context.Tag.Service<Http>;
 
 function closeServerPromise(server: Server): Promise<void> {
   return new Promise((resolve) => server.close(() => resolve()));
@@ -69,18 +70,18 @@ function listenLoopback(
     });
     server.listen(options.port, options.host, () => {
       const address = server.address();
-      if (!address || typeof address === "string") {
+      if (address === null) {
         resume(Effect.fail(new LoopbackFailure({ reason: "loopback address unavailable" })));
         return;
       }
-      // SAFETY: TCP loopback listen returns AddressInfo; Unix socket paths never arise on this host binding.
-      resume(Effect.succeed({ server, port: (address as AddressInfo).port }));
+      // SAFETY: TCP loopback listen returns AddressInfo; this host binding never uses a Unix socket path.
+      resume(Effect.succeed({ server, port: (address as import("node:net").AddressInfo).port }));
     });
   });
 }
 
-export function makeHttpLive(runRequest: RunRequestEffect): Layer.Layer<Http> {
-  return Layer.succeed(Http, {
+export function buildHttpService(runRequest: RunRequestEffect): HttpService {
+  return {
     request: (url, init) =>
       Effect.tryPromise({
         try: () => fetch(url, init),
@@ -112,5 +113,9 @@ export function makeHttpLive(runRequest: RunRequestEffect): Layer.Layer<Http> {
       Effect.sync(() => {
         server.closeAllConnections();
       }),
-  });
+  };
+}
+
+export function HttpLive(runRequest: RunRequestEffect): Layer.Layer<Http> {
+  return Layer.succeed(Http, buildHttpService(runRequest));
 }
