@@ -4,6 +4,7 @@ import type { RealtimeStatus, ScheduledTimer } from "@sidecar/realtime";
 import { ATTENTION_SPEECH_SOURCE, type AttentionSpeech, REALTIME_STATUS } from "@sidecar/realtime";
 import { ATTENTION_DISPOSITION } from "@sidecar/session";
 import {
+  ANNOUNCER_GRACE_MS,
   ANNOUNCER_LINGER_MS,
   ANNOUNCER_RETRY_DELAY_MS,
   type AnnouncerSession,
@@ -434,4 +435,319 @@ test("a sentence that went stale in the queue is dropped, not read as news", () 
   session.setStatus(REALTIME_STATUS.READY);
   subject.onStatus(REALTIME_STATUS.READY);
   assert.deepEqual<AttentionSpeech[]>(session.spoken, []);
+});
+
+/** An unbidden evaluator summary, which may only ride the developer's call. */
+function summarySpeech(id: string, decidedAt = 1_000): AttentionSpeech {
+  return {
+    providerId: "claude-code",
+    providerSessionId: id,
+    disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
+    source: ATTENTION_SPEECH_SOURCE.EVALUATOR,
+    summary: `The agent on "${id}" is still at it.`,
+    decidedAt,
+  };
+}
+
+test("a batch of summaries rides the developer's call one READY edge at a time", () => {
+  const session = fakeSession();
+  session.microphone = true;
+  session.setStatus(REALTIME_STATUS.READY);
+  const timers = fakeTimers();
+  const subject = announcer(session, timers);
+
+  // One review pass decided two summaries at once. The first takes the turn;
+  // the second used to be refused against it and lost.
+  subject.enqueueRide([summarySpeech("a"), summarySpeech("b")]);
+  assert.deepEqual(
+    session.spoken.map((item) => item.providerSessionId),
+    ["a"],
+  );
+
+  session.setStatus(REALTIME_STATUS.READY);
+  subject.onStatus(REALTIME_STATUS.READY);
+  assert.deepEqual(
+    session.spoken.map((item) => item.providerSessionId),
+    ["a", "b"],
+  );
+  assert.equal(session.connects, 0, "the developer's call was ridden, never replaced");
+});
+
+test("a summary arriving mid-reply waits for the turn to end", () => {
+  const session = fakeSession();
+  session.microphone = true;
+  session.setStatus(REALTIME_STATUS.RESPONDING);
+  const timers = fakeTimers();
+  const subject = announcer(session, timers);
+
+  subject.enqueueRide([summarySpeech("a")]);
+  assert.deepEqual<AttentionSpeech[]>(session.spoken, []);
+
+  session.setStatus(REALTIME_STATUS.READY);
+  subject.onStatus(REALTIME_STATUS.READY);
+  assert.deepEqual(
+    session.spoken.map((item) => item.providerSessionId),
+    ["a"],
+  );
+});
+
+test("a summary never opens a call of Luke's own", async () => {
+  const session = fakeSession();
+  const timers = fakeTimers();
+  const subject = announcer(session, timers);
+
+  // No call is up, so there is nothing for a summary to ride: it is dropped
+  // rather than held for a call it must not open.
+  subject.enqueueRide([summarySpeech("a")]);
+  await Promise.resolve();
+  assert.equal(session.connects, 0);
+  timers.fire();
+  await Promise.resolve();
+  assert.equal(session.connects, 0);
+  assert.deepEqual<AttentionSpeech[]>(session.spoken, []);
+});
+
+test("a waiting summary dies with the call it was riding", async () => {
+  const session = fakeSession();
+  session.microphone = true;
+  session.setStatus(REALTIME_STATUS.RESPONDING);
+  const timers = fakeTimers();
+  const subject = announcer(session, timers);
+
+  subject.enqueueRide([summarySpeech("a")]);
+  assert.deepEqual<AttentionSpeech[]>(session.spoken, []);
+
+  // The developer hangs up before the reply's end ever frees an edge.
+  session.microphone = false;
+  session.setStatus(REALTIME_STATUS.IDLE);
+  subject.onStatus(REALTIME_STATUS.IDLE);
+
+  // A notice later opens Luke's own call, and the orphaned summary must not
+  // ride it: that call is not the one the developer opened.
+  subject.enqueue([speech("n")]);
+  await Promise.resolve();
+  timers.fire();
+  await Promise.resolve();
+  assert.deepEqual(
+    session.spoken.map((item) => item.providerSessionId),
+    ["n"],
+  );
+});
+
+test("notices outrank summaries on the same READY edge", () => {
+  const session = fakeSession();
+  session.microphone = true;
+  session.setStatus(REALTIME_STATUS.RESPONDING);
+  const timers = fakeTimers();
+  const subject = announcer(session, timers);
+
+  // Both wait out the same reply: the notice the developer asked to hear
+  // and a summary nobody asked about.
+  subject.enqueueRide([summarySpeech("s")]);
+  subject.enqueue([speech("n")]);
+
+  session.setStatus(REALTIME_STATUS.READY);
+  subject.onStatus(REALTIME_STATUS.READY);
+  assert.deepEqual(
+    session.spoken.map((item) => item.providerSessionId),
+    ["n"],
+  );
+
+  session.setStatus(REALTIME_STATUS.READY);
+  subject.onStatus(REALTIME_STATUS.READY);
+  assert.deepEqual(
+    session.spoken.map((item) => item.providerSessionId),
+    ["n", "s"],
+  );
+});
+
+test("quiet beginning drops the summaries waiting for an edge", () => {
+  const session = fakeSession();
+  session.microphone = true;
+  session.setStatus(REALTIME_STATUS.RESPONDING);
+  const timers = fakeTimers();
+  const subject = announcer(session, timers);
+
+  subject.enqueueRide([summarySpeech("a")]);
+  subject.setMeetingQuiet(true);
+  subject.setMeetingQuiet(false);
+
+  session.setStatus(REALTIME_STATUS.READY);
+  subject.onStatus(REALTIME_STATUS.READY);
+  assert.deepEqual<AttentionSpeech[]>(session.spoken, []);
+});
+
+test("a summary that went stale in the wait is dropped, not read as news", () => {
+  const session = fakeSession();
+  session.microphone = true;
+  session.setStatus(REALTIME_STATUS.RESPONDING);
+  const timers = fakeTimers();
+  let now = 10_000;
+  const subject = announcer(session, timers, () => now);
+
+  subject.enqueueRide([summarySpeech("a", 10_000)]);
+
+  now = 10_000 + SPOKEN_NOTICE_MAX_AGE_MS + 1;
+  session.setStatus(REALTIME_STATUS.READY);
+  subject.onStatus(REALTIME_STATUS.READY);
+  assert.deepEqual<AttentionSpeech[]>(session.spoken, []);
+});
+
+test("an announcement waits out the developer's floor after Luke answers them", () => {
+  const session = fakeSession();
+  session.microphone = true;
+  const timers = fakeTimers();
+  let now = 1_000;
+  const subject = announcer(session, timers, () => now);
+
+  // A full exchange: the developer asks, Luke answers, the reply ends.
+  session.setStatus(REALTIME_STATUS.LISTENING);
+  subject.onStatus(REALTIME_STATUS.LISTENING);
+  session.setStatus(REALTIME_STATUS.RESPONDING);
+  subject.onStatus(REALTIME_STATUS.RESPONDING);
+
+  // News arrives mid-reply and again right after: the pause belongs to the
+  // developer's next ask, not to the backlog.
+  subject.enqueue([speech("a")]);
+  session.setStatus(REALTIME_STATUS.READY);
+  subject.onStatus(REALTIME_STATUS.READY);
+  assert.deepEqual<AttentionSpeech[]>(session.spoken, []);
+
+  // Half the window passes in silence; a straggler still may not speak.
+  now = 1_000 + ANNOUNCER_GRACE_MS / 2;
+  subject.enqueue([speech("b")]);
+  assert.deepEqual<AttentionSpeech[]>(session.spoken, []);
+
+  // The developer left the pause empty; the backlog takes it.
+  now = 1_000 + ANNOUNCER_GRACE_MS;
+  timers.fire();
+  assert.deepEqual(
+    session.spoken.map((item) => item.providerSessionId),
+    ["a"],
+  );
+
+  // And chains without a second window: the readout is already Luke's turn.
+  session.setStatus(REALTIME_STATUS.READY);
+  subject.onStatus(REALTIME_STATUS.READY);
+  assert.deepEqual(
+    session.spoken.map((item) => item.providerSessionId),
+    ["a", "b"],
+  );
+});
+
+test("the developer speaking inside the window keeps the floor theirs", () => {
+  const session = fakeSession();
+  session.microphone = true;
+  const timers = fakeTimers();
+  let now = 1_000;
+  const subject = announcer(session, timers, () => now);
+
+  session.setStatus(REALTIME_STATUS.RESPONDING);
+  subject.onStatus(REALTIME_STATUS.RESPONDING);
+  subject.enqueueRide([summarySpeech("s")]);
+  session.setStatus(REALTIME_STATUS.READY);
+  subject.onStatus(REALTIME_STATUS.READY);
+  assert.deepEqual<AttentionSpeech[]>(session.spoken, []);
+
+  // The developer takes the turn inside the window — the grace did its job —
+  // and Luke's answer to them ends with a fresh window, not a spent one.
+  now = 1_000 + ANNOUNCER_GRACE_MS / 2;
+  session.setStatus(REALTIME_STATUS.LISTENING);
+  subject.onStatus(REALTIME_STATUS.LISTENING);
+  session.setStatus(REALTIME_STATUS.RESPONDING);
+  subject.onStatus(REALTIME_STATUS.RESPONDING);
+  session.setStatus(REALTIME_STATUS.READY);
+  subject.onStatus(REALTIME_STATUS.READY);
+  timers.fire();
+  assert.deepEqual<AttentionSpeech[]>(session.spoken, []);
+
+  // Only the pause after the second answer, left empty, is spoken into.
+  now = 1_000 + ANNOUNCER_GRACE_MS / 2 + ANNOUNCER_GRACE_MS;
+  timers.fire();
+  assert.deepEqual(
+    session.spoken.map((item) => item.providerSessionId),
+    ["s"],
+  );
+});
+
+test("the retry clock respects the developer's floor", () => {
+  const session = fakeSession();
+  session.microphone = true;
+  session.setStatus(REALTIME_STATUS.RESPONDING);
+  const timers = fakeTimers();
+  let now = 1_000;
+  const subject = announcer(session, timers, () => now);
+
+  subject.onStatus(REALTIME_STATUS.RESPONDING);
+  subject.enqueue([speech("a")]);
+  session.setStatus(REALTIME_STATUS.READY);
+  subject.onStatus(REALTIME_STATUS.READY);
+
+  // Every armed clock firing inside the window still finds the floor held.
+  now = 1_000 + ANNOUNCER_GRACE_MS - 1;
+  timers.fire();
+  assert.deepEqual<AttentionSpeech[]>(session.spoken, []);
+
+  now = 1_000 + ANNOUNCER_GRACE_MS;
+  timers.fire();
+  assert.deepEqual(
+    session.spoken.map((item) => item.providerSessionId),
+    ["a"],
+  );
+});
+
+test("a notice on Luke's own call speaks without the developer's window", async () => {
+  const session = fakeSession();
+  const timers = fakeTimers();
+  const subject = announcer(session, timers);
+
+  // Nobody is conversing: the window guards the developer's next ask, and
+  // on Luke's own call there is no ask to guard.
+  subject.enqueue([speech("a")]);
+  await Promise.resolve();
+  subject.onStatus(REALTIME_STATUS.READY);
+  assert.deepEqual(
+    session.spoken.map((item) => item.providerSessionId),
+    ["a"],
+  );
+});
+
+test("the developer taking the turn stands the grace clock down", () => {
+  const session = fakeSession();
+  session.microphone = true;
+  const timers = fakeTimers();
+  let now = 1_000;
+  const subject = announcer(session, timers, () => now);
+
+  session.setStatus(REALTIME_STATUS.RESPONDING);
+  subject.onStatus(REALTIME_STATUS.RESPONDING);
+  subject.enqueue([speech("a")]);
+  session.setStatus(REALTIME_STATUS.READY);
+  subject.onStatus(REALTIME_STATUS.READY);
+  const armedDuringWindow = timers.armed();
+
+  // The press is what the window waited for: the clock aimed at the pause
+  // stands down rather than firing into the developer's own turn.
+  session.setStatus(REALTIME_STATUS.LISTENING);
+  subject.onStatus(REALTIME_STATUS.LISTENING);
+  assert.ok(timers.armed() < armedDuringWindow);
+
+  // Every clock still standing fires into the busy turn and speaks nothing.
+  session.setStatus(REALTIME_STATUS.RESPONDING);
+  subject.onStatus(REALTIME_STATUS.RESPONDING);
+  now = 1_000 + ANNOUNCER_GRACE_MS * 2;
+  timers.fire();
+  assert.deepEqual<AttentionSpeech[]>(session.spoken, []);
+
+  // The answer's own end opens the next window, on a clock of its own.
+  session.setStatus(REALTIME_STATUS.READY);
+  subject.onStatus(REALTIME_STATUS.READY);
+  timers.fire();
+  assert.deepEqual<AttentionSpeech[]>(session.spoken, []);
+  now = 1_000 + ANNOUNCER_GRACE_MS * 3;
+  timers.fire();
+  assert.deepEqual(
+    session.spoken.map((item) => item.providerSessionId),
+    ["a"],
+  );
 });

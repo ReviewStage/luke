@@ -1148,18 +1148,24 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       rememberLastAnnouncement(latestSpeech(speech));
       const notices = announcerNotices(speech);
       if (notices.length > 0) ensureAnnouncer().enqueue(notices);
-      const session = voiceSession.current;
-      if (!session?.microphoneCall) return;
-      for (const item of evaluatorSummaries(speech)) session.speak(item);
+      // Evaluator summaries may only ride the developer's own call. The
+      // announcer paces them by the READY edge like everything else it says,
+      // so a batch of several — or one arriving while Luke is mid-reply — is
+      // spoken as the turns free up instead of being refused and lost.
+      if (!voiceSession.current?.microphoneCall) return;
+      const summaries = evaluatorSummaries(speech);
+      if (summaries.length > 0) ensureAnnouncer().enqueueRide(summaries);
     });
   }, [ensureAnnouncer, rememberLastAnnouncement, rememberSessionReference]);
 
   // The announcer paces itself by the session's status: READY is when a queued
   // sentence can speak and when an empty queue starts the walk toward closing
-  // the call Luke opened for himself.
+  // the call Luke opened for himself. Built through ensure so the status
+  // history is already standing when the first notice arrives — the grace
+  // window after a reply needs to know one just ended.
   useEffect(() => {
-    announcer.current?.onStatus(voiceStatus);
-  }, [voiceStatus]);
+    ensureAnnouncer().onStatus(voiceStatus);
+  }, [ensureAnnouncer, voiceStatus]);
 
   // The meeting quiet reaching the announcer. Quiet beginning is built
   // through ensure, so it stands even before the first notice would have
