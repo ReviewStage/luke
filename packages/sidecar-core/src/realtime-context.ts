@@ -14,7 +14,7 @@ import {
   announcementSummaryText,
   REALTIME_CLIENT_EVENT,
 } from "./realtime-protocol.js";
-import { type NormalizedSession, SESSION_LOCATION, sessionOpenControl } from "./session.js";
+import { type NormalizedSession, SESSION_LOCATION } from "./session.js";
 
 /**
  * Roster context serialization: the bounded, redacted view of sessions, issues,
@@ -42,10 +42,7 @@ function sessionCapabilityText(session: NormalizedSession): string {
     session.canReceiveMessage ? "takes messages" : "takes no messages",
     // Openability is the link's presence, never the link: an address has no
     // business in a conversation when the identity is what a tool call names.
-    // A session with no address of its own still reads as openable when a
-    // control advertises the act, or Luke would refuse an open its row
-    // plainly offers.
-    session.detail.link || sessionOpenControl(session) ? "can be opened" : "cannot be opened",
+    session.detail.link ? "can be opened" : "cannot be opened",
     // Readability is stated up front so Luke offers a transcript read only
     // where one can answer, instead of learning the boundary by being refused.
     session.location === SESSION_LOCATION.LOCAL

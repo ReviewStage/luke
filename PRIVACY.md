@@ -199,6 +199,10 @@ Luke never modifies the running app.
   exactly to a session Luke already observed; Luke does not infer membership
   from a filesystem path. Missing files and unknown schemas mean no Superset
   context, never an on-screen failure. The stale legacy `local.db` is not read.
+  A managed session's row carries its workspace's `superset://` address,
+  composed on this machine from the observed workspace identifier; opening it
+  hands that address to macOS like any row press, and nothing is sent to
+  Superset.
 
 Luke processes bounded fields needed to identify and display a session:
 provider and session identifiers, provider-generated titles, the workspace

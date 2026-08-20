@@ -1,10 +1,5 @@
 import path from "node:path";
-import {
-  PROVIDER_ID,
-  type ProviderSessionObservation,
-  SESSION_CONTROL_KIND,
-  type WireRecord,
-} from "@sidecar/core";
+import { PROVIDER_ID, type ProviderSessionObservation, type WireRecord } from "@sidecar/core";
 import { readDirectory } from "./local-session-adapter";
 import {
   canIgnoreSqliteError,
@@ -31,6 +26,17 @@ function supersetProviderId(agentId: string): string | undefined {
     if (key === agentId) return providerId;
   }
   return undefined;
+}
+
+/**
+ * The address of one workspace in Superset's own app — the same deep link
+ * Superset's CLI fires for `workspaces open`, composed here from the observed
+ * workspace id instead of asking the CLI to compose it, so opening stays what
+ * every open is: an address handed to the operating system, reaching no
+ * provider and needing no login.
+ */
+export function supersetWorkspaceLink(workspaceId: string): string {
+  return `superset://v2-workspace/${workspaceId}`;
 }
 
 const SUPERSET_WORKSPACE_QUERY = `
@@ -144,6 +150,12 @@ export class SupersetWorkspaceSnapshot {
       if (context.projectName) detail.repository = context.projectName;
       if (context.branch) detail.branch = context.branch;
       if (context.pullRequestUrl) detail.change = context.pullRequestUrl;
+      // A managed chat's address is its workspace's: Superset documents no
+      // terminal-scoped address, so chats sharing a workspace share it, and a
+      // session whose provider reported an address of its own keeps that one.
+      // The app that wrote the host state is the scheme's handler, so the
+      // address stands without the CLI login the acts below wait for.
+      if (!detail.link) detail.link = supersetWorkspaceLink(context.workspaceId);
       const workspace = {
         providerWorkspaceId: context.workspaceId,
         name: context.workspaceName,
@@ -155,15 +167,6 @@ export class SupersetWorkspaceSnapshot {
       }
       const controls = [
         ...(observation.controls ?? []),
-        // The open kind is what lets an ask to open this chat run the
-        // control: a Superset-managed local session has no address of its
-        // own, and Superset's window is where it opens.
-        {
-          id: SUPERSET_CONTROL_ID.OPEN_WORKSPACE,
-          label: "Open in Superset",
-          kind: SESSION_CONTROL_KIND.OPEN,
-          target: context.workspaceId,
-        },
         {
           id: SUPERSET_CONTROL_ID.CLOSE_TERMINAL,
           label: "Close terminal",

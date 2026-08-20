@@ -58,7 +58,6 @@ export {
   type SessionStatus,
   sessionChangeNumber,
   sessionMessageText,
-  sessionOpenControl,
   UNKNOWN_WORKSPACE_LABEL,
 } from "./session.js";
 export { InMemorySessionRegistry } from "./session-registry.js";

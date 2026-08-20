@@ -51,7 +51,6 @@ const CONTEXT: SupersetSessionContext = {
 };
 
 test("recognizes only controls owned by Superset", () => {
-  assert.equal(isSupersetControlId(SUPERSET_CONTROL_ID.OPEN_WORKSPACE), true);
   assert.equal(isSupersetControlId(SUPERSET_CONTROL_ID.CLOSE_TERMINAL), true);
   assert.equal(isSupersetControlId("provider-native-control"), false);
 });
@@ -153,12 +152,14 @@ test("message and controls use fixed arguments without a shell", async (t) => {
     PROVIDER_ACT_RESULT_STATUS.ACCEPTED,
   );
   assert.equal(
-    (await cli.executeControl(CONTEXT, SUPERSET_CONTROL_ID.OPEN_WORKSPACE)).status,
-    PROVIDER_ACT_RESULT_STATUS.ACCEPTED,
-  );
-  assert.equal(
     (await cli.executeControl(CONTEXT, SUPERSET_CONTROL_ID.CLOSE_TERMINAL)).status,
     PROVIDER_ACT_RESULT_STATUS.ACCEPTED,
+  );
+  // The one workspace-opening invocation left is the follow-through on a
+  // creation; an observed chat's open is an address handed to the OS instead.
+  assert.equal(
+    (await cli.executeControl(CONTEXT, "superset-open-workspace")).status,
+    PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED,
   );
   assert.equal(
     (await cli.createAgent(CONTEXT, "claude", "Review the change")).status,
@@ -184,10 +185,6 @@ test("message and controls use fixed arguments without a shell", async (t) => {
         "ship it",
         "--json",
       ],
-    },
-    {
-      executable: path.join(home, "bin", "superset"),
-      arguments_: ["workspaces", "open", "workspace-1", "--host", "host-1", "--json"],
     },
     {
       executable: path.join(home, "bin", "superset"),

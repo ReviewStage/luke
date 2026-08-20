@@ -64,7 +64,6 @@ import {
   type SessionControl,
   type SessionIdentity,
   sessionMessageText,
-  sessionOpenControl,
   supportsSessionControl,
 } from "./session.js";
 
@@ -450,18 +449,10 @@ function validateOpenSession(parsed: WireRecord, context: SessionToolContext): S
   const { session, identity } = found;
   // The action carries the identity, never the address: the main process
   // reads the link back out of its own registry, the same as a pressed row.
-  if (session.detail.link) {
-    return { kind: SESSION_TOOL_KIND.OPEN, identity };
+  if (!session.detail.link) {
+    return { kind: "refused", reason: "That session has no address to open." };
   }
-  // A session with no address of its own can still be opened where its
-  // roster advertises the act as a control — a local chat managed by
-  // Superset today — so the ask becomes that control's run rather than a
-  // refusal of something the row plainly offers.
-  const openControl = sessionOpenControl(session);
-  if (openControl) {
-    return { kind: SESSION_TOOL_KIND.CONTROL, identity, control: openControl };
-  }
-  return { kind: "refused", reason: "That session has no address to open." };
+  return { kind: SESSION_TOOL_KIND.OPEN, identity };
 }
 
 function validateRequestSessionNotice(

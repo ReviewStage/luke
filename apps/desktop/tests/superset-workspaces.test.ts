@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
-import { PROVIDER_ID, SESSION_CONTROL_KIND, SESSION_STATUS } from "@sidecar/core";
+import { PROVIDER_ID, SESSION_STATUS } from "@sidecar/core";
 import { SUPERSET_WORKSPACE_PROVIDER_ID } from "../src/shared/contracts";
 import { SUPERSET_CONTROL_ID } from "../src/superset-cli";
 import { SupersetWorkspaceReader } from "../src/superset-workspaces";
@@ -98,6 +98,7 @@ test("reads live host databases and enriches an exact provider session", async (
           repository: "Luke",
           branch: "feat/superset",
           change: "https://github.com/example/luke/pull/42",
+          link: "superset://v2-workspace/workspace-1",
         },
         workspace: {
           providerWorkspaceId: "workspace-1",
@@ -107,6 +108,21 @@ test("reads live host databases and enriches an exact provider session", async (
         },
       },
     ],
+  );
+
+  // A session whose provider reported an address of its own keeps it: the
+  // workspace address fills an absence, never overrides.
+  assert.equal(
+    snapshot.enrich(PROVIDER_ID.CODEX, [
+      {
+        providerSessionId: "session-1",
+        title: "Implement integration",
+        status: SESSION_STATUS.WORKING,
+        observedAt: 100,
+        detail: { link: "codex://threads/session-1" },
+      },
+    ])[0]?.detail?.link,
+    "codex://threads/session-1",
   );
 });
 
@@ -153,8 +169,14 @@ test("advertises Superset actions only after the CLI is connected", async (t) =>
     observedAt: 100,
   };
 
-  assert.equal(snapshot.enrich(PROVIDER_ID.CODEX, [observation])[0]?.canReceiveMessage, undefined);
-  assert.equal(snapshot.enrich(PROVIDER_ID.CODEX, [observation])[0]?.renameTarget, undefined);
+  const observed = snapshot.enrich(PROVIDER_ID.CODEX, [observation])[0];
+  assert.equal(observed?.canReceiveMessage, undefined);
+  assert.equal(observed?.controls, undefined);
+  assert.equal(observed?.renameTarget, undefined);
+  // The workspace address is observation's, not the login's: the app that
+  // wrote the host state is the scheme's handler, so a signed-out CLI still
+  // leaves every managed chat somewhere to open.
+  assert.equal(observed?.detail?.link, "superset://v2-workspace/workspace-1");
   const connected = snapshot.enrich(PROVIDER_ID.CODEX, [observation], true)[0];
   assert.equal(connected?.canReceiveMessage, true);
   assert.deepEqual(connected?.spawnableAgents, ["claude", "codex"]);
@@ -162,13 +184,7 @@ test("advertises Superset actions only after the CLI is connected", async (t) =>
   assert.equal(connected?.renameTarget, "workspace-1");
   assert.deepEqual(
     connected?.controls?.map((control) => control.id),
-    [SUPERSET_CONTROL_ID.OPEN_WORKSPACE, SUPERSET_CONTROL_ID.CLOSE_TERMINAL],
-  );
-  // The open kind is what lets an ask to open a Superset-managed local chat —
-  // which has no address of its own — run this control instead of refusing.
-  assert.equal(
-    connected?.controls?.find((control) => control.id === SUPERSET_CONTROL_ID.OPEN_WORKSPACE)?.kind,
-    SESSION_CONTROL_KIND.OPEN,
+    [SUPERSET_CONTROL_ID.CLOSE_TERMINAL],
   );
 });
 

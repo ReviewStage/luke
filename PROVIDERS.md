@@ -64,9 +64,10 @@ workspace rename — through its CLI; see
 [Integrations beyond sessions](#integrations-beyond-sessions).
 
 Superset management widens local rows past this table: a session Superset's
-host state binds to one of its terminals gains the message path, controls,
-and agent adds described under [Integrations beyond
-sessions](#integrations-beyond-sessions), whatever its own provider takes.
+host state binds to one of its terminals gains an address to open at, and —
+with the CLI logged in — the message path, control, and agent adds described
+under [Integrations beyond sessions](#integrations-beyond-sessions), whatever
+its own provider takes.
 
 Transcript readout is Luke reading a local session's conversation aloud — or
 into his composer — when asked about that session; a cloud session's
@@ -277,18 +278,22 @@ spoken announcements hold and the face sleeps.
 reads its local host state (`host/<host-id>/host.db`) read-only, joins each
 terminal-agent binding to a session another provider already observes, and
 groups those rows under the Superset workspace that owns them — enriched with
-the project, branch, and pull-request link Superset records. With Superset's
-CLI installed and logged in, a managed row takes the developer's message
-through `terminals send` and offers two controls: Open in Superset
-(`superset-open-workspace`) and Close terminal (`superset-close-terminal`).
-The open control is also how an ask to open a managed local chat is carried —
-the chat has no address of its own, so Superset's window is where it opens —
-whether the control is pressed on the row or the open is asked of Luke in a
-developer-opened turn. A managed row can start another agent in its workspace
+the project, branch, and pull-request link Superset records. Each managed row
+also carries its workspace's own address, `superset://v2-workspace/<id>`,
+composed on this machine from the observed workspace id — the same deep link
+Superset's CLI fires for `workspaces open` — so opening a managed chat is a
+row press like any other: the address goes to the operating system, nothing
+reaches Superset, and no CLI login is needed. Superset documents one address
+per workspace, so chats sharing a workspace open the same place, and a
+session whose own provider reported an address keeps that one instead. With
+Superset's CLI installed and logged in, a managed row takes the developer's
+message through `terminals send` and offers one control, Close terminal
+(`superset-close-terminal`); it can start another agent in its workspace
 through `agents create`, and a new workspace can be created in a project and
 host the CLI currently lists, with an agent it lists and an opening task,
-through `workspaces create`. Signing the CLI out withdraws every act;
-observation of the local host state continues unchanged.
+through `workspaces create` — followed by the one `workspaces open` the
+creation itself asks for. Signing the CLI out withdraws every act;
+observation, and the addresses it yields, continue unchanged.
 
 **OpenAI and the hosted account** carry voice and the optional attention
 review. They are credential-only — nothing of theirs is ever observed as a

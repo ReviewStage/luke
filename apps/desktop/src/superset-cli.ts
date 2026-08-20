@@ -26,7 +26,6 @@ import type { SupersetSessionContext } from "./superset-workspaces";
 import { unparsedWire, wireRecord } from "./wire-boundary";
 
 export const SUPERSET_CONTROL_ID = {
-  OPEN_WORKSPACE: "superset-open-workspace",
   CLOSE_TERMINAL: "superset-close-terminal",
 } as const;
 
@@ -371,12 +370,6 @@ export class SupersetCli {
     context: SupersetSessionContext,
     controlId: string,
   ): Promise<ProviderControlResult> {
-    if (controlId === SUPERSET_CONTROL_ID.OPEN_WORKSPACE) {
-      return this.#act(
-        ["workspaces", "open", context.workspaceId, "--host", context.hostId, "--json"],
-        "Superset could not open that workspace.",
-      );
-    }
     if (controlId === SUPERSET_CONTROL_ID.CLOSE_TERMINAL) {
       return this.#act(
         [
