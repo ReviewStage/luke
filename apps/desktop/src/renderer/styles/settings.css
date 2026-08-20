@@ -1158,6 +1158,30 @@
 /* Checkbox first, name after: the choice is what the line is for. The box is
    drawn in the calendar's own colour where Google listed one, and in the
    working accent — the same blue the dropdowns focus in — where it did not. */
+/* The refresh mid-read: the session rows' own spin — the stylesheets bundle
+   into one, so the keyframes are shared — under the endless-loop exception
+   DESIGN.md sanctions: a literal duration is allowed because the loop
+   answers the play-state token, which is how capture runs and reduced
+   motion stop it. */
+.icon-button[data-spinning="true"] .icon-button-glyph {
+  animation: row-spin 900ms linear infinite;
+  animation-play-state: var(--loop-motion);
+}
+
+/* The source a run of Mac calendars belongs to — iCloud, a Google account,
+   Subscribed — sectioning the checkboxes the way Calendar.app sections its
+   sidebar, in the type the Google account headers wear, because both name
+   whose calendars follow. Google account blocks carry no groups. */
+.calendar-group {
+  overflow: hidden;
+  margin: 4px 0 0;
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 620;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .calendar-choice {
   display: flex;
   align-items: center;

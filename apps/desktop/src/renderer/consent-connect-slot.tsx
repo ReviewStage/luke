@@ -1,5 +1,9 @@
 import { useRef } from "react";
-import { CONSENT_SERVICE_NAME, type ConsentServiceId } from "#shared/consent-services";
+import {
+  CONSENT_SERVICE_NAME,
+  CONSENT_SERVICE_WAIT,
+  type ConsentServiceId,
+} from "#shared/consent-services";
 import { HIT_REGION } from "./panel-state";
 import { ProviderMark } from "./provider-marks";
 import { ExternalIcon } from "./settings-icons";
@@ -15,21 +19,51 @@ export interface ConsentConnectEntry {
 }
 
 /**
- * The panel stood down while a consent sign-in waits on the browser — the
- * same courtesy the key slot pays: Luke floats above every window, including
- * the provider's consent page, so the shape shrinks to a line that says what
- * it is waiting for and the one way to stop waiting. The flow finishes in the
- * browser and the main process; when it does, the panel comes back on its own
- * around the newly connected service.
+ * A refusal's own words with its "System Settings" made pressable: the
+ * sentence names where the fix lives, so the words are the way there. The
+ * button opens the pane the main process fixes — no address crosses from
+ * here — and a sentence that never says the words is rendered untouched.
+ * Offered only where the service's wait says the pane is the way back.
+ */
+function SystemSettingsSentence({
+  text,
+  onOpen,
+}: {
+  text: string;
+  onOpen: () => void;
+}): React.JSX.Element {
+  const parts = text.split("System Settings");
+  if (parts.length === 1) return <>{text}</>;
+  return (
+    <>
+      {parts[0]}
+      <button type="button" className="link-button" onClick={onOpen}>
+        System Settings
+      </button>
+      {parts.slice(1).join("System Settings")}
+    </>
+  );
+}
+
+/**
+ * The panel stood down while a consent ask waits on the user — the same
+ * courtesy the key slot pays: Luke floats above every window, including a
+ * provider's consent page and macOS's own consent dialog, so the shape
+ * shrinks to a line that says what it is waiting for and the one way to stop
+ * waiting. The flow finishes in the browser or the system dialog and the
+ * main process; when it does, the panel comes back on its own around the
+ * newly connected service.
  *
  * One slot serves every consent flow, so no two of them can introduce
- * themselves differently: only the mark and the service's name change.
+ * themselves differently: only the mark, the name, and what the small line
+ * asks for change.
  */
 export function ConsentConnectSlot({
   entry,
   drawn,
   onCancel,
   onReopen,
+  onOpenSystemSettings,
   measure,
 }: {
   entry: ConsentConnectEntry | undefined;
@@ -38,6 +72,8 @@ export function ConsentConnectSlot({
   onCancel: () => void;
   /** Opens the waiting sign-in's consent page again, for a tab lost or closed. */
   onReopen: () => void;
+  /** Opens the pane where a refused system grant is undone. */
+  onOpenSystemSettings: () => void;
   /** Reports the slot's height, so the surface can end where it does. */
   measure: (element: HTMLElement | null) => void;
 }): React.JSX.Element | null {
@@ -68,13 +104,20 @@ export function ConsentConnectSlot({
                 : `Waiting for ${CONSENT_SERVICE_NAME[held.serviceId]}…`}
             </strong>
             <small>
-              {held.rejection ?? "Finish in your browser."}{" "}
+              {held.rejection && CONSENT_SERVICE_WAIT[held.serviceId].settingsPane ? (
+                // A refusal that names System Settings carries the way there
+                // in its own words.
+                <SystemSettingsSentence text={held.rejection} onOpen={onOpenSystemSettings} />
+              ) : (
+                (held.rejection ?? CONSENT_SERVICE_WAIT[held.serviceId].detail)
+              )}{" "}
               {/* The lost-tab way back in, on the key slot's own terms: a
                   button, not an anchor — the main process reopens the page
                   the waiting flow built, and no address crosses from here.
-                  Only while the flow is still waiting: a failed sign-in has
-                  no page listening to go back to. */}
-              {held.rejection ? null : (
+                  Only while a browser flow is still waiting: a failed sign-in
+                  has no page listening to go back to, and the system's own
+                  dialog cannot be lost or summoned again. */}
+              {held.rejection || !CONSENT_SERVICE_WAIT[held.serviceId].reopens ? null : (
                 <button type="button" className="link-button" onClick={onReopen}>
                   Open the page again
                   <ExternalIcon />

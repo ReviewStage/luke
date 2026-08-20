@@ -40,14 +40,17 @@ const REQUEST_TIMEOUT_MS = 10_000;
 /** Refreshed a minute early, so a pass never rides a token mid-expiry. */
 const ACCESS_TOKEN_EXPIRY_SLACK_MS = 60_000;
 
+// The list bounds, exported because the Apple reader keeps them too: the two
+// sources' calendars land on the same settings rows, which must not learn to
+// tell them apart.
 /** More calendars than anyone chooses between; past this the list is noise. */
-const MAXIMUM_ACCOUNT_CALENDARS = 50;
+export const MAXIMUM_ACCOUNT_CALENDARS = 50;
 
 /** A calendar's name is drawn on one settings row; a paragraph is not a name. */
-const MAXIMUM_CALENDAR_LABEL_LENGTH = 80;
+export const MAXIMUM_CALENDAR_LABEL_LENGTH = 80;
 
-/** The one colour shape Google lists calendars in; anything else is dropped. */
-const CALENDAR_COLOR_PATTERN = /^#[0-9a-f]{6}$/i;
+/** The one colour shape a listed calendar carries; anything else is dropped. */
+export const CALENDAR_COLOR_PATTERN = /^#[0-9a-f]{6}$/i;
 
 interface CachedAccessToken {
   /** The refresh token it was minted from; a replaced grant empties the cache. */

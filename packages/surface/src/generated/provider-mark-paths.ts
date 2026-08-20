@@ -63,7 +63,7 @@ export const CONDUCTOR_MARK_PATHS = [
   "M109.793 63.6992H91.9941V37.251H109.793C110.779 37.2511 111.58 38.0517 111.58 39.0381V61.9121C111.58 62.8984 110.779 63.6991 109.793 63.6992Z",
 ] as const;
 
-// The one mark that carries its own colours: Google Calendar's flat product
+// The two marks that carry their own colours. Google Calendar's flat product
 // icon, drawn as filled layers in a 200×200 box offset by 3.75 on each axis.
 export const GOOGLE_CALENDAR_MARK_LAYERS: readonly { fill: string; path: string }[] = [
   {
@@ -101,6 +101,27 @@ export const GOOGLE_CALENDAR_MARK_LAYERS: readonly { fill: string; path: string 
   {
     fill: "#1967d2",
     path: "M196.25,43.618V12.039c0-8.724-7.066-15.789-15.789-15.789h-31.579v47.368H196.25z",
+  },
+];
+
+// The macOS Calendar app icon's flat anatomy in a 40×40 box, drawn in the
+// generator because Apple ships no vector mark to reproduce.
+export const APPLE_CALENDAR_MARK_LAYERS: readonly { fill: string; path: string }[] = [
+  {
+    fill: "#ffffff",
+    path: "M9 0H31A9 9 0 0 1 40 9V31A9 9 0 0 1 31 40H9A9 9 0 0 1 0 31V9A9 9 0 0 1 9 0Z",
+  },
+  {
+    fill: "#f4574e",
+    path: "M9 0H31A9 9 0 0 1 40 9V12.6H0V9A9 9 0 0 1 9 0Z",
+  },
+  {
+    fill: "#ffffff",
+    path: "M16.4 4V6.6A2 2 0 0 1 12.4 6.6V5.9H13.7V6.6A0.7 0.7 0 0 0 15.1 6.6V4ZM18 4H19.3V6.4A0.9 0.9 0 0 0 21.1 6.4V4H22.4V6.4A2.2 2.2 0 0 1 18 6.4ZM24.2 4H25.5V7.3H27.6V8.6H24.2Z",
+  },
+  {
+    fill: "#2d2d2d",
+    path: "M15.8 16.4V34H14.2V19.1L11.8 20.8V19.1L14.6 16.4ZM19.4 16.4H27.8V17.9L22.6 34H20.9L26 18H19.4Z",
   },
 ];
 

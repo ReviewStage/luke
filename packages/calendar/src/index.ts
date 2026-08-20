@@ -22,11 +22,14 @@ export type {
   ObservedAccountCalendars,
 } from "./observation.js";
 export {
+  CALENDAR_COLOR_PATTERN,
   type CalendarAccountCredential,
   type CalendarAccountObservation,
   GoogleCalendarReader,
   type GoogleCalendarReaderOptions,
   type ListedCalendar,
+  MAXIMUM_ACCOUNT_CALENDARS,
+  MAXIMUM_CALENDAR_LABEL_LENGTH,
 } from "./reader.js";
 export {
   GOOGLE_CALENDAR_ID,

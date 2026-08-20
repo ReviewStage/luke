@@ -60,6 +60,16 @@ const bridge: AppBridge = {
     ipcRenderer.send(channels.reopenGoogleCalendarSignIn);
   },
   removeCalendarAccount: invokeMethod<"removeCalendarAccount">(channels.removeCalendarAccount),
+  connectAppleCalendar: invokeMethod<"connectAppleCalendar">(channels.connectAppleCalendar),
+  disconnectAppleCalendar: invokeMethod<"disconnectAppleCalendar">(
+    channels.disconnectAppleCalendar,
+  ),
+  appleCalendarAccessStatus: invokeMethod<"appleCalendarAccessStatus">(
+    channels.appleCalendarAccessStatus,
+  ),
+  cancelAppleCalendarConnect: () => ipcRenderer.send(channels.cancelAppleCalendarConnect),
+  openCalendarSettings: () => ipcRenderer.send(channels.openCalendarSettings),
+  refreshCalendars: invokeMethod<"refreshCalendars">(channels.refreshCalendars),
   setCalendarSelected: invokeMethod<"setCalendarSelected">(channels.setCalendarSelected),
   connectLinear: invokeMethod<"connectLinear">(channels.connectLinear),
   cancelLinearSignIn: () => {

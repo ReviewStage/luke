@@ -17,6 +17,7 @@ import {
   type WorkspaceProviderId,
 } from "@sidecar/superset/vocabulary";
 import { Fragment, useRef } from "react";
+import { APPLE_CALENDAR_ID, APPLE_CALENDAR_NAME } from "#shared/apple-calendar";
 import type { AppSettings } from "#shared/contracts";
 import { CREDENTIAL_SOURCE, VOICE_SOURCE } from "#shared/contracts";
 import { FOCUS_FRAME_LIMIT } from "./credential-entry";
@@ -187,9 +188,11 @@ const SETTING_ROW_DRAWN = {
   [APP_SETTING_ID.VOICE_CAPTIONS]: voiceControlRowDrawn,
   [APP_SETTING_ID.DUCK_OTHER_MEDIA]: voiceControlRowDrawn,
   [APP_SETTING_ID.PREFER_BUILT_IN_MICROPHONE]: voiceControlRowDrawn,
-  // The quiet rides the calendar block, and appears with its first account.
+  // The quiet rides the calendar block, and appears with its first
+  // connection — a Google account, or this Mac's own Calendar.
   [APP_SETTING_ID.QUIET_DURING_MEETINGS]: (input) =>
-    input.settings.calendarSignInAvailable && input.settings.calendarAccounts.length > 0,
+    (input.settings.calendarSignInAvailable && input.settings.calendarAccounts.length > 0) ||
+    input.settings.appleCalendar !== undefined,
   // The Conductor agent rows belong to a connected provider the build
   // documents a model table for.
   [APP_SETTING_ID.WORKSPACE_AGENT_MODEL]: conductorAgentRowDrawn,
@@ -368,6 +371,15 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           page: SETTINGS_VIEW.CONNECTIONS,
           icon: <PlugIcon />,
           haystack: ["Superset", "workspaces sign in connect integration"],
+        }
+      : undefined,
+    input.settings.appleCalendarAvailable
+      ? {
+          id: APPLE_CALENDAR_ID,
+          label: APPLE_CALENDAR_NAME,
+          page: SETTINGS_VIEW.CONNECTIONS,
+          icon: <ProviderMark providerId={APPLE_CALENDAR_ID} />,
+          haystack: [APPLE_CALENDAR_NAME, "meetings Mac calendar connect integration"],
         }
       : undefined,
     input.settings.calendarSignInAvailable

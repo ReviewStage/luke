@@ -206,6 +206,17 @@ function integrationsFact(settings: AppSettings): AppGuideFact {
         "reads only when meetings start and end — never their titles or who attends. Which " +
         "calendars count is chosen with the checkboxes under each account, and more accounts " +
         "can be added from the same row.";
+  const apple = !settings.appleCalendarAvailable
+    ? ""
+    : settings.appleCalendar === undefined
+      ? " Apple Calendar (not connected) connects from its row through macOS's own " +
+        "calendar-access ask — no sign-in and no key. Connecting it lets Luke read only when " +
+        "the meetings in this Mac's Calendar start and end — never their titles or who " +
+        "attends — so announcements can wait out a meeting."
+      : " Apple Calendar (connected) reads only when the meetings in this Mac's Calendar " +
+        "start and end — never their titles or who attends. Which calendars count is chosen " +
+        "with the checkboxes on its row, and the access itself stays the user's in System " +
+        "Settings under Privacy & Security, Calendars.";
   const superset =
     " Superset workspaces on this Mac are recognized automatically from Superset's local " +
     "read-only host state, so agents from different providers group under the project and " +
@@ -229,7 +240,7 @@ function integrationsFact(settings: AppSettings): AppGuideFact {
     "none is chosen under Superset in Settings; until one is chosen, Luke asks.";
   return {
     label: "Integrations",
-    detail: `${linear}${calendar}${superset}`.trim(),
+    detail: `${linear}${apple}${calendar}${superset}`.trim(),
   };
 }
 
@@ -560,11 +571,12 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
               "conversation holds, because its turn boundaries are already being heard " +
               "first-hand; the first change after the conversation closes is announced as " +
               "usual, and nothing from inside it is replayed." +
-              // Only a build that offers the calendar may describe the quiet:
+              // Only a build that offers a calendar may describe the quiet:
               // a hold Luke claims without a calendar row to connect is a
               // capability he does not have.
-              (input.settings.calendarSignInAvailable
-                ? " With a Google Calendar account connected and Quiet during meetings on, " +
+              (input.settings.calendarSignInAvailable || input.settings.appleCalendarAvailable
+                ? " With a calendar connected — a Google Calendar account, or this Mac's own " +
+                  "Apple Calendar — and Quiet during meetings on, " +
                   "announcements decided during a meeting wait and are read out together once " +
                   "it ends. The quiet beginning — a meeting starting, or the setting switched " +
                   "on mid-meeting — silences Luke at once, an announcement mid-sentence " +

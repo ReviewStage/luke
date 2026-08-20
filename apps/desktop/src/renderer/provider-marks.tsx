@@ -9,6 +9,7 @@ import {
 } from "@sidecar/session";
 import { SUPERSET_WORKSPACE_PROVIDER_ID } from "@sidecar/superset/vocabulary";
 import {
+  APPLE_CALENDAR_MARK_LAYERS,
   CLAUDE_CODE_PATH,
   CLOUD_BADGE_PATH,
   CMUX_PATH,
@@ -27,6 +28,7 @@ import {
   SUPERSET_PATH,
 } from "@sidecar/surface";
 import { useId } from "react";
+import { APPLE_CALENDAR_ID } from "#shared/apple-calendar";
 
 /**
  * The provider marks, and the one badge that rides them.
@@ -63,7 +65,11 @@ import { useId } from "react";
  * colour, so all three are drawn in the light form their brand uses on a dark
  * surface. They are trademarks of their respective owners. Do not restyle the
  * geometry or recolour them; swap the path in the generator if a provider
- * publishes an updated mark.
+ * publishes an updated mark. Apple Calendar is the one exception to
+ * "reproduced rather than redrawn": Apple distributes the Calendar icon only
+ * as raster app artwork, so its flat anatomy — tile, red weekday line, and
+ * the marketing icon's 17 — is drawn in the generator instead (a trademark
+ * of Apple Inc.).
  */
 interface MarkProps {
   className?: string;
@@ -223,6 +229,26 @@ function JulesMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
+function AppleCalendarMark({ className }: MarkProps): React.JSX.Element {
+  // Drawn after the macOS Calendar app icon — white tile, red weekday line,
+  // and the 17 Apple's marketing icon shows — in its own colours, because
+  // Apple ships the icon only as raster app artwork; the generator owns the
+  // geometry and the rationale.
+  return (
+    <svg
+      className={className}
+      data-mark={APPLE_CALENDAR_ID}
+      viewBox="0 0 40 40"
+      aria-hidden="true"
+      focusable="false"
+    >
+      {APPLE_CALENDAR_MARK_LAYERS.map((layer) => (
+        <path fill={layer.fill} d={layer.path} key={layer.path} />
+      ))}
+    </svg>
+  );
+}
+
 function GoogleCalendarMark({ className }: MarkProps): React.JSX.Element {
   // The one mark that carries its own colours: Google's flat product icon is
   // drawn as its published filled layers, offset the way the original artwork
@@ -369,11 +395,13 @@ export type MarkId =
   | ProviderId
   | SessionApplicationId
   | IssueTrackerId
+  | typeof APPLE_CALENDAR_ID
   | typeof GOOGLE_CALENDAR_ID
   | typeof CREDENTIAL_PROVIDER_ID.OPENAI
   | typeof SUPERSET_WORKSPACE_PROVIDER_ID;
 
 const PROVIDER_MARKS = {
+  [APPLE_CALENDAR_ID]: AppleCalendarMark,
   [PROVIDER_ID.CLAUDE_CODE]: ClaudeCodeMark,
   [SESSION_APPLICATION_ID.CHATGPT]: ChatGptMark,
   [SESSION_APPLICATION_ID.CMUX]: CmuxMark,

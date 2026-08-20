@@ -3,12 +3,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { packager } from "@electron/packager";
+import { buildAppIcon } from "./app-icon.mjs";
 import {
   APP_UPDATE_CONFIG_FILE_NAME,
   appUpdateConfig,
   createPackagerOptions,
-  ICONSET_SOURCES,
-  iconutilArguments,
   LICENSE_RESOURCE_NAME,
   resolveSigningMode,
   SIGNING_MODE,
@@ -23,11 +22,10 @@ const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(scriptDirectory, "..");
 const repoRoot = path.resolve(appRoot, "../..");
 const outputRoot = path.join(appRoot, "out");
+// A bundled helper ships as its whole bundle; the rest ship as bare binaries.
 const helperPaths = NATIVE_HELPERS.map((helper) =>
-  path.join(appRoot, ".build", "native", helper.binary),
+  path.join(appRoot, ".build", "native", helper.bundle ?? helper.binary),
 );
-const iconsetPath = path.join(appRoot, ".build", "luke.iconset");
-const iconPath = path.join(appRoot, ".build", "Luke.icns");
 const licensePath = path.join(appRoot, ".build", LICENSE_RESOURCE_NAME);
 const appUpdateConfigPath = path.join(appRoot, ".build", APP_UPDATE_CONFIG_FILE_NAME);
 const entitlementsPath = path.join(appRoot, "native", "macos", "entitlements.plist");
@@ -45,19 +43,7 @@ for (const helperPath of helperPaths) {
 fs.mkdirSync(path.dirname(licensePath), { recursive: true });
 fs.copyFileSync(path.join(repoRoot, "LICENSE"), licensePath);
 fs.writeFileSync(appUpdateConfigPath, appUpdateConfig());
-const brandIconDirectory = path.join(repoRoot, "design", "brand", "icon");
-fs.rmSync(iconsetPath, { recursive: true, force: true });
-fs.mkdirSync(iconsetPath, { recursive: true });
-for (const [iconsetName, sourceName] of Object.entries(ICONSET_SOURCES)) {
-  const sourcePath = path.join(brandIconDirectory, sourceName);
-  if (!fs.existsSync(sourcePath)) {
-    throw new Error(`Luke brand icon source is missing: ${sourcePath}`);
-  }
-  fs.copyFileSync(sourcePath, path.join(iconsetPath, iconsetName));
-}
-execFileSync("iconutil", iconutilArguments(iconsetPath, iconPath), {
-  stdio: "inherit",
-});
+const iconPath = buildAppIcon(appRoot, repoRoot);
 fs.rmSync(outputRoot, { recursive: true, force: true });
 const appPaths = await packager(
   createPackagerOptions({
