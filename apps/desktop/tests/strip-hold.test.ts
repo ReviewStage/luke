@@ -1,10 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { pointOverStrip, type SpokenStripContent, stripHoldNext } from "../src/renderer/strip-hold";
+import {
+  CAPTION_TONE,
+  pointOverStrip,
+  type SpokenStripContent,
+  stripHoldNext,
+} from "../src/renderer/strip-hold";
 
 const WORDS: SpokenStripContent = {
   texts: ["Bootstrap the desktop shell is finished."],
-  isError: false,
+  tone: CAPTION_TONE.WORDS,
   chips: true,
 };
 
@@ -30,7 +35,11 @@ test("a hover that began after the dismissal resurrects nothing", () => {
 });
 
 test("a new reply's content replaces whatever was held", () => {
-  const older: SpokenStripContent = { texts: ["An older reply."], isError: false, chips: false };
+  const older: SpokenStripContent = {
+    texts: ["An older reply."],
+    tone: CAPTION_TONE.WORDS,
+    chips: false,
+  };
   assert.equal(stripHoldNext({ hovered: true, drawn: WORDS, held: older }), WORDS);
 });
 
@@ -42,8 +51,15 @@ test("an unchanged sentence keeps the hold's identity", () => {
   // would re-render an unchanged strip every frame the pointer rests on it.
   const rebuilt: SpokenStripContent = { ...WORDS, texts: [...(WORDS.texts ?? [])] };
   assert.equal(stripHoldNext({ hovered: true, drawn: rebuilt, held: WORDS }), WORDS);
-  const chipless: SpokenStripContent = { texts: undefined, isError: false, chips: true };
+  const chipless: SpokenStripContent = { texts: undefined, tone: CAPTION_TONE.WORDS, chips: true };
   assert.equal(stripHoldNext({ hovered: true, drawn: { ...chipless }, held: chipless }), chipless);
+});
+
+test("a tone change is a content change", () => {
+  // The same words in a different tone are drawn differently, so a held
+  // snapshot must not keep its identity across one.
+  const notice: SpokenStripContent = { ...WORDS, tone: CAPTION_TONE.NOTICE };
+  assert.equal(stripHoldNext({ hovered: true, drawn: notice, held: WORDS }), notice);
 });
 
 test("the caption counts only to its visible height", () => {

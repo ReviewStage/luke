@@ -109,6 +109,7 @@ import { type Errand, errandTargets, LukeErrand } from "./luke-errand";
 import { LukeFace } from "./luke-face";
 import { usePrefersReducedMotion } from "./luke-face-mood";
 import { applySpokenSetting, buildLukeGuide, isAppSettingId } from "./luke-guide";
+import { hostedVoiceReading, hostedVoiceSpentNote, quotaResetsWhen } from "./microphone-access";
 import { NotchWings } from "./notch-wings";
 import { PanelBody, type SessionWriteHandlers } from "./panel-body";
 import {
@@ -152,7 +153,13 @@ import {
 } from "./settings-views";
 import { useSignInFaceCycle } from "./sign-in-gate";
 import { SignInSlot } from "./sign-in-slot";
-import { pointOverStrip, type SpokenStripContent, stripHoldNext } from "./strip-hold";
+import {
+  CAPTION_TONE,
+  type CaptionTone,
+  pointOverStrip,
+  type SpokenStripContent,
+  stripHoldNext,
+} from "./strip-hold";
 import { SupersetSignInSlot } from "./superset-sign-in-slot";
 import { useBootstrapRacedChannel } from "./use-bootstrap-raced-channel";
 import { panelEntryOpen, usePanelEntry } from "./use-panel-entry";
@@ -1854,6 +1861,8 @@ export function App(): React.JSX.Element {
     microphoneStatus,
     setMicrophoneStatus,
     voiceError,
+    voiceNotice,
+    announceVoiceNotice,
     voiceStatus,
     talkOpening,
     voiceHotkey,
@@ -1898,11 +1907,25 @@ export function App(): React.JSX.Element {
     voice: voiceTurn,
     error: voiceError,
   });
-  // What the caption block is being handed live this frame: Luke's words, or
-  // a failure borrowing their strip.
+  // A state notice borrows the strip on the failure's own terms — yielding to
+  // live words, leaving on the same clock — in its quieter tone. The failure
+  // outranks it: a fault is the more urgent thing to read.
+  const voiceNoticeShown = voiceErrorToShow({
+    fixtureSpeaking,
+    voice: voiceTurn,
+    error: voiceNotice,
+  });
+  // What the caption block is being handed live this frame: Luke's words, a
+  // failure borrowing their strip, or a notice borrowing it more quietly.
+  const liveStripText = voiceErrorNotice ?? voiceNoticeShown;
   const liveCaptionTexts =
-    lukeCaptions ?? (voiceErrorNotice === undefined ? undefined : [voiceErrorNotice]);
-  const captionLiveIsError = lukeCaptions === undefined && voiceErrorNotice !== undefined;
+    lukeCaptions ?? (liveStripText === undefined ? undefined : [liveStripText]);
+  const captionLiveTone: CaptionTone =
+    lukeCaptions !== undefined
+      ? CAPTION_TONE.WORDS
+      : voiceErrorNotice !== undefined
+        ? CAPTION_TONE.ERROR
+        : CAPTION_TONE.NOTICE;
 
   // The notices: the pressable faces of what the reply being spoken is about
   // — an announcement's one subject, or the several a conversation reply
@@ -1981,7 +2004,7 @@ export function App(): React.JSX.Element {
     drawn:
       liveCaptionTexts === undefined && !chipsDrawn
         ? undefined
-        : { texts: liveCaptionTexts, isError: captionLiveIsError, chips: chipsDrawn },
+        : { texts: liveCaptionTexts, tone: captionLiveTone, chips: chipsDrawn },
     held: stripHoldRef.current,
   });
   stripHoldRef.current = stripHold;
@@ -2622,6 +2645,73 @@ export function App(): React.JSX.Element {
     };
   }, [tab, settings, bootstrap]);
 
+  // The reading the calls move: a mint stores the service's own quota on
+  // success and refusal alike, so the moment a call settles is the moment the
+  // held diagnostics may be a day fresher than the panel's copy. One local
+  // IPC round trip, answered from the main process's memory — the settled
+  // statuses are exactly the ones a mint attempt can end on.
+  useEffect(() => {
+    if (
+      voiceStatus !== REALTIME_STATUS.IDLE &&
+      voiceStatus !== REALTIME_STATUS.FAILED &&
+      voiceStatus !== REALTIME_STATUS.UNAVAILABLE
+    ) {
+      return;
+    }
+    let stale = false;
+    void window.sidecar
+      .requestRealtimeDiagnostics()
+      .then((report) => {
+        if (!stale) setVoiceService(report);
+      })
+      .catch(() => undefined);
+    return () => {
+      stale = true;
+    };
+  }, [voiceStatus]);
+
+  // Whether voice runs on the account's included allowance right now — the
+  // gate every spent-day surface shares, so a key user or a signed-out launch
+  // never wears a meter they do not have.
+  const voiceSettings = settings ?? bootstrap?.settings;
+  const hostedVoiceNow =
+    voiceSettings?.voiceAvailable === true &&
+    voiceSettings.credentialSources[VOICE_CREDENTIAL_PROVIDER.id] === CREDENTIAL_SOURCE.NONE;
+  const voiceReading = hostedVoiceReading({
+    hosted: hostedVoiceNow,
+    usage: hostedUsage?.voice,
+    minted: voiceService?.quota,
+    now: Date.now(),
+  });
+  // The spent state stands only while no call is up or opening: the day's
+  // last call is still a working conversation, and neither the composer nor
+  // the face may say "spent" over an ask that would still be answered. Past
+  // the quota's own reset the reading is no reading, so the state lifts on
+  // the next render of a fresh day without anyone asking.
+  const voiceCallSettled =
+    voiceStatus === REALTIME_STATUS.IDLE ||
+    voiceStatus === REALTIME_STATUS.FAILED ||
+    voiceStatus === REALTIME_STATUS.UNAVAILABLE;
+  const voiceSpentNote =
+    voiceCallSettled && voiceReading?.remaining === 0
+      ? hostedVoiceSpentNote(quotaResetsWhen(voiceReading.resetsAt, Date.now()))
+      : undefined;
+
+  // The run-out is told once, at the moment it happens: the meter was seen
+  // running this session and now stands spent with no call open. A launch
+  // into a day already spent announces nothing — the standing surfaces carry
+  // it — and the latch re-arms when a fresh day's meter runs again.
+  const voiceRanToday = useRef(false);
+  useEffect(() => {
+    if (voiceReading !== undefined && voiceReading.remaining > 0) {
+      voiceRanToday.current = true;
+      return;
+    }
+    if (voiceSpentNote === undefined || !voiceRanToday.current) return;
+    voiceRanToday.current = false;
+    announceVoiceNotice(voiceSpentNote);
+  }, [voiceReading, voiceSpentNote, announceVoiceNotice]);
+
   if (!bootstrap || !display) return <div />;
 
   const visibleSessions = displaySessions(bootstrap, sessions, noticeAsks);
@@ -2667,11 +2757,11 @@ export function App(): React.JSX.Element {
   const hasAudioSignal = fixtureSpeaking || analyser !== undefined;
   const outputIsSilent = outputSilent(outputAudio);
   // Live words win; the held snapshot only ever finishes being read. A held
-  // caption is drawn exactly as it was, failure red included.
+  // caption is drawn exactly as it was, its tone included.
   const heldCaptionTexts = liveCaptionTexts === undefined ? stripHold?.texts : undefined;
   const captionTexts = liveCaptionTexts ?? heldCaptionTexts;
-  const captionIsError =
-    liveCaptionTexts !== undefined ? captionLiveIsError : stripHold?.isError === true;
+  const captionTone: CaptionTone =
+    liveCaptionTexts !== undefined ? captionLiveTone : (stripHold?.tone ?? CAPTION_TONE.WORDS);
   // Two responses spoken back-to-back stack as two captions: the settled one
   // above, the one still arriving below, in the always-mounted slot the lone
   // caption also uses.
@@ -2813,6 +2903,7 @@ export function App(): React.JSX.Element {
             ask={askLuke}
             onAskEngaged={changeAskEngagement}
             {...(shownAskHotkey ? { askShortcut: shownAskHotkey } : undefined)}
+            {...(voiceSpentNote ? { askNotice: voiceSpentNote } : undefined)}
             offerOptions={offerOptions}
             optionsOpen={optionsOpen}
             onOptionsToggle={() => setOptionsOpen((open) => !open)}
@@ -2976,6 +3067,7 @@ export function App(): React.JSX.Element {
         hasAudioSignal={hasAudioSignal}
         voiceOpening={talkOpening}
         meetingQuiet={meetingQuiet}
+        voiceSpent={voiceSpentNote !== undefined}
         presentation={presentation}
         housingWidth={display.notch.housingWidth}
         accountGated={accountGated}
@@ -3023,12 +3115,13 @@ export function App(): React.JSX.Element {
           not there. Hidden from readers while it captions speech — it
           // SAFETY: The preceding check establishes the asserted contract.
           duplicates what is already audible — and announced as a status line
-          when it carries a failure, which was never audible at all. */}
+          when it carries a failure or a notice, which was never audible at
+          all. */}
       <span
         className="voice-caption"
         ref={captionElement}
-        data-error={String(captionIsError)}
-        {...(captionIsError ? { role: "status" } : { "aria-hidden": true })}
+        data-tone={captionTone}
+        {...(captionTone !== CAPTION_TONE.WORDS ? { role: "status" } : { "aria-hidden": true })}
       >
         <span className="voice-caption-stack" ref={captionTextElement}>
           {settledCaption === undefined ? null : (

@@ -46,6 +46,8 @@ interface NotchWingsProps {
   voiceOpening: boolean;
   /** Whether the calendar's quiet is holding announcements — the face sleeps on it. */
   meetingQuiet: boolean;
+  /** Whether today's voice allowance is spent with no call open — the face hushes on it. */
+  voiceSpent: boolean;
   presentation: PanelPresentation;
   housingWidth: number;
   /**
@@ -198,6 +200,7 @@ export function NotchWings({
   hasAudioSignal,
   voiceOpening,
   meetingQuiet,
+  voiceSpent,
   presentation,
   housingWidth,
   accountGated,
@@ -236,6 +239,7 @@ export function NotchWings({
         voiceActive,
       }),
       meetingQuiet,
+      voiceSpent,
       attention: tally.attentionIds,
       working: tally.working,
       complete: tally.complete,

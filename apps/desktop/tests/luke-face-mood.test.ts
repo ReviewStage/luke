@@ -25,6 +25,7 @@ function context(overrides: Partial<FaceContext> = {}): FaceContext {
     speaking: false,
     microphoneLive: false,
     meetingQuiet: false,
+    voiceSpent: false,
     attention: [],
     working: 0,
     complete: 0,
@@ -101,13 +102,40 @@ test("a meeting the calendar is holding through puts the face to sleep", () => {
   );
 });
 
+test("a spent voice hushes an awake face, and everything else outranks it", () => {
+  // Spent voice with sessions still moving: watching continues, so the face
+  // stays awake — hushed rather than asleep.
+  assert.equal(
+    restingMotion(context({ voiceSpent: true, attention: ["a"], working: 3, total: 5 })),
+    FACE_MOTION.HUSHED,
+  );
+  // A meeting's hold and an empty roster each say more about this moment
+  // than the meter does; speech says the most of all. Speech over a spent
+  // meter can still happen — the day's last call keeps working after the
+  // meter it was minted against reads zero.
+  assert.equal(
+    restingMotion(context({ voiceSpent: true, meetingQuiet: true, total: 2 })),
+    FACE_MOTION.SLEEPING,
+  );
+  assert.equal(restingMotion(context({ voiceSpent: true })), FACE_MOTION.SLEEPING);
+  assert.equal(
+    restingMotion(context({ voiceSpent: true, speaking: true, total: 2 })),
+    FACE_MOTION.TALKING,
+  );
+});
+
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("only what stays true for as long as it holds may hold the face", () => {
   // Nothing to watch at all, which is a different thing from nothing happening.
   assert.equal(restingMotion(context()), FACE_MOTION.SLEEPING);
-  // The three rests are the whole of what repeats, so they are the whole of what
+  // The four rests are the whole of what repeats, so they are the whole of what
   // the artwork is allowed to loop.
-  const rests = [FACE_MOTION.TALKING, FACE_MOTION.LISTENING, FACE_MOTION.SLEEPING];
+  const rests = [
+    FACE_MOTION.TALKING,
+    FACE_MOTION.LISTENING,
+    FACE_MOTION.SLEEPING,
+    FACE_MOTION.HUSHED,
+  ];
   for (const pool of [asidePool(true), asidePool(false)]) {
     for (const aside of pool) {
       assert.ok(!rests.includes(aside.motion), `${aside.motion} is a rest and cannot be a gesture`);
@@ -124,6 +152,7 @@ const SPOKEN = [
   FACE_MOTION.TALKING,
   FACE_MOTION.LISTENING,
   FACE_MOTION.SLEEPING,
+  FACE_MOTION.HUSHED,
   FACE_MOTION.WAITING,
   FACE_MOTION.SUCCESS,
   FACE_MOTION.NOTIFICATION,
@@ -222,7 +251,12 @@ test("a gesture the rest is covering is not a play", () => {
   // A rest on the face: the gesture is not being played, and counting it would
   // rebuild the drawing — restarting the rest's own loop — at a session the rest
   // is meant to be ignoring, and again a frame later when the rest dropped it.
-  for (const resting of [FACE_MOTION.LISTENING, FACE_MOTION.TALKING, FACE_MOTION.SLEEPING]) {
+  for (const resting of [
+    FACE_MOTION.LISTENING,
+    FACE_MOTION.TALKING,
+    FACE_MOTION.SLEEPING,
+    FACE_MOTION.HUSHED,
+  ]) {
     assert.deepEqual(facePlay(resting, gesture), { motion: resting, repeat: true, play: 0 });
     assert.deepEqual(facePlay(resting, undefined), { motion: resting, repeat: true, play: 0 });
   }
@@ -254,6 +288,13 @@ test("every motion the renderer can play is one the artwork describes", () => {
   // the renderer draws lids instead of eyes, so anything else would go blind.
   const withLids = Object.values(FACE_MOTION).filter((motion) => FACE_MOTION_PARTS[motion].lids);
   assert.deepEqual(withLids, [FACE_MOTION.SLEEPING]);
+  // Only the hush wears the crescent, and a hushed face keeps its eyes: the
+  // one thing a spent allowance must not say is that Luke stopped watching.
+  const withMoon = Object.values(FACE_MOTION).filter(
+    (motion) => FACE_MOTION_PARTS[motion].hushMoon,
+  );
+  assert.deepEqual(withMoon, [FACE_MOTION.HUSHED]);
+  assert.equal(FACE_MOTION_PARTS[FACE_MOTION.HUSHED].lids, false);
 });
 
 const NO_METER = { hasAudioSignal: false, fixtureSpeaking: false, voiceActive: false };

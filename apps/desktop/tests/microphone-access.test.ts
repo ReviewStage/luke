@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { REALTIME_DEFAULTS, REALTIME_MINT_OUTCOME, type RealtimeDiagnostics } from "@sidecar/core";
 import {
   currentQuota,
   fresherQuota,
+  hostedVoiceReading,
   hostedVoiceSpentNote,
   microphoneAccessRow,
   QUOTA_LEVEL,
@@ -11,9 +13,25 @@ import {
   VOICE_SOURCE_DETAIL,
   VOICE_SOURCE_LABEL,
   voiceAttentionNote,
+  voiceQuotaSpentNote,
   voiceSourceLabel,
 } from "../src/renderer/microphone-access";
 import { VOICE_SOURCE } from "../src/shared/contracts";
+
+/** A hosted diagnostics report with only what a test wants to vary. */
+function diagnostics(overrides: Partial<RealtimeDiagnostics>): RealtimeDiagnostics {
+  return {
+    apiKeyConfigured: false,
+    hosted: true,
+    fixtureMode: false,
+    model: REALTIME_DEFAULTS.MODEL,
+    voice: REALTIME_DEFAULTS.VOICE,
+    speed: REALTIME_DEFAULTS.SPEED,
+    endpoint: "https://tryluke.dev/api/voice/mint",
+    lastOutcome: REALTIME_MINT_OUTCOME.NOT_ATTEMPTED,
+    ...overrides,
+  };
+}
 
 test("access is offered only where it can be used", () => {
   const offered = microphoneAccessRow({
@@ -176,6 +194,69 @@ test("the spent sentence says when voice returns, on the reader's own clock", ()
   assert.match(hostedVoiceSpentNote("at 5:00 PM"), /Back at 5:00 PM/);
   // With no reading in hand, the day boundary every counter shares.
   assert.match(hostedVoiceSpentNote(), /Back at midnight UTC/);
+  // Plain sentences, because the note also lands where a reply would have —
+  // under the ask field — where dash-spliced prose reads as an error code.
+  assert.doesNotMatch(hostedVoiceSpentNote("at 5:00 PM"), /—/);
+});
+
+test("one reading serves every spent-day surface, and only a hosted day has one", () => {
+  const now = 1_800_000_000_000;
+  const usage = { used: 49, limit: 50, remaining: 1, resetsAt: now + 3_600_000 };
+  const minted = { used: 50, limit: 50, remaining: 0, resetsAt: now + 3_600_000 };
+
+  // The mint's fresher reading wins over a usage read held from earlier.
+  assert.equal(hostedVoiceReading({ hosted: true, usage, minted, now }), minted);
+  // Voice on a key has no meter, whatever readings are still lying around.
+  assert.equal(hostedVoiceReading({ hosted: false, usage, minted, now }), undefined);
+  // A reading past its own reset is no reading: the fresh day answers for itself.
+  assert.equal(
+    hostedVoiceReading({ hosted: true, usage: undefined, minted, now: minted.resetsAt + 1 }),
+    undefined,
+  );
+  assert.equal(
+    hostedVoiceReading({ hosted: true, usage: undefined, minted: undefined, now }),
+    undefined,
+  );
+});
+
+test("the moment-of-use note speaks only while a spent allowance is what is missing", () => {
+  const now = 1_800_000_000_000;
+  const running = { used: 50, limit: 50, remaining: 0, resetsAt: now + 3_600_000 };
+
+  // A spent day inside its own window says when voice returns, on the quota
+  // the refusal itself carried.
+  const spent = voiceQuotaSpentNote(
+    diagnostics({ lastOutcome: REALTIME_MINT_OUTCOME.QUOTA_EXHAUSTED, quota: running }),
+    now,
+  );
+  assert.ok(spent);
+  assert.match(spent, /voice is spent/);
+  assert.match(spent, /Back at/);
+
+  // A refusal that carried no reading still says spent, with the shared
+  // day boundary standing in for the missing clock.
+  const unread = voiceQuotaSpentNote(
+    diagnostics({ lastOutcome: REALTIME_MINT_OUTCOME.QUOTA_EXHAUSTED }),
+    now,
+  );
+  assert.ok(unread);
+  assert.match(unread, /midnight UTC/);
+
+  // Any other outcome is not a spent allowance, and yesterday's refusal is
+  // no longer one either — the fresh day has an allowance again.
+  assert.equal(voiceQuotaSpentNote(undefined, now), undefined);
+  assert.equal(
+    voiceQuotaSpentNote(diagnostics({ lastOutcome: REALTIME_MINT_OUTCOME.NO_API_KEY }), now),
+    undefined,
+  );
+  const expired = { used: 50, limit: 50, remaining: 0, resetsAt: now - 1 };
+  assert.equal(
+    voiceQuotaSpentNote(
+      diagnostics({ lastOutcome: REALTIME_MINT_OUTCOME.QUOTA_EXHAUSTED, quota: expired }),
+      now,
+    ),
+    undefined,
+  );
 });
 
 test("the toggle names both sources and explains each one", () => {

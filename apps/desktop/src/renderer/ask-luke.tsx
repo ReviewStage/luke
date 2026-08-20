@@ -63,15 +63,21 @@ export type AskHandler = (text: string) => Promise<string | undefined>;
  * the call's receiving half, so a typed ask goes whether or not the system
  * would let a press capture. A failure's own message is not repeated here:
  * it lands on the caption strip directly below, where the reply would have.
+ *
+ * `quotaSpent` is the one unavailability with different words: a signed-in
+ * account whose free day is used up needs neither way in, it needs tomorrow.
+ * The sentence is the same one the settings meters stand behind, minted by
+ * the caller from the voice service's own diagnostics.
  */
-export function askRefusal(status: RealtimeStatus): string {
+export function askRefusal(status: RealtimeStatus, quotaSpent?: string): string {
   if (status === REALTIME_STATUS.LISTENING) {
     return "The microphone is open. Finish saying it.";
   }
   if (status === REALTIME_STATUS.UNAVAILABLE) {
     // Both ways in, because naming only the key would send a signed-in
-    // developer to buy one they do not need.
-    return "Sign in, or connect an OpenAI key, in Settings.";
+    // developer to buy one they do not need — and a spent allowance names
+    // itself, because its fix is tomorrow rather than either.
+    return quotaSpent ?? "Sign in, or connect an OpenAI key, in Settings.";
   }
   if (status === REALTIME_STATUS.CONNECTING) {
     return "Still connecting. Ask again in a moment.";
@@ -107,6 +113,7 @@ export function AskLuke({
   onEngagedChange,
   rowIndex,
   shortcut,
+  standingNotice,
 }: {
   ask: AskHandler;
   /**
@@ -124,6 +131,13 @@ export function AskLuke({
    * key that answers — a hint for a chord another app owns would be a lie.
    */
   shortcut?: string;
+  /**
+   * A note standing under the pill before anyone types — today's voice
+   * allowance spent — so the state is read at a glance rather than
+   * discovered by an ask being refused. A refusal outranks it while one is
+   * showing: the refusal is the fresher answer to the ask actually made.
+   */
+  standingNotice?: string;
 }): React.JSX.Element {
   const [draft, setDraft] = useState("");
   const [asking, setAsking] = useState(false);
@@ -235,7 +249,9 @@ export function AskLuke({
           <SendIcon />
         </button>
       </form>
-      {refusal ? <small className="ask-luke-refusal">{refusal}</small> : null}
+      {(refusal ?? standingNotice) ? (
+        <small className="ask-luke-refusal">{refusal ?? standingNotice}</small>
+      ) : null}
     </div>
   );
 }

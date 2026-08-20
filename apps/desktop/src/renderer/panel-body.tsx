@@ -664,6 +664,12 @@ export interface PanelBodyProps {
   writes: SessionWriteHandlers;
   /** Carries a typed ask to Luke's own conversation, answering why it could not go. */
   ask: AskHandler;
+  /**
+   * A standing note under the composer — today's voice allowance spent — so
+   * the state is read before an ask is typed rather than discovered by one
+   * being refused.
+   */
+  askNotice?: string;
   /** Reports someone being part-way through an ask, so the panel holds for them. */
   onAskEngaged: (engaged: boolean) => void;
   /** The registered summon key the field should teach, if the system granted one. */
@@ -706,6 +712,7 @@ export function PanelBody({
   onOpenSession,
   writes,
   ask,
+  askNotice,
   onAskEngaged,
   askShortcut,
   offerOptions,
@@ -841,6 +848,7 @@ export function PanelBody({
             onEngagedChange={onAskEngaged}
             rowIndex={rows.length + 1}
             {...(askShortcut ? { shortcut: askShortcut } : undefined)}
+            {...(askNotice ? { standingNotice: askNotice } : undefined)}
           />
         </SessionsPanel>
       )}

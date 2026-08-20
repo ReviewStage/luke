@@ -14,7 +14,7 @@ interface LukeFaceProps {
 }
 
 /** Nothing beyond the smile and the eyes, which is what a still face draws. */
-const RESTING_PARTS = { brows: false, lids: false, sleepZ: false } as const;
+const RESTING_PARTS = { brows: false, lids: false, sleepZ: false, hushMoon: false } as const;
 
 /** The monoline stroke every drawn line of the face shares. */
 const STROKE = {
@@ -125,6 +125,19 @@ export function LukeFace({ motion, repeat = false }: LukeFaceProps): React.JSX.E
             </g>
           ))
         : null}
+
+      {/* Outside the layers for the same reason the z's are: the crescent
+          hangs beside the head, not on it. Filled like the eyes — at capsule
+          size a stroked crescent collapses into a ring. */}
+      {parts.hushMoon ? (
+        <g transform={FACE_ART.HUSH_MOON.transform}>
+          <path
+            className="luke-face-part luke-face-moon"
+            d={FACE_ART.HUSH_MOON.path}
+            fill="currentColor"
+          />
+        </g>
+      ) : null}
     </svg>
   );
 }
