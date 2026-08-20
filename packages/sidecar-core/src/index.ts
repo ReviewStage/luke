@@ -217,6 +217,7 @@ export {
   type AttentionSpeech,
   attentionSpeechFromReviews,
   cancelResponseEvents,
+  clearOutputAudioEvents,
   clearInputAudioEvents,
   functionCallFollowUpEvents,
   functionCallOutputEvents,

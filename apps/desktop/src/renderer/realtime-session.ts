@@ -11,6 +11,7 @@ import {
   type ContextItemKind,
   cancelResponseEvents,
   clearInputAudioEvents,
+  clearOutputAudioEvents,
   contextItemId,
   contextSupersedeEventId,
   contextSupersedeEvents,
@@ -118,6 +119,18 @@ const CONTEXT_FLUSH_ORDER: readonly ContextItemKind[] = [
  * two turns' worth of room for something that ordinarily clears immediately.
  */
 const MAXIMUM_PENDING_SUPERSEDES = CONTEXT_FLUSH_ORDER.length * 2;
+
+/** Bounds interruption events whose successful requests receive no matching acknowledgement. */
+const MAXIMUM_PENDING_INTERRUPTIONS = 24;
+
+const INTERRUPTION_EVENT_KIND = {
+  CANCELLATION: "cancellation",
+  AUDIO_CLEAR: "audio-clear",
+} as const;
+
+type InterruptionEventKind = (typeof INTERRUPTION_EVENT_KIND)[keyof typeof INTERRUPTION_EVENT_KIND];
+
+const NO_ACTIVE_RESPONSE_CANCELLATION = /^Cancellation failed:\s*no active response\b/i;
 
 /**
  // SAFETY: The preceding check establishes the asserted contract.
@@ -429,6 +442,14 @@ export class RealtimeVoiceSession {
    * rather than a fault to report to the developer.
    */
   #pendingSupersedes = new Map<string, string>();
+  /**
+   * Cancel and clear requests not yet answered with an error, by their stamped
+   * names. Their errors belong to the reply that was interrupted, so they must
+   * never finish a newer turn; only the documented redundant-cancel race stays
+   * quiet, while every genuine refusal is still reported.
+   */
+  #pendingInterruptions = new Map<string, InterruptionEventKind>();
+  #interruptionSequence = 0;
   /**
    * Luke's own audio track. Cancelling stops the model producing more, but what
    * it already produced is on its way down the connection and keeps playing —
@@ -1389,7 +1410,24 @@ export class RealtimeVoiceSession {
     // never heard — the text runs ahead of the speech — and leaving them up
     // would show Luke finishing a sentence he was just stopped from saying.
     this.#clearCaption();
-    this.#send(cancelResponseEvents());
+    this.#interruptionSequence += 1;
+    const cancellationEventId = `response_cancel_${this.#interruptionSequence}`;
+    const clearEventId = `output_audio_clear_${this.#interruptionSequence}`;
+    const cancelGeneration = this.#responseOutstanding;
+    const interruptionCount = cancelGeneration ? 2 : 1;
+    while (this.#pendingInterruptions.size + interruptionCount > MAXIMUM_PENDING_INTERRUPTIONS) {
+      const [oldest] = this.#pendingInterruptions.keys();
+      if (oldest === undefined) break;
+      this.#pendingInterruptions.delete(oldest);
+    }
+    if (cancelGeneration) {
+      this.#pendingInterruptions.set(cancellationEventId, INTERRUPTION_EVENT_KIND.CANCELLATION);
+      this.#pendingInterruptions.set(clearEventId, INTERRUPTION_EVENT_KIND.AUDIO_CLEAR);
+      this.#send(cancelResponseEvents({ cancellationEventId, clearEventId }));
+    } else {
+      this.#pendingInterruptions.set(clearEventId, INTERRUPTION_EVENT_KIND.AUDIO_CLEAR);
+      this.#send(clearOutputAudioEvents(clearEventId));
+    }
     // Then correct what Luke believes he said, or the next answer is free to
     // refer back to a sentence that never reached the room.
     this.#send(this.#truncateEvents());
@@ -1521,6 +1559,7 @@ export class RealtimeVoiceSession {
     this.#contextPending.clear();
     this.#contextLive.clear();
     this.#pendingSupersedes.clear();
+    this.#pendingInterruptions.clear();
     this.#conversationBegan = false;
     this.#clearIdleTimer();
     this.#responseOutstanding = false;
@@ -2066,6 +2105,25 @@ export class RealtimeVoiceSession {
   }
 
   /**
+   * Handles an error answering one interruption without letting an old reply's
+   * failure finish the new turn that interrupted it. Only the documented
+   * no-active-response race is quiet; every other refusal still reaches the
+   * developer as a real voice error.
+   */
+  #interruptionError(event: { message: string; eventId?: string; errorType?: string }): boolean {
+    if (event.eventId === undefined) return false;
+    const kind = this.#pendingInterruptions.get(event.eventId);
+    if (kind === undefined) return false;
+    this.#pendingInterruptions.delete(event.eventId);
+    const benignCancellation =
+      kind === INTERRUPTION_EVENT_KIND.CANCELLATION &&
+      event.errorType === "invalid_request_error" &&
+      NO_ACTIVE_RESPONSE_CANCELLATION.test(event.message);
+    if (!benignCancellation) this.#options.onError(event.message);
+    return true;
+  }
+
+  /**
    * The context items this call currently holds, by kind — what the
    * conversation would be answered from if a turn opened now. Exposed for the
    * tests that hold this class to its one-item-per-kind promise.
@@ -2245,6 +2303,7 @@ export class RealtimeVoiceSession {
         // nothing they can act on, and reporting it would both put a fault on
         // screen and, below, end a reply that is still being spoken.
         if (this.#supersedeError(event)) return;
+        if (this.#interruptionError(event)) return;
         this.#options.onError(event.message);
         // An error can arrive *instead of* `response.done` — an empty push-to-talk
         // commit is the common case — which would otherwise leave the session
