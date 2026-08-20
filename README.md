@@ -48,23 +48,28 @@ Voice is the one feature that sends audio off your Mac. Refer to
 Luke also counts how his own features are used, on by default — switch it off
 under **Share usage data** in Settings.
 
-## Supported providers
+## Supported agents and apps
 
-| Provider | Local | Cloud |
+Every row leads with its agent — the provider the session belongs to:
+
+| Agent | Local | Cloud |
 | --- | :---: | :---: |
 | Claude Code | ✅ | |
-| cmux | ✅ | |
 | Codex | ✅ | ✅ |
 | Conductor | | ✅ |
-| GitHub Copilot | | ✅ |
 | Cursor | ✅ | ✅ |
 | Devin | ✅ | ✅ |
+| GitHub Copilot | | ✅ |
 | Jules | | ✅ |
 | OpenCode | ✅ | |
-| Orca | ✅ | |
-| Superset | ✅ | |
 
-See [docs/PROVIDERS.md](docs/PROVIDERS.md) and [PRIVACY.md](PRIVACY.md) for more details.
+Luke also marks the apps holding a session on your Mac — ChatGPT, cmux,
+Conductor, Orca, and Superset — grouping rows under their workspaces and
+opening the exact window an app documents. Superset-managed rows can
+additionally take messages and workspace acts through Superset's own CLI.
+
+See [docs/PROVIDERS.md](docs/PROVIDERS.md) for what Luke can read and write
+per agent and app, and [PRIVACY.md](PRIVACY.md) for the data's point of view.
 
 ## Build from source
 
