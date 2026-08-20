@@ -34,6 +34,7 @@ import {
   VOICE_RESTART,
   voiceErrorToShow,
   voiceExchangeActive,
+  voiceNoticeToShow,
   voiceRestartAction,
   waveformVoice,
 } from "../src/renderer/use-voice-conversation";
@@ -138,6 +139,27 @@ test("a voice failure is drawn on the strip, but never over a live turn or a fix
     undefined,
     "a fixture has no call to fail, so a capture run never draws one",
   );
+});
+
+test("a notice yields to Luke's turn alone, because the developer's draws nothing on the strip", () => {
+  const notice = {
+    fixtureSpeaking: false,
+    voice: undefined,
+    notice: "The microphone is open. Finish saying it.",
+  };
+  assert.equal(voiceNoticeToShow(notice), notice.notice);
+  assert.equal(voiceNoticeToShow({ ...notice, notice: undefined }), undefined);
+  assert.equal(
+    voiceNoticeToShow({ ...notice, voice: WAVEFORM_VOICE.DEVELOPER }),
+    notice.notice,
+    "the one refusal an open microphone causes is exactly what the strip should answer with",
+  );
+  assert.equal(
+    voiceNoticeToShow({ ...notice, voice: WAVEFORM_VOICE.LUKE }),
+    undefined,
+    "Luke's words own the box whether or not the captions draw them",
+  );
+  assert.equal(voiceNoticeToShow({ ...notice, fixtureSpeaking: true }), undefined);
 });
 
 test("a typed ask, or an output that would swallow the reply, captions whatever the preference says", () => {

@@ -132,6 +132,22 @@ export function voiceErrorToShow(input: {
 }
 
 /**
+ * The notice drawn in the same strip, yielding only to Luke's own turn — his
+ * words own the box whether or not the captions draw them. The developer's
+ * turn is no reason to hide it: an open microphone draws nothing on the
+ * strip, and the one refusal that happens during it — a typed ask against
+ * the open turn — is exactly what the strip should answer with.
+ */
+export function voiceNoticeToShow(input: {
+  fixtureSpeaking: boolean;
+  voice: WaveformVoice | undefined;
+  notice: string | undefined;
+}): string | undefined {
+  if (input.fixtureSpeaking || input.voice === WAVEFORM_VOICE.LUKE) return undefined;
+  return input.notice;
+}
+
+/**
  * The words drawn under the shape, one entry per response so back-to-back
  * responses stack apart instead of running together. A capture run always
  * draws the fixture's words; otherwise Luke's captions are shown only when
@@ -943,6 +959,10 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       }
       if (session.sendText(text)) {
         setTypedAsk(true);
+        // A sent ask outdates whatever refusal the strip was still reading:
+        // a call already open skips `startConversation`, so the clear it
+        // would have run happens here.
+        setVoiceNotice(undefined);
         return undefined;
       }
       const spent =

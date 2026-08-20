@@ -165,7 +165,11 @@ import { useBootstrapRacedChannel } from "./use-bootstrap-raced-channel";
 import { panelEntryOpen, usePanelEntry } from "./use-panel-entry";
 import { usePanelPresentation } from "./use-panel-presentation";
 import { useStateWithRef } from "./use-state-with-ref";
-import { useVoiceConversation, voiceErrorToShow } from "./use-voice-conversation";
+import {
+  useVoiceConversation,
+  voiceErrorToShow,
+  voiceNoticeToShow,
+} from "./use-voice-conversation";
 import {
   outputSilent,
   VOLUME_HINT_BAND_HEIGHT,
@@ -1907,13 +1911,15 @@ export function App(): React.JSX.Element {
     voice: voiceTurn,
     error: voiceError,
   });
-  // A state notice borrows the strip on the failure's own terms — yielding to
-  // live words, leaving on the same clock — in its quieter tone. The failure
-  // outranks it: a fault is the more urgent thing to read.
-  const voiceNoticeShown = voiceErrorToShow({
+  // A state notice borrows the strip on the failure's own terms — leaving on
+  // the same clock, in its quieter tone — but yields only to Luke's own turn:
+  // the developer's open microphone draws nothing on the strip, and the one
+  // refusal that happens during it belongs there. The failure outranks it: a
+  // fault is the more urgent thing to read.
+  const voiceNoticeShown = voiceNoticeToShow({
     fixtureSpeaking,
     voice: voiceTurn,
-    error: voiceNotice,
+    notice: voiceNotice,
   });
   // What the caption block is being handed live this frame: Luke's words, a
   // failure borrowing their strip, or a notice borrowing it more quietly.
