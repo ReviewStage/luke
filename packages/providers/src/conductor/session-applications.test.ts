@@ -35,12 +35,14 @@ function createConductorDatabase(databasePath: string): DatabaseSync {
       id TEXT PRIMARY KEY,
       claude_session_id TEXT,
       agent_type TEXT,
-      workspace_id TEXT
+      workspace_id TEXT,
+      is_hidden INTEGER DEFAULT 0
     );
     CREATE TABLE workspaces (
       id TEXT PRIMARY KEY,
       workspace_name TEXT,
-      directory_name TEXT
+      directory_name TEXT,
+      state TEXT DEFAULT 'active'
     );
   `);
   return database;
@@ -65,12 +67,13 @@ function writeSession(
   providerSessionId: string,
   agentType: string,
   workspaceId?: string,
+  hidden?: boolean,
 ): void {
   database
     .prepare(
-      "INSERT INTO sessions (id, claude_session_id, agent_type, workspace_id) VALUES (?, ?, ?, ?)",
+      "INSERT INTO sessions (id, claude_session_id, agent_type, workspace_id, is_hidden) VALUES (?, ?, ?, ?, ?)",
     )
-    .run(id, providerSessionId, agentType, workspaceId ?? null);
+    .run(id, providerSessionId, agentType, workspaceId ?? null, hidden ? 1 : 0);
 }
 
 function writeWorkspace(
@@ -78,10 +81,13 @@ function writeWorkspace(
   id: string,
   workspaceName: string | undefined,
   directoryName: string,
+  state?: string,
 ): void {
   database
-    .prepare("INSERT INTO workspaces (id, workspace_name, directory_name) VALUES (?, ?, ?)")
-    .run(id, workspaceName ?? null, directoryName);
+    .prepare(
+      "INSERT INTO workspaces (id, workspace_name, directory_name, state) VALUES (?, ?, ?, ?)",
+    )
+    .run(id, workspaceName ?? null, directoryName, state ?? "active");
 }
 
 test("indexes supported provider session ids from Conductor records", async (t) => {
@@ -415,6 +421,64 @@ test("keeps another manager's workspace and stays on the row instead", async (t)
       link: "conductor://workspace?id=workspace-conductor&session=chat-managed",
     },
   ]);
+});
+
+test("drops chats filed away in Conductor: hidden chats and archived workspaces", async (t) => {
+  const databasePath = await temporaryDatabasePath(t);
+  const database = createConductorDatabase(databasePath);
+  try {
+    writeWorkspace(database, "workspace-open", "lisbon-v2", "kingstown", "ready");
+    writeWorkspace(database, "workspace-filed", "adana-v1", "kingstown", "archived");
+    writeSession(database, "chat-open", "open", TEST_CONDUCTOR_AGENT_TYPE.CLAUDE, "workspace-open");
+    writeSession(
+      database,
+      "chat-hidden",
+      "hidden",
+      TEST_CONDUCTOR_AGENT_TYPE.CLAUDE,
+      "workspace-open",
+      true,
+    );
+    writeSession(
+      database,
+      "chat-archived",
+      "archived",
+      TEST_CONDUCTOR_AGENT_TYPE.CLAUDE,
+      "workspace-filed",
+    );
+  } finally {
+    database.close();
+  }
+  const snapshot = await new ConductorSessionApplicationReader({ databasePath }).read();
+  const observations = snapshot.enrich(PROVIDER_ID.CLAUDE_CODE, [
+    { ...OBSERVED_CHAT, providerSessionId: "open", title: "Open" },
+    { ...OBSERVED_CHAT, providerSessionId: "hidden", title: "Hidden" },
+    { ...OBSERVED_CHAT, providerSessionId: "archived", title: "Archived" },
+    // A sub-agent of a filed-away chat was filed away with its parent.
+    {
+      ...OBSERVED_CHAT,
+      providerSessionId: "archived-child",
+      parentProviderSessionId: "archived",
+      title: "Archived child",
+    },
+    // A cloud row with a coincidentally equal provider id is never Conductor's.
+    {
+      ...OBSERVED_CHAT,
+      providerSessionId: "archived",
+      title: "Cloud twin",
+      location: SESSION_LOCATION.CLOUD,
+    },
+  ]);
+
+  assert.deepEqual(
+    observations.map((observation) => observation.title),
+    ["Open", "Cloud twin"],
+  );
+  assert.deepEqual(observations[0]?.workspace, {
+    providerWorkspaceId: "workspace-open",
+    name: "lisbon-v2",
+    scopeId: SESSION_APPLICATION_ID.CONDUCTOR,
+    managerName: "Conductor",
+  });
 });
 
 test("a schema from before workspaces still annotates, without grouping", async (t) => {
