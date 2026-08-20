@@ -185,7 +185,11 @@ unreadable file, or a schema this build does not know means no annotation.
   read. A sub-agent
   inherits through its provider's own parent record, and a chat another
   manager already groups keeps that workspace with the Orca mark on the row
-  alone.
+  alone. No address, because Orca registers no URL scheme at all — even its
+  own notification clicks focus a pane over internal process messaging, so
+  there is no link to hand the operating system; and no writes, because its
+  control paths are a daemon socket undocumented for outside callers. The
+  honest absence stands rather than an improvised control.
 - **Superset** — every act runs the CLI's documented command, invoked directly
   without a shell, in a developer-opened turn, carrying only observed
   identifiers beside the developer's own words; the login serves one
