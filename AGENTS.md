@@ -60,7 +60,14 @@ Trust constraints:
   the control's own press or a developer-opened turn, and advertised only on
   a row positively seen settled — never one still working or unreadable,
   because the delete is unrecoverable and takes every sibling chat's terminal
-  with it. This does not authorize any other Superset CLI command, deletion
+  with it. A managed row here is also the standing row an idle workspace
+  earns for itself: a worktree with no agent terminal at all, read from the
+  same observed host state, is settled by construction — there is no agent
+  whose turn could be cut, and a workspace whose only terminal Luke cannot
+  map draws no row rather than a gamble — while the main checkout and
+  anything Superset already archived stand behind no row and can never be
+  offered the delete. This does not authorize any other Superset CLI command,
+  deletion
   of anything else, tasks, automations, account changes, or settings changes.
 - Product behavior must not require provider MCP, plugins, hooks, wrappers,
   credentials, or live sessions. A provider whose sessions exist only in a cloud

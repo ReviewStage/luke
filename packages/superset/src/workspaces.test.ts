@@ -36,7 +36,9 @@ function createSchema(database: DatabaseSync): void {
       pull_request_id TEXT,
       name TEXT NOT NULL,
       branch TEXT NOT NULL,
-      updated_at INTEGER NOT NULL
+      updated_at INTEGER NOT NULL,
+      type TEXT NOT NULL DEFAULT 'worktree',
+      archived_at INTEGER
     );
     CREATE TABLE terminal_agent_bindings (
       terminal_id TEXT PRIMARY KEY,
@@ -59,7 +61,7 @@ test("reads live host databases and enriches an exact provider session", async (
   database.exec(`
     INSERT INTO projects VALUES ('project-1', 'Luke');
     INSERT INTO pull_requests VALUES ('pr-1', 'https://github.com/example/luke/pull/42');
-    INSERT INTO workspaces VALUES (
+    INSERT INTO workspaces (id, project_id, pull_request_id, name, branch, updated_at) VALUES (
       'workspace-1', 'project-1', 'pr-1', 'power-vacation', 'feat/superset', 200
     );
     INSERT INTO terminal_agent_bindings VALUES (
@@ -148,7 +150,7 @@ test("keeps the newest duplicate binding across host databases", async (t) => {
     const database = await writeHostDatabase(home, organizationId);
     createSchema(database);
     database.exec(`
-      INSERT INTO workspaces VALUES (
+      INSERT INTO workspaces (id, project_id, pull_request_id, name, branch, updated_at) VALUES (
         'workspace-${organizationId}', NULL, NULL, '${organizationId}', 'main', ${updatedAt}
       );
       INSERT INTO terminal_agent_bindings VALUES (
@@ -170,7 +172,8 @@ test("advertises Superset actions only after the CLI is connected", async (t) =>
   const database = await writeHostDatabase(home, "host-local");
   createSchema(database);
   database.exec(`
-    INSERT INTO workspaces VALUES ('workspace-1', NULL, NULL, 'power-vacation', 'main', 100);
+    INSERT INTO workspaces (id, project_id, pull_request_id, name, branch, updated_at)
+      VALUES ('workspace-1', NULL, NULL, 'power-vacation', 'main', 100);
     INSERT INTO host_agent_configs VALUES ('claude', 0), ('codex', 1);
     INSERT INTO terminal_agent_bindings VALUES (
       'terminal-1', 'workspace-1', 'codex', 'session-1', 'Start'
@@ -247,7 +250,8 @@ test("does not attach unknown Superset agent kinds to a Luke provider", async (t
   const database = await writeHostDatabase(home, "host-local");
   createSchema(database);
   database.exec(`
-    INSERT INTO workspaces VALUES ('workspace-1', NULL, NULL, 'power-vacation', 'main', 100);
+    INSERT INTO workspaces (id, project_id, pull_request_id, name, branch, updated_at)
+      VALUES ('workspace-1', NULL, NULL, 'power-vacation', 'main', 100);
     INSERT INTO terminal_agent_bindings VALUES (
       'terminal-1', 'workspace-1', 'mystery-agent', 'session-1', 'Start'
     );
@@ -258,12 +262,148 @@ test("does not attach unknown Superset agent kinds to a Luke provider", async (t
   assert.equal(snapshot.context(PROVIDER_ID.CODEX, "session-1"), undefined);
 });
 
+test("reports a chatless workspace as its own standing, settled row", async (t) => {
+  const home = await temporarySupersetHome(t);
+  const database = await writeHostDatabase(home, "host-local");
+  createSchema(database);
+  database.exec(`
+    INSERT INTO projects VALUES ('project-1', 'Luke');
+    INSERT INTO pull_requests VALUES ('pr-1', 'https://github.com/example/luke/pull/42');
+    INSERT INTO workspaces (id, project_id, pull_request_id, name, branch, updated_at) VALUES
+      ('workspace-idle', 'project-1', 'pr-1', 'grok-bot-support', 'grok-bot', 300);
+    INSERT INTO host_agent_configs VALUES ('claude', 0), ('codex', 1);
+  `);
+  database.close();
+
+  const snapshot = await new SupersetWorkspaceReader({ homeDirectory: home }).read();
+  // Signed out, the row still observes — host state needs no login — but
+  // advertises no act, the same posture a bound chat's enrichment keeps.
+  assert.deepEqual(snapshot.workspaceRowObservations(undefined), [
+    {
+      providerSessionId: "workspace-idle",
+      title: "grok-bot-support",
+      status: SESSION_STATUS.COMPLETE,
+      observedAt: 300,
+      standing: true,
+      detail: {
+        link: "superset://v2-workspace/workspace-idle",
+        repository: "Luke",
+        branch: "grok-bot",
+        change: "https://github.com/example/luke/pull/42",
+      },
+      applications: [
+        {
+          id: SESSION_APPLICATION_ID.SUPERSET,
+          displayName: "Superset",
+          scope: SESSION_APPLICATION_SCOPE.WORKSPACE,
+          link: "superset://v2-workspace/workspace-idle",
+        },
+      ],
+      workspace: {
+        providerWorkspaceId: "workspace-idle",
+        name: "grok-bot-support",
+        scopeId: SUPERSET_WORKSPACE_PROVIDER_ID,
+        managerName: "Superset",
+      },
+    },
+  ]);
+
+  const connected = snapshot.workspaceRowObservations("host-local")[0];
+  assert.deepEqual(connected?.controls, [
+    {
+      id: SUPERSET_CONTROL_ID.DELETE_WORKSPACE,
+      label: "Delete workspace",
+      target: "workspace-idle",
+    },
+  ]);
+  assert.equal(connected?.renameTarget, "workspace-idle");
+  assert.deepEqual(connected?.spawnableAgents, ["claude", "codex"]);
+  assert.equal(connected?.spawnTarget, "workspace-idle");
+  assert.equal(connected?.canReceiveMessage, undefined);
+  assert.equal(snapshot.workspaceRowObservations("org-other")[0]?.controls, undefined);
+
+  // The act router resolves the row like any managed session, terminal-less.
+  const context = snapshot.actableContext(
+    SUPERSET_WORKSPACE_PROVIDER_ID,
+    "workspace-idle",
+    "host-local",
+  );
+  assert.equal(context?.workspaceId, "workspace-idle");
+  assert.equal(context?.terminalId, undefined);
+  assert.equal(
+    snapshot.actableContext(SUPERSET_WORKSPACE_PROVIDER_ID, "workspace-idle", "org-other"),
+    undefined,
+  );
+});
+
+test("keeps the main checkout, archived, and chat-bound workspaces off the workspace rows", async (t) => {
+  const home = await temporarySupersetHome(t);
+  const database = await writeHostDatabase(home, "host-local");
+  createSchema(database);
+  database.exec(`
+    INSERT INTO workspaces (id, project_id, pull_request_id, name, branch, updated_at, type, archived_at) VALUES
+      ('workspace-main', NULL, NULL, 'main', 'main', 500, 'main', NULL),
+      ('workspace-archived', NULL, NULL, 'filed-away', 'old-branch', 400, 'worktree', 350),
+      ('workspace-bound', NULL, NULL, 'has-a-chat', 'chat-branch', 300, 'worktree', NULL),
+      ('workspace-shadowed', NULL, NULL, 'unmapped-agent', 'shadow-branch', 200, 'worktree', NULL),
+      ('workspace-idle', NULL, NULL, 'truly-idle', 'idle-branch', 100, 'worktree', NULL);
+    INSERT INTO terminal_agent_bindings VALUES
+      ('terminal-1', 'workspace-bound', 'claude', 'session-1', 'Stop'),
+      ('terminal-2', 'workspace-shadowed', 'mystery-agent', NULL, 'Start');
+  `);
+  database.close();
+
+  const snapshot = await new SupersetWorkspaceReader({ homeDirectory: home }).read();
+  // Only the truly idle worktree earns a row: the main checkout is the user's
+  // own working copy, the archived one Superset already filed away, and any
+  // agent terminal — even one Luke cannot map, which could be mid-turn
+  // invisibly — means the workspace is not settled by construction.
+  assert.deepEqual(
+    snapshot.workspaceRowObservations("host-local").map((row) => row.providerSessionId),
+    ["workspace-idle"],
+  );
+});
+
+test("a host database without the workspace columns loses only the chatless rows", async (t) => {
+  const home = await temporarySupersetHome(t);
+  const database = await writeHostDatabase(home, "host-local");
+  database.exec(`
+    CREATE TABLE projects (id TEXT PRIMARY KEY, name TEXT NOT NULL);
+    CREATE TABLE pull_requests (id TEXT PRIMARY KEY, url TEXT NOT NULL);
+    CREATE TABLE workspaces (
+      id TEXT PRIMARY KEY,
+      project_id TEXT,
+      pull_request_id TEXT,
+      name TEXT NOT NULL,
+      branch TEXT NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE TABLE terminal_agent_bindings (
+      terminal_id TEXT PRIMARY KEY,
+      workspace_id TEXT NOT NULL,
+      agent_id TEXT NOT NULL,
+      agent_session_id TEXT,
+      last_event_type TEXT NOT NULL
+    );
+    CREATE TABLE host_agent_configs (preset_id TEXT, display_order INTEGER NOT NULL);
+    INSERT INTO workspaces VALUES ('workspace-1', NULL, NULL, 'power-vacation', 'main', 100);
+    INSERT INTO terminal_agent_bindings VALUES
+      ('terminal-1', 'workspace-1', 'codex', 'session-1', 'Start');
+  `);
+  database.close();
+
+  const snapshot = await new SupersetWorkspaceReader({ homeDirectory: home }).read();
+  assert.equal(snapshot.context(PROVIDER_ID.CODEX, "session-1")?.workspaceId, "workspace-1");
+  assert.deepEqual(snapshot.workspaceRowObservations("host-local"), []);
+});
+
 test("attaches Superset's Gemini terminals to Gemini CLI rows", async (t) => {
   const home = await temporarySupersetHome(t);
   const database = await writeHostDatabase(home, "host-local");
   createSchema(database);
   database.exec(`
-    INSERT INTO workspaces VALUES ('workspace-1', NULL, NULL, 'power-vacation', 'main', 100);
+    INSERT INTO workspaces (id, project_id, pull_request_id, name, branch, updated_at)
+      VALUES ('workspace-1', NULL, NULL, 'power-vacation', 'main', 100);
     INSERT INTO terminal_agent_bindings VALUES (
       'terminal-1', 'workspace-1', 'gemini', 'session-1', 'Start'
     );

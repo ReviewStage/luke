@@ -156,7 +156,7 @@ schema this build does not know means no annotation.
 | cmux | Hook-session stores under `~/.cmuxterm` | Mark, exact `cmux:` pane address | None |
 | Conductor | Local session index (`conductor.db`) | Mark, workspace grouping, `conductor:` chat address, filed-away filtering | None |
 | Orca | Hook-status cache and worktree names | Mark, worktree grouping | None |
-| Superset | Host state (`host.db`) | Mark, grouping, `superset:` workspace address | Message, open workspace, close terminal, add agent, new workspace, rename, delete workspace — through its CLI, while logged in |
+| Superset | Host state (`host.db`) | Mark, grouping, `superset:` workspace address; a standing row for each unarchived worktree with no agent terminal | Message, open workspace, close terminal, add agent, new workspace, rename, delete workspace — through its CLI, while logged in |
 
 ### App notes
 
@@ -202,7 +202,14 @@ schema this build does not know means no annotation.
   id its single argument) is permanent — Superset documents no archive — and
   takes every chat in the workspace, so it is offered only on a row positively
   seen settled, carried once on a grouped tray's header, and an archive-worded
-  ask is taken and reported as the delete it is. Connect and Disconnect are
+  ask is taken and reported as the delete it is. A worktree workspace with no
+  agent terminal at all is settled by construction, so it stands as its own
+  row — read from the same host state, titled by the workspace, opening at
+  its `superset:` address, taking the same rename, add-agent, and delete
+  while logged in, and never taking a message, because no terminal exists to
+  land one. The main checkout and workspaces Superset itself archived draw no
+  row: the one is the user's own working copy, the other already filed away.
+  Connect and Disconnect are
   the CLI's own `auth login` and `auth logout` at the developer's press on the
   Superset row; the CLI owns the credential throughout, and signing out
   withdraws every act while observation continues unchanged.

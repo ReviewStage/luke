@@ -8,6 +8,7 @@ import {
   PROVIDER_ACT_RESULT_STATUS,
   type ProviderControlResult,
   type ProviderMessageResult,
+  type ProviderSessionObservation,
   type ProviderWorkspaceRequest,
   type ProviderWorkspaceResult,
   SessionProviderAdapterBase,
@@ -373,6 +374,10 @@ export class SupersetCli {
   // the flag takes a machineId the state does not carry — passing the state
   // directory's organization name there is what made every act fail.
   async sendMessage(context: SupersetSessionContext, text: string): Promise<ProviderMessageResult> {
+    // A chatless workspace row carries no terminal for a message to land in,
+    // and never advertises taking one; the adapter answers the same way
+    // rather than improvising a way in.
+    if (!context.terminalId) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
     return this.#act(
       [
         "terminals",
@@ -519,17 +524,32 @@ export class SupersetWorkspaceAdapter extends SessionProviderAdapterBase {
   #projects: readonly WorkspaceProject[] = [];
   #projectsRefreshedAt: number | undefined;
   #defaultAgent: string | undefined;
+  #workspaceRows: readonly ProviderSessionObservation[] = [];
 
   constructor(cli: SupersetCli) {
     super();
     this.#cli = cli;
   }
 
-  async observe(): Promise<readonly never[]> {
-    return [];
+  /**
+   * The chatless workspaces the latest host-state read reported, exactly as
+   * the snapshot decorated them. They are handed in by `refresh` rather than
+   * read here so that this adapter observes the same pass everything else
+   * validated against — and so a plain registry refresh after an act commits
+   * the same decorated shape the observation loop does.
+   */
+  async observe(): Promise<readonly ProviderSessionObservation[]> {
+    return this.#workspaceRows;
   }
 
-  async refresh(defaultAgent: string | undefined, connected: boolean): Promise<void> {
+  async refresh(
+    defaultAgent: string | undefined,
+    connected: boolean,
+    workspaceRows: readonly ProviderSessionObservation[],
+  ): Promise<void> {
+    // The rows are observation, not an act: host state reads without a login,
+    // so they stand — undecorated with acts — however the connection looks.
+    this.#workspaceRows = workspaceRows;
     if (!connected) {
       this.#projects = [];
       this.#projectsRefreshedAt = undefined;

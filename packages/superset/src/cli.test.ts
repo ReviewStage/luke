@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
-import { PROVIDER_ACT_RESULT_STATUS, PROVIDER_ID } from "@sidecar/session";
+import { PROVIDER_ACT_RESULT_STATUS, PROVIDER_ID, SESSION_STATUS } from "@sidecar/session";
 import { isRecord, text, type UnparsedWireValue } from "@sidecar/wire";
 import {
   isSupersetControlId,
@@ -247,6 +247,56 @@ test("a refused rename answers with the CLI's own bounded error line", async (t)
   });
 });
 
+test("a chatless workspace context takes the delete but never a message", async (t) => {
+  const home = await connectedHome(t);
+  const calls: Array<readonly string[]> = [];
+  const cli = new SupersetCli({
+    ...testCliOptions(home),
+    run: async (_executable, arguments_) => {
+      calls.push(arguments_);
+    },
+  });
+  const { terminalId: _terminalId, ...chatless } = CONTEXT;
+
+  // No terminal exists for a message to land in, so no invocation may run.
+  assert.deepEqual(await cli.sendMessage(chatless, "hello"), {
+    status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED,
+  });
+  assert.equal(
+    (await cli.executeControl(chatless, SUPERSET_CONTROL_ID.DELETE_WORKSPACE)).status,
+    PROVIDER_ACT_RESULT_STATUS.ACCEPTED,
+  );
+  assert.equal(
+    (await cli.renameWorkspace(chatless, "Cleaned up")).status,
+    PROVIDER_ACT_RESULT_STATUS.ACCEPTED,
+  );
+  assert.deepEqual(calls, [
+    ["workspaces", "delete", "workspace-1", "--json"],
+    ["workspaces", "update", "workspace-1", "--name", "Cleaned up"],
+  ]);
+});
+
+test("the workspace adapter reports the rows it was refreshed with", async (t) => {
+  const home = await connectedHome(t);
+  const cli = new SupersetCli({ ...testCliOptions(home), query: async () => "[]" });
+  const adapter = new SupersetWorkspaceAdapter(cli);
+  const row = {
+    providerSessionId: "workspace-1",
+    title: "power-vacation",
+    status: SESSION_STATUS.COMPLETE,
+    observedAt: 100,
+    standing: true,
+  };
+
+  assert.deepEqual(await adapter.observe(), []);
+  // Observation reads host state, which needs no login, so the rows stand
+  // while the CLI is signed out — only their acts wait for the connection.
+  await adapter.refresh(undefined, false, [row]);
+  assert.deepEqual(await adapter.observe(), [row]);
+  await adapter.refresh(undefined, false, []);
+  assert.deepEqual(await adapter.observe(), []);
+});
+
 test("a CLI failure becomes a bounded rejection", async (t) => {
   const home = await connectedHome(t);
   const cli = new SupersetCli({
@@ -389,8 +439,8 @@ test("reuses recently discovered workspace projects", async (t) => {
   });
   const adapter = new SupersetWorkspaceAdapter(cli);
 
-  await adapter.refresh("codex", true);
-  await adapter.refresh("codex", true);
+  await adapter.refresh("codex", true, []);
+  await adapter.refresh("codex", true, []);
 
   assert.equal(projectQueries, 1);
   assert.equal(adapter.workspaceProjects()[0]?.defaultAgent, "codex");
@@ -412,8 +462,8 @@ test("retries workspace discovery after an empty result", async (t) => {
   });
   const adapter = new SupersetWorkspaceAdapter(cli);
 
-  await adapter.refresh("codex", true);
-  await adapter.refresh("codex", true);
+  await adapter.refresh("codex", true, []);
+  await adapter.refresh("codex", true, []);
 
   assert.equal(projectQueries, 2);
   assert.equal(adapter.workspaceProjects()[0]?.providerProjectId, "project-1");

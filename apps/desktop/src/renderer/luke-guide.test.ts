@@ -353,7 +353,12 @@ test("the facts describe creating a workspace, so Luke does not deny the capabil
   // closed on its own, so the refusal Luke voices is itself the guidance,
   // and that the developer's own word for tidying, archive, is taken as the
   // delete rather than refused over vocabulary.
-  assert.match(rendered, /Delete workspace once their work settled/);
+  assert.match(rendered, /Delete workspace once its work settled/);
+  // The idle workspaces are the ones a cleanup ask is usually about, so the
+  // guide teaches that they stand as rows at all — and which never do.
+  assert.match(rendered, /no agent chat at all stands as its own idle row/);
+  assert.match(rendered, /settled by construction/);
+  assert.match(rendered, /main checkout and workspaces Superset already archived draw no row/);
   assert.match(rendered, /deleting is permanent/);
   assert.match(rendered, /single chat cannot be closed or removed on its own/);
   assert.match(rendered, /ask to archive one means exactly this delete/);
