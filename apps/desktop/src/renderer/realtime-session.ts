@@ -2257,6 +2257,26 @@ export class RealtimeVoiceSession {
           this.#settleCaptionTranscript(event.itemId, event.transcript);
         }
         return;
+      case REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STARTED:
+        // Audio flowing again says the drain the turn remembered was the
+        // pause between two things the reply had to say, not its ending.
+        // Left standing, the stale drain lets the `done` end the turn under
+        // the second half — the face and the duck released while Luke is
+        // still speaking. Only a resume that is attributably the current
+        // reply's own — or unnamed, the same reading the drain gets — may
+        // un-remember it. The backstop a drain armed is restarted rather
+        // than kept or cleared: kept, its clock ran from the pause and cuts
+        // a resumed half that outlives it; cleared, a `done` that never
+        // comes would hold the turn open with nothing left to end it.
+        if (event.responseId !== undefined && event.responseId !== this.#activeResponseId) {
+          return;
+        }
+        this.#audioDrained = false;
+        if (this.#settleTimer !== undefined) {
+          this.#clearSettleTimer();
+          this.#armSettleTimer();
+        }
+        return;
       case REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED:
         this.#audioEndingsReported = true;
         // The audio can run out while the server still owes the reply its
