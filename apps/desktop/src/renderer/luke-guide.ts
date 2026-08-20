@@ -218,8 +218,16 @@ function integrationsFact(settings: AppSettings): AppGuideFact {
   const superset =
     " Superset workspaces on this Mac are recognized automatically from Superset's local " +
     "read-only host state, so agents from different providers group under the project and " +
-    "workspace that owns them. When Superset's CLI is logged in, those rows can send the " +
-    "developer's own message, offer Superset workspace controls, and create a new workspace " +
+    "workspace that owns them. Every grouped chat carries its workspace's own Superset " +
+    "address, so it opens in Superset like any other row — pressed, or asked of Luke — with " +
+    "no login needed; Superset keeps one address per workspace, so chats sharing one open " +
+    "the same place. When Superset's CLI is logged in, those rows can also send the " +
+    "developer's own message, offer Delete workspace once their work settled — Superset " +
+    "keeps no archive, so deleting is permanent and takes the whole workspace with every " +
+    "chat in it, and a row still working is never offered it; a single chat cannot be " +
+    "closed or removed on its own, so deleting the settled workspace is the one removal " +
+    "a Superset row takes, and an ask to archive one means exactly this delete — and " +
+    "create a new workspace " +
     "with an agent in a project and host Superset currently lists; connect from Luke's " +
     "Settings, finish Superset's own sign-in flow in the browser, and paste its one-time code " +
     "into Luke. Superset's CLI exchanges that code, stores the login, and switches organizations; " +
@@ -309,10 +317,11 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
     {
       label: "Workspaces in the list",
       detail:
-        "Where a provider nests chats in a workspace — Conductor today — each chat is its own " +
-        "row. A workspace holding several draws them inside one tray named by the workspace; " +
-        "one holding a single chat stays one row titled by the workspace. Every chat can be " +
-        "seen, opened, and messaged individually.",
+        "Where chats nest in a workspace — Conductor's, and Superset's on this Mac — each " +
+        "chat is its own row. A workspace holding several draws them inside one tray named by " +
+        "the workspace; one holding a single chat stays one row titled by the workspace. Every " +
+        "chat can be seen, opened, and messaged individually, though chats in one Superset " +
+        "workspace share its address and open the same place.",
     },
     {
       label: "The Settings tab",
@@ -458,7 +467,10 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "stays readable but takes no new runs; an archived Devin session can be viewed but not " +
         "resumed. A row mid-turn — or one whose state could not be read — offers no archive, a " +
         "session whose roster entry lists no archive control takes no such ask, and local " +
-        "sessions — which Luke only reads — are never archived.",
+        "sessions — which Luke only reads — are never archived. A Superset-managed workspace " +
+        "keeps no archive, so an ask to archive one is taken as the one removal it does take " +
+        "— its Delete workspace control, offered only once its work settled — and Luke words " +
+        "the outcome as the delete it is: permanent, never filed away.",
     },
     {
       label: "Standing asks about sessions",

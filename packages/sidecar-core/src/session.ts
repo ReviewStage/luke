@@ -207,6 +207,7 @@ export const SESSION_LINK_SCHEME = {
   HTTPS: "https:",
   CODEX: "codex:",
   CONDUCTOR: "conductor:",
+  SUPERSET: "superset:",
 } as const;
 
 export type SessionLinkScheme = (typeof SESSION_LINK_SCHEME)[keyof typeof SESSION_LINK_SCHEME];

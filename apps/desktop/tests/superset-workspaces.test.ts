@@ -15,8 +15,8 @@ async function temporarySupersetHome(t: TestContext): Promise<string> {
   return directory;
 }
 
-async function writeHostDatabase(home: string, hostId: string): Promise<DatabaseSync> {
-  const directory = path.join(home, "host", hostId);
+async function writeHostDatabase(home: string, organizationId: string): Promise<DatabaseSync> {
+  const directory = path.join(home, "host", organizationId);
   await fs.mkdir(directory, { recursive: true });
   return new DatabaseSync(path.join(directory, "host.db"), {});
 }
@@ -67,7 +67,7 @@ test("reads live host databases and enriches an exact provider session", async (
   assert.deepEqual(snapshot.context(PROVIDER_ID.CODEX, "session-1"), {
     providerId: PROVIDER_ID.CODEX,
     providerSessionId: "session-1",
-    hostId: "host-local",
+    organizationId: "host-local",
     workspaceId: "workspace-1",
     workspaceName: "power-vacation",
     terminalId: "terminal-1",
@@ -98,6 +98,7 @@ test("reads live host databases and enriches an exact provider session", async (
           repository: "Luke",
           branch: "feat/superset",
           change: "https://github.com/example/luke/pull/42",
+          link: "superset://v2-workspace/workspace-1",
         },
         workspace: {
           providerWorkspaceId: "workspace-1",
@@ -108,29 +109,47 @@ test("reads live host databases and enriches an exact provider session", async (
       },
     ],
   );
+
+  // A session whose provider reported an address of its own keeps it: the
+  // workspace address fills an absence, never overrides.
+  assert.equal(
+    snapshot.enrich(PROVIDER_ID.CODEX, [
+      {
+        providerSessionId: "session-1",
+        title: "Implement integration",
+        status: SESSION_STATUS.WORKING,
+        observedAt: 100,
+        detail: { link: "codex://threads/session-1" },
+      },
+    ])[0]?.detail?.link,
+    "codex://threads/session-1",
+  );
 });
 
 test("keeps the newest duplicate binding across host databases", async (t) => {
   const home = await temporarySupersetHome(t);
-  for (const [hostId, updatedAt] of [
+  for (const [organizationId, updatedAt] of [
     ["host-old", 100],
     ["host-new", 200],
   ] as const) {
-    const database = await writeHostDatabase(home, hostId);
+    const database = await writeHostDatabase(home, organizationId);
     createSchema(database);
     database.exec(`
       INSERT INTO workspaces VALUES (
-        'workspace-${hostId}', NULL, NULL, '${hostId}', 'main', ${updatedAt}
+        'workspace-${organizationId}', NULL, NULL, '${organizationId}', 'main', ${updatedAt}
       );
       INSERT INTO terminal_agent_bindings VALUES (
-        'terminal-${hostId}', 'workspace-${hostId}', 'claude', 'shared-session', 'Stop'
+        'terminal-${organizationId}', 'workspace-${organizationId}', 'claude', 'shared-session', 'Stop'
       );
     `);
     database.close();
   }
 
   const snapshot = await new SupersetWorkspaceReader({ homeDirectory: home }).read();
-  assert.equal(snapshot.context(PROVIDER_ID.CLAUDE_CODE, "shared-session")?.hostId, "host-new");
+  assert.equal(
+    snapshot.context(PROVIDER_ID.CLAUDE_CODE, "shared-session")?.workspaceId,
+    "workspace-host-new",
+  );
 });
 
 test("advertises Superset actions only after the CLI is connected", async (t) => {
@@ -149,20 +168,52 @@ test("advertises Superset actions only after the CLI is connected", async (t) =>
   const observation = {
     providerSessionId: "session-1",
     title: "Implement integration",
-    status: SESSION_STATUS.WORKING,
+    status: SESSION_STATUS.WAITING,
     observedAt: 100,
   };
 
-  assert.equal(snapshot.enrich(PROVIDER_ID.CODEX, [observation])[0]?.canReceiveMessage, undefined);
-  assert.equal(snapshot.enrich(PROVIDER_ID.CODEX, [observation])[0]?.renameTarget, undefined);
-  const connected = snapshot.enrich(PROVIDER_ID.CODEX, [observation], true)[0];
+  const observed = snapshot.enrich(PROVIDER_ID.CODEX, [observation])[0];
+  assert.equal(observed?.canReceiveMessage, undefined);
+  assert.equal(observed?.controls, undefined);
+  assert.equal(observed?.renameTarget, undefined);
+  // The workspace address is observation's, not the login's: the app that
+  // wrote the host state is the scheme's handler, so a signed-out CLI still
+  // leaves every managed chat somewhere to open.
+  assert.equal(observed?.detail?.link, "superset://v2-workspace/workspace-1");
+  const connected = snapshot.enrich(PROVIDER_ID.CODEX, [observation], "host-local")[0];
   assert.equal(connected?.canReceiveMessage, true);
   assert.deepEqual(connected?.spawnableAgents, ["claude", "codex"]);
   assert.equal(connected?.spawnTarget, "workspace-1");
   assert.equal(connected?.renameTarget, "workspace-1");
-  assert.deepEqual(
-    connected?.controls?.map((control) => control.id),
-    [SUPERSET_CONTROL_ID.OPEN_WORKSPACE, SUPERSET_CONTROL_ID.CLOSE_TERMINAL],
+  // The delete carries the workspace it acts on as its target — what the
+  // press deletes, and what seats the control on a tray's header.
+  assert.deepEqual(connected?.controls, [
+    {
+      id: SUPERSET_CONTROL_ID.DELETE_WORKSPACE,
+      label: "Delete workspace",
+      target: "workspace-1",
+    },
+  ]);
+
+  // Deleting is unrecoverable, so a row still working — or one whose state
+  // could not be read — is never offered it.
+  for (const status of [SESSION_STATUS.WORKING, SESSION_STATUS.UNKNOWN]) {
+    const busy = snapshot.enrich(PROVIDER_ID.CODEX, [{ ...observation, status }], "host-local")[0];
+    assert.deepEqual(busy?.controls, []);
+  }
+
+  // The CLI's login serves one organization at a time, so a workspace another
+  // organization's host service recorded advertises nothing actable — and the
+  // act router answers no context for it — while observation itself stays.
+  const otherOrg = snapshot.enrich(PROVIDER_ID.CODEX, [observation], "org-other")[0];
+  assert.equal(otherOrg?.canReceiveMessage, undefined);
+  assert.equal(otherOrg?.controls, undefined);
+  assert.equal(otherOrg?.detail?.link, "superset://v2-workspace/workspace-1");
+  assert.equal(snapshot.actableContext(PROVIDER_ID.CODEX, "session-1", "org-other"), undefined);
+  assert.equal(snapshot.actableContext(PROVIDER_ID.CODEX, "session-1", undefined), undefined);
+  assert.equal(
+    snapshot.actableContext(PROVIDER_ID.CODEX, "session-1", "host-local")?.workspaceId,
+    "workspace-1",
   );
 });
 

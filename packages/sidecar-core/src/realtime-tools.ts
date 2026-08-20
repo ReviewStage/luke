@@ -918,8 +918,9 @@ export const REALTIME_TOOLS = {
     family: REALTIME_TOOL_FAMILY.SESSION,
     schema: {
       description:
-        "Run a control one observed session advertises, such as stopping its current run or " +
-        "archiving the settled workspace around it. " +
+        "Run a control one observed session advertises, such as stopping its current run, " +
+        "archiving the settled workspace around it, or deleting a settled workspace whose " +
+        "manager keeps no archive. " +
         "Only controls the roster lists for that session exist.",
       parameters: {
         type: "object",

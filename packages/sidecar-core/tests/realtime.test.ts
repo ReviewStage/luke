@@ -283,6 +283,17 @@ test("the spoken instructions state what Luke cannot see, and when he may act", 
   assert.match(instructions, /never restate the intent or the result/);
 });
 
+test("an ask to open a workspace never stalls on which chat is meant", () => {
+  const instructions = realtimeInstructions();
+
+  // Chats in one managed workspace share the workspace's address, so an open
+  // has nothing to disambiguate: asking "which chat?" would refuse an act any
+  // of them carries identically. Messages and controls still need the chat.
+  assert.match(instructions, /An ask to open a workspace is never ambiguous/);
+  assert.match(instructions, /without asking which chat is meant/);
+  assert.match(instructions, /to message or control one, say which agent is meant/);
+});
+
 test("a bare ask for a new agent defaults to a new workspace", () => {
   const instructions = realtimeInstructions();
 
@@ -711,6 +722,26 @@ test("session context carries only bounded, redacted fields", () => {
   const linkedText = sessionContextText([linked]);
   assert.match(linkedText, /can be opened/);
   assert.doesNotMatch(linkedText, /https:/);
+
+  // A local chat a workspace manager addresses is openable on the same terms
+  // as any linked session: the address is a fact in the roster, never a URL.
+  const managed = normalizeSession(
+    { id: "claude-code", displayName: "Claude Code" },
+    {
+      providerSessionId: "session-managed",
+      title: "checkout-service",
+      status: SESSION_STATUS.WORKING,
+      observedAt: DECIDED_AT,
+      detail: { link: "superset://v2-workspace/workspace-1" },
+      controls: [
+        { id: "superset-delete-workspace", label: "Delete workspace", target: "workspace-1" },
+      ],
+    },
+  );
+  const managedText = sessionContextText([managed]);
+  assert.match(managedText, /can be opened/);
+  assert.match(managedText, /Delete workspace \(superset-delete-workspace\)/);
+  assert.doesNotMatch(managedText, /superset:/);
 });
 
 test("a chat carries its workspace in the roster, so siblings read apart out loud", () => {

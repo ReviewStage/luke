@@ -1,5 +1,10 @@
 import path from "node:path";
-import { PROVIDER_ID, type ProviderSessionObservation, type WireRecord } from "@sidecar/core";
+import {
+  PROVIDER_ID,
+  type ProviderSessionObservation,
+  SESSION_STATUS,
+  type WireRecord,
+} from "@sidecar/core";
 import { readDirectory } from "./local-session-adapter";
 import {
   canIgnoreSqliteError,
@@ -28,6 +33,17 @@ function supersetProviderId(agentId: string): string | undefined {
   return undefined;
 }
 
+/**
+ * The address of one workspace in Superset's own app — the same deep link
+ * Superset's CLI fires for `workspaces open`, composed here from the observed
+ * workspace id instead of asking the CLI to compose it, so opening stays what
+ * every open is: an address handed to the operating system, reaching no
+ * provider and needing no login.
+ */
+export function supersetWorkspaceLink(workspaceId: string): string {
+  return `superset://v2-workspace/${workspaceId}`;
+}
+
 const SUPERSET_WORKSPACE_QUERY = `
   SELECT
     bindings.agent_id,
@@ -53,10 +69,23 @@ const SUPERSET_AGENT_QUERY = `
   ORDER BY display_order, preset_id
 `;
 
+/**
+ * What one binding row says about the session it manages. Deliberately no
+ * host identifier: the host state read here is this machine's own — the
+ * directories under `host/` are named by organization, not by machine — so
+ * every act on a bound terminal lands on the CLI's local default, and the
+ * one id the CLI would take for `--host`, a machineId, appears nowhere in
+ * this state.
+ */
 export interface SupersetSessionContext {
   providerId: string;
   providerSessionId: string;
-  hostId: string;
+  /**
+   * The organization whose local host service recorded the session, which is
+   * what the directory under `host/` is named by. It is not a host id: every
+   * database under that directory belongs to this machine.
+   */
+  organizationId: string;
   workspaceId: string;
   workspaceName: string;
   terminalId: string;
@@ -67,8 +96,20 @@ export interface SupersetSessionContext {
   spawnableAgents: readonly string[];
 }
 
+/**
+ * An act reaches Superset through the CLI's own login, which serves one
+ * organization at a time, so only sessions the active organization's host
+ * service recorded can be acted on at all.
+ */
+function actableInOrganization(
+  context: SupersetSessionContext,
+  activeOrganizationId: string | undefined,
+): boolean {
+  return activeOrganizationId !== undefined && context.organizationId === activeOrganizationId;
+}
+
 function contextFromRow(
-  hostId: string,
+  organizationId: string,
   row: WireRecord,
   spawnableAgents: readonly string[],
 ): SupersetSessionContext | undefined {
@@ -96,7 +137,7 @@ function contextFromRow(
   const context: SupersetSessionContext = {
     providerId,
     providerSessionId,
-    hostId,
+    organizationId,
     workspaceId,
     workspaceName,
     terminalId,
@@ -127,10 +168,19 @@ export class SupersetWorkspaceSnapshot {
     return this.#sessions.get(providerId)?.get(providerSessionId);
   }
 
+  actableContext(
+    providerId: string,
+    providerSessionId: string,
+    activeOrganizationId: string | undefined,
+  ): SupersetSessionContext | undefined {
+    const context = this.context(providerId, providerSessionId);
+    return context && actableInOrganization(context, activeOrganizationId) ? context : undefined;
+  }
+
   enrich(
     providerId: string,
     observations: readonly ProviderSessionObservation[],
-    actionsEnabled = false,
+    activeOrganizationId?: string,
   ): readonly ProviderSessionObservation[] {
     return observations.map((observation) => {
       const context = this.context(providerId, observation.providerSessionId);
@@ -139,26 +189,41 @@ export class SupersetWorkspaceSnapshot {
       if (context.projectName) detail.repository = context.projectName;
       if (context.branch) detail.branch = context.branch;
       if (context.pullRequestUrl) detail.change = context.pullRequestUrl;
+      // A managed chat's address is its workspace's: Superset documents no
+      // terminal-scoped address, so chats sharing a workspace share it, and a
+      // session whose provider reported an address of its own keeps that one.
+      // The app that wrote the host state is the scheme's handler, so the
+      // address stands without the CLI login the acts below wait for.
+      if (!detail.link) detail.link = supersetWorkspaceLink(context.workspaceId);
       const workspace = {
         providerWorkspaceId: context.workspaceId,
         name: context.workspaceName,
         scopeId: SUPERSET_WORKSPACE_PROVIDER_ID,
         managerName: "Superset",
       };
-      if (!actionsEnabled) {
+      if (!actableInOrganization(context, activeOrganizationId)) {
         return { ...observation, detail, workspace };
       }
+      // Deleting the workspace is unrecoverable and takes every sibling
+      // chat's terminal with it, so it is offered only on a row positively
+      // seen settled — never one still working, or one whose state could not
+      // be read. The workspace id rides as the control's target, which is
+      // both what the press deletes and what seats the control once on a
+      // tray's own header when several chats share the workspace.
+      const settled =
+        observation.status !== SESSION_STATUS.WORKING &&
+        observation.status !== SESSION_STATUS.UNKNOWN;
       const controls = [
         ...(observation.controls ?? []),
-        {
-          id: SUPERSET_CONTROL_ID.OPEN_WORKSPACE,
-          label: "Open in Superset",
-          target: context.workspaceId,
-        },
-        {
-          id: SUPERSET_CONTROL_ID.CLOSE_TERMINAL,
-          label: "Close terminal",
-        },
+        ...(settled
+          ? [
+              {
+                id: SUPERSET_CONTROL_ID.DELETE_WORKSPACE,
+                label: "Delete workspace",
+                target: context.workspaceId,
+              },
+            ]
+          : []),
       ];
       if (context.spawnableAgents.length > 0) {
         return {
@@ -208,15 +273,15 @@ export class SupersetWorkspaceReader {
         entries
           .filter((entry) => entry.isDirectory())
           .map((entry) =>
-            this.#readHost(entry.name, path.join(hostDirectory, entry.name, "host.db")),
+            this.#readOrganization(entry.name, path.join(hostDirectory, entry.name, "host.db")),
           ),
       )
     ).flat();
     return new SupersetWorkspaceSnapshot(contexts);
   }
 
-  async #readHost(
-    hostId: string,
+  async #readOrganization(
+    organizationId: string,
     databasePath: string,
   ): Promise<readonly SupersetSessionContext[]> {
     const database = await openReadOnlyDatabase(this.#sqlite, databasePath);
@@ -237,7 +302,7 @@ export class SupersetWorkspaceReader {
         .flatMap((value) => {
           const row = wireRecord(value);
           if (!row) return [];
-          const context = contextFromRow(hostId, row, spawnableAgents);
+          const context = contextFromRow(organizationId, row, spawnableAgents);
           return context ? [context] : [];
         });
     } catch (error) {

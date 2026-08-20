@@ -42,7 +42,7 @@ function testCliOptions(homeDirectory: string) {
 const CONTEXT: SupersetSessionContext = {
   providerId: PROVIDER_ID.CODEX,
   providerSessionId: "session-1",
-  hostId: "host-1",
+  organizationId: "org-1",
   workspaceId: "workspace-1",
   workspaceName: "power-vacation",
   terminalId: "terminal-1",
@@ -51,16 +51,17 @@ const CONTEXT: SupersetSessionContext = {
 };
 
 test("recognizes only controls owned by Superset", () => {
-  assert.equal(isSupersetControlId(SUPERSET_CONTROL_ID.OPEN_WORKSPACE), true);
-  assert.equal(isSupersetControlId(SUPERSET_CONTROL_ID.CLOSE_TERMINAL), true);
+  assert.equal(isSupersetControlId(SUPERSET_CONTROL_ID.DELETE_WORKSPACE), true);
   assert.equal(isSupersetControlId("provider-native-control"), false);
 });
 
 test("login state uses only the injected organization-id answer", async (t) => {
   const home = await connectedHome(t);
   const cli = new SupersetCli(testCliOptions(home));
+  assert.equal(await cli.activeOrganization(), "org-1");
   assert.equal(await cli.connected(), true);
   await fs.writeFile(path.join(home, "config.json"), '{"organizationId":""}');
+  assert.equal(await cli.activeOrganization(), undefined);
   assert.equal(await cli.connected(), false);
   await fs.writeFile(path.join(home, "config.json"), "not json");
   assert.equal(await cli.connected(), false);
@@ -153,12 +154,14 @@ test("message and controls use fixed arguments without a shell", async (t) => {
     PROVIDER_ACT_RESULT_STATUS.ACCEPTED,
   );
   assert.equal(
-    (await cli.executeControl(CONTEXT, SUPERSET_CONTROL_ID.OPEN_WORKSPACE)).status,
+    (await cli.executeControl(CONTEXT, SUPERSET_CONTROL_ID.DELETE_WORKSPACE)).status,
     PROVIDER_ACT_RESULT_STATUS.ACCEPTED,
   );
+  // The one workspace-opening invocation left is the follow-through on a
+  // creation; an observed chat's open is an address handed to the OS instead.
   assert.equal(
-    (await cli.executeControl(CONTEXT, SUPERSET_CONTROL_ID.CLOSE_TERMINAL)).status,
-    PROVIDER_ACT_RESULT_STATUS.ACCEPTED,
+    (await cli.executeControl(CONTEXT, "superset-open-workspace")).status,
+    PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED,
   );
   assert.equal(
     (await cli.createAgent(CONTEXT, "claude", "Review the change")).status,
@@ -168,6 +171,9 @@ test("message and controls use fixed arguments without a shell", async (t) => {
     (await cli.renameWorkspace(CONTEXT, "Payments rollout")).status,
     PROVIDER_ACT_RESULT_STATUS.ACCEPTED,
   );
+  // No `--host` on any bound-workspace act: the observed host state is this
+  // machine's own, which is the CLI's default, and the flag's machineId is an
+  // identifier that state does not carry.
   assert.deepEqual(calls, [
     {
       executable: path.join(home, "bin", "superset"),
@@ -176,8 +182,6 @@ test("message and controls use fixed arguments without a shell", async (t) => {
         "send",
         "--workspace",
         "workspace-1",
-        "--host",
-        "host-1",
         "--terminal",
         "terminal-1",
         "--text",
@@ -186,22 +190,10 @@ test("message and controls use fixed arguments without a shell", async (t) => {
       ],
     },
     {
+      // The one deletion the agent guide authorizes: the observed workspace
+      // id as the command's single argument.
       executable: path.join(home, "bin", "superset"),
-      arguments_: ["workspaces", "open", "workspace-1", "--host", "host-1", "--json"],
-    },
-    {
-      executable: path.join(home, "bin", "superset"),
-      arguments_: [
-        "terminals",
-        "close",
-        "--workspace",
-        "workspace-1",
-        "--host",
-        "host-1",
-        "--terminal",
-        "terminal-1",
-        "--json",
-      ],
+      arguments_: ["workspaces", "delete", "workspace-1", "--json"],
     },
     {
       executable: path.join(home, "bin", "superset"),
@@ -210,8 +202,6 @@ test("message and controls use fixed arguments without a shell", async (t) => {
         "create",
         "--workspace",
         "workspace-1",
-        "--host",
-        "host-1",
         "--agent",
         "claude",
         "--prompt",
@@ -223,15 +213,7 @@ test("message and controls use fixed arguments without a shell", async (t) => {
       executable: path.join(home, "bin", "superset"),
       // No `--json` rides the rename: `workspaces update` does not document
       // it, and nothing reads the output.
-      arguments_: [
-        "workspaces",
-        "update",
-        "workspace-1",
-        "--host",
-        "host-1",
-        "--name",
-        "Payments rollout",
-      ],
+      arguments_: ["workspaces", "update", "workspace-1", "--name", "Payments rollout"],
     },
   ]);
 });
@@ -300,7 +282,11 @@ test("discovers host-scoped projects and creates a workspace with a generated br
       }
       if (arguments_[0] === "workspaces") {
         mutableCommands.push([...arguments_]);
-        return JSON.stringify({ workspaceId: "workspace-new" });
+        // The CLI's creation answer: the id sits on the workspace itself.
+        return JSON.stringify({
+          workspace: { id: "workspace-new", name: "luke-fix-the-panel-transitions-deadbeef" },
+          alreadyExists: false,
+        });
       }
       return "[]";
     },
@@ -347,6 +333,43 @@ test("discovers host-scoped projects and creates a workspace with a generated br
     ],
     ["workspaces", "open", "workspace-new", "--json"],
   ]);
+});
+
+test("lists a project once when the local machine is also a listed host", async (t) => {
+  const home = await connectedHome(t);
+  const cli = new SupersetCli({
+    ...testCliOptions(home),
+    query: async (_executable, arguments_) => {
+      if (arguments_[0] === "hosts") {
+        // The hosts list names every host in the organization, this machine's
+        // own row included — the CLI has no way to say which row is local.
+        return JSON.stringify([
+          { id: "host-me", name: "My Mac" },
+          { id: "host-studio", name: "Studio" },
+        ]);
+      }
+      if (arguments_[0] === "projects") {
+        if (arguments_.includes("--local") || arguments_.includes("host-me")) {
+          return JSON.stringify([{ id: "project-1", name: "Luke" }]);
+        }
+        return JSON.stringify([{ id: "project-2", name: "Studio site" }]);
+      }
+      if (arguments_[0] === "agents") return JSON.stringify([{ presetId: "codex" }]);
+      return "[]";
+    },
+  });
+
+  const projects = await cli.workspaceProjects();
+
+  // The local target lists project-1 first, so this machine's own host row
+  // repeating it adds nothing; the genuinely remote project stays.
+  assert.deepEqual(
+    projects.map((project) => [project.providerProjectId, project.providerTargetId]),
+    [
+      ["project-1", "local"],
+      ["project-2", "host-studio"],
+    ],
+  );
 });
 
 test("reuses recently discovered workspace projects", async (t) => {
@@ -417,7 +440,7 @@ test("creates on an observed remote host and preserves success when opening fail
           "host-1",
           "--project",
         ]);
-        return JSON.stringify({ workspaceId: "workspace-new" });
+        return JSON.stringify({ workspace: { id: "workspace-new", name: "Luke" } });
       }
       return "[]";
     },

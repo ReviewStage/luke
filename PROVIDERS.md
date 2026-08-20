@@ -63,6 +63,12 @@ Sessions Superset manages also take its workspace-level acts — including a
 workspace rename — through its CLI; see
 [Integrations beyond sessions](#integrations-beyond-sessions).
 
+Superset management widens local rows past this table: a session Superset's
+host state binds to one of its terminals gains an address to open at, and —
+with the CLI logged in — the message path, control, and agent adds described
+under [Integrations beyond sessions](#integrations-beyond-sessions), whatever
+its own provider takes.
+
 Transcript readout is Luke reading a local session's conversation aloud — or
 into his composer — when asked about that session; a cloud session's
 conversation lives with its provider and is never fetched. Every provider's
@@ -267,6 +273,38 @@ per-account grants read the calendar list and free/busy intervals — start and
 end instants only, so titles cannot even travel. The intervals drive exactly
 one behavior: while a meeting covers now and Quiet during meetings is on,
 spoken announcements hold and the face sleeps.
+
+**Superset** is a workspace manager rather than a session provider: Luke
+reads its local host state (`host/<organization-id>/host.db`) read-only, joins each
+terminal-agent binding to a session another provider already observes, and
+groups those rows under the Superset workspace that owns them — enriched with
+the project, branch, and pull-request link Superset records. Each managed row
+also carries its workspace's own address, `superset://v2-workspace/<id>`,
+composed on this machine from the observed workspace id — the same deep link
+Superset's CLI fires for `workspaces open` — so opening a managed chat is a
+row press like any other: the address goes to the operating system, nothing
+reaches Superset, and no CLI login is needed. Superset documents one address
+per workspace, so chats sharing a workspace open the same place, and a
+session whose own provider reported an address keeps that one instead. With
+Superset's CLI installed and logged in — the login serves one organization at
+a time, so only rows that organization's own host database recorded offer any
+act — a managed row takes the developer's
+message through `terminals send` and offers one control, Delete workspace
+(`superset-delete-workspace`) — Superset documents no archive, so the delete
+is permanent and takes the whole workspace with every chat in it, which is
+why it is offered only on a row positively seen settled, never one still
+working or unreadable, and why grouped chats carry it once on the tray's own
+header. It runs `workspaces delete` with the observed workspace id as its
+single argument, and an archive-worded ask is taken as this delete — the one
+removal Superset takes — with the outcome said as the delete it is. A managed
+row can start another agent in its workspace
+through `agents create`, and a new workspace can be created in a project and
+host the CLI currently lists, with an agent it lists and an opening task,
+through `workspaces create` — followed by the one `workspaces open` the
+creation itself asks for. Signing the CLI out withdraws every act — in a
+terminal, or by disconnecting from Superset's row on the Connections page,
+which runs the CLI's own `auth logout`; observation, and the addresses it
+yields, continue unchanged.
 
 **OpenAI and the hosted account** carry voice and the optional attention
 review. They are credential-only — nothing of theirs is ever observed as a

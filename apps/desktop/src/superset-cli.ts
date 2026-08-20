@@ -26,8 +26,7 @@ import type { SupersetSessionContext } from "./superset-workspaces";
 import { unparsedWire, wireRecord } from "./wire-boundary";
 
 export const SUPERSET_CONTROL_ID = {
-  OPEN_WORKSPACE: "superset-open-workspace",
-  CLOSE_TERMINAL: "superset-close-terminal",
+  DELETE_WORKSPACE: "superset-delete-workspace",
 } as const;
 
 export function isSupersetControlId(controlId: string): boolean {
@@ -142,11 +141,15 @@ export class SupersetCli {
   }
 
   async connected(): Promise<boolean> {
-    if (!(await this.installed())) return false;
+    return (await this.activeOrganization()) !== undefined;
+  }
+
+  async activeOrganization(): Promise<string | undefined> {
+    if (!(await this.installed())) return undefined;
     try {
-      return ((await this.#organizationId())?.trim().length ?? 0) > 0;
+      return (await this.#organizationId())?.trim() || undefined;
     } catch {
-      return false;
+      return undefined;
     }
   }
 
@@ -218,15 +221,15 @@ export class SupersetCli {
 
   async workspaceProjects(defaultAgent?: string): Promise<readonly WorkspaceProject[]> {
     if (!(await this.connected())) return [];
-    const remoteHosts = await this.#records(["hosts", "list", "--json"]);
+    const hosts = await this.#records(["hosts", "list", "--json"]);
     // Only a remote host names itself on a project: the local target is the
     // machine the user is sitting at, which the rows already say by wearing
     // no cloud badge, so annotating it would state the default.
     const targets: readonly { id: string; name?: string; arguments_: readonly string[] }[] = [
       { id: LOCAL_TARGET_ID, arguments_: ["--local"] },
-      ...remoteHosts.slice(0, SUPERSET_TARGET_LIMIT).flatMap((host) => {
-        const id = text(host.machineId) ?? text(host.id);
-        const name = text(host.name) ?? text(host.displayName) ?? text(host.hostname) ?? id;
+      ...hosts.slice(0, SUPERSET_TARGET_LIMIT).flatMap((host) => {
+        const id = text(host.id);
+        const name = text(host.name) ?? id;
         return id && name ? [{ id, name, arguments_: ["--host", id] }] : [];
       }),
     ];
@@ -267,7 +270,19 @@ export class SupersetCli {
         });
       }),
     );
-    return projects.flat();
+    // The hosts list includes this machine's own host row, so the local
+    // target's projects come back a second time under that row's id. A
+    // project id names one project on one host, so the first target to list
+    // it keeps it — the local target leads, and a creation ask lands on
+    // `--local` rather than on this machine's host id.
+    const seen = new Set<string>();
+    const deduped: WorkspaceProject[] = [];
+    for (const project of projects.flat()) {
+      if (seen.has(project.providerProjectId)) continue;
+      seen.add(project.providerProjectId);
+      deduped.push(project);
+    }
+    return deduped;
   }
 
   async createWorkspace(request: ProviderWorkspaceRequest): Promise<ProviderWorkspaceResult> {
@@ -310,10 +325,12 @@ export class SupersetCli {
     try {
       const output = await this.#query(this.executable, arguments_, 30_000);
       const parsed = unparsedWire(JSON.parse(output));
-      const workspaceRecord = wireRecord(parsed);
-      const workspaceId = workspaceRecord
-        ? (text(workspaceRecord.workspaceId) ?? text(workspaceRecord.id))
-        : undefined;
+      const envelope = wireRecord(parsed);
+      // The CLI answers a creation with `{ workspace, alreadyExists }`, so the
+      // one thing read out of it — the id the follow-through open names — sits
+      // a level down on the workspace itself.
+      const workspaceRecord = envelope ? wireRecord(envelope.workspace) : undefined;
+      const workspaceId = workspaceRecord ? text(workspaceRecord.id) : undefined;
       if (!workspaceId) return { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED };
       try {
         await this.#run(this.executable, [
@@ -348,6 +365,10 @@ export class SupersetCli {
     }
   }
 
+  // The acts on a bound terminal name no `--host`: the CLI's default is this
+  // machine, which is the only machine the observed host state describes, and
+  // the flag takes a machineId the state does not carry — passing the state
+  // directory's organization name there is what made every act fail.
   async sendMessage(context: SupersetSessionContext, text: string): Promise<ProviderMessageResult> {
     return this.#act(
       [
@@ -355,8 +376,6 @@ export class SupersetCli {
         "send",
         "--workspace",
         context.workspaceId,
-        "--host",
-        context.hostId,
         "--terminal",
         context.terminalId,
         "--text",
@@ -371,26 +390,12 @@ export class SupersetCli {
     context: SupersetSessionContext,
     controlId: string,
   ): Promise<ProviderControlResult> {
-    if (controlId === SUPERSET_CONTROL_ID.OPEN_WORKSPACE) {
+    // The one deletion the agent guide authorizes: the observed workspace id
+    // as the command's single argument, nothing else ever deleted.
+    if (controlId === SUPERSET_CONTROL_ID.DELETE_WORKSPACE) {
       return this.#act(
-        ["workspaces", "open", context.workspaceId, "--host", context.hostId, "--json"],
-        "Superset could not open that workspace.",
-      );
-    }
-    if (controlId === SUPERSET_CONTROL_ID.CLOSE_TERMINAL) {
-      return this.#act(
-        [
-          "terminals",
-          "close",
-          "--workspace",
-          context.workspaceId,
-          "--host",
-          context.hostId,
-          "--terminal",
-          context.terminalId,
-          "--json",
-        ],
-        "Superset could not close that terminal.",
+        ["workspaces", "delete", context.workspaceId, "--json"],
+        "Superset could not delete that workspace.",
       );
     }
     return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
@@ -416,8 +421,6 @@ export class SupersetCli {
         "workspaces",
         "update",
         context.workspaceId,
-        "--host",
-        context.hostId,
         "--name",
         name,
       ]);
@@ -455,8 +458,6 @@ export class SupersetCli {
         "create",
         "--workspace",
         context.workspaceId,
-        "--host",
-        context.hostId,
         "--agent",
         agent,
         "--prompt",

@@ -143,6 +143,7 @@ test("keeps only the addresses Luke would open, and never a shortened one", () =
     "https://cursor.com/agents?id=bc_1",
     "codex://threads/019ff315-8735-7382-9fbe-16b0ea8ad990",
     "conductor://workspace?session=session-working",
+    "superset://v2-workspace/019ff315-8735-7382-9fbe-16b0ea8ad990",
   ]) {
     assert.equal(linkFor(link), link, `${link} is a session's own address`);
   }

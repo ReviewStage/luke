@@ -192,13 +192,17 @@ Luke never modifies the running app.
   the fact of a failed turn rather than the reason Cursor recorded for it. A
   session is labelled by the folder it runs in, which Luke reads from Cursor's
   own record of that folder, not from the chat's generated name.
-- For Superset, Luke discovers each `host/<host-id>/host.db`, opens it in
+- For Superset, Luke discovers each `host/<organization-id>/host.db`, opens it in
   read-only defensive mode, and reads project and workspace names, branches,
   pull-request links, terminal identifiers, configured agent kinds, lifecycle
   events, and the agent's own session identifier. That identifier is joined
   exactly to a session Luke already observed; Luke does not infer membership
   from a filesystem path. Missing files and unknown schemas mean no Superset
   context, never an on-screen failure. The stale legacy `local.db` is not read.
+  A managed session's row carries its workspace's `superset://` address,
+  composed on this machine from the observed workspace identifier; opening it
+  hands that address to macOS like any row press, and nothing is sent to
+  Superset.
 
 Luke processes bounded fields needed to identify and display a session:
 provider and session identifiers, provider-generated titles, the workspace
@@ -231,10 +235,17 @@ and the next observation pass reports the signed-out state.
 
 Luke asks macOS's property-list utility whether the CLI config names an active
 organization and receives only that identifier; Luke never opens the config or
-receives its credential fields. A message or control runs only from the developer's press or a turn
-the developer opened, invokes the CLI executable directly without a shell, and
-passes only the observed host, workspace and terminal identifiers plus the
-developer's own message. Luke never reads, copies, or stores the CLI token. The
+receives its credential fields. The login serves one organization at a time,
+so acts are offered only on the workspaces that organization's own host
+database recorded. A message or control runs only from the developer's press
+or a turn the developer opened, invokes the CLI executable directly without a shell, and
+passes only the observed workspace and terminal identifiers plus the
+developer's own message — the terminal lives on this machine, which is the
+CLI's own default, so no host identifier travels at all. The one control
+offered today is Delete workspace, on a row whose work was positively seen
+settled: it runs Superset's own `workspaces delete` with the observed
+workspace id as its single argument, and Superset documents no archive or
+restore, so it permanently removes that workspace and every terminal in it. Luke never reads, copies, or stores the CLI token. The
 CLI is Superset's cloud client and its own telemetry and privacy terms apply to
 commands it runs. Without its login, these actions do not appear and local
 observation continues unchanged.
