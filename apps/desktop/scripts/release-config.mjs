@@ -28,6 +28,11 @@ export const DMG_STAGING_ENTRIES = [
   { name: "Luke.app", kind: "application" },
   { name: "Applications", kind: "symlink", target: "/Applications" },
 ];
+// The name Finder reads a volume's icon from, at the volume root. The file
+// alone is not enough: Finder only looks for it once the root directory's
+// custom-icon bit is set, which can only happen on a mounted volume — see
+// volumeCustomIconArguments.
+export const DMG_VOLUME_ICON_FILE_NAME = ".VolumeIcon.icns";
 
 export function releaseDmgFileName(version) {
   return `Luke-${version}-${PACKAGED_ARCHITECTURE}.dmg`;
@@ -213,6 +218,14 @@ export function dmgStoreLayout(mountPoint) {
       },
     ],
   };
+}
+
+// Sets the custom-icon Finder bit on the mounted volume's root, which is what
+// makes Finder read DMG_VOLUME_ICON_FILE_NAME beside it. Run through xcrun:
+// SetFile ships with the developer tools rather than on the system path. Both
+// the bit and the icon file survive the UDZO conversion.
+export function volumeCustomIconArguments(mountPoint) {
+  return ["SetFile", "-a", "C", mountPoint];
 }
 
 export function dmgCodesignArguments(identity, dmgPath) {
