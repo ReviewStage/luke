@@ -71,11 +71,43 @@ export function appendConversationEntry(
   entries: readonly ConversationEntry[],
   entry: ConversationEntry,
 ): readonly ConversationEntry[] {
-  const words = entry.words.replace(/\s+/g, " ").trim().slice(0, maximumConversationEntryLength);
+  const words = boundedEntryWords(entry.words);
   if (!words) return entries;
   const appended: ConversationEntry = { kind: entry.kind, words };
   if (entry.identity) appended.identity = entry.identity;
   return [...entries, appended].slice(-maximumConversationEntries);
+}
+
+/** One flattening and one bound for every line, however it enters. */
+function boundedEntryWords(words: string): string {
+  return words.replace(/\s+/g, " ").trim().slice(0, maximumConversationEntryLength);
+}
+
+/**
+ * Places a spoken ask where its turn actually happened. The transcription
+ * arrives on the service's own clock — usually while the reply is still being
+ * spoken, sometimes after it has ended — and a plain append would then store
+ * Luke's answer ahead of the developer's question, re-feeding a reversed
+ * exchange to the next call. The place is the caller's mark, not a guess
+ * against the entries: `after` is the entry the history ended with at the
+ * moment the spoken turn committed — everything behind it is that turn's own
+ * produce — or nothing for a turn committed against an empty history, which
+ * belongs at the very front. A mark the bounds have already retired lands
+ * there too: an ask older than everything left comes before all of it.
+ */
+export function insertSpokenAskEntry(
+  entries: readonly ConversationEntry[],
+  words: string,
+  after: ConversationEntry | undefined,
+): readonly ConversationEntry[] {
+  const bounded = boundedEntryWords(words);
+  if (!bounded) return entries;
+  // indexOf answers -1 for a retired mark, so the ask lands at the front —
+  // exactly where an entry older than the whole history belongs.
+  const at = after ? entries.indexOf(after) + 1 : 0;
+  const placed = [...entries];
+  placed.splice(at, 0, { kind: CONVERSATION_ENTRY_KIND.SPOKEN_ASK, words: bounded });
+  return placed.slice(-maximumConversationEntries);
 }
 
 /**
