@@ -308,7 +308,9 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "Conductor means Codex chats associated with Conductor. The sheet stays open while " +
         "chips toggle, and the options button wears the narrowing while the sheet is closed. " +
         "Chosen chips are un-pressed the same way they were pressed, a spoken ask can narrow " +
-        "to one value or back to all, replacing what was picked by hand, and the list is " +
+        "to one or several values combined the same way — local Codex voice chats is one ask " +
+        "— naming an agent or app by its everyday name, or back to all, replacing what was " +
+        "picked by hand, and the list is " +
         "orderable by urgency or recency by the same button or ask. " +
         "A row can be opened, messaged, or controlled " +
         "where its provider allows. A session whose provider reported a pull request grows a " +

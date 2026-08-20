@@ -65,6 +65,7 @@ import {
   maximumWorkspaceNameLength,
   normalizeSession,
   type ObservedWorkspaceProject,
+  PROVIDER_ID_LIST,
   SESSION_APPLICATION_ID,
   SESSION_LOCATION,
   SESSION_STATUS,
@@ -1084,27 +1085,25 @@ test("the session is minted with the fifteen acts and nothing wider", () => {
   assert.equal(config.tool_choice, "auto");
 });
 
-test("show_panel teaches the whole filter vocabulary its validator accepts", () => {
-  const filter = REALTIME_TOOLS.SHOW_PANEL.schema.parameters.properties.filter.description;
+test("show_panel's filter enum carries the whole vocabulary its validator accepts", () => {
+  const filters = REALTIME_TOOLS.SHOW_PANEL.schema.parameters.properties.filters;
+  const values = filters.items.enum;
 
-  // The filter parameter has no enum — an agent filter is whatever
-  // provider_id the roster currently lists — so its description is the only
-  // place the model learns the fixed half of the vocabulary. A value the
-  // validator accepts but the description never names is a narrowing no ask
-  // can reach.
-  assert.match(filter, /provider_id/);
+  // The enum is what binds the model to real tokens instead of the
+  // developer's own words for them — a value the validator accepts but the
+  // enum never lists is a narrowing no ask can reach, and the sets must stay
+  // the ones the chips draw from so the two cannot drift.
   const scopes = [
     SESSION_LIST_ALL,
     SESSION_LOCATION.LOCAL,
     SESSION_LOCATION.CLOUD,
     SESSION_LIST_VOICE,
   ];
-  for (const value of scopes) {
-    assert.ok(filter.includes(value), `filter description never names "${value}"`);
+  for (const value of [...scopes, ...PROVIDER_ID_LIST, ...Object.values(SESSION_APPLICATION_ID)]) {
+    assert.ok(values.includes(value), `the filter enum never lists "${value}"`);
   }
-  for (const applicationId of Object.values(SESSION_APPLICATION_ID)) {
-    assert.ok(filter.includes(applicationId), `filter description never names "${applicationId}"`);
-  }
+  // One token is one value however many sets carry it.
+  assert.equal(new Set(values).size, values.length);
 });
 
 test("a proactive turn is opened with its tools withheld", () => {

@@ -4337,7 +4337,7 @@ test("a spoken panel ask is validated against the roster and carried", async () 
           type: "function_call",
           name: "show_panel",
           call_id: "call-guide-3",
-          arguments: '{"filter":"claude-code","sort":"recency"}',
+          arguments: '{"filters":["claude-code"],"sort":"recency"}',
         },
       ],
     },
@@ -4345,7 +4345,7 @@ test("a spoken panel ask is validated against the roster and carried", async () 
   await new Promise((resolve) => setTimeout(resolve, 0));
 
   assert.deepEqual(carried, [
-    { kind: "panel", tab: "sessions", filter: "claude-code", sort: "recency" },
+    { kind: "panel", tab: "sessions", filters: ["claude-code"], sort: "recency" },
   ]);
 
   // Switching to the settings tab is the same ask carried with a tab, not a
@@ -4381,7 +4381,7 @@ test("a spoken panel ask is validated against the roster and carried", async () 
           type: "function_call",
           name: "show_panel",
           call_id: "call-guide-5",
-          arguments: '{"filter":"superset"}',
+          arguments: '{"filters":["superset"]}',
         },
       ],
     },
@@ -4407,14 +4407,14 @@ test("a spoken panel ask is validated against the roster and carried", async () 
           type: "function_call",
           name: "show_panel",
           call_id: "call-guide-6",
-          arguments: '{"filter":"superset"}',
+          arguments: '{"filters":["superset"]}',
         },
       ],
     },
   });
   await new Promise((resolve) => setTimeout(resolve, 0));
 
-  assert.deepEqual(carried.at(-1), { kind: "panel", tab: "sessions", filter: "superset" });
+  assert.deepEqual(carried.at(-1), { kind: "panel", tab: "sessions", filters: ["superset"] });
 
   // A hosted chat answers its agent's filter and its apps' filters the way
   // its chips do: the agent behind the chat and an associated app are
@@ -4435,13 +4435,13 @@ test("a spoken panel ask is validated against the roster and carried", async () 
           type: "function_call",
           name: "show_panel",
           call_id: "call-guide-7",
-          arguments: '{"filter":"codex"}',
+          arguments: '{"filters":["codex"]}',
         },
       ],
     },
   });
   await new Promise((resolve) => setTimeout(resolve, 0));
-  assert.deepEqual(carried.at(-1), { kind: "panel", tab: "sessions", filter: "codex" });
+  assert.deepEqual(carried.at(-1), { kind: "panel", tab: "sessions", filters: ["codex"] });
 
   await armDeveloperTurn(context);
   context.emit({
@@ -4452,13 +4452,55 @@ test("a spoken panel ask is validated against the roster and carried", async () 
           type: "function_call",
           name: "show_panel",
           call_id: "call-guide-8",
-          arguments: '{"filter":"conductor"}',
+          arguments: '{"filters":["conductor"]}',
         },
       ],
     },
   });
   await new Promise((resolve) => setTimeout(resolve, 0));
-  assert.deepEqual(carried.at(-1), { kind: "panel", tab: "sessions", filter: "conductor" });
+  assert.deepEqual(carried.at(-1), { kind: "panel", tab: "sessions", filters: ["conductor"] });
+
+  // Several values combine like the chips: the observed session is a local
+  // Codex chat associated with Conductor, so the combination is carried
+  // whole — and one nothing occupies is refused rather than carried.
+  await armDeveloperTurn(context);
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      output: [
+        {
+          type: "function_call",
+          name: "show_panel",
+          call_id: "call-guide-9",
+          arguments: '{"filters":["codex","conductor","local"]}',
+        },
+      ],
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(carried.at(-1), {
+    kind: "panel",
+    tab: "sessions",
+    filters: ["codex", "conductor", "local"],
+  });
+
+  await armDeveloperTurn(context);
+  const combinedBefore = carried.length;
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      output: [
+        {
+          type: "function_call",
+          name: "show_panel",
+          call_id: "call-guide-10",
+          arguments: '{"filters":["codex","cloud"]}',
+        },
+      ],
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(carried.length, combinedBefore);
 });
 
 test("a spoken composer open is validated against the fixed kinds and carried, never sent", async () => {

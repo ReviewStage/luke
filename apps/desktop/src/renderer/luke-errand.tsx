@@ -131,7 +131,7 @@ export function errandTargets(action: AppToolAction): readonly ErrandTarget[] {
   const tab = tabErrandTarget(action.tab);
   // A narrowing or a re-ordering is the news; the tab is only where it
   // happened, and it may not have changed at all.
-  if (action.filter !== undefined || action.sort !== undefined) {
+  if (action.filters !== undefined || action.sort !== undefined) {
     return [ERRAND_TARGET.LIST_OPTIONS, tab];
   }
   return [tab];
