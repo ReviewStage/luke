@@ -950,7 +950,11 @@ export const REALTIME_TOOLS = {
     name: "open_session",
     family: REALTIME_TOOL_FAMILY.SESSION,
     schema: {
-      description: "Open an observed session.",
+      description:
+        "Open one observed session where its provider keeps it — only when the developer asks " +
+        "to open, go to, or jump into that specific session. An ask to show, see, or list " +
+        'sessions or agents — "show me the cloud agents" — filters the panel through ' +
+        "show_panel instead, never this.",
       parameters: {
         type: "object",
         properties: { ...SESSION_IDENTITY_PARAMETERS },
@@ -1198,7 +1202,9 @@ export const REALTIME_TOOLS = {
     family: REALTIME_TOOL_FAMILY.APP,
     schema: {
       description:
-        "Show Luke's panel on a tab — and, on the sessions tab, narrow or reorder the list.",
+        "Show Luke's panel on a tab — and, on the sessions tab, narrow or reorder the list. " +
+        'An ask to show, see, or list sessions or agents of some kind — "show me the Codex ' +
+        'agents", "show me my local sessions" — is this tool with a filter, not open_session.',
       parameters: {
         type: "object",
         properties: {
