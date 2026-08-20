@@ -46,6 +46,7 @@ import {
   maximumWorkspaceNameLength,
   type NormalizedSession,
   type ObservedWorkspaceProject,
+  SESSION_APPLICATION_ID,
   SESSION_LOCATION,
   type SessionControl,
   type SessionIdentity,
@@ -115,6 +116,19 @@ export type AppToolKind = (typeof APP_TOOL_KIND)[keyof typeof APP_TOOL_KIND];
  */
 export const SESSION_LIST_ALL = "all";
 export const SESSION_LIST_VOICE = "voice";
+
+/**
+ * The filter vocabulary, taught on the tool itself. The parameter cannot be
+ * an enum — an agent filter is whatever provider_id the roster currently
+ * lists — so this description is the only place the model learns what the
+ * validator will accept, and it is composed from the same value sets the
+ * validator reads so the two cannot drift.
+ */
+const SESSION_LIST_FILTER_DESCRIPTION =
+  `Narrows the session list: ${SESSION_LIST_ALL} for every session, ` +
+  `${SESSION_LOCATION.LOCAL} or ${SESSION_LOCATION.CLOUD} for where work runs, ` +
+  `${SESSION_LIST_VOICE} for voice chats, an observed session's provider_id for one agent, ` +
+  `or an associated app: ${Object.values(SESSION_APPLICATION_ID).join(", ")}.`;
 
 /** What one validated tool call asks for, ready for the bridge that carries it. */
 export type SessionToolAction =
@@ -1183,23 +1197,26 @@ export const REALTIME_TOOLS = {
     name: "show_panel",
     family: REALTIME_TOOL_FAMILY.APP,
     schema: {
-      description: "Show Luke's panel.",
+      description:
+        "Show Luke's panel on a tab — and, on the sessions tab, narrow or reorder the list.",
       parameters: {
         type: "object",
         properties: {
           tab: {
             type: "string",
             enum: Object.values(APP_PANEL_TAB),
-            description: "The tab to show.",
+            description: "The tab to show. Defaults to sessions.",
           },
           filter: {
             type: "string",
-            description: "An optional session-list filter.",
+            description: SESSION_LIST_FILTER_DESCRIPTION,
           },
           sort: {
             type: "string",
             enum: Object.values(SESSION_LIST_SORT),
-            description: "An optional session-list sort order.",
+            description:
+              `Reorders the session list: ${SESSION_LIST_SORT.URGENCY} puts what needs the ` +
+              `developer first, ${SESSION_LIST_SORT.RECENCY} puts what moved last first.`,
           },
         },
         required: [],
