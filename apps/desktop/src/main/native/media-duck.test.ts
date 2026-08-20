@@ -156,7 +156,7 @@ test("a helper that cannot be spawned leaves the exchange unharmed", () => {
   assert.deepEqual(context.commands, []);
 });
 
-test("a duck write that throws is handed once to a fresh helper", () => {
+test("a duck write that throws drops the helper, and the next exchange starts fresh", () => {
   const context = harness({
     spawns: [
       () => ({
@@ -173,8 +173,12 @@ test("a duck write that throws is handed once to a fresh helper", () => {
   });
   context.controller.setEnabled(true);
 
-  // The stale helper's pipe was already gone; the exchange still deserves its
-  // quiet, so the same command goes to a replacement rather than being lost.
+  // The helper's pipe was already gone, so this exchange loses its quiet —
+  // like a helper that died mid-duck — but nothing throws and nothing sticks.
+  context.controller.setExchangeActive(true);
+  assert.equal(context.spawns(), 1);
+
+  context.controller.setExchangeActive(false);
   context.controller.setExchangeActive(true);
   assert.equal(context.spawns(), 2);
   assert.deepEqual(context.commands, ["duck"]);

@@ -114,15 +114,10 @@ export class MediaDuckController {
       // never started back up, so there is nothing to send.
       this.#clearReleaseTimer();
       if (this.#ducked) return;
-      // A helper can be found dead only by writing to it, so a write that
-      // fails drops the stale helper and hands the same command to a fresh
-      // one — once, because a spawn that comes up broken will again.
-      for (let attempt = 0; attempt < 2; attempt += 1) {
-        const child = this.#ensureChild();
-        if (!child) return;
-        this.#ducked = true;
-        if (this.#write(child, MEDIA_DUCK_COMMAND.DUCK)) return;
-      }
+      const child = this.#ensureChild();
+      if (!child) return;
+      this.#ducked = true;
+      this.#write(child, MEDIA_DUCK_COMMAND.DUCK);
       return;
     }
     if (!this.#ducked) {
@@ -153,13 +148,11 @@ export class MediaDuckController {
    * Writes one command, treating a throw as the helper's death: the pipe is
    * gone, so the state resets exactly as the exit listener would reset it.
    */
-  #write(child: MediaDuckProcess, command: MediaDuckCommand): boolean {
+  #write(child: MediaDuckProcess, command: MediaDuckCommand): void {
     try {
       child.stdin?.write(`${command}\n`);
-      return true;
     } catch {
       this.#drop(child);
-      return false;
     }
   }
 

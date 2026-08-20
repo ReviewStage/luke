@@ -170,18 +170,10 @@ private struct MediaDuckCommand {
     }
 
     /// Every playing player comes down, each from its own level. A player
-    /// still remembered from the last duck is left alone while it still reads
-    /// as ducked — a repeated `duck` must not read the ducked volume back as
-    /// the one to restore to — but one that reads elsewhere was restored late
-    /// or moved by hand, and either way the level standing now is the one to
-    /// duck from and the one owed back.
+    /// already ducked is left alone — a repeated `duck` must not read the
+    /// ducked volume back as the one to restore to.
     static func duck() {
-        for player in PLAYERS {
-            if let entry = ducked[player.bundleIdentifier] {
-                guard isRunning(player), let current = volume(of: player),
-                      !reads(current, asDucked: entry) else { continue }
-                ducked[player.bundleIdentifier] = nil
-            }
+        for player in PLAYERS where ducked[player.bundleIdentifier] == nil {
             guard isRunning(player), isPlaying(player) else { continue }
             guard let original = volume(of: player), original > 0 else { continue }
             let requested = Int((Double(original) * DUCK_FACTOR).rounded())
@@ -204,11 +196,9 @@ private struct MediaDuckCommand {
     /// quit — is theirs, not this helper's to overrule. A read that merely
     /// failed is neither of those: it says nothing about the user's intent,
     /// so the memory is kept for the next restore rather than the player
-    /// being stranded quiet with nothing left to bring it back. The fade
-    /// itself is not trusted either — Spotify can drop part of a burst of
-    /// writes — so a player still reading as ducked afterwards is told the
-    /// original once more, exactly, and one still ducked even then keeps its
-    /// memory the same way a failed read does.
+    /// being stranded quiet with nothing left to bring it back. A skip is
+    /// said aloud like a refusal, because honoring the user's hand and
+    /// losing a restore look identical otherwise.
     static func restore() {
         let restoring = ducked
         ducked = [:]
@@ -218,18 +208,11 @@ private struct MediaDuckCommand {
                 ducked[key] = entry
                 continue
             }
-            guard reads(current, asDucked: entry) else { continue }
+            guard reads(current, asDucked: entry) else {
+                emit("skipped \(key) at \(current)")
+                continue
+            }
             fade(entry.player, from: current, to: entry.original, stepSeconds: RESTORE_STEP_SECONDS)
-            // A duck shallower than the tolerance leaves success unreadable —
-            // the original and the ducked level answer alike — and inaudible.
-            guard abs(entry.original - entry.requested) > RESTORE_TOLERANCE else { continue }
-            Thread.sleep(forTimeInterval: SETTLE_SECONDS)
-            guard let after = volume(of: entry.player), reads(after, asDucked: entry) else { continue }
-            setVolume(of: entry.player, to: entry.original)
-            Thread.sleep(forTimeInterval: SETTLE_SECONDS)
-            guard let final = volume(of: entry.player), reads(final, asDucked: entry) else { continue }
-            emit("kept \(key) at \(final)")
-            ducked[key] = entry
         }
     }
 }
