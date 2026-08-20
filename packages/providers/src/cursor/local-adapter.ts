@@ -3,6 +3,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   type ProviderSessionObservation,
+  SESSION_APPLICATION_ID,
+  SESSION_APPLICATION_SCOPE,
   SESSION_STATUS,
   type SessionDetail,
   type SessionStatus,
@@ -358,6 +360,21 @@ class CursorAppChatRegistry {
 }
 
 /**
+ * The Cursor app riding a chat it holds as an app association, the way
+ * ChatGPT rides a local Codex chat: the agent stays the row's identity, and
+ * the mark's press opens the same exact chat the row itself opens. A CLI
+ * chat gets none, because the app does not hold it.
+ */
+function cursorApplication(link: string) {
+  return {
+    id: SESSION_APPLICATION_ID.CURSOR,
+    displayName: "Cursor",
+    scope: SESSION_APPLICATION_SCOPE.SESSION,
+    link,
+  } as const;
+}
+
+/**
  * What Cursor knows about a local session beyond its state: the folder, that
  * a turn failed, and — for a chat the app holds — the chat's own address.
  * Cursor records why a turn failed, but that reason is written from the turn
@@ -490,6 +507,7 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
       // anything.
       observedAt: candidate.mtimeMs,
       detail: detailFor(label, status, link),
+      ...(link ? { applications: [cursorApplication(link)] } : undefined),
     };
   }
 }

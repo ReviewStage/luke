@@ -4,7 +4,11 @@ import os from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
 import { pathToFileURL } from "node:url";
-import { SESSION_STATUS } from "@sidecar/session";
+import {
+  SESSION_APPLICATION_ID,
+  SESSION_APPLICATION_SCOPE,
+  SESSION_STATUS,
+} from "@sidecar/session";
 import type { MutableWireRecord, ParsedJsonObject } from "@sidecar/wire/testing";
 import { CURSOR_PROVIDER } from "./adapter.js";
 import { CursorLocalSessionAdapter } from "./local-adapter.js";
@@ -209,11 +213,20 @@ test("observes an open turn as work, labelled by its folder and free of transcri
   assert.equal(observations[0]?.recap, undefined);
   // The address is the same /agent route Cursor's own deep-link handler
   // resolves, composed from the observed chat id alone — offered because the
-  // app's own index holds this chat.
+  // app's own index holds this chat, which is also what seats the Cursor app
+  // mark beside the agent identity, the way ChatGPT rides a Codex chat.
   assert.deepEqual(observations[0]?.detail, {
     repository: "luke",
     link: "cursor://anysphere.cursor-deeplink/agent?id=0b1f4b0e-2c5a-4d1e-9a3c-6d5f7e8a9b0c",
   });
+  assert.deepEqual(observations[0]?.applications, [
+    {
+      id: SESSION_APPLICATION_ID.CURSOR,
+      displayName: "Cursor",
+      scope: SESSION_APPLICATION_SCOPE.SESSION,
+      link: "cursor://anysphere.cursor-deeplink/agent?id=0b1f4b0e-2c5a-4d1e-9a3c-6d5f7e8a9b0c",
+    },
+  ]);
   // Nothing says this session runs anywhere but here, which is what leaves it
   // local once the registry normalizes it.
   assert.equal(observations[0]?.location, undefined);
@@ -284,6 +297,9 @@ test("offers the app's address only for the chats the app itself holds", async (
       ["cli-chat", undefined],
     ],
   );
+  // The app association follows the same gate: the app rides only its own.
+  assert.equal(observations[0]?.applications?.[0]?.id, SESSION_APPLICATION_ID.CURSOR);
+  assert.equal(observations[1]?.applications, undefined);
   assert.equal(JSON.stringify(observations).includes(SECRET_TRANSCRIPT_TEXT), false);
 });
 

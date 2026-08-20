@@ -118,18 +118,16 @@ The bounds the tables cannot carry:
   the build's table. Conductor on this Mac is an app — see [Apps](#apps).
 - **Cursor, local** — rows report turn state and failure without Cursor's
   reason, which is not stored, and the readout renders what Cursor wrote down,
-  which excludes tool outputs. A chat the app itself holds carries its own
+  which excludes tool outputs. A chat the Cursor app holds carries its own
   address, `cursor://anysphere.cursor-deeplink/agent?id=<chat>`, composed on
   this machine from the chat's observed id — the same route Cursor's
-  deep-link handler resolves — and it opens the exact chat whether Cursor is
-  running or not. Whether the app holds a chat is read from Cursor's own
-  index as the presence of the chat's key alone, because the values are the
-  conversations. Cursor's `agents` CLI writes transcripts beside the app's
-  without registering them in any window, so a CLI chat keeps no provider
-  address — an app that manages its terminal stands its own in, the way
-  cmux, Superset, and Conductor rows already do, and a CLI chat in an
-  unmanaged terminal honestly opens nowhere, like every other
-  terminal-only agent.
+  deep-link handler resolves, opening the exact chat whether Cursor is
+  running or not — and wears the app's own mark: Cursor on this Mac is an
+  app as well as an agent — see [Apps](#apps). A chat the `agents` CLI
+  started keeps no provider address — an app that manages its terminal
+  stands its own in, the way cmux, Superset, and Conductor rows already do,
+  and a CLI chat in an unmanaged terminal honestly opens nowhere, like every
+  other terminal-only agent.
 - **Cursor, cloud** — cancel and archive are never offered at once; a message
   is a follow-up run, only after the latest run finished on an unarchived
   agent; the new agent's task is required because Cursor cannot make an idle
@@ -166,6 +164,7 @@ schema this build does not know means no annotation.
 | ChatGPT | Nothing | A mark opening the exact Codex thread | None |
 | cmux | Hook-session stores under `~/.cmuxterm` | Mark, exact `cmux:` pane address | None |
 | Conductor | Local session index (`conductor.db`) | Mark, workspace grouping, `conductor:` chat address, filed-away filtering | None |
+| Cursor | Chat-key presence in the app's own index | Mark and `cursor:` address opening the exact chat | None |
 | Orca | Hook-status cache and worktree names | Mark, worktree grouping | None |
 | Superset | Host state (`host.db`) | Mark, grouping, `superset:` workspace address; a standing row for each unarchived worktree with no agent terminal | Message, open workspace, close terminal, add agent, new workspace, rename, delete workspace — through its CLI, while logged in |
 
@@ -198,6 +197,14 @@ schema this build does not know means no annotation.
   absent app, an unreadable index, or a schema too old to say leaves every
   observation standing. Conductor documents no message endpoint for a local
   chat, so the association adds no send control.
+- **Cursor** — the agent's own app, riding the local rows it holds the way
+  ChatGPT rides a Codex chat: the agent stays the row's identity, the Cursor
+  mark and the row's own press open the same exact chat, and the Cursor
+  filter takes the union of agent and app the way Conductor's does. Whether
+  the app holds a chat is read from the app's own index as the presence of
+  the chat's key alone — the values are the conversations, and observation
+  never opens message content. A chat the `agents` CLI started registers in
+  no window, so it carries no Cursor app mark and none of the app's address.
 - **Orca** — the hook-status cache also carries conversational fields — the
   last prompt, a message preview, a tool's input — and none of them are ever
   read. A sub-agent

@@ -309,7 +309,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "Lists every session that still matters: one working or waiting stays at any age, a " +
         "failure for three days, a finished or quiet one for two. The options button opens " +
         "filter rows by axis — location (local, cloud), kind (voice chats), app (Conductor, " +
-        "ChatGPT, Orca, Superset, cmux), and agent — where several chips can be pressed at once: choices " +
+        "ChatGPT, Cursor, Orca, Superset, cmux), and agent — where several chips can be pressed at once: choices " +
         "on one row widen each other and choices across rows narrow, so Codex beside " +
         "Conductor means Codex chats associated with Conductor. The sheet stays open while " +
         "chips toggle, and the options button wears the narrowing while the sheet is closed. " +
@@ -340,9 +340,14 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "Cursor, Gemini CLI, and OpenCode only after cmux's `cmux hooks setup`, so a session cmux never " +
         "recorded carries no cmux mark. A local Codex chat also names " +
         "ChatGPT because OpenAI's desktop app documents the exact Codex thread address Luke " +
-        "already opens. More than one app mark may appear on one row; none replaces the agent " +
+        "already opens. A local Cursor chat held by the Cursor app names Cursor itself the " +
+        "same way — the app's own index says which chats its windows hold, read as key " +
+        "presence alone — where a chat Cursor's agents CLI started in a plain terminal " +
+        "carries no Cursor app mark and opens nowhere unless cmux, Superset, or Conductor " +
+        "hosts its terminal. More than one app mark may appear on one row; none replaces the agent " +
         "or changes local versus cloud. An app mark with an exact address is a button: " +
-        "ChatGPT opens that Codex thread, Superset opens its bound terminal, cmux opens the " +
+        "ChatGPT opens that Codex thread, Cursor opens the exact chat in its own window, " +
+        "Superset opens its bound terminal, cmux opens the " +
         "exact terminal pane the agent runs in — and stands in as the row's own destination " +
         "when no other app gave it one — and a Conductor " +
         "cloud chat's Conductor mark opens that exact chat. The row body still opens its " +
