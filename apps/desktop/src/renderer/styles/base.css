@@ -1876,6 +1876,27 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   height: 11px;
 }
 
+/* App associations trail the name as bare marks, the way they trail the
+   title on the session's own row: the leading mark says which agent this
+   is, these say where the same chat is also held. Secondary ink keeps them
+   subordinate to the name inside a chip this small. */
+.session-notice-applications {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-secondary);
+}
+
+.session-notice-application {
+  display: grid;
+  place-items: center;
+}
+
+.session-notice .provider-mark[data-mark="superset"] {
+  width: 19px;
+}
+
 .session-notice-name {
   overflow: hidden;
   text-overflow: ellipsis;

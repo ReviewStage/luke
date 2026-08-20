@@ -542,7 +542,9 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
               "off. While he says it, a pressable notice names the session he is talking " +
               "about — under the housing, or at the open panel's foot: pressing it opens the " +
               "session where its provider keeps it, or opens the panel for a local session " +
-              "with no page of its own. The same chips appear while a conversation reply " +
+              "with no page of its own. A session's chip wears the same marks its row " +
+              "does: the agent's own in front, and the apps holding the chat — Conductor, " +
+              "Orca, and kin — trailing the name. The same chips appear while a conversation reply " +
               "names observed sessions by title, or a workspace of grouped chats by its " +
               "name — asking what is being worked on draws one chip per thing named, up to " +
               "a dozen, a workspace's opening its most recent chat. A reply naming tracked " +
