@@ -86,7 +86,6 @@ import {
   shell,
   systemPreferences,
 } from "electron";
-import { AppleCalendarReader } from "./apple-calendar";
 import { APPLE_CALENDAR_ACCESS, APPLE_CALENDAR_ID } from "#shared/apple-calendar";
 import {
   ACCOUNT_STATUS,
@@ -102,6 +101,7 @@ import {
   SUPERSET_WORKSPACE_PROVIDER_ID,
 } from "#shared/contracts";
 import { buildCarriesDeveloperIdSigning, resolveAppName } from "./app-identity";
+import { AppleCalendarReader } from "./apple-calendar";
 import { registerAccountSessionIpc } from "./ipc/account-session";
 import { registerCalendarConnectionIpc } from "./ipc/calendar-connection";
 import { registerSessionActsIpc } from "./ipc/session-acts";

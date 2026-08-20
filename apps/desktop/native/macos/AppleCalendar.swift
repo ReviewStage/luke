@@ -298,11 +298,15 @@ private struct AppleCalendarCommand {
             )
             return
         }
+        // An EKEventStore answers from the authorization it was created
+        // under, so the store that carried a first-time ask still reads as
+        // empty; the seed listing needs a store born after the grant.
+        let granted = freshEventStore()
         emit(
             Report(
                 access: accessWord(.fullAccess),
-                calendars: reportedCalendars(store.calendars(for: .event)),
-                defaultCalendarId: store.defaultCalendarForNewEvents?.calendarIdentifier
+                calendars: reportedCalendars(granted.calendars(for: .event)),
+                defaultCalendarId: granted.defaultCalendarForNewEvents?.calendarIdentifier
             )
         )
     }

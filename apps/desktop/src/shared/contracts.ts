@@ -32,7 +32,6 @@ import type {
   SessionIdentity,
   WorkspaceAgentSelection,
 } from "@sidecar/session";
-import type { AppleCalendarAccess } from "./apple-calendar";
 import type {
   AppSettingField,
   AppSettingValue,
@@ -50,6 +49,7 @@ import type {
   WindowMode,
 } from "@sidecar/surface";
 import type { UnparsedWireValue } from "@sidecar/wire";
+import type { AppleCalendarAccess } from "./apple-calendar";
 
 export {
   ACCOUNT_PROVIDER,

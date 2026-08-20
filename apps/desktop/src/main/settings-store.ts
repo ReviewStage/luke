@@ -15,14 +15,11 @@ import {
   isRecord,
   isWireNumber,
   isWireString,
+  wireRecord as readWireRecord,
   type UnparsedWireValue,
   unparsedWire,
   type WireRecord,
-  wireRecord as readWireRecord,
 } from "@sidecar/wire";
-// The reader owns the shape it is fed: what this store resolves a stored
-// connection into is exactly what `readAppleCalendarConnection` promises it.
-import type { AppleCalendarConnection } from "./apple-calendar";
 import { APPLE_CALENDAR_ID } from "#shared/apple-calendar";
 import {
   ACCOUNT_PROVIDER,
@@ -41,6 +38,9 @@ import {
   VOICE_SOURCE,
   type VoiceSource,
 } from "#shared/contracts";
+// The reader owns the shape it is fed: what this store resolves a stored
+// connection into is exactly what `readAppleCalendarConnection` promises it.
+import type { AppleCalendarConnection } from "./apple-calendar";
 
 export type { StoredAccount } from "@sidecar/account";
 

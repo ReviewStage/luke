@@ -13,10 +13,10 @@ import {
 } from "@sidecar/calendar";
 import {
   isWireString,
+  wireRecord as readWireRecord,
   text,
   type UnparsedWireValue,
   unparsedWire,
-  wireRecord as readWireRecord,
 } from "@sidecar/wire";
 import { app } from "electron";
 import {
@@ -351,6 +351,10 @@ export class AppleCalendarReader {
     superseded: () => boolean;
   }): Promise<AppleCalendarAccessOutcome> {
     let outcome = await this.requestAccess();
+    // A cancel that landed while the dialog stood ends the flow here: the
+    // grant, if given, stays macOS's own, but nobody is taken to System
+    // Settings for an ask they already gave up on.
+    if (options.superseded()) return outcome;
     if (outcome.access !== APPLE_CALENDAR_ACCESS.FULL && !outcome.failure) {
       options.openSystemSettings();
       const deadline = this.#now() + SETTINGS_WAIT_TIMEOUT_MS;

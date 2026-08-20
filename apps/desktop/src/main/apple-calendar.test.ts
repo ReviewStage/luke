@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { CALENDAR_LOOKAHEAD_MS, MAXIMUM_MEETING_LENGTH_MS } from "@sidecar/calendar";
+import { APPLE_CALENDAR_ACCESS, APPLE_CALENDAR_ID } from "#shared/apple-calendar";
 import {
   type AppleCalendarConnection,
   AppleCalendarReader,
   parseHelperReport,
 } from "./apple-calendar";
-import { APPLE_CALENDAR_ACCESS, APPLE_CALENDAR_ID } from "#shared/apple-calendar";
 
 const NOW = Date.parse("2026-08-19T12:00:00Z");
 
@@ -227,6 +227,22 @@ test("a refused grant comes back as its status, never as a throw", async () => {
   assert.equal(outcome.access, APPLE_CALENDAR_ACCESS.DENIED);
   assert.deepEqual(outcome.calendars, []);
   assert.equal(outcome.failure, undefined);
+});
+
+test("a cancelled ask ends where it stands, without opening System Settings", async () => {
+  const { reader, runs } = readerFor({
+    answer: () => JSON.stringify({ access: APPLE_CALENDAR_ACCESS.DENIED }),
+  });
+  let opened = 0;
+  const outcome = await reader.obtainAccess({
+    openSystemSettings: () => {
+      opened += 1;
+    },
+    superseded: () => true,
+  });
+  assert.equal(outcome.access, APPLE_CALENDAR_ACCESS.DENIED);
+  assert.equal(opened, 0);
+  assert.equal(runs.length, 1);
 });
 
 test("an ask that failed on its own carries the helper's why", async () => {

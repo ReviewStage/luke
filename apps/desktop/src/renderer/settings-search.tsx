@@ -5,7 +5,6 @@ import {
   VOICE_CREDENTIAL_PROVIDER,
 } from "@sidecar/credentials";
 import { PROVIDER_ID, workspaceAgentModels } from "@sidecar/session";
-import { APPLE_CALENDAR_ID, APPLE_CALENDAR_NAME } from "#shared/apple-calendar";
 import {
   APP_SETTING_ID,
   type AppSettingId,
@@ -18,6 +17,7 @@ import {
   type WorkspaceProviderId,
 } from "@sidecar/superset/vocabulary";
 import { Fragment, useRef } from "react";
+import { APPLE_CALENDAR_ID, APPLE_CALENDAR_NAME } from "#shared/apple-calendar";
 import type { AppSettings } from "#shared/contracts";
 import { CREDENTIAL_SOURCE, VOICE_SOURCE } from "#shared/contracts";
 import { FOCUS_FRAME_LIMIT } from "./credential-entry";

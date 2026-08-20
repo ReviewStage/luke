@@ -38,6 +38,7 @@ function settings(overrides: Partial<AppSettings> = {}): AppSettings {
     preferBuiltInMicrophone: true,
     quietDuringMeetings: true,
     calendarSignInAvailable: false,
+    appleCalendarAvailable: false,
     linearSignInAvailable: false,
     calendarAccounts: [],
     showOnAllDisplays: false,

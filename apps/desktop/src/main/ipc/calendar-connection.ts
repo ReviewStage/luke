@@ -107,6 +107,12 @@ export function registerCalendarConnectionIpc(
         openSystemSettings: () => openExternal(CALENDAR_PRIVACY_PANE_URL),
         superseded: () => appleConnectGeneration !== generation,
       });
+      // An Allow that arrived after the cancel stores nothing: the grant is
+      // macOS's own to keep, but the connection waits for the next Connect.
+      // A cancel is the user's own act, so it carries no refusal to show.
+      if (appleConnectGeneration !== generation) {
+        return { settings: await settingsStore.snapshot() };
+      }
       if (outcome.access !== APPLE_CALENDAR_ACCESS.FULL) {
         return {
           settings: await settingsStore.snapshot(),
