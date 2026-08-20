@@ -4,9 +4,11 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
+  AD_HOC_IDENTITY,
   APPLE_EVENTS_USAGE_DESCRIPTION,
   addonCompilerArguments,
   createPackagerOptions,
+  developmentSigningIdentity,
   ICONSET_SOURCES,
   iconutilArguments,
   LICENSE_RESOURCE_NAME,
@@ -268,6 +270,30 @@ test("signing configuration separates ad-hoc and Developer ID modes", () => {
     hardenedRuntime: true,
     entitlements: entitlementsPath,
   });
+});
+
+test("a development signing identity signs the package without making it a release", () => {
+  assert.equal(developmentSigningIdentity({}), AD_HOC_IDENTITY);
+  assert.equal(developmentSigningIdentity({ LUKE_DEV_CODESIGN_IDENTITY: "   " }), AD_HOC_IDENTITY);
+
+  const identity = "Luke Development Signing";
+  const environment = { LUKE_DEV_CODESIGN_IDENTITY: ` ${identity} ` };
+  assert.equal(developmentSigningIdentity(environment), identity);
+  // The whole point of the split: a stable signature for the development build,
+  // and none of the release's identity — so it keeps the development name, the
+  // development state directory, and the development Keychain entry.
+  assert.deepEqual(resolveSigningMode(environment), { mode: SIGNING_MODE.AD_HOC });
+  assert.deepEqual(signingModeDefine(environment), {
+    PACKAGED_WITH_DEVELOPER_ID_SIGNING: "false",
+  });
+});
+
+test("the release identity is not read as a development one", () => {
+  // Both are signing identities, but only `LUKE_CODESIGN_IDENTITY` may reach a
+  // release: reading it here would sign a development package with it and hand
+  // that package the released app's Keychain entry.
+  const environment = { LUKE_CODESIGN_IDENTITY: "Developer ID Application: X (TEAM)" };
+  assert.equal(developmentSigningIdentity(environment), AD_HOC_IDENTITY);
 });
 
 test("the baked signing define mirrors the signing mode and carries no identity", () => {

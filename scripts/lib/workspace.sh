@@ -150,6 +150,47 @@ sidecar_require_node() {
     fi
 }
 
+# Electron ships its prebuilt bundle linker-signed ad-hoc: the executable
+# carries a signature, but the bundle seals no resources, so `codesign --verify`
+# rejects it. macOS binds a Keychain item's trust to the program's designated
+# requirement, and a requirement it cannot verify never matches — so an
+# `electron .` run asks for the login password on every launch and "Always
+# Allow" can never take. Signing the bundle with a stable identity is what makes
+# the grant hold: the requirement then names the certificate, so it survives
+# both a reinstall and a move to another worktree. Without an identity to sign
+# with, the prompt is the cost of a development run and the bundle is left as
+# Electron shipped it.
+sidecar_sign_development_electron() {
+    # Trimmed the way `developmentSigningIdentity` trims it, so a padded value
+    # reads as unset here too rather than reaching codesign as a name wrapped in
+    # spaces — which would fail the lookup and take the whole launch down.
+    local identity
+    read -r identity <<<"${LUKE_DEV_CODESIGN_IDENTITY:-}"
+    if [[ -z $identity ]]; then
+        return 0
+    fi
+
+    local electron_app
+    electron_app=$(cd "$SIDECAR_DESKTOP_APP_ROOT" &&
+        node -p 'require("node:path").resolve(require("electron"), "../../..")' 2>/dev/null) || return 0
+    if [[ ! -d $electron_app ]]; then
+        return 0
+    fi
+
+    # Electron's postinstall re-extracts the ad-hoc bundle, so the signature on
+    # disk rather than a marker decides whether this run has anything to do.
+    # The signature line comes from `-dvv`; `--display` alone reports only the
+    # executable path, which would leave the ad-hoc half of this test matching
+    # nothing and a bundle that verifies while still ad-hoc unsigned.
+    if codesign --verify "$electron_app" >/dev/null 2>&1 &&
+        ! codesign -dvv "$electron_app" 2>&1 | grep -qx 'Signature=adhoc'; then
+        return 0
+    fi
+
+    printf 'Signing the development Electron bundle so its Keychain grant holds\n'
+    codesign --force --deep --sign "$identity" "$electron_app"
+}
+
 # A script that launches Electron is not useful until the workspace has been
 # bootstrapped; running bootstrap here keeps `run.sh` and `evidence.sh` from
 # each restating that guard.
@@ -157,4 +198,5 @@ sidecar_ensure_dependencies() {
     if [[ ! -x "$SIDECAR_ELECTRON_BIN" ]]; then
         "$SIDECAR_REPO_ROOT/scripts/bootstrap.sh"
     fi
+    sidecar_sign_development_electron
 }
