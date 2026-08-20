@@ -86,11 +86,7 @@ import {
   REALTIME_SESSION_TYPE,
   realtimeInstructions,
 } from "../src/realtime-protocol";
-import {
-  REALTIME_TOOL,
-  REALTIME_TOOL_FAMILY,
-  REALTIME_TOOLS,
-} from "../src/realtime-tools";
+import { REALTIME_TOOL, REALTIME_TOOL_FAMILY, REALTIME_TOOLS } from "../src/realtime-tools";
 import { maximumSessionMessageLength } from "../src/session";
 
 function conversationItem(event: WireRecord | undefined): WireRecord | undefined {
@@ -795,7 +791,10 @@ function announcement(source: AttentionSpeech["source"], summary: string): Atten
 
 test("the last announcement carries the words said, flattened and bounded", () => {
   const text = lastAnnouncementContextText(
-    announcement(ATTENTION_SPEECH_SOURCE.NOTICE_REQUEST, "x".repeat(2 * maximumAttentionSummaryLength)),
+    announcement(
+      ATTENTION_SPEECH_SOURCE.NOTICE_REQUEST,
+      "x".repeat(2 * maximumAttentionSummaryLength),
+    ),
   );
 
   assert.ok(text);

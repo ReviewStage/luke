@@ -47,9 +47,7 @@ function sessionCapabilityText(session: NormalizedSession): string {
           `controls=${session.controls.map((control) => `${control.label} (${control.id})`).join(", ")}`,
         ]
       : []),
-    ...(session.spawnableAgents.length > 0
-      ? [`agents=${session.spawnableAgents.join(", ")}`]
-      : []),
+    ...(session.spawnableAgents.length > 0 ? [`agents=${session.spawnableAgents.join(", ")}`] : []),
     // Each capability travels as a fact and never a target: the identity is
     // what a rename ask names, and what it lands on stays resolved from
     // observed state on the machine.

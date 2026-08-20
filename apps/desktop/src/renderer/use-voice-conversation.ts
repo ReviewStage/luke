@@ -260,6 +260,7 @@ export function voiceRestartAction(input: {
  * open a speak-only call of Luke's own to say it.
  */
 const ANNOUNCER_SPEECH_SOURCES: ReadonlySet<string> = new Set([
+  ATTENTION_SPEECH_SOURCE.STATUS_EDGE,
   ATTENTION_SPEECH_SOURCE.NOTICE_REQUEST,
 ]);
 

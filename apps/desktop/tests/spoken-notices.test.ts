@@ -21,7 +21,7 @@ function speech(id: string, decidedAt = 1_000): AttentionSpeech {
     providerId: "claude-code",
     providerSessionId: id,
     disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
-    source: ATTENTION_SPEECH_SOURCE.NOTICE_REQUEST,
+    source: ATTENTION_SPEECH_SOURCE.STATUS_EDGE,
     summary: `Claude Code finished "${id}".`,
     decidedAt,
   };

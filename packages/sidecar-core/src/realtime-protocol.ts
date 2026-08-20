@@ -111,6 +111,7 @@ export const REALTIME_SERVER_EVENT = {
  * as the ask stands.
  */
 export const ATTENTION_SPEECH_SOURCE = {
+  STATUS_EDGE: "status-edge",
   EVALUATOR: "evaluator",
   NOTICE_REQUEST: "notice-request",
 } as const;
@@ -120,7 +121,7 @@ export type AttentionSpeechSource =
 
 /**
  * A proactive update the attention layer decided is worth voicing. What
- * `summary` is a finished sentence, read out verbatim.
+ * `summary` is either a finished sentence or observed status fields.
  */
 export interface AttentionSpeech extends SessionIdentity {
   disposition: AttentionDisposition;
@@ -362,6 +363,12 @@ const PROACTIVE_SPEECH_INSTRUCTIONS = [
   "Read the announcement in the last message aloud verbatim, then stop.",
 ].join("\n");
 
+const STATUS_EDGE_INSTRUCTIONS = [
+  "Summarize the status update in the last message in one or two short sentences, then stop.",
+].join("\n");
+
+export const maximumNoticeContextLength = 1_400;
+
 /**
  * The one line of an announcement that may travel. Shared by the events that
  * voice the announcement and the context item that lets the developer's own
@@ -371,7 +378,11 @@ const PROACTIVE_SPEECH_INSTRUCTIONS = [
 export function announcementSummaryText(speech: AttentionSpeech): string | undefined {
   // Flattened, because the separators an instruction block is built from are
   // newlines and blank lines. One line of text cannot open a new section.
-  return trimmedText(speech.summary?.replace(/\s+/g, " "))?.slice(0, maximumAttentionSummaryLength);
+  const bound =
+    speech.source === ATTENTION_SPEECH_SOURCE.STATUS_EDGE
+      ? maximumNoticeContextLength
+      : maximumAttentionSummaryLength;
+  return trimmedText(speech.summary?.replace(/\s+/g, " "))?.slice(0, bound);
 }
 
 /**
@@ -387,6 +398,7 @@ export function announcementSummaryText(speech: AttentionSpeech): string | undef
  * and the one thing it cannot do is change what Luke was asked to do with it.
  */
 export function proactiveSpeechEvents(speech: AttentionSpeech): readonly WireRecord[] {
+  const isStatusEdge = speech.source === ATTENTION_SPEECH_SOURCE.STATUS_EDGE;
   const payload = announcementSummaryText(speech);
   if (!payload) return [];
 
@@ -396,7 +408,12 @@ export function proactiveSpeechEvents(speech: AttentionSpeech): readonly WireRec
       item: {
         type: "message",
         role: "user",
-        content: [{ type: "input_text", text: `[announcement to read out]\n${payload}` }],
+        content: [
+          {
+            type: "input_text",
+            text: `${isStatusEdge ? "[session update]" : "[announcement to read out]"}\n${payload}`,
+          },
+        ],
       },
     },
     {
@@ -405,7 +422,10 @@ export function proactiveSpeechEvents(speech: AttentionSpeech): readonly WireRec
       // payload is provider-observed data about an agent's work — nothing in
       // it was written by someone entitled to ask Luke to act, so the turn
       // itself is opened with nothing to act with.
-      response: { instructions: PROACTIVE_SPEECH_INSTRUCTIONS, tool_choice: "none" },
+      response: {
+        instructions: isStatusEdge ? STATUS_EDGE_INSTRUCTIONS : PROACTIVE_SPEECH_INSTRUCTIONS,
+        tool_choice: "none",
+      },
     },
   ];
 }

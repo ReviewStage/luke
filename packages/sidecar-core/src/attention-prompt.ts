@@ -3,12 +3,9 @@ import {
   type AttentionContext,
   type AttentionTrigger,
   attentionRequestText,
-  DISPOSITION_GUIDANCE,
-  maximumAttentionSummaryLength,
 } from "./attention.js";
 import { isRecord, isWireString, text, type UnparsedWireValue } from "./json.js";
 import {
-  ATTENTION_DISPOSITION,
   boundedText,
   maximumSessionDetailLength,
   maximumSessionRecapLength,
