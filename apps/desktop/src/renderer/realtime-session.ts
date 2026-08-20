@@ -125,11 +125,21 @@ const MAXIMUM_PENDING_INTERRUPTIONS = 24;
 const INTERRUPTION_EVENT_KIND = {
   CANCELLATION: "cancellation",
   AUDIO_CLEAR: "audio-clear",
+  TRUNCATION: "truncation",
 } as const;
 
 type InterruptionEventKind = (typeof INTERRUPTION_EVENT_KIND)[keyof typeof INTERRUPTION_EVENT_KIND];
 
 const NO_ACTIVE_RESPONSE_CANCELLATION = /^Cancellation failed:\s*no active response\b/i;
+
+/**
+ * The server refusing to trim a reply past its own end. The trim measures how
+ * long the reply was audible on a wall clock, which outruns the audio itself
+ * when a stop lands at the reply's very end — the words all played, the clock
+ * kept counting. A reply refused this way was heard whole, so the record the
+ * trim would have corrected is already right.
+ */
+const TRUNCATION_PAST_AUDIO_END = /^Audio content of \d+ms is already shorter than\b/i;
 
 /**
  * One kind of context as it is waiting to be said: the words, for telling an
@@ -458,10 +468,11 @@ export class RealtimeVoiceSession {
    */
   #pendingSupersedes = new Map<string, string>();
   /**
-   * Cancel and clear requests not yet answered with an error, by their stamped
-   * names. Their errors belong to the reply that was interrupted, so they must
-   * never finish a newer turn; only the documented redundant-cancel race stays
-   * quiet, while every genuine refusal is still reported.
+   * Cancel, clear, and trim requests not yet answered with an error, by their
+   * stamped names. Their errors belong to the reply that was interrupted, so
+   * they must never finish a newer turn; only the redundant-cancel race and a
+   * trim refused for asking past the audio's end stay quiet, while every
+   * genuine refusal is still reported.
    */
   #pendingInterruptions = new Map<string, InterruptionEventKind>();
   #interruptionSequence = 0;
@@ -1431,8 +1442,10 @@ export class RealtimeVoiceSession {
     this.#interruptionSequence += 1;
     const cancellationEventId = `response_cancel_${this.#interruptionSequence}`;
     const clearEventId = `output_audio_clear_${this.#interruptionSequence}`;
+    const truncationEventId = `item_truncate_${this.#interruptionSequence}`;
+    const truncateEvents = this.#truncateEvents(truncationEventId);
     const cancelGeneration = this.#responseOutstanding;
-    const interruptionCount = cancelGeneration ? 2 : 1;
+    const interruptionCount = (cancelGeneration ? 2 : 1) + (truncateEvents.length > 0 ? 1 : 0);
     while (this.#pendingInterruptions.size + interruptionCount > MAXIMUM_PENDING_INTERRUPTIONS) {
       const [oldest] = this.#pendingInterruptions.keys();
       if (oldest === undefined) break;
@@ -1448,7 +1461,10 @@ export class RealtimeVoiceSession {
     }
     // Then correct what Luke believes he said, or the next answer is free to
     // refer back to a sentence that never reached the room.
-    this.#send(this.#truncateEvents());
+    if (truncateEvents.length > 0) {
+      this.#pendingInterruptions.set(truncationEventId, INTERRUPTION_EVENT_KIND.TRUNCATION);
+      this.#send(truncateEvents);
+    }
     // The trim was this reply's last word: forgetting its item here is what
     // stops the transcript still trailing in — the server had produced it
     // before the cancel landed — from ever matching the caption again.
@@ -1712,13 +1728,21 @@ export class RealtimeVoiceSession {
   /**
    * What to trim the cut-off reply to, if there is anything to trim. Nothing
    * heard means nothing to correct — a reply interrupted in the gap before its
-   * first word left no impression to undo.
+   * first word left no impression to undo — and a reply whose audio already
+   * ran out was heard whole: the record needs no correction, and the wall
+   * clock has been counting past the audio's end for as long as the turn has
+   * held for its `done`, so a trim measured from it would ask past the end
+   * and be refused.
    */
-  #truncateEvents(): readonly WireRecord[] {
+  #truncateEvents(truncationEventId: string): readonly WireRecord[] {
     const itemId = this.#responseItemId;
     const audibleSince = this.#audibleSince;
-    if (!itemId || audibleSince === undefined) return [];
-    return truncateResponseEvents({ itemId, audioEndMs: this.#now() - audibleSince });
+    if (!itemId || audibleSince === undefined || this.#audioDrained) return [];
+    return truncateResponseEvents({
+      itemId,
+      audioEndMs: this.#now() - audibleSince,
+      truncationEventId,
+    });
   }
 
   #now(): number {
@@ -2120,9 +2144,11 @@ export class RealtimeVoiceSession {
 
   /**
    * Handles an error answering one interruption without letting an old reply's
-   * failure finish the new turn that interrupted it. Only the documented
-   * no-active-response race is quiet; every other refusal still reaches the
-   * developer as a real voice error.
+   * failure finish the new turn that interrupted it. Two refusals are quiet —
+   * the documented no-active-response race, and a trim refused for asking past
+   * the audio's end, which means the reply was heard whole and the record is
+   * already right; every other refusal still reaches the developer as a real
+   * voice error.
    */
   #interruptionError(event: { message: string; eventId?: string; errorType?: string }): boolean {
     if (event.eventId === undefined) return false;
@@ -2133,7 +2159,11 @@ export class RealtimeVoiceSession {
       kind === INTERRUPTION_EVENT_KIND.CANCELLATION &&
       event.errorType === "invalid_request_error" &&
       NO_ACTIVE_RESPONSE_CANCELLATION.test(event.message);
-    if (!benignCancellation) this.#options.onError(event.message);
+    const benignTruncation =
+      kind === INTERRUPTION_EVENT_KIND.TRUNCATION &&
+      event.errorType === "invalid_request_error" &&
+      TRUNCATION_PAST_AUDIO_END.test(event.message);
+    if (!benignCancellation && !benignTruncation) this.#options.onError(event.message);
     return true;
   }
 

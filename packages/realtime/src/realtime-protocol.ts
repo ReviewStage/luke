@@ -204,20 +204,31 @@ export function cancelResponseEvents(input: {
  * said every word it generated, and will happily refer back to a sentence that
  * never reached the room.
  *
- * `audioEndMs` is how long the reply was audible, which cannot exceed what was
- * generated — the audio was heard because it had already been produced. That is
- * what keeps this from being refused for trimming past the end.
+ * `audioEndMs` is how long the reply was audible, measured on a wall clock —
+ * which can outrun the audio itself when playback stalls, or when the stop
+ * lands at the reply's very end. The server refuses a trim past the end, so
+ * the event carries a name for the session to recognize that refusal as its
+ * own: a reply refused this way was heard whole, and the record it would have
+ * corrected is already right.
  */
 export function truncateResponseEvents(input: {
   itemId: string;
   audioEndMs: number;
+  truncationEventId: string;
 }): readonly WireRecord[] {
-  if (!trimmedText(input.itemId) || !Number.isFinite(input.audioEndMs) || input.audioEndMs <= 0) {
+  const truncationEventId = trimmedText(input.truncationEventId);
+  if (
+    !trimmedText(input.itemId) ||
+    !truncationEventId ||
+    !Number.isFinite(input.audioEndMs) ||
+    input.audioEndMs <= 0
+  ) {
     return [];
   }
   return [
     {
       type: REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_TRUNCATE,
+      event_id: truncationEventId,
       item_id: input.itemId,
       // One audio part per assistant message, so the first is the reply.
       content_index: 0,

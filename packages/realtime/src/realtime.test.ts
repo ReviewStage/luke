@@ -346,10 +346,15 @@ test("a reply can be stopped by the developer taking the turn", () => {
 });
 
 test("a cut-off reply is trimmed to what was heard of it", () => {
-  const events = truncateResponseEvents({ itemId: "item_abc", audioEndMs: 1240.7 });
+  const events = truncateResponseEvents({
+    itemId: "item_abc",
+    audioEndMs: 1240.7,
+    truncationEventId: "item_truncate_1",
+  });
 
   assert.equal(events.length, 1);
   assert.equal(events[0]?.type, REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_TRUNCATE);
+  assert.equal(events[0]?.event_id, "item_truncate_1");
   assert.equal(events[0]?.item_id, "item_abc");
   assert.equal(events[0]?.content_index, 0);
   assert.equal(events[0]?.audio_end_ms, 1240);
@@ -358,13 +363,16 @@ test("a cut-off reply is trimmed to what was heard of it", () => {
 test("nothing heard is nothing to correct", () => {
   // Cut off in the gap before the first word: the model has said nothing to the
   // room, and asking to trim a reply to zero — or trimming a message that was
-  // never named — is a request the server refuses rather than a correction.
+  // never named — is a request the server refuses rather than a correction. An
+  // unnamed trim is refused too: the name is what lets the session recognize
+  // the server refusing it as the stop's own answer.
   for (const input of [
-    { itemId: "item_abc", audioEndMs: 0 },
-    { itemId: "item_abc", audioEndMs: -50 },
-    { itemId: "item_abc", audioEndMs: Number.NaN },
-    { itemId: "", audioEndMs: 900 },
-    { itemId: "   ", audioEndMs: 900 },
+    { itemId: "item_abc", audioEndMs: 0, truncationEventId: "item_truncate_1" },
+    { itemId: "item_abc", audioEndMs: -50, truncationEventId: "item_truncate_1" },
+    { itemId: "item_abc", audioEndMs: Number.NaN, truncationEventId: "item_truncate_1" },
+    { itemId: "", audioEndMs: 900, truncationEventId: "item_truncate_1" },
+    { itemId: "   ", audioEndMs: 900, truncationEventId: "item_truncate_1" },
+    { itemId: "item_abc", audioEndMs: 900, truncationEventId: " " },
   ]) {
     assert.deepEqual(truncateResponseEvents(input), []);
   }

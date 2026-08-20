@@ -2308,6 +2308,102 @@ test("a stop does not surface the server refusing its already-finished cancellat
   assert.equal(context.session.status, REALTIME_STATUS.READY);
 });
 
+test("a stop does not surface the server refusing a trim past the audio's end", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.deliverRemoteTrack();
+  await holdTurn(context);
+  context.session.endTurn(true);
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-1" } });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED,
+    item: { id: "item_reply" },
+  });
+  context.session.reportRemoteAudioActive();
+
+  assert.equal(context.session.stopSpeaking(), true);
+  const truncate = context.sent.findLast(
+    (event) => event.type === REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_TRUNCATE,
+  );
+  assert.ok(truncate);
+
+  // The audible clock runs on the wall, so a stop landing at the reply's very
+  // end can measure past the audio itself. The refusal means every word was
+  // heard and the record is already right — nothing the developer can or
+  // should act on.
+  context.emit({
+    type: REALTIME_SERVER_EVENT.ERROR,
+    error: {
+      type: "invalid_request_error",
+      message: "Audio content of 1500ms is already shorter than 2000ms",
+      event_id: truncate?.event_id,
+    },
+  });
+
+  assert.deepEqual(reportedErrors(context), []);
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+});
+
+test("a real error answering the stop's trim is still surfaced", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.deliverRemoteTrack();
+  await holdTurn(context);
+  context.session.endTurn(true);
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-1" } });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED,
+    item: { id: "item_reply" },
+  });
+  context.session.reportRemoteAudioActive();
+
+  assert.equal(context.session.stopSpeaking(), true);
+  const truncate = context.sent.findLast(
+    (event) => event.type === REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_TRUNCATE,
+  );
+  context.emit({
+    type: REALTIME_SERVER_EVENT.ERROR,
+    error: {
+      type: "server_error",
+      message: "Truncation could not be processed.",
+      event_id: truncate?.event_id,
+    },
+  });
+
+  assert.deepEqual(reportedErrors(context), ["Truncation could not be processed."]);
+});
+
+test("a stop after the reply's audio ran out leaves nothing to trim", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.deliverRemoteTrack();
+  await holdTurn(context);
+  context.session.endTurn(true);
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-1" } });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED,
+    item: { id: "item_reply" },
+  });
+  context.session.reportRemoteAudioActive();
+
+  // The audio runs out while the server still owes the reply its done, so the
+  // turn holds and a stop can still land on it. Every word already reached the
+  // room: there is nothing to correct, and a trim measured on the wall clock
+  // would ask past the audio's end and be refused.
+  context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED });
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+  const before = context.sent.length;
+
+  assert.equal(context.session.stopSpeaking(), true);
+
+  assert.ok(
+    !context.sent
+      .slice(before)
+      .some((event) => event.type === REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_TRUNCATE),
+  );
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+});
+
 test("a stop after response.done clears playback without cancelling finished generation", async () => {
   const context = harness();
   await context.session.connect();
