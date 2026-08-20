@@ -32,6 +32,51 @@
 Notable changes to Luke, newest first. Each heading is a released version and
 the date its release was published.
 
+## 0.3.4 — 2026-08-20
+
+### Improvements
+
+- Luke reads this Mac's own calendars to stay quiet while you are in a meeting
+  ([#311](https://github.com/ReviewStage/luke/pull/311))
+- Luke observes local Gemini CLI sessions alongside your other coding agents
+  ([#347](https://github.com/ReviewStage/luke/pull/347))
+- Luke opens local Conductor chats at the exact place their notifications point
+  ([#349](https://github.com/ReviewStage/luke/pull/349))
+- Luke shows each session's app marks on spoken announcement notices
+  ([#340](https://github.com/ReviewStage/luke/pull/340))
+- Luke combines session filters in spoken asks just like the panel chips do
+  ([#348](https://github.com/ReviewStage/luke/pull/348))
+
+### Fixes
+
+- Fixed voice replies ending early when audio resumes after draining
+  ([#342](https://github.com/ReviewStage/luke/pull/342))
+- Fixed the web service failing to load its function sources
+  ([#343](https://github.com/ReviewStage/luke/pull/343))
+- Fixed unanswered cloud writes appearing to have failed
+  ([#345](https://github.com/ReviewStage/luke/pull/345))
+- Fixed spoken announcements interrupting the developer's active conversation
+  ([#344](https://github.com/ReviewStage/luke/pull/344))
+- Fixed spoken panel asks misunderstanding session filters and sort order
+  ([#346](https://github.com/ReviewStage/luke/pull/346))
+- Fixed status-edge announcements omitting the session name
+  ([#350](https://github.com/ReviewStage/luke/pull/350))
+- Fixed session-list asks bypassing the panel's session filter
+  ([#351](https://github.com/ReviewStage/luke/pull/351))
+- Fixed spoken session answers omitting the apps that hold each session
+  ([#352](https://github.com/ReviewStage/luke/pull/352))
+- Fixed media volume restoration being skipped when Luke quits
+  ([#353](https://github.com/ReviewStage/luke/pull/353))
+
+### Miscellaneous
+
+- Added the electron-builder release path
+  ([#324](https://github.com/ReviewStage/luke/pull/324))
+- Updated the installer volume name to Luke Installer
+  ([#339](https://github.com/ReviewStage/luke/pull/339))
+- Updated the provider documentation around agents, apps, and read/write surfaces
+  ([#341](https://github.com/ReviewStage/luke/pull/341))
+
 ## 0.3.3 — 2026-08-20
 
 ### Improvements
