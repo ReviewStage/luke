@@ -65,6 +65,7 @@ import {
   maximumWorkspaceNameLength,
   normalizeSession,
   type ObservedWorkspaceProject,
+  SESSION_APPLICATION_ID,
   SESSION_LOCATION,
   SESSION_STATUS,
   WORKSPACE_TASK_SUPPORT,
@@ -88,7 +89,13 @@ import {
   REALTIME_SESSION_TYPE,
   realtimeInstructions,
 } from "./realtime-protocol.js";
-import { REALTIME_TOOL, REALTIME_TOOL_FAMILY, REALTIME_TOOLS } from "./realtime-tools.js";
+import {
+  REALTIME_TOOL,
+  REALTIME_TOOL_FAMILY,
+  REALTIME_TOOLS,
+  SESSION_LIST_ALL,
+  SESSION_LIST_VOICE,
+} from "./realtime-tools.js";
 
 function conversationItem(event: WireRecord | undefined): WireRecord | undefined {
   if (!event) return undefined;
@@ -1075,6 +1082,29 @@ test("the session is minted with the fifteen acts and nothing wider", () => {
     ],
   );
   assert.equal(config.tool_choice, "auto");
+});
+
+test("show_panel teaches the whole filter vocabulary its validator accepts", () => {
+  const filter = REALTIME_TOOLS.SHOW_PANEL.schema.parameters.properties.filter.description;
+
+  // The filter parameter has no enum — an agent filter is whatever
+  // provider_id the roster currently lists — so its description is the only
+  // place the model learns the fixed half of the vocabulary. A value the
+  // validator accepts but the description never names is a narrowing no ask
+  // can reach.
+  assert.match(filter, /provider_id/);
+  const scopes = [
+    SESSION_LIST_ALL,
+    SESSION_LOCATION.LOCAL,
+    SESSION_LOCATION.CLOUD,
+    SESSION_LIST_VOICE,
+  ];
+  for (const value of scopes) {
+    assert.ok(filter.includes(value), `filter description never names "${value}"`);
+  }
+  for (const applicationId of Object.values(SESSION_APPLICATION_ID)) {
+    assert.ok(filter.includes(applicationId), `filter description never names "${applicationId}"`);
+  }
 });
 
 test("a proactive turn is opened with its tools withheld", () => {
