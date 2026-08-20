@@ -192,7 +192,7 @@ Luke never modifies the running app.
   the fact of a failed turn rather than the reason Cursor recorded for it. A
   session is labelled by the folder it runs in, which Luke reads from Cursor's
   own record of that folder, not from the chat's generated name.
-- For Superset, Luke discovers each `host/<host-id>/host.db`, opens it in
+- For Superset, Luke discovers each `host/<organization-id>/host.db`, opens it in
   read-only defensive mode, and reads project and workspace names, branches,
   pull-request links, terminal identifiers, configured agent kinds, lifecycle
   events, and the agent's own session identifier. That identifier is joined
@@ -237,8 +237,9 @@ Luke asks macOS's property-list utility whether the CLI config names an active
 organization and receives only that identifier; Luke never opens the config or
 receives its credential fields. A message or control runs only from the developer's press or a turn
 the developer opened, invokes the CLI executable directly without a shell, and
-passes only the observed host, workspace and terminal identifiers plus the
-developer's own message. Luke never reads, copies, or stores the CLI token. The
+passes only the observed workspace and terminal identifiers plus the
+developer's own message — the terminal lives on this machine, which is the
+CLI's own default, so no host identifier travels at all. Luke never reads, copies, or stores the CLI token. The
 CLI is Superset's cloud client and its own telemetry and privacy terms apply to
 commands it runs. Without its login, these actions do not appear and local
 observation continues unchanged.

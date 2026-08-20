@@ -42,7 +42,6 @@ function testCliOptions(homeDirectory: string) {
 const CONTEXT: SupersetSessionContext = {
   providerId: PROVIDER_ID.CODEX,
   providerSessionId: "session-1",
-  hostId: "host-1",
   workspaceId: "workspace-1",
   workspaceName: "power-vacation",
   terminalId: "terminal-1",
@@ -169,6 +168,9 @@ test("message and controls use fixed arguments without a shell", async (t) => {
     (await cli.renameWorkspace(CONTEXT, "Payments rollout")).status,
     PROVIDER_ACT_RESULT_STATUS.ACCEPTED,
   );
+  // No `--host` on any bound-workspace act: the observed host state is this
+  // machine's own, which is the CLI's default, and the flag's machineId is an
+  // identifier that state does not carry.
   assert.deepEqual(calls, [
     {
       executable: path.join(home, "bin", "superset"),
@@ -177,8 +179,6 @@ test("message and controls use fixed arguments without a shell", async (t) => {
         "send",
         "--workspace",
         "workspace-1",
-        "--host",
-        "host-1",
         "--terminal",
         "terminal-1",
         "--text",
@@ -193,8 +193,6 @@ test("message and controls use fixed arguments without a shell", async (t) => {
         "close",
         "--workspace",
         "workspace-1",
-        "--host",
-        "host-1",
         "--terminal",
         "terminal-1",
         "--json",
@@ -207,8 +205,6 @@ test("message and controls use fixed arguments without a shell", async (t) => {
         "create",
         "--workspace",
         "workspace-1",
-        "--host",
-        "host-1",
         "--agent",
         "claude",
         "--prompt",
@@ -220,15 +216,7 @@ test("message and controls use fixed arguments without a shell", async (t) => {
       executable: path.join(home, "bin", "superset"),
       // No `--json` rides the rename: `workspaces update` does not document
       // it, and nothing reads the output.
-      arguments_: [
-        "workspaces",
-        "update",
-        "workspace-1",
-        "--host",
-        "host-1",
-        "--name",
-        "Payments rollout",
-      ],
+      arguments_: ["workspaces", "update", "workspace-1", "--name", "Payments rollout"],
     },
   ]);
 });

@@ -64,10 +64,17 @@ const SUPERSET_AGENT_QUERY = `
   ORDER BY display_order, preset_id
 `;
 
+/**
+ * What one binding row says about the session it manages. Deliberately no
+ * host identifier: the host state read here is this machine's own — the
+ * directories under `host/` are named by organization, not by machine — so
+ * every act on a bound terminal lands on the CLI's local default, and the
+ * one id the CLI would take for `--host`, a machineId, appears nowhere in
+ * this state.
+ */
 export interface SupersetSessionContext {
   providerId: string;
   providerSessionId: string;
-  hostId: string;
   workspaceId: string;
   workspaceName: string;
   terminalId: string;
@@ -79,7 +86,6 @@ export interface SupersetSessionContext {
 }
 
 function contextFromRow(
-  hostId: string,
   row: WireRecord,
   spawnableAgents: readonly string[],
 ): SupersetSessionContext | undefined {
@@ -107,7 +113,6 @@ function contextFromRow(
   const context: SupersetSessionContext = {
     providerId,
     providerSessionId,
-    hostId,
     workspaceId,
     workspaceName,
     terminalId,
@@ -219,18 +224,13 @@ export class SupersetWorkspaceReader {
       await Promise.all(
         entries
           .filter((entry) => entry.isDirectory())
-          .map((entry) =>
-            this.#readHost(entry.name, path.join(hostDirectory, entry.name, "host.db")),
-          ),
+          .map((entry) => this.#readHost(path.join(hostDirectory, entry.name, "host.db"))),
       )
     ).flat();
     return new SupersetWorkspaceSnapshot(contexts);
   }
 
-  async #readHost(
-    hostId: string,
-    databasePath: string,
-  ): Promise<readonly SupersetSessionContext[]> {
+  async #readHost(databasePath: string): Promise<readonly SupersetSessionContext[]> {
     const database = await openReadOnlyDatabase(this.#sqlite, databasePath);
     if (!database) return [];
     try {
@@ -249,7 +249,7 @@ export class SupersetWorkspaceReader {
         .flatMap((value) => {
           const row = wireRecord(value);
           if (!row) return [];
-          const context = contextFromRow(hostId, row, spawnableAgents);
+          const context = contextFromRow(row, spawnableAgents);
           return context ? [context] : [];
         });
     } catch (error) {

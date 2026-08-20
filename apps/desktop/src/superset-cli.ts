@@ -347,6 +347,10 @@ export class SupersetCli {
     }
   }
 
+  // The acts on a bound terminal name no `--host`: the CLI's default is this
+  // machine, which is the only machine the observed host state describes, and
+  // the flag takes a machineId the state does not carry — passing the state
+  // directory's organization name there is what made every act fail.
   async sendMessage(context: SupersetSessionContext, text: string): Promise<ProviderMessageResult> {
     return this.#act(
       [
@@ -354,8 +358,6 @@ export class SupersetCli {
         "send",
         "--workspace",
         context.workspaceId,
-        "--host",
-        context.hostId,
         "--terminal",
         context.terminalId,
         "--text",
@@ -377,8 +379,6 @@ export class SupersetCli {
           "close",
           "--workspace",
           context.workspaceId,
-          "--host",
-          context.hostId,
           "--terminal",
           context.terminalId,
           "--json",
@@ -409,8 +409,6 @@ export class SupersetCli {
         "workspaces",
         "update",
         context.workspaceId,
-        "--host",
-        context.hostId,
         "--name",
         name,
       ]);
@@ -448,8 +446,6 @@ export class SupersetCli {
         "create",
         "--workspace",
         context.workspaceId,
-        "--host",
-        context.hostId,
         "--agent",
         agent,
         "--prompt",

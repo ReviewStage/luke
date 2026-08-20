@@ -67,7 +67,6 @@ test("reads live host databases and enriches an exact provider session", async (
   assert.deepEqual(snapshot.context(PROVIDER_ID.CODEX, "session-1"), {
     providerId: PROVIDER_ID.CODEX,
     providerSessionId: "session-1",
-    hostId: "host-local",
     workspaceId: "workspace-1",
     workspaceName: "power-vacation",
     terminalId: "terminal-1",
@@ -146,7 +145,10 @@ test("keeps the newest duplicate binding across host databases", async (t) => {
   }
 
   const snapshot = await new SupersetWorkspaceReader({ homeDirectory: home }).read();
-  assert.equal(snapshot.context(PROVIDER_ID.CLAUDE_CODE, "shared-session")?.hostId, "host-new");
+  assert.equal(
+    snapshot.context(PROVIDER_ID.CLAUDE_CODE, "shared-session")?.workspaceId,
+    "workspace-host-new",
+  );
 });
 
 test("advertises Superset actions only after the CLI is connected", async (t) => {

@@ -275,7 +275,7 @@ one behavior: while a meeting covers now and Quiet during meetings is on,
 spoken announcements hold and the face sleeps.
 
 **Superset** is a workspace manager rather than a session provider: Luke
-reads its local host state (`host/<host-id>/host.db`) read-only, joins each
+reads its local host state (`host/<organization-id>/host.db`) read-only, joins each
 terminal-agent binding to a session another provider already observes, and
 groups those rows under the Superset workspace that owns them — enriched with
 the project, branch, and pull-request link Superset records. Each managed row
