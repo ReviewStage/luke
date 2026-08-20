@@ -2032,22 +2032,27 @@ export function App(): React.JSX.Element {
         mention.kind === SESSION_MENTION_KIND.WORKSPACE && session.workspace?.name !== undefined
           ? session.workspace.name
           : session.title;
+      // The chip's mark is the agent having the conversation, the same
+      // identity the session's own row leads with.
+      const markId = session.agent?.id ?? session.providerId;
       return [
         {
           kind: MENTION_CHIP_KIND.SESSION,
           id: session.providerSessionId,
-          // The chip's mark is the agent having the conversation, the same
-          // identity the session's own row leads with.
-          markId: session.agent?.id ?? session.providerId,
+          markId,
           title,
           identity: {
             providerId: session.providerId,
             providerSessionId: session.providerSessionId,
           },
-          applications: session.applications.map((application) => ({
-            id: application.id,
-            name: application.displayName,
-          })),
+          applications: session.applications.flatMap((application) =>
+            // An app the leading mark already stands for — a provider that is
+            // itself the app, standing in where no agent was reported — would
+            // draw the same mark twice on one chip.
+            application.id === markId
+              ? []
+              : [{ id: application.id, name: application.displayName }],
+          ),
         },
       ];
     }),
