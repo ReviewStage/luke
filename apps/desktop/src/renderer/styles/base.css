@@ -2799,15 +2799,11 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   padding-left: calc(var(--slot-mark-size) + var(--slot-gutter-gap));
 }
 
-.superset-code-row,
-.superset-organization-list {
-  padding-left: calc(var(--slot-mark-size) + var(--slot-gutter-gap));
-}
-
 .superset-organization-list {
   display: flex;
   flex-wrap: wrap;
   gap: 7px;
+  padding-left: calc(var(--slot-mark-size) + var(--slot-gutter-gap));
 }
 
 /* Evidence capture screenshots a fixed moment after the renderer reports ready.

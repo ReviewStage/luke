@@ -639,6 +639,7 @@ export const SUPERSET_SIGN_IN_STAGE = {
   BROWSER_CODE: "browser-code",
   EXCHANGING: "exchanging",
   ORGANIZATION: "organization",
+  SWITCHING: "switching",
   FAILURE: "failure",
   CONNECTED: "connected",
 } as const;

@@ -221,6 +221,29 @@ test("zero organizations fail; listed organizations are offered and revalidated"
   listed = [];
   assert.equal((await signIn.chooseOrganization("acme")).stage, SUPERSET_SIGN_IN_STAGE.FAILURE);
 
+  const chosen = new FakeChild();
+  listed = organizations;
+  const stages: string[] = [];
+  const switching = new SupersetSignIn({
+    cli,
+    openExternal: async () => undefined,
+    onChange: (state) => stages.push(state.stage),
+    spawnLogin: () => chosen,
+  });
+  await fs.rm(path.join(home, "config.json"), { force: true });
+  await switching.begin();
+  chosen.emit("close", 1);
+  await waitFor(() => switching.current().stage === SUPERSET_SIGN_IN_STAGE.ORGANIZATION);
+  assert.equal(
+    (await switching.chooseOrganization("acme")).stage,
+    SUPERSET_SIGN_IN_STAGE.CONNECTED,
+  );
+  // The switch is its own stage: drawn as the code exchange, the slot would
+  // ask for a second code nobody owes.
+  assert.ok(stages.includes(SUPERSET_SIGN_IN_STAGE.SWITCHING));
+  assert.equal(stages.includes(SUPERSET_SIGN_IN_STAGE.EXCHANGING), false);
+  await fs.rm(path.join(home, "config.json"), { force: true });
+
   const second = new FakeChild();
   listed = [];
   const empty = new SupersetSignIn({
