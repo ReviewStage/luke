@@ -1,7 +1,11 @@
 import { PROVIDER_ID, type ProviderId } from "./providers.js";
 import {
+  SESSION_APPLICATION_ID,
+  SESSION_APPLICATION_SCOPE,
   SESSION_CONTROL_KIND,
   SESSION_LOCATION,
+  type SessionApplicationId,
+  type SessionApplicationScope,
   type SessionControl,
   type SessionLocation,
 } from "./session.js";
@@ -11,6 +15,16 @@ import { SESSION_URGENCY, type SessionUrgency } from "./session-display.js";
 export interface WorkspaceSnapshot {
   id: string;
   name: string;
+  /** The manager whose mark the tray header carries, when one owns the workspace. */
+  scopeId?: string;
+  managerName?: string;
+}
+
+/** One app association drawn by a synthetic fixture row. */
+export interface SessionApplicationSnapshot {
+  id: SessionApplicationId;
+  name: string;
+  scope: SessionApplicationScope;
 }
 
 export interface SessionSnapshot {
@@ -19,6 +33,11 @@ export interface SessionSnapshot {
   /** The observing provider's stable identity, as an adapter reports it. */
   providerId: ProviderId;
   provider: string;
+  /** The agent behind the chat, when the provider hosts rather than is it. */
+  agentId?: ProviderId;
+  agent?: string;
+  /** Drawn only: apps where this synthetic local chat also appears. */
+  applications?: readonly SessionApplicationSnapshot[];
   /** What the session is doing, or what stopped it; empty when it said nothing. */
   detail: string;
   /**
@@ -77,9 +96,22 @@ const smokeFixture: FixtureSnapshot = {
   sessions: [
     {
       id: "codex-bootstrap",
-      title: "Bootstrap the desktop shell",
+      title:
+        "Bootstrap the desktop shell while keeping every destination visible across a very long Codex conversation title",
       providerId: PROVIDER_ID.CODEX,
       provider: "Codex",
+      applications: [
+        {
+          id: SESSION_APPLICATION_ID.CHATGPT,
+          name: "ChatGPT",
+          scope: SESSION_APPLICATION_SCOPE.SESSION,
+        },
+        {
+          id: SESSION_APPLICATION_ID.CONDUCTOR,
+          name: "Conductor",
+          scope: SESSION_APPLICATION_SCOPE.SESSION,
+        },
+      ],
       detail: "exec_command: pnpm --filter @luke/desktop build",
       repository: "luke",
       branch: "dean/desktop-shell",
@@ -107,37 +139,67 @@ const smokeFixture: FixtureSnapshot = {
     // Two Conductor chats of one workspace, titled by their own names and
     // grouped under the workspace's — the name the user knows the work by,
     // which never was a branch. The pair is what proves a run of chats joins
-    // into one card in the one screenshot the evidence is reviewed from.
+    // into one card in the one screenshot the evidence is reviewed from —
+    // each row led by the agent's own mark, with the Conductor mark carried
+    // once on the tray header the way a Superset workspace carries its own.
     {
       id: "conductor-chat-package",
       title: "amber-shoal",
       providerId: PROVIDER_ID.CONDUCTOR,
       provider: "Conductor",
+      agentId: PROVIDER_ID.CLAUDE_CODE,
+      agent: "Claude Code",
+      applications: [
+        {
+          id: SESSION_APPLICATION_ID.CONDUCTOR,
+          name: "Conductor",
+          scope: SESSION_APPLICATION_SCOPE.WORKSPACE,
+        },
+      ],
       detail: "Packaging the macOS build.",
       repository: "luke",
       model: "claude-opus-5",
       urgency: SESSION_URGENCY.WORKING,
       location: SESSION_LOCATION.CLOUD,
       observedAt: minutesBeforeEpoch(6),
-      workspace: { id: "conductor-lisbon", name: "lisbon-v2" },
+      workspace: {
+        id: "conductor-lisbon",
+        name: "lisbon-v2",
+        scopeId: PROVIDER_ID.CONDUCTOR,
+        managerName: "Conductor",
+      },
     },
     // The complete chat is also the most recently observed session while being
     // among the least urgent, so the fixture tells the two orderings apart
     // rather than agreeing with both. A provider that reported no activity,
     // failure, or recap: the surface words the state itself, and this row is
-    // what proves it does.
+    // what proves it does. Its agent went unreported, so the Conductor mark
+    // stands in for the agent's — the honest fallback this row is also proof
+    // of — which keeps the fixture at five distinct wing marks.
     {
       id: "conductor-chat-tidy",
       title: "gentle-cove",
       providerId: PROVIDER_ID.CONDUCTOR,
       provider: "Conductor",
+      applications: [
+        {
+          id: SESSION_APPLICATION_ID.CONDUCTOR,
+          name: "Conductor",
+          scope: SESSION_APPLICATION_SCOPE.WORKSPACE,
+        },
+      ],
       detail: "",
       repository: "luke",
       model: "claude-opus-5",
       urgency: SESSION_URGENCY.COMPLETE,
       location: SESSION_LOCATION.CLOUD,
       observedAt: minutesBeforeEpoch(1),
-      workspace: { id: "conductor-lisbon", name: "lisbon-v2" },
+      workspace: {
+        id: "conductor-lisbon",
+        name: "lisbon-v2",
+        scopeId: PROVIDER_ID.CONDUCTOR,
+        managerName: "Conductor",
+      },
     },
     {
       id: "cursor-agent",

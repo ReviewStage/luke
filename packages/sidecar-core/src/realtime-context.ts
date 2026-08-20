@@ -113,6 +113,17 @@ function noticeAsksByIdentity(
 }
 
 /**
+ * How a session is named out loud: the agent having the conversation, with
+ * the hosting provider beside it where the two differ — "Claude Code in
+ * Conductor" — so the spoken answer matches the mark the row leads with.
+ */
+function sessionSpokenName(session: NormalizedSession): string {
+  return session.agent
+    ? `${session.agent.displayName} in ${session.provider.displayName}`
+    : session.provider.displayName;
+}
+
+/**
  * Renders the session roster the conversation is allowed to know about.
  *
  * These are the same bounded, redacted fields the attention layer already
@@ -141,7 +152,9 @@ export function sessionContextText(
     ...sessions.slice(0, maximumVoiceContextSessions).map((session) => {
       const ask = asks.get(session.providerId)?.get(session.providerSessionId);
       return [
-        `- ${session.provider.displayName}`,
+        // A hosted chat is named by the agent having the conversation, with
+        // the host beside it, the same way its row leads with the agent mark.
+        `- ${sessionSpokenName(session)}`,
         session.title,
         // The workspace tells siblings' chats apart out loud, so it rides
         // beside the title wherever a provider named one — and only by its
@@ -299,7 +312,7 @@ export function sessionReferenceContextText(session: NormalizedSession): string 
   return [
     "Session under discussion:",
     [
-      `- ${session.provider.displayName}`,
+      `- ${sessionSpokenName(session)}`,
       session.title,
       ...(session.workspace?.name ? [`a chat in workspace ${session.workspace.name}`] : []),
       `[provider_id=${session.providerId} provider_session_id=${session.providerSessionId}]`,

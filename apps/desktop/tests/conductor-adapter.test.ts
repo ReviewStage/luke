@@ -354,11 +354,14 @@ test("observes cloud sessions the signed-in user created, under their own names"
   assert.equal(observations[0]?.providerSessionId, "session-working");
   // Titled by the chat's own name, grouped under the workspace's — the name
   // the user knows the work by — and neither is a branch, so no branch is
-  // reported at all.
+  // reported at all. Conductor manages the workspace, so the grouping carries
+  // its mark the way a Superset workspace carries Superset's.
   assert.equal(observations[0]?.title, TEST_SESSION_NAME);
   assert.deepEqual(observations[0]?.workspace, {
     providerWorkspaceId: "workspace-active",
     name: TEST_WORKSPACE_NAME,
+    scopeId: "conductor",
+    managerName: "Conductor",
   });
   assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
   assert.equal(observations[0]?.observedAt, TEST_TIME - 5_000);
@@ -584,9 +587,12 @@ test("reads a settled chat's parting words from the transcripts view as its reca
   // the header is not part of it, and nothing earlier in the tail survives.
   assert.equal(idle?.recap, TEST_RECAP);
   assert.equal(secondIdle?.recap, TEST_RECAP);
-  // The agent kind joins the model label, and stands alone when no model came.
-  assert.equal(idle?.detail?.model, "codex · gpt-5.5");
-  assert.equal(secondIdle?.detail?.model, "claude");
+  // A mapped agent kind becomes the agent itself — the identity the row's
+  // mark leads with — and the model rides plain beside it.
+  assert.equal(idle?.detail?.model, "gpt-5.5");
+  assert.deepEqual(idle?.agent, { id: "codex", displayName: "Codex" });
+  assert.equal(secondIdle?.detail?.model, undefined);
+  assert.deepEqual(secondIdle?.agent, { id: "claude-code", displayName: "Claude Code" });
 
   // One read document for the whole pass, fixed by the build: the SELECT this
   // build wrote, naming exactly the observed session ids and nothing else.
@@ -649,7 +655,7 @@ test("keeps parting words off a chat that is still working or newly failed", asy
   const working = observations.find(
     (candidate) => candidate.providerSessionId === WORKING_SESSION_UUID,
   );
-  assert.equal(working?.detail?.model, "cursor");
+  assert.deepEqual(working?.agent, { id: "cursor", displayName: "Cursor" });
 });
 
 test("reports no recap for a tail it cannot attribute to the agent", async () => {
@@ -870,7 +876,20 @@ test("reports every chat in a workspace, each grouped under it", async () => {
     assert.deepEqual(observation.workspace, {
       providerWorkspaceId: "workspace-shared",
       name: TEST_WORKSPACE_NAME,
+      scopeId: "conductor",
+      managerName: "Conductor",
     });
+    // The Conductor mark rides each chat as an app association carrying the
+    // chat's own exact address, so the trailing mark opens the same place the
+    // row does.
+    assert.deepEqual(observation.applications, [
+      {
+        id: "conductor",
+        displayName: "Conductor",
+        scope: "workspace",
+        link: observation.detail?.link,
+      },
+    ]);
   }
 });
 

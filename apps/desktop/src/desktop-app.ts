@@ -56,6 +56,10 @@ import { accountGateOpen } from "./account-gate";
 import { AccountSessionManager } from "./account-session-manager";
 import { buildCarriesDeveloperIdSigning, resolveAppName } from "./app-identity";
 import { CodexCloudSessionAdapter } from "./codex-cloud-adapter";
+import {
+  ConductorSessionApplicationReader,
+  ConductorSessionApplicationSnapshot,
+} from "./conductor-session-applications";
 import { DockPresence } from "./dock-presence";
 import { feedbackDeliveryFromEnvironment } from "./feedback-delivery";
 import { GoogleCalendarReader } from "./google-calendar";
@@ -157,6 +161,7 @@ const sessionRegistry = new InMemorySessionRegistry();
 // evidence run never refreshes it, so there its answer stays the honest
 // "unknown".
 const codexCloudAdapter = new CodexCloudSessionAdapter();
+const conductorSessionApplications = new ConductorSessionApplicationReader();
 const supersetHomeDirectory =
   process.env.SUPERSET_HOME_DIR ?? path.join(app.getPath("home"), ".superset");
 const supersetWorkspaces = new SupersetWorkspaceReader({
@@ -1055,6 +1060,11 @@ async function applyLocalSessionHooks(): Promise<void> {
 
 async function refreshProviderSessions(generation: number): Promise<void> {
   const actionsWereEnabled = observedSupersetOrganization !== undefined;
+  const conductorSnapshotPromise = conductorSessionApplications.read().catch((error) => {
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`Conductor application observation failed: ${message}\n`);
+    return new ConductorSessionApplicationSnapshot();
+  });
   let supersetSnapshot = new SupersetWorkspaceSnapshot([]);
   let supersetOrganization: string | undefined;
   try {
@@ -1075,6 +1085,7 @@ async function refreshProviderSessions(generation: number): Promise<void> {
   }
   observedSupersetWorkspaces = supersetSnapshot;
   observedSupersetOrganization = supersetOrganization;
+  const conductorSnapshot = await conductorSnapshotPromise;
   const supersetActionsEnabled = supersetOrganization !== undefined;
   if (actionsWereEnabled !== supersetActionsEnabled) {
     if (supersetActionsEnabled) {
@@ -1096,7 +1107,10 @@ async function refreshProviderSessions(generation: number): Promise<void> {
     orderedRegistrations.map(async ({ adapter }) => {
       try {
         await sessionRegistry.refresh(adapter, (providerId, observations) =>
-          supersetSnapshot.enrich(providerId, observations, supersetOrganization),
+          conductorSnapshot.enrich(
+            providerId,
+            supersetSnapshot.enrich(providerId, observations, supersetOrganization),
+          ),
         );
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

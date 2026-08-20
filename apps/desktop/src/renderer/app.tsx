@@ -17,6 +17,7 @@ import {
   SESSION_MENTION_KIND,
   SESSION_NOTICE_HEIGHT,
   SESSION_NOTICE_MAX_ROWS,
+  type SessionApplicationId,
   type SessionIdentity,
   type SessionNoticeAsk,
   VOICE_CAPTION_MAX_HEIGHT,
@@ -126,9 +127,10 @@ import {
   DEFAULT_SESSION_VIEW,
   type DisplaySession,
   displaySessions,
-  SESSION_FILTER,
+  type SessionFilter,
   type SessionView,
-  sessionFilterFromSpoken,
+  sameSessionFilters,
+  sessionFiltersFromSpoken,
   sessionTally,
   tallySummary,
 } from "./session-model";
@@ -163,6 +165,7 @@ import {
 } from "./strip-hold";
 import { SupersetSignInSlot } from "./superset-sign-in-slot";
 import { useBootstrapRacedChannel } from "./use-bootstrap-raced-channel";
+import { useMeasuredHeight } from "./use-measured-height";
 import { panelEntryOpen, usePanelEntry } from "./use-panel-entry";
 import { usePanelPresentation } from "./use-panel-presentation";
 import { useStateWithRef } from "./use-state-with-ref";
@@ -301,41 +304,6 @@ function surfaceHeightStyle(
   return cssCustomProperties(properties);
 }
 
-/**
- * Reports a shape's own content height so the black surface can end where the
- * content does. The window stays one size; only the shape inside it follows
- * what it holds — the number of sessions in the panel, a refusal appearing
- * under the slot's field — which is what makes either one feel like a resize
- * rather than a redraw.
- */
-function useSurfaceHeight(): [(element: HTMLElement | null) => void, number | undefined] {
-  const observer = useRef<ResizeObserver | undefined>(undefined);
-  const [height, setHeight] = useState<number>();
-
-  // A callback ref rather than an effect: the panel mounts only once bootstrap
-  // has resolved, and the slot only once a key is being entered — both after
-  // the first render.
-  const measured = useCallback((element: HTMLElement | null) => {
-    observer.current?.disconnect();
-    observer.current = undefined;
-    if (!element) return;
-    const measure = () => setHeight(Math.ceil(element.getBoundingClientRect().height));
-    const nextObserver = new ResizeObserver(measure);
-    // The border box, because that is the box the bounding rect reports: the
-    // caption's room arrives as padding on the panel, which grows the shape
-    // without ever touching the content box, and a content-box observer would
-    // sleep through it — leaving the surface and the caption's rest position
-    // sized to a height the panel no longer has.
-    nextObserver.observe(element, { box: "border-box" });
-    observer.current = nextObserver;
-    measure();
-  }, []);
-
-  useEffect(() => () => observer.current?.disconnect(), []);
-
-  return [measured, height];
-}
-
 const COLLAPSE_ANIMATION_MS = MOTION_DURATION_MS.EXIT + MOTION_DURATION_MS.SURFACE;
 
 /**
@@ -414,12 +382,12 @@ export function App(): React.JSX.Element {
   // Counts for nothing except having changed: each tick re-renders the rows so
   // their "how long ago" labels stay honest while they are on screen.
   const [, setClock] = useState(0);
-  const [panelElement, panelHeight] = useSurfaceHeight();
-  const [slotElement, slotHeight] = useSurfaceHeight();
-  const [signInSlotElement, signInSlotHeight] = useSurfaceHeight();
-  const [connectElement, connectHeight] = useSurfaceHeight();
-  const [feedbackElement, feedbackHeight] = useSurfaceHeight();
-  const [captionTextElement, captionTextHeight] = useSurfaceHeight();
+  const [panelElement, panelHeight] = useMeasuredHeight();
+  const [slotElement, slotHeight] = useMeasuredHeight();
+  const [signInSlotElement, signInSlotHeight] = useMeasuredHeight();
+  const [connectElement, connectHeight] = useMeasuredHeight();
+  const [feedbackElement, feedbackHeight] = useMeasuredHeight();
+  const [captionTextElement, captionTextHeight] = useMeasuredHeight();
   const captionElement = useRef<HTMLSpanElement>(null);
   const [captionPadding, setCaptionPadding] = useState(0);
   useLayoutEffect(() => {
@@ -626,15 +594,21 @@ export function App(): React.JSX.Element {
     [setSettingsView, setTab],
   );
 
-  // A choice made in the sheet puts the sheet away. It is drawn over the list
-  // and is taller than a row, so a list narrowed to one or two sessions ends up
-  // entirely behind it — the control would hide the very rows it was asked for,
-  // which reads as a filter that shows nothing at all. The fallback the render
-  // performs when a filter empties writes the view directly instead: that is the
-  // list correcting itself, not somebody choosing.
+  // A sort chosen in the sheet puts the sheet away: an order is one choice of
+  // two, made once. The fallback the render performs when a selection empties
+  // writes the view directly instead: that is the list correcting itself, not
+  // somebody choosing.
   const changeSessionView = useCallback((next: SessionView) => {
     setSessionView(next);
     setOptionsOpen(false);
+  }, []);
+
+  // A filter toggled in the sheet leaves it open: the chips combine, and a
+  // sheet that closed on every press would make choosing two filters cost two
+  // openings. The sheet still goes away by hand — its button, a press outside
+  // it, Escape — and the options button names the narrowing the whole time.
+  const changeSessionFilters = useCallback((filters: readonly SessionFilter[]) => {
+    setSessionView((current) => ({ ...current, filters }));
   }, []);
 
   /**
@@ -1564,6 +1538,26 @@ export function App(): React.JSX.Element {
   );
 
   /**
+   * Opens the exact route carried by one app association. The app id, rather
+   * than its address, crosses the bridge; the main process validates it against
+   * the latest roster before handing the normalized route to macOS.
+   */
+  const openSessionApplication = useCallback(
+    (session: DisplaySession, applicationId: SessionApplicationId) => {
+      void window.sidecar.openSessionApplication(
+        {
+          providerId: session.providerId,
+          providerSessionId: session.id,
+        },
+        applicationId,
+      );
+      cancelHover();
+      void changeMode(false);
+    },
+    [cancelHover, changeMode],
+  );
+
+  /**
    * The same press asked for out loud. It stands the panel down for the same
    * reason the pressed row does — Luke floats above the very chat he was asked
    * to bring forward — but only once something actually opened, and only if the
@@ -1823,20 +1817,20 @@ export function App(): React.JSX.Element {
           // errand into a shape still growing has to trail the whole opening,
           // and one into a panel already up does not.
           const opening = presentationOf() !== PANEL_PRESENTATION.PANEL;
-          const spoken = action.filter ? sessionFilterFromSpoken(action.filter) : undefined;
+          const spoken = action.filter ? sessionFiltersFromSpoken(action.filter) : undefined;
           // An agent this build never registered cannot narrow the list, and Luke
           // must not claim it did. The list still has to match the sentence that
           // says every session is shown, so an unmappable ask widens the view to
-          // All rather than leaving whatever narrowing was already in force.
-          const filter = action.filter ? (spoken ?? SESSION_FILTER.ALL) : undefined;
+          // everything rather than leaving whatever narrowing was already in force.
+          const filters = action.filter ? (spoken ?? []) : undefined;
           // Caught rather than applied, on the settings switch's terms: the
           // narrowing is what Luke is on his way to the options button to do, and
           // a list that has already re-sorted itself by the time he gets there
           // makes the flight a report rather than the act.
           const view =
-            filter || action.sort
+            filters || action.sort
               ? {
-                  ...(filter ? { filter } : undefined),
+                  ...(filters ? { filters } : undefined),
                   ...(action.sort ? { sort: action.sort } : undefined),
                 }
               : undefined;
@@ -1857,8 +1851,8 @@ export function App(): React.JSX.Element {
           return {
             status: "shown",
             tab: action.tab,
-            ...(spoken ? { filter: action.filter } : undefined),
-            ...(action.filter && !spoken
+            ...(spoken !== undefined ? { filter: action.filter } : undefined),
+            ...(action.filter && spoken === undefined
               ? { note: "That agent has no filter of its own here, so every session is shown." }
               : undefined),
             ...(action.sort ? { sort: action.sort } : undefined),
@@ -1996,7 +1990,9 @@ export function App(): React.JSX.Element {
         {
           kind: MENTION_CHIP_KIND.SESSION,
           id: session.providerSessionId,
-          markId: session.providerId,
+          // The chip's mark is the agent having the conversation, the same
+          // identity the session's own row leads with.
+          markId: session.agent?.id ?? session.providerId,
           title,
           identity: {
             providerId: session.providerId,
@@ -2110,7 +2106,7 @@ export function App(): React.JSX.Element {
   // reveal the growth on the shape's own spring, which leaves the inner
   // stack's wrapped height as the only box that says how many rows the chips
   // made.
-  const [noticeRowsElement, noticeBandHeight] = useSurfaceHeight();
+  const [noticeRowsElement, noticeBandHeight] = useMeasuredHeight();
   /**
    * The measured caption and band heights the shape spends, held through a
    * collapse out of the panel. The compact width lands at the flip and
@@ -2800,13 +2796,14 @@ export function App(): React.JSX.Element {
       ? "Checking for sessions"
       : tallySummary(tally);
   const list = arrangeSessions(visibleSessions, sessionView);
-  // Dropping an emptied filter is a change of view, not a way of drawing one.
-  // Left in state it would lie dormant behind an All that only looks chosen,
-  // and the next session to enter that state would narrow the list back down
-  // to it with nothing having been pressed. Setting state here rather than from
-  // an effect is what keeps that from being drawn first and corrected after.
-  if (list.filter !== sessionView.filter) {
-    setSessionView({ ...sessionView, filter: list.filter });
+  // Dropping an emptied selection is a change of view, not a way of drawing
+  // one. Left in state it would lie dormant behind a list that only looks
+  // unnarrowed, and the next session to enter that state would narrow the list
+  // back down to it with nothing having been pressed. Setting state here rather
+  // than from an effect is what keeps that from being drawn first and corrected
+  // after.
+  if (!sameSessionFilters(list.filters, sessionView.filters)) {
+    setSessionView({ ...sessionView, filters: list.filters });
   }
   // The sheet exists only while there is something for it to decide, and its
   // being open has to go when its button does — by the same rule the emptied
@@ -2978,8 +2975,10 @@ export function App(): React.JSX.Element {
             list={list}
             view={sessionView}
             onViewChange={changeSessionView}
+            onFiltersChange={changeSessionFilters}
             now={now}
             onOpenSession={openSession}
+            onOpenSessionApplication={openSessionApplication}
             writes={sessionWrites}
             ask={askLuke}
             // Reaching for the composer during a spent day is answered before

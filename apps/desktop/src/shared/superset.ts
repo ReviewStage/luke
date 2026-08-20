@@ -1,6 +1,6 @@
-import { isProviderId, type ProviderId } from "@sidecar/core";
+import { isProviderId, type ProviderId, SESSION_APPLICATION_ID } from "@sidecar/core";
 
-export const SUPERSET_WORKSPACE_PROVIDER_ID = "superset";
+export const SUPERSET_WORKSPACE_PROVIDER_ID = SESSION_APPLICATION_ID.SUPERSET;
 
 /** Every provider that can offer a workspace through the desktop app. */
 export type WorkspaceProviderId = ProviderId | typeof SUPERSET_WORKSPACE_PROVIDER_ID;

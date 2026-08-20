@@ -4,7 +4,12 @@ import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
-import { PROVIDER_ID, SESSION_STATUS } from "@sidecar/core";
+import {
+  PROVIDER_ID,
+  SESSION_APPLICATION_ID,
+  SESSION_APPLICATION_SCOPE,
+  SESSION_STATUS,
+} from "@sidecar/core";
 import { SUPERSET_WORKSPACE_PROVIDER_ID } from "../src/shared/contracts";
 import { SUPERSET_CONTROL_ID } from "../src/superset-cli";
 import { SupersetWorkspaceReader } from "../src/superset-workspaces";
@@ -98,8 +103,16 @@ test("reads live host databases and enriches an exact provider session", async (
           repository: "Luke",
           branch: "feat/superset",
           change: "https://github.com/example/luke/pull/42",
-          link: "superset://v2-workspace/workspace-1",
+          link: "superset://v2-workspace/workspace-1?terminalId=terminal-1",
         },
+        applications: [
+          {
+            id: SESSION_APPLICATION_ID.SUPERSET,
+            displayName: "Superset",
+            scope: SESSION_APPLICATION_SCOPE.WORKSPACE,
+            link: "superset://v2-workspace/workspace-1?terminalId=terminal-1",
+          },
+        ],
         workspace: {
           providerWorkspaceId: "workspace-1",
           name: "power-vacation",
@@ -179,7 +192,7 @@ test("advertises Superset actions only after the CLI is connected", async (t) =>
   // The workspace address is observation's, not the login's: the app that
   // wrote the host state is the scheme's handler, so a signed-out CLI still
   // leaves every managed chat somewhere to open.
-  assert.equal(observed?.detail?.link, "superset://v2-workspace/workspace-1");
+  assert.equal(observed?.detail?.link, "superset://v2-workspace/workspace-1?terminalId=terminal-1");
   const connected = snapshot.enrich(PROVIDER_ID.CODEX, [observation], "host-local")[0];
   assert.equal(connected?.canReceiveMessage, true);
   assert.deepEqual(connected?.spawnableAgents, ["claude", "codex"]);
@@ -208,7 +221,7 @@ test("advertises Superset actions only after the CLI is connected", async (t) =>
   const otherOrg = snapshot.enrich(PROVIDER_ID.CODEX, [observation], "org-other")[0];
   assert.equal(otherOrg?.canReceiveMessage, undefined);
   assert.equal(otherOrg?.controls, undefined);
-  assert.equal(otherOrg?.detail?.link, "superset://v2-workspace/workspace-1");
+  assert.equal(otherOrg?.detail?.link, "superset://v2-workspace/workspace-1?terminalId=terminal-1");
   assert.equal(snapshot.actableContext(PROVIDER_ID.CODEX, "session-1", "org-other"), undefined);
   assert.equal(snapshot.actableContext(PROVIDER_ID.CODEX, "session-1", undefined), undefined);
   assert.equal(

@@ -1,11 +1,19 @@
 /* The session list: the capsule grows into full-width rows, one per line. */
 
 /* The sessions tab is its list and, over the top of it, the sheet that says
-   which part of it is being shown. Only the list scrolls. */
+   which part of it is being shown. Only the list scrolls.
+
+   The floor is the open sheet's own measured height. The sheet floats, so it
+   never reaches the panel's measurement on its own — and a list narrowed to a
+   row or two measures shorter than the sheet over it, leaving the sheet's
+   foot cropped at the surface's clipped edge. Reserving the height here grows
+   the measured panel, and the surface springs down to hold whichever of the
+   two is taller. Unset while the sheet is closed, the floor falls back to the
+   zero the scrolling list needs to shrink. */
 .session-view {
   position: relative;
   display: flex;
-  min-height: 0;
+  min-height: var(--options-height, 0px);
   flex: 1;
   flex-direction: column;
 }
@@ -93,8 +101,14 @@
 .options-current {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 7px;
   color: var(--text-primary);
+}
+
+.options-current-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
 
 .options-button[data-narrowed="true"] {
@@ -152,7 +166,9 @@
    the same glance as the controls beside them, and shouting a word that small
    only makes it harder to read. */
 .options-label {
-  min-width: 38px;
+  /* Wide enough for the longest axis word, so the chip columns of every row
+     start on one line. */
+  min-width: 52px;
   flex: 0 0 auto;
   color: var(--text-secondary);
   font-size: 11px;
@@ -226,11 +242,11 @@
   color: var(--text-primary);
 }
 
-/* An agent chip is its mark and its count. The mark keeps its own brand colour
-   whether or not the chip is chosen — it is how the agent is identified, not a
+/* A brand chip is its mark and its count. The mark keeps its own brand colour
+   whether or not the chip is chosen — it is how the brand is identified, not a
    way of saying the chip is selected — so the chip says that with its ground
    the way every other control in the panel does. */
-.filter-chip[data-agent="true"] {
+.filter-chip[data-brand="true"] {
   padding-left: 7px;
 }
 
@@ -569,6 +585,87 @@ html[data-keyboard="true"] button.session-row:focus-visible {
   white-space: nowrap;
 }
 
+.row-title-line {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.row-title-line strong {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+/* When an exact app mark is independently pressable, the title carries the
+   row's preferred open action. It remains typographically indistinguishable
+   from the strong text it replaces; only hover and keyboard focus reveal the
+   affordance, as they do for the rest of the row. */
+.row-title-open {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* App associations follow the title as bare marks: the leading mark already
+   says which agent this is, while these answer where the same local chat also
+   appears. Their fixed trailing seat keeps them visible when a long provider
+   title ellipsizes. */
+.row-applications {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-secondary);
+}
+
+.row-application {
+  display: grid;
+  place-items: center;
+}
+
+/* An exact destination earns a real button, but no resting container: its app
+   mark stays the same bare mark as an informative association. The small hover
+   ground is feedback for the pointer, not a badge drawn around the identity. */
+.row-application-button {
+  width: 19px;
+  height: 19px;
+  margin: -4px;
+  padding: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  transition:
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+}
+
+.row-application-button:hover {
+  background: rgba(255, 255, 255, 0.09);
+  color: var(--text-primary);
+}
+
+.row-application .provider-mark {
+  width: 11px;
+  height: 11px;
+}
+
+.row-application .provider-mark[data-mark="superset"] {
+  width: 19px;
+}
+
+.row-application-button:has(.provider-mark[data-mark="superset"]) {
+  width: 27px;
+}
+
 /* A workspace's chats sit in a tray: one card that visibly contains them,
    named once at its top, its chats divided by hairlines inside. One border
    does all the containing — the rows inside give up their own — so membership
@@ -616,6 +713,21 @@ html[data-keyboard="true"] button.session-row:focus-visible {
   height: 11px;
   flex: 0 0 auto;
   color: var(--text-tertiary);
+}
+
+.workspace-manager-mark {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+}
+
+.workspace-manager-mark .provider-mark {
+  width: 12px;
+  height: 12px;
+}
+
+.workspace-manager-mark .provider-mark[data-mark="superset"] {
+  width: 21px;
 }
 
 /* The name grows from a zero basis so it soaks up the line's free space and
@@ -684,11 +796,19 @@ html[data-keyboard="true"] button.session-row:focus-visible {
 .workspace-tray button.session-row[data-state="attention"]:hover,
 .workspace-tray
   .session-row[data-actions][data-openable]:hover:not(
-    :has(.row-compose:hover, .row-action:hover, .row-stop:hover)
+    :has(.row-compose:hover, .row-action:hover, .row-stop:hover, .row-application-button:hover)
   ),
 .workspace-tray
   .session-row[data-actions][data-openable][data-state="attention"]:hover:not(
-    :has(.row-compose:hover, .row-action:hover, .row-stop:hover)
+    :has(.row-compose:hover, .row-action:hover, .row-stop:hover, .row-application-button:hover)
+  ),
+.workspace-tray
+  .session-row[data-application-controls][data-openable]:hover:not(
+    :has(.row-application-button:hover, .row-compose:hover, .row-action:hover, .row-stop:hover)
+  ),
+.workspace-tray
+  .session-row[data-application-controls][data-openable][data-state="attention"]:hover:not(
+    :has(.row-application-button:hover, .row-compose:hover, .row-action:hover, .row-stop:hover)
   ) {
   border-color: rgba(255, 255, 255, 0.05);
 }
@@ -840,14 +960,14 @@ html[data-keyboard="true"] button.session-row:focus-visible {
 }
 
 .session-row[data-actions][data-openable]:hover:not(
-  :has(.row-compose:hover, .row-action:hover, .row-stop:hover)
+  :has(.row-compose:hover, .row-action:hover, .row-stop:hover, .row-application-button:hover)
 ) {
   border-color: rgba(255, 255, 255, 0.16);
   background: var(--raised);
 }
 
 .session-row[data-actions][data-openable][data-state="attention"]:hover:not(
-  :has(.row-compose:hover, .row-action:hover, .row-stop:hover)
+  :has(.row-compose:hover, .row-action:hover, .row-stop:hover, .row-application-button:hover)
 ) {
   border-color: color-mix(in srgb, var(--accent) 46%, transparent);
   background: color-mix(in srgb, var(--accent) 15%, transparent);
@@ -864,6 +984,42 @@ html[data-keyboard="true"] .session-row[data-actions]:has(> button.row-main:focu
 
 html[data-keyboard="true"] button.row-main:focus-visible {
   outline: none;
+}
+
+/* Rows with independently pressable app marks cannot wrap those buttons in a
+   row button. Pointer presses still use the card; keyboard presses use its
+   title, and the ring traces the same card either way. */
+.session-row[data-application-controls][data-openable] {
+  cursor: pointer;
+}
+
+.session-row[data-application-controls][data-openable]:hover:not(
+  :has(.row-application-button:hover, .row-compose:hover, .row-action:hover, .row-stop:hover)
+) {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: var(--raised);
+}
+
+.session-row[data-application-controls][data-openable][data-state="attention"]:hover:not(
+  :has(.row-application-button:hover, .row-compose:hover, .row-action:hover, .row-stop:hover)
+) {
+  border-color: color-mix(in srgb, var(--accent) 46%, transparent);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+html[data-keyboard="true"]
+  .session-row[data-application-controls]:has(.row-title-open:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: -3px;
+}
+
+html[data-keyboard="true"] .row-title-open:focus-visible {
+  outline: none;
+}
+
+html[data-keyboard="true"] .row-application-button:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
 }
 
 /* What a provider promised for this session: a composer that is simply there,

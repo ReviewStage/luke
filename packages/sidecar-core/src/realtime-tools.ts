@@ -776,9 +776,10 @@ function appSettingValue(setting: AppGuideSetting, value: UnparsedWireValue): st
  * Validates a spoken session-list filter against the sessions actually being
  * observed. A filter that would show nothing is refused rather than applied:
  * the panel would quietly fall back to showing everything, and Luke would have
- * reported a narrowing that never happened. A workspace manager's scope id —
- * the one a session's workspace carries when an orchestrator owns it — is a
- * filter on the same terms as a provider id: the two share no namespace.
+ * reported a narrowing that never happened. Every identity a row carries is a
+ * filter on the same terms as its provider id — the agent behind a hosted
+ * chat, an app associated with it, and a workspace manager's scope id — so a
+ * spoken ask reaches exactly the rows the matching chip would keep.
  */
 function panelFilterAction(
   filter: string,
@@ -795,12 +796,16 @@ function panelFilterAction(
   }
   if (
     sessions.some(
-      (session) => session.providerId === filter || session.workspace?.scopeId === filter,
+      (session) =>
+        session.providerId === filter ||
+        session.agent?.id === filter ||
+        session.workspace?.scopeId === filter ||
+        session.applications.some((application) => application.id === filter),
     )
   ) {
     return { filter };
   }
-  return { reason: "No observed session belongs to that provider or workspace manager." };
+  return { reason: "No observed session belongs to that agent, app, or workspace manager." };
 }
 
 function validateChangeAppSetting(parsed: WireRecord, context: AppToolContext): AppToolAction {

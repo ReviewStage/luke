@@ -2,13 +2,17 @@ import {
   ATTENTION_DISPOSITION,
   compareSessionsByUrgency,
   isProviderId,
+  isSessionApplicationId,
   type NormalizedSession,
   PROVIDER_ID_LIST,
   type ProviderId,
+  SESSION_APPLICATION_ID_LIST,
   SESSION_LIST_SORT,
   SESSION_LOCATION,
   SESSION_STATUS,
   SESSION_URGENCY,
+  type SessionApplicationId,
+  type SessionApplicationScope,
   type SessionControlKind,
   type SessionDiffSummary,
   type SessionListSort,
@@ -22,59 +26,147 @@ import type { AppBootstrap } from "../shared/contracts";
 import { SUPERSET_WORKSPACE_PROVIDER_ID } from "../shared/superset";
 
 /**
- * Which sessions the list draws: everything, everything running in one place,
- * every realtime voice chat, everything Superset manages, or everything
- * belonging to one agent. The coarse values are the session locations, the
- * realtime voice kind, and the Superset workspace scope itself, and the rest
- * are provider ids, so narrowing the list is a comparison against something a
- * row already carries rather than a second vocabulary mapped onto it. The
- * values cannot collide — no provider is called `local`, `cloud`, `voice`, or
- * `superset`.
+ * One narrowing the list can hold: a place work runs, the realtime voice kind,
+ * one app that associates with sessions, or one agent. The values are
+ * identities a row already carries: its location, voice kind, app associations
+ * and provider. Conductor deliberately occupies both app and provider
+ * vocabularies, so its filter takes the union — native Conductor chats and
+ * local chats annotated as running in Conductor — while no identity collides
+ * with `local`, `cloud`, or `voice`.
  *
  * Location belongs to the session rather than to the agent, so an agent with
  * work in both places is one chip that answers `Local` and `Cloud` both — and
  * Superset belongs to the workspace rather than to the agent, so the same
  * agent answers its own chip and the Superset chip when Superset manages it.
+ * A hosted chat carries its agent's identity beside its provider's, so a
+ * Claude conversation in Conductor's cloud answers the Claude Code chip and
+ * the Conductor chip at once.
  */
 export const SESSION_FILTER = {
-  ALL: "all",
   LOCAL: SESSION_LOCATION.LOCAL,
   CLOUD: SESSION_LOCATION.CLOUD,
   VOICE: "voice",
   SUPERSET: SUPERSET_WORKSPACE_PROVIDER_ID,
 } as const;
 
-export type SessionFilter = (typeof SESSION_FILTER)[keyof typeof SESSION_FILTER] | ProviderId;
+export type SessionFilter =
+  | (typeof SESSION_FILTER)[keyof typeof SESSION_FILTER]
+  | ProviderId
+  | SessionApplicationId;
+
+/**
+ * The independent questions the filters answer. Each filter value belongs to
+ * exactly one axis, and the axis is what gives a combined selection its
+ * meaning: values on one axis are alternatives (either place, either agent),
+ * where values on different axes are each a further narrowing.
+ */
+export const SESSION_FILTER_AXIS = {
+  LOCATION: "location",
+  KIND: "kind",
+  APP: "app",
+  AGENT: "agent",
+} as const;
+
+export type SessionFilterAxis = (typeof SESSION_FILTER_AXIS)[keyof typeof SESSION_FILTER_AXIS];
+
+/**
+ * Conductor and Superset land on the app axis even where a namesake provider
+ * exists, because "associated with that app" is the question their chips
+ * answer — a native cloud Conductor chat and a local Codex chat annotated by
+ * Conductor answer the same chip, and an agent chip beside it stays a further
+ * narrowing rather than a widening.
+ */
+export function sessionFilterAxis(filter: SessionFilter): SessionFilterAxis {
+  if (filter === SESSION_FILTER.LOCAL || filter === SESSION_FILTER.CLOUD) {
+    return SESSION_FILTER_AXIS.LOCATION;
+  }
+  if (filter === SESSION_FILTER.VOICE) return SESSION_FILTER_AXIS.KIND;
+  if (isSessionApplicationId(filter)) return SESSION_FILTER_AXIS.APP;
+  return SESSION_FILTER_AXIS.AGENT;
+}
 
 function matchesFilter(session: DisplaySession, filter: SessionFilter): boolean {
-  if (filter === SESSION_FILTER.ALL) return true;
   if (filter === SESSION_FILTER.LOCAL || filter === SESSION_FILTER.CLOUD) {
     return session.location === filter;
   }
   if (filter === SESSION_FILTER.VOICE) return session.realtimeVoice === true;
-  if (filter === SESSION_FILTER.SUPERSET) {
-    return session.workspace?.scopeId === SESSION_FILTER.SUPERSET;
-  }
-  return session.providerId === filter;
+  return (
+    session.providerId === filter ||
+    session.agentId === filter ||
+    session.workspace?.scopeId === filter ||
+    session.applications.some((application) => application.id === filter)
+  );
 }
 
 /**
- * Reads a spoken filter into the list's own vocabulary. The values are the
- * same strings the chips use — the coarse scopes, voice kind, and provider ids
- * — so a validated spoken ask maps one-to-one; anything else is nothing rather
- * than a guess, and the list is left as it was.
+ * Whether a row answers the whole selection. Within one axis the values are
+ * ORed — Local and Cloud together is either place — and across axes they are
+ * ANDed — Codex beside Conductor is Codex chats associated with Conductor.
+ * An axis nothing is chosen on asks nothing, so an empty selection is the
+ * unnarrowed list.
  */
-export function sessionFilterFromSpoken(value: string): SessionFilter | undefined {
+export function matchesSessionFilters(
+  session: DisplaySession,
+  filters: readonly SessionFilter[],
+): boolean {
+  const byAxis = new Map<SessionFilterAxis, SessionFilter[]>();
+  for (const filter of filters) {
+    const axis = sessionFilterAxis(filter);
+    const held = byAxis.get(axis) ?? [];
+    held.push(filter);
+    byAxis.set(axis, held);
+  }
+  for (const alternatives of byAxis.values()) {
+    if (!alternatives.some((filter) => matchesFilter(session, filter))) return false;
+  }
+  return true;
+}
+
+/**
+ * One filter chosen where one already stands: the same value leaves the
+ * selection, a new one joins it. What a chip press means, kept beside the
+ * matching so the two cannot drift.
+ */
+export function toggledSessionFilters(
+  filters: readonly SessionFilter[],
+  filter: SessionFilter,
+): readonly SessionFilter[] {
+  return filters.includes(filter)
+    ? filters.filter((held) => held !== filter)
+    : [...filters, filter];
+}
+
+/** Whether two selections narrow identically; a selection never repeats a value. */
+export function sameSessionFilters(
+  first: readonly SessionFilter[],
+  second: readonly SessionFilter[],
+): boolean {
+  return first.length === second.length && first.every((filter) => second.includes(filter));
+}
+
+/** The spoken name for the unnarrowed list, shared with the voice tool's vocabulary. */
+const SPOKEN_ALL = "all";
+
+/**
+ * Reads a spoken filter into the list's own selection. The values are the
+ * same strings the chips use — the coarse scopes, voice kind, app ids, and
+ * provider ids — so a validated spoken ask maps one-to-one. A spoken ask says
+ * what the list should show, so it replaces a hand-picked combination rather
+ * than joining it: `all` is the empty selection, one value is a selection of
+ * one. Anything else is nothing rather than a guess, and the list is left as
+ * it was.
+ */
+export function sessionFiltersFromSpoken(value: string): readonly SessionFilter[] | undefined {
+  if (value === SPOKEN_ALL) return [];
   if (
-    value === SESSION_FILTER.ALL ||
     value === SESSION_FILTER.LOCAL ||
     value === SESSION_FILTER.CLOUD ||
-    value === SESSION_FILTER.VOICE ||
-    value === SESSION_FILTER.SUPERSET
+    value === SESSION_FILTER.VOICE
   ) {
-    return value;
+    return [value];
   }
-  return isProviderId(value) ? value : undefined;
+  if (isSessionApplicationId(value)) return [value];
+  return isProviderId(value) ? [value] : undefined;
 }
 
 /**
@@ -87,7 +179,8 @@ export const SESSION_SORT = SESSION_LIST_SORT;
 export type SessionSort = SessionListSort;
 
 export interface SessionView {
-  filter: SessionFilter;
+  /** The chosen narrowings, combined by axis; empty shows every session. */
+  filters: readonly SessionFilter[];
   sort: SessionSort;
   /** The words the list is searched by; empty when nothing is being searched. */
   query: string;
@@ -101,7 +194,7 @@ export interface SessionView {
  * question about the list as it was, not a standing way of viewing it.
  */
 export const DEFAULT_SESSION_VIEW: SessionView = {
-  filter: SESSION_FILTER.ALL,
+  filters: [],
   sort: SESSION_SORT.URGENCY,
   query: "",
 };
@@ -130,7 +223,17 @@ export interface SessionAction {
 export interface DisplayWorkspace {
   id: string;
   scopeId?: string;
+  managerName?: string;
   name: string;
+}
+
+/** One app that independently associates itself with the session. */
+export interface DisplayApplication {
+  id: string;
+  name: string;
+  scope: SessionApplicationScope;
+  /** Whether this app association carries its own exact normalized address. */
+  openable: boolean;
 }
 
 export interface DisplaySession {
@@ -138,6 +241,14 @@ export interface DisplaySession {
   title: string;
   providerId: string;
   provider: string;
+  /**
+   * The agent behind the chat, when its provider hosts agents rather than
+   * being one — what the row's mark draws, so a Conductor cloud chat leads
+   * with the agent having the conversation the way a local chat does.
+   */
+  agentId?: string;
+  agent?: string;
+  applications: readonly DisplayApplication[];
   /** What the session is doing, or what stopped it, worded to carry the state. */
   detail: string;
   /**
@@ -167,6 +278,8 @@ export interface DisplaySession {
    * main process: the row only has to know that pressing it would do something.
    */
   openable: boolean;
+  /** The app owning the row's primary address, when that association is exact. */
+  openApplication?: string;
   /**
    * Whether the provider will take a typed message for this session right now.
    * Like the address, the route stays in the main process; the row only has to
@@ -197,17 +310,24 @@ export interface DisplaySession {
   workspace?: DisplayWorkspace;
 }
 
-/** One filter someone can choose, and how many sessions it would leave. */
+/** One filter someone can choose, and how many sessions it alone would leave. */
 export interface SessionFilterOption {
   filter: SessionFilter;
   label: string;
   count: number;
   /**
-   * Set when the chip stands for one brand — an agent, or the Superset
+   * Set when the chip stands for one brand — an agent, associated app, or
    * workspace manager — so the row can draw that brand's own mark where the
    * coarser chips carry a word.
    */
-  providerId?: string;
+  markId?: string;
+}
+
+/** One axis's choices, offered as a labelled row of the options sheet. */
+export interface SessionFilterGroup {
+  axis: SessionFilterAxis;
+  label: string;
+  options: readonly SessionFilterOption[];
 }
 
 /** What became of the query, reported so no narrowing is ever silent. */
@@ -229,9 +349,9 @@ export interface ArrangedSessions {
   sessions: readonly DisplaySession[];
   /** Everything tracked, which is what the controls are offered against. */
   total: number;
-  /** The filter actually in force, which is All whenever the chosen one emptied. */
-  filter: SessionFilter;
-  options: readonly SessionFilterOption[];
+  /** The selection actually in force, which is empty whenever the chosen one emptied. */
+  filters: readonly SessionFilter[];
+  groups: readonly SessionFilterGroup[];
   /** Present only while a query is in force. */
   search?: SessionSearchOutcome;
 }
@@ -364,7 +484,9 @@ function searchableLines(session: DisplaySession): readonly string[] {
     session.repository,
     session.workspace?.name,
     session.provider,
+    session.agent,
     session.model,
+    ...session.applications.map((application) => application.name),
   ];
   return lines.filter((line): line is string => line !== undefined);
 }
@@ -439,6 +561,10 @@ export function displaySessions(
         // reach a provider: the main process refuses every write against its
         // empty registry.
         openable: false,
+        applications: (session.applications ?? []).map((application) => ({
+          ...application,
+          openable: false,
+        })),
         canMessage: session.canMessage === true,
         actions: session.actions ?? [],
         hasChange: session.hasChange === true,
@@ -449,11 +575,23 @@ export function displaySessions(
         const changeNumber = session.detail.change
           ? sessionChangeNumber(session.detail.change)
           : undefined;
+        const openApplication = session.applications.find(
+          (application) => application.link === session.detail.link,
+        );
         const displaySession: DisplaySession = {
           id: session.providerSessionId,
           title: session.title,
           providerId: session.providerId,
           provider: session.provider.displayName,
+          ...(session.agent
+            ? { agentId: session.agent.id, agent: session.agent.displayName }
+            : undefined),
+          applications: session.applications.map((application) => ({
+            id: application.id,
+            name: application.displayName,
+            scope: application.scope,
+            openable: application.link !== undefined,
+          })),
           detail: sessionDetail(session, urgency),
           repository: session.detail.repository,
           branch: session.detail.branch,
@@ -464,6 +602,7 @@ export function displaySessions(
           location: session.location,
           observedAt: session.observedAt,
           openable: session.detail.link !== undefined,
+          ...(openApplication ? { openApplication: openApplication.displayName } : undefined),
           canMessage: session.canReceiveMessage,
           actions: session.controls,
           hasChange: session.detail.change !== undefined,
@@ -481,6 +620,9 @@ export function displaySessions(
                   };
                   if (session.workspace.scopeId) {
                     workspace.scopeId = session.workspace.scopeId;
+                  }
+                  if (session.workspace.managerName) {
+                    workspace.managerName = session.workspace.managerName;
                   }
                   return workspace;
                 })(),
@@ -504,38 +646,67 @@ const LOCATION_ORDER: readonly SessionLocation[] = [SESSION_LOCATION.LOCAL, SESS
 
 const VOICE_FILTER_OPTION = { filter: SESSION_FILTER.VOICE, label: "Voice" } as const;
 
+/** The order the sheet's rows read in: coarse to fine, top to bottom. */
+const FILTER_AXIS_ORDER: readonly SessionFilterAxis[] = [
+  SESSION_FILTER_AXIS.LOCATION,
+  SESSION_FILTER_AXIS.KIND,
+  SESSION_FILTER_AXIS.APP,
+  SESSION_FILTER_AXIS.AGENT,
+];
+
+const FILTER_AXIS_LABEL = {
+  [SESSION_FILTER_AXIS.LOCATION]: "Location",
+  [SESSION_FILTER_AXIS.KIND]: "Kind",
+  [SESSION_FILTER_AXIS.APP]: "App",
+  [SESSION_FILTER_AXIS.AGENT]: "Agent",
+};
+
 /**
- * All, then where a session runs, then whether it is voice, then whether
- * Superset manages it, then which agent is running it — coarse to fine, left
- * to right. Each level is offered only where it is a real choice: a single
- * location, voice kind, or agent says nothing All has not already said, and a
- * Voice or Superset chip counting every session — or none — narrows nothing.
- * The counts make the row a breakdown of what is tracked before it is a
+ * Where a session runs, whether it is voice, which apps associate with it,
+ * and which agent is running it — one labelled row per axis, coarse to fine.
+ * Each identity is offered only where it is a real choice: one counting every
+ * session — or none — narrows nothing, and an axis left with no chips costs
+ * no row in the sheet.
+ * The counts make each row a breakdown of what is tracked before it is a
  * control, which is what earns it the line it costs.
  *
  * Agents are listed in the registry's own order rather than by how many
  * sessions they have, so a chip never moves out from under the pointer as
  * sessions come and go.
  */
-function filterOptions(sessions: readonly DisplaySession[]): readonly SessionFilterOption[] {
+function filterGroups(sessions: readonly DisplaySession[]): readonly SessionFilterGroup[] {
   if (sessions.length === 0) return [];
 
   const locations = new Map<SessionLocation, number>();
-  const providers = new Map<ProviderId, { label: string; count: number }>();
+  const brands = new Map<string, { label: string; count: number }>();
+  const applicationIds = new Set<SessionApplicationId>();
+  const providerIds = new Set<ProviderId>();
   let voiceCount = 0;
   let managed = 0;
   for (const session of sessions) {
     locations.set(session.location, (locations.get(session.location) ?? 0) + 1);
     if (session.realtimeVoice === true) voiceCount += 1;
     if (session.workspace?.scopeId === SESSION_FILTER.SUPERSET) managed += 1;
-    // An agent this build has no registry entry for has no mark to draw a chip
-    // with, so it is counted under All and offered under nothing else.
-    if (!isProviderId(session.providerId)) continue;
-    const tally = providers.get(session.providerId);
-    providers.set(session.providerId, {
-      label: session.provider,
-      count: (tally?.count ?? 0) + 1,
-    });
+    const identities = new Map<string, string>();
+    if (isProviderId(session.providerId)) {
+      identities.set(session.providerId, session.provider);
+      providerIds.add(session.providerId);
+    }
+    // A hosted chat answers its agent's chip too: a Claude conversation in
+    // Conductor's cloud is a Claude conversation for the agent axis.
+    if (session.agentId && isProviderId(session.agentId)) {
+      identities.set(session.agentId, session.agent ?? session.agentId);
+      providerIds.add(session.agentId);
+    }
+    for (const application of session.applications) {
+      if (!isSessionApplicationId(application.id)) continue;
+      identities.set(application.id, application.name);
+      applicationIds.add(application.id);
+    }
+    for (const [id, label] of identities) {
+      const tally = brands.get(id);
+      brands.set(id, { label, count: (tally?.count ?? 0) + 1 });
+    }
   }
 
   const locationOptions =
@@ -553,31 +724,66 @@ function filterOptions(sessions: readonly DisplaySession[]): readonly SessionFil
             filter: SESSION_FILTER.SUPERSET,
             label: "Superset",
             count: managed,
-            providerId: SUPERSET_WORKSPACE_PROVIDER_ID,
+            markId: SUPERSET_WORKSPACE_PROVIDER_ID,
           },
         ]
       : [];
+  const applicationOptions = SESSION_APPLICATION_ID_LIST.filter(
+    (applicationId) =>
+      applicationId !== SESSION_FILTER.SUPERSET && applicationIds.has(applicationId),
+  )
+    .filter((applicationId) => {
+      const count = brands.get(applicationId)?.count ?? 0;
+      return count > 0 && count < sessions.length;
+    })
+    .map((applicationId) => ({
+      filter: applicationId,
+      label: brands.get(applicationId)?.label ?? applicationId,
+      count: brands.get(applicationId)?.count ?? 0,
+      markId: applicationId,
+    }));
+  const applicationOptionIds = new Set<string>(applicationOptions.map((option) => option.filter));
   const providerOptions =
-    providers.size > 1
-      ? PROVIDER_ID_LIST.filter((providerId) => providers.has(providerId)).map((providerId) => ({
-          filter: providerId,
-          label: providers.get(providerId)?.label ?? providerId,
-          count: providers.get(providerId)?.count ?? 0,
-          providerId,
-        }))
+    providerIds.size > 1
+      ? PROVIDER_ID_LIST.filter(
+          (providerId) => brands.has(providerId) && !applicationOptionIds.has(providerId),
+        )
+          .filter((providerId) => {
+            const count = brands.get(providerId)?.count ?? 0;
+            return count > 0 && count < sessions.length;
+          })
+          .map((providerId) => ({
+            filter: providerId,
+            label: brands.get(providerId)?.label ?? providerId,
+            count: brands.get(providerId)?.count ?? 0,
+            markId: providerId,
+          }))
       : [];
   const voiceOptions =
     voiceCount > 0 && voiceCount < sessions.length
       ? [{ ...VOICE_FILTER_OPTION, count: voiceCount }]
       : [];
 
-  return [
-    { filter: SESSION_FILTER.ALL, label: "All", count: sessions.length },
+  // Seated by each value's own axis rather than by the list it was built in,
+  // so Conductor's chip lands on the app row even when only native Conductor
+  // chats put it on offer.
+  const byAxis = new Map<SessionFilterAxis, SessionFilterOption[]>();
+  for (const option of [
     ...locationOptions,
     ...voiceOptions,
     ...managedOptions,
+    ...applicationOptions,
     ...providerOptions,
-  ];
+  ]) {
+    const axis = sessionFilterAxis(option.filter);
+    const held = byAxis.get(axis) ?? [];
+    held.push(option);
+    byAxis.set(axis, held);
+  }
+  return FILTER_AXIS_ORDER.flatMap((axis) => {
+    const options = byAxis.get(axis);
+    return options === undefined ? [] : [{ axis, label: FILTER_AXIS_LABEL[axis], options }];
+  });
 }
 
 /** Whether two rows are chats of one workspace. */
@@ -728,38 +934,41 @@ export function sessionListRuns(sessions: readonly DisplaySession[]): readonly S
 }
 
 /**
- * The list as it is drawn. A chosen filter whose last session has since left —
- * an agent's only session finished, say — falls back to All rather than leaving
- * an empty panel, because the one thing this list may never do is hide a
- * session the capsule is still counting.
+ * The list as it is drawn. A chosen selection whose last session has since
+ * left — an agent's only session finished, say, or a combination no session
+ * answers any more — falls back whole to the unnarrowed list rather than
+ * leaving an empty panel, because the one thing this list may never do is
+ * hide a session the capsule is still counting. Whole rather than value by
+ * value: which surviving part of a combination to keep is a choice, and the
+ * list correcting itself must not choose for the developer.
  *
- * Showing something is the whole of the test: a filter still matching sessions
- * survives even while no chip offers it, which happens when a spoken ask names
- * the only provider or location there is. Collapsing it then would be quietly
- * wrong twice over — Luke has just said the list was narrowed, and the moment
- * a second agent appeared the list would widen out from under a developer who
- * asked to watch one. While the filter is chipless it hides nothing (every
- * session matches), and as soon as another value exists its chip and the
- * options button's "showing X only" badge both appear.
+ * Showing something is the whole of the test: a selection still matching
+ * sessions survives even while no chip offers a value in it, which happens
+ * when a spoken ask names the only provider or location there is. Collapsing
+ * it then would be quietly wrong twice over — Luke has just said the list was
+ * narrowed, and the moment a second agent appeared the list would widen out
+ * from under a developer who asked to watch one. While a filter is chipless
+ * it hides nothing (every session matches), and as soon as another value
+ * exists its chip and the options button's "showing" badge both appear.
  *
  * A query is the one narrowing allowed to empty the list, because it is a
  * question rather than a way of viewing: "nothing matches" is its honest
  * answer, where a filter falling to nothing is a stale choice to be dropped.
- * It reads within the filter — search narrows what is being shown — and what
- * the filter hides is counted rather than swallowed, so an emptied search can
- * offer the matches sitting behind the chip instead of denying they exist.
+ * It reads within the filters — search narrows what is being shown — and what
+ * the filters hide is counted rather than swallowed, so an emptied search can
+ * offer the matches sitting behind the chips instead of denying they exist.
  */
 export function arrangeSessions(
   sessions: readonly DisplaySession[],
   view: SessionView,
 ): ArrangedSessions {
-  const options = filterOptions(sessions);
+  const groups = filterGroups(sessions);
   const chosen =
-    view.filter === SESSION_FILTER.ALL
+    view.filters.length === 0
       ? sessions
-      : sessions.filter((session) => matchesFilter(session, view.filter));
-  const filter = chosen.length > 0 ? view.filter : SESSION_FILTER.ALL;
-  const matching = filter === view.filter ? chosen : sessions;
+      : sessions.filter((session) => matchesSessionFilters(session, view.filters));
+  const filters = chosen.length > 0 ? view.filters : [];
+  const matching = filters === view.filters ? chosen : sessions;
 
   const tokens = searchTokens(view.query);
   const found =
@@ -774,15 +983,16 @@ export function arrangeSessions(
             matching.length === sessions.length
               ? 0
               : sessions.filter(
-                  (session) => !matchesFilter(session, filter) && matchesQuery(session, tokens),
+                  (session) =>
+                    !matchesSessionFilters(session, filters) && matchesQuery(session, tokens),
                 ).length,
         };
 
   return {
     sessions: seatWorkspacesTogether([...found].sort(bySort(view.sort))),
     total: sessions.length,
-    filter,
-    options,
+    filters,
+    groups,
     ...(search ? { search } : undefined),
   };
 }
@@ -810,13 +1020,16 @@ export function sessionTally(
     else if (session.urgency === SESSION_URGENCY.COMPLETE) counts.complete += 1;
     else counts.idle += 1;
 
-    const tally = providers.get(session.providerId) ?? {
-      providerId: session.providerId,
-      provider: session.provider,
+    // The wing draws the agent having the conversation, the same identity the
+    // row's own mark leads with, so a hosted chat counts under its agent.
+    const markId = session.agentId ?? session.providerId;
+    const tally = providers.get(markId) ?? {
+      providerId: markId,
+      provider: session.agent ?? session.provider,
       total: 0,
       attention: 0,
     };
-    providers.set(session.providerId, {
+    providers.set(markId, {
       ...tally,
       total: tally.total + 1,
       attention: tally.attention + (session.urgency === SESSION_URGENCY.ATTENTION ? 1 : 0),

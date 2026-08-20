@@ -248,6 +248,20 @@ test("the facts say what is connected, never what connects it", () => {
   assert.doesNotMatch(rendered, /API key:/);
 });
 
+test("the guide distinguishes app identity from exact app opening", () => {
+  const rendered = JSON.stringify(buildLukeGuide(guideInput()).facts);
+
+  assert.match(rendered, /app mark with an exact address is a button/);
+  assert.match(rendered, /ChatGPT opens that Codex thread/);
+  assert.match(rendered, /Superset opens its bound terminal/);
+  assert.match(rendered, /exact parent-thread record carries that Conductor association/);
+  // A Conductor cloud chat leads with its agent's own mark, its Conductor
+  // mark opens the exact chat, and a local one stays identification alone.
+  assert.match(rendered, /leads?[^.]*with the agent running it/);
+  assert.match(rendered, /Conductor cloud chat's Conductor mark opens that exact chat/);
+  assert.match(rendered, /adds no open or send control/);
+});
+
 test("the guide names the signed-in identity and keeps sign-out manual", () => {
   const facts = buildLukeGuide(
     guideInput({
@@ -728,7 +742,10 @@ test("the guide describes the search, and says it is by hand alone", () => {
   assert.match(fact.detail, /searchable by hand alone/);
   assert.match(fact.detail, /magnifier/);
   assert.match(fact.detail, /Command-F/);
-  assert.match(fact.detail, /title, status line, branch, repository, workspace, agent, or model/);
+  assert.match(
+    fact.detail,
+    /title, status line, branch, repository, workspace, agent, associated app, or model/,
+  );
   assert.match(fact.detail, /no spoken ask can search/);
   assert.match(fact.detail, /no search survives the panel closing/);
 });

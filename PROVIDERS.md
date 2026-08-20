@@ -120,6 +120,14 @@ as a read-only row.
   working, `ready` and `applied` to complete, and `error` to a failure.
 - Opens at `codex://threads/<id>` locally; a cloud task opens its
   `chatgpt.com` page.
+- Every local thread also carries a ChatGPT app association with that same
+  thread address — OpenAI's desktop app documents the route — so the small
+  ChatGPT mark after a row's title is a button that opens the exact thread.
+- Sub-agents: a thread spawned by another is its own row with its own status,
+  linked to its parent by the exact `parent_thread_id` Codex persists in the
+  thread's structured source (with the older delegation markers still
+  honored), which is also how a Conductor-hosted parent's association reaches
+  the sub-agent's row.
 - New workspace (cloud): a task started with `codex cloud exec --env`, in an
   environment the latest observation reported, by id where the list reports
   one and by label otherwise. The opening task is required — the prompt is
@@ -154,10 +162,20 @@ as a read-only row.
 Cloud sessions under a user-supplied API key; nothing is observed without one.
 Luke reads projects, workspaces, sessions, and their statuses from
 `api.conductor.build`, plus one fixed read-only SQL document over the
-transcripts view for each session's agent kind and recap tail. Conductor is
-the one provider that reports `workspace`, so its chats group into a tray
-named by the workspace, and the one provider whose sessions list
-`spawnableAgents`.
+transcripts view for each session's agent kind and recap tail. Conductor
+hosts agents rather than being one, so a chat whose agent kind maps to an
+agent this build knows — Claude Code, Codex, Cursor, OpenCode — reports that
+agent as its identity: the row leads with the agent's own mark under the
+cloud badge, the agent's chip and search words match it, and the Conductor
+letter mark rides after the title as an app association whose press opens the
+chat's own deep link. A chat whose agent kind this build cannot map keeps the
+Conductor mark and the kind rides the model label instead. Conductor reports
+`workspace` with itself as manager, so its chats group into a tray named by
+the workspace and carrying the Conductor mark once in its header, and its
+sessions are the ones that list `spawnableAgents`.
+
+Local Conductor workspaces are an annotation rather than a session provider:
+see [Integrations beyond sessions](#integrations-beyond-sessions).
 
 - Message: while a session is idle or working.
 - Controls: `cancel-turn` mid-turn; `archive-workspace` once every open chat
@@ -259,6 +277,21 @@ with its opening task (`agents create`), a new workspace in a listed project
 with a host, agent, and opening task (`workspaces create`), and renaming an
 observed workspace (`workspaces update` with `--name` alone). Nothing else of
 the CLI is invoked.
+
+**Conductor on this Mac** is the same shape as Superset at the observation
+end, with no act at all: Luke reads Conductor's read-only local session index
+(`~/Library/Application Support/com.conductor.app/conductor.db`), matching
+its sessions to local Claude Code, Codex, Cursor, and OpenCode rows by exact
+provider session id — never by title — and never opening any agent
+transcript through it. A matched row gains the Conductor app association,
+groups under its Conductor workspace — a tray named by the workspace,
+carrying the Conductor mark once in its header, exactly as a Superset
+workspace does — and answers the Conductor filter chip. A Codex sub-agent
+spawned inside a matched chat inherits the association and workspace through
+Codex's own persisted parent-thread record. An absent app or an older schema
+means no annotation, and a schema that predates workspaces still annotates
+without grouping. Conductor documents no exact address or message endpoint
+for a local chat, so the association adds no open or send control.
 
 **Linear** (`linear`) is connected by the tracker's own consent page — OAuth
 with PKCE over a loopback redirect, never a typed key or an environment

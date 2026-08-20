@@ -6,9 +6,11 @@ import {
   SESSION_FILTER,
   SESSION_SORT,
   type SessionFilter,
+  type SessionFilterAxis,
   type SessionFilterOption,
   type SessionSort,
   type SessionView,
+  toggledSessionFilters,
 } from "./session-model";
 import { CloudIcon, LaptopIcon, OptionsIcon, VoiceIcon } from "./settings-icons";
 
@@ -99,14 +101,18 @@ export function EmptyState(): React.JSX.Element {
 /** Wraps the sessions tab so its tab semantics match the settings tab. */
 export function SessionsPanel({
   className,
+  style,
   children,
 }: {
   className: string;
+  /** Custom properties the view is sized by — the open sheet's reserved height. */
+  style?: React.CSSProperties;
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
     <div
       className={className}
+      {...(style ? { style } : undefined)}
       role="tabpanel"
       id={panelPanelId(PANEL_TAB.SESSIONS)}
       aria-labelledby={panelTabId(PANEL_TAB.SESSIONS)}
@@ -137,7 +143,6 @@ const SORT_DESCRIPTORS: readonly SortDescriptor[] = [
 ];
 
 const SORT_LABEL_ID = "session-sort-label";
-const SHOW_LABEL_ID = "session-show-label";
 export const SESSION_OPTIONS_ID = "session-options";
 /**
  * Named so the panel can tell a press on the button from a press outside the
@@ -156,11 +161,21 @@ function FilterIcon({ filter }: { filter: SessionFilter }): React.JSX.Element | 
 
 /** The mark for a brand — agent or Superset — the glyph for a place, nothing for everything. */
 function FilterMark({ option }: { option: SessionFilterOption }): React.JSX.Element | null {
-  if (option.providerId) {
-    return <ProviderMark providerId={option.providerId} className="filter-mark" />;
+  if (option.markId) {
+    return <ProviderMark providerId={option.markId} className="filter-mark" />;
   }
   return <FilterIcon filter={option.filter} />;
 }
+
+/** The chips of the selection in force, in the order the sheet offers them. */
+function selectedFilterOptions(list: ArrangedSessions): readonly SessionFilterOption[] {
+  return list.groups
+    .flatMap((group) => group.options)
+    .filter((option) => list.filters.includes(option.filter));
+}
+
+/** How many chosen chips the button names before it resorts to counting. */
+const NARROWED_ON_BUTTON = 2;
 
 /**
  * The button that opens the list's own controls, on the tab bar's line because
@@ -168,8 +183,10 @@ function FilterMark({ option }: { option: SessionFilterOption }): React.JSX.Elem
  *
  * It also has to say when the list is narrowed. A control that hides its own
  * effect is the one thing this panel cannot afford — the capsule is out there
- * counting sessions the list would not be showing — so a filter other than All
+ * counting sessions the list would not be showing — so the selection in force
  * is named on the button itself rather than only inside the sheet it opens.
+ * The button has one line to say it on, so it names the first two choices and
+ * counts the rest; the full selection stays on the hover and in the sheet.
  */
 export function SessionOptionsButton({
   list,
@@ -180,9 +197,10 @@ export function SessionOptionsButton({
   open: boolean;
   onToggle: () => void;
 }): React.JSX.Element {
-  const narrowed = list.options.find(
-    (option) => option.filter === list.filter && option.filter !== SESSION_FILTER.ALL,
-  );
+  const narrowed = list.filters.length > 0;
+  const named = selectedFilterOptions(list).slice(0, NARROWED_ON_BUTTON);
+  const beyond = list.filters.length - named.length;
+  const summary = selectionSummary(list);
 
   return (
     <button
@@ -193,22 +211,46 @@ export function SessionOptionsButton({
       // narrowing or a re-ordering Luke made himself is signed.
       {...errandTargetProps(ERRAND_TARGET.LIST_OPTIONS)}
       data-active={String(open)}
-      data-narrowed={String(narrowed !== undefined)}
+      data-narrowed={String(narrowed)}
       aria-expanded={open}
       aria-controls={SESSION_OPTIONS_ID}
-      aria-label={narrowed ? `Options — showing ${narrowed.label} only` : "Options"}
-      title={narrowed ? `Showing ${narrowed.label} only` : "Filter and sort"}
+      aria-label={narrowed ? `Options — showing ${summary} only` : "Options"}
+      title={narrowed ? `Showing ${summary} only` : "Filter and sort"}
       onClick={onToggle}
     >
       <OptionsIcon />
       {narrowed ? (
         <span className="options-current">
-          <FilterMark option={narrowed} />
-          {narrowed.label}
+          {named.map((option) => (
+            <span className="options-current-item" key={option.filter}>
+              <FilterMark option={option} />
+              {option.label}
+            </span>
+          ))}
+          {beyond > 0 ? <span className="options-current-item">+{beyond}</span> : null}
         </span>
       ) : null}
     </button>
   );
+}
+
+/** Names one axis's row for a reader, from the fixed axis value set. */
+function filterAxisLabelId(axis: SessionFilterAxis): string {
+  return `session-filter-axis-${axis}`;
+}
+
+/**
+ * The selection in force, worded. A chosen value can outlive its chip — a
+ * spoken ask can name the only provider there is — and it still has to be
+ * named to be cleared, so a value no chip labels is worded by its own id
+ * rather than left out.
+ */
+function selectionSummary(list: ArrangedSessions): string {
+  const labels = new Map<SessionFilter, string>();
+  for (const group of list.groups) {
+    for (const option of group.options) labels.set(option.filter, option.label);
+  }
+  return list.filters.map((filter) => labels.get(filter) ?? filter).join(" · ");
 }
 
 /**
@@ -221,62 +263,76 @@ export function SessionOptionsButton({
  * the desktop for the length of it. Floating costs the top of the list while
  * the sheet is open, and costs the shape nothing.
  *
- * What it costs has to be paid back the moment a choice is made. The sheet is
- * taller than a row, and a narrowed list can be a single row: left open over
- * one, it hides the very sessions it was asked for, and the control reads as
- * having done nothing. So `onViewChange` is also what puts the sheet away — it
- * is a menu over the list, not a shelf beside it.
+ * The filters combine — several chips can stand pressed at once, alternatives
+ * within one row and a further narrowing across rows — so a chip press leaves
+ * the sheet open for the next one: closing on each press would make choosing
+ * two filters cost two openings. A sort is one choice of two, so choosing one
+ * still puts the sheet away, as does pressing anywhere outside it. What an
+ * open sheet covers while filters are picked is admitted on the options
+ * button, which names the selection in force the whole time.
  *
- * Both groups are pressed buttons rather than radios: a radio owes its reader
- * arrow-key navigation, and the panel is a surface someone tabs through beside
- * the capsule rather than one that claims the arrow keys. Each set is a real
- * `fieldset`, so the group is named for a reader by the markup rather than by
- * a role attached to a bare element.
+ * Every group is pressed buttons rather than radios or checkboxes: a radio
+ * owes its reader arrow-key navigation, and the panel is a surface someone
+ * tabs through beside the capsule rather than one that claims the arrow keys.
+ * Each set is a real `fieldset`, so the group is named for a reader by the
+ * markup rather than by a role attached to a bare element.
  */
 export function SessionOptions({
   list,
   view,
   onViewChange,
+  onFiltersChange,
+  measure,
 }: {
   list: ArrangedSessions;
   view: SessionView;
+  /** Carries a sort choice, and puts the sheet away with it. */
   onViewChange: (view: SessionView) => void;
+  /** Carries a toggled selection; the sheet stays open for the next chip. */
+  onFiltersChange: (filters: readonly SessionFilter[]) => void;
+  /**
+   * Reports the sheet's own height, so the list can reserve it: the sheet
+   * floats, and a panel shorter than it would crop the sheet's foot at the
+   * surface's clipped edge.
+   */
+  measure: (element: HTMLElement | null) => void;
 }): React.JSX.Element {
   return (
-    <div className="session-options" id={SESSION_OPTIONS_ID}>
-      {/* With only All to choose there is nothing to choose between, so the
-          chips are left out rather than offered as a row of one answer. */}
-      {list.options.length > 1 ? (
-        <div className="options-row">
-          <span className="options-label" id={SHOW_LABEL_ID}>
-            Show
+    <div className="session-options" id={SESSION_OPTIONS_ID} ref={measure}>
+      {list.groups.map((group) => (
+        <div className="options-row" key={group.axis}>
+          <span className="options-label" id={filterAxisLabelId(group.axis)}>
+            {group.label}
           </span>
-          <fieldset className="session-filters" aria-labelledby={SHOW_LABEL_ID}>
-            {list.options.map((option) => (
-              <button
-                type="button"
-                key={option.filter}
-                className="filter-chip"
-                data-agent={String(option.providerId !== undefined)}
-                data-active={String(option.filter === list.filter)}
-                aria-pressed={option.filter === list.filter}
-                // An agent is named by its own mark rather than by a word, which
-                // is how every row below already names it, and four names would
-                // not fit the line beside the coarser chips. The label is still
-                // the accessible name, so it is what is announced and what a
-                // voice control is told to press.
-                aria-label={option.providerId ? `${option.label} ${option.count}` : undefined}
-                title={option.providerId ? option.label : undefined}
-                onClick={() => onViewChange({ ...view, filter: option.filter })}
-              >
-                <FilterMark option={option} />
-                {option.providerId ? null : option.label}
-                <span className="filter-count">{option.count}</span>
-              </button>
-            ))}
+          <fieldset className="session-filters" aria-labelledby={filterAxisLabelId(group.axis)}>
+            {group.options.map((option) => {
+              const active = list.filters.includes(option.filter);
+              return (
+                <button
+                  type="button"
+                  key={option.filter}
+                  className="filter-chip"
+                  data-brand={String(option.markId !== undefined)}
+                  data-active={String(active)}
+                  aria-pressed={active}
+                  // A brand is named by its own mark rather than by a word, which
+                  // is how every row below already names agents and associated
+                  // apps. The label stays the accessible name and hover.
+                  aria-label={option.markId ? `${option.label} ${option.count}` : undefined}
+                  title={option.markId ? option.label : undefined}
+                  onClick={() =>
+                    onFiltersChange(toggledSessionFilters(list.filters, option.filter))
+                  }
+                >
+                  <FilterMark option={option} />
+                  {option.markId ? null : option.label}
+                  <span className="filter-count">{option.count}</span>
+                </button>
+              );
+            })}
           </fieldset>
         </div>
-      ) : null}
+      ))}
       <div className="options-row">
         <span className="options-label" id={SORT_LABEL_ID}>
           Sort

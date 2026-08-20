@@ -253,6 +253,19 @@ is said back to you under the field you typed in.
   address, composed on this machine from the observed workspace identifier;
   opening it hands that address to macOS like any row press, and nothing is
   sent to Superset.
+- For the Conductor workspaces on this Mac, Luke opens Conductor's own session
+  index (`~/Library/Application Support/com.conductor.app/conductor.db`) in
+  read-only defensive mode and reads one fixed query's worth of rows: each
+  session's agent kind, the agent's own session identifier, and the identifier
+  and name of the workspace holding it. That identifier is joined exactly to a
+  session Luke already observed on this machine — never inferred from a title
+  or a path — and the matched row gains the Conductor mark and groups under
+  its Conductor workspace. No message, transcript, or terminal content is
+  read through this database, an absent app or unknown schema means no
+  annotation, and nothing is ever sent to Conductor. A local Codex chat's row
+  also carries a ChatGPT mark whose press opens the same `codex://` thread
+  address the row itself opens, composed on this machine; nothing is sent to
+  OpenAI by drawing or pressing it.
 
 Luke processes bounded fields needed to identify and display a session:
 provider and session identifiers, provider-generated titles, the workspace
