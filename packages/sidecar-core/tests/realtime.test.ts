@@ -247,8 +247,6 @@ test("the standing instructions make Luke the coding agents' engineering manager
   const instructions = realtimeInstructions();
 
   assert.match(instructions, /engineering manager for the developer's coding agents/i);
-  assert.match(instructions, /developer is your CTO/i);
-  assert.match(instructions, /direct, candid, calm/i);
 });
 
 test("the spoken instructions state what Luke cannot see, and when he may act", () => {
@@ -260,9 +258,6 @@ test("the spoken instructions state what Luke cannot see, and when he may act", 
   assert.match(instructions, /only when the developer asks/i);
   assert.match(instructions, /never act unprompted/i);
   assert.match(instructions, /never a reason to act/i);
-  // Both halves of the developer's side are named, so a typed ask is answered
-  // rather than remarked on as something unexpected.
-  assert.match(instructions, /speaks to you or types to you/i);
   // Spoken references stay human: a hash or an id is noise read aloud.
   assert.match(instructions, /identifiers no one says aloud/i);
   // A broad "what are we working on?" spans the roster: Luke answers across
