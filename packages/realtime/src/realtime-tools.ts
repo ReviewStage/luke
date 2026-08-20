@@ -47,6 +47,7 @@ import {
   maximumWorkspaceNameLength,
   type NormalizedSession,
   type ObservedWorkspaceProject,
+  PROVIDER_ID_LIST,
   SESSION_APPLICATION_ID,
   SESSION_LOCATION,
   type SessionControl,
@@ -109,27 +110,34 @@ export const APP_TOOL_KIND = {
 
 export type AppToolKind = (typeof APP_TOOL_KIND)[keyof typeof APP_TOOL_KIND];
 
-/**
- * The whole-list scope a spoken panel ask may name. The rest of the filter
- * vocabulary is not this module's to define: a location is a session's own
- * `location`, and a provider is its `provider_id`, so a spoken filter is
- * validated against the observed roster rather than against a second list.
- */
+/** The two whole-list scopes of a spoken panel ask beyond the locations. */
 export const SESSION_LIST_ALL = "all";
 export const SESSION_LIST_VOICE = "voice";
 
 /**
- * The filter vocabulary, taught on the tool itself. The parameter cannot be
- * an enum — an agent filter is whatever provider_id the roster currently
- * lists — so this description is the only place the model learns what the
- * validator will accept, and it is composed from the same value sets the
- * validator reads so the two cannot drift.
+ * Every value a spoken narrowing may name, fixed by the build: the whole-list
+ * scopes, every agent this build knows, and every app that associates with
+ * sessions. The chips can hold no other value — a `SessionFilter` is drawn
+ * from these same sets — so this enum is the whole vocabulary rather than a
+ * convenience, and the model picks a token from it instead of echoing the
+ * developer's words for a matcher to guess at. Which of these values narrow
+ * to anything right now is the roster's question, answered by the validator.
  */
+const SESSION_LIST_FILTER_VALUES: readonly string[] = [
+  ...new Set<string>([
+    SESSION_LIST_ALL,
+    SESSION_LOCATION.LOCAL,
+    SESSION_LOCATION.CLOUD,
+    SESSION_LIST_VOICE,
+    ...PROVIDER_ID_LIST,
+    ...Object.values(SESSION_APPLICATION_ID),
+  ]),
+];
+
 const SESSION_LIST_FILTER_DESCRIPTION =
   `The values to narrow the session list to: ${SESSION_LIST_ALL} for every session, ` +
   `${SESSION_LOCATION.LOCAL} or ${SESSION_LOCATION.CLOUD} for where work runs, ` +
-  `${SESSION_LIST_VOICE} for voice chats, an observed session's provider_id for one agent, ` +
-  `or an associated app: ${Object.values(SESSION_APPLICATION_ID).join(", ")}. ` +
+  `${SESSION_LIST_VOICE} for voice chats, an agent's provider_id, or an associated app's id. ` +
   `Values combine — ${SESSION_LOCATION.LOCAL} with an agent keeps that agent's local ` +
   `sessions — and ${SESSION_LIST_ALL} stands alone.`;
 
@@ -836,6 +844,13 @@ function panelFiltersAction(
   filters: readonly string[],
   sessions: readonly NormalizedSession[],
 ): { filters: readonly string[] } | { reason: string } {
+  // The enum on the tool's own schema already binds a compliant model to
+  // these tokens; this is the backstop for a call composed past it.
+  for (const filter of filters) {
+    if (!SESSION_LIST_FILTER_VALUES.includes(filter)) {
+      return { reason: `"${filter}" is not one of the filter values the tool lists.` };
+    }
+  }
   const chosen = [...new Set(filters)];
   if (chosen.includes(SESSION_LIST_ALL)) {
     if (chosen.length > 1) {
@@ -1273,7 +1288,7 @@ export const REALTIME_TOOLS = {
           },
           filters: {
             type: "array",
-            items: { type: "string" },
+            items: { type: "string", enum: SESSION_LIST_FILTER_VALUES },
             description: SESSION_LIST_FILTER_DESCRIPTION,
           },
           sort: {

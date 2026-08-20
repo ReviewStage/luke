@@ -361,6 +361,13 @@ test("a spoken panel ask can combine filters, on the axes the chips combine on",
   assert.equal(show('{"filters":{"value":"cloud"}}').kind, "refused");
   // A list of nothing is no narrowing at all.
   assert.deepEqual(show('{"filters":[]}'), { kind: "panel", tab: APP_PANEL_TAB.SESSIONS });
+
+  // The enum on the schema binds the model to real tokens — a developer's
+  // phrase arriving untranslated is refused by the backstop, never guessed at.
+  assert.deepEqual(show('{"filters":["Claude Code"]}'), {
+    kind: "refused",
+    reason: '"Claude Code" is not one of the filter values the tool lists.',
+  });
 });
 
 test("a spoken panel ask can reorder the list in the panel's own two words", () => {
