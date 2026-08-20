@@ -138,6 +138,38 @@ export function sessionFiltersFromSpoken(
   return selection;
 }
 
+/** What a spoken search is told it did: the count, and the honest word for a zero. */
+export interface SpokenSearchOutcome {
+  matches: number;
+  note?: string;
+}
+
+/**
+ * What a spoken search is told it did, read against the same arrangement the
+ * panel is about to draw. A spoken filter that would show nothing is refused
+ * before it is carried, but an emptied search is the list's honest answer
+ * rather than a stale choice — so the outcome carries the count instead of a
+ * refusal, and names the matches a filter is hiding the way the list's own
+ * empty state does, so the sentence Luke says can never claim rows the list
+ * will not draw.
+ */
+export function spokenSearchOutcome(
+  sessions: readonly DisplaySession[],
+  view: SessionView,
+): SpokenSearchOutcome {
+  const list = arrangeSessions(sessions, view);
+  const matches = list.sessions.length;
+  if (matches > 0) return { matches };
+  const beyond = list.search?.beyondFilter ?? 0;
+  if (beyond === 0) return { matches, note: "No sessions match those words." };
+  return {
+    matches,
+    note: `No shown sessions match, but the filter in force hides ${beyond} ${
+      beyond === 1 ? "session" : "sessions"
+    } that would.`,
+  };
+}
+
 /**
  * The two questions a list of agent sessions is read to answer. The set is
  * core's, because a spoken ask names an order in the same words this control
@@ -446,12 +478,15 @@ export function searchTokens(query: string): readonly string[] {
  * which a lone chat cedes its title line to its workspace for. Those still
  * find the session — each is a name the provider's own surface knows it by —
  * so a row can match without a mark to show for it; the marks only ever land
- * on the lines the row draws.
+ * on the lines the row draws. The status word is its own line because the
+ * detail sentence only falls back to it: a row busy saying what it is doing
+ * must still answer for the state it is in.
  */
 function searchableLines(session: DisplaySession): readonly string[] {
   const lines = [
     session.title,
     session.detail,
+    session.label,
     session.branch,
     session.repository,
     session.workspace?.name,

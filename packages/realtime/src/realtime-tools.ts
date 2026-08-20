@@ -221,6 +221,8 @@ export type AppToolAction =
       /** The validated narrowing, combined like the chips: OR within an axis, AND across. */
       filters?: readonly string[];
       sort?: SessionListSort;
+      /** Words to search the list for, exactly as the developer asked them. */
+      query?: string;
     }
   | { kind: typeof APP_TOOL_KIND.FEEDBACK; composer: FeedbackComposerKind; draft?: string }
   | { kind: "refused"; reason: string };
@@ -948,11 +950,26 @@ function validateShowPanel(parsed: WireRecord, context: AppToolContext): AppTool
   if (sort !== undefined && !isSessionListSort(sort)) {
     return { kind: "refused", reason: "The list orders by urgency or by recency." };
   }
+  // A search is bounded by the hand's own control: the magnifier is only
+  // offered beside a list with more than one session, and a spoken ask
+  // reaches no further than it. The words themselves are not validated
+  // against the rows the way a filter is — a query is read against the lines
+  // as the surface words them, which only the renderer knows, and a search
+  // matching nothing is the list's own honest answer rather than a stale
+  // narrowing to refuse.
+  const query = textArgument(parsed, "query");
+  if (query !== undefined && context.sessions.length < 2) {
+    return {
+      kind: "refused",
+      reason: "The list offers a search only when more than one session is observed.",
+    };
+  }
   const asked = spokenFilterValues(parsed.filters);
   if ("reason" in asked) return { kind: "refused", reason: asked.reason };
   if (asked.values === undefined) {
     const action: AppToolAction = { kind: APP_TOOL_KIND.PANEL, tab };
     if (sort !== undefined) action.sort = sort;
+    if (query !== undefined) action.query = query;
     return action;
   }
   const outcome = panelFiltersAction(asked.values, context.sessions);
@@ -963,6 +980,7 @@ function validateShowPanel(parsed: WireRecord, context: AppToolContext): AppTool
     filters: outcome.filters,
   };
   if (sort !== undefined) action.sort = sort;
+  if (query !== undefined) action.query = query;
   return action;
 }
 
@@ -1303,6 +1321,11 @@ export const REALTIME_TOOLS = {
             description:
               `Reorders the session list: ${SESSION_LIST_SORT.URGENCY} puts what needs the ` +
               `developer first, ${SESSION_LIST_SORT.RECENCY} puts what moved last first.`,
+          },
+          query: {
+            type: "string",
+            description:
+              "Optional words to search the session list for; only rows saying every word stay.",
           },
         },
         required: [],

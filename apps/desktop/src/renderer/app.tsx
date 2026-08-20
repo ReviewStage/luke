@@ -136,6 +136,7 @@ import {
   sameSessionFilters,
   sessionFiltersFromSpoken,
   sessionTally,
+  spokenSearchOutcome,
   tallySummary,
 } from "./session-model";
 import { parsePixels } from "./session-motion";
@@ -596,6 +597,10 @@ export function App(): React.JSX.Element {
       // when one empties, and a snapshot taken at the ask would undo that.
       const view = hold.view;
       if (view !== undefined) setSessionView((current) => ({ ...current, ...view }));
+      // A query landing opens the field it fills, on the rule the field's own
+      // closing keeps: a narrowing in force behind no visible control would
+      // hide sessions with nothing on screen admitting it.
+      if (view?.query) setSearchOpen(true);
     },
     [applySettings],
   );
@@ -1946,11 +1951,23 @@ export function App(): React.JSX.Element {
           // a list that has already re-sorted itself by the time he gets there
           // makes the flight a report rather than the act.
           const view =
-            filters || action.sort
+            filters || action.sort || action.query !== undefined
               ? {
                   ...(filters ? { filters } : undefined),
                   ...(action.sort ? { sort: action.sort } : undefined),
+                  ...(action.query !== undefined ? { query: action.query } : undefined),
                 }
+              : undefined;
+          // What the query will leave, read now against the roster and the
+          // view the hold is about to land: the reply voices this outcome, and
+          // it must not claim rows the list will not draw. Only the drawing
+          // waits for the flight, never the report.
+          const searched =
+            action.query !== undefined && bootstrap !== undefined
+              ? spokenSearchOutcome(displaySessions(bootstrap, sessions, noticeAsks), {
+                  ...sessionView,
+                  ...view,
+                })
               : undefined;
           await changeMode(true);
           // The tab bar and the options button are drawn outside the settings
@@ -1966,14 +1983,22 @@ export function App(): React.JSX.Element {
             borrowsPanel: false,
             hold: view === undefined ? NOTHING_HELD : { view },
           });
+          // One note line, because an unmappable narrowing and an emptied
+          // search can arrive in the same ask and each has its own sentence.
+          const notes = [
+            action.filters && spoken === undefined
+              ? "That narrowing has no filter of its own here, so every session is shown."
+              : undefined,
+            searched?.note,
+          ].filter((line): line is string => line !== undefined);
           return {
             status: "shown",
             tab: action.tab,
             ...(spoken !== undefined ? { filters: action.filters } : undefined),
-            ...(action.filters && spoken === undefined
-              ? { note: "That narrowing has no filter of its own here, so every session is shown." }
-              : undefined),
             ...(action.sort ? { sort: action.sort } : undefined),
+            ...(action.query !== undefined ? { query: action.query } : undefined),
+            ...(searched !== undefined ? { matches: searched.matches } : undefined),
+            ...(notes.length > 0 ? { note: notes.join(" ") } : undefined),
           };
         },
       }),
@@ -1986,6 +2011,9 @@ export function App(): React.JSX.Element {
       drawErrandHold,
       feedbackEntry.latest,
       presentationOf,
+      sessions,
+      noticeAsks,
+      sessionView,
     ],
   );
 

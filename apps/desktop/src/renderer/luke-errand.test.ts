@@ -140,6 +140,25 @@ test("a narrowing or a re-ordering is signed on the control that carries it", ()
   );
 });
 
+test("a search is signed on the magnifier, ahead of whatever else the ask changed", () => {
+  assert.deepEqual(errandTargets({ kind: "panel", tab: APP_PANEL_TAB.SESSIONS, query: "parser" }), [
+    ERRAND_TARGET.LIST_SEARCH,
+    ERRAND_TARGET.SESSIONS_TAB,
+  ]);
+  // One ask can search and narrow at once; one flight signs it, on the control
+  // whose change is loudest, with the others standing behind in case the
+  // magnifier is not drawn.
+  assert.deepEqual(
+    errandTargets({
+      kind: "panel",
+      tab: APP_PANEL_TAB.SESSIONS,
+      filters: ["cloud"],
+      query: "parser",
+    }),
+    [ERRAND_TARGET.LIST_SEARCH, ERRAND_TARGET.LIST_OPTIONS, ERRAND_TARGET.SESSIONS_TAB],
+  );
+});
+
 test("a refused act is signed nowhere", () => {
   assert.deepEqual(errandTargets({ kind: "refused", reason: "No such tool exists." }), []);
 });

@@ -4503,6 +4503,56 @@ test("a spoken panel ask is validated against the roster and carried", async () 
   assert.equal(carried.length, combinedBefore);
 });
 
+test("a spoken search is bounded by the list the magnifier is offered beside", async () => {
+  const carried: unknown[] = [];
+  const context = harness({
+    carryAppAction: async (action) => {
+      carried.push(action);
+      return { status: "shown" };
+    },
+  });
+  await context.session.connect();
+  context.session.updateGuide(CAPTIONS_GUIDE);
+  context.session.updateSessions([observedSession("session-a")]);
+  await armDeveloperTurn(context);
+
+  // One session offers no magnifier, so the ask is refused rather than
+  // carried into a field the panel will not draw.
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      output: [
+        {
+          type: "function_call",
+          name: "show_panel",
+          call_id: "call-search-1",
+          arguments: '{"query":"parser"}',
+        },
+      ],
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(carried, []);
+
+  context.session.updateSessions([observedSession("session-a"), observedSession("session-b")]);
+  await armDeveloperTurn(context);
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      output: [
+        {
+          type: "function_call",
+          name: "show_panel",
+          call_id: "call-search-2",
+          arguments: '{"query":" parser "}',
+        },
+      ],
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(carried, [{ kind: "panel", tab: "sessions", query: "parser" }]);
+});
+
 test("a spoken composer open is validated against the fixed kinds and carried, never sent", async () => {
   const carried: unknown[] = [];
   const context = harness({
