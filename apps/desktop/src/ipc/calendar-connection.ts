@@ -4,13 +4,13 @@ import {
   type RecordProductEvent,
   type UnparsedWireValue,
 } from "@sidecar/core";
+import { Effect } from "effect";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from "electron";
-import { runDesktopEffect } from "../effect-runtime";
 import type { GoogleCalendarReader } from "../google-calendar";
 import type { GoogleCalendarSignIn } from "../google-calendar-oauth";
 import { type createSettingsHandler, SettingsRefusal } from "../settings-handler";
 import type { SettingsStore } from "../settings-store";
-import { channels, type ObservedAccountCalendars } from "../shared/contracts";
+import { channels } from "../shared/contracts";
 
 export interface CalendarConnectionIpcDependencies {
   ipcMain: Pick<IpcMain, "on">;
@@ -19,7 +19,7 @@ export interface CalendarConnectionIpcDependencies {
   settingsStore: SettingsStore;
   calendar: GoogleCalendarReader;
   signIn: GoogleCalendarSignIn;
-  observedCalendars: () => readonly ObservedAccountCalendars[];
+  observedCalendars: () => readonly import("../shared/contracts").ObservedAccountCalendars[];
   refresh: () => void;
   recordProductEvent: RecordProductEvent;
 }
@@ -39,26 +39,29 @@ export function registerCalendarConnectionIpc(
   } = dependencies;
   registerSetting(channels.connectGoogleCalendar, {
     validate: () => undefined,
-    async save() {
-      const outcome = await runDesktopEffect(signIn.signIn());
-      if ("reason" in outcome) {
-        return { settings: await settingsStore.snapshot(), reason: outcome.reason };
-      }
-      let primaryId: string | undefined;
-      try {
-        const calendars = await runDesktopEffect(calendar.listCalendars(outcome.accessToken));
-        primaryId = (calendars.find((candidate) => candidate.primary) ?? calendars[0])?.id;
-      } catch {
-        primaryId = undefined;
-      }
-      if (!primaryId) {
-        return {
-          settings: await settingsStore.snapshot(),
-          reason: "Google did not answer with the account's calendars.",
-        };
-      }
-      return settingsStore.addCalendarAccount(primaryId, outcome.refreshToken, [primaryId]);
-    },
+    save: () =>
+      Effect.gen(function* () {
+        const outcome = yield* signIn.signIn();
+        if ("reason" in outcome) {
+          return { settings: yield* settingsStore.snapshot(), reason: outcome.reason };
+        }
+        let primaryId: string | undefined;
+        const calendars = yield* calendar
+          .listCalendars(outcome.accessToken)
+          .pipe(Effect.catchAll(() => Effect.succeed(undefined)));
+        if (calendars) {
+          primaryId = (calendars.find((candidate) => candidate.primary) ?? calendars[0])?.id;
+        }
+        if (!primaryId) {
+          return {
+            settings: yield* settingsStore.snapshot(),
+            reason: "Google did not answer with the account's calendars.",
+          };
+        }
+        return yield* settingsStore.addCalendarAccount(primaryId, outcome.refreshToken, [
+          primaryId,
+        ]);
+      }),
     apply(result) {
       if (!result.reason) {
         refresh();
@@ -87,7 +90,7 @@ export function registerCalendarConnectionIpc(
     refusal: "Could not disconnect that account on this system.",
   });
   registerSetting(channels.setCalendarSelected, {
-    async validate(
+    validate(
       accountId: UnparsedWireValue,
       calendarId: UnparsedWireValue,
       selected: UnparsedWireValue,
@@ -98,8 +101,9 @@ export function registerCalendarConnectionIpc(
       if (!isWireString(calendarId) || !calendarId) {
         throw new Error("Invalid calendar selection request");
       }
-      if (selected !== true && selected !== false)
+      if (selected !== true && selected !== false) {
         throw new Error("Invalid calendar selection request");
+      }
       if (
         selected &&
         !dependencies
@@ -107,10 +111,14 @@ export function registerCalendarConnectionIpc(
           .find((account) => account.accountId === accountId)
           ?.calendars.some((candidate) => candidate.id === calendarId)
       ) {
-        return new SettingsRefusal({
-          settings: await settingsStore.snapshot(),
-          reason: "That calendar is not one Google listed for the account.",
-        });
+        return Effect.map(
+          settingsStore.snapshot(),
+          (settings) =>
+            new SettingsRefusal({
+              settings,
+              reason: "That calendar is not one Google listed for the account.",
+            }),
+        );
       }
       return { accountId, calendarId, selected };
     },

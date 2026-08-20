@@ -5,6 +5,7 @@ import {
   type SessionProviderAdapter,
   type UnparsedWireValue,
 } from "@sidecar/core";
+import { Effect } from "effect";
 import type { IpcMainInvokeEvent } from "electron";
 import type { DockPresence } from "../dock-presence";
 import { HOTKEY_RANK, type HotkeyRegistrar } from "../hotkey-registrar";
@@ -86,25 +87,14 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
       return { providerId, apiKey };
     },
     save: ({ providerId, apiKey }) => settingsStore.setApiKey(providerId, apiKey),
-    async apply(result, { providerId, apiKey }) {
-      // Only the provider whose key changed is affected, so the local
-      // observers are left alone rather than re-crawling the filesystem on
-      // every save.
+    apply(result, { providerId, apiKey }) {
       const adapter = adapterForCredential(providerId);
       if (!result.reason && adapter) void refreshAdapter(adapter);
-      // The tracker's key connects the tracker, not a session provider, so
-      // its save refreshes the roster instead of the registry.
       if (!result.reason && providerId === CREDENTIAL_PROVIDER_ID.LINEAR) {
         refreshIssues();
       }
-      // The voice key connects neither: it is what the spoken conversation and
-      // the attention review are built from, so a change to it rebuilds both
-      // and then moves the talk key — claimed now that there is something to
-      // talk to, or given back to the machine now that there is not. Awaited,
-      // because a press right after the save has to find a minter.
       if (!result.reason && providerId === VOICE_CREDENTIAL_PROVIDER_ID) {
-        await applyVoiceCredential();
-        await hotkeys.reapply(HOTKEY_RANK.TALK);
+        void applyVoiceCredential().then(() => hotkeys.reapply(HOTKEY_RANK.TALK));
       }
       // The store reads a blank key as a clearing, so the count reads it the
       // same way rather than reporting a connection that did not happen.
@@ -133,13 +123,13 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
     });
   }
 
-  async function applySettingSideEffect(
+  function applySettingSideEffect(
     field: AppSettingField,
     value: AppSettingValue<AppSettingField>,
     settings: AppSettings,
     event: IpcMainInvokeEvent,
     waitForDeferredEffects = false,
-  ): Promise<void> {
+  ): void {
     switch (APP_SETTING_SCHEMA[field].mainProcessSideEffect) {
       case SETTING_SIDE_EFFECT.DOCK:
         dock.apply(settings.showInDock, panels.displayIdFor(event.sender));
@@ -161,18 +151,19 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
       case SETTING_SIDE_EFFECT.TALK_HOTKEY:
         // SAFETY: The preceding check establishes the asserted contract.
         hotkeys.setChosen(HOTKEY_RANK.TALK, value as string | undefined);
-        await hotkeys.reapply(HOTKEY_RANK.TALK);
+        if (waitForDeferredEffects) void hotkeys.reapply(HOTKEY_RANK.TALK);
+        else void hotkeys.reapply(HOTKEY_RANK.TALK);
         break;
       case SETTING_SIDE_EFFECT.ASK_HOTKEY:
         // SAFETY: The preceding check establishes the asserted contract.
         hotkeys.setChosen(HOTKEY_RANK.ASK, value as string | undefined);
-        if (waitForDeferredEffects) await hotkeys.reapply(HOTKEY_RANK.ASK);
+        if (waitForDeferredEffects) void hotkeys.reapply(HOTKEY_RANK.ASK);
         else void hotkeys.reapply(HOTKEY_RANK.ASK);
         break;
       case SETTING_SIDE_EFFECT.STOP_HOTKEY:
         // SAFETY: The preceding check establishes the asserted contract.
         hotkeys.setChosen(HOTKEY_RANK.STOP, value as string | undefined);
-        if (waitForDeferredEffects) await hotkeys.reapply(HOTKEY_RANK.STOP);
+        if (waitForDeferredEffects) void hotkeys.reapply(HOTKEY_RANK.STOP);
         else void hotkeys.reapply(HOTKEY_RANK.STOP);
         break;
       case SETTING_SIDE_EFFECT.MEDIA_DUCK:
@@ -194,39 +185,43 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
   }
 
   registerSettingHandler(channels.updateSetting, {
-    async validate(field: UnparsedWireValue, value: UnparsedWireValue) {
+    validate(field: UnparsedWireValue, value: UnparsedWireValue) {
       if (!isAppSettingField(field)) throw new Error("Unknown setting");
-      // A map-valued setting is written one entry at a time. Its own guard drops
-      // entries it cannot hold rather than refusing them — right for reading a
-      // stored file, wrong for a write, where a whole map of unholdable entries
-      // would read as valid and silently clear what is stored.
       if (isKeyedAppSettingField(field)) throw new Error("Setting takes one entry at a time");
       const parsed = APP_SETTING_SCHEMA[field].guard(value);
       if (!parsed.valid) throw new Error("Invalid setting value");
       if (field === APP_SETTING_SCHEMA.askHotkey.field && isWireString(parsed.value)) {
         if (hotkeys.reserve(parsed.value, HOTKEY_RANK.ASK) === HOTKEY_RANK.TALK) {
-          return new SettingsRefusal({
-            settings: await settingsStore.snapshot(),
-            reason: "That chord is reserved for the talk key.",
-          });
+          return Effect.map(
+            settingsStore.snapshot(),
+            (settings) =>
+              new SettingsRefusal({
+                settings,
+                reason: "That chord is reserved for the talk key.",
+              }),
+          );
         }
       }
       if (field === APP_SETTING_SCHEMA.stopHotkey.field && isWireString(parsed.value)) {
         const owner = hotkeys.reserve(parsed.value, HOTKEY_RANK.STOP);
         if (owner === HOTKEY_RANK.TALK || owner === HOTKEY_RANK.ASK) {
-          return new SettingsRefusal({
-            settings: await settingsStore.snapshot(),
-            reason: `That chord is reserved for the ${owner === HOTKEY_RANK.TALK ? "talk" : "ask"} key.`,
-          });
+          return Effect.map(
+            settingsStore.snapshot(),
+            (settings) =>
+              new SettingsRefusal({
+                settings,
+                reason: `That chord is reserved for the ${owner === HOTKEY_RANK.TALK ? "talk" : "ask"} key.`,
+              }),
+          );
         }
       }
       return { field, value: parsed.value };
     },
     save: ({ field, value }) => settingsStore.set(field, value),
-    async apply(result, { field, value }, event) {
+    apply(result, { field, value }, event) {
       if (result.reason) return;
       recordSettingUpdate(field, result.settings);
-      await applySettingSideEffect(field, value, result.settings, event);
+      void applySettingSideEffect(field, value, result.settings, event);
     },
     refusal: "Could not save that setting on this system.",
   });
@@ -235,7 +230,7 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
   // arrives here is the single entry and the renderer never sends back a map it
   // read before an overlapping write landed.
   registerSettingHandler(channels.updateSettingEntry, {
-    async validate(field: UnparsedWireValue, key: UnparsedWireValue, value: UnparsedWireValue) {
+    validate(field: UnparsedWireValue, key: UnparsedWireValue, value: UnparsedWireValue) {
       if (!isKeyedAppSettingField(field)) throw new Error("Unknown setting");
       if (!isSettingEntryKey(field, key)) throw new Error("Unknown setting entry");
       const parsed = settingEntryGuard(field, key, value);
@@ -260,10 +255,10 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
         // SAFETY: settingEntryGuard validated the entry before it reaches the store.
         value as UnparsedWireValue,
       ),
-    async apply(result, { field }, event) {
+    apply(result, { field }, event) {
       if (result.reason) return;
       recordSettingUpdate(field, result.settings);
-      await applySettingSideEffect(field, result.settings[field], result.settings, event);
+      void applySettingSideEffect(field, result.settings[field], result.settings, event);
     },
     refusal: "Could not save that setting on this system.",
   });
@@ -281,12 +276,12 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
       return scope;
     },
     save: (scope) => settingsStore.resetSettings(scope),
-    async apply(result, scope, event) {
+    apply(result, scope, event) {
       if (result.reason) return;
       for (const field of APP_SETTING_FIELDS) {
         const definition = APP_SETTING_SCHEMA[field];
         if (!("resetScope" in definition) || definition.resetScope !== scope) continue;
-        await applySettingSideEffect(field, result.settings[field], result.settings, event, true);
+        applySettingSideEffect(field, result.settings[field], result.settings, event, true);
       }
     },
     refusal: "Could not reset those settings on this system.",

@@ -48,7 +48,8 @@
     {
       "files": ["**/*.test.ts", "**/*.test.mjs", "**/*.test.tsx"],
       "rules": {
-        "anti-slop/no-chained-type-assertions": "off"
+        "anti-slop/no-chained-type-assertions": "off",
+        "anti-slop/require-safety-comment-for-type-assertion": "off"
       }
     }
   ]

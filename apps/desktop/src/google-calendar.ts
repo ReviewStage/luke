@@ -82,7 +82,7 @@ export interface GoogleCalendarReaderOptions {
    * Resolved at observation time, so an account connected or removed in
    * settings takes effect on the next pass without the reader being rebuilt.
    */
-  readAccounts: () => Effect.Effect<readonly CalendarAccountCredential[]>;
+  readAccounts: () => Effect.Effect<readonly CalendarAccountCredential[], unknown, unknown>;
   /** The OAuth client this build carries, without which a grant buys nothing. */
   signInConfig?: () => GoogleCalendarSignInConfig | undefined;
   now?: () => number;
@@ -96,7 +96,11 @@ export interface GoogleCalendarReaderOptions {
  * names a calendar the account did not just report.
  */
 export class GoogleCalendarReader {
-  readonly #readAccounts: () => Effect.Effect<readonly CalendarAccountCredential[]>;
+  readonly #readAccounts: () => Effect.Effect<
+    readonly CalendarAccountCredential[],
+    unknown,
+    unknown
+  >;
   readonly #signInConfig: () => GoogleCalendarSignInConfig | undefined;
   readonly #now: () => number;
   /** Short-lived access tokens by account id, so passes never drum the minter. */
@@ -157,7 +161,7 @@ export class GoogleCalendarReader {
         });
       }
       return observations;
-    });
+    }) as Effect.Effect<readonly CalendarAccountObservation[] | undefined, unknown, Http>;
   }
 
   /**

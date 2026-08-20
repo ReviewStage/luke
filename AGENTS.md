@@ -351,6 +351,27 @@ Biome is the executable style policy for TypeScript, JavaScript, JSON,
 Markdown, and CSS. Husky runs the same checks against staged files as a local
 convenience; `./scripts/check.sh` and CI remain authoritative.
 
+## Effect migration
+
+Luke's main-process and `sidecar-core` logic runs on [Effect](https://effect.website/). The rules:
+
+**R1 — Zero bridges except edge files and I/O services.** Only these files may call `ManagedRuntime`, `runPromise`, or `runSync`:
+
+- Edge: `apps/desktop/src/main.ts`, `desktop-app.ts`, `action-handler.ts`, `observation-loop.ts`, `settings-handler.ts`, `ipc/window-surface.ts`
+- I/O services: `apps/desktop/src/services/http.ts`, `services/cli.ts`, `services/files.ts`
+
+**R2 — Non-edge modules return `Effect` only.** No `async`/`await`, no `Promise` types, no `Effect.promise`/`Effect.tryPromise` outside I/O services.
+
+**R3 — One runtime at the composition root.** `ManagedRuntime` is built in `desktop-app.ts` via `makeEffectRuntime`; `effectRuntime` is exported for edge files.
+
+**R4 — No `Effect.die` / `orDie` / `ignore`.** Failures stay typed and explicit.
+
+**R5 — No stringly error matching.** No `message.match`, `message.includes`, or regex on error text.
+
+**R6 — No `const self = this`.** Use `Effect.gen(this, function* () { … })` or arrow closures.
+
+`Http.listenLoopback` receives a `runRequestEffect` callback from `desktop-app.ts` so request handlers never call `runPromise` inside `services/http.ts`.
+
 ## Git workflow
 
 - Follow [Conventional Commits

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import http from "node:http";
+import type { IncomingMessage, ServerResponse } from "node:http";
 import {
   isRecord,
   isWireNumber,
@@ -7,12 +7,12 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/core";
+import { type Context, Deferred, Duration, Effect, Exit } from "effect";
 // The same landing page the Luke account sign-in leaves the browser on, so no
 // two of Luke's consent trips dress their tabs differently.
 import { accountLoopbackPage, LOOPBACK_PAGE_TONE } from "./account-loopback-page";
-// The same RFC 7636 arithmetic every other flow here uses: one PKCE, three
-// flows, so none can drift into a weaker verifier than the others.
 import { codeChallenge, createCodeVerifier } from "./account-pkce";
+import { Http, type LoopbackFailure } from "./services/http";
 
 /**
  * The sign-in behind the Linear row: Linear's own OAuth flow for a public
@@ -197,18 +197,22 @@ export class LinearSignIn {
     this.#options = options;
   }
 
-  async signIn(): Promise<LinearSignInOutcome> {
+  signIn(): Effect.Effect<LinearSignInOutcome, LoopbackFailure, Http> {
     const config = linearSignInConfig(this.#options.environment);
-    if (!config) return { reason: "Sign-in is not configured in this build." };
-    if (this.#running) return { reason: "A sign-in is already waiting in your browser." };
-    this.#running = true;
-    try {
-      return await this.#run(config);
-    } finally {
-      this.#running = false;
-      this.#abandon = undefined;
-      this.#reopen = undefined;
+    if (!config) return Effect.succeed({ reason: "Sign-in is not configured in this build." });
+    if (this.#running) {
+      return Effect.succeed({ reason: "A sign-in is already waiting in your browser." });
     }
+    this.#running = true;
+    return this.#run(config).pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          this.#running = false;
+          this.#abandon = undefined;
+          this.#reopen = undefined;
+        }),
+      ),
+    );
   }
 
   /**
@@ -230,36 +234,119 @@ export class LinearSignIn {
     this.#reopen?.();
   }
 
-  async #run(config: LinearSignInConfig): Promise<LinearSignInOutcome> {
-    const verifier = createCodeVerifier();
-    const challenge = codeChallenge(verifier);
-    const state = randomUUID();
+  #run(config: LinearSignInConfig): Effect.Effect<LinearSignInOutcome, LoopbackFailure, Http> {
+    return Effect.gen(this, function* () {
+      const http = yield* Http;
+      const verifier = createCodeVerifier();
+      const challenge = codeChallenge(verifier);
+      const state = randomUUID();
+      const outcomeDeferred = yield* Deferred.make<LinearSignInOutcome>();
+      let redirectUri = "";
+      let callbackClaimed = false;
 
-    let finish: (outcome: LinearSignInOutcome) => void = () => undefined;
-    const outcome = new Promise<LinearSignInOutcome>((resolve) => {
-      finish = resolve;
+      const bound = yield* this.#bindLoopback(http, (request, response) =>
+        this.#handleCallback(request, response, {
+          config,
+          verifier,
+          state,
+          http,
+          getRedirectUri: () => redirectUri,
+          getCallbackClaimed: () => callbackClaimed,
+          setCallbackClaimed: () => {
+            callbackClaimed = true;
+          },
+          finish: (outcome) => Deferred.succeed(outcomeDeferred, outcome),
+        }),
+      );
+      if (bound === undefined) {
+        return { reason: "Luke could not open a sign-in callback on this machine." };
+      }
+      const { server, port } = bound;
+      redirectUri = `http://${LOOPBACK_HOST}:${port}${CALLBACK_PATH}`;
+
+      const authorization = new URL(LINEAR_AUTHORIZATION_URL);
+      authorization.searchParams.set("client_id", config.clientId);
+      authorization.searchParams.set("redirect_uri", redirectUri);
+      authorization.searchParams.set("response_type", "code");
+      authorization.searchParams.set("scope", LINEAR_SCOPES);
+      authorization.searchParams.set("code_challenge", challenge);
+      authorization.searchParams.set("code_challenge_method", "S256");
+      authorization.searchParams.set("actor", "user");
+      authorization.searchParams.set("prompt", "consent");
+      authorization.searchParams.set("state", state);
+
+      const timeoutMs = this.#options.timeoutMs ?? SIGN_IN_TIMEOUT_MS;
+      this.#abandon = () => {
+        Deferred.unsafeDone(outcomeDeferred, Exit.succeed({ reason: "Sign-in was cancelled." }));
+      };
+      this.#reopen = () => this.#options.openExternal(authorization.toString());
+
+      try {
+        this.#options.openExternal(authorization.toString());
+        return yield* Deferred.await(outcomeDeferred).pipe(
+          Effect.timeout(Duration.millis(timeoutMs)),
+          Effect.catchAll(() =>
+            Effect.succeed({
+              reason: "Sign-in timed out. Try again from the Linear row.",
+            } as LinearSignInOutcome),
+          ),
+        );
+      } finally {
+        yield* http.closeServer(server);
+        yield* http.closeAllConnections(server);
+        yield* Effect.sync(() => {
+          server.unref();
+        });
+      }
     });
-    // Assigned once a registered port has bound, before the browser is opened
-    // — no request can arrive ahead of it.
-    let redirectUri = "";
-    let callbackClaimed = false;
-    let timeout: ReturnType<typeof setTimeout> | undefined;
+  }
 
-    const server = http.createServer((request, response) => {
+  #bindLoopback(
+    http: Context.Tag.Service<Http>,
+    onRequest: (
+      request: IncomingMessage,
+      response: ServerResponse,
+    ) => Effect.Effect<void, LoopbackFailure>,
+  ): Effect.Effect<
+    { server: import("node:http").Server; port: number } | undefined,
+    LoopbackFailure
+  > {
+    return Effect.gen(function* () {
+      for (const port of LOOPBACK_PORTS) {
+        const attempt = yield* http
+          .listenLoopback({ host: LOOPBACK_HOST, port, onRequest })
+          .pipe(Effect.either);
+        if (attempt._tag === "Right") return attempt.right;
+      }
+      return undefined;
+    });
+  }
+
+  #handleCallback(
+    request: IncomingMessage,
+    response: ServerResponse,
+    options: {
+      config: LinearSignInConfig;
+      verifier: string;
+      state: string;
+      http: Context.Tag.Service<Http>;
+      getRedirectUri: () => string;
+      getCallbackClaimed: () => boolean;
+      setCallbackClaimed: () => void;
+      finish: (outcome: LinearSignInOutcome) => Effect.Effect<void>;
+    },
+  ): Effect.Effect<void, LoopbackFailure> {
+    return Effect.gen(this, function* () {
       const url = new URL(request.url ?? "/", `http://${LOOPBACK_HOST}`);
-      // Anything that is not this flow's own redirect — another path, a stray
-      // request, a state this run never issued — is refused without ending
-      // the wait: the real redirect may still be on its way.
-      if (url.pathname !== CALLBACK_PATH || url.searchParams.get("state") !== state) {
+      if (url.pathname !== CALLBACK_PATH || url.searchParams.get("state") !== options.state) {
         response.writeHead(404, { "content-type": "text/plain" }).end("Not found");
         return;
       }
-      if (callbackClaimed) {
+      if (options.getCallbackClaimed()) {
         response.writeHead(404, { "content-type": "text/plain" }).end("Not found");
         return;
       }
-      callbackClaimed = true;
-      if (timeout) clearTimeout(timeout);
+      options.setCallbackClaimed();
       this.#abandon = undefined;
       const refused = url.searchParams.get("error");
       const code = url.searchParams.get("code");
@@ -267,99 +354,28 @@ export class LinearSignIn {
         response
           .writeHead(200, { "content-type": "text/html; charset=utf-8" })
           .end(signInPage(false));
-        finish({ reason: "Linear did not grant access." });
+        yield* options.finish({ reason: "Linear did not grant access." });
         return;
       }
-      void this.#exchange(config, code, verifier, redirectUri).then((exchanged) => {
-        response
-          .writeHead(200, { "content-type": "text/html; charset=utf-8" })
-          .end(signInPage(!("reason" in exchanged)));
-        finish(exchanged);
-      });
+      const exchanged = yield* this.#exchange(
+        options.config,
+        code,
+        options.verifier,
+        options.getRedirectUri(),
+      ).pipe(Effect.provideService(Http, options.http));
+      response
+        .writeHead(200, { "content-type": "text/html; charset=utf-8" })
+        .end(signInPage(!("reason" in exchanged)));
+      yield* options.finish(exchanged);
     });
-
-    const port = await this.#bind(server);
-    if (port === undefined) {
-      return { reason: "Luke could not open a sign-in callback on this machine." };
-    }
-    redirectUri = `http://${LOOPBACK_HOST}:${port}${CALLBACK_PATH}`;
-
-    const authorization = new URL(LINEAR_AUTHORIZATION_URL);
-    authorization.searchParams.set("client_id", config.clientId);
-    authorization.searchParams.set("redirect_uri", redirectUri);
-    authorization.searchParams.set("response_type", "code");
-    authorization.searchParams.set("scope", LINEAR_SCOPES);
-    authorization.searchParams.set("code_challenge", challenge);
-    authorization.searchParams.set("code_challenge_method", "S256");
-    // Everything Luke does on a board, he does as the developer who asked:
-    // an issue moves under their name and a comment carries it. `user` is
-    // Linear's default, and saying so keeps a changed default from quietly
-    // turning Luke into an actor of his own.
-    authorization.searchParams.set("actor", "user");
-    // Consent every time, so reconnecting after withdrawing the grant in
-    // Linear actually asks again rather than silently reissuing.
-    authorization.searchParams.set("prompt", "consent");
-    authorization.searchParams.set("state", state);
-
-    timeout = setTimeout(() => {
-      finish({ reason: "Sign-in timed out. Try again from the Linear row." });
-    }, this.#options.timeoutMs ?? SIGN_IN_TIMEOUT_MS);
-    timeout.unref();
-    this.#abandon = () => finish({ reason: "Sign-in was cancelled." });
-    this.#reopen = () => this.#options.openExternal(authorization.toString());
-
-    try {
-      this.#options.openExternal(authorization.toString());
-      return await outcome;
-    } finally {
-      clearTimeout(timeout);
-      server.close();
-      // The browser keeps its connection alive after the redirect, and a
-      // socket it holds open would keep this port bound — which, on a
-      // registered port rather than an ephemeral one, is the next sign-in's
-      // port. Ending those connections is what makes the flow repeatable.
-      server.closeAllConnections();
-      // The server holds the process open only while the flow is live; a
-      // browser tab left forever must not be what keeps Luke running.
-      server.unref();
-    }
   }
 
-  /**
-   * Binds the first registered port that is free. A port already held is the
-   * ordinary case — another copy of Luke, or another app — and not a failure
-   * until every registered address has been tried, because a port Linear was
-   * never told about would fail at the redirect instead.
-   */
-  async #bind(server: http.Server): Promise<number | undefined> {
-    for (const port of LOOPBACK_PORTS) {
-      const bound = await new Promise<boolean>((resolve) => {
-        const failed = (): void => {
-          server.removeListener("error", failed);
-          // A server that failed to bind is closed before the next address is
-          // tried, so no attempt inherits the last one's half-open state.
-          server.close(() => resolve(false));
-        };
-        server.once("error", failed);
-        // The loopback answers this machine alone: Linear's redirect lands in
-        // the user's own browser, which hands the code straight back across
-        // localhost.
-        server.listen(port, LOOPBACK_HOST, () => {
-          server.removeListener("error", failed);
-          resolve(true);
-        });
-      });
-      if (bound) return port;
-    }
-    return undefined;
-  }
-
-  async #exchange(
+  #exchange(
     config: LinearSignInConfig,
     code: string,
     verifier: string,
     redirectUri: string,
-  ): Promise<LinearSignInOutcome> {
+  ): Effect.Effect<LinearSignInOutcome, never, Http> {
     const body = new URLSearchParams({
       code,
       client_id: config.clientId,
@@ -367,21 +383,24 @@ export class LinearSignIn {
       grant_type: "authorization_code",
       code_verifier: verifier,
     });
-    try {
-      const fetchImplementation = this.#options.fetchImplementation ?? fetch;
-      const response = await fetchImplementation(LINEAR_TOKEN_URL, {
-        method: "POST",
-        headers: { "content-type": "application/x-www-form-urlencoded" },
-        body: body.toString(),
-        signal: AbortSignal.timeout(TOKEN_REQUEST_TIMEOUT_MS),
-      });
-      if (!response.ok) return { reason: "Linear refused the sign-in exchange." };
-      const grant = grantFrom(await response.json(), (this.#options.now ?? Date.now)());
+    return Effect.gen(this, function* () {
+      const http = yield* Http;
+      const response = yield* http
+        .request(LINEAR_TOKEN_URL, {
+          method: "POST",
+          headers: { "content-type": "application/x-www-form-urlencoded" },
+          body: body.toString(),
+          signal: AbortSignal.timeout(TOKEN_REQUEST_TIMEOUT_MS),
+        })
+        .pipe(Effect.catchAll(() => Effect.succeed(undefined)));
+      if (!response?.ok) return { reason: "Linear refused the sign-in exchange." };
+      const payload = yield* http
+        .readJson(response)
+        .pipe(Effect.catchAll(() => Effect.succeed(undefined)));
+      const grant = grantFrom(payload as UnparsedWireValue, (this.#options.now ?? Date.now)());
       if (!grant) return { reason: "Linear answered the sign-in without a token." };
       return grant;
-    } catch {
-      return { reason: "The sign-in exchange with Linear did not complete." };
-    }
+    });
   }
 }
 
@@ -392,24 +411,22 @@ export class LinearSignIn {
  * not a reason to keep the grant on this machine — the caller deletes it
  * either way, and Linear's own settings remain the certain way to withdraw.
  */
-export async function revokeLinearGrant(
+export function revokeLinearGrant(
   token: string,
   tokenType: "access_token" | "refresh_token",
-  fetchImplementation: typeof fetch = fetch,
-): Promise<boolean> {
-  try {
-    const response = await fetchImplementation(LINEAR_REVOKE_URL, {
-      method: "POST",
-      headers: {
-        "content-type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({ token, token_type_hint: tokenType }).toString(),
-      signal: AbortSignal.timeout(TOKEN_REQUEST_TIMEOUT_MS),
-    });
-    return response.ok;
-  } catch {
-    return false;
-  }
+): Effect.Effect<boolean, never, Http> {
+  return Effect.gen(function* () {
+    const http = yield* Http;
+    const response = yield* http
+      .request(LINEAR_REVOKE_URL, {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ token, token_type_hint: tokenType }).toString(),
+        signal: AbortSignal.timeout(TOKEN_REQUEST_TIMEOUT_MS),
+      })
+      .pipe(Effect.catchAll(() => Effect.succeed(undefined)));
+    return response?.ok ?? false;
+  });
 }
 
 /**
@@ -441,52 +458,48 @@ export type LinearRefreshOutcome =
  * before it is used — a grant refreshed and then lost is a grant the user has
  * to make again.
  */
-export async function refreshLinearGrant(
+export function refreshLinearGrant(
   refreshToken: string,
   options: {
     environment?: NodeJS.ProcessEnv;
-    fetchImplementation?: typeof fetch;
     now?: () => number;
   } = {},
-): Promise<LinearRefreshOutcome> {
+): Effect.Effect<LinearRefreshOutcome, never, Http> {
   const config = linearSignInConfig(options.environment);
-  // A build that lost its registration cannot refresh anything, and has not
-  // been told the grant is bad either.
-  if (!config) return { status: LINEAR_REFRESH_STATUS.UNREACHABLE };
+  if (!config) return Effect.succeed({ status: LINEAR_REFRESH_STATUS.UNREACHABLE });
   const body = new URLSearchParams({
     refresh_token: refreshToken,
     client_id: config.clientId,
     grant_type: "refresh_token",
   });
-  const fetchImplementation = options.fetchImplementation ?? fetch;
-  let response: Response;
-  try {
-    response = await fetchImplementation(LINEAR_TOKEN_URL, {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: body.toString(),
-      signal: AbortSignal.timeout(TOKEN_REQUEST_TIMEOUT_MS),
-    });
-  } catch {
-    return { status: LINEAR_REFRESH_STATUS.UNREACHABLE };
-  }
-  if (!response.ok) {
-    try {
-      const payload = await response.json();
-      if (isRecord(payload) && payload.error === "invalid_grant") {
+  return Effect.gen(function* () {
+    const http = yield* Http;
+    const response = yield* http
+      .request(LINEAR_TOKEN_URL, {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: body.toString(),
+        signal: AbortSignal.timeout(TOKEN_REQUEST_TIMEOUT_MS),
+      })
+      .pipe(Effect.catchAll(() => Effect.succeed(undefined)));
+    if (!response) return { status: LINEAR_REFRESH_STATUS.UNREACHABLE };
+    if (!response.ok) {
+      const payload = yield* http
+        .readJson(response)
+        .pipe(Effect.catchAll(() => Effect.succeed(undefined)));
+      if (
+        isRecord(payload as UnparsedWireValue) &&
+        (payload as WireRecord).error === "invalid_grant"
+      ) {
         return { status: LINEAR_REFRESH_STATUS.REFUSED };
       }
-    } catch {
-      // An unreadable refusal proves nothing about the grant.
+      return { status: LINEAR_REFRESH_STATUS.UNREACHABLE };
     }
-    return { status: LINEAR_REFRESH_STATUS.UNREACHABLE };
-  }
-  let grant: LinearGrant | undefined;
-  try {
-    grant = grantFrom(await response.json(), (options.now ?? Date.now)());
-  } catch {
-    return { status: LINEAR_REFRESH_STATUS.UNREACHABLE };
-  }
-  if (!grant?.refreshToken) return { status: LINEAR_REFRESH_STATUS.UNREACHABLE };
-  return { status: LINEAR_REFRESH_STATUS.RENEWED, grant };
+    const payload = yield* http
+      .readJson(response)
+      .pipe(Effect.catchAll(() => Effect.succeed(undefined)));
+    const grant = grantFrom(payload as UnparsedWireValue, (options.now ?? Date.now)());
+    if (!grant?.refreshToken) return { status: LINEAR_REFRESH_STATUS.UNREACHABLE };
+    return { status: LINEAR_REFRESH_STATUS.RENEWED, grant };
+  });
 }

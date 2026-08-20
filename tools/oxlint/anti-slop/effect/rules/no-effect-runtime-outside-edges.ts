@@ -25,6 +25,7 @@ const RUNTIME_MEMBERS = new Set([
 
 const RUNTIME_OBJECTS = new Set(["Effect", "ManagedRuntime", "Runtime"]);
 const TEST_FILE = /\.(?:test|spec)\.[cm]?[jt]sx?$/u;
+const TEST_SUPPORT_FILE = /\/tests\/support\//u;
 
 function normalized(filename: string): string {
   return filename.replaceAll("\\", "/");
@@ -33,6 +34,11 @@ function normalized(filename: string): string {
 function isEdgeFile(filename: string): boolean {
   const path = normalized(filename);
   return EDGE_FILES.some((edge) => path.endsWith(edge));
+}
+
+function isAllowedRuntimeFile(filename: string): boolean {
+  const path = normalized(filename);
+  return isEdgeFile(path) || TEST_FILE.test(path) || TEST_SUPPORT_FILE.test(path);
 }
 
 export const noEffectRuntimeOutsideEdgesRule = defineRule({
@@ -51,7 +57,7 @@ export const noEffectRuntimeOutsideEdgesRule = defineRule({
   },
   create(context) {
     const filename = context.filename;
-    if (isEdgeFile(filename) || TEST_FILE.test(normalized(filename))) return {};
+    if (isAllowedRuntimeFile(filename)) return {};
 
     return {
       MemberExpression(node) {

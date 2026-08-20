@@ -82,7 +82,7 @@ export interface LinearTrackerOptions {
    * here knows how the token was come by or when it lapses: it arrives
    * already renewed, or it does not arrive.
    */
-  readAccessToken: () => Effect.Effect<string | undefined>;
+  readAccessToken: () => Effect.Effect<string | undefined, unknown, unknown>;
   now?: () => number;
 }
 
@@ -134,7 +134,7 @@ export class LinearIssueTracker implements IssueTrackerAdapter {
     displayName: LINEAR_TRACKER_NAME,
   };
 
-  readonly #readAccessToken: () => Effect.Effect<string | undefined>;
+  readonly #readAccessToken: () => Effect.Effect<string | undefined, unknown, unknown>;
   readonly #now: () => number;
   readonly #endpoint: string;
 
