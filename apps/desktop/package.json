@@ -1,7 +1,7 @@
 {
   "name": "@luke/desktop",
   "productName": "Luke",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "private": true,
   "description": "Luke desktop application",
   "main": "dist/main.js",
