@@ -28,14 +28,18 @@ private let PLAYERS = [
     MediaPlayer(bundleIdentifier: "com.spotify.client"),
 ]
 
-/// Where a player's volume was, and where the duck put it. The second value is
-/// what decides whether the first may be restored: a volume that no longer
+/// Where a player's volume was, and where the duck put it. The ducked level is
+/// what decides whether the original may be restored: a volume that no longer
 /// reads as the ducked one was moved by the user's own hand, and their hand
-/// wins.
+/// wins. Two rememberings of that level, because Spotify quantizes a volume
+/// write to its own steps and applies it a beat late — the level asked for and
+/// the level read back afterwards can both be the duck's own doing, and a
+/// reading near either must not be mistaken for the user's hand.
 private struct DuckedPlayer {
     let player: MediaPlayer
     let original: Int
-    let ducked: Int
+    let requested: Int
+    let landed: Int
 }
 
 /// A quarter of the user's own level: audible, so a duck never reads as the
@@ -50,6 +54,18 @@ private let RESTORE_STEP_SECONDS = 0.08
 /// Spotify reports a volume one below the one it was just set to, so "still
 /// where the duck put it" has to allow the reading to sit slightly off.
 private let RESTORE_TOLERANCE = 2
+/// How long a player is given to apply a volume write before it is read back.
+/// Spotify applies Apple Event volume writes asynchronously, and a reading
+/// taken too soon answers with the level being replaced.
+private let SETTLE_SECONDS = 0.15
+
+/// Whether a reading is still the duck's own level rather than the user's
+/// hand. Near either remembering counts: a player may have honored the
+/// request late — after the landing was read — or never moved past where the
+/// read-back caught it.
+private func reads(_ reading: Int, asDucked entry: DuckedPlayer) -> Bool {
+    min(abs(reading - entry.requested), abs(reading - entry.landed)) <= RESTORE_TOLERANCE
+}
 
 private let MEDIA_DUCK_COMMAND = (duck: "duck", restore: "restore")
 
@@ -160,12 +176,17 @@ private struct MediaDuckCommand {
         for player in PLAYERS where ducked[player.bundleIdentifier] == nil {
             guard isRunning(player), isPlaying(player) else { continue }
             guard let original = volume(of: player), original > 0 else { continue }
-            let target = Int((Double(original) * DUCK_FACTOR).rounded())
-            fade(player, from: original, to: target, stepSeconds: DUCK_STEP_SECONDS)
+            let requested = Int((Double(original) * DUCK_FACTOR).rounded())
+            fade(player, from: original, to: requested, stepSeconds: DUCK_STEP_SECONDS)
+            // Only the player can say where the fade actually left it, and
+            // that level is the one restore() will have to recognize.
+            Thread.sleep(forTimeInterval: SETTLE_SECONDS)
+            let landed = volume(of: player) ?? requested
             ducked[player.bundleIdentifier] = DuckedPlayer(
                 player: player,
                 original: original,
-                ducked: target
+                requested: requested,
+                landed: landed
             )
         }
     }
@@ -175,7 +196,9 @@ private struct MediaDuckCommand {
     /// quit — is theirs, not this helper's to overrule. A read that merely
     /// failed is neither of those: it says nothing about the user's intent,
     /// so the memory is kept for the next restore rather than the player
-    /// being stranded quiet with nothing left to bring it back.
+    /// being stranded quiet with nothing left to bring it back. A skip is
+    /// said aloud like a refusal, because honoring the user's hand and
+    /// losing a restore look identical otherwise.
     static func restore() {
         let restoring = ducked
         ducked = [:]
@@ -185,7 +208,10 @@ private struct MediaDuckCommand {
                 ducked[key] = entry
                 continue
             }
-            guard abs(current - entry.ducked) <= RESTORE_TOLERANCE else { continue }
+            guard reads(current, asDucked: entry) else {
+                emit("skipped \(key) at \(current)")
+                continue
+            }
             fade(entry.player, from: current, to: entry.original, stepSeconds: RESTORE_STEP_SECONDS)
         }
     }

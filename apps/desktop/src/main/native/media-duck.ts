@@ -12,6 +12,8 @@ export const MEDIA_DUCK_COMMAND = {
   RESTORE: "restore",
 } as const;
 
+type MediaDuckCommand = (typeof MEDIA_DUCK_COMMAND)[keyof typeof MEDIA_DUCK_COMMAND];
+
 /**
  * How long quiet is held after an exchange ends before the players come back
  * up. A conversation is turns with gaps in them, and a volume that climbed in
@@ -47,6 +49,10 @@ function spawnMediaDuckHelper(): MediaDuckProcess | undefined {
     // terminal run, nowhere at all in a packaged one.
     stdio: ["pipe", "inherit", "ignore"],
   });
+  // A helper that died surfaces twice: as the exit event the controller
+  // handles, and as a broken pipe on this stream — which, with no listener,
+  // would take the whole app down for a volume that merely stayed put.
+  child.stdin?.on("error", () => undefined);
   // SAFETY: spawn returns ChildProcess; the helper's stdin protocol matches MediaDuckProcess.
   return child as MediaDuckProcess;
 }
@@ -95,7 +101,11 @@ export class MediaDuckController {
     this.#child = undefined;
     this.#ducked = false;
     child?.removeAllListeners();
-    child?.stdin?.end();
+    try {
+      child?.stdin?.end();
+    } catch {
+      // A pipe already broken is already closed, and EOF was the whole message.
+    }
   }
 
   #apply(): void {
@@ -107,7 +117,7 @@ export class MediaDuckController {
       const child = this.#ensureChild();
       if (!child) return;
       this.#ducked = true;
-      child.stdin?.write(`${MEDIA_DUCK_COMMAND.DUCK}\n`);
+      this.#write(child, MEDIA_DUCK_COMMAND.DUCK);
       return;
     }
     if (!this.#ducked) {
@@ -128,7 +138,22 @@ export class MediaDuckController {
 
   #restore(): void {
     this.#ducked = false;
-    this.#child?.stdin?.write(`${MEDIA_DUCK_COMMAND.RESTORE}\n`);
+    const child = this.#child;
+    // A restore that cannot be written is owed by no one: the helper it was
+    // meant for died, and its memory of the volumes died with it.
+    if (child) this.#write(child, MEDIA_DUCK_COMMAND.RESTORE);
+  }
+
+  /**
+   * Writes one command, treating a throw as the helper's death: the pipe is
+   * gone, so the state resets exactly as the exit listener would reset it.
+   */
+  #write(child: MediaDuckProcess, command: MediaDuckCommand): void {
+    try {
+      child.stdin?.write(`${command}\n`);
+    } catch {
+      this.#drop(child);
+    }
   }
 
   #ensureChild(): MediaDuckProcess | undefined {
@@ -140,19 +165,23 @@ export class MediaDuckController {
       child = undefined;
     }
     if (!child) return undefined;
-    this.#child = child;
-    // A helper that dies mid-duck takes its memory of the volumes with it, so
-    // there is nothing to say and no one to say it to: the state resets and
-    // the next exchange starts a fresh helper from the players' own levels.
-    const drop = () => {
-      if (this.#child !== child) return;
-      this.#child = undefined;
-      this.#ducked = false;
-      this.#clearReleaseTimer();
-    };
-    child.on("error", drop);
-    child.on("exit", drop);
-    return child;
+    const spawned = child;
+    this.#child = spawned;
+    spawned.on("error", () => this.#drop(spawned));
+    spawned.on("exit", () => this.#drop(spawned));
+    return spawned;
+  }
+
+  /**
+   * A helper that dies mid-duck takes its memory of the volumes with it, so
+   * there is nothing to say and no one to say it to: the state resets and
+   * the next exchange starts a fresh helper from the players' own levels.
+   */
+  #drop(child: MediaDuckProcess): void {
+    if (this.#child !== child) return;
+    this.#child = undefined;
+    this.#ducked = false;
+    this.#clearReleaseTimer();
   }
 
   #clearReleaseTimer(): void {
