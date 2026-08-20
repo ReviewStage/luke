@@ -1041,8 +1041,8 @@ function announcedFinish(id: string): AttentionSpeech {
     providerId: "claude-code",
     providerSessionId: id,
     disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
-    source: ATTENTION_SPEECH_SOURCE.STATUS_EDGE,
-    summary: `session: '${id}'; event: finished`,
+    source: ATTENTION_SPEECH_SOURCE.NOTICE_REQUEST,
+    summary: `${id} finished.`,
     decidedAt: Date.now(),
   };
 }
@@ -1780,7 +1780,7 @@ function announcementSpeech(summary: string) {
     providerId: "claude-code",
     providerSessionId: "session-a",
     disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
-    source: ATTENTION_SPEECH_SOURCE.STATUS_EDGE,
+    source: ATTENTION_SPEECH_SOURCE.NOTICE_REQUEST,
     summary,
     decidedAt: 1_800_000_000_000,
   };
@@ -2832,15 +2832,13 @@ test("a spoken ask for a new workspace is carried, and an unlisted project is re
   await armDeveloperTurn(context);
   assert.equal(contextItems(context, "[workspace projects").length, 1);
 
-  // The default provider is part of the same answer, so choosing one is news
-  // even while the list itself has not moved.
+  // Changing a default does not change the context payload.
   const sentBeforeDefault = context.sent.length;
   context.session.updateWorkspaceProjects([project], "conductor");
   context.session.stopSpeaking();
   await armDeveloperTurn(context);
   const chosen = contextItems(context, "[workspace projects", sentBeforeDefault);
-  assert.equal(chosen.length, 1);
-  assert.match(itemText(chosen[0]), /default provider for new workspaces is Conductor/);
+  assert.equal(chosen.length, 0);
 
   const sentBefore = context.sent.length;
 
@@ -3704,8 +3702,8 @@ test("an announcement's caption names its session; a conversation's names none",
     providerId: "claude-code",
     providerSessionId: "session-a",
     disposition: ATTENTION_DISPOSITION.SPEAK_DURING_TURN,
-    source: ATTENTION_SPEECH_SOURCE.STATUS_EDGE,
-    summary: "session: 'checkout'; event: finished",
+    source: ATTENTION_SPEECH_SOURCE.NOTICE_REQUEST,
+    summary: "Checkout finished.",
     decidedAt: 1_800_000_000_000,
   });
   context.emit({
@@ -4232,7 +4230,7 @@ test("the conversation is told which issues the tracker lists", async () => {
   const [contextEvent] = contextItems(context, "[observed issue tracker");
   assert.ok(contextEvent, "the issue roster was sent");
   assert.match(itemText(contextEvent), /LUKE-123/);
-  assert.match(itemText(contextEvent), /states: Done/);
+  assert.match(itemText(contextEvent), /states=Done/);
 
   // An unchanged roster is not resent, however many turns go by.
   const sentBefore = context.sent.length;
@@ -4533,7 +4531,7 @@ test("a speak-only call reads a notice out but refuses a typed ask", async () =>
       providerId: "claude-code",
       providerSessionId: "session-a",
       disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
-      source: ATTENTION_SPEECH_SOURCE.STATUS_EDGE,
+      source: ATTENTION_SPEECH_SOURCE.NOTICE_REQUEST,
       summary: "Claude Code finished checkout-service.",
       decidedAt: 1_800_000_000_000,
     }),

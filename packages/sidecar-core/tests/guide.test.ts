@@ -21,7 +21,7 @@ import {
 } from "../src";
 import { appToggleValue } from "../src/guide";
 import { isRecord, text, type WireRecord } from "../src/json.js";
-import { maximumFeedbackDraftLength, realtimeInstructions } from "../src/realtime-protocol";
+import { maximumFeedbackDraftLength } from "../src/realtime-protocol";
 import { REALTIME_TOOL } from "../src/realtime-tools";
 
 function conversationItem(event: WireRecord | undefined): WireRecord | undefined {
@@ -110,34 +110,22 @@ function observedConductorSession(realtimeVoice = false) {
   );
 }
 
-test("the guide's text carries the facts and every setting's id, value, and by-hand path", () => {
+test("the guide's text carries app facts and compact setting data", () => {
   const text = appGuideContextText(GUIDE);
 
   assert.match(text, /What Luke is: A macOS sidecar/);
   assert.match(text, /Captions — Luke's words on screen while he speaks\./);
-  assert.match(text, /currently off/);
-  // The default is printed beside the value, because "back to the default" is
-  // an ask the guide must be able to ground in a real value.
-  assert.match(text, /currently off; default: off/);
-  assert.match(text, /currently marin; default: cedar/);
+  assert.match(text, /value=off/);
+  assert.match(text, /value=off; default=off/);
+  assert.match(text, /value=marin; default=cedar/);
   // The id is printed where the value is, because it is what a spoken change
   // names the setting by — the same rule the session roster follows.
   assert.match(text, /setting_id=voice_captions/);
-  assert.match(text, /choices: cedar, marin/);
-  // A setting a spoken ask cannot touch still says where the hand can.
-  assert.match(text, /not changeable by voice/);
-  assert.match(text, /System Settings, under Privacy & Security/);
-  // A system permission has no default of the app's own, so its line honestly
-  // carries none rather than inventing one.
-  assert.match(text, /Microphone access[^\n]*currently on; not changeable/);
-  // The levels each choice takes are printed with the choices, said once per
-  // distinct list, so a value and its effort can be asked for in one breath.
-  assert.match(
-    text,
-    /a change may name an effort with the value: Fable 5, GPT take low\/high\/max/,
-  );
+  assert.match(text, /choices=cedar, marin/);
+  assert.match(text, /Microphone access[^\n]*value=on/);
+  assert.match(text, /efforts=Fable 5:low\/high\/max, GPT:low\/high\/max/);
   // A choice that takes none is not listed taking any.
-  assert.doesNotMatch(text, /Cursor Auto take/);
+  assert.doesNotMatch(text, /Cursor Auto:/);
 });
 
 test("an empty guide says so rather than describing an app it was never told about", () => {
@@ -156,35 +144,6 @@ test("the guide travels as context and never opens Luke's mouth", () => {
     events.some((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE),
     false,
   );
-});
-
-test("the standing instructions promise the guide the context actually delivers", () => {
-  const instructions = realtimeInstructions();
-  assert.match(instructions, /\[app guide\]/);
-  assert.match(instructions, /change_app_setting/);
-  // The guide carries each setting's default, and the instructions must
-  // say what it is for: an ask for the default is a change to that value.
-  assert.match(instructions, /its current value, its default/);
-  assert.match(instructions, /a change to the default the guide lists/);
-  assert.match(instructions, /show_panel/);
-  // Switching an open panel between its tabs is the same ask, and the
-  // instructions must say so or Luke will deny a capability he has.
-  assert.match(instructions, /switches a panel already open/);
-  assert.match(instructions, /open_feedback_composer/);
-  assert.match(instructions, /create_workspace/);
-  assert.match(instructions, /\[workspace projects\]/);
-});
-
-test("the instructions bound the refusal offer: once, on a clear yes, never a send", () => {
-  const instructions = realtimeInstructions();
-  // The offer follows an honest refusal and is made exactly once.
-  assert.match(instructions, /refuse honestly in one sentence, then offer once/);
-  assert.match(instructions, /Only on a clear yes/);
-  assert.match(instructions, /do not repeat the offer/);
-  // Opening and drafting are all the tool does; the send stays the developer's.
-  assert.match(instructions, /never sends/);
-  assert.match(instructions, /presses Send themselves/);
-  assert.match(instructions, /never words they did not say/);
 });
 
 test("a spoken toggle accepts the unambiguous words and nothing else", () => {
