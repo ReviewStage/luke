@@ -2844,10 +2844,16 @@ export function App(): React.JSX.Element {
   // unnarrowed, and the next session to enter that state would narrow the list
   // back down to it with nothing having been pressed. Setting state here rather
   // than from an effect is what keeps that from being drawn first and corrected
-  // after. Only once the roster has actually been read, though: before the
-  // first reading an empty list says "not looked yet", and a selection
-  // restored from the store must not be judged stale against it.
-  if (sessionsSettled && !sameSessionFilters(list.filters, sessionView.filters)) {
+  // after. Only a roster actually read and holding sessions can prove a
+  // selection stale, though: before the first reading an empty list says "not
+  // looked yet", and an empty roster hides nothing behind a chip — either way
+  // a selection restored from the store is left to stand rather than wiped
+  // against a list that has nothing to show under any view.
+  if (
+    sessionsSettled &&
+    visibleSessions.length > 0 &&
+    !sameSessionFilters(list.filters, sessionView.filters)
+  ) {
     setSessionView({ ...sessionView, filters: list.filters });
   }
   // The sheet exists only while there is something for it to decide, and its
