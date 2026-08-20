@@ -394,14 +394,17 @@ export function NotchWings({
             }
           >
             <span className="count-value" aria-hidden="true" ref={countValueElement}>
-              {accountGated ? "Sign in" : rosterLoading ? "…" : tallyValue(tally)}
+              {/* Blank while checking: the accessible label already says so,
+                  and a drawn placeholder poses as a count that is not there
+                  yet. */}
+              {accountGated ? "Sign in" : rosterLoading ? null : tallyValue(tally)}
             </span>
             <span className="count-caption" aria-hidden="true" ref={countCaptionElement}>
               {/* No caption while signed out: the two words are the label
                   entire, and with nothing beside them the fit keeps their
                   natural size inside the peek's side. Nor while checking —
-                  the ellipsis is the whole report until there is a count to
-                  put words beside. */}
+                  the badge stays blank until there is a count to put words
+                  beside. */}
               {accountGated || rosterLoading ? null : tallyCaption(tally)}
             </span>
           </span>
