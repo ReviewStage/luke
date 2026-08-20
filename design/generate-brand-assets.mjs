@@ -148,6 +148,14 @@ const zGlyph = ({ x, y, size, start }) => {
   );
 };
 
+// How faded a hushed face draws, everywhere the face draws: nothing
+// corner-sized reads at menu-bar scale, so the state is carried by the ink
+// itself — the grayed-out idiom every UI says "present but unavailable"
+// with, over eyes that stay open and blinking. A `dim` on a motion reaches
+// both outputs from this one number, so the app's face and the standalone
+// SVG cannot disagree about how quiet the hush looks.
+const HUSH_DIM = 0.45;
+
 // Composes the face. opts: { eyes, extra } override the defaults.
 function face(opts = {}) {
   const [c1, c2] = eyeXs();
@@ -360,6 +368,22 @@ const MOTIONS = {
     ],
     eyes: { kind: "lids" },
     sleepZ: true,
+  },
+  // Awake but voiceless: the day's spoken allowance is spent, and the sidecar
+  // keeps watching. The eyes stay open on a slow single blink — a hush that
+  // closed them would read as a sidecar that stopped watching, which is the
+  // one thing this state must not say — the head holds a shade of the
+  // sleeper's droop, and the whole face dims to the grayed-out idiom's ink.
+  hushed: {
+    moment: "voice spent for the day (awake, grayed out)",
+    layers: [{ type: "rotate", pivot: [120, 150], hold: 4 }],
+    eyes: {
+      kind: "blink",
+      factors: [1, 1, 0.1, 1, 1],
+      keyTimes: [0, 0.6, 0.64, 0.68, 1],
+      dur: 5.2,
+    },
+    dim: HUSH_DIM,
   },
   // One full pirouette with an ease-out landing, then a long rest.
   refresh: {
@@ -714,6 +738,7 @@ function motionSvg(motion) {
     body = wrapAnim(body, animT(layer.type, values, layer.dur, opts));
   }
   if (motion.sleepZ) body += SLEEP_Z.map(zGlyph).join("");
+  if (motion.dim !== undefined) body = `<g opacity="${motion.dim}">${body}</g>`;
   return body;
 }
 
@@ -772,6 +797,12 @@ function motionCss(name, motion) {
     blocks.push(block);
     rules.push(rule);
   };
+
+  // A dim is a state, not an animation: it holds through pauses and reduced
+  // motion, which is exactly why it can carry the hush where a loop cannot.
+  if (motion.dim !== undefined) {
+    rules.push(`${selector} {\n  opacity: ${motion.dim};\n}`);
+  }
 
   motion.layers.forEach((layer, index) => {
     const target = `${selector} .luke-face-layer-${index + 1}`;

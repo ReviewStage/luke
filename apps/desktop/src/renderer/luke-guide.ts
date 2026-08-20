@@ -255,7 +255,12 @@ function voiceKeyFact(settings: AppSettings, voiceAvailable: boolean): AppGuideF
       `${openai.displayName} (${connectionWord(source)}). ` +
       (hosted
         ? `Voice and session review run on the signed-in Luke account's daily allowance. A ` +
-          `key of the developer's own runs them unmetered instead, billed by OpenAI. `
+          `key of the developer's own runs them unmetered instead, billed by OpenAI. When a ` +
+          `day's allowance is spent, watching continues unmetered and only voice pauses until ` +
+          `the reset: the face beside the housing stays awake but grays out to half ink, ` +
+          `and a caption where replies land says when voice ` +
+          `returns — once at the ` +
+          `run-out, again whenever the composer is reached for or an ask is refused. `
         : source === CREDENTIAL_SOURCE.NONE
           ? `Signing in — or connecting a key — is what lets Luke speak and review sessions. `
           : `Voice and session review run on this key: no daily limit, nothing through Luke's ` +

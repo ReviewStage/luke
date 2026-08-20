@@ -47,9 +47,10 @@ export function focusAskField(): () => void {
 
 /**
  * Carries one typed ask to the conversation. Answers with why it could not be
- * sent, or with nothing when it was — the reply itself is spoken, so a sent
- * ask needs no confirmation line under a field the answer is about to land
- * beside.
+ * sent, or with nothing when it was. The reason has already been drawn by the
+ * conversation itself — on the caption strip, where the reply would have
+ * landed — so the composer reads the answer only to decide whether the draft
+ * stays.
  */
 export type AskHandler = (text: string) => Promise<string | undefined>;
 
@@ -57,21 +58,27 @@ export type AskHandler = (text: string) => Promise<string | undefined>;
  * Why an ask could not be opened, said in one sentence the field can show.
  *
  * The refusal is diagnosed from the same fact the settings rows draw — how
- * far the voice loop got — so the sentence under the field and the rows in
+ * far the voice loop got — so the sentence on the strip and the rows in
  * settings can never tell two different stories. The microphone permission
  * has no say here: typing opens no capture device, and the reply arrives on
  * the call's receiving half, so a typed ask goes whether or not the system
  * would let a press capture. A failure's own message is not repeated here:
  * it lands on the caption strip directly below, where the reply would have.
+ *
+ * `quotaSpent` is the one unavailability with different words: a signed-in
+ * account whose free day is used up needs neither way in, it needs tomorrow.
+ * The sentence is the same one the settings meters stand behind, minted by
+ * the caller from the voice service's own diagnostics.
  */
-export function askRefusal(status: RealtimeStatus): string {
+export function askRefusal(status: RealtimeStatus, quotaSpent?: string): string {
   if (status === REALTIME_STATUS.LISTENING) {
     return "The microphone is open. Finish saying it.";
   }
   if (status === REALTIME_STATUS.UNAVAILABLE) {
     // Both ways in, because naming only the key would send a signed-in
-    // developer to buy one they do not need.
-    return "Sign in, or connect an OpenAI key, in Settings.";
+    // developer to buy one they do not need — and a spent allowance names
+    // itself, because its fix is tomorrow rather than either.
+    return quotaSpent ?? "Sign in, or connect an OpenAI key, in Settings.";
   }
   if (status === REALTIME_STATUS.CONNECTING) {
     return "Still connecting. Ask again in a moment.";
@@ -92,9 +99,11 @@ export function askRefusal(status: RealtimeStatus): string {
  *
  * Sending is deliberately quiet. A sent ask clears the field and nothing else:
  * the reply beginning is the confirmation, and a line saying "sent" would sit
- * between the question and its answer. Only a refusal earns a sentence, and it
- * leaves the draft in place, because a refused ask is still the developer's
- * words.
+ * between the question and its answer. Only a refusal earns a sentence, and
+ * that sentence is not the pill's to draw: the conversation lands it on the
+ * caption strip directly below, in the notice tone — the reply's own place,
+ * so a refusal reads like every other answer. The draft stays through one,
+ * because a refused ask is still the developer's words.
  *
  * The field wraps rather than scrolls sideways: an ask long enough to re-read
  * is worth seeing whole, so the pill grows a line at a time — each new line an
@@ -127,7 +136,6 @@ export function AskLuke({
 }): React.JSX.Element {
   const [draft, setDraft] = useState("");
   const [asking, setAsking] = useState(false);
-  const [refusal, setRefusal] = useState<string>();
   const field = useRef<HTMLTextAreaElement | null>(null);
   /**
    // SAFETY: The preceding check establishes the asserted contract.
@@ -142,13 +150,12 @@ export function AskLuke({
     if (!text || askInFlight.current) return;
     askInFlight.current = true;
     setAsking(true);
-    setRefusal(undefined);
     try {
+      // A refusal keeps the draft — a refused ask is still the developer's
+      // words — and needs nothing drawn here: the conversation has already
+      // landed the sentence on the caption strip below.
       const reason = await ask(text);
-      if (reason) {
-        // The draft stays: a refused ask is still the developer's words.
-        setRefusal(reason);
-      } else {
+      if (!reason) {
         // The ask has become the conversation's; the field empties for the
         // next one, and the caret stays for it.
         setDraft("");
@@ -185,11 +192,7 @@ export function AskLuke({
           spellCheck={false}
           rows={1}
           value={draft}
-          onChange={(event) => {
-            // Typing again answers the refusal, so the refusal goes.
-            setRefusal(undefined);
-            setDraft(event.target.value);
-          }}
+          onChange={(event) => setDraft(event.target.value)}
           onFocus={() => {
             // The panel can be showing without its window being key, and a
             // field that cannot be typed into is worse than no field.
@@ -235,7 +238,6 @@ export function AskLuke({
           <SendIcon />
         </button>
       </form>
-      {refusal ? <small className="ask-luke-refusal">{refusal}</small> : null}
     </div>
   );
 }

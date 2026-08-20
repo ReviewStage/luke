@@ -30,6 +30,18 @@ test("no refusal sends a typed ask after the microphone permission", () => {
   }
 });
 
+test("a spent free day is named as itself, never as a missing way in", () => {
+  // A signed-in account whose allowance is used up needs neither a key nor a
+  // sign-in, it needs tomorrow — sent to Settings, the spent day reads as a
+  // breakage. The sentence is the caller's, minted from the voice service's
+  // own diagnostics, so the field and the settings meters tell one story.
+  const spent = "Today's voice is spent. Back at 5:00 PM.";
+  assert.equal(askRefusal(REALTIME_STATUS.UNAVAILABLE, spent), spent);
+  // The spent sentence stands in only for unavailability — every other
+  // refusal keeps its own diagnosis.
+  assert.match(askRefusal(REALTIME_STATUS.LISTENING, spent), /microphone is open/i);
+});
+
 test("a failure the loop cannot name still answers with something to do", () => {
   assert.ok(askRefusal(REALTIME_STATUS.READY).length > 0);
 });

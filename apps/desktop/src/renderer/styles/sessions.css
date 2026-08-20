@@ -1179,14 +1179,3 @@ html[data-keyboard="true"] button.row-main:focus-visible {
     opacity: 0.45;
   }
 }
-
-/* Why the ask could not go, said once under the pill and replaced by typing.
-   A sent ask draws nothing here: the reply beginning is the confirmation. */
-.ask-luke-refusal {
-  overflow: hidden;
-  padding: 0 14px;
-  color: var(--text-tertiary);
-  font-size: 10px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}

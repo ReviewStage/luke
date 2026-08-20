@@ -13,6 +13,21 @@
  */
 
 /**
+ * What kind of words the caption strip is carrying, which is what colours
+ * them. Spoken words are the strip's own job; a failure borrows it in the
+ * error red; a notice borrows it in the attention orange, because what it
+ * reports — today's voice allowance running out — is a state with its own
+ * return, not a fault.
+ */
+export const CAPTION_TONE = {
+  WORDS: "words",
+  ERROR: "error",
+  NOTICE: "notice",
+} as const;
+
+export type CaptionTone = (typeof CAPTION_TONE)[keyof typeof CAPTION_TONE];
+
+/**
  * What the strip is showing, snapshotted whole. The hold keeps a snapshot
  * rather than reading each part's own last-drawn value, because the parts
  * outlive each other separately: a reply that drew only chips must not hold
@@ -22,8 +37,8 @@
 export interface SpokenStripContent {
   /** The caption block's words, absent while only chips are drawn. */
   texts: readonly string[] | undefined;
-  /** Whether the words are a failure borrowing the caption's strip. */
-  isError: boolean;
+  /** Whose words they are: Luke's own, a failure's, or a notice's. */
+  tone: CaptionTone;
   /** Whether the chip band is drawn. */
   chips: boolean;
 }
@@ -52,7 +67,7 @@ export function stripHoldNext(input: {
 }
 
 function stripContentEquals(a: SpokenStripContent, b: SpokenStripContent): boolean {
-  if (a.isError !== b.isError || a.chips !== b.chips) return false;
+  if (a.tone !== b.tone || a.chips !== b.chips) return false;
   if (a.texts === undefined || b.texts === undefined) return a.texts === b.texts;
   return (
     a.texts.length === b.texts.length && a.texts.every((text, index) => text === b.texts?.[index])

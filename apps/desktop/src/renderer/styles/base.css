@@ -1413,8 +1413,15 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 /* A voice failure borrows the caption's strip — same box, same travel — in
    the `.error-message` red, because it is a fault being reported rather than
    words being spoken. */
-.voice-caption[data-error="true"] .voice-caption-text {
+.voice-caption[data-tone="error"] .voice-caption-text {
   color: #ff8c8c;
+}
+
+/* A state notice borrows the strip more quietly, in the attention orange the
+   session rows warn in: the one thing it reports — today's voice allowance
+   running out — has its own return, so it must not wear a fault's red. */
+.voice-caption[data-tone="notice"] .voice-caption-text {
+  color: var(--state-attention);
 }
 
 /* Volume hint ------------------------------------------------------------- */

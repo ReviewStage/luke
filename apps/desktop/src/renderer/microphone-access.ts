@@ -1,4 +1,4 @@
-import type { HostedQuota } from "@sidecar/core";
+import { type HostedQuota, REALTIME_MINT_OUTCOME, type RealtimeDiagnostics } from "@sidecar/core";
 import { type MicrophoneStatus, VOICE_SOURCE, type VoiceSource } from "../shared/contracts";
 
 /**
@@ -41,6 +41,25 @@ export function hostedVoiceSpentNote(resetsIn?: string): string {
 }
 
 /**
+ * The spent sentence for the moment of use — a typed ask refused, a talk key
+ * pressed against a call that will not open — or nothing while the allowance
+ * is not what is missing. This is what keeps a spent day from reading as a
+ * breakage: the settings page already says it, but nobody mid-question is
+ * looking there. A refusal dated by its own expired quota describes an
+ * allowance that no longer exists, so it reads as nothing and the ordinary
+ * refusal words stand.
+ */
+export function voiceQuotaSpentNote(
+  diagnostics: RealtimeDiagnostics | undefined,
+  now: number,
+): string | undefined {
+  if (diagnostics?.lastOutcome !== REALTIME_MINT_OUTCOME.QUOTA_EXHAUSTED) return undefined;
+  if (diagnostics.quota === undefined) return hostedVoiceSpentNote();
+  const quota = currentQuota(diagnostics.quota, now);
+  return quota && hostedVoiceSpentNote(quotaResetsWhen(quota.resetsAt, now));
+}
+
+/**
  * The fresher of two readings of the same meter, decided from the readings
  * themselves: `resetsAt` names the day, so a later one is a later day, and
  * within one day `remaining` only ever falls — the usage read and the quota a
@@ -65,6 +84,25 @@ export function fresherQuota(a?: HostedQuota, b?: HostedQuota): HostedQuota | un
  */
 export function currentQuota(quota: HostedQuota | undefined, now: number): HostedQuota | undefined {
   return quota && quota.resetsAt > now ? quota : undefined;
+}
+
+/**
+ * The freshest current reading of the hosted voice meter, or nothing while
+ * none stands: voice on a key or off entirely has no meter, a reading past
+ * its own reset describes an allowance that no longer exists, and with no
+ * reading at all there is nothing honest to say. The two sources are the
+ * day's usage read and the quota the last mint carried — the mint stores one
+ * on success and refusal alike — reconciled by the same freshness rule the
+ * settings meters use, so every surface reads one meter.
+ */
+export function hostedVoiceReading(input: {
+  hosted: boolean;
+  usage: HostedQuota | undefined;
+  minted: HostedQuota | undefined;
+  now: number;
+}): HostedQuota | undefined {
+  if (!input.hosted) return undefined;
+  return currentQuota(fresherQuota(input.usage, input.minted), input.now);
 }
 
 /**
