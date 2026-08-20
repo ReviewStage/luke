@@ -67,7 +67,7 @@ test("sign out closes capabilities, clears storage, broadcasts, then revokes", a
 test("refresh keeps a valid stored account signed in without rewriting it", async () => {
   const subject = manager({ stored: STORED });
   subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
-  await subject.instance.refresh();
+  await subject.instance.refreshOnce();
   assert.equal(subject.instance.snapshot.status, ACCOUNT_STATUS.SIGNED_IN);
   assert.equal(subject.stored()?.accessToken, "access");
 });

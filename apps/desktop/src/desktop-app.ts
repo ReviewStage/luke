@@ -262,7 +262,7 @@ let trackedIssues: readonly TrackedIssue[] | undefined;
 // registry or the roster. Its meetings answer one question — is the user in a
 // meeting now — and the answer gates only when announcements are spoken.
 const googleCalendar = new GoogleCalendarReader({
-  readAccounts: () => settingsStore.readCalendarAccounts(),
+  readAccounts: () => Effect.promise(() => settingsStore.readCalendarAccounts()),
 });
 // The sign-in behind the calendar row: it opens Google's own consent page in
 // the user's browser and hands back one grant, which the connect handler
@@ -364,6 +364,7 @@ const feedbackDelivery = feedbackDeliveryFromEnvironment();
 const updateService = new UpdateService({
   currentVersion: app.getVersion(),
   onChange: (update) => panels.broadcast(channels.updateChanged, update),
+  runEffect: runDesktopEffect,
 });
 // Counts how Luke's own features are used. It lives here rather than in a
 // renderer because every emit site is already in this process and the timer
@@ -373,8 +374,10 @@ const productEvents = new ProductEventSender({
   serviceBaseUrl: HOSTED_SERVICE_BASE_URL,
   appVersion: app.getVersion(),
   sends: runMode.sendsNetwork,
-  readAccessToken: async () => (await settingsStore.readAccount())?.accessToken,
-  refreshAccount: accountSession.refreshOnce,
+  readAccessToken: () =>
+    Effect.promise(async () => (await settingsStore.readAccount())?.accessToken),
+  refreshAccount: () => Effect.promise(() => accountSession.refreshOnce()),
+  runEffect: runDesktopEffect,
 });
 // One narrow function rather than the service itself, so an IPC module can
 // count an act without being handed anything it could flush, stop, or read.
@@ -830,9 +833,8 @@ function registerIpc(): void {
     registerSettingHandler,
     settingsStore,
     adapterForCredential,
-    refreshAdapter: async (adapter) => {
-      await sessionRegistry.refresh(adapter);
-    },
+    refreshAdapter: (adapter) =>
+      runDesktopEffect(sessionRegistry.refresh(adapter).pipe(Effect.asVoid)),
     refreshIssues: () => void issueObservationLoop.refresh(),
     applyVoiceCredential,
     hotkeys,
@@ -941,7 +943,7 @@ function registerIpc(): void {
       if (!runMode.sendsNetwork) {
         return { delivered: false, reason: "A fixture run sends nothing." };
       }
-      return feedbackDelivery.deliver(parsed);
+      return runDesktopEffect(feedbackDelivery.deliver(parsed));
     },
   );
 
@@ -1007,7 +1009,7 @@ async function applyLocalSessionHooks(): Promise<void> {
     orderedRegistrations.map(async ({ adapter, registerObservationHook }) => {
       if (!registerObservationHook) return;
       try {
-        await registerObservationHook();
+        await runDesktopEffect(registerObservationHook());
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         process.stderr.write(
@@ -1334,7 +1336,7 @@ async function releaseHeldNotices(): Promise<void> {
  */
 async function refreshCalendarMeetingsAsync(generation: number): Promise<void> {
   try {
-    const observations = await googleCalendar.observe();
+    const observations = await runDesktopEffect(googleCalendar.observe());
     // A pass that outlived its stop is no longer ours to report: the stop
     // cleared the meetings, the calendars, and the quiet, and letting a read
     // that was already in flight land would put the calendar — and a sleeping

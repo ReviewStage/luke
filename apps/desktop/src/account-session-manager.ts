@@ -7,6 +7,7 @@ import {
   accountFailureAction,
 } from "./account-gate";
 import {
+  type AccountLoopback,
   isSignInCancellation,
   SIGN_IN_CANCELLED_MESSAGE,
   startAccountLoopback,
@@ -169,9 +170,11 @@ export class AccountSessionManager {
       cancelled = true;
     };
     this.#signInRunning = (async () => {
-      let loopback: Awaited<ReturnType<typeof startAccountLoopback>> | undefined;
+      let loopback: AccountLoopback | undefined;
       try {
-        const activeLoopback = await startAccountLoopback({ providerHint: provider });
+        const activeLoopback = await this.#options.runEffect(
+          startAccountLoopback({ providerHint: provider }),
+        );
         loopback = activeLoopback;
         this.#cancelSignIn = () => activeLoopback.cancel();
         if (cancelled) activeLoopback.cancel();
@@ -182,7 +185,7 @@ export class AccountSessionManager {
             codeChallenge: activeLoopback.codeChallenge,
           }),
         );
-        const code = await activeLoopback.waitForCode;
+        const code = await this.#options.runEffect(activeLoopback.waitForCode);
         await this.#options.runEffect(
           withIssuedAccountTokens({
             issue: () =>
@@ -221,7 +224,7 @@ export class AccountSessionManager {
         throw error;
       } finally {
         this.#cancelSignIn = undefined;
-        await loopback?.close();
+        if (loopback) await this.#options.runEffect(loopback.close());
         this.#signInRunning = undefined;
       }
     })();

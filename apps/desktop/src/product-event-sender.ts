@@ -9,6 +9,8 @@ import {
   productEventFromWire,
   text,
 } from "@sidecar/core";
+import { Effect } from "effect";
+import { Http } from "./services/http";
 
 const PRODUCT_EVENT_DEFAULTS = {
   REQUEST_TIMEOUT_MS: 10_000,
@@ -32,8 +34,6 @@ const UNAUTHORIZED_STATUS = 401;
 /** The one discriminator the day marker dedups on; the day itself is the key. */
 const DAY_ACTIVE_KEY = "day";
 
-type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
-
 export interface ProductEventSenderOptions {
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
@@ -41,13 +41,13 @@ export interface ProductEventSenderOptions {
   appVersion: string;
   /** `runMode.sendsNetwork`. False makes every record a no-op. */
   sends: boolean;
-  readAccessToken: () => Promise<string | undefined>;
-  refreshAccount: () => Promise<void>;
-  fetch?: FetchLike;
+  readAccessToken: () => Effect.Effect<string | undefined>;
+  refreshAccount: () => Effect.Effect<void>;
   now?: () => number;
   requestTimeoutMs?: number;
   flushIntervalMs?: number;
   queueLimit?: number;
+  runEffect: <A, E>(effect: Effect.Effect<A, E, unknown>) => Promise<A>;
 }
 
 function withoutTrailingSlash(value: string): string {
@@ -76,13 +76,13 @@ export class ProductEventSender {
   readonly #endpoint: string;
   readonly #appVersion: string;
   readonly #sends: boolean;
-  readonly #readAccessToken: () => Promise<string | undefined>;
-  readonly #refreshAccount: () => Promise<void>;
-  readonly #fetch: FetchLike;
+  readonly #readAccessToken: () => Effect.Effect<string | undefined>;
+  readonly #refreshAccount: () => Effect.Effect<void>;
   readonly #now: () => number;
   readonly #requestTimeoutMs: number;
   readonly #flushIntervalMs: number;
   readonly #queueLimit: number;
+  readonly #runEffect: ProductEventSenderOptions["runEffect"];
   readonly #queue: ProductEvent[] = [];
   /** Nested rather than an interpolated key: the name and the discriminator stay apart. */
   readonly #recordedDays = new Map<ProductEventName, Map<string, string>>();
@@ -99,7 +99,7 @@ export class ProductEventSender {
     this.#sends = options.sends;
     this.#readAccessToken = options.readAccessToken;
     this.#refreshAccount = options.refreshAccount;
-    this.#fetch = options.fetch ?? ((input, init) => fetch(input, init));
+    this.#runEffect = options.runEffect;
     this.#now = options.now ?? Date.now;
     this.#requestTimeoutMs = positiveInteger(
       options.requestTimeoutMs,
@@ -219,7 +219,7 @@ export class ProductEventSender {
    * makes.
    */
   flush(): Promise<void> {
-    this.#inFlight ??= this.#send().then(
+    this.#inFlight ??= this.#runEffect(this.#send()).then(
       () => {
         this.#inFlight = undefined;
       },
@@ -234,38 +234,44 @@ export class ProductEventSender {
     return this.#sends && this.#sharing;
   }
 
-  async #send(): Promise<void> {
-    if (this.#queue.length === 0) return;
-    const token = await this.#readAccessToken();
-    // Signed out is temporary and nobody's fault, so the queue waits rather
-    // than being spent against a request that cannot authenticate.
-    if (!token) return;
-    // Taken only once a request will actually be made, and gone whatever
-    // becomes of it.
-    const events = this.#queue.splice(0, PRODUCT_EVENT_BATCH_LIMIT);
-    let response = await this.#post(token, events);
-    if (response?.status === UNAUTHORIZED_STATUS) {
-      await this.#refreshAccount().catch(() => undefined);
-      const refreshed = await this.#readAccessToken();
-      if (refreshed && refreshed !== token) {
-        response = await this.#post(refreshed, events);
+  #send(): Effect.Effect<void, unknown, Http> {
+    return Effect.gen(this, function* () {
+      if (this.#queue.length === 0) return;
+      const token = yield* this.#readAccessToken();
+      // Signed out is temporary and nobody's fault, so the queue waits rather
+      // than being spent against a request that cannot authenticate.
+      if (!token) return;
+      // Taken only once a request will actually be made, and gone whatever
+      // becomes of it.
+      const events = this.#queue.splice(0, PRODUCT_EVENT_BATCH_LIMIT);
+      let response = yield* this.#post(token, events);
+      if (response?.status === UNAUTHORIZED_STATUS) {
+        yield* this.#refreshAccount().pipe(Effect.catchAll(() => Effect.void));
+        const refreshed = yield* this.#readAccessToken();
+        if (refreshed && refreshed !== token) {
+          response = yield* this.#post(refreshed, events);
+        }
       }
-    }
+    });
   }
 
-  async #post(token: string, events: readonly ProductEvent[]): Promise<Response | undefined> {
-    try {
-      return await this.#fetch(this.#endpoint, {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${token}`,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({ events }),
-        signal: AbortSignal.timeout(this.#requestTimeoutMs),
-      });
-    } catch {
-      return undefined;
-    }
+  #post(
+    token: string,
+    events: readonly ProductEvent[],
+  ): Effect.Effect<Response | undefined, never, Http> {
+    return Effect.gen(this, function* () {
+      const http = yield* Http;
+      return yield* http
+        .request(this.#endpoint, {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${token}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ events }),
+          signal: AbortSignal.timeout(this.#requestTimeoutMs),
+        })
+        .pipe(Effect.catchAll(() => Effect.succeed(undefined)));
+    });
   }
 }

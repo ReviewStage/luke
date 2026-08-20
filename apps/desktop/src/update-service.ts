@@ -1,4 +1,6 @@
 import { isNewerVersion, parseReleaseVersion, text } from "@sidecar/core";
+import { Effect } from "effect";
+import { Http } from "./services/http";
 import { UPDATE_STATUS, type UpdateSnapshot } from "./shared/contracts";
 import { unparsedWire, type WireBoundaryInput, wireRecord } from "./wire-boundary";
 
@@ -32,17 +34,15 @@ const UPDATE_CHECK_DEFAULTS = {
   INTERVAL_MS: 6 * 60 * 60 * 1000,
 } as const;
 
-type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
-
 export interface UpdateServiceOptions {
   // SAFETY: The preceding check establishes the asserted contract.
   /** The running build's version, as the packaged app reports it. */
   currentVersion: string;
   /** Every state the service moves through, for the broadcast to carry. */
   onChange: (update: UpdateSnapshot) => void;
-  fetch?: FetchLike;
   requestTimeoutMs?: number;
   intervalMs?: number;
+  runEffect: <A, E>(effect: Effect.Effect<A, E, unknown>) => Promise<A>;
 }
 
 /**
@@ -58,9 +58,9 @@ export interface UpdateServiceOptions {
 export class UpdateService {
   readonly #currentVersion: string;
   readonly #onChange: (update: UpdateSnapshot) => void;
-  readonly #fetch: FetchLike;
   readonly #requestTimeoutMs: number;
   readonly #intervalMs: number;
+  readonly #runEffect: UpdateServiceOptions["runEffect"];
   #snapshot: UpdateSnapshot;
   #inFlight: Promise<UpdateSnapshot> | undefined;
   #timer: NodeJS.Timeout | undefined;
@@ -68,9 +68,9 @@ export class UpdateService {
   constructor(options: UpdateServiceOptions) {
     this.#currentVersion = options.currentVersion;
     this.#onChange = options.onChange;
-    this.#fetch = options.fetch ?? ((input, init) => fetch(input, init));
     this.#requestTimeoutMs = options.requestTimeoutMs ?? UPDATE_CHECK_DEFAULTS.REQUEST_TIMEOUT_MS;
     this.#intervalMs = options.intervalMs ?? UPDATE_CHECK_DEFAULTS.INTERVAL_MS;
+    this.#runEffect = options.runEffect;
     this.#snapshot = { status: UPDATE_STATUS.UNKNOWN, currentVersion: this.#currentVersion };
   }
 
@@ -84,7 +84,7 @@ export class UpdateService {
    * row's button land on the same read.
    */
   check(): Promise<UpdateSnapshot> {
-    this.#inFlight ??= this.#read()
+    this.#inFlight ??= this.#runEffect(this.#read())
       .catch((error): UpdateSnapshot => {
         // A throw anywhere in the read must not leave a dead check parked in
         // flight, where every later ask would reuse the failure and the row
@@ -120,46 +120,53 @@ export class UpdateService {
     this.#timer = undefined;
   }
 
-  async #read(): Promise<UpdateSnapshot> {
-    this.#move({ status: UPDATE_STATUS.CHECKING, currentVersion: this.#currentVersion });
-    let response: Response;
-    try {
-      response = await this.#fetch(UPDATE_ENDPOINT.LATEST_RELEASE_URL, {
-        headers: GITHUB_REQUEST_HEADERS,
-        signal: AbortSignal.timeout(this.#requestTimeoutMs),
-      });
-    } catch (error) {
-      this.#report(
-        `Update check did not complete: ${error instanceof Error ? error.name : "unknown error"}`,
-      );
-      return { status: UPDATE_STATUS.UNREACHABLE, currentVersion: this.#currentVersion };
-    }
-    if (!response.ok) {
-      this.#report(`Update check failed with status ${response.status}`);
-      return { status: UPDATE_STATUS.UNREACHABLE, currentVersion: this.#currentVersion };
-    }
-    let payload: WireBoundaryInput | undefined;
-    try {
-      payload = await response.json();
-    } catch {
-      this.#report("Update check answered with an unreadable body");
-      return { status: UPDATE_STATUS.UNREACHABLE, currentVersion: this.#currentVersion };
-    }
-    const release = wireRecord(unparsedWire(payload));
-    const tag = release ? text(release.tag_name) : undefined;
-    const latest = tag && parseReleaseVersion(tag) ? tag.trim().replace(/^v/, "") : undefined;
-    if (!latest) {
-      // A release this build cannot name is not an update it can offer.
-      this.#report("Update check answered without a readable release version");
-      return { status: UPDATE_STATUS.UNREACHABLE, currentVersion: this.#currentVersion };
-    }
-    return isNewerVersion(latest, this.#currentVersion)
-      ? {
-          status: UPDATE_STATUS.UPDATE_AVAILABLE,
-          currentVersion: this.#currentVersion,
-          latestVersion: latest,
-        }
-      : { status: UPDATE_STATUS.UP_TO_DATE, currentVersion: this.#currentVersion };
+  #read(): Effect.Effect<UpdateSnapshot, unknown, Http> {
+    return Effect.gen(this, function* () {
+      this.#move({ status: UPDATE_STATUS.CHECKING, currentVersion: this.#currentVersion });
+      const http = yield* Http;
+      const response = yield* http
+        .request(UPDATE_ENDPOINT.LATEST_RELEASE_URL, {
+          headers: GITHUB_REQUEST_HEADERS,
+          signal: AbortSignal.timeout(this.#requestTimeoutMs),
+        })
+        .pipe(
+          Effect.catchAll((error) => {
+            this.#report(
+              `Update check did not complete: ${error instanceof Error ? error.name : "unknown error"}`,
+            );
+            return Effect.succeed(undefined);
+          }),
+        );
+      if (!response) {
+        return { status: UPDATE_STATUS.UNREACHABLE, currentVersion: this.#currentVersion };
+      }
+      if (!response.ok) {
+        this.#report(`Update check failed with status ${response.status}`);
+        return { status: UPDATE_STATUS.UNREACHABLE, currentVersion: this.#currentVersion };
+      }
+      const payload = yield* http
+        .readJson(response)
+        .pipe(Effect.catchAll(() => Effect.succeed(undefined)));
+      if (payload === undefined) {
+        this.#report("Update check answered with an unreadable body");
+        return { status: UPDATE_STATUS.UNREACHABLE, currentVersion: this.#currentVersion };
+      }
+      const release = wireRecord(unparsedWire(payload as WireBoundaryInput));
+      const tag = release ? text(release.tag_name) : undefined;
+      const latest = tag && parseReleaseVersion(tag) ? tag.trim().replace(/^v/, "") : undefined;
+      if (!latest) {
+        // A release this build cannot name is not an update it can offer.
+        this.#report("Update check answered without a readable release version");
+        return { status: UPDATE_STATUS.UNREACHABLE, currentVersion: this.#currentVersion };
+      }
+      return isNewerVersion(latest, this.#currentVersion)
+        ? {
+            status: UPDATE_STATUS.UPDATE_AVAILABLE,
+            currentVersion: this.#currentVersion,
+            latestVersion: latest,
+          }
+        : { status: UPDATE_STATUS.UP_TO_DATE, currentVersion: this.#currentVersion };
+    });
   }
 
   #move(snapshot: UpdateSnapshot): void {

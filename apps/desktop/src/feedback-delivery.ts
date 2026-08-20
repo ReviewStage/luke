@@ -1,3 +1,5 @@
+import { Effect } from "effect";
+import { Http } from "./services/http";
 import type { FeedbackResult, FeedbackSubmission } from "./shared/feedback";
 
 const FEEDBACK_ENVIRONMENT = {
@@ -24,11 +26,8 @@ const FEEDBACK_REFUSAL = {
   REFUSED: "The feedback service could not take this right now. Try again in a moment.",
 } as const;
 
-type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
-
 export interface FeedbackDeliveryOptions {
   url?: string;
-  fetch?: FetchLike;
   requestTimeoutMs?: number;
 }
 
@@ -46,35 +45,40 @@ function trimmedText(value: string | undefined): string | undefined {
  */
 export class FeedbackDelivery {
   readonly #url: string;
-  readonly #fetch: FetchLike;
   readonly #requestTimeoutMs: number;
 
   constructor(options: FeedbackDeliveryOptions = {}) {
     this.#url = trimmedText(options.url) ?? FEEDBACK_DEFAULTS.URL;
-    this.#fetch = options.fetch ?? ((input, init) => fetch(input, init));
     this.#requestTimeoutMs = options.requestTimeoutMs ?? FEEDBACK_DEFAULTS.REQUEST_TIMEOUT_MS;
   }
 
-  async deliver(submission: FeedbackSubmission): Promise<FeedbackResult> {
-    let response: Response;
-    try {
-      response = await this.#fetch(this.#url, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(submission),
-        signal: AbortSignal.timeout(this.#requestTimeoutMs),
-      });
-    } catch (error) {
-      this.#report(
-        `Feedback delivery did not complete: ${error instanceof Error ? error.name : "unknown error"}`,
-      );
-      return { delivered: false, reason: FEEDBACK_REFUSAL.UNREACHABLE };
-    }
-    if (!response.ok) {
-      this.#report(`Feedback delivery failed with status ${response.status}`);
-      return { delivered: false, reason: FEEDBACK_REFUSAL.REFUSED };
-    }
-    return { delivered: true };
+  deliver(submission: FeedbackSubmission): Effect.Effect<FeedbackResult, never, Http> {
+    return Effect.gen(this, function* () {
+      const http = yield* Http;
+      const response = yield* http
+        .request(this.#url, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(submission),
+          signal: AbortSignal.timeout(this.#requestTimeoutMs),
+        })
+        .pipe(
+          Effect.catchAll((error) => {
+            this.#report(
+              `Feedback delivery did not complete: ${error instanceof Error ? error.name : "unknown error"}`,
+            );
+            return Effect.succeed(undefined);
+          }),
+        );
+      if (!response) {
+        return { delivered: false, reason: FEEDBACK_REFUSAL.UNREACHABLE };
+      }
+      if (!response.ok) {
+        this.#report(`Feedback delivery failed with status ${response.status}`);
+        return { delivered: false, reason: FEEDBACK_REFUSAL.REFUSED };
+      }
+      return { delivered: true };
+    });
   }
 
   #report(message: string): void {

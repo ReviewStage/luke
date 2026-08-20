@@ -671,7 +671,7 @@ export class CodexSessionAdapter extends LocalSessionAdapter {
    */
   #hookEvents(
     rows: readonly CodexThreadRow[],
-  ): Effect.Effect<Map<string, ObservedCodexHookEvent>, never, never> {
+  ): Effect.Effect<Map<string, ObservedCodexHookEvent>, never, Files> {
     return Effect.gen(this, function* () {
       const events = new Map<string, ObservedCodexHookEvent>();
       const hookEventsDirectory = this.#hookEventsDirectory?.();
@@ -681,12 +681,8 @@ export class CodexSessionAdapter extends LocalSessionAdapter {
           Effect.gen(function* () {
             const id = textFromRow(row, CODEX_THREAD_COLUMN.ID);
             if (!id) return;
-            const event = yield* Effect.async<ObservedCodexHookEvent | undefined, never>(
-              (resume) => {
-                readCodexHookEvent(hookEventsDirectory, id)
-                  .then((value) => resume(Effect.succeed(value)))
-                  .catch(() => resume(Effect.succeed(undefined)));
-              },
+            const event = yield* readCodexHookEvent(hookEventsDirectory, id).pipe(
+              Effect.catchAll(() => Effect.succeed(undefined)),
             );
             if (event) events.set(id, event);
           }),

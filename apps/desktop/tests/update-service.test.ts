@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { UPDATE_STATUS, type UpdateSnapshot } from "../src/shared/contracts";
 import { UPDATE_ENDPOINT, UpdateService } from "../src/update-service";
+import { runWithHttp } from "./support/effect-http";
 import type { JsonValue } from "./support/json";
 
 function releaseResponse(body: JsonValue): Response {
@@ -15,10 +16,24 @@ function sleep(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
+function serviceWith(options: {
+  currentVersion: string;
+  onChange: (update: UpdateSnapshot) => void;
+  fetch: typeof fetch;
+  intervalMs?: number;
+}) {
+  return new UpdateService({
+    currentVersion: options.currentVersion,
+    onChange: options.onChange,
+    intervalMs: options.intervalMs,
+    runEffect: (effect) => runWithHttp(effect, options.fetch),
+  });
+}
+
 test("a newer published release is offered by its version, without the tag's v", async () => {
   const requests: { url: string; headers: Record<string, string> }[] = [];
   const states: UpdateSnapshot[] = [];
-  const service = new UpdateService({
+  const service = serviceWith({
     currentVersion: "0.1.0",
     onChange: (update) => states.push(update),
     fetch: async (url, init) => {
@@ -50,7 +65,7 @@ test("a newer published release is offered by its version, without the tag's v",
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("the running release reads as up to date", async () => {
-  const service = new UpdateService({
+  const service = serviceWith({
     currentVersion: "0.2.0",
     onChange: () => undefined,
     fetch: async () => releaseResponse({ tag_name: "v0.2.0" }),
@@ -64,14 +79,14 @@ test("the running release reads as up to date", async () => {
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("a refusal, an unreachable service, and an unreadable answer all read as unreachable", async () => {
-  const refused = new UpdateService({
+  const refused = serviceWith({
     currentVersion: "0.1.0",
     onChange: () => undefined,
     fetch: async () => new Response("", { status: 503 }),
   });
   assert.equal((await refused.check()).status, UPDATE_STATUS.UNREACHABLE);
 
-  const unreachable = new UpdateService({
+  const unreachable = serviceWith({
     currentVersion: "0.1.0",
     onChange: () => undefined,
     fetch: async () => {
@@ -80,7 +95,7 @@ test("a refusal, an unreachable service, and an unreadable answer all read as un
   });
   assert.equal((await unreachable.check()).status, UPDATE_STATUS.UNREACHABLE);
 
-  const unreadable = new UpdateService({
+  const unreadable = serviceWith({
     currentVersion: "0.1.0",
     onChange: () => undefined,
     fetch: async () => new Response("not json", { status: 200 }),
@@ -92,14 +107,14 @@ test("a refusal, an unreachable service, and an unreadable answer all read as un
 test("a release this build cannot name is not offered as an update", async () => {
   // A prerelease suffix and a missing tag both leave nothing to compare, and
   // an unnamed update would send someone to fetch an unknown.
-  const prerelease = new UpdateService({
+  const prerelease = serviceWith({
     currentVersion: "0.1.0",
     onChange: () => undefined,
     fetch: async () => releaseResponse({ tag_name: "v0.2.0-beta.1" }),
   });
   assert.equal((await prerelease.check()).status, UPDATE_STATUS.UNREACHABLE);
 
-  const unnamed = new UpdateService({
+  const unnamed = serviceWith({
     currentVersion: "0.1.0",
     onChange: () => undefined,
     fetch: async () => releaseResponse({}),
@@ -110,7 +125,7 @@ test("a release this build cannot name is not offered as an update", async () =>
 test("the timer and the button share a check already in flight", async () => {
   let requests = 0;
   let release: ((response: Response) => void) | undefined;
-  const service = new UpdateService({
+  const service = serviceWith({
     currentVersion: "0.1.0",
     onChange: () => undefined,
     fetch: () => {
@@ -141,7 +156,7 @@ test("a listener that throws neither fails the check nor jams the next one", asy
   // park a dead check in flight — the row would say "checking" forever and
   // every later ask would reuse the failure.
   let requests = 0;
-  const service = new UpdateService({
+  const service = serviceWith({
     currentVersion: "0.1.0",
     onChange: () => {
       throw new Error("window already torn down");
@@ -163,7 +178,7 @@ test("a listener that throws neither fails the check nor jams the next one", asy
 
 test("the timed check starts at once and stops when asked", async () => {
   let requests = 0;
-  const service = new UpdateService({
+  const service = serviceWith({
     currentVersion: "0.1.0",
     onChange: () => undefined,
     intervalMs: 10,

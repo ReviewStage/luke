@@ -8,17 +8,21 @@ import type { SqliteModuleLoader } from "../src/local-sqlite";
 import { OpenCodeSessionAdapter } from "../src/opencode-adapter";
 import type { ParsedJsonObject } from "./support/json";
 
+import { runTranscriptEffect } from "./support/transcript-effect";
+
 function readOpenCodeSessionTranscript(request: {
   dataDirectory?: string;
   providerSessionId: string;
   sqlite?: SqliteModuleLoader;
   maximumRenderedLength?: number;
 }): Promise<string | undefined> {
-  return new OpenCodeSessionAdapter({
-    dataDirectory: request.dataDirectory,
-    sqlite: request.sqlite,
-    transcriptMaximumRenderedLength: request.maximumRenderedLength,
-  }).readTranscript(request.providerSessionId);
+  return runTranscriptEffect(
+    new OpenCodeSessionAdapter({
+      dataDirectory: request.dataDirectory,
+      sqlite: request.sqlite,
+      transcriptMaximumRenderedLength: request.maximumRenderedLength,
+    }).readTranscript(request.providerSessionId),
+  );
 }
 
 const TEST_SESSION_ID = "ses_8f2f6a01aa";

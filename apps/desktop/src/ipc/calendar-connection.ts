@@ -5,6 +5,7 @@ import {
   type UnparsedWireValue,
 } from "@sidecar/core";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from "electron";
+import { runDesktopEffect } from "../effect-runtime";
 import type { GoogleCalendarReader } from "../google-calendar";
 import type { GoogleCalendarSignIn } from "../google-calendar-oauth";
 import { type createSettingsHandler, SettingsRefusal } from "../settings-handler";
@@ -45,7 +46,7 @@ export function registerCalendarConnectionIpc(
       }
       let primaryId: string | undefined;
       try {
-        const calendars = await calendar.listCalendars(outcome.accessToken);
+        const calendars = await runDesktopEffect(calendar.listCalendars(outcome.accessToken));
         primaryId = (calendars.find((candidate) => candidate.primary) ?? calendars[0])?.id;
       } catch {
         primaryId = undefined;

@@ -8,15 +8,19 @@ import { DevinLocalSessionAdapter } from "../src/devin-local-adapter";
 import { OMISSION_MARKER } from "../src/local-transcript";
 import type { ParsedJsonObject } from "./support/json";
 
+import { runTranscriptEffect } from "./support/transcript-effect";
+
 function readDevinSessionTranscript(request: {
   cliDirectory?: string;
   providerSessionId: string;
   maximumRenderedLength?: number;
 }): Promise<string | undefined> {
-  return new DevinLocalSessionAdapter({
-    cliDirectory: request.cliDirectory,
-    transcriptMaximumRenderedLength: request.maximumRenderedLength,
-  }).readTranscript(request.providerSessionId);
+  return runTranscriptEffect(
+    new DevinLocalSessionAdapter({
+      cliDirectory: request.cliDirectory,
+      transcriptMaximumRenderedLength: request.maximumRenderedLength,
+    }).readTranscript(request.providerSessionId),
+  );
 }
 
 const TEST_TIME_S = Math.floor(Date.parse("2026-08-18T21:30:00.000Z") / 1000);

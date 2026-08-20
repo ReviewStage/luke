@@ -14,7 +14,7 @@ import {
   readClaudeHookEvent,
   removeClaudeCodeObservationHooks,
 } from "../src/claude-code-hooks";
-import type { ParsedJsonObject } from "./support/json";
+import { runWithFiles } from "./support/effect-http";
 
 const execFileAsync = promisify(execFile);
 
@@ -108,7 +108,7 @@ test("registers every lifecycle event beside the user's own settings", async (t)
     }),
   );
 
-  await installClaudeCodeObservationHooks(installation);
+  await runWithFiles(installClaudeCodeObservationHooks(installation));
 
   const settings = await readSettings(installation);
   // The user's own setting and hook both survive the merge untouched.
@@ -143,7 +143,7 @@ test("registers every lifecycle event beside the user's own settings", async (t)
 test("creates the settings file for a Claude home that has none yet", async (t) => {
   const installation = await temporaryInstallation(t);
 
-  await installClaudeCodeObservationHooks(installation);
+  await runWithFiles(installClaudeCodeObservationHooks(installation));
 
   const settings = await readSettings(installation);
   assert.equal(entryCommands(hookEntries(settings, "Stop")).length, 1);
@@ -153,7 +153,7 @@ test("touches nothing on a machine with no Claude home at all", async (t) => {
   const installation = await temporaryInstallation(t);
   await fs.rm(installation.claudeHome, { recursive: true, force: true });
 
-  await installClaudeCodeObservationHooks(installation);
+  await runWithFiles(installClaudeCodeObservationHooks(installation));
 
   // No provider directory is created on the provider's behalf, and no script
   // or spool is staged for sessions that cannot exist.
@@ -168,7 +168,7 @@ test("leaves a settings file it cannot parse exactly as it was", async (t) => {
   const corrupt = "{ this is not json";
   await fs.writeFile(settingsPath(installation), corrupt);
 
-  await installClaudeCodeObservationHooks(installation);
+  await runWithFiles(installClaudeCodeObservationHooks(installation));
 
   assert.equal(await fs.readFile(settingsPath(installation), "utf8"), corrupt);
 });
@@ -176,9 +176,9 @@ test("leaves a settings file it cannot parse exactly as it was", async (t) => {
 test("converges rather than accumulates: reinstalling changes nothing", async (t) => {
   const installation = await temporaryInstallation(t);
 
-  await installClaudeCodeObservationHooks(installation);
+  await runWithFiles(installClaudeCodeObservationHooks(installation));
   const first = await fs.readFile(settingsPath(installation), "utf8");
-  await installClaudeCodeObservationHooks(installation);
+  await runWithFiles(installClaudeCodeObservationHooks(installation));
 
   assert.equal(await fs.readFile(settingsPath(installation), "utf8"), first);
 });
@@ -197,7 +197,7 @@ test("reconciles entries an older build registered under another path", async (t
     }),
   );
 
-  await installClaudeCodeObservationHooks(installation);
+  await runWithFiles(installClaudeCodeObservationHooks(installation));
 
   const settings = await readSettings(installation);
   const stopCommands = entryCommands(hookEntries(settings, "Stop")).filter((command) =>
@@ -219,9 +219,9 @@ test("removal strips Luke's entries and leaves the user's hooks standing", async
       },
     }),
   );
-  await installClaudeCodeObservationHooks(installation);
+  await runWithFiles(installClaudeCodeObservationHooks(installation));
 
-  await removeClaudeCodeObservationHooks(installation);
+  await runWithFiles(removeClaudeCodeObservationHooks(installation));
 
   const settings = await readSettings(installation);
   assert.equal(settings.model, "opus");
@@ -238,9 +238,9 @@ test("removal strips Luke's entries and leaves the user's hooks standing", async
 
 test("removal drops the hooks container once nothing of the user's remains", async (t) => {
   const installation = await temporaryInstallation(t);
-  await installClaudeCodeObservationHooks(installation);
+  await runWithFiles(installClaudeCodeObservationHooks(installation));
 
-  await removeClaudeCodeObservationHooks(installation);
+  await runWithFiles(removeClaudeCodeObservationHooks(installation));
 
   const settings = await readSettings(installation);
   assert.equal("hooks" in settings, false);
@@ -249,14 +249,14 @@ test("removal drops the hooks container once nothing of the user's remains", asy
 test("removal never creates a settings file", async (t) => {
   const installation = await temporaryInstallation(t);
 
-  await removeClaudeCodeObservationHooks(installation);
+  await runWithFiles(removeClaudeCodeObservationHooks(installation));
 
   await assert.rejects(fs.stat(settingsPath(installation)));
 });
 
 test("the script writes one fixed token named by the session, and nothing else", async (t) => {
   const installation = await temporaryInstallation(t);
-  await installClaudeCodeObservationHooks(installation);
+  await runWithFiles(installClaudeCodeObservationHooks(installation));
   const envelope = JSON.stringify({
     session_id: TEST_SESSION_ID,
     transcript_path: `/somewhere/${TEST_SESSION_ID}.jsonl`,
@@ -279,7 +279,7 @@ test("the script writes one fixed token named by the session, and nothing else",
 
 test("a later event replaces the earlier one", async (t) => {
   const installation = await temporaryInstallation(t);
-  await installClaudeCodeObservationHooks(installation);
+  await runWithFiles(installClaudeCodeObservationHooks(installation));
   const envelope = JSON.stringify({ session_id: TEST_SESSION_ID });
 
   await pipeToHookScript(installation, CLAUDE_HOOK_EVENT.STOP, envelope);
@@ -294,7 +294,7 @@ test("a later event replaces the earlier one", async (t) => {
 
 test("the script refuses a token the build never registered", async (t) => {
   const installation = await temporaryInstallation(t);
-  await installClaudeCodeObservationHooks(installation);
+  await runWithFiles(installClaudeCodeObservationHooks(installation));
 
   await pipeToHookScript(
     installation,
@@ -307,7 +307,7 @@ test("the script refuses a token the build never registered", async (t) => {
 
 test("the script skips a subagent's events", async (t) => {
   const installation = await temporaryInstallation(t);
-  await installClaudeCodeObservationHooks(installation);
+  await runWithFiles(installClaudeCodeObservationHooks(installation));
 
   await pipeToHookScript(
     installation,
@@ -320,7 +320,7 @@ test("the script skips a subagent's events", async (t) => {
 
 test("the script refuses a session id outside the shape Claude Code mints", async (t) => {
   const installation = await temporaryInstallation(t);
-  await installClaudeCodeObservationHooks(installation);
+  await runWithFiles(installClaudeCodeObservationHooks(installation));
 
   await pipeToHookScript(
     installation,
@@ -333,7 +333,7 @@ test("the script refuses a session id outside the shape Claude Code mints", asyn
 
 test("the script is silent once the spool is gone", async (t) => {
   const installation = await temporaryInstallation(t);
-  await installClaudeCodeObservationHooks(installation);
+  await runWithFiles(installClaudeCodeObservationHooks(installation));
   await fs.rm(installation.spoolDirectory, { recursive: true, force: true });
 
   await pipeToHookScript(
@@ -352,7 +352,9 @@ test("reads the spooled event back with the file's own clock", async (t) => {
   await fs.writeFile(filePath, '{"event":"stop"}');
   await fs.utimes(filePath, TEST_TIME / 1000, TEST_TIME / 1000);
 
-  const event = await readClaudeHookEvent(installation.spoolDirectory, TEST_SESSION_ID);
+  const event = await runWithFiles(
+    readClaudeHookEvent(installation.spoolDirectory, TEST_SESSION_ID),
+  );
 
   assert.equal(event?.event, CLAUDE_HOOK_EVENT.STOP);
   assert.equal(event?.atMs, TEST_TIME);
@@ -367,10 +369,22 @@ test("reads nothing from a missing, foreign, or oversized spool file", async (t)
   await write("not-json", "not json at all");
   await write("oversized", `{"event":"stop","padding":"${"x".repeat(512)}"}`);
 
-  assert.equal(await readClaudeHookEvent(installation.spoolDirectory, "absent"), undefined);
-  assert.equal(await readClaudeHookEvent(installation.spoolDirectory, "unknown-token"), undefined);
-  assert.equal(await readClaudeHookEvent(installation.spoolDirectory, "not-json"), undefined);
-  assert.equal(await readClaudeHookEvent(installation.spoolDirectory, "oversized"), undefined);
+  assert.equal(
+    await runWithFiles(readClaudeHookEvent(installation.spoolDirectory, "absent")),
+    undefined,
+  );
+  assert.equal(
+    await runWithFiles(readClaudeHookEvent(installation.spoolDirectory, "unknown-token")),
+    undefined,
+  );
+  assert.equal(
+    await runWithFiles(readClaudeHookEvent(installation.spoolDirectory, "not-json")),
+    undefined,
+  );
+  assert.equal(
+    await runWithFiles(readClaudeHookEvent(installation.spoolDirectory, "oversized")),
+    undefined,
+  );
 });
 
 test("pruning drops only the events past the observation window", async (t) => {
@@ -384,12 +398,14 @@ test("pruning drops only the events past the observation window", async (t) => {
   await fs.utimes(freshPath, (TEST_TIME - 60_000) / 1000, (TEST_TIME - 60_000) / 1000);
   await fs.utimes(stalePath, (TEST_TIME - 2 * dayMs) / 1000, (TEST_TIME - 2 * dayMs) / 1000);
 
-  await pruneClaudeHookSpool(installation.spoolDirectory, dayMs, TEST_TIME);
+  await runWithFiles(pruneClaudeHookSpool(installation.spoolDirectory, dayMs, TEST_TIME));
 
   await fs.stat(freshPath);
   await assert.rejects(fs.stat(stalePath));
   // A spool that does not exist is nothing to prune rather than a failure.
-  await pruneClaudeHookSpool(path.join(installation.spoolDirectory, "absent"), dayMs, TEST_TIME);
+  await runWithFiles(
+    pruneClaudeHookSpool(path.join(installation.spoolDirectory, "absent"), dayMs, TEST_TIME),
+  );
 });
 
 test("removal leaves a file with no Luke entries byte-for-byte alone", async (t) => {
@@ -398,7 +414,7 @@ test("removal leaves a file with no Luke entries byte-for-byte alone", async (t)
   const foreign = '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"afplay /a.aiff"}]}]}}';
   await fs.writeFile(settingsPath(installation), foreign);
 
-  await removeClaudeCodeObservationHooks(installation);
+  await runWithFiles(removeClaudeCodeObservationHooks(installation));
 
   assert.equal(await fs.readFile(settingsPath(installation), "utf8"), foreign);
 });
@@ -408,7 +424,7 @@ test("the settings write keeps the file's own mode and leaves no debris", async 
   await fs.writeFile(settingsPath(installation), "{}\n", { mode: 0o600 });
   await fs.chmod(settingsPath(installation), 0o600);
 
-  await installClaudeCodeObservationHooks(installation);
+  await runWithFiles(installClaudeCodeObservationHooks(installation));
 
   // The rename replaced the file, and the user's own protection rode along.
   assert.equal((await fs.stat(settingsPath(installation))).mode & 0o777, 0o600);
@@ -425,7 +441,7 @@ test("the settings write lands through a symlink rather than replacing it", asyn
   await fs.writeFile(syncedPath, "{}\n");
   await fs.symlink(syncedPath, settingsPath(installation));
 
-  await installClaudeCodeObservationHooks(installation);
+  await runWithFiles(installClaudeCodeObservationHooks(installation));
 
   const linked = await fs.lstat(settingsPath(installation));
   assert.ok(linked.isSymbolicLink(), "the link survives the write");

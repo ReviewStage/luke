@@ -1,8 +1,9 @@
 import { randomBytes } from "node:crypto";
-import { createServer, type Server, type ServerResponse } from "node:http";
-import type { AddressInfo } from "node:net";
+import type { IncomingMessage, ServerResponse } from "node:http";
+import { Deferred, Effect, Ref } from "effect";
 import { accountLoopbackPage, LOOPBACK_PAGE_TONE } from "./account-loopback-page";
 import { codeChallenge, createCodeVerifier } from "./account-pkce";
+import { Http, type LoopbackFailure } from "./services/http";
 import type { AccountProvider } from "./shared/contracts";
 
 const CALLBACK_PATH = "/callback";
@@ -76,7 +77,7 @@ export interface AccountLoopback {
   state: string;
   codeVerifier: string;
   codeChallenge: string;
-  waitForCode: Promise<string>;
+  waitForCode: Effect.Effect<string, Error>;
   /**
    // SAFETY: The preceding check establishes the asserted contract.
    * Withdraws the wait: `waitForCode` rejects as cancelled and the server
@@ -84,90 +85,112 @@ export interface AccountLoopback {
    * cancel changes nothing.
    */
   cancel(): void;
-  close(): Promise<void>;
-}
-
-function closeServer(server: Server): Promise<void> {
-  return new Promise((resolve) => server.close(() => resolve()));
+  close(): Effect.Effect<void, LoopbackFailure, Http>;
 }
 
 /** Opens one ephemeral loopback callback and accepts exactly one matching response. */
-export async function startAccountLoopback(
+export function startAccountLoopback(
   options: { timeoutMs?: number; providerHint?: AccountProvider } = {},
-): Promise<AccountLoopback> {
-  const randomState = randomBytes(32).toString("base64url");
-  const state = options.providerHint ? `${options.providerHint}.${randomState}` : randomState;
-  const timeoutMs = options.timeoutMs ?? 5 * 60_000;
-  const codeVerifier = createCodeVerifier();
-  let settle: ((code: string) => void) | undefined;
-  let reject: ((error: Error) => void) | undefined;
-  let accepted = false;
-  const waitForCode = new Promise<string>((resolve, rejectPromise) => {
-    settle = resolve;
-    reject = rejectPromise;
-  });
+): Effect.Effect<AccountLoopback, LoopbackFailure, Http> {
+  return Effect.gen(function* () {
+    const http = yield* Http;
+    const randomState = randomBytes(32).toString("base64url");
+    const state = options.providerHint ? `${options.providerHint}.${randomState}` : randomState;
+    const timeoutMs = options.timeoutMs ?? 5 * 60_000;
+    const codeVerifier = createCodeVerifier();
+    const codeDeferred = yield* Deferred.make<string, Error>();
+    const accepted = yield* Ref.make(false);
 
-  const server = createServer((request, response) => {
+    const { server, port } = yield* http.listenLoopback({
+      host: LOOPBACK_HOST,
+      port: 0,
+      onRequest: (request, response) =>
+        handleCallback(request, response, {
+          state,
+          accepted,
+          codeDeferred,
+        }),
+    });
+
+    const timer = setTimeout(() => {
+      void Effect.runPromise(
+        Effect.gen(function* () {
+          const done = yield* Deferred.isDone(codeDeferred);
+          if (done) return;
+          yield* Deferred.fail(codeDeferred, new Error("Sign-in timed out"));
+          yield* http.closeServer(server);
+        }),
+      );
+    }, timeoutMs);
+    timer.unref();
+
+    void Effect.runPromise(
+      Deferred.await(codeDeferred).pipe(
+        Effect.ensuring(Effect.sync(() => clearTimeout(timer))),
+        Effect.catchAll(() => Effect.void),
+      ),
+    );
+
+    const redirectUri = `http://${LOOPBACK_HOST}:${port}${CALLBACK_PATH}`;
+
+    return {
+      redirectUri,
+      state,
+      codeVerifier,
+      codeChallenge: codeChallenge(codeVerifier),
+      waitForCode: Deferred.await(codeDeferred),
+      cancel: () => {
+        void Effect.runPromise(
+          Effect.gen(function* () {
+            const done = yield* Deferred.isDone(codeDeferred);
+            if (done) return;
+            yield* Deferred.fail(codeDeferred, new Error(SIGN_IN_CANCELLED_MESSAGE));
+            yield* http.closeServer(server);
+          }),
+        );
+      },
+      close: () => http.closeServer(server),
+    };
+  });
+}
+
+function handleCallback(
+  request: IncomingMessage,
+  response: ServerResponse,
+  options: {
+    state: string;
+    accepted: Ref.Ref<boolean>;
+    codeDeferred: Deferred.Deferred<string, Error>;
+  },
+): Effect.Effect<void> {
+  return Effect.gen(function* () {
     const url = new URL(request.url ?? "/", `http://${LOOPBACK_HOST}`);
     const code = url.searchParams.get("code");
     const oauthError = url.searchParams.get("error");
     const returnedState = url.searchParams.get("state");
-    if (url.pathname !== CALLBACK_PATH || returnedState !== state) {
+    if (url.pathname !== CALLBACK_PATH || returnedState !== options.state) {
       answer(response, LOOPBACK_ANSWER.NOT_VERIFIED);
       return;
     }
-    if (accepted) {
+    if (yield* Ref.get(options.accepted)) {
       answer(response, LOOPBACK_ANSWER.ALREADY_USED);
       return;
     }
     if (oauthError) {
-      accepted = true;
+      yield* Ref.set(options.accepted, true);
       answer(response, LOOPBACK_ANSWER.NOT_COMPLETED);
-      reject?.(new Error(`Sign-in was not completed (${oauthError})`));
-      reject = undefined;
+      yield* Deferred.fail(
+        options.codeDeferred,
+        new Error(`Sign-in was not completed (${oauthError})`),
+      );
       return;
     }
     if (!code) {
       answer(response, LOOPBACK_ANSWER.NOT_VERIFIED);
       return;
     }
-    accepted = true;
+    yield* Ref.set(options.accepted, true);
     answer(response, LOOPBACK_ANSWER.SIGNED_IN);
-    settle?.(code);
-    settle = undefined;
+    yield* Deferred.succeed(options.codeDeferred, code);
   });
-
-  await new Promise<void>((resolve, rejectListen) => {
-    server.once("error", rejectListen);
-    server.listen(0, LOOPBACK_HOST, () => resolve());
-  });
-  const address = server.address();
-  if (!address) {
-    await closeServer(server);
-    throw new Error("Luke could not open a sign-in callback");
-  }
-  // SAFETY: TCP loopback listen returns AddressInfo; Unix socket paths never arise on this host binding.
-  const { port } = address as AddressInfo;
-
-  const timer = setTimeout(() => {
-    reject?.(new Error("Sign-in timed out"));
-    reject = undefined;
-    void closeServer(server);
-  }, timeoutMs);
-  timer.unref();
-  void waitForCode.finally(() => clearTimeout(timer)).catch(() => undefined);
-
-  return {
-    redirectUri: `http://${LOOPBACK_HOST}:${port}${CALLBACK_PATH}`,
-    state,
-    codeVerifier,
-    codeChallenge: codeChallenge(codeVerifier),
-    waitForCode,
-    cancel: () => {
-      reject?.(new Error(SIGN_IN_CANCELLED_MESSAGE));
-      reject = undefined;
-      void closeServer(server);
-    },
-    close: () => closeServer(server),
-  };
 }

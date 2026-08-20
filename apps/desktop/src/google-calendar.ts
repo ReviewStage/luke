@@ -9,11 +9,13 @@ import {
   text,
   type WireValue,
 } from "@sidecar/core";
+import { Effect } from "effect";
 import {
   GOOGLE_TOKEN_URL,
   type GoogleCalendarSignInConfig,
   googleCalendarSignInConfig,
 } from "./google-calendar-oauth";
+import { Http } from "./services/http";
 import type { AccountCalendar, ObservedAccountCalendars } from "./shared/contracts";
 import { wireRecord as readWireRecord, unparsedWire } from "./wire-boundary";
 
@@ -80,11 +82,9 @@ export interface GoogleCalendarReaderOptions {
    * Resolved at observation time, so an account connected or removed in
    * settings takes effect on the next pass without the reader being rebuilt.
    */
-  readAccounts: () => Promise<readonly CalendarAccountCredential[]>;
+  readAccounts: () => Effect.Effect<readonly CalendarAccountCredential[]>;
   /** The OAuth client this build carries, without which a grant buys nothing. */
   signInConfig?: () => GoogleCalendarSignInConfig | undefined;
-  /** Injectable so tests exercise the reader without a network. */
-  fetchImplementation?: typeof fetch;
   now?: () => number;
 }
 
@@ -96,9 +96,8 @@ export interface GoogleCalendarReaderOptions {
  * names a calendar the account did not just report.
  */
 export class GoogleCalendarReader {
-  readonly #readAccounts: () => Promise<readonly CalendarAccountCredential[]>;
+  readonly #readAccounts: () => Effect.Effect<readonly CalendarAccountCredential[]>;
   readonly #signInConfig: () => GoogleCalendarSignInConfig | undefined;
-  readonly #fetch: typeof fetch;
   readonly #now: () => number;
   /** Short-lived access tokens by account id, so passes never drum the minter. */
   readonly #accessTokens = new Map<string, CachedAccessToken>();
@@ -108,7 +107,6 @@ export class GoogleCalendarReader {
   constructor(options: GoogleCalendarReaderOptions) {
     this.#readAccounts = options.readAccounts;
     this.#signInConfig = options.signInConfig ?? googleCalendarSignInConfig;
-    this.#fetch = options.fetchImplementation ?? fetch;
     this.#now = options.now ?? Date.now;
   }
 
@@ -123,31 +121,33 @@ export class GoogleCalendarReader {
     this.#accessTokens.clear();
   }
 
-  async observe(): Promise<readonly CalendarAccountObservation[] | undefined> {
-    const accounts = await this.#readAccounts();
-    // No accounts, no request: the calendar is not connected, which is a
-    // different answer from a connected calendar with no meetings.
-    if (accounts.length === 0) {
-      this.#lastObservations.clear();
-      return undefined;
-    }
-    // An account disconnected since the last pass has nothing to stand.
-    const connected = new Set(accounts.map((account) => account.id));
-    for (const id of this.#lastObservations.keys()) {
-      if (!connected.has(id)) this.#lastObservations.delete(id);
-    }
-    const observations: CalendarAccountObservation[] = [];
-    for (const account of accounts) {
-      try {
-        const observation = await this.#observeAccount(account);
-        this.#lastObservations.set(account.id, observation);
-        observations.push(observation);
-      } catch (error) {
+  observe(): Effect.Effect<readonly CalendarAccountObservation[] | undefined, unknown, Http> {
+    return Effect.gen(this, function* () {
+      const accounts = yield* this.#readAccounts();
+      // No accounts, no request: the calendar is not connected, which is a
+      // different answer from a connected calendar with no meetings.
+      if (accounts.length === 0) {
+        this.#lastObservations.clear();
+        return undefined;
+      }
+      // An account disconnected since the last pass has nothing to stand.
+      const connected = new Set(accounts.map((account) => account.id));
+      for (const id of this.#lastObservations.keys()) {
+        if (!connected.has(id)) this.#lastObservations.delete(id);
+      }
+      const observations: CalendarAccountObservation[] = [];
+      for (const account of accounts) {
+        const outcome = yield* Effect.either(this.#observeAccount(account));
+        if (outcome._tag === "Right") {
+          this.#lastObservations.set(account.id, outcome.right);
+          observations.push(outcome.right);
+          continue;
+        }
         // One bad account must not blind the rest of the pass: the others
         // still read, and this one answers with what it last showed and why
         // it could not answer now. Which account failed is the whole fix —
         // sign into that one again.
-        const message = error instanceof Error ? error.message : String(error);
+        const message = outcome.left instanceof Error ? outcome.left.message : String(outcome.left);
         const held = this.#lastObservations.get(account.id);
         observations.push({
           accountId: account.id,
@@ -156,73 +156,81 @@ export class GoogleCalendarReader {
           failure: `${account.id}: ${message}`,
         });
       }
-    }
-    return observations;
+      return observations;
+    });
   }
 
   /**
    * The calendars an access token can see, for the connect flow: naming the
    * new account by its primary calendar and seeding what is selected.
    */
-  async listCalendars(accessToken: string): Promise<readonly ListedCalendar[]> {
-    const response = await this.#fetch(GOOGLE_CALENDAR_LIST_URL, {
-      method: "GET",
-      headers: { authorization: `Bearer ${accessToken}` },
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
-    if (!response.ok) throw new Error(`Google Calendar answered ${response.status}`);
-    const payload = await response.json();
-    const parsedPayload = unparsedWire(payload);
-    const items =
-      isRecord(parsedPayload) && Array.isArray(parsedPayload.items) ? parsedPayload.items : [];
-    const calendars: ListedCalendar[] = [];
-    for (const item of items) {
-      if (calendars.length >= MAXIMUM_ACCOUNT_CALENDARS) break;
-      const itemRecord = readWireRecord(unparsedWire(item));
-      if (!itemRecord) continue;
-      const id = text(itemRecord.id);
-      if (!id) continue;
-      // The calendar's own name, for its settings row alone; the id stands in
-      // when Google sent none.
-      const label = (text(itemRecord.summary) ?? id).slice(0, MAXIMUM_CALENDAR_LABEL_LENGTH);
-      const color = text(itemRecord.backgroundColor);
-      calendars.push({
-        id,
-        label,
-        ...(color && CALENDAR_COLOR_PATTERN.test(color) ? { color } : undefined),
-        primary: itemRecord.primary === true,
+  listCalendars(accessToken: string): Effect.Effect<readonly ListedCalendar[], unknown, Http> {
+    return Effect.gen(this, function* () {
+      const http = yield* Http;
+      const response = yield* http.request(GOOGLE_CALENDAR_LIST_URL, {
+        method: "GET",
+        headers: { authorization: `Bearer ${accessToken}` },
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
-    }
-    // Google's list order is its own; the settings rows need one that holds
-    // still between passes and reads at a glance — the account's primary
-    // calendar first, the rest by name.
-    return calendars.sort(
-      (left, right) =>
-        Number(right.primary) - Number(left.primary) ||
-        left.label.localeCompare(right.label, undefined, { sensitivity: "base" }) ||
-        left.id.localeCompare(right.id),
-    );
+      if (!response.ok)
+        return yield* Effect.fail(new Error(`Google Calendar answered ${response.status}`));
+      const payload = yield* http.readJson(response);
+      const parsedPayload = unparsedWire(payload as import("./wire-boundary").WireBoundaryInput);
+      const items =
+        isRecord(parsedPayload) && Array.isArray(parsedPayload.items) ? parsedPayload.items : [];
+      const calendars: ListedCalendar[] = [];
+      for (const item of items) {
+        if (calendars.length >= MAXIMUM_ACCOUNT_CALENDARS) break;
+        const itemRecord = readWireRecord(unparsedWire(item));
+        if (!itemRecord) continue;
+        const id = text(itemRecord.id);
+        if (!id) continue;
+        // The calendar's own name, for its settings row alone; the id stands in
+        // when Google sent none.
+        const label = (text(itemRecord.summary) ?? id).slice(0, MAXIMUM_CALENDAR_LABEL_LENGTH);
+        const color = text(itemRecord.backgroundColor);
+        calendars.push({
+          id,
+          label,
+          ...(color && CALENDAR_COLOR_PATTERN.test(color) ? { color } : undefined),
+          primary: itemRecord.primary === true,
+        });
+      }
+      // Google's list order is its own; the settings rows need one that holds
+      // still between passes and reads at a glance — the account's primary
+      // calendar first, the rest by name.
+      return calendars.sort(
+        (left, right) =>
+          Number(right.primary) - Number(left.primary) ||
+          left.label.localeCompare(right.label, undefined, { sensitivity: "base" }) ||
+          left.id.localeCompare(right.id),
+      );
+    });
   }
 
-  async #observeAccount(account: CalendarAccountCredential): Promise<CalendarAccountObservation> {
-    const now = this.#now();
-    const accessToken = await this.#accessTokenFor(account, now);
-    const calendars = await this.listCalendars(accessToken);
-    // Only calendars this very pass listed may enter the read document; a
-    // selection outlives the calendars it named, and a stale id steers
-    // nothing until its calendar is listed again.
-    const selected = account.selectedCalendarIds.filter((id) =>
-      calendars.some((calendar) => calendar.id === id),
-    );
-    return {
-      accountId: account.id,
-      calendars: calendars.map(({ id, label, color }) => ({
-        id,
-        label,
-        ...(color ? { color } : undefined),
-      })),
-      meetings: selected.length > 0 ? await this.#freeBusy(accessToken, selected, now) : [],
-    };
+  #observeAccount(
+    account: CalendarAccountCredential,
+  ): Effect.Effect<CalendarAccountObservation, unknown, Http> {
+    return Effect.gen(this, function* () {
+      const now = this.#now();
+      const accessToken = yield* this.#accessTokenFor(account, now);
+      const calendars = yield* this.listCalendars(accessToken);
+      // Only calendars this very pass listed may enter the read document; a
+      // selection outlives the calendars it named, and a stale id steers
+      // nothing until its calendar is listed again.
+      const selected = account.selectedCalendarIds.filter((id) =>
+        calendars.some((calendar) => calendar.id === id),
+      );
+      return {
+        accountId: account.id,
+        calendars: calendars.map(({ id, label, color }) => ({
+          id,
+          label,
+          ...(color ? { color } : undefined),
+        })),
+        meetings: selected.length > 0 ? yield* this.#freeBusy(accessToken, selected, now) : [],
+      };
+    });
   }
 
   /**
@@ -230,51 +238,61 @@ export class GoogleCalendarReader {
    * The document is fixed by this build, and nothing enters it but the two
    * instants the window computes and the calendar ids validated above.
    */
-  async #freeBusy(
+  #freeBusy(
     accessToken: string,
     calendarIds: readonly string[],
     now: number,
-  ): Promise<MeetingInterval[]> {
-    const response = await this.#fetch(GOOGLE_FREEBUSY_URL, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${accessToken}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        timeMin: new Date(now - MAXIMUM_MEETING_LENGTH_MS).toISOString(),
-        timeMax: new Date(now + CALENDAR_LOOKAHEAD_MS).toISOString(),
-        items: calendarIds.map((id) => ({ id })),
-      }),
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  ): Effect.Effect<MeetingInterval[], unknown, Http> {
+    return Effect.gen(this, function* () {
+      const http = yield* Http;
+      const response = yield* http.request(GOOGLE_FREEBUSY_URL, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          timeMin: new Date(now - MAXIMUM_MEETING_LENGTH_MS).toISOString(),
+          timeMax: new Date(now + CALENDAR_LOOKAHEAD_MS).toISOString(),
+          items: calendarIds.map((id) => ({ id })),
+        }),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+      if (!response.ok)
+        return yield* Effect.fail(new Error(`Google Calendar answered ${response.status}`));
+      const payload = yield* http.readJson(response);
+      const responseRecord = readWireRecord(
+        unparsedWire(payload as import("./wire-boundary").WireBoundaryInput),
+      );
+      const calendars = responseRecord
+        ? (readWireRecord(unparsedWire(responseRecord.calendars)) ?? {})
+        : {};
+      // Every asked-for calendar's busy blocks, together: which calendar a
+      // meeting sits on does not matter to a hold, only that the user is in it.
+      // Every asked-for calendar must also have answered: Google reports a
+      // calendar it could not read just then as an `errors` entry inside a 200,
+      // not as a failing request, and a calendar that cannot answer is not an
+      // empty diary. Read as free, one such entry would end a quiet mid-meeting
+      // and dump the held announcements aloud — so the pass fails instead, and
+      // the account stands what it last showed.
+      const busy: WireValue[] = [];
+      for (const id of calendarIds) {
+        const entryRecord = readWireRecord(unparsedWire(calendars[id]));
+        if (!entryRecord) {
+          return yield* Effect.fail(
+            new Error(`Google Calendar could not read free/busy for "${id}"`),
+          );
+        }
+        const errored = Array.isArray(entryRecord.errors) && entryRecord.errors.length > 0;
+        if (errored || !Array.isArray(entryRecord.busy)) {
+          return yield* Effect.fail(
+            new Error(`Google Calendar could not read free/busy for "${id}"`),
+          );
+        }
+        busy.push(...entryRecord.busy);
+      }
+      return meetingsFromBusyIntervals(busy, now);
     });
-    if (!response.ok) throw new Error(`Google Calendar answered ${response.status}`);
-    const payload = await response.json();
-    const responseRecord = readWireRecord(unparsedWire(payload));
-    const calendars = responseRecord
-      ? (readWireRecord(unparsedWire(responseRecord.calendars)) ?? {})
-      : {};
-    // Every asked-for calendar's busy blocks, together: which calendar a
-    // meeting sits on does not matter to a hold, only that the user is in it.
-    // Every asked-for calendar must also have answered: Google reports a
-    // calendar it could not read just then as an `errors` entry inside a 200,
-    // not as a failing request, and a calendar that cannot answer is not an
-    // empty diary. Read as free, one such entry would end a quiet mid-meeting
-    // and dump the held announcements aloud — so the pass fails instead, and
-    // the account stands what it last showed.
-    const busy: WireValue[] = [];
-    for (const id of calendarIds) {
-      const entryRecord = readWireRecord(unparsedWire(calendars[id]));
-      if (!entryRecord) {
-        throw new Error(`Google Calendar could not read free/busy for "${id}"`);
-      }
-      const errored = Array.isArray(entryRecord.errors) && entryRecord.errors.length > 0;
-      if (errored || !Array.isArray(entryRecord.busy)) {
-        throw new Error(`Google Calendar could not read free/busy for "${id}"`);
-      }
-      busy.push(...entryRecord.busy);
-    }
-    return meetingsFromBusyIntervals(busy, now);
   }
 
   /**
@@ -283,49 +301,60 @@ export class GoogleCalendarReader {
    * so an account reconnected under a new grant is never served a token
    * belonging to the old one.
    */
-  async #accessTokenFor(account: CalendarAccountCredential, now: number): Promise<string> {
-    const cached = this.#accessTokens.get(account.id);
-    if (
-      cached &&
-      cached.refreshToken === account.refreshToken &&
-      cached.expiresAt - ACCESS_TOKEN_EXPIRY_SLACK_MS > now
-    ) {
-      return cached.accessToken;
-    }
-    const config = this.#signInConfig();
-    if (!config) throw new Error("sign-in is not configured in this build");
-    const body = new URLSearchParams({
-      grant_type: "refresh_token",
-      refresh_token: account.refreshToken,
-      client_id: config.clientId,
-      client_secret: config.clientSecret,
+  #accessTokenFor(
+    account: CalendarAccountCredential,
+    now: number,
+  ): Effect.Effect<string, unknown, Http> {
+    return Effect.gen(this, function* () {
+      const cached = this.#accessTokens.get(account.id);
+      if (
+        cached &&
+        cached.refreshToken === account.refreshToken &&
+        cached.expiresAt - ACCESS_TOKEN_EXPIRY_SLACK_MS > now
+      ) {
+        return cached.accessToken;
+      }
+      const config = this.#signInConfig();
+      if (!config) return yield* Effect.fail(new Error("sign-in is not configured in this build"));
+      const body = new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: account.refreshToken,
+        client_id: config.clientId,
+        client_secret: config.clientSecret,
+      });
+      const http = yield* Http;
+      const response = yield* http.request(GOOGLE_TOKEN_URL, {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: body.toString(),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+      if (!response.ok) {
+        this.#accessTokens.delete(account.id);
+        return yield* Effect.fail(
+          new Error("Google no longer honours the sign-in; connect the account again"),
+        );
+      }
+      const payload = yield* http.readJson(response);
+      const tokenRecord = readWireRecord(
+        unparsedWire(payload as import("./wire-boundary").WireBoundaryInput),
+      );
+      let accessToken = "";
+      let expiresIn = 0;
+      if (tokenRecord) {
+        const token = tokenRecord.access_token;
+        if (isWireString(token)) accessToken = token;
+        const ttl = tokenRecord.expires_in;
+        if (isWireNumber(ttl)) expiresIn = ttl;
+      }
+      if (!accessToken)
+        return yield* Effect.fail(new Error("Google answered the token refresh without a token"));
+      this.#accessTokens.set(account.id, {
+        refreshToken: account.refreshToken,
+        accessToken,
+        expiresAt: now + expiresIn * 1_000,
+      });
+      return accessToken;
     });
-    const response = await this.#fetch(GOOGLE_TOKEN_URL, {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: body.toString(),
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
-    if (!response.ok) {
-      this.#accessTokens.delete(account.id);
-      throw new Error("Google no longer honours the sign-in; connect the account again");
-    }
-    const payload = await response.json();
-    const tokenRecord = readWireRecord(unparsedWire(payload));
-    let accessToken = "";
-    let expiresIn = 0;
-    if (tokenRecord) {
-      const token = tokenRecord.access_token;
-      if (isWireString(token)) accessToken = token;
-      const ttl = tokenRecord.expires_in;
-      if (isWireNumber(ttl)) expiresIn = ttl;
-    }
-    if (!accessToken) throw new Error("Google answered the token refresh without a token");
-    this.#accessTokens.set(account.id, {
-      refreshToken: account.refreshToken,
-      accessToken,
-      expiresAt: now + expiresIn * 1_000,
-    });
-    return accessToken;
   }
 }

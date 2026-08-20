@@ -4,7 +4,7 @@ import {
   type ProviderId,
   type SessionProviderAdapter,
 } from "@sidecar/core";
-import type { Effect } from "effect";
+import { Effect } from "effect";
 import { ClaudeCodeSessionAdapter } from "./claude-code-adapter";
 import {
   CLAUDE_HOOK_SPOOL_MAXIMUM_AGE_MS,
@@ -38,7 +38,7 @@ import {
 export interface ProviderRegistration {
   adapter: SessionProviderAdapter;
   credential?: CredentialProvider;
-  registerObservationHook?: () => Promise<void>;
+  registerObservationHook?: () => Effect.Effect<void, unknown, unknown>;
 }
 
 export interface ProviderRegistrationOptions {
@@ -94,27 +94,29 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
   return {
     [PROVIDER_ID.CLAUDE_CODE]: {
       adapter: claude,
-      registerObservationHook: async () => {
-        const installation = options.claudeHookInstallation();
-        await installClaudeCodeObservationHooks(installation);
-        await pruneClaudeHookSpool(
-          installation.spoolDirectory,
-          CLAUDE_HOOK_SPOOL_MAXIMUM_AGE_MS,
-          now(),
-        );
-      },
+      registerObservationHook: () =>
+        Effect.gen(function* () {
+          const installation = options.claudeHookInstallation();
+          yield* installClaudeCodeObservationHooks(installation);
+          yield* pruneClaudeHookSpool(
+            installation.spoolDirectory,
+            CLAUDE_HOOK_SPOOL_MAXIMUM_AGE_MS,
+            now(),
+          );
+        }),
     },
     [PROVIDER_ID.CODEX]: {
       adapter: codex,
-      registerObservationHook: async () => {
-        const installation = options.codexHookInstallation();
-        await installCodexObservationHooks(installation);
-        await pruneCodexHookSpool(
-          installation.spoolDirectory,
-          CODEX_HOOK_SPOOL_MAXIMUM_AGE_MS,
-          now(),
-        );
-      },
+      registerObservationHook: () =>
+        Effect.gen(function* () {
+          const installation = options.codexHookInstallation();
+          yield* installCodexObservationHooks(installation);
+          yield* pruneCodexHookSpool(
+            installation.spoolDirectory,
+            CODEX_HOOK_SPOOL_MAXIMUM_AGE_MS,
+            now(),
+          );
+        }),
     },
     [PROVIDER_ID.CONDUCTOR]: {
       adapter: new ConductorSessionAdapter({

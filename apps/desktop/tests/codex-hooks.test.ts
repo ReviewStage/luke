@@ -13,7 +13,7 @@ import {
   readCodexHookEvent,
   removeCodexObservationHooks,
 } from "../src/codex-hooks";
-import type { ParsedJsonObject } from "./support/json";
+import { runWithFiles } from "./support/effect-http";
 
 const execFileAsync = promisify(execFile);
 
@@ -125,7 +125,7 @@ test("registers every lifecycle event beside the user's own hooks", async (t) =>
     }),
   );
 
-  await installCodexObservationHooks(installation);
+  await runWithFiles(installCodexObservationHooks(installation));
 
   const configuration = await readHooksFile(installation);
   // The user's own hook survives the merge untouched.
@@ -154,7 +154,7 @@ test("touches nothing on a machine with no Codex home at all", async (t) => {
   const installation = await temporaryInstallation(t);
   await fs.rm(installation.codexHome, { recursive: true, force: true });
 
-  await installCodexObservationHooks(installation);
+  await runWithFiles(installCodexObservationHooks(installation));
 
   await assert.rejects(fs.stat(installation.codexHome));
   await assert.rejects(fs.stat(installation.hookScriptPath));
@@ -167,7 +167,7 @@ test("leaves a hooks file it cannot parse exactly as it was", async (t) => {
   const corrupt = "{ this is not json";
   await fs.writeFile(hooksPath(installation), corrupt);
 
-  await installCodexObservationHooks(installation);
+  await runWithFiles(installCodexObservationHooks(installation));
 
   assert.equal(await fs.readFile(hooksPath(installation), "utf8"), corrupt);
 });
@@ -175,9 +175,9 @@ test("leaves a hooks file it cannot parse exactly as it was", async (t) => {
 test("converges rather than accumulates: reinstalling changes nothing", async (t) => {
   const installation = await temporaryInstallation(t);
 
-  await installCodexObservationHooks(installation);
+  await runWithFiles(installCodexObservationHooks(installation));
   const first = await fs.readFile(hooksPath(installation), "utf8");
-  await installCodexObservationHooks(installation);
+  await runWithFiles(installCodexObservationHooks(installation));
 
   assert.equal(await fs.readFile(hooksPath(installation), "utf8"), first);
 });
@@ -196,8 +196,8 @@ test("appends its entries after the user's, so their trust anchors hold still", 
     }),
   );
 
-  await installCodexObservationHooks(installation);
-  await installCodexObservationHooks(installation);
+  await runWithFiles(installCodexObservationHooks(installation));
+  await runWithFiles(installCodexObservationHooks(installation));
 
   const stopCommands = entryCommands(hookEntries(await readHooksFile(installation), "Stop"));
   assert.equal(stopCommands[0], "afplay /System/done.aiff");
@@ -214,9 +214,9 @@ test("removal strips Luke's entries and leaves the user's hooks standing", async
       },
     }),
   );
-  await installCodexObservationHooks(installation);
+  await runWithFiles(installCodexObservationHooks(installation));
 
-  await removeCodexObservationHooks(installation);
+  await runWithFiles(removeCodexObservationHooks(installation));
 
   const configuration = await readHooksFile(installation);
   assert.deepEqual(entryCommands(hookEntries(configuration, "Stop")), ["afplay /System/done.aiff"]);
@@ -232,7 +232,7 @@ test("removal strips Luke's entries and leaves the user's hooks standing", async
 
 test("the script writes one fixed token from a piped envelope", async (t) => {
   const installation = await temporaryInstallation(t);
-  await installCodexObservationHooks(installation);
+  await runWithFiles(installCodexObservationHooks(installation));
   const envelope = JSON.stringify({
     hook_event_name: "Stop",
     session_id: TEST_SESSION_ID,
@@ -257,7 +257,7 @@ test("the script writes one fixed token from a piped envelope", async (t) => {
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("the script accepts an envelope passed as its argument too", async (t) => {
   const installation = await temporaryInstallation(t);
-  await installCodexObservationHooks(installation);
+  await runWithFiles(installCodexObservationHooks(installation));
   const envelope = JSON.stringify({ session_id: TEST_SESSION_ID, prompt: SECRET_ENVELOPE_TEXT });
 
   await callHookScript(installation, CODEX_HOOK_EVENT.PROMPT, envelope);
@@ -275,7 +275,7 @@ test("the script accepts an envelope passed as its argument too", async (t) => {
 
 test("the script refuses a token the build never registered", async (t) => {
   const installation = await temporaryInstallation(t);
-  await installCodexObservationHooks(installation);
+  await runWithFiles(installCodexObservationHooks(installation));
 
   // Claude Code's spool speaks this token; Codex's build must not.
   await pipeToHookScript(
@@ -289,7 +289,7 @@ test("the script refuses a token the build never registered", async (t) => {
 
 test("the script skips a subagent's events", async (t) => {
   const installation = await temporaryInstallation(t);
-  await installCodexObservationHooks(installation);
+  await runWithFiles(installCodexObservationHooks(installation));
 
   await pipeToHookScript(
     installation,
@@ -303,7 +303,7 @@ test("the script skips a subagent's events", async (t) => {
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("an empty agent_id does not read as a subagent", async (t) => {
   const installation = await temporaryInstallation(t);
-  await installCodexObservationHooks(installation);
+  await runWithFiles(installCodexObservationHooks(installation));
 
   // A provider that serializes the field on every envelope, empty outside a
   // subagent, must not silence the hook whole.
@@ -322,7 +322,7 @@ test("an empty agent_id does not read as a subagent", async (t) => {
 
 test("the script refuses a session id outside the shape Codex mints", async (t) => {
   const installation = await temporaryInstallation(t);
-  await installCodexObservationHooks(installation);
+  await runWithFiles(installCodexObservationHooks(installation));
 
   await pipeToHookScript(
     installation,
@@ -340,7 +340,9 @@ test("reads the spooled event back with the file's own clock", async (t) => {
   await fs.writeFile(filePath, '{"event":"notification"}');
   await fs.utimes(filePath, TEST_TIME / 1000, TEST_TIME / 1000);
 
-  const event = await readCodexHookEvent(installation.spoolDirectory, TEST_SESSION_ID);
+  const event = await runWithFiles(
+    readCodexHookEvent(installation.spoolDirectory, TEST_SESSION_ID),
+  );
 
   assert.equal(event?.event, CODEX_HOOK_EVENT.NOTIFICATION);
   assert.equal(event?.atMs, TEST_TIME);
@@ -354,5 +356,8 @@ test("reads nothing from a token outside Codex's own vocabulary", async (t) => {
     '{"event":"stop-failure"}',
   );
 
-  assert.equal(await readCodexHookEvent(installation.spoolDirectory, TEST_SESSION_ID), undefined);
+  assert.equal(
+    await runWithFiles(readCodexHookEvent(installation.spoolDirectory, TEST_SESSION_ID)),
+    undefined,
+  );
 });

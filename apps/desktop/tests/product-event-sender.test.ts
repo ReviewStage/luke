@@ -6,7 +6,9 @@ import {
   PRODUCT_SESSION_COUNT_BUCKET,
   type ProductEvent,
 } from "@sidecar/core";
+import { Effect } from "effect";
 import { ProductEventSender, type ProductEventSenderOptions } from "../src/product-event-sender";
+import { runWithHttp } from "./support/effect-http";
 import { HTTP_STATUS, type RecordedRequest, recordingFetch } from "./support/http-fake";
 
 const BASE_URL = "https://luke.test";
@@ -28,10 +30,10 @@ function senderWith(
     serviceBaseUrl: BASE_URL,
     appVersion: APP_VERSION,
     sends: true,
-    readAccessToken: async () => "token-1",
-    refreshAccount: async () => {},
-    fetch,
+    readAccessToken: () => Effect.succeed("token-1"),
+    refreshAccount: () => Effect.void,
     now: () => NOON,
+    runEffect: (effect) => runWithHttp(effect, fetch),
     ...overrides,
   });
   return { sender, requests };
@@ -121,13 +123,14 @@ test("a 401 refreshes and retries once, and the same token twice does not", asyn
     serviceBaseUrl: BASE_URL,
     appVersion: APP_VERSION,
     sends: true,
-    readAccessToken: async () => token,
-    refreshAccount: async () => {
-      refreshes += 1;
-      token = "fresh";
-    },
-    fetch,
+    readAccessToken: () => Effect.succeed(token),
+    refreshAccount: () =>
+      Effect.sync(() => {
+        refreshes += 1;
+        token = "fresh";
+      }),
     now: () => NOON,
+    runEffect: (effect) => runWithHttp(effect, fetch),
   });
   sender.setSharing(true);
   sender.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: APP_VERSION });
@@ -140,7 +143,7 @@ test("a 401 refreshes and retries once, and the same token twice does not", asyn
   );
 
   const stuck = senderWith(
-    { readAccessToken: async () => "same" },
+    { readAccessToken: () => Effect.succeed("same") },
     () => new Response("{}", { status: HTTP_STATUS.UNAUTHORIZED }),
   );
   stuck.sender.setSharing(true);
@@ -157,10 +160,10 @@ test("a failed send drops its batch rather than retrying it behind the next one"
     serviceBaseUrl: BASE_URL,
     appVersion: APP_VERSION,
     sends: true,
-    readAccessToken: async () => "token-1",
-    refreshAccount: async () => {},
-    fetch,
+    readAccessToken: () => Effect.succeed("token-1"),
+    refreshAccount: () => Effect.void,
     now: () => NOON,
+    runEffect: (effect) => runWithHttp(effect, fetch),
   });
   sender.setSharing(true);
   sender.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: APP_VERSION });
@@ -182,10 +185,10 @@ test("signed out the queue waits rather than being spent", async () => {
     serviceBaseUrl: BASE_URL,
     appVersion: APP_VERSION,
     sends: true,
-    readAccessToken: async () => token,
-    refreshAccount: async () => {},
-    fetch,
+    readAccessToken: () => Effect.succeed(token),
+    refreshAccount: () => Effect.void,
     now: () => NOON,
+    runEffect: (effect) => runWithHttp(effect, fetch),
   });
   sender.setSharing(true);
   sender.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: APP_VERSION });

@@ -5,6 +5,7 @@ import path from "node:path";
 import test, { type TestContext } from "node:test";
 import { ClaudeCodeSessionAdapter } from "../src/claude-code-adapter";
 import type { ParsedJsonObject } from "./support/json";
+import { runTranscriptEffect } from "./support/transcript-effect";
 
 const TEST_SESSION_ID = "3f9a1b2c-4d5e-6789-abcd-ef0123456789";
 const CLAUDE_PROJECTS_DIRECTORY = "projects";
@@ -15,11 +16,13 @@ function readClaudeSessionTranscript(request: {
   readTailBytes?: number;
   maximumRenderedLength?: number;
 }): Promise<string | undefined> {
-  return new ClaudeCodeSessionAdapter({
-    claudeHome: request.claudeHome,
-    transcriptReadTailBytes: request.readTailBytes,
-    transcriptMaximumRenderedLength: request.maximumRenderedLength,
-  }).readTranscript(request.providerSessionId);
+  return runTranscriptEffect(
+    new ClaudeCodeSessionAdapter({
+      claudeHome: request.claudeHome,
+      transcriptReadTailBytes: request.readTailBytes,
+      transcriptMaximumRenderedLength: request.maximumRenderedLength,
+    }).readTranscript(request.providerSessionId),
+  );
 }
 
 async function temporaryClaudeHome(t: TestContext): Promise<string> {

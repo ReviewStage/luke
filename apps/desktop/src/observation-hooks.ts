@@ -7,7 +7,9 @@ import {
   type WireRecord,
   type WireValue,
 } from "@sidecar/core";
+import { Effect } from "effect";
 import { canIgnoreFilesystemError } from "./local-session-adapter";
+import { Files } from "./services/files";
 import {
   wireRecord as readWireRecord,
   unparsedWire,
@@ -356,13 +358,11 @@ export function configurationWithoutObservationHooks<Event extends string>(
   return `${JSON.stringify(root, undefined, 2)}\n`;
 }
 
-async function readFileIfPresent(filePath: string): Promise<string | undefined> {
-  try {
-    return await fs.readFile(filePath, "utf8");
-  } catch (error) {
-    if (error instanceof Error && canIgnoreFilesystemError(error)) return undefined;
-    throw error;
-  }
+function readFileIfPresent(filePath: string): Effect.Effect<string | undefined, unknown, Files> {
+  return Effect.gen(function* () {
+    const files = yield* Files;
+    return yield* files.readTextFileUtf8(filePath);
+  });
 }
 
 /**
@@ -379,42 +379,52 @@ async function readFileIfPresent(filePath: string): Promise<string | undefined> 
  * stale. A path that does not resolve yet is a file being created, placed by
  * its directory's own resolution for the same reason.
  */
-async function replaceConfigurationFile(configurationPath: string, content: string): Promise<void> {
-  let targetPath: string;
-  try {
-    targetPath = await fs.realpath(configurationPath);
-  } catch (error) {
-    if (!(error instanceof Error) || !canIgnoreFilesystemError(error)) throw error;
-    const directory = await fs
-      .realpath(path.dirname(configurationPath))
-      .catch(() => path.dirname(configurationPath));
-    targetPath = path.join(directory, path.basename(configurationPath));
-  }
-  let mode = 0o644;
-  try {
-    mode = (await fs.stat(targetPath)).mode & 0o777;
-  } catch (error) {
-    if (!(error instanceof Error) || !canIgnoreFilesystemError(error)) throw error;
-  }
-  const temporaryPath = `${targetPath}.luke-tmp`;
-  await fs.writeFile(temporaryPath, content, { encoding: "utf8", mode });
-  // `mode` only applies when the file is created, so a temporary file left
-  // behind by an interrupted write keeps whatever mode it already had.
-  await fs.chmod(temporaryPath, mode);
-  await fs.rename(temporaryPath, targetPath);
+function replaceConfigurationFile(
+  configurationPath: string,
+  content: string,
+): Effect.Effect<void, unknown, Files> {
+  return Effect.gen(function* () {
+    const files = yield* Files;
+    const targetPath = yield* files.bridge("realpath", async () => {
+      try {
+        return await fs.realpath(configurationPath);
+      } catch (error) {
+        if (!(error instanceof Error) || !canIgnoreFilesystemError(error)) throw error;
+        const directory = await fs
+          .realpath(path.dirname(configurationPath))
+          .catch(() => path.dirname(configurationPath));
+        return path.join(directory, path.basename(configurationPath));
+      }
+    });
+    const stats = yield* files.stat(targetPath);
+    const mode = stats ? stats.mode & 0o777 : 0o644;
+    const temporaryPath = `${targetPath}.luke-tmp`;
+    yield* files.writeFile(temporaryPath, content, { mode });
+    // `mode` only applies when the file is created, so a temporary file left
+    // behind by an interrupted write keeps whatever mode it already had.
+    yield* files.chmod(temporaryPath, mode);
+    yield* files.rename(temporaryPath, targetPath);
+  });
 }
 
-async function writeFileIfChanged(filePath: string, content: string, mode: number): Promise<void> {
-  const existing = await readFileIfPresent(filePath);
-  if (existing === content) {
-    await fs.chmod(filePath, mode);
-    return;
-  }
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
-  await fs.writeFile(filePath, content, { encoding: "utf8", mode });
-  // `mode` only applies when the file is created; an existing script must not
-  // keep whatever mode an older write left it.
-  await fs.chmod(filePath, mode);
+function writeFileIfChanged(
+  filePath: string,
+  content: string,
+  mode: number,
+): Effect.Effect<void, unknown, Files> {
+  return Effect.gen(function* () {
+    const files = yield* Files;
+    const existing = yield* readFileIfPresent(filePath);
+    if (existing === content) {
+      yield* files.chmod(filePath, mode);
+      return;
+    }
+    yield* files.mkdir(path.dirname(filePath), { recursive: true });
+    yield* files.writeFile(filePath, content, { mode });
+    // `mode` only applies when the file is created; an existing script must not
+    // keep whatever mode an older write left it.
+    yield* files.chmod(filePath, mode);
+  });
 }
 
 /**
@@ -424,33 +434,32 @@ async function writeFileIfChanged(filePath: string, content: string, mode: numbe
  * rather than performed once — and safe to run again at any time: an
  * unchanged file is left untouched down to its mtime.
  */
-export async function installObservationHooks<Event extends string>(
+export function installObservationHooks<Event extends string>(
   spec: ObservationHookSpec<Event>,
   installation: ObservationHookInstallation,
-): Promise<void> {
-  // A machine with no provider home gets nothing at all: registering would
-  // create another product's directory on its behalf, for sessions that do
-  // not exist. Installation converges at every launch, so a provider that
-  // arrives later is picked up the next time Luke starts.
-  try {
-    await fs.stat(installation.providerHome);
-  } catch (error) {
-    if (error instanceof Error && canIgnoreFilesystemError(error)) return;
-    throw error;
-  }
+): Effect.Effect<void, unknown, Files> {
+  return Effect.gen(function* () {
+    const files = yield* Files;
+    // A machine with no provider home gets nothing at all: registering would
+    // create another product's directory on its behalf, for sessions that do
+    // not exist. Installation converges at every launch, so a provider that
+    // arrives later is picked up the next time Luke starts.
+    const providerHome = yield* files.stat(installation.providerHome);
+    if (!providerHome) return;
 
-  await fs.mkdir(installation.spoolDirectory, { recursive: true });
-  await writeFileIfChanged(
-    installation.hookScriptPath,
-    observationHookScript(spec, installation.spoolDirectory),
-    0o755,
-  );
+    yield* files.mkdir(installation.spoolDirectory, { recursive: true });
+    yield* writeFileIfChanged(
+      installation.hookScriptPath,
+      observationHookScript(spec, installation.spoolDirectory),
+      0o755,
+    );
 
-  const configurationPath = path.join(installation.providerHome, spec.configurationFileName);
-  const source = await readFileIfPresent(configurationPath);
-  const merged = configurationWithObservationHooks(spec, source, installation.hookScriptPath);
-  if (merged === undefined || merged === source) return;
-  await replaceConfigurationFile(configurationPath, merged);
+    const configurationPath = path.join(installation.providerHome, spec.configurationFileName);
+    const source = yield* readFileIfPresent(configurationPath);
+    const merged = configurationWithObservationHooks(spec, source, installation.hookScriptPath);
+    if (merged === undefined || merged === source) return;
+    yield* replaceConfigurationFile(configurationPath, merged);
+  });
 }
 
 /**
@@ -460,18 +469,23 @@ export async function installObservationHooks<Event extends string>(
  * the relationship backwards — and a file that cannot be parsed is left as
  * found.
  */
-export async function removeObservationHooks<Event extends string>(
+export function removeObservationHooks<Event extends string>(
   spec: ObservationHookSpec<Event>,
   installation: ObservationHookInstallation,
-): Promise<void> {
-  const configurationPath = path.join(installation.providerHome, spec.configurationFileName);
-  const source = await readFileIfPresent(configurationPath);
-  if (source !== undefined) {
-    const stripped = configurationWithoutObservationHooks(spec, source);
-    if (stripped !== undefined) await replaceConfigurationFile(configurationPath, stripped);
-  }
-  await fs.rm(installation.hookScriptPath, { force: true });
-  await fs.rm(installation.spoolDirectory, { recursive: true, force: true });
+): Effect.Effect<void, unknown, Files> {
+  return Effect.gen(function* () {
+    const files = yield* Files;
+    const configurationPath = path.join(installation.providerHome, spec.configurationFileName);
+    const source = yield* readFileIfPresent(configurationPath);
+    if (source !== undefined) {
+      const stripped = configurationWithoutObservationHooks(spec, source);
+      if (stripped !== undefined) yield* replaceConfigurationFile(configurationPath, stripped);
+    }
+    yield* files.bridge("rm", () => fs.rm(installation.hookScriptPath, { force: true }));
+    yield* files.bridge("rm", () =>
+      fs.rm(installation.spoolDirectory, { recursive: true, force: true }),
+    );
+  });
 }
 
 /**
@@ -482,23 +496,17 @@ export async function removeObservationHooks<Event extends string>(
  * Anything unexpected — no file, a foreign shape, an unknown token — reads as
  * no event, because the state this refines is always there to fall back on.
  */
-export async function readObservationHookEvent<Event extends string>(
+export function readObservationHookEvent<Event extends string>(
   spec: ObservationHookSpec<Event>,
   spoolDirectory: string,
   providerSessionId: string,
-): Promise<ObservedHookEvent<Event> | undefined> {
-  const filePath = path.join(spoolDirectory, `${providerSessionId}${HOOK_EVENT_FILE_EXTENSION}`);
-  let handle: fs.FileHandle;
-  try {
-    handle = await fs.open(filePath, "r");
-  } catch (error) {
-    if (error instanceof Error && canIgnoreFilesystemError(error)) return undefined;
-    throw error;
-  }
-  try {
-    const stats = await handle.stat();
-    if (stats.size > HOOK_EVENT_FILE_READ_BYTES) return undefined;
-    const content = await handle.readFile({ encoding: "utf8" });
+): Effect.Effect<ObservedHookEvent<Event> | undefined, unknown, Files> {
+  return Effect.gen(function* () {
+    const files = yield* Files;
+    const filePath = path.join(spoolDirectory, `${providerSessionId}${HOOK_EVENT_FILE_EXTENSION}`);
+    const stats = yield* files.stat(filePath);
+    if (!stats || stats.size > HOOK_EVENT_FILE_READ_BYTES) return undefined;
+    const content = yield* files.readFileRegion(filePath, HOOK_EVENT_FILE_READ_BYTES, () => 0);
     let parsed: WireBoundaryInput;
     try {
       parsed = JSON.parse(content);
@@ -511,9 +519,7 @@ export async function readObservationHookEvent<Event extends string>(
     if (!isWireString(wire.event) || !tokens.includes(wire.event)) return undefined;
     // SAFETY: eventTokens validated wire.event against the hook spec's allowed events.
     return { event: wire.event as Event, atMs: stats.mtimeMs };
-  } finally {
-    await handle.close();
-  }
+  });
 }
 
 /**
@@ -523,27 +529,24 @@ export async function readObservationHookEvent<Event extends string>(
  * the spool's size tracks the sessions actually alive rather than every
  * session ever observed.
  */
-export async function pruneObservationHookSpool(
+export function pruneObservationHookSpool(
   spoolDirectory: string,
   maximumAgeMs: number,
   now: number,
-): Promise<void> {
-  let entries: string[];
-  try {
-    entries = await fs.readdir(spoolDirectory);
-  } catch (error) {
-    if (error instanceof Error && canIgnoreFilesystemError(error)) return;
-    throw error;
-  }
-  for (const entry of entries) {
-    const filePath = path.join(spoolDirectory, entry);
-    try {
-      const stats = await fs.stat(filePath);
-      if (now - stats.mtimeMs > maximumAgeMs) await fs.rm(filePath, { force: true });
-    } catch (error) {
-      if (!(error instanceof Error) || !canIgnoreFilesystemError(error)) throw error;
+): Effect.Effect<void, unknown, Files> {
+  return Effect.gen(function* () {
+    const files = yield* Files;
+    const entries = yield* files.readDirectory(spoolDirectory);
+    for (const entry of entries) {
+      if (!entry.isFile()) continue;
+      const filePath = path.join(spoolDirectory, entry.name);
+      const stats = yield* files.stat(filePath);
+      if (!stats) continue;
+      if (now - stats.mtimeMs > maximumAgeMs) {
+        yield* files.bridge("rm", () => fs.rm(filePath, { force: true }));
+      }
     }
-  }
+  });
 }
 
 interface BoundObservationHookInstallation {

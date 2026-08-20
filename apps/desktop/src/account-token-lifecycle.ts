@@ -1,5 +1,5 @@
 import type { AccountClientFailure, CloudFailure } from "@sidecar/core/effect-errors";
-import { Effect, Ref } from "effect";
+import { Deferred, Effect, Ref } from "effect";
 import type { AccountTokens } from "./account-client";
 import type { Http } from "./services/http";
 
@@ -16,14 +16,35 @@ import type { Http } from "./services/http";
 export function singleFlight(
   run: () => Effect.Effect<void, unknown, unknown>,
 ): () => Effect.Effect<void, unknown, unknown> {
-  const running = Ref.unsafeMake<Effect.Effect<void, unknown, unknown> | undefined>(undefined);
+  const shared = Ref.unsafeMake<Deferred.Deferred<void, unknown> | undefined>(undefined);
   return () =>
     Effect.gen(function* () {
-      const current = yield* Ref.get(running);
-      if (current) return yield* current;
-      const flight = run().pipe(Effect.ensuring(Ref.set(running, undefined)));
-      yield* Ref.set(running, flight);
-      return yield* flight;
+      const current = yield* Ref.get(shared);
+      if (current && !(yield* Deferred.isDone(current))) {
+        return yield* Deferred.await(current);
+      }
+      const created = yield* Deferred.make<void, unknown>();
+      const won = yield* Ref.modify(shared, (stored) => {
+        if (stored && !Effect.runSync(Deferred.isDone(stored))) {
+          return [false, stored] as const;
+        }
+        return [true, created] as const;
+      });
+      if (!won) {
+        const joined = yield* Ref.get(shared);
+        if (!joined) return;
+        return yield* Deferred.await(joined);
+      }
+      yield* Effect.forkDaemon(
+        run().pipe(
+          Effect.matchEffect({
+            onFailure: (error) => Deferred.fail(created, error),
+            onSuccess: () => Deferred.succeed(created, undefined),
+          }),
+          Effect.ensuring(Ref.set(shared, undefined)),
+        ),
+      );
+      return yield* Deferred.await(created);
     });
 }
 

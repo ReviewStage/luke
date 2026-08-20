@@ -1,10 +1,22 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { startAccountLoopback } from "../src/account-loopback";
+import { Effect } from "effect";
+import { type AccountLoopback, startAccountLoopback } from "../src/account-loopback";
+import { type Http, HttpLive } from "../src/services/http";
 import { ACCOUNT_PROVIDER } from "../src/shared/contracts";
 
+function runWithHttp<A, E>(effect: Effect.Effect<A, E, Http>): Promise<A> {
+  return Effect.runPromise(effect.pipe(Effect.provide(HttpLive)));
+}
+
+async function openLoopback(
+  options: Parameters<typeof startAccountLoopback>[0] = {},
+): Promise<AccountLoopback> {
+  return runWithHttp(startAccountLoopback(options));
+}
+
 test("a mismatched state is refused without consuming the callback", async () => {
-  const loopback = await startAccountLoopback({ timeoutMs: 2_000 });
+  const loopback = await openLoopback({ timeoutMs: 2_000 });
   try {
     const refused = await fetch(`${loopback.redirectUri}?code=wrong&state=wrong`);
     assert.equal(refused.status, 400);
@@ -19,40 +31,40 @@ test("a mismatched state is refused without consuming the callback", async () =>
     const body = await accepted.text();
     assert.match(body, /Signed in to Luke/);
     assert.doesNotMatch(body, /accepted/);
-    assert.equal(await loopback.waitForCode, "accepted");
+    assert.equal(await Effect.runPromise(loopback.waitForCode), "accepted");
   } finally {
-    await loopback.close();
+    await runWithHttp(loopback.close());
   }
 });
 
 test("a second callback is ignored after the first succeeds", async () => {
-  const loopback = await startAccountLoopback({ timeoutMs: 2_000 });
+  const loopback = await openLoopback({ timeoutMs: 2_000 });
   try {
     const callback = `${loopback.redirectUri}?state=${encodeURIComponent(loopback.state)}`;
     assert.equal((await fetch(`${callback}&code=first`)).status, 200);
     assert.equal((await fetch(`${callback}&code=second`)).status, 409);
-    assert.equal(await loopback.waitForCode, "first");
+    assert.equal(await Effect.runPromise(loopback.waitForCode), "first");
   } finally {
-    await loopback.close();
+    await runWithHttp(loopback.close());
   }
 });
 
 test("a matching OAuth refusal ends the sign-in immediately", async () => {
-  const loopback = await startAccountLoopback({ timeoutMs: 2_000 });
+  const loopback = await openLoopback({ timeoutMs: 2_000 });
   try {
     const callback = `${loopback.redirectUri}?state=${encodeURIComponent(loopback.state)}`;
     assert.equal((await fetch(`${callback}&error=access_denied`)).status, 400);
-    await assert.rejects(loopback.waitForCode, /access_denied/);
+    await assert.rejects(Effect.runPromise(loopback.waitForCode), /access_denied/);
     assert.equal((await fetch(`${callback}&code=too-late`)).status, 409);
   } finally {
-    await loopback.close();
+    await runWithHttp(loopback.close());
   }
 });
 
 test("cancel rejects the wait and closes the callback", async () => {
-  const loopback = await startAccountLoopback({ timeoutMs: 2_000 });
+  const loopback = await openLoopback({ timeoutMs: 2_000 });
   loopback.cancel();
-  await assert.rejects(loopback.waitForCode, /cancelled/);
+  await assert.rejects(Effect.runPromise(loopback.waitForCode), /cancelled/);
   // The server is gone with the wait: the redirect has nowhere left to land.
   await assert.rejects(
     fetch(`${loopback.redirectUri}?code=late&state=${encodeURIComponent(loopback.state)}`),
@@ -60,21 +72,21 @@ test("cancel rejects the wait and closes the callback", async () => {
 });
 
 test("a cancel after the code landed changes nothing", async () => {
-  const loopback = await startAccountLoopback({ timeoutMs: 2_000 });
+  const loopback = await openLoopback({ timeoutMs: 2_000 });
   try {
     const response = await fetch(
       `${loopback.redirectUri}?code=accepted&state=${encodeURIComponent(loopback.state)}`,
     );
     assert.equal(response.status, 200);
     loopback.cancel();
-    assert.equal(await loopback.waitForCode, "accepted");
+    assert.equal(await Effect.runPromise(loopback.waitForCode), "accepted");
   } finally {
-    await loopback.close();
+    await runWithHttp(loopback.close());
   }
 });
 
 test("a provider hint keeps a full-entropy state for the hosted choice", async () => {
-  const loopback = await startAccountLoopback({
+  const loopback = await openLoopback({
     timeoutMs: 2_000,
     providerHint: ACCOUNT_PROVIDER.GITHUB,
   });
@@ -84,8 +96,8 @@ test("a provider hint keeps a full-entropy state for the hosted choice", async (
       `${loopback.redirectUri}?code=accepted&state=${encodeURIComponent(loopback.state)}`,
     );
     assert.equal(response.status, 200);
-    assert.equal(await loopback.waitForCode, "accepted");
+    assert.equal(await Effect.runPromise(loopback.waitForCode), "accepted");
   } finally {
-    await loopback.close();
+    await runWithHttp(loopback.close());
   }
 });

@@ -1,6 +1,7 @@
 import { CLOUD_FAILURE, CloudFailure } from "@sidecar/core/effect-errors";
 import { Effect, Layer } from "effect";
-import { Http } from "../src/services/http";
+import { type Files, FilesLive } from "../../src/services/files";
+import { Http } from "../../src/services/http";
 
 export function httpLayerFromFetch(fetchLike: typeof fetch): Layer.Layer<Http> {
   return Layer.succeed(Http, {
@@ -30,4 +31,17 @@ export function runWithHttp<A, E>(
   fetchLike: typeof fetch,
 ): Promise<A> {
   return Effect.runPromise(effect.pipe(Effect.provide(httpLayerFromFetch(fetchLike))));
+}
+
+export function runWithFiles<A, E>(effect: Effect.Effect<A, E, Files>): Promise<A> {
+  return Effect.runPromise(effect.pipe(Effect.provide(FilesLive)));
+}
+
+export function runWithHttpAndFiles<A, E>(
+  effect: Effect.Effect<A, E, Http | Files>,
+  fetchLike: typeof fetch,
+): Promise<A> {
+  return Effect.runPromise(
+    effect.pipe(Effect.provide(Layer.mergeAll(httpLayerFromFetch(fetchLike), FilesLive))),
+  );
 }

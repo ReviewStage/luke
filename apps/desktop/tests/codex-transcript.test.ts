@@ -7,6 +7,7 @@ import test, { type TestContext } from "node:test";
 import { CodexSessionAdapter } from "../src/codex-adapter";
 import type { SqliteModuleLoader } from "../src/local-sqlite";
 import type { ParsedJsonObject } from "./support/json";
+import { runTranscriptEffect } from "./support/transcript-effect";
 
 function readCodexSessionTranscript(request: {
   codexHome?: string;
@@ -15,12 +16,14 @@ function readCodexSessionTranscript(request: {
   sqlite?: SqliteModuleLoader;
   maximumRenderedLength?: number;
 }): Promise<string | undefined> {
-  return new CodexSessionAdapter({
-    codexHome: request.codexHome,
-    sqliteHome: request.sqliteHome,
-    sqlite: request.sqlite,
-    transcriptMaximumRenderedLength: request.maximumRenderedLength,
-  }).readTranscript(request.providerSessionId);
+  return runTranscriptEffect(
+    new CodexSessionAdapter({
+      codexHome: request.codexHome,
+      sqliteHome: request.sqliteHome,
+      sqlite: request.sqlite,
+      transcriptMaximumRenderedLength: request.maximumRenderedLength,
+    }).readTranscript(request.providerSessionId),
+  );
 }
 
 const TEST_SESSION_ID = "0198c1f2-4d5e-7789-abcd-ef0123456789";

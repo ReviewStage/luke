@@ -637,12 +637,9 @@ export class ClaudeCodeSessionAdapter extends LocalFileSessionAdapter<
     return Effect.gen(this, function* () {
       const hookEventsDirectory = this.#hookEventsDirectory?.();
       const hookEvent = hookEventsDirectory
-        ? yield* Effect.async<ObservedClaudeHookEvent | undefined, never>((resume) => {
-            readClaudeHookEvent(hookEventsDirectory, candidate.providerSessionId).then(
-              (value) => resume(Effect.succeed(value)),
-              () => resume(Effect.succeed(undefined)),
-            );
-          })
+        ? yield* readClaudeHookEvent(hookEventsDirectory, candidate.providerSessionId).pipe(
+            Effect.catchAll(() => Effect.succeed(undefined)),
+          )
         : undefined;
       return observationFromSessionFile(
         candidate,
