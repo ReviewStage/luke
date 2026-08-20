@@ -59,6 +59,7 @@ Every row leads with its agent — the provider the session belongs to:
 | Conductor | | ✅ |
 | Cursor | ✅ | ✅ |
 | Devin | ✅ | ✅ |
+| Gemini CLI | ✅ | |
 | GitHub Copilot | | ✅ |
 | Jules | | ✅ |
 | OpenCode | ✅ | |

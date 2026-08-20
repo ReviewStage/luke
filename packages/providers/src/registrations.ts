@@ -31,6 +31,7 @@ import { CURSOR_PROVIDER, CursorSessionAdapter } from "./cursor/adapter.js";
 import { CursorLocalSessionAdapter } from "./cursor/local-adapter.js";
 import { DEVIN_PROVIDER, DevinSessionAdapter } from "./devin/adapter.js";
 import { DevinLocalSessionAdapter } from "./devin/local-adapter.js";
+import { GeminiCliSessionAdapter } from "./gemini-cli/adapter.js";
 import { JulesSessionAdapter } from "./jules/adapter.js";
 import { OpenCodeSessionAdapter } from "./opencode/adapter.js";
 
@@ -135,6 +136,7 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
       adapter: devin,
       credential: CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.DEVIN],
     },
+    [PROVIDER_ID.GEMINI_CLI]: { adapter: new GeminiCliSessionAdapter() },
     [PROVIDER_ID.JULES]: {
       adapter: new JulesSessionAdapter({
         readApiKey: () => options.readApiKey(CREDENTIAL_PROVIDER_ID.JULES),

@@ -18,6 +18,8 @@ import {
   COPILOT_PATH,
   CURSOR_PATH,
   DEVIN_PATH,
+  GEMINI_CLI_MARK_LAYERS,
+  GEMINI_CLI_MARK_MASK_PATH,
   GOOGLE_CALENDAR_MARK_LAYERS,
   JULES_PATH,
   LINEAR_PATH,
@@ -50,7 +52,10 @@ import { APPLE_CALENDAR_ID } from "#shared/apple-calendar";
  * (MIT, sourced from https://primer.style/foundations/icons/copilot-24),
  * Cursor via Simple Icons (CC0-1.0, sourced from https://cursor.com/brand),
  * Devin's verbatim from the mark https://devin.ai serves as its own favicon
- * and site header, Google Calendar via Simple Icons (CC0-1.0, sourced from
+ * and site header, Gemini's aurora sparkle verbatim from the vector the
+ * Gemini web app inlines at gemini.google.com (trademark of Google LLC),
+ * keeping the masked, blurred colour field it is published with,
+ * Google Calendar via Simple Icons (CC0-1.0, sourced from
  * https://developers.google.com/calendar), Jules via Simple Icons (CC0-1.0, sourced from
  * https://jules.google), OpenAI via Simple Icons (CC0-1.0), Linear via Simple Icons (CC0-1.0, sourced from
  * https://linear.app), OpenCode's two-tone terminal mark verbatim from
@@ -211,6 +216,60 @@ function DevinMark({ className }: MarkProps): React.JSX.Element {
       focusable="false"
     >
       <path fill="currentColor" d={DEVIN_PATH} />
+    </svg>
+  );
+}
+
+function GeminiCliMark({ className }: MarkProps): React.JSX.Element {
+  // The aurora sparkle is not a filled path: the rounded star masks a field
+  // of gaussian-blurred colour blobs, so like Google Calendar it carries its
+  // own published colours — reproduced exactly, never recoloured to a theme —
+  // and it needs a mask and one blur filter per layer. `useId` keeps every
+  // reference unique when several rows render the mark at once.
+  const idPrefix = `gemini-cli-mark-${useId()}`;
+  const maskId = `${idPrefix}-mask`;
+
+  return (
+    <svg
+      className={className}
+      data-mark={PROVIDER_ID.GEMINI_CLI}
+      viewBox="0 0 65 65"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <defs>
+        <mask id={maskId} maskUnits="userSpaceOnUse" x="0" y="0" width="65" height="65">
+          <path fill="#ffffff" d={GEMINI_CLI_MARK_MASK_PATH} />
+        </mask>
+        {GEMINI_CLI_MARK_LAYERS.map((layer, index) => (
+          <filter
+            // The published artwork stacks one blob twice, so the layer list
+            // holds duplicates and only the position names a layer.
+            // biome-ignore lint/suspicious/noArrayIndexKey: see above
+            key={index}
+            id={`${idPrefix}-blur-${index}`}
+            filterUnits="userSpaceOnUse"
+            colorInterpolationFilters="sRGB"
+            x={layer.region.x}
+            y={layer.region.y}
+            width={layer.region.width}
+            height={layer.region.height}
+          >
+            <feGaussianBlur stdDeviation={layer.blur} />
+          </filter>
+        ))}
+      </defs>
+      <g mask={`url(#${maskId})`}>
+        {GEMINI_CLI_MARK_LAYERS.map((layer, index) => (
+          <g
+            // biome-ignore lint/suspicious/noArrayIndexKey: same duplicate-layer list as above
+            key={index}
+            filter={`url(#${idPrefix}-blur-${index})`}
+          >
+            <path fill={layer.fill} d={layer.path} />
+          </g>
+        ))}
+      </g>
     </svg>
   );
 }
@@ -410,6 +469,7 @@ const PROVIDER_MARKS = {
   [PROVIDER_ID.COPILOT]: CopilotMark,
   [PROVIDER_ID.CURSOR]: CursorMark,
   [PROVIDER_ID.DEVIN]: DevinMark,
+  [PROVIDER_ID.GEMINI_CLI]: GeminiCliMark,
   [GOOGLE_CALENDAR_ID]: GoogleCalendarMark,
   [PROVIDER_ID.JULES]: JulesMark,
   [ISSUE_TRACKER_ID.LINEAR]: LinearMark,
