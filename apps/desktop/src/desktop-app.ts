@@ -1080,9 +1080,13 @@ async function reviewSessionAttention(generation: number): Promise<void> {
     // holds every conversation ever observed — reviewing all of it would send
     // an update about each one to OpenAI on every launch, hundreds of requests
     // rate-limiting the same key the voice opens calls with.
+    // A session inside a live realtime voice conversation sends the evaluator
+    // nothing while it holds: its updates would only ever decide to speak over
+    // the very exchange the developer is already in, and the conversation
+    // closing puts the session back under review with the next pass.
     const reviews = await attentionReviewer.review(
       rosterRelevantSessions(sessionRegistry.list(), Date.now()).filter(
-        (session) => session.realtimeVoice !== true,
+        (session) => session.realtimeVoice !== true && session.realtimeVoiceLive !== true,
       ),
     );
     if (!attentionObservationLoop.isCurrent(generation)) return;

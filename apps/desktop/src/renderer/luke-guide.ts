@@ -488,7 +488,12 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
               "chips and the captioned words leave when the reply ends, but never out from " +
               "under the pointer: resting on them holds them until it moves away. " +
               "Always on while voice is available; the panel and the capsule count show the " +
-              "same states either way." +
+              "same states either way. A session the developer is speaking with through its " +
+              "provider's own realtime voice — a Codex thread in a live voice conversation, " +
+              "and any chat that conversation delegated — announces nothing while the " +
+              "conversation holds, because its turn boundaries are already being heard " +
+              "first-hand; the first change after the conversation closes is announced as " +
+              "usual, and nothing from inside it is replayed." +
               // Only a build that offers the calendar may describe the quiet:
               // a hold Luke claims without a calendar row to connect is a
               // capability he does not have.

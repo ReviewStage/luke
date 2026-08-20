@@ -117,6 +117,24 @@ as a read-only row.
   itself, and the one thing read from the answer is the created task's id.
 - No message path and no controls: Codex documents no way to message or steer
   a task already running, so the honest absence stands.
+- Realtime voice: the rollout tail also says whether a Codex realtime voice
+  conversation is live over a local thread — the world-state snapshots Codex
+  persists carry a `realtime` section, and a delegated turn's
+  `<realtime_delegation>` marker says the same when the snapshot has scrolled
+  past the bounded tail. A thread the developer is speaking with produces no
+  spoken announcements and is left out of attention evaluation while the
+  conversation holds; announcements resume with the first edge after it
+  closes, and nothing from inside it is replayed. A chat born from a realtime
+  delegation is never announced at all, and a chat another conversation
+  delegated — linked back to its source by the delegation marker in the first
+  user message it was born with, so the link survives Codex naming the chat —
+  holds its announcements the same way for as long as the source's voice is
+  live.
+- Delegated chats are labelled by a name Codex actually keeps, never the raw
+  marker: the chat's own newest entry in Codex's `session_index.jsonl` — read
+  as a bounded tail, only on a pass that saw a marker, honoring entries that
+  clear a name — then the source conversation's title or indexed name, then
+  the workspace.
 - Transcript readout: yes for local sessions
   (`apps/desktop/src/codex-transcript.ts`); a cloud task's conversation lives
   with its provider and is never fetched.

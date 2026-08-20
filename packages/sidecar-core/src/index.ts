@@ -9,6 +9,7 @@
 // JSON — defensive readers for untrusted payloads.
 export {
   isRecord,
+  isWireBoolean,
   isWireNumber,
   isWireString,
   nonNegativeNumber,

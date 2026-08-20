@@ -2,6 +2,7 @@ import os from "node:os";
 import path from "node:path";
 import {
   isRecord,
+  isWireBoolean,
   isWireNumber,
   isWireString,
   maximumSessionRecapLength,
@@ -102,7 +103,23 @@ const CODEX_THREAD_COLUMN = {
 const CODEX_ROLLOUT_TYPE = {
   EVENT_MSG: "event_msg",
   RESPONSE_ITEM: "response_item",
+  WORLD_STATE: "world_state",
 } as const;
+
+/**
+ * The realtime section of Codex's persisted world state: `{ active: boolean }`,
+ * written into every turn's snapshot. This is the durable record of whether a
+ * realtime voice conversation was open over the thread when its last turn ran —
+ * the voice lifecycle events themselves are transient and never reach the
+ * rollout. A `full` snapshot carries every section, so one without this key is
+ * a build with no realtime at all; a patch reports the section only when it
+ * changed.
+ */
+const CODEX_WORLD_STATE_SECTION = {
+  REALTIME: "realtime",
+} as const;
+
+const CODEX_REALTIME_ACTIVE_KEY = "active";
 
 /**
  * The turn boundary. `threads` carries no status column at all, so without the
@@ -123,6 +140,11 @@ const CODEX_EVENT_PAYLOAD = {
 
 const CODEX_RESPONSE_PAYLOAD = {
   FUNCTION_CALL: "function_call",
+  MESSAGE: "message",
+} as const;
+
+const CODEX_MESSAGE_ROLE = {
+  USER: "user",
 } as const;
 
 /**
@@ -145,6 +167,14 @@ const CODEX_ADAPTER_DEFAULTS = {
   READ_ROLLOUT_TAIL_BYTES: 64 * 1024,
   /** Only the threads that can still change are worth a second file read. */
   MAXIMUM_ROLLOUT_READS: 12,
+  /**
+   * How far back into Codex's append-only name index one pass reads. The
+   * newest entry per thread wins and a delegated chat is created moments
+   * before its title needs resolving, so the names worth having live at the
+   * end; a bounded tail keeps a file that only ever grows from becoming an
+   * unbounded read on every pass.
+   */
+  READ_SESSION_INDEX_TAIL_BYTES: 128 * 1024,
   MAXIMUM_ACTIVITY_LENGTH: 80,
   /**
    * How much older than the thread row's clock a hook event may run and still
@@ -258,6 +288,33 @@ interface ParsedCodexRollout {
   error?: string;
   lastAgentMessage?: string;
   turnComplete?: boolean;
+  /** Whether a realtime voice conversation is live over this thread, when the tail says. */
+  realtimeVoiceLive?: boolean;
+}
+
+/**
+ * Reads whether the realtime voice conversation is open out of one world-state
+ * snapshot, or nothing when the snapshot does not say. A patch that omits the
+ * realtime section left it unchanged; a full snapshot omitting it comes from a
+ * build with no realtime to be in.
+ */
+function realtimeActiveFromWorldState(payload: WireRecord): boolean | undefined {
+  const state = isRecord(payload.state) ? payload.state : undefined;
+  if (!state) return undefined;
+  const realtime = state[CODEX_WORLD_STATE_SECTION.REALTIME];
+  if (isRecord(realtime)) {
+    const active = realtime[CODEX_REALTIME_ACTIVE_KEY];
+    return isWireBoolean(active) ? active : undefined;
+  }
+  return payload.full === true ? false : undefined;
+}
+
+/** Whether a message is the realtime conversation delegating its turn to the thread. */
+function isRealtimeDelegationMessage(payload: WireRecord): boolean {
+  if (payload.role !== CODEX_MESSAGE_ROLE.USER || !Array.isArray(payload.content)) return false;
+  return payload.content.some(
+    (block) => isRecord(block) && isCodexRealtimeDelegationText(text(block.text)),
+  );
 }
 
 /**
@@ -314,11 +371,21 @@ function parseCodexRolloutTail(tail: string): ParsedCodexRollout {
       }
       continue;
     }
-    if (
-      record.type === CODEX_ROLLOUT_TYPE.RESPONSE_ITEM &&
-      payload.type === CODEX_RESPONSE_PAYLOAD.FUNCTION_CALL
-    ) {
-      parsed.activity = activityFromCall(payload) ?? parsed.activity;
+    if (record.type === CODEX_ROLLOUT_TYPE.WORLD_STATE) {
+      parsed.realtimeVoiceLive = realtimeActiveFromWorldState(payload) ?? parsed.realtimeVoiceLive;
+      continue;
+    }
+    if (record.type === CODEX_ROLLOUT_TYPE.RESPONSE_ITEM) {
+      if (payload.type === CODEX_RESPONSE_PAYLOAD.FUNCTION_CALL) {
+        parsed.activity = activityFromCall(payload) ?? parsed.activity;
+      }
+      // A delegation is written only while the conversation is open, so one is
+      // proof of the conversation even when the world-state snapshot that
+      // opened it has scrolled past the bounded tail. The snapshot that closes
+      // it always lands after the last delegation, so last-in-file-order wins.
+      if (payload.type === CODEX_RESPONSE_PAYLOAD.MESSAGE && isRealtimeDelegationMessage(payload)) {
+        parsed.realtimeVoiceLive = true;
+      }
     }
   }
   return parsed;
@@ -413,35 +480,65 @@ export async function stateDatabasePaths(
   );
 }
 
-/**
- * Codex names its own threads, and that name is what a developer is looking
- * for. The workspace is the fallback for a thread too new to have been named.
- */
-function titleFromRow(row: CodexThreadRow, sessionTitles: ReadonlyMap<string, string>): string {
-  const title = oneLine(textFromRow(row, CODEX_THREAD_COLUMN.TITLE), maximumSessionTitleLength);
-  if (title) {
-    const sourceThreadId = CODEX_DELEGATION_TITLE.exec(title)?.[1];
-    if (sourceThreadId) {
-      return (
-        sessionTitles.get(textFromRow(row, CODEX_THREAD_COLUMN.ID) ?? "") ??
-        sessionTitles.get(sourceThreadId) ??
-        workspaceLabel(textFromRow(row, CODEX_THREAD_COLUMN.CWD))
-      );
-    }
-    return title;
-  }
-  return workspaceLabel(textFromRow(row, CODEX_THREAD_COLUMN.CWD));
+interface CodexThreadNameSources {
+  /**
+   * The newest name per thread from Codex's own index, read only on a pass
+   * where a marker title actually needs resolving.
+   */
+  indexNames: ReadonlyMap<string, string>;
+  /** Each observed thread's own titled name, for resolving a delegation's source in the same pass. */
+  rowTitles: ReadonlyMap<string, string>;
 }
 
+/**
+ * Codex names its own threads, and that name is what a developer is looking
+ * for. A delegated chat's derived title is the delegation marker itself, so it
+ * resolves through names Codex actually keeps — the chat's own newest indexed
+ * name first, for one renamed since it was spawned, then the source
+ * conversation's title or indexed name, because the delegated chat is that
+ * conversation's work. The workspace is the fallback for a thread too new to
+ * have been named — or one whose only title is the realtime delegation
+ * scaffolding, which names no source to borrow from.
+ */
+function titleFromRow(row: CodexThreadRow, names: CodexThreadNameSources): string {
+  const title = oneLine(textFromRow(row, CODEX_THREAD_COLUMN.TITLE), maximumSessionTitleLength);
+  const workspace = workspaceLabel(textFromRow(row, CODEX_THREAD_COLUMN.CWD));
+  if (!title) return workspace;
+  const ownName = names.indexNames.get(textFromRow(row, CODEX_THREAD_COLUMN.ID) ?? "");
+  const sourceThreadId = CODEX_DELEGATION_TITLE.exec(title)?.[1];
+  if (sourceThreadId) {
+    return (
+      ownName ??
+      names.rowTitles.get(sourceThreadId) ??
+      names.indexNames.get(sourceThreadId) ??
+      workspace
+    );
+  }
+  if (isCodexRealtimeDelegationText(title)) return ownName ?? workspace;
+  return title;
+}
+
+/**
+ * The newest name Codex's own index holds for each thread. Entries are
+ * append-only and a later line wins; a line with an empty name is the name
+ * being removed, and unmakes what an earlier line said rather than being
+ * skipped past it. The read is a bounded tail: the file only ever grows, and
+ * the names worth having — a delegated chat's, its source's — are recent by
+ * construction.
+ */
 async function readCodexSessionTitles(codexHome: string): Promise<Map<string, string>> {
   const titles = new Map<string, string>();
-  const contents = await readTextFile(path.join(codexHome, CODEX_SESSION_INDEX_FILE));
-  if (!contents) return titles;
-  for (const line of contents.split(/\r?\n/u)) {
+  const tail = await readTail(
+    path.join(codexHome, CODEX_SESSION_INDEX_FILE),
+    CODEX_ADAPTER_DEFAULTS.READ_SESSION_INDEX_TAIL_BYTES,
+  );
+  for (const line of tail.split(/\r?\n/u)) {
     const record = recordFromJsonLine(line);
     const id = text(record?.id);
+    if (!id) continue;
     const title = oneLine(text(record?.thread_name), maximumSessionTitleLength);
-    if (id && title) titles.set(id, title);
+    if (title) titles.set(id, title);
+    else titles.delete(id);
   }
   return titles;
 }
@@ -461,6 +558,44 @@ function isCodexRealtimeDelegationThread(row: CodexThreadRow): boolean {
     isCodexRealtimeDelegationText(textFromRow(row, CODEX_THREAD_COLUMN.FIRST_USER_MESSAGE)) ||
     isCodexRealtimeDelegationText(textFromRow(row, CODEX_THREAD_COLUMN.TITLE))
   );
+}
+
+/**
+ * The source conversation a delegated chat was born from, wherever the marker
+ * survives. The derived title is replaced once Codex names the chat, but the
+ * row keeps the first user message for its whole life, so the link back to the
+ * source outlives the rename; the title stands in for older rows whose column
+ * carries nothing.
+ */
+function delegationSourceFromRow(row: CodexThreadRow): string | undefined {
+  for (const column of [CODEX_THREAD_COLUMN.FIRST_USER_MESSAGE, CODEX_THREAD_COLUMN.TITLE]) {
+    const sourceId = CODEX_DELEGATION_TITLE.exec(textFromRow(row, column) ?? "")?.[1];
+    if (sourceId) return sourceId;
+  }
+  return undefined;
+}
+
+/**
+ * A chat another conversation delegated is a limb of that conversation: while
+ * the source thread's rollout says its realtime voice conversation is open,
+ * the delegated chat's turn boundaries belong to the same spoken exchange and
+ * hold their announcements the same way. The link is the marker Codex itself
+ * wrote the chat's first message with, and the source's state is the same
+ * pass's rollout read — arithmetic against observed state, nothing decided.
+ */
+function linkDelegatedVoiceConversations(
+  rows: readonly CodexThreadRow[],
+  rollouts: Map<string, ParsedCodexRollout>,
+): void {
+  for (const row of rows) {
+    const sourceId = delegationSourceFromRow(row);
+    if (!sourceId || rollouts.get(sourceId)?.realtimeVoiceLive !== true) continue;
+    const id = textFromRow(row, CODEX_THREAD_COLUMN.ID);
+    if (!id) continue;
+    const parsed = rollouts.get(id);
+    if (parsed) parsed.realtimeVoiceLive = true;
+    else rollouts.set(id, { realtimeVoiceLive: true });
+  }
 }
 
 function modelFromRow(row: CodexThreadRow): string | undefined {
@@ -549,7 +684,7 @@ function detailFromRow(
 function observationFromThreadRow(
   row: CodexThreadRow,
   rollout: ParsedCodexRollout | undefined,
-  sessionTitles: ReadonlyMap<string, string>,
+  names: CodexThreadNameSources,
   now: number,
   activeSessionFreshnessMs: number,
   hookEvent?: ObservedCodexHookEvent,
@@ -584,7 +719,7 @@ function observationFromThreadRow(
       : undefined;
   const observation: ProviderSessionObservation = {
     providerSessionId,
-    title: titleFromRow(row, sessionTitles),
+    title: titleFromRow(row, names),
     status,
     ...(completionCause ? { completionCause } : undefined),
     observedAt,
@@ -592,6 +727,7 @@ function observationFromThreadRow(
     detail: detailFromRow(row, rollout),
   };
   if (isCodexRealtimeDelegationThread(row)) observation.realtimeVoice = true;
+  if (rollout?.realtimeVoiceLive === true) observation.realtimeVoiceLive = true;
   return observation;
 }
 
@@ -642,13 +778,14 @@ export class CodexSessionAdapter extends LocalSessionAdapter {
       // writing.
       const rollouts = await this.#rollouts(rows);
       const hookEvents = await this.#hookEvents(rows);
-      const sessionTitles = await readCodexSessionTitles(this.#codexHome);
+      const names = await this.#threadNames(rows);
+      linkDelegatedVoiceConversations(rows, rollouts);
       return rows
         .map((row) =>
           observationFromThreadRow(
             row,
             rollouts.get(textFromRow(row, CODEX_THREAD_COLUMN.ID) ?? ""),
-            sessionTitles,
+            names,
             now,
             this.activeSessionFreshnessMs,
             hookEvents.get(textFromRow(row, CODEX_THREAD_COLUMN.ID) ?? ""),
@@ -698,6 +835,31 @@ export class CodexSessionAdapter extends LocalSessionAdapter {
       }),
     );
     return new Map(parsed);
+  }
+
+  /**
+   * Gathers the names a delegated chat's marker title can resolve through. The
+   * pass's own rows already carry every titled thread; the name index is a
+   * second file read, so it is opened only when some row actually shows a
+   * marker in need of a name.
+   */
+  async #threadNames(rows: readonly CodexThreadRow[]): Promise<CodexThreadNameSources> {
+    const rowTitles = new Map<string, string>();
+    let hasMarkerTitle = false;
+    for (const row of rows) {
+      const id = textFromRow(row, CODEX_THREAD_COLUMN.ID);
+      const title = oneLine(textFromRow(row, CODEX_THREAD_COLUMN.TITLE), maximumSessionTitleLength);
+      if (!id || !title) continue;
+      if (CODEX_DELEGATION_TITLE.test(title) || isCodexRealtimeDelegationText(title)) {
+        hasMarkerTitle = true;
+        continue;
+      }
+      rowTitles.set(id, title);
+    }
+    const indexNames = hasMarkerTitle
+      ? await readCodexSessionTitles(this.#codexHome)
+      : new Map<string, string>();
+    return { indexNames, rowTitles };
   }
 
   /**

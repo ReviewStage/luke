@@ -318,6 +318,292 @@ test("keeps realtime delegation sessions suppressed after Codex names the chat",
   assert.equal(observation?.realtimeVoice, true);
 });
 
+const TEST_SOURCE_THREAD_ID = "01a01c04-31e2-7be1-a478-0f321abcdef0";
+const TEST_DELEGATION_TITLE =
+  `<codex_delegation>\n<source_thread_id>${TEST_SOURCE_THREAD_ID}</source_thread_id>\n` +
+  "<input>delegated work</input>\n</codex_delegation>";
+
+test("labels a delegated chat by its source conversation's own title", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  await writeCodexState(codexHome, [
+    {
+      id: TEST_SOURCE_THREAD_ID,
+      cwd: "/Users/test/luke",
+      observedAt: TEST_TIME - 2_000,
+      title: "Fix Luke voice announcements",
+    },
+    {
+      id: "codex-delegated",
+      cwd: "/Users/test/luke",
+      observedAt: TEST_TIME - 1_000,
+      title: TEST_DELEGATION_TITLE,
+    },
+  ]);
+
+  const adapter = new CodexSessionAdapter({
+    codexHome,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60_000,
+  });
+  const observations = await adapter.observe();
+
+  const delegated = observations.find((o) => o.providerSessionId === "codex-delegated");
+  assert.equal(delegated?.title, "Fix Luke voice announcements");
+});
+
+test("a name the index has since cleared no longer resolves a delegation", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  await writeCodexSessionIndex(codexHome, [
+    { id: TEST_SOURCE_THREAD_ID, threadName: "Fix Luke voice announcements" },
+    { id: TEST_SOURCE_THREAD_ID, threadName: "" },
+  ]);
+  await writeCodexState(codexHome, [
+    {
+      id: "codex-delegated",
+      cwd: "/Users/test/delegated-repository",
+      observedAt: TEST_TIME - 1_000,
+      title: TEST_DELEGATION_TITLE,
+    },
+  ]);
+
+  const adapter = new CodexSessionAdapter({
+    codexHome,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60_000,
+  });
+  const observations = await adapter.observe();
+
+  assert.equal(observations[0]?.title, "delegated-repository");
+});
+
+test("a realtime delegation title with no source resolves to the workspace", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  await writeCodexState(codexHome, [
+    {
+      id: "codex-voice-born",
+      cwd: "/Users/test/delegated-repository",
+      observedAt: TEST_TIME - 1_000,
+      title: "<realtime_delegation>\n<input>run the tests</input>\n</realtime_delegation>",
+    },
+  ]);
+
+  const adapter = new CodexSessionAdapter({
+    codexHome,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60_000,
+  });
+  const observations = await adapter.observe();
+
+  assert.equal(observations[0]?.title, "delegated-repository");
+  assert.equal(observations[0]?.realtimeVoice, true);
+});
+
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+test("observes a live realtime voice conversation over a Codex thread", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  const rolloutPath = path.join(codexHome, "rollout-realtime-open.jsonl");
+  await writeCodexState(codexHome, [
+    { id: "codex-voice", cwd: "/Users/test/luke", observedAt: TEST_TIME - 1_000, rolloutPath },
+  ]);
+  await writeRollout(rolloutPath, [
+    { type: "world_state", payload: { full: true, state: { realtime: { active: true } } } },
+    { type: "event_msg", payload: { type: "task_started" } },
+    {
+      type: "event_msg",
+      payload: { type: "task_complete", last_agent_message: "Ran the tests; all green." },
+    },
+  ]);
+
+  const adapter = new CodexSessionAdapter({
+    codexHome,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60_000,
+  });
+  const [observation] = await adapter.observe();
+
+  // The settled delegated turn still reads as waiting — the conversation is
+  // what the notice layer holds its tongue about, not the row.
+  assert.equal(observation?.status, SESSION_STATUS.WAITING);
+  assert.equal(observation?.realtimeVoiceLive, true);
+});
+
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+test("observes the realtime voice conversation closing on a later turn", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  const rolloutPath = path.join(codexHome, "rollout-realtime-closed.jsonl");
+  await writeCodexState(codexHome, [
+    { id: "codex-voice-done", cwd: "/Users/test/luke", observedAt: TEST_TIME - 1_000, rolloutPath },
+  ]);
+  await writeRollout(rolloutPath, [
+    { type: "world_state", payload: { full: true, state: { realtime: { active: true } } } },
+    { type: "event_msg", payload: { type: "task_started" } },
+    { type: "event_msg", payload: { type: "task_complete", last_agent_message: "Done." } },
+    // The first turn after the conversation ends patches the section closed.
+    { type: "world_state", payload: { full: false, state: { realtime: { active: false } } } },
+    { type: "event_msg", payload: { type: "task_started" } },
+    { type: "event_msg", payload: { type: "task_complete", last_agent_message: "Follow-up." } },
+  ]);
+
+  const adapter = new CodexSessionAdapter({
+    codexHome,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60_000,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.realtimeVoiceLive, undefined);
+});
+
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+test("reads a delegation as the conversation being live when its snapshot left the tail", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  const rolloutPath = path.join(codexHome, "rollout-realtime-delegation.jsonl");
+  await writeCodexState(codexHome, [
+    { id: "codex-delegated", cwd: "/Users/test/luke", observedAt: TEST_TIME - 1_000, rolloutPath },
+  ]);
+  await writeRollout(rolloutPath, [
+    { type: "event_msg", payload: { type: "task_started" } },
+    {
+      type: "response_item",
+      payload: {
+        type: "message",
+        role: "user",
+        content: [
+          {
+            type: "input_text",
+            text: "<realtime_delegation>\n  <input>run the release script</input>\n</realtime_delegation>",
+          },
+        ],
+      },
+    },
+    { type: "event_msg", payload: { type: "task_complete", last_agent_message: "Released." } },
+  ]);
+
+  const adapter = new CodexSessionAdapter({
+    codexHome,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60_000,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.realtimeVoiceLive, true);
+});
+
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+test("a typed user message never reads as a live voice conversation", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  const rolloutPath = path.join(codexHome, "rollout-typed-turn.jsonl");
+  await writeCodexState(codexHome, [
+    { id: "codex-typed", cwd: "/Users/test/luke", observedAt: TEST_TIME - 1_000, rolloutPath },
+  ]);
+  await writeRollout(rolloutPath, [
+    { type: "event_msg", payload: { type: "task_started" } },
+    {
+      type: "response_item",
+      payload: {
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: "please run the release script" }],
+      },
+    },
+    { type: "event_msg", payload: { type: "task_complete", last_agent_message: "Released." } },
+  ]);
+
+  const adapter = new CodexSessionAdapter({
+    codexHome,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60_000,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.realtimeVoiceLive, undefined);
+});
+
+test("a delegated chat holds announcements while its source conversation's voice is live", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  const sourceRollout = path.join(codexHome, "rollout-voice-source.jsonl");
+  const delegatedRollout = path.join(codexHome, "rollout-voice-delegated.jsonl");
+  await writeCodexState(codexHome, [
+    {
+      id: TEST_SOURCE_THREAD_ID,
+      cwd: "/Users/test/luke",
+      observedAt: TEST_TIME - 2_000,
+      title: "Fix Luke voice announcements",
+      rolloutPath: sourceRollout,
+    },
+    {
+      id: "codex-delegated",
+      cwd: "/Users/test/luke",
+      observedAt: TEST_TIME - 1_000,
+      title: TEST_DELEGATION_TITLE,
+      rolloutPath: delegatedRollout,
+    },
+  ]);
+  await writeRollout(sourceRollout, [
+    { type: "world_state", payload: { full: true, state: { realtime: { active: true } } } },
+    { type: "event_msg", payload: { type: "task_started" } },
+    { type: "event_msg", payload: { type: "task_complete", last_agent_message: "Delegated." } },
+  ]);
+  // The delegated chat's own rollout says nothing about the conversation that
+  // spawned it; the link through the marker is what must carry the hold.
+  await writeRollout(delegatedRollout, [
+    { type: "event_msg", payload: { type: "task_started" } },
+    { type: "event_msg", payload: { type: "task_complete", last_agent_message: "Done." } },
+  ]);
+
+  const adapter = new CodexSessionAdapter({
+    codexHome,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60_000,
+  });
+  const observations = await adapter.observe();
+
+  const source = observations.find((o) => o.providerSessionId === TEST_SOURCE_THREAD_ID);
+  const delegated = observations.find((o) => o.providerSessionId === "codex-delegated");
+  assert.equal(source?.realtimeVoiceLive, true);
+  assert.equal(delegated?.realtimeVoiceLive, true);
+  assert.equal(delegated?.title, "Fix Luke voice announcements");
+});
+
+test("the voice hold outlives Codex naming the delegated chat", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  const sourceRollout = path.join(codexHome, "rollout-voice-renamed-source.jsonl");
+  await writeCodexState(codexHome, [
+    {
+      id: TEST_SOURCE_THREAD_ID,
+      cwd: "/Users/test/luke",
+      observedAt: TEST_TIME - 2_000,
+      title: "Fix Luke voice announcements",
+      rolloutPath: sourceRollout,
+    },
+    {
+      // Codex has named the chat, so the title no longer carries the marker;
+      // the first user message is where the link has to survive.
+      id: "codex-delegated-named",
+      cwd: "/Users/test/luke",
+      observedAt: TEST_TIME - 1_000,
+      title: "What sessions are open?",
+      firstUserMessage: TEST_DELEGATION_TITLE,
+    },
+  ]);
+  await writeRollout(sourceRollout, [
+    { type: "world_state", payload: { full: true, state: { realtime: { active: true } } } },
+    { type: "event_msg", payload: { type: "task_started" } },
+    { type: "event_msg", payload: { type: "task_complete", last_agent_message: "Delegated." } },
+  ]);
+
+  const adapter = new CodexSessionAdapter({
+    codexHome,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60_000,
+  });
+  const observations = await adapter.observe();
+
+  const delegated = observations.find((o) => o.providerSessionId === "codex-delegated-named");
+  assert.equal(delegated?.realtimeVoiceLive, true);
+  assert.equal(delegated?.title, "What sessions are open?");
+});
+
 test("addresses a Codex thread by the id Codex files it under", async (t) => {
   const codexHome = await temporaryCodexHome(t);
   await writeCodexState(codexHome, [
