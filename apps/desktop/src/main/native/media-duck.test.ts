@@ -156,6 +156,83 @@ test("a helper that cannot be spawned leaves the exchange unharmed", () => {
   assert.deepEqual(context.commands, []);
 });
 
+test("a duck write that throws is handed once to a fresh helper", () => {
+  const context = harness({
+    spawns: [
+      () => ({
+        stdin: {
+          write: () => {
+            throw new Error("broken pipe");
+          },
+          end: () => undefined,
+        },
+        on: () => undefined,
+        removeAllListeners: () => undefined,
+      }),
+    ],
+  });
+  context.controller.setEnabled(true);
+
+  // The stale helper's pipe was already gone; the exchange still deserves its
+  // quiet, so the same command goes to a replacement rather than being lost.
+  context.controller.setExchangeActive(true);
+  assert.equal(context.spawns(), 2);
+  assert.deepEqual(context.commands, ["duck"]);
+});
+
+test("a restore write that throws costs nothing but the dead helper", async () => {
+  const written: string[] = [];
+  const context = harness({
+    spawns: [
+      () => ({
+        stdin: {
+          write: (chunk: string) => {
+            const command = chunk.trim();
+            if (command === "restore") throw new Error("broken pipe");
+            written.push(command);
+          },
+          end: () => undefined,
+        },
+        on: () => undefined,
+        removeAllListeners: () => undefined,
+      }),
+    ],
+  });
+  context.controller.setEnabled(true);
+  context.controller.setExchangeActive(true);
+  context.controller.setExchangeActive(false);
+  await settle();
+  assert.deepEqual(written, ["duck"]);
+
+  // The helper died owing a restore it can no longer deliver — its memory of
+  // the volumes died with it — and the next exchange gets a fresh helper
+  // rather than the broken pipe.
+  context.controller.setExchangeActive(true);
+  assert.equal(context.spawns(), 2);
+  assert.deepEqual(context.commands, ["duck"]);
+});
+
+test("stopping a controller whose pipe already broke does not throw", () => {
+  const context = harness({
+    spawns: [
+      () => ({
+        stdin: {
+          write: () => undefined,
+          end: () => {
+            throw new Error("already closed");
+          },
+        },
+        on: () => undefined,
+        removeAllListeners: () => undefined,
+      }),
+    ],
+  });
+  context.controller.setEnabled(true);
+  context.controller.setExchangeActive(true);
+
+  context.controller.stop();
+});
+
 test("stopping closes stdin rather than writing, and writes nothing after", async () => {
   const context = harness();
   context.controller.setEnabled(true);
