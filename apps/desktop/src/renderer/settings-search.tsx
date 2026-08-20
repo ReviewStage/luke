@@ -480,8 +480,9 @@ const FOCUSABLE = "button, select, input, textarea, [tabindex]";
  * the press asked for — the same frame-by-frame seek the session search field
  * needs, because the row is not drawn until React has answered. The row is
  * found by the anchor it wears, or by the errand mark its control already
- * carries; a control is focused, which scrolls on its own terms, and a plain
- * row is scrolled to the middle of the view. It lands after the page's own
+ * carries, and is scrolled to the top of the view — the scroller's own scroll
+ * padding keeps it clear of a pinned header — with a control also taking the
+ * keyboard, without a second scroll of its own. It lands after the page's own
  * header focus on purpose: the result named a row, so the row is where the
  * view belongs. A row the page is not drawing is given up on quietly.
  */
@@ -493,8 +494,8 @@ export function landOnSettingsRow(id: string): () => void {
       document.querySelector(`[${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${id}"]`) ??
       document.querySelector(`[${ERRAND_TARGET_ATTRIBUTE}="${id}"]`);
     if (element instanceof HTMLElement && element.checkVisibility({ opacityProperty: true })) {
-      if (element.matches(FOCUSABLE)) element.focus();
-      else element.scrollIntoView({ block: "center" });
+      element.scrollIntoView({ block: "start" });
+      if (element.matches(FOCUSABLE)) element.focus({ preventScroll: true });
       return;
     }
     if (frames++ > FOCUS_FRAME_LIMIT) return;
