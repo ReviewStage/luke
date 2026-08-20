@@ -1116,14 +1116,23 @@ async function refreshProviderSessions(generation: number): Promise<void> {
   });
   let supersetSnapshot = new SupersetWorkspaceSnapshot([]);
   let supersetOrganization: string | undefined;
+  let supersetAgentDefault: string | undefined;
   try {
-    const supersetAgentDefault = await settingsStore.get(
-      APP_SETTING_SCHEMA.supersetAgentDefault.field,
-    );
+    supersetAgentDefault = await settingsStore.get(APP_SETTING_SCHEMA.supersetAgentDefault.field);
     [supersetSnapshot, supersetOrganization] = await Promise.all([
       supersetWorkspaces.read(),
       supersetCli.activeOrganization(),
     ]);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`Superset observation failed: ${message}\n`);
+  }
+  observedSupersetWorkspaces = supersetSnapshot;
+  observedSupersetOrganization = supersetOrganization;
+  // Refreshed outside the read's own try so a failed pass hands the adapter
+  // the same emptiness the act contexts just took: rows the router would
+  // refuse to act on must not keep standing on a snapshot that is gone.
+  try {
     await supersetWorkspaceAdapter.refresh(
       supersetAgentDefault,
       supersetOrganization !== undefined,
@@ -1133,8 +1142,6 @@ async function refreshProviderSessions(generation: number): Promise<void> {
     const message = error instanceof Error ? error.message : String(error);
     process.stderr.write(`Superset observation failed: ${message}\n`);
   }
-  observedSupersetWorkspaces = supersetSnapshot;
-  observedSupersetOrganization = supersetOrganization;
   const conductorSnapshot = await conductorSnapshotPromise;
   const orcaSnapshot = await orcaSnapshotPromise;
   const cmuxSnapshot = await cmuxSnapshotPromise;
