@@ -66,6 +66,7 @@ import {
   normalizeSession,
   type ObservedWorkspaceProject,
   SESSION_APPLICATION_ID,
+  SESSION_APPLICATION_SCOPE,
   SESSION_LOCATION,
   SESSION_STATUS,
   WORKSPACE_TASK_SUPPORT,
@@ -705,6 +706,44 @@ test("the roster identifies sessions managed by Superset", () => {
   );
 
   assert.match(sessionContextText([chat]), /managed by Superset/);
+});
+
+test("the roster names a session's app associations, so 'my cmux Cursor session' resolves", () => {
+  const annotated = normalizeSession(
+    { id: "cursor", displayName: "Cursor" },
+    {
+      providerSessionId: "cursor-1",
+      title: "Refit the settings drawer",
+      status: SESSION_STATUS.WORKING,
+      observedAt: DECIDED_AT,
+      applications: [
+        {
+          id: SESSION_APPLICATION_ID.CMUX,
+          displayName: "cmux",
+          scope: SESSION_APPLICATION_SCOPE.SESSION,
+          link: "cmux://workspace/workspace-1/surface/surface-1",
+        },
+      ],
+    },
+  );
+
+  const text = sessionContextText([annotated]);
+
+  assert.match(text, /associated with cmux/);
+  // The association travels by name alone; the pane address stays on the machine.
+  assert.doesNotMatch(text, /cmux:\/\//);
+
+  // A session no app claimed says nothing about associations at all.
+  const unclaimed = normalizeSession(
+    { id: "cursor", displayName: "Cursor" },
+    {
+      providerSessionId: "cursor-2",
+      title: "Chase the flaky test",
+      status: SESSION_STATUS.WORKING,
+      observedAt: DECIDED_AT,
+    },
+  );
+  assert.doesNotMatch(sessionContextText([unclaimed]), /associated with/);
 });
 
 test("the roster names a hosted chat by its agent, with the host beside it", () => {
