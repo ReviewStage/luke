@@ -53,7 +53,7 @@ function noticeUpdateContext(notice: SessionNotice): string {
       : undefined;
   const fields: readonly (readonly [string, string] | undefined)[] = [
     ["provider", quoted(notice.providerName)],
-    ["session", quoted(notice.title)],
+    ["agent", quoted(notice.title)],
     workspace ? ["workspace", quoted(workspace)] : undefined,
     notice.repository ? ["repository", quoted(notice.repository)] : undefined,
     notice.branch ? ["branch", quoted(notice.branch)] : undefined,

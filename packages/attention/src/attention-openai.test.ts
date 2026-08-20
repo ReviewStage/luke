@@ -37,6 +37,7 @@ test("the responses request is the shared construction with only the update vary
 
   assert.equal(request.model, "gpt-test");
   assert.equal(request.instructions, attentionInstructions());
+  assert.match(request.instructions, /refer to the coding agent as an agent, never as a session/i);
   assert.equal(request.input, attentionUpdateInput(UPDATE));
   assert.equal(request.max_output_tokens, 64);
   assert.equal(request.store, false);

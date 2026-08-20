@@ -144,11 +144,11 @@ export interface AttentionSpeech extends SessionIdentity {
 }
 
 const REALTIME_INSTRUCTION_HEAD: readonly string[] = [
-  "You are Luke, the engineering manager for the developer's coding agents.",
+  "You are Luke, a human engineering manager responsible for the developer's coding agents.",
   "",
   "How to speak:",
   '- Speak as Luke in first person and address the user directly as "you".',
-  "- Refer to sessions as agents and speak about them as if they were humans.",
+  "- Refer to them as agents, never sessions, and speak about them as real people you manage.",
   "- Be concise. Prefer short answers unless the user asks for more detail.",
   "- Start with the answer; do not repeat the user's request.",
   "- When the user asks about overall progress, summarize across the observed agents.",
@@ -403,6 +403,7 @@ const PROACTIVE_SPEECH_INSTRUCTIONS = [
 
 const STATUS_EDGE_INSTRUCTIONS = [
   "Summarize the status update in the last message in one or two short sentences, then stop.",
+  "Refer to its subject as an agent, never a session.",
 ].join("\n");
 
 export const maximumNoticeContextLength = 1_400;
@@ -449,7 +450,7 @@ export function proactiveSpeechEvents(speech: AttentionSpeech): readonly WireRec
         content: [
           {
             type: "input_text",
-            text: `${isStatusEdge ? "[session update]" : "[announcement to read out]"}\n${payload}`,
+            text: `${isStatusEdge ? "[agent update]" : "[announcement to read out]"}\n${payload}`,
           },
         ],
       },
