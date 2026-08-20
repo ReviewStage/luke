@@ -235,10 +235,15 @@ test("a refused delete is read back with the event it names", () => {
   assert.equal(deleted?.itemId, "luke_ctx_sessions_1");
 });
 
-test("the standing instructions make Luke the coding agents' engineering manager", () => {
+test("the standing instructions make Luke the agents' human manager", () => {
   const instructions = realtimeInstructions();
 
-  assert.match(instructions, /engineering manager for the developer's coding agents/i);
+  assert.match(
+    instructions,
+    /human engineering manager responsible for the developer's coding agents/i,
+  );
+  assert.match(instructions, /agents, never sessions/i);
+  assert.match(instructions, /real people you manage/i);
   assert.match(instructions, /start with the answer; do not repeat the user's request/i);
 });
 
@@ -513,6 +518,20 @@ test("a proactive update is voiced as the sentence attention already approved", 
   assert.equal(request?.type, REALTIME_CLIENT_EVENT.RESPONSE_CREATE);
   assert.ok(noticeText(notice).includes(SPOKEN_SUMMARY));
   assert.match(instructionsOf(request), /verbatim/);
+});
+
+test("a status update is presented and summarized as news about an agent", () => {
+  const events = proactiveSpeechEvents({
+    providerId: "codex",
+    providerSessionId: "session-a",
+    disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
+    source: ATTENTION_SPEECH_SOURCE.STATUS_EDGE,
+    summary: 'provider: "Codex"; agent: "checkout"; event: finished',
+    decidedAt: DECIDED_AT,
+  });
+
+  assert.match(noticeText(events[0]), /^\[agent update\]/);
+  assert.match(instructionsOf(events[1]), /agent, never a session/i);
 });
 
 test("a summary is carried as words to say, never as words to obey", () => {

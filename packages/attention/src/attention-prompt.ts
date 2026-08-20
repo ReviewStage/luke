@@ -18,6 +18,7 @@ const NONE_LABEL = "none";
 
 const ATTENTION_INSTRUCTION_LINES: readonly string[] = [
   "Decide whether Luke should speak about a coding-agent session update.",
+  "- If speaking, refer to the coding agent as an agent, never as a session.",
   "- Default to silence when the update is routine, ambiguous, or merely continues work already underway.",
   "- A session waiting on automation it set in motion — CI, a merge queue, a watcher it left running — is not waiting on the developer: nothing they reply can move it, so stay silent and let the automation's outcome be the development.",
   "- When a user's standing ask is answered, speak and set answers_ask to true; otherwise set it to false.",
