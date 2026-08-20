@@ -32,6 +32,28 @@
 Notable changes to Luke, newest first. Each heading is a released version and
 the date its release was published.
 
+## 0.3.2 — 2026-08-20
+
+### Improvements
+
+- Session rows lead with the agent doing the work and show the apps holding
+  each session ([#331](https://github.com/ReviewStage/luke/pull/331))
+
+### Fixes
+
+- Fixed automatic updates failing before a download could begin
+  ([#327](https://github.com/ReviewStage/luke/pull/327))
+- Fixed the Superset sign-in popup looking unlike Luke's other credential
+  prompts ([#322](https://github.com/ReviewStage/luke/pull/322))
+
+### Miscellaneous
+
+- Added Luke's icon to the mounted installer volume
+  ([#326](https://github.com/ReviewStage/luke/pull/326))
+- Updated the design contract and package boundaries
+  ([#328](https://github.com/ReviewStage/luke/pull/328),
+  [#321](https://github.com/ReviewStage/luke/pull/321))
+
 ## 0.3.1 — 2026-08-19
 
 ### Fixes
