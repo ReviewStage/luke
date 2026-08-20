@@ -1085,7 +1085,7 @@ test("the session is minted with the fifteen acts and nothing wider", () => {
 });
 
 test("show_panel teaches the whole filter vocabulary its validator accepts", () => {
-  const filter = REALTIME_TOOLS.SHOW_PANEL.schema.parameters.properties.filter.description;
+  const filter = REALTIME_TOOLS.SHOW_PANEL.schema.parameters.properties.filters.description;
 
   // The filter parameter has no enum — an agent filter is whatever
   // provider_id the roster currently lists — so its description is the only

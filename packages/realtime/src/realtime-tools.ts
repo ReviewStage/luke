@@ -42,6 +42,7 @@ import {
   type TrackedIssue,
 } from "@sidecar/issues";
 import {
+  matchesFilterSelection,
   maximumSessionMessageLength,
   maximumWorkspaceNameLength,
   type NormalizedSession,
@@ -125,10 +126,12 @@ export const SESSION_LIST_VOICE = "voice";
  * validator reads so the two cannot drift.
  */
 const SESSION_LIST_FILTER_DESCRIPTION =
-  `Narrows the session list: ${SESSION_LIST_ALL} for every session, ` +
+  `The values to narrow the session list to: ${SESSION_LIST_ALL} for every session, ` +
   `${SESSION_LOCATION.LOCAL} or ${SESSION_LOCATION.CLOUD} for where work runs, ` +
   `${SESSION_LIST_VOICE} for voice chats, an observed session's provider_id for one agent, ` +
-  `or an associated app: ${Object.values(SESSION_APPLICATION_ID).join(", ")}.`;
+  `or an associated app: ${Object.values(SESSION_APPLICATION_ID).join(", ")}. ` +
+  `Values combine — ${SESSION_LOCATION.LOCAL} with an agent keeps that agent's local ` +
+  `sessions — and ${SESSION_LIST_ALL} stands alone.`;
 
 /** What one validated tool call asks for, ready for the bridge that carries it. */
 export type SessionToolAction =
@@ -204,7 +207,13 @@ export type AppToolAction =
       /** The effort riding the new value, when the developer named both. */
       effort?: string;
     }
-  | { kind: typeof APP_TOOL_KIND.PANEL; tab: AppPanelTab; filter?: string; sort?: SessionListSort }
+  | {
+      kind: typeof APP_TOOL_KIND.PANEL;
+      tab: AppPanelTab;
+      /** The validated narrowing, combined like the chips: OR within an axis, AND across. */
+      filters?: readonly string[];
+      sort?: SessionListSort;
+    }
   | { kind: typeof APP_TOOL_KIND.FEEDBACK; composer: FeedbackComposerKind; draft?: string }
   | { kind: "refused"; reason: string };
 
@@ -240,7 +249,16 @@ type JsonSchemaObjectProperty = {
   additionalProperties?: boolean;
 };
 
-type JsonSchemaProperty = JsonSchemaStringProperty | JsonSchemaObjectProperty;
+type JsonSchemaArrayProperty = {
+  type: "array";
+  description?: string;
+  items: JsonSchemaStringProperty;
+};
+
+type JsonSchemaProperty =
+  | JsonSchemaStringProperty
+  | JsonSchemaObjectProperty
+  | JsonSchemaArrayProperty;
 
 type JsonSchemaPropertyMap = {
   readonly [key: string]: JsonSchemaProperty;
@@ -785,39 +803,67 @@ function appSettingValue(setting: AppGuideSetting, value: UnparsedWireValue): st
 }
 
 /**
- * Validates a spoken session-list filter against the sessions actually being
- * observed. A filter that would show nothing is refused rather than applied:
- * the panel would quietly fall back to showing everything, and Luke would have
- * reported a narrowing that never happened. Every identity a row carries is a
- * filter on the same terms as its provider id — the agent behind a hosted
- * chat, an app associated with it, and a workspace manager's scope id — so a
- * spoken ask reaches exactly the rows the matching chip would keep.
+ * Whether one observed session answers one spoken filter value. Every
+ * identity a row carries is a filter on the same terms as its provider id —
+ * the agent behind a hosted chat, an app associated with it, and a workspace
+ * manager's scope id — so a spoken ask reaches exactly the rows the matching
+ * chip would keep.
  */
-function panelFilterAction(
-  filter: string,
-  sessions: readonly NormalizedSession[],
-): { filter: string } | { reason: string } {
-  if (filter === SESSION_LIST_ALL) return { filter };
+function sessionAnswersFilter(session: NormalizedSession, filter: string): boolean {
   if (filter === SESSION_LOCATION.LOCAL || filter === SESSION_LOCATION.CLOUD) {
-    if (sessions.some((session) => session.location === filter)) return { filter };
-    return { reason: `No ${filter} sessions are observed right now.` };
+    return session.location === filter;
   }
-  if (filter === SESSION_LIST_VOICE) {
-    if (sessions.some((session) => session.realtimeVoice === true)) return { filter };
-    return { reason: "No voice sessions are observed right now." };
+  if (filter === SESSION_LIST_VOICE) return session.realtimeVoice === true;
+  return (
+    session.providerId === filter ||
+    session.agent?.id === filter ||
+    session.workspace?.scopeId === filter ||
+    session.applications.some((application) => application.id === filter)
+  );
+}
+
+/**
+ * Validates a spoken session-list narrowing against the sessions actually
+ * being observed. A narrowing that would show nothing is refused rather than
+ * applied: the panel would quietly fall back to showing everything, and Luke
+ * would have reported a narrowing that never happened. Each value is checked
+ * on its own first, so the refusal can name the value that is wrong rather
+ * than only the combination — and then the combination is checked whole, on
+ * the same axis terms the chips combine on, because two values a roster
+ * answers separately can still name an intersection nothing occupies.
+ */
+function panelFiltersAction(
+  filters: readonly string[],
+  sessions: readonly NormalizedSession[],
+): { filters: readonly string[] } | { reason: string } {
+  const chosen = [...new Set(filters)];
+  if (chosen.includes(SESSION_LIST_ALL)) {
+    if (chosen.length > 1) {
+      return { reason: `${SESSION_LIST_ALL} is the whole list, so it combines with nothing.` };
+    }
+    return { filters: chosen };
+  }
+  for (const filter of chosen) {
+    if (sessions.some((session) => sessionAnswersFilter(session, filter))) continue;
+    if (filter === SESSION_LOCATION.LOCAL || filter === SESSION_LOCATION.CLOUD) {
+      return { reason: `No ${filter} sessions are observed right now.` };
+    }
+    if (filter === SESSION_LIST_VOICE) {
+      return { reason: "No voice sessions are observed right now." };
+    }
+    return {
+      reason: `No observed session belongs to an agent, app, or workspace manager "${filter}".`,
+    };
   }
   if (
-    sessions.some(
-      (session) =>
-        session.providerId === filter ||
-        session.agent?.id === filter ||
-        session.workspace?.scopeId === filter ||
-        session.applications.some((application) => application.id === filter),
+    chosen.length > 1 &&
+    !sessions.some((session) =>
+      matchesFilterSelection(chosen, (filter) => sessionAnswersFilter(session, filter)),
     )
   ) {
-    return { filter };
+    return { reason: "No observed session matches that combination of filters." };
   }
-  return { reason: "No observed session belongs to that agent, app, or workspace manager." };
+  return { filters: chosen };
 }
 
 function validateChangeAppSetting(parsed: WireRecord, context: AppToolContext): AppToolAction {
@@ -861,6 +907,23 @@ function validateChangeAppSetting(parsed: WireRecord, context: AppToolContext): 
   return { kind: APP_TOOL_KIND.SETTING, setting, value, effort };
 }
 
+/**
+ * Reads the narrowing a panel ask carries: several values, or a lone string
+ * for a narrowing of one. Blank entries are dropped rather than validated,
+ * and an emptied list is no narrowing at all.
+ */
+function spokenFilterValues(
+  value: UnparsedWireValue,
+): { values: readonly string[] | undefined } | { reason: string } {
+  if (value === undefined) return { values: undefined };
+  const entries = isWireString(value) ? [value] : value;
+  if (!Array.isArray(entries) || !entries.every((entry) => isWireString(entry))) {
+    return { reason: "filters takes a list of filter values." };
+  }
+  const cleaned = entries.map((entry) => entry.trim()).filter((entry) => entry.length > 0);
+  return { values: cleaned.length > 0 ? cleaned : undefined };
+}
+
 function validateShowPanel(parsed: WireRecord, context: AppToolContext): AppToolAction {
   const tab = parsed.tab ?? APP_PANEL_TAB.SESSIONS;
   if (!isAppPanelTab(tab)) {
@@ -870,18 +933,19 @@ function validateShowPanel(parsed: WireRecord, context: AppToolContext): AppTool
   if (sort !== undefined && !isSessionListSort(sort)) {
     return { kind: "refused", reason: "The list orders by urgency or by recency." };
   }
-  const filter = textArgument(parsed, "filter");
-  if (filter === undefined) {
+  const asked = spokenFilterValues(parsed.filters);
+  if ("reason" in asked) return { kind: "refused", reason: asked.reason };
+  if (asked.values === undefined) {
     const action: AppToolAction = { kind: APP_TOOL_KIND.PANEL, tab };
     if (sort !== undefined) action.sort = sort;
     return action;
   }
-  const outcome = panelFilterAction(filter, context.sessions);
+  const outcome = panelFiltersAction(asked.values, context.sessions);
   if ("reason" in outcome) return { kind: "refused", reason: outcome.reason };
   const action: AppToolAction = {
     kind: APP_TOOL_KIND.PANEL,
     tab,
-    filter: outcome.filter,
+    filters: outcome.filters,
   };
   if (sort !== undefined) action.sort = sort;
   return action;
@@ -1207,8 +1271,9 @@ export const REALTIME_TOOLS = {
             enum: Object.values(APP_PANEL_TAB),
             description: "The tab to show. Defaults to sessions.",
           },
-          filter: {
-            type: "string",
+          filters: {
+            type: "array",
+            items: { type: "string" },
             description: SESSION_LIST_FILTER_DESCRIPTION,
           },
           sort: {

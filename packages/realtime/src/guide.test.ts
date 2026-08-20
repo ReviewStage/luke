@@ -262,23 +262,24 @@ test("a spoken panel ask opens a real tab and narrows only to what is observed",
 
   assert.deepEqual(show("{}"), { kind: "panel", tab: APP_PANEL_TAB.SESSIONS });
   assert.deepEqual(show('{"tab":"settings"}'), { kind: "panel", tab: APP_PANEL_TAB.SETTINGS });
-  assert.deepEqual(show('{"filter":"all"}'), {
+  assert.deepEqual(show('{"filters":["all"]}'), {
     kind: "panel",
     tab: APP_PANEL_TAB.SESSIONS,
-    filter: "all",
+    filters: ["all"],
   });
-  assert.deepEqual(show('{"filter":"conductor"}'), {
+  assert.deepEqual(show('{"filters":["conductor"]}'), {
     kind: "panel",
     tab: APP_PANEL_TAB.SESSIONS,
-    filter: "conductor",
+    filters: ["conductor"],
   });
-  assert.deepEqual(show('{"filter":"cloud"}'), {
+  // A narrowing of one may arrive as a lone string, read as a list of one.
+  assert.deepEqual(show('{"filters":"cloud"}'), {
     kind: "panel",
     tab: APP_PANEL_TAB.SESSIONS,
-    filter: "cloud",
+    filters: ["cloud"],
   });
 
-  assert.deepEqual(show('{"filter":"voice"}'), {
+  assert.deepEqual(show('{"filters":["voice"]}'), {
     kind: "refused",
     reason: "No voice sessions are observed right now.",
   });
@@ -286,18 +287,80 @@ test("a spoken panel ask opens a real tab and narrows only to what is observed",
   assert.equal(show('{"tab":"about"}').kind, "refused");
   // A narrowing that would show nothing is refused rather than applied: the
   // panel would fall back to everything, and the sentence would be wrong.
-  assert.equal(show('{"filter":"local"}').kind, "refused");
-  assert.equal(show('{"filter":"codex"}').kind, "refused");
+  assert.equal(show('{"filters":["local"]}').kind, "refused");
+  assert.equal(show('{"filters":["codex"]}').kind, "refused");
 
   const voiceShow = (argumentsJson: string) =>
     appToolAction(call(REALTIME_TOOL.SHOW_PANEL, argumentsJson), GUIDE, [
       observedConductorSession(true),
     ]);
-  assert.deepEqual(voiceShow('{"filter":"voice"}'), {
+  assert.deepEqual(voiceShow('{"filters":["voice"]}'), {
     kind: "panel",
     tab: APP_PANEL_TAB.SESSIONS,
-    filter: SESSION_LIST_VOICE,
+    filters: [SESSION_LIST_VOICE],
   });
+});
+
+test("a spoken panel ask can combine filters, on the axes the chips combine on", () => {
+  const sessions = [observedConductorSession(), observedConductorSession(true)];
+  const show = (argumentsJson: string) =>
+    appToolAction(call(REALTIME_TOOL.SHOW_PANEL, argumentsJson), GUIDE, sessions);
+
+  // Values on different axes narrow: a cloud Conductor voice chat is observed.
+  assert.deepEqual(show('{"filters":["cloud","conductor","voice"]}'), {
+    kind: "panel",
+    tab: APP_PANEL_TAB.SESSIONS,
+    filters: ["cloud", "conductor", "voice"],
+  });
+  // A repeated value is one value, not a tighter ask.
+  assert.deepEqual(show('{"filters":["cloud","cloud"]}'), {
+    kind: "panel",
+    tab: APP_PANEL_TAB.SESSIONS,
+    filters: ["cloud"],
+  });
+
+  // Each value answered by some session can still name an intersection
+  // nothing occupies: every observed session is cloud, so local matches
+  // nothing — and with a local session beside them, local Conductor exists
+  // but no local voice chat does.
+  assert.deepEqual(show('{"filters":["local","conductor"]}'), {
+    kind: "refused",
+    reason: "No local sessions are observed right now.",
+  });
+  const mixed = (argumentsJson: string) =>
+    appToolAction(call(REALTIME_TOOL.SHOW_PANEL, argumentsJson), GUIDE, [
+      ...sessions,
+      normalizeSession(
+        { id: "conductor", displayName: "Conductor" },
+        {
+          providerSessionId: "workspace-2",
+          title: "Conductor: checkout-service",
+          status: SESSION_STATUS.WORKING,
+          observedAt: 1_800_000_000_000,
+          location: SESSION_LOCATION.LOCAL,
+        },
+      ),
+    ]);
+  assert.deepEqual(mixed('{"filters":["local","conductor"]}'), {
+    kind: "panel",
+    tab: APP_PANEL_TAB.SESSIONS,
+    filters: ["local", "conductor"],
+  });
+  assert.deepEqual(mixed('{"filters":["local","voice"]}'), {
+    kind: "refused",
+    reason: "No observed session matches that combination of filters.",
+  });
+
+  // The whole list is not a value to narrow by.
+  assert.deepEqual(show('{"filters":["all","cloud"]}'), {
+    kind: "refused",
+    reason: "all is the whole list, so it combines with nothing.",
+  });
+  // A narrowing has to be a list of words; anything else is unreadable.
+  assert.equal(show('{"filters":[3]}').kind, "refused");
+  assert.equal(show('{"filters":{"value":"cloud"}}').kind, "refused");
+  // A list of nothing is no narrowing at all.
+  assert.deepEqual(show('{"filters":[]}'), { kind: "panel", tab: APP_PANEL_TAB.SESSIONS });
 });
 
 test("a spoken panel ask can reorder the list in the panel's own two words", () => {
@@ -310,10 +373,10 @@ test("a spoken panel ask can reorder the list in the panel's own two words", () 
     tab: APP_PANEL_TAB.SESSIONS,
     sort: SESSION_LIST_SORT.RECENCY,
   });
-  assert.deepEqual(show('{"filter":"conductor","sort":"urgency"}'), {
+  assert.deepEqual(show('{"filters":["conductor"],"sort":"urgency"}'), {
     kind: "panel",
     tab: APP_PANEL_TAB.SESSIONS,
-    filter: "conductor",
+    filters: ["conductor"],
     sort: SESSION_LIST_SORT.URGENCY,
   });
   assert.equal(show('{"sort":"alphabetical"}').kind, "refused");

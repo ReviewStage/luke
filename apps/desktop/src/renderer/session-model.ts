@@ -4,11 +4,13 @@ import {
   ATTENTION_DISPOSITION,
   isProviderId,
   isSessionApplicationId,
+  matchesFilterSelection,
   type NormalizedSession,
   PROVIDER_ID_LIST,
   type ProviderId,
   SESSION_APPLICATION_ID_LIST,
   SESSION_FILTER,
+  SESSION_FILTER_AXIS,
   SESSION_LOCATION,
   SESSION_STATUS,
   type SessionApplicationId,
@@ -16,8 +18,10 @@ import {
   type SessionControlKind,
   type SessionDiffSummary,
   type SessionFilter,
+  type SessionFilterAxis,
   type SessionLocation,
   sessionChangeNumber,
+  sessionFilterAxis,
 } from "@sidecar/session";
 import { SUPERSET_WORKSPACE_PROVIDER_ID } from "@sidecar/superset/vocabulary";
 import {
@@ -38,39 +42,18 @@ import type { AppBootstrap } from "#shared/contracts";
  * Superset manages it. A hosted chat carries its agent's identity beside its
  * provider's, so a Claude conversation in Conductor's cloud answers the
  * Claude Code chip and the Conductor chip at once.
+ *
+ * The axes the filters combine on live there too, because a spoken ask's
+ * combination is validated against the observed roster by the same rules the
+ * chips narrow the drawn list by, and the two readings must not drift apart.
  */
-export { SESSION_FILTER, type SessionFilter };
-
-/**
- * The independent questions the filters answer. Each filter value belongs to
- * exactly one axis, and the axis is what gives a combined selection its
- * meaning: values on one axis are alternatives (either place, either agent),
- * where values on different axes are each a further narrowing.
- */
-export const SESSION_FILTER_AXIS = {
-  LOCATION: "location",
-  KIND: "kind",
-  APP: "app",
-  AGENT: "agent",
-} as const;
-
-export type SessionFilterAxis = (typeof SESSION_FILTER_AXIS)[keyof typeof SESSION_FILTER_AXIS];
-
-/**
- * Conductor and Superset land on the app axis even where a namesake provider
- * exists, because "associated with that app" is the question their chips
- * answer — a native cloud Conductor chat and a local Codex chat annotated by
- * Conductor answer the same chip, and an agent chip beside it stays a further
- * narrowing rather than a widening.
- */
-export function sessionFilterAxis(filter: SessionFilter): SessionFilterAxis {
-  if (filter === SESSION_FILTER.LOCAL || filter === SESSION_FILTER.CLOUD) {
-    return SESSION_FILTER_AXIS.LOCATION;
-  }
-  if (filter === SESSION_FILTER.VOICE) return SESSION_FILTER_AXIS.KIND;
-  if (isSessionApplicationId(filter)) return SESSION_FILTER_AXIS.APP;
-  return SESSION_FILTER_AXIS.AGENT;
-}
+export {
+  SESSION_FILTER,
+  SESSION_FILTER_AXIS,
+  type SessionFilter,
+  type SessionFilterAxis,
+  sessionFilterAxis,
+};
 
 function matchesFilter(session: DisplaySession, filter: SessionFilter): boolean {
   if (filter === SESSION_FILTER.LOCAL || filter === SESSION_FILTER.CLOUD) {
@@ -85,28 +68,12 @@ function matchesFilter(session: DisplaySession, filter: SessionFilter): boolean 
   );
 }
 
-/**
- * Whether a row answers the whole selection. Within one axis the values are
- * ORed — Local and Cloud together is either place — and across axes they are
- * ANDed — Codex beside Conductor is Codex chats associated with Conductor.
- * An axis nothing is chosen on asks nothing, so an empty selection is the
- * unnarrowed list.
- */
+/** Whether a row answers the whole selection, on the axes' own combining rules. */
 export function matchesSessionFilters(
   session: DisplaySession,
   filters: readonly SessionFilter[],
 ): boolean {
-  const byAxis = new Map<SessionFilterAxis, SessionFilter[]>();
-  for (const filter of filters) {
-    const axis = sessionFilterAxis(filter);
-    const held = byAxis.get(axis) ?? [];
-    held.push(filter);
-    byAxis.set(axis, held);
-  }
-  for (const alternatives of byAxis.values()) {
-    if (!alternatives.some((filter) => matchesFilter(session, filter))) return false;
-  }
-  return true;
+  return matchesFilterSelection(filters, (filter) => matchesFilter(session, filter));
 }
 
 /**
@@ -134,26 +101,41 @@ export function sameSessionFilters(
 /** The spoken name for the unnarrowed list, shared with the voice tool's vocabulary. */
 const SPOKEN_ALL = "all";
 
-/**
- * Reads a spoken filter into the list's own selection. The values are the
- * same strings the chips use — the coarse scopes, voice kind, app ids, and
- * provider ids — so a validated spoken ask maps one-to-one. A spoken ask says
- * what the list should show, so it replaces a hand-picked combination rather
- * than joining it: `all` is the empty selection, one value is a selection of
- * one. Anything else is nothing rather than a guess, and the list is left as
- * it was.
- */
-export function sessionFiltersFromSpoken(value: string): readonly SessionFilter[] | undefined {
-  if (value === SPOKEN_ALL) return [];
+/** One spoken value read as the chip it names, or nothing when no chip holds it. */
+function sessionFilterFromSpoken(value: string): SessionFilter | undefined {
   if (
     value === SESSION_FILTER.LOCAL ||
     value === SESSION_FILTER.CLOUD ||
     value === SESSION_FILTER.VOICE
   ) {
-    return [value];
+    return value;
   }
-  if (isSessionApplicationId(value)) return [value];
-  return isProviderId(value) ? [value] : undefined;
+  if (isSessionApplicationId(value)) return value;
+  return isProviderId(value) ? value : undefined;
+}
+
+/**
+ * Reads a spoken narrowing into the list's own selection. The values are the
+ * same strings the chips use — the coarse scopes, voice kind, app ids, and
+ * provider ids — so a validated spoken ask maps one-to-one, and several
+ * values combine exactly as the matching chips would. A spoken ask says what
+ * the list should show, so it replaces a hand-picked combination rather than
+ * joining it: `all` is the empty selection. A value no chip of this build
+ * holds makes the whole ask nothing rather than a guess — a selection quietly
+ * missing one of its values would show more than the ask named while
+ * reporting the narrowing happened.
+ */
+export function sessionFiltersFromSpoken(
+  values: readonly string[],
+): readonly SessionFilter[] | undefined {
+  if (values.length === 1 && values[0] === SPOKEN_ALL) return [];
+  const selection: SessionFilter[] = [];
+  for (const value of values) {
+    const filter = sessionFilterFromSpoken(value);
+    if (filter === undefined) return undefined;
+    if (!selection.includes(filter)) selection.push(filter);
+  }
+  return selection;
 }
 
 /**

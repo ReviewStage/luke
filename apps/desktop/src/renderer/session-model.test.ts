@@ -459,7 +459,24 @@ test("the voice filter narrows to realtime voice chats and has a spoken name", (
     }).sessions.map((session) => session.id),
     ["codex-voice"],
   );
-  assert.deepEqual(sessionFiltersFromSpoken(SESSION_FILTER.VOICE), [SESSION_FILTER.VOICE]);
+  assert.deepEqual(sessionFiltersFromSpoken([SESSION_FILTER.VOICE]), [SESSION_FILTER.VOICE]);
+});
+
+test("a spoken narrowing of several values reads as the matching chips combined", () => {
+  assert.deepEqual(
+    sessionFiltersFromSpoken([SESSION_FILTER.LOCAL, PROVIDER_ID.CODEX, SESSION_FILTER.VOICE]),
+    [SESSION_FILTER.LOCAL, PROVIDER_ID.CODEX, SESSION_FILTER.VOICE],
+  );
+  // A repeated value is one chip, not a tighter ask.
+  assert.deepEqual(sessionFiltersFromSpoken([SESSION_FILTER.CLOUD, SESSION_FILTER.CLOUD]), [
+    SESSION_FILTER.CLOUD,
+  ]);
+  // The whole list is the empty selection.
+  assert.deepEqual(sessionFiltersFromSpoken(["all"]), []);
+  // A value no chip of this build holds makes the whole ask nothing rather
+  // than a guess: a selection quietly missing one of its values would show
+  // more than the ask named.
+  assert.equal(sessionFiltersFromSpoken([SESSION_FILTER.LOCAL, "not-an-agent"]), undefined);
 });
 
 // The fixture above covers the agents it happens to contain. Every agent the
@@ -884,7 +901,7 @@ test("sessions Superset manages earn a chip and can be narrowed to", () => {
   assert.equal(narrowed.total, 2);
 
   // The spoken vocabulary is the chips' own, so the same word narrows by voice.
-  assert.deepEqual(sessionFiltersFromSpoken("superset"), [SESSION_FILTER.SUPERSET]);
+  assert.deepEqual(sessionFiltersFromSpoken(["superset"]), [SESSION_FILTER.SUPERSET]);
 });
 
 test("an app filter matches annotations as well as a namesake provider", () => {
@@ -942,7 +959,7 @@ test("an app filter matches annotations as well as a namesake provider", () => {
     }).sessions.map((session) => session.id),
     ["codex-conductor"],
   );
-  assert.deepEqual(sessionFiltersFromSpoken(SESSION_APPLICATION_ID.CHATGPT), [
+  assert.deepEqual(sessionFiltersFromSpoken([SESSION_APPLICATION_ID.CHATGPT]), [
     SESSION_APPLICATION_ID.CHATGPT,
   ]);
 });

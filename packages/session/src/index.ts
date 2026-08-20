@@ -81,8 +81,12 @@ export {
 } from "./session.js";
 export {
   isSessionFilter,
+  matchesFilterSelection,
   SESSION_FILTER,
+  SESSION_FILTER_AXIS,
   type SessionFilter,
+  type SessionFilterAxis,
+  sessionFilterAxis,
 } from "./session-filter.js";
 export {
   firstWholeNameIndex,

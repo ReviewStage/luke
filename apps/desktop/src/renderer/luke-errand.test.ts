@@ -126,10 +126,10 @@ test("a narrowing or a re-ordering is signed on the control that carries it", ()
   // The options button says how the list is being shown, so it comes first —
   // and it is only drawn beside a list with something to choose between, which
   // is why the tab stands behind it rather than instead of it.
-  assert.deepEqual(errandTargets({ kind: "panel", tab: APP_PANEL_TAB.SESSIONS, filter: "cloud" }), [
-    ERRAND_TARGET.LIST_OPTIONS,
-    ERRAND_TARGET.SESSIONS_TAB,
-  ]);
+  assert.deepEqual(
+    errandTargets({ kind: "panel", tab: APP_PANEL_TAB.SESSIONS, filters: ["cloud"] }),
+    [ERRAND_TARGET.LIST_OPTIONS, ERRAND_TARGET.SESSIONS_TAB],
+  );
   assert.deepEqual(
     errandTargets({
       kind: "panel",

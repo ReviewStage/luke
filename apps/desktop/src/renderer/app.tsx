@@ -1933,12 +1933,14 @@ export function App(): React.JSX.Element {
           // errand into a shape still growing has to trail the whole opening,
           // and one into a panel already up does not.
           const opening = presentationOf() !== PANEL_PRESENTATION.PANEL;
-          const spoken = action.filter ? sessionFiltersFromSpoken(action.filter) : undefined;
-          // An agent this build never registered cannot narrow the list, and Luke
-          // must not claim it did. The list still has to match the sentence that
-          // says every session is shown, so an unmappable ask widens the view to
-          // everything rather than leaving whatever narrowing was already in force.
-          const filters = action.filter ? (spoken ?? []) : undefined;
+          const spoken = action.filters ? sessionFiltersFromSpoken(action.filters) : undefined;
+          // An identity this build holds no chip for cannot narrow the list, and
+          // Luke must not claim it did. The list still has to match the sentence
+          // that says every session is shown, so an unmappable ask widens the view
+          // to everything rather than leaving whatever narrowing was already in
+          // force — the whole ask, because a combination quietly missing one of
+          // its values would show more than the sentence names.
+          const filters = action.filters ? (spoken ?? []) : undefined;
           // Caught rather than applied, on the settings switch's terms: the
           // narrowing is what Luke is on his way to the options button to do, and
           // a list that has already re-sorted itself by the time he gets there
@@ -1967,9 +1969,9 @@ export function App(): React.JSX.Element {
           return {
             status: "shown",
             tab: action.tab,
-            ...(spoken !== undefined ? { filter: action.filter } : undefined),
-            ...(action.filter && spoken === undefined
-              ? { note: "That agent has no filter of its own here, so every session is shown." }
+            ...(spoken !== undefined ? { filters: action.filters } : undefined),
+            ...(action.filters && spoken === undefined
+              ? { note: "That narrowing has no filter of its own here, so every session is shown." }
               : undefined),
             ...(action.sort ? { sort: action.sort } : undefined),
           };
