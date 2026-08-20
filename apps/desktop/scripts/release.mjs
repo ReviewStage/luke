@@ -11,6 +11,7 @@ import {
   codesignDisplayArguments,
   DMG_MOUNT_POINT,
   DMG_STAGING_ENTRIES,
+  DMG_VOLUME_ICON_FILE_NAME,
   dmgCodesignArguments,
   dmgStoreLayout,
   dmgVerificationCommands,
@@ -29,6 +30,7 @@ import {
   resolveReleaseSigning,
   stapleArguments,
   tiffutilHiDpiArguments,
+  volumeCustomIconArguments,
   withMountedDmg,
 } from "./release-config.mjs";
 
@@ -146,6 +148,25 @@ try {
     }
   }
 
+  // The volume wears the packaged app's own icon — read from the bundle it is
+  // shipping rather than from .build, so the two can never disagree.
+  const bundleIconFile = execFileSync(
+    "plutil",
+    [
+      "-extract",
+      "CFBundleIconFile",
+      "raw",
+      "-o",
+      "-",
+      path.join(appPath, "Contents", "Info.plist"),
+    ],
+    { encoding: "utf8" },
+  ).trim();
+  fs.copyFileSync(
+    path.join(appPath, "Contents", "Resources", bundleIconFile),
+    path.join(stagingDirectory, DMG_VOLUME_ICON_FILE_NAME),
+  );
+
   const stagingBackgroundDirectory = path.join(stagingDirectory, DMG_WINDOW.BACKGROUND.DIRECTORY);
   fs.mkdirSync(stagingBackgroundDirectory);
   execFileSync(
@@ -187,6 +208,7 @@ try {
         const storePath = path.join(mountPoint, ".DS_Store");
         fs.rmSync(storePath, { force: true });
         await writeDmgStore(storePath, dmgStoreLayout(mountPoint));
+        execFileSync("xcrun", volumeCustomIconArguments(mountPoint), { stdio: "inherit" });
         execFileSync("sync", [], { stdio: "inherit" });
       },
     });

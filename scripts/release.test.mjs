@@ -9,6 +9,7 @@ import {
   codesignDisplayArguments,
   DMG_MOUNT_POINT,
   DMG_STAGING_ENTRIES,
+  DMG_VOLUME_ICON_FILE_NAME,
   dmgCodesignArguments,
   dmgStoreLayout,
   dmgVerificationCommands,
@@ -35,6 +36,7 @@ import {
   resolveReleaseSigning,
   stapleArguments,
   tiffutilHiDpiArguments,
+  volumeCustomIconArguments,
   withMountedDmg,
 } from "../apps/desktop/scripts/release-config.mjs";
 import { DMG_WINDOW } from "../design/dmg-window.mjs";
@@ -291,6 +293,29 @@ test("release DMG store layout is branded and bounded", () => {
   assert.equal(DMG_WINDOW.BOUNDS.WIDTH, DMG_WINDOW.BACKGROUND.PNG.WIDTH);
   assert.equal(DMG_WINDOW.BOUNDS.HEIGHT, DMG_WINDOW.BACKGROUND.PNG.HEIGHT);
   assert.ok(DMG_WINDOW.BACKGROUND.DIRECTORY.startsWith("."));
+});
+
+test("the DMG volume wears the app's own icon", () => {
+  // Finder reads a volume icon from this exact hidden name at the root, and
+  // only once the root's custom-icon bit is set — so staging the file without
+  // setting the bit, or the reverse, is a generic disk icon with no other sign.
+  assert.equal(DMG_VOLUME_ICON_FILE_NAME, ".VolumeIcon.icns");
+  assert.deepEqual(volumeCustomIconArguments("/Volumes/Luke"), [
+    "SetFile",
+    "-a",
+    "C",
+    "/Volumes/Luke",
+  ]);
+
+  const releaseScript = fs.readFileSync(
+    path.join(repoRoot, "apps", "desktop", "scripts", "release.mjs"),
+    "utf8",
+  );
+  assert.ok(releaseScript.includes("DMG_VOLUME_ICON_FILE_NAME"));
+  assert.ok(releaseScript.includes("volumeCustomIconArguments(mountPoint)"));
+  // The staged icon comes from the packaged bundle itself, not the .build
+  // intermediate, so the volume can never wear an icon the app does not.
+  assert.ok(releaseScript.includes("CFBundleIconFile"));
 });
 
 test("release zip names include the desktop version and packaged architecture", () => {
