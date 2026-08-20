@@ -217,15 +217,15 @@ export class SupersetCli {
 
   async workspaceProjects(defaultAgent?: string): Promise<readonly WorkspaceProject[]> {
     if (!(await this.connected())) return [];
-    const remoteHosts = await this.#records(["hosts", "list", "--json"]);
+    const hosts = await this.#records(["hosts", "list", "--json"]);
     // Only a remote host names itself on a project: the local target is the
     // machine the user is sitting at, which the rows already say by wearing
     // no cloud badge, so annotating it would state the default.
     const targets: readonly { id: string; name?: string; arguments_: readonly string[] }[] = [
       { id: LOCAL_TARGET_ID, arguments_: ["--local"] },
-      ...remoteHosts.slice(0, SUPERSET_TARGET_LIMIT).flatMap((host) => {
-        const id = text(host.machineId) ?? text(host.id);
-        const name = text(host.name) ?? text(host.displayName) ?? text(host.hostname) ?? id;
+      ...hosts.slice(0, SUPERSET_TARGET_LIMIT).flatMap((host) => {
+        const id = text(host.id);
+        const name = text(host.name) ?? id;
         return id && name ? [{ id, name, arguments_: ["--host", id] }] : [];
       }),
     ];
@@ -266,7 +266,19 @@ export class SupersetCli {
         });
       }),
     );
-    return projects.flat();
+    // The hosts list includes this machine's own host row, so the local
+    // target's projects come back a second time under that row's id. A
+    // project id names one project on one host, so the first target to list
+    // it keeps it — the local target leads, and a creation ask lands on
+    // `--local` rather than on this machine's host id.
+    const seen = new Set<string>();
+    const deduped: WorkspaceProject[] = [];
+    for (const project of projects.flat()) {
+      if (seen.has(project.providerProjectId)) continue;
+      seen.add(project.providerProjectId);
+      deduped.push(project);
+    }
+    return deduped;
   }
 
   async createWorkspace(request: ProviderWorkspaceRequest): Promise<ProviderWorkspaceResult> {
@@ -309,10 +321,12 @@ export class SupersetCli {
     try {
       const output = await this.#query(this.executable, arguments_, 30_000);
       const parsed = unparsedWire(JSON.parse(output));
-      const workspaceRecord = wireRecord(parsed);
-      const workspaceId = workspaceRecord
-        ? (text(workspaceRecord.workspaceId) ?? text(workspaceRecord.id))
-        : undefined;
+      const envelope = wireRecord(parsed);
+      // The CLI answers a creation with `{ workspace, alreadyExists }`, so the
+      // one thing read out of it — the id the follow-through open names — sits
+      // a level down on the workspace itself.
+      const workspaceRecord = envelope ? wireRecord(envelope.workspace) : undefined;
+      const workspaceId = workspaceRecord ? text(workspaceRecord.id) : undefined;
       if (!workspaceId) return { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED };
       try {
         await this.#run(this.executable, [

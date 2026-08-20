@@ -285,7 +285,11 @@ test("discovers host-scoped projects and creates a workspace with a generated br
       }
       if (arguments_[0] === "workspaces") {
         mutableCommands.push([...arguments_]);
-        return JSON.stringify({ workspaceId: "workspace-new" });
+        // The CLI's creation answer: the id sits on the workspace itself.
+        return JSON.stringify({
+          workspace: { id: "workspace-new", name: "luke-fix-the-panel-transitions-deadbeef" },
+          alreadyExists: false,
+        });
       }
       return "[]";
     },
@@ -332,6 +336,43 @@ test("discovers host-scoped projects and creates a workspace with a generated br
     ],
     ["workspaces", "open", "workspace-new", "--json"],
   ]);
+});
+
+test("lists a project once when the local machine is also a listed host", async (t) => {
+  const home = await connectedHome(t);
+  const cli = new SupersetCli({
+    ...testCliOptions(home),
+    query: async (_executable, arguments_) => {
+      if (arguments_[0] === "hosts") {
+        // The hosts list names every host in the organization, this machine's
+        // own row included — the CLI has no way to say which row is local.
+        return JSON.stringify([
+          { id: "host-me", name: "My Mac" },
+          { id: "host-studio", name: "Studio" },
+        ]);
+      }
+      if (arguments_[0] === "projects") {
+        if (arguments_.includes("--local") || arguments_.includes("host-me")) {
+          return JSON.stringify([{ id: "project-1", name: "Luke" }]);
+        }
+        return JSON.stringify([{ id: "project-2", name: "Studio site" }]);
+      }
+      if (arguments_[0] === "agents") return JSON.stringify([{ presetId: "codex" }]);
+      return "[]";
+    },
+  });
+
+  const projects = await cli.workspaceProjects();
+
+  // The local target lists project-1 first, so this machine's own host row
+  // repeating it adds nothing; the genuinely remote project stays.
+  assert.deepEqual(
+    projects.map((project) => [project.providerProjectId, project.providerTargetId]),
+    [
+      ["project-1", "local"],
+      ["project-2", "host-studio"],
+    ],
+  );
 });
 
 test("reuses recently discovered workspace projects", async (t) => {
@@ -402,7 +443,7 @@ test("creates on an observed remote host and preserves success when opening fail
           "host-1",
           "--project",
         ]);
-        return JSON.stringify({ workspaceId: "workspace-new" });
+        return JSON.stringify({ workspace: { id: "workspace-new", name: "Luke" } });
       }
       return "[]";
     },
