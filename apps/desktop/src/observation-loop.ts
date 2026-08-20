@@ -1,5 +1,5 @@
 import type { Effect } from "effect";
-import { effectRuntime } from "./effect-runtime";
+import { effectRuntime } from "./desktop-app";
 
 export interface ObservationLoopOptions {
   gate: () => boolean;
@@ -41,7 +41,7 @@ export class ObservationLoop {
     this.#timer = undefined;
   }
 
-  async refresh(): Promise<void> {
+  refresh(): void {
     if (!this.#options.gate()) return;
     if (this.#running) {
       this.#queued = true;
@@ -49,20 +49,14 @@ export class ObservationLoop {
     }
     const generation = this.#generation;
     this.#running = true;
-    try {
-      await effectRuntime.runPromise(this.#options.run(generation));
-    } finally {
+    void effectRuntime.runPromise(this.#options.run(generation)).finally(() => {
       this.#running = false;
-      // The hook re-checks what the clock alone changes, so it belongs to a
-      // pass the loop still owns. A pass that outlived its stop has no clock
-      // behind it — running the hook there would draw the roster again over
-      // the empty one the stop just published.
       if (this.isCurrent(generation)) this.#options.afterRun?.();
       if (this.#queued) {
         this.#queued = false;
-        void this.refresh();
+        this.refresh();
       }
-    }
+    });
   }
 }
 

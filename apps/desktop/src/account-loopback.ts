@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { Deferred, Effect, Ref } from "effect";
+import { Deferred, Duration, Effect, Exit, Ref } from "effect";
 import { accountLoopbackPage, LOOPBACK_PAGE_TONE } from "./account-loopback-page";
 import { codeChallenge, createCodeVerifier } from "./account-pkce";
 import { Http, type LoopbackFailure } from "./services/http";
@@ -112,42 +112,25 @@ export function startAccountLoopback(
         }),
     });
 
-    const timer = setTimeout(() => {
-      void Effect.runPromise(
-        Effect.gen(function* () {
-          const done = yield* Deferred.isDone(codeDeferred);
-          if (done) return;
-          yield* Deferred.fail(codeDeferred, new Error("Sign-in timed out"));
-          yield* http.closeServer(server);
-        }),
-      );
-    }, timeoutMs);
-    timer.unref();
-
-    void Effect.runPromise(
-      Deferred.await(codeDeferred).pipe(
-        Effect.ensuring(Effect.sync(() => clearTimeout(timer))),
-        Effect.catchAll(() => Effect.void),
-      ),
-    );
-
     const redirectUri = `http://${LOOPBACK_HOST}:${port}${CALLBACK_PATH}`;
+
+    const waitForCode = Deferred.await(codeDeferred).pipe(
+      Effect.timeoutFail({
+        duration: Duration.millis(timeoutMs),
+        onTimeout: () => new Error("Sign-in timed out"),
+      }),
+      Effect.ensuring(http.closeServer(server).pipe(Effect.catchAll(() => Effect.void))),
+    );
 
     return {
       redirectUri,
       state,
       codeVerifier,
       codeChallenge: codeChallenge(codeVerifier),
-      waitForCode: Deferred.await(codeDeferred),
+      waitForCode,
       cancel: () => {
-        void Effect.runPromise(
-          Effect.gen(function* () {
-            const done = yield* Deferred.isDone(codeDeferred);
-            if (done) return;
-            yield* Deferred.fail(codeDeferred, new Error(SIGN_IN_CANCELLED_MESSAGE));
-            yield* http.closeServer(server);
-          }),
-        );
+        Deferred.unsafeDone(codeDeferred, Exit.fail(new Error(SIGN_IN_CANCELLED_MESSAGE)));
+        server.close();
       },
       close: () => http.closeServer(server),
     };

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { isWireString, type UnparsedWireValue } from "@sidecar/core";
-import { type Context, Deferred, Effect } from "effect";
+import { type Context, Deferred, Duration, Effect, Exit } from "effect";
 // The same landing page the Luke account sign-in leaves the browser on, so
 // the two flows' tabs cannot dress differently.
 import { accountLoopbackPage, LOOPBACK_PAGE_TONE } from "./account-loopback-page";
@@ -260,26 +260,23 @@ export class GoogleCalendarSignIn {
       authorization.searchParams.set("prompt", "consent");
       authorization.searchParams.set("state", state);
 
-      const timeout = setTimeout(() => {
-        void Effect.runPromise(
-          Deferred.succeed(outcomeDeferred, {
-            reason: "Sign-in timed out. Try again from the Google Calendar row.",
-          }),
-        );
-      }, this.#options.timeoutMs ?? SIGN_IN_TIMEOUT_MS);
-      timeout.unref();
+      const timeoutMs = this.#options.timeoutMs ?? SIGN_IN_TIMEOUT_MS;
       this.#abandon = () => {
-        void Effect.runPromise(
-          Deferred.succeed(outcomeDeferred, { reason: "Sign-in was cancelled." }),
-        );
+        Deferred.unsafeDone(outcomeDeferred, Exit.succeed({ reason: "Sign-in was cancelled." }));
       };
       this.#reopen = () => this.#options.openExternal(authorization.toString());
 
       try {
         this.#options.openExternal(authorization.toString());
-        return yield* Deferred.await(outcomeDeferred);
+        return yield* Deferred.await(outcomeDeferred).pipe(
+          Effect.timeout(Duration.millis(timeoutMs)),
+          Effect.catchAll(() =>
+            Effect.succeed({
+              reason: "Sign-in timed out. Try again from the Google Calendar row.",
+            } as GoogleCalendarSignInOutcome),
+          ),
+        );
       } finally {
-        clearTimeout(timeout);
         yield* http.closeServer(server);
         yield* Effect.sync(() => {
           server.unref();

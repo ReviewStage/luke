@@ -34,7 +34,7 @@ import {
   type WorkspaceAgentSelection,
   workspaceProjectSelectionId,
 } from "@sidecar/core";
-import { Effect } from "effect";
+import { Effect, Layer, ManagedRuntime } from "effect";
 import {
   app,
   BrowserWindow,
@@ -55,9 +55,8 @@ import { AccountSessionManager } from "./account-session-manager";
 import { buildCarriesDeveloperIdSigning, resolveAppName } from "./app-identity";
 import { CodexCloudSessionAdapter } from "./codex-cloud-adapter";
 import { DockPresence } from "./dock-presence";
-import { initializeEffectRuntime, runDesktopEffect } from "./effect-runtime";
 import { feedbackDeliveryFromEnvironment } from "./feedback-delivery";
-import { GoogleCalendarReader } from "./google-calendar";
+import { type CalendarAccountCredential, GoogleCalendarReader } from "./google-calendar";
 import { GoogleCalendarSignIn } from "./google-calendar-oauth";
 import { HOTKEY_RANK, HotkeyRegistrar } from "./hotkey-registrar";
 import { registerAccountSessionIpc } from "./ipc/account-session";
@@ -79,6 +78,10 @@ import { PanelManager } from "./panel-manager";
 import { ProductEventSender } from "./product-event-sender";
 import { type ProviderRegistration, providerRegistrations } from "./provider-registrations";
 import { runModeFor } from "./run-mode";
+import { type Cli, CliLive } from "./services/cli";
+import { type Files, FilesLive } from "./services/files";
+import { type Http, makeHttpLive } from "./services/http";
+import { type SettingsStoreService, settingsStoreLive } from "./services/settings-store-service";
 import { sessionNoticeSpeech } from "./session-notifications";
 import { createSettingsHandler } from "./settings-handler";
 import { SettingsStore } from "./settings-store";
@@ -164,6 +167,35 @@ const supersetCli = new SupersetCli({ homeDirectory: supersetHomeDirectory });
 const supersetWorkspaceAdapter = new SupersetWorkspaceAdapter(supersetCli);
 let observedSupersetWorkspaces = new SupersetWorkspaceSnapshot([]);
 let observedSupersetActionsEnabled = false;
+
+export type DesktopServices = Http | Cli | Files | SettingsStoreService;
+
+export type DesktopEffect<A, E = unknown> = Effect.Effect<A, E, DesktopServices>;
+
+export type DesktopEffectRuntime = ManagedRuntime.ManagedRuntime<DesktopServices, never>;
+
+/** Set once at the composition root before any edge runs an Effect. */
+export let effectRuntime: DesktopEffectRuntime;
+
+function runDesktopEffect<A, E, R>(effect: Effect.Effect<A, E, R>): Promise<A> {
+  return effectRuntime.runPromise(effect as DesktopEffect<A, E>);
+}
+
+function runRequestEffect<A, E, R>(effect: Effect.Effect<A, E, R>): void {
+  void runDesktopEffect(effect);
+}
+
+function makeEffectRuntime(settingsStore: SettingsStore): DesktopEffectRuntime {
+  return ManagedRuntime.make(
+    Layer.mergeAll(
+      makeHttpLive(runRequestEffect),
+      CliLive,
+      FilesLive,
+      settingsStoreLive(settingsStore),
+    ),
+  );
+}
+
 // `directory` and the cipher are read lazily so the store can be declared before
 // the Electron app is ready.
 const settingsStore = new SettingsStore({
@@ -178,9 +210,7 @@ const settingsStore = new SettingsStore({
   },
   codexCloudConnection: () => codexCloudAdapter.connection(),
 });
-const effectRuntime = initializeEffectRuntime(settingsStore);
-
-export { effectRuntime };
+effectRuntime = makeEffectRuntime(settingsStore);
 
 const accountClient = new AccountClient({ baseUrl: ACCOUNT_BASE_URL, clientId: ACCOUNT_CLIENT_ID });
 let account: AccountSnapshot = { status: ACCOUNT_STATUS.SIGNED_OUT };
@@ -189,9 +219,21 @@ const accountSession = new AccountSessionManager({
   store: settingsStore,
   hostedServiceBaseUrl: HOSTED_SERVICE_BASE_URL,
   requiresAccount: runMode.requiresAccount,
-  openExternal: (url) => shell.openExternal(url),
-  startCapabilities: () => startAccountCapabilities(),
-  stopCapabilities: stopAccountCapabilities,
+  openExternal: (url) =>
+    Effect.tryPromise({
+      try: () => shell.openExternal(url),
+      catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+    }).pipe(Effect.asVoid),
+  startCapabilities: () =>
+    Effect.tryPromise({
+      try: () => startAccountCapabilities(),
+      catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+    }).pipe(Effect.asVoid),
+  stopCapabilities: () =>
+    Effect.tryPromise({
+      try: () => stopAccountCapabilities(),
+      catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+    }).pipe(Effect.asVoid),
   onChange: (next) => {
     const signedIn = next.status === ACCOUNT_STATUS.SIGNED_IN;
     const wasSignedIn = account.status === ACCOUNT_STATUS.SIGNED_IN;
@@ -209,7 +251,10 @@ const observationHooks = new ObservationHookRegistry(() => app.getPath("userData
 // observation hook it registers, described in one place rather than assembled
 // from three parallel lists here.
 const providerRegistry = providerRegistrations({
-  readApiKey: (providerId) => Effect.promise(() => settingsStore.readApiKey(providerId)),
+  readApiKey: (providerId) =>
+    settingsStore
+      .readApiKey(providerId)
+      .pipe(Effect.catchAll(() => Effect.succeed(undefined))) as Effect.Effect<string | undefined>,
   claudeHookInstallation: () => observationHooks.claudeInstallation(),
   codexHookInstallation: () => observationHooks.codexInstallation(),
   codexCloudAdapter,
@@ -226,20 +271,21 @@ const orderedRegistrations: readonly ProviderRegistration[] = PROVIDER_ID_LIST.m
 // only Linear refusing that renewal disconnects anything.
 const linearCredentials = new LinearCredentials({
   readGrant: () => settingsStore.readGrant(CREDENTIAL_PROVIDER_ID.LINEAR),
-  writeGrant: async (grant) => {
-    await settingsStore.setGrant(CREDENTIAL_PROVIDER_ID.LINEAR, grant);
-  },
-  forgetGrant: async () => {
-    const cleared = await settingsStore.clearGrant(CREDENTIAL_PROVIDER_ID.LINEAR);
-    // Nobody pressed anything to end this connection — Linear refused the
-    // renewal — so no settings reply is on its way to say so. A row left
-    // saying connected would be a row about a grant that no longer exists.
-    panels.broadcast(channels.settingsChanged, cleared.settings);
-  },
-  runEffect: runDesktopEffect,
+  writeGrant: (grant) =>
+    settingsStore.setGrant(CREDENTIAL_PROVIDER_ID.LINEAR, grant).pipe(Effect.asVoid),
+  forgetGrant: () =>
+    settingsStore.clearGrant(CREDENTIAL_PROVIDER_ID.LINEAR).pipe(
+      Effect.tap((cleared) =>
+        Effect.sync(() => {
+          panels.broadcast(channels.settingsChanged, cleared.settings);
+        }),
+      ),
+      Effect.asVoid,
+    ),
 });
 const linearTracker = new LinearIssueTracker({
-  readAccessToken: () => Effect.promise(() => linearCredentials.accessToken()),
+  readAccessToken: () =>
+    linearCredentials.accessToken().pipe(Effect.catchAll(() => Effect.succeed(undefined))),
 });
 // The sign-in behind the Linear row: it opens Linear's own consent page in the
 // user's browser and hands back one grant, which the connect handler stores.
@@ -262,7 +308,14 @@ let trackedIssues: readonly TrackedIssue[] | undefined;
 // registry or the roster. Its meetings answer one question — is the user in a
 // meeting now — and the answer gates only when announcements are spoken.
 const googleCalendar = new GoogleCalendarReader({
-  readAccounts: () => Effect.promise(() => settingsStore.readCalendarAccounts()),
+  readAccounts: () =>
+    settingsStore
+      .readCalendarAccounts()
+      .pipe(Effect.catchAll(() => Effect.succeed([]))) as unknown as Effect.Effect<
+      readonly CalendarAccountCredential[],
+      unknown,
+      unknown
+    >,
 });
 // The sign-in behind the calendar row: it opens Google's own consent page in
 // the user's browser and hands back one grant, which the connect handler
@@ -344,12 +397,12 @@ const voiceCapabilities = new VoiceCapabilityAssembler({
     readVoiceSource: () => settingsStore.readVoiceSource(),
     readApiKey: (providerId) => settingsStore.readApiKey(providerId),
     get: (field) => settingsStore.get(field),
-    readAccount: () => Effect.promise(() => settingsStore.readAccount()),
+    readAccount: () => settingsStore.readAccount(),
   },
   credentialsUsable: () => runMode.sendsNetwork && accountCapabilitiesActive(),
   accountSignedIn: () => account.status === ACCOUNT_STATUS.SIGNED_IN,
   hostedServiceBaseUrl: HOSTED_SERVICE_BASE_URL,
-  refreshAccount: () => Effect.promise(() => accountSession.refreshOnce()),
+  refreshAccount: () => accountSession.refreshOnce(),
   currentSession: (identity) => sessionRegistry.get(identity),
   noticeRequestFor: (identity) => attentionRequests.get(identity),
 });
@@ -364,7 +417,9 @@ const feedbackDelivery = feedbackDeliveryFromEnvironment();
 const updateService = new UpdateService({
   currentVersion: app.getVersion(),
   onChange: (update) => panels.broadcast(channels.updateChanged, update),
-  runEffect: runDesktopEffect,
+  runEffect: (effect) => {
+    void runDesktopEffect(effect);
+  },
 });
 // Counts how Luke's own features are used. It lives here rather than in a
 // renderer because every emit site is already in this process and the timer
@@ -375,9 +430,14 @@ const productEvents = new ProductEventSender({
   appVersion: app.getVersion(),
   sends: runMode.sendsNetwork,
   readAccessToken: () =>
-    Effect.promise(async () => (await settingsStore.readAccount())?.accessToken),
-  refreshAccount: () => Effect.promise(() => accountSession.refreshOnce()),
-  runEffect: runDesktopEffect,
+    settingsStore.readAccount().pipe(
+      Effect.map((account) => account?.accessToken),
+      Effect.catchAll(() => Effect.succeed(undefined)),
+    ) as Effect.Effect<string | undefined>,
+  refreshAccount: () => accountSession.refreshOnce(),
+  runEffect: (effect) => {
+    void runDesktopEffect(effect);
+  },
 });
 // One narrow function rather than the service itself, so an IPC module can
 // count an act without being handed anything it could flush, stop, or read.
@@ -417,7 +477,13 @@ const panels = new PanelManager({
 });
 const supersetSignIn = new SupersetSignIn({
   cli: supersetCli,
-  openExternal: (url) => shell.openExternal(url),
+  openExternal: (url) =>
+    Effect.sync(() => {
+      void shell.openExternal(url);
+    }),
+  runEffect: (effect) => {
+    void runDesktopEffect(effect);
+  },
   onChange: (state) => {
     panels.broadcast(channels.supersetSignInChanged, state);
     if (state.stage === SUPERSET_SIGN_IN_STAGE.CONNECTED) void sessionObservationLoop.refresh();
@@ -502,7 +568,9 @@ let workspaceProjectsBroadcastGeneration = 0;
 async function broadcastWorkspaceProjects(): Promise<void> {
   const generation = ++workspaceProjectsBroadcastGeneration;
   const offeredProjects = offeredWorkspaceProjects();
-  const defaults = await settingsStore.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field);
+  const defaults = await runDesktopEffect(
+    settingsStore.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field),
+  );
   if (generation !== workspaceProjectsBroadcastGeneration) return;
   await pruneWorkspaceProjectDefaults(
     offeredProjects,
@@ -534,10 +602,12 @@ async function pruneWorkspaceProjectDefaults(
       if (!isCurrent()) return;
       const expected = defaults?.[providerId];
       if (expected === undefined) continue;
-      const saved = await settingsStore.clearEntryIfUnchanged(
-        APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
-        providerId,
-        expected,
+      const saved = await runDesktopEffect(
+        settingsStore.clearEntryIfUnchanged(
+          APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
+          providerId,
+          expected,
+        ),
       );
       if (!saved.cleared) continue;
       if (!isCurrent()) return;
@@ -588,7 +658,7 @@ function broadcastAccount(): void {
  * renderer keeps drawing the voice state of the account it no longer has.
  */
 async function broadcastVoiceAvailability(): Promise<void> {
-  panels.broadcast(channels.settingsChanged, await settingsStore.snapshot());
+  panels.broadcast(channels.settingsChanged, await runDesktopEffect(settingsStore.snapshot()));
 }
 
 /**
@@ -604,7 +674,7 @@ async function broadcastCodexCloudConnection(): Promise<void> {
   const connection = codexCloudAdapter.connection();
   if (connection === announcedCodexCloudConnection) return;
   announcedCodexCloudConnection = connection;
-  panels.broadcast(channels.settingsChanged, await settingsStore.snapshot());
+  panels.broadcast(channels.settingsChanged, await runDesktopEffect(settingsStore.snapshot()));
 }
 
 async function startAccountCapabilities(): Promise<void> {
@@ -629,7 +699,7 @@ async function stopAccountCapabilities(): Promise<void> {
 }
 
 async function applyVoiceCredential(): Promise<void> {
-  await voiceCapabilities.apply();
+  await runDesktopEffect(voiceCapabilities.apply() as DesktopEffect<void, unknown>);
 }
 
 function adapterFor(providerId: string) {
@@ -665,20 +735,24 @@ async function rememberWorkspaceDefaults(
   if (!isProviderId(providerId) && providerId !== SUPERSET_WORKSPACE_PROVIDER_ID) return;
   try {
     if (
-      (await settingsStore.get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field)) === undefined
+      (await runDesktopEffect(
+        settingsStore.get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field),
+      )) === undefined
     ) {
-      const saved = await settingsStore.set(
-        APP_SETTING_SCHEMA.defaultWorkspaceProvider.field,
-        providerId,
+      const saved = await runDesktopEffect(
+        settingsStore.set(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field, providerId),
       );
       panels.broadcast(channels.settingsChanged, saved.settings);
     }
     if (
       providerId === SUPERSET_WORKSPACE_PROVIDER_ID &&
       agent !== undefined &&
-      (await settingsStore.get(APP_SETTING_SCHEMA.supersetAgentDefault.field)) === undefined
+      (await runDesktopEffect(settingsStore.get(APP_SETTING_SCHEMA.supersetAgentDefault.field))) ===
+        undefined
     ) {
-      const saved = await settingsStore.set(APP_SETTING_SCHEMA.supersetAgentDefault.field, agent);
+      const saved = await runDesktopEffect(
+        settingsStore.set(APP_SETTING_SCHEMA.supersetAgentDefault.field, agent),
+      );
       panels.broadcast(channels.settingsChanged, saved.settings);
     }
     // The project the workspace landed in becomes that provider's default on
@@ -687,14 +761,17 @@ async function rememberWorkspaceDefaults(
     // projects before the creation ran, so what is remembered is one the
     // provider itself listed.
     if (
-      (await settingsStore.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field))?.[providerId] ===
-      undefined
+      (
+        await runDesktopEffect(settingsStore.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field))
+      )?.[providerId] === undefined
     ) {
-      const saved = await settingsStore.setEntry(
-        APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
-        providerId,
-        workspaceProjectSelectionId(
-          providerTargetId ? { providerProjectId, providerTargetId } : { providerProjectId },
+      const saved = await runDesktopEffect(
+        settingsStore.setEntry(
+          APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
+          providerId,
+          workspaceProjectSelectionId(
+            providerTargetId ? { providerProjectId, providerTargetId } : { providerProjectId },
+          ),
         ),
       );
       panels.broadcast(channels.settingsChanged, saved.settings);
@@ -709,13 +786,16 @@ async function rememberWorkspaceDefaults(
     if (
       isProviderId(providerId) &&
       namedSelection !== undefined &&
-      (await settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[providerId] ===
-        undefined
+      (
+        await runDesktopEffect(settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))
+      )?.[providerId] === undefined
     ) {
-      const saved = await settingsStore.setEntry(
-        APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
-        providerId,
-        namedSelection,
+      const saved = await runDesktopEffect(
+        settingsStore.setEntry(
+          APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
+          providerId,
+          namedSelection,
+        ),
       );
       panels.broadcast(channels.settingsChanged, saved.settings);
     }
@@ -729,6 +809,7 @@ function registerIpc(): void {
     trustedSender,
     snapshot: () => settingsStore.snapshot(),
     broadcast: (settings, except) => panels.broadcast(channels.settingsChanged, settings, except),
+    runEffect: runDesktopEffect,
   });
   ipcMain.handle(channels.bootstrap, async (event): Promise<AppBootstrap> => {
     if (!trustedSender(event)) throw new Error("Untrusted renderer");
@@ -738,10 +819,9 @@ function registerIpc(): void {
     const display =
       (displayId !== undefined ? panels.display(displayId) : undefined) ??
       screen.getPrimaryDisplay();
-    const [supersetInstalled, supersetConnected] = await Promise.all([
-      supersetCli.installed(),
-      supersetCli.connected(),
-    ]);
+    const [supersetInstalled, supersetConnected] = await runDesktopEffect(
+      Effect.all([supersetCli.installed(), supersetCli.connected()]),
+    );
     return {
       mode: displayId !== undefined ? panels.modeFor(displayId) : panels.initialMode,
       startPeeked,
@@ -784,7 +864,9 @@ function registerIpc(): void {
       workspaceProjects: accountCapabilitiesActive()
         ? normalizeObservedWorkspaceProjects(
             offeredWorkspaceProjects(),
-            await settingsStore.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field),
+            await runDesktopEffect(
+              settingsStore.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field),
+            ),
           )
         : [],
       ...(trackedIssues && runMode.observesProviders && accountCapabilitiesActive()
@@ -794,22 +876,22 @@ function registerIpc(): void {
       // shown, or held quiet, before the account gate opens.
       calendars: accountCapabilitiesActive() ? observedCalendars : [],
       meetingQuiet: accountCapabilitiesActive() && meetingQuietActive,
-      settings: await settingsStore.snapshot(),
+      settings: await runDesktopEffect(settingsStore.snapshot()),
     };
   });
-  ipcMain.handle(channels.beginSupersetSignIn, async (event) => {
+  ipcMain.handle(channels.beginSupersetSignIn, (event) => {
     if (!trustedSender(event)) throw new Error("Untrusted renderer");
-    return supersetSignIn.begin();
+    return runDesktopEffect(supersetSignIn.begin());
   });
   ipcMain.handle(channels.submitSupersetSignInCode, (event, code: UnparsedWireValue) => {
     if (!trustedSender(event)) throw new Error("Untrusted renderer");
     if (!isWireString(code)) throw new Error("Invalid Superset sign-in code");
     return supersetSignIn.submitCode(code);
   });
-  ipcMain.handle(channels.chooseSupersetOrganization, async (event, slug: UnparsedWireValue) => {
+  ipcMain.handle(channels.chooseSupersetOrganization, (event, slug: UnparsedWireValue) => {
     if (!trustedSender(event)) throw new Error("Untrusted renderer");
     if (!isWireString(slug)) throw new Error("Invalid Superset organization");
-    return supersetSignIn.chooseOrganization(slug);
+    return runDesktopEffect(supersetSignIn.chooseOrganization(slug));
   });
   ipcMain.on(channels.reopenSupersetSignIn, (event) => {
     if (trustedSender(event)) supersetSignIn.reopen();
@@ -878,7 +960,7 @@ function registerIpc(): void {
   ipcMain.handle(channels.checkForUpdates, (event) => {
     if (!trustedSender(event)) throw new Error("Untrusted renderer");
     if (!runMode.sendsNetwork) return updateService.snapshot();
-    return updateService.check();
+    return runDesktopEffect(updateService.check());
   });
 
   // The newest release's page, in the browser. The address is fixed here like
@@ -924,6 +1006,12 @@ function registerIpc(): void {
         : undefined,
     supersetCli,
     recordProductEvent,
+    runEffect: runDesktopEffect,
+    openExternalEffect: (url) =>
+      Effect.tryPromise({
+        try: () => shell.openExternal(url),
+        catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+      }),
   });
 
   // A note to the founders travels one road: typed in the composer, validated
@@ -1025,14 +1113,15 @@ async function refreshProviderSessionsAsync(generation: number): Promise<void> {
   let supersetSnapshot = new SupersetWorkspaceSnapshot([]);
   let supersetActionsEnabled = false;
   try {
-    const supersetAgentDefault = await settingsStore.get(
-      APP_SETTING_SCHEMA.supersetAgentDefault.field,
+    const supersetAgentDefault = await runDesktopEffect(
+      settingsStore.get(APP_SETTING_SCHEMA.supersetAgentDefault.field),
     );
-    [supersetSnapshot, supersetActionsEnabled] = await Promise.all([
-      runDesktopEffect(supersetWorkspaces.read()),
-      supersetCli.connected(),
-    ]);
-    await supersetWorkspaceAdapter.refresh(supersetAgentDefault, supersetActionsEnabled);
+    [supersetSnapshot, supersetActionsEnabled] = await runDesktopEffect(
+      Effect.all([supersetWorkspaces.read(), supersetCli.connected()]),
+    );
+    await runDesktopEffect(
+      supersetWorkspaceAdapter.refresh(supersetAgentDefault, supersetActionsEnabled),
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     process.stderr.write(`Superset observation failed: ${message}\n`);
@@ -1232,7 +1321,8 @@ async function announcementsQuietNow(now: number): Promise<boolean> {
   const inMeeting =
     calendarMeetings !== undefined && activeMeetingEnd(calendarMeetings, now) !== undefined;
   const holding =
-    inMeeting && (await settingsStore.get(APP_SETTING_SCHEMA.quietDuringMeetings.field));
+    inMeeting &&
+    (await runDesktopEffect(settingsStore.get(APP_SETTING_SCHEMA.quietDuringMeetings.field)));
   if (holding !== meetingQuietActive) {
     meetingQuietActive = holding;
     panels.broadcast(channels.meetingQuietChanged, holding);
@@ -1540,7 +1630,7 @@ async function refreshTrackedIssuesAsync(generation: number): Promise<void> {
     const collected: TrackedIssue[] = [];
     let connected = false;
     for (const tracker of issueTrackers) {
-      const observations = await effectRuntime.runPromise(tracker.observe());
+      const observations = await runDesktopEffect(tracker.observe());
       if (!observations) continue;
       connected = true;
       for (const observation of observations) {
@@ -1612,7 +1702,7 @@ export function startDesktopApp(): void {
       // A stored refresh token is the account gate. No network request stands
       // between an offline launch and Luke's local capabilities.
       account = runMode.requiresAccount
-        ? await settingsStore.accountSnapshot()
+        ? await runDesktopEffect(settingsStore.accountSnapshot())
         : { status: ACCOUNT_STATUS.SIGNED_OUT };
       accountSession.initialize(account);
       panels.refreshGeometry();
@@ -1621,7 +1711,7 @@ export function startDesktopApp(): void {
       // provider that already has a stored key to decrypt. Starting it here keeps
       // that work off the renderer's first paint, which blocks on the bootstrap
       // reply.
-      void settingsStore.snapshot();
+      void runDesktopEffect(settingsStore.snapshot());
       // The Dock wears Luke's own face from the start, and keeps wearing the
       // right one as the desktop changes mode — whether the icon is shown yet
       // is a separate question, answered by the setting below.
@@ -1630,7 +1720,7 @@ export function startDesktopApp(): void {
       // The Dock icon reads the same file under the opposite default: it is
       // opt-in, so a file that cannot be read leaves Luke out of the Dock — the
       // accessory app the launch just asserted. Nothing to do until it says so.
-      void settingsStore.get(APP_SETTING_SCHEMA.showInDock.field).then(
+      void runDesktopEffect(settingsStore.get(APP_SETTING_SCHEMA.showInDock.field)).then(
         (show) => {
           if (show) dock.apply(true);
         },
@@ -1639,16 +1729,19 @@ export function startDesktopApp(): void {
       // Armed from the settings file alone, like the status item, and for the
       // same reason. A file that cannot be read leaves the duck on, the same
       // answer a file that has never said gives.
-      void settingsStore.get(APP_SETTING_SCHEMA.duckOtherMedia.field).then(
+      void runDesktopEffect(settingsStore.get(APP_SETTING_SCHEMA.duckOtherMedia.field)).then(
         (enabled) => mediaDuck.setEnabled(enabled === true),
         () => mediaDuck.setEnabled(APP_SETTING_DEFAULTS.duckOtherMedia),
       );
       // Armed from the settings file alone, like the duck above, and on the
       // same terms: a file that cannot be read leaves counting on, the answer
       // a file that has never said gives.
-      void settingsStore
-        .get(APP_SETTING_SCHEMA.shareUsageData.field)
-        .catch(() => APP_SETTING_DEFAULTS.shareUsageData)
+      void effectRuntime
+        .runPromise(
+          settingsStore
+            .get(APP_SETTING_SCHEMA.shareUsageData.field)
+            .pipe(Effect.catchAll(() => Effect.succeed(APP_SETTING_DEFAULTS.shareUsageData))),
+        )
         .then((share) => {
           productEvents.setSharing(share);
           // Recorded behind the read, because nothing may be counted before
@@ -1683,13 +1776,16 @@ export function startDesktopApp(): void {
       // file that cannot be read means no choice was kept — the main display,
       // the default form — and must not keep the panels from starting.
       panels.setShowOnAllDisplays(
-        (await settingsStore
-          .get(APP_SETTING_SCHEMA.showOnAllDisplays.field)
-          .catch(() => APP_SETTING_DEFAULTS.showOnAllDisplays)) === true,
+        (await runDesktopEffect(
+          settingsStore
+            .get(APP_SETTING_SCHEMA.showOnAllDisplays.field)
+            .pipe(Effect.catchAll(() => Effect.succeed(APP_SETTING_DEFAULTS.showOnAllDisplays))),
+        )) === true,
       );
       panels.setFormFactor(
-        (await settingsStore.get(APP_SETTING_SCHEMA.formFactor.field).catch(() => undefined)) ??
-          DEFAULT_PANEL_FORM_FACTOR,
+        (await runDesktopEffect(settingsStore.get(APP_SETTING_SCHEMA.formFactor.field)).catch(
+          () => undefined,
+        )) ?? DEFAULT_PANEL_FORM_FACTOR,
       );
       // Awaited for the same reason the voice is: the chosen chord has to be in
       // hand before the key is registered, or the first registration would take
@@ -1697,15 +1793,21 @@ export function startDesktopApp(): void {
       // read means no choice was kept, and the defaults answer.
       hotkeys.setChosen(
         HOTKEY_RANK.TALK,
-        await settingsStore.get(APP_SETTING_SCHEMA.voiceHotkey.field).catch(() => undefined),
+        await runDesktopEffect(settingsStore.get(APP_SETTING_SCHEMA.voiceHotkey.field)).catch(
+          () => undefined,
+        ),
       );
       hotkeys.setChosen(
         HOTKEY_RANK.ASK,
-        await settingsStore.get(APP_SETTING_SCHEMA.askHotkey.field).catch(() => undefined),
+        await runDesktopEffect(settingsStore.get(APP_SETTING_SCHEMA.askHotkey.field)).catch(
+          () => undefined,
+        ),
       );
       hotkeys.setChosen(
         HOTKEY_RANK.STOP,
-        await settingsStore.get(APP_SETTING_SCHEMA.stopHotkey.field).catch(() => undefined),
+        await runDesktopEffect(settingsStore.get(APP_SETTING_SCHEMA.stopHotkey.field)).catch(
+          () => undefined,
+        ),
       );
       // The report is not made here: the helper answers over its own stdout a
       // moment later, and a line printed now would state an absence that only

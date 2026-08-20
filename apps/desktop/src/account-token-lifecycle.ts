@@ -13,39 +13,57 @@ import type { Http } from "./services/http";
  * right after a successful refresh. A run that ends, ends the flight; the next
  * ask starts a fresh one holding the newly rotated token.
  */
-export function singleFlight(
-  run: () => Effect.Effect<void, unknown, unknown>,
-): () => Effect.Effect<void, unknown, unknown> {
+export function singleFlight<R = unknown>(
+  run: () => Effect.Effect<void, unknown, R>,
+): () => Effect.Effect<void, unknown, R> {
   const shared = Ref.unsafeMake<Deferred.Deferred<void, unknown> | undefined>(undefined);
+  const lock = Effect.unsafeMakeSemaphore(1);
   return () =>
-    Effect.gen(function* () {
-      const current = yield* Ref.get(shared);
-      if (current && !(yield* Deferred.isDone(current))) {
-        return yield* Deferred.await(current);
-      }
-      const created = yield* Deferred.make<void, unknown>();
-      const won = yield* Ref.modify(shared, (stored) => {
-        if (stored && !Effect.runSync(Deferred.isDone(stored))) {
-          return [false, stored] as const;
-        }
-        return [true, created] as const;
-      });
-      if (!won) {
-        const joined = yield* Ref.get(shared);
-        if (!joined) return;
-        return yield* Deferred.await(joined);
-      }
-      yield* Effect.forkDaemon(
-        run().pipe(
-          Effect.matchEffect({
-            onFailure: (error) => Deferred.fail(created, error),
-            onSuccess: () => Deferred.succeed(created, undefined),
-          }),
-          Effect.ensuring(Ref.set(shared, undefined)),
-        ),
-      );
-      return yield* Deferred.await(created);
-    });
+    lock.withPermits(1)(
+      Effect.gen(function* () {
+        const current = yield* Ref.get(shared);
+        if (current) return yield* Deferred.await(current);
+        const created = yield* Deferred.make<void, unknown>();
+        yield* Ref.set(shared, created);
+        yield* Effect.forkDaemon(
+          run().pipe(
+            Effect.matchEffect({
+              onFailure: (error) => Deferred.fail(created, error),
+              onSuccess: () => Deferred.succeed(created, undefined),
+            }),
+            Effect.ensuring(Ref.set(shared, undefined)),
+          ),
+        );
+        return yield* Deferred.await(created);
+      }),
+    );
+}
+
+/** Like {@link singleFlight}, but shares the successful result with concurrent callers. */
+export function singleFlightResult<A, R = unknown>(
+  run: () => Effect.Effect<A, unknown, R>,
+): () => Effect.Effect<A, unknown, R> {
+  const shared = Ref.unsafeMake<Deferred.Deferred<A, unknown> | undefined>(undefined);
+  const lock = Effect.unsafeMakeSemaphore(1);
+  return () =>
+    lock.withPermits(1)(
+      Effect.gen(function* () {
+        const current = yield* Ref.get(shared);
+        if (current) return yield* Deferred.await(current);
+        const created = yield* Deferred.make<A, unknown>();
+        yield* Ref.set(shared, created);
+        yield* Effect.forkDaemon(
+          run().pipe(
+            Effect.matchEffect({
+              onFailure: (error) => Deferred.fail(created, error),
+              onSuccess: (value) => Deferred.succeed(created, value),
+            }),
+            Effect.ensuring(Ref.set(shared, undefined)),
+          ),
+        );
+        return yield* Deferred.await(created);
+      }),
+    );
 }
 
 /** Ensures credentials rejected before sign-in completes do not outlive the failed attempt. */
