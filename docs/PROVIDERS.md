@@ -145,15 +145,16 @@ The bounds the tables cannot carry:
 ## Apps
 
 An app's chats are observed by their own agents' adapters; the app's own state
-is read solely for where those sessions live. Matching is by exact provider
-session id — never by title or filesystem path — and an absent app, an
-unreadable file, or a schema this build does not know means no annotation.
+is read solely for where those sessions live — and, for Conductor, whether the
+user filed them away there. Matching is by exact provider session id — never
+by title or filesystem path — and an absent app, an unreadable file, or a
+schema this build does not know means no annotation.
 
 | App | Reads | Adds to matched rows | Writes |
 | --- | --- | --- | --- |
 | ChatGPT | Nothing | A mark opening the exact Codex thread | None |
 | cmux | Hook-session stores under `~/.cmuxterm` | Mark, exact `cmux:` pane address | None |
-| Conductor | Local session index (`conductor.db`) | Mark, workspace grouping, `conductor:` chat address | None |
+| Conductor | Local session index (`conductor.db`) | Mark, workspace grouping, `conductor:` chat address, filed-away filtering | None |
 | Orca | Hook-status cache and worktree names | Mark, worktree grouping | None |
 | Superset | Host state (`host.db`) | Mark, grouping, `superset:` workspace address | Message, open workspace, close terminal, add agent, new workspace, rename, delete workspace — through its CLI, while logged in |
 
@@ -178,8 +179,14 @@ unreadable file, or a schema this build does not know means no annotation.
   where the chat's agent gave it none; a sub-agent's address is its ancestor
   chat's, where its conversation lives in Conductor's window, and a
   pre-workspace schema has no workspace id to address, so its rows keep none.
-  Conductor documents no message endpoint for a local chat, so the
-  association adds no send control.
+  A chat the user filed away on Conductor's own surface — the chat hidden on
+  its own, or its whole workspace archived — is dropped from the roster with
+  its sub-agents, the same way the cloud adapter drops an archived
+  workspace's chats: the agent's transcript outlives the chat the user
+  already said goodbye to. Only Conductor's positive record drops a row; an
+  absent app, an unreadable index, or a schema too old to say leaves every
+  observation standing. Conductor documents no message endpoint for a local
+  chat, so the association adds no send control.
 - **Orca** — the hook-status cache also carries conversational fields — the
   last prompt, a message preview, a tool's input — and none of them are ever
   read. A sub-agent

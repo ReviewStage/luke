@@ -9,7 +9,7 @@ import {
   type SessionApplication,
   type SessionProvider,
 } from "@sidecar/session";
-import { text, type UnparsedWireValue, wireRecord } from "@sidecar/wire";
+import { text, type UnparsedWireValue, wholeNumber, wireRecord } from "@sidecar/wire";
 import {
   canIgnoreSqliteError,
   defaultSqliteModule,
@@ -54,9 +54,11 @@ export function conductorAgent(value: string | undefined): SessionProvider | und
 const CONDUCTOR_SESSION_FIELD = {
   AGENT_TYPE: "agent_type",
   CONDUCTOR_SESSION_ID: "conductor_session_id",
+  HIDDEN: "hidden",
   PROVIDER_SESSION_ID: "provider_session_id",
   WORKSPACE_ID: "workspace_id",
   WORKSPACE_NAME: "workspace_name",
+  WORKSPACE_STATE: "workspace_state",
 } as const;
 
 /**
@@ -75,19 +77,33 @@ export function conductorWorkspaceLink(workspaceId: string, conductorChatId?: st
 }
 
 /**
+ * The one workspace state that means the user filed the whole workspace away
+ * on Conductor's own surface. Its other states — active, ready, sleeping —
+ * are all still-open workspaces.
+ */
+const CONDUCTOR_ARCHIVED_WORKSPACE_STATE = "archived";
+
+/**
  * Conductor's provider-session column kept its original Claude-specific name
  * as more agents were added. The alias is the meaning Luke reads from it. The
  * workspace join carries the name the user knows the work by — the chosen
- * workspace name, or the directory name Conductor fell back to itself.
+ * workspace name, or the directory name Conductor fell back to itself — and
+ * the workspace's lifecycle state, because an archived state is the one place
+ * Conductor records that the user filed the workspace away. A chat filed away
+ * on its own is Conductor's hidden flag, which its schema has carried since
+ * before it named agents, so any database this query can read at all says
+ * both.
  */
 const CONDUCTOR_SESSION_QUERY = `
   SELECT
     sessions.claude_session_id AS ${CONDUCTOR_SESSION_FIELD.PROVIDER_SESSION_ID},
     sessions.agent_type AS ${CONDUCTOR_SESSION_FIELD.AGENT_TYPE},
     sessions.id AS ${CONDUCTOR_SESSION_FIELD.CONDUCTOR_SESSION_ID},
+    sessions.is_hidden AS ${CONDUCTOR_SESSION_FIELD.HIDDEN},
     workspaces.id AS ${CONDUCTOR_SESSION_FIELD.WORKSPACE_ID},
     COALESCE(workspaces.workspace_name, workspaces.directory_name)
-      AS ${CONDUCTOR_SESSION_FIELD.WORKSPACE_NAME}
+      AS ${CONDUCTOR_SESSION_FIELD.WORKSPACE_NAME},
+    workspaces.state AS ${CONDUCTOR_SESSION_FIELD.WORKSPACE_STATE}
   FROM sessions
   LEFT JOIN workspaces ON workspaces.id = sessions.workspace_id
   WHERE sessions.claude_session_id IS NOT NULL
@@ -96,7 +112,8 @@ const CONDUCTOR_SESSION_QUERY = `
 
 /**
  * The same read against a database from before Conductor stored workspaces.
- * The sessions still annotate; they simply group under nothing.
+ * The sessions still annotate; they simply group under nothing, and a schema
+ * too old to say what was filed away files nothing away.
  */
 const CONDUCTOR_SESSION_QUERY_WITHOUT_WORKSPACES = `
   SELECT
@@ -113,6 +130,14 @@ interface ConductorSessionContext {
   conductorSessionId?: string;
   workspaceId?: string;
   workspaceName?: string;
+  /**
+   * The user filed this chat away on Conductor's own surface — the chat
+   * hidden on its own, or its whole workspace archived. Filing a chat away is
+   * how a user says it is done being watched, so it keeps the chat off the
+   * panel the same way an archived workspace keeps its chats out of the cloud
+   * adapter's roster.
+   */
+  filedAway?: boolean;
 }
 
 type SessionContextsByProvider = ReadonlyMap<string, ReadonlyMap<string, ConductorSessionContext>>;
@@ -140,7 +165,10 @@ function agentType(value: UnparsedWireValue): ConductorAgentType | undefined {
 /**
  * Reads Conductor's own session-to-provider mapping without opening any agent
  * transcript. An absent app, an older schema, or a failed auxiliary read means
- * no annotation; it can never make the provider's own observation disappear.
+ * no annotation; failure can never make the provider's own observation
+ * disappear. Only Conductor's own positive record that the user filed a chat
+ * away — the chat hidden, or its workspace archived — drops a row, and drops
+ * it whole.
  */
 export class ConductorSessionApplicationSnapshot {
   readonly #sessionsByProvider: SessionContextsByProvider;
@@ -160,7 +188,10 @@ export class ConductorSessionApplicationSnapshot {
    * observations can match a local Conductor database; a cloud row with a
    * coincidentally equal provider id is never annotated. A sub-agent inherits
    * its nearest Conductor-known ancestor's association and workspace: the
-   * child is Conductor's work even though only the parent is in its index.
+   * child is Conductor's work even though only the parent is in its index —
+   * and a chat the user filed away in Conductor is dropped from the roster
+   * with its sub-agents, because the agent's transcript outlives the chat the
+   * user already said goodbye to.
    */
   enrich(
     providerId: string,
@@ -190,15 +221,19 @@ export class ConductorSessionApplicationSnapshot {
       return undefined;
     };
 
-    return observations.map((observation) => {
+    return observations.flatMap((observation) => {
       const context = conductorContextFor(observation);
+      // A filed-away chat is dropped rather than annotated: the user archived
+      // or hid it on Conductor's own surface, and a sub-agent inheriting that
+      // context was filed away with its parent.
+      if (context?.filedAway) return [];
       if (
         !context ||
         observation.applications?.some(
           (application) => application.id === SESSION_APPLICATION_ID.CONDUCTOR,
         )
       ) {
-        return observation;
+        return [observation];
       }
       // The workspace is claimed only where no other manager already grouped
       // the chat, and the association's scope follows it: carried by the
@@ -230,12 +265,14 @@ export class ConductorSessionApplicationSnapshot {
       };
       const detail =
         link && !observation.detail?.link ? { ...observation.detail, link } : observation.detail;
-      return {
-        ...observation,
-        ...(detail ? { detail } : undefined),
-        applications: [...(observation.applications ?? []), application],
-        ...(workspace ? { workspace } : undefined),
-      };
+      return [
+        {
+          ...observation,
+          ...(detail ? { detail } : undefined),
+          applications: [...(observation.applications ?? []), application],
+          ...(workspace ? { workspace } : undefined),
+        },
+      ];
     });
   }
 }
@@ -243,7 +280,8 @@ export class ConductorSessionApplicationSnapshot {
 /**
  * Reads Conductor's own session-to-provider mapping without opening any agent
  * transcript. An absent app, an older schema, or a failed auxiliary read means
- * an empty snapshot; it can never make the provider's observation disappear.
+ * an empty snapshot; failure can never make the provider's observation
+ * disappear.
  */
 export class ConductorSessionApplicationReader {
   readonly #databasePath: string;
@@ -280,12 +318,19 @@ export class ConductorSessionApplicationReader {
       const conductorSessionId = text(record[CONDUCTOR_SESSION_FIELD.CONDUCTOR_SESSION_ID]);
       const workspaceId = text(record[CONDUCTOR_SESSION_FIELD.WORKSPACE_ID]);
       const workspaceName = text(record[CONDUCTOR_SESSION_FIELD.WORKSPACE_NAME]);
+      // Filed away only on a positive record: a hidden flag or workspace
+      // state the fallback query never read leaves the chat standing.
+      const filedAway =
+        (wholeNumber(record[CONDUCTOR_SESSION_FIELD.HIDDEN]) ?? 0) !== 0 ||
+        text(record[CONDUCTOR_SESSION_FIELD.WORKSPACE_STATE]) ===
+          CONDUCTOR_ARCHIVED_WORKSPACE_STATE;
       const providerId = CONDUCTOR_AGENT_BY_TYPE[type].id;
       const sessions = sessionsByProvider.get(providerId) ?? new Map();
       sessions.set(providerSessionId, {
         ...(conductorSessionId ? { conductorSessionId } : undefined),
         ...(workspaceId ? { workspaceId } : undefined),
         ...(workspaceName ? { workspaceName } : undefined),
+        ...(filedAway ? { filedAway } : undefined),
       });
       sessionsByProvider.set(providerId, sessions);
     }
