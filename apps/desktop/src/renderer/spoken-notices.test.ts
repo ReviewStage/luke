@@ -711,3 +711,43 @@ test("a notice on Luke's own call speaks without the developer's window", async 
     ["a"],
   );
 });
+
+test("the developer taking the turn stands the grace clock down", () => {
+  const session = fakeSession();
+  session.microphone = true;
+  const timers = fakeTimers();
+  let now = 1_000;
+  const subject = announcer(session, timers, () => now);
+
+  session.setStatus(REALTIME_STATUS.RESPONDING);
+  subject.onStatus(REALTIME_STATUS.RESPONDING);
+  subject.enqueue([speech("a")]);
+  session.setStatus(REALTIME_STATUS.READY);
+  subject.onStatus(REALTIME_STATUS.READY);
+  const armedDuringWindow = timers.armed();
+
+  // The press is what the window waited for: the clock aimed at the pause
+  // stands down rather than firing into the developer's own turn.
+  session.setStatus(REALTIME_STATUS.LISTENING);
+  subject.onStatus(REALTIME_STATUS.LISTENING);
+  assert.ok(timers.armed() < armedDuringWindow);
+
+  // Every clock still standing fires into the busy turn and speaks nothing.
+  session.setStatus(REALTIME_STATUS.RESPONDING);
+  subject.onStatus(REALTIME_STATUS.RESPONDING);
+  now = 1_000 + ANNOUNCER_GRACE_MS * 2;
+  timers.fire();
+  assert.deepEqual<AttentionSpeech[]>(session.spoken, []);
+
+  // The answer's own end opens the next window, on a clock of its own.
+  session.setStatus(REALTIME_STATUS.READY);
+  subject.onStatus(REALTIME_STATUS.READY);
+  timers.fire();
+  assert.deepEqual<AttentionSpeech[]>(session.spoken, []);
+  now = 1_000 + ANNOUNCER_GRACE_MS * 3;
+  timers.fire();
+  assert.deepEqual(
+    session.spoken.map((item) => item.providerSessionId),
+    ["a"],
+  );
+});

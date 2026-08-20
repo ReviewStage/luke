@@ -209,10 +209,13 @@ export class SpokenNoticeAnnouncer {
       this.#ownsCall = false;
       this.#cancelLinger();
     }
-    // The developer taking the turn is the very act the floor was theirs for,
-    // and whatever reply follows is an answer to them, not a readout.
+    // The developer taking the turn is the very act the floor was theirs for:
+    // whatever reply follows is an answer to them, not a readout, and the
+    // clock waiting to speak into their pause has nothing left to wait for —
+    // the reply's own end starts the next window.
     if (status === REALTIME_STATUS.LISTENING) {
       this.#ownReply = false;
+      this.#cancelHold();
       return;
     }
     if (status === REALTIME_STATUS.READY) {
@@ -229,6 +232,9 @@ export class SpokenNoticeAnnouncer {
         this.#options.session().microphoneCall
       ) {
         this.#holdUntil = (this.#options.now?.() ?? Date.now()) + ANNOUNCER_GRACE_MS;
+        // A fresh window gets a fresh clock: one still armed for an older
+        // window would come back early and find the floor still held.
+        this.#cancelHold();
       }
       this.#flush();
       return;
