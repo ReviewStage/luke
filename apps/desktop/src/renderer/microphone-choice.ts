@@ -1,4 +1,4 @@
-import { LID_STATE, MICROPHONE_TRANSPORT, type MicrophoneRoute } from "../shared/contracts";
+import { LID_STATE, MICROPHONE_TRANSPORT, type MicrophoneRoute } from "#shared/contracts";
 
 /**
  * How every capture is processed, wherever it is opened from.

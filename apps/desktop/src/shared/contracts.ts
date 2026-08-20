@@ -1,35 +1,36 @@
+import {
+  ACCOUNT_PROVIDER,
+  type AccountProvider,
+  type AccountSnapshot,
+} from "@sidecar/account/snapshot";
+import type { AttentionRequestResult, SessionNoticeAsk } from "@sidecar/attention";
+import type { ObservedAccountCalendars } from "@sidecar/calendar/observation";
+import type { CredentialProviderId } from "@sidecar/credentials";
+import type { FeedbackKind, FeedbackResult, FeedbackSubmission } from "@sidecar/feedback";
+import type { FixtureSnapshot } from "@sidecar/fixtures";
+import type { HostedUsageAnswer } from "@sidecar/hosted";
+import type { IssueIdentity, TrackedIssue, TrackerActionResult } from "@sidecar/issues";
 import type {
-  AttentionRequestResult,
   AttentionSpeech,
-  FixtureSnapshot,
-  HostedUsageAnswer,
-  IssueIdentity,
   IssueToolAction,
+  RealtimeConnection,
+  RealtimeDiagnostics,
+  RealtimeVoice,
+  RealtimeVoiceSpeed,
+} from "@sidecar/realtime";
+import type {
+  CliConnection,
   NormalizedSession,
   ObservedWorkspaceProject,
-  PanelFormFactor,
   ProviderActResult,
   ProviderControlResult,
   ProviderId,
   ProviderMessageResult,
   ProviderWorkspaceResult,
-  RealtimeConnection,
-  RealtimeDiagnostics,
-  RealtimeVoice,
-  RealtimeVoiceSpeed,
-  Rectangle,
-  ResolvedNotchGeometry,
   SessionApplicationId,
   SessionIdentity,
-  SessionNoticeAsk,
-  TrackedIssue,
-  TrackerActionResult,
-  UnparsedWireValue,
-  WindowMode,
   WorkspaceAgentSelection,
-} from "@sidecar/core";
-import type { CredentialProviderId } from "./credential-providers";
-import type { FeedbackKind, FeedbackResult, FeedbackSubmission } from "./feedback";
+} from "@sidecar/session";
 import type {
   AppSettingField,
   AppSettingValue,
@@ -37,10 +38,25 @@ import type {
   SettingEntryValue,
   SettingsResetScope,
   VoiceSource,
-} from "./settings-schema";
-import type { WorkspaceProviderId } from "./superset";
+} from "@sidecar/settings";
+import type { SupersetSignInSnapshot } from "@sidecar/superset/sign-in-stage";
+import type { WorkspaceProviderId } from "@sidecar/superset/vocabulary";
+import type {
+  PanelFormFactor,
+  Rectangle,
+  ResolvedNotchGeometry,
+  WindowMode,
+} from "@sidecar/surface";
+import type { UnparsedWireValue } from "@sidecar/wire";
 
-export type { WindowMode } from "@sidecar/core";
+export {
+  ACCOUNT_PROVIDER,
+  ACCOUNT_STATUS,
+  type AccountProvider,
+  type AccountSnapshot,
+} from "@sidecar/account/snapshot";
+export type { AccountCalendar, ObservedAccountCalendars } from "@sidecar/calendar/observation";
+export { CLI_CONNECTION, type CliConnection } from "@sidecar/session";
 export type {
   AppSettingField,
   AppSettingValue,
@@ -48,53 +64,29 @@ export type {
   SettingEntryValue,
   SettingsResetScope,
   VoiceSource,
-} from "./settings-schema";
+} from "@sidecar/settings";
 export {
   APP_SETTING_DEFAULTS,
   isSettingsResetScope,
   isVoiceSource,
   SETTINGS_RESET_SCOPE,
   VOICE_SOURCE,
-} from "./settings-schema";
-
-export const ACCOUNT_PROVIDER = {
-  GOOGLE: "google",
-  GITHUB: "github",
-} as const;
-
+} from "@sidecar/settings";
+export {
+  SUPERSET_SIGN_IN_STAGE,
+  type SupersetOrganizationChoice,
+  type SupersetSignInSnapshot,
+} from "@sidecar/superset/sign-in-stage";
 export {
   isWorkspaceProviderId,
   SUPERSET_WORKSPACE_PROVIDER_ID,
   type WorkspaceProviderId,
-} from "./superset";
-
-export type AccountProvider = (typeof ACCOUNT_PROVIDER)[keyof typeof ACCOUNT_PROVIDER];
+} from "@sidecar/superset/vocabulary";
+export type { WindowMode } from "@sidecar/surface";
 
 export function isAccountProvider(value: UnparsedWireValue): value is AccountProvider {
   return value === ACCOUNT_PROVIDER.GOOGLE || value === ACCOUNT_PROVIDER.GITHUB;
 }
-
-export const ACCOUNT_STATUS = {
-  SIGNED_OUT: "signed-out",
-  SIGNING_IN: "signing-in",
-  SIGNED_IN: "signed-in",
-} as const;
-
-/** Renderer-safe identity. OAuth tokens never cross the preload boundary. */
-export type AccountSnapshot =
-  | { status: typeof ACCOUNT_STATUS.SIGNED_OUT }
-  | { status: typeof ACCOUNT_STATUS.SIGNING_IN }
-  | {
-      status: typeof ACCOUNT_STATUS.SIGNED_IN;
-      email: string;
-      name?: string;
-      /**
-       * The provider's own avatar for the signed-in user, kept only when it
-       * lives on a host this build pins in the renderer's image policy.
-       */
-      pictureUrl?: string;
-      provider: AccountProvider;
-    };
 
 export type MicrophoneStatus = "not-determined" | "granted" | "denied" | "restricted" | "unknown";
 
@@ -106,21 +98,6 @@ export const CREDENTIAL_SOURCE = {
 } as const;
 
 export type CredentialSource = (typeof CREDENTIAL_SOURCE)[keyof typeof CREDENTIAL_SOURCE];
-
-/**
- * Whether a CLI-observed provider can be observed right now, without ever
- * exposing the login behind it — the CLI analogue of {@link CredentialSource}.
- * Unknown is the state before the first pass has asked; the other three are
- * what the latest pass learned from the provider's own CLI.
- */
-export const CLI_CONNECTION = {
-  UNKNOWN: "unknown",
-  CONNECTED: "connected",
-  SIGNED_OUT: "signed-out",
-  CLI_MISSING: "cli-missing",
-} as const;
-
-export type CliConnection = (typeof CLI_CONNECTION)[keyof typeof CLI_CONNECTION];
 
 /**
  * Whether Luke can store a credential through OS-provided encryption. Asking is
@@ -149,26 +126,12 @@ export interface CalendarAccount {
   selectedCalendarIds: readonly string[];
 }
 
-/** One calendar as its account's list names it, for a settings row. */
-export interface AccountCalendar {
-  id: string;
-  label: string;
-  /** The calendar's own colour as Google lists it, when it sent a sound one. */
-  color?: string;
-}
-
-/** The calendars one account offered on the latest observation pass. */
-export interface ObservedAccountCalendars {
-  accountId: string;
-  calendars: readonly AccountCalendar[];
-}
-
 /**
  * What each plain preference is until the user chooses otherwise. The store
  * falls back to these when the settings file has never said, and the app
  * guide carries the same values so a spoken ask for "the default" names a
  * real one — stated once so the two can never drift. The voice, pace, and
- * form factor keep their defaults beside their own types in `@sidecar/core`,
+ * form factor keep their defaults beside their own types in `@sidecar/surface`,
  * and the three keys' defaults live with the registrar that owns them.
  */
 /**
@@ -613,31 +576,6 @@ export interface AppBootstrap {
   /** Whether the calendar's quiet is holding announcements right now. */
   meetingQuiet: boolean;
   settings: AppSettings;
-}
-
-export const SUPERSET_SIGN_IN_STAGE = {
-  IDLE: "idle",
-  BROWSER_CODE: "browser-code",
-  EXCHANGING: "exchanging",
-  ORGANIZATION: "organization",
-  SWITCHING: "switching",
-  FAILURE: "failure",
-  CONNECTED: "connected",
-} as const;
-
-export type SupersetSignInStage =
-  (typeof SUPERSET_SIGN_IN_STAGE)[keyof typeof SUPERSET_SIGN_IN_STAGE];
-
-export interface SupersetOrganizationChoice {
-  id: string;
-  name: string;
-  slug: string;
-}
-
-export interface SupersetSignInSnapshot {
-  stage: SupersetSignInStage;
-  failure?: string;
-  organizations: readonly SupersetOrganizationChoice[];
 }
 
 /** One validated issue act on its way to the main process. */

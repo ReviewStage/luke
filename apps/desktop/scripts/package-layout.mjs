@@ -32,7 +32,7 @@ export const NATIVE_HELPERS = [
 ];
 
 export const packageIgnorePatterns = [
-  /^\/(?:\.build|native|node_modules|out|scripts|src|tests)(?:$|\/)/,
+  /^\/(?:\.build|native|node_modules|out|scripts|src)(?:$|\/)/,
   /^\/(?:\.gitignore|pnpm-lock\.yaml|tsconfig\.json)$/,
   /\.map$/,
 ];

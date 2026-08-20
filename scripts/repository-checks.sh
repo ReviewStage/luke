@@ -7,13 +7,12 @@ source "$SCRIPT_DIRECTORY/lib/workspace.sh"
 
 required_files=(
     AGENTS.md
-    DESIGN.md
     design/check-design-contract.mjs
     CHANGELOG.md
     CLAUDE.md
-    WORKFLOW.md
+    docs/WORKFLOW.md
     README.md
-    PROVIDERS.md
+    docs/PROVIDERS.md
     package.json
     pnpm-lock.yaml
     pnpm-workspace.yaml
@@ -28,9 +27,24 @@ required_files=(
     apps/desktop/native/macos/TalkKey.swift
     apps/web/drizzle.config.ts
     apps/web/server/db/schema.ts
-    packages/sidecar-core/package.json
+    packages/wire/package.json
     scripts/release-macos.sh
     scripts/verify.sh
+    docs/DESIGN.md
+    apps/desktop/src/renderer/AGENTS.md
+    apps/desktop/src/renderer/CLAUDE.md
+    packages/AGENTS.md
+    packages/CLAUDE.md
+    packages/analytics/AGENTS.md
+    packages/analytics/CLAUDE.md
+    packages/hosted/AGENTS.md
+    packages/hosted/CLAUDE.md
+    packages/providers/AGENTS.md
+    packages/providers/CLAUDE.md
+    packages/realtime/AGENTS.md
+    packages/realtime/CLAUDE.md
+    packages/surface/AGENTS.md
+    packages/surface/CLAUDE.md
     .conductor/settings.toml
     .github/pull_request_template.md
     .github/workflows/ci.yml
@@ -63,7 +77,7 @@ node "$SIDECAR_REPO_ROOT/design/generate-brand-assets.mjs" --check
 
 # Motion tokens, layout sizes, provider-mark path data, and session labels are
 # the same contract between the desktop renderer and the marketing mock. One
-# source, four committed outputs in sidecar-core; --check fails if any drifted.
+# source, four committed outputs in @sidecar/surface; --check fails if any drifted.
 node "$SIDECAR_REPO_ROOT/design/generate-surface-shared.mjs" --check
 
 # Mount reveals, literal timings, loops, and layout-property animation obey the
@@ -78,23 +92,44 @@ generic_safety=$(grep -RFn --include='*.ts' --include='*.tsx' --include='*.js' -
     'SAFETY: The preceding check establishes the asserted contract.' \
     "$SIDECAR_REPO_ROOT/apps" "$SIDECAR_REPO_ROOT/packages" || true)
 if [[ -n "$generic_safety" ]]; then
-    printf 'error: replace generic SAFETY comments with the concrete checked invariant:\n%s\n' \
+    printf 'error: replace generic SAFETY comments with the concrete checked invariant:
+%s
+' \
         "$generic_safety" >&2
     exit 1
 fi
 
-# Every relative import inside sidecar-core must carry its .js extension.
-# Vercel's builder compiles the package's TypeScript into the web functions
-# but leaves the specifiers alone, and Node's ESM loader refuses an
-# extensionless one at run time — a break the build cannot see and production
-# reports only as FUNCTION_INVOCATION_FAILED. The desktop's esbuild and the
-# web's Vite both accept the .js form, so the stricter spelling costs the
-# other consumers nothing.
-extensionless_imports=$(grep -rEn 'from "\.\.?/[^"]*"' "$SIDECAR_REPO_ROOT/packages/sidecar-core/src" |
+# Every relative import inside a package must carry its .js extension.
+# Vercel's builder compiles the packages' TypeScript into the web functions but
+# leaves the specifiers alone, and Node's ESM loader refuses an extensionless
+# one at run time — a break the build cannot see and production reports only as
+# FUNCTION_INVOCATION_FAILED. The desktop's esbuild and the web's Vite both
+# accept the .js form, so the stricter spelling costs the other consumers
+# nothing. Checked across every package rather than one, so a new package
+# cannot silently opt out of the rule that keeps the functions loadable.
+extensionless_imports=$(grep -rEn 'from "\.\.?/[^"]*"' "$SIDECAR_REPO_ROOT"/packages/*/src |
     grep -vE '\.(js|css)"' || true)
 if [[ -n "$extensionless_imports" ]]; then
-    printf 'error: sidecar-core relative imports must end in .js (Node ESM cannot load them compiled otherwise):\n%s\n' \
+    printf 'error: relative imports inside packages/ must end in .js (Node ESM cannot load them compiled otherwise):\n%s\n' \
         "$extensionless_imports" >&2
+    exit 1
+fi
+
+# The renderer is a sandboxed browser context: it reaches the main process
+# through the preload bridge alone, so `#shared/contracts` is the widest door
+# it has. A `#main/` import compiles and bundles happily and then fails in the
+# browser, and a `node:` import does the same — neither is a mistake the type
+# checker or esbuild can report, because both are real modules that simply are
+# not there at run time.
+#
+# A colocated test is not the renderer: it runs under Node and never enters the
+# bundle, so `node:test` is its whole point. The main-process door stays shut
+# for it either way — a renderer test that needs main is testing the wrong side.
+renderer_escapes=$(grep -ranE 'from "(#main/|node:)' "$SIDECAR_REPO_ROOT/apps/desktop/src/renderer" |
+    grep -vE '\.test\.tsx?:[0-9]+:import .*"node:' || true)
+if [[ -n "$renderer_escapes" ]]; then
+    printf 'error: the renderer is sandboxed — it reaches the main process only through #shared/contracts and the preload bridge:\n%s\n' \
+        "$renderer_escapes" >&2
     exit 1
 fi
 

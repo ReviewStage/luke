@@ -1,13 +1,13 @@
-import type { HostedApiError, HostedQuota } from "../core.js";
+import type { HostedApiError, HostedQuota } from "../core";
 
 /**
  * The response vocabulary the hosted endpoints share. Every answer is JSON,
  * and every refusal names its reason from the wire contract in
- * `@sidecar/core`'s `hosted-service` — the same module the desktop's hosted
+ * `@sidecar/hosted` — the same module the desktop's hosted
  * clients validate against, so an error slug cannot drift between the two.
  */
 
-export { HOSTED_API_ERROR, type HostedApiError } from "../core.js";
+export { HOSTED_API_ERROR, type HostedApiError } from "../core";
 
 export const HOSTED_HTTP_STATUS = {
   OK: 200,

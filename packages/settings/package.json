@@ -1,0 +1,29 @@
+{
+  "name": "@sidecar/settings",
+  "version": "0.3.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "tsx --test 'src/**/*.test.ts'",
+    "typecheck": "tsc --project tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/node": "26.2.0",
+    "tsx": "4.23.12",
+    "typescript": "7.0.2"
+  },
+  "dependencies": {
+    "@sidecar/analytics": "workspace:*",
+    "@sidecar/credentials": "workspace:*",
+    "@sidecar/guide": "workspace:*",
+    "@sidecar/realtime": "workspace:*",
+    "@sidecar/session": "workspace:*",
+    "@sidecar/superset": "workspace:*",
+    "@sidecar/surface": "workspace:*",
+    "@sidecar/wire": "workspace:*"
+  }
+}

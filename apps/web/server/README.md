@@ -81,7 +81,7 @@ the account outlives the request.
 the same bearer resolution. The desktop never talks to the analytics processor:
 it posts an allowlisted batch here, and this is the one place a `distinct_id`
 is attached — from the resolved account, never from the body, which has no
-place to name one. `productEventBatchFromWire` in `@sidecar/core` is the whole
+place to name one. `productEventBatchFromWire` in `@sidecar/analytics` is the whole
 admission policy, and it builds each event from that event's property
 allowlist, so nothing outside the vocabulary survives the read.
 

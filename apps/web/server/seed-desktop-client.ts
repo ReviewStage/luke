@@ -1,7 +1,7 @@
 import { pathToFileURL } from "node:url";
-import { oauthClient } from "./db/auth-schema.js";
-import { getDatabase } from "./db/index.js";
-import { desktopOAuthClientRecord } from "./desktop-oauth-client.js";
+import { oauthClient } from "./db/auth-schema";
+import { getDatabase } from "./db/index";
+import { desktopOAuthClientRecord } from "./desktop-oauth-client";
 
 type SeedDatabase = Pick<ReturnType<typeof getDatabase>, "insert">;
 

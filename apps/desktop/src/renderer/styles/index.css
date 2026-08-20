@@ -1,7 +1,7 @@
 /* The renderer ships one stylesheet; esbuild inlines these imports. */
 /* Motion tokens first, so base.css can spend them without restating the springs
    or the duration set. */
-@import "@sidecar/core/motion-tokens.css";
+@import "@sidecar/surface/motion-tokens.css";
 /* Before base.css: `.settings-input` and `.action-button` are equal specificity
    to the key-slot and feedback tweaks there, and those tweaks have to win. */
 @import "./settings.css";
@@ -14,4 +14,4 @@
 @import "./voice.css";
 /* Generated from design/generate-brand-assets.mjs; base.css holds the wiring it
    assumes. Last, so a hand-written rule can still win. */
-@import "./face-motion.css";
+@import "./generated/face-motion.css";

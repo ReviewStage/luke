@@ -1,10 +1,10 @@
-import { useEffect, useRef } from "react";
-import type { CredentialSource } from "../shared/contracts";
 import {
   CREDENTIAL_CONNECTION,
   CREDENTIAL_PROVIDERS,
   providerRunsSessionsInCloud,
-} from "../shared/credential-providers";
+} from "@sidecar/credentials";
+import { useEffect, useRef } from "react";
+import type { CredentialSource } from "#shared/contracts";
 import {
   CREDENTIAL_PLACEHOLDER,
   type CredentialEntryControl,

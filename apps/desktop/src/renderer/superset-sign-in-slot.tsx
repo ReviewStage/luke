@@ -1,7 +1,7 @@
+import { SUPERSET_WORKSPACE_PROVIDER_ID } from "@sidecar/superset/vocabulary";
 import { useEffect, useRef, useState } from "react";
-import type { SupersetSignInSnapshot } from "../shared/contracts";
-import { CREDENTIAL_SOURCE, SUPERSET_SIGN_IN_STAGE } from "../shared/contracts";
-import { SUPERSET_WORKSPACE_PROVIDER_ID } from "../shared/superset";
+import type { SupersetSignInSnapshot } from "#shared/contracts";
+import { CREDENTIAL_SOURCE, SUPERSET_SIGN_IN_STAGE } from "#shared/contracts";
 import { CREDENTIAL_PLACEHOLDER, useStagedFocus } from "./credential-entry";
 import { HIT_REGION } from "./panel-state";
 import { ProviderMark } from "./provider-marks";

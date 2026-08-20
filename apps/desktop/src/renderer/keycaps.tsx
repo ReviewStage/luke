@@ -8,8 +8,8 @@
  * one piece and the gaps between the caps are drawn rather than spelled.
  */
 
+import { voiceHotkeyKeycaps } from "@sidecar/settings";
 import type React from "react";
-import { voiceHotkeyKeycaps } from "../shared/voice-hotkey";
 
 export function Keycaps({
   accelerator,

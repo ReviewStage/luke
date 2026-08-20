@@ -1,16 +1,15 @@
-import type {
-  ProviderControlResult,
-  ProviderMessageResult,
-  SessionApplicationId,
-} from "@sidecar/core";
 import {
   isSessionApplicationId,
   PROVIDER_ACT_RESULT_STATUS,
+  type ProviderControlResult,
+  type ProviderMessageResult,
   SESSION_APPLICATION_SCOPE,
   SESSION_CONTROL_KIND,
   SESSION_LOCATION,
-  SESSION_URGENCY,
-} from "@sidecar/core";
+  type SessionApplicationId,
+} from "@sidecar/session";
+import { SESSION_URGENCY } from "@sidecar/surface";
+import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { useCallback, useRef, useState } from "react";
 import {
   ACCOUNT_STATUS,
@@ -18,9 +17,8 @@ import {
   type AccountSnapshot,
   SESSION_OPEN_RESULT_STATUS,
   type SessionOpenResult,
-} from "../shared/contracts";
+} from "#shared/contracts";
 import { type AskHandler, AskLuke } from "./ask-luke";
-import { cssCustomProperties } from "./css-custom-properties";
 import { PANEL_TAB, type PanelTab, TabBar } from "./panel-tabs";
 import { AudioBadge, CloudBadge, ProviderMark } from "./provider-marks";
 import {

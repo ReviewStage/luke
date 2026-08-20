@@ -2,7 +2,7 @@
  * Turns one Luke feedback submission into email to the founders.
  *
  * This is the fixed endpoint the desktop app's composer posts to
- * (`apps/desktop/src/feedback-delivery.ts`), deployed with the landing page.
+ * (`apps/desktop/src/main/feedback-delivery.ts`), deployed with the landing page.
  * It forwards exactly what the user typed and attached — the app never holds a
  * mail credential, and the destination never crosses the wire.
  *

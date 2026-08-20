@@ -1,4 +1,4 @@
-import type { AppBridge } from "../shared/contracts";
+import type { AppBridge } from "#shared/contracts";
 
 declare global {
   interface Window {

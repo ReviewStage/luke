@@ -1,5 +1,5 @@
-import type { FeedbackImage } from "../shared/feedback";
-import { FEEDBACK_IMAGE_TYPE, FEEDBACK_LIMITS, isFeedbackImageType } from "../shared/feedback";
+import type { FeedbackImage } from "@sidecar/feedback";
+import { FEEDBACK_IMAGE_TYPE, FEEDBACK_LIMITS, isFeedbackImageType } from "@sidecar/feedback";
 
 /**
  * What becomes of a picked file: it rides as it is, it is re-encoded first, or

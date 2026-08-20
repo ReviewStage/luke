@@ -1,4 +1,4 @@
-import { PRESS_AUDIO_SAMPLE_RATE } from "@sidecar/core";
+import { PRESS_AUDIO_SAMPLE_RATE } from "@sidecar/realtime";
 
 /**
  * Reads PCM off the microphone stream the connect attempt already opened, so

@@ -52,8 +52,8 @@ cut from — they are generated files and are not to be hand-edited either:
 
 | File | What it carries |
 |---|---|
-| `apps/desktop/src/renderer/luke-face-art.ts` | The geometry, the motion names, their cycle lengths, and which parts each one needs drawn |
-| `apps/desktop/src/renderer/styles/face-motion.css` | One `@keyframes` per moving part, with each interval's easing |
+| `packages/surface/src/generated/face-art.ts` | The geometry, the motion names, their cycle lengths, and which parts each one needs drawn |
+| `apps/desktop/src/renderer/styles/generated/face-motion.css` | One `@keyframes` per moving part, with each interval's easing |
 
 `scripts/repository-checks.sh` runs `generate-brand-assets.mjs --check`, which
 compares every committed output against what the script produces now and fails if

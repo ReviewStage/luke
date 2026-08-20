@@ -1,8 +1,8 @@
+import { FACE_MOTION, FACE_MOTION_CYCLE_MS, type FaceMotion } from "@sidecar/surface";
 import { useEffect, useState } from "react";
-import type { AccountSnapshot } from "../shared/contracts";
-import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountProvider } from "../shared/contracts";
+import type { AccountSnapshot } from "#shared/contracts";
+import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountProvider } from "#shared/contracts";
 import { GitHubMark, GoogleMark } from "./account-marks";
-import { FACE_MOTION, FACE_MOTION_CYCLE_MS, type FaceMotion } from "./luke-face-art";
 
 /**
  * The introductions Luke makes while nobody is signed in, in the order he

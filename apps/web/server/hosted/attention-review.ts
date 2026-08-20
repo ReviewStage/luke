@@ -7,16 +7,16 @@ import {
   attentionResponsesRequest,
   text as trimmedText,
   type UnparsedWireValue,
-} from "../core.js";
+} from "../core";
 import {
   errorResponse,
   HOSTED_API_ERROR,
   HOSTED_HTTP_STATUS,
   type HostedErrorFields,
   jsonResponse,
-} from "./http.js";
-import { type FetchLike, postOpenAi } from "./openai.js";
-import type { HostedSpend } from "./quota.js";
+} from "./http";
+import { type FetchLike, postOpenAi } from "./openai";
+import type { HostedSpend } from "./quota";
 
 /**
  * Reviews one bounded session update on Luke's own key for a signed-in user.

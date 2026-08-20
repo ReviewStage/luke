@@ -1,7 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
-import type { HostedQuota, HostedUsageAnswer } from "../core.js";
-import type { createDatabase } from "../db/index.js";
-import { hostedUsage } from "../db/usage-schema.js";
+import type { HostedQuota, HostedUsageAnswer } from "../core";
+import type { createDatabase } from "../db/index";
+import { hostedUsage } from "../db/usage-schema";
 
 /** The two things the hosted tier spends, each metered on its own ceiling. */
 export const HOSTED_METER = {
@@ -24,7 +24,7 @@ export const HOSTED_DAILY_LIMIT = {
 
 /* The quota shape is the wire contract's, imported rather than restated, so
    the endpoint and the desktop reading it cannot drift. */
-export type { HostedQuota } from "../core.js";
+export type { HostedQuota } from "../core";
 
 export interface HostedSpend {
   allowed: boolean;

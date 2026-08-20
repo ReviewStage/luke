@@ -5,8 +5,8 @@ import {
   ATTENTION_TRIGGER,
   type AttentionPromptUpdate,
   attentionInstructions,
-  SESSION_STATUS,
-} from "@sidecar/core";
+} from "@sidecar/attention";
+import { SESSION_STATUS } from "@sidecar/session";
 import {
   HOSTED_ATTENTION_DEFAULTS,
   handleAttentionReview,

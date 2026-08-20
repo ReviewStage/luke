@@ -19,34 +19,13 @@
  */
 
 import {
-  type AppGuideFact,
-  type AppGuideSetting,
-  type AppGuideSnapshot,
-  PROVIDER_ID,
-  type WireRecord,
-  type WorkspaceAgentSelection,
-} from "@sidecar/core";
-import type {
-  AccountSnapshot,
-  AppBridge,
-  AppSettings,
-  CredentialSource,
-  MicrophoneStatus,
-  SettingsUpdateResult,
-} from "../shared/contracts";
-import {
-  ACCOUNT_PROVIDER,
-  ACCOUNT_STATUS,
-  CLI_CONNECTION,
-  CREDENTIAL_SOURCE,
-  SECRET_STORAGE,
-} from "../shared/contracts";
-import {
   CLOUD_AGENT_PROVIDER_LIST,
   CREDENTIAL_PROVIDER_ID,
   CREDENTIAL_PROVIDERS,
   VOICE_CREDENTIAL_PROVIDER_ID,
-} from "../shared/credential-providers";
+} from "@sidecar/credentials";
+import type { AppGuideFact, AppGuideSetting, AppGuideSnapshot } from "@sidecar/guide";
+import { PROVIDER_ID, type WorkspaceAgentSelection, workspaceAgentModels } from "@sidecar/session";
 import {
   APP_SETTING_ID,
   APP_SETTING_SCHEMA,
@@ -54,12 +33,27 @@ import {
   settingFieldForGuideId,
   settingGuideEntries,
   spokenSettingValue,
-} from "../shared/settings-schema";
-import { workspaceAgentModels } from "../shared/workspace-agents";
+} from "@sidecar/settings";
+import type { WireRecord } from "@sidecar/wire";
+import type {
+  AccountSnapshot,
+  AppBridge,
+  AppSettings,
+  CredentialSource,
+  MicrophoneStatus,
+  SettingsUpdateResult,
+} from "#shared/contracts";
+import {
+  ACCOUNT_PROVIDER,
+  ACCOUNT_STATUS,
+  CLI_CONNECTION,
+  CREDENTIAL_SOURCE,
+  SECRET_STORAGE,
+} from "#shared/contracts";
 
-export type { AppSettingId } from "../shared/settings-schema";
+export type { AppSettingId } from "@sidecar/settings";
 /** The ids a spoken change names Luke's settings by. */
-export { APP_SETTING_ID, isAppSettingId } from "../shared/settings-schema";
+export { APP_SETTING_ID, isAppSettingId } from "@sidecar/settings";
 
 /** Where the switches live, said once so every entry words it the same way. */
 const SETTINGS_TAB = "the panel's Settings tab";

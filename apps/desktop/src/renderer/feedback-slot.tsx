@@ -1,6 +1,6 @@
+import type { FeedbackImage } from "@sidecar/feedback";
+import { FEEDBACK_LIMITS } from "@sidecar/feedback";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { FeedbackImage } from "../shared/feedback";
-import { FEEDBACK_LIMITS } from "../shared/feedback";
 import { useStagedFocus } from "./credential-entry";
 import { CONFIRMATION_ENTRANCE_MS, type FeedbackConfirmation } from "./feedback-confirmation";
 import {

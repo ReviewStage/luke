@@ -1,6 +1,6 @@
-import type { FeedbackKind } from "../shared/feedback";
-import { FEEDBACK_KIND } from "../shared/feedback";
-import { cssCustomProperties } from "./css-custom-properties";
+import type { FeedbackKind } from "@sidecar/feedback";
+import { FEEDBACK_KIND } from "@sidecar/feedback";
+import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { FEEDBACK_COPY, type FeedbackEntryControl } from "./feedback-entry";
 import { CheckIcon, MegaphoneIcon } from "./settings-icons";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "./settings-search";

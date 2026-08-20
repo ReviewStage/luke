@@ -8,7 +8,7 @@
  * brand mark, and it inherits `currentColor` like the rest.
  */
 
-import { FACE_ART } from "./luke-face-art";
+import { FACE_ART } from "@sidecar/surface";
 
 function Glyph({
   children,

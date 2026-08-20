@@ -1,5 +1,5 @@
-import { CREDENTIAL_PROVIDER_ID } from "./credential-providers";
-import { GOOGLE_CALENDAR_ID, GOOGLE_CALENDAR_NAME } from "./google-calendar";
+import { GOOGLE_CALENDAR_ID, GOOGLE_CALENDAR_NAME } from "@sidecar/calendar/vocabulary";
+import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials";
 
 /**
  * The services connected by consent rather than by a pasted key: the panel

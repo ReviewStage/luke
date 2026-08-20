@@ -5,7 +5,7 @@
 //
 //   node design/generate-surface-shared.mjs
 //
-// It writes four committed outputs into packages/sidecar-core, all from the
+// It writes four committed outputs into packages/surface/src/generated, all from the
 // tables further down:
 //
 //   src/motion-tokens.css       springs, durations, and the layout sizes
@@ -23,7 +23,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const CORE = join(HERE, "..", "packages", "sidecar-core", "src");
+const SURFACE = join(HERE, "..", "packages", "surface", "src", "generated");
 
 // ---------- Motion tokens ----------
 // Sampled damped springs, one duration. A real spring's motion is a property
@@ -415,12 +415,12 @@ const outputs = [
 ];
 
 for (const [name, content] of outputs) {
-  put(join(CORE, name), content);
+  put(join(SURFACE, name), content);
   written.push(name);
 }
 
 if (!CHECK_ONLY) {
-  process.stdout.write(`${written.length} files written to packages/sidecar-core/src/\n`);
+  process.stdout.write(`${written.length} files written to packages/surface/src/generated/\n`);
 } else if (stale.length > 0) {
   process.stderr.write(
     `${stale.length} generated file(s) no longer match this script:\n${stale.join("\n")}\n` +

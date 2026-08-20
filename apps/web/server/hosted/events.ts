@@ -3,8 +3,8 @@ import {
   productEventBatchFromWire,
   text as trimmedText,
   type UnparsedWireValue,
-} from "../core.js";
-import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
+} from "../core";
+import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http";
 import {
   type FetchLike,
   type PosthogBatch,
@@ -12,7 +12,7 @@ import {
   type PosthogPerson,
   type PosthogUpstreamOptions,
   postPosthogBatch,
-} from "./posthog.js";
+} from "./posthog";
 
 /**
  * Records what the signed-in desktop counted about its own use. The desktop

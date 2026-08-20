@@ -1,5 +1,5 @@
-import type { AttentionSpeech, RealtimeStatus } from "@sidecar/core";
-import { REALTIME_STATUS } from "@sidecar/core";
+import type { AttentionSpeech, RealtimeStatus, ScheduledTimer } from "@sidecar/realtime";
+import { REALTIME_STATUS } from "@sidecar/realtime";
 
 /**
  * How long a notice stays worth saying. News about a session is news for
@@ -36,8 +36,6 @@ export const ANNOUNCER_RETRY_DELAY_MS = 20_000;
  */
 export const MAXIMUM_CONNECT_ATTEMPTS = 3;
 
-type TimerHandle = number | ReturnType<typeof setTimeout>;
-
 /**
  * The slice of the voice session the announcer drives. `microphoneCall` is the
  * ownership question: true means the call up or coming is the developer's own,
@@ -57,8 +55,8 @@ export interface AnnouncerSession {
 export interface SpokenNoticeAnnouncerOptions {
   session: () => AnnouncerSession;
   now?: () => number;
-  schedule?: (callback: () => void, delayMs: number) => TimerHandle;
-  cancel?: (timer: TimerHandle) => void;
+  schedule?: (callback: () => void, delayMs: number) => ScheduledTimer;
+  cancel?: (timer: ScheduledTimer) => void;
 }
 
 /**
@@ -88,10 +86,10 @@ export class SpokenNoticeAnnouncer {
   #queue: AttentionSpeech[] = [];
   /** Whether the call now up is one this announcer opened, and so must close. */
   #ownsCall = false;
-  #lingerTimer: TimerHandle | undefined;
+  #lingerTimer: unknown;
   /** How many times the backlog now queued has tried to open Luke's own call. */
   #connectAttempts = 0;
-  #retryTimer: TimerHandle | undefined;
+  #retryTimer: unknown;
   /** Whether the meeting quiet is holding, which silences this announcer. */
   #quiet = false;
 
@@ -251,7 +249,11 @@ export class SpokenNoticeAnnouncer {
 
   #cancelRetry(): void {
     if (this.#retryTimer === undefined) return;
-    (this.#options.cancel ?? clearTimeout)(this.#retryTimer);
+    // SAFETY: The handle is whatever `schedule ?? setTimeout` returned, and the
+    // fallbacks are paired — a handle from `setTimeout` can only reach
+    // `clearTimeout`. The cast satisfies that signature; nothing reads it as a
+    // number.
+    (this.#options.cancel ?? clearTimeout)(this.#retryTimer as number);
     this.#retryTimer = undefined;
   }
 
@@ -267,7 +269,11 @@ export class SpokenNoticeAnnouncer {
 
   #cancelLinger(): void {
     if (this.#lingerTimer === undefined) return;
-    (this.#options.cancel ?? clearTimeout)(this.#lingerTimer);
+    // SAFETY: The handle is whatever `schedule ?? setTimeout` returned, and the
+    // fallbacks are paired — a handle from `setTimeout` can only reach
+    // `clearTimeout`. The cast satisfies that signature; nothing reads it as a
+    // number.
+    (this.#options.cancel ?? clearTimeout)(this.#lingerTimer as number);
     this.#lingerTimer = undefined;
   }
 

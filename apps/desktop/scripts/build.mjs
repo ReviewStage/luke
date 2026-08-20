@@ -20,7 +20,7 @@ await fs.mkdir(path.join(outputRoot, "icon"), { recursive: true });
 
 await Promise.all([
   build({
-    entryPoints: [path.join(appRoot, "src/main.ts")],
+    entryPoints: [path.join(appRoot, "src/main/index.ts")],
     outfile: path.join(outputRoot, "main.js"),
     bundle: true,
     platform: "node",
@@ -44,7 +44,7 @@ await Promise.all([
     logLevel: "info",
   }),
   build({
-    entryPoints: [path.join(appRoot, "src/preload.ts")],
+    entryPoints: [path.join(appRoot, "src/preload/index.ts")],
     outfile: path.join(outputRoot, "preload.js"),
     bundle: true,
     platform: "node",
