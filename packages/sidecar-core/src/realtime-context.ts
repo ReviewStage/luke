@@ -9,6 +9,7 @@ import {
   workspaceProjectSelectionId,
 } from "./providers.js";
 import {
+  ATTENTION_SPEECH_SOURCE,
   type AttentionSpeech,
   announcementSummaryText,
   REALTIME_CLIENT_EVENT,
@@ -360,10 +361,15 @@ export function sessionReferenceWithdrawnEvents(itemId: string): readonly WireRe
 export function lastAnnouncementContextText(speech: AttentionSpeech): string | undefined {
   const payload = announcementSummaryText(speech);
   if (!payload) return undefined;
+  const isStatusEdge = speech.source === ATTENTION_SPEECH_SOURCE.STATUS_EDGE;
   return [
-    "The most recent announcement Luke made unprompted, in exactly these words:",
+    isStatusEdge
+      ? "The most recent announcement Luke made unprompted, worded from this status update:"
+      : "The most recent announcement Luke made unprompted, in exactly these words:",
     `- ${payload}`,
-    'It is what "what did you just say?" points back at: words already said.',
+    isStatusEdge
+      ? 'It is what "what did you just say?" points back at: the update Luke summarized.'
+      : 'It is what "what did you just say?" points back at: words already said.',
   ].join("\n");
 }
 

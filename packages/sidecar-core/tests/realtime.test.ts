@@ -820,6 +820,20 @@ test("the last announcement carries the words said, flattened and bounded", () =
   );
 });
 
+test("a status-edge announcement keeps its update distinct from the words Luke chose", () => {
+  const text = lastAnnouncementContextText(
+    announcement(
+      ATTENTION_SPEECH_SOURCE.STATUS_EDGE,
+      'provider: Claude Code; session: "checkout"; event: finished',
+    ),
+  );
+
+  assert.ok(text);
+  assert.match(text, /worded from this status update/i);
+  assert.match(text, /update Luke summarized/i);
+  assert.doesNotMatch(text, /in exactly these words/i);
+});
+
 test("the last announcement is context, never a prompt", () => {
   const events = lastAnnouncementContextEvents(
     announcement(ATTENTION_SPEECH_SOURCE.NOTICE_REQUEST, "Claude Code finished checkout-service."),
