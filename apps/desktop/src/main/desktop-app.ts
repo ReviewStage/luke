@@ -1122,13 +1122,15 @@ async function refreshProviderSessions(generation: number): Promise<void> {
   await Promise.all(
     orderedRegistrations.map(async ({ adapter }) => {
       try {
-        // Superset claims its workspaces first; Orca and Conductor each defer
-        // to a workspace already claimed, so one chat is grouped by exactly
-        // one manager however many of them hold it.
+        // Superset claims its workspaces first and Conductor next — the
+        // precedence that stood before Orca joined, so no existing tray moves
+        // — and Orca defers to both: one chat is grouped by exactly one
+        // manager however many of them hold it, and a chat only Orca holds
+        // still groups under its worktree.
         await sessionRegistry.refresh(adapter, (providerId, observations) =>
-          conductorSnapshot.enrich(
+          orcaSnapshot.enrich(
             providerId,
-            orcaSnapshot.enrich(
+            conductorSnapshot.enrich(
               providerId,
               supersetSnapshot.enrich(providerId, observations, supersetOrganization),
             ),
