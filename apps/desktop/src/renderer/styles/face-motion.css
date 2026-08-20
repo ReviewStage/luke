@@ -490,7 +490,7 @@
   animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
 }
 
-/* hushed — voice spent for the day (awake and quiet, crescent) */
+/* hushed — voice spent for the day (awake and quiet, barred bubble) */
 
 @keyframes luke-hushed-eyes {
   0% {
@@ -1272,11 +1272,11 @@
   animation-name: luke-sleep-z-3;
 }
 
-/* The hushed crescent breathes in place, and its first frame is its most
+/* The hushed bubble breathes in place, and its first frame is its most
    visible one: paused, the hush still shows, because it is a state rather
    than a motion. */
 
-@keyframes luke-hush-moon {
+@keyframes luke-hush-mark {
   0% {
     opacity: 0.85;
   }
@@ -1290,7 +1290,7 @@
   }
 }
 
-.luke-face-moon {
-  animation-name: luke-hush-moon;
+.luke-face-hush-mark {
+  animation-name: luke-hush-mark;
   animation-duration: 5.2s;
 }

@@ -34,10 +34,13 @@ export const FACE_ART = {
     { x: 166, y: 44, path: "M 0 0 H 6 L 0 6 H 6" },
   ],
   SLEEP_Z_WIDTH: 3.5,
-  /** The silenced crescent a hushed face wears where the sleeper's z's rise. */
-  HUSH_MOON: {
-    transform: "translate(180 57) rotate(-18)",
-    path: "M 0 -11 A 11 11 0 1 1 0 11 A 16.5 16.5 0 0 0 0 -11 Z",
+  /** The struck-through bubble a hushed face wears where the sleeper's z's rise. */
+  HUSH_MARK: {
+    transform: "translate(181 54)",
+    bubble:
+      "M -8 -11 H 8 A 7 7 0 0 1 15 -4 V 4 A 7 7 0 0 1 8 11 H -3 L -10 17 L -8 11 A 7 7 0 0 1 -15 4 V -4 A 7 7 0 0 1 -8 -11 Z",
+    bar: "M -12 13 L 12 -13",
+    width: 3.5,
   },
 } as const;
 
@@ -101,31 +104,31 @@ export const FACE_MOTION_CYCLE_MS = {
 
 /** What a motion needs drawn beyond the resting smile and eyes. */
 export const FACE_MOTION_PARTS = {
-  talking: { brows: false, lids: false, sleepZ: false, hushMoon: false },
-  yes: { brows: false, lids: false, sleepZ: false, hushMoon: false },
-  error: { brows: false, lids: false, sleepZ: false, hushMoon: false },
-  reviewing: { brows: false, lids: false, sleepZ: false, hushMoon: false },
-  success: { brows: false, lids: false, sleepZ: false, hushMoon: false },
-  listening: { brows: false, lids: false, sleepZ: false, hushMoon: false },
-  idle: { brows: false, lids: false, sleepZ: false, hushMoon: false },
-  notification: { brows: true, lids: false, sleepZ: false, hushMoon: false },
-  wink: { brows: false, lids: false, sleepZ: false, hushMoon: false },
-  sleeping: { brows: false, lids: true, sleepZ: true, hushMoon: false },
-  hushed: { brows: false, lids: false, sleepZ: false, hushMoon: true },
-  refresh: { brows: false, lids: false, sleepZ: false, hushMoon: false },
-  boop: { brows: false, lids: false, sleepZ: false, hushMoon: false },
-  monitoring: { brows: false, lids: false, sleepZ: false, hushMoon: false },
-  appear: { brows: false, lids: false, sleepZ: false, hushMoon: false },
-  attention: { brows: false, lids: false, sleepZ: false, hushMoon: false },
-  floating: { brows: false, lids: false, sleepZ: false, hushMoon: false },
-  hiding: { brows: false, lids: false, sleepZ: false, hushMoon: false },
-  flyoff: { brows: false, lids: false, sleepZ: false, hushMoon: false },
-  tease: { brows: true, lids: false, sleepZ: false, hushMoon: false },
-  waiting: { brows: false, lids: false, sleepZ: false, hushMoon: false },
-  shimmy: { brows: false, lids: false, sleepZ: false, hushMoon: false },
-  dizzy: { brows: false, lids: false, sleepZ: false, hushMoon: false },
-  glance: { brows: false, lids: false, sleepZ: false, hushMoon: false },
+  talking: { brows: false, lids: false, sleepZ: false, hushMark: false },
+  yes: { brows: false, lids: false, sleepZ: false, hushMark: false },
+  error: { brows: false, lids: false, sleepZ: false, hushMark: false },
+  reviewing: { brows: false, lids: false, sleepZ: false, hushMark: false },
+  success: { brows: false, lids: false, sleepZ: false, hushMark: false },
+  listening: { brows: false, lids: false, sleepZ: false, hushMark: false },
+  idle: { brows: false, lids: false, sleepZ: false, hushMark: false },
+  notification: { brows: true, lids: false, sleepZ: false, hushMark: false },
+  wink: { brows: false, lids: false, sleepZ: false, hushMark: false },
+  sleeping: { brows: false, lids: true, sleepZ: true, hushMark: false },
+  hushed: { brows: false, lids: false, sleepZ: false, hushMark: true },
+  refresh: { brows: false, lids: false, sleepZ: false, hushMark: false },
+  boop: { brows: false, lids: false, sleepZ: false, hushMark: false },
+  monitoring: { brows: false, lids: false, sleepZ: false, hushMark: false },
+  appear: { brows: false, lids: false, sleepZ: false, hushMark: false },
+  attention: { brows: false, lids: false, sleepZ: false, hushMark: false },
+  floating: { brows: false, lids: false, sleepZ: false, hushMark: false },
+  hiding: { brows: false, lids: false, sleepZ: false, hushMark: false },
+  flyoff: { brows: false, lids: false, sleepZ: false, hushMark: false },
+  tease: { brows: true, lids: false, sleepZ: false, hushMark: false },
+  waiting: { brows: false, lids: false, sleepZ: false, hushMark: false },
+  shimmy: { brows: false, lids: false, sleepZ: false, hushMark: false },
+  dizzy: { brows: false, lids: false, sleepZ: false, hushMark: false },
+  glance: { brows: false, lids: false, sleepZ: false, hushMark: false },
 } as const satisfies Record<
   FaceMotion,
-  { brows: boolean; lids: boolean; sleepZ: boolean; hushMoon: boolean }
+  { brows: boolean; lids: boolean; sleepZ: boolean; hushMark: boolean }
 >;

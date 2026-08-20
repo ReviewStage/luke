@@ -148,31 +148,38 @@ const zGlyph = ({ x, y, size, start }) => {
   );
 };
 
-// The silenced crescent beside a hushed head — the mark macOS wears for a
-// voice deliberately quiet — where the sleeper's z's rise, so the two states
-// share an address and differ in what they say: z's on closed lids mean not
-// watching, the crescent over open eyes means watching but out of voice for
-// the day. It breathes opacity in place rather than travelling: a glyph that
-// drifted like the z's would read as sleep. Unlike the z's, its first frame
-// is its most visible one, because a paused loop — a capture run, reduced
-// motion — must still show the hush: it is a state, not a motion.
-const HUSH_MOON = { x: 180, y: 57, r: 11, tilt: -18 };
-const HUSH_MOON_DURATION = 5.2;
-const HUSH_MOON_OPACITY = [0.85, 0.55, 0.85];
-// A crescent as one closed path: the outer arc is half a circle bulging
-// right, the inner arc returns shallower on the same side, and the lune
-// between them fills. Drawn filled like the eyes rather than stroked like
-// the z's: at capsule size a stroked crescent collapses into a ring.
-const hushMoonD = (r) => {
-  const inner = fmt(r * 1.5);
-  return `M 0 ${fmt(-r)} A ${r} ${r} 0 1 1 0 ${fmt(r)} A ${inner} ${inner} 0 0 0 0 ${fmt(-r)} Z`;
+// The struck-through speech bubble beside a hushed head, where the sleeper's
+// z's rise, so the two states share an address and differ in what they say:
+// z's on closed lids mean not watching, a barred bubble over open eyes means
+// watching but out of voice for the day. It breathes opacity in place rather
+// than travelling: a glyph that drifted like the z's would read as sleep.
+// Unlike the z's, its first frame is its most visible one, because a paused
+// loop — a capture run, reduced motion — must still show the hush: it is a
+// state, not a motion.
+const HUSH_MARK = { x: 181, y: 54, w: 30, h: 22, r: 7 };
+const HUSH_MARK_WIDTH = 3.5;
+const HUSH_MARK_DURATION = 5.2;
+const HUSH_MARK_OPACITY = [0.85, 0.55, 0.85];
+// The bubble as one monoline outline in the z's own stroke, its tail toward
+// the head it belongs to, and the bar as a second stroke across it.
+const hushMarkBubbleD = () => {
+  const x = HUSH_MARK.w / 2;
+  const y = HUSH_MARK.h / 2;
+  const r = HUSH_MARK.r;
+  const arc = (ex, ey) => `A ${r} ${r} 0 0 1 ${fmt(ex)} ${fmt(ey)}`;
+  return (
+    `M ${fmt(-x + r)} ${fmt(-y)} H ${fmt(x - r)} ${arc(x, -y + r)} V ${fmt(y - r)} ` +
+    `${arc(x - r, y)} H -3 L -10 ${fmt(y + 6)} L -8 ${fmt(y)} ${arc(-x, y - r)} ` +
+    `V ${fmt(-y + r)} ${arc(-x + r, -y)} Z`
+  );
 };
-const hushMoonTransform = () =>
-  `translate(${HUSH_MOON.x} ${HUSH_MOON.y}) rotate(${HUSH_MOON.tilt})`;
-const hushMoonGlyph = () =>
-  `<g transform="${hushMoonTransform()}">` +
-  `<animate attributeName="opacity" values="${HUSH_MOON_OPACITY.join(";")}" dur="${HUSH_MOON_DURATION}s" repeatCount="indefinite"/>` +
-  `<path d="${hushMoonD(HUSH_MOON.r)}" fill="currentColor"/></g>`;
+const hushMarkBarD = () => `M ${fmt(-HUSH_MARK.w / 2 + 3)} 13 L ${fmt(HUSH_MARK.w / 2 - 3)} -13`;
+const hushMarkTransform = () => `translate(${HUSH_MARK.x} ${HUSH_MARK.y})`;
+const hushMarkGlyph = () =>
+  `<g transform="${hushMarkTransform()}">` +
+  `<animate attributeName="opacity" values="${HUSH_MARK_OPACITY.join(";")}" dur="${HUSH_MARK_DURATION}s" repeatCount="indefinite"/>` +
+  `<path d="${hushMarkBubbleD()}" stroke="currentColor" stroke-width="${HUSH_MARK_WIDTH}" stroke-linecap="round" stroke-linejoin="round" fill="none"/>` +
+  `<path d="${hushMarkBarD()}" stroke="currentColor" stroke-width="${HUSH_MARK_WIDTH}" stroke-linecap="round" fill="none"/></g>`;
 
 // Composes the face. opts: { eyes, extra } override the defaults.
 function face(opts = {}) {
@@ -394,7 +401,7 @@ const MOTIONS = {
   // sleeper's droop so the quiet reads on the silhouette, and the silenced
   // crescent breathes beside the head where the sleeper's z's rise.
   hushed: {
-    moment: "voice spent for the day (awake and quiet, crescent)",
+    moment: "voice spent for the day (awake and quiet, barred bubble)",
     layers: [{ type: "rotate", pivot: [120, 150], hold: 4 }],
     eyes: {
       kind: "blink",
@@ -402,7 +409,7 @@ const MOTIONS = {
       keyTimes: [0, 0.6, 0.64, 0.68, 1],
       dur: 5.2,
     },
-    hushMoon: true,
+    hushMark: true,
   },
   // One full pirouette with an ease-out landing, then a long rest.
   refresh: {
@@ -699,7 +706,7 @@ function motionCycleMs(motion) {
     ...(motion.eyes?.dur ? [motion.eyes.dur] : []),
     ...(motion.brows?.dur ? [motion.brows.dur] : []),
     ...(motion.sleepZ ? [SLEEP_Z_DURATION] : []),
-    ...(motion.hushMoon ? [HUSH_MOON_DURATION] : []),
+    ...(motion.hushMark ? [HUSH_MARK_DURATION] : []),
   ];
   return Math.round(Math.max(...durations, 0) * 1000);
 }
@@ -758,7 +765,7 @@ function motionSvg(motion) {
     body = wrapAnim(body, animT(layer.type, values, layer.dur, opts));
   }
   if (motion.sleepZ) body += SLEEP_Z.map(zGlyph).join("");
-  if (motion.hushMoon) body += hushMoonGlyph();
+  if (motion.hushMark) body += hushMarkGlyph();
   return body;
 }
 
@@ -879,14 +886,14 @@ function faceMotionCss() {
       (z, index) => `.luke-face-z-${index + 1} {\n  animation-name: luke-sleep-z-${index + 1};\n}`,
     ),
   ];
-  const moonBlock = cssKeyframes(
-    "luke-hush-moon",
-    HUSH_MOON_OPACITY.map((opacity, index) => ({
-      at: index / (HUSH_MOON_OPACITY.length - 1),
+  const hushBlock = cssKeyframes(
+    "luke-hush-mark",
+    HUSH_MARK_OPACITY.map((opacity, index) => ({
+      at: index / (HUSH_MARK_OPACITY.length - 1),
       declaration: `opacity: ${opacity};`,
     })),
   );
-  const moonRule = `.luke-face-moon {\n  animation-name: luke-hush-moon;\n  animation-duration: ${HUSH_MOON_DURATION}s;\n}`;
+  const hushRule = `.luke-face-hush-mark {\n  animation-name: luke-hush-mark;\n  animation-duration: ${HUSH_MARK_DURATION}s;\n}`;
   return [
     "/* Generated by design/generate-brand-assets.mjs. Do not edit by hand: change",
     "   the motion table in that script and re-run it.",
@@ -904,11 +911,11 @@ function faceMotionCss() {
     "",
     [...zBlocks, ...zRules].join("\n\n"),
     "",
-    "/* The hushed crescent breathes in place, and its first frame is its most",
+    "/* The hushed bubble breathes in place, and its first frame is its most",
     "   visible one: paused, the hush still shows, because it is a state rather",
     "   than a motion. */",
     "",
-    [moonBlock, moonRule].join("\n\n"),
+    [hushBlock, hushRule].join("\n\n"),
     "",
   ].join("\n");
 }
@@ -928,7 +935,7 @@ function faceArtModule() {
       `brows: ${Boolean(motion.brows)}`,
       `lids: ${motion.eyes?.kind === "lids"}`,
       `sleepZ: ${Boolean(motion.sleepZ)}`,
-      `hushMoon: ${Boolean(motion.hushMoon)}`,
+      `hushMark: ${Boolean(motion.hushMark)}`,
     ];
     return [name, `{ ${tsList(flags)} }`];
   });
@@ -967,10 +974,13 @@ export const FACE_ART = {
 ${SLEEP_Z.map((z) => `    { x: ${z.x}, y: ${z.y}, path: "${zGlyphD(z.size)}" },`).join("\n")}
   ],
   SLEEP_Z_WIDTH: ${SLEEP_Z_WIDTH},
-  /** The silenced crescent a hushed face wears where the sleeper's z's rise. */
-  HUSH_MOON: {
-    transform: "${hushMoonTransform()}",
-    path: "${hushMoonD(HUSH_MOON.r)}",
+  /** The struck-through bubble a hushed face wears where the sleeper's z's rise. */
+  HUSH_MARK: {
+    transform: "${hushMarkTransform()}",
+    bubble:
+      "${hushMarkBubbleD()}",
+    bar: "${hushMarkBarD()}",
+    width: ${HUSH_MARK_WIDTH},
   },
 } as const;
 
@@ -991,7 +1001,7 @@ export const FACE_MOTION_PARTS = {
 ${tsRecord(parts)}
 } as const satisfies Record<
   FaceMotion,
-  { brows: boolean; lids: boolean; sleepZ: boolean; hushMoon: boolean }
+  { brows: boolean; lids: boolean; sleepZ: boolean; hushMark: boolean }
 >;
 `;
 }

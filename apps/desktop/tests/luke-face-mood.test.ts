@@ -288,12 +288,12 @@ test("every motion the renderer can play is one the artwork describes", () => {
   // the renderer draws lids instead of eyes, so anything else would go blind.
   const withLids = Object.values(FACE_MOTION).filter((motion) => FACE_MOTION_PARTS[motion].lids);
   assert.deepEqual(withLids, [FACE_MOTION.SLEEPING]);
-  // Only the hush wears the crescent, and a hushed face keeps its eyes: the
-  // one thing a spent allowance must not say is that Luke stopped watching.
-  const withMoon = Object.values(FACE_MOTION).filter(
-    (motion) => FACE_MOTION_PARTS[motion].hushMoon,
+  // Only the hush wears the barred bubble, and a hushed face keeps its eyes:
+  // the one thing a spent allowance must not say is that Luke stopped watching.
+  const withMark = Object.values(FACE_MOTION).filter(
+    (motion) => FACE_MOTION_PARTS[motion].hushMark,
   );
-  assert.deepEqual(withMoon, [FACE_MOTION.HUSHED]);
+  assert.deepEqual(withMark, [FACE_MOTION.HUSHED]);
   assert.equal(FACE_MOTION_PARTS[FACE_MOTION.HUSHED].lids, false);
 });
 
