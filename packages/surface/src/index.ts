@@ -28,6 +28,7 @@ export {
   OPENAI_PATH,
   OPENCODE_BLOCK_PATH,
   OPENCODE_FRAME_PATH,
+  ORCA_PATH,
   SUPERSET_PATH,
 } from "./generated/provider-mark-paths.js";
 export {

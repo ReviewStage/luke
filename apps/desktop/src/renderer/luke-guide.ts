@@ -292,7 +292,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "Lists every session that still matters: one working or waiting stays at any age, a " +
         "failure for three days, a finished or quiet one for two. The options button opens " +
         "filter rows by axis — location (local, cloud), kind (voice chats), app (Conductor, " +
-        "ChatGPT, Superset), and agent — where several chips can be pressed at once: choices " +
+        "ChatGPT, Orca, Superset), and agent — where several chips can be pressed at once: choices " +
         "on one row widen each other and choices across rows narrow, so Codex beside " +
         "Conductor means Codex chats associated with Conductor. The sheet stays open while " +
         "chips toggle, and the options button wears the narrowing while the sheet is closed. " +
@@ -314,15 +314,17 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "also appears. Luke recognizes Conductor locally from Conductor's read-only session " +
         "index; when a Codex chat there spawns a sub-agent, Codex's exact parent-thread " +
         "record carries that Conductor association to the sub-agent's separate row. Luke " +
-        "recognizes Superset from its read-only host state. A local Codex chat also names " +
+        "recognizes Superset from its read-only host state, and Orca from its read-only " +
+        "hook-status cache, grouping chats under the Orca worktree that hosts them. A local " +
+        "Codex chat also names " +
         "ChatGPT because OpenAI's desktop app documents the exact Codex thread address Luke " +
         "already opens. More than one app mark may appear on one row; none replaces the agent " +
         "or changes local versus cloud. An app mark with an exact address is a button: " +
         "ChatGPT opens that Codex thread, Superset opens its bound terminal, and a Conductor " +
         "cloud chat's Conductor mark opens that exact chat. The row body still opens its " +
-        "preferred exact destination. Local Conductor chats expose no documented exact " +
-        "address or message endpoint, so their mark identifies the association but adds no " +
-        "open or send control.",
+        "preferred exact destination. A local Conductor chat or an Orca worktree exposes no " +
+        "documented exact address or message endpoint, so each of those marks identifies the " +
+        "association but adds no open or send control.",
     },
     {
       label: "Searching sessions",
@@ -339,10 +341,11 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
       label: "Workspaces in the list",
       detail:
         "Where chats nest in a workspace — Conductor's, cloud and local alike, and " +
-        "Superset's on this Mac — each chat is its own row. A workspace holding several " +
+        "Superset's and Orca's on this machine — each chat is its own row. A workspace holding several " +
         "draws them inside one tray named by the workspace; one holding a single chat stays " +
         "one row titled by the workspace. Every chat can be seen, opened, and messaged " +
-        "individually where its latest roster entry offers that act. A Superset or Conductor " +
+        "individually where its latest roster entry offers that act. A Superset, Conductor, " +
+        "or Orca " +
         "tray carries the managing app's mark once in its header rather than repeating it on " +
         "every child row.",
     },

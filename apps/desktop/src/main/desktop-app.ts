@@ -29,7 +29,10 @@ import {
   CodexCloudSessionAdapter,
   ConductorSessionApplicationReader,
   ConductorSessionApplicationSnapshot,
+  defaultOrcaDataDirectory,
   ObservationHookRegistry,
+  OrcaWorkspaceReader,
+  OrcaWorkspaceSnapshot,
   type ProviderRegistration,
   providerRegistrations,
 } from "@sidecar/providers";
@@ -166,6 +169,9 @@ const sessionRegistry = new InMemorySessionRegistry();
 // "unknown".
 const codexCloudAdapter = new CodexCloudSessionAdapter();
 const conductorSessionApplications = new ConductorSessionApplicationReader();
+const orcaWorkspaces = new OrcaWorkspaceReader({
+  dataDirectory: process.env.ORCA_USER_DATA_PATH ?? defaultOrcaDataDirectory(),
+});
 const supersetHomeDirectory =
   process.env.SUPERSET_HOME_DIR ?? path.join(app.getPath("home"), ".superset");
 const supersetWorkspaces = new SupersetWorkspaceReader({
@@ -1069,6 +1075,11 @@ async function refreshProviderSessions(generation: number): Promise<void> {
     process.stderr.write(`Conductor application observation failed: ${message}\n`);
     return new ConductorSessionApplicationSnapshot();
   });
+  const orcaSnapshotPromise = orcaWorkspaces.read().catch((error) => {
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`Orca application observation failed: ${message}\n`);
+    return new OrcaWorkspaceSnapshot();
+  });
   let supersetSnapshot = new SupersetWorkspaceSnapshot([]);
   let supersetOrganization: string | undefined;
   try {
@@ -1090,6 +1101,7 @@ async function refreshProviderSessions(generation: number): Promise<void> {
   observedSupersetWorkspaces = supersetSnapshot;
   observedSupersetOrganization = supersetOrganization;
   const conductorSnapshot = await conductorSnapshotPromise;
+  const orcaSnapshot = await orcaSnapshotPromise;
   const supersetActionsEnabled = supersetOrganization !== undefined;
   if (actionsWereEnabled !== supersetActionsEnabled) {
     if (supersetActionsEnabled) {
@@ -1110,10 +1122,18 @@ async function refreshProviderSessions(generation: number): Promise<void> {
   await Promise.all(
     orderedRegistrations.map(async ({ adapter }) => {
       try {
+        // Superset claims its workspaces first and Conductor next — the
+        // precedence that stood before Orca joined, so no existing tray moves
+        // — and Orca defers to both: one chat is grouped by exactly one
+        // manager however many of them hold it, and a chat only Orca holds
+        // still groups under its worktree.
         await sessionRegistry.refresh(adapter, (providerId, observations) =>
-          conductorSnapshot.enrich(
+          orcaSnapshot.enrich(
             providerId,
-            supersetSnapshot.enrich(providerId, observations, supersetOrganization),
+            conductorSnapshot.enrich(
+              providerId,
+              supersetSnapshot.enrich(providerId, observations, supersetOrganization),
+            ),
           ),
         );
       } catch (error) {

@@ -266,6 +266,20 @@ is said back to you under the field you typed in.
   also carries a ChatGPT mark whose press opens the same `codex://` thread
   address the row itself opens, composed on this machine; nothing is sent to
   OpenAI by drawing or pressing it.
+- For the Orca worktrees on this machine, Luke reads two of Orca's own files
+  read-only: the hook-status cache
+  (`~/Library/Application Support/orca/agent-hooks/last-status.json`), from
+  which each entry's agent kind, the agent's own session identifier, the
+  worktree identifier holding it, and its timestamp are read; and the state
+  file (`orca-data.json`), from which only each worktree's display name is
+  read. The hook-status cache also holds conversational fields — the last
+  prompt, a message preview, a tool's input — and Luke reads none of them.
+  The session identifier is joined exactly to a session Luke already observed
+  on this machine — never inferred from a title or a path — and the matched
+  row gains the Orca mark and groups under its Orca worktree. Both files are
+  re-parsed only when they change on disk, an absent app, unreadable file, or
+  unknown format version means no annotation, and nothing is ever sent to
+  Orca.
 
 Luke processes bounded fields needed to identify and display a session:
 provider and session identifiers, provider-generated titles, the workspace

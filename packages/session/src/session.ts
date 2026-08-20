@@ -194,6 +194,7 @@ export interface SessionProvider {
 export const SESSION_APPLICATION_ID = {
   CHATGPT: "chatgpt",
   CONDUCTOR: "conductor",
+  ORCA: "orca",
   SUPERSET: "superset",
 } as const;
 

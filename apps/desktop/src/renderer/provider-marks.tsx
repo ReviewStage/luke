@@ -22,6 +22,7 @@ import {
   OPENAI_PATH,
   OPENCODE_BLOCK_PATH,
   OPENCODE_FRAME_PATH,
+  ORCA_PATH,
   SUPERSET_PATH,
 } from "@sidecar/surface";
 import { useId } from "react";
@@ -48,7 +49,8 @@ import { useId } from "react";
  * https://developers.google.com/calendar), Jules via Simple Icons (CC0-1.0, sourced from
  * https://jules.google), OpenAI via Simple Icons (CC0-1.0), Linear via Simple Icons (CC0-1.0, sourced from
  * https://linear.app), OpenCode's two-tone terminal mark verbatim from
- * the favicon https://opencode.ai serves, and Superset's bracket mark traced
+ * the favicon https://opencode.ai serves, Orca's whale mark verbatim from the
+ * logo the Orca repository publishes (stablyai/orca, MIT), and Superset's bracket mark traced
  * from the pixel grid of the favicon https://superset.sh serves — the one
  * square mark Superset publishes — keeping the vertical metallic gradient the
  * favicon draws it with. Each keeps its own brand colour
@@ -269,6 +271,23 @@ function OpenCodeMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
+function OrcaMark({ className }: MarkProps): React.JSX.Element {
+  // The box reproduces the published artwork's group offset — the path is
+  // drawn 6.67 right and 70.67 down of the origin — so the path itself stays
+  // verbatim from the logo the Orca repository publishes.
+  return (
+    <svg
+      className={className}
+      data-mark={SESSION_APPLICATION_ID.ORCA}
+      viewBox="6.6666669 70.666669 318.60232 202.66667"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path fill="currentColor" d={ORCA_PATH} />
+    </svg>
+  );
+}
+
 function SupersetMark({ className }: MarkProps): React.JSX.Element {
   // Superset's favicon draws its bracket mark in a vertical metallic gradient
   // rather than a flat colour, so like Codex it needs its own paint server.
@@ -331,6 +350,7 @@ const PROVIDER_MARKS = {
   [ISSUE_TRACKER_ID.LINEAR]: LinearMark,
   [CREDENTIAL_PROVIDER_ID.OPENAI]: OpenAiMark,
   [PROVIDER_ID.OPENCODE]: OpenCodeMark,
+  [SESSION_APPLICATION_ID.ORCA]: OrcaMark,
   [SUPERSET_WORKSPACE_PROVIDER_ID]: SupersetMark,
 } as const satisfies Readonly<Record<MarkId, (props: MarkProps) => React.JSX.Element>>;
 

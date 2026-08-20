@@ -60,6 +60,7 @@ under **Share usage data** in Settings.
 | Devin | ✅ | ✅ |
 | Jules | | ✅ |
 | OpenCode | ✅ | |
+| Orca | ✅ | |
 | Superset | ✅ | |
 
 See [docs/PROVIDERS.md](docs/PROVIDERS.md) and [PRIVACY.md](PRIVACY.md) for more details.
