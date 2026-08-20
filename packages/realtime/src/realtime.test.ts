@@ -11,7 +11,6 @@ import { EMPTY_APP_GUIDE } from "@sidecar/guide";
 import { ISSUE_TRACKER_ID, normalizeTrackedIssue } from "@sidecar/issues";
 import {
   ATTENTION_SPEECH_SOURCE,
-  type AttentionSpeech,
   appGuideContextEvents,
   attentionSpeechFromReviews,
   CONTEXT_ITEM_KIND,
@@ -20,6 +19,7 @@ import {
   contextItemId,
   contextSupersedeEventId,
   contextSupersedeEvents,
+  conversationContextEvents,
   functionCallFollowUpEvents,
   functionCallOutputEvents,
   inputAudioAppendEvents,
@@ -32,8 +32,6 @@ import {
   issueContextText,
   issueToolAction,
   issueTrackerDisconnectedEvents,
-  lastAnnouncementContextEvents,
-  lastAnnouncementContextText,
   outputSpeedUpdateEvents,
   PRESS_AUDIO_SAMPLE_RATE,
   parseRealtimeServerEvent,
@@ -47,12 +45,8 @@ import {
   realtimeClientSecretRequest,
   realtimeCredentialFromResponse,
   realtimeCredentialIsUsable,
-  SESSION_REFERENCE_WITHDRAWN_TEXT,
   sessionContextEvents,
   sessionContextText,
-  sessionReferenceContextEvents,
-  sessionReferenceContextText,
-  sessionReferenceWithdrawnEvents,
   sessionToolAction,
   truncateResponseEvents,
   typedAskEvents,
@@ -713,7 +707,6 @@ test("the roster names a hosted chat by its agent, with the host beside it", () 
   );
 
   assert.match(sessionContextText([hosted]), /- Claude Code in Conductor — amber-shoal/);
-  assert.match(sessionReferenceContextText(hosted), /- Claude Code in Conductor — amber-shoal/);
 });
 
 test("an empty roster says so rather than implying Luke sees nothing at all", () => {
@@ -762,120 +755,10 @@ test("the roster carries how long ago each session was last seen, measured again
   assert.match(sessionContextText([ahead], [], now), /updated just now/);
 });
 
-test("the session under discussion carries the identity a bare reference resolves to", () => {
-  const chat = normalizeSession(
-    { id: "conductor", displayName: "Conductor" },
-    {
-      providerSessionId: "chat-1",
-      title: "Revamp the notch panel",
-      status: SESSION_STATUS.WAITING,
-      observedAt: DECIDED_AT,
-      workspace: { providerWorkspaceId: "workspace-1", name: "lisbon-v2" },
-      detail: { link: "https://conductor.build/w/lisbon-v2" },
-      recap: "Waiting on a review of the spring table.",
-    },
-  );
-
-  const text = sessionReferenceContextText(chat);
-
-  // The whole point of the line: the mention a "that chat" points back at
-  // carried only a title, so this is where the identity a tool call must name
-  // survives across turns and across calls.
-  assert.match(text, /provider_id=conductor provider_session_id=chat-1/);
-  assert.match(text, /Conductor/);
-  assert.match(text, /Revamp the notch panel/);
-  assert.match(text, /a chat in workspace lisbon-v2/);
-  // Naming fields only: status and recap are the roster's answer, and an
-  // address has no business in a conversation.
-  assert.doesNotMatch(text, /waiting/i);
-  assert.doesNotMatch(text, /spring table/);
-  assert.doesNotMatch(text, /https:/);
-});
-
-test("the session under discussion is context, never a prompt", () => {
-  const chat = normalizeSession(
-    { id: "claude-code", displayName: "Claude Code" },
-    {
-      providerSessionId: "session-a",
-      title: "checkout-service",
-      status: SESSION_STATUS.WORKING,
-      observedAt: DECIDED_AT,
-    },
-  );
-
-  for (const events of [
-    sessionReferenceContextEvents(chat, "luke_ctx_session-reference_1"),
-    sessionReferenceWithdrawnEvents("luke_ctx_session-reference_2"),
-  ]) {
-    assert.equal(events.length, 1);
-    assert.equal(events[0]?.type, REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE);
-    assert.ok(
-      events.every((event) => event.type !== REALTIME_CLIENT_EVENT.RESPONSE_CREATE),
-      "learning what 'that chat' means must not open Luke's mouth",
-    );
-  }
-  assert.match(SESSION_REFERENCE_WITHDRAWN_TEXT, /no longer observed/);
-});
-
-function announcement(source: AttentionSpeech["source"], summary: string): AttentionSpeech {
-  return {
-    providerId: "claude-code",
-    providerSessionId: "session-a",
-    disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
-    source,
-    summary,
-    decidedAt: 1_800_000_000_000,
-  };
-}
-
-test("the last announcement carries the words said, flattened and bounded", () => {
-  const text = lastAnnouncementContextText(
-    announcement(
-      ATTENTION_SPEECH_SOURCE.NOTICE_REQUEST,
-      "x".repeat(2 * maximumAttentionSummaryLength),
-    ),
-  );
-
-  assert.ok(text);
-  const lines = text.split("\n");
-  // Flattened before it is bounded: the payload is one line of the item, so
-  // nothing inside a recap can open a new section of it.
-  assert.equal(lines.length, 3);
-  assert.ok((lines[1] ?? "").length <= "- ".length + maximumAttentionSummaryLength);
-  assert.match(text, /in exactly these words/);
-
-  // An announcement with no words left builds nothing rather than an empty line.
-  assert.equal(
-    lastAnnouncementContextText(announcement(ATTENTION_SPEECH_SOURCE.EVALUATOR, "  ")),
-    undefined,
-  );
-  assert.deepEqual(
-    lastAnnouncementContextEvents(
-      announcement(ATTENTION_SPEECH_SOURCE.EVALUATOR, "  "),
-      "luke_ctx_last-announcement_1",
-    ),
-    [],
-  );
-});
-
-test("a status-edge announcement keeps its update distinct from the words Luke chose", () => {
-  const text = lastAnnouncementContextText(
-    announcement(
-      ATTENTION_SPEECH_SOURCE.STATUS_EDGE,
-      'provider: Claude Code; session: "checkout"; event: finished',
-    ),
-  );
-
-  assert.ok(text);
-  assert.match(text, /worded from this status update/i);
-  assert.match(text, /update Luke summarized/i);
-  assert.doesNotMatch(text, /in exactly these words/i);
-});
-
-test("the last announcement is context, never a prompt", () => {
-  const events = lastAnnouncementContextEvents(
-    announcement(ATTENTION_SPEECH_SOURCE.NOTICE_REQUEST, "Claude Code finished checkout-service."),
-    "luke_ctx_last-announcement_1",
+test("the conversation history is context, never a prompt", () => {
+  const events = conversationContextEvents(
+    'The recent conversation, oldest first.\n- Luke announced: "Claude Code finished."',
+    "luke_ctx_conversation_1",
   );
 
   assert.equal(events.length, 1);
@@ -884,7 +767,7 @@ test("the last announcement is context, never a prompt", () => {
     events.every((event) => event.type !== REALTIME_CLIENT_EVENT.RESPONSE_CREATE),
     "remembering what was said must not open Luke's mouth",
   );
-  assert.match(conversationItemText(events[0]), /^\[last announcement, sent automatically\]\n/);
+  assert.match(conversationItemText(events[0]), /^\[recent conversation, sent automatically\]\n/);
 });
 
 test("the roster says what a session is doing and where, in the attention update's own fields", () => {

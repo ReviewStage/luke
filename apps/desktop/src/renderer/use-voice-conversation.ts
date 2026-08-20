@@ -4,13 +4,18 @@ import { mentionedIssues, type TrackedIssue } from "@sidecar/issues";
 import {
   ATTENTION_SPEECH_SOURCE,
   type AttentionSpeech,
+  announcementConversationEntry,
+  appendConversationEntry,
   type CarriedSessionAction,
+  CONVERSATION_ENTRY_KIND,
+  type ConversationEntry,
   dispatchByKind,
   REALTIME_STATUS,
   type RealtimeStatus,
   type RealtimeVoice,
   type RealtimeVoiceSpeed,
   SESSION_TOOL_KIND,
+  sessionActConversationEntry,
 } from "@sidecar/realtime";
 import {
   mentionedSessions,
@@ -285,46 +290,15 @@ export function announcerNotices(speech: readonly AttentionSpeech[]): AttentionS
 }
 
 /**
- * The newest item of one batch of attention speech, by the moment it was
- * decided. Every item counts, however it reached the developer — spoken on an
- * open call, read out on Luke's own, or only shown as a popup — since each is
- * something Luke just told them. Picking the newest is arithmetic, so no
- * model output chooses what survives the batch.
+ * One batch of attention speech in the order it was decided. Every item
+ * counts, however it reached the developer — spoken on an open call, read out
+ * on Luke's own, or only shown as a popup — since each is something Luke just
+ * told them, and each earns a history line so the next call remembers it.
+ * Ordering by decision is arithmetic, so no model output chooses what the
+ * history holds.
  */
-export function latestSpeech(speech: readonly AttentionSpeech[]): AttentionSpeech | undefined {
-  let latest: AttentionSpeech | undefined;
-  for (const item of speech) {
-    if (latest === undefined || item.decidedAt >= latest.decidedAt) latest = item;
-  }
-  return latest;
-}
-
-/**
- * The session one batch of attention speech leaves under discussion: the
- * newest mention, because it is the one a bare "that chat" a moment later
- * points back at. Deterministic on both sides: the deciders behind the speech
- * are the status edge and the standing ask, and {@link latestSpeech} picks the
- * newest by arithmetic, so no model output chooses what the reference points
- * at.
- */
-export function latestSpeechReference(
-  speech: readonly AttentionSpeech[],
-): SessionIdentity | undefined {
-  const latest = latestSpeech(speech);
-  return latest
-    ? { providerId: latest.providerId, providerSessionId: latest.providerSessionId }
-    : undefined;
-}
-
-/**
- * The session one carried act is aimed at, when it is aimed at one at all. An
- * act the developer just asked of a session makes it the session under
- * discussion as surely as an announcement does — "read me that transcript"
- * is followed by "open that chat" often enough — and a workspace creation
- * aims at no session, so it moves the reference not at all.
- */
-export function carriedSessionIdentity(action: CarriedSessionAction): SessionIdentity | undefined {
-  return "identity" in action ? action.identity : undefined;
+export function speechByDecision(speech: readonly AttentionSpeech[]): readonly AttentionSpeech[] {
+  return [...speech].sort((a, b) => a.decidedAt - b.decidedAt);
 }
 
 /**
@@ -565,42 +539,32 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     undefined,
   );
   /**
-   * The session under discussion, surviving here across calls: an announcement
-   * is often read out on Luke's own speak-only call, which the talk-key press
-   * tears down on its way to opening the developer's — and "open that chat"
-   * arrives on the call that never heard the announcement. The session's own
-   * copy goes with its teardown; this one re-feeds the next call.
+   * The conversation history, surviving here across calls: a call is a
+   * transport that comes and goes — an announcement is often read out on
+   * Luke's own speak-only call, which the talk-key press tears down on its
+   * way to opening the developer's, and an idle call retires — while the
+   * thread itself lives here and re-feeds whichever call opens next. The
+   * session's own copy goes with its teardown; this one is the conversation.
    */
-  const sessionReferenceRef = useRef<SessionIdentity | undefined>(undefined);
+  const conversationRef = useRef<readonly ConversationEntry[]>([]);
   /**
-   * The most recent announcement's words, surviving here on the reference's
-   * own terms: the announcement was often read out on Luke's speak-only call,
-   * which the talk-key press tears down — and "what did you just say?"
-   * arrives on the call that never said it. The session's copy goes with its
-   * teardown; this one re-feeds the next call.
+   * Whether the turn under way read a transcript aloud. The rendering travels
+   * only in the turn that asked for it, so the reply that spoke it must not
+   * be recorded: the record keeps the act — already recorded at the carry —
+   * and not a word of what it rendered.
    */
-  const lastAnnouncementRef = useRef<AttentionSpeech | undefined>(undefined);
+  const transcriptSpokenRef = useRef(false);
 
   /**
-   * Moves the session under discussion, when there is somewhere to move it.
-   * Nothing here ever clears it — a reference whose session stops being
-   * observed withdraws itself against the roster instead.
+   * Appends one line to the history and tells the call now open, when there
+   * is a line to append. Nothing here ever removes a line — the history's own
+   * bounds retire the oldest, and a session leaving the roster costs a line
+   * its identity at render, never its words.
    */
-  const rememberSessionReference = useCallback((identity: SessionIdentity | undefined) => {
-    if (!identity) return;
-    sessionReferenceRef.current = identity;
-    voiceSession.current?.updateSessionReference(identity);
-  }, []);
-
-  /**
-   * Keeps the newest announcement's words, when a batch carried any. Nothing
-   * here ever clears them: words already said do not go stale the way an
-   * identity does, and the next announcement replaces them soon enough.
-   */
-  const rememberLastAnnouncement = useCallback((speech: AttentionSpeech | undefined) => {
-    if (!speech) return;
-    lastAnnouncementRef.current = speech;
-    voiceSession.current?.updateLastAnnouncement(speech);
+  const rememberConversationEntry = useCallback((entry: ConversationEntry | undefined) => {
+    if (!entry) return;
+    conversationRef.current = appendConversationEntry(conversationRef.current, entry);
+    voiceSession.current?.updateConversation(conversationRef.current);
   }, []);
 
   const ensureVoiceSession = useCallback((): RealtimeVoiceSession => {
@@ -623,10 +587,16 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       // press that opens a session: a spoken ask is a third way to ask for the
       // same act, behind the same gauntlet in the main process.
       carryAction: (action: CarriedSessionAction) => {
-        // The act's target becomes the session under discussion before the
-        // outcome is known: a refusal still leaves the developer talking
-        // about that session, and the next turn may point back at it.
-        rememberSessionReference(carriedSessionIdentity(action));
+        // The ask is recorded before the outcome is known: a refusal still
+        // leaves the developer having asked it, and the next turn may point
+        // back at the session it named. The outcome needs no line of its own —
+        // the reply voicing it is recorded as what Luke said.
+        rememberConversationEntry(sessionActConversationEntry(action, sessionsRef.current));
+        // The reply that voices a transcript reading must stay out of the
+        // history: the rendering travels only in the turn that asked for it.
+        if (action.kind === SESSION_TOOL_KIND.READ_TRANSCRIPT) {
+          transcriptSpokenRef.current = true;
+        }
         return dispatchByKind(action, {
           [SESSION_TOOL_KIND.MESSAGE]: (act) =>
             window.sidecar.sendSessionMessage(act.identity, act.text),
@@ -677,9 +647,19 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       onRemoteStream: setRemoteStream,
       onError: setVoiceError,
       onCaption: (texts, about) => setVoiceCaption({ texts, about }),
+      onReplyEnded: (texts, about) => {
+        const spokeTranscript = transcriptSpokenRef.current;
+        transcriptSpokenRef.current = false;
+        // An announcement's reply is already recorded from the update that
+        // decided it — with the identity the attention layer validated, which
+        // the words alone cannot carry — and a transcript reading enters the
+        // record only as the act it was.
+        if (about || spokeTranscript) return;
+        rememberConversationEntry({ kind: CONVERSATION_ENTRY_KIND.REPLY, words: texts.join(" ") });
+      },
     });
     return voiceSession.current;
-  }, [rememberSessionReference, setVoiceStatus]);
+  }, [rememberConversationEntry, setVoiceStatus]);
 
   /**
    * The announcer that lets Luke speak into silence: it queues the notices the
@@ -744,16 +724,12 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     const session = ensureVoiceSession();
     if (!(await session.connect())) return false;
     session.updateSessions(sessionsRef.current, noticeAsksRef.current);
-    // After the roster, which it is rendered against. The reference outlives
-    // the calls themselves on purpose: the announcement it points back at
-    // may have been read out on the speak-only call this one just replaced.
-    session.updateSessionReference(sessionReferenceRef.current);
-    // The announcement's own words re-feed on the same terms, so "what did
-    // you just say?" can be answered on the call that replaced the one that
-    // said it.
-    if (lastAnnouncementRef.current) {
-      session.updateLastAnnouncement(lastAnnouncementRef.current);
-    }
+    // After the roster, which it is rendered against. The history outlives
+    // the calls themselves on purpose: it is the conversation, and this call
+    // is only the newest transport to carry it — the announcement a "what did
+    // you just say?" points back at was often read out on the speak-only call
+    // this one just replaced.
+    session.updateConversation(conversationRef.current);
     session.updateWorkspaceProjects(
       workspaceProjectsRef.current,
       defaultWorkspaceProviderRef.current,
@@ -952,6 +928,9 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       }
       if (session.sendText(text)) {
         setTypedAsk(true);
+        // The developer's own words enter the history as they were typed, so
+        // the thread holds both halves of the exchange the reply answers.
+        rememberConversationEntry({ kind: CONVERSATION_ENTRY_KIND.TYPED_ASK, words: text });
         // A sent ask outdates whatever refusal the strip was still reading:
         // a call already open skips `startConversation`, so the clear it
         // would have run happens here.
@@ -969,7 +948,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       setVoiceNotice(refusal);
       return refusal;
     },
-    [ensureVoiceSession, spentAllowanceNote, startConversation],
+    [rememberConversationEntry, ensureVoiceSession, spentAllowanceNote, startConversation],
   );
 
   const discardListening = useCallback(() => {
@@ -1138,21 +1117,21 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
 
   useEffect(() => {
     return window.sidecar.onAttentionSpeech((speech) => {
-      // However the mention reaches the developer — spoken on this call, read
-      // out on Luke's own, or only shown as a popup — its session is now the
-      // one under discussion, and the next turn may say just "that chat".
-      rememberSessionReference(latestSpeechReference(speech));
-      // And its words are now the last announcement, so "what did you just
-      // say?" has an answer on whichever call the question lands on. The two
-      // compose: the reference carries the identity, this carries the words.
-      rememberLastAnnouncement(latestSpeech(speech));
+      // However a mention reaches the developer — spoken on this call, read
+      // out on Luke's own, or only shown as a popup — it is something Luke
+      // just told them, so it enters the history: the next turn may say just
+      // "that chat", and the line carries the identity the words alone
+      // cannot.
+      for (const item of speechByDecision(speech)) {
+        rememberConversationEntry(announcementConversationEntry(item));
+      }
       const notices = announcerNotices(speech);
       if (notices.length > 0) ensureAnnouncer().enqueue(notices);
       const session = voiceSession.current;
       if (!session?.microphoneCall) return;
       for (const item of evaluatorSummaries(speech)) session.speak(item);
     });
-  }, [ensureAnnouncer, rememberLastAnnouncement, rememberSessionReference]);
+  }, [rememberConversationEntry, ensureAnnouncer]);
 
   // The announcer paces itself by the session's status: READY is when a queued
   // sentence can speak and when an empty queue starts the walk toward closing
