@@ -80,7 +80,6 @@ export const DEVIN_ROLE = {
 
 /**
  * The states of a tool call that is still someone's live work. The CLI stores
- // SAFETY: The preceding check establishes the asserted contract.
  * each call as an ACP `ToolCall` record whose final update lands in a second
  * column, so a call is open while that update is missing — unless the call's
  * own status already says it settled, which an interrupted session can leave
@@ -123,7 +122,6 @@ const DEVIN_SESSION_QUERY_MINIMAL = `
 /**
  * The main chain's newest nodes, tip first. The chain is walked by parent
  * pointers from the tip the session row names rather than taken from the top
- // SAFETY: The preceding check establishes the asserted contract.
  * of the table, because a rewound session leaves its abandoned branch as the
  * newest nodes while the tip points where the conversation actually stands.
  */

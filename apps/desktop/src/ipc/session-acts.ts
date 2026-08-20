@@ -854,14 +854,11 @@ function isIssueActionAsk(value: UnparsedWireValue): value is {
   body?: string;
 } {
   if (!isRecord(value)) return false;
-  // SAFETY: The preceding check establishes the asserted contract.
-  const { kind, identity } = value as {
-    kind?: UnparsedWireValue;
-    identity?: { trackerId?: UnparsedWireValue; identifier?: UnparsedWireValue };
-  };
+  const { kind, identity } = value;
   if (kind !== "issue-state" && kind !== "issue-comment") return false;
+  if (!isRecord(identity)) return false;
   return (
-    isWireString(identity?.trackerId) &&
+    isWireString(identity.trackerId) &&
     identity.trackerId.trim().length > 0 &&
     isWireString(identity.identifier) &&
     identity.identifier.trim().length > 0

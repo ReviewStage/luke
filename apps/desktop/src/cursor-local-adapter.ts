@@ -120,7 +120,6 @@ function canonicalProjectName(value: string): string {
 function folderPathFromWorkspaceRecord(source: string): string | undefined {
   let parsed: WireBoundaryInput;
   try {
-    // SAFETY: The preceding check establishes the asserted contract.
     parsed = JSON.parse(source);
   } catch (error) {
     if (error instanceof SyntaxError) return undefined;
@@ -128,7 +127,6 @@ function folderPathFromWorkspaceRecord(source: string): string | undefined {
   }
   const record = wireRecord(unparsedWire(parsed));
   if (!record) return undefined;
-  // SAFETY: The preceding check establishes the asserted contract.
   const folder = record[CURSOR_WORKSPACE_FIELD.FOLDER];
   if (!isWireString(folder)) return undefined;
   try {
@@ -260,7 +258,6 @@ function closedTurn(tail: string): { failed: boolean } | undefined {
 /**
  * A turn Cursor has closed is holding for the user; one it failed is stuck
  * until someone comes back to it, which asks something different and is
- // SAFETY: The preceding check establishes the asserted contract.
  * reported as such. Anything else is a turn still in progress. A transcript
  * has no heartbeat, so an open turn that has gone quiet is unknown rather
  * than still working.
@@ -286,7 +283,6 @@ function statusFromTurn(
  * registers `cursor://` for its windows but publishes no route to a chat: its
  * handler answers a prompt, a command, a rule, and a background agent, and none
  * of them is a chat that already exists. The folder the chat was held in is not
- // SAFETY: The preceding check establishes the asserted contract.
  * the chat, so it is not offered as one.
  */
 function detailFor(label: string, status: SessionStatus): SessionDetail {

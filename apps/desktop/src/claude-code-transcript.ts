@@ -140,7 +140,6 @@ function linesFromRecord(record: WireRecord): string[] {
 /**
  * Finds the session's transcript file the way discovery does — the file named
  * by the session's own id, directly inside one of the project directories —
- // SAFETY: The preceding check establishes the asserted contract.
  * without trusting the id as a path: an id outside the shape Claude Code
  * mints names nothing.
  */

@@ -276,7 +276,6 @@ export interface PreferenceWrites {
 }
 
 /**
- // SAFETY: The preceding check establishes the asserted contract.
  * The talk, ask, and stop keys as registered, and the one way to move them
  * or to say a recording is under way. The keys the rows show are the ones
  * that actually answered, which can differ from the stored choice when
@@ -284,7 +283,6 @@ export interface PreferenceWrites {
  */
 export interface ShortcutControl {
   /**
-   // SAFETY: The preceding check establishes the asserted contract.
    * The talk key as registered, as an accelerator: the row draws it as its
    * separate keys and says it whole in the labels its buttons carry.
    */
@@ -299,7 +297,6 @@ export interface ShortcutControl {
    * that answer belongs.
    */
   onVoiceHotkeyChange: (accelerator: string | undefined) => Promise<string | undefined>;
-  // SAFETY: The preceding check establishes the asserted contract.
   /** The ask key as registered, an accelerator on the talk key's terms. */
   askHotkey?: string;
   /** Whether a chosen ask chord is stored, on the talk key's terms. */
@@ -310,7 +307,6 @@ export interface ShortcutControl {
    * refuses, and the row is where that answer belongs.
    */
   onAskHotkeyChange: (accelerator: string | undefined) => Promise<string | undefined>;
-  // SAFETY: The preceding check establishes the asserted contract.
   /** The stop key as registered, an accelerator on the talk key's terms. */
   stopHotkey?: string;
   /** Whether a chosen stop chord is stored, on the other rows' terms. */
@@ -329,7 +325,6 @@ export interface ShortcutControl {
 }
 
 /**
- // SAFETY: The preceding check establishes the asserted contract.
  * The settings tab, as the grouped controls that draw it. A preference write
  * or a shortcut lives on its own bundle so a leaf can change without the
  * panel, the body, or the app's settings object growing a new field.
@@ -439,17 +434,14 @@ const REMOVAL_ANSWER_INDEX = {
 } as const;
 
 function answerOrder(index: number): React.CSSProperties {
-  // SAFETY: The preceding check establishes the asserted contract.
-  return { "--answer-index": index } as React.CSSProperties;
+  return cssCustomProperties({ "--answer-index": index });
 }
 
 /**
  * One provider, one line: its mark, its name, whether it is connected, and what
  * can be done about that — connect, supersede, or delete, whichever the state
  * actually allows. The field only exists while a key is being entered, because
- // SAFETY: The preceding check establishes the asserted contract.
  * a settings tab that is mostly empty input boxes reads as work to do rather
- // SAFETY: The preceding check establishes the asserted contract.
  * than as a state to check.
  *
  * Asking to write one takes the panel down to the slot, so the field is drawn
@@ -618,10 +610,8 @@ function ProviderCredential({
             connected from the environment rather than from a key kept here. */}
         {status ? <span className="credential-status">{status}</span> : null}
         {/* The line's controls and the confirm that stands in for them are the
-            // SAFETY: The preceding check establishes the asserted contract.
             same cell of one grid, so the box is as wide as the wider of the two
             whichever is showing and the provider's name beside it never
-            // SAFETY: The preceding check establishes the asserted contract.
             re-shapes as they trade places. Neither layer is mounted by the
             press either: one arriving from nothing would have no size to spring
             from. */}
@@ -677,7 +667,6 @@ function ProviderCredential({
           </span>
           {/* Only ever drawn for a key Luke keeps, because that is the only key
               it has any business deleting. The group carries the question, so
-              // SAFETY: The preceding check establishes the asserted contract.
               the two answers are read as answers rather than as a Cancel and a
               Delete that could belong to anything on the line. */}
           {stored ? (
@@ -723,7 +712,6 @@ function ProviderCredential({
       </div>
 
       {entry ? (
-        // SAFETY: The preceding check establishes the asserted contract.
         /* Named as a group, because Cancel, Save, and the link to the
            provider's own page are the same three words on every row. */
         <fieldset
@@ -799,13 +787,16 @@ function ProviderCredential({
           </div>
         </fieldset>
       ) : null}
-      {rejection ? <p className="error-message">{rejection}</p> : null}
+      {rejection ? (
+        <p className="error-message" role="alert">
+          {rejection}
+        </p>
+      ) : null}
       {children}
     </div>
   );
 }
 
-// SAFETY: The preceding check establishes the asserted contract.
 /* The API names its voices in lowercase; on a control they read as names. The
    default carries its status into the menu, so returning to it never needs the
    README or a memory of what shipped. */
@@ -814,7 +805,6 @@ function voiceOptionLabel(voice: RealtimeVoice): string {
   return voice === REALTIME_DEFAULTS.VOICE ? `${name} (default)` : name;
 }
 
-// SAFETY: The preceding check establishes the asserted contract.
 /* A pace reads as a rate multiple, the way every player writes one. The
    natural rate carries its status into the menu for the same reason the
    default voice does. */
@@ -822,7 +812,6 @@ function speedOptionLabel(speed: RealtimeVoiceSpeed): string {
   return speed === REALTIME_DEFAULTS.SPEED ? `${speed}× (default)` : `${speed}×`;
 }
 
-// SAFETY: The preceding check establishes the asserted contract.
 /* The forms read as names, and the bubble carries its status into the menu the
    way the default voice does. */
 function formFactorOptionLabel(formFactor: PanelFormFactor): string {
@@ -834,7 +823,6 @@ function formFactorOptionLabel(formFactor: PanelFormFactor): string {
  * The small mark beside a row's name while its value differs from the
  * default: what a page's reset would change, said row by row rather than
  * only by the reset appearing. A statement, not a control — the row's own
- // SAFETY: The preceding check establishes the asserted contract.
  * control is where the value moves — so it carries its meaning as words for
  * a reader and a hover alike.
  */
@@ -867,7 +855,6 @@ function AttentionMark({ note }: { note: string }): React.JSX.Element {
    same resolved settings the rows draw — so the mark, the reset, and the row
    always agree on what is standing. The voice and pace compare against the
    shipped defaults the way their menus label them; a launch-environment
-   // SAFETY: The preceding check establishes the asserted contract.
    override reads as changed, which is what the row shows too. */
 /**
  * The one control that returns a whole group to its defaults, drawn only
@@ -882,7 +869,6 @@ function ResetGroupButton({
   onReset,
 }: {
   scope: SettingsResetScope;
-  // SAFETY: The preceding check establishes the asserted contract.
   /** The group as the button names it aloud: "the Voice page's settings". */
   label: string;
   onReset: (scope: SettingsResetScope) => Promise<string | undefined>;
@@ -900,7 +886,11 @@ function ResetGroupButton({
       >
         <ResetIcon />
       </button>
-      {rejection ? <p className="error-message settings-reset-refusal">{rejection}</p> : null}
+      {rejection ? (
+        <p className="error-message settings-reset-refusal" role="alert">
+          {rejection}
+        </p>
+      ) : null}
     </>
   );
 }
@@ -954,7 +944,6 @@ function SwitchRow({
   label: string;
   detail?: string;
   checked: boolean;
-  // SAFETY: The preceding check establishes the asserted contract.
   /** When the visible name is too short to stand as the control's own name. */
   ariaLabel?: string;
   /** The id a spoken change names this switch by, so an errand lands on it. */
@@ -987,7 +976,11 @@ function SwitchRow({
           <span className="switch-thumb" />
         </button>
       </div>
-      {rejection ? <p className="error-message">{rejection}</p> : null}
+      {rejection ? (
+        <p className="error-message" role="alert">
+          {rejection}
+        </p>
+      ) : null}
     </>
   );
 }
@@ -1018,7 +1011,6 @@ function SelectRow<Value extends string | number>({
   value: Value;
   options: readonly { value: Value; label: string }[];
   parse: (raw: string) => Value | undefined;
-  // SAFETY: The preceding check establishes the asserted contract.
   /** When the visible name is too short to stand as the control's own name. */
   ariaLabel?: string;
   /**
@@ -1083,23 +1075,24 @@ function SelectRow<Value extends string | number>({
           </span>
         </span>
       </div>
-      {rejection ? <p className="error-message">{rejection}</p> : null}
+      {rejection ? (
+        <p className="error-message" role="alert">
+          {rejection}
+        </p>
+      ) : null}
     </>
   );
 }
 
 /* Why every Connect in a key-holding section is refusing, said once per
-   // SAFETY: The preceding check establishes the asserted contract.
    section: a disabled control with no words beside it reads as broken. */
 const STORAGE_UNAVAILABLE_NOTE =
   "This system offers no encrypted credential storage, so Luke will not store a key here.";
 
 /**
  * Which model — and, where its agent takes one, which effort — this provider
- // SAFETY: The preceding check establishes the asserted contract.
  * starts new workspaces with, drawn as sub-rows of its credential line
  * because the choice means nothing until the key above it connects. The
- // SAFETY: The preceding check establishes the asserted contract.
  * options are the build's documented table for the provider, worded as the
  * names people know the models by; the first is no choice at all — the
  * provider's own default, which is the state every install begins in. The
@@ -1222,18 +1215,20 @@ function WorkspaceAgentRow({
           }}
         />
       ) : null}
-      {write.rejection ? <p className="error-message">{write.rejection}</p> : null}
+      {write.rejection ? (
+        <p className="error-message" role="alert">
+          {write.rejection}
+        </p>
+      ) : null}
     </>
   );
 }
 
 /**
- // SAFETY: The preceding check establishes the asserted contract.
  * What each answer the Codex CLI can give reads as on its row. Every state
  * has words — unlike a key row, whose check needs none — because the check
  * alone could not say the connection is a CLI login rather than a key, and
  * the disconnected states are exactly where the next step must be named.
- // SAFETY: The preceding check establishes the asserted contract.
  * The step is a command, so it is drawn as one.
  */
 const CODEX_CLOUD_STATUS = {
@@ -1326,8 +1321,7 @@ function CredentialsSection({
     (option) => option.id === SUPERSET_WORKSPACE_PROVIDER_ID,
   );
   return (
-    // SAFETY: The preceding check establishes the asserted contract.
-    <section className="settings-section" style={{ "--row-index": 2 } as React.CSSProperties}>
+    <section className="settings-section" style={cssCustomProperties({ "--row-index": 2 })}>
       <h2>
         <KeyIcon />
         Providers
@@ -1397,7 +1391,6 @@ function CredentialsSection({
 
 /** Everything the Google Calendar block can do, wired above the panel. */
 export interface CalendarControl {
-  // SAFETY: The preceding check establishes the asserted contract.
   /** Each connected account's calendars, as last observed. */
   choices: readonly ObservedAccountCalendars[];
   /** True while another entry holds the slot, which refuses a second act. */
@@ -1456,9 +1449,7 @@ function CalendarAccountRow({
       <div className="calendar-account-row">
         <span className="calendar-account-name">{account.id}</span>
         {/* The trash and the confirm that stands in for it share one grid
-            // SAFETY: The preceding check establishes the asserted contract.
             cell, exactly as the credential rows' do: the cell is as wide and
-            // SAFETY: The preceding check establishes the asserted contract.
             as tall as the larger of the two whichever is showing, so asking
             the question never re-shapes the line. */}
         <span className="credential-actions">
@@ -1542,7 +1533,11 @@ function CalendarAccountRow({
           </label>
         );
       })}
-      {rejection ? <p className="error-message">{rejection}</p> : null}
+      {rejection ? (
+        <p className="error-message" role="alert">
+          {rejection}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -1776,7 +1771,11 @@ function SupersetIntegration({
           </span>
         )}
       </div>
-      {rejection ? <p className="error-message">{rejection}</p> : null}
+      {rejection ? (
+        <p className="error-message" role="alert">
+          {rejection}
+        </p>
+      ) : null}
       {control.connected && control.agents.length > 0 ? (
         <SelectRow
           label="New Superset sessions run"
@@ -1849,9 +1848,7 @@ function LinearIntegration({
         </span>
         {connected ? (
           /* The trash and the confirm that stands in for it share one grid
-             // SAFETY: The preceding check establishes the asserted contract.
              cell, exactly as the credential rows' do: the cell is as wide and
-             // SAFETY: The preceding check establishes the asserted contract.
              as tall as the larger of the two whichever is showing, so asking
              the question never re-shapes the line. */
           <span className="credential-actions">
@@ -1923,7 +1920,11 @@ function LinearIntegration({
           </span>
         )}
       </div>
-      {rejection ? <p className="error-message">{rejection}</p> : null}
+      {rejection ? (
+        <p className="error-message" role="alert">
+          {rejection}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -1948,8 +1949,7 @@ function IntegrationsSection({
 }): React.JSX.Element {
   const storageUnavailable = settings.secretStorage === SECRET_STORAGE.UNAVAILABLE;
   return (
-    // SAFETY: The preceding check establishes the asserted contract.
-    <section className="settings-section" style={{ "--row-index": 3 } as React.CSSProperties}>
+    <section className="settings-section" style={cssCustomProperties({ "--row-index": 3 })}>
       <h2>
         <PlugIcon />
         Integrations
@@ -1972,7 +1972,6 @@ function IntegrationsSection({
  * because the row that opens a page and the header that leaves it must never
  * disagree about its name. The name and the glyph are the whole row: what a
  * page holds is one press away, and a sentence under every name made the
- // SAFETY: The preceding check establishes the asserted contract.
  * front page read as prose rather than as places to go.
  */
 const SETTINGS_PAGE = {
@@ -2052,8 +2051,7 @@ function SettingsPageHeader({
   reset?: React.JSX.Element;
 }): React.JSX.Element {
   return (
-    // SAFETY: The preceding check establishes the asserted contract.
-    <div className="settings-header" style={{ "--row-index": 0 } as React.CSSProperties}>
+    <div className="settings-header" style={cssCustomProperties({ "--row-index": 0 })}>
       <button
         type="button"
         ref={backControl}
@@ -2081,7 +2079,6 @@ function SettingsPageHeader({
  * alone until voice is available at all, the microphone permission beneath it
  * once there is a voice for the microphone to reach, and the voice controls
  * only once both stand —
- // SAFETY: The preceding check establishes the asserted contract.
  * a page of settings for a feature two steps from running reads as work
  * already done, and the one thing to do next reads clearest standing alone.
  * Whichever stage is missing wears the same exclamation mark the front
@@ -2114,8 +2111,7 @@ function VoiceSection({
           from working. The line stays because it is the way in, not a
           description of one: without it the page is a heading and a tooltip. */}
       {settings.voiceAvailable ? null : (
-        // SAFETY: The preceding check establishes the asserted contract.
-        <section className="settings-section" style={{ "--row-index": 1 } as React.CSSProperties}>
+        <section className="settings-section" style={cssCustomProperties({ "--row-index": 1 })}>
           <h2>
             <KeyIcon />
             Voice
@@ -2128,8 +2124,7 @@ function VoiceSection({
           then, the permission guards a feature that cannot run, and the page
           holds the one thing to do next rather than a queue of them. */}
       {settings.voiceAvailable ? (
-        // SAFETY: The preceding check establishes the asserted contract.
-        <section className="settings-section" style={{ "--row-index": 1 } as React.CSSProperties}>
+        <section className="settings-section" style={cssCustomProperties({ "--row-index": 1 })}>
           <h2>
             <ShieldIcon />
             Permissions
@@ -2198,8 +2193,7 @@ function VoiceControlsSection({
   return (
     <section
       className="settings-section settings-plain"
-      // SAFETY: The preceding check establishes the asserted contract.
-      style={{ "--row-index": 2 } as React.CSSProperties}
+      style={cssCustomProperties({ "--row-index": 2 })}
     >
       <SelectRow
         label="Voice"
@@ -2263,7 +2257,6 @@ function VoiceControlsSection({
 }
 
 /**
- // SAFETY: The preceding check establishes the asserted contract.
  * Where Luke stands and how he is drawn: the Dock as a second door, every
  * display or just the main one, and the form he takes on a display
  * without a housing. Switches and one pop-up, because nothing rides on any
@@ -2279,8 +2272,7 @@ function AppearanceSection({
   return (
     <section
       className="settings-section settings-plain"
-      // SAFETY: The preceding check establishes the asserted contract.
-      style={{ "--row-index": 1 } as React.CSSProperties}
+      style={cssCustomProperties({ "--row-index": 1 })}
     >
       <SwitchRow
         label="Show Luke in the Dock"
@@ -2331,8 +2323,7 @@ function WorkspacesSection({
   preferences: PreferenceWrites;
 }): React.JSX.Element {
   return (
-    // SAFETY: The preceding check establishes the asserted contract.
-    <section className="settings-section" style={{ "--row-index": 1 } as React.CSSProperties}>
+    <section className="settings-section" style={cssCustomProperties({ "--row-index": 1 })}>
       {/* No group reset here: the workspace-creation defaults live as rows
           beside the providers they belong to, and a reset by this one select
           would reach settings drawn under other headings. */}
@@ -2438,7 +2429,6 @@ function WorkspaceProjectRow({
 const SHORTCUT_HINT = "Hold ⌃, ⌥ or ⌘ — ⇧ may join — and press a letter or Space.";
 
 /**
- // SAFETY: The preceding check establishes the asserted contract.
  * How Luke is reached rather than what he can see. The chord is drawn as the
  * keys it is — one cap each, the way a keyboard has them — and is a statement
  * rather than a control; the pencil beside it is what moves it. Pressing it
@@ -2453,7 +2443,6 @@ const SHORTCUT_HINT = "Hold ⌃, ⌥ or ⌘ — ⇧ may join — and press a let
  * recording is underway: until a chord is stored it could only offer to
  * change nothing, and during a recording the chord it would return to is
  * exactly what typing nothing already keeps. What the row shows is the
- // SAFETY: The preceding check establishes the asserted contract.
  * key as registered, not as stored — the two differ when another app owns the
  * chosen chord, and a row that showed the stored one would name a key that
  * answers nothing.
@@ -2473,7 +2462,6 @@ function ShortcutRow({
   detail: string;
   /** The id a pressed search result lands on. */
   anchor: string;
-  // SAFETY: The preceding check establishes the asserted contract.
   /** The accelerator as registered, absent when no candidate answered. */
   shown?: string | undefined;
   /** Whether a chosen chord is stored, which is what Reset has to undo. */
@@ -2603,7 +2591,9 @@ function ShortcutRow({
           </button>
         </span>
         {rejection ? (
-          <p className="error-message">{rejection}</p>
+          <p className="error-message" role="alert">
+            {rejection}
+          </p>
         ) : recording ? (
           <p className="shortcut-hint">{SHORTCUT_HINT}</p>
         ) : null}
@@ -2638,8 +2628,7 @@ function ShortcutSection({
   return (
     <section
       className="settings-section settings-plain"
-      // SAFETY: The preceding check establishes the asserted contract.
-      style={{ "--row-index": 1 } as React.CSSProperties}
+      style={cssCustomProperties({ "--row-index": 1 })}
     >
       <ShortcutRow
         title="Talk to Luke"
@@ -2697,7 +2686,6 @@ const ACCOUNT_ASK = {
 type AccountAsk = (typeof ACCOUNT_ASK)[keyof typeof ACCOUNT_ASK];
 
 /**
- // SAFETY: The preceding check establishes the asserted contract.
  * One meter of today's allowance, drawn as a track the day fills. The native
  * `meter` rather than a progressbar, because nothing is underway: it reports
  * a level against a limit. Nothing about it animates — a changed value snaps
@@ -2749,7 +2737,6 @@ function VoiceSourceToggle({
   onChoose,
   onConnect,
 }: {
-  // SAFETY: The preceding check establishes the asserted contract.
   /** Which source is actually running, as the store resolved it. */
   source: VoiceSource;
   /** Whether a key is stored at all, which decides what its half does. */
@@ -2816,7 +2803,11 @@ function VoiceSourceToggle({
           );
         })}
       </div>
-      {rejection ? <p className="error-message">{rejection}</p> : null}
+      {rejection ? (
+        <p className="error-message" role="alert">
+          {rejection}
+        </p>
+      ) : null}
     </>
   );
 }
@@ -2885,11 +2876,7 @@ function WhatLukeRunsOnSection({
       ? hostedUsage.attention
       : undefined;
   return (
-    <section
-      className="settings-section"
-      // SAFETY: The preceding check establishes the asserted contract.
-      style={{ "--row-index": rowIndex } as React.CSSProperties}
-    >
+    <section className="settings-section" style={cssCustomProperties({ "--row-index": rowIndex })}>
       <h2>
         <LukeIcon />
         What Luke runs on
@@ -3042,9 +3029,7 @@ function AccountSection({
           </span>
         </span>
         {/* The control and the confirm that stands in for it are the same cell
-            // SAFETY: The preceding check establishes the asserted contract.
             of one grid, exactly as a credential row's are, so the line never
-            // SAFETY: The preceding check establishes the asserted contract.
             re-shapes as they trade places. */}
         <span className="credential-actions">
           <span
@@ -3146,7 +3131,11 @@ function AccountSection({
           </fieldset>
         </span>
       </div>
-      {rejection ? <p className="error-message">{rejection}</p> : null}
+      {rejection ? (
+        <p className="error-message" role="alert">
+          {rejection}
+        </p>
+      ) : null}
     </section>
   );
 }
@@ -3261,11 +3250,7 @@ function UpdatesSection({
 }): React.JSX.Element {
   const row = updateRow(control.update);
   return (
-    <section
-      className="settings-section"
-      // SAFETY: The preceding check establishes the asserted contract.
-      style={{ "--row-index": rowIndex } as React.CSSProperties}
-    >
+    <section className="settings-section" style={cssCustomProperties({ "--row-index": rowIndex })}>
       <h2>
         <DownloadIcon />
         Updates
@@ -3471,7 +3456,6 @@ export function SettingsPanel({
            the founders, whose account this is, and the way out. The allowance leads because it is the one
            thing here worth checking daily; the account itself follows the
            page down to the ways out, which are done once or never. A newer
-           // SAFETY: The preceding check establishes the asserted contract.
            release waiting takes the head of the page for as long as it
            stands, because it is the one thing here that is news rather than
            state, and the row indexes below count past it so the arrival
@@ -3492,8 +3476,7 @@ export function SettingsPanel({
           ) : null}
           <section
             className="settings-section settings-index"
-            // SAFETY: The preceding check establishes the asserted contract.
-            style={{ "--row-index": updateLeads ? 3 : 2 } as React.CSSProperties}
+            style={cssCustomProperties({ "--row-index": updateLeads ? 3 : 2 })}
           >
             {SETTINGS_SUBVIEW_LIST.map((subview) => (
               <SettingsNavRow

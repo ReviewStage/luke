@@ -2,7 +2,6 @@ import type { FeedbackImage } from "../shared/feedback";
 import { FEEDBACK_IMAGE_TYPE, FEEDBACK_LIMITS, isFeedbackImageType } from "../shared/feedback";
 
 /**
- // SAFETY: The preceding check establishes the asserted contract.
  * What becomes of a picked file: it rides as it is, it is re-encoded first, or
  * it cannot come. Decided from the type and size alone, so the decision is
  * testable without a canvas.

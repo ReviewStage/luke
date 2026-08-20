@@ -28,7 +28,6 @@ import { unparsedWire, wireRecord } from "./wire-boundary";
 export interface GoogleCalendarSignInConfig {
   clientId: string;
   /**
-   // SAFETY: The preceding check establishes the asserted contract.
    * Google issues desktop OAuth clients a "secret" it documents as not
    * confidential — every installed copy carries it — and the token endpoint
    * expects it for that client type, so a config without one is not offered.
@@ -259,7 +258,7 @@ export class GoogleCalendarSignIn {
       server.once("error", reject);
       server.listen(0, "127.0.0.1", resolve);
     });
-    // SAFETY: The preceding check establishes the asserted contract.
+    // SAFETY: A TCP server successfully listening on port 0 has an AddressInfo address.
     const port = (server.address() as AddressInfo).port;
     redirectUri = `http://127.0.0.1:${port}${CALLBACK_PATH}`;
 

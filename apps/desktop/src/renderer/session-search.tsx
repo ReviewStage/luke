@@ -171,7 +171,6 @@ export function SessionSearch({
 /**
  * What an emptied search says instead of rows. It never just shrugs: when the
  * filter is hiding sessions the query would find, the way to them is offered
- // SAFETY: The preceding check establishes the asserted contract.
  * as a button, because "no matches" while matches sit behind a chip would be
  * the silent narrowing this list refuses everywhere else.
  */
@@ -197,7 +196,6 @@ export function SearchEmptyState({
 
 /**
  * One drawn line with the query's words marked where they landed, so a row
- // SAFETY: The preceding check establishes the asserted contract.
  * says why it matched. A line the words did not land on is returned as it
  * was — plenty of rows match on a field another line carries.
  */

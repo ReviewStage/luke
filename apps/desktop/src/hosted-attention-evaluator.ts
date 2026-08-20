@@ -72,7 +72,6 @@ export class HostedAttentionEvaluator implements AttentionEvaluator {
   readonly #fetch: FetchLike;
   readonly #now: () => number;
   readonly #requestTimeoutMs: number;
-  // SAFETY: The preceding check establishes the asserted contract.
   /** Until when reviews stay unsent, as epoch milliseconds. */
   #quietUntil = 0;
 

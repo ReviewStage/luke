@@ -371,7 +371,6 @@ export class PanelManager {
    * Moves a living window to another display, state and all: its mode, its
    * collapse-in-flight, its exchange report, and the renderer behind it — which
    * learns its new ground from the `displayChanged` the repositioning sends,
-   // SAFETY: The preceding check establishes the asserted contract.
    * exactly as it would for a geometry change in place.
    */
   #rebind(fromDisplayId: number, toDisplayId: number): void {
@@ -411,7 +410,6 @@ export class PanelManager {
   }
 
   /**
-   // SAFETY: The preceding check establishes the asserted contract.
    * Brings one panel forward as the key window. An accessory app has no Dock
    * presence, so the app itself has to come forward before one of its windows can
    * take keyboard focus.

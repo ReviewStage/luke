@@ -97,7 +97,6 @@ export class DockPresence {
     if (!image.isEmpty()) this.#dock.setIcon(image);
   }
 
-  // SAFETY: The preceding check establishes the asserted contract.
   /** Keeps the tile matched as the desktop changes mode. */
   watchTheme(): void {
     this.#theme.on("updated", () => this.applyIcon());
@@ -105,7 +104,6 @@ export class DockPresence {
 
   /**
    * Puts Luke in the Dock or takes him back out, to match the setting. He ships
-   // SAFETY: The preceding check establishes the asserted contract.
    * as an accessory app — the notch is his fixed point — so the icon is an
    * optional second door. `askedFrom` is
    * the display whose panel held the switch, so the caret goes back where the

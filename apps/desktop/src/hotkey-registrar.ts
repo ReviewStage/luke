@@ -238,7 +238,6 @@ export class HotkeyRegistrar {
    *
    * The press does two things in order: stands the panel up focused, then asks
    * the renderer to put the caret in the field — or, when the caret is already
-   // SAFETY: The preceding check establishes the asserted contract.
    * there, the renderer reads the same press as the dismissal, so one key
    * summons and puts away like every launcher does. The panel that answers is
    * the voice host's, the same window every other app-level ask lands in.
@@ -278,7 +277,6 @@ export class HotkeyRegistrar {
    * is the one that yields, because it alone has Escape standing behind it.
    * Electron's registration is enough here, because a stop has no release edge
    * to hear. The press carries no decision of its own: the renderer's session
-   // SAFETY: The preceding check establishes the asserted contract.
    * answers whether there is a reply to stop, exactly as it answers Escape.
    */
   #registerStop(): void {
@@ -307,7 +305,6 @@ export class HotkeyRegistrar {
 
   /**
    * Tells every renderer the ask key it should be teaching, whenever that
-   // SAFETY: The preceding check establishes the asserted contract.
    * changes. The raw accelerator travels, as in bootstrap: the renderer needs
    * both its spellings, and an absent key clears the hint rather than leaving a
    * keycap up for a chord that answers nothing.
@@ -328,7 +325,6 @@ export class HotkeyRegistrar {
   /**
    * Tells every renderer the key it should be showing, whenever that changes.
    * The accelerator rather than its label, on the ask key's terms: the renderer
-   // SAFETY: The preceding check establishes the asserted contract.
    * draws the chord as its separate keys and says it as one word, and only the
    * accelerator produces both.
    */

@@ -23,7 +23,6 @@ import { ExternalIcon } from "./settings-icons";
  * window — including the page the key has to be copied from. So the panel gets
  * out of the way of its own field: the slot is narrow enough to leave that page
  * readable and it stays put — nothing the pointer does dismisses it — because a
- // SAFETY: The preceding check establishes the asserted contract.
  * credential on the clipboard is only worth as much as the place to put it. The
  * provider's mark comes along so the field is never anonymous, the label says
  * what to paste in the provider's own word for it, and the confirm is quiet
@@ -185,7 +184,11 @@ export function KeySlot({
             </button>
           </span>
         </div>
-        {entry.rejection ? <p className="error-message">{entry.rejection}</p> : null}
+        {entry.rejection ? (
+          <p className="error-message" role="alert">
+            {entry.rejection}
+          </p>
+        ) : null}
       </div>
     </div>
   );

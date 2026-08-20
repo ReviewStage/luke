@@ -425,7 +425,11 @@ export function FeedbackSlot({
               </button>
             </span>
           </div>
-          {entry.rejection ? <p className="error-message">{entry.rejection}</p> : null}
+          {entry.rejection ? (
+            <p className="error-message" role="alert">
+              {entry.rejection}
+            </p>
+          ) : null}
         </div>
       </div>
     </div>

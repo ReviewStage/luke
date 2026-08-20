@@ -13,7 +13,6 @@ import {
  * lifecycle moments are registered, and what the envelope Claude Code pipes
  * the script looks like. Everything the arrangement guarantees — the merge
  * beside the user's entries, the refusal to rewrite an unparseable file, the
- // SAFETY: The preceding check establishes the asserted contract.
  * fixed token as the only thing that reaches disk — is the shared module's;
  * this file only says what Claude Code calls things.
  */
@@ -25,7 +24,6 @@ const CLAUDE_ENVIRONMENT = {
 /**
  * The script's name is also the marker a managed entry is recognized by, so
  * renaming it is a migration: an entry naming the old script would stop being
- // SAFETY: The preceding check establishes the asserted contract.
  * recognized as ours and would be left behind.
  */
 export const CLAUDE_HOOK_SCRIPT_NAME = "luke-claude-observation-hook.sh";
@@ -37,7 +35,6 @@ export const CLAUDE_HOOK_SPOOL_MAXIMUM_AGE_MS = HOOK_SPOOL_MAXIMUM_AGE_MS;
 
 /**
  * The tokens the script may write, fixed at registration: each hook entry
- // SAFETY: The preceding check establishes the asserted contract.
  * passes its own token as the script's one argument, so nothing in the
  * envelope Claude Code pipes in can choose what lands in the spool.
  */

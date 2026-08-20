@@ -18,7 +18,6 @@ export interface FeedbackEntry {
   /**
    * Optional credit. A fresh note starts signed with the account the user is
    * signed in as; both fields stay theirs to edit or clear, and empty means
-   // SAFETY: The preceding check establishes the asserted contract.
    * unsigned. Kept as edited for the life of the note.
    */
   name: string;
@@ -72,7 +71,6 @@ export interface FeedbackSignature {
   email?: string;
 }
 
-// SAFETY: The preceding check establishes the asserted contract.
 /** What the account offers a fresh note as its signature: nothing, signed out. */
 export function accountSignature(
   account: AccountSnapshot | undefined,
@@ -104,7 +102,6 @@ export function freshFeedbackEntry(
  * words: the section never sends one, and the spoken tool's
  * contract forbids anything the user did not say. `signature` is the
  * signed-in account's credit, and it seeds only a note that does not exist
- // SAFETY: The preceding check establishes the asserted contract.
  * yet: a note already there keeps its fields exactly as its author left
  * them, cleared ones included.
  */
@@ -172,7 +169,6 @@ export function isSendable(entry: FeedbackEntry | undefined): entry is FeedbackE
  * beside the field rather than thrown, because attaching is the user's act.
  */
 export const IMAGE_REFUSAL = {
-  // SAFETY: The preceding check establishes the asserted contract.
   UNREADABLE: "That file could not come along as a screenshot.",
   FULL: `Up to ${FEEDBACK_LIMITS.MAX_IMAGES} screenshots can come along.`,
 } as const;

@@ -133,7 +133,6 @@ type InterruptionEventKind = (typeof INTERRUPTION_EVENT_KIND)[keyof typeof INTER
 const NO_ACTIVE_RESPONSE_CANCELLATION = /^Cancellation failed:\s*no active response\b/i;
 
 /**
- // SAFETY: The preceding check establishes the asserted contract.
  * One kind of context as it is waiting to be said: the words, for telling an
  * unchanged answer from a fresh one, and how to build the item once it has a
  * name to occupy.
@@ -191,7 +190,6 @@ export type SessionActionCarrier = (action: CarriedSessionAction) => Promise<Wir
 /**
  * Carries one validated app-level act — a settings change, the panel being
  * shown, or the feedback composer brought up — to the renderer that can
- // SAFETY: The preceding check establishes the asserted contract.
  * perform it. The same posture as the session carrier: validation happened
  * against the guide before this is called, and the carrier only performs and
  * reports. Nothing here sends a note: the feedback act opens the composer,
@@ -208,7 +206,6 @@ export interface RealtimeVoiceSessionCallbacks {
   onRemoteStream(stream: MediaStream | undefined): void;
   onError(message: string | undefined): void;
   /**
-   // SAFETY: The preceding check establishes the asserted contract.
    * The words Luke is currently speaking, growing as they are generated, or
    * undefined once there is nothing being spoken. Each entry is one response's
    * words: a turn that speaks twice — a sentence before a tool call and the
@@ -218,7 +215,6 @@ export interface RealtimeVoiceSessionCallbacks {
    * the captions clear when the reply ends, is cut off, or the call closes —
    * so the caller only ever draws what it is handed. `about` is the session a
    * proactive announcement names, carried from the roster-validated update
-   // SAFETY: The preceding check establishes the asserted contract.
    * `speak()` was handed and living exactly as long as that reply; a
    * conversation reply carries none.
    */
@@ -254,8 +250,8 @@ export interface RealtimeVoiceSessionOptions extends RealtimeVoiceSessionCallbac
    */
   idleTimeoutMs?: number;
   /** The timer the idle retirement runs on, injectable for the same reason. */
-  schedule?: (callback: () => void, delayMs: number) => ReturnType<typeof setTimeout>;
-  cancel?: (timer: UnparsedWireValue) => void;
+  schedule?: (callback: () => void, delayMs: number) => number | ReturnType<typeof setTimeout>;
+  cancel?: (timer: number | ReturnType<typeof setTimeout>) => void;
   /** Injectable so a test can hold the clock a truncate measures against. */
   now?: () => number;
 }
@@ -269,14 +265,12 @@ function errorMessage(error: Error): string {
  *
  * One meter draws both halves of the conversation, so it goes quiet twice for
  * reasons that have nothing to do with Luke: while it lets go of the
- // SAFETY: The preceding check establishes the asserted contract.
  * microphone as a turn is committed, and again in the gap before the first
  * word comes back. Ending a reply on either takes his waveform down seconds
  * after it appeared, while he is still speaking.
  *
  * So silence only counts once the reply is his and something has been heard of
  * it. Nothing here decides when a reply is over — that is the generation being
- // SAFETY: The preceding check establishes the asserted contract.
  * finished as well — only whose silence is being read.
  */
 export function quietIsLukesOwn(input: { status: RealtimeStatus; heardLuke: boolean }): boolean {
@@ -289,16 +283,12 @@ export function quietIsLukesOwn(input: { status: RealtimeStatus; heardLuke: bool
  * The capture device is the developer's, not the call's: it opens when a
  * press takes a turn and closes when the exchange that press started settles,
  * and nothing else — not connecting, not typing, not an announcement — ever
- // SAFETY: The preceding check establishes the asserted contract.
  * touches it. The call negotiates its sending half up front as a bare
  * transceiver, so each turn's fresh track rides the same sender without
- // SAFETY: The preceding check establishes the asserted contract.
  * renegotiating. The press is held as a pending intention while the device
- // SAFETY: The preceding check establishes the asserted contract.
  * opens, exactly as a press that beats the call's handshake is. The close
  * waits for the settle rather than the key coming up because closing a
  * capture device is itself audible on shared hardware — a Bluetooth headset
- // SAFETY: The preceding check establishes the asserted contract.
  * renegotiates its codec — and the key comes up exactly as Luke starts to
  * answer; the track is disabled at that moment, and the device follows in
  * the quiet after the reply. What this buys is that the microphone and its
@@ -320,7 +310,6 @@ export class RealtimeVoiceSession {
   /** The device being reopened, held so two presses cannot open it twice. */
   #acquiring: Promise<void> | undefined;
   /**
-   // SAFETY: The preceding check establishes the asserted contract.
    * The connect attempt the state below belongs to, as an identity: refreshed
    * by every teardown, captured by a device open before its wait, and what a
    * device arriving late is checked against — a call closed or replaced while
@@ -332,13 +321,11 @@ export class RealtimeVoiceSession {
   /**
    * The words the press has spoken while its call is still connecting: a local
    * PCM capture off the press's own device, buffered until the data channel
-   // SAFETY: The preceding check establishes the asserted contract.
    * can carry them as appends. It belongs to exactly one connect attempt —
    * created only while a press holds a turn, discarded on every path that ends
    * the attempt — so no press can leave audio behind for a later connection.
    *
    * The seam between the captured words and the live WebRTC track is decided
-   // SAFETY: The preceding check establishes the asserted contract.
    * deliberately: the whole of the turn the press opened travels as appends,
    * and the track joins the sender only when that turn is over. Appends ride
    * the ordered data channel while the track rides RTP, and the server writes
@@ -358,7 +345,6 @@ export class RealtimeVoiceSession {
    * with the attempt if it never does.
    */
   #pressCommitPending = false;
-  // SAFETY: The preceding check establishes the asserted contract.
   /** Whether the turn now under way travels as appends rather than the track. */
   #listeningOnAppends = false;
   /**
@@ -373,18 +359,15 @@ export class RealtimeVoiceSession {
   #connecting: Promise<boolean> | undefined;
   #closed = false;
   /**
-   // SAFETY: The preceding check establishes the asserted contract.
    * The roster as last reported, kept whole rather than as its rendered text:
    * it is what a tool call is validated against, and a call may only name a
    * session Luke was actually shown.
    */
   #sessions: readonly NormalizedSession[] = [];
   /**
-   // SAFETY: The preceding check establishes the asserted contract.
    * The session under discussion, as the caller last reported it: the one Luke
    * most recently announced or was asked to act on. Only an identity — the
    * words a turn reads are rendered from the roster at flush time, so a
-   // SAFETY: The preceding check establishes the asserted contract.
    * renamed session is described as it is now. The caller keeps its own copy
    * and re-reports it after a reconnect, because an announcement is often made
    * on Luke's own speak-only call and the ask that points back at it arrives
@@ -392,15 +375,12 @@ export class RealtimeVoiceSession {
    */
   #sessionReference: SessionIdentity | undefined;
   /**
-   // SAFETY: The preceding check establishes the asserted contract.
    * The app guide as last provided, kept whole for the same reason the roster
    * is: it is what a spoken ask about Luke himself is validated against, and a
-   // SAFETY: The preceding check establishes the asserted contract.
    * call may only name a setting Luke was actually described as having.
    */
   #guide: AppGuideSnapshot = EMPTY_APP_GUIDE;
   /**
-   // SAFETY: The preceding check establishes the asserted contract.
    * The projects a workspace can be created in, as last reported — kept whole
    * for the same reason the roster is: a spoken creation ask may only name a
    * project Luke was actually shown.
@@ -409,7 +389,6 @@ export class RealtimeVoiceSession {
   /**
    * The issue roster, held to the same rule — and `undefined` while no
    * tracker is connected, so an issue call then has nothing to be validated
-   // SAFETY: The preceding check establishes the asserted contract.
    * against and is refused as such.
    */
   #issues: readonly TrackedIssue[] | undefined;
@@ -481,9 +460,7 @@ export class RealtimeVoiceSession {
    * sends ahead of anything newer. The client's side of the turn can settle
    * first — the audio drains before the `done` arrives — and in that window
    * the conversation still holds an active response: a `response.create`
-   // SAFETY: The preceding check establishes the asserted contract.
    * sent into it is refused as a conversation already in progress, with the
-   // SAFETY: The preceding check establishes the asserted contract.
    * refusal read out to the developer as a voice error and the reply it was
    * meant to open lost. Nothing may end the turn while this stands.
    */
@@ -531,7 +508,6 @@ export class RealtimeVoiceSession {
    */
   #responseItemId: string | undefined;
   /**
-   // SAFETY: The preceding check establishes the asserted contract.
    * The response now under way, as the server named it when it confirmed the
    * reply had started — or nothing between asking for a reply and that
    * confirmation. It is what tells the current reply's `response.done` from a
@@ -544,7 +520,6 @@ export class RealtimeVoiceSession {
   #activeResponseId: string | undefined;
   #audibleSince: number | undefined;
   /**
-   // SAFETY: The preceding check establishes the asserted contract.
    * The words of the turn being spoken, as far as they have arrived — one
    * segment per output item, oldest first, each remembering which item spoke
    * it. A turn that speaks twice back-to-back — a second message item, or the
@@ -567,7 +542,6 @@ export class RealtimeVoiceSession {
   /**
    * Whether this call has ever reported a reply's audio running out. Once it
    * has, silence stops being evidence of anything: the server says when Luke is
-   // SAFETY: The preceding check establishes the asserted contract.
    * finished, and a stretch of quiet is just as likely to be the gap between
    * two sentences. Calls that never report one keep the old guess, because a
    * turn that never ends is worse than one that ends early.
@@ -606,7 +580,7 @@ export class RealtimeVoiceSession {
    * The timer that puts an idle call away, armed whenever the call settles and
    * cancelled the moment anything is being said on it.
    */
-  #idleTimer: unknown;
+  #idleTimer: number | ReturnType<typeof setTimeout> | undefined;
   /**
    * Whether the developer has taken a turn on this call. It is what makes a
    * dropped connection worth mentioning: a call that carried a conversation
@@ -694,6 +668,7 @@ export class RealtimeVoiceSession {
     // its capture rides beside the mint — but that is the press's doing,
     // never the connect's.
     let connection: RealtimeConnection | undefined;
+    let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
     try {
       connection = await this.#options.requestConnection();
     } catch (error) {
@@ -767,18 +742,29 @@ export class RealtimeVoiceSession {
       // Without it a stalled endpoint leaves the panel on "Connecting…" forever,
       // with the only control that could recover it disabled.
       const timeoutMs = positiveInteger(this.#options.connectTimeoutMs, CONNECT_TIMEOUT_MS);
-      const deadline = AbortSignal.timeout(timeoutMs);
+      const deadline = new AbortController();
+      // AbortSignal.timeout() deliberately does not keep Node's event loop
+      // alive. A referenced timer makes the same product deadline observable
+      // to the test harness, and the finally below clears it once the call has
+      // settled so a successful handshake holds nothing open.
+      deadlineTimer = setTimeout(
+        () =>
+          deadline.abort(
+            new DOMException("The voice connection timed out while opening.", "TimeoutError"),
+          ),
+        timeoutMs,
+      );
 
       await peer.setLocalDescription(await peer.createOffer());
       const answer = await this.#exchangeDescription(
         connection,
         peer.localDescription?.sdp ?? "",
-        deadline,
+        deadline.signal,
       );
       if (answer === undefined) return false;
       await peer.setRemoteDescription({ type: "answer", sdp: answer });
 
-      await this.#waitForChannel(channel, deadline);
+      await this.#waitForChannel(channel, deadline.signal);
       if (this.#closed) return this.#abandonConnect();
       this.#send(realtimeSessionSyncEvents());
       this.#setStatus(REALTIME_STATUS.READY);
@@ -813,12 +799,13 @@ export class RealtimeVoiceSession {
       if (this.#closed) return this.#abandonConnect();
       if (!(error instanceof Error)) return this.#fail(String(error));
       return this.#fail(errorMessage(error));
+    } finally {
+      if (deadlineTimer !== undefined) clearTimeout(deadlineTimer);
     }
   }
 
   /**
    * Releases everything a cancelled connect had already acquired, leaving the
-   // SAFETY: The preceding check establishes the asserted contract.
    * session idle as the caller that stopped it intended.
    */
   #abandonConnect(): boolean {
@@ -889,7 +876,6 @@ export class RealtimeVoiceSession {
   /**
    * The talk key going down. Opening a turn and ending one are separate here
    * rather than one toggle, because a key that reports being let go of can say
-   // SAFETY: The preceding check establishes the asserted contract.
    * which of the two it meant — and a turn that lasts exactly as long as the
    * key is held cannot be left open by forgetting to press again.
    */
@@ -1164,7 +1150,6 @@ export class RealtimeVoiceSession {
    * microphone call with the device already open and nothing already reading
    * it — every other moment it does nothing. Its two callers are the device
    * arriving mid-connect, and the device arriving connected for a re-press
-   // SAFETY: The preceding check establishes the asserted contract.
    * over sealed words: either way the turn it feeds travels as appends.
    */
   #beginPressCapture(): void {
@@ -1264,7 +1249,6 @@ export class RealtimeVoiceSession {
 
   /**
    * Delivers the turn a press held and released while the call was still
-   // SAFETY: The preceding check establishes the asserted contract.
    * connecting: the captured words flush as appends and commit as the turn
    * the release already closed. It runs a tick after the channel opened so
    * the caller's context re-feed lands first, and it yields to anything that
@@ -1301,7 +1285,6 @@ export class RealtimeVoiceSession {
   }
 
   /**
-   // SAFETY: The preceding check establishes the asserted contract.
    * Opens the microphone for as long as push-to-talk is held, reporting
    * whether it actually did. The caller uses that to decide whether to claim
    * the key it was pressed with — Space still scrolls the panel when there is
@@ -1370,9 +1353,7 @@ export class RealtimeVoiceSession {
 
   /**
    * Sends a typed ask and requests the reply to it, reporting whether it
-   // SAFETY: The preceding check establishes the asserted contract.
    * could. Typing is the developer opening a turn, exactly as holding the talk
-   // SAFETY: The preceding check establishes the asserted contract.
    * key is, so the turn is armed for tools on the same terms as a push-to-talk
    * commit: a write out of it is the developer's own request, made in their
    * own words.
@@ -1825,7 +1806,6 @@ export class RealtimeVoiceSession {
 
   /**
    * Changes how fast Luke speaks on the call now open, from his next reply on.
-   // SAFETY: The preceding check establishes the asserted contract.
    * A call minted at one pace stays a live session, so the change travels as a
    * session update rather than waiting for the next conversation. The API
    * applies a pace only between model turns: a change landing mid-reply is
@@ -1860,7 +1840,6 @@ export class RealtimeVoiceSession {
   /**
    * Tells the conversation what Luke can currently see.
    *
-   // SAFETY: The preceding check establishes the asserted contract.
    * The standing instructions describe session state as something Luke knows,
    * so without this the prompt would assert a capability the connection never
    * provides and a question about live work could not be answered from real
@@ -1897,7 +1876,6 @@ export class RealtimeVoiceSession {
   }
 
   /**
-   // SAFETY: The preceding check establishes the asserted contract.
    * Renders the reference against the roster as both now stand. A reference
    * whose session is not observed points at nothing a call could name: a
    * conversation never told of one is told nothing, and one holding a line is
@@ -1939,7 +1917,6 @@ export class RealtimeVoiceSession {
    * developer's call is asked "what did you just say?" by someone it never
    * said anything to. Context on the roster's own
    * terms: remembered here, flushed only at a developer-opened turn, and
-   // SAFETY: The preceding check establishes the asserted contract.
    * carrying the same bounded payload the announcement already traveled as —
    * the words alone, never an identity, which [session under discussion]
    * carries beside it.
@@ -2482,7 +2459,6 @@ export class RealtimeVoiceSession {
    * holds no conversation worth a clock of its own.
    *
    * A settled call restarts the clock however it settled, so a notice read out
-   // SAFETY: The preceding check establishes the asserted contract.
    * counts as the call being used. It reached the developer, and a call that
    * just spoke to someone is not one nobody is having.
    */
@@ -2501,8 +2477,7 @@ export class RealtimeVoiceSession {
 
   #clearIdleTimer(): void {
     if (this.#idleTimer === undefined) return;
-    // SAFETY: The preceding check establishes the asserted contract.
-    (this.#options.cancel ?? clearTimeout)(this.#idleTimer as number);
+    (this.#options.cancel ?? clearTimeout)(this.#idleTimer);
     this.#idleTimer = undefined;
   }
 }

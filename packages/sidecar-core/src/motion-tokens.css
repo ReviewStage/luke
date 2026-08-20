@@ -81,4 +81,5 @@
   --notice-size: 26px;
   --notice-max-rows: 3;
   --panel-width: 620px;
+  --panel-height-max: 520px;
 }

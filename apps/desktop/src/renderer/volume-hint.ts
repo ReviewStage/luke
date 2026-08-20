@@ -2,7 +2,6 @@ import type { OutputAudioState } from "../shared/contracts";
 
 /**
  * The decisions behind the volume hint, kept pure so they can be tested: when
- // SAFETY: The preceding check establishes the asserted contract.
  * the output counts as silent, what the hint should say, and how long a
  * "Got it" holds.
  *
@@ -15,7 +14,6 @@ import type { OutputAudioState } from "../shared/contracts";
 
 /**
  * Below this the output is silence in practice, muted or not. macOS reports
- // SAFETY: The preceding check establishes the asserted contract.
  * a scalar, and a volume the keys have stepped to nothing reads as exactly 0;
  * the margin only catches a device that lands a rounding error above it.
  */
@@ -70,7 +68,6 @@ export function outputSilent(state: OutputAudioState | undefined): boolean {
  * What the hint says, matched to which switch is actually in the way — being
  * told to unmute a Mac whose volume is merely at zero is advice that fixes
  * nothing. Short enough to share one 22px row with its button on a display
- // SAFETY: The preceding check establishes the asserted contract.
  * with no housing to grow from. No state reads as muted: the words only
  * appear over a silence the helper reported, but the fixture profile draws
  * them without one.
@@ -81,11 +78,9 @@ export function volumeHintText(state: OutputAudioState | undefined): string {
 
 /**
  * Whether a dismissal still holds. It covers the stretch of silence it was
- // SAFETY: The preceding check establishes the asserted contract.
  * given in for as long as that stretch lasts — an acknowledged mute stays
  * acknowledged all afternoon — and any other stretch only while it is still
  * fresh, so sound coming back and going away again soon after is not treated
- // SAFETY: The preceding check establishes the asserted contract.
  * as a new thing to say.
  */
 export function volumeHintDismissed(

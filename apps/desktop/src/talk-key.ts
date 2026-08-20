@@ -108,7 +108,6 @@ export class TalkKeyWatcher {
 
   /**
    * Stops the helper, reporting when its process is actually gone. Detached
-   // SAFETY: The preceding check establishes the asserted contract.
    * before killing: this exit is the app's own doing, and reporting it as the
    * key becoming unavailable would stand up a fallback during shutdown. The
    * answer matters to a successor — the system releases the chord with the

@@ -218,7 +218,7 @@ function voiceSpeedMultiple(speed: RealtimeVoiceSpeed): string {
   return `${speed}×`;
 }
 
-function voiceSpeedWord(speed: RealtimeVoiceSpeed): string {
+function voiceSpeedWord(speed: RealtimeVoiceSpeed | undefined): string {
   return (
     VOICE_SPEED_WORDS.find((candidate) => candidate.speed === speed)?.word ??
     VOICE_SPEED_WORD.NORMAL
@@ -234,10 +234,11 @@ function workspaceProviderName(providerId: WorkspaceProviderId): string {
   return providerId;
 }
 
-function settingGuideEntry(
+function settingGuideEntry<Field extends AppSettingField>(
+  _field: Field,
   ids: readonly AppSettingId[],
-  build: SettingDefinition<AppSettingField>["guideEntry"]["build"],
-): SettingDefinition<AppSettingField>["guideEntry"] {
+  build: SettingDefinition<Field>["guideEntry"]["build"],
+): SettingDefinition<Field>["guideEntry"] {
   return { ids, build };
 }
 
@@ -317,18 +318,20 @@ export const APP_SETTING_SCHEMA = {
     guard: boolean(false),
     settingsPage: SETTINGS_PAGE.APPEARANCE,
     resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
-    guideEntry: settingGuideEntry([APP_SETTING_ID.SHOW_IN_DOCK], (settings, defaultValue) => ({
-      id: APP_SETTING_ID.SHOW_IN_DOCK,
-      label: "Show Luke in the Dock",
-      // SAFETY: The preceding check establishes the asserted contract.
-      description: "Whether Luke also stands in the Dock as an app icon.",
-      kind: APP_SETTING_KIND.TOGGLE,
-      value: appToggleText(settings.showInDock),
-      // SAFETY: The preceding check establishes the asserted contract.
-      defaultValue: appToggleText(defaultValue as boolean),
-      adjustable: true,
-      manual: APPEARANCE_PAGE,
-    })),
+    guideEntry: settingGuideEntry(
+      "showInDock",
+      [APP_SETTING_ID.SHOW_IN_DOCK],
+      (settings, defaultValue) => ({
+        id: APP_SETTING_ID.SHOW_IN_DOCK,
+        label: "Show Luke in the Dock",
+        description: "Whether Luke also stands in the Dock as an app icon.",
+        kind: APP_SETTING_KIND.TOGGLE,
+        value: appToggleText(settings.showInDock),
+        defaultValue: appToggleText(defaultValue),
+        adjustable: true,
+        manual: APPEARANCE_PAGE,
+      }),
+    ),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.DOCK,
     spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
     analytics: { id: APP_SETTING_ID.SHOW_IN_DOCK, value: toggleAnalytics },
@@ -339,15 +342,14 @@ export const APP_SETTING_SCHEMA = {
     guard: (value: UnparsedWireValue) => optional(value, isRealtimeVoice),
     settingsPage: SETTINGS_PAGE.VOICE,
     resetScope: SETTINGS_RESET_SCOPE.VOICE,
-    guideEntry: settingGuideEntry([APP_SETTING_ID.VOICE], (settings, defaultValue) => ({
+    guideEntry: settingGuideEntry("voice", [APP_SETTING_ID.VOICE], (settings, defaultValue) => ({
       id: APP_SETTING_ID.VOICE,
       label: "Voice",
       description:
         "Which voice Luke speaks with; a change is heard right away — a conversation under way starts afresh in the new voice.",
       kind: APP_SETTING_KIND.CHOICE,
       value: settings.voice,
-      // SAFETY: The preceding check establishes the asserted contract.
-      defaultValue: defaultValue as RealtimeVoice,
+      defaultValue,
       choices: REALTIME_VOICE_LIST,
       adjustable: true,
       manual: VOICE_PAGE,
@@ -362,22 +364,25 @@ export const APP_SETTING_SCHEMA = {
     guard: (value: UnparsedWireValue) => optional(value, isRealtimeVoiceSpeed),
     settingsPage: SETTINGS_PAGE.VOICE,
     resetScope: SETTINGS_RESET_SCOPE.VOICE,
-    guideEntry: settingGuideEntry([APP_SETTING_ID.VOICE_SPEED], (settings, defaultValue) => ({
-      id: APP_SETTING_ID.VOICE_SPEED,
-      label: "Speed",
-      description:
-        "How fast Luke talks: slow 0.75×, normal 1×, quick 1.25×, fast 1.5× the voice's natural rate. An ask may use the word or the multiple. A change is heard from the next reply on.",
-      kind: APP_SETTING_KIND.CHOICE,
-      value: voiceSpeedWord(settings.voiceSpeed),
-      // SAFETY: The preceding check establishes the asserted contract.
-      defaultValue: voiceSpeedWord(defaultValue as RealtimeVoiceSpeed),
-      choices: VOICE_SPEED_WORDS.flatMap((candidate) => [
-        candidate.word,
-        voiceSpeedMultiple(candidate.speed),
-      ]),
-      adjustable: true,
-      manual: VOICE_PAGE,
-    })),
+    guideEntry: settingGuideEntry(
+      "voiceSpeed",
+      [APP_SETTING_ID.VOICE_SPEED],
+      (settings, defaultValue) => ({
+        id: APP_SETTING_ID.VOICE_SPEED,
+        label: "Speed",
+        description:
+          "How fast Luke talks: slow 0.75×, normal 1×, quick 1.25×, fast 1.5× the voice's natural rate. An ask may use the word or the multiple. A change is heard from the next reply on.",
+        kind: APP_SETTING_KIND.CHOICE,
+        value: voiceSpeedWord(settings.voiceSpeed),
+        defaultValue: voiceSpeedWord(defaultValue),
+        choices: VOICE_SPEED_WORDS.flatMap((candidate) => [
+          candidate.word,
+          voiceSpeedMultiple(candidate.speed),
+        ]),
+        adjustable: true,
+        manual: VOICE_PAGE,
+      }),
+    ),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.VOICE_SPEED,
     spokenValue: (value: string) => {
       return VOICE_SPEED_BY_SPOKEN_VALUE[value];
@@ -390,20 +395,23 @@ export const APP_SETTING_SCHEMA = {
     guard: boolean(false),
     settingsPage: SETTINGS_PAGE.VOICE,
     resetScope: SETTINGS_RESET_SCOPE.VOICE,
-    guideEntry: settingGuideEntry([APP_SETTING_ID.VOICE_CAPTIONS], (settings, defaultValue) => ({
-      id: APP_SETTING_ID.VOICE_CAPTIONS,
-      label: "Captions",
-      description:
-        "Luke's words on screen while he speaks; nothing is kept. They also appear on their own, " +
-        "whatever this says, for a reply answering a typed ask and while the Mac's output is " +
-        "muted or at zero.",
-      kind: APP_SETTING_KIND.TOGGLE,
-      value: appToggleText(settings.voiceCaptions),
-      // SAFETY: The preceding check establishes the asserted contract.
-      defaultValue: appToggleText(defaultValue as boolean),
-      adjustable: true,
-      manual: VOICE_PAGE,
-    })),
+    guideEntry: settingGuideEntry(
+      "voiceCaptions",
+      [APP_SETTING_ID.VOICE_CAPTIONS],
+      (settings, defaultValue) => ({
+        id: APP_SETTING_ID.VOICE_CAPTIONS,
+        label: "Captions",
+        description:
+          "Luke's words on screen while he speaks; nothing is kept. They also appear on their own, " +
+          "whatever this says, for a reply answering a typed ask and while the Mac's output is " +
+          "muted or at zero.",
+        kind: APP_SETTING_KIND.TOGGLE,
+        value: appToggleText(settings.voiceCaptions),
+        defaultValue: appToggleText(defaultValue),
+        adjustable: true,
+        manual: VOICE_PAGE,
+      }),
+    ),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.NONE,
     spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
     analytics: { id: APP_SETTING_ID.VOICE_CAPTIONS, value: toggleAnalytics },
@@ -415,7 +423,7 @@ export const APP_SETTING_SCHEMA = {
     settingsPage: SETTINGS_PAGE.SHORTCUTS,
     resetScope: SETTINGS_RESET_SCOPE.SHORTCUTS,
     // The talk-key fact reports the registered chord and its manual path.
-    guideEntry: settingGuideEntry([], () => undefined),
+    guideEntry: settingGuideEntry("voiceHotkey", [], () => undefined),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.TALK_HOTKEY,
   },
   askHotkey: {
@@ -425,7 +433,7 @@ export const APP_SETTING_SCHEMA = {
     settingsPage: SETTINGS_PAGE.SHORTCUTS,
     resetScope: SETTINGS_RESET_SCOPE.SHORTCUTS,
     // The ask-key fact reports the registered chord and its manual path.
-    guideEntry: settingGuideEntry([], () => undefined),
+    guideEntry: settingGuideEntry("askHotkey", [], () => undefined),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.ASK_HOTKEY,
   },
   stopHotkey: {
@@ -435,7 +443,7 @@ export const APP_SETTING_SCHEMA = {
     settingsPage: SETTINGS_PAGE.SHORTCUTS,
     resetScope: SETTINGS_RESET_SCOPE.SHORTCUTS,
     // The stop-key fact reports the registered chord and its manual path.
-    guideEntry: settingGuideEntry([], () => undefined),
+    guideEntry: settingGuideEntry("stopHotkey", [], () => undefined),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.STOP_HOTKEY,
   },
   duckOtherMedia: {
@@ -444,18 +452,21 @@ export const APP_SETTING_SCHEMA = {
     guard: boolean(true),
     settingsPage: SETTINGS_PAGE.VOICE,
     resetScope: SETTINGS_RESET_SCOPE.VOICE,
-    guideEntry: settingGuideEntry([APP_SETTING_ID.DUCK_OTHER_MEDIA], (settings, defaultValue) => ({
-      id: APP_SETTING_ID.DUCK_OTHER_MEDIA,
-      label: "Quiet Music and Spotify",
-      description:
-        "Whether Music and Spotify are turned down while a spoken exchange is live, and back up after.",
-      kind: APP_SETTING_KIND.TOGGLE,
-      value: appToggleText(settings.duckOtherMedia),
-      // SAFETY: The preceding check establishes the asserted contract.
-      defaultValue: appToggleText(defaultValue as boolean),
-      adjustable: true,
-      manual: VOICE_PAGE,
-    })),
+    guideEntry: settingGuideEntry(
+      "duckOtherMedia",
+      [APP_SETTING_ID.DUCK_OTHER_MEDIA],
+      (settings, defaultValue) => ({
+        id: APP_SETTING_ID.DUCK_OTHER_MEDIA,
+        label: "Quiet Music and Spotify",
+        description:
+          "Whether Music and Spotify are turned down while a spoken exchange is live, and back up after.",
+        kind: APP_SETTING_KIND.TOGGLE,
+        value: appToggleText(settings.duckOtherMedia),
+        defaultValue: appToggleText(defaultValue),
+        adjustable: true,
+        manual: VOICE_PAGE,
+      }),
+    ),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.MEDIA_DUCK,
     spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
     analytics: { id: APP_SETTING_ID.DUCK_OTHER_MEDIA, value: toggleAnalytics },
@@ -465,7 +476,7 @@ export const APP_SETTING_SCHEMA = {
     default: undefined,
     guard: (value: UnparsedWireValue) => optional(value, isVoiceSource),
     settingsPage: SETTINGS_PAGE.ROOT,
-    guideEntry: settingGuideEntry([APP_SETTING_ID.VOICE_SOURCE], (settings) => ({
+    guideEntry: settingGuideEntry("voiceSource", [APP_SETTING_ID.VOICE_SOURCE], (settings) => ({
       id: APP_SETTING_ID.VOICE_SOURCE,
       label: "What Luke runs on",
       description:
@@ -489,6 +500,7 @@ export const APP_SETTING_SCHEMA = {
     settingsPage: SETTINGS_PAGE.VOICE,
     resetScope: SETTINGS_RESET_SCOPE.VOICE,
     guideEntry: settingGuideEntry(
+      "preferBuiltInMicrophone",
       [APP_SETTING_ID.PREFER_BUILT_IN_MICROPHONE],
       (settings, defaultValue) => ({
         id: APP_SETTING_ID.PREFER_BUILT_IN_MICROPHONE,
@@ -499,8 +511,7 @@ export const APP_SETTING_SCHEMA = {
           "headset's microphone either way.",
         kind: APP_SETTING_KIND.TOGGLE,
         value: appToggleText(settings.preferBuiltInMicrophone),
-        // SAFETY: The preceding check establishes the asserted contract.
-        defaultValue: appToggleText(defaultValue as boolean),
+        defaultValue: appToggleText(defaultValue),
         adjustable: true,
         manual: VOICE_PAGE,
       }),
@@ -515,6 +526,7 @@ export const APP_SETTING_SCHEMA = {
     guard: boolean(true),
     settingsPage: SETTINGS_PAGE.CONNECTIONS,
     guideEntry: settingGuideEntry(
+      "quietDuringMeetings",
       [APP_SETTING_ID.QUIET_DURING_MEETINGS],
       (settings, defaultValue) => ({
         id: APP_SETTING_ID.QUIET_DURING_MEETINGS,
@@ -523,8 +535,7 @@ export const APP_SETTING_SCHEMA = {
           "Whether spoken announcements wait while a connected calendar shows a meeting on, then read out together once it ends. Switched on mid-meeting it takes hold at once. It changes nothing until a Google Calendar account is connected.",
         kind: APP_SETTING_KIND.TOGGLE,
         value: appToggleText(settings.quietDuringMeetings),
-        // SAFETY: The preceding check establishes the asserted contract.
-        defaultValue: appToggleText(defaultValue as boolean),
+        defaultValue: appToggleText(defaultValue),
         adjustable: true,
         manual: `${CONNECTIONS_PAGE} — drawn once a calendar account is connected`,
       }),
@@ -540,6 +551,7 @@ export const APP_SETTING_SCHEMA = {
     settingsPage: SETTINGS_PAGE.APPEARANCE,
     resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
     guideEntry: settingGuideEntry(
+      "showOnAllDisplays",
       [APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS],
       (settings, defaultValue) => ({
         id: APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS,
@@ -548,8 +560,7 @@ export const APP_SETTING_SCHEMA = {
           "Whether Luke stands on every connected display at once; off keeps him to the main display alone.",
         kind: APP_SETTING_KIND.TOGGLE,
         value: appToggleText(settings.showOnAllDisplays),
-        // SAFETY: The preceding check establishes the asserted contract.
-        defaultValue: appToggleText(defaultValue as boolean),
+        defaultValue: appToggleText(defaultValue),
         adjustable: true,
         manual: APPEARANCE_PAGE,
       }),
@@ -565,21 +576,24 @@ export const APP_SETTING_SCHEMA = {
     settingsPage: SETTINGS_PAGE.ROOT,
     // No reset scope on purpose: a "reset appearance" that quietly turned
     // sharing back on would be a consent the developer never gave.
-    guideEntry: settingGuideEntry([APP_SETTING_ID.SHARE_USAGE_DATA], (settings, defaultValue) => ({
-      id: APP_SETTING_ID.SHARE_USAGE_DATA,
-      label: "Share usage data",
-      description:
-        "Whether Luke counts how his own features are used — a launch, a provider connected, " +
-        "a call opened — and sends those counts to Luke's own service, tied to the signed-in " +
-        "account by name and email. Every event and value is fixed by this build, so nothing " +
-        "about a session and nothing typed or spoken can travel in one. On to begin with.",
-      kind: APP_SETTING_KIND.TOGGLE,
-      value: appToggleText(settings.shareUsageData),
-      // SAFETY: The preceding check establishes the asserted contract.
-      defaultValue: appToggleText(defaultValue as boolean),
-      adjustable: true,
-      manual: USAGE_DATA_SECTION,
-    })),
+    guideEntry: settingGuideEntry(
+      "shareUsageData",
+      [APP_SETTING_ID.SHARE_USAGE_DATA],
+      (settings, defaultValue) => ({
+        id: APP_SETTING_ID.SHARE_USAGE_DATA,
+        label: "Share usage data",
+        description:
+          "Whether Luke counts how his own features are used — a launch, a provider connected, " +
+          "a call opened — and sends those counts to Luke's own service, tied to the signed-in " +
+          "account by name and email. Every event and value is fixed by this build, so nothing " +
+          "about a session and nothing typed or spoken can travel in one. On to begin with.",
+        kind: APP_SETTING_KIND.TOGGLE,
+        value: appToggleText(settings.shareUsageData),
+        defaultValue: appToggleText(defaultValue),
+        adjustable: true,
+        manual: USAGE_DATA_SECTION,
+      }),
+    ),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.USAGE_SHARING,
     spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
     analytics: { id: APP_SETTING_ID.SHARE_USAGE_DATA, value: toggleAnalytics },
@@ -590,19 +604,22 @@ export const APP_SETTING_SCHEMA = {
     guard: (value: UnparsedWireValue) => optional(value, isPanelFormFactor),
     settingsPage: SETTINGS_PAGE.APPEARANCE,
     resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
-    guideEntry: settingGuideEntry([APP_SETTING_ID.FORM_FACTOR], (settings, defaultValue) => ({
-      id: APP_SETTING_ID.FORM_FACTOR,
-      label: "Form factor",
-      description:
-        "How Luke stands on a display without a camera housing — notch draws him one pressed into the top edge, bubble floats him just under it. A display with a real notch ignores this.",
-      kind: APP_SETTING_KIND.CHOICE,
-      value: settings.formFactor,
-      // SAFETY: The preceding check establishes the asserted contract.
-      defaultValue: defaultValue as PanelFormFactor,
-      choices: PANEL_FORM_FACTOR_LIST,
-      adjustable: true,
-      manual: APPEARANCE_PAGE,
-    })),
+    guideEntry: settingGuideEntry(
+      "formFactor",
+      [APP_SETTING_ID.FORM_FACTOR],
+      (settings, defaultValue) => ({
+        id: APP_SETTING_ID.FORM_FACTOR,
+        label: "Form factor",
+        description:
+          "How Luke stands on a display without a camera housing — notch draws him one pressed into the top edge, bubble floats him just under it. A display with a real notch ignores this.",
+        kind: APP_SETTING_KIND.CHOICE,
+        value: settings.formFactor,
+        defaultValue,
+        choices: PANEL_FORM_FACTOR_LIST,
+        adjustable: true,
+        manual: APPEARANCE_PAGE,
+      }),
+    ),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.FORM_FACTOR,
     spokenValue: (value: string) => (isPanelFormFactor(value) ? value : undefined),
     analytics: { id: APP_SETTING_ID.FORM_FACTOR, value: choiceAnalytics },
@@ -618,29 +635,32 @@ export const APP_SETTING_SCHEMA = {
       ),
     settingsPage: SETTINGS_PAGE.CONNECTIONS,
     resetScope: SETTINGS_RESET_SCOPE.WORKSPACES,
-    guideEntry: settingGuideEntry([APP_SETTING_ID.DEFAULT_WORKSPACE_PROVIDER], (settings) => ({
-      id: APP_SETTING_ID.DEFAULT_WORKSPACE_PROVIDER,
-      label: "Default workspace provider",
-      description:
-        "Which provider a conversational ask creates a new workspace in when the ask names none. " +
-        "Until one is chosen Luke asks when more than one provider could take it, and the first " +
-        // SAFETY: The preceding check establishes the asserted contract.
-        "workspace created saves its provider as the default.",
-      kind: APP_SETTING_KIND.CHOICE,
-      value: settings.defaultWorkspaceProvider
-        ? workspaceProviderName(settings.defaultWorkspaceProvider)
-        : ASK_EACH_TIME_CHOICE,
-      choices: [
-        ASK_EACH_TIME_CHOICE,
-        workspaceProviderName(PROVIDER_ID.CODEX),
-        workspaceProviderName(PROVIDER_ID.CONDUCTOR),
-        workspaceProviderName(PROVIDER_ID.CURSOR),
-        "Superset",
-      ],
-      defaultValue: ASK_EACH_TIME_CHOICE,
-      adjustable: false,
-      manual: `${CONNECTIONS_PAGE}, under Workspaces`,
-    })),
+    guideEntry: settingGuideEntry(
+      "defaultWorkspaceProvider",
+      [APP_SETTING_ID.DEFAULT_WORKSPACE_PROVIDER],
+      (settings) => ({
+        id: APP_SETTING_ID.DEFAULT_WORKSPACE_PROVIDER,
+        label: "Default workspace provider",
+        description:
+          "Which provider a conversational ask creates a new workspace in when the ask names none. " +
+          "Until one is chosen Luke asks when more than one provider could take it, and the first " +
+          "workspace created saves its provider as the default.",
+        kind: APP_SETTING_KIND.CHOICE,
+        value: settings.defaultWorkspaceProvider
+          ? workspaceProviderName(settings.defaultWorkspaceProvider)
+          : ASK_EACH_TIME_CHOICE,
+        choices: [
+          ASK_EACH_TIME_CHOICE,
+          workspaceProviderName(PROVIDER_ID.CODEX),
+          workspaceProviderName(PROVIDER_ID.CONDUCTOR),
+          workspaceProviderName(PROVIDER_ID.CURSOR),
+          "Superset",
+        ],
+        defaultValue: ASK_EACH_TIME_CHOICE,
+        adjustable: false,
+        manual: `${CONNECTIONS_PAGE}, under Workspaces`,
+      }),
+    ),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.NONE,
     analytics: { id: APP_SETTING_ID.DEFAULT_WORKSPACE_PROVIDER, value: choiceAnalytics },
   },
@@ -657,6 +677,7 @@ export const APP_SETTING_SCHEMA = {
     },
     settingsPage: SETTINGS_PAGE.CONNECTIONS,
     guideEntry: settingGuideEntry(
+      "workspaceAgentDefaults",
       [APP_SETTING_ID.WORKSPACE_AGENT_MODEL, APP_SETTING_ID.WORKSPACE_AGENT_EFFORT],
       (settings) => {
         const chosen = settings.workspaceAgentDefaults?.[PROVIDER_ID.CONDUCTOR];
@@ -727,7 +748,7 @@ export const APP_SETTING_SCHEMA = {
     settingsPage: SETTINGS_PAGE.CONNECTIONS,
     resetScope: SETTINGS_RESET_SCOPE.WORKSPACES,
     // Observed project names and defaults travel in the workspace-project context.
-    guideEntry: settingGuideEntry([], () => undefined),
+    guideEntry: settingGuideEntry("workspaceProjectDefaults", [], () => undefined),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.NONE,
   },
   supersetAgentDefault: {
@@ -741,23 +762,27 @@ export const APP_SETTING_SCHEMA = {
       ),
     settingsPage: SETTINGS_PAGE.CONNECTIONS,
     resetScope: SETTINGS_RESET_SCOPE.WORKSPACES,
-    guideEntry: settingGuideEntry([APP_SETTING_ID.SUPERSET_AGENT], (settings) => [
-      {
-        id: APP_SETTING_ID.SUPERSET_AGENT,
-        label: "New Superset sessions run",
-        description:
-          "Which configured Superset agent starts when a creation ask names none. Unset, Luke asks which agent to use.",
-        kind: APP_SETTING_KIND.CHOICE,
-        value: settings.supersetAgentDefault ?? ASK_EACH_TIME_CHOICE,
-        choices: [
-          ASK_EACH_TIME_CHOICE,
-          ...(settings.supersetAgentDefault ? [settings.supersetAgentDefault] : []),
-        ],
-        defaultValue: ASK_EACH_TIME_CHOICE,
-        adjustable: false,
-        manual: `${CONNECTIONS_PAGE}, under Superset`,
-      },
-    ]),
+    guideEntry: settingGuideEntry(
+      "supersetAgentDefault",
+      [APP_SETTING_ID.SUPERSET_AGENT],
+      (settings) => [
+        {
+          id: APP_SETTING_ID.SUPERSET_AGENT,
+          label: "New Superset sessions run",
+          description:
+            "Which configured Superset agent starts when a creation ask names none. Unset, Luke asks which agent to use.",
+          kind: APP_SETTING_KIND.CHOICE,
+          value: settings.supersetAgentDefault ?? ASK_EACH_TIME_CHOICE,
+          choices: [
+            ASK_EACH_TIME_CHOICE,
+            ...(settings.supersetAgentDefault ? [settings.supersetAgentDefault] : []),
+          ],
+          defaultValue: ASK_EACH_TIME_CHOICE,
+          adjustable: false,
+          manual: `${CONNECTIONS_PAGE}, under Superset`,
+        },
+      ],
+    ),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.NONE,
   },
 } as const satisfies {
@@ -784,7 +809,7 @@ export function isKeyedAppSettingField(value: UnparsedWireValue): value is Keyed
 }
 
 function settingEntry(field: KeyedAppSettingField): SettingEntryDefinition<never> {
-  // SAFETY: The preceding check establishes the asserted contract.
+  // SAFETY: KeyedAppSettingField is derived only from schema members that declare `entry`.
   return (APP_SETTING_SCHEMA[field] as { entry: SettingEntryDefinition<never> }).entry;
 }
 
@@ -800,7 +825,7 @@ export function sameSettingEntry(
   current: UnparsedWireValue,
   next: UnparsedWireValue,
 ): boolean {
-  // SAFETY: The preceding check establishes the asserted contract.
+  // SAFETY: The selected entry definition owns both values; `never` erases the keyed union.
   return settingEntry(field).same(current as never, next as never);
 }
 
@@ -823,21 +848,26 @@ export function settingEntryGuard(
 }
 
 export function isSettingsResetScope(value: UnparsedWireValue): value is SettingsResetScope {
-  // SAFETY: The preceding check establishes the asserted contract.
-  return Object.values(SETTINGS_RESET_SCOPE).includes(value as SettingsResetScope);
+  return Object.values(SETTINGS_RESET_SCOPE).some((scope) => scope === value);
 }
 
 export function settingFieldForGuideId(id: AppSettingId): AppSettingField | undefined {
   return APP_SETTING_FIELDS.find((field) => APP_SETTING_SCHEMA[field].guideEntry.ids.includes(id));
 }
 
+function isGuideSettingList(
+  value: AppGuideSetting | readonly AppGuideSetting[],
+): value is readonly AppGuideSetting[] {
+  return Array.isArray(value);
+}
+
 export function settingGuideEntries(settings: AppSettingGuideSettings): AppGuideSetting[] {
   return APP_SETTING_FIELDS.flatMap((field) => {
-    const definition = APP_SETTING_SCHEMA[field];
+    // SAFETY: field and definition come from the same exhaustive schema entry.
+    const definition = APP_SETTING_SCHEMA[field] as SettingDefinition<AppSettingField>;
     const entry = definition.guideEntry.build(settings, definition.default);
     if (entry === undefined) return [];
-    // SAFETY: The preceding check establishes the asserted contract.
-    return Array.isArray(entry) ? entry : [entry as AppGuideSetting];
+    return isGuideSettingList(entry) ? entry : [entry];
   });
 }
 

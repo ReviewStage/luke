@@ -7,6 +7,8 @@ source "$SCRIPT_DIRECTORY/lib/workspace.sh"
 
 required_files=(
     AGENTS.md
+    DESIGN.md
+    design/check-design-contract.mjs
     CHANGELOG.md
     CLAUDE.md
     WORKFLOW.md
@@ -63,6 +65,23 @@ node "$SIDECAR_REPO_ROOT/design/generate-brand-assets.mjs" --check
 # the same contract between the desktop renderer and the marketing mock. One
 # source, four committed outputs in sidecar-core; --check fails if any drifted.
 node "$SIDECAR_REPO_ROOT/design/generate-surface-shared.mjs" --check
+
+# Mount reveals, literal timings, loops, and layout-property animation obey the
+# renderer contract in DESIGN.md. The checker keeps the bounded face-artwork
+# exceptions explicit while rejecting new drift.
+node "$SIDECAR_REPO_ROOT/design/check-design-contract.mjs"
+
+# A prior cleanup stamped this sentence ahead of assertions without explaining
+# any invariant. Specific SAFETY comments are part of the executable style
+# contract; the boilerplate must not return.
+generic_safety=$(grep -RFn --include='*.ts' --include='*.tsx' --include='*.js' --include='*.mjs' \
+    'SAFETY: The preceding check establishes the asserted contract.' \
+    "$SIDECAR_REPO_ROOT/apps" "$SIDECAR_REPO_ROOT/packages" || true)
+if [[ -n "$generic_safety" ]]; then
+    printf 'error: replace generic SAFETY comments with the concrete checked invariant:\n%s\n' \
+        "$generic_safety" >&2
+    exit 1
+fi
 
 # Every relative import inside sidecar-core must carry its .js extension.
 # Vercel's builder compiles the package's TypeScript into the web functions

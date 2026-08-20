@@ -20,7 +20,6 @@ const SIGN_IN_FACE_CYCLE = [
 ] as const;
 
 /**
- // SAFETY: The preceding check establishes the asserted contract.
  * The stillness between gestures. Long enough that each reads as something
  * Luke did rather than one long fidget, short enough that the face never looks
  * switched off while it is the only thing introducing him.
