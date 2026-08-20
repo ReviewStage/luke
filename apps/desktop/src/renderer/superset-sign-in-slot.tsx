@@ -81,7 +81,7 @@ export function SupersetSignInSlot({
           >
             <input
               ref={input}
-              className="key-slot-input"
+              className="settings-input key-slot-input"
               aria-label="Superset sign-in code"
               placeholder="Paste Superset code"
               value={code}
@@ -109,6 +109,7 @@ export function SupersetSignInSlot({
             <button
               type="submit"
               className="action-button key-slot-confirm"
+              data-ready={String(code.length > 0)}
               disabled={!code || exchanging}
             >
               {exchanging ? "Connecting…" : "Continue"}
