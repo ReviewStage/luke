@@ -160,13 +160,13 @@ test("a panel that has gone draws everything the run was still holding", () => {
 test("holds folded together keep the last snapshot and every part of the view", () => {
   assert.deepEqual(
     foldErrandHolds([
-      { settings: CAPTIONS_ON, view: { filter: SESSION_FILTER.CLOUD } },
+      { settings: CAPTIONS_ON, view: { filters: [SESSION_FILTER.CLOUD] } },
       { view: { sort: SESSION_SORT.RECENCY } },
       { settings: CAPTIONS_OFF },
     ]),
     {
       settings: CAPTIONS_OFF,
-      view: { filter: SESSION_FILTER.CLOUD, sort: SESSION_SORT.RECENCY },
+      view: { filters: [SESSION_FILTER.CLOUD], sort: SESSION_SORT.RECENCY },
     },
   );
   assert.deepEqual(foldErrandHolds([]), NOTHING_HELD);
@@ -182,7 +182,7 @@ test("a settings push takes every held snapshot with it and leaves the held view
     tab: PANEL_TAB.SESSIONS,
     opening: false,
     borrowsPanel: false,
-    hold: { view: { filter: SESSION_FILTER.CLOUD } },
+    hold: { view: { filters: [SESSION_FILTER.CLOUD] } },
   };
   const waiting = settingAct(APP_SETTING_ID.SHOW_IN_DOCK, SETTINGS_VIEW.APPEARANCE, {
     settings: CAPTIONS_OFF,
@@ -196,7 +196,7 @@ test("a settings push takes every held snapshot with it and leaves the held view
   // about it.
   assert.deepEqual(
     superseded.waiting.map((pending) => pending.hold),
-    [{ view: { filter: SESSION_FILTER.CLOUD } }, NOTHING_HELD],
+    [{ view: { filters: [SESSION_FILTER.CLOUD] } }, NOTHING_HELD],
   );
 });
 

@@ -186,6 +186,48 @@ export interface SessionProvider {
   displayName: string;
 }
 
+/**
+ * Apps that can hold a local agent session without becoming that session's
+ * agent provider. A Codex conversation, for example, can be visible in both
+ * Conductor and ChatGPT while it remains a Codex conversation.
+ */
+export const SESSION_APPLICATION_ID = {
+  CHATGPT: "chatgpt",
+  CONDUCTOR: "conductor",
+  SUPERSET: "superset",
+} as const;
+
+export type SessionApplicationId =
+  (typeof SESSION_APPLICATION_ID)[keyof typeof SESSION_APPLICATION_ID];
+
+export const SESSION_APPLICATION_ID_LIST: readonly SessionApplicationId[] =
+  Object.values(SESSION_APPLICATION_ID);
+
+export function isSessionApplicationId(value: string): value is SessionApplicationId {
+  return SESSION_APPLICATION_ID_LIST.some((candidate) => candidate === value);
+}
+
+/** Where an app association is drawn when several chats share one workspace. */
+export const SESSION_APPLICATION_SCOPE = {
+  SESSION: "session",
+  WORKSPACE: "workspace",
+} as const;
+
+export type SessionApplicationScope =
+  (typeof SESSION_APPLICATION_SCOPE)[keyof typeof SESSION_APPLICATION_SCOPE];
+
+/**
+ * One app in which an observed local session appears. The optional address is
+ * the app's exact route to that chat; absence means Luke can name the
+ * association but has no documented way to open it.
+ */
+export interface SessionApplication {
+  id: string;
+  displayName: string;
+  scope: SessionApplicationScope;
+  link?: string;
+}
+
 /** Identifies a session without conflating identifiers from different providers. */
 export interface SessionIdentity {
   providerId: string;
@@ -293,6 +335,12 @@ export interface SessionWorkspace {
  */
 export interface ProviderSessionObservation {
   providerSessionId: string;
+  /**
+   * The provider-owned id of the session that directly spawned this one,
+   * when the provider persists that relationship. It is identity only: the
+   * child remains its own session with its own status and row.
+   */
+  parentProviderSessionId?: string;
   title: string;
   status: SessionStatus;
   /** Why a completed row became complete, when the provider can distinguish it. */
@@ -310,11 +358,21 @@ export interface ProviderSessionObservation {
   /** Omitted by an adapter that reads sessions off this machine. */
   location?: SessionLocation;
   /**
+   * The agent having the conversation, when the session's provider hosts
+   * agents rather than being one — a Conductor chat is a Claude Code or Codex
+   * conversation before it is a Conductor one. Identity only: the provider
+   * stays the thing observed, credentialed, and written through, and a host
+   * that did not say which agent runs a chat reports none rather than a guess.
+   */
+  agent?: SessionProvider;
+  /**
    * A bounded recap of where the work stands — provider-designated, or a
    * settled turn's parting words. Never the transcript behind it.
    */
   recap?: string;
   detail?: SessionDetail;
+  /** Apps on this machine that independently associate themselves with the session. */
+  applications?: readonly SessionApplication[];
   controls?: readonly SessionControl[];
   /**
    * Set only by an adapter whose provider documents taking a message for this
@@ -364,6 +422,8 @@ export interface ProviderSessionObservation {
  */
 export interface NormalizedSession extends SessionIdentity {
   provider: SessionProvider;
+  /** The immediate provider-owned parent of this independently observed session. */
+  parentProviderSessionId?: string;
   title: string;
   status: SessionStatus;
   completionCause?: SessionCompletionCause;
@@ -373,8 +433,12 @@ export interface NormalizedSession extends SessionIdentity {
   /** Whether a realtime voice conversation is live over this session right now. */
   realtimeVoiceLive?: boolean;
   location: SessionLocation;
+  /** The agent behind this session, when its provider hosts rather than is it. */
+  agent?: SessionProvider;
   recap?: string;
   detail: SessionDetail;
+  /** Apps on this machine that independently associate themselves with the session. */
+  applications: readonly SessionApplication[];
   controls: readonly SessionControl[];
   /** Whether this session's provider will take a message for it right now. */
   canReceiveMessage: boolean;
@@ -392,6 +456,8 @@ export interface NormalizedSession extends SessionIdentity {
 }
 
 export const maximumSessionTitleLength = 160;
+/** Enough for overlapping app surfaces without allowing an unbounded roster decoration. */
+export const maximumSessionApplications = 4;
 /** An agent kind is a short identifier, never a sentence. */
 export const maximumSpawnableAgentLength = 40;
 /** How many kinds of agent one session may offer to start. */
@@ -559,6 +625,33 @@ function normalizeControls(
   });
 }
 
+function normalizeApplications(
+  applications: readonly SessionApplication[] | undefined,
+): readonly SessionApplication[] {
+  if (!applications) return [];
+
+  const ids = new Set<string>();
+  const normalized: SessionApplication[] = [];
+  for (const application of applications) {
+    const id = boundedText(application.id, maximumSessionDetailLength);
+    if (!id || ids.has(id)) continue;
+    const scope = Object.values(SESSION_APPLICATION_SCOPE).find(
+      (candidate) => candidate === application.scope,
+    );
+    if (!scope) throw new Error(`Unknown session application scope: ${application.scope}`);
+    const displayName = boundedText(application.displayName, maximumSessionTitleLength) ?? id;
+    const link = sessionLink(application.link);
+    normalized.push({ id, displayName, scope, ...(link ? { link } : undefined) });
+    ids.add(id);
+    if (normalized.length >= maximumSessionApplications) break;
+  }
+  const order = (id: string): number =>
+    isSessionApplicationId(id)
+      ? SESSION_APPLICATION_ID_LIST.indexOf(id)
+      : SESSION_APPLICATION_ID_LIST.length;
+  return normalized.sort((first, second) => order(first.id) - order(second.id));
+}
+
 /**
  * Bounds every field a provider reported and drops the ones it left empty, so
  * a renderer can treat any present field as worth drawing.
@@ -625,6 +718,20 @@ function normalizeWorkspace(workspace: SessionWorkspace | undefined): SessionWor
   return normalized;
 }
 
+/**
+ * The agent behind a hosted session, or nothing. An agent naming the session's
+ * own provider says nothing the provider id does not, so it is dropped rather
+ * than drawn twice.
+ */
+function normalizeAgent(
+  agent: SessionProvider | undefined,
+  providerId: string,
+): SessionProvider | undefined {
+  const id = boundedText(agent?.id, maximumSessionDetailLength);
+  if (!id || id === providerId) return undefined;
+  return { id, displayName: boundedText(agent?.displayName, maximumSessionTitleLength) ?? id };
+}
+
 /** Normalizes the two-part identity used to locate a session in the registry. */
 export function normalizeSessionIdentity(identity: SessionIdentity): SessionIdentity {
   return {
@@ -674,9 +781,14 @@ export function normalizeSession(
   const status = normalizeStatus(observation.status);
   const completionCause = normalizeCompletionCause(observation.completionCause, status);
   const recap = boundedText(observation.recap, maximumSessionRecapLength);
+  const parentProviderSessionId = boundedText(
+    observation.parentProviderSessionId,
+    maximumSessionDetailLength,
+  );
   const spawnTarget = boundedText(observation.spawnTarget, maximumSessionDetailLength);
   const renameTarget = boundedText(observation.renameTarget, maximumSessionDetailLength);
   const workspace = normalizeWorkspace(observation.workspace);
+  const agent = normalizeAgent(observation.agent, providerId);
 
   const session: NormalizedSession = {
     providerId,
@@ -690,6 +802,7 @@ export function normalizeSession(
     observedAt,
     location: normalizeLocation(observation.location),
     detail: normalizeSessionDetail(observation.detail),
+    applications: normalizeApplications(observation.applications),
     controls: normalizeControls(observation.controls),
     // Anything but an explicit yes is a no, so an adapter that has not thought
     // about messaging reports a session that cannot be messaged.
@@ -700,8 +813,12 @@ export function normalizeSession(
   };
   if (observation.realtimeVoice === true) session.realtimeVoice = true;
   if (observation.realtimeVoiceLive === true) session.realtimeVoiceLive = true;
+  if (parentProviderSessionId && parentProviderSessionId !== providerSessionId) {
+    session.parentProviderSessionId = parentProviderSessionId;
+  }
   if (completionCause) session.completionCause = completionCause;
   if (recap) session.recap = recap;
+  if (agent) session.agent = agent;
   if (spawnTarget) session.spawnTarget = spawnTarget;
   if (renameTarget) session.renameTarget = renameTarget;
   if (workspace) session.workspace = workspace;

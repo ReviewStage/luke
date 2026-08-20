@@ -16,6 +16,8 @@ import {
   OPENCODE_FRAME_PATH,
   PROVIDER_ID,
   type ProviderId,
+  SESSION_APPLICATION_ID,
+  type SessionApplicationId,
   SUPERSET_PATH,
 } from "@sidecar/core";
 import { useId } from "react";
@@ -231,6 +233,20 @@ function OpenAiMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
+function ChatGptMark({ className }: MarkProps): React.JSX.Element {
+  return (
+    <svg
+      className={className}
+      data-mark={SESSION_APPLICATION_ID.CHATGPT}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path fill="currentColor" d={OPENAI_PATH} />
+    </svg>
+  );
+}
+
 function OpenCodeMark({ className }: MarkProps): React.JSX.Element {
   // The box crops the favicon's 512 canvas to a square the glyph fills top to
   // bottom, centred as published; the paths themselves are untouched. Verbatim
@@ -295,6 +311,7 @@ function UnknownProviderMark({ className }: MarkProps): React.JSX.Element {
 
 export type MarkId =
   | ProviderId
+  | SessionApplicationId
   | IssueTrackerId
   | typeof GOOGLE_CALENDAR_ID
   | typeof CREDENTIAL_PROVIDER_ID.OPENAI
@@ -302,6 +319,7 @@ export type MarkId =
 
 const PROVIDER_MARKS = {
   [PROVIDER_ID.CLAUDE_CODE]: ClaudeCodeMark,
+  [SESSION_APPLICATION_ID.CHATGPT]: ChatGptMark,
   [PROVIDER_ID.CODEX]: CodexMark,
   [PROVIDER_ID.CONDUCTOR]: ConductorMark,
   [PROVIDER_ID.COPILOT]: CopilotMark,

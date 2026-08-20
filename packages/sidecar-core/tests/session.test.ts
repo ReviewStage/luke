@@ -123,3 +123,31 @@ test("keeps a sound diff summary and drops a suspect or empty one whole", () => 
     undefined,
   );
 });
+
+test("keeps the agent behind a hosted session, and drops one saying nothing", () => {
+  const withAgent = (agent: Parameters<typeof normalizeSession>[1]["agent"]) =>
+    normalizeSession(
+      { id: "conductor", displayName: "Conductor" },
+      {
+        providerSessionId: "chat-1",
+        title: "Hosted chat",
+        status: SESSION_STATUS.WORKING,
+        observedAt: TEST_NOW,
+        agent,
+      },
+    ).agent;
+
+  assert.deepEqual(withAgent({ id: "claude-code", displayName: "Claude Code" }), {
+    id: "claude-code",
+    displayName: "Claude Code",
+  });
+  // An empty display name falls back to the id rather than to a blank mark.
+  assert.deepEqual(withAgent({ id: "codex", displayName: "  " }), {
+    id: "codex",
+    displayName: "codex",
+  });
+  // An agent naming the provider itself says nothing the provider id does not.
+  assert.equal(withAgent({ id: "conductor", displayName: "Conductor" }), undefined);
+  assert.equal(withAgent({ id: "   ", displayName: "Claude Code" }), undefined);
+  assert.equal(withAgent(undefined), undefined);
+});

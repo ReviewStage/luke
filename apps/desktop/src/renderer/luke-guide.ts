@@ -216,9 +216,9 @@ function integrationsFact(settings: AppSettings): AppGuideFact {
     " Superset workspaces on this Mac are recognized automatically from Superset's local " +
     "read-only host state, so agents from different providers group under the project and " +
     "workspace that owns them. Every grouped chat carries its workspace's own Superset " +
-    "address, so it opens in Superset like any other row — pressed, or asked of Luke — with " +
-    "no login needed; Superset keeps one address per workspace, so chats sharing one open " +
-    "the same place. When Superset's CLI is logged in, those rows can also send the " +
+    "and terminal identifiers, so a chat with no native address opens at its exact terminal " +
+    "in Superset — pressed, or asked of Luke — with no login needed. When Superset's CLI is " +
+    "logged in, those rows can also send the " +
     "developer's own message, offer Delete workspace once their work settled — Superset " +
     "keeps no archive, so deleting is permanent and takes the whole workspace with every " +
     "chat in it, and a row still working is never offered it; a single chat cannot be " +
@@ -296,21 +296,46 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
       label: "The sessions list",
       detail:
         "Lists every session that still matters: one working or waiting stays at any age, a " +
-        "failure for three days, a finished or quiet one for two. Narrowable to all, local, " +
-        "cloud, voice chats, the sessions whose workspaces Superset manages, or one provider, " +
-        "and orderable " +
-        "by urgency or recency — by its options button, or by the same ask that shows the tab. " +
+        "failure for three days, a finished or quiet one for two. The options button opens " +
+        "filter rows by axis — location (local, cloud), kind (voice chats), app (Conductor, " +
+        "ChatGPT, Superset), and agent — where several chips can be pressed at once: choices " +
+        "on one row widen each other and choices across rows narrow, so Codex beside " +
+        "Conductor means Codex chats associated with Conductor. The sheet stays open while " +
+        "chips toggle, and the options button wears the narrowing while the sheet is closed. " +
+        "Chosen chips are un-pressed the same way they were pressed, a spoken ask can narrow " +
+        "to one value or back to all, replacing what was picked by hand, and the list is " +
+        "orderable by urgency or recency by the same button or ask. " +
         "A row can be opened, messaged, or controlled " +
         "where its provider allows. A session whose provider reported a pull request grows a " +
         "chip that opens it in the browser. A row the developer asked Luke to listen for wears " +
         "a listening mark beside its age. Luke's own composer at the foot takes a typed ask.",
     },
     {
+      label: "Apps beside a session",
+      detail:
+        "The large mark leading a row names the coding agent — a Conductor cloud chat leads " +
+        "with the agent running it, Claude Code or Codex, with the small cloud badge saying " +
+        "where it runs; Conductor's own letter mark stands in only when the agent went " +
+        "unreported. The small bare marks after a row's title name apps where the same chat " +
+        "also appears. Luke recognizes Conductor locally from Conductor's read-only session " +
+        "index; when a Codex chat there spawns a sub-agent, Codex's exact parent-thread " +
+        "record carries that Conductor association to the sub-agent's separate row. Luke " +
+        "recognizes Superset from its read-only host state. A local Codex chat also names " +
+        "ChatGPT because OpenAI's desktop app documents the exact Codex thread address Luke " +
+        "already opens. More than one app mark may appear on one row; none replaces the agent " +
+        "or changes local versus cloud. An app mark with an exact address is a button: " +
+        "ChatGPT opens that Codex thread, Superset opens its bound terminal, and a Conductor " +
+        "cloud chat's Conductor mark opens that exact chat. The row body still opens its " +
+        "preferred exact destination. Local Conductor chats expose no documented exact " +
+        "address or message endpoint, so their mark identifies the association but adds no " +
+        "open or send control.",
+    },
+    {
       label: "Searching sessions",
       detail:
         "The list is searchable by hand alone: the magnifier beside the options button, or " +
         "Command-F while the panel has the keyboard. It keeps rows saying every typed word in " +
-        "their title, status line, branch, repository, workspace, agent, or model, and counts " +
+        "their title, status line, branch, repository, workspace, agent, associated app, or model, and counts " +
         "what it left. A search matching nothing offers the matches a filter is hiding rather " +
         "than pretending there are none. Escape clears the query and then closes the field; " +
         "no spoken ask can search, and no search survives the panel closing. Command-F answers " +
@@ -319,11 +344,13 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
     {
       label: "Workspaces in the list",
       detail:
-        "Where chats nest in a workspace — Conductor's, and Superset's on this Mac — each " +
-        "chat is its own row. A workspace holding several draws them inside one tray named by " +
-        "the workspace; one holding a single chat stays one row titled by the workspace. Every " +
-        "chat can be seen, opened, and messaged individually, though chats in one Superset " +
-        "workspace share its address and open the same place.",
+        "Where chats nest in a workspace — Conductor's, cloud and local alike, and " +
+        "Superset's on this Mac — each chat is its own row. A workspace holding several " +
+        "draws them inside one tray named by the workspace; one holding a single chat stays " +
+        "one row titled by the workspace. Every chat can be seen, opened, and messaged " +
+        "individually where its latest roster entry offers that act. A Superset or Conductor " +
+        "tray carries the managing app's mark once in its header rather than repeating it on " +
+        "every child row.",
     },
     {
       label: "The Settings tab",

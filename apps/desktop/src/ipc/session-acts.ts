@@ -9,6 +9,7 @@ import {
   isIssueTrackerId,
   isProviderId,
   isRecord,
+  isSessionApplicationId,
   issueCommentText,
   isWireString,
   type NormalizedSession,
@@ -180,6 +181,40 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
     (identity) => sessionRegistry.get(identity)?.detail.link,
     "The system could not open that session.",
   );
+  registerAction<[SessionIdentity, string], SessionOpenResult>(channels.openSessionApplication, {
+    validate: (args) => {
+      const [rawIdentity, rawApplicationId] = args;
+      // SAFETY: IPC validate receives structured-clone args; these positions are a session identity and app id.
+      const identity = requireSessionIdentity(
+        unparsedWire(rawIdentity as WireBoundaryInput),
+        "Invalid session application open request",
+      );
+      // SAFETY: IPC validate receives structured-clone args; this position is the requested app id.
+      const applicationId = unparsedWire(rawApplicationId as WireBoundaryInput);
+      if (!isWireString(applicationId) || !isSessionApplicationId(applicationId)) {
+        throw new Error("Invalid session application open request");
+      }
+      return [identity, applicationId];
+    },
+    async act(identity, applicationId) {
+      const url = sessionRegistry
+        .get(identity)
+        ?.applications.find((application) => application.id === applicationId)?.link;
+      if (!url) return { status: SESSION_OPEN_RESULT_STATUS.UNSUPPORTED };
+      await openExternal(url);
+      if (isProviderId(identity.providerId)) {
+        recordProductEvent(PRODUCT_EVENT.SESSION_ACT_SEND, {
+          provider_id: identity.providerId,
+          session_act: PRODUCT_SESSION_ACT.SESSION_OPEN,
+        });
+      }
+      return { status: SESSION_OPEN_RESULT_STATUS.OPENED };
+    },
+    failure: () => ({
+      status: SESSION_OPEN_RESULT_STATUS.REJECTED,
+      reason: "The system could not open that session in the selected app.",
+    }),
+  });
   registerOpenAction(
     channels.openSessionChange,
     (identity) => sessionRegistry.get(identity)?.detail.change,

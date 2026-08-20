@@ -2,6 +2,8 @@ import path from "node:path";
 import {
   PROVIDER_ID,
   type ProviderSessionObservation,
+  SESSION_APPLICATION_ID,
+  SESSION_APPLICATION_SCOPE,
   SESSION_STATUS,
   type WireRecord,
 } from "@sidecar/core";
@@ -42,6 +44,13 @@ function supersetProviderId(agentId: string): string | undefined {
  */
 export function supersetWorkspaceLink(workspaceId: string): string {
   return `superset://v2-workspace/${workspaceId}`;
+}
+
+/** Superset's documented route to one terminal inside an observed workspace. */
+export function supersetTerminalLink(workspaceId: string, terminalId: string): string {
+  const link = new URL(supersetWorkspaceLink(workspaceId));
+  link.searchParams.set("terminalId", terminalId);
+  return link.toString();
 }
 
 const SUPERSET_WORKSPACE_QUERY = `
@@ -189,12 +198,25 @@ export class SupersetWorkspaceSnapshot {
       if (context.projectName) detail.repository = context.projectName;
       if (context.branch) detail.branch = context.branch;
       if (context.pullRequestUrl) detail.change = context.pullRequestUrl;
-      // A managed chat's address is its workspace's: Superset documents no
-      // terminal-scoped address, so chats sharing a workspace share it, and a
-      // session whose provider reported an address of its own keeps that one.
+      const applicationLink = supersetTerminalLink(context.workspaceId, context.terminalId);
       // The app that wrote the host state is the scheme's handler, so the
-      // address stands without the CLI login the acts below wait for.
-      if (!detail.link) detail.link = supersetWorkspaceLink(context.workspaceId);
+      // address stands without the CLI login the acts below wait for. A native
+      // provider address still wins as the row's primary press; the Superset
+      // association keeps its own exact terminal address independently.
+      if (!detail.link) detail.link = applicationLink;
+      const applications = observation.applications?.some(
+        (application) => application.id === SESSION_APPLICATION_ID.SUPERSET,
+      )
+        ? observation.applications
+        : [
+            ...(observation.applications ?? []),
+            {
+              id: SESSION_APPLICATION_ID.SUPERSET,
+              displayName: "Superset",
+              scope: SESSION_APPLICATION_SCOPE.WORKSPACE,
+              link: applicationLink,
+            },
+          ];
       const workspace = {
         providerWorkspaceId: context.workspaceId,
         name: context.workspaceName,
@@ -202,7 +224,7 @@ export class SupersetWorkspaceSnapshot {
         managerName: "Superset",
       };
       if (!actableInOrganization(context, activeOrganizationId)) {
-        return { ...observation, detail, workspace };
+        return { ...observation, detail, applications, workspace };
       }
       // Deleting the workspace is unrecoverable and takes every sibling
       // chat's terminal with it, so it is offered only on a row positively
@@ -229,6 +251,7 @@ export class SupersetWorkspaceSnapshot {
         return {
           ...observation,
           detail,
+          applications,
           workspace,
           canReceiveMessage: true,
           spawnableAgents: context.spawnableAgents,
@@ -242,6 +265,7 @@ export class SupersetWorkspaceSnapshot {
       return {
         ...observation,
         detail,
+        applications,
         workspace,
         canReceiveMessage: true,
         renameTarget: context.workspaceId,

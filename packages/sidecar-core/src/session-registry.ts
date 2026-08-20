@@ -6,6 +6,7 @@ import {
   normalizeSession,
   normalizeSessionIdentity,
   type ProviderSessionObservation,
+  type SessionApplication,
   type SessionControl,
   type SessionDetail,
   type SessionIdentity,
@@ -35,11 +36,13 @@ function copySession(session: NormalizedSession): NormalizedSession {
     ...session,
     provider: { ...session.provider },
     detail,
+    applications: session.applications.map((application) => ({ ...application })),
     controls: session.controls.map((control) => ({ ...control })),
     spawnableAgents: [...session.spawnableAgents],
     attention: { ...session.attention },
   };
   if (session.workspace) copied.workspace = { ...session.workspace };
+  if (session.agent) copied.agent = { ...session.agent };
   return copied;
 }
 
@@ -125,6 +128,13 @@ const sameProvider = exhaustiveSame<SessionProvider>({
   displayName: (first, second) => first.displayName === second.displayName,
 });
 
+const sameApplication = exhaustiveSame<SessionApplication>({
+  id: (first, second) => first.id === second.id,
+  displayName: (first, second) => first.displayName === second.displayName,
+  scope: (first, second) => first.scope === second.scope,
+  link: (first, second) => first.link === second.link,
+});
+
 const sameAttention = exhaustiveSame<AttentionDecision>({
   disposition: (first, second) => first.disposition === second.disposition,
   decidedAt: (first, second) => first.decidedAt === second.decidedAt,
@@ -143,6 +153,8 @@ const sameSession = exhaustiveSame<NormalizedSession>({
   providerId: (first, second) => first.providerId === second.providerId,
   providerSessionId: (first, second) => first.providerSessionId === second.providerSessionId,
   provider: (first, second) => sameProvider(first.provider, second.provider),
+  parentProviderSessionId: (first, second) =>
+    first.parentProviderSessionId === second.parentProviderSessionId,
   title: (first, second) => first.title === second.title,
   status: (first, second) => first.status === second.status,
   completionCause: (first, second) => first.completionCause === second.completionCause,
@@ -150,8 +162,11 @@ const sameSession = exhaustiveSame<NormalizedSession>({
   realtimeVoice: (first, second) => first.realtimeVoice === second.realtimeVoice,
   realtimeVoiceLive: (first, second) => first.realtimeVoiceLive === second.realtimeVoiceLive,
   location: (first, second) => first.location === second.location,
+  agent: (first, second) => sameOptional(first.agent, second.agent, sameProvider),
   recap: (first, second) => first.recap === second.recap,
   detail: (first, second) => sameDetail(first.detail, second.detail),
+  applications: (first, second) =>
+    sameItems(first.applications, second.applications, sameApplication),
   controls: (first, second) => sameItems(first.controls, second.controls, sameControl),
   canReceiveMessage: (first, second) => first.canReceiveMessage === second.canReceiveMessage,
   canRename: (first, second) => first.canRename === second.canRename,

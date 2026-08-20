@@ -11,6 +11,8 @@ import {
   PROVIDER_ID,
   type ProviderSessionObservation,
   recordFromJsonLine,
+  SESSION_APPLICATION_ID,
+  SESSION_APPLICATION_SCOPE,
   SESSION_COMPLETION_CAUSE,
   SESSION_STATUS,
   type SessionDetail,
@@ -82,8 +84,11 @@ const CODEX_THREAD_LINK_PREFIX = "codex://threads/";
 const CODEX_DELEGATION_TITLE =
   /<codex_delegation>\s*<source_thread_id>\s*([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\s*<\/source_thread_id>/i;
 
+const CODEX_THREAD_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const CODEX_THREAD_COLUMN = {
   ID: "id",
+  SOURCE: "source",
   CWD: "cwd",
   CREATED_AT: "created_at",
   UPDATED_AT: "updated_at",
@@ -96,6 +101,12 @@ const CODEX_THREAD_COLUMN = {
   MODEL: "model",
   REASONING_EFFORT: "reasoning_effort",
   ROLLOUT_PATH: "rollout_path",
+} as const;
+
+const CODEX_SUBAGENT_SOURCE_FIELD = {
+  SUBAGENT: "subagent",
+  THREAD_SPAWN: "thread_spawn",
+  PARENT_THREAD_ID: "parent_thread_id",
 } as const;
 
 /** Records Codex appends to the rollout file named by a thread's `rollout_path`. */
@@ -569,13 +580,21 @@ function isCodexRealtimeDelegationThread(row: CodexThreadRow): boolean {
 }
 
 /**
- * The source conversation a delegated chat was born from, wherever the marker
- * survives. The derived title is replaced once Codex names the chat, but the
- * row keeps the first user message for its whole life, so the link back to the
- * source outlives the rename; the title stands in for older rows whose column
- * carries nothing.
+ * The source conversation a delegated chat was born from. Current Codex rows
+ * carry an exact parent id in their structured thread source. Older delegated
+ * chats used the first-message marker instead: the row keeps that message for
+ * its whole life, so the link outlives a rename, while the title stands in for
+ * still older rows whose column carries nothing.
  */
 function delegationSourceFromRow(row: CodexThreadRow): string | undefined {
+  const source = recordFromJsonLine(textFromRow(row, CODEX_THREAD_COLUMN.SOURCE) ?? "");
+  const subagentValue = source?.[CODEX_SUBAGENT_SOURCE_FIELD.SUBAGENT];
+  const subagent = isRecord(subagentValue) ? subagentValue : undefined;
+  const threadSpawnValue = subagent?.[CODEX_SUBAGENT_SOURCE_FIELD.THREAD_SPAWN];
+  const threadSpawn = isRecord(threadSpawnValue) ? threadSpawnValue : undefined;
+  const parentThreadId = text(threadSpawn?.[CODEX_SUBAGENT_SOURCE_FIELD.PARENT_THREAD_ID]);
+  if (parentThreadId && CODEX_THREAD_ID.test(parentThreadId)) return parentThreadId;
+
   for (const column of [CODEX_THREAD_COLUMN.FIRST_USER_MESSAGE, CODEX_THREAD_COLUMN.TITLE]) {
     const sourceId = CODEX_DELEGATION_TITLE.exec(textFromRow(row, column) ?? "")?.[1];
     if (sourceId) return sourceId;
@@ -689,6 +708,15 @@ function detailFromRow(
   };
 }
 
+function chatGptApplication(link: string) {
+  return {
+    id: SESSION_APPLICATION_ID.CHATGPT,
+    displayName: "ChatGPT",
+    scope: SESSION_APPLICATION_SCOPE.SESSION,
+    link,
+  } as const;
+}
+
 function observationFromThreadRow(
   row: CodexThreadRow,
   rollout: ParsedCodexRollout | undefined,
@@ -725,14 +753,18 @@ function observationFromThreadRow(
     hookEvent.event === CODEX_HOOK_EVENT.SESSION_END
       ? SESSION_COMPLETION_CAUSE.SESSION_CLOSED
       : undefined;
+  const detail = detailFromRow(row, rollout);
+  const parentProviderSessionId = delegationSourceFromRow(row);
   const observation: ProviderSessionObservation = {
     providerSessionId,
+    ...(parentProviderSessionId ? { parentProviderSessionId } : undefined),
     title: titleFromRow(row, names),
     status,
     ...(completionCause ? { completionCause } : undefined),
     observedAt,
     ...(rollout?.lastAgentMessage ? { recap: rollout.lastAgentMessage } : undefined),
-    detail: detailFromRow(row, rollout),
+    detail,
+    ...(detail.link ? { applications: [chatGptApplication(detail.link)] } : undefined),
   };
   if (isCodexRealtimeDelegationThread(row)) observation.realtimeVoice = true;
   if (rollout?.realtimeVoiceLive === true) observation.realtimeVoiceLive = true;

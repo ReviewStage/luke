@@ -19,6 +19,7 @@ import type {
   RealtimeVoiceSpeed,
   Rectangle,
   ResolvedNotchGeometry,
+  SessionApplicationId,
   SessionIdentity,
   SessionNoticeAsk,
   TrackedIssue,
@@ -815,6 +816,15 @@ export interface AppBridge {
    */
   openSession(identity: SessionIdentity): Promise<SessionOpenResult>;
   /**
+   * Opens one exact app association attached to an observed session. The
+   * renderer names the session and the known app, never its address; the main
+   * process reads the latest normalized association back out of the roster.
+   */
+  openSessionApplication(
+    identity: SessionIdentity,
+    applicationId: SessionApplicationId,
+  ): Promise<SessionOpenResult>;
+  /**
    * Opens the pull request an observed session published, on the row's own
    * terms: the renderer names the session, never the address, and the main
    * process reads the change back out of its registry — an address that never
@@ -1071,6 +1081,7 @@ export const channels = {
   openProviderApiKeys: "app:open-provider-api-keys",
   resetSettings: "app:reset-settings",
   openSession: "app:open-session",
+  openSessionApplication: "app:open-session-application",
   openSessionChange: "app:open-session-change",
   readSessionTranscript: "app:read-session-transcript",
   sendSessionMessage: "app:send-session-message",

@@ -4,7 +4,13 @@ import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
-import { InMemorySessionRegistry, SESSION_COMPLETION_CAUSE, SESSION_STATUS } from "@sidecar/core";
+import {
+  InMemorySessionRegistry,
+  SESSION_APPLICATION_ID,
+  SESSION_APPLICATION_SCOPE,
+  SESSION_COMPLETION_CAUSE,
+  SESSION_STATUS,
+} from "@sidecar/core";
 import {
   CODEX_PROVIDER,
   CodexSessionAdapter,
@@ -31,6 +37,7 @@ interface TestThread {
   id: string;
   cwd: string;
   observedAt: number;
+  source?: string;
   recencyAt?: number;
   updatedAt?: number;
   archived?: number;
@@ -85,7 +92,7 @@ function writeThread(database: DatabaseSync, thread: TestThread): void {
       thread.rolloutPath ?? "",
       Math.floor(thread.observedAt / 1000),
       Math.floor((thread.updatedAt ?? thread.observedAt) / 1000),
-      TEST_CODEX_SOURCE.CLI,
+      thread.source ?? TEST_CODEX_SOURCE.CLI,
       TEST_CODEX_MODEL_PROVIDER.OPENAI_SSE,
       thread.cwd,
       thread.title ?? "",
@@ -194,6 +201,14 @@ test("observes a Codex thread under the name Codex gave it", async (t) => {
     model: "gpt-5.6-luna · medium",
     link: "codex://threads/codex-active",
   });
+  assert.deepEqual(observations[0]?.applications, [
+    {
+      id: SESSION_APPLICATION_ID.CHATGPT,
+      displayName: "ChatGPT",
+      scope: SESSION_APPLICATION_SCOPE.SESSION,
+      link: "codex://threads/codex-active",
+    },
+  ]);
 });
 
 test("falls back to the workspace for Codex delegation marker titles", async (t) => {
@@ -217,6 +232,37 @@ test("falls back to the workspace for Codex delegation marker titles", async (t)
   const observations = await adapter.observe();
 
   assert.equal(observations[0]?.title, "delegated-repository");
+  assert.equal(observations[0]?.parentProviderSessionId, "01a01c04-31e2-7be1-a478-0f321abcdef0");
+});
+
+test("observes the exact parent of a Codex thread-spawn sub-agent", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  const parentThreadId = "01a01c04-31e2-7be1-a478-0f321abcdef0";
+  await writeCodexState(codexHome, [
+    {
+      id: "codex-sub-agent",
+      cwd: "/Users/test/luke",
+      observedAt: TEST_TIME - 1_000,
+      title: "Inspect the Conductor relationship",
+      source: JSON.stringify({
+        subagent: {
+          thread_spawn: {
+            parent_thread_id: parentThreadId,
+            depth: 1,
+            agent_path: "/root/research",
+          },
+        },
+      }),
+    },
+  ]);
+
+  const [observation] = await new CodexSessionAdapter({
+    codexHome,
+    now: () => TEST_TIME,
+  }).observe();
+
+  assert.equal(observation?.parentProviderSessionId, parentThreadId);
+  assert.equal(observation?.title, "Inspect the Conductor relationship");
 });
 
 test("resolves a Codex delegation marker through the source chat title index", async (t) => {

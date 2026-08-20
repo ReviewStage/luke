@@ -5,6 +5,8 @@ import {
   InMemorySessionRegistry,
   maximumSessionRecapLength,
   type ProviderSessionObservation,
+  SESSION_APPLICATION_ID,
+  SESSION_APPLICATION_SCOPE,
   SESSION_LOCATION,
   SESSION_STATUS,
   type SessionLocation,
@@ -41,6 +43,7 @@ test("normalizes provider observations without conflating provider-local identit
     codex,
     observation("run:42", 100, {
       title: "  Implement the shared session core  ",
+      parentProviderSessionId: "  run:parent  ",
       recap: `  ${"a".repeat(maximumSessionRecapLength + 1)}  `,
       controls: [{ id: TEST_CONTROL_WITH_WHITESPACE, label: " Open workspace " }],
     }),
@@ -52,6 +55,7 @@ test("normalizes provider observations without conflating provider-local identit
     { providerId: codex.id, providerSessionId: "run:42" },
   );
   assert.equal(session.title, "Implement the shared session core");
+  assert.equal(session.parentProviderSessionId, "run:parent");
   assert.equal(session.recap?.length, maximumSessionRecapLength);
   assert.deepEqual(session.controls, [{ id: TEST_CONTROL.OPEN, label: "Open workspace" }]);
   assert.deepEqual(session.attention, {
@@ -96,6 +100,74 @@ test("a workspace grouping is bounded, and one without an id is dropped whole", 
     }),
   );
   assert.notEqual(registry.revision, before);
+});
+
+test("keeps several bounded app associations without changing the agent identity", () => {
+  const registry = new InMemorySessionRegistry();
+  const session = registry.upsert(
+    codex,
+    observation("run:applications", 100, {
+      applications: [
+        {
+          id: SESSION_APPLICATION_ID.SUPERSET,
+          displayName: " Superset ",
+          scope: SESSION_APPLICATION_SCOPE.WORKSPACE,
+          link: "file:///tmp/not-openable",
+        },
+        {
+          id: SESSION_APPLICATION_ID.CONDUCTOR,
+          displayName: "Conductor",
+          scope: SESSION_APPLICATION_SCOPE.SESSION,
+        },
+        {
+          id: SESSION_APPLICATION_ID.CHATGPT,
+          displayName: "ChatGPT",
+          scope: SESSION_APPLICATION_SCOPE.SESSION,
+          link: "codex://threads/run%3Aapplications",
+        },
+        {
+          id: SESSION_APPLICATION_ID.CONDUCTOR,
+          displayName: "Duplicate",
+          scope: SESSION_APPLICATION_SCOPE.SESSION,
+        },
+      ],
+    }),
+  );
+
+  assert.equal(session.providerId, codex.id);
+  assert.deepEqual(session.applications, [
+    {
+      id: SESSION_APPLICATION_ID.CHATGPT,
+      displayName: "ChatGPT",
+      scope: SESSION_APPLICATION_SCOPE.SESSION,
+      link: "codex://threads/run%3Aapplications",
+    },
+    {
+      id: SESSION_APPLICATION_ID.CONDUCTOR,
+      displayName: "Conductor",
+      scope: SESSION_APPLICATION_SCOPE.SESSION,
+    },
+    {
+      id: SESSION_APPLICATION_ID.SUPERSET,
+      displayName: "Superset",
+      scope: SESSION_APPLICATION_SCOPE.WORKSPACE,
+    },
+  ]);
+
+  const revision = registry.revision;
+  registry.upsert(
+    codex,
+    observation("run:applications", 100, {
+      applications: [
+        {
+          id: SESSION_APPLICATION_ID.CONDUCTOR,
+          displayName: "Conductor",
+          scope: SESSION_APPLICATION_SCOPE.SESSION,
+        },
+      ],
+    }),
+  );
+  assert.equal(registry.revision, revision + 1);
 });
 
 test("a session takes messages only when its adapter said so explicitly", () => {

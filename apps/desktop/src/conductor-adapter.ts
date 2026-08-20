@@ -5,6 +5,8 @@ import {
   OBSERVATION_WINDOW,
   type ProviderSessionObservation,
   type ProviderWorkspaceAgentRequest,
+  SESSION_APPLICATION_ID,
+  SESSION_APPLICATION_SCOPE,
   SESSION_CONTROL_KIND,
   SESSION_STATUS,
   type SessionControl,
@@ -27,6 +29,7 @@ import {
   textFromRecord,
   timestampFromRecord,
 } from "./cloud-session-adapter";
+import { conductorAgent } from "./conductor-session-applications";
 import { CREDENTIAL_PROVIDER_ID, CREDENTIAL_PROVIDERS } from "./shared/credential-providers";
 import { isListedWorkspaceAgentModel, workspaceAgentModels } from "./shared/workspace-agents";
 
@@ -856,7 +859,12 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
     // a failure they predate the thing the row now has to say.
     const recap =
       reported?.status === CONDUCTOR_SESSION_STATUS.IDLE ? transcript?.recap : undefined;
-    const model = agentAndModelLabel(transcript?.agentKind, session.model);
+    // The chat is the agent's conversation before it is Conductor's, so a
+    // mapped agent kind leads the row as the agent itself and the model rides
+    // plain. Only a kind this build cannot map keeps riding the model label,
+    // so the provider's own word is not lost.
+    const agent = conductorAgent(transcript?.agentKind);
+    const model = agent ? session.model : agentAndModelLabel(transcript?.agentKind, session.model);
     // The workspace's own words for why its chats are quiet, and its own
     // failure message when standing it up went wrong. A session's reported
     // error is about the turn the user is watching, so it always outranks the
@@ -891,11 +899,27 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
       observedAt,
       // The workspace this chat is one voice of. Its name falls back to the
       // repository so an unnamed workspace still groups under something a
-      // person can say out loud.
+      // person can say out loud. Conductor manages the workspace the way
+      // Superset manages its own, so the tray around several chats carries
+      // the Conductor mark once instead of each row repeating it.
       workspace: {
         providerWorkspaceId: session.workspace.id,
         name: session.workspace.name ?? session.workspace.repositoryLabel,
+        scopeId: CONDUCTOR_PROVIDER_ID,
+        managerName: CONDUCTOR_PROVIDER_NAME,
       },
+      // The Conductor mark rides as an app association like every other app
+      // holding a chat, carrying the same exact address the row opens with,
+      // so the one glyph means the same thing on a cloud row and a local one.
+      applications: [
+        {
+          id: SESSION_APPLICATION_ID.CONDUCTOR,
+          displayName: CONDUCTOR_PROVIDER_NAME,
+          scope: SESSION_APPLICATION_SCOPE.WORKSPACE,
+          ...(session.deepLink ? { link: session.deepLink } : undefined),
+        },
+      ],
+      ...(agent ? { agent } : undefined),
       // Conductor documents both halves of a send — queued while a session is
       // idle, steered into the turn while it works — so any open chat takes a
       // message. An errored one is documented for no writer.

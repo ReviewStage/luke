@@ -1,6 +1,12 @@
-import type { ProviderControlResult, ProviderMessageResult } from "@sidecar/core";
+import type {
+  ProviderControlResult,
+  ProviderMessageResult,
+  SessionApplicationId,
+} from "@sidecar/core";
 import {
+  isSessionApplicationId,
   PROVIDER_ACT_RESULT_STATUS,
+  SESSION_APPLICATION_SCOPE,
   SESSION_CONTROL_KIND,
   SESSION_LOCATION,
   SESSION_URGENCY,
@@ -23,6 +29,7 @@ import {
   type DisplaySession,
   observedAgoLabel,
   type SessionAction,
+  type SessionFilter,
   type SessionListRun,
   type SessionView,
   sessionListRuns,
@@ -60,6 +67,7 @@ import { SettingsPanel, type SettingsPanelProps } from "./settings-panel";
 import { SettingsSearchButton } from "./settings-search";
 import { SignInGate } from "./sign-in-gate";
 import { updateAvailable, updateRow } from "./update-row";
+import { useMeasuredHeight } from "./use-measured-height";
 
 /** Handed up rather than performed here: the row knows sessions, not IPC. */
 export interface SessionWriteHandlers {
@@ -411,6 +419,7 @@ function SessionRow({
   inWorkspaceTray = false,
   highlight,
   onOpen,
+  onOpenApplication,
   writes,
 }: {
   session: DisplaySession;
@@ -422,6 +431,7 @@ function SessionRow({
   /** The search's words, marked on the row's lines so it says why it matched. */
   highlight?: readonly string[] | undefined;
   onOpen: (session: DisplaySession) => void;
+  onOpenApplication: (session: DisplaySession, applicationId: SessionApplicationId) => void;
   writes: SessionWriteHandlers;
 }): React.JSX.Element {
   // Inside a tray, an action aimed at the whole workspace is the tray
@@ -456,6 +466,23 @@ function SessionRow({
   // chat's own generated name only earns a line once there is a sibling to
   // tell it from.
   const title = !inWorkspaceTray && session.workspace ? session.workspace.name : session.title;
+  const applications = session.applications.filter(
+    (application) =>
+      !inWorkspaceTray ||
+      application.scope === SESSION_APPLICATION_SCOPE.SESSION ||
+      // A workspace manager is already named once in the tray header, unless
+      // its exact per-chat route is an alternative to the row's preferred
+      // destination. In that case the mark stays on this row as the only
+      // honest way to offer both places without making a second session.
+      (application.openable && application.name !== session.openApplication),
+  );
+  const hasOpenableApplication = applications.some(
+    (application) => application.openable && isSessionApplicationId(application.id),
+  );
+  const openLabel = session.openApplication ?? session.provider;
+  // The mark is the agent having the conversation; the provider only stands
+  // in where a host did not say which agent runs the chat.
+  const markName = session.agent ?? session.provider;
   const content = (
     <>
       <span
@@ -464,17 +491,65 @@ function SessionRow({
             ? "row-mark row-mark-audio"
             : "row-mark"
         }
-        title={session.model ? `${session.provider} · ${session.model}` : session.provider}
+        title={session.model ? `${markName} · ${session.model}` : markName}
       >
-        <span className="visually-hidden">{session.provider}</span>
-        <ProviderMark providerId={session.providerId} />
+        <span className="visually-hidden">{markName}</span>
+        <ProviderMark providerId={session.agentId ?? session.providerId} />
         {session.location === SESSION_LOCATION.CLOUD ? <CloudBadge /> : null}
         {session.realtimeVoice ? <AudioBadge /> : null}
       </span>
       <span className="row-copy">
-        <strong>
-          <Highlighted text={title} tokens={highlight} />
-        </strong>
+        <span className="row-title-line">
+          <strong>
+            {session.openable && hasOpenableApplication ? (
+              <button
+                type="button"
+                className="row-title-open"
+                title={`Open in ${openLabel}`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onOpen(session);
+                }}
+              >
+                <Highlighted text={title} tokens={highlight} />
+              </button>
+            ) : (
+              <Highlighted text={title} tokens={highlight} />
+            )}
+          </strong>
+          {applications.length > 0 ? (
+            <span className="row-applications">
+              {applications.map((application) => {
+                const applicationId = application.id;
+                return application.openable && isSessionApplicationId(applicationId) ? (
+                  <button
+                    type="button"
+                    className="row-application row-application-button"
+                    title={`Open in ${application.name}`}
+                    aria-label={`Open in ${application.name}`}
+                    key={applicationId}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onOpenApplication(session, applicationId);
+                    }}
+                  >
+                    <ProviderMark providerId={applicationId} />
+                  </button>
+                ) : (
+                  <span
+                    className="row-application"
+                    role="img"
+                    aria-label={`Also in ${application.name}`}
+                    title={application.name}
+                    key={applicationId}
+                  >
+                    <ProviderMark providerId={applicationId} />
+                  </span>
+                );
+              })}
+            </span>
+          ) : null}
+        </span>
         <small className="row-doing">
           {session.urgency === SESSION_URGENCY.WORKING ? (
             <span className="row-spinner" aria-hidden="true" />
@@ -510,7 +585,7 @@ function SessionRow({
     </>
   );
 
-  if (!withActions) {
+  if (!withActions && !hasOpenableApplication) {
     if (!session.openable) return <article {...shared}>{content}</article>;
     return (
       <button
@@ -519,7 +594,7 @@ function SessionRow({
         // The row's own lines are its accessible name, which already reads as
         // the session; the title says what pressing it does, and names the agent
         // because that is the window you are about to be in.
-        title={`Open in ${session.provider}`}
+        title={`Open in ${openLabel}`}
         onClick={() => onOpen(session)}
       >
         {content}
@@ -527,22 +602,36 @@ function SessionRow({
     );
   }
 
+  if (!withActions) {
+    return (
+      <article
+        {...shared}
+        data-application-controls="true"
+        {...(session.openable
+          ? { "data-openable": "true", onClick: () => onOpen(session) }
+          : undefined)}
+      >
+        {content}
+      </article>
+    );
+  }
+
   return (
     // The row is the press target, controls and all: the gaps beside the
     // composer are still the session, and a press there must not be a press on
-    // nothing. The first line stays a real button — it is what the keyboard
-    // and a reader press, and its click bubbles here rather than opening twice
-    // — while every control below swallows its own click, so the only presses
-    // that open are the ones that meant the session itself.
+    // nothing. Ordinarily the first line is its keyboard button; when an app
+    // mark is independently pressable, the title becomes that button instead
+    // so interactive controls are siblings rather than invalidly nested.
     <article
       {...shared}
       data-actions="true"
+      {...(hasOpenableApplication ? { "data-application-controls": "true" } : undefined)}
       {...(session.openable
         ? { "data-openable": "true", onClick: () => onOpen(session) }
         : undefined)}
     >
-      {session.openable ? (
-        <button type="button" className="row-main" title={`Open in ${session.provider}`}>
+      {session.openable && !hasOpenableApplication ? (
+        <button type="button" className="row-main" title={`Open in ${openLabel}`}>
           {content}
         </button>
       ) : (
@@ -621,7 +710,17 @@ function SessionRun({
             <Highlighted text={run.workspace?.name ?? ""} tokens={highlight} />
           </span>
           <span className="workspace-tray-meta">
-            <WorkspaceGlyph />
+            {run.workspace?.scopeId && run.workspace.managerName ? (
+              <span
+                className="workspace-manager-mark"
+                title={`${run.workspace.managerName} workspace`}
+              >
+                <ProviderMark providerId={run.workspace.scopeId} />
+                <span className="visually-hidden">{run.workspace.managerName}</span>
+              </span>
+            ) : (
+              <WorkspaceGlyph />
+            )}
             {run.repository ? (
               <span>
                 <Highlighted text={run.repository} tokens={highlight} />
@@ -646,6 +745,8 @@ export interface PanelBodyProps {
   list: ArrangedSessions;
   view: SessionView;
   onViewChange: (view: SessionView) => void;
+  /** Carries a toggled filter selection; unlike a view change it leaves the sheet open. */
+  onFiltersChange: (filters: readonly SessionFilter[]) => void;
   /**
    * The instant the rows' ages are read against. Passed down rather than read
    * here, because only the app knows which clock is honest: the wall clock for
@@ -654,6 +755,8 @@ export interface PanelBodyProps {
   now: number;
   /** Sends the pressed session to its provider, wherever the provider keeps it. */
   onOpenSession: (session: DisplaySession) => void;
+  /** Opens one exact app association without exposing its address to the renderer. */
+  onOpenSessionApplication: (session: DisplaySession, applicationId: SessionApplicationId) => void;
   /** Carries a typed reply or an advertised action to the session's provider. */
   writes: SessionWriteHandlers;
   /** Carries a typed ask to Luke's own conversation, answering why it could not go. */
@@ -698,8 +801,10 @@ export function PanelBody({
   list,
   view,
   onViewChange,
+  onFiltersChange,
   now,
   onOpenSession,
+  onOpenSessionApplication,
   writes,
   ask,
   onAskEngaged,
@@ -719,6 +824,16 @@ export function PanelBody({
 }: PanelBodyProps): React.JSX.Element {
   const sessionListRef = useSessionReorderMotion();
   const rows = useRoster(list.sessions, sessionListRef);
+  // The sheet floats over the list, so its height never reaches the panel's
+  // measurement — and a list of one row measures shorter than the sheet over
+  // it, cropping the sheet at the surface's clipped edge. Measured here and
+  // reserved on the view below, so the surface grows to hold whichever of the
+  // two is taller.
+  const [optionsElement, optionsHeight] = useMeasuredHeight();
+  const optionsRoom =
+    optionsOpen && optionsHeight !== undefined
+      ? cssCustomProperties({ "--options-height": `${optionsHeight}px` })
+      : undefined;
   if (accountRequired && account.status !== ACCOUNT_STATUS.SIGNED_IN) {
     return (
       <div className="body">
@@ -770,9 +885,18 @@ export function PanelBody({
       {tab === PANEL_TAB.SETTINGS ? (
         <SettingsPanel {...settings} />
       ) : (
-        <SessionsPanel className="session-view">
+        <SessionsPanel
+          className="session-view"
+          {...(optionsRoom ? { style: optionsRoom } : undefined)}
+        >
           {offerOptions && optionsOpen ? (
-            <SessionOptions list={list} view={view} onViewChange={onViewChange} />
+            <SessionOptions
+              list={list}
+              view={view}
+              onViewChange={onViewChange}
+              onFiltersChange={onFiltersChange}
+              measure={optionsElement}
+            />
           ) : null}
           {searchOpen ? (
             <SessionSearch
@@ -827,6 +951,7 @@ export function PanelBody({
                           inWorkspaceTray={tray}
                           highlight={highlight}
                           onOpen={onOpenSession}
+                          onOpenApplication={onOpenSessionApplication}
                           writes={writes}
                         />
                       ) : null;

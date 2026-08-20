@@ -6,6 +6,8 @@ import {
   normalizeSession,
   PROVIDER_ID,
   PROVIDER_ID_LIST,
+  SESSION_APPLICATION_ID,
+  SESSION_APPLICATION_SCOPE,
   SESSION_CONTROL_KIND,
   SESSION_LOCATION,
   SESSION_STATUS,
@@ -20,14 +22,16 @@ import {
   matchRanges,
   observedAgoLabel,
   SESSION_FILTER,
+  SESSION_FILTER_AXIS,
   SESSION_SORT,
-  sessionFilterFromSpoken,
+  sessionFiltersFromSpoken,
   sessionListRuns,
   sessionRunKeys,
   sessionTally,
   tallyCaption,
   tallySummary,
   tallyValue,
+  toggledSessionFilters,
   workspaceTrayActions,
 } from "../src/renderer/session-model";
 import type { AppBootstrap } from "../src/shared/contracts";
@@ -115,11 +119,29 @@ test("a row is a control only where its provider gave an address", () => {
       status: SESSION_STATUS.WORKING,
       observedAt: 1_000,
       detail: { link: "codex://threads/codex-addressed" },
+      applications: [
+        {
+          id: SESSION_APPLICATION_ID.CHATGPT,
+          displayName: "ChatGPT",
+          scope: SESSION_APPLICATION_SCOPE.SESSION,
+          link: "codex://threads/codex-addressed",
+        },
+      ],
     }),
     liveSession(CLAUDE_PROVIDER, "claude-unaddressed", SESSION_STATUS.WORKING),
   ]);
 
-  assert.equal(live.find((session) => session.id === "codex-addressed")?.openable, true);
+  const addressed = live.find((session) => session.id === "codex-addressed");
+  assert.equal(addressed?.openable, true);
+  assert.equal(addressed?.openApplication, "ChatGPT");
+  assert.deepEqual(addressed?.applications, [
+    {
+      id: SESSION_APPLICATION_ID.CHATGPT,
+      name: "ChatGPT",
+      scope: SESSION_APPLICATION_SCOPE.SESSION,
+      openable: true,
+    },
+  ]);
   assert.equal(live.find((session) => session.id === "claude-unaddressed")?.openable, false);
 
   // A fixture stands for sessions that are not on the machine drawing them, so
@@ -267,17 +289,17 @@ test("the tally counts per state and per provider", () => {
       providers: undefined,
     },
   );
-  // Providers follow the order their most urgent session takes, so Conductor's
-  // working chat seats it ahead of Cursor's older one and Devin's suspended
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  // session — and its two chats count as two sessions under one mark. Five is
-  // one more than the wings hold, so the fixture also proves the remainder is
-  // counted rather than dropped.
+  // Providers follow the order their most urgent session takes, and a hosted
+  // chat counts under the agent having the conversation: Conductor's working
+  // Claude chat counts beside the local Claude Code session under one mark,
+  // while its agent-less chat stays under Conductor's own. Five is one more
+  // than the wings hold, so the fixture also proves the remainder is counted
+  // rather than dropped.
   assert.deepEqual(tally.providers, [
-    { providerId: PROVIDER_ID.CLAUDE_CODE, provider: "Claude Code", total: 1, attention: 1 },
+    { providerId: PROVIDER_ID.CLAUDE_CODE, provider: "Claude Code", total: 2, attention: 1 },
     { providerId: PROVIDER_ID.CODEX, provider: "Codex", total: 1, attention: 0 },
-    { providerId: PROVIDER_ID.CONDUCTOR, provider: "Conductor", total: 2, attention: 0 },
     { providerId: PROVIDER_ID.CURSOR, provider: "Cursor", total: 1, attention: 0 },
+    { providerId: PROVIDER_ID.CONDUCTOR, provider: "Conductor", total: 1, attention: 0 },
     { providerId: PROVIDER_ID.DEVIN, provider: "Devin", total: 1, attention: 0 },
   ]);
 });
@@ -359,28 +381,53 @@ test("the caption is the badge state's own words, never a second number", () => 
   assert.equal(tallySummary(sessionTally([])), "No sessions tracked");
 });
 
-test("the filters offered run from everything to one agent, counted", () => {
+test("the filters offered are grouped by axis, coarse to fine, counted", () => {
   const list = arrangeSessions(FIXTURE_SESSIONS, DEFAULT_SESSION_VIEW);
 
-  assert.deepEqual(list.options, [
-    { filter: SESSION_FILTER.ALL, label: "All", count: 6 },
-    { filter: SESSION_FILTER.LOCAL, label: "Local", count: 2 },
-    { filter: SESSION_FILTER.CLOUD, label: "Cloud", count: 4 },
+  assert.deepEqual(list.groups, [
     {
-      filter: PROVIDER_ID.CLAUDE_CODE,
-      label: "Claude Code",
-      count: 1,
-      providerId: PROVIDER_ID.CLAUDE_CODE,
+      axis: SESSION_FILTER_AXIS.LOCATION,
+      label: "Location",
+      options: [
+        { filter: SESSION_FILTER.LOCAL, label: "Local", count: 2 },
+        { filter: SESSION_FILTER.CLOUD, label: "Cloud", count: 4 },
+      ],
     },
-    { filter: PROVIDER_ID.CODEX, label: "Codex", count: 1, providerId: PROVIDER_ID.CODEX },
     {
-      filter: PROVIDER_ID.CONDUCTOR,
-      label: "Conductor",
-      count: 2,
-      providerId: PROVIDER_ID.CONDUCTOR,
+      axis: SESSION_FILTER_AXIS.APP,
+      label: "App",
+      options: [
+        {
+          filter: SESSION_APPLICATION_ID.CHATGPT,
+          label: "ChatGPT",
+          count: 1,
+          markId: SESSION_APPLICATION_ID.CHATGPT,
+        },
+        {
+          filter: SESSION_APPLICATION_ID.CONDUCTOR,
+          label: "Conductor",
+          count: 3,
+          markId: SESSION_APPLICATION_ID.CONDUCTOR,
+        },
+      ],
     },
-    { filter: PROVIDER_ID.CURSOR, label: "Cursor", count: 1, providerId: PROVIDER_ID.CURSOR },
-    { filter: PROVIDER_ID.DEVIN, label: "Devin", count: 1, providerId: PROVIDER_ID.DEVIN },
+    {
+      axis: SESSION_FILTER_AXIS.AGENT,
+      label: "Agent",
+      options: [
+        {
+          filter: PROVIDER_ID.CLAUDE_CODE,
+          label: "Claude Code",
+          // The local Claude session and the Conductor cloud chat whose agent
+          // is Claude Code: the agent chip counts hosted chats too.
+          count: 2,
+          markId: PROVIDER_ID.CLAUDE_CODE,
+        },
+        { filter: PROVIDER_ID.CODEX, label: "Codex", count: 1, markId: PROVIDER_ID.CODEX },
+        { filter: PROVIDER_ID.CURSOR, label: "Cursor", count: 1, markId: PROVIDER_ID.CURSOR },
+        { filter: PROVIDER_ID.DEVIN, label: "Devin", count: 1, markId: PROVIDER_ID.DEVIN },
+      ],
+    },
   ]);
 });
 
@@ -397,18 +444,21 @@ test("the voice filter narrows to realtime voice chats and has a spoken name", (
   ]);
 
   const list = arrangeSessions(sessions, DEFAULT_SESSION_VIEW);
-  assert.deepEqual(list.options, [
-    { filter: SESSION_FILTER.ALL, label: "All", count: 2 },
-    { filter: SESSION_FILTER.VOICE, label: "Voice", count: 1 },
+  assert.deepEqual(list.groups, [
+    {
+      axis: SESSION_FILTER_AXIS.KIND,
+      label: "Kind",
+      options: [{ filter: SESSION_FILTER.VOICE, label: "Voice", count: 1 }],
+    },
   ]);
   assert.deepEqual(
     arrangeSessions(sessions, {
       ...DEFAULT_SESSION_VIEW,
-      filter: SESSION_FILTER.VOICE,
+      filters: [SESSION_FILTER.VOICE],
     }).sessions.map((session) => session.id),
     ["codex-voice"],
   );
-  assert.equal(sessionFilterFromSpoken(SESSION_FILTER.VOICE), SESSION_FILTER.VOICE);
+  assert.deepEqual(sessionFiltersFromSpoken(SESSION_FILTER.VOICE), [SESSION_FILTER.VOICE]);
 });
 
 // The fixture above covers the agents it happens to contain. Every agent the
@@ -431,15 +481,20 @@ test("every agent this build knows can be narrowed down to", () => {
       ),
     ),
   );
-  const offered = arrangeSessions(sessions, DEFAULT_SESSION_VIEW).options;
+  const offered = arrangeSessions(sessions, DEFAULT_SESSION_VIEW)
+    .groups.flatMap((group) => group.options)
+    .filter((option) => option.markId !== undefined)
+    .map((option) => option.filter);
 
-  assert.deepEqual(
-    offered.filter((option) => option.providerId !== undefined).map((option) => option.filter),
-    [...PROVIDER_ID_LIST],
-  );
+  // Conductor's chip sits on the app axis rather than among the agents, so
+  // the offer is compared as a set: every agent is reachable, wherever seated.
+  assert.deepEqual([...offered].sort(), [...PROVIDER_ID_LIST].sort());
   for (const providerId of PROVIDER_ID_LIST) {
-    const narrowed = arrangeSessions(sessions, { ...DEFAULT_SESSION_VIEW, filter: providerId });
-    assert.equal(narrowed.filter, providerId);
+    const narrowed = arrangeSessions(sessions, {
+      ...DEFAULT_SESSION_VIEW,
+      filters: [providerId],
+    });
+    assert.deepEqual(narrowed.filters, [providerId]);
     assert.deepEqual(
       narrowed.sessions.map((session) => session.id),
       [providerId],
@@ -455,44 +510,96 @@ test("a level with one answer is not offered as a choice", () => {
     liveSession(CLAUDE_PROVIDER, "claude-1", SESSION_STATUS.WORKING),
   ]);
   assert.deepEqual(
-    arrangeSessions(local, DEFAULT_SESSION_VIEW).options.map((option) => option.filter),
-    [SESSION_FILTER.ALL, PROVIDER_ID.CLAUDE_CODE, PROVIDER_ID.CODEX],
+    arrangeSessions(local, DEFAULT_SESSION_VIEW).groups.map((group) => ({
+      axis: group.axis,
+      filters: group.options.map((option) => option.filter),
+    })),
+    [
+      {
+        axis: SESSION_FILTER_AXIS.AGENT,
+        filters: [PROVIDER_ID.CLAUDE_CODE, PROVIDER_ID.CODEX],
+      },
+    ],
   );
 
-  // One agent, several sessions: nothing below All is a question at all.
+  // One agent, several sessions: nothing is a question at all.
   const alone = displaySessions(bootstrap(false), [
     liveSession(CODEX_PROVIDER, "codex-1", SESSION_STATUS.WORKING),
     liveSession(CODEX_PROVIDER, "codex-2", SESSION_STATUS.COMPLETE),
   ]);
-  assert.deepEqual(
-    arrangeSessions(alone, DEFAULT_SESSION_VIEW).options.map((option) => option.filter),
-    [SESSION_FILTER.ALL],
-  );
+  assert.deepEqual(arrangeSessions(alone, DEFAULT_SESSION_VIEW).groups, []);
 
-  assert.deepEqual(arrangeSessions([], DEFAULT_SESSION_VIEW).options, []);
+  assert.deepEqual(arrangeSessions([], DEFAULT_SESSION_VIEW).groups, []);
 });
 
 test("a filter narrows the list without changing what is tracked", () => {
   const cloud = arrangeSessions(FIXTURE_SESSIONS, {
     ...DEFAULT_SESSION_VIEW,
-    filter: SESSION_FILTER.CLOUD,
+    filters: [SESSION_FILTER.CLOUD],
   });
   const agent = arrangeSessions(FIXTURE_SESSIONS, {
     ...DEFAULT_SESSION_VIEW,
-    filter: PROVIDER_ID.CLAUDE_CODE,
+    filters: [PROVIDER_ID.CLAUDE_CODE],
   });
 
   assert.deepEqual(
     cloud.sessions.map((session) => session.id),
     ["conductor-chat-package", "conductor-chat-tidy", "cursor-agent", "devin-session"],
   );
+  // The agent chip reaches the hosted chat too: the Conductor cloud chat
+  // whose agent is Claude Code answers the Claude Code narrowing.
   assert.deepEqual(
     agent.sessions.map((session) => session.id),
-    ["claude-review"],
+    ["claude-review", "conductor-chat-package"],
   );
-  assert.equal(cloud.filter, SESSION_FILTER.CLOUD);
+  assert.deepEqual(cloud.filters, [SESSION_FILTER.CLOUD]);
   assert.equal(cloud.total, 6);
   assert.equal(agent.total, 6);
+});
+
+// The report's own example: within one axis the chips are alternatives, and
+// across axes each is a further narrowing.
+test("filters on one axis widen each other and across axes narrow", () => {
+  // Local and Cloud together is either place: the whole list.
+  const either = arrangeSessions(FIXTURE_SESSIONS, {
+    ...DEFAULT_SESSION_VIEW,
+    filters: [SESSION_FILTER.LOCAL, SESSION_FILTER.CLOUD],
+  });
+  assert.equal(either.sessions.length, 6);
+
+  // Cloud beside Conductor is Conductor's cloud chats alone.
+  const both = arrangeSessions(FIXTURE_SESSIONS, {
+    ...DEFAULT_SESSION_VIEW,
+    filters: [SESSION_FILTER.CLOUD, SESSION_APPLICATION_ID.CONDUCTOR],
+  });
+  assert.deepEqual(
+    both.sessions.map((session) => session.id),
+    ["conductor-chat-package", "conductor-chat-tidy"],
+  );
+  assert.deepEqual(both.filters, [SESSION_FILTER.CLOUD, SESSION_APPLICATION_ID.CONDUCTOR]);
+});
+
+// Which surviving part of an emptied combination to keep would be a choice,
+// and the list correcting itself must not choose — so the selection falls
+// back whole.
+test("a combination no session answers falls back whole to everything", () => {
+  const emptied = arrangeSessions(FIXTURE_SESSIONS, {
+    ...DEFAULT_SESSION_VIEW,
+    filters: [SESSION_FILTER.LOCAL, SESSION_APPLICATION_ID.CONDUCTOR, PROVIDER_ID.CURSOR],
+  });
+
+  assert.deepEqual(emptied.filters, []);
+  assert.equal(emptied.sessions.length, 6);
+});
+
+test("a chip press toggles one value in and out of the selection", () => {
+  const chosen = toggledSessionFilters([], SESSION_FILTER.CLOUD);
+  assert.deepEqual(chosen, [SESSION_FILTER.CLOUD]);
+  assert.deepEqual(toggledSessionFilters(chosen, PROVIDER_ID.CODEX), [
+    SESSION_FILTER.CLOUD,
+    PROVIDER_ID.CODEX,
+  ]);
+  assert.deepEqual(toggledSessionFilters([SESSION_FILTER.CLOUD], SESSION_FILTER.CLOUD), []);
 });
 
 test("a filter whose last session has left falls back to showing everything", () => {
@@ -502,8 +609,8 @@ test("a filter whose last session has left falls back to showing everything", ()
   ]);
 
   for (const filter of [SESSION_FILTER.CLOUD, PROVIDER_ID.CURSOR]) {
-    const list = arrangeSessions(noCloud, { ...DEFAULT_SESSION_VIEW, filter });
-    assert.equal(list.filter, SESSION_FILTER.ALL);
+    const list = arrangeSessions(noCloud, { ...DEFAULT_SESSION_VIEW, filters: [filter] });
+    assert.deepEqual(list.filters, []);
     assert.equal(list.sessions.length, 2);
   }
 });
@@ -520,16 +627,13 @@ test("a filter that still matches survives even when no chip offers it", () => {
   ]);
   const narrowed = arrangeSessions(codexOnly, {
     ...DEFAULT_SESSION_VIEW,
-    filter: PROVIDER_ID.CODEX,
+    filters: [PROVIDER_ID.CODEX],
   });
 
-  assert.equal(narrowed.filter, PROVIDER_ID.CODEX);
+  assert.deepEqual(narrowed.filters, [PROVIDER_ID.CODEX]);
   assert.equal(narrowed.sessions.length, 2);
   // No second agent yet, so no chips are offered — the filter outlives them.
-  assert.deepEqual(
-    narrowed.options.map((option) => option.filter),
-    [SESSION_FILTER.ALL],
-  );
+  assert.deepEqual(narrowed.groups, []);
 
   const withClaude = displaySessions(bootstrap(false), [
     liveSession(CODEX_PROVIDER, "codex-1", SESSION_STATUS.WORKING),
@@ -538,21 +642,21 @@ test("a filter that still matches survives even when no chip offers it", () => {
   ]);
   const still = arrangeSessions(withClaude, {
     ...DEFAULT_SESSION_VIEW,
-    filter: PROVIDER_ID.CODEX,
+    filters: [PROVIDER_ID.CODEX],
   });
 
-  assert.equal(still.filter, PROVIDER_ID.CODEX);
+  assert.deepEqual(still.filters, [PROVIDER_ID.CODEX]);
   assert.deepEqual(
     still.sessions.map((session) => session.providerId),
     [PROVIDER_ID.CODEX, PROVIDER_ID.CODEX],
   );
 });
 
-// The panel stores the filter this returns rather than only drawing it, so a
-// filter that emptied is dropped instead of lying dormant behind an All that
-// only looks chosen. That write is safe exactly while arranging the result
-// again changes nothing.
-test("the filter the list settles on is one it would settle on again", () => {
+// The panel stores the selection this returns rather than only drawing it, so
+// a selection that emptied is dropped instead of lying dormant behind a list
+// that only looks unnarrowed. That write is safe exactly while arranging the
+// result again changes nothing.
+test("the selection the list settles on is one it would settle on again", () => {
   const oneAgent = displaySessions(bootstrap(false), [
     liveSession(CODEX_PROVIDER, "codex-1", SESSION_STATUS.WORKING),
   ]);
@@ -560,12 +664,12 @@ test("the filter the list settles on is one it would settle on again", () => {
   for (const sessions of [oneAgent, []]) {
     const first = arrangeSessions(sessions, {
       ...DEFAULT_SESSION_VIEW,
-      filter: PROVIDER_ID.CURSOR,
+      filters: [PROVIDER_ID.CURSOR],
     });
-    const second = arrangeSessions(sessions, { ...DEFAULT_SESSION_VIEW, filter: first.filter });
+    const second = arrangeSessions(sessions, { ...DEFAULT_SESSION_VIEW, filters: first.filters });
 
-    assert.equal(first.filter, SESSION_FILTER.ALL);
-    assert.equal(second.filter, first.filter);
+    assert.deepEqual(first.filters, []);
+    assert.deepEqual(second.filters, first.filters);
   }
 });
 
@@ -580,8 +684,7 @@ test("a session from an unknown agent is counted but never filed under a guess",
   ]);
   const list = arrangeSessions(unknown, DEFAULT_SESSION_VIEW);
 
-  assert.equal(list.options.length, 1);
-  assert.deepEqual(list.options[0], { filter: SESSION_FILTER.ALL, label: "All", count: 2 });
+  assert.deepEqual(list.groups, []);
   assert.equal(list.sessions.length, 2);
 });
 
@@ -622,7 +725,7 @@ test("the two orderings answer different questions about the same sessions", () 
 test("filtering leaves the chosen ordering in force", () => {
   const recentCloud = arrangeSessions(FIXTURE_SESSIONS, {
     ...DEFAULT_SESSION_VIEW,
-    filter: SESSION_FILTER.CLOUD,
+    filters: [SESSION_FILTER.CLOUD],
     sort: SESSION_SORT.RECENCY,
   });
 
@@ -691,6 +794,7 @@ test("an orchestrator workspace groups sessions from different providers", () =>
   const workspace = {
     providerWorkspaceId: "workspace-superset",
     scopeId: "superset",
+    managerName: "Superset",
     name: "power-vacation",
   };
   const rows = displaySessions(bootstrap(false), [
@@ -723,6 +827,7 @@ test("sessions Superset manages earn a chip and can be narrowed to", () => {
   const workspace = {
     providerWorkspaceId: "workspace-superset",
     scopeId: "superset",
+    managerName: "Superset",
     name: "power-vacation",
   };
   const rows = displaySessions(bootstrap(false), [
@@ -736,29 +841,41 @@ test("sessions Superset manages earn a chip and can be narrowed to", () => {
     liveSession(CODEX_PROVIDER, "codex-loose", SESSION_STATUS.WORKING, 1_000),
   ]);
   const list = arrangeSessions(rows, DEFAULT_SESSION_VIEW);
+  assert.equal(rows[0]?.workspace?.managerName, "Superset");
 
-  assert.deepEqual(list.options, [
-    { filter: SESSION_FILTER.ALL, label: "All", count: 2 },
+  assert.deepEqual(list.groups, [
     {
-      filter: SESSION_FILTER.SUPERSET,
-      label: "Superset",
-      count: 1,
-      providerId: SESSION_FILTER.SUPERSET,
+      axis: SESSION_FILTER_AXIS.APP,
+      label: "App",
+      options: [
+        {
+          filter: SESSION_FILTER.SUPERSET,
+          label: "Superset",
+          count: 1,
+          markId: SESSION_FILTER.SUPERSET,
+        },
+      ],
     },
     {
-      filter: PROVIDER_ID.CLAUDE_CODE,
-      label: "Claude Code",
-      count: 1,
-      providerId: PROVIDER_ID.CLAUDE_CODE,
+      axis: SESSION_FILTER_AXIS.AGENT,
+      label: "Agent",
+      options: [
+        {
+          filter: PROVIDER_ID.CLAUDE_CODE,
+          label: "Claude Code",
+          count: 1,
+          markId: PROVIDER_ID.CLAUDE_CODE,
+        },
+        { filter: PROVIDER_ID.CODEX, label: "Codex", count: 1, markId: PROVIDER_ID.CODEX },
+      ],
     },
-    { filter: PROVIDER_ID.CODEX, label: "Codex", count: 1, providerId: PROVIDER_ID.CODEX },
   ]);
 
   const narrowed = arrangeSessions(rows, {
     ...DEFAULT_SESSION_VIEW,
-    filter: SESSION_FILTER.SUPERSET,
+    filters: [SESSION_FILTER.SUPERSET],
   });
-  assert.equal(narrowed.filter, SESSION_FILTER.SUPERSET);
+  assert.deepEqual(narrowed.filters, [SESSION_FILTER.SUPERSET]);
   assert.deepEqual(
     narrowed.sessions.map((session) => session.id),
     ["claude-managed"],
@@ -766,7 +883,67 @@ test("sessions Superset manages earn a chip and can be narrowed to", () => {
   assert.equal(narrowed.total, 2);
 
   // The spoken vocabulary is the chips' own, so the same word narrows by voice.
-  assert.equal(sessionFilterFromSpoken("superset"), SESSION_FILTER.SUPERSET);
+  assert.deepEqual(sessionFiltersFromSpoken("superset"), [SESSION_FILTER.SUPERSET]);
+});
+
+test("an app filter matches annotations as well as a namesake provider", () => {
+  const rows = displaySessions(bootstrap(false), [
+    normalizeSession(CODEX_PROVIDER, {
+      providerSessionId: "codex-conductor",
+      title: "A long Codex title that still keeps its application marks",
+      status: SESSION_STATUS.WORKING,
+      observedAt: 3_000,
+      applications: [
+        {
+          id: SESSION_APPLICATION_ID.CHATGPT,
+          displayName: "ChatGPT",
+          scope: SESSION_APPLICATION_SCOPE.SESSION,
+          link: "codex://threads/codex-conductor",
+        },
+        {
+          id: SESSION_APPLICATION_ID.CONDUCTOR,
+          displayName: "Conductor",
+          scope: SESSION_APPLICATION_SCOPE.SESSION,
+        },
+      ],
+      detail: { link: "codex://threads/codex-conductor" },
+    }),
+    liveSession(CONDUCTOR_PROVIDER, "conductor-native", SESSION_STATUS.WORKING, 2_000),
+    liveSession(CLAUDE_PROVIDER, "claude-loose", SESSION_STATUS.WORKING, 1_000),
+  ]);
+  const list = arrangeSessions(rows, DEFAULT_SESSION_VIEW);
+
+  assert.deepEqual(
+    list.groups
+      .flatMap((group) => group.options)
+      .find((option) => option.filter === SESSION_APPLICATION_ID.CONDUCTOR),
+    {
+      filter: SESSION_APPLICATION_ID.CONDUCTOR,
+      label: "Conductor",
+      count: 2,
+      markId: SESSION_APPLICATION_ID.CONDUCTOR,
+    },
+  );
+  assert.deepEqual(
+    arrangeSessions(rows, {
+      ...DEFAULT_SESSION_VIEW,
+      filters: [SESSION_APPLICATION_ID.CONDUCTOR],
+    }).sessions.map((session) => session.id),
+    ["codex-conductor", "conductor-native"],
+  );
+  // The report's rule for the app axis: an agent chip beside Conductor's is a
+  // further narrowing, so Codex + Conductor is Codex chats associated with
+  // Conductor — never Conductor's own chats as well.
+  assert.deepEqual(
+    arrangeSessions(rows, {
+      ...DEFAULT_SESSION_VIEW,
+      filters: [PROVIDER_ID.CODEX, SESSION_APPLICATION_ID.CONDUCTOR],
+    }).sessions.map((session) => session.id),
+    ["codex-conductor"],
+  );
+  assert.deepEqual(sessionFiltersFromSpoken(SESSION_APPLICATION_ID.CHATGPT), [
+    SESSION_APPLICATION_ID.CHATGPT,
+  ]);
 });
 
 // A Superset chip counting every session narrows nothing, like a lone
@@ -786,8 +963,10 @@ test("a Superset chip counting every session is not offered", () => {
   ]);
 
   assert.deepEqual(
-    arrangeSessions(rows, DEFAULT_SESSION_VIEW).options.map((option) => option.filter),
-    [SESSION_FILTER.ALL, PROVIDER_ID.CLAUDE_CODE, PROVIDER_ID.CODEX],
+    arrangeSessions(rows, DEFAULT_SESSION_VIEW)
+      .groups.flatMap((group) => group.options)
+      .map((option) => option.filter),
+    [PROVIDER_ID.CLAUDE_CODE, PROVIDER_ID.CODEX],
   );
 });
 
@@ -1044,7 +1223,7 @@ test("a query reads within the filter and counts what the filter hides", () => {
 
   const narrowed = arrangeSessions(rows, {
     ...DEFAULT_SESSION_VIEW,
-    filter: PROVIDER_ID.CLAUDE_CODE,
+    filters: [PROVIDER_ID.CLAUDE_CODE],
     query: "alpha",
   });
   assert.deepEqual(
@@ -1056,7 +1235,7 @@ test("a query reads within the filter and counts what the filter hides", () => {
 
   const emptied = arrangeSessions(rows, {
     ...DEFAULT_SESSION_VIEW,
-    filter: PROVIDER_ID.CLAUDE_CODE,
+    filters: [PROVIDER_ID.CLAUDE_CODE],
     query: "cleanup",
   });
   assert.deepEqual(emptied.sessions, []);
@@ -1064,7 +1243,8 @@ test("a query reads within the filter and counts what the filter hides", () => {
 });
 
 test("searching leaves the chosen ordering and the workspace seating in force", () => {
-  // The agent's name finds both Conductor chats, in the order the sort chose.
+  // The same word finds the native Conductor chats and a Codex chat carrying
+  // Conductor's app association, all in the order the sort chose.
   const recent = arrangeSessions(FIXTURE_SESSIONS, {
     ...DEFAULT_SESSION_VIEW,
     sort: SESSION_SORT.RECENCY,
@@ -1072,17 +1252,20 @@ test("searching leaves the chosen ordering and the workspace seating in force", 
   });
   assert.deepEqual(
     recent.sessions.map((session) => session.id),
-    ["conductor-chat-tidy", "conductor-chat-package"],
+    ["conductor-chat-tidy", "conductor-chat-package", "codex-bootstrap"],
   );
 
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  // Seated as one tray run, exactly as they would be unsearched.
+  // The native chats stay one tray run; the annotated Codex chat stays loose.
   assert.deepEqual(
     sessionListRuns(recent.sessions).map((run) => ({
       workspaceId: run.workspace?.id,
       indexes: run.indexes,
     })),
-    [{ workspaceId: "conductor-lisbon", indexes: [0, 1] }],
+    [
+      { workspaceId: "conductor-lisbon", indexes: [0, 1] },
+      { workspaceId: undefined, indexes: [2] },
+    ],
   );
 });
 
@@ -1146,5 +1329,51 @@ test("an unsplit workspace and a lone fading chat both keep the workspace key", 
   assert.deepEqual(
     sessionRunKeys([{ indexes: [0] }], [{ item: { id: "codex-1" }, leaving: false }]),
     ["codex-1"],
+  );
+});
+
+// A hosted chat is the agent's conversation before it is the host's: the row's
+// mark, the agent chip, and the search all reach it by the agent, while the
+// provider identity stays what the host observed it as.
+test("a hosted chat carries its agent for the mark, the chips, and the search", () => {
+  const rows = displaySessions(bootstrap(false), [
+    normalizeSession(
+      { id: PROVIDER_ID.CONDUCTOR, displayName: "Conductor" },
+      {
+        providerSessionId: "conductor-claude",
+        title: "amber-shoal",
+        status: SESSION_STATUS.WORKING,
+        observedAt: 2_000,
+        location: SESSION_LOCATION.CLOUD,
+        agent: { id: PROVIDER_ID.CLAUDE_CODE, displayName: "Claude Code" },
+      },
+    ),
+    liveSession(CODEX_PROVIDER, "codex-loose", SESSION_STATUS.WORKING, 1_000),
+  ]);
+
+  assert.equal(rows[0]?.agentId, PROVIDER_ID.CLAUDE_CODE);
+  assert.equal(rows[0]?.agent, "Claude Code");
+  assert.equal(rows[0]?.providerId, PROVIDER_ID.CONDUCTOR);
+
+  const narrowed = arrangeSessions(rows, {
+    ...DEFAULT_SESSION_VIEW,
+    filters: [PROVIDER_ID.CLAUDE_CODE],
+  });
+  assert.deepEqual(
+    narrowed.sessions.map((session) => session.id),
+    ["conductor-claude"],
+  );
+
+  const found = arrangeSessions(rows, { ...DEFAULT_SESSION_VIEW, query: "claude" });
+  assert.deepEqual(
+    found.sessions.map((session) => session.id),
+    ["conductor-claude"],
+  );
+
+  // The wing counts the chat under the agent having the conversation.
+  const tally = sessionTally(rows);
+  assert.deepEqual(
+    tally.providers.map((provider) => provider.providerId),
+    [PROVIDER_ID.CLAUDE_CODE, PROVIDER_ID.CODEX],
   );
 });

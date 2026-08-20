@@ -86,6 +86,7 @@ const bridge: AppBridge = {
     ipcRenderer.send(channels.setVoiceExchange, active);
   },
   openSession: invokeMethod<"openSession">(channels.openSession),
+  openSessionApplication: invokeMethod<"openSessionApplication">(channels.openSessionApplication),
   openSessionChange: invokeMethod<"openSessionChange">(channels.openSessionChange),
   readSessionTranscript: invokeMethod<"readSessionTranscript">(channels.readSessionTranscript),
   sendSessionMessage: invokeMethod<"sendSessionMessage">(channels.sendSessionMessage),

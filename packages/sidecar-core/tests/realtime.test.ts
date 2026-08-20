@@ -691,6 +691,22 @@ test("the roster identifies sessions managed by Superset", () => {
   assert.match(sessionContextText([chat]), /managed by Superset/);
 });
 
+test("the roster names a hosted chat by its agent, with the host beside it", () => {
+  const hosted = normalizeSession(
+    { id: "conductor", displayName: "Conductor" },
+    {
+      providerSessionId: "chat-1",
+      title: "amber-shoal",
+      status: SESSION_STATUS.WORKING,
+      observedAt: DECIDED_AT,
+      agent: { id: "claude-code", displayName: "Claude Code" },
+    },
+  );
+
+  assert.match(sessionContextText([hosted]), /- Claude Code in Conductor — amber-shoal/);
+  assert.match(sessionReferenceContextText(hosted), /- Claude Code in Conductor — amber-shoal/);
+});
+
 test("an empty roster says so rather than implying Luke sees nothing at all", () => {
   assert.match(sessionContextText([]), /No coding-agent sessions/);
 });

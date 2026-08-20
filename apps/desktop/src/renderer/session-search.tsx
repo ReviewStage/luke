@@ -1,11 +1,6 @@
 import { useRef } from "react";
 import { FOCUS_FRAME_LIMIT } from "./credential-entry";
-import {
-  type ArrangedSessions,
-  matchRanges,
-  SESSION_FILTER,
-  type SessionView,
-} from "./session-model";
+import { type ArrangedSessions, matchRanges, type SessionView } from "./session-model";
 import { CloseIcon, SearchIcon } from "./settings-icons";
 
 /**
@@ -224,7 +219,7 @@ export function Highlighted({
   return <>{parts}</>;
 }
 
-/** The widened view an emptied search's button asks for. */
+/** The widened view an emptied search's button asks for: no filters at all. */
 export function widenedView(view: SessionView): SessionView {
-  return { ...view, filter: SESSION_FILTER.ALL };
+  return { ...view, filters: [] };
 }
