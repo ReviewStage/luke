@@ -19,6 +19,7 @@ export {
   type WireValue,
   wholeNumber,
 } from "./json.js";
+export { parseReleaseVersion } from "./release-version.js";
 export {
   unparsedWire,
   type WireBoundaryInput,

@@ -7,8 +7,13 @@ import {
   SESSION_STATUS,
   type SessionStatus,
 } from "@sidecar/session";
-import { parseReleaseVersion } from "@sidecar/update";
-import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
+import {
+  isRecord,
+  isWireNumber,
+  isWireString,
+  parseReleaseVersion,
+  type UnparsedWireValue,
+} from "@sidecar/wire";
 
 /**
  * What the desktop may count about its own use, and the one reader both sides

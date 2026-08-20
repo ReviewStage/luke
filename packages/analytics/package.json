@@ -16,7 +16,6 @@
     "@sidecar/hosted": "workspace:*",
     "@sidecar/issues": "workspace:*",
     "@sidecar/session": "workspace:*",
-    "@sidecar/update": "workspace:*",
     "@sidecar/wire": "workspace:*"
   },
   "devDependencies": {

@@ -55,7 +55,6 @@
     "@sidecar/superset": "workspace:*",
     "@sidecar/surface": "workspace:*",
     "@sidecar/trackers": "workspace:*",
-    "@sidecar/update": "workspace:*",
     "@sidecar/voice": "workspace:*",
     "@sidecar/wire": "workspace:*",
     "@types/node": "26.2.0",

@@ -91,9 +91,6 @@ importers:
       '@sidecar/trackers':
         specifier: workspace:*
         version: link:../../packages/trackers
-      '@sidecar/update':
-        specifier: workspace:*
-        version: link:../../packages/update
       '@sidecar/voice':
         specifier: workspace:*
         version: link:../../packages/voice
@@ -252,9 +249,6 @@ importers:
       '@sidecar/session':
         specifier: workspace:*
         version: link:../session
-      '@sidecar/update':
-        specifier: workspace:*
-        version: link:../update
       '@sidecar/wire':
         specifier: workspace:*
         version: link:../wire
@@ -607,22 +601,6 @@ importers:
       '@sidecar/oauth':
         specifier: workspace:*
         version: link:../oauth
-      '@sidecar/wire':
-        specifier: workspace:*
-        version: link:../wire
-    devDependencies:
-      '@types/node':
-        specifier: 26.2.0
-        version: 26.2.0
-      tsx:
-        specifier: 4.23.12
-        version: 4.23.12
-      typescript:
-        specifier: 7.0.2
-        version: 7.0.2
-
-  packages/update:
-    dependencies:
       '@sidecar/wire':
         specifier: workspace:*
         version: link:../wire
