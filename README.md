@@ -67,7 +67,9 @@ Every row leads with its agent — the provider the session belongs to:
 Luke also marks the apps holding a session on your Mac — ChatGPT, cmux,
 Conductor, Orca, and Superset — grouping rows under their workspaces and
 opening the exact window an app documents. Superset-managed rows can
-additionally take messages and workspace acts through Superset's own CLI.
+additionally take messages and workspace acts through Superset's own CLI,
+and a Superset worktree with no agent chat stands as its own idle row, so a
+stale workspace can be found, renamed, given an agent, or deleted.
 
 See [docs/PROVIDERS.md](docs/PROVIDERS.md) for what Luke can read and write
 per agent and app, and [PRIVACY.md](PRIVACY.md) for the data's point of view.
