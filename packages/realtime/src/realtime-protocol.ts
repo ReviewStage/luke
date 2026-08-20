@@ -104,6 +104,14 @@ export const REALTIME_SERVER_EVENT = {
    */
   OUTPUT_AUDIO_BUFFER_STOPPED: "output_audio_buffer.stopped",
   /**
+   * Luke is audible again — the server streaming into a buffer that had
+   * drained. WebRTC only, like its stop, and what makes a mid-reply stop
+   * readable at all: a reply with more than one thing to say can drain the
+   * buffer between them, and only this event says that drain was a pause
+   * rather than the ending.
+   */
+  OUTPUT_AUDIO_BUFFER_STARTED: "output_audio_buffer.started",
+  /**
    * The words of the reply, arriving as they are generated. They run ahead of
    * the audio — the model produces text faster than it speaks it — so they
    * caption the reply in progress rather than subtitling word by word.
@@ -493,6 +501,7 @@ export type ParsedRealtimeServerEvent =
       transcript: string;
     }
   | { type: typeof REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED; responseId?: string }
+  | { type: typeof REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STARTED; responseId?: string }
   | {
       type: typeof REALTIME_SERVER_EVENT.RESPONSE_DONE;
       responseId?: string;
@@ -633,6 +642,16 @@ export function parseRealtimeServerEvent(
       const responseId = optionalString(event.response_id);
       const parsed: ParsedRealtimeServerEvent = {
         type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED,
+      };
+      if (responseId) parsed.responseId = responseId;
+      return parsed;
+    }
+    case REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STARTED: {
+      // The resume names its response the same way, so a stale start cannot
+      // un-remember a drain that was really the current reply's ending.
+      const responseId = optionalString(event.response_id);
+      const parsed: ParsedRealtimeServerEvent = {
+        type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STARTED,
       };
       if (responseId) parsed.responseId = responseId;
       return parsed;

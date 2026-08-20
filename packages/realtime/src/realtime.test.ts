@@ -1207,6 +1207,17 @@ test("inbound events the conversation acts on are parsed, and nothing else is", 
     }),
     { type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED, responseId: "resp-1" },
   );
+  assert.deepEqual(
+    parseRealtimeServerEvent({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STARTED }),
+    { type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STARTED },
+  );
+  assert.deepEqual(
+    parseRealtimeServerEvent({
+      type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STARTED,
+      response_id: "resp-1",
+    }),
+    { type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STARTED, responseId: "resp-1" },
+  );
   assert.deepEqual(parseRealtimeServerEvent({ type: REALTIME_SERVER_EVENT.RESPONSE_DONE }), {
     type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
     calls: [],

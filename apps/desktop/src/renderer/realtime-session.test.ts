@@ -1087,6 +1087,53 @@ test("audio draining before response.done does not free the turn early", async (
   assert.deepEqual(reportedErrors(context), []);
 });
 
+test("audio resuming after a mid-reply drain keeps the turn for the second half", async () => {
+  const context = harness();
+  await context.session.connect();
+  await holdTurn(context);
+  context.session.endTurn(true);
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-1" } });
+
+  // A reply with two things to say can drain the buffer between them. The
+  // stop is remembered as a deferred ending, and the audio starting again is
+  // what says it was a pause instead.
+  context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED });
+  context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STARTED });
+
+  // Generation concludes while the second half is still audible. A stale
+  // drain here ended the turn under it — the face and the duck released
+  // while Luke was still speaking.
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_DONE, response: { id: "resp-1" } });
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+
+  // The second half's own drain is the ending that lands.
+  context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED });
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+  assert.deepEqual(reportedErrors(context), []);
+});
+
+test("a drain's backstop restarts when the audio resumes", async (t) => {
+  const context = harness();
+  await context.session.connect();
+  await holdTurn(context);
+  context.session.endTurn(true);
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-1" } });
+
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED });
+  t.mock.timers.tick(REALTIME_SETTLE_TIMEOUT_MS - 1_000);
+
+  // The resume is when Luke was last heard, so the backstop measures from
+  // it: the pause's nearly spent clock must not cut the second half short.
+  context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STARTED });
+  t.mock.timers.tick(1_000);
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+
+  // A done that never comes still meets the restarted backstop.
+  t.mock.timers.tick(REALTIME_SETTLE_TIMEOUT_MS);
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+});
+
 test("an announcement queued mid-reply waits out the server's own ending", async () => {
   // The reported shape of the fault, whole: Luke is reading one announcement
   // out on his own call when another agent finishes. The second announcement
