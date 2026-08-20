@@ -38,25 +38,17 @@ export const maximumVoiceContextSessions = 25;
 function sessionCapabilityText(session: NormalizedSession): string {
   const capabilities = [
     `provider_id=${session.providerId} provider_session_id=${session.providerSessionId}`,
-    session.canReceiveMessage ? "takes messages" : "takes no messages",
-    // Openability is the link's presence, never the link: an address has no
-    // business in a conversation when the identity is what a tool call names.
-    session.detail.link ? "can be opened" : "cannot be opened",
-    // Readability is stated up front so Luke offers a transcript read only
-    // where one can answer, instead of learning the boundary by being refused.
-    session.location === SESSION_LOCATION.LOCAL
-      ? "local, transcript readable on ask"
-      : "cloud, no transcript to read",
-    // Like the link, the pull request travels as a fact and never an address:
-    // the row is where it opens from.
-    ...(session.detail.change ? ["has a pull request"] : []),
+    `messages=${session.canReceiveMessage}`,
+    `open=${Boolean(session.detail.link)}`,
+    `transcript=${session.location === SESSION_LOCATION.LOCAL}`,
+    ...(session.detail.change ? ["pull_request=true"] : []),
     ...(session.controls.length > 0
       ? [
-          `controls: ${session.controls.map((control) => `${control.label} (${control.id})`).join(", ")}`,
+          `controls=${session.controls.map((control) => `${control.label} (${control.id})`).join(", ")}`,
         ]
       : []),
     ...(session.spawnableAgents.length > 0
-      ? [`new agents: ${session.spawnableAgents.join(", ")}`]
+      ? [`agents=${session.spawnableAgents.join(", ")}`]
       : []),
     // Each capability travels as a fact and never a target: the identity is
     // what a rename ask names, and what it lands on stays resolved from
@@ -306,14 +298,13 @@ export function sessionContextEvents(
  */
 export function sessionReferenceContextText(session: NormalizedSession): string {
   return [
-    "The session under discussion — the one most recently announced to the developer or acted on at their ask:",
+    "Session under discussion:",
     [
       `- ${session.provider.displayName}`,
       session.title,
       ...(session.workspace?.name ? [`a chat in workspace ${session.workspace.name}`] : []),
       `[provider_id=${session.providerId} provider_session_id=${session.providerSessionId}]`,
     ].join(" — "),
-    'A bare "that chat" or "that session" means the session this conversation named most recently — and when it has named none, this one.',
   ].join("\n");
 }
 
@@ -404,9 +395,9 @@ export const maximumVoiceContextIssues = 15;
 function issueCapabilityText(issue: TrackedIssue): string {
   const capabilities = [
     `tracker_id=${issue.trackerId} issue_id=${issue.identifier}`,
-    issue.canComment ? "takes comments" : "takes no comments",
+    `comments=${issue.canComment}`,
     ...(issue.transitions.length > 0
-      ? [`states: ${issue.transitions.map((transition) => transition.name).join(", ")}`]
+      ? [`states=${issue.transitions.map((transition) => transition.name).join(", ")}`]
       : []),
   ];
   return capabilities.join("; ");
@@ -493,7 +484,7 @@ export const maximumVoiceContextWorkspaceProjects = 10;
  */
 export function workspaceProjectContextText(
   projects: readonly ObservedWorkspaceProject[],
-  defaultProviderId?: string,
+  _defaultProviderId?: string,
   defaultProjectIds?: Readonly<Partial<Record<string, string>>>,
 ): string {
   if (projects.length === 0) return "No provider currently offers workspace creation.";
@@ -504,8 +495,6 @@ export function workspaceProjectContextText(
       (project) =>
         `- ${project.providerName} — ${project.repository}${project.targetName ? ` on ${project.targetName}` : ""} [provider_id=${project.providerId} project_id=${project.providerProjectId}${project.providerTargetId ? ` target_id=${project.providerTargetId}` : ""}]; ${TASK_SUPPORT_TEXT[project.taskSupport]}${project.spawnableAgents?.length ? `; agents: ${project.spawnableAgents.join(", ")}${project.defaultAgent ? `; default agent: ${project.defaultAgent}` : ""}` : ""}`,
     ),
-    ...workspaceDefaultProviderLines(listed, defaultProviderId),
-    ...workspaceDefaultProjectLines(listed, defaultProjectIds),
   ].join("\n");
 }
 
@@ -528,69 +517,6 @@ function listedWorkspaceProjects(
     }
   }
   return listed;
-}
-
-/**
- * How the default provider reads under the projects list. A default that is
- * chosen but not currently offering earns no line at all: it is not a place
- * an ask can go, and the choice already made must not be presented as still
- * open — only a developer who has never chosen is told the first creation
- * chooses for them.
- */
-function workspaceDefaultProviderLines(
-  projects: readonly ObservedWorkspaceProject[],
-  defaultProviderId: string | undefined,
-): readonly string[] {
-  const chosen = defaultProviderId
-    ? projects.find((project) => project.providerId === defaultProviderId)
-    : undefined;
-  if (chosen) {
-    return [
-      `The developer's default provider for new workspaces is ${chosen.providerName}: an ask that names no provider creates there.`,
-    ];
-  }
-  if (defaultProviderId) return [];
-  const providers = new Set(projects.map((project) => project.providerId));
-  return [
-    providers.size > 1
-      ? "No default provider is chosen yet: when an ask names no provider, ask which listed provider it should be. The first workspace created saves its provider as the developer's default."
-      : "No default provider is chosen yet: the first workspace created saves its provider as the developer's default.",
-  ];
-}
-
-/**
- * How each provider's default project reads under the projects list, on the
- * provider default's own terms. A default that is chosen but no longer
- * offered earns no line at all; a provider with exactly one project earns
- * none either while nothing is chosen, because there is nothing to steer —
- * only a provider actually offering a choice is said to be decided by the
- * first creation there.
- */
-function workspaceDefaultProjectLines(
-  projects: readonly ObservedWorkspaceProject[],
-  defaultProjectIds: Readonly<Partial<Record<string, string>>> | undefined,
-): readonly string[] {
-  const lines: string[] = [];
-  const said = new Set<string>();
-  for (const project of projects) {
-    if (said.has(project.providerId)) continue;
-    said.add(project.providerId);
-    const offered = projects.filter((candidate) => candidate.providerId === project.providerId);
-    const chosenId = defaultProjectIds?.[project.providerId];
-    const chosen = chosenId
-      ? offered.find((candidate) => workspaceProjectSelectionId(candidate) === chosenId)
-      : undefined;
-    if (chosen) {
-      lines.push(
-        `The developer's default ${chosen.providerName} project is ${chosen.repository}${chosen.targetName ? ` on ${chosen.targetName}` : ""}: an ask that names no project creates there.`,
-      );
-    } else if (chosenId === undefined && offered.length > 1) {
-      lines.push(
-        `No default ${project.providerName} project is chosen yet: when an ask names no project there, ask which listed project it should be. The first workspace created in ${project.providerName} saves its project as the default.`,
-      );
-    }
-  }
-  return lines;
 }
 
 /**

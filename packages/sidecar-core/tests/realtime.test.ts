@@ -594,10 +594,10 @@ test("session context carries only bounded, redacted fields", () => {
   // what the session can be asked to do rides beside it, so Luke never offers
   // what a provider has not promised.
   assert.match(text, /provider_session_id=session-a/);
-  assert.match(text, /takes no messages/);
+  assert.match(text, /messages=false/);
   // A session that reported no address is offered nowhere to open — and the
   // roster says which sessions can be, never where they are.
-  assert.match(text, /cannot be opened/);
+  assert.match(text, /open=false/);
   assert.doesNotMatch(text, /https:/);
 
   const linked = normalizeSession(
@@ -611,7 +611,7 @@ test("session context carries only bounded, redacted fields", () => {
     },
   );
   const linkedText = sessionContextText([linked]);
-  assert.match(linkedText, /can be opened/);
+  assert.match(linkedText, /open=true/);
   assert.doesNotMatch(linkedText, /https:/);
 });
 
@@ -886,7 +886,7 @@ test("the roster says which sessions keep a readable transcript and a pull reque
       observedAt: DECIDED_AT,
     },
   );
-  assert.match(sessionContextText([local]), /local, transcript readable on ask/);
+  assert.match(sessionContextText([local]), /transcript=true/);
 
   const cloud = normalizeSession(
     { id: "devin", displayName: "Devin" },
@@ -900,12 +900,12 @@ test("the roster says which sessions keep a readable transcript and a pull reque
     },
   );
   const cloudText = sessionContextText([cloud]);
-  assert.match(cloudText, /cloud, no transcript to read/);
+  assert.match(cloudText, /transcript=false/);
   // The pull request travels as a fact, like openability: the row is where it
   // opens from, and no address belongs in a conversation.
-  assert.match(cloudText, /has a pull request/);
+  assert.match(cloudText, /pull_request=true/);
   assert.doesNotMatch(cloudText, /github\.com/);
-  assert.doesNotMatch(sessionContextText([local]), /has a pull request/);
+  assert.doesNotMatch(sessionContextText([local]), /pull_request=true/);
 });
 
 test("a standing ask rides its own session's roster line, in the developer's words", () => {
@@ -1341,107 +1341,6 @@ test("the projects context lists each project with the identity a call names", (
   );
 });
 
-test("the projects context says where a nameless creation ask goes", () => {
-  const cursorProject: ObservedWorkspaceProject = {
-    providerId: "cursor",
-    providerName: "Cursor",
-    providerProjectId: "https://github.com/acme/luke",
-    repository: "acme/luke",
-    taskSupport: WORKSPACE_TASK_SUPPORT.REQUIRED,
-  };
-
-  // A chosen default that is offering is named as where a nameless ask goes.
-  const chosen = workspaceProjectContextText([OFFERED_PROJECT, cursorProject], "conductor");
-  assert.match(chosen, /default provider for new workspaces is Conductor/);
-  assert.doesNotMatch(chosen, /No default provider is chosen/);
-
-  // Nothing chosen and more than one provider listed: ask first, and say that
-  // the first creation decides — that sentence is how the developer learns
-  // their answer will be remembered.
-  const open = workspaceProjectContextText([OFFERED_PROJECT, cursorProject]);
-  assert.match(open, /No default provider is chosen yet/);
-  assert.match(open, /ask which listed provider/);
-  assert.match(open, /first workspace created saves its provider/);
-
-  // One provider alone leaves nothing to ask about, but the save is still
-  // said, or the remembered choice would be a surprise.
-  const single = workspaceProjectContextText([OFFERED_PROJECT]);
-  assert.match(single, /No default provider is chosen yet/);
-  assert.doesNotMatch(single, /ask which/);
-  assert.match(single, /first workspace created saves its provider/);
-
-  // A default whose provider is not offering earns no line at all: it is not
-  // somewhere an ask can go, and a choice already made is not re-offered to
-  // the first creation.
-  const away = workspaceProjectContextText([cursorProject], "conductor");
-  assert.doesNotMatch(away, /default provider/);
-
-  // The default rides the same context event the list does.
-  const [event] = workspaceProjectContextEvents(
-    [OFFERED_PROJECT],
-    "luke_ctx_workspace-projects_2",
-    "conductor",
-  );
-  assert.match(conversationItemText(event), /default provider for new workspaces is Conductor/);
-});
-
-test("the projects context says which project a nameless ask lands in", () => {
-  const secondProject: ObservedWorkspaceProject = {
-    providerId: "conductor",
-    providerName: "Conductor",
-    providerProjectId: "proj-2",
-    repository: "acme/other",
-    taskSupport: WORKSPACE_TASK_SUPPORT.OPTIONAL,
-  };
-
-  // A chosen default that is still offered is named by its repository, as
-  // where a nameless ask goes.
-  const chosen = workspaceProjectContextText([OFFERED_PROJECT, secondProject], undefined, {
-    conductor: "proj-1",
-  });
-  assert.match(chosen, /default Conductor project is luke/);
-  assert.doesNotMatch(chosen, /No default Conductor project/);
-
-  // Nothing chosen and more than one project listed: ask first, and say that
-  // the first creation there decides — that sentence is how the developer
-  // learns their answer will be remembered.
-  const open = workspaceProjectContextText([OFFERED_PROJECT, secondProject]);
-  assert.match(open, /No default Conductor project is chosen yet/);
-  assert.match(open, /ask which listed project/);
-  assert.match(open, /first workspace created in Conductor saves its project/);
-
-  // One project alone leaves nothing to steer, so nothing is said of it.
-  const single = workspaceProjectContextText([OFFERED_PROJECT]);
-  assert.doesNotMatch(single, /default Conductor project/);
-
-  // A default the provider no longer offers earns no line at all: it is not
-  // somewhere an ask can go, and the choice already made is not re-offered to
-  // the first creation.
-  const away = workspaceProjectContextText([OFFERED_PROJECT, secondProject], undefined, {
-    conductor: "proj-gone",
-  });
-  assert.doesNotMatch(away, /default Conductor project/);
-  assert.doesNotMatch(away, /No default Conductor project/);
-
-  // The default rides the same context event the list does.
-  const [event] = workspaceProjectContextEvents(
-    [OFFERED_PROJECT, secondProject],
-    "luke_ctx_workspace-projects_3",
-    undefined,
-    { conductor: "proj-2" },
-  );
-  assert.match(conversationItemText(event), /default Conductor project is acme\/other/);
-});
-
-test("a host-scoped default names only its exact target", () => {
-  const local = { ...OFFERED_PROJECT, providerTargetId: "local", targetName: "This Mac" };
-  const remote = { ...OFFERED_PROJECT, providerTargetId: "studio", targetName: "Studio" };
-  const chosen = workspaceProjectContextText([local, remote], undefined, {
-    conductor: JSON.stringify(["proj-1", "studio"]),
-  });
-  assert.match(chosen, /default Conductor project is luke on Studio/);
-});
-
 test("a chosen default project survives the context cap", () => {
   // One more project than the context will list, alphabetical like the
   // normalizer hands them over, with the developer's chosen default sorted
@@ -1458,13 +1357,12 @@ test("a chosen default project survives the context cap", () => {
   const capless = workspaceProjectContextText(crowd);
   assert.doesNotMatch(capless, new RegExp(last.providerProjectId));
 
-  // The chosen default rides past the cut, listed and steered both — a
-  // default the sentence names but the list omits would be unaskable.
+  // The chosen default rides past the cut so it remains available to the
+  // validator even though the context no longer narrates defaulting behavior.
   const kept = workspaceProjectContextText(crowd, undefined, {
     conductor: last.providerProjectId,
   });
   assert.match(kept, new RegExp(`project_id=${last.providerProjectId}`));
-  assert.match(kept, new RegExp(`default Conductor project is ${last.repository}`));
 });
 
 /**
@@ -1673,7 +1571,7 @@ test("another agent can only be added as a kind the session's own entry lists", 
   const identity = '"provider_id":"conductor","provider_session_id":"chat-1"';
 
   // The roster says what can be started here, so the ask can name it exactly.
-  assert.match(sessionContextText(roster), /new agents: claude, codex, cursor/);
+  assert.match(sessionContextText(roster), /agents=claude, codex, cursor/);
 
   assert.deepEqual(
     sessionToolAction(
@@ -1860,8 +1758,8 @@ test("issue context carries the roster and what each issue will take", () => {
 
   assert.match(context, /Linear — LUKE-123 — Add Codex support — In Progress/);
   assert.match(context, /tracker_id=linear issue_id=LUKE-123/);
-  assert.match(context, /states: Done, In Review/);
-  assert.match(context, /takes comments/);
+  assert.match(context, /states=Done, In Review/);
+  assert.match(context, /comments=true/);
   // A connected tracker with nothing listed is an answer, not an absence.
   assert.match(issueContextText([]), /lists no issues/i);
 });
