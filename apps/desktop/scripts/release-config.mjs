@@ -22,7 +22,10 @@ export const NOTARY_SUBMISSION_STATUS = {
 };
 export const NOTARY_POLL_INTERVAL_MS = 30_000;
 export const NOTARY_POLL_TIMEOUT_MS = 20 * 60_000;
-export const RELEASE_VOLUME_NAME = "Luke";
+// The mounted volume is deliberately not named bare "Luke": it lands on the
+// desktop and in the sidebar right beside the app it installs, and a volume
+// carrying the app's own name is indistinguishable from the app itself.
+export const RELEASE_VOLUME_NAME = "Luke Installer";
 export const DMG_MOUNT_POINT = `/Volumes/${RELEASE_VOLUME_NAME}`;
 export const DMG_STAGING_ENTRIES = [
   { name: "Luke.app", kind: "application" },

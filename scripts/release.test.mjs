@@ -27,6 +27,7 @@ import {
   parseHdiutilAttachPlist,
   RELEASE_LATEST_DMG_FILE_NAME,
   RELEASE_UPDATE_FEED_FILE_NAME,
+  RELEASE_VOLUME_NAME,
   releaseArtifactDirectory,
   releaseDmgFileName,
   releaseSignatureMatchesIdentity,
@@ -134,7 +135,7 @@ test("release DMG layout and hdiutil arguments are deterministic", () => {
     [
       "create",
       "-volname",
-      "Luke",
+      "Luke Installer",
       "-srcfolder",
       "/tmp/staging",
       "-fs",
@@ -157,12 +158,12 @@ test("release DMG mount, conversion, and background arguments are deterministic"
     "-noautoopen",
     "-nobrowse",
     "-mountpoint",
-    "/Volumes/Luke",
+    "/Volumes/Luke Installer",
     "-plist",
   ]);
   // The layout writer does not need Finder, so keep Finder from creating a competing .DS_Store.
   assert.equal(attachArguments.includes("-nobrowse"), true);
-  assert.equal(DMG_MOUNT_POINT, "/Volumes/Luke");
+  assert.equal(DMG_MOUNT_POINT, "/Volumes/Luke Installer");
   assert.deepEqual(hdiutilDetachArguments("/Volumes/Luke"), ["detach", "/Volumes/Luke"]);
   assert.deepEqual(hdiutilDetachArguments("/Volumes/Luke", { force: true }), [
     "detach",
@@ -295,17 +296,22 @@ test("release DMG store layout is branded and bounded", () => {
   assert.ok(DMG_WINDOW.BACKGROUND.DIRECTORY.startsWith("."));
 });
 
-test("the DMG volume wears the app's own icon", () => {
+test("the DMG volume wears the app's own icon under the installer's name", () => {
   // Finder reads a volume icon from this exact hidden name at the root, and
   // only once the root's custom-icon bit is set — so staging the file without
   // setting the bit, or the reverse, is a generic disk icon with no other sign.
   assert.equal(DMG_VOLUME_ICON_FILE_NAME, ".VolumeIcon.icns");
-  assert.deepEqual(volumeCustomIconArguments("/Volumes/Luke"), [
+  assert.deepEqual(volumeCustomIconArguments("/Volumes/Luke Installer"), [
     "SetFile",
     "-a",
     "C",
-    "/Volumes/Luke",
+    "/Volumes/Luke Installer",
   ]);
+
+  // The name is what tells the installer apart from the installed app: the
+  // volume wears Luke's own icon, so a volume also named bare "Luke" would be
+  // indistinguishable from the Luke.app beside it.
+  assert.equal(RELEASE_VOLUME_NAME, "Luke Installer");
 
   const releaseScript = fs.readFileSync(
     path.join(repoRoot, "apps", "desktop", "scripts", "release.mjs"),

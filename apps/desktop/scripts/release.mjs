@@ -149,7 +149,9 @@ try {
   }
 
   // The volume wears the packaged app's own icon — read from the bundle it is
-  // shipping rather than from .build, so the two can never disagree.
+  // shipping rather than from .build, so the two can never disagree. The
+  // volume's name, not its icon, is what tells the installer apart from the
+  // installed app: Finder shows "Luke Installer" under this artwork.
   const bundleIconFile = execFileSync(
     "plutil",
     [
