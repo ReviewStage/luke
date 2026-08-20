@@ -20,12 +20,15 @@ function render(state: SupersetSignInSnapshot): string {
   );
 }
 
-test("the browser stage asks for an explicit paste and can reopen or cancel", () => {
+test("the browser stage speaks the key popups' own language", () => {
   const markup = render({ stage: SUPERSET_SIGN_IN_STAGE.BROWSER_CODE, organizations: [] });
-  assert.match(markup, /Finish signing in with Superset/);
-  assert.match(markup, /press ⌘V here/);
-  assert.match(markup, /Open the page again/);
+  assert.match(markup, /key-slot-label[^>]*>Sign-in code/);
+  assert.match(markup, /key-slot-foot/);
+  assert.match(markup, /type="password"/);
+  assert.match(markup, /Paste it here/);
+  assert.match(markup, /Where to get one/);
   assert.match(markup, /Cancel/);
+  assert.match(markup, /Connect</);
   assert.match(markup, /Superset sign-in code/);
 });
 
@@ -55,14 +58,14 @@ test("the organization stage draws only the returned identities", () => {
   assert.doesNotMatch(markup, /Superset sign-in code/);
 });
 
-test("a bounded failure offers both retry and close", () => {
+test("a bounded failure offers both another sign-in and close", () => {
   const markup = render({
     stage: SUPERSET_SIGN_IN_STAGE.FAILURE,
     failure: "Superset sign-in did not finish.",
     organizations: [],
   });
   assert.match(markup, /Not connected/);
-  assert.match(markup, /Retry/);
+  assert.match(markup, /Sign in again/);
   assert.match(markup, /Close/);
   assert.doesNotMatch(markup, /token=/);
 });
