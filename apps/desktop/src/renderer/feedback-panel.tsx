@@ -3,6 +3,7 @@ import { FEEDBACK_KIND } from "../shared/feedback";
 import { cssCustomProperties } from "./css-custom-properties";
 import { FEEDBACK_COPY, type FeedbackEntryControl } from "./feedback-entry";
 import { CheckIcon, MegaphoneIcon } from "./settings-icons";
+import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "./settings-search";
 
 /**
  * One button that offers a kind: its name is the whole line, and pressing it
@@ -42,7 +43,11 @@ function FeedbackOffer({
  */
 export function FeedbackSection({ control }: { control: FeedbackEntryControl }): React.JSX.Element {
   return (
-    <section className="settings-section" style={cssCustomProperties({ "--row-index": 5 })}>
+    <section
+      className="settings-section"
+      style={cssCustomProperties({ "--row-index": 5 })}
+      {...searchAnchorProps(SETTINGS_SEARCH_ROW.FEEDBACK)}
+    >
       <h2>
         <MegaphoneIcon />
         Feedback

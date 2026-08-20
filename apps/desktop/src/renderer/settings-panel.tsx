@@ -125,6 +125,17 @@ import {
   UserIcon,
 } from "./settings-icons";
 import {
+  defaultProjectRowId,
+  landOnSettingsRow,
+  SETTINGS_SEARCH_ROW,
+  SettingsSearch,
+  type SettingsSearchEntry,
+  SettingsSearchResults,
+  searchAnchorProps,
+  searchSettings,
+  settingsSearchEntries,
+} from "./settings-search";
+import {
   SETTINGS_SUBVIEW_LIST,
   SETTINGS_VIEW,
   type SettingsSubview,
@@ -376,6 +387,20 @@ export interface SettingsPanelProps {
   superset: SupersetControl;
   onQuit: () => void;
   shortcuts: ShortcutControl;
+  /**
+   * Whether the search field stands at the head of the front page. Held by
+   * the app rather than here because the magnifier that answers for it lives
+   * beside the tab bar, above this panel.
+   */
+  searchOpen: boolean;
+  /** The field's own way out — Escape on an empty query — which also clears. */
+  onSearchClose: () => void;
+  /**
+   * Reports someone being part-way through a settings search, which holds the
+   * panel open against the pointer wandering off — the same hold a half-typed
+   * ask has, for the same reason: the caret is the signal that hands are here.
+   */
+  onSearchEngaged: (engaged: boolean) => void;
 }
 
 /* What nothing else on the line can say on its own. A key kept here needs no
@@ -566,7 +591,9 @@ function ProviderCredential({
   };
 
   return (
-    <div className="credential">
+    // Anchored by the provider's own id, so a pressed search result can bring
+    // this line into view.
+    <div className="credential" {...searchAnchorProps(provider.id)}>
       <div className="credential-row">
         <span className="credential-identity">
           {/* The provider's own mark, so a list is read by brand rather than by
@@ -978,6 +1005,7 @@ function SelectRow<Value extends string | number>({
   parse,
   ariaLabel,
   errand,
+  anchor,
   changed,
   busy: restBusy,
   onChange,
@@ -996,6 +1024,12 @@ function SelectRow<Value extends string | number>({
    * and only the `select` is drawn with the corners that outline has to take.
    */
   errand?: ErrandTarget;
+  /**
+   * The id a pressed search result lands on, for a row whose control carries
+   * no errand mark of its own. Marked on the row rather than the `select`,
+   * because the landing scrolls to the whole line rather than outlining it.
+   */
+  anchor?: string;
   /** Whether the stored value differs from the default, which earns the mark. */
   changed?: boolean;
   /**
@@ -1009,7 +1043,7 @@ function SelectRow<Value extends string | number>({
   const { busy, rejection, run } = useSettingWrite(onChange);
   return (
     <>
-      <div className="settings-row">
+      <div className="settings-row" {...(anchor ? searchAnchorProps(anchor) : undefined)}>
         <span className="settings-copy">
           <strong>
             {label}
@@ -1105,10 +1139,14 @@ function WorkspaceAgentRow({
   const write = useSettingWrite((next: WorkspaceAgentSelection | undefined) =>
     onChange(providerId, next),
   );
+  // Only Conductor's rows are searchable today — the one provider the build
+  // documents a table for — so only its rows wear the anchors.
+  const conductor = providerId === PROVIDER_ID.CONDUCTOR;
   return (
     <>
       <SelectRow
         label="New agents run"
+        {...(conductor ? { anchor: APP_SETTING_ID.WORKSPACE_AGENT_MODEL } : undefined)}
         ariaLabel={`The model new ${provider.displayName} workspaces run`}
         value={chosenIndex >= 0 ? String(chosenIndex) : PROVIDER_DEFAULT_VALUE}
         options={[
@@ -1152,6 +1190,7 @@ function WorkspaceAgentRow({
       {chosen && chosen.efforts.length > 0 ? (
         <SelectRow
           label="Effort"
+          {...(conductor ? { anchor: APP_SETTING_ID.WORKSPACE_AGENT_EFFORT } : undefined)}
           ariaLabel={`The effort new ${provider.displayName} agents think at`}
           value={
             selection?.effort && chosen.efforts.includes(selection.effort)
@@ -1229,7 +1268,7 @@ function CodexCloudConnection({
   workspaceProvider?: WorkspaceProviderOption;
 }): React.JSX.Element {
   return (
-    <div className="credential">
+    <div className="credential" {...searchAnchorProps(SETTINGS_SEARCH_ROW.CODEX_CLOUD)}>
       <div className="credential-row">
         <span className="credential-identity">
           {/* The same mark and cloud badge the codex session rows carry: the
@@ -1522,7 +1561,7 @@ function GoogleCalendarIntegration({
   if (!settings.calendarSignInAvailable) return null;
   const accounts = settings.calendarAccounts;
   return (
-    <div className="credential">
+    <div className="credential" {...searchAnchorProps(GOOGLE_CALENDAR_ID)}>
       <div className="credential-row">
         <span className="credential-identity">
           <span className="credential-mark">
@@ -1637,7 +1676,7 @@ function SupersetIntegration({
   };
 
   return (
-    <div className="credential">
+    <div className="credential" {...searchAnchorProps(SUPERSET_WORKSPACE_PROVIDER_ID)}>
       <div className="credential-row">
         <span className="credential-identity">
           <span className="credential-mark">
@@ -1720,6 +1759,7 @@ function SupersetIntegration({
       {control.connected && control.agents.length > 0 ? (
         <SelectRow
           label="New Superset sessions run"
+          anchor={APP_SETTING_ID.SUPERSET_AGENT}
           ariaLabel="Default agent for new Superset sessions"
           changed={control.defaultAgent !== undefined}
           value={control.defaultAgent ?? PROVIDER_DEFAULT_VALUE}
@@ -1777,7 +1817,7 @@ function LinearIntegration({
   };
 
   return (
-    <div className="credential">
+    <div className="credential" {...searchAnchorProps(provider.id)}>
       <div className="credential-row">
         <span className="credential-identity">
           <span className="credential-mark">
@@ -2082,7 +2122,7 @@ function VoiceSection({
               the same words: what Luke has been let at, and whether it is on. The
               check and the attention mark trade the same spot: allowed, or the
               next thing needing a hand. */}
-          <div className="settings-row">
+          <div className="settings-row" {...searchAnchorProps(SETTINGS_SEARCH_ROW.MICROPHONE)}>
             <span className="settings-copy">
               <span className="settings-name">
                 <strong>Microphone</strong>
@@ -2281,6 +2321,7 @@ function WorkspacesSection({
       </h2>
       <SelectRow
         label="Default workspace provider"
+        anchor={APP_SETTING_ID.DEFAULT_WORKSPACE_PROVIDER}
         changed={settings.defaultWorkspaceProvider !== undefined}
         value={settings.defaultWorkspaceProvider ?? ASK_EACH_TIME}
         options={[
@@ -2329,6 +2370,9 @@ function WorkspaceProjectRow({
   // A provider this build cannot store a choice for, or one with no projects
   // to choose between, has nothing for the row to say.
   if (provider.projects.length === 0) return null;
+  // Several providers draw this row, so each anchors by its own provider —
+  // absent where the search's table does not name one.
+  const anchor = defaultProjectRowId(providerId);
   const stored = settings.workspaceProjectDefaults?.[providerId];
   // A stored default the provider has stopped offering is on its way out: the
   // main process clears it on the same observation, and until that write lands
@@ -2341,6 +2385,7 @@ function WorkspaceProjectRow({
   return (
     <SelectRow
       label="Default project"
+      {...(anchor ? { anchor } : undefined)}
       ariaLabel={`The project a nameless ask creates ${provider.name} workspaces in`}
       changed={shown !== PROJECT_ASK_EACH_TIME}
       value={shown}
@@ -2395,6 +2440,7 @@ const SHORTCUT_HINT = "Hold ⌃, ⌥ or ⌘ — ⇧ may join — and press a let
 function ShortcutRow({
   title,
   detail,
+  anchor,
   shown,
   chosen,
   defaultKey,
@@ -2404,6 +2450,8 @@ function ShortcutRow({
 }: {
   title: string;
   detail: string;
+  /** The id a pressed search result lands on. */
+  anchor: string;
   // SAFETY: The preceding check establishes the asserted contract.
   /** The accelerator as registered, absent when no candidate answered. */
   shown?: string | undefined;
@@ -2441,7 +2489,7 @@ function ShortcutRow({
   };
 
   return (
-    <div className="settings-row">
+    <div className="settings-row" {...searchAnchorProps(anchor)}>
       <span className="settings-copy">
         <strong>
           {title}
@@ -2574,6 +2622,7 @@ function ShortcutSection({
     >
       <ShortcutRow
         title="Talk to Luke"
+        anchor={SETTINGS_SEARCH_ROW.TALK_KEY}
         // What the key actually does, which depends on whether it can report
         // being let go of. Describing a hold to someone whose key can only
         // toggle would leave them holding it and wondering.
@@ -2591,6 +2640,7 @@ function ShortcutSection({
       />
       <ShortcutRow
         title="Ask Luke"
+        anchor={SETTINGS_SEARCH_ROW.ASK_KEY}
         detail="Press to type to Luke from any app."
         {...(shownAsk ? { shown: shownAsk } : undefined)}
         chosen={shortcuts.askChosen}
@@ -2601,6 +2651,7 @@ function ShortcutSection({
       />
       <ShortcutRow
         title="Stop Luke"
+        anchor={SETTINGS_SEARCH_ROW.STOP_KEY}
         detail="Press to cut off a reply, from any app."
         {...(shownStop ? { shown: shownStop } : undefined)}
         chosen={shortcuts.stopChosen}
@@ -2695,7 +2746,7 @@ function VoiceSourceToggle({
           real checkboxes: one value from a set of two is exactly what a radio
           group is, and taking the native one means the arrow keys, the
           grouping, and the announcement all come with it. */}
-      <div className="source-toggle">
+      <div className="source-toggle" {...searchAnchorProps(APP_SETTING_ID.VOICE_SOURCE)}>
         {[VOICE_SOURCE.ACCOUNT, VOICE_SOURCE.KEY].map((candidate) => {
           const live = candidate === source;
           // The key's half is the one that can be unavailable: a machine with
@@ -2942,7 +2993,7 @@ function AccountSection({
         <UserIcon />
         Account
       </h2>
-      <div className="settings-row">
+      <div className="settings-row" {...searchAnchorProps(SETTINGS_SEARCH_ROW.SIGN_OUT)}>
         <span className="settings-copy account-identity">
           {/* The provider's own picture of the person, when their identity
               carried one from a host this build pins — otherwise the same
@@ -3022,7 +3073,7 @@ function AccountSection({
           </fieldset>
         </span>
       </div>
-      <div className="settings-row">
+      <div className="settings-row" {...searchAnchorProps(SETTINGS_SEARCH_ROW.DELETE_ACCOUNT)}>
         <span className="settings-copy">
           <strong>Delete account</strong>
         </span>
@@ -3158,7 +3209,7 @@ function UpdatesSection({
         <DownloadIcon />
         Updates
       </h2>
-      <div className="settings-row">
+      <div className="settings-row" {...searchAnchorProps(SETTINGS_SEARCH_ROW.UPDATES)}>
         <span className="settings-copy">
           <span className="settings-name">
             <strong>Version {control.update.currentVersion}</strong>
@@ -3244,6 +3295,9 @@ export function SettingsPanel({
   superset,
   onQuit,
   shortcuts,
+  searchOpen,
+  onSearchClose,
+  onSearchEngaged,
 }: SettingsPanelProps): React.JSX.Element {
   // Why the front page's Voice row wears its mark, or nothing while voice is
   // fully set up. Judged here rather than on the Voice page because the mark
@@ -3254,6 +3308,52 @@ export function SettingsPanel({
   const voiceNote = microphone.voiceAvailable
     ? voiceAttentionNote({ voiceAvailable: true, status: microphone.status })
     : undefined;
+  // The query someone typed into the search field. Held here rather than
+  // above because nothing else answers to it — and corrected during the
+  // render that discovers the field closed or the panel gone, the way the
+  // removal confirm is, because a query belongs to the field it was typed in.
+  const [searchQuery, setSearchQuery] = useState("");
+  if (searchQuery !== "" && (!panelOpen || !searchOpen)) setSearchQuery("");
+  // What the pages currently offer, read afresh each render from the same
+  // inputs the pages branch on, so a result never leads to a page without
+  // its row. Built only while a query stands: an empty field searches nothing.
+  const search =
+    settings && searchOpen && searchQuery !== ""
+      ? searchSettings(
+          settingsSearchEntries({
+            settings,
+            voiceControlsDrawn: microphoneAccessRow({
+              voiceAvailable: microphone.voiceAvailable,
+              status: microphone.status,
+            }).ready,
+            accountDrawn: account.status === ACCOUNT_STATUS.SIGNED_IN,
+            superset: {
+              installed: superset.installed,
+              connected: superset.connected,
+              agentsOffered: superset.agents.length > 0,
+            },
+            workspaceProjects: workspaceProviders
+              .filter((option) => option.projects.length > 0)
+              .map((option) => ({ id: option.id, name: option.name })),
+          }),
+          searchQuery,
+        )
+      : undefined;
+  // A pressed result is the search answered: the field closes, the page the
+  // result named opens, and the view follows to the row itself — its control
+  // focused where it has one, the row scrolled into view where it does not.
+  // Fire-and-forget like the session search's summons — the seek gives
+  // itself up after its own frame limit.
+  const openSearchResult = (entry: SettingsSearchEntry) => {
+    onSearchClose();
+    onViewChange(entry.page);
+    landOnSettingsRow(entry.id);
+  };
+  // A pressed group head is the same answer one level up: the page itself.
+  const openSearchPage = (page: SettingsSubview) => {
+    onSearchClose();
+    onViewChange(page);
+  };
   // Moving between pages moves the keyboard with it: into a page, onto its
   // back button; back out, onto the row that opened the page just left. Keyed
   // to the page, because the control being reached for only exists once the
@@ -3296,7 +3396,30 @@ export function SettingsPanel({
         />
       ) : null}
 
-      {view === SETTINGS_VIEW.ROOT ? (
+      {settings && searchOpen ? (
+        /* The field opens at the head of whichever page is showing — under
+           the page's own pinned header, above the front page's sections —
+           and a typed query swaps the page below it for the rows it kept,
+           read across every page wherever the field was opened from. */
+        <SettingsSearch
+          query={searchQuery}
+          search={search}
+          onQueryChange={setSearchQuery}
+          onClose={onSearchClose}
+          onEngagedChange={onSearchEngaged}
+        />
+      ) : null}
+
+      {search ? (
+        <SettingsSearchResults
+          search={search}
+          pageIcon={(page) => SETTINGS_PAGE[page].icon}
+          onOpenPage={openSearchPage}
+          onOpen={openSearchResult}
+        />
+      ) : null}
+
+      {view === SETTINGS_VIEW.ROOT && !search ? (
         /* The front page: what voice runs on and what is left of it today,
            then one row per page, then the sections that answer at a glance —
            what Luke is allowed, what he counts about his own use, the way to
@@ -3341,15 +3464,15 @@ export function SettingsPanel({
         </>
       ) : null}
 
-      {view === SETTINGS_VIEW.VOICE && settings ? (
+      {view === SETTINGS_VIEW.VOICE && settings && !search ? (
         <VoiceSection settings={settings} preferences={preferences} microphone={microphone} />
       ) : null}
 
-      {view === SETTINGS_VIEW.APPEARANCE && settings ? (
+      {view === SETTINGS_VIEW.APPEARANCE && settings && !search ? (
         <AppearanceSection settings={settings} preferences={preferences} />
       ) : null}
 
-      {view === SETTINGS_VIEW.SHORTCUTS ? (
+      {view === SETTINGS_VIEW.SHORTCUTS && !search ? (
         <ShortcutSection
           shortcuts={shortcuts}
           {...(settings ? { settings } : undefined)}
@@ -3357,7 +3480,7 @@ export function SettingsPanel({
         />
       ) : null}
 
-      {view === SETTINGS_VIEW.CONNECTIONS && settings ? (
+      {view === SETTINGS_VIEW.CONNECTIONS && settings && !search ? (
         <>
           {/* The one choice spanning every provider leads the page; the
               providers it chooses between follow. */}
@@ -3383,7 +3506,7 @@ export function SettingsPanel({
         </>
       ) : null}
 
-      {view !== SETTINGS_VIEW.ROOT ? null : (
+      {view !== SETTINGS_VIEW.ROOT || search ? null : (
         <>
           {updateLeads ? null : <UpdatesSection control={updates} rowIndex={3} />}
 
@@ -3407,6 +3530,7 @@ export function SettingsPanel({
             type="button"
             className="quit-button"
             style={cssCustomProperties({ "--row-index": 7 })}
+            {...searchAnchorProps(SETTINGS_SEARCH_ROW.QUIT)}
             onClick={onQuit}
           >
             <PowerIcon />

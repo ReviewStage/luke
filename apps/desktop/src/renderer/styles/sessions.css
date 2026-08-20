@@ -334,6 +334,14 @@
   }
 }
 
+/* The same pill worn at the head of the Settings front page, where finding a
+   row starts. Its stand carries the pin and the ground (settings.css); the
+   pill itself gives up only its margin, because the page's own gap already
+   spaces the stack. */
+.session-search.settings-search {
+  margin-bottom: 0;
+}
+
 /* Focus answers in the panel's own neutral voice: searching is neither a
    message to a session (the working blue) nor the developer's half of a
    conversation (their green) — it is looking, and looking has no state. The

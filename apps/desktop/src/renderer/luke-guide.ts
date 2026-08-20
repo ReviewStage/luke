@@ -303,7 +303,8 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "their title, status line, branch, repository, workspace, agent, or model, and counts " +
         "what it left. A search matching nothing offers the matches a filter is hiding rather " +
         "than pretending there are none. Escape clears the query and then closes the field; " +
-        "no spoken ask can search, and no search survives the panel closing.",
+        "no spoken ask can search, and no search survives the panel closing. Command-F answers " +
+        "for whichever tab is showing: the sessions list here, the settings search on Settings.",
     },
     {
       label: "Workspaces in the list",
@@ -326,6 +327,18 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "opening the Voice, Appearance, Keyboard shortcuts, and Connections pages, each led " +
         "back out by its back button or Escape. The Feedback section, the Account section, and " +
         "Quit stay on the front page itself.",
+    },
+    {
+      label: "Searching settings",
+      detail:
+        "The magnifier beside the tab bar — or Command-F — while Settings is showing opens a " +
+        "search field pinned at the head of whichever settings page is showing, and the search " +
+        "always reads across every page. It finds any row — a page itself, a setting by its " +
+        "name or what it does, a provider, a shortcut, a way out. Typing swaps the page for " +
+        "the matches, grouped under the page that holds each; pressing a page opens it, and " +
+        "pressing a row opens its page and takes the view to the row itself. Escape clears " +
+        "the query, then closes the field, then leaves the page. The search is by hand alone: " +
+        "no spoken ask can search, and no search survives the panel closing.",
     },
     {
       label: "What a settings page marks",

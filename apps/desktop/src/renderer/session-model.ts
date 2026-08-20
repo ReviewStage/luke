@@ -340,9 +340,11 @@ function sessionUrgency(session: NormalizedSession): SessionUrgency {
 /**
  * A query read into the words it asks for: lowercased and split on whitespace,
  * because matching is case-blind and every word must be found somewhere. A
- * blank query has no words, which is what makes it no search at all.
+ * blank query has no words, which is what makes it no search at all. Exported
+ * for the settings search, so the two searches cannot disagree about what a
+ * word is.
  */
-function searchTokens(query: string): readonly string[] {
+export function searchTokens(query: string): readonly string[] {
   return query
     .toLowerCase()
     .split(/\s+/)

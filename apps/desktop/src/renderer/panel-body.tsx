@@ -56,6 +56,7 @@ import {
 } from "./session-search";
 import { SendIcon, StopIcon } from "./settings-icons";
 import { SettingsPanel, type SettingsPanelProps } from "./settings-panel";
+import { SettingsSearchButton } from "./settings-search";
 import { SignInGate } from "./sign-in-gate";
 import { updateAvailable, updateRow } from "./update-row";
 
@@ -689,6 +690,9 @@ export interface PanelBodyProps {
   onSearchToggle: () => void;
   /** The field's own way out — Escape on an empty query — which also clears. */
   onSearchClose: () => void;
+  /** The settings search's field state, on the sessions search's own terms. */
+  settingsSearchOpen: boolean;
+  onSettingsSearchToggle: () => void;
   tab: PanelTab;
   onTabChange: (tab: PanelTab) => void;
   /**
@@ -720,6 +724,8 @@ export function PanelBody({
   searchOpen,
   onSearchToggle,
   onSearchClose,
+  settingsSearchOpen,
+  onSettingsSearchToggle,
   tab,
   onTabChange,
   settings,
@@ -757,10 +763,16 @@ export function PanelBody({
           onTabChange={onTabChange}
           {...(settingsNote ? { settingsNote } : undefined)}
         />
-        {offerSearch || offerOptions ? (
+        {offerSearch || offerOptions || tab === PANEL_TAB.SETTINGS ? (
           <span className="header-controls">
             {offerSearch ? (
               <SessionSearchButton open={searchOpen} onToggle={onSearchToggle} />
+            ) : null}
+            {/* The settings' own magnifier, in the sessions magnifier's spot:
+                each tab's search is opened from the same place, and only the
+                showing tab's is offered. */}
+            {tab === PANEL_TAB.SETTINGS ? (
+              <SettingsSearchButton open={settingsSearchOpen} onToggle={onSettingsSearchToggle} />
             ) : null}
             {offerOptions ? (
               <SessionOptionsButton list={list} open={optionsOpen} onToggle={onOptionsToggle} />
