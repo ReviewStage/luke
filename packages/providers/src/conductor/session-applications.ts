@@ -53,10 +53,26 @@ export function conductorAgent(value: string | undefined): SessionProvider | und
 
 const CONDUCTOR_SESSION_FIELD = {
   AGENT_TYPE: "agent_type",
+  CONDUCTOR_SESSION_ID: "conductor_session_id",
   PROVIDER_SESSION_ID: "provider_session_id",
   WORKSPACE_ID: "workspace_id",
   WORKSPACE_NAME: "workspace_name",
 } as const;
+
+/**
+ * The address of one chat in Conductor's own app — the same deep link
+ * Conductor's notifications fire, composed here from the observed workspace
+ * and chat ids, so opening stays what every open is: an address handed to
+ * the operating system, reaching no provider. Conductor's handler requires
+ * the workspace id and takes the chat id as the focus inside it, which is
+ * why a session without a workspace has no address at all.
+ */
+export function conductorWorkspaceLink(workspaceId: string, conductorChatId?: string): string {
+  const link = new URL("conductor://workspace");
+  link.searchParams.set("id", workspaceId);
+  if (conductorChatId !== undefined) link.searchParams.set("session", conductorChatId);
+  return link.toString();
+}
 
 /**
  * Conductor's provider-session column kept its original Claude-specific name
@@ -68,6 +84,7 @@ const CONDUCTOR_SESSION_QUERY = `
   SELECT
     sessions.claude_session_id AS ${CONDUCTOR_SESSION_FIELD.PROVIDER_SESSION_ID},
     sessions.agent_type AS ${CONDUCTOR_SESSION_FIELD.AGENT_TYPE},
+    sessions.id AS ${CONDUCTOR_SESSION_FIELD.CONDUCTOR_SESSION_ID},
     workspaces.id AS ${CONDUCTOR_SESSION_FIELD.WORKSPACE_ID},
     COALESCE(workspaces.workspace_name, workspaces.directory_name)
       AS ${CONDUCTOR_SESSION_FIELD.WORKSPACE_NAME}
@@ -92,6 +109,8 @@ const CONDUCTOR_SESSION_QUERY_WITHOUT_WORKSPACES = `
 
 /** What Conductor's own index says about one session it holds. */
 interface ConductorSessionContext {
+  /** Conductor's own id for the chat, which its deep link takes as the focus. */
+  conductorSessionId?: string;
   workspaceId?: string;
   workspaceName?: string;
 }
@@ -194,13 +213,26 @@ export class ConductorSessionApplicationSnapshot {
               managerName: CONDUCTOR_APPLICATION_NAME,
             }
           : undefined;
+      // The address needs the workspace id — Conductor's handler drops a
+      // link without one — and a sub-agent's inherited context addresses the
+      // ancestor chat, which is where its conversation lives. The app that
+      // wrote the index is the scheme's handler, so the address stands with
+      // no credential at all. A native provider address still wins as the
+      // row's primary press; the Conductor association keeps its own.
+      const link = context.workspaceId
+        ? conductorWorkspaceLink(context.workspaceId, context.conductorSessionId)
+        : undefined;
       const application: SessionApplication = {
         id: SESSION_APPLICATION_ID.CONDUCTOR,
         displayName: CONDUCTOR_APPLICATION_NAME,
         scope: workspace ? SESSION_APPLICATION_SCOPE.WORKSPACE : SESSION_APPLICATION_SCOPE.SESSION,
+        ...(link ? { link } : undefined),
       };
+      const detail =
+        link && !observation.detail?.link ? { ...observation.detail, link } : observation.detail;
       return {
         ...observation,
+        ...(detail ? { detail } : undefined),
         applications: [...(observation.applications ?? []), application],
         ...(workspace ? { workspace } : undefined),
       };
@@ -245,11 +277,13 @@ export class ConductorSessionApplicationReader {
       const type = agentType(record[CONDUCTOR_SESSION_FIELD.AGENT_TYPE]);
       const providerSessionId = text(record[CONDUCTOR_SESSION_FIELD.PROVIDER_SESSION_ID]);
       if (!type || !providerSessionId) continue;
+      const conductorSessionId = text(record[CONDUCTOR_SESSION_FIELD.CONDUCTOR_SESSION_ID]);
       const workspaceId = text(record[CONDUCTOR_SESSION_FIELD.WORKSPACE_ID]);
       const workspaceName = text(record[CONDUCTOR_SESSION_FIELD.WORKSPACE_NAME]);
       const providerId = CONDUCTOR_AGENT_BY_TYPE[type].id;
       const sessions = sessionsByProvider.get(providerId) ?? new Map();
       sessions.set(providerSessionId, {
+        ...(conductorSessionId ? { conductorSessionId } : undefined),
         ...(workspaceId ? { workspaceId } : undefined),
         ...(workspaceName ? { workspaceName } : undefined),
       });
