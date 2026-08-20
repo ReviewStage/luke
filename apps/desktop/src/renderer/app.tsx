@@ -2883,6 +2883,9 @@ export function App(): React.JSX.Element {
               })(),
               onQuit: () => window.sidecar.quit(),
               shortcuts,
+              // The same hold the ask field and the session search report
+              // through: one caret anywhere in the panel is hands being here.
+              onSearchEngaged: changeAskEngagement,
             }}
           />
         </section>

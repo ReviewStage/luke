@@ -125,6 +125,14 @@ import {
   UserIcon,
 } from "./settings-icons";
 import {
+  focusSettingsControl,
+  SettingsSearch,
+  type SettingsSearchEntry,
+  SettingsSearchResults,
+  searchSettings,
+  settingsSearchEntries,
+} from "./settings-search";
+import {
   SETTINGS_SUBVIEW_LIST,
   SETTINGS_VIEW,
   type SettingsSubview,
@@ -376,6 +384,12 @@ export interface SettingsPanelProps {
   superset: SupersetControl;
   onQuit: () => void;
   shortcuts: ShortcutControl;
+  /**
+   * Reports someone being part-way through a settings search, which holds the
+   * panel open against the pointer wandering off — the same hold a half-typed
+   * ask has, for the same reason: the caret is the signal that hands are here.
+   */
+  onSearchEngaged: (engaged: boolean) => void;
 }
 
 /* What nothing else on the line can say on its own. A key kept here needs no
@@ -3179,6 +3193,7 @@ export function SettingsPanel({
   superset,
   onQuit,
   shortcuts,
+  onSearchEngaged,
 }: SettingsPanelProps): React.JSX.Element {
   // Why the front page's Voice row wears its mark, or nothing while voice is
   // fully set up. Judged here rather than on the Voice page because the mark
@@ -3189,6 +3204,44 @@ export function SettingsPanel({
   const voiceNote = microphone.voiceAvailable
     ? voiceAttentionNote({ voiceAvailable: true, status: microphone.status })
     : undefined;
+  // The query someone typed into the front page's search field. Held here
+  // rather than above because nothing else answers to it — and corrected
+  // during the render that discovers the panel closed, the way the removal
+  // confirm is, because no search survives the panel closing.
+  const [searchQuery, setSearchQuery] = useState("");
+  if (searchQuery !== "" && !panelOpen) setSearchQuery("");
+  // What the pages currently offer, read afresh each render from the same
+  // inputs the pages branch on, so a result never leads to a page without
+  // its row. Built only while a query stands: an empty field searches nothing.
+  const search =
+    settings && searchQuery !== ""
+      ? searchSettings(
+          settingsSearchEntries({
+            settings,
+            voiceControlsDrawn: microphoneAccessRow({
+              voiceAvailable: microphone.voiceAvailable,
+              status: microphone.status,
+            }).ready,
+            accountDrawn: account.status === ACCOUNT_STATUS.SIGNED_IN,
+            superset: {
+              installed: superset.installed,
+              connected: superset.connected,
+              agentsOffered: superset.agents.length > 0,
+            },
+            defaultProjectOffered: workspaceProviders.some((option) => option.projects.length > 0),
+          }),
+          searchQuery,
+        )
+      : undefined;
+  // A pressed result is the search answered: the query lets go, the page the
+  // result named opens, and the keyboard follows to the row's own control
+  // where one is marked. Fire-and-forget like the session search's summons —
+  // the seek gives itself up after its own frame limit.
+  const openSearchResult = (entry: SettingsSearchEntry) => {
+    setSearchQuery("");
+    onViewChange(entry.page);
+    if (entry.target) focusSettingsControl(entry.target);
+  };
   // Moving between pages moves the keyboard with it: into a page, onto its
   // back button; back out, onto the row that opened the page just left. Keyed
   // to the page, because the control being reached for only exists once the
@@ -3231,7 +3284,23 @@ export function SettingsPanel({
         />
       ) : null}
 
-      {view === SETTINGS_VIEW.ROOT ? (
+      {view === SETTINGS_VIEW.ROOT && settings ? (
+        /* Finding leads the front page, because the front page is the index:
+           the field stands above everything it can find, and a typed query
+           swaps the sections below it for the rows it kept. */
+        <SettingsSearch
+          query={searchQuery}
+          search={search}
+          onQueryChange={setSearchQuery}
+          onEngagedChange={onSearchEngaged}
+        />
+      ) : null}
+
+      {view === SETTINGS_VIEW.ROOT && search ? (
+        <SettingsSearchResults search={search} onOpen={openSearchResult} />
+      ) : null}
+
+      {view === SETTINGS_VIEW.ROOT && !search ? (
         /* The front page: what voice runs on and what is left of it today,
            then one row per page, then the sections that answer at a glance —
            what Luke is allowed, what he counts about his own use, the way to
@@ -3317,7 +3386,7 @@ export function SettingsPanel({
         </>
       ) : null}
 
-      {view !== SETTINGS_VIEW.ROOT ? null : (
+      {view !== SETTINGS_VIEW.ROOT || search ? null : (
         <>
           {updateLeads ? null : <UpdatesSection control={updates} rowIndex={3} />}
 

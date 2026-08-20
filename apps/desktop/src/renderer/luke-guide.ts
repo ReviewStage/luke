@@ -324,6 +324,16 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "Quit stay on the front page itself.",
     },
     {
+      label: "Searching settings",
+      detail:
+        "A search field at the head of the Settings front page finds any row across the pages " +
+        "— a setting by its name or what it does, a provider, a shortcut, a way out. Typing " +
+        "swaps the front page for the matching rows, each naming its page, and pressing one " +
+        "opens that page with the keyboard on the row's own control where it has one. Escape " +
+        "clears the query and then lets go of the field. The search is by hand alone: no " +
+        "spoken ask can search, and no query survives the panel closing.",
+    },
+    {
       label: "What a settings page marks",
       detail:
         "A dot beside a row marks a value changed from its default, and a page holding one " +
