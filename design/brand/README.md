@@ -19,6 +19,7 @@ cd design/brand
 for m in light dark; do
   for s in 16 32 64 128 256 512 1024; do
     rsvg-convert -w $s -h $s icon/luke-icon-$m.svg -o icon/luke-icon-$m-$s.png
+    rsvg-convert -w $s -h $s icon/luke-installer-icon-$m.svg -o icon/luke-installer-icon-$m-$s.png
   done
 done
 for m in light dark; do
@@ -41,6 +42,11 @@ rsvg-convert -w 1200 -h 630 social/luke-og-card.svg -o ../../apps/web/public/luk
 `icon/luke-icon-{light,dark}-512.png` are copied into `dist/icon/` and handed to
 `app.dock.setIcon`. The Dock tile is swapped between the two mode icons as the
 theme changes.
+
+`icon/luke-installer-icon-dark-*.png` are cut into the release DMG's volume
+icon (`.VolumeIcon.icns`): the same face on a drive silhouette rather than the
+app's squircle, so the mounted "Luke Installer" volume cannot pass for the
+Luke.app beside it.
 
 The notch panel draws the face itself rather than loading these SVGs, because it
 needs two things a baked asset cannot give it: `currentColor`, so it can take the

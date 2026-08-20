@@ -22,7 +22,10 @@ export const NOTARY_SUBMISSION_STATUS = {
 };
 export const NOTARY_POLL_INTERVAL_MS = 30_000;
 export const NOTARY_POLL_TIMEOUT_MS = 20 * 60_000;
-export const RELEASE_VOLUME_NAME = "Luke";
+// The mounted volume is deliberately not named bare "Luke": it lands on the
+// desktop and in the sidebar right beside the app it installs, and a volume
+// carrying the app's own name is indistinguishable from the app itself.
+export const RELEASE_VOLUME_NAME = "Luke Installer";
 export const DMG_MOUNT_POINT = `/Volumes/${RELEASE_VOLUME_NAME}`;
 export const DMG_STAGING_ENTRIES = [
   { name: "Luke.app", kind: "application" },
@@ -33,6 +36,22 @@ export const DMG_STAGING_ENTRIES = [
 // custom-icon bit is set, which can only happen on a mounted volume — see
 // volumeCustomIconArguments.
 export const DMG_VOLUME_ICON_FILE_NAME = ".VolumeIcon.icns";
+// The volume's icon is the installer icon — the face on a drive silhouette —
+// never the app's own squircle, for the same reason the volume is not named
+// bare "Luke". Cut from the dark set like the app's bundle icon: one volume
+// icon has to serve both desktop modes.
+export const INSTALLER_ICONSET_SOURCES = Object.freeze({
+  "icon_16x16.png": "luke-installer-icon-dark-16.png",
+  "icon_16x16@2x.png": "luke-installer-icon-dark-32.png",
+  "icon_32x32.png": "luke-installer-icon-dark-32.png",
+  "icon_32x32@2x.png": "luke-installer-icon-dark-64.png",
+  "icon_128x128.png": "luke-installer-icon-dark-128.png",
+  "icon_128x128@2x.png": "luke-installer-icon-dark-256.png",
+  "icon_256x256.png": "luke-installer-icon-dark-256.png",
+  "icon_256x256@2x.png": "luke-installer-icon-dark-512.png",
+  "icon_512x512.png": "luke-installer-icon-dark-512.png",
+  "icon_512x512@2x.png": "luke-installer-icon-dark-1024.png",
+});
 
 export function releaseDmgFileName(version) {
   return `Luke-${version}-${PACKAGED_ARCHITECTURE}.dmg`;

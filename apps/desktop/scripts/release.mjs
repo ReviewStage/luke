@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { DMG_WINDOW } from "../../../design/dmg-window.mjs";
+import { iconutilArguments } from "./package-config.mjs";
 import { packagedAppExecutable } from "./package-layout.mjs";
 import {
   awaitNotarizationDecision,
@@ -19,6 +20,7 @@ import {
   hdiutilConvertArguments,
   hdiutilCreateArguments,
   hdiutilDetachArguments,
+  INSTALLER_ICONSET_SOURCES,
   notaryInfoArguments,
   notaryLogArguments,
   notarySubmitArguments,
@@ -148,24 +150,29 @@ try {
     }
   }
 
-  // The volume wears the packaged app's own icon — read from the bundle it is
-  // shipping rather than from .build, so the two can never disagree.
-  const bundleIconFile = execFileSync(
-    "plutil",
-    [
-      "-extract",
-      "CFBundleIconFile",
-      "raw",
-      "-o",
-      "-",
-      path.join(appPath, "Contents", "Info.plist"),
-    ],
-    { encoding: "utf8" },
-  ).trim();
-  fs.copyFileSync(
-    path.join(appPath, "Contents", "Resources", bundleIconFile),
-    path.join(stagingDirectory, DMG_VOLUME_ICON_FILE_NAME),
-  );
+  // The volume wears the installer icon — the face on a drive silhouette,
+  // deliberately not the app's own squircle, so the mounted volume cannot
+  // pass for the Luke.app beside it — cut here from the same generated brand
+  // assets the app icon is cut from.
+  const brandIconDirectory = path.join(repoRoot, "design", "brand", "icon");
+  const iconsetScratch = fs.mkdtempSync(path.join(os.tmpdir(), "luke-installer-icon-"));
+  try {
+    const iconsetPath = path.join(iconsetScratch, "installer.iconset");
+    fs.mkdirSync(iconsetPath);
+    for (const [iconsetName, sourceName] of Object.entries(INSTALLER_ICONSET_SOURCES)) {
+      fs.copyFileSync(
+        path.join(brandIconDirectory, sourceName),
+        path.join(iconsetPath, iconsetName),
+      );
+    }
+    execFileSync(
+      "iconutil",
+      iconutilArguments(iconsetPath, path.join(stagingDirectory, DMG_VOLUME_ICON_FILE_NAME)),
+      { stdio: "inherit" },
+    );
+  } finally {
+    fs.rmSync(iconsetScratch, { recursive: true, force: true });
+  }
 
   const stagingBackgroundDirectory = path.join(stagingDirectory, DMG_WINDOW.BACKGROUND.DIRECTORY);
   fs.mkdirSync(stagingBackgroundDirectory);
