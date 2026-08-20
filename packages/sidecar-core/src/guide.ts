@@ -194,44 +194,24 @@ export function appGuideSetting(
   return guide.settings.find((setting) => setting.id === settingId);
 }
 
-/**
- * The effort levels a setting's choices take, said once per distinct list
- * rather than once per choice: the agents behind the choices share their
- * levels, so grouping is what keeps the line sayable.
- */
 function settingEffortsText(setting: AppGuideSetting): string | undefined {
   const efforts = setting.efforts;
   if (!efforts || !setting.choices) return undefined;
-  const groups: { levels: readonly string[]; choices: string[] }[] = [];
-  for (const choice of setting.choices) {
+  const entries = setting.choices.flatMap((choice) => {
     const levels = efforts[choice];
-    if (!levels || levels.length === 0) continue;
-    const group = groups.find(
-      (candidate) =>
-        candidate.levels.length === levels.length &&
-        candidate.levels.every((level, index) => level === levels[index]),
-    );
-    if (group) group.choices.push(choice);
-    else groups.push({ levels, choices: [choice] });
-  }
-  if (groups.length === 0) return undefined;
-  return `a change may name an effort with the value: ${groups
-    .map((group) => `${group.choices.join(", ")} take ${group.levels.join("/")}`)
-    .join("; ")}`;
+    return levels && levels.length > 0 ? [`${choice}:${levels.join("/")}`] : [];
+  });
+  return entries.length > 0 ? `efforts=${entries.join(", ")}` : undefined;
 }
 
 function settingLine(setting: AppGuideSetting): string {
   const efforts = settingEffortsText(setting);
   const parts = [
-    `- ${setting.label} — ${setting.description}`,
-    `currently ${setting.value}`,
-    ...(setting.defaultValue !== undefined ? [`default: ${setting.defaultValue}`] : []),
-    ...(setting.choices ? [`choices: ${setting.choices.join(", ")}`] : []),
+    `- ${setting.label} — ${setting.description} [setting_id=${setting.id}]`,
+    `value=${setting.value}`,
+    ...(setting.defaultValue !== undefined ? [`default=${setting.defaultValue}`] : []),
+    ...(setting.choices ? [`choices=${setting.choices.join(", ")}`] : []),
     ...(efforts !== undefined ? [efforts] : []),
-    setting.adjustable
-      ? `changeable by voice [setting_id=${setting.id}]`
-      : "not changeable by voice",
-    `by hand: ${setting.manual}`,
   ];
   return parts.join("; ");
 }

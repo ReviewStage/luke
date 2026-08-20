@@ -110,34 +110,22 @@ function observedConductorSession(realtimeVoice = false) {
   );
 }
 
-test("the guide's text carries the facts and every setting's id, value, and by-hand path", () => {
+test("the guide's text carries app facts and compact setting data", () => {
   const text = appGuideContextText(GUIDE);
 
   assert.match(text, /What Luke is: A macOS sidecar/);
   assert.match(text, /Captions — Luke's words on screen while he speaks\./);
-  assert.match(text, /currently off/);
-  // The default is printed beside the value, because "back to the default" is
-  // an ask the guide must be able to ground in a real value.
-  assert.match(text, /currently off; default: off/);
-  assert.match(text, /currently marin; default: cedar/);
+  assert.match(text, /value=off/);
+  assert.match(text, /value=off; default=off/);
+  assert.match(text, /value=marin; default=cedar/);
   // The id is printed where the value is, because it is what a spoken change
   // names the setting by — the same rule the session roster follows.
   assert.match(text, /setting_id=voice_captions/);
-  assert.match(text, /choices: cedar, marin/);
-  // A setting a spoken ask cannot touch still says where the hand can.
-  assert.match(text, /not changeable by voice/);
-  assert.match(text, /System Settings, under Privacy & Security/);
-  // A system permission has no default of the app's own, so its line honestly
-  // carries none rather than inventing one.
-  assert.match(text, /Microphone access[^\n]*currently on; not changeable/);
-  // The levels each choice takes are printed with the choices, said once per
-  // distinct list, so a value and its effort can be asked for in one breath.
-  assert.match(
-    text,
-    /a change may name an effort with the value: Fable 5, GPT take low\/high\/max/,
-  );
+  assert.match(text, /choices=cedar, marin/);
+  assert.match(text, /Microphone access[^\n]*value=on/);
+  assert.match(text, /efforts=Fable 5:low\/high\/max, GPT:low\/high\/max/);
   // A choice that takes none is not listed taking any.
-  assert.doesNotMatch(text, /Cursor Auto take/);
+  assert.doesNotMatch(text, /Cursor Auto:/);
 });
 
 test("an empty guide says so rather than describing an app it was never told about", () => {
