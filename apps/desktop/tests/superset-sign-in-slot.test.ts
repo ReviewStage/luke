@@ -58,6 +58,15 @@ test("the organization stage draws only the returned identities", () => {
   assert.doesNotMatch(markup, /Superset sign-in code/);
 });
 
+test("the organization switch keeps the one-line dress and asks for no code", () => {
+  const markup = render({ stage: SUPERSET_SIGN_IN_STAGE.SWITCHING, organizations: [] });
+  assert.match(markup, /Connecting…/);
+  assert.match(markup, /Cancel/);
+  assert.doesNotMatch(markup, /Sign-in code/);
+  assert.doesNotMatch(markup, /Paste it here/);
+  assert.doesNotMatch(markup, /Where to get one/);
+});
+
 test("a bounded failure offers both another sign-in and close", () => {
   const markup = render({
     stage: SUPERSET_SIGN_IN_STAGE.FAILURE,

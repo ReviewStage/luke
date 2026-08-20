@@ -15,8 +15,9 @@ import { ExternalIcon } from "./settings-icons";
  * Superset's own word for it, the provider's mark beside it, where the code
  * comes from on the line below, and the confirm quiet until there is
  * something to confirm. Only the stages a key never has — choosing an
- * organization, a sign-in that failed — keep the waiting popups' one-line
- * dress, worded the way the consent slot words them.
+ * organization, the switch that choice starts, a sign-in that failed — keep
+ * the waiting popups' one-line dress, worded the way the consent slot words
+ * them: an organization switch asks for no code, so it never wears the field.
  */
 export function SupersetSignInSlot({
   state,
@@ -47,6 +48,7 @@ export function SupersetSignInSlot({
   const exchanging = state.stage === SUPERSET_SIGN_IN_STAGE.EXCHANGING;
   const failed = state.stage === SUPERSET_SIGN_IN_STAGE.FAILURE;
   const choosing = state.stage === SUPERSET_SIGN_IN_STAGE.ORGANIZATION;
+  const switching = state.stage === SUPERSET_SIGN_IN_STAGE.SWITCHING;
   const filled = code.trim().length > 0;
   const ready = filled && waiting;
 
@@ -138,13 +140,19 @@ export function SupersetSignInSlot({
             </div>
           </>
         ) : null}
-        {choosing || failed ? (
+        {choosing || switching || failed ? (
           <div className="key-slot-row">
             <span className="key-slot-mark">
               <ProviderMark providerId={SUPERSET_WORKSPACE_PROVIDER_ID} />
             </span>
             <span className="sign-in-slot-copy" role="status">
-              <strong>{failed ? "Not connected" : "Choose a Superset organization"}</strong>
+              <strong>
+                {failed
+                  ? "Not connected"
+                  : switching
+                    ? "Connecting…"
+                    : "Choose a Superset organization"}
+              </strong>
               {failed ? (
                 <small>
                   {state.failure}{" "}
