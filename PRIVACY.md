@@ -23,9 +23,11 @@ You can delete the account from the same place you sign out: the Account
 section at the foot of Luke's Settings tab, behind a confirmation. Deleting
 erases the service's user record and everything referencing it — the sign-in
 records above and the usage counters below — in one cascading database delete,
-then signs the desktop out. It does not touch the Google or GitHub identity
-you signed in with, and anything stored only on your Mac (provider API keys,
-settings, calendar grants) stays until you remove it in Luke.
+asks the analytics processor to erase the person record and events described
+under Product analytics, and signs the desktop out. It does not touch the
+Google or GitHub identity you signed in with, and anything stored only on your
+Mac (provider API keys, settings, calendar grants) stays until you remove it in
+Luke.
 
 ## Hosted voice and review
 
@@ -42,10 +44,11 @@ nothing typed or spoken. The service builds the session request from
 definitions fixed at its build, sends it to OpenAI under Luke's own key, and
 returns the short-lived credential OpenAI minted. The call itself is then a
 direct WebRTC connection from your Mac to OpenAI — microphone audio and spoken
-replies never transit Luke's servers. At launch, Luke also sends this endpoint
-one request that carries nothing and authenticates nothing, purely so the
-serverless function is loaded before your first press needs it; the endpoint
-refuses it by design.
+replies never transit Luke's servers. Whenever Luke settles on the hosted path
+— at launch, and again whenever a setting or a sign-in changes which credential
+voice runs on — he also sends this endpoint one request that carries nothing
+and authenticates nothing, purely so the serverless function is loaded before
+your first press needs it; the endpoint refuses it by design.
 
 The review endpoint receives the same bounded session fields the attention
 review section below lists — never message history, file content, command
@@ -57,11 +60,11 @@ false`, and returns the decision. The update is inspected in memory and
 discarded.
 
 What the service keeps is a counter: how many calls and how many reviews your
-account spent each UTC day, checked against the allowance and deleted with the
-account. Request content is not written to its logs; a failure is recorded as
-a status alone. What OpenAI receives on these paths is the same as on the
-keyed paths below, under Luke's key rather than yours, and OpenAI's policies
-govern it the same way.
+account spent each UTC day, checked against the allowance, read back by the
+panel to draw what is left, and deleted with the account. Request content is
+not written to its logs; a failure is recorded as a status alone. What OpenAI
+receives on these paths is the same as on the keyed paths below, under Luke's
+key rather than yours, and OpenAI's policies govern it the same way.
 
 ## Product analytics
 
@@ -133,22 +136,27 @@ a failed send drops those counts rather than retrying, and quitting drops
 whatever had not been sent. Nothing is written to disk.
 
 **The website is a separate matter and a weaker guarantee.** tryluke.dev counts
-page views and two sign-in steps (started, completed) through PostHog's browser
-library, with autocapture and session recording both switched off, so the text
-and attributes of what you click and the contents of the page are not
-collected. But the browser talks to PostHog directly, which means **PostHog
-sees your network address and user agent on the website**, as it would for any
-third-party script. Visitors are not given a person record until they sign in;
-at that point the account's database id is what links the visit to the account, so the website
-half and the desktop half of the funnel join, and the same name and email
-address the account holds are set on the person record. The sign-in provider
-does not travel.
+page views, a press of its download button, and two sign-in steps (started,
+completed) through PostHog's browser library, with autocapture and session
+recording both switched off, so the text and attributes of what you click and
+the contents of the page are not collected. But the browser talks to PostHog
+directly, which means **PostHog sees your network address and user agent on the
+website**, as it would for any third-party script. Visitors are not given a
+person record until they sign in; at that point the account's database id is
+what links the visit to the account, so the website half and the desktop half
+of the funnel join, and the same name and email address the account holds are
+set on the person record. The sign-in provider does not travel.
 
-Deleting your Luke account removes it from Luke's own service, but does not by
-itself erase counts already sent to PostHog: those remain against the person
-record, which afterwards names an account that no longer exists. Turning the
-switch off stops further collection and likewise erases nothing already
-collected. Ask us and we will delete the person record and its events.
+Deleting your Luke account also asks PostHog to erase the person record behind
+it and the events recorded against it, through PostHog's own bulk-delete
+endpoint, before the user row goes — after it there would be nothing left to
+name the person by. The erasure is asked for once and best-effort, and PostHog
+queues the event deletion rather than performing it: a refusal or an outage
+there is logged as a status and does not hold up the account delete, because
+erasing your account is yours to do and a third party's availability is not a
+condition of it. A deployment holding no analytics configuration has no such
+request to make. Turning the switch off stops further collection but erases
+nothing already collected; ask us and we will run the erasure again.
 
 ## Update check
 
@@ -165,12 +173,44 @@ check. What a check learns changes only what the row says: fetching an update
 is your own download in the browser, from the repository's releases page, and
 Luke never modifies the running app.
 
+## Sending feedback
+
+The front page of Luke's Settings tab has a Feedback section with two composers
+— Send feedback and Submit a prompt. Both are yours to open, and nothing is
+sent until you press send. What a submission carries is what the composer
+showed you and nothing else: which of the two kinds it is, your message (up to
+eight thousand characters), the name and address you signed it with, and up to
+three screenshots you attached yourself. A screenshot the composer cannot send
+as it stands is re-encoded to fit; a file that is not an image at all is
+refused.
+
+The signature starts out filled in with the name and address of the account you
+are signed in to, and is yours to edit or clear before sending — credit is
+yours to claim. Nothing observed rides along: no session, roster, transcript,
+setting, log, or key material is part of a submission, and the app never
+attaches a screenshot you did not pick.
+
+A submission goes to one endpoint on Luke's own site, fixed by the build — the
+panel names an intent and never an address — and that endpoint forwards it to
+the founders as email through a third-party email service, whose policies
+govern it from there. Nothing about a submission is written to Luke's own logs;
+the status of the send alone is what diagnoses a failure, and what became of it
+is said back to you under the field you typed in.
+
 ## What Luke reads locally
 
 - For Claude Code, Luke finds recent session files, opens bounded tails
-  read-only, and inspects them in memory.
-- For Codex, Luke opens the local SQLite state database in read-only mode and
-  reads the recent rollout logs named by its thread records.
+  read-only, and inspects them in memory. It also reads each project's own
+  session index, for the one fact of which sessions the user filed away, so an
+  archived chat is not drawn as a row.
+- For Codex, Luke opens the local SQLite state database in read-only mode,
+  skipping the threads archived in Codex's own UI, and reads the recent rollout
+  logs named by its thread records. A rollout tail also says whether a Codex
+  realtime voice conversation is live over that thread, which decides only
+  whether Luke stays quiet about it on this machine. On a pass that saw a chat
+  born from such a conversation, Luke reads a bounded tail of Codex's own
+  session index for the name Codex keeps for that chat, so the row is labelled
+  by a name rather than by the marker it was born with.
 - For OpenCode, Luke opens the local session database in read-only mode and
   reads session records plus the bookkeeping of a session's newest message and
   tool records — roles, timestamps, tool names and inputs, and recorded
@@ -192,24 +232,28 @@ Luke never modifies the running app.
   the fact of a failed turn rather than the reason Cursor recorded for it. A
   session is labelled by the folder it runs in, which Luke reads from Cursor's
   own record of that folder, not from the chat's generated name.
-- For Superset, Luke discovers each `host/<organization-id>/host.db`, opens it in
-  read-only defensive mode, and reads project and workspace names, branches,
-  pull-request links, terminal identifiers, configured agent kinds, lifecycle
-  events, and the agent's own session identifier. That identifier is joined
-  exactly to a session Luke already observed; Luke does not infer membership
-  from a filesystem path. Missing files and unknown schemas mean no Superset
-  context, never an on-screen failure. The stale legacy `local.db` is not read.
-  A managed session's row carries its workspace's `superset://` address,
-  composed on this machine from the observed workspace identifier; opening it
-  hands that address to macOS like any row press, and nothing is sent to
-  Superset.
+- For Superset, Luke discovers each `host/<organization-id>/host.db`, opens it
+  in read-only defensive mode, and reads two fixed queries' worth of rows: from
+  the terminal-to-agent bindings, each workspace's name, identifier, branch,
+  last-updated timestamp, pull-request link, project name, terminal identifier,
+  and the agent's own session identifier; and from the host's agent
+  configuration, the identifiers of the agent presets it has. That identifier
+  is joined exactly to a session Luke already observed; Luke does not infer
+  membership from a filesystem path. Missing files and unknown schemas mean no
+  Superset context, never an on-screen failure. The stale legacy `local.db` is
+  not read. A managed session's row carries its workspace's `superset://`
+  address, composed on this machine from the observed workspace identifier;
+  opening it hands that address to macOS like any row press, and nothing is
+  sent to Superset.
 
 Luke processes bounded fields needed to identify and display a session:
 provider and session identifiers, provider-generated titles, the workspace
 folder basename, repository and branch, timestamps, status, model, current tool
-activity, reported errors, provider-designated turn recaps, and session or
-change links where available. It inspects event types, turn boundaries, tool
-calls, and stop reasons to derive those fields and the session status.
+activity, reported errors, provider-designated turn recaps, the size of a
+change as its provider counts it — files touched, lines added and removed — and
+session or change links where available. It inspects event types, turn
+boundaries, tool calls, and stop reasons to derive those fields and the session
+status.
 
 Luke does not retain raw records or message history, inject input, or require
 provider hooks or plugins. Observed fields are held in memory for the local
@@ -217,51 +261,55 @@ display. Observation itself never controls a provider session; see Optional
 cloud-provider reads and Optional issue-tracker reads and spoken acts below
 for the narrow, user-requested writes Luke makes elsewhere.
 
-Superset observation never invokes its CLI and sends nothing to Superset. If
-Superset's CLI executable and its own `config.json` login both exist, Luke may
-offer controls on the exact workspaces and terminals the latest database pass
-reported. You can start that login from Luke's Settings: Luke launches exactly
-one CLI login process, opens only the Superset HTTPS authorization page the CLI
-reports, and writes the one-time code you explicitly paste to that process's
-standard input. Luke does not read the clipboard. The code is kept only in the
-visible field until submission and is never logged or stored; the CLI performs
-the exchange and owns the resulting credential. If Superset returns several
-organizations, Luke shows only the identities from a fresh CLI list and asks
-the CLI to switch only to the choice you press. Cancelling, quitting Luke, or
-waiting three minutes ends the login process. Disconnecting from the same
-Settings row runs the CLI's own documented `auth logout`, which clears the
-login the CLI stored — the same consent withdrawn through the same binary —
-and the next observation pass reports the signed-out state.
+Reading the session rows never invokes Superset's CLI and sends nothing to
+Superset — every field above comes off the local database. If Superset's CLI
+executable and its own `config.json` login both exist, Luke may offer controls
+on the exact workspaces and terminals the latest database pass reported, and
+asks the CLI's own documented `hosts list`, `projects list`, and `agents list`
+— at most once a minute while the login stands — so that a workspace can be
+created somewhere the CLI actually offers. Those three are reads, invoked
+directly without a shell with arguments fixed by the build, and only bounded
+identifiers and labels are kept from what they answer. You can start that login
+from Luke's Settings: Luke launches exactly one CLI login process, opens only
+the Superset HTTPS authorization page the CLI reports, and writes the one-time
+code you explicitly paste to that process's standard input. Luke does not read
+the clipboard. The code is kept only in the visible field until submission and
+is never logged or stored; the CLI performs the exchange and owns the resulting
+credential. If Superset returns several organizations, Luke shows only the
+identities from a fresh CLI list and asks the CLI to switch only to the choice
+you press. Cancelling, quitting Luke, or waiting three minutes ends the login
+process. Disconnecting from the same Settings row runs the CLI's own documented
+`auth logout`, which clears the login the CLI stored — the same consent
+withdrawn through the same binary — and the next observation pass reports the
+signed-out state.
 
 Luke asks macOS's property-list utility whether the CLI config names an active
 organization and receives only that identifier; Luke never opens the config or
-receives its credential fields. The login serves one organization at a time,
-so acts are offered only on the workspaces that organization's own host
-database recorded. A message or control runs only from the developer's press
-or a turn the developer opened, invokes the CLI executable directly without a shell, and
+receives its credential fields. The login serves one organization at a time, so
+acts are offered only on the workspaces that organization's own host database
+recorded. A message or control runs only from the developer's press or a turn
+the developer opened, invokes the CLI executable directly without a shell, and
 passes only the observed workspace and terminal identifiers plus the
 developer's own message — the terminal lives on this machine, which is the
 CLI's own default, so no host identifier travels at all. The one control
 offered today is Delete workspace, on a row whose work was positively seen
-settled: it runs Superset's own `workspaces delete` with the observed
-workspace id as its single argument, and Superset documents no archive or
-restore, so it permanently removes that workspace and every terminal in it. Luke never reads, copies, or stores the CLI token. The
-CLI is Superset's cloud client and its own telemetry and privacy terms apply to
-commands it runs. Without its login, these actions do not appear and local
-observation continues unchanged.
+settled: it runs Superset's own `workspaces delete` with the observed workspace
+id as its single argument, and Superset documents no archive or restore, so it
+permanently removes that workspace and every terminal in it. Luke never reads,
+copies, or stores the CLI token. The CLI is Superset's cloud client and its own
+telemetry and privacy terms apply to commands it runs. Without its login, these
+actions do not appear and local observation continues unchanged.
 
 A developer-opened conversation may also ask Luke to create a Superset
-workspace. Luke first asks the CLI for accessible hosts, their projects, and
-configured agent presets, retains only bounded identifiers and labels for the
-current observation, and validates the requested host, project, and agent in
-both processes. It invokes `workspaces create` directly with the developer's
-opening task and a generated bounded branch, then may invoke `workspaces open`
-for the workspace identifier Superset returned. A developer-opened
-conversation may also ask Luke to rename a Superset workspace already
-observed: Luke invokes `workspaces update` directly with that workspace's
-observed id and host and the developer's own bounded new name behind
-`--name`, and nothing else. No arbitrary CLI command or
-argument is exposed to the model.
+workspace, in one of the hosts, projects, and agent presets those three reads
+reported, validated in both processes. It invokes `workspaces create` directly
+with the developer's opening task and a generated bounded branch, then may
+invoke `workspaces open` for the workspace identifier Superset returned. Such a
+turn may also ask Luke to rename a Superset workspace already observed: Luke
+invokes `workspaces update` directly with that workspace's observed id and host
+and the developer's own bounded new name behind `--name`, and nothing else —
+never that command's other flags, which link and unlink tasks. No arbitrary CLI
+command or argument is exposed to the model.
 
 One provider file per provider is the exception to "does not modify", and it
 is configuration rather than session data: Luke merges an observation hook
@@ -298,17 +346,19 @@ evaluator still never receives transcript content.
 
 ## Optional cloud-provider reads
 
-Conductor has no local session state for Luke to observe, and neither do
-Cursor's cloud agents. Without a key for one of those providers, Luke sends that
-provider no request and reports none of its sessions; the Cursor sessions
-running on this machine are read from disk and are unaffected by whether a
-Cursor key exists.
+Five providers keep sessions Luke has no local state to read: Conductor, GitHub
+Copilot, and Jules, whose sessions live only in a cloud, and the cloud halves
+of Cursor and Devin. Without a key for one of them, Luke sends that provider no
+request and reports none of its sessions; the Cursor and Devin sessions running
+on this machine are read from disk and are unaffected by whether a key for
+either exists.
 
-When a key is supplied, Luke sends it as a bearer credential to that provider,
-and observation issues only reads: authenticated `GET` requests, plus — for
-Conductor — one fixed `SELECT` posted to its documented read-only query
-endpoint, under the same read-document boundary the Linear section below
-describes.
+When a key is supplied, Luke sends it to that provider as the credential the
+provider documents — a bearer token for every one of them but Jules, which
+documents Google's own API-key header instead — and observation issues only
+reads: authenticated `GET` requests, plus — for Conductor — one fixed `SELECT`
+posted to its documented read-only query endpoint, under the same read-document
+boundary the Linear section below describes.
 
 - For Conductor, Luke reads the authenticated identity, projects, workspaces the
   authenticated user created, sessions, session statuses, and each open
@@ -330,33 +380,61 @@ describes.
   names and links, repository URLs, starting refs and run branches, timestamps,
   archive and run status, provider-designated run results, and pull-request
   links.
+- For Devin, Luke reads who the token authenticates as — the identity route
+  answers a user id, an organization id, and which kind of credential it is,
+  and a token that is not a person's own personal access token is observed as
+  having nothing at all — then that person's own newest sessions in that
+  organization. It processes session identifiers, Devin's own session name,
+  status and reported status detail, timestamps, archive state, session links,
+  and pull-request links, from which the repository label is derived. Devin's
+  session list reports no recap and no failure reason, so neither is shown.
+- For Copilot, Luke reads the agent tasks the supplied GitHub token can see — a
+  fine-grained personal access token with Agent tasks read access, or a GitHub
+  App user token — through GitHub's documented agent-tasks list, the one route
+  of that API that does not write, pinned to the API version this build was
+  written against. It processes task identifiers, state, timestamps, archive
+  state, the task's own page link, the base branch from its branch artifact,
+  and the repository, which is read out of the task's own API address rather
+  than from the task's name: GitHub documents that name as derived from the
+  prompt, so it is transcript content and Luke discards it. The connection is
+  read-only by construction — GitHub documents no way to message or steer a
+  task — so no Copilot row offers a message or a control.
+- For Jules, Luke reads the sessions the supplied key can see. It processes
+  session identifiers, state, timestamps, the session's own link, the starting
+  branch whoever opened the session chose, and the source repository, which is
+  also what labels the row: a Jules session's `prompt` is the task you typed
+  and its `title` is generated from that prompt, so neither is read.
 
 Observation never calls a provider write route. Luke calls one only when you
 ask for the act it performs — a message typed on a session's row or asked for
-out loud, a control a session's provider advertised (such as cancelling a
-Conductor turn), a new workspace: a Conductor workspace in one of the
-projects Conductor reports, or a Cursor agent in a repository Cursor lists —
-another agent started in the workspace an observed Conductor session runs
-in, or a rename giving an observed Conductor session — or the workspace it
-runs in — the name you chose — each through the provider's own documented endpoint under the same key,
-and each validated against what the latest observation actually reported. A new
-workspace can carry the opening task you gave its agent, in your words; that
-text goes to the provider the same way a message to an existing session does,
-and nowhere else. Nothing automatic reaches a write route. Provider-assigned names and results
-can reflect task or prompt content; Luke uses their bounded values to distinguish
-sessions and describe outcomes. Returned metadata is held in memory for display;
-response bodies are not persisted.
+out loud, which Conductor, Cursor, Devin, and Jules document and Copilot does
+not; a control a session's provider advertised (cancelling a Conductor turn or
+archiving its workspace, cancelling a Cursor run or archiving its agent,
+archiving a Devin session, approving a Jules plan); a new workspace: a
+Conductor workspace in one of the projects Conductor reports, or a Cursor agent
+in a repository Cursor lists; another agent started in the workspace an
+observed Conductor session runs in; or a rename giving an observed Conductor
+session — or the workspace it runs in — the name you chose — each through the
+provider's own documented endpoint under the same key, and each validated
+against what the latest observation actually reported. A new workspace can
+carry the opening task you gave its agent, in your words; that text goes to the
+provider the same way a message to an existing session does, and nowhere else.
+Nothing automatic reaches a write route. Provider-assigned names and results
+can reflect task or prompt content; Luke uses their bounded values to
+distinguish sessions and describe outcomes. Returned metadata is held in memory
+for display; response bodies are not persisted.
 
-Conductor keys may come from Luke's Settings, `CONDUCTOR_API_KEY`, or
-`CONDUCTOR_API_TOKEN`; Cursor keys may come from Settings or `CURSOR_API_KEY`.
-Keys saved in Settings are encrypted with Electron `safeStorage`, backed by the
+Every one of these keys may come from Luke's Settings or from that provider's
+own environment variable — `CONDUCTOR_API_KEY` or `CONDUCTOR_API_TOKEN`,
+`CURSOR_API_KEY`, `DEVIN_API_KEY`, `COPILOT_API_KEY`, `JULES_API_KEY`. Keys
+saved in Settings are encrypted with Electron `safeStorage`, backed by the
 macOS login Keychain, and are never returned to the renderer. Environment keys
 are not copied into Luke's settings file.
 
 By default, these requests go to the provider's own API. Changing
-`CONDUCTOR_API_URL` or `CURSOR_API_URL` sends the corresponding bearer credential
-to that configured endpoint, whose policies then govern the request and
-response data.
+`CONDUCTOR_API_URL`, `CURSOR_API_URL`, `DEVIN_API_URL`, `COPILOT_API_URL`, or
+`JULES_API_URL` sends the corresponding credential to that configured endpoint,
+whose policies then govern the request and response data.
 
 ## Optional Codex cloud reads through the Codex CLI
 
@@ -459,21 +537,24 @@ answers with busy intervals only — a title or an attendee cannot travel in
 that response at all. The query names only calendar ids the same pass's list
 reported. Events themselves are never read: Luke holds no event scope.
 
-The intervals gate exactly one behavior, on this machine: while a meeting is
-on and the "Quiet during meetings" switch is enabled, Luke's spoken
-announcements wait and are read out after the meeting ends. Nothing about the
-calendar leaves the machine — meeting times are never sent to the voice
-service, the attention evaluator, or anywhere else.
+What the intervals gate is bounded and entirely on this machine: while a
+meeting is on and the "Quiet during meetings" switch is enabled, Luke's spoken
+announcements wait and are read out after the meeting ends, and the face drawn
+beside the housing sleeps for as long as that hold stands. Holding is the whole
+power — a calendar entry can delay an announcement and put a drawn face to
+sleep, never create one, reword one, or act on one. Nothing about the calendar
+leaves the machine — meeting times are never sent to the voice service, the
+attention evaluator, or anywhere else.
 
 ## Local display and microphone
 
 The local panel may show a session's provider-assigned title, status, current
 activity or error, recap — provider-designated, or for Conductor the agent's
-parting words read from its transcript — repository, branch, model, the name
-and identifier of the workspace a chat is grouped under where its provider
-nests them, and session or change links. The links, model label, and workspace
-identifier are kept out of the optional attention-review request described
-below.
+parting words read from its transcript — repository, branch, model, the size of
+the change as its provider counts it, the name and identifier of the workspace
+a chat is grouped under where its provider nests them, and session or change
+links. The links, model label, change size, and workspace identifier are kept
+out of the optional attention-review request described below.
 
 The microphone is optional.
 
@@ -486,6 +567,18 @@ local-only listening mode. Nothing is captured until you open a turn: the
 microphone track is created muted, server-side voice detection is disabled, and
 each turn begins by discarding whatever the buffer held. Luke never opens the
 microphone on its own.
+
+To know which device to open, Luke reads where your voice would be captured
+from — the default input device's transport, whether this Mac has a built-in
+microphone and what it is named, and whether the lid over it is open — through
+a helper that reads nothing else and can write nothing. No audio is ever read
+by it, that reading never leaves your Mac and is not logged, and what it
+decides is exactly one thing: which device the browser is asked to open when a
+press takes a turn, so a Bluetooth headset is not pulled onto its call codec
+while the Mac's own microphone can listen, and is listened to itself when a
+shut lid would muffle the Mac's. "Prefer the Mac's microphone", in the Voice
+section of Settings, is that choice and is on by default. A route the helper
+cannot read means the browser's default device, never a refusal to listen.
 
 ## Optional spoken conversation
 
@@ -518,21 +611,34 @@ When you open a turn, Luke sends that turn's microphone audio to the OpenAI
 Realtime API over a direct WebRTC connection from your Mac, and plays back the
 spoken reply. OpenAI's policies govern that audio and the reply.
 
+A turn can also be opened by typing rather than speaking. An ask typed into
+Luke's own composer, under the session list, rides the same Realtime connection
+as text — opening one if none is up — and asks the system for no microphone at
+all: the words you typed are what travels, and the reply comes back the same
+way a spoken one does. Everything below about what a conversation carries
+applies to a typed turn exactly as it does to a spoken one.
+
 Alongside the audio, Luke sends the same bounded session fields the attention
-review uses — provider name, session title, status, the name of the workspace
-a chat belongs to where its provider groups them, repository or branch, the
-tool a session is currently running, the provider's reported error line, and
-each session's recap — so a spoken question about your sessions can be
-answered with what a session is doing or stuck on, not only that it works or
-waits. Each roster line also states what the session can be asked to do —
-whether it takes messages, can be opened, is a local session whose transcript
-can be read on ask, has a pull request, and which controls its provider
-advertised — as facts, never as addresses. A standing ask you have made about
-a session (described below under the attention review) rides its roster line
-in your own words, so Luke can say what he is already listening for. No
-message history, file content, or command output is ever included: a recap
-can reflect what a session was asked and replied — for Conductor it is the
-agent's own parting words — but the conversation behind it never travels.
+review uses — provider name, session title, status, the name of the workspace a
+chat belongs to where its provider groups them, repository or branch, the tool
+a session is currently running, the provider's reported error line, and each
+session's recap — so a spoken question about your sessions can be answered with
+what a session is doing or stuck on, not only that it works or waits. Two
+things ride the roster line that the attention review is not sent: how long ago
+the session was last observed, as a phrase rather than a timestamp, and the
+identity a tool call names it by — its provider id and the provider's own
+session id — because an ask to message or open a session has to resolve to one.
+Each roster line also states what the session can be asked to do — whether it
+takes messages, can be opened, is a local session whose transcript can be read
+on ask, has a pull request, whether it or its workspace can be renamed, which
+controls its provider advertised, and the name of whatever manages its
+workspace — as facts, never as addresses: a link's presence travels and the
+link itself does not. A standing ask you have made about a session (described
+below under the attention review) rides its roster line in your own words, so
+Luke can say what he is already listening for. No message history, file
+content, or command output is ever included: a recap can reflect what a session
+was asked and replied — for Conductor it is the agent's own parting words — but
+the conversation behind it never travels.
 
 Luke also sends the list of projects a new workspace could be created in —
 each project's provider, repository label, and provider-assigned identifier —
@@ -551,37 +657,47 @@ allows — so a question about your board can be answered and an ask validated
 against what Linear actually listed. No issue description or comment thread is
 ever included, because Luke never reads one.
 
-While voice is available — announcements do nothing while it is not —
-Luke also opens a call of his own to speak a session announcement when no
-conversation is up. That call is narrower in
-every direction: it receives audio and sends none (no microphone track exists
-on it, so nothing can be captured), it carries no tools, and the only thing
-sent up it is the one update's bounded fields — the session's provider name,
-title, the name of the workspace it is one chat of, repository or branch,
-what changed, the provider's one-line error reason when there is one, whether
-the session takes a reply, and — for a session that started waiting or
-finished — a bounded excerpt of the same session recap the attention review
-and open conversations above already carry. The voice words those fields into
-the announcement you hear, so it can say what the session is waiting on
-rather than only that it waits; whether and when to announce is decided on
-your Mac by the status change alone. As above, a recap can reflect what a
-session was asked and replied, but the conversation behind it never travels.
-The session roster, workspace projects, app guide, and issue roster named
-above travel only on conversations you open yourself. The call closes itself
-shortly after the announcement is spoken.
+While voice is available — announcements do nothing while it is not — Luke also
+opens a call of his own to speak a session announcement when no conversation is
+up. That call is narrower in every direction: it receives audio and sends none
+(no microphone track exists on it, so nothing can be captured), it carries no
+tools, and the only thing sent up it is the one update's bounded fields — the
+session's provider name, title, the name of the workspace it is one chat of,
+repository or branch, what changed, the provider's one-line error reason when
+there is one, whether the session takes a reply, and — for a session that
+started waiting or finished — a bounded excerpt of the same session recap the
+attention review and open conversations above already carry. The voice words
+those fields into the announcement you hear, so it can say what the session is
+waiting on rather than only that it waits. The one other thing that call may
+carry is a sentence the attention review already wrote, when the review found
+an update that answers a standing ask you made about that session; it is read
+out in exactly those words rather than re-worded, and nothing beyond it is
+sent. So what opens Luke's own call is either a status change your Mac observed
+or the review answering an ask you made — never a model deciding to speak. As
+above, a recap can reflect what a session was asked and replied, but the
+conversation behind it never travels. The session roster, workspace projects,
+app guide, and issue roster named above travel only on conversations you open
+yourself. The call closes itself shortly after the announcement is spoken.
 
-While an announcement is being spoken, a pressable notice on Luke's own
-surface under the notch names the session it is about. The notice is drawn
-entirely on your Mac from what Luke already observed and nothing about it
-leaves it: pressing it only hands the session's provider-reported address to
-macOS — the same thing pressing the session's row does — or opens Luke's own
-panel when the session reported none.
+While an announcement is being spoken, a pressable notice on Luke's own surface
+under the notch names the session it is about. Whenever Luke speaks, the same
+band also draws a chip for each session or tracked issue his words named — the
+session the announcement is about is one of those. What a reply named is worked
+out on your Mac by matching its own words against the titles and identifiers
+the latest observation and the latest tracker read already reported, so nothing
+a model said can conjure a session or an issue that is not there. Every chip is
+drawn entirely from what Luke already observed, lives exactly as long as the
+words, and nothing about it leaves the machine: pressing one only hands that
+session's or issue's provider-reported address to macOS — the same thing
+pressing the session's row does — or opens Luke's own panel when the session
+reported none.
 
 Luke does not record the conversation, write audio to disk, or keep a
 transcript. With captions enabled in Settings — they are off by default — the
 reply's text is drawn on screen while Luke speaks; it is discarded when the
-reply ends and is never written to disk. Audio is not retained by Luke in any
-form.
+reply ends and is never written to disk. A reply answering an ask you typed
+draws its captions whatever the setting says, because there is nothing to
+listen for. Audio is not retained by Luke in any form.
 
 While the Mac's output is muted or its volume is at zero, the same captions are
 drawn even with the setting off, so a reply the speakers would swallow can
@@ -589,6 +705,17 @@ still be read. To know when, Luke reads exactly two things from the default
 output device — its mute switch and its volume level — through a helper that
 can write nothing. That reading never leaves your Mac, is not logged, and Luke
 never changes the system volume.
+
+While a spoken exchange is live, Luke may turn two other apps down so he can be
+heard: Music and Spotify, through their own scripting interfaces, behind
+macOS's per-app automation consent — which the system asks you for, once, the
+first time. A helper does that and only that. It never pauses either app and
+reads nothing beyond whether each is playing and how loud, a volume you move
+yourself during the quiet stays where your hand put it, and the levels are
+restored shortly after the exchange settles. Nothing about either app leaves
+your Mac. The whole behavior is the "Quiet Music and Spotify" switch in the
+Voice section of Settings, on by default, and what triggers it is the state of
+the exchange itself — never anything Luke read, heard, or decided.
 
 The standing API key — or, on the hosted path, the account's access token —
 stays in Luke's main process. The renderer receives only a short-lived client
