@@ -15,8 +15,8 @@ async function temporarySupersetHome(t: TestContext): Promise<string> {
   return directory;
 }
 
-async function writeHostDatabase(home: string, hostId: string): Promise<DatabaseSync> {
-  const directory = path.join(home, "host", hostId);
+async function writeHostDatabase(home: string, organizationId: string): Promise<DatabaseSync> {
+  const directory = path.join(home, "host", organizationId);
   await fs.mkdir(directory, { recursive: true });
   return new DatabaseSync(path.join(directory, "host.db"), {});
 }
@@ -128,18 +128,18 @@ test("reads live host databases and enriches an exact provider session", async (
 
 test("keeps the newest duplicate binding across host databases", async (t) => {
   const home = await temporarySupersetHome(t);
-  for (const [hostId, updatedAt] of [
+  for (const [organizationId, updatedAt] of [
     ["host-old", 100],
     ["host-new", 200],
   ] as const) {
-    const database = await writeHostDatabase(home, hostId);
+    const database = await writeHostDatabase(home, organizationId);
     createSchema(database);
     database.exec(`
       INSERT INTO workspaces VALUES (
-        'workspace-${hostId}', NULL, NULL, '${hostId}', 'main', ${updatedAt}
+        'workspace-${organizationId}', NULL, NULL, '${organizationId}', 'main', ${updatedAt}
       );
       INSERT INTO terminal_agent_bindings VALUES (
-        'terminal-${hostId}', 'workspace-${hostId}', 'claude', 'shared-session', 'Stop'
+        'terminal-${organizationId}', 'workspace-${organizationId}', 'claude', 'shared-session', 'Stop'
       );
     `);
     database.close();
