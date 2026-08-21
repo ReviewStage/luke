@@ -54,6 +54,41 @@ Google's callback is `${BETTER_AUTH_URL}/api/auth/callback/google`; GitHub's is
 `api/feedback.mjs` deliberately remains plain ESM so Vercel's builder has nothing
 to transpile.
 
+# Signing in on a Preview deployment
+
+A Preview deployment answers on hostnames minted for the branch, so
+`server/auth-deployment.ts` reads the deployment's own address rather than
+assuming one: on a Preview, `VERCEL_URL` is the base URL and `VERCEL_BRANCH_URL`
+joins it as a trusted origin, and `BETTER_AUTH_URL` stays what it has always
+been, the production address whose callback the two providers registered.
+Without this a preview refuses its own sign-in before it reaches a provider at
+all — Better Auth trusts the origin of its own base URL, and the browser on a
+preview sends the preview's, which is the 403 behind the admin dashboard's
+"Sign-in could not start. Try again."
+
+Better Auth's `oAuthProxy` plugin carries the rest: the preview hands the
+provider production's registered redirect URI, production exchanges the code and
+redirects the profile back to the preview encrypted, and the preview creates the
+session in its own Neon branch database. Production runs the same plugin,
+because it is the end that decrypts, and the proxy is inert there — a request
+that already arrived on the address it would proxy to is left alone. A preview
+therefore signs in only against a production deployment that already carries the
+plugin.
+
+The Preview environment needs `BETTER_AUTH_URL`, `BETTER_AUTH_SECRET`,
+`GOOGLE_CLIENT_ID`, and `GITHUB_CLIENT_ID`; the two client secrets are spent by
+production, which is the end that exchanges the code. The two ends encrypt with
+`BETTER_AUTH_SECRET` unless `BETTER_AUTH_PROXY_SECRET` is set, and whichever it
+is has to hold the same value in both environments, or the profile arrives
+undecryptable. Prefer setting `BETTER_AUTH_PROXY_SECRET` on both: a preview then
+never holds the secret that signs production's sessions, and a leaked proxy
+secret forges nothing.
+
+Vercel Deployment Protection sits in front of all of this. The redirect back
+from production lands on the protected preview like any other request, so the
+browser needs that deployment's access cookie already; without it the dashboard
+reports the intercepted API call rather than the metrics.
+
 # Hosted voice and attention
 
 `api/voice/mint.ts` and `api/attention/review.ts` run Luke's voice and
