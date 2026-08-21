@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   maximumSessionRecapLength,
+  maximumSessionTitleLength,
   PROVIDER_ACT_RESULT_STATUS,
   type ProviderMessageResult,
   type ProviderSessionMessage,
@@ -12,6 +13,7 @@ import {
   SESSION_COMPLETION_CAUSE,
   SESSION_STATUS,
   type SessionDetail,
+  type SessionDiffSummary,
   type SessionStatus,
   sessionMessageText,
   UNKNOWN_WORKSPACE_LABEL,
@@ -21,11 +23,13 @@ import {
   isWireNumber,
   isWireString,
   oneLine,
+  recordFromJsonLine,
   resolveOptions,
   text,
   unparsedWire,
   type WireBoundaryInput,
   type WireRecord,
+  wholeNumber,
   wireRecord,
 } from "@sidecar/wire";
 import {
@@ -100,12 +104,19 @@ const CURSOR_APP_CHAT_QUERY = "SELECT 1 FROM cursorDiskKV WHERE key = ?";
 
 /**
  * The app's per-chat header row, which is where Cursor records that the user
- * filed a chat away. Only the presence of a positively archived row is ever
- * read — the header's own value column is the chat's name and standing, which
- * Cursor writes from the conversation, and observation never opens it.
+ * filed a chat away, read as the presence of a positively archived row.
  */
 const CURSOR_APP_ARCHIVED_CHAT_QUERY =
   "SELECT 1 FROM composerHeaders WHERE composerId = ? AND isArchived = 1";
+
+/**
+ * The same header row's own bookkeeping value, read for the fixed fields
+ * {@link chatHeaderFromValue} names — the chat's name, branch, folder, held
+ * call, and change counts, everything *about* the chat and nothing of it. The
+ * conversation lives in the separate `composerData` records, whose values
+ * observation still never opens.
+ */
+const CURSOR_CHAT_HEADER_QUERY = "SELECT value FROM composerHeaders WHERE composerId = ?";
 
 const CURSOR_TRANSCRIPT_FILE_EXTENSION = ".jsonl";
 const CURSOR_WORKSPACE_FILE = "workspace.json";
@@ -438,9 +449,85 @@ interface CursorAppChatIndex {
   held: ReadonlySet<string>;
   /** The chats the user positively filed away, which draw no row. */
   archived: ReadonlySet<string>;
+  /** Each observed chat's bounded header bookkeeping, where a header exists. */
+  headers: ReadonlyMap<string, CursorChatHeader>;
 }
 
-const EMPTY_APP_CHAT_INDEX: CursorAppChatIndex = { held: new Set(), archived: new Set() };
+const EMPTY_APP_CHAT_INDEX: CursorAppChatIndex = {
+  held: new Set(),
+  archived: new Set(),
+  headers: new Map(),
+};
+
+/**
+ * The bounded bookkeeping Cursor's own header row keeps about one chat —
+ * fields *about* the session, read from the header's value by fixed names and
+ * discarded past what a row can show. The conversation itself lives in the
+ * separate `composerData` records, which observation still never opens.
+ */
+interface CursorChatHeader {
+  /** The name Cursor gave the chat, the same standing as Claude Code's generated title. */
+  name?: string;
+  /** The branch the chat works on: the active branch where recorded, else the one it began on. */
+  branch?: string;
+  /** The folder the chat runs in, exactly as Cursor's own header names it. */
+  folderPath?: string;
+  /** Whether a tool call is holding for the user's answer right now. */
+  blockedPending?: boolean;
+  diff?: SessionDiffSummary;
+}
+
+/** The header fields this build reads, by Cursor's own names. */
+const CURSOR_HEADER_FIELD = {
+  NAME: "name",
+  CREATED_ON_BRANCH: "createdOnBranch",
+  ACTIVE_BRANCH: "activeBranch",
+  BRANCH_NAME: "branchName",
+  WORKSPACE_IDENTIFIER: "workspaceIdentifier",
+  URI: "uri",
+  FS_PATH: "fsPath",
+  HAS_BLOCKING_PENDING_ACTIONS: "hasBlockingPendingActions",
+  FILES_CHANGED_COUNT: "filesChangedCount",
+  TOTAL_LINES_ADDED: "totalLinesAdded",
+  TOTAL_LINES_REMOVED: "totalLinesRemoved",
+} as const;
+
+const CURSOR_HEADER_BOUNDS = {
+  MAXIMUM_BRANCH_LENGTH: 120,
+} as const;
+
+/** One chat's header value, reduced to the fixed fields a row can show. */
+function chatHeaderFromValue(source: string): CursorChatHeader | undefined {
+  const record = recordFromJsonLine(source);
+  if (!record) return undefined;
+  const header: CursorChatHeader = {};
+  const name = oneLine(text(record[CURSOR_HEADER_FIELD.NAME]), maximumSessionTitleLength);
+  if (name) header.name = name;
+  const activeBranchValue = record[CURSOR_HEADER_FIELD.ACTIVE_BRANCH];
+  const activeBranch = isRecord(activeBranchValue) ? activeBranchValue : undefined;
+  const branch = oneLine(
+    text(activeBranch?.[CURSOR_HEADER_FIELD.BRANCH_NAME]) ??
+      text(record[CURSOR_HEADER_FIELD.CREATED_ON_BRANCH]),
+    CURSOR_HEADER_BOUNDS.MAXIMUM_BRANCH_LENGTH,
+  );
+  if (branch) header.branch = branch;
+  const workspaceValue = record[CURSOR_HEADER_FIELD.WORKSPACE_IDENTIFIER];
+  const workspace = isRecord(workspaceValue) ? workspaceValue : undefined;
+  const uriValue = workspace?.[CURSOR_HEADER_FIELD.URI];
+  const uri = isRecord(uriValue) ? uriValue : undefined;
+  const folderPath = text(uri?.[CURSOR_HEADER_FIELD.FS_PATH]);
+  if (folderPath && path.isAbsolute(folderPath)) header.folderPath = folderPath;
+  if (record[CURSOR_HEADER_FIELD.HAS_BLOCKING_PENDING_ACTIONS] === true) {
+    header.blockedPending = true;
+  }
+  const filesChanged = wholeNumber(record[CURSOR_HEADER_FIELD.FILES_CHANGED_COUNT]);
+  const linesAdded = wholeNumber(record[CURSOR_HEADER_FIELD.TOTAL_LINES_ADDED]);
+  const linesRemoved = wholeNumber(record[CURSOR_HEADER_FIELD.TOTAL_LINES_REMOVED]);
+  if (filesChanged !== undefined && linesAdded !== undefined && linesRemoved !== undefined) {
+    header.diff = { filesChanged, linesAdded, linesRemoved };
+  }
+  return header;
+}
 
 /**
  * What the refinement actually buys here is the state the transcript cannot
@@ -459,14 +546,15 @@ const CURSOR_HOOK_STATUS_REFINEMENT = {
 } as const satisfies HookStatusRefinement<CursorHookEvent>;
 
 /**
- * Reads which of the observed chats Cursor's app holds, and which of them the
- * user has archived — each as the presence of a row in the app's own index, a
- * point lookup per chat, never a value, because the values are the
- * conversations themselves. An absent app, an unreadable or mid-write
- * database, or a schema this build does not know holds nothing, which
- * withholds addresses and keeps every row rather than inventing an address
- * the app cannot resolve or a filing away nobody performed — and never fails
- * the pass the rows come from.
+ * Reads what Cursor's own index says about the observed chats: which the app
+ * holds and which the user archived, each as the presence of a row, and each
+ * chat's header bookkeeping, reduced to the fixed fields a row can show. Every
+ * read is a point lookup per observed chat. The `composerData` values — the
+ * conversations themselves — are never opened. An absent app, an unreadable or
+ * mid-write database, or a schema this build does not know holds nothing,
+ * which withholds the annotations rather than inventing an address the app
+ * cannot resolve or a filing away nobody performed — and never fails the pass
+ * the rows come from.
  */
 class CursorAppChatRegistry {
   readonly #statePath: string;
@@ -507,10 +595,30 @@ class CursorAppChatRegistry {
           providerSessionIds,
           (id) => id,
         ),
+        headers: chatHeaders(database, providerSessionIds),
       };
     } finally {
       database.close();
     }
+  }
+}
+
+function chatHeaders(
+  database: SqliteDatabase,
+  providerSessionIds: readonly string[],
+): ReadonlyMap<string, CursorChatHeader> {
+  const headers = new Map<string, CursorChatHeader>();
+  try {
+    const statement = database.prepare(CURSOR_CHAT_HEADER_QUERY);
+    for (const providerSessionId of providerSessionIds) {
+      const row = statement.all(providerSessionId)[0];
+      const value = isRecord(row) ? row.value : undefined;
+      const header = isWireString(value) ? chatHeaderFromValue(value) : undefined;
+      if (header) headers.set(providerSessionId, header);
+    }
+    return headers;
+  } catch {
+    return headers;
   }
 }
 
@@ -534,25 +642,63 @@ function matchingChats(
   }
 }
 
+/** The shape a symbolic HEAD names its branch in; a detached HEAD names none. */
+const GIT_HEAD_BRANCH_PATTERN = /^ref: refs\/heads\/(.+)$/m;
+const GIT_DIRECTORY_POINTER_PATTERN = /^gitdir: (.+)$/m;
+
+/**
+ * The branch the chat's folder stands on right now, from the folder's own
+ * `.git` HEAD — the one fact read outside Cursor's files, two bounded file
+ * reads and never a git invocation, because the header's `createdOnBranch`
+ * says where a chat began rather than where its folder stands after a
+ * checkout. A worktree's `.git` is a pointer file to its own git directory,
+ * followed for the same HEAD; a detached HEAD, an unreadable file, or a
+ * folder that is not a repository names no branch at all.
+ */
+async function branchFromGitHead(folderPath: string): Promise<string | undefined> {
+  const gitPath = path.join(folderPath, ".git");
+  const stats = await fileStats(gitPath);
+  let headPath: string | undefined;
+  if (stats?.isDirectory()) {
+    headPath = path.join(gitPath, "HEAD");
+  } else if (stats?.isFile()) {
+    const pointer = GIT_DIRECTORY_POINTER_PATTERN.exec((await readTextFile(gitPath)) ?? "")?.[1];
+    const gitDirectory = text(pointer);
+    if (gitDirectory) headPath = path.resolve(folderPath, gitDirectory, "HEAD");
+  }
+  if (!headPath) return undefined;
+  const head = await readTextFile(headPath);
+  if (!head) return undefined;
+  return oneLine(
+    text(GIT_HEAD_BRANCH_PATTERN.exec(head)?.[1]),
+    CURSOR_HEADER_BOUNDS.MAXIMUM_BRANCH_LENGTH,
+  );
+}
+
 /**
  * What Cursor knows about a local session beyond its state: the folder, the
- * tool call an open turn is running, that a turn failed, and — for a chat the
- * app holds — the chat's own address. Cursor records why a turn failed, but
- * that reason is written from the turn itself, so the fact of the failure is
- * reported and its wording is not — the same fixed line the cloud half
- * reports for a failed run.
+ * tool call an open turn is running, that a turn failed, the branch and
+ * change counts its header records, and — for a chat the app holds — the
+ * chat's own address. Cursor records why a turn failed, but that reason is
+ * written from the turn itself, so the fact of the failure is reported and
+ * its wording is not — the same fixed line the cloud half reports for a
+ * failed run.
  */
 function detailFor(
   label: string,
   status: SessionStatus,
   link: string | undefined,
   activity: string | undefined,
+  branch: string | undefined,
+  diff: SessionDiffSummary | undefined,
 ): SessionDetail {
   return {
     ...(activity ? { activity } : undefined),
     repository: label,
+    ...(branch ? { branch } : undefined),
     ...(link ? { link } : undefined),
     ...(status === SESSION_STATUS.ERROR ? { error: CURSOR_TURN_FAILED_MESSAGE } : undefined),
+    ...(diff ? { diff } : undefined),
   };
 }
 
@@ -712,7 +858,7 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
   readonly #cursorHome: string;
   readonly #workspaceLabels: CursorWorkspaceLabels;
   readonly #appChatRegistry: CursorAppChatRegistry;
-  #appChats: ReadonlySet<string> = new Set();
+  #appChatIndex: CursorAppChatIndex = EMPTY_APP_CHAT_INDEX;
   readonly #maximumProjectDirectories: number;
   readonly #readTailBytes: number;
   readonly #transcriptReadTailBytes: number | undefined;
@@ -761,7 +907,7 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
     const index = await this.#appChatRegistry.index(
       candidates.map((candidate) => candidate.providerSessionId),
     );
-    this.#appChats = index.held;
+    this.#appChatIndex = index;
     // A chat the user filed away in the app draws no row, the same answer an
     // archived cloud agent gives. The transcript Cursor keeps for it is left
     // unread; a chat the index cannot vouch for either way stays.
@@ -771,6 +917,16 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
   protected override async prepare(
     candidates: readonly CursorTranscriptCandidate[],
   ): Promise<void> {
+    // A send target lives exactly as long as its chat stays on the roster this
+    // pass discovered. A chat archived or gone since the last pass never
+    // reaches observation() again, so its entry is pruned here rather than
+    // waiting to be replaced — while a chat still discovered keeps its entry
+    // through the pass, so a send arriving mid-pass is not refused by a map
+    // half-built.
+    const discovered = new Set(candidates.map((candidate) => candidate.providerSessionId));
+    for (const providerSessionId of this.#sendTargets.keys()) {
+      if (!discovered.has(providerSessionId)) this.#sendTargets.delete(providerSessionId);
+    }
     const projectDirectoryNames = [
       ...new Set(candidates.map((candidate) => candidate.projectDirectoryName)),
     ];
@@ -836,10 +992,11 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
   }
 
   /**
-   * A session is named by the folder it ran in and by nothing else. Cursor
-   * names a chat from its opening prompt, so that name is the prompt and never
-   * reaches an observation — and the location is left unsaid, which is how an
-   * adapter reading this machine reports one that runs on it.
+   * A session is named by the name Cursor's own header keeps for the chat —
+   * the same standing as the title Claude Code generates and Gemini CLI's
+   * summary — falling back to the folder it ran in for a chat whose header
+   * carries none. The location is left unsaid, which is how an adapter
+   * reading this machine reports one that runs on it.
    */
   protected async observation(
     candidate: CursorTranscriptCandidate,
@@ -847,7 +1004,17 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
     now: number,
     activeSessionFreshnessMs: number,
   ): Promise<ProviderSessionObservation> {
-    const label = this.#workspaceLabels.label(candidate.projectDirectoryName);
+    const header = this.#appChatIndex.headers.get(candidate.providerSessionId);
+    // One folder answers for the label, the branch, and the send pin, in the
+    // order of how exactly each source names it: the chat's own header, the
+    // project's trust record, and last the reduced-name workspace match.
+    const folderPath =
+      header?.folderPath ??
+      this.#trustedFoldersByProject.get(candidate.projectDirectoryName) ??
+      this.#workspaceLabels.folder(candidate.projectDirectoryName);
+    const label = folderPath
+      ? workspaceLabel(folderPath)
+      : this.#workspaceLabels.label(candidate.projectDirectoryName);
     const hookEventsDirectory = this.#hookEventsDirectory?.();
     const hookEvent: ObservedCursorHookEvent | undefined = hookEventsDirectory
       ? await readCursorHookEvent(hookEventsDirectory, candidate.providerSessionId).catch(
@@ -866,9 +1033,22 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
       now,
       activeSessionFreshnessMs,
     });
-    const { status, observedAt } = refined;
-    const appHeld = this.#appChats.has(candidate.providerSessionId);
+    const { observedAt } = refined;
+    let status = refined.status;
+    // A tool call holding for the user's answer is the one state neither the
+    // transcript nor the hooks can show — the header's own record of it
+    // upgrades only a live working row, so a stale hold decays with the turn
+    // it belongs to.
+    if (parsed.turn === undefined && header?.blockedPending && status === SESSION_STATUS.WORKING) {
+      status = SESSION_STATUS.WAITING;
+    }
+    const appHeld = this.#appChatIndex.held.has(candidate.providerSessionId);
     const link = appHeld ? cursorChatLink(candidate.providerSessionId) : undefined;
+    // The branch is the folder's own HEAD wherever the folder is known — a
+    // header's created-on branch says where a chat began, not where its
+    // folder stands after a checkout — with that header record standing in
+    // where the folder cannot say.
+    const branch = (folderPath ? await branchFromGitHead(folderPath) : undefined) ?? header?.branch;
     // A message is advertised only where the CLI's documented resume can
     // honestly land one: the turn is settled and nothing newer says work is
     // running — a prompt hook can know about a turn the transcript has not
@@ -879,9 +1059,6 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
     // than none. A target outlives the pass that advertised it — clearing at
     // the pass's start would fail a send arriving mid-pass — and a session
     // gone from the roster is caught by the act-time transcript re-check.
-    const folderPath =
-      this.#trustedFoldersByProject.get(candidate.projectDirectoryName) ??
-      this.#workspaceLabels.folder(candidate.projectDirectoryName);
     const canReceiveMessage =
       parsed.turn !== undefined &&
       status !== SESSION_STATUS.WORKING &&
@@ -898,10 +1075,10 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
     }
     return {
       providerSessionId: candidate.providerSessionId,
-      title: label,
+      title: header?.name ?? label,
       status,
       observedAt,
-      detail: detailFor(label, status, link, parsed.activity),
+      detail: detailFor(label, status, link, parsed.activity, branch, header?.diff),
       ...(parsed.recap ? { recap: parsed.recap } : undefined),
       ...(canReceiveMessage ? { canReceiveMessage: true } : undefined),
       ...(refined.sessionClosed

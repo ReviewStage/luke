@@ -20,3 +20,4 @@ pnpm-debug.log*
 # Local build and agent state, never inputs
 .vercel/
 .claude/
+error.log

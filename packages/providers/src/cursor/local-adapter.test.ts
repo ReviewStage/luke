@@ -104,7 +104,7 @@ async function registerAppChats(state: CursorState, sessionIds: readonly string[
  */
 async function writeChatHeaders(
   state: CursorState,
-  chats: readonly { sessionId: string; archived: boolean }[],
+  chats: readonly { sessionId: string; archived: boolean; value?: ParsedJsonObject }[],
 ): Promise<void> {
   const { DatabaseSync } = await import("node:sqlite");
   const database = new DatabaseSync(state.globalStorageStatePath, {});
@@ -120,7 +120,9 @@ async function writeChatHeaders(
         .run(
           chat.sessionId,
           chat.archived ? 1 : 0,
-          JSON.stringify({ name: SECRET_TRANSCRIPT_TEXT }),
+          // The subtitle is a header field this build deliberately does not
+          // read, so the tests can assert it never surfaces.
+          JSON.stringify({ subtitle: SECRET_TRANSCRIPT_TEXT, ...(chat.value ?? {}) }),
         );
     }
   } finally {
@@ -171,6 +173,11 @@ async function writeSubagentTranscript(
     `${JSON.stringify(messageRecord(TEST_ROLE.ASSISTANT, TEST_CONTENT_TYPE.TEXT))}\n`,
   );
   await fs.utimes(filePath, mtimeMs / 1000, mtimeMs / 1000);
+}
+
+/** The project directory name Cursor files a folder's sessions under. */
+function canonicalName(folderPath: string): string {
+  return folderPath.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 }
 
 function projectDirectory(state: CursorState, projectDirectoryName: string): string {
@@ -512,6 +519,40 @@ test("advertises a message only where the CLI's resume can honestly land one", a
   );
 });
 
+test("archiving a chat withdraws its send target with its row", async (t) => {
+  const state = await temporaryCursorState(t);
+  await writeWorkspaceRecord(state, "9f1c", "/Users/test/luke");
+  await writeTranscript(
+    state,
+    "Users-test-luke",
+    "chat-filed-away",
+    [turnEndedRecord(TEST_TURN_STATUS.SUCCESS)],
+    TEST_TIME - 5_000,
+  );
+  const adapter = new CursorLocalSessionAdapter({
+    ...state,
+    now: () => TEST_TIME,
+    cursorAgent: {
+      locate: async () => "/opt/test/cursor-agent",
+      probeLogin: async () => true,
+      launch: async () => "running" as const,
+    },
+  });
+  const [before] = await adapter.observe();
+  assert.equal(before?.canReceiveMessage, true);
+
+  // The user files the chat away in the app: it leaves the roster, and the
+  // send target advertised for it must leave with the row rather than keep
+  // authorizing from a cache the roster no longer stands behind.
+  await registerAppChats(state, ["chat-filed-away"]);
+  await writeChatHeaders(state, [{ sessionId: "chat-filed-away", archived: true }]);
+  const observations = await adapter.observe();
+  assert.equal(observations.length, 0);
+
+  const result = await adapter.sendMessage({ providerSessionId: "chat-filed-away", text: "hi" });
+  assert.equal(result.status, "unsupported");
+});
+
 test("a prompt the hook already knows about withdraws the advertisement", async (t) => {
   const state = await temporaryCursorState(t);
   await writeWorkspaceRecord(state, "9f1c", "/Users/test/luke");
@@ -766,6 +807,131 @@ test("offers the app's address only for the chats the app itself holds", async (
   assert.equal(observations[0]?.applications?.[0]?.id, SESSION_APPLICATION_ID.CURSOR);
   assert.equal(observations[1]?.applications, undefined);
   assert.equal(JSON.stringify(observations).includes(SECRET_TRANSCRIPT_TEXT), false);
+});
+
+test("titles a chat by the name Cursor's own header keeps for it", async (t) => {
+  const state = await temporaryCursorState(t);
+  await writeWorkspaceRecord(state, "9f1c", "/Users/test/luke");
+  await registerAppChats(state, ["chat-named"]);
+  await writeChatHeaders(state, [
+    {
+      sessionId: "chat-named",
+      archived: false,
+      value: {
+        name: "Fix sticky scrolling",
+        createdOnBranch: "dean/fix-sticky-scrolling",
+        filesChangedCount: 3,
+        totalLinesAdded: 40,
+        totalLinesRemoved: 12,
+        workspaceIdentifier: { uri: { fsPath: "/Users/test/elsewhere/stage" } },
+      },
+    },
+  ]);
+  await writeTranscript(
+    state,
+    "Users-test-luke",
+    "chat-named",
+    [messageRecord(TEST_ROLE.USER, TEST_CONTENT_TYPE.TEXT)],
+    TEST_TIME - 5_000,
+  );
+  // A chat with no header keeps the folder label it always had.
+  await writeTranscript(
+    state,
+    "Users-test-luke",
+    "chat-unnamed",
+    [messageRecord(TEST_ROLE.USER, TEST_CONTENT_TYPE.TEXT)],
+    TEST_TIME - 6_000,
+  );
+
+  const observations = await adapterFor(state).observe();
+
+  assert.equal(observations[0]?.title, "Fix sticky scrolling");
+  // The header's own folder outranks the reduced-name workspace match, for
+  // the label and the branch alike; the branch is the header's created-on
+  // record where the folder holds no repository to ask.
+  assert.equal(observations[0]?.detail?.repository, "stage");
+  assert.equal(observations[0]?.detail?.branch, "dean/fix-sticky-scrolling");
+  assert.deepEqual(observations[0]?.detail?.diff, {
+    filesChanged: 3,
+    linesAdded: 40,
+    linesRemoved: 12,
+  });
+  assert.equal(observations[1]?.title, "luke");
+  assert.equal(observations[1]?.detail?.branch, undefined);
+  assert.equal(JSON.stringify(observations).includes(SECRET_TRANSCRIPT_TEXT), false);
+});
+
+test("the folder's own HEAD names the branch over where the chat began", async (t) => {
+  const state = await temporaryCursorState(t);
+  const folder = path.join(path.dirname(state.cursorHome), "repo");
+  await fs.mkdir(path.join(folder, ".git"), { recursive: true });
+  await fs.writeFile(path.join(folder, ".git", "HEAD"), "ref: refs/heads/feature/live-branch\n");
+  await writeWorkspaceRecord(state, "9f1c", folder);
+  await registerAppChats(state, ["chat-checked-out"]);
+  await writeChatHeaders(state, [
+    {
+      sessionId: "chat-checked-out",
+      archived: false,
+      value: { createdOnBranch: "main", workspaceIdentifier: { uri: { fsPath: folder } } },
+    },
+  ]);
+  await writeTranscript(
+    state,
+    canonicalName(folder),
+    "chat-checked-out",
+    [messageRecord(TEST_ROLE.USER, TEST_CONTENT_TYPE.TEXT)],
+    TEST_TIME - 5_000,
+  );
+  // A worktree's .git is a pointer file to its own git directory.
+  const worktreeFolder = path.join(path.dirname(state.cursorHome), "worktree");
+  const worktreeGitDirectory = path.join(path.dirname(state.cursorHome), "git-worktrees", "wt");
+  await fs.mkdir(worktreeFolder, { recursive: true });
+  await fs.mkdir(worktreeGitDirectory, { recursive: true });
+  await fs.writeFile(path.join(worktreeFolder, ".git"), `gitdir: ${worktreeGitDirectory}\n`);
+  await fs.writeFile(path.join(worktreeGitDirectory, "HEAD"), "ref: refs/heads/wt-branch\n");
+  await writeWorkspaceRecord(state, "7c2d", worktreeFolder);
+  await writeTranscript(
+    state,
+    canonicalName(worktreeFolder),
+    "chat-worktree",
+    [messageRecord(TEST_ROLE.USER, TEST_CONTENT_TYPE.TEXT)],
+    TEST_TIME - 6_000,
+  );
+
+  const observations = await adapterFor(state).observe();
+
+  assert.equal(observations[0]?.detail?.branch, "feature/live-branch");
+  assert.equal(observations[1]?.detail?.branch, "wt-branch");
+});
+
+test("a tool call holding for the user reads as waiting, not working", async (t) => {
+  const state = await temporaryCursorState(t);
+  await writeWorkspaceRecord(state, "9f1c", "/Users/test/luke");
+  await registerAppChats(state, ["chat-held", "chat-settled-hold"]);
+  await writeChatHeaders(state, [
+    { sessionId: "chat-held", archived: false, value: { hasBlockingPendingActions: true } },
+    // A hold recorded on a settled turn is stale bookkeeping, not a wait.
+    { sessionId: "chat-settled-hold", archived: false, value: { hasBlockingPendingActions: true } },
+  ]);
+  const openTurn = [messageRecord(TEST_ROLE.USER, TEST_CONTENT_TYPE.TEXT)];
+  await writeTranscript(state, "Users-test-luke", "chat-held", openTurn, TEST_TIME - 5_000);
+  await writeTranscript(
+    state,
+    "Users-test-luke",
+    "chat-settled-hold",
+    [...openTurn, turnEndedRecord(TEST_TURN_STATUS.SUCCESS)],
+    TEST_TIME - 6_000,
+  );
+
+  const observations = await adapterFor(state).observe();
+
+  assert.deepEqual(
+    observations.map((observation) => [observation.providerSessionId, observation.status]),
+    [
+      ["chat-held", SESSION_STATUS.WAITING],
+      ["chat-settled-hold", SESSION_STATUS.WAITING],
+    ],
+  );
 });
 
 test("leaves a chat the app filed away off the roster", async (t) => {
