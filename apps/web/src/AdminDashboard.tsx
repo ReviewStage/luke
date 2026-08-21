@@ -1362,6 +1362,116 @@ async function readUsersState(response: Response): Promise<UsersState> {
   return { status: "ready", list: (await response.json()) as AdminUserList };
 }
 
+/** The roster's sortable columns, one per header the table draws. */
+const USERS_SORT_KEY = {
+  ACCOUNT: "account",
+  JOINED: "joined",
+  ACTIVE_DAYS: "activeDays",
+  LAST_ACTIVE: "lastActive",
+  VOICE: "voice",
+  ATTENTION: "attention",
+} as const;
+
+type UsersSortKey = (typeof USERS_SORT_KEY)[keyof typeof USERS_SORT_KEY];
+
+/** The values `aria-sort` takes, so the state is the announcement. */
+const SORT_DIRECTION = {
+  ASCENDING: "ascending",
+  DESCENDING: "descending",
+} as const;
+
+type SortDirection = (typeof SORT_DIRECTION)[keyof typeof SORT_DIRECTION];
+
+/** A column's first press: names read forward, counts and dates largest first. */
+const USERS_SORT_FIRST_DIRECTION = {
+  [USERS_SORT_KEY.ACCOUNT]: SORT_DIRECTION.ASCENDING,
+  [USERS_SORT_KEY.JOINED]: SORT_DIRECTION.DESCENDING,
+  [USERS_SORT_KEY.ACTIVE_DAYS]: SORT_DIRECTION.DESCENDING,
+  [USERS_SORT_KEY.LAST_ACTIVE]: SORT_DIRECTION.DESCENDING,
+  [USERS_SORT_KEY.VOICE]: SORT_DIRECTION.DESCENDING,
+  [USERS_SORT_KEY.ATTENTION]: SORT_DIRECTION.DESCENDING,
+} satisfies Record<UsersSortKey, SortDirection>;
+
+/**
+ * What each column orders by. An account sorts by the name its row shows —
+ * falling back to the email exactly as the cell does — and a last-active day
+ * is an ISO date, so its lexicographic order is its chronological one.
+ */
+const USERS_SORT_VALUE = {
+  [USERS_SORT_KEY.ACCOUNT]: (row) => (row.name || row.email).toLowerCase(),
+  [USERS_SORT_KEY.JOINED]: (row) => row.createdAt,
+  [USERS_SORT_KEY.ACTIVE_DAYS]: (row) => row.activeDays,
+  [USERS_SORT_KEY.LAST_ACTIVE]: (row) => row.lastActiveDay,
+  [USERS_SORT_KEY.VOICE]: (row) => row.voiceCalls,
+  [USERS_SORT_KEY.ATTENTION]: (row) => row.attentionReviews,
+} satisfies Record<UsersSortKey, (row: AdminUserListRow) => string | number | null>;
+
+interface UsersSort {
+  key: UsersSortKey;
+  direction: SortDirection;
+}
+
+/**
+ * Orders the roster for one sort. No sort keeps the server's order — most
+ * recently active first — and ties keep it too, since the sort is stable. An
+ * account with no active day yet sits below the dated rows in either
+ * direction: it has no place in a chronology, and flipping one should not
+ * bury the answer under the blanks.
+ */
+function sortUsersRows(
+  rows: readonly AdminUserListRow[],
+  sort: UsersSort | undefined,
+): readonly AdminUserListRow[] {
+  if (!sort) return rows;
+  const value = USERS_SORT_VALUE[sort.key];
+  const flip = sort.direction === SORT_DIRECTION.DESCENDING ? -1 : 1;
+  return [...rows].sort((a, b) => {
+    const left = value(a);
+    const right = value(b);
+    if (left === null) return right === null ? 0 : 1;
+    if (right === null) return -1;
+    if (left < right) return -flip;
+    if (left > right) return flip;
+    return 0;
+  });
+}
+
+/**
+ * A header that sorts its column: a real button inside the cell so a keyboard
+ * reaches it, `aria-sort` on the cell so a reader hears the order the pointer
+ * sees drawn as the arrow.
+ */
+function SortableHeader({
+  label,
+  sortKey,
+  sort,
+  onSort,
+  numeric,
+}: {
+  label: string;
+  sortKey: UsersSortKey;
+  sort: UsersSort | undefined;
+  onSort: (key: UsersSortKey) => void;
+  numeric?: boolean;
+}): React.JSX.Element {
+  const direction = sort?.key === sortKey ? sort.direction : undefined;
+  return (
+    <th className={`px-5 py-3 font-medium ${numeric ? "text-right" : ""}`} aria-sort={direction}>
+      <button
+        type="button"
+        className="inline-flex cursor-pointer items-baseline gap-1 font-medium uppercase transition-colors duration-150 outline-offset-2 hover:text-foreground data-[sorted=true]:text-foreground"
+        data-sorted={direction !== undefined}
+        onClick={() => onSort(sortKey)}
+      >
+        {label}
+        {direction ? (
+          <span aria-hidden="true">{direction === SORT_DIRECTION.ASCENDING ? "▲" : "▼"}</span>
+        ) : null}
+      </button>
+    </th>
+  );
+}
+
 function UsersTable({
   rows,
   windowDays,
@@ -1371,6 +1481,21 @@ function UsersTable({
   windowDays: number;
   onOpen: (id: string) => void;
 }): React.JSX.Element {
+  const [sort, setSort] = useState<UsersSort>();
+  const toggleSort = (key: UsersSortKey) => {
+    setSort((current) =>
+      current?.key === key
+        ? {
+            key,
+            direction:
+              current.direction === SORT_DIRECTION.ASCENDING
+                ? SORT_DIRECTION.DESCENDING
+                : SORT_DIRECTION.ASCENDING,
+          }
+        : { key, direction: USERS_SORT_FIRST_DIRECTION[key] },
+    );
+  };
+
   if (rows.length === 0) {
     return (
       <div className="rounded-lg border border-border bg-card px-5 py-8 text-center text-sm text-muted-foreground">
@@ -1378,21 +1503,57 @@ function UsersTable({
       </div>
     );
   }
+  const sorted = sortUsersRows(rows, sort);
   return (
     <div className="overflow-hidden rounded-lg border border-border bg-card">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-border text-left font-mono text-xs text-muted-foreground uppercase">
-            <th className="px-5 py-3 font-medium">Account</th>
-            <th className="px-5 py-3 text-right font-medium">Joined</th>
-            <th className="px-5 py-3 text-right font-medium">Active days</th>
-            <th className="px-5 py-3 text-right font-medium">Last active</th>
-            <th className="px-5 py-3 text-right font-medium">Voice</th>
-            <th className="px-5 py-3 text-right font-medium">Attention</th>
+            <SortableHeader
+              label="Account"
+              sortKey={USERS_SORT_KEY.ACCOUNT}
+              sort={sort}
+              onSort={toggleSort}
+            />
+            <SortableHeader
+              label="Joined"
+              sortKey={USERS_SORT_KEY.JOINED}
+              sort={sort}
+              onSort={toggleSort}
+              numeric
+            />
+            <SortableHeader
+              label="Active days"
+              sortKey={USERS_SORT_KEY.ACTIVE_DAYS}
+              sort={sort}
+              onSort={toggleSort}
+              numeric
+            />
+            <SortableHeader
+              label="Last active"
+              sortKey={USERS_SORT_KEY.LAST_ACTIVE}
+              sort={sort}
+              onSort={toggleSort}
+              numeric
+            />
+            <SortableHeader
+              label="Voice"
+              sortKey={USERS_SORT_KEY.VOICE}
+              sort={sort}
+              onSort={toggleSort}
+              numeric
+            />
+            <SortableHeader
+              label="Attention"
+              sortKey={USERS_SORT_KEY.ATTENTION}
+              sort={sort}
+              onSort={toggleSort}
+              numeric
+            />
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
+          {sorted.map((row) => (
             <tr
               key={row.id}
               className="cursor-pointer border-b border-border transition-colors duration-150 last:border-0 hover:bg-muted"
@@ -1521,7 +1682,7 @@ function UsersPage({
         <p className="mt-3 text-sm text-muted-foreground">
           Every account the service holds, most recently active first, whether or not it ever
           touched the hosted tier — active days count the window's UTC days with hosted voice or
-          attention. A row opens the account's own page.
+          attention. A heading sorts by its column, and a row opens the account's own page.
           {list.total > list.rows.length
             ? ` Only the ${formatNumber(list.rows.length)} most recently active accounts are listed here, and the filter searches those alone.`
             : ""}
