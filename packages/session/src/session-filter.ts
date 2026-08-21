@@ -61,15 +61,16 @@ export const SESSION_FILTER_AXIS = {
 export type SessionFilterAxis = (typeof SESSION_FILTER_AXIS)[keyof typeof SESSION_FILTER_AXIS];
 
 /**
- * Conductor, Cursor, and Superset land on the app axis even where a namesake
- * provider exists, because "associated with that app" is the question their
- * chips answer — a native cloud Conductor chat and a local Codex chat
- * annotated by Conductor answer the same chip, a Cursor chat answers Cursor's
- * whichever way it met the app, and an agent chip beside it stays a further
- * narrowing rather than a widening. The parameter is wider than
- * {@link SessionFilter} because a spoken ask may name an identity only the
- * roster knows — a hosted agent's own id — and it lands on the agent axis
- * like the provider ids do.
+ * Conductor and Superset land on the app axis even where a namesake provider
+ * exists, because "associated with that app" is the question their chips
+ * answer — a native cloud Conductor chat and a local Codex chat annotated by
+ * Conductor answer the same chip, and an agent chip beside it stays a further
+ * narrowing rather than a widening. Cursor deliberately does not share one
+ * id: its app chip counts the chats the Cursor app can open and its agent
+ * chip every Cursor chat, so each axis holds its own Cursor value. The
+ * parameter is wider than {@link SessionFilter} because a spoken ask may
+ * name an identity only the roster knows — a hosted agent's own id — and it
+ * lands on the agent axis like the provider ids do.
  */
 export function sessionFilterAxis(filter: string): SessionFilterAxis {
   if (filter === SESSION_FILTER.LOCAL || filter === SESSION_FILTER.CLOUD) {

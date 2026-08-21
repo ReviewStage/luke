@@ -455,7 +455,10 @@ boundary the Linear section below describes.
   of repositories the key may launch agents in. It processes identifiers, agent
   names and links, repository URLs, starting refs and run branches, timestamps,
   archive and run status, provider-designated run results, and pull-request
-  links.
+  links. Each agent's row also carries a `cursor://` address for the Cursor
+  app mark, composed on this machine from the observed agent identifier;
+  opening it hands the address to macOS like any row press, and nothing is
+  sent to Cursor by drawing or pressing it.
 - For Devin, Luke reads who the token authenticates as — the identity route
   answers a user id, an organization id, and which kind of credential it is,
   and a token that is not a person's own personal access token is observed as

@@ -200,10 +200,11 @@ export const SESSION_APPLICATION_ID = {
   CHATGPT: "chatgpt",
   CMUX: "cmux",
   CONDUCTOR: "conductor",
-  // Cursor is an agent whose own app also holds chats, so like Conductor it
-  // deliberately occupies both vocabularies under one id: the mark and the
-  // filter are the same identity whichever way a chat met Cursor.
-  CURSOR: "cursor",
+  // Cursor the app is deliberately not Cursor the agent: the app chip counts
+  // the chats the Cursor app can open — app-held local chats and cloud
+  // agents — where the agent chip counts every Cursor chat, CLI ones
+  // included, so the two ride separate axes under separate ids.
+  CURSOR: "cursor-app",
   ORCA: "orca",
   SUPERSET: "superset",
 } as const;

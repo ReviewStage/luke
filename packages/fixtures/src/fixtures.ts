@@ -207,6 +207,17 @@ const smokeFixture: FixtureSnapshot = {
       title: "Follow a cloud agent",
       providerId: PROVIDER_ID.CURSOR,
       provider: "Cursor",
+      // The Cursor app opens any cloud agent by id, so the row wears the app
+      // mark beside the agent identity — which also keeps both Cursor filter
+      // chips, app and agent, in the one screenshot the evidence is reviewed
+      // from.
+      applications: [
+        {
+          id: SESSION_APPLICATION_ID.CURSOR,
+          name: "Cursor",
+          scope: SESSION_APPLICATION_SCOPE.SESSION,
+        },
+      ],
       detail: "Opened a pull request against sidecar.",
       repository: "sidecar",
       branch: "cursor/follow-agent-a1b2",

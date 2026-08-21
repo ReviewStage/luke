@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { SESSION_CONTROL_KIND, SESSION_STATUS, type SessionControl } from "@sidecar/session";
+import {
+  SESSION_APPLICATION_ID,
+  SESSION_APPLICATION_SCOPE,
+  SESSION_CONTROL_KIND,
+  SESSION_STATUS,
+  type SessionControl,
+} from "@sidecar/session";
 import type { JsonObject } from "@sidecar/wire/testing";
 import { HTTP_STATUS, jsonResponse, recordingFetch } from "@sidecar/wire/testing";
 import type { CloudFetch } from "../shared/cloud-session-adapter.js";
@@ -285,6 +291,16 @@ test("observes a running agent under the name Cursor gave it", async () => {
     link: "https://cursor.com/agents/agent-running",
     change: TEST_PULL_REQUEST_URL,
   });
+  // The row's own press keeps the agent page Cursor reported; the app mark
+  // carries the in-app address the same agent answers to.
+  assert.deepEqual(observations[0]?.applications, [
+    {
+      id: SESSION_APPLICATION_ID.CURSOR,
+      displayName: "Cursor",
+      scope: SESSION_APPLICATION_SCOPE.SESSION,
+      link: "cursor://anysphere.cursor-deeplink/background-agent?bcId=agent-running",
+    },
+  ]);
   // The repository offer, one list call, then one read of the run that list
   // named. Nothing else.
   assert.deepEqual(

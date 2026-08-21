@@ -412,9 +412,9 @@ test("the filters offered are grouped by axis, coarse to fine, counted", () => {
           markId: SESSION_APPLICATION_ID.CONDUCTOR,
         },
         {
-          // Cursor occupies both vocabularies the way Conductor does, so its
-          // chip is seated by its own axis — the app row — even when only
-          // native Cursor chats put it on offer.
+          // The app chip counts the chats the Cursor app can open; the agent
+          // chip below counts every Cursor chat. Separate ids keep the two
+          // questions on their own axes.
           filter: SESSION_APPLICATION_ID.CURSOR,
           label: "Cursor",
           count: 1,
@@ -435,6 +435,7 @@ test("the filters offered are grouped by axis, coarse to fine, counted", () => {
           markId: PROVIDER_ID.CLAUDE_CODE,
         },
         { filter: PROVIDER_ID.CODEX, label: "Codex", count: 1, markId: PROVIDER_ID.CODEX },
+        { filter: PROVIDER_ID.CURSOR, label: "Cursor", count: 1, markId: PROVIDER_ID.CURSOR },
         { filter: PROVIDER_ID.DEVIN, label: "Devin", count: 1, markId: PROVIDER_ID.DEVIN },
       ],
     },
@@ -610,11 +611,9 @@ test("filters on one axis widen each other and across axes narrow", () => {
 // and the list correcting itself must not choose — so the selection falls
 // back whole.
 test("a combination no session answers falls back whole to everything", () => {
-  // Devin rather than Cursor: Cursor now shares the app axis with Conductor,
-  // where two values widen each other instead of contradicting.
   const emptied = arrangeSessions(FIXTURE_SESSIONS, {
     ...DEFAULT_SESSION_VIEW,
-    filters: [SESSION_FILTER.LOCAL, SESSION_APPLICATION_ID.CONDUCTOR, PROVIDER_ID.DEVIN],
+    filters: [SESSION_FILTER.LOCAL, SESSION_APPLICATION_ID.CONDUCTOR, PROVIDER_ID.CURSOR],
   });
 
   assert.deepEqual(emptied.filters, []);

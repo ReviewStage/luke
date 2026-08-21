@@ -28,6 +28,7 @@ import {
   textFromRecord,
   timestampFromRecord,
 } from "../shared/cloud-session-adapter.js";
+import { cursorApplication, cursorCloudAgentLink } from "./app-links.js";
 
 // Shared with the credential registry so the key the user saves and the
 // provider Luke observes with it can never name different things.
@@ -535,6 +536,10 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
       title: agent.name ?? repository ?? UNKNOWN_AGENT_LABEL,
       status,
       observedAt,
+      // The Cursor app opens any cloud agent by id — the same address its own
+      // dashboard fires — so every cloud row wears the app's mark; the row's
+      // own press keeps the agent page Cursor reported.
+      applications: [cursorApplication(cursorCloudAgentLink(agent.id))],
       canReceiveMessage: this.#agentTakesMessages(agent, run),
       // The two controls are exclusive by construction: an active run offers
       // its stop, a settled agent offers to be filed away, and an archived one

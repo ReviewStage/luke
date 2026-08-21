@@ -3,8 +3,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   type ProviderSessionObservation,
-  SESSION_APPLICATION_ID,
-  SESSION_APPLICATION_SCOPE,
   SESSION_STATUS,
   type SessionDetail,
   type SessionStatus,
@@ -39,6 +37,7 @@ import {
   type SqliteModuleLoader,
 } from "../shared/local-sqlite.js";
 import { CURSOR_PROVIDER } from "./adapter.js";
+import { cursorApplication, cursorChatLink } from "./app-links.js";
 import { readCursorSessionTranscript } from "./transcript.js";
 
 /** A turn Cursor failed records its own reason, which is transcript content. */
@@ -306,22 +305,6 @@ function statusFromTurn(
 }
 
 /**
- * The address of one chat in Cursor's own app — the same `/agent` route
- * Cursor's deep-link handler resolves, composed on this machine from the
- * observed chat id and handed to the operating system, reaching Cursor's
- * write paths never. The route opens the exact chat whether Cursor is
- * running or not — but only a chat the app itself holds: Cursor's `agents`
- * CLI writes its transcripts beside the app's without registering them in
- * any window, and a link Cursor cannot resolve draws its not-found notice.
- * So the address is offered exactly where the app's own index says the chat
- * is one of its own, and a CLI chat keeps no provider address — leaving the
- * row's press to whatever manager hosts its terminal, or honestly to no one.
- */
-export function cursorChatLink(providerSessionId: string): string {
-  return `cursor://anysphere.cursor-deeplink/agent?id=${encodeURIComponent(providerSessionId)}`;
-}
-
-/**
  * Reads which of the observed chats Cursor's app holds, as the presence of
  * each chat's key in the app's own index — a point lookup per chat, never a
  * value, because the values are the conversations themselves. An absent app,
@@ -357,21 +340,6 @@ class CursorAppChatRegistry {
       database.close();
     }
   }
-}
-
-/**
- * The Cursor app riding a chat it holds as an app association, the way
- * ChatGPT rides a local Codex chat: the agent stays the row's identity, and
- * the mark's press opens the same exact chat the row itself opens. A CLI
- * chat gets none, because the app does not hold it.
- */
-function cursorApplication(link: string) {
-  return {
-    id: SESSION_APPLICATION_ID.CURSOR,
-    displayName: "Cursor",
-    scope: SESSION_APPLICATION_SCOPE.SESSION,
-    link,
-  } as const;
 }
 
 /**
