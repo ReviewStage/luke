@@ -5,7 +5,7 @@
 The renderer reaches the main process through the preload bridge alone, so
 `#shared/contracts` is the widest door it has. A `#main/` import compiles and
 bundles happily and then fails in the browser, and a `node:` import does the
-same — neither is a mistake the type checker or esbuild can report, because
+same. Neither is a mistake the type checker or esbuild can report, because
 both are real modules that simply are not there at run time.
 `repository-checks.sh` fails the build on either. A colocated `*.test.ts` is
 exempt from the `node:` half: it runs under Node and never enters the bundle.
@@ -13,20 +13,20 @@ exempt from the `node:` half: it runs under Node and never enters the bundle.
 The same trap arrives through a package barrel, where nothing greps for it.
 Importing `@sidecar/calendar` for one string constant resolves that package's
 whole export graph, `node:http` included. Packages that hold both a vocabulary
-and a Node flow open a door for the vocabulary alone — import
+and a Node flow open a door for the vocabulary alone. Import
 `@sidecar/calendar/vocabulary`, `@sidecar/account/snapshot`,
 `@sidecar/superset/sign-in-stage`, not the barrel.
 
 ## Panel motion
 
 `docs/DESIGN.md` is the binding contract for how anything drawn on the surface may
-move — the spring vocabulary, how content joins and leaves a resizing shape,
+move: the spring vocabulary, how content joins and leaves a resizing shape,
 and how a motion change is proven. Read it before adding or altering any
 animation; this section covers only the window and the surface themselves.
 
 The window is a stage; the drawn surface is the shape. Every window holds the
-width of the widest shape any mode can draw — the panel, and the peek where a
-housing outgrows it — so hovering and the slot cost no IPC and a mode change
+width of the widest shape any mode can draw (the panel, and the peek where a
+housing outgrows it), so hovering and the slot cost no IPC and a mode change
 never moves the window: macOS lands a window's move and its content's relayout
 on different frames, so a mode change that also recentred a narrower window
 flashed the capsule against the old origin before the move caught up. Only the
@@ -44,12 +44,12 @@ a shape built on the inset stops short of the strip it has to pass for.
 The window never animates its own frame. An animated `setBounds` re-lays out
 the whole renderer on every frame, because the panel is anchored to the
 viewport's centre. Everything layered on the surface must move with `transform`
-and `opacity` only — animating width, height, padding, or font-size on the
+and `opacity` only. Animating width, height, padding, or font-size on the
 wings, the count badge, or the rows re-shapes text on every frame and is what
 makes the motion stutter.
 
-The surface is opaque in every state — it has to pass for part of a physical
-object, and nothing behind the window may show through it — and takes its
+The surface is opaque in every state, because it has to pass for part of a
+physical object and nothing behind the window may show through it. It takes its
 shadow and hairline edge once it has grown past the housing. The panel's
 shadow is delayed until the shape settles, because a blurred shadow repaints on
 every frame that resizes the element; the peek's is small enough to ride along.
@@ -70,7 +70,7 @@ screen.
 In either direction the shape and its content must not cross, or content is
 left drawn on the desktop: growing, the surface leads and content follows;
 shrinking, content leaves over `--duration-exit` before the surface moves.
-`setWindowMode` owns the ordering for every caller — the panel, the tray, and
+`setWindowMode` owns the ordering for every caller: the panel, the tray, and
 the motion recorder alike. `COLLAPSE_ANIMATION_MS` is the sum of
 `--duration-exit` and `--duration-shape`, taken from `MOTION_DURATION_MS` so
 the three cannot drift.
@@ -78,7 +78,7 @@ the three cannot drift.
 A key being entered is app state, not field state, because it outlives the panel
 it was started in: asking to write one stands the panel down to the slot, where
 the same entry is drawn instead of in the settings row, and the entry remembers
-whether the provider's key page was opened — that is what decides whether giving
+whether the provider's key page was opened, which decides whether giving
 up returns you to the panel or leaves the browser alone. Nothing that closes the
 panel may discard the entry: the pointer leaving is already refused, and a slot
 left alone is the normal case rather than a dismissal, so the settings tab and
@@ -91,7 +91,7 @@ shape it is drawn in comes forward again.
 It writes three sets of committed outputs from that one description: the SVGs in
 `design/brand/`, `packages/surface/src/generated/face-art.ts`, and
 `apps/desktop/src/renderer/styles/generated/face-motion.css`. None of the three may be
-hand-edited — change the parameters or the motion table in the script, re-run it,
+hand-edited. Change the parameters or the motion table in the script, re-run it,
 and commit what it writes. `repository-checks.sh` runs it with `--check`, which
 compares every output without writing and fails on any drift.
 
@@ -102,8 +102,8 @@ for a capture run and for reduced motion, and SMIL answers to neither.
 The face is still unless something is happening to it, and what is happening is
 chosen in `luke-face-mood.ts`. A gesture plays once and a rest repeats, so only
 a motion that stays true for as long as it holds may be a rest: speech, an open
-microphone, and nothing whatever to watch. Everything else is a gesture — fired
-at a change, or drawn by weight from the pool between stillnesses — and a
+microphone, and nothing whatever to watch. Everything else is a gesture, fired
+at a change or drawn by weight from the pool between stillnesses, and a
 gesture that carries meaning may only be offered while its meaning is true.
 
 Two rules follow from playing a motion once, and both belong to the artwork
@@ -113,7 +113,7 @@ back out of it on the way out. Every layer of a gesture shares a period,
 because the app hands the face back after the longest of them and a layer on
 its own period would be cut wherever it had got to. A rest is under no such
 rule: it is cut whenever its meaning stops being true rather than at any
-boundary of its own, so its layers may run on offset periods — `talking` bobs
+boundary of its own, so its layers may run on offset periods. `talking` bobs
 against its rock deliberately, like a person mid-sentence.
 
 ## Luke's knowledge of himself
@@ -141,7 +141,7 @@ Rules the guide must keep:
 
 - A spoken settings change runs only in a turn the developer opened by
   speaking, is validated against the guide before any carrier runs, and goes
-  through the same bridge call the setting's own row uses — never a new write
+  through the same bridge call the setting's own row uses, never a new write
   path.
 - Mark a setting `adjustable` only after wiring its id into
   `applySpokenSetting`; the test suite refuses an adjustable entry the bridge

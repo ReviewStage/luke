@@ -1,5 +1,3 @@
-# Luke
-
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="design/brand/luke-wordmark-dark.svg">
@@ -7,50 +5,79 @@
   </picture>
 </p>
 
-**Your AI engineering manager.**
-
-Luke is an open-source macOS app that watches your coding agent sessions and
-shows you which ones need your attention. It sits in the MacBook notch and
-works without changing how your agents run.
-
 <p align="center">
-  <a href="https://github.com/ReviewStage/luke/releases/latest/download/Luke.dmg"><picture><source media="(prefers-color-scheme: dark)" srcset="design/brand/button/luke-cta-download-dark.svg"><img src="design/brand/button/luke-cta-download-light.svg" alt="Download for macOS"></picture></a>&nbsp;&nbsp;&nbsp;<a href="https://tryluke.dev"><picture><source media="(prefers-color-scheme: dark)" srcset="design/brand/button/luke-cta-site-dark.svg"><img src="design/brand/button/luke-cta-site-light.svg" alt="Visit tryluke.dev"></picture></a>
+  <a href="https://github.com/ReviewStage/luke/actions/workflows/ci.yml"><img src="https://github.com/ReviewStage/luke/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/ReviewStage/luke/releases/latest"><img src="https://img.shields.io/github/v/release/ReviewStage/luke?label=release" alt="Latest release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue" alt="License: Apache 2.0"></a>
+  <img src="https://img.shields.io/badge/macOS-14%2B%20%C2%B7%20Apple%20silicon-black" alt="macOS 14 or newer, Apple silicon">
 </p>
 
-![The panel expanded from the notch over the desktop, listing agent sessions with their status, recaps, and follow-up fields.](apps/web/public/changelog/0.1.0/one-panel-for-every-agent.png)
+<p align="center">
+  <strong>Your AI engineering manager.</strong><br>
+  A macOS app that watches your coding agents and keeps you updated.
+</p>
 
-One panel shows all of your local and cloud coding agents.
+<p align="center">
+  <a href="https://github.com/ReviewStage/luke/releases/latest/download/Luke.dmg"><picture><source media="(prefers-color-scheme: dark)" srcset="design/brand/button/luke-cta-download-dark.svg"><img src="design/brand/button/luke-cta-download-light.svg" alt="Download for macOS"></picture></a>
+</p>
 
-## Install
+<p align="center">
+  <a href="https://tryluke.dev">Website</a> ·
+  <a href="PRIVACY.md">Privacy</a> ·
+  <a href="CHANGELOG.md">Changelog</a>
+</p>
 
-Luke runs on Apple Silicon Macs with macOS 14 or newer.
+![Luke's panel expanded from the notch, listing local and cloud agent sessions with their status, recaps, and workspace grouping.](docs/media/luke-panel.png)
 
-1. [Download Luke](https://github.com/ReviewStage/luke/releases/latest/download/Luke.dmg).
-2. Open the DMG and drag **Luke** into **Applications**.
-3. Launch Luke and sign in with Google or GitHub.
+## Features
 
-Local sessions appear with no further setup. Cloud integrations stay inactive
-until you connect them in Luke's Settings.
+### One panel for every agent
 
-## Talk to Luke
+One panel shows every coding agent working for you: Claude Code, Codex,
+Cursor, Gemini CLI, and OpenCode on your Mac, and Codex, Conductor, Cursor,
+Devin, GitHub Copilot, and Jules in the cloud. Filter, sort, or search the
+list, and click a session to open it where it runs.
 
-Press and hold `⌥`+`Space` to talk. Press again while Luke is talking to cut
-him off, and `⌥`+`S` to stop him.
+### Talk to Luke
 
-Use `⌥`+`L` to type out a message to Luke instead.
+Hold <kbd>⌥</kbd><kbd>Space</kbd> to talk to Luke from any app, or press
+<kbd>⌥</kbd><kbd>L</kbd> to type to him instead. He answers about your
+sessions, opens them, messages agents, creates workspaces, changes his own
+settings, and reads and acts on Linear issues. <kbd>⌥</kbd><kbd>S</kbd> stops
+him talking. Voice runs on an included daily allowance, or your own OpenAI key.
 
-Voice is included under a daily allowance, or you can connect your own OpenAI
-key in Settings.
+![Luke's capsule under the notch, speaking a summary of which sessions finished and which are waiting.](docs/media/luke-talking.png)
 
-Voice is the one feature that sends audio off your Mac. Refer to
-[PRIVACY.md](PRIVACY.md).
+### Announcements
 
-Luke also counts how his own features are used, on by default — switch it off
-under **Share usage data** in Settings.
+Luke speaks up when a session starts waiting, hits an error, or finishes. He
+shows captions on screen, turns down Music and Spotify while he talks, and
+names the session in a chip you can press. Ask him to "tell me when this
+session finishes" and he will.
+
+### Quiet during meetings
+
+Connect Google Calendar or this Mac's own Calendar and Luke holds his
+announcements until your meeting is over.
+
+## How it works
+
+Luke reads the session files your agents already write, and the APIs they
+already expose. He does not run your agents, wrap them, or type for them.
+
+- Luke never writes a provider's transcripts or session-state files.
+- No Accessibility permission, no simulated keystrokes, no terminal wrapper.
+- Local sessions need no MCP server, plugin, or credential.
+- Cloud providers stay inactive until you connect one, each under a key you
+  supply.
+- Anything Luke sends to an agent follows something you did, checked against the
+  session list he last observed.
+- Voice is the only feature that sends audio off your Mac.
+
+[PRIVACY.md](PRIVACY.md) describes what Luke reads, what he may write, and what
+leaves your machine.
 
 ## Supported agents and apps
-
-Every row leads with its agent — the provider the session belongs to:
 
 | Agent | Local | Cloud |
 | --- | :---: | :---: |
@@ -64,15 +91,17 @@ Every row leads with its agent — the provider the session belongs to:
 | Jules | | ✅ |
 | OpenCode | ✅ | |
 
-Luke also marks the apps holding a session on your Mac — ChatGPT, cmux,
-Conductor, Orca, and Superset — grouping rows under their workspaces and
-opening the exact window an app documents. Superset-managed rows can
-additionally take messages and workspace acts through Superset's own CLI,
-and a Superset worktree with no agent chat stands as its own idle row, so a
-stale workspace can be found, renamed, given an agent, or deleted.
 
-See [docs/PROVIDERS.md](docs/PROVIDERS.md) for what Luke can read and write
-per agent and app, and [PRIVACY.md](PRIVACY.md) for the data's point of view.
+## Install
+
+Luke runs on Apple Silicon Macs with macOS 14 or newer.
+
+1. [Download Luke](https://github.com/ReviewStage/luke/releases/latest/download/Luke.dmg).
+2. Open the DMG and drag **Luke** into **Applications**.
+3. Launch Luke and sign in with Google or GitHub.
+
+Local sessions appear with no further setup. Cloud integrations stay inactive
+until you connect them in Luke's Settings.
 
 ## Build from source
 
@@ -80,11 +109,14 @@ Requires an Apple Silicon Mac on macOS 14 or newer, Node.js 24 or newer,
 pnpm 9.15.0, and the Xcode Command Line Tools.
 
 ```sh
-./scripts/run.sh
+./scripts/bootstrap.sh   # install pinned workspace dependencies
+./scripts/run.sh         # launch against live sessions
 ```
 
-Run the complete macOS validation suite with `./scripts/verify.sh`, and the
-website locally with `pnpm --filter @luke/web dev`.
+## Contributing
+
+Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md)
+to get set up, and [SECURITY.md](SECURITY.md) for reporting a vulnerability.
 
 ## License
 
