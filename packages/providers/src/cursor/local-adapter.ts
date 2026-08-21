@@ -31,9 +31,9 @@ import {
   workspaceLabel,
 } from "../shared/local-session-adapter.js";
 import {
-  canIgnoreSqliteError,
   defaultSqliteModule,
   openReadOnlyDatabase,
+  type SqliteDatabase,
   type SqliteModuleLoader,
 } from "../shared/local-sqlite.js";
 import { CURSOR_PROVIDER } from "./adapter.js";
@@ -308,8 +308,9 @@ function statusFromTurn(
  * Reads which of the observed chats Cursor's app holds, as the presence of
  * each chat's key in the app's own index — a point lookup per chat, never a
  * value, because the values are the conversations themselves. An absent app,
- * an unreadable database, or a schema this build does not know holds nothing,
- * which withholds addresses rather than inventing ones the app cannot resolve.
+ * an unreadable or mid-write database, or a schema this build does not know
+ * holds nothing, which withholds addresses rather than inventing ones the
+ * app cannot resolve — and never fails the pass the rows come from.
  */
 class CursorAppChatRegistry {
   readonly #statePath: string;
@@ -320,9 +321,17 @@ class CursorAppChatRegistry {
     this.#sqlite = sqlite;
   }
 
+  // The index read is auxiliary to observing at all: a database Cursor holds
+  // mid-write, or one this build cannot parse, answers nothing — never a
+  // failed pass, because losing the app addresses must not cost the rows.
   async heldChats(providerSessionIds: readonly string[]): Promise<ReadonlySet<string>> {
     if (providerSessionIds.length === 0) return new Set();
-    const database = await openReadOnlyDatabase(this.#sqlite, this.#statePath);
+    let database: SqliteDatabase | undefined;
+    try {
+      database = await openReadOnlyDatabase(this.#sqlite, this.#statePath);
+    } catch {
+      return new Set();
+    }
     if (!database) return new Set();
     try {
       const statement = database.prepare(CURSOR_APP_CHAT_QUERY);
@@ -333,9 +342,8 @@ class CursorAppChatRegistry {
         }
       }
       return held;
-    } catch (error) {
-      if (error instanceof Error && canIgnoreSqliteError(error)) return new Set();
-      throw error;
+    } catch {
+      return new Set();
     } finally {
       database.close();
     }

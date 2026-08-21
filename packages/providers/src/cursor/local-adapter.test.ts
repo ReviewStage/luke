@@ -303,6 +303,26 @@ test("offers the app's address only for the chats the app itself holds", async (
   assert.equal(JSON.stringify(observations).includes(SECRET_TRANSCRIPT_TEXT), false);
 });
 
+test("a malformed app index never costs the rows themselves", async (t) => {
+  const state = await temporaryCursorState(t);
+  await writeWorkspaceRecord(state, "9f1c", "/Users/test/luke");
+  // Not a database at all — the shape a torn write or a foreign file leaves.
+  await fs.writeFile(state.globalStorageStatePath, "not a sqlite database");
+  await writeTranscript(
+    state,
+    "Users-test-luke",
+    "app-chat",
+    [messageRecord(TEST_ROLE.USER, TEST_CONTENT_TYPE.TEXT)],
+    TEST_TIME - 5_000,
+  );
+
+  const observations = await adapterFor(state).observe();
+
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0]?.detail?.link, undefined);
+  assert.equal(observations[0]?.applications, undefined);
+});
+
 test("an app index this build cannot read withholds addresses rather than guessing", async (t) => {
   const state = await temporaryCursorState(t);
   await writeWorkspaceRecord(state, "9f1c", "/Users/test/luke");
