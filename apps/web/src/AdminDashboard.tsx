@@ -188,7 +188,12 @@ type DashboardState =
   | { status: "signed-out" }
   | { status: "forbidden" }
   | { status: "error"; detail: string }
-  | { status: "ready"; metrics: AdminMetrics; refreshFailure: string | undefined };
+  | {
+      status: "ready";
+      metrics: AdminMetrics;
+      question: string;
+      refreshFailure: string | undefined;
+    };
 
 const ERROR_DETAIL = {
   UNAVAILABLE: "The service did not answer. It may be briefly unavailable — try again shortly.",
@@ -886,7 +891,9 @@ function GeneratedStamp({
  * describing them — and this band says the newer read did not arrive. The
  * status region stands in the page whether or not it has anything to say,
  * because a live region inserted together with its news is announced by
- * nothing.
+ * nothing; it holds the announcement alone, with the button beside it, so a
+ * press flipping the button's label cannot re-announce the failure and the
+ * button keeps its own role.
  */
 function RefreshFailureNotice({
   failure,
@@ -898,19 +905,27 @@ function RefreshFailureNotice({
   onRetry: () => void;
 }): React.JSX.Element {
   return (
-    <div role="status">
-      {failure ? (
-        <div className="mt-6 flex flex-wrap items-center justify-between gap-x-6 gap-y-2 rounded-lg border border-border bg-card px-5 py-3 text-sm">
-          <span>
+    <div
+      className={
+        failure !== undefined
+          ? "mt-6 flex flex-wrap items-center justify-between gap-x-6 gap-y-2 rounded-lg border border-border bg-card px-5 py-3 text-sm"
+          : undefined
+      }
+    >
+      <span role="status">
+        {failure !== undefined ? (
+          <>
             <span className="font-medium text-attention">Refresh failed.</span>{" "}
             <span className="text-muted-foreground">
               Still showing the earlier answer. {failure}
             </span>
-          </span>
-          <button type="button" className={PLAIN_BUTTON} onClick={onRetry} disabled={refreshing}>
-            {refreshing ? "Trying…" : "Try again"}
-          </button>
-        </div>
+          </>
+        ) : null}
+      </span>
+      {failure !== undefined ? (
+        <button type="button" className={PLAIN_BUTTON} onClick={onRetry} disabled={refreshing}>
+          {refreshing ? "Trying…" : "Try again"}
+        </button>
       ) : null}
     </div>
   );
@@ -1213,7 +1228,7 @@ function ForbiddenCard({
 }
 
 /** What one answer from the metrics endpoint means, with the gate's refusals kept distinct. */
-async function readDashboardState(response: Response): Promise<DashboardState> {
+async function readDashboardState(response: Response, question: string): Promise<DashboardState> {
   // A followed cross-origin redirect means something sat in front of the API —
   // a preview's deployment protection is the usual culprit — so the body is a
   // login page, not JSON.
@@ -1228,6 +1243,7 @@ async function readDashboardState(response: Response): Promise<DashboardState> {
   return {
     status: "ready",
     metrics: (await response.json()) as AdminMetrics,
+    question,
     refreshFailure: undefined,
   };
 }
@@ -1239,9 +1255,14 @@ type DetailState =
   | { status: "forbidden" }
   | { status: "missing" }
   | { status: "error"; detail: string }
-  | { status: "ready"; detail: AdminUserDetail; refreshFailure: string | undefined };
+  | {
+      status: "ready";
+      detail: AdminUserDetail;
+      question: string;
+      refreshFailure: string | undefined;
+    };
 
-async function readDetailState(response: Response): Promise<DetailState> {
+async function readDetailState(response: Response, question: string): Promise<DetailState> {
   if (response.redirected) return { status: "error", detail: ERROR_DETAIL.PROTECTED };
   if (response.status === ADMIN_HTTP_STATUS.UNAUTHORIZED) return { status: "signed-out" };
   if (response.status === ADMIN_HTTP_STATUS.FORBIDDEN) return { status: "forbidden" };
@@ -1254,6 +1275,7 @@ async function readDetailState(response: Response): Promise<DetailState> {
   return {
     status: "ready",
     detail: (await response.json()) as AdminUserDetail,
+    question,
     refreshFailure: undefined,
   };
 }
@@ -1443,9 +1465,9 @@ type UsersState =
   | { status: "signed-out" }
   | { status: "forbidden" }
   | { status: "error"; detail: string }
-  | { status: "ready"; list: AdminUserList; refreshFailure: string | undefined };
+  | { status: "ready"; list: AdminUserList; question: string; refreshFailure: string | undefined };
 
-async function readUsersState(response: Response): Promise<UsersState> {
+async function readUsersState(response: Response, question: string): Promise<UsersState> {
   if (response.redirected) return { status: "error", detail: ERROR_DETAIL.PROTECTED };
   if (response.status === ADMIN_HTTP_STATUS.UNAUTHORIZED) return { status: "signed-out" };
   if (response.status === ADMIN_HTTP_STATUS.FORBIDDEN) return { status: "forbidden" };
@@ -1457,6 +1479,7 @@ async function readUsersState(response: Response): Promise<UsersState> {
   return {
     status: "ready",
     list: (await response.json()) as AdminUserList,
+    question,
     refreshFailure: undefined,
   };
 }
@@ -1952,12 +1975,13 @@ function UsersScreen({
             headers: { accept: "application/json" },
             signal: controller.signal,
           }),
+          path,
         );
-        if (!controller.signal.aborted) setState((current) => settleRead(current, next));
+        if (!controller.signal.aborted) setState((current) => settleRead(current, next, path));
       } catch {
         if (!controller.signal.aborted) {
           setState((current) =>
-            settleRead(current, { status: "error", detail: ERROR_DETAIL.USERS }),
+            settleRead(current, { status: "error", detail: ERROR_DETAIL.USERS }, path),
           );
         }
       } finally {
@@ -2114,19 +2138,21 @@ function UserDetailScreen({
         : { status: "loading" },
     );
     setRefreshing(true);
+    const path = `${USER_DETAIL_PATH}?${ADMIN_USER_ID_PARAM}=${encodeURIComponent(id)}`;
     void (async () => {
       try {
         const next = await readDetailState(
-          await fetch(`${USER_DETAIL_PATH}?${ADMIN_USER_ID_PARAM}=${encodeURIComponent(id)}`, {
+          await fetch(path, {
             headers: { accept: "application/json" },
             signal: controller.signal,
           }),
+          path,
         );
-        if (!controller.signal.aborted) setState((current) => settleRead(current, next));
+        if (!controller.signal.aborted) setState((current) => settleRead(current, next, path));
       } catch {
         if (!controller.signal.aborted) {
           setState((current) =>
-            settleRead(current, { status: "error", detail: ERROR_DETAIL.ACCOUNT }),
+            settleRead(current, { status: "error", detail: ERROR_DETAIL.ACCOUNT }, path),
           );
         }
       } finally {
@@ -2271,12 +2297,13 @@ export function AdminDashboard(): React.JSX.Element {
             headers: { accept: "application/json" },
             signal: controller.signal,
           }),
+          path,
         );
-        if (!controller.signal.aborted) setState((current) => settleRead(current, next));
+        if (!controller.signal.aborted) setState((current) => settleRead(current, next, path));
       } catch {
         if (!controller.signal.aborted) {
           setState((current) =>
-            settleRead(current, { status: "error", detail: ERROR_DETAIL.METRICS }),
+            settleRead(current, { status: "error", detail: ERROR_DETAIL.METRICS }, path),
           );
         }
       } finally {
