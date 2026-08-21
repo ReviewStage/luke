@@ -381,6 +381,15 @@ export interface ProviderSessionObservation {
   /** Omitted by an adapter that reads sessions off this machine. */
   location?: SessionLocation;
   /**
+   * The working directory the provider itself recorded for a local session,
+   * as the absolute path it wrote. Identity for grouping only: a workspace
+   * manager that recorded no session id for a chat (Superset's OpenCode
+   * terminals today) can still claim the chat by the worktree both sides
+   * named independently. Never reported for a cloud session, and never
+   * drawn — the bounded `detail.repository` label is what a surface shows.
+   */
+  directory?: string;
+  /**
    * The agent having the conversation, when the session's provider hosts
    * agents rather than being one — a Conductor chat is a Claude Code or Codex
    * conversation before it is a Conductor one. Identity only: the provider
