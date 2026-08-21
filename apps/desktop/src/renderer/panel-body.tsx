@@ -876,7 +876,12 @@ export function PanelBody({
               <SettingsSearchButton open={settingsSearchOpen} onToggle={onSettingsSearchToggle} />
             ) : null}
             {offerOptions ? (
-              <SessionOptionsButton list={list} open={optionsOpen} onToggle={onOptionsToggle} />
+              <SessionOptionsButton
+                list={list}
+                open={optionsOpen}
+                onToggle={onOptionsToggle}
+                onClear={() => onFiltersChange([])}
+              />
             ) : null}
           </span>
         ) : null}

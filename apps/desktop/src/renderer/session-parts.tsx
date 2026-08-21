@@ -12,7 +12,7 @@ import {
   type SessionView,
   toggledSessionFilters,
 } from "./session-model";
-import { CloudIcon, LaptopIcon, OptionsIcon, VoiceIcon } from "./settings-icons";
+import { CloseIcon, CloudIcon, LaptopIcon, OptionsIcon, VoiceIcon } from "./settings-icons";
 
 /**
  * Rides beside a branch name to say which kind of identifier it is: a branch
@@ -145,10 +145,14 @@ const SORT_DESCRIPTORS: readonly SortDescriptor[] = [
 const SORT_LABEL_ID = "session-sort-label";
 export const SESSION_OPTIONS_ID = "session-options";
 /**
- * Named so the panel can tell a press on the button from a press outside the
- * sheet. The button keeps its own toggle: dismissed on the way down and toggled
- * on the way up, a press here would close and reopen the sheet in one gesture.
+ * The whole control the sheet answers to: the toggle and, while a selection
+ * stands, the X that clears it. Named so the panel can tell a press here from
+ * a press outside the sheet. The toggle keeps its own click: dismissed on the
+ * way down and toggled on the way up, a press here would close and reopen the
+ * sheet in one gesture. The X sits on the same control, so clearing is not
+ * "outside" either.
  */
+export const SESSION_OPTIONS_CONTROL_ID = "session-options-control";
 export const SESSION_OPTIONS_BUTTON_ID = "session-options-button";
 
 /** What each coarse chip is drawn with. An agent carries its own mark instead. */
@@ -187,15 +191,21 @@ const NARROWED_ON_BUTTON = 2;
  * is named on the button itself rather than only inside the sheet it opens.
  * The button has one line to say it on, so it names the first two choices and
  * counts the rest; the full selection stays on the hover and in the sheet.
+ * While a selection stands, an X on the right clears every chosen chip at
+ * once — a sibling rather than a nested button, because a button cannot hold
+ * another, and a press there must not also toggle the sheet.
  */
 export function SessionOptionsButton({
   list,
   open,
   onToggle,
+  onClear,
 }: {
   list: ArrangedSessions;
   open: boolean;
   onToggle: () => void;
+  /** Drops every chosen chip. Offered only while a selection stands. */
+  onClear: () => void;
 }): React.JSX.Element {
   const narrowed = list.filters.length > 0;
   const named = selectedFilterOptions(list).slice(0, NARROWED_ON_BUTTON);
@@ -203,34 +213,51 @@ export function SessionOptionsButton({
   const summary = selectionSummary(list);
 
   return (
-    <button
-      type="button"
-      id={SESSION_OPTIONS_BUTTON_ID}
-      className="options-button"
-      // The button already says how the list is being shown, so it is where a
-      // narrowing or a re-ordering Luke made himself is signed.
-      {...errandTargetProps(ERRAND_TARGET.LIST_OPTIONS)}
-      data-active={String(open)}
+    <span
+      className="options-control"
+      id={SESSION_OPTIONS_CONTROL_ID}
       data-narrowed={String(narrowed)}
-      aria-expanded={open}
-      aria-controls={SESSION_OPTIONS_ID}
-      aria-label={narrowed ? `Options — showing ${summary} only` : "Options"}
-      title={narrowed ? `Showing ${summary} only` : "Filter and sort"}
-      onClick={onToggle}
     >
-      <OptionsIcon />
+      <button
+        type="button"
+        id={SESSION_OPTIONS_BUTTON_ID}
+        className="options-button"
+        // The button already says how the list is being shown, so it is where a
+        // narrowing or a re-ordering Luke made himself is signed.
+        {...errandTargetProps(ERRAND_TARGET.LIST_OPTIONS)}
+        data-active={String(open)}
+        data-narrowed={String(narrowed)}
+        aria-expanded={open}
+        aria-controls={SESSION_OPTIONS_ID}
+        aria-label={narrowed ? `Options — showing ${summary} only` : "Options"}
+        title={narrowed ? `Showing ${summary} only` : "Filter and sort"}
+        onClick={onToggle}
+      >
+        <OptionsIcon />
+        {narrowed ? (
+          <span className="options-current">
+            {named.map((option) => (
+              <span className="options-current-item" key={option.filter}>
+                <FilterMark option={option} />
+                {option.label}
+              </span>
+            ))}
+            {beyond > 0 ? <span className="options-current-item">+{beyond}</span> : null}
+          </span>
+        ) : null}
+      </button>
       {narrowed ? (
-        <span className="options-current">
-          {named.map((option) => (
-            <span className="options-current-item" key={option.filter}>
-              <FilterMark option={option} />
-              {option.label}
-            </span>
-          ))}
-          {beyond > 0 ? <span className="options-current-item">+{beyond}</span> : null}
-        </span>
+        <button
+          type="button"
+          className="options-clear"
+          aria-label="Clear filters"
+          title="Clear filters"
+          onClick={onClear}
+        >
+          <CloseIcon />
+        </button>
       ) : null}
-    </button>
+    </span>
   );
 }
 

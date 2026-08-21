@@ -368,7 +368,8 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "Conductor means Codex chats associated with Conductor. Cursor sits on both rows: " +
         "its app chip narrows to the chats the Cursor app can open, its agent chip to every " +
         "Cursor chat. The sheet stays open while " +
-        "chips toggle, and the options button wears the narrowing while the sheet is closed. " +
+        "chips toggle, and the options button wears the narrowing while the sheet is closed, " +
+        "with an X on its right that clears every chosen chip at once. " +
         "Chosen chips are un-pressed the same way they were pressed, a spoken ask can narrow " +
         "to one or several values combined the same way — local Codex voice chats is one ask " +
         "— naming an agent or app by its everyday name, or back to all, replacing what was " +

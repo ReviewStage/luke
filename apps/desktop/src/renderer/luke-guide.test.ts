@@ -765,6 +765,18 @@ test("the panel fact says the tabs answer an ask as well as a press", () => {
   assert.ok(guide.facts.some((candidate) => candidate.label === "The Settings tab"));
 });
 
+test("the sessions list fact says the options button wears an X that clears", () => {
+  const fact = buildLukeGuide(guideInput()).facts.find(
+    (candidate) => candidate.label === "The sessions list",
+  );
+
+  assert.ok(fact);
+  // The X is a capability of the list itself, and a capability the guide does
+  // not describe is one Luke will deny having — or misdescribe as only
+  // un-pressing chips one at a time.
+  assert.match(fact.detail, /an X on its right that clears every chosen chip at once/);
+});
+
 test("the guide describes the search, its three ways in, and their shared bound", () => {
   const fact = buildLukeGuide(guideInput()).facts.find(
     (candidate) => candidate.label === "Searching sessions",

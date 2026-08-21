@@ -144,7 +144,7 @@ import {
   tallySummary,
 } from "./session-model";
 import { parsePixels } from "./session-motion";
-import { SESSION_OPTIONS_BUTTON_ID, SESSION_OPTIONS_ID } from "./session-parts";
+import { SESSION_OPTIONS_CONTROL_ID, SESSION_OPTIONS_ID } from "./session-parts";
 import { focusSearchField, SESSION_SEARCH_INPUT_ID } from "./session-search";
 import type {
   MicrophoneControl,
@@ -2838,19 +2838,20 @@ export function App(): React.JSX.Element {
   // A press anywhere else is the same dismissal Escape is, and the one a sheet
   // over a list has to answer: what is behind it can only be reached by asking
   // it to move, so pressing there has to be what asks. The press is taken on the
-  // way down, before whatever it lands on can act on it, and the button that
-  // opened the sheet is left to its own toggle. Nothing outside the drawn shape
-  // reaches this renderer at all — those presses belong to whatever is behind
-  // Luke — so leaving the shape is what closes the panel, and closing the panel
-  // is what puts the sheet away.
+  // way down, before whatever it lands on can act on it, and the control that
+  // opened the sheet — toggle and, while a selection stands, the X that clears
+  // it — is left to its own clicks. Nothing outside the drawn shape reaches
+  // this renderer at all — those presses belong to whatever is behind Luke —
+  // so leaving the shape is what closes the panel, and closing the panel is
+  // what puts the sheet away.
   useEffect(() => {
     if (!optionsOpen) return;
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target instanceof Node ? event.target : undefined;
       if (!target) return;
       const sheet = document.getElementById(SESSION_OPTIONS_ID);
-      const button = document.getElementById(SESSION_OPTIONS_BUTTON_ID);
-      if (sheet?.contains(target) || button?.contains(target)) return;
+      const control = document.getElementById(SESSION_OPTIONS_CONTROL_ID);
+      if (sheet?.contains(target) || control?.contains(target)) return;
       setOptionsOpen(false);
     };
     window.addEventListener("pointerdown", handlePointerDown, { capture: true });

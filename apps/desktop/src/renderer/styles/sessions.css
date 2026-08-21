@@ -66,6 +66,30 @@
   flex: 0 0 auto;
 }
 
+/* The toggle and its clear share one seat: while nothing is chosen the
+   wrapper is invisible and the button is the pill; while a selection stands
+   the wrapper becomes the pill so the X can sit on its right without nesting
+   a button inside a button. */
+.options-control {
+  display: inline-flex;
+  align-items: center;
+}
+
+.options-control[data-narrowed="true"] {
+  min-height: 28px;
+  border-radius: 10px;
+  background: var(--raised);
+  color: var(--text-primary);
+  transition:
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+}
+
+.options-control[data-narrowed="true"]:hover,
+.options-control[data-narrowed="true"]:has(.options-button[data-active="true"]) {
+  background: var(--raised-strong);
+}
+
 .options-button {
   display: inline-flex;
   min-height: 28px;
@@ -87,6 +111,18 @@
 .options-button[data-active="true"] {
   background: var(--raised-strong);
   color: var(--text-primary);
+}
+
+.options-control[data-narrowed="true"] .options-button {
+  padding-right: 4px;
+  background: none;
+  color: inherit;
+}
+
+.options-control[data-narrowed="true"] .options-button:hover,
+.options-control[data-narrowed="true"] .options-button[data-active="true"] {
+  background: none;
+  color: inherit;
 }
 
 .options-glyph {
@@ -113,6 +149,36 @@
 
 .options-button[data-narrowed="true"] {
   color: var(--text-primary);
+}
+
+/* The way out of a held selection without opening the sheet. Colour is the
+   whole hover: the button must not grow or move inside a pill that names the
+   narrowing. Padding is zeroed by hand — the engine's own button padding is
+   asymmetric, and in a 20px disc it reads as the glyph leaning to one side. */
+.options-clear {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  margin-right: 4px;
+  padding: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--text-tertiary);
+  place-items: center;
+  transition:
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+}
+
+.options-clear:hover {
+  background: rgba(255, 255, 255, 0.22);
+  color: var(--text-primary);
+}
+
+.options-clear .icon-button-glyph {
+  width: 10px;
+  height: 10px;
 }
 
 /* Floating rather than in the flow. In the flow it would push the last row down
