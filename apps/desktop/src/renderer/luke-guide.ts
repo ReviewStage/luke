@@ -349,7 +349,11 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "preferred exact destination. A local Conductor chat or an Orca worktree exposes no " +
         "documented exact address or message endpoint, so each of those marks identifies the " +
         "association but adds no open or send control; a cmux chat takes no message or " +
-        "control through cmux either — its mark opens the pane, nothing more.",
+        "control through cmux either — its mark opens the pane, nothing more. An ask in " +
+        "conversation, spoken or typed, opens the same destinations the row offers: the row's " +
+        "own preferred address by default, or — when the chat appears in more than one app and " +
+        "the ask names one whose mark is a button — that app's exact address instead, so the " +
+        "developer picks where a chat held by several apps comes forward.",
     },
     {
       label: "Searching sessions",

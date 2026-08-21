@@ -14,7 +14,7 @@
  * answered with — and the record lives in memory alone, dying with the app.
  */
 
-import type { NormalizedSession, SessionIdentity } from "@sidecar/session";
+import type { NormalizedSession, SessionApplicationId, SessionIdentity } from "@sidecar/session";
 import { type AttentionSpeech, announcementSummaryText } from "./realtime-protocol.js";
 import { type CarriedSessionAction, dispatchByKind, SESSION_TOOL_KIND } from "./realtime-tools.js";
 
@@ -142,6 +142,28 @@ function sessionName(identity: SessionIdentity, sessions: readonly NormalizedSes
 }
 
 /**
+ * How the app an open landed in is named inside a history line: the display
+ * name the roster listed it under. The id stands in only for a session the
+ * roster no longer reports — the line is written at the act, so that is a
+ * session retired between the ask and the record.
+ */
+function applicationName(
+  identity: SessionIdentity,
+  applicationId: SessionApplicationId,
+  sessions: readonly NormalizedSession[],
+): string {
+  const session = sessions.find(
+    (candidate) =>
+      candidate.providerId === identity.providerId &&
+      candidate.providerSessionId === identity.providerSessionId,
+  );
+  return (
+    session?.applications.find((application) => application.id === applicationId)?.displayName ??
+    applicationId
+  );
+}
+
+/**
  * The history line one carried act leaves behind: the ask, in the words of
  * what was asked — never the outcome, which the reply voicing it records as
  * its own line. A transcript reading is deliberately only the fact that one
@@ -156,7 +178,10 @@ export function sessionActConversationEntry(
   const describe = {
     [SESSION_TOOL_KIND.MESSAGE]: (act) => `sent a message to ${name}: "${act.text}"`,
     [SESSION_TOOL_KIND.CONTROL]: (act) => `ran "${act.control.label}" on ${name}`,
-    [SESSION_TOOL_KIND.OPEN]: () => `opened ${name}`,
+    [SESSION_TOOL_KIND.OPEN]: (act) =>
+      act.applicationId
+        ? `opened ${name} in ${applicationName(act.identity, act.applicationId, sessions)}`
+        : `opened ${name}`,
     [SESSION_TOOL_KIND.NOTICE_REQUEST]: (act) =>
       `remembered a standing ask about ${name}: "${act.request}"`,
     [SESSION_TOOL_KIND.NOTICE_WITHDRAW]: () => `withdrew the standing ask about ${name}`,

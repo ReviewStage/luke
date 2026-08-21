@@ -743,6 +743,9 @@ test("the roster names a session's app associations, so 'my cmux Cursor session'
   assert.match(text, /associated with cmux/);
   // The association travels by name alone; the pane address stays on the machine.
   assert.doesNotMatch(text, /cmux:\/\//);
+  // An association with an exact address is one an open ask may name, so the
+  // capability line lists it — by the same name, and never the address.
+  assert.match(text, /opens_in=cmux/);
 
   // A session no app claimed says nothing about associations at all.
   const unclaimed = normalizeSession(
@@ -755,6 +758,29 @@ test("the roster names a session's app associations, so 'my cmux Cursor session'
     },
   );
   assert.doesNotMatch(sessionContextText([unclaimed]), /associated with/);
+  assert.doesNotMatch(sessionContextText([unclaimed]), /opens_in/);
+
+  // An association without an address identifies the app but opens nothing,
+  // so it rides the association line and stays off the capability line.
+  const identifiedOnly = normalizeSession(
+    { id: "claude-code", displayName: "Claude Code" },
+    {
+      providerSessionId: "session-3",
+      title: "Rework the roster",
+      status: SESSION_STATUS.WORKING,
+      observedAt: DECIDED_AT,
+      applications: [
+        {
+          id: SESSION_APPLICATION_ID.ORCA,
+          displayName: "Orca",
+          scope: SESSION_APPLICATION_SCOPE.WORKSPACE,
+        },
+      ],
+    },
+  );
+  const identifiedText = sessionContextText([identifiedOnly]);
+  assert.match(identifiedText, /associated with Orca/);
+  assert.doesNotMatch(identifiedText, /opens_in/);
 });
 
 test("the roster names a hosted chat by its agent, with the host beside it", () => {
@@ -1363,6 +1389,65 @@ test("a tool call can act only on a session Luke was shown, doing what it advert
     [cloudSession],
   );
   assert.equal(nothingToRead.kind, "refused");
+});
+
+test("an open ask can pick the app, held to the roster's own associations", () => {
+  const held = normalizeSession(
+    { id: "codex", displayName: "Codex" },
+    {
+      providerSessionId: "thread-2",
+      title: "Codex: luke",
+      status: SESSION_STATUS.WAITING,
+      observedAt: DECIDED_AT,
+      detail: { link: "codex://thread/thread-2" },
+      applications: [
+        {
+          id: SESSION_APPLICATION_ID.SUPERSET,
+          displayName: "Superset",
+          scope: SESSION_APPLICATION_SCOPE.SESSION,
+          link: "superset://v2-workspace/workspace-1?terminalId=terminal-1",
+        },
+        {
+          id: SESSION_APPLICATION_ID.ORCA,
+          displayName: "Orca",
+          scope: SESSION_APPLICATION_SCOPE.WORKSPACE,
+        },
+      ],
+    },
+  );
+  const identity = '"provider_id":"codex","provider_session_id":"thread-2"';
+
+  // The developer's word for the app resolves to the build's id — by display
+  // name in any case, or by the id itself — and the action carries that id,
+  // never the address behind it.
+  assert.deepEqual(
+    sessionToolAction(
+      messageCall(`{${identity},"application":"superset"}`, REALTIME_TOOL.OPEN_SESSION),
+      [held],
+    ),
+    {
+      kind: "open",
+      identity: { providerId: "codex", providerSessionId: "thread-2" },
+      applicationId: SESSION_APPLICATION_ID.SUPERSET,
+    },
+  );
+
+  // An ask that names no app keeps the row's own destination.
+  assert.deepEqual(
+    sessionToolAction(messageCall(`{${identity}}`, REALTIME_TOOL.OPEN_SESSION), [held]),
+    { kind: "open", identity: { providerId: "codex", providerSessionId: "thread-2" } },
+  );
+
+  // An association without an address opens nothing, and an app the roster
+  // never listed opens nothing; each refusal says where the session does open.
+  for (const application of ["Orca", "TextEdit"]) {
+    const refusal = sessionToolAction(
+      messageCall(`{${identity},"application":"${application}"}`, REALTIME_TOOL.OPEN_SESSION),
+      [held],
+    );
+    assert.equal(refusal.kind, "refused");
+    assert.match("reason" in refusal ? refusal.reason : "", /opens in Superset/);
+  }
 });
 
 const OFFERED_PROJECT: ObservedWorkspaceProject = {

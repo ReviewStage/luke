@@ -42,6 +42,7 @@ import {
   type TrackedIssue,
 } from "@sidecar/issues";
 import {
+  isSessionApplicationId,
   matchesFilterSelection,
   maximumSessionMessageLength,
   maximumWorkspaceNameLength,
@@ -50,6 +51,7 @@ import {
   PROVIDER_ID_LIST,
   SESSION_APPLICATION_ID,
   SESSION_LOCATION,
+  type SessionApplicationId,
   type SessionControl,
   type SessionIdentity,
   sessionMessageText,
@@ -145,7 +147,12 @@ const SESSION_LIST_FILTER_DESCRIPTION =
 export type SessionToolAction =
   | { kind: typeof SESSION_TOOL_KIND.MESSAGE; identity: SessionIdentity; text: string }
   | { kind: typeof SESSION_TOOL_KIND.CONTROL; identity: SessionIdentity; control: SessionControl }
-  | { kind: typeof SESSION_TOOL_KIND.OPEN; identity: SessionIdentity }
+  | {
+      kind: typeof SESSION_TOOL_KIND.OPEN;
+      identity: SessionIdentity;
+      /** The one app the developer named to open it in, resolved to its id. */
+      applicationId?: SessionApplicationId;
+    }
   | { kind: typeof SESSION_TOOL_KIND.NOTICE_REQUEST; identity: SessionIdentity; request: string }
   | { kind: typeof SESSION_TOOL_KIND.NOTICE_WITHDRAW; identity: SessionIdentity }
   | { kind: typeof SESSION_TOOL_KIND.READ_TRANSCRIPT; identity: SessionIdentity }
@@ -486,8 +493,36 @@ function validateOpenSession(parsed: WireRecord, context: SessionToolContext): S
   const found = sessionFromArguments(parsed, context.sessions);
   if ("kind" in found) return found;
   const { session, identity } = found;
-  // The action carries the identity, never the address: the main process
-  // reads the link back out of its own registry, the same as a pressed row.
+  // The action carries the identity — and, when the developer named an app,
+  // that app's id — never the address: the main process reads the link back
+  // out of its own registry, the same as a pressed row or a pressed app mark.
+  const applicationWord = textArgument(parsed, "application");
+  if (applicationWord !== undefined) {
+    const normalized = applicationWord.trim().toLowerCase();
+    const application = session.applications.find(
+      (candidate) =>
+        candidate.displayName.toLowerCase() === normalized || candidate.id === normalized,
+    );
+    // An association without an exact address identifies the app but opens
+    // nothing, so it refuses like an app the roster never listed — and the
+    // refusal names the apps that can open, which the roster already carries.
+    // The id must be one the build fixed: the bridge takes no other, and the
+    // main process would refuse it again.
+    const applicationId = application?.link ? application.id : undefined;
+    if (applicationId === undefined || !isSessionApplicationId(applicationId)) {
+      const openable = session.applications.filter((candidate) => candidate.link);
+      return {
+        kind: "refused",
+        reason:
+          openable.length > 0
+            ? `That session opens in ${openable
+                .map((candidate) => candidate.displayName)
+                .join(" or ")}, not there.`
+            : "No app carries an exact address for that session.",
+      };
+    }
+    return { kind: SESSION_TOOL_KIND.OPEN, identity, applicationId };
+  }
   if (!session.detail.link) {
     return { kind: "refused", reason: "That session has no address to open." };
   }
@@ -1054,7 +1089,15 @@ export const REALTIME_TOOLS = {
         "show_panel instead, never this.",
       parameters: {
         type: "object",
-        properties: { ...SESSION_IDENTITY_PARAMETERS },
+        properties: {
+          ...SESSION_IDENTITY_PARAMETERS,
+          application: {
+            type: "string",
+            description:
+              "The app to open the session in, as its roster line's opens_in lists it — only " +
+              "when the developer named one. Omitted, the session opens at its own address.",
+          },
+        },
         required: ["provider_id", "provider_session_id"],
       },
     },
