@@ -300,13 +300,15 @@ const USAGE_CHART = {
 function UsageChart({
   daily,
   trend,
+  label,
 }: {
   daily: readonly AdminDailyUsage[];
   trend: AdminTrend;
+  label: string;
 }): React.JSX.Element {
   return (
     <div className="rounded-lg border border-border bg-card p-5">
-      <ChartHeading label="Hosted-tier calls per day" trend={trend} />
+      <ChartHeading label={label} trend={trend} />
       <ChartContainer config={USAGE_CHART} className="aspect-auto h-48 w-full">
         <BarChart data={[...daily]}>
           <CartesianGrid vertical={false} />
@@ -962,7 +964,11 @@ function Dashboard({
           />
         </div>
         <div className="mt-3">
-          <UsageChart daily={metrics.featureUsage.daily} trend={metrics.featureUsage.usageTrend} />
+          <UsageChart
+            daily={metrics.featureUsage.daily}
+            trend={metrics.featureUsage.usageTrend}
+            label="Hosted-tier calls per day"
+          />
         </div>
         <SectionHeading>Most active hosted-tier accounts</SectionHeading>
         <ActiveAccountsTable
@@ -1310,7 +1316,11 @@ function UserDetailPage({
           />
         </div>
         <div className="mt-3">
-          <UsageChart daily={activity.daily} trend={activity.usageTrend} />
+          <UsageChart
+            daily={activity.daily}
+            trend={activity.usageTrend}
+            label="This account's calls per day"
+          />
         </div>
 
         <SectionHeading>Volume</SectionHeading>
