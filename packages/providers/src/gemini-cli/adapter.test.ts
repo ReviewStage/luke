@@ -739,3 +739,41 @@ test("a spool that cannot be read costs only the refinement", async (t) => {
 
   assert.equal(observation?.status, SESSION_STATUS.WORKING);
 });
+
+test("a prompt event never clears the hold the recording already shows", async (t) => {
+  const geminiHome = await temporaryGeminiHome(t);
+  const spool = await temporaryHookSpool(t);
+  await writeSessionFile(
+    geminiHome,
+    "luke",
+    "session-2026-08-20T11-00-abcd1234",
+    [
+      metadataRecord(FULL_SESSION_ID, "2026-08-20T11:00:00.000Z"),
+      geminiMessage("m1", "2026-08-20T11:59:58.000Z", {
+        toolCalls: [
+          {
+            id: "t1",
+            name: "write_file",
+            args: { file_path: "/Users/test/luke/README.md" },
+            status: "awaiting_approval",
+            timestamp: "2026-08-20T11:59:58.000Z",
+          },
+        ],
+      }),
+    ],
+    TEST_TIME - 1_000,
+  );
+  // The prompt opened the very turn now holding, so it stands newer than the
+  // record — and must still lose to it.
+  await writeHookEvent(spool, FULL_SESSION_ID, "prompt", TEST_TIME - 1_000);
+
+  const adapter = new GeminiCliSessionAdapter({
+    geminiHome,
+    hookEventsDirectory: () => spool,
+    now: () => TEST_TIME,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.WAITING);
+  assert.equal(observation?.holdingForDeveloper, true);
+});

@@ -426,9 +426,16 @@ export class GeminiCliSessionAdapter extends LocalFileSessionAdapter<
       hookEventsDirectory !== undefined && parsed.sessionId !== undefined
         ? await readGeminiHookEvent(hookEventsDirectory, parsed.sessionId).catch(() => undefined)
         : undefined;
+    // A prompt event always precedes the reply it opened, so a tip already
+    // holding a call for approval has outrun it: the hold stands rather than
+    // reading as busy for the tolerance window before the notification lands.
+    const standingHookEvent =
+      hookEvent?.event === GEMINI_HOOK_EVENT.PROMPT && parsed.holdingForApproval === true
+        ? undefined
+        : hookEvent;
     const refined = hookRefinedStatus({
       refinement: GEMINI_HOOK_STATUS_REFINEMENT,
-      hookEvent,
+      hookEvent: standingHookEvent,
       providerAtMs: conversationAt,
       statusAt: (observedAt) => statusFromTail(parsed, observedAt, now, activeSessionFreshnessMs),
       now,
