@@ -236,6 +236,7 @@ test("reports a tool call holding for approval as waiting", async (t) => {
   const observations = await adapter.observe();
 
   assert.equal(observations[0]?.status, SESSION_STATUS.WAITING);
+  assert.equal(observations[0]?.holdingForDeveloper, true);
 });
 
 test("reports the error that stopped a session", async (t) => {

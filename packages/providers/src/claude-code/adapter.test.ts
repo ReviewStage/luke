@@ -77,6 +77,7 @@ test("observes a Claude Code session file and labels it by its workspace", async
   assert.equal(observations[0]?.providerSessionId, "session-waiting");
   assert.equal(observations[0]?.title, "luke");
   assert.equal(observations[0]?.status, SESSION_STATUS.WAITING);
+  assert.equal(observations[0]?.holdingForDeveloper, undefined);
   assert.equal(observations[0]?.controls, undefined);
   assert.equal(observations[0]?.detail?.repository, "luke");
 });
@@ -1065,6 +1066,7 @@ test("a permission prompt the transcript cannot show turns the row to waiting", 
   const [observation] = await adapter.observe();
 
   assert.equal(observation?.status, SESSION_STATUS.WAITING);
+  assert.equal(observation?.holdingForDeveloper, true);
   // The event also dates the session: the spool is written only by Luke's own
   // script, so its clock cannot suffer the transcripts' bulk-touch problem.
   assert.equal(observation?.observedAt, TEST_TIME - 60_000);

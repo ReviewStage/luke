@@ -405,6 +405,14 @@ export interface ProviderSessionObservation {
    */
   canReceiveMessage?: boolean;
   /**
+   * Whether a waiting session is holding for the developer to act — a
+   * permission, an approval, or a question the provider itself reported.
+   * Absent means the adapter could not tell: a waiting notice then speaks
+   * only when the recap itself asks, because idle-after-a-turn is the
+   * panel's to show, not a banner's to read as an ask.
+   */
+  holdingForDeveloper?: boolean;
+  /**
    * Set only by an adapter whose provider documents renaming this session
    * itself, through the provider's own API, under the same absent-means-no
    * rule. The chat's own name is what this renames; the workspace around it
@@ -467,6 +475,11 @@ export interface NormalizedSession extends SessionIdentity {
   controls: readonly SessionControl[];
   /** Whether this session's provider will take a message for it right now. */
   canReceiveMessage: boolean;
+  /**
+   * Whether a waiting session is holding for the developer to act. Absent
+   * means the adapter could not tell.
+   */
+  holdingForDeveloper?: boolean;
   /** Whether this session's provider documents renaming the chat itself. */
   canRename: boolean;
   /** The agents that can be started alongside this session, or none. */
@@ -844,6 +857,9 @@ export function normalizeSession(
   if (observation.realtimeVoice === true) session.realtimeVoice = true;
   if (observation.realtimeVoiceLive === true) session.realtimeVoiceLive = true;
   if (observation.standing === true) session.standing = true;
+  if (status === SESSION_STATUS.WAITING && observation.holdingForDeveloper === true) {
+    session.holdingForDeveloper = true;
+  }
   if (parentProviderSessionId && parentProviderSessionId !== providerSessionId) {
     session.parentProviderSessionId = parentProviderSessionId;
   }

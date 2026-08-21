@@ -537,6 +537,11 @@ function observationFromSessionFile(
     observedAt,
     ...(parsed.awaySummary ? { recap: parsed.awaySummary } : undefined),
     detail: detailFromTail(parsed),
+    ...(status === SESSION_STATUS.WAITING &&
+    eventStands &&
+    hookEvent?.event === CLAUDE_HOOK_EVENT.NOTIFICATION
+      ? { holdingForDeveloper: true }
+      : undefined),
   };
 }
 

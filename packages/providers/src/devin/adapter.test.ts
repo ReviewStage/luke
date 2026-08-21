@@ -435,6 +435,12 @@ test("maps the states Devin reports onto states Luke can show", async () => {
       ["devin-later-state", SESSION_STATUS.UNKNOWN],
     ],
   );
+  assert.deepEqual(
+    observations
+      .filter((observation) => observation.holdingForDeveloper === true)
+      .map((observation) => observation.providerSessionId),
+    ["devin-waiting-user", "devin-waiting-approval"],
+  );
 });
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.

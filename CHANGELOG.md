@@ -43,6 +43,9 @@ the date its release was published.
 
 - Fixed Developer ID releases failing while signing the nested Calendar helper
   ([#370](https://github.com/ReviewStage/luke/pull/370))
+- Fixed spoken announcements calling a settled chat "waiting on you" when it
+  did not need a reply
+  ([#374](https://github.com/ReviewStage/luke/pull/374))
 
 ## 0.3.5 — 2026-08-20
 

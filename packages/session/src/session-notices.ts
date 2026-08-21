@@ -84,6 +84,24 @@ export interface SessionNotice {
   observedAt: number;
 }
 
+/**
+ * A waiting banner is only worth hearing when the session cannot continue
+ * without the developer. A provider that saw a permission, an approval, or
+ * an open question says so on the observation; a recap that itself asks is
+ * the same evidence when the adapter could not tell. A query string inside
+ * a URL is not a question. A `?` that ends a sentence after a link still
+ * is: a query string has characters after the mark, and a trailing ask
+ * does not.
+ */
+function waitingHoldsForDeveloper(session: NormalizedSession): boolean {
+  if (session.status !== SESSION_STATUS.WAITING) return false;
+  if (session.holdingForDeveloper === true) return true;
+  if (!session.recap) return false;
+  return session.recap
+    .replace(/\bhttps?:\/\/[^\s?]+(?:\?[^\s#]+)?(?:#[^\s]+)?/gi, "")
+    .includes("?");
+}
+
 interface TrackedSessionState {
   status: SessionStatus;
   /** When each notice-worthy status was last noticed, for the repeat window. */
@@ -122,7 +140,9 @@ function sessionNotice(session: NormalizedSession, previousStatus: SessionStatus
  * A watched edge speaks only while its event is fresh — the status's own
  * timestamp within `SESSION_NOTICE_FRESH_AGE_MS` of now — so a wake from
  * sleep or a provider back from an outage never reads out the afternoon's
- * history as though it just happened.
+ * history as though it just happened. A waiting edge is quieter still: the
+ * turn ending is not an ask, so it announces only when the session is
+ * holding for the developer.
  * Deterministic by construction — nothing a model wrote can reach it — and
  * purely derived from the roster, so it can never act on a session, only
  * describe one.
@@ -169,6 +189,10 @@ export class SessionNoticeTracker {
       if (session.completionCause === SESSION_COMPLETION_CAUSE.SESSION_CLOSED) continue;
       const status = noticeStatus(session.status);
       if (!status) continue;
+      // Idle-after-a-turn is waiting on the row and still not an ask.
+      if (status === SESSION_NOTICE_STATUS.WAITING && !waitingHoldsForDeveloper(session)) {
+        continue;
+      }
       // The edge is still tracked above — it just is not news any more.
       if (now - session.observedAt > SESSION_NOTICE_FRESH_AGE_MS) continue;
       const lastNoticed = state.noticedAt.get(status);

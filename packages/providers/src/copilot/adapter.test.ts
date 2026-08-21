@@ -245,6 +245,12 @@ test("maps every state GitHub reports onto a state Luke can show", async () => {
       ["task-later-state", SESSION_STATUS.UNKNOWN],
     ],
   );
+  assert.deepEqual(
+    observations
+      .filter((observation) => observation.holdingForDeveloper === true)
+      .map((observation) => observation.providerSessionId),
+    ["task-waiting"],
+  );
 });
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.

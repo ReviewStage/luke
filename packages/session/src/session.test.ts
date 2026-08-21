@@ -172,3 +172,29 @@ test("keeps the agent behind a hosted session, and drops one saying nothing", ()
   assert.equal(withAgent({ id: "   ", displayName: "Claude Code" }), undefined);
   assert.equal(withAgent(undefined), undefined);
 });
+
+test("a developer hold rides a waiting session and is dropped on any other status", () => {
+  const waiting = normalizeSession(
+    { id: "claude-code", displayName: "Claude Code" },
+    {
+      providerSessionId: "held",
+      title: "Held for permission",
+      status: SESSION_STATUS.WAITING,
+      observedAt: TEST_NOW,
+      holdingForDeveloper: true,
+    },
+  );
+  assert.equal(waiting.holdingForDeveloper, true);
+
+  const working = normalizeSession(
+    { id: "claude-code", displayName: "Claude Code" },
+    {
+      providerSessionId: "held",
+      title: "Held for permission",
+      status: SESSION_STATUS.WORKING,
+      observedAt: TEST_NOW,
+      holdingForDeveloper: true,
+    },
+  );
+  assert.equal(working.holdingForDeveloper, undefined);
+});

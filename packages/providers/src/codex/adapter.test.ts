@@ -1343,6 +1343,7 @@ test("a permission request the database cannot show turns the row to waiting", a
   const [observation] = await adapter.observe();
 
   assert.equal(observation?.status, SESSION_STATUS.WAITING);
+  assert.equal(observation?.holdingForDeveloper, true);
   // The event also dates the session: the spool is written only by Luke's own
   // script, so its clock is the moment the session actually moved.
   assert.equal(observation?.observedAt, TEST_TIME - 60_000);

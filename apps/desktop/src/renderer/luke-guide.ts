@@ -568,8 +568,9 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
             // denies announcing nor offers to turn it off.
             label: "Announcements",
             detail:
-              "Luke says it out loud when an observed session starts waiting on the developer, " +
-              "stops on an error, or finishes — in his own words, naming the session and saying " +
+              "Luke says it out loud when an observed session is holding for you, stops on an " +
+              "error, or finishes — a hold is a question, a permission, or an approval, not a " +
+              "turn that merely ended — in his own words, naming the session and saying " +
               "what it needs, from the agent's parting words or the provider's error line when " +
               "one was reported. No conversation needs to be open, and the microphone stays " +
               "off. While he says it, a pressable notice names the session he is talking " +

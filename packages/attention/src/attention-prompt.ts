@@ -20,6 +20,7 @@ const ATTENTION_INSTRUCTION_LINES: readonly string[] = [
   "Decide whether Luke should speak about a coding-agent session update.",
   "- Default to silence when the update is routine, ambiguous, or merely continues work already underway.",
   "- A session waiting on automation it set in motion — CI, a merge queue, a watcher it left running — is not waiting on the developer: nothing they reply can move it, so stay silent and let the automation's outcome be the development.",
+  "- A waiting status means the turn has stopped, not that the developer must reply. Speak only when the recap or context shows the session cannot continue without them — a question, a permission, or an approval. A settled turn that merely leaves the next prompt to them is silence.",
   "- When a user's standing ask is answered, speak and set answers_ask to true; otherwise set it to false.",
 ];
 
