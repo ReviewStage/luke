@@ -1112,15 +1112,23 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
       return this.#chatStoreObservation(candidate, now, activeSessionFreshnessMs);
     }
     const header = this.#appChatIndex.headers.get(candidate.providerSessionId);
-    // One folder answers for the label, the branch, and the send pin, in the
-    // order of how exactly each source names it: the chat's own header, the
-    // project's trust record, and last the reduced-name workspace match.
+    // The send pin's folder, in the order of how exactly each source names
+    // it: the chat's own header, the project's trust record, and last the
+    // reduced-name workspace match. Deliberately not the chat store's cwd:
+    // the messaging exception pins a resume to the folder Cursor's workspace
+    // records name, and widening that set is a product decision, not an
+    // implementation detail.
     const folderPath =
       header?.folderPath ??
       this.#trustedFoldersByProject.get(candidate.projectDirectoryName) ??
       this.#workspaceLabels.folder(candidate.projectDirectoryName);
-    const label = folderPath
-      ? workspaceLabel(folderPath)
+    // What the row shows and groups by is the chat's own folder, and the
+    // store's record of it is the most exact where one stands — the cwd the
+    // chat actually ran in, which is also what a workspace manager's worktree
+    // is matched against.
+    const directory = candidate.meta?.cwd ?? folderPath;
+    const label = directory
+      ? workspaceLabel(directory)
       : this.#workspaceLabels.label(candidate.projectDirectoryName);
     const hookEvent = await this.#hookEvent(candidate.providerSessionId);
     // A transcript carries no timestamps of its own, so when it was last
@@ -1156,7 +1164,7 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
     // header's created-on branch says where a chat began, not where its
     // folder stands after a checkout — with that header record standing in
     // where the folder cannot say.
-    const branch = (folderPath ? await branchFromGitHead(folderPath) : undefined) ?? header?.branch;
+    const branch = (directory ? await branchFromGitHead(directory) : undefined) ?? header?.branch;
     // A message is advertised only where the CLI's documented resume can
     // honestly land one: the turn is settled and nothing newer says work is
     // running — a prompt hook can know about a turn the transcript has not
@@ -1181,10 +1189,6 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
     } else {
       this.#sendTargets.delete(candidate.providerSessionId);
     }
-    // The chat store names the chat and the exact folder it ran in, neither
-    // of which the transcript records; the folder Luke would pin a resume to
-    // stands in for a chat the store does not hold.
-    const directory = candidate.meta?.cwd ?? folderPath;
     return {
       providerSessionId: candidate.providerSessionId,
       title: header?.name ?? oneLine(candidate.meta?.title, maximumSessionTitleLength) ?? label,
