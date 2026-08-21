@@ -235,6 +235,7 @@ test("the gate answers 405, 401, 403, and 200 as distinct outcomes", async () =>
     readMetrics: async (now) => emptyMetrics(now),
   });
   assert.equal(wrongMethod.status, 405);
+  assert.equal(wrongMethod.headers.get("cache-control"), "no-store");
   assert.equal((await wrongMethod.json()).error, ADMIN_ERROR.METHOD_NOT_ALLOWED);
 
   const anonymous = await handleAdminMetrics({
@@ -260,6 +261,7 @@ test("the gate answers 405, 401, 403, and 200 as distinct outcomes", async () =>
     now: () => NOON_UTC,
   });
   assert.equal(ok.status, 200);
+  assert.equal(ok.headers.get("cache-control"), "no-store");
   // SAFETY: handleAdminMetrics answered 200, whose body is an AdminMetrics document.
   const body = (await ok.json()) as AdminMetrics;
   assert.equal(body.generatedAt, NOON_UTC);

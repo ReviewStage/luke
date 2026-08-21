@@ -167,6 +167,7 @@ test("the gate answers 405, 401, 403, 400, 404, and 200 as distinct outcomes", a
     readUser,
   });
   assert.equal(wrongMethod.status, 405);
+  assert.equal(wrongMethod.headers.get("cache-control"), "no-store");
 
   const anonymous = await handleAdminUser({
     request: userRequest(),
@@ -207,6 +208,7 @@ test("the gate answers 405, 401, 403, 400, 404, and 200 as distinct outcomes", a
     now: () => NOON_UTC,
   });
   assert.equal(ok.status, 200);
+  assert.equal(ok.headers.get("cache-control"), "no-store");
   // SAFETY: handleAdminUser answered 200, whose body is an AdminUserDetail document.
   const body = (await ok.json()) as AdminUserDetail;
   assert.equal(body.generatedAt, NOON_UTC);
