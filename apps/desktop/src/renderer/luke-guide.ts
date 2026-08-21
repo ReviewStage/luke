@@ -429,8 +429,10 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "beside a list of more than one session. It keeps rows saying every typed word in " +
         "their title, status word or status line, branch, repository, workspace, agent, associated app, or model, and counts " +
         "what it left. A search matching nothing offers the matches a filter is hiding rather " +
-        "than pretending there are none. Escape clears the query and then closes the field; " +
-        "no search survives the panel closing. Command-F answers " +
+        "than pretending there are none. Escape clears the query and then closes the field, " +
+        "and clearing or closing is what lets a search go; a search left standing is a way of " +
+        "viewing the list like the filter chips, so it survives the panel closing and the app " +
+        "restarting and comes back with its field open. Command-F answers " +
         "for whichever tab is showing: the sessions list here, the settings search on Settings.",
     },
     {

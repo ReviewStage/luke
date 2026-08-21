@@ -113,6 +113,8 @@ export interface StoredAppSettings {
   formFactor?: PanelFormFactor;
   /** The session list's chosen filter chips, absent while nothing narrows it. */
   sessionFilters?: readonly SessionFilter[];
+  /** The session list's held search words, absent while nothing is searched. */
+  sessionSearchQuery?: string;
   defaultWorkspaceProvider?: WorkspaceProviderId;
   workspaceAgentDefaults?: Readonly<Partial<Record<ProviderId, WorkspaceAgentSelection>>>;
   workspaceProjectDefaults?: Readonly<Partial<Record<WorkspaceProviderId, string>>>;
@@ -318,6 +320,26 @@ function sessionFilters(
     filters.push(candidate);
   }
   return valid(filters.length > 0 ? filters : undefined);
+}
+
+const MAXIMUM_SESSION_SEARCH_QUERY_LENGTH = 500;
+
+/**
+ * The stored words come back exactly as typed, because the field they refill
+ * is the developer's own text. Only a value that could not be a held search
+ * reads as unset instead: words that are all whitespace narrow nothing, and a
+ * value past any typeable length is a corrupted file rather than a question
+ * someone is still asking.
+ */
+function sessionSearchQuery(
+  value: UnparsedWireValue,
+): SettingGuardResult<StoredAppSettings["sessionSearchQuery"]> {
+  if (value === undefined) return valid(undefined);
+  if (!isWireString(value)) return invalid(undefined);
+  if (value.trim() === "" || value.length > MAXIMUM_SESSION_SEARCH_QUERY_LENGTH) {
+    return valid(undefined);
+  }
+  return valid(value);
 }
 
 const MAXIMUM_WORKSPACE_PROJECT_ID_LENGTH = 500;
@@ -667,6 +689,22 @@ export const APP_SETTING_SCHEMA = {
     // the spoken filter tool's own vocabulary; the stored selection is what
     // those already changed, not a setting of its own to describe.
     guideEntry: settingGuideEntry("sessionFilters", [], () => undefined),
+    mainProcessSideEffect: SETTING_SIDE_EFFECT.NONE,
+  },
+  sessionSearchQuery: {
+    field: "sessionSearchQuery",
+    default: undefined,
+    guard: sessionSearchQuery,
+    // The query backs no settings row, on the filter selection's own terms: it
+    // is the session list's view state, stored so a held search survives the
+    // panel closing and the app restarting. With no guide ids the page below
+    // is inert; the root page is named only because a definition must name one.
+    settingsPage: SETTINGS_PAGE.ROOT,
+    // The guide covers searching through the session-search facts and the
+    // spoken search tool's own vocabulary; the stored words are what those
+    // already typed, not a setting of their own to describe. No analytics
+    // either: the value is the developer's own text, which never travels.
+    guideEntry: settingGuideEntry("sessionSearchQuery", [], () => undefined),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.NONE,
   },
   defaultWorkspaceProvider: {
