@@ -6,13 +6,11 @@
  * session the maintainer signed in for on this site (resolved through Better
  * Auth, never the desktop's bearer token) whose account carries the admin role.
  *
- * The database is the source of truth; this file holds the role vocabulary and
- * the bootstrap. `LUKE_ADMIN_EMAILS` names the accounts a deployment wants given
- * the admin role — a comma-separated list read from the environment, never
- * committed here — and a matching account is promoted when it signs in (and by
- * the `admin:seed` build step for accounts that already existed). Once the role
- * is set it stands on its own; clearing the env value does not demote it, and
- * setting the role back to `user` is how access is withdrawn.
+ * The database is the source of truth and the only place the role is set. New
+ * accounts default to `user`; grant admin by setting the column directly
+ * (`update "user" set role = 'admin' where email = '…';`) and withdraw it by
+ * setting it back to `user`. There is no environment allowlist and no code path
+ * that promotes an account — the grant is a deliberate write a maintainer makes.
  */
 
 /** The user roles this build knows. Plain-text in the column, a fixed set here. */
@@ -28,32 +26,6 @@ export function isAdminRole(role: string | null | undefined): boolean {
   return role === USER_ROLE.ADMIN;
 }
 
-/** The env name a deployment names the accounts to promote to admin under. */
-export const ADMIN_SEED_EMAILS_ENVIRONMENT = "LUKE_ADMIN_EMAILS";
-
-/**
- * The seed-admin email set, parsed from its comma-separated env value.
- * Case-folded and trimmed so a stored address matches however its provider
- * cased it; a blank or absent value is an empty set, never a wildcard.
- */
-export function adminSeedEmailsFromEnv(value: string | undefined): ReadonlySet<string> {
-  return new Set(
-    (value ?? "")
-      .split(",")
-      .map((entry) => entry.trim().toLowerCase())
-      .filter((entry) => entry.length > 0),
-  );
-}
-
-/** Whether one account's address is on the seed list, matched case-insensitively. */
-export function isSeededAdminEmail(
-  email: string | undefined,
-  seedEmails: ReadonlySet<string>,
-): boolean {
-  const normalized = email?.trim().toLowerCase();
-  return normalized !== undefined && normalized.length > 0 && seedEmails.has(normalized);
-}
-
 /**
  * The signed-in browser viewer a request resolves to. `role` is read from the
  * account's own `user` row on the session, so nothing the request carries can
@@ -61,6 +33,5 @@ export function isSeededAdminEmail(
  */
 export interface AdminViewer {
   userId: string;
-  email: string | undefined;
   role: string | null | undefined;
 }

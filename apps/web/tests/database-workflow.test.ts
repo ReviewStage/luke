@@ -23,10 +23,7 @@ test("migrations stay out of package lifecycle and application scripts", () => {
 });
 
 test("Vercel migrates and seeds a deployment's database before it builds", () => {
-  assert.equal(
-    vercelConfig.buildCommand,
-    "pnpm db:migrate && pnpm auth:seed && pnpm admin:seed && pnpm build",
-  );
+  assert.equal(vercelConfig.buildCommand, "pnpm db:migrate && pnpm auth:seed && pnpm build");
   assert.doesNotMatch(vercelConfig.buildCommand, /drizzle-kit push/);
 });
 

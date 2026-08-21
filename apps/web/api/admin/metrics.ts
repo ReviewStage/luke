@@ -31,11 +31,7 @@ export default {
         .catch(() => null);
       const account = authenticated?.user;
       if (!account) return undefined;
-      return {
-        userId: account.id,
-        email: account.email ?? undefined,
-        role: account.role,
-      };
+      return { userId: account.id, role: account.role };
     };
 
     const integrations = adminIntegrations({

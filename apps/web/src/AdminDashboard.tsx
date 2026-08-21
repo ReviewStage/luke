@@ -534,8 +534,8 @@ export function AdminDashboard(): React.JSX.Element {
         return (
           <Centered title="Not authorized">
             You are signed in, but this account does not have the admin role. Admin access is the{" "}
-            <code className="font-mono">admin</code> role on your account, granted to the accounts
-            named in <code className="font-mono">LUKE_ADMIN_EMAILS</code> when they sign in.
+            <code className="font-mono">admin</code> role on your account, set directly in the
+            database.
           </Centered>
         );
       case "error":

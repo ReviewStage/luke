@@ -123,7 +123,6 @@ function metricsRequest(method = "GET"): Request {
 
 const ADMIN_VIEWER: AdminViewer = {
   userId: "user-1",
-  email: "dean@example.com",
   role: "admin",
 };
 
