@@ -356,6 +356,31 @@ test("reads only session directories, never the store's own bookkeeping", async 
   assert.equal(observations[0]?.providerSessionId, SESSION_ID.SETTLED);
 });
 
+test("honors the CLI's own GROK_HOME override when no home is passed", async (t) => {
+  const grokHome = await temporaryGrokHome(t);
+  await writeSession(
+    grokHome,
+    LUKE_PROJECT_DIRECTORY,
+    SESSION_ID.SETTLED,
+    {
+      summary: summaryDocument(SESSION_ID.SETTLED, "Found through the override"),
+      events: [event("2026-08-20T11:59:00.000Z", "turn_ended", { outcome: "completed" })],
+    },
+    TEST_TIME - 1_000,
+  );
+  const previous = process.env.GROK_HOME;
+  process.env.GROK_HOME = grokHome;
+  t.after(() => {
+    if (previous === undefined) delete process.env.GROK_HOME;
+    else process.env.GROK_HOME = previous;
+  });
+
+  const adapter = new GrokBuildSessionAdapter({ now: () => TEST_TIME });
+  const observations = await adapter.observe();
+
+  assert.equal(observations[0]?.title, "Found through the override");
+});
+
 test("observes nothing where Grok Build has never run", async (t) => {
   const grokHome = path.join(await temporaryGrokHome(t), "missing");
 

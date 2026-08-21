@@ -21,6 +21,12 @@ import {
  * recap or a transcript rendering is read from.
  */
 
+/**
+ * Grok Build's own home override: `GROK_HOME` names the directory the CLI
+ * keeps everything in — the sessions store included — standing in for
+ * `~/.grok` whole rather than re-rooting it.
+ */
+const GROK_ENVIRONMENT = { HOME: "GROK_HOME" } as const;
 const GROK_DIRECTORY_NAME = ".grok";
 
 export const GROK_SESSIONS_DIRECTORY = "sessions";
@@ -32,7 +38,8 @@ export const GROK_SESSION_FILE = {
 } as const;
 
 export function defaultGrokBuildHome(): string {
-  return path.join(os.homedir(), GROK_DIRECTORY_NAME);
+  const configured = process.env[GROK_ENVIRONMENT.HOME]?.trim();
+  return configured || path.join(os.homedir(), GROK_DIRECTORY_NAME);
 }
 
 /** The lifecycle event types whose meaning this code consults. */
