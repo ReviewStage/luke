@@ -322,8 +322,6 @@ test("maps every run state Cursor reports onto a state Luke can show", async () 
       [
         [TEST_RUN_STATUS.RUNNING, "running"],
         [TEST_RUN_STATUS.FINISHED, "finished"],
-        [TEST_RUN_STATUS.CANCELLED, "cancelled"],
-        [TEST_RUN_STATUS.EXPIRED, "expired"],
         [TEST_RUN_STATUS.CREATING, "creating"],
         [TEST_RUN_STATUS.ERROR, "errored"],
       ] as const
@@ -343,8 +341,6 @@ test("maps every run state Cursor reports onto a state Luke can show", async () 
     [
       ["agent-running", SESSION_STATUS.WORKING],
       ["agent-finished", SESSION_STATUS.WAITING],
-      ["agent-cancelled", SESSION_STATUS.COMPLETE],
-      ["agent-expired", SESSION_STATUS.COMPLETE],
       ["agent-creating", SESSION_STATUS.UNKNOWN],
       // A run Cursor failed stopped on something the developer has to deal
       // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
@@ -352,6 +348,33 @@ test("maps every run state Cursor reports onto a state Luke can show", async () 
       ["agent-errored", SESSION_STATUS.ERROR],
     ],
   );
+});
+
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+test("draws no row for an agent whose run is cancelled or expired", async () => {
+  const api = fakeCursorApi([
+    {
+      id: "agent-cancelled",
+      name: TEST_AGENT_NAME,
+      createdAt: TEST_TIME - 1_000,
+      updatedAt: TEST_TIME - 1_000,
+      run: { id: "run-cancelled", status: TEST_RUN_STATUS.CANCELLED, updatedAt: TEST_TIME - 1_000 },
+    },
+    {
+      id: "agent-expired",
+      name: TEST_AGENT_NAME,
+      createdAt: TEST_TIME - 2_000,
+      updatedAt: TEST_TIME - 2_000,
+      run: { id: "run-expired", status: TEST_RUN_STATUS.EXPIRED, updatedAt: TEST_TIME - 2_000 },
+    },
+  ]);
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  // A cancelled run is the user's own act of dismissal, and an expired run is
+  // Cursor's housekeeping over one nobody came back for — either draws no row
+  // at all rather than a completed one.
+  assert.deepEqual(observations, []);
 });
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.

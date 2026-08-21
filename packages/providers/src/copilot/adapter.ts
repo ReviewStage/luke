@@ -105,13 +105,14 @@ type CopilotTaskState = (typeof COPILOT_TASK_STATE)[keyof typeof COPILOT_TASK_ST
 /**
  * A task is a container for sessions, and GitHub derives its state from the
  * most recent one. Queued and in-progress are work the user cannot act on yet;
- * `waiting_for_user` is the task holding for the user. Completed and cancelled
- * are both settled — cancelling is the user closing the task, not the task
- * stopping on something. A failed or timed-out task reports no reason on the
- * list projection and can be sent back to work from its task page with a new
- * session, so like a suspended Devin session it is neither settled nor asking;
- * Luke leaves it unknown rather than promoting it to an error it cannot
- * describe. Idle says only that no session is running at all.
+ * `waiting_for_user` is the task holding for the user. Completed is settled.
+ * A failed or timed-out task reports no reason on the list projection and can
+ * be sent back to work from its task page with a new session, so like a
+ * suspended Devin session it is neither settled nor asking; Luke leaves it
+ * unknown rather than promoting it to an error it cannot describe. Idle says
+ * only that no session is running at all. Cancelled tasks are excluded by the
+ * filter in `collect` before any observation is built, so that entry is never
+ * consulted; it remains for type completeness.
  */
 const SESSION_STATUS_BY_COPILOT_STATE = {
   [COPILOT_TASK_STATE.QUEUED]: SESSION_STATUS.WORKING,
@@ -249,11 +250,17 @@ export class CopilotSessionAdapter extends CloudSessionAdapter {
       [COPILOT_QUERY.PER_PAGE]: String(COPILOT_ADAPTER_DEFAULTS.TASK_PAGE_SIZE),
     });
 
-    return recordsFromPage(body, COPILOT_FIELD.TASKS)
-      .map(taskFromRecord)
-      .filter(isDefined)
-      .sort((first, second) => second.observedAt - first.observedAt)
-      .map((task) => this.#observationFor(task, now));
+    return (
+      recordsFromPage(body, COPILOT_FIELD.TASKS)
+        .map(taskFromRecord)
+        .filter(isDefined)
+        // A task the user filed away in GitHub's own UI, or closed with cancel,
+        // is no row at all rather than a completed one — the same reading every
+        // other provider's dismissed work gets.
+        .filter((task) => !task.archived && task.state !== COPILOT_TASK_STATE.CANCELLED)
+        .sort((first, second) => second.observedAt - first.observedAt)
+        .map((task) => this.#observationFor(task, now))
+    );
   }
 
   #observationFor(task: CopilotTask, now: number): ProviderSessionObservation {
@@ -275,8 +282,6 @@ export class CopilotSessionAdapter extends CloudSessionAdapter {
   }
 
   #statusFor(task: CopilotTask, now: number): SessionStatus {
-    // A task the user filed away is settled whatever its last session did.
-    if (task.archived) return SESSION_STATUS.COMPLETE;
     // A state this build does not know is not guessed at.
     if (!task.state) return SESSION_STATUS.UNKNOWN;
     return agedStatus(

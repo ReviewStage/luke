@@ -213,7 +213,6 @@ test("maps every state GitHub reports onto a state Luke can show", async () => {
         [TEST_STATE.IN_PROGRESS, "in-progress"],
         [TEST_STATE.WAITING_FOR_USER, "waiting"],
         [TEST_STATE.COMPLETED, "completed"],
-        [TEST_STATE.CANCELLED, "cancelled"],
         [TEST_STATE.FAILED, "failed"],
         [TEST_STATE.TIMED_OUT, "timed-out"],
         [TEST_STATE.IDLE, "idle"],
@@ -236,7 +235,6 @@ test("maps every state GitHub reports onto a state Luke can show", async () => {
       ["task-in-progress", SESSION_STATUS.WORKING],
       ["task-waiting", SESSION_STATUS.WAITING],
       ["task-completed", SESSION_STATUS.COMPLETE],
-      ["task-cancelled", SESSION_STATUS.COMPLETE],
       // A failed or timed-out task can be sent back to work with a new
       // session, so neither is promoted to an error Luke cannot describe.
       ["task-failed", SESSION_STATUS.UNKNOWN],
@@ -300,7 +298,7 @@ test("keeps a completed task complete however long ago it finished", async () =>
 });
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-test("reports a task the user filed away as settled whatever it was doing", async () => {
+test("draws no row for a task the user filed away or cancelled", async () => {
   const api = fakeAgentTasksApi([
     {
       id: "task-archived",
@@ -309,11 +307,19 @@ test("reports a task the user filed away as settled whatever it was doing", asyn
       createdAt: TEST_TIME - 2_000,
       updatedAt: TEST_TIME - 1_000,
     },
+    {
+      id: "task-cancelled",
+      state: TEST_STATE.CANCELLED,
+      createdAt: TEST_TIME - 2_000,
+      updatedAt: TEST_TIME - 1_500,
+    },
   ]);
 
   const observations = await adapterFor(api.fetch).observe();
 
-  assert.equal(observations[0]?.status, SESSION_STATUS.COMPLETE);
+  // A task the user filed away in GitHub's own UI, or closed with cancel, is
+  // no row at all rather than a completed one.
+  assert.deepEqual(observations, []);
 });
 
 test("keeps a task untouched since the day before yesterday", async () => {

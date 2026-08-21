@@ -224,6 +224,7 @@ test("advertises the archive only for a session positively seen settled", async 
     // a state this build does not know is not a settled one.
     { id: "devin-detailless", status: TEST_STATUS.RUNNING, updatedAt: settled },
     { id: "devin-new", status: TEST_STATUS.NEW, updatedAt: settled },
+    // An archived session draws no row at all, so it draws no archive control either.
     { id: "devin-filed", status: TEST_STATUS.EXIT, archived: true, updatedAt: settled },
   ]);
 
@@ -233,9 +234,11 @@ test("advertises the archive only for a session positively seen settled", async 
   for (const sessionId of ["devin-exited", "devin-errored", "devin-suspended", "devin-holding"]) {
     assert.deepEqual(byId.get(sessionId)?.controls, [{ id: "archive-session", label: "Archive" }]);
   }
-  for (const sessionId of ["devin-working", "devin-detailless", "devin-new", "devin-filed"]) {
+  for (const sessionId of ["devin-working", "devin-detailless", "devin-new"]) {
     assert.equal(byId.get(sessionId)?.controls, undefined);
   }
+  // The filed session draws no row rather than lingering as complete.
+  assert.equal(byId.get("devin-filed"), undefined);
 });
 
 test("files a settled session away through Devin's archive endpoint, sending no body", async () => {
@@ -444,14 +447,16 @@ test("maps the states Devin reports onto states Luke can show", async () => {
 });
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-test("reports an archived session as complete whatever it was doing", async () => {
+test("draws no row for an archived session, whatever it was doing", async () => {
   const api = fakeDevinApi([
     { ...workingSession("devin-archived", TEST_TIME - 1_000), archived: true },
   ]);
 
   const observations = await adapterFor(api.fetch).observe();
 
-  assert.equal(observations[0]?.status, SESSION_STATUS.COMPLETE);
+  // An archived session is one the user filed away in Devin's own UI — no
+  // row at all rather than a completed one.
+  assert.deepEqual(observations, []);
 });
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
@@ -673,6 +678,7 @@ test("advertises a message only for sessions Devin will take one for", async () 
     { id: "devin-suspended", status: TEST_STATUS.SUSPENDED, updatedAt: TEST_TIME - 2_000 },
     { id: "devin-exited", status: TEST_STATUS.EXIT, updatedAt: TEST_TIME - 3_000 },
     { id: "devin-failed", status: TEST_STATUS.ERROR, updatedAt: TEST_TIME - 4_000 },
+    // An archived session draws no row at all and is never offered a message.
     {
       id: "devin-filed",
       status: TEST_STATUS.RUNNING,
@@ -682,18 +688,16 @@ test("advertises a message only for sessions Devin will take one for", async () 
   ]);
 
   const observations = await adapterFor(api.fetch).observe();
-  const messageable = new Map(
-    observations.map((entry) => [entry.providerSessionId, entry.canReceiveMessage]),
-  );
+  const byId = new Map(observations.map((entry) => [entry.providerSessionId, entry]));
 
   // A running session takes a message, and a suspended one is resumed by it —
-  // both documented. A session that exited or failed is promised nothing, and
-  // an archived one the user has already filed away.
-  assert.equal(messageable.get("devin-working"), true);
-  assert.equal(messageable.get("devin-suspended"), true);
-  assert.equal(messageable.get("devin-exited"), false);
-  assert.equal(messageable.get("devin-failed"), false);
-  assert.equal(messageable.get("devin-filed"), false);
+  // both documented. A session that exited or failed is promised nothing.
+  assert.equal(byId.get("devin-working")?.canReceiveMessage, true);
+  assert.equal(byId.get("devin-suspended")?.canReceiveMessage, true);
+  assert.equal(byId.get("devin-exited")?.canReceiveMessage, false);
+  assert.equal(byId.get("devin-failed")?.canReceiveMessage, false);
+  // The archived session draws no row rather than lingering as complete.
+  assert.equal(byId.get("devin-filed"), undefined);
 });
 
 test("hands a user message to Devin's documented message endpoint", async () => {
