@@ -7,7 +7,6 @@ import type {
   AdminIntegration,
   AdminMetrics,
   AdminRetentionCell,
-  AdminTopUser,
   AdminTrend,
 } from "../server/admin/admin-metrics";
 import type { AdminUserAccount, AdminUserDetail } from "../server/admin/admin-user";
@@ -721,92 +720,6 @@ function RetentionGrid({ retention }: { retention: AdminMetrics["retention"] }):
   );
 }
 
-/**
- * The accounts that show up most, ordered by days present before volume
- * spent, so the people living in Luke daily sit on top of the people who had
- * one heavy afternoon. Every row opens the account's own page: the row for
- * the pointer, and a real anchor on the name so a keyboard reaches it and a
- * modified click still gets the browser's own gesture.
- */
-function ActiveAccountsTable({
-  users,
-  windowDays,
-  onOpen,
-}: {
-  users: readonly AdminTopUser[];
-  windowDays: number;
-  onOpen: (id: string) => void;
-}): React.JSX.Element {
-  if (users.length === 0) {
-    return (
-      <div className="rounded-lg border border-border bg-card px-5 py-8 text-center text-sm text-muted-foreground">
-        No hosted-tier usage recorded in this window yet.
-      </div>
-    );
-  }
-  return (
-    <div className="overflow-hidden rounded-lg border border-border bg-card">
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[640px] text-sm">
-          <thead>
-            <tr className="border-b border-border text-left font-mono text-xs text-muted-foreground uppercase">
-              <th className="px-5 py-3 font-medium">Account</th>
-              <th className="px-5 py-3 text-right font-medium">Active days</th>
-              <th className="px-5 py-3 text-right font-medium">Last active</th>
-              <th className="px-5 py-3 text-right font-medium">Voice</th>
-              <th className="px-5 py-3 text-right font-medium">Attention</th>
-              <th className="px-5 py-3 text-right font-medium">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map((entry) => (
-              <tr
-                key={entry.id}
-                className="cursor-pointer border-b border-border transition-colors duration-150 last:border-0 hover:bg-muted"
-                onClick={() => onOpen(entry.id)}
-              >
-                <td className="px-5 py-3">
-                  <a
-                    href={accountHref(entry.id)}
-                    className="block outline-offset-2"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      if (!plainLeftClick(event)) return;
-                      event.preventDefault();
-                      onOpen(entry.id);
-                    }}
-                  >
-                    <div className="font-medium">{accountLabel(entry)}</div>
-                    {accountLabel(entry) === entry.email ? null : (
-                      <div className="text-xs text-muted-foreground">{entry.email}</div>
-                    )}
-                  </a>
-                </td>
-                <td className="px-5 py-3 text-right tabular-nums">
-                  {formatNumber(entry.activeDays)}
-                  <span className="text-muted-foreground"> of {formatNumber(windowDays)}</span>
-                </td>
-                <td className="px-5 py-3 text-right tabular-nums">
-                  {formatDayTick(entry.lastActiveDay)}
-                </td>
-                <td className="px-5 py-3 text-right tabular-nums">
-                  {formatNumber(entry.voiceCalls)}
-                </td>
-                <td className="px-5 py-3 text-right tabular-nums">
-                  {formatNumber(entry.attentionReviews)}
-                </td>
-                <td className="px-5 py-3 text-right font-semibold tabular-nums">
-                  {formatNumber(entry.total)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
 function IntegrationRow({ integration }: { integration: AdminIntegration }): React.JSX.Element {
   return (
     <li className="flex items-center justify-between gap-4 border-b border-border py-3 last:border-0">
@@ -1371,10 +1284,13 @@ function Dashboard({
           />
         </div>
         <SectionHeading>Most active hosted-tier accounts</SectionHeading>
-        <ActiveAccountsTable
-          users={metrics.featureUsage.topUsers}
+        <AccountsTable
+          rows={metrics.featureUsage.topUsers}
           windowDays={metrics.windowDays}
+          emptyText="No hosted-tier usage recorded in this window yet."
+          minWidth={ACCOUNTS_TABLE_MIN_WIDTH.OVERVIEW}
           onOpen={onOpenAccount}
+          total={(row) => row.total}
         />
         <p className="mt-3 text-sm text-muted-foreground">
           An active day is a UTC day the account spent hosted voice or attention — the one
@@ -1811,8 +1727,25 @@ async function readUsersState(response: Response, question: string): Promise<Use
   };
 }
 
-/** The roster's sortable columns, one per header the table draws. */
-const USERS_SORT_KEY = {
+/**
+ * The account fields both admin tables' rows carry — the shared columns'
+ * whole vocabulary, so a row from either endpoint draws through the one
+ * `AccountsTable` below.
+ */
+interface AccountsTableRow {
+  id: string;
+  name: string;
+  email: string;
+  image: string | null;
+  admin: boolean;
+  activeDays: number;
+  lastActiveDay: string | null;
+  voiceCalls: number;
+  attentionReviews: number;
+}
+
+/** The sortable columns, one per header the roster draws. */
+const ACCOUNTS_SORT_KEY = {
   ACCOUNT: "account",
   JOINED: "joined",
   LAST_SEEN: "lastSeen",
@@ -1822,7 +1755,7 @@ const USERS_SORT_KEY = {
   ATTENTION: "attention",
 } as const;
 
-type UsersSortKey = (typeof USERS_SORT_KEY)[keyof typeof USERS_SORT_KEY];
+type AccountsSortKey = (typeof ACCOUNTS_SORT_KEY)[keyof typeof ACCOUNTS_SORT_KEY];
 
 /** The values `aria-sort` takes, so the state is the announcement. */
 const SORT_DIRECTION = {
@@ -1833,35 +1766,64 @@ const SORT_DIRECTION = {
 type SortDirection = (typeof SORT_DIRECTION)[keyof typeof SORT_DIRECTION];
 
 /** A column's first press: names read forward, counts and dates largest first. */
-const USERS_SORT_FIRST_DIRECTION = {
-  [USERS_SORT_KEY.ACCOUNT]: SORT_DIRECTION.ASCENDING,
-  [USERS_SORT_KEY.JOINED]: SORT_DIRECTION.DESCENDING,
-  [USERS_SORT_KEY.LAST_SEEN]: SORT_DIRECTION.DESCENDING,
-  [USERS_SORT_KEY.ACTIVE_DAYS]: SORT_DIRECTION.DESCENDING,
-  [USERS_SORT_KEY.LAST_ACTIVE]: SORT_DIRECTION.DESCENDING,
-  [USERS_SORT_KEY.VOICE]: SORT_DIRECTION.DESCENDING,
-  [USERS_SORT_KEY.ATTENTION]: SORT_DIRECTION.DESCENDING,
-} satisfies Record<UsersSortKey, SortDirection>;
+const ACCOUNTS_SORT_FIRST_DIRECTION = {
+  [ACCOUNTS_SORT_KEY.ACCOUNT]: SORT_DIRECTION.ASCENDING,
+  [ACCOUNTS_SORT_KEY.JOINED]: SORT_DIRECTION.DESCENDING,
+  [ACCOUNTS_SORT_KEY.LAST_SEEN]: SORT_DIRECTION.DESCENDING,
+  [ACCOUNTS_SORT_KEY.ACTIVE_DAYS]: SORT_DIRECTION.DESCENDING,
+  [ACCOUNTS_SORT_KEY.LAST_ACTIVE]: SORT_DIRECTION.DESCENDING,
+  [ACCOUNTS_SORT_KEY.VOICE]: SORT_DIRECTION.DESCENDING,
+  [ACCOUNTS_SORT_KEY.ATTENTION]: SORT_DIRECTION.DESCENDING,
+} satisfies Record<AccountsSortKey, SortDirection>;
 
 /**
- * What each column orders by. An account sorts by the name its row shows —
- * falling back to the email exactly as the cell does — and a last-active day
- * is an ISO date, so its lexicographic order is its chronological one.
+ * What each shared column orders by. An account sorts by the name its row
+ * shows — falling back to the email exactly as the cell does — and a
+ * last-active day is an ISO date, so its lexicographic order is its
+ * chronological one. A detail column's ordering rides the column itself,
+ * because its fields exist only on the rows of the surface that draws it.
  */
-const USERS_SORT_VALUE = {
-  [USERS_SORT_KEY.ACCOUNT]: (row) => accountLabel(row).toLowerCase(),
-  [USERS_SORT_KEY.JOINED]: (row) => row.createdAt,
-  [USERS_SORT_KEY.LAST_SEEN]: (row) => row.lastSeenAt,
-  [USERS_SORT_KEY.ACTIVE_DAYS]: (row) => row.activeDays,
-  [USERS_SORT_KEY.LAST_ACTIVE]: (row) => row.lastActiveDay,
-  [USERS_SORT_KEY.VOICE]: (row) => row.voiceCalls,
-  [USERS_SORT_KEY.ATTENTION]: (row) => row.attentionReviews,
-} satisfies Record<UsersSortKey, (row: AdminUserListRow) => string | number | null>;
+const SHARED_SORT_VALUE = new Map<
+  AccountsSortKey,
+  (row: AccountsTableRow) => string | number | null
+>([
+  [ACCOUNTS_SORT_KEY.ACCOUNT, (row) => accountLabel(row).toLowerCase()],
+  [ACCOUNTS_SORT_KEY.ACTIVE_DAYS, (row) => row.activeDays],
+  [ACCOUNTS_SORT_KEY.LAST_ACTIVE, (row) => row.lastActiveDay],
+  [ACCOUNTS_SORT_KEY.VOICE, (row) => row.voiceCalls],
+  [ACCOUNTS_SORT_KEY.ATTENTION, (row) => row.attentionReviews],
+]);
 
-interface UsersSort {
-  key: UsersSortKey;
+/**
+ * A column one surface adds between Account and the usage counts — the
+ * roster's Joined and Last seen. It carries its own cell and ordering because
+ * its fields exist only on that surface's rows; the shared columns are fixed
+ * in the table itself.
+ */
+interface AccountsDetailColumn<Row> {
+  key: AccountsSortKey;
+  label: string;
+  cell: (row: Row) => React.ReactNode;
+  sortValue: (row: Row) => string | number | null;
+}
+
+interface AccountsSort {
+  key: AccountsSortKey;
   direction: SortDirection;
 }
+
+/**
+ * The narrowest each surface's table may draw before its scroll wrapper takes
+ * over — past this the columns crush instead of shrinking. The roster stands
+ * wider because its detail and star columns join the shared set.
+ */
+const ACCOUNTS_TABLE_MIN_WIDTH = {
+  OVERVIEW: "min-w-[640px]",
+  ROSTER: "min-w-[760px]",
+} as const;
+
+type AccountsTableMinWidth =
+  (typeof ACCOUNTS_TABLE_MIN_WIDTH)[keyof typeof ACCOUNTS_TABLE_MIN_WIDTH];
 
 /**
  * The last sort chosen, remembered the way the sidebar's collapse is: locally,
@@ -1869,17 +1831,17 @@ interface UsersSort {
  * sets above no longer name reads as no sort at all — the server's own order —
  * rather than a guess at what an old build meant by it.
  */
-const USERS_SORT_STORAGE_KEY = "luke-admin-users-sort";
+const ACCOUNTS_SORT_STORAGE_KEY = "luke-admin-users-sort";
 
 /** No sort key contains the separator, so the stored token splits back apart. */
-const USERS_SORT_STORAGE_SEPARATOR = ":";
+const ACCOUNTS_SORT_STORAGE_SEPARATOR = ":";
 
-function usersSortLeft(): UsersSort | undefined {
+function accountsSortLeft(): AccountsSort | undefined {
   try {
-    const stored = window.localStorage.getItem(USERS_SORT_STORAGE_KEY);
+    const stored = window.localStorage.getItem(ACCOUNTS_SORT_STORAGE_KEY);
     if (stored === null) return undefined;
-    const [key, direction] = stored.split(USERS_SORT_STORAGE_SEPARATOR);
-    const knownKey = Object.values(USERS_SORT_KEY).find((candidate) => candidate === key);
+    const [key, direction] = stored.split(ACCOUNTS_SORT_STORAGE_SEPARATOR);
+    const knownKey = Object.values(ACCOUNTS_SORT_KEY).find((candidate) => candidate === key);
     const knownDirection = Object.values(SORT_DIRECTION).find(
       (candidate) => candidate === direction,
     );
@@ -1890,11 +1852,11 @@ function usersSortLeft(): UsersSort | undefined {
   }
 }
 
-function rememberUsersSort(sort: UsersSort): void {
+function rememberAccountsSort(sort: AccountsSort): void {
   try {
     window.localStorage.setItem(
-      USERS_SORT_STORAGE_KEY,
-      `${sort.key}${USERS_SORT_STORAGE_SEPARATOR}${sort.direction}`,
+      ACCOUNTS_SORT_STORAGE_KEY,
+      `${sort.key}${ACCOUNTS_SORT_STORAGE_SEPARATOR}${sort.direction}`,
     );
   } catch {
     // Storage refused: the roster opens in the server's order on the next visit.
@@ -1902,22 +1864,28 @@ function rememberUsersSort(sort: UsersSort): void {
 }
 
 /**
- * Orders the roster for one sort. Favorites stand above everything first —
+ * Orders the rows for one sort. Starred rows stand above everything first —
  * the star marks the accounts the admin actually watches, so no column order
  * may bury them — and the sort chosen orders each tier on its own. No sort
  * keeps the server's order — most recently active first — and ties keep it
  * too, since the sort is stable. An account with no active day yet sits below
  * the dated rows of its tier in either direction: it has no place in a
  * chronology, and flipping one should not bury the answer under the blanks.
+ * A stored key naming a column this table does not draw reads as no sort at
+ * all.
  */
-function sortUsersRows(
-  rows: readonly AdminUserListRow[],
-  sort: UsersSort | undefined,
-): readonly AdminUserListRow[] {
-  const value = sort ? USERS_SORT_VALUE[sort.key] : undefined;
+function sortAccountsRows<Row extends AccountsTableRow>(
+  rows: readonly Row[],
+  sort: AccountsSort | undefined,
+  detailColumns: readonly AccountsDetailColumn<Row>[],
+  starred: ((row: Row) => boolean) | undefined,
+): readonly Row[] {
+  const detail = sort ? detailColumns.find((column) => column.key === sort.key) : undefined;
+  const value = sort ? (detail?.sortValue ?? SHARED_SORT_VALUE.get(sort.key)) : undefined;
+  if (value === undefined && starred === undefined) return rows;
   const flip = sort?.direction === SORT_DIRECTION.DESCENDING ? -1 : 1;
   return [...rows].sort((a, b) => {
-    if (a.favorite !== b.favorite) return a.favorite ? -1 : 1;
+    if (starred && starred(a) !== starred(b)) return starred(a) ? -1 : 1;
     if (value === undefined) return 0;
     const left = value(a);
     const right = value(b);
@@ -1930,11 +1898,12 @@ function sortUsersRows(
 }
 
 /**
- * A header that sorts its column: a real button inside the cell so a keyboard
- * reaches it, `aria-sort` on the cell so a reader hears the order the pointer
- * sees drawn as the arrow.
+ * A column heading, sortable where the surface sorts: a real button inside
+ * the cell so a keyboard reaches it, `aria-sort` on the cell so a reader
+ * hears the order the pointer sees drawn as the arrow. Without a sorter the
+ * heading is the plain cell the overview draws.
  */
-function SortableHeader({
+function AccountsHeader({
   label,
   sortKey,
   sort,
@@ -1942,14 +1911,16 @@ function SortableHeader({
   numeric,
 }: {
   label: string;
-  sortKey: UsersSortKey;
-  sort: UsersSort | undefined;
-  onSort: (key: UsersSortKey) => void;
+  sortKey: AccountsSortKey;
+  sort: AccountsSort | undefined;
+  onSort: ((key: AccountsSortKey) => void) | undefined;
   numeric?: boolean;
 }): React.JSX.Element {
+  const cell = `px-5 py-3 font-medium ${numeric ? "text-right" : ""}`;
+  if (!onSort) return <th className={cell}>{label}</th>;
   const direction = sort?.key === sortKey ? sort.direction : undefined;
   return (
-    <th className={`px-5 py-3 font-medium ${numeric ? "text-right" : ""}`} aria-sort={direction}>
+    <th className={cell} aria-sort={direction}>
       <button
         type="button"
         className="inline-flex cursor-pointer items-baseline gap-1 font-medium uppercase transition-colors duration-150 outline-offset-2 hover:text-foreground data-[sorted=true]:text-foreground"
@@ -1981,20 +1952,44 @@ function StarIcon({ filled }: { filled: boolean }): React.JSX.Element {
   );
 }
 
-function UsersTable({
+/**
+ * One table for every account list the admin surface draws: the overview's
+ * most-active accounts and the Users roster both render through it, so the
+ * shared columns cannot drift apart. Every row opens the account's own page:
+ * the row for the pointer, and a real anchor on the name so a keyboard
+ * reaches it and a modified click still gets the browser's own gesture. What
+ * belongs to one surface is opted into — the roster's star column, sortable
+ * headers, and detail columns, and the overview's Total.
+ */
+function AccountsTable<Row extends AccountsTableRow>({
   rows,
   windowDays,
+  emptyText,
+  minWidth,
   onOpen,
-  onToggleFavorite,
+  detailColumns = [],
+  total,
+  sortable = false,
+  favorite,
 }: {
-  rows: readonly AdminUserListRow[];
+  rows: readonly Row[];
   windowDays: number;
+  emptyText: string;
+  minWidth: AccountsTableMinWidth;
   onOpen: (id: string) => void;
-  onToggleFavorite: (id: string, favorite: boolean) => void;
+  detailColumns?: readonly AccountsDetailColumn<Row>[];
+  /** Draws the trailing Total column from this reading of a row. */
+  total?: (row: Row) => number;
+  /** Sorts by any header's press, remembering the order chosen. */
+  sortable?: boolean;
+  /** Draws the leading star column: what a row's star shows, and what its press asks. */
+  favorite?: { starred: (row: Row) => boolean; onToggle: (id: string, favorite: boolean) => void };
 }): React.JSX.Element {
-  const [sort, setSort] = useState<UsersSort | undefined>(usersSortLeft);
-  const toggleSort = (key: UsersSortKey) => {
-    const next: UsersSort =
+  const [sort, setSort] = useState<AccountsSort | undefined>(
+    sortable ? accountsSortLeft : undefined,
+  );
+  const toggleSort = (key: AccountsSortKey) => {
+    const next: AccountsSort =
       sort?.key === key
         ? {
             key,
@@ -2003,76 +1998,76 @@ function UsersTable({
                 ? SORT_DIRECTION.DESCENDING
                 : SORT_DIRECTION.ASCENDING,
           }
-        : { key, direction: USERS_SORT_FIRST_DIRECTION[key] };
-    rememberUsersSort(next);
+        : { key, direction: ACCOUNTS_SORT_FIRST_DIRECTION[key] };
+    rememberAccountsSort(next);
     setSort(next);
   };
+  const onSort = sortable ? toggleSort : undefined;
 
   if (rows.length === 0) {
     return (
       <div className="rounded-lg border border-border bg-card px-5 py-8 text-center text-sm text-muted-foreground">
-        No account matches.
+        {emptyText}
       </div>
     );
   }
-  const sorted = sortUsersRows(rows, sort);
+  const sorted = sortAccountsRows(rows, sort, detailColumns, favorite?.starred);
   return (
     <div className="overflow-hidden rounded-lg border border-border bg-card">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[760px] text-sm">
+        <table className={`w-full ${minWidth} text-sm`}>
           <thead>
             <tr className="border-b border-border text-left font-mono text-xs text-muted-foreground uppercase">
-              <th className="w-0 py-3 pr-0 pl-5">
-                <span className="sr-only">Favorite</span>
-              </th>
-              <SortableHeader
+              {favorite ? (
+                <th className="w-0 py-3 pr-0 pl-5">
+                  <span className="sr-only">Favorite</span>
+                </th>
+              ) : null}
+              <AccountsHeader
                 label="Account"
-                sortKey={USERS_SORT_KEY.ACCOUNT}
+                sortKey={ACCOUNTS_SORT_KEY.ACCOUNT}
                 sort={sort}
-                onSort={toggleSort}
+                onSort={onSort}
               />
-              <SortableHeader
-                label="Joined"
-                sortKey={USERS_SORT_KEY.JOINED}
-                sort={sort}
-                onSort={toggleSort}
-                numeric
-              />
-              <SortableHeader
-                label="Last seen"
-                sortKey={USERS_SORT_KEY.LAST_SEEN}
-                sort={sort}
-                onSort={toggleSort}
-                numeric
-              />
-              <SortableHeader
+              {detailColumns.map((column) => (
+                <AccountsHeader
+                  key={column.key}
+                  label={column.label}
+                  sortKey={column.key}
+                  sort={sort}
+                  onSort={onSort}
+                  numeric
+                />
+              ))}
+              <AccountsHeader
                 label="Active days"
-                sortKey={USERS_SORT_KEY.ACTIVE_DAYS}
+                sortKey={ACCOUNTS_SORT_KEY.ACTIVE_DAYS}
                 sort={sort}
-                onSort={toggleSort}
+                onSort={onSort}
                 numeric
               />
-              <SortableHeader
+              <AccountsHeader
                 label="Last active"
-                sortKey={USERS_SORT_KEY.LAST_ACTIVE}
+                sortKey={ACCOUNTS_SORT_KEY.LAST_ACTIVE}
                 sort={sort}
-                onSort={toggleSort}
+                onSort={onSort}
                 numeric
               />
-              <SortableHeader
+              <AccountsHeader
                 label="Voice"
-                sortKey={USERS_SORT_KEY.VOICE}
+                sortKey={ACCOUNTS_SORT_KEY.VOICE}
                 sort={sort}
-                onSort={toggleSort}
+                onSort={onSort}
                 numeric
               />
-              <SortableHeader
+              <AccountsHeader
                 label="Attention"
-                sortKey={USERS_SORT_KEY.ATTENTION}
+                sortKey={ACCOUNTS_SORT_KEY.ATTENTION}
                 sort={sort}
-                onSort={toggleSort}
+                onSort={onSort}
                 numeric
               />
+              {total ? <th className="px-5 py-3 text-right font-medium">Total</th> : null}
             </tr>
           </thead>
           <tbody>
@@ -2082,21 +2077,23 @@ function UsersTable({
                 className="group cursor-pointer border-b border-border transition-colors duration-150 last:border-0 hover:bg-muted"
                 onClick={() => onOpen(row.id)}
               >
-                <td className="w-0 py-3 pr-0 pl-5">
-                  <button
-                    type="button"
-                    className="flex cursor-pointer text-muted-foreground opacity-0 transition-opacity duration-150 outline-offset-2 group-hover:opacity-100 hover:text-foreground focus-visible:opacity-100 data-[favorite=true]:text-attention data-[favorite=true]:opacity-100"
-                    data-favorite={row.favorite}
-                    aria-pressed={row.favorite}
-                    aria-label={`${row.favorite ? "Unfavorite" : "Favorite"} ${row.name || row.email}`}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onToggleFavorite(row.id, !row.favorite);
-                    }}
-                  >
-                    <StarIcon filled={row.favorite} />
-                  </button>
-                </td>
+                {favorite ? (
+                  <td className="w-0 py-3 pr-0 pl-5">
+                    <button
+                      type="button"
+                      className="flex cursor-pointer text-muted-foreground opacity-0 transition-opacity duration-150 outline-offset-2 group-hover:opacity-100 hover:text-foreground focus-visible:opacity-100 data-[favorite=true]:text-attention data-[favorite=true]:opacity-100"
+                      data-favorite={favorite.starred(row)}
+                      aria-pressed={favorite.starred(row)}
+                      aria-label={`${favorite.starred(row) ? "Unfavorite" : "Favorite"} ${row.name || row.email}`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        favorite.onToggle(row.id, !favorite.starred(row));
+                      }}
+                    >
+                      <StarIcon filled={favorite.starred(row)} />
+                    </button>
+                  </td>
+                ) : null}
                 <td className="px-5 py-3">
                   <a
                     href={accountHref(row.id)}
@@ -2126,16 +2123,17 @@ function UsersTable({
                     </div>
                   </a>
                 </td>
-                <td className="px-5 py-3 text-right tabular-nums">{formatDate(row.createdAt)}</td>
-                <td className="px-5 py-3 text-right tabular-nums">
-                  {row.lastSeenAt === null ? "—" : formatDate(row.lastSeenAt)}
-                </td>
+                {detailColumns.map((column) => (
+                  <td key={column.key} className="px-5 py-3 text-right tabular-nums">
+                    {column.cell(row)}
+                  </td>
+                ))}
                 <td className="px-5 py-3 text-right tabular-nums">
                   {formatNumber(row.activeDays)}
                   <span className="text-muted-foreground"> of {formatNumber(windowDays)}</span>
                 </td>
                 <td className="px-5 py-3 text-right tabular-nums">
-                  {row.lastActiveDay ? formatDayTick(row.lastActiveDay) : "—"}
+                  {row.lastActiveDay === null ? "—" : formatDayTick(row.lastActiveDay)}
                 </td>
                 <td className="px-5 py-3 text-right tabular-nums">
                   {formatNumber(row.voiceCalls)}
@@ -2143,6 +2141,11 @@ function UsersTable({
                 <td className="px-5 py-3 text-right tabular-nums">
                   {formatNumber(row.attentionReviews)}
                 </td>
+                {total ? (
+                  <td className="px-5 py-3 text-right font-semibold tabular-nums">
+                    {formatNumber(total(row))}
+                  </td>
+                ) : null}
               </tr>
             ))}
           </tbody>
@@ -2151,6 +2154,26 @@ function UsersTable({
     </div>
   );
 }
+
+/**
+ * The roster's own columns beside the shared ones: when the account joined
+ * and when it last touched the service, fields the most-active rows do not
+ * carry.
+ */
+const ROSTER_DETAIL_COLUMNS: readonly AccountsDetailColumn<AdminUserListRow>[] = [
+  {
+    key: ACCOUNTS_SORT_KEY.JOINED,
+    label: "Joined",
+    cell: (row) => formatDate(row.createdAt),
+    sortValue: (row) => row.createdAt,
+  },
+  {
+    key: ACCOUNTS_SORT_KEY.LAST_SEEN,
+    label: "Last seen",
+    cell: (row) => (row.lastSeenAt === null ? "—" : formatDate(row.lastSeenAt)),
+    sortValue: (row) => row.lastSeenAt,
+  },
+];
 
 function UsersPage({
   list,
@@ -2239,11 +2262,15 @@ function UsersPage({
           </span>
         </div>
         <div className="mt-4">
-          <UsersTable
+          <AccountsTable
             rows={rows}
             windowDays={list.windowDays}
+            emptyText="No account matches."
+            minWidth={ACCOUNTS_TABLE_MIN_WIDTH.ROSTER}
             onOpen={onOpenAccount}
-            onToggleFavorite={onToggleFavorite}
+            detailColumns={ROSTER_DETAIL_COLUMNS}
+            sortable
+            favorite={{ starred: (row) => row.favorite, onToggle: onToggleFavorite }}
           />
         </div>
         <p className="mt-3 text-sm text-muted-foreground">

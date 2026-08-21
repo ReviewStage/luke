@@ -146,12 +146,16 @@ export interface AdminRetentionCohort {
  * own user row — the same fields the account already holds and the analytics
  * person record already carries. The id is carried so the row can open the
  * account's own page, and it goes back into the detail endpoint's gate,
- * never into a rendered string.
+ * never into a rendered string. The account fields match the roster row's,
+ * because both tables draw one account cell.
  */
 export interface AdminTopUser {
   id: string;
   name: string;
   email: string;
+  /** The avatar URL the sign-in provider gave the account, when it gave one. */
+  image: string | null;
+  admin: boolean;
   /** Window days with a hosted-usage row — the account showed up that day. */
   activeDays: number;
   /** The account's most recent active day inside the window, as YYYY-MM-DD. */
