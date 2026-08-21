@@ -744,23 +744,23 @@ function SignInCard(): React.JSX.Element {
             type="button"
             className={`${AUTH_BUTTON} inline-flex items-center justify-center gap-2.5`}
             disabled={pending !== undefined}
-            onClick={() => void begin(SOCIAL_PROVIDER.GITHUB)}
-          >
-            <GitHubMark className="size-[15px] shrink-0" />
-            {pending === SOCIAL_PROVIDER.GITHUB
-              ? "Opening…"
-              : `Continue with ${SOCIAL_PROVIDER_LABEL[SOCIAL_PROVIDER.GITHUB]}`}
-          </button>
-          <button
-            type="button"
-            className={`${AUTH_BUTTON} inline-flex items-center justify-center gap-2.5`}
-            disabled={pending !== undefined}
             onClick={() => void begin(SOCIAL_PROVIDER.GOOGLE)}
           >
             <GoogleMark className="size-[15px] shrink-0" />
             {pending === SOCIAL_PROVIDER.GOOGLE
               ? "Opening…"
               : `Continue with ${SOCIAL_PROVIDER_LABEL[SOCIAL_PROVIDER.GOOGLE]}`}
+          </button>
+          <button
+            type="button"
+            className={`${AUTH_BUTTON} inline-flex items-center justify-center gap-2.5`}
+            disabled={pending !== undefined}
+            onClick={() => void begin(SOCIAL_PROVIDER.GITHUB)}
+          >
+            <GitHubMark className="size-[15px] shrink-0" />
+            {pending === SOCIAL_PROVIDER.GITHUB
+              ? "Opening…"
+              : `Continue with ${SOCIAL_PROVIDER_LABEL[SOCIAL_PROVIDER.GITHUB]}`}
           </button>
         </div>
         {failed ? <p className="m-0 text-attention">Sign-in could not start. Try again.</p> : null}
