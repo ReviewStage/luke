@@ -1,4 +1,4 @@
-import { isRecord, text, type UnparsedWireValue } from "@sidecar/wire";
+import { isRecord, text, type UnparsedWireValue, type WireValue } from "@sidecar/wire";
 import type { Properties } from "posthog-js";
 import posthog from "posthog-js/dist/module.full.no-external";
 import type { SessionReplayBootstrap } from "#shared/contracts";
@@ -51,71 +51,69 @@ export const POSTHOG_HOST = "https://us.i.posthog.com";
 const RENDERER_ADDRESS = "app://luke/panel";
 
 /**
- * The properties the library fills with this page's address. On a `file://`
- * page every one of them is that path and nothing else, so each is replaced
- * outright rather than inspected.
+ * Whether a value is this page's own address, in any of the forms it takes:
+ * the whole `file://` address, or the bare path the library reports beside it.
  *
- * Named one by one because a value set is what this repository keeps rather
- * than a walk over whatever arrived — but unlike the counted events, nothing
- * here is compile-enforced: a library that starts recording the address under
- * a seventh name would carry it until this list learns the name too. That is
- * the cost of the stock configuration, and it is why the list sits beside the
- * comment explaining it.
+ * Read off `globalThis` rather than `window` so the parser can be exercised
+ * with no document at all, where there is no address to match and every value
+ * passes through.
  */
-const ADDRESS_PROPERTIES = [
-  "$current_url",
-  "$pathname",
-  "$initial_current_url",
-  "$initial_pathname",
-  "$session_entry_url",
-  "$session_entry_pathname",
-] as const;
+function namesThisMachine(value: string): boolean {
+  return value.startsWith("file://") || value === globalThis.location?.pathname;
+}
 
 /**
- * Takes this machine's path out of everything on its way to the processor.
+ * Takes this machine's path out of anything on its way to the processor.
  *
- * Switching pageviews off withholds the address from one event and no others:
- * the library attaches it to every event it sends and to the person's
- * first-seen properties. This is where it actually stops.
+ * Switching pageviews off withholds the address from one event and no others.
+ * The library puts it on every event as `$current_url` and `$pathname`, onto
+ * the person as the first-seen twins of those, inside a captured exception as
+ * the file each stack frame came from, and inside a recording as the frame
+ * rrweb opens with. Naming those one by one is a list somebody has to keep in
+ * step with the library, and three rounds of finding another one is the
+ * argument against it: this matches the address itself, wherever it sits.
  *
- * The referrer properties are left alone deliberately. A page opened as a file
- * has no referrer, so the library records the same `$direct` it would for any
- * unreferred visit, and that says nothing about the machine.
+ * Written against the wire vocabulary because that is what these values are —
+ * built by the library rather than declared by this build, so they are parsed
+ * here rather than trusted. Anything that is not this address is passed back
+ * exactly as it came.
+ *
+ * The referrer properties come through untouched of their own accord. A page
+ * opened as a file has no referrer, so the library records the same `$direct`
+ * any unreferred visit gets, and that says nothing about the machine.
  */
-export function withoutLocalAddress(properties: Properties): Properties {
-  const scrubbed: Properties = { ...properties };
-  for (const property of ADDRESS_PROPERTIES) {
-    if (property in scrubbed) scrubbed[property] = RENDERER_ADDRESS;
-  }
+export function withoutLocalAddress(value: UnparsedWireValue): UnparsedWireValue {
+  return value === undefined ? undefined : addressless(value);
+}
+
+/**
+ * The walk itself, over a value that is present. Split from the entry point so
+ * that a missing property stays missing rather than becoming one of the nulls
+ * a nested array would otherwise need to carry it.
+ */
+function addressless(value: WireValue): WireValue {
+  const asText = text(value);
+  if (asText !== undefined) return namesThisMachine(asText) ? RENDERER_ADDRESS : value;
+  if (Array.isArray(value)) return value.map(addressless);
+  if (!isRecord(value)) return value;
+  const scrubbed: Record<string, WireValue> = {};
+  for (const [key, entry] of Object.entries(value)) scrubbed[key] = addressless(entry);
   return scrubbed;
 }
 
 /**
- * Where the recorder writes the page's address inside a recording: rrweb's
- * opening frame, and again whenever it believes the page moved. The recorder
- * reads `window.location.href` itself and this version of the library offers
- * no lever over it, so the address is taken out here, on the way past.
- *
- * The frames arrive as the recorder built them rather than as anything this
- * build declared, so they are parsed at this boundary rather than trusted:
- * anything that is not a frame carrying an address is passed along untouched.
+ * The bridge between the library's own property bag and the parser above.
+ * `Properties` types its values as `any`, which is what an unvalidated wire
+ * value is; this is the one place that is said out loud.
  */
-export function withoutRecordedAddress(snapshotData: UnparsedWireValue): UnparsedWireValue {
-  if (!Array.isArray(snapshotData)) return snapshotData;
-  return snapshotData.map((frame) => {
-    const record = isRecord(frame) ? frame : undefined;
-    if (!record) return frame;
-    const data = isRecord(record.data) ? record.data : undefined;
-    if (!data) return frame;
-    // The opening frame carries the address directly; a move carries it one
-    // level further in, under the tag the recorder gives its own events.
-    if (text(data.href) !== undefined) {
-      return { ...record, data: { ...data, href: RENDERER_ADDRESS } };
-    }
-    const payload = isRecord(data.payload) ? data.payload : undefined;
-    if (!payload || text(payload.href) === undefined) return frame;
-    return { ...record, data: { ...data, payload: { ...payload, href: RENDERER_ADDRESS } } };
-  });
+function scrubbedProperties(properties: Properties): Properties {
+  const scrubbed: Properties = {};
+  for (const [key, value] of Object.entries(properties)) {
+    // SAFETY: the library built this bag, so its values are unvalidated wire
+    // values by construction; the parser establishes any shape it acts on.
+    scrubbed[key] = withoutLocalAddress(value as UnparsedWireValue);
+  }
+  return scrubbed;
 }
 
 /**
@@ -213,20 +211,14 @@ function startSessionReplay(bootstrap: SessionReplayBootstrap): void {
       if (!event) return event;
       // `$set` and `$set_once` carry the address too, as the person's
       // first-seen properties, where it would outlive every event holding it.
-      const properties = withoutLocalAddress(event.properties);
-      if (properties.$snapshot_data) {
-        // SAFETY: `Properties` types its values as `any`, so this narrows to
-        // the widest thing that can be parsed rather than asserting a shape;
-        // `withoutRecordedAddress` establishes the frames' shape itself and
-        // passes back untouched anything that does not hold an address.
-        const frames = properties.$snapshot_data as UnparsedWireValue;
-        properties.$snapshot_data = withoutRecordedAddress(frames);
-      }
+      // SAFETY: `Properties` types its values as `any`; each is handed to the
+      // parser above as the unvalidated wire value it actually is, and comes
+      // back either replaced or exactly as it came.
       return {
         ...event,
-        properties,
-        ...(event.$set ? { $set: withoutLocalAddress(event.$set) } : undefined),
-        ...(event.$set_once ? { $set_once: withoutLocalAddress(event.$set_once) } : undefined),
+        properties: scrubbedProperties(event.properties),
+        ...(event.$set ? { $set: scrubbedProperties(event.$set) } : undefined),
+        ...(event.$set_once ? { $set_once: scrubbedProperties(event.$set_once) } : undefined),
       };
     },
   });

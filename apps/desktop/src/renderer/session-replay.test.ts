@@ -1,13 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import type { UnparsedWireValue } from "@sidecar/wire";
 import type { SessionReplayBootstrap } from "#shared/contracts";
-import {
-  POSTHOG_HOST,
-  sessionReplayWanted,
-  withoutLocalAddress,
-  withoutRecordedAddress,
-} from "./session-replay";
+import { POSTHOG_HOST, sessionReplayWanted, withoutLocalAddress } from "./session-replay";
 
 /**
  * The gate, on its own. Recording is the one thing Luke sends that a fixed
@@ -63,45 +59,48 @@ test("the connect policy names the recorder's host, and only what else is reache
 /**
  * The renderer is a `file://` page, so its address is a path on the
  * developer's own disk and a packaged install sits under `/Users/<name>/`.
- * Switching pageviews off stops it reaching one event; these are the two
- * places it reaches everything else.
+ * Switching pageviews off stops it reaching one event; this is what stops it
+ * reaching everything else the library puts it in.
  */
-test("this machine's path leaves no event or person property carrying it", () => {
-  const scrubbed = withoutLocalAddress({
-    $current_url: "file:///Users/someone/Applications/Luke.app/renderer/index.html",
-    $pathname: "/Users/someone/Applications/Luke.app/renderer/index.html",
-    $initial_current_url: "file:///Users/someone/Applications/Luke.app/renderer/index.html",
-    $session_entry_url: "file:///Users/someone/Applications/Luke.app/renderer/index.html",
-    $referrer: "$direct",
-    $browser: "Chrome",
-  });
-  for (const [property, value] of Object.entries(scrubbed)) {
-    assert.doesNotMatch(String(value), /someone|file:\/\//, `${property} still names the machine`);
-  }
-  // What is not the address is left exactly as the library reported it: a
-  // page opened as a file has no referrer, and that says nothing about anyone.
-  assert.equal(scrubbed.$referrer, "$direct");
-  assert.equal(scrubbed.$browser, "Chrome");
+const LOCAL = "file:///Users/someone/Applications/Luke.app/renderer/index.html";
+
+function namesNobody(value: UnparsedWireValue): void {
+  assert.doesNotMatch(JSON.stringify(value) ?? "", /someone|file:\/\//);
+}
+
+test("the address goes from an event's own properties", () => {
+  const scrubbed = withoutLocalAddress({ $current_url: LOCAL, $browser: "Chrome" });
+  namesNobody(scrubbed);
+  // What is not the address is left exactly as the library reported it.
+  assert.deepEqual(scrubbed, { $current_url: "app://luke/panel", $browser: "Chrome" });
 });
 
-test("the recorder's own frames give up the address they were written with", () => {
-  const local = "file:///Users/someone/Applications/Luke.app/renderer/index.html";
-  const frames = withoutRecordedAddress([
-    { type: 4, data: { href: local, width: 640, height: 480 }, timestamp: 1 },
-    { type: 5, data: { tag: "$url_changed", payload: { href: local } }, timestamp: 2 },
-    { type: 3, data: { source: 2, id: 7 }, timestamp: 3 },
-  ]);
-  assert.doesNotMatch(JSON.stringify(frames), /someone|file:\/\//);
-  // A frame that never named the address is passed through as it came, rather
-  // than rebuilt into something the recorder did not write.
-  assert.deepEqual(Array.isArray(frames) ? frames[2] : undefined, {
-    type: 3,
-    data: { source: 2, id: 7 },
-    timestamp: 3,
-  });
+test("the address goes from a captured exception's stack frames", () => {
+  namesNobody(
+    withoutLocalAddress({
+      $exception_list: [
+        {
+          type: "TypeError",
+          stacktrace: { frames: [{ filename: LOCAL, function: "render", lineno: 12 }] },
+        },
+      ],
+    }),
+  );
 });
 
-test("anything that is not a frame list is left entirely alone", () => {
-  assert.equal(withoutRecordedAddress(undefined), undefined);
-  assert.equal(withoutRecordedAddress("not frames"), "not frames");
+test("the address goes from the frames the recorder opens with", () => {
+  namesNobody(
+    withoutLocalAddress([
+      { type: 4, data: { href: LOCAL, width: 640 }, timestamp: 1 },
+      { type: 5, data: { tag: "$url_changed", payload: { href: LOCAL } }, timestamp: 2 },
+    ]),
+  );
+});
+
+test("everything that is not the address comes through as it came", () => {
+  // A page opened as a file has no referrer, so the library reports the same
+  // `$direct` any unreferred visit gets, and that says nothing about anyone.
+  const properties = { $referrer: "$direct", $screen_height: 900, nested: { list: [1, "two"] } };
+  assert.deepEqual(withoutLocalAddress(properties), properties);
+  assert.equal(withoutLocalAddress(undefined), undefined);
 });
