@@ -58,6 +58,12 @@ import { transcriptContentBlocks, transcriptMessageText } from "../shared/local-
 import { CURSOR_PROVIDER } from "./adapter.js";
 import { cursorApplication, cursorChatLink } from "./app-links.js";
 import {
+  CURSOR_CHAT_STORE_DIRECTORY,
+  type CursorChatStoreMeta,
+  chatStoreSessionsIn,
+  readCursorChatStoreMeta,
+} from "./chat-store.js";
+import {
   CURSOR_HOOK_EVENT,
   type CursorHookEvent,
   type ObservedCursorHookEvent,
@@ -201,9 +207,36 @@ interface CursorSendTarget {
   transcriptFilePath: string;
 }
 
+const CURSOR_CANDIDATE_KIND = {
+  /** A chat with a transcript in the projects tree, the richer read. */
+  TRANSCRIPT: "transcript",
+  /** A chat only the chat store holds, drawn from its metadata record alone. */
+  CHAT_STORE: "chat-store",
+} as const;
+
 interface CursorTranscriptCandidate extends SessionFileCandidate {
+  kind: typeof CURSOR_CANDIDATE_KIND.TRANSCRIPT;
   projectDirectoryName: string;
+  /**
+   * The chat store's metadata record for this same chat, when one exists: the
+   * name Cursor gave the chat and the exact folder it ran in, which the
+   * transcript itself never records.
+   */
+  meta?: CursorChatStoreMeta;
+  /**
+   * The store's own file clock for the same chat — its journal is what moves
+   * while a turn runs, which neither the transcript nor the metadata record's
+   * timestamp shows.
+   */
+  storeAtMs?: number;
 }
+
+interface CursorChatStoreCandidate extends SessionFileCandidate {
+  kind: typeof CURSOR_CANDIDATE_KIND.CHAT_STORE;
+  meta: CursorChatStoreMeta;
+}
+
+type CursorSessionCandidate = CursorTranscriptCandidate | CursorChatStoreCandidate;
 
 /**
  * Reduces a name to what both halves of Cursor's local state can still agree
@@ -342,6 +375,7 @@ async function transcriptsIn(
       const stats = await fileStats(filePath);
       if (!stats?.isFile()) return undefined;
       return {
+        kind: CURSOR_CANDIDATE_KIND.TRANSCRIPT,
         filePath,
         providerSessionId,
         mtimeMs: stats.mtimeMs,
@@ -850,7 +884,7 @@ function defaultGlobalStorageStatePath(): string {
  * Cursor has not written down.
  */
 export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
-  CursorTranscriptCandidate,
+  CursorSessionCandidate,
   ParsedCursorTail
 > {
   readonly provider = CURSOR_PROVIDER;
@@ -868,6 +902,7 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
   #cursorAgentBinaryPath: string | undefined;
   #trustedFoldersByProject: ReadonlyMap<string, string> = new Map();
   readonly #sendTargets = new Map<string, CursorSendTarget>();
+  readonly #chatStoreMetaCache = new Map<string, { mtimeMs: number; meta?: CursorChatStoreMeta }>();
 
   constructor(options: CursorLocalAdapterOptions = {}) {
     super(options);
@@ -897,13 +932,45 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
     this.#transcriptMaximumRenderedLength = options.transcriptMaximumRenderedLength;
   }
 
-  protected async discover(): Promise<CursorTranscriptCandidate[]> {
-    const candidates = await discoverSessionFiles({
-      projectsDirectory: path.join(this.#cursorHome, CURSOR_DIRECTORY.PROJECTS),
-      sessionsDirectoryName: CURSOR_DIRECTORY.TRANSCRIPTS,
-      maximumProjectDirectories: this.#maximumProjectDirectories,
-      sessionFilesIn: transcriptsIn,
-    });
+  protected async discover(): Promise<CursorSessionCandidate[]> {
+    const [transcripts, storeFiles] = await Promise.all([
+      discoverSessionFiles({
+        projectsDirectory: path.join(this.#cursorHome, CURSOR_DIRECTORY.PROJECTS),
+        sessionsDirectoryName: CURSOR_DIRECTORY.TRANSCRIPTS,
+        maximumProjectDirectories: this.#maximumProjectDirectories,
+        sessionFilesIn: transcriptsIn,
+      }),
+      discoverSessionFiles({
+        projectsDirectory: path.join(this.#cursorHome, CURSOR_CHAT_STORE_DIRECTORY),
+        maximumProjectDirectories: this.#maximumProjectDirectories,
+        sessionFilesIn: (sessionsDirectory) => chatStoreSessionsIn(sessionsDirectory),
+      }),
+    ]);
+    const metaByFile = await this.#chatStoreMetas(storeFiles);
+    // Newest first from discovery, so a chat resumed from another folder — the
+    // store keys chats by folder, and a resume re-files one — reads its
+    // freshest record.
+    const metaById = new Map<string, { meta: CursorChatStoreMeta; atMs: number }>();
+    const transcriptIds = new Set(transcripts.map((candidate) => candidate.providerSessionId));
+    const stores: CursorChatStoreCandidate[] = [];
+    for (const file of storeFiles) {
+      const meta = metaByFile.get(file.filePath);
+      if (!meta) continue;
+      if (!metaById.has(file.providerSessionId)) {
+        metaById.set(file.providerSessionId, { meta, atMs: file.mtimeMs });
+      }
+      // A chat with a transcript is read from the transcript — the richer
+      // record — and its store metadata rides that candidate instead.
+      if (transcriptIds.has(file.providerSessionId)) continue;
+      stores.push({ ...file, kind: CURSOR_CANDIDATE_KIND.CHAT_STORE, meta });
+    }
+    const candidates: CursorSessionCandidate[] = [
+      ...transcripts.map((candidate) => {
+        const store = metaById.get(candidate.providerSessionId);
+        return store ? { ...candidate, meta: store.meta, storeAtMs: store.atMs } : candidate;
+      }),
+      ...stores,
+    ].sort((first, second) => second.mtimeMs - first.mtimeMs);
     const index = await this.#appChatRegistry.index(
       candidates.map((candidate) => candidate.providerSessionId),
     );
@@ -914,9 +981,36 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
     return candidates.filter((candidate) => !index.archived.has(candidate.providerSessionId));
   }
 
-  protected override async prepare(
-    candidates: readonly CursorTranscriptCandidate[],
-  ): Promise<void> {
+  /**
+   * Each candidate's metadata record, re-read only when its chat has moved —
+   * the same clock the parse cache runs on — and dropped when the chat is
+   * gone. An unreadable, foreign, or conversation-less record resolves to
+   * nothing, which is what drops its candidate.
+   */
+  async #chatStoreMetas(
+    storeFiles: readonly SessionFileCandidate[],
+  ): Promise<ReadonlyMap<string, CursorChatStoreMeta | undefined>> {
+    const metas = new Map<string, CursorChatStoreMeta | undefined>();
+    await Promise.all(
+      storeFiles.map(async (file) => {
+        const cached = this.#chatStoreMetaCache.get(file.filePath);
+        if (cached && cached.mtimeMs === file.mtimeMs) {
+          metas.set(file.filePath, cached.meta);
+          return;
+        }
+        const source = await readTextFile(file.filePath);
+        const meta = source === undefined ? undefined : readCursorChatStoreMeta(source);
+        this.#chatStoreMetaCache.set(file.filePath, { mtimeMs: file.mtimeMs, meta });
+        metas.set(file.filePath, meta);
+      }),
+    );
+    for (const filePath of this.#chatStoreMetaCache.keys()) {
+      if (!metas.has(filePath)) this.#chatStoreMetaCache.delete(filePath);
+    }
+    return metas;
+  }
+
+  protected override async prepare(candidates: readonly CursorSessionCandidate[]): Promise<void> {
     // A send target lives exactly as long as its chat stays on the roster this
     // pass discovered. A chat archived or gone since the last pass never
     // reaches observation() again, so its entry is pruned here rather than
@@ -928,7 +1022,13 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
       if (!discovered.has(providerSessionId)) this.#sendTargets.delete(providerSessionId);
     }
     const projectDirectoryNames = [
-      ...new Set(candidates.map((candidate) => candidate.projectDirectoryName)),
+      ...new Set(
+        candidates.flatMap((candidate) =>
+          candidate.kind === CURSOR_CANDIDATE_KIND.TRANSCRIPT
+            ? [candidate.projectDirectoryName]
+            : [],
+        ),
+      ),
     ];
     const [binaryPath, trustedFolders] = await Promise.all([
       // Located every pass, so an install or removal is honoured on the next
@@ -987,7 +1087,11 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
     });
   }
 
-  protected async parse(candidate: CursorTranscriptCandidate): Promise<ParsedCursorTail> {
+  protected async parse(candidate: CursorSessionCandidate): Promise<ParsedCursorTail> {
+    // A chat-store candidate's tail is legitimately empty: the store's
+    // conversation is a blob graph this build cannot read, so no turn, tool
+    // call, or recap can honestly come out of it.
+    if (candidate.kind === CURSOR_CANDIDATE_KIND.CHAT_STORE) return {};
     return parseCursorTail(await readTail(candidate.filePath, this.#readTailBytes));
   }
 
@@ -999,31 +1103,43 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
    * reading this machine reports one that runs on it.
    */
   protected async observation(
-    candidate: CursorTranscriptCandidate,
+    candidate: CursorSessionCandidate,
     parsed: ParsedCursorTail,
     now: number,
     activeSessionFreshnessMs: number,
   ): Promise<ProviderSessionObservation> {
+    if (candidate.kind === CURSOR_CANDIDATE_KIND.CHAT_STORE) {
+      return this.#chatStoreObservation(candidate, now, activeSessionFreshnessMs);
+    }
     const header = this.#appChatIndex.headers.get(candidate.providerSessionId);
-    // One folder answers for the label, the branch, and the send pin, in the
-    // order of how exactly each source names it: the chat's own header, the
-    // project's trust record, and last the reduced-name workspace match.
+    // The send pin's folder, in the order of how exactly each source names
+    // it: the chat's own header, the project's trust record, and last the
+    // reduced-name workspace match. Deliberately not the chat store's cwd:
+    // the messaging exception pins a resume to the folder Cursor's workspace
+    // records name, and widening that set is a product decision, not an
+    // implementation detail.
     const folderPath =
       header?.folderPath ??
       this.#trustedFoldersByProject.get(candidate.projectDirectoryName) ??
       this.#workspaceLabels.folder(candidate.projectDirectoryName);
-    const label = folderPath
-      ? workspaceLabel(folderPath)
+    // What the row shows and groups by is the chat's own folder, and the
+    // store's record of it is the most exact where one stands — the cwd the
+    // chat actually ran in, which is also what a workspace manager's worktree
+    // is matched against.
+    const directory = candidate.meta?.cwd ?? folderPath;
+    const label = directory
+      ? workspaceLabel(directory)
       : this.#workspaceLabels.label(candidate.projectDirectoryName);
-    const hookEventsDirectory = this.#hookEventsDirectory?.();
-    const hookEvent: ObservedCursorHookEvent | undefined = hookEventsDirectory
-      ? await readCursorHookEvent(hookEventsDirectory, candidate.providerSessionId).catch(
-          () => undefined,
-        )
-      : undefined;
+    const hookEvent = await this.#hookEvent(candidate.providerSessionId);
     // A transcript carries no timestamps of its own, so when it was last
-    // written is Cursor's only account of when this session last did anything.
-    const transcriptAt = candidate.mtimeMs;
+    // written is Cursor's only account of when this session last did anything —
+    // sharpened by the chat store's own clock where the store holds this chat,
+    // because the store is written while a turn runs and the transcript is not.
+    const transcriptAt = Math.max(
+      candidate.mtimeMs,
+      candidate.storeAtMs ?? 0,
+      candidate.meta?.updatedAtMs ?? 0,
+    );
     const refined = hookRefinedStatus({
       refinement: CURSOR_HOOK_STATUS_REFINEMENT,
       hookEvent,
@@ -1048,7 +1164,7 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
     // header's created-on branch says where a chat began, not where its
     // folder stands after a checkout — with that header record standing in
     // where the folder cannot say.
-    const branch = (folderPath ? await branchFromGitHead(folderPath) : undefined) ?? header?.branch;
+    const branch = (directory ? await branchFromGitHead(directory) : undefined) ?? header?.branch;
     // A message is advertised only where the CLI's documented resume can
     // honestly land one: the turn is settled and nothing newer says work is
     // running — a prompt hook can know about a turn the transcript has not
@@ -1075,9 +1191,10 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
     }
     return {
       providerSessionId: candidate.providerSessionId,
-      title: header?.name ?? label,
+      title: header?.name ?? oneLine(candidate.meta?.title, maximumSessionTitleLength) ?? label,
       status,
       observedAt,
+      ...(directory ? { directory } : undefined),
       detail: detailFor(label, status, link, parsed.activity, branch, header?.diff),
       ...(parsed.recap ? { recap: parsed.recap } : undefined),
       ...(canReceiveMessage ? { canReceiveMessage: true } : undefined),
@@ -1086,6 +1203,68 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
         : undefined),
       ...(link ? { applications: [cursorApplication(link)] } : undefined),
     };
+  }
+
+  /**
+   * A chat only the chat store holds, drawn from its metadata record alone.
+   * The store's conversation is a blob graph this build cannot read, so the
+   * turn boundary is unreadable: a store still being written is a chat doing
+   * something, one gone quiet is unknown rather than holding, and the hooks
+   * sharpen both exactly as they do for a transcript. No tool call, recap, or
+   * message advertisement can honestly come out of a record this thin — the
+   * send stays with chats whose settled turn the transcript can show.
+   */
+  async #chatStoreObservation(
+    candidate: CursorChatStoreCandidate,
+    now: number,
+    activeSessionFreshnessMs: number,
+  ): Promise<ProviderSessionObservation> {
+    const header = this.#appChatIndex.headers.get(candidate.providerSessionId);
+    const label = workspaceLabel(candidate.meta.cwd);
+    const hookEvent = await this.#hookEvent(candidate.providerSessionId);
+    const providerAt = Math.max(candidate.mtimeMs, candidate.meta.updatedAtMs ?? 0);
+    const refined = hookRefinedStatus({
+      refinement: CURSOR_HOOK_STATUS_REFINEMENT,
+      hookEvent,
+      providerAtMs: providerAt,
+      statusAt: (observedAt) =>
+        statusFromTurn(undefined, observedAt, now, activeSessionFreshnessMs),
+      now,
+      activeSessionFreshnessMs,
+    });
+    const { observedAt } = refined;
+    let status = refined.status;
+    // The same held-call upgrade a transcript row gets: a store row's turn is
+    // always unreadable, so the header's record of a live hold is the one
+    // word there is, decaying with the freshness that made the row working.
+    if (header?.blockedPending && status === SESSION_STATUS.WORKING) {
+      status = SESSION_STATUS.WAITING;
+    }
+    const appHeld = this.#appChatIndex.held.has(candidate.providerSessionId);
+    const link = appHeld ? cursorChatLink(candidate.providerSessionId) : undefined;
+    const branch =
+      (candidate.meta.cwd ? await branchFromGitHead(candidate.meta.cwd) : undefined) ??
+      header?.branch;
+    this.#sendTargets.delete(candidate.providerSessionId);
+    return {
+      providerSessionId: candidate.providerSessionId,
+      title: header?.name ?? oneLine(candidate.meta.title, maximumSessionTitleLength) ?? label,
+      status,
+      observedAt,
+      ...(candidate.meta.cwd ? { directory: candidate.meta.cwd } : undefined),
+      detail: detailFor(label, status, link, undefined, branch, header?.diff),
+      ...(refined.sessionClosed
+        ? { completionCause: SESSION_COMPLETION_CAUSE.SESSION_CLOSED }
+        : undefined),
+      ...(link ? { applications: [cursorApplication(link)] } : undefined),
+    };
+  }
+
+  /** The observation hook's last word about one session, where hooks are on at all. */
+  async #hookEvent(providerSessionId: string): Promise<ObservedCursorHookEvent | undefined> {
+    const hookEventsDirectory = this.#hookEventsDirectory?.();
+    if (!hookEventsDirectory) return undefined;
+    return readCursorHookEvent(hookEventsDirectory, providerSessionId).catch(() => undefined);
   }
 
   /**
