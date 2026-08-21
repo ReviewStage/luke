@@ -23,9 +23,9 @@ import {
   ADMIN_METRICS_WINDOW_DAYS,
   type AdminIntegration,
   type AdminMetricsSource,
-  type AdminSignInMethods,
   type AdminTopUser,
   type AdminUsageDay,
+  countSignInMethods,
   lastNDayKeys,
 } from "./admin-metrics.js";
 import type { AdminUserSource } from "./admin-user.js";
@@ -86,26 +86,20 @@ async function readUserMetrics(
         .from(session)
         .innerJoin(user, eq(session.userId, user.id))
         .where(and(gt(session.expiresAt, new Date(now)), scopeCondition(scope))),
+      // Distinct pairs rather than a count of linked rows: the chart states
+      // accounts per method, and an account can hold several rows of one
+      // provider. The per-method counting itself lives in the fold below.
       database
-        .select({ providerId: account.providerId, value: count() })
+        .selectDistinct({ userId: account.userId, providerId: account.providerId })
         .from(account)
         .innerJoin(user, eq(account.userId, user.id))
-        .where(scopeCondition(scope))
-        .groupBy(account.providerId),
+        .where(scopeCondition(scope)),
       database
         .select({ day: dayExpression, value: count() })
         .from(user)
         .where(and(gte(user.createdAt, windowStart), scopeCondition(scope)))
         .groupBy(dayExpression),
     ]);
-
-  const signInMethods: AdminSignInMethods = { google: 0, github: 0, other: 0 };
-  for (const row of providerRows) {
-    const value = toNumber(row.value);
-    if (row.providerId === "google") signInMethods.google += value;
-    else if (row.providerId === "github") signInMethods.github += value;
-    else signInMethods.other += value;
-  }
 
   const signupsByDay = new Map<string, number>();
   for (const row of signupRows) signupsByDay.set(row.day, toNumber(row.value));
@@ -114,7 +108,7 @@ async function readUserMetrics(
     total: toNumber(totalRow?.value),
     activeSessions: toNumber(activeSessionRow?.value),
     activeSessionUsers: toNumber(activeSessionUsersRow?.value),
-    signInMethods,
+    signInMethods: countSignInMethods(providerRows),
     signupsByDay,
   };
 }
