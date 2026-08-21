@@ -384,7 +384,10 @@ const SIGN_IN_METHODS_CHART = {
 /**
  * How the accounts sign in, as horizontal bars. One measure across nominal
  * categories, so every bar wears the first slot's hue and the end labels
- * carry the exact count and share the meter rows used to state.
+ * carry the exact count and share the meter rows used to state. A method
+ * nobody has linked draws no bar at all: a zero-length bar parks its end
+ * label at the plot origin, where two empty methods would stack their labels
+ * over the category axis.
  */
 function SignInMethodsChart({
   methods,
@@ -397,11 +400,22 @@ function SignInMethodsChart({
     { method: "Google", accounts: methods.google },
     { method: "Other", accounts: methods.other },
   ]
-    .filter((row) => row.method !== "Other" || row.accounts > 0)
+    .filter((row) => row.accounts > 0)
     .map((row) => ({
       ...row,
-      label: `${formatNumber(row.accounts)} · ${total > 0 ? Math.round((row.accounts / total) * 100) : 0}%`,
+      label: `${formatNumber(row.accounts)} · ${Math.round((row.accounts / total) * 100)}%`,
     }));
+
+  if (rows.length === 0) {
+    return (
+      <div className="rounded-lg border border-border bg-card p-5">
+        <div className="mb-4 text-xs text-muted-foreground">Linked sign-in methods</div>
+        <p className="m-0 py-6 text-center text-sm text-muted-foreground">
+          No linked sign-in methods recorded yet.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-lg border border-border bg-card p-5">
