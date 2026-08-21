@@ -1700,6 +1700,29 @@ export function App(): React.JSX.Element {
   );
 
   /**
+   * The same spoken press aimed at one app mark, for an open ask that named
+   * the app: the same bridge call the mark's own button makes, standing the
+   * panel down on the same terms as {@link openSessionAloud}.
+   */
+  const openSessionApplicationAloud = useCallback(
+    async (
+      identity: SessionIdentity,
+      applicationId: SessionApplicationId,
+    ): Promise<SessionOpenResult> => {
+      const result = await window.sidecar.openSessionApplication(identity, applicationId);
+      if (
+        result.status === SESSION_OPEN_RESULT_STATUS.OPENED &&
+        presentationOf() === PANEL_PRESENTATION.PANEL
+      ) {
+        cancelHover();
+        void changeMode(false);
+      }
+      return result;
+    },
+    [cancelHover, changeMode, presentationOf],
+  );
+
+  /**
    * The ask key, pressed anywhere on the system. The main process has already
    * stood the panel up focused; what is left is the caret — or the dismissal,
    * because a summons repeated over its own open field is someone asking the
@@ -2063,6 +2086,7 @@ export function App(): React.JSX.Element {
     fixtureSpeaking,
     capturingShortcut: () => shortcutCapture.current,
     openSession: openSessionAloud,
+    openSessionApplication: openSessionApplicationAloud,
     carryAppAction,
   });
 

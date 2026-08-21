@@ -30,13 +30,25 @@ export const maximumVoiceContextSessions = 25;
 /**
  * What one session can be asked to do, said in the roster so Luke offers only
  * what its provider promised: the identity a tool call must name, whether it
- * takes a message, and each advertised control with the id a call names it by.
+ * takes a message, each advertised control with the id a call names it by,
+ * and each app whose exact address an open ask may pick — by name alone,
+ * because the address behind it stays on the machine.
  */
 function sessionCapabilityText(session: NormalizedSession): string {
+  const openableApplications = session.applications.filter(
+    (application) => application.link !== undefined,
+  );
   const capabilities = [
     `provider_id=${session.providerId} provider_session_id=${session.providerSessionId}`,
     `messages=${session.canReceiveMessage}`,
     `open=${Boolean(session.detail.link)}`,
+    ...(openableApplications.length > 0
+      ? [
+          `opens_in=${openableApplications
+            .map((application) => application.displayName)
+            .join(", ")}`,
+        ]
+      : []),
     `transcript=${session.location === SESSION_LOCATION.LOCAL}`,
     ...(session.detail.change ? ["pull_request=true"] : []),
     ...(session.controls.length > 0

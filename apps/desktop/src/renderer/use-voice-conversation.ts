@@ -23,6 +23,7 @@ import {
   type NormalizedSession,
   type ObservedWorkspaceProject,
   SESSION_MENTION_KIND,
+  type SessionApplicationId,
   type SessionIdentity,
   type SessionMention,
 } from "@sidecar/session";
@@ -408,6 +409,14 @@ export interface VoiceConversationOptions {
    */
   openSession: (identity: SessionIdentity) => Promise<SessionOpenResult>;
   /**
+   * The spoken form of pressing one app mark on a row, for an open that named
+   * the app. Passed in on the same terms as {@link openSession}.
+   */
+  openSessionApplication: (
+    identity: SessionIdentity,
+    applicationId: SessionApplicationId,
+  ) => Promise<SessionOpenResult>;
+  /**
    * The spoken asks about Luke himself. Passed in on the same terms as
    * {@link openSession}.
    */
@@ -663,7 +672,10 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
             window.sidecar.renameSessionWorkspace(act.identity, act.name),
           [SESSION_TOOL_KIND.RENAME_SESSION]: (act) =>
             window.sidecar.renameSession(act.identity, act.name),
-          [SESSION_TOOL_KIND.OPEN]: (act) => optionsRef.current.openSession(act.identity),
+          [SESSION_TOOL_KIND.OPEN]: (act) =>
+            act.applicationId
+              ? optionsRef.current.openSessionApplication(act.identity, act.applicationId)
+              : optionsRef.current.openSession(act.identity),
           [SESSION_TOOL_KIND.READ_TRANSCRIPT]: (act) =>
             window.sidecar.readSessionTranscript(act.identity),
         });

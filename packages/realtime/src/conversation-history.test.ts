@@ -3,6 +3,8 @@ import test from "node:test";
 import {
   ATTENTION_DISPOSITION,
   normalizeSession,
+  SESSION_APPLICATION_ID,
+  SESSION_APPLICATION_SCOPE,
   SESSION_STATUS,
   type SessionControl,
 } from "@sidecar/session";
@@ -118,6 +120,36 @@ test("an act's line records the ask in words, with the identity it named", () =>
     sessionActConversationEntry({ kind: SESSION_TOOL_KIND.OPEN, identity }, []).words,
     "opened a session",
   );
+
+  // An open that picked an app records where it landed, under the display
+  // name the roster listed — or the bare id when the roster has let it go.
+  const heldByApp = normalizeSession(
+    { id: "claude-code", displayName: "Claude Code" },
+    {
+      providerSessionId: "session-a",
+      title: "checkout-service",
+      status: SESSION_STATUS.WORKING,
+      observedAt: OBSERVED_AT,
+      applications: [
+        {
+          id: SESSION_APPLICATION_ID.SUPERSET,
+          displayName: "Superset",
+          scope: SESSION_APPLICATION_SCOPE.SESSION,
+          link: "superset://v2-workspace/workspace-1",
+        },
+      ],
+    },
+  );
+  const openedInApp = {
+    kind: SESSION_TOOL_KIND.OPEN,
+    identity,
+    applicationId: SESSION_APPLICATION_ID.SUPERSET,
+  } as const;
+  assert.equal(
+    sessionActConversationEntry(openedInApp, [heldByApp]).words,
+    'opened "checkout-service" in Superset',
+  );
+  assert.equal(sessionActConversationEntry(openedInApp, []).words, "opened a session in superset");
 
   // A workspace creation aims at no session, so its line carries no identity.
   const created = sessionActConversationEntry(
