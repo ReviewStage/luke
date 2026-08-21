@@ -230,6 +230,22 @@ test("the analytics console address rides through when configured and stays abse
   );
   assert.equal(configured.reliability.analyticsConsoleUrl, "https://us.posthog.com/project/12345");
 
+  const overriddenHost = buildAdminMetrics(
+    source({
+      reliability: {
+        quotaLimitedUserDaysToday: 0,
+        quotaLimitedUserDaysWindow: 0,
+        // A deployment on another region's host must link to its own console.
+        analyticsConsoleUrl: posthogProjectConsoleUrl("12345", "https://eu.posthog.com/"),
+      },
+    }),
+    NOON_UTC,
+  );
+  assert.equal(
+    overriddenHost.reliability.analyticsConsoleUrl,
+    "https://eu.posthog.com/project/12345",
+  );
+
   const absent = buildAdminMetrics(source(), NOON_UTC);
   assert.equal(absent.reliability.analyticsConsoleUrl, undefined);
 });

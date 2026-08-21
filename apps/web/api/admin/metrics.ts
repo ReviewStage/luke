@@ -38,7 +38,9 @@ export default {
     // The project id names which console to open, never a secret; the key
     // presence booleans above are still the only thing said about the keys.
     const projectId = (process.env[POSTHOG_ENVIRONMENT.PROJECT_ID] ?? "").trim();
-    const analyticsConsoleUrl = projectId ? posthogProjectConsoleUrl(projectId) : undefined;
+    const analyticsConsoleUrl = projectId
+      ? posthogProjectConsoleUrl(projectId, process.env[POSTHOG_ENVIRONMENT.API_HOST])
+      : undefined;
 
     return handleAdminMetrics({
       request,
