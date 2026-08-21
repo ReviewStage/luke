@@ -95,6 +95,38 @@ async function registerAppChats(state: CursorState, sessionIds: readonly string[
   }
 }
 
+/**
+ * The app's per-chat header rows, where Cursor records that a chat was filed
+ * away. A header's value column carries the chat's name, which Cursor writes
+ * from the opening prompt, so the fixture plants transcript text there and
+ * the tests assert it never surfaces.
+ */
+async function writeChatHeaders(
+  state: CursorState,
+  chats: readonly { sessionId: string; archived: boolean }[],
+): Promise<void> {
+  const { DatabaseSync } = await import("node:sqlite");
+  const database = new DatabaseSync(state.globalStorageStatePath, {});
+  try {
+    database.exec(
+      "CREATE TABLE IF NOT EXISTS composerHeaders (composerId TEXT PRIMARY KEY, workspaceId TEXT, createdAt INTEGER, lastUpdatedAt INTEGER, isArchived INTEGER, isSubagent INTEGER, recency INTEGER, checkpointAt INTEGER, value TEXT)",
+    );
+    for (const chat of chats) {
+      database
+        .prepare(
+          "INSERT OR REPLACE INTO composerHeaders (composerId, isArchived, value) VALUES (?, ?, ?)",
+        )
+        .run(
+          chat.sessionId,
+          chat.archived ? 1 : 0,
+          JSON.stringify({ name: SECRET_TRANSCRIPT_TEXT }),
+        );
+    }
+  } finally {
+    database.close();
+  }
+}
+
 async function writeTranscript(
   state: CursorState,
   projectDirectoryName: string,
@@ -301,6 +333,54 @@ test("offers the app's address only for the chats the app itself holds", async (
   assert.equal(observations[0]?.applications?.[0]?.id, SESSION_APPLICATION_ID.CURSOR);
   assert.equal(observations[1]?.applications, undefined);
   assert.equal(JSON.stringify(observations).includes(SECRET_TRANSCRIPT_TEXT), false);
+});
+
+test("leaves a chat the app filed away off the roster", async (t) => {
+  const state = await temporaryCursorState(t);
+  await writeWorkspaceRecord(state, "9f1c", "/Users/test/luke");
+  await registerAppChats(state, ["chat-active", "chat-archived"]);
+  await writeChatHeaders(state, [
+    { sessionId: "chat-active", archived: false },
+    { sessionId: "chat-archived", archived: true },
+  ]);
+  const records = [messageRecord(TEST_ROLE.USER, TEST_CONTENT_TYPE.TEXT)];
+  await writeTranscript(state, "Users-test-luke", "chat-active", records, TEST_TIME - 5_000);
+  await writeTranscript(state, "Users-test-luke", "chat-archived", records, TEST_TIME - 1_000);
+
+  const observations = await adapterFor(state).observe();
+
+  // Archiving is the app's own way of saying a chat is done being looked at,
+  // so the filed chat draws no row while its transcript stays on disk.
+  assert.deepEqual(
+    observations.map((observation) => observation.providerSessionId),
+    ["chat-active"],
+  );
+  assert.equal(JSON.stringify(observations).includes(SECRET_TRANSCRIPT_TEXT), false);
+});
+
+test("keeps a row the index cannot positively call archived", async (t) => {
+  const state = await temporaryCursorState(t);
+  await writeWorkspaceRecord(state, "9f1c", "/Users/test/luke");
+  // A Cursor build too old to keep header rows: the chat index exists and the
+  // header table does not, so nothing can vouch for a filing away.
+  await registerAppChats(state, ["chat-headerless"]);
+  await writeTranscript(
+    state,
+    "Users-test-luke",
+    "chat-headerless",
+    [messageRecord(TEST_ROLE.USER, TEST_CONTENT_TYPE.TEXT)],
+    TEST_TIME - 5_000,
+  );
+
+  const observations = await adapterFor(state).observe();
+
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0]?.providerSessionId, "chat-headerless");
+  // The chat index still answers, so the row keeps its address.
+  assert.equal(
+    observations[0]?.detail?.link,
+    "cursor://anysphere.cursor-deeplink/agent?id=chat-headerless",
+  );
 });
 
 test("a malformed app index never costs the rows themselves", async (t) => {

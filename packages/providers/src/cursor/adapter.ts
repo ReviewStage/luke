@@ -116,7 +116,8 @@ function cursorCancelRunControl(runId: string): SessionControl {
  * readable but takes no new runs — and the agent is the whole unit of a
  * Cursor cloud workspace, so filing it away is this provider's workspace
  * archive. It is advertised only once the latest run has settled: an agent
- * mid-run has a stop to offer, not a filing away.
+ * mid-run has a stop to offer, not a filing away. A press files the agent
+ * off the roster too, because an archived agent draws no row.
  */
 const CURSOR_ARCHIVE_AGENT_CONTROL = {
   id: "archive-agent",
@@ -331,20 +332,17 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
 
     // Agents are never capped: one page of the documented maximum is the
     // request's only bound, and Cursor lists newest-first, so the `cursor`
-    // page after it could only reach further into the settled past.
+    // page after it could only reach further into the settled past. An
+    // archived agent draws no row at all: filing away is Cursor's own way of
+    // saying a task is done being looked at, and its own surfaces list one
+    // only behind an archive filter.
     const agents = recordsFromPage(body, CURSOR_FIELD.ITEMS)
       .map(agentFromRecord)
       .filter(isDefined)
-      .sort(
-        (first, second) =>
-          Number(first.archived) - Number(second.archived) ||
-          second.lastActivityAt - first.lastActivityAt,
-      );
+      .filter((agent) => !agent.archived)
+      .sort((first, second) => second.lastActivityAt - first.lastActivityAt);
 
-    // The only fan-out in a pass, bounded by the page above — and an archived
-    // agent spends no request at all: an agent record reports whether it was
-    // filed away, never what it is doing, so the status Luke shows exists
-    // only on the run.
+    // The only fan-out in a pass, bounded by the page above.
     const observations = await Promise.all(
       agents.map((agent) => this.#observationFor(request, agent, now)),
     );
@@ -353,13 +351,12 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
 
   /**
    * Cursor documents a follow-up only against an agent whose latest run has
-   * finished: an archived agent cannot take new runs, a running one answers
-   * conflict until its run ends, and what a follow-up does to a failed or
-   * expired run is documented nowhere. Only the case Cursor has promised is
-   * advertised.
+   * finished: a running one answers conflict until its run ends, and what a
+   * follow-up does to a failed or expired run is documented nowhere. Only the
+   * case Cursor has promised is advertised.
    */
-  #agentTakesMessages(agent: CursorAgent, run: CursorRun | undefined): boolean {
-    return !agent.archived && run?.status === CURSOR_RUN_STATUS.FINISHED;
+  #agentTakesMessages(run: CursorRun | undefined): boolean {
+    return run?.status === CURSOR_RUN_STATUS.FINISHED;
   }
 
   /**
@@ -367,11 +364,8 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
    * conflict for one that has already settled. An active run is the only state
    * the control is advertised in.
    */
-  #agentTakesCancel(agent: CursorAgent, run: CursorRun | undefined): boolean {
-    return (
-      !agent.archived &&
-      (run?.status === CURSOR_RUN_STATUS.RUNNING || run?.status === CURSOR_RUN_STATUS.CREATING)
-    );
+  #agentTakesCancel(run: CursorRun | undefined): boolean {
+    return run?.status === CURSOR_RUN_STATUS.RUNNING || run?.status === CURSOR_RUN_STATUS.CREATING;
   }
 
   /**
@@ -381,11 +375,9 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
    * that ends a run on purpose. An agent that has never run has no run to
    * take; one whose run could not be read, or reports a state this build does
    * not know, is not known to have stopped, so it is offered nothing rather
-   * than a filing away that could land on a live turn. An agent already
-   * archived has nothing left to archive.
+   * than a filing away that could land on a live turn.
    */
   #agentTakesArchive(agent: CursorAgent, run: CursorRun | undefined): boolean {
-    if (agent.archived) return false;
     if (!agent.latestRunId) return true;
     return run?.status !== undefined && CURSOR_SETTLED_RUN_STATUSES.has(run.status);
   }
@@ -515,16 +507,16 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
     agent: CursorAgent,
     now: number,
   ): Promise<ProviderSessionObservation | undefined> {
-    // An archived agent is already settled, and one that has never run has no
-    // run to ask about, so neither spends a request.
-    const latestRunId = agent.archived ? undefined : agent.latestRunId;
+    // An agent that has never run has no run to ask about, so it spends no
+    // request.
+    const latestRunId = agent.latestRunId;
     const run = latestRunId
       ? await this.tolerateItemFailure(() => this.#latestRun(request, agent.id, latestRunId))
       : undefined;
     // The run's timestamp is the moment its state was entered; the agent's is
     // only the last resort, because it also moves for edits that are not work.
     const observedAt = run?.updatedAt ?? agent.lastActivityAt;
-    const status = this.#statusFor(agent, run, observedAt, now);
+    const status = this.#statusFor(run, observedAt, now);
     // A run names the repository it pushed to, so a list item that carries no
     // `repos` still resolves to something better than "workspace".
     const repository = agent.repositoryLabel ?? run?.repositoryLabel;
@@ -539,11 +531,10 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
       // share the thread's. The agent page URL Cursor also reports stays
       // reachable inside the app; the pull request keeps its own chip.
       applications: [cursorApplication(cursorCloudAgentLink(agent.id))],
-      canReceiveMessage: this.#agentTakesMessages(agent, run),
+      canReceiveMessage: this.#agentTakesMessages(run),
       // The two controls are exclusive by construction: an active run offers
-      // its stop, a settled agent offers to be filed away, and an archived one
-      // offers nothing.
-      ...(latestRunId && this.#agentTakesCancel(agent, run)
+      // its stop, and a settled agent offers to be filed away.
+      ...(latestRunId && this.#agentTakesCancel(run)
         ? { controls: [cursorCancelRunControl(latestRunId)] }
         : this.#agentTakesArchive(agent, run)
           ? { controls: [CURSOR_ARCHIVE_AGENT_CONTROL] }
@@ -561,13 +552,7 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
     };
   }
 
-  #statusFor(
-    agent: CursorAgent,
-    run: CursorRun | undefined,
-    observedAt: number,
-    now: number,
-  ): SessionStatus {
-    if (agent.archived) return SESSION_STATUS.COMPLETE;
+  #statusFor(run: CursorRun | undefined, observedAt: number, now: number): SessionStatus {
     // A run state this build does not know is not guessed at.
     if (!run?.status) return SESSION_STATUS.UNKNOWN;
     return agedStatus(

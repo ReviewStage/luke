@@ -413,7 +413,7 @@ test("keeps reporting a long run as working", async () => {
 });
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-test("reports an archived agent as complete without reading its run", async () => {
+test("draws no row for an archived agent, and spends no request on it", async () => {
   const api = fakeCursorApi([
     {
       id: "agent-archived",
@@ -427,9 +427,9 @@ test("reports an archived agent as complete without reading its run", async () =
 
   const observations = await adapterFor(api.fetch).observe();
 
-  assert.equal(observations.length, 1);
-  assert.equal(observations[0]?.status, SESSION_STATUS.COMPLETE);
-  assert.equal(observations[0]?.observedAt, TEST_TIME - 20_000);
+  // Filing away is Cursor's own way of saying a task is done being looked at,
+  // so an archived agent leaves the roster rather than lingering as complete.
+  assert.deepEqual(observations, []);
   assert.deepEqual(
     api.requests.map((request) => request.pathname),
     ["/v1/repositories", "/v1/agents"],
@@ -538,7 +538,7 @@ test("falls back to a neutral label for an agent with no name at all", async () 
   assert.equal(observations[0]?.title, "Cloud agent");
 });
 
-test("reports every agent the page holds, the ones that can still change first", async () => {
+test("reports every unarchived agent the page holds, newest first", async () => {
   const api = fakeCursorApi([
     {
       id: "agent-archived-moments-ago",
@@ -555,7 +555,7 @@ test("reports every agent the page holds, the ones that can still change first",
 
   assert.deepEqual(
     observations.map((observation) => observation.providerSessionId),
-    ["agent-running-newer", "agent-running-older", "agent-archived-moments-ago"],
+    ["agent-running-newer", "agent-running-older"],
   );
 });
 
@@ -635,9 +635,8 @@ test("advertises a follow-up only for an agent whose run has finished", async ()
   // does after a failure is documented nowhere; neither is promised one.
   assert.equal(byId.get("agent-running")?.canReceiveMessage, false);
   assert.equal(byId.get("agent-errored")?.canReceiveMessage, false);
-  assert.equal(byId.get("agent-filed")?.canReceiveMessage, false);
   // The stoppable one is the one still running; every settled agent offers to
-  // be filed away instead, and one already filed offers nothing.
+  // be filed away instead, and one already filed draws no row at all.
   assert.deepEqual(byId.get("agent-running")?.controls, [
     { id: "cancel-run", label: "Stop this run", kind: "stop", target: "run-agent-running" },
   ]);
@@ -647,7 +646,7 @@ test("advertises a follow-up only for an agent whose run has finished", async ()
   assert.deepEqual(byId.get("agent-errored")?.controls, [
     { id: "archive-agent", label: "Archive" },
   ]);
-  assert.equal(byId.get("agent-filed")?.controls, undefined);
+  assert.equal(byId.get("agent-filed"), undefined);
 });
 
 test("hands a follow-up to Cursor's documented run endpoint", async () => {
