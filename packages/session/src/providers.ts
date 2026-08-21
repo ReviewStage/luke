@@ -40,6 +40,30 @@ export const CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID = "conductor-local";
  */
 export const PROVIDER_ID_LIST: readonly ProviderId[] = Object.values(PROVIDER_ID);
 
+/**
+ * Agents Luke draws only inside a hosting app's workspaces — today the
+ * DeepSeek Harness and Pi chats Replicas runs. Identity alone: the id keys
+ * the agent's own mark and filter chip, and nothing else exists behind it —
+ * no adapter, no files, no credential — so the hosting provider stays the
+ * thing observed, credentialed, and written through.
+ */
+export const HOSTED_AGENT_ID = {
+  DEEPSEEK: "deepseek",
+  PI: "pi",
+} as const;
+
+export type HostedAgentId = (typeof HOSTED_AGENT_ID)[keyof typeof HOSTED_AGENT_ID];
+
+/** The registry's own order, for the same reason `PROVIDER_ID_LIST` keeps one. */
+export const HOSTED_AGENT_ID_LIST: readonly HostedAgentId[] = Object.values(HOSTED_AGENT_ID);
+
+const HOSTED_AGENT_IDS: ReadonlySet<string> = new Set(HOSTED_AGENT_ID_LIST);
+
+/** Whether this build draws the hosted agent an observation names. */
+export function isHostedAgentId(value: string): value is HostedAgentId {
+  return HOSTED_AGENT_IDS.has(value);
+}
+
 const PROVIDER_IDS: ReadonlySet<string> = new Set(PROVIDER_ID_LIST);
 
 /** Whether this build knows the provider an observation names. */

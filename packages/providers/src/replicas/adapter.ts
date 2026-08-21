@@ -1,6 +1,7 @@
 import { CREDENTIAL_PROVIDER_ID, CREDENTIAL_PROVIDERS } from "@sidecar/credentials";
 import {
   agedStatus,
+  HOSTED_AGENT_ID,
   maximumSessionRecapLength,
   OBSERVATION_WINDOW,
   PROVIDER_ID,
@@ -188,17 +189,20 @@ const SESSION_STATUS_BY_REPLICAS_STATUS = {
 
 /**
  * The agent kinds Replicas names in its own vocabulary, each mapped to the
- * identity Luke already draws that agent's sessions under — the same four
- * words and identities Conductor's chats map, so an agent reports the same
- * whichever app hosts it. A kind outside this table (Replicas also runs
- * DeepSeek Harness, fx, Kimi Code, and Pi) rides the row's model slot in the
- * provider's own word instead, so it is not lost for lacking a mark.
+ * identity Luke already draws that agent's sessions under: the same four
+ * identities Conductor's chats map, so an agent reports the same whichever
+ * app hosts it, plus the hosted-agent identities DeepSeek Harness and Pi
+ * carry their own marks as. A kind outside this table (fx and Kimi Code)
+ * rides the row's model slot in the provider's own word instead, so it is
+ * not lost for lacking a mark.
  */
 const REPLICAS_AGENT_KIND = {
   CLAUDE: "claude",
   CODEX: "codex",
   CURSOR: "cursor",
+  DEEPSEEK: "deepseek",
   OPENCODE: "opencode",
+  PI: "pi",
 } as const;
 
 type ReplicasAgentKind = (typeof REPLICAS_AGENT_KIND)[keyof typeof REPLICAS_AGENT_KIND];
@@ -207,7 +211,14 @@ const REPLICAS_AGENT_BY_KIND = {
   [REPLICAS_AGENT_KIND.CLAUDE]: { id: PROVIDER_ID.CLAUDE_CODE, displayName: "Claude Code" },
   [REPLICAS_AGENT_KIND.CODEX]: { id: PROVIDER_ID.CODEX, displayName: "Codex" },
   [REPLICAS_AGENT_KIND.CURSOR]: { id: PROVIDER_ID.CURSOR, displayName: "Cursor" },
+  [REPLICAS_AGENT_KIND.DEEPSEEK]: {
+    id: HOSTED_AGENT_ID.DEEPSEEK,
+    // Replicas' own name for its DeepSeek-backed harness, not DeepSeek the
+    // model vendor: the mark is the vendor's, the word is the agent's.
+    displayName: "DeepSeek Harness",
+  },
   [REPLICAS_AGENT_KIND.OPENCODE]: { id: PROVIDER_ID.OPENCODE, displayName: "OpenCode" },
+  [REPLICAS_AGENT_KIND.PI]: { id: HOSTED_AGENT_ID.PI, displayName: "Pi" },
 } as const satisfies Readonly<Record<ReplicasAgentKind, SessionProvider>>;
 
 /**
@@ -417,9 +428,9 @@ function workspaceFromRecord(record: WireRecord): ReplicasWorkspace | undefined 
  */
 function chatFromDetailRecord(record: WireRecord): ReplicasChat | undefined {
   const id = textFromRecord(record, REPLICAS_FIELD.ID);
-  const observedAt =
-    timestampFromRecord(record, REPLICAS_FIELD.UPDATED_AT) ??
-    timestampFromRecord(record, REPLICAS_FIELD.CREATED_AT);
+  const createdAt = timestampFromRecord(record, REPLICAS_FIELD.CREATED_AT);
+  const updatedAt = timestampFromRecord(record, REPLICAS_FIELD.UPDATED_AT);
+  const observedAt = updatedAt ?? createdAt;
   if (!id || observedAt === undefined) return undefined;
 
   const agentKind = textFromRecord(record, REPLICAS_FIELD.PROVIDER)?.slice(
@@ -428,6 +439,14 @@ function chatFromDetailRecord(record: WireRecord): ReplicasChat | undefined {
   );
   const title = textFromRecord(record, REPLICAS_FIELD.TITLE);
   const processing = record[REPLICAS_FIELD.PROCESSING];
+  // The engine pre-creates one chat slot per agent harness, so a workspace's
+  // detail lists eight chats where the user opened three — observed live. A
+  // slot is told from a conversation by never having been touched: no title,
+  // no turn running, and never updated past its creation. A real chat hides
+  // behind this only between its creation and its first message, and returns
+  // the moment either lands.
+  const untouched = updatedAt === undefined || (createdAt !== undefined && updatedAt <= createdAt);
+  if (!title && processing !== true && untouched) return undefined;
   return {
     id,
     observedAt,

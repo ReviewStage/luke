@@ -31,6 +31,8 @@ interface TestChat {
   title?: string;
   updatedAt: number;
   processing?: boolean;
+  /** A pre-created harness slot: never touched since the engine made it. */
+  untouched?: boolean;
 }
 
 interface TestWorkspace {
@@ -143,7 +145,7 @@ function detailChatPayload(chat: TestChat) {
     id: chat.id,
     provider: chat.provider ?? "claude",
     title: chat.title ?? "",
-    created_at: isoTimestamp(chat.updatedAt - 60_000),
+    created_at: isoTimestamp(chat.untouched ? chat.updatedAt : chat.updatedAt - 60_000),
     updated_at: isoTimestamp(chat.updatedAt),
     processing: chat.processing ?? false,
   };
@@ -706,6 +708,50 @@ test("offers the reported environments as projects and creates a workspace in on
   assert.equal(taskless.status, "rejected");
 });
 
+test("draws no row for the untouched chat slot the engine keeps per harness", async () => {
+  // The detail read lists one pre-created slot per agent harness beside the
+  // chats the user actually opened — observed live as eight rows where three
+  // conversations existed. A slot has never been touched: no title, no turn,
+  // never updated past its creation.
+  const api = fakeReplicasApi([
+    {
+      ...activeWorkspace("workspace-slots", TEST_TIME - 1_000),
+      chats: [
+        {
+          id: "chat-real",
+          provider: "claude",
+          title: "Fix the login timeout",
+          updatedAt: TEST_TIME - 1_000,
+        },
+        // A fresh real chat mid-first-turn has no title yet, but its turn is
+        // running, so it keeps its row.
+        {
+          id: "chat-fresh",
+          provider: "codex",
+          updatedAt: TEST_TIME - 2_000,
+          processing: true,
+          untouched: true,
+        },
+        { id: "slot-cursor", provider: "cursor", updatedAt: TEST_TIME - 3_000, untouched: true },
+        { id: "slot-pi", provider: "pi", updatedAt: TEST_TIME - 3_000, untouched: true },
+        {
+          id: "slot-deepseek",
+          provider: "deepseek",
+          updatedAt: TEST_TIME - 3_000,
+          untouched: true,
+        },
+      ],
+    },
+  ]);
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  assert.deepEqual(
+    observations.map((observation) => observation.providerSessionId),
+    ["chat-real", "chat-fresh"],
+  );
+});
+
 test("marks a workspace with the agent its retained history names", async () => {
   const api = fakeReplicasApi([
     {
@@ -713,21 +759,29 @@ test("marks a workspace with the agent its retained history names", async () => 
       codingAgent: "claude",
     },
     {
-      // A kind this build has no identity for rides the model slot in the
-      // provider's own word instead, so it is not lost for lacking a mark.
+      // A hosted agent with no adapter of its own still carries its own mark
+      // and name.
       ...activeWorkspace("workspace-pi", TEST_TIME - 2_000),
       codingAgent: "pi",
     },
-    activeWorkspace("workspace-unread", TEST_TIME - 3_000),
+    {
+      // A kind this build has no identity for rides the model slot in the
+      // provider's own word instead, so it is not lost for lacking a mark.
+      ...activeWorkspace("workspace-kimi", TEST_TIME - 3_000),
+      codingAgent: "kimi",
+    },
+    activeWorkspace("workspace-unread", TEST_TIME - 4_000),
   ]);
 
   const observations = await adapterFor(api.fetch).observe();
 
   assert.deepEqual(observations[0]?.agent, { id: "claude-code", displayName: "Claude Code" });
   assert.equal(observations[0]?.detail?.model, undefined);
-  assert.equal(observations[1]?.agent, undefined);
-  assert.equal(observations[1]?.detail?.model, "pi");
+  assert.deepEqual(observations[1]?.agent, { id: "pi", displayName: "Pi" });
+  assert.equal(observations[1]?.detail?.model, undefined);
   assert.equal(observations[2]?.agent, undefined);
+  assert.equal(observations[2]?.detail?.model, "kimi");
+  assert.equal(observations[3]?.agent, undefined);
 });
 
 test("derives the agent from the retained events when none is currently active", async () => {

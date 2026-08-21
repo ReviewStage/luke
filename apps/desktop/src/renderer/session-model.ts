@@ -5,6 +5,9 @@ import type { IssueIdentity } from "@sidecar/issues";
 import { SESSION_LIST_ALL } from "@sidecar/realtime";
 import {
   ATTENTION_DISPOSITION,
+  HOSTED_AGENT_ID_LIST,
+  type HostedAgentId,
+  isHostedAgentId,
   isProviderId,
   isSessionApplicationId,
   matchesFilterSelection,
@@ -786,7 +789,7 @@ function filterGroups(sessions: readonly DisplaySession[]): readonly SessionFilt
   const locations = new Map<SessionLocation, number>();
   const brands = new Map<string, { label: string; count: number }>();
   const applicationIds = new Set<SessionApplicationId>();
-  const providerIds = new Set<ProviderId>();
+  const providerIds = new Set<ProviderId | HostedAgentId>();
   let voiceCount = 0;
   let managed = 0;
   for (const session of sessions) {
@@ -799,8 +802,10 @@ function filterGroups(sessions: readonly DisplaySession[]): readonly SessionFilt
       providerIds.add(session.providerId);
     }
     // A hosted chat answers its agent's chip too: a Claude conversation in
-    // Conductor's cloud is a Claude conversation for the agent axis.
-    if (session.agentId && isProviderId(session.agentId)) {
+    // Conductor's cloud is a Claude conversation for the agent axis, and an
+    // agent that exists only inside a hosting app — DeepSeek Harness, Pi —
+    // earns the same chip under its own hosted identity.
+    if (session.agentId && (isProviderId(session.agentId) || isHostedAgentId(session.agentId))) {
       identities.set(session.agentId, session.agent ?? session.agentId);
       providerIds.add(session.agentId);
     }
@@ -851,9 +856,10 @@ function filterGroups(sessions: readonly DisplaySession[]): readonly SessionFilt
   const applicationOptionIds = new Set<string>(applicationOptions.map((option) => option.filter));
   const providerOptions =
     providerIds.size > 1
-      ? PROVIDER_ID_LIST.filter(
-          (providerId) => brands.has(providerId) && !applicationOptionIds.has(providerId),
-        )
+      ? // Hosted agents take chips after the providers, in each registry's
+        // own order, so the rail does not reshuffle as sessions come and go.
+        [...PROVIDER_ID_LIST, ...HOSTED_AGENT_ID_LIST]
+          .filter((providerId) => brands.has(providerId) && !applicationOptionIds.has(providerId))
           .filter((providerId) => {
             const count = brands.get(providerId)?.count ?? 0;
             return count > 0 && count < sessions.length;

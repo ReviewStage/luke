@@ -37,7 +37,9 @@
   --mark-conductor: #eae8e6;
   --mark-copilot: #ffffff;
   --mark-cursor: #ffffff;
+  --mark-deepseek: #5786fe;
   --mark-devin: #ffffff;
+  --mark-pi: #ffffff;
   --mark-jules: #715cd7;
   --mark-linear: #5e6ad2;
   --mark-opencode: #ffffff;
@@ -885,11 +887,27 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   transform: scale(0.94);
 }
 
+/* DeepSeek's whale fills its box edge to edge the way the Codex and Cursor
+   marks do, so it takes the same scale they do. */
+.provider-mark[data-mark="deepseek"] {
+  color: var(--mark-deepseek);
+  transform: scale(0.94);
+}
+
 /* Devin's published mark leaves roughly a fifth of its box empty on every side,
    so it is scaled up to the height the full-bleed marks reach. */
 .provider-mark[data-mark="devin"] {
   color: var(--mark-devin);
   transform: scale(1.22);
+}
+
+/* Pi's glyph spans 470 of its 800-unit canvas, so it is scaled up to the
+   height the full-bleed marks reach. Like Copilot, Cursor, and Devin, pi.dev
+   publishes one silhouette rather than a colour, so it is drawn in the light
+   form a dark surface takes. */
+.provider-mark[data-mark="pi"] {
+  color: var(--mark-pi);
+  transform: scale(1.6);
 }
 
 /* The Apple Calendar mark carries its own colours, like Google Calendar's, so
