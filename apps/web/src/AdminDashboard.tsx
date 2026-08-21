@@ -9,6 +9,7 @@ import type {
   AdminTrend,
 } from "../server/admin/admin-metrics";
 import type { AdminUserAccount, AdminUserDetail } from "../server/admin/admin-user";
+import type { AdminUserList, AdminUserListRow } from "../server/admin/admin-users";
 import {
   ADMIN_HTTP_STATUS,
   ADMIN_METRICS_SCOPE,
@@ -25,26 +26,41 @@ const authClient = createAuthClient();
 
 const METRICS_PATH = "/api/admin/metrics";
 const USER_DETAIL_PATH = "/api/admin/user";
+const USERS_PATH = "/api/admin/users";
 
 /**
- * The page's own address for one account, distinct from the API's `id` so a
- * pasted dashboard link and an API call never read as each other. The id
- * rides the query string because the page is served at `/admin` alone — a
- * path segment would need its own route — and it goes back into the detail
+ * The page's own addresses, distinct from the API's parameters so a pasted
+ * dashboard link and an API call never read as each other. Both ride the
+ * query string because the page is served at `/admin` alone — a path segment
+ * would need its own route — and the account id goes back into the detail
  * endpoint's gate, never into anything rendered.
  */
 const ACCOUNT_VIEW_PARAM = "user";
+const TAB_PARAM = "view";
+const USERS_TAB_VALUE = "users";
 
-/** Which of the page's two views the address bar names. */
-type AdminView = { kind: "overview" } | { kind: "account"; id: string };
+/** The sidebar's two destinations; an open account highlights Users. */
+type AdminTab = "dashboard" | "users";
+
+/** Which of the page's views the address bar names. */
+type AdminView = { kind: "dashboard" } | { kind: "users" } | { kind: "account"; id: string };
 
 function viewFromLocation(): AdminView {
-  const id = new URLSearchParams(window.location.search).get(ACCOUNT_VIEW_PARAM);
-  return id ? { kind: "account", id } : { kind: "overview" };
+  const params = new URLSearchParams(window.location.search);
+  const id = params.get(ACCOUNT_VIEW_PARAM);
+  if (id) return { kind: "account", id };
+  if (params.get(TAB_PARAM) === USERS_TAB_VALUE) return { kind: "users" };
+  return { kind: "dashboard" };
 }
 
 function accountHref(id: string): string {
   return `${window.location.pathname}?${ACCOUNT_VIEW_PARAM}=${encodeURIComponent(id)}`;
+}
+
+function tabHref(tab: AdminTab): string {
+  return tab === "users"
+    ? `${window.location.pathname}?${TAB_PARAM}=${USERS_TAB_VALUE}`
+    : window.location.pathname;
 }
 
 /**
@@ -93,6 +109,30 @@ function forgetSignInChosen(): void {
   }
 }
 
+/**
+ * Whether the sidebar was left collapsed, remembered the way the sign-in
+ * press is: locally, as the presence of a key, so a browser that refuses
+ * storage simply opens expanded every visit.
+ */
+const SIDEBAR_COLLAPSED_STORAGE_KEY = "luke-admin-sidebar-collapsed";
+
+function sidebarLeftCollapsed(): boolean {
+  try {
+    return window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) !== null;
+  } catch {
+    return false;
+  }
+}
+
+function rememberSidebarCollapsed(collapsed: boolean): void {
+  try {
+    if (collapsed) window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, "true");
+    else window.localStorage.removeItem(SIDEBAR_COLLAPSED_STORAGE_KEY);
+  } catch {
+    // Storage refused: the sidebar opens expanded on the next visit.
+  }
+}
+
 /** The signed-in account the header names; read from the session, shown as-is. */
 interface ViewerAccount {
   name: string;
@@ -116,7 +156,9 @@ const ERROR_DETAIL = {
   UNAVAILABLE: "The service did not answer. It may be briefly unavailable — try again shortly.",
   PROTECTED:
     "The request was redirected before it reached the dashboard. A preview deployment behind Vercel Deployment Protection intercepts the API call; disable protection for this deployment, or use a production URL.",
-  GENERIC: "The metrics endpoint did not answer. Try again shortly.",
+  METRICS: "The metrics endpoint did not answer. Try again shortly.",
+  USERS: "The users endpoint did not answer. Try again shortly.",
+  ACCOUNT: "The account endpoint did not answer. Try again shortly.",
 } as const;
 
 const numberFormat = new Intl.NumberFormat("en-US");
@@ -602,24 +644,150 @@ function AccountMenu({
   );
 }
 
-/** The brand block and account menu both views wear; controls sit between them. */
+function DashboardIcon(): React.JSX.Element {
+  return (
+    <svg
+      className="size-4 shrink-0"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      aria-hidden="true"
+    >
+      <rect x="1.75" y="1.75" width="5" height="5" rx="1" />
+      <rect x="9.25" y="1.75" width="5" height="5" rx="1" />
+      <rect x="1.75" y="9.25" width="5" height="5" rx="1" />
+      <rect x="9.25" y="9.25" width="5" height="5" rx="1" />
+    </svg>
+  );
+}
+
+function UsersIcon(): React.JSX.Element {
+  return (
+    <svg
+      className="size-4 shrink-0"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <circle cx="6" cy="5.1" r="2.35" />
+      <path d="M1.9 13.4c.6-2.4 2.2-3.7 4.1-3.7s3.5 1.3 4.1 3.7" />
+      <path d="M10.6 3a2.35 2.35 0 0 1 0 4.2" />
+      <path d="M11.8 10c1.3.5 2 1.6 2.3 3.4" />
+    </svg>
+  );
+}
+
+/** Points at the sidebar's own edge: left to fold it away, right to bring it back. */
+function CollapseIcon({ collapsed }: { collapsed: boolean }): React.JSX.Element {
+  return (
+    <svg
+      className="size-4 shrink-0"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {collapsed ? <path d="M6 3.5 10.5 8 6 12.5" /> : <path d="M10 3.5 5.5 8l4.5 4.5" />}
+    </svg>
+  );
+}
+
+const SIDEBAR_ITEM = {
+  ACTIVE: "bg-muted text-foreground",
+  IDLE: "text-muted-foreground hover:bg-muted hover:text-foreground",
+} as const;
+
+/**
+ * The page's one navigation, wearing the brand the headers used to carry.
+ * Each tab is a real anchor to its own address, so a modified click still
+ * gets the browser's own gesture; collapsed, the labels fold away and each
+ * item keeps its name on a title and the toggle on its aria-label.
+ */
+function AdminSidebar({
+  active,
+  collapsed,
+  onToggle,
+  onNavigate,
+}: {
+  active: AdminTab;
+  collapsed: boolean;
+  onToggle: () => void;
+  onNavigate: (tab: AdminTab) => void;
+}): React.JSX.Element {
+  const item = (tab: AdminTab, label: string, icon: React.ReactNode) => (
+    <a
+      href={tabHref(tab)}
+      aria-current={active === tab ? "page" : undefined}
+      title={collapsed ? label : undefined}
+      className={`flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium transition-colors duration-150 ${
+        active === tab ? SIDEBAR_ITEM.ACTIVE : SIDEBAR_ITEM.IDLE
+      } ${collapsed ? "justify-center" : ""}`}
+      onClick={(event) => {
+        if (!plainLeftClick(event)) return;
+        event.preventDefault();
+        onNavigate(tab);
+      }}
+    >
+      {icon}
+      {collapsed ? null : label}
+    </a>
+  );
+
+  return (
+    <nav
+      aria-label="Admin sections"
+      className={`sticky top-0 flex h-screen shrink-0 flex-col border-r border-border bg-card px-3 py-5 transition-[width] duration-150 ${
+        collapsed ? "w-[62px]" : "w-56"
+      }`}
+    >
+      <div className={`flex items-center gap-2 px-1 ${collapsed ? "justify-center" : ""}`}>
+        <span className="inline-flex w-6 shrink-0 text-foreground" aria-hidden="true">
+          <LukeMark className="h-auto w-full" />
+        </span>
+        {collapsed ? null : (
+          <span className="font-brand text-base font-bold tracking-[-0.01em]">Luke admin</span>
+        )}
+      </div>
+      <div className="mt-8 grid gap-1">
+        {item("dashboard", "Dashboard", <DashboardIcon />)}
+        {item("users", "Users", <UsersIcon />)}
+      </div>
+      <div className="flex-1" />
+      <button
+        type="button"
+        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        className={`flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium transition-colors duration-150 ${SIDEBAR_ITEM.IDLE} ${collapsed ? "justify-center" : ""}`}
+        onClick={onToggle}
+      >
+        <CollapseIcon collapsed={collapsed} />
+        {collapsed ? null : "Collapse"}
+      </button>
+    </nav>
+  );
+}
+
+/** The heading and account menu every view wears; controls sit between them. */
 function PageHeader({
+  title,
   controls,
   account,
   onSignOut,
 }: {
+  title: string;
   controls: React.ReactNode;
   account: ViewerAccount | undefined;
   onSignOut: () => void;
 }): React.JSX.Element {
   return (
     <header className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
-      <div className="inline-flex items-center gap-2">
-        <span className="inline-flex w-6 text-foreground" aria-hidden="true">
-          <LukeMark className="h-auto w-full" />
-        </span>
-        <span className="font-brand text-base font-bold tracking-[-0.01em]">Luke admin</span>
-      </div>
+      <h1 className="text-lg font-semibold tracking-[-0.01em]">{title}</h1>
       <div className="flex flex-wrap items-center gap-4">
         {controls}
         {account ? (
@@ -680,8 +848,9 @@ function Dashboard({
   const db = metrics.systemHealth.database;
 
   return (
-    <div className="mx-auto max-w-[1040px] px-6 py-10">
+    <main className="mx-auto max-w-[1040px] px-6 py-10">
       <PageHeader
+        title="Dashboard"
         account={account}
         onSignOut={onSignOut}
         controls={
@@ -858,7 +1027,7 @@ function Dashboard({
           </div>
         </div>
       </div>
-    </div>
+    </main>
   );
 }
 
@@ -975,7 +1144,7 @@ async function readDashboardState(response: Response): Promise<DashboardState> {
   if (response.status === ADMIN_HTTP_STATUS.SERVICE_UNAVAILABLE) {
     return { status: "error", detail: ERROR_DETAIL.UNAVAILABLE };
   }
-  if (!response.ok) return { status: "error", detail: ERROR_DETAIL.GENERIC };
+  if (!response.ok) return { status: "error", detail: ERROR_DETAIL.METRICS };
   // SAFETY: a 200 from the admin metrics endpoint is an AdminMetrics body by its contract.
   return { status: "ready", metrics: (await response.json()) as AdminMetrics };
 }
@@ -997,7 +1166,7 @@ async function readDetailState(response: Response): Promise<DetailState> {
   if (response.status === ADMIN_HTTP_STATUS.SERVICE_UNAVAILABLE) {
     return { status: "error", detail: ERROR_DETAIL.UNAVAILABLE };
   }
-  if (!response.ok) return { status: "error", detail: ERROR_DETAIL.GENERIC };
+  if (!response.ok) return { status: "error", detail: ERROR_DETAIL.ACCOUNT };
   // SAFETY: a 200 from the admin user endpoint is an AdminUserDetail body by its contract.
   return { status: "ready", detail: (await response.json()) as AdminUserDetail };
 }
@@ -1036,8 +1205,9 @@ function UserDetailPage({
       : formatNumber(activity.currentStreakDays);
 
   return (
-    <div className="mx-auto max-w-[1040px] px-6 py-10">
+    <main className="mx-auto max-w-[1040px] px-6 py-10">
       <PageHeader
+        title="Account"
         account={account}
         onSignOut={onSignOut}
         controls={
@@ -1065,7 +1235,7 @@ function UserDetailPage({
         aria-busy={refreshing}
       >
         <a
-          href={window.location.pathname}
+          href={tabHref("users")}
           className="mt-8 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors duration-150 hover:text-foreground"
           onClick={(event) => {
             if (!plainLeftClick(event)) return;
@@ -1073,7 +1243,7 @@ function UserDetailPage({
             onBack();
           }}
         >
-          <span aria-hidden="true">←</span> All accounts
+          <span aria-hidden="true">←</span> All users
         </a>
 
         <div className="mt-6 flex flex-wrap items-center gap-4">
@@ -1168,8 +1338,303 @@ function UserDetailPage({
           which live with the analytics processor rather than in this database.
         </p>
       </div>
+    </main>
+  );
+}
+
+/** What the roster fetch resolved to, in the overview's own vocabulary. */
+type UsersState =
+  | { status: "loading" }
+  | { status: "signed-out" }
+  | { status: "forbidden" }
+  | { status: "error"; detail: string }
+  | { status: "ready"; list: AdminUserList };
+
+async function readUsersState(response: Response): Promise<UsersState> {
+  if (response.redirected) return { status: "error", detail: ERROR_DETAIL.PROTECTED };
+  if (response.status === ADMIN_HTTP_STATUS.UNAUTHORIZED) return { status: "signed-out" };
+  if (response.status === ADMIN_HTTP_STATUS.FORBIDDEN) return { status: "forbidden" };
+  if (response.status === ADMIN_HTTP_STATUS.SERVICE_UNAVAILABLE) {
+    return { status: "error", detail: ERROR_DETAIL.UNAVAILABLE };
+  }
+  if (!response.ok) return { status: "error", detail: ERROR_DETAIL.USERS };
+  // SAFETY: a 200 from the admin users endpoint is an AdminUserList body by its contract.
+  return { status: "ready", list: (await response.json()) as AdminUserList };
+}
+
+function UsersTable({
+  rows,
+  windowDays,
+  onOpen,
+}: {
+  rows: readonly AdminUserListRow[];
+  windowDays: number;
+  onOpen: (id: string) => void;
+}): React.JSX.Element {
+  if (rows.length === 0) {
+    return (
+      <div className="rounded-lg border border-border bg-card px-5 py-8 text-center text-sm text-muted-foreground">
+        No account matches.
+      </div>
+    );
+  }
+  return (
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-border text-left font-mono text-xs text-muted-foreground uppercase">
+            <th className="px-5 py-3 font-medium">Account</th>
+            <th className="px-5 py-3 text-right font-medium">Joined</th>
+            <th className="px-5 py-3 text-right font-medium">Active days</th>
+            <th className="px-5 py-3 text-right font-medium">Last active</th>
+            <th className="px-5 py-3 text-right font-medium">Voice</th>
+            <th className="px-5 py-3 text-right font-medium">Attention</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr
+              key={row.id}
+              className="cursor-pointer border-b border-border transition-colors duration-150 last:border-0 hover:bg-muted"
+              onClick={() => onOpen(row.id)}
+            >
+              <td className="px-5 py-3">
+                <a
+                  href={accountHref(row.id)}
+                  className="block outline-offset-2"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    if (!plainLeftClick(event)) return;
+                    event.preventDefault();
+                    onOpen(row.id);
+                  }}
+                >
+                  <div className="flex items-center gap-2 font-medium">
+                    {row.name}
+                    {row.admin ? (
+                      <span className="rounded-full border border-border px-1.5 py-px font-mono text-[10px] tracking-[0.2px] text-muted-foreground uppercase">
+                        Admin
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="text-xs text-muted-foreground">{row.email}</div>
+                </a>
+              </td>
+              <td className="px-5 py-3 text-right tabular-nums">{formatDate(row.createdAt)}</td>
+              <td className="px-5 py-3 text-right tabular-nums">
+                {formatNumber(row.activeDays)}
+                <span className="text-muted-foreground"> of {formatNumber(windowDays)}</span>
+              </td>
+              <td className="px-5 py-3 text-right tabular-nums">
+                {row.lastActiveDay ? formatDayTick(row.lastActiveDay) : "—"}
+              </td>
+              <td className="px-5 py-3 text-right tabular-nums">{formatNumber(row.voiceCalls)}</td>
+              <td className="px-5 py-3 text-right tabular-nums">
+                {formatNumber(row.attentionReviews)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
+}
+
+function UsersPage({
+  list,
+  hideAdmins,
+  onHideAdminsChange,
+  account,
+  onSignOut,
+  onOpenAccount,
+  refreshing,
+  onRefresh,
+  now,
+}: {
+  list: AdminUserList;
+  hideAdmins: boolean;
+  onHideAdminsChange: (hide: boolean) => void;
+  account: ViewerAccount | undefined;
+  onSignOut: () => void;
+  onOpenAccount: (id: string) => void;
+  refreshing: boolean;
+  onRefresh: () => void;
+  now: number;
+}): React.JSX.Element {
+  const [query, setQuery] = useState("");
+  const needle = query.trim().toLowerCase();
+  const rows = needle
+    ? list.rows.filter((row) => `${row.name} ${row.email}`.toLowerCase().includes(needle))
+    : list.rows;
+
+  return (
+    <main className="mx-auto max-w-[1040px] px-6 py-10">
+      <PageHeader
+        title="Users"
+        account={account}
+        onSignOut={onSignOut}
+        controls={
+          <>
+            <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground select-none">
+              <input
+                type="checkbox"
+                className="size-3.5 cursor-pointer accent-primary"
+                checked={hideAdmins}
+                onChange={(event) => onHideAdminsChange(event.target.checked)}
+              />
+              Hide admins
+            </label>
+            <GeneratedStamp generatedAt={list.generatedAt} windowDays={list.windowDays} now={now} />
+            <button
+              type="button"
+              className={PLAIN_BUTTON}
+              onClick={onRefresh}
+              disabled={refreshing}
+            >
+              {refreshing ? "Refreshing…" : "Refresh"}
+            </button>
+          </>
+        }
+      />
+
+      <div
+        className="transition-opacity duration-150 data-[busy=true]:opacity-50"
+        data-busy={refreshing}
+        aria-busy={refreshing}
+      >
+        <div className="mt-8 flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+          <input
+            type="search"
+            value={query}
+            placeholder="Filter by name or email…"
+            aria-label="Filter accounts by name or email"
+            className="w-full max-w-[320px] rounded-md border border-border bg-card px-3 py-1.5 text-sm placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2"
+            onChange={(event) => setQuery(event.target.value)}
+          />
+          <span className="text-xs text-muted-foreground tabular-nums">
+            {formatNumber(rows.length)} of {formatNumber(list.total)} accounts
+          </span>
+        </div>
+        <div className="mt-4">
+          <UsersTable rows={rows} windowDays={list.windowDays} onOpen={onOpenAccount} />
+        </div>
+        <p className="mt-3 text-sm text-muted-foreground">
+          Every account the service holds, most recently active first, whether or not it ever
+          touched the hosted tier — active days count the window's UTC days with hosted voice or
+          attention. A row opens the account's own page.
+          {list.total > list.rows.length
+            ? ` Only the ${formatNumber(list.rows.length)} most recently active accounts are listed here, and the filter searches those alone.`
+            : ""}
+        </p>
+      </div>
+    </main>
+  );
+}
+
+function UsersScreen({
+  hideAdmins,
+  onHideAdminsChange,
+  account,
+  onSignOut,
+  onOpenAccount,
+  frame,
+  now,
+}: {
+  hideAdmins: boolean;
+  onHideAdminsChange: (hide: boolean) => void;
+  account: ViewerAccount | undefined;
+  onSignOut: () => Promise<void>;
+  onOpenAccount: (id: string) => void;
+  /** Applied around every answer but the gate's own cards, which stand alone. */
+  frame: (content: React.JSX.Element) => React.JSX.Element;
+  now: number;
+}): React.JSX.Element {
+  const [state, setState] = useState<UsersState>(() =>
+    signInChosenHere() ? { status: "loading" } : { status: "signed-out" },
+  );
+  const [refreshing, setRefreshing] = useState(false);
+  const inFlight = useRef<AbortController>(null);
+
+  // The same withdrawal the detail screen lands: this screen renders in the
+  // overview's place with a ready answer of its own, so the parent's sign-out
+  // alone would leave the roster on screen after the consent behind it left.
+  const signOut = async () => {
+    inFlight.current?.abort();
+    setRefreshing(false);
+    await onSignOut();
+    setState({ status: "signed-out" });
+  };
+
+  const load = useCallback(() => {
+    if (!signInChosenHere()) {
+      setState({ status: "signed-out" });
+      return;
+    }
+    inFlight.current?.abort();
+    const controller = new AbortController();
+    inFlight.current = controller;
+    setState((current) => (current.status === "ready" ? current : { status: "loading" }));
+    setRefreshing(true);
+    const path = hideAdmins
+      ? USERS_PATH
+      : `${USERS_PATH}?${ADMIN_METRICS_SCOPE_PARAM}=${ADMIN_METRICS_SCOPE.ALL}`;
+    void (async () => {
+      try {
+        const next = await readUsersState(
+          await fetch(path, {
+            headers: { accept: "application/json" },
+            signal: controller.signal,
+          }),
+        );
+        if (!controller.signal.aborted) setState(next);
+      } catch {
+        if (!controller.signal.aborted) {
+          setState({ status: "error", detail: ERROR_DETAIL.USERS });
+        }
+      } finally {
+        if (!controller.signal.aborted) setRefreshing(false);
+      }
+    })();
+  }, [hideAdmins]);
+
+  useEffect(() => {
+    load();
+    return () => inFlight.current?.abort();
+  }, [load]);
+
+  switch (state.status) {
+    case "loading":
+      return frame(<Centered title="Loading…">Reading the service's own tables.</Centered>);
+    case "signed-out":
+      return <SignInCard />;
+    case "forbidden":
+      return <ForbiddenCard email={account?.email} onSignOut={() => void signOut()} />;
+    case "error":
+      return frame(
+        <Centered title="Could not load">
+          {state.detail}
+          <div className="mt-6">
+            <button type="button" className={PLAIN_BUTTON} onClick={load} disabled={refreshing}>
+              {refreshing ? "Trying…" : "Try again"}
+            </button>
+          </div>
+        </Centered>,
+      );
+    case "ready":
+      return frame(
+        <UsersPage
+          list={state.list}
+          hideAdmins={hideAdmins}
+          onHideAdminsChange={onHideAdminsChange}
+          account={account}
+          onSignOut={() => void signOut()}
+          onOpenAccount={onOpenAccount}
+          refreshing={refreshing}
+          onRefresh={load}
+          now={now}
+        />,
+      );
+  }
 }
 
 function UserDetailScreen({
@@ -1177,12 +1642,15 @@ function UserDetailScreen({
   account,
   onSignOut,
   onBack,
+  frame,
   now,
 }: {
   id: string;
   account: ViewerAccount | undefined;
   onSignOut: () => Promise<void>;
   onBack: () => void;
+  /** Applied around every answer but the gate's own cards, which stand alone. */
+  frame: (content: React.JSX.Element) => React.JSX.Element;
   now: number;
 }): React.JSX.Element {
   const [state, setState] = useState<DetailState>(() =>
@@ -1234,7 +1702,7 @@ function UserDetailScreen({
         if (!controller.signal.aborted) setState(next);
       } catch {
         if (!controller.signal.aborted) {
-          setState({ status: "error", detail: ERROR_DETAIL.GENERIC });
+          setState({ status: "error", detail: ERROR_DETAIL.ACCOUNT });
         }
       } finally {
         if (!controller.signal.aborted) setRefreshing(false);
@@ -1249,24 +1717,24 @@ function UserDetailScreen({
 
   switch (state.status) {
     case "loading":
-      return <Centered title="Loading…">Reading the account's own rows.</Centered>;
+      return frame(<Centered title="Loading…">Reading the account's own rows.</Centered>);
     case "signed-out":
       return <SignInCard />;
     case "forbidden":
       return <ForbiddenCard email={account?.email} onSignOut={() => void signOut()} />;
     case "missing":
-      return (
+      return frame(
         <Centered title="No such account">
-          No account carries this id — it may have been deleted since the overview was read.
+          No account carries this id — it may have been deleted since its row was read.
           <div className="mt-6">
             <button type="button" className={PLAIN_BUTTON} onClick={onBack}>
-              Back to overview
+              Back to users
             </button>
           </div>
-        </Centered>
+        </Centered>,
       );
     case "error":
-      return (
+      return frame(
         <Centered title="Could not load">
           {state.detail}
           <div className="mt-6">
@@ -1274,10 +1742,10 @@ function UserDetailScreen({
               {refreshing ? "Trying…" : "Try again"}
             </button>
           </div>
-        </Centered>
+        </Centered>,
       );
     case "ready":
-      return (
+      return frame(
         <UserDetailPage
           detail={state.detail}
           account={account}
@@ -1286,7 +1754,7 @@ function UserDetailScreen({
           refreshing={refreshing}
           onRefresh={load}
           now={now}
-        />
+        />,
       );
   }
 }
@@ -1318,8 +1786,8 @@ export function AdminDashboard(): React.JSX.Element {
   const session = authClient.useSession();
   const account = session.data?.user;
 
-  // The address bar owns which view is open, so an account page can be
-  // reloaded, shared, and left with the browser's own back button.
+  // The address bar owns which view is open, so a tab or an account page can
+  // be reloaded, shared, and left with the browser's own back button.
   const [view, setView] = useState<AdminView>(viewFromLocation);
   useEffect(() => {
     const onPopState = () => setView(viewFromLocation());
@@ -1330,10 +1798,18 @@ export function AdminDashboard(): React.JSX.Element {
     window.history.pushState(null, "", accountHref(id));
     setView({ kind: "account", id });
   }, []);
-  const closeAccount = useCallback(() => {
-    window.history.pushState(null, "", window.location.pathname);
-    setView({ kind: "overview" });
+  const navigate = useCallback((tab: AdminTab) => {
+    window.history.pushState(null, "", tabHref(tab));
+    setView(tab === "users" ? { kind: "users" } : { kind: "dashboard" });
   }, []);
+
+  const [sidebarFolded, setSidebarFolded] = useState(sidebarLeftCollapsed);
+  const toggleSidebar = () => {
+    setSidebarFolded((current) => {
+      rememberSidebarCollapsed(!current);
+      return !current;
+    });
+  };
 
   const load = useCallback(() => {
     // A session earned elsewhere on the site does not open the dashboard by
@@ -1369,7 +1845,7 @@ export function AdminDashboard(): React.JSX.Element {
         if (!controller.signal.aborted) setState(next);
       } catch {
         if (!controller.signal.aborted) {
-          setState({ status: "error", detail: ERROR_DETAIL.GENERIC });
+          setState({ status: "error", detail: ERROR_DETAIL.METRICS });
         }
       } finally {
         if (!controller.signal.aborted) setRefreshing(false);
@@ -1378,10 +1854,10 @@ export function AdminDashboard(): React.JSX.Element {
   }, [hideAdmins]);
 
   useEffect(() => {
-    // The overview's read waits while an account page is open; coming back
+    // The dashboard's read waits while another view is open; coming back
     // re-runs it, which refreshes the numbers while the last answer stands
     // dimmed the way any refetch does.
-    if (view.kind !== "overview") return;
+    if (view.kind !== "dashboard") return;
     load();
     return () => inFlight.current?.abort();
   }, [load, view.kind]);
@@ -1398,17 +1874,51 @@ export function AdminDashboard(): React.JSX.Element {
     setState({ status: "signed-out" });
   };
 
+  const viewer: ViewerAccount | undefined = account
+    ? { name: account.name, email: account.email, image: account.image ?? undefined }
+    : undefined;
+
+  // The gate's cards — sign-in and the non-admin refusal — stand alone on
+  // every view: navigation drawn beside a consent card would pose as
+  // somewhere to go. Everything past the gate wears the sidebar, which is why
+  // the screens below take the shell as a frame to apply themselves, only
+  // around the answers that earn it. The content region is a div because the
+  // `main` landmark belongs to whatever stands inside it — a page's own root
+  // or a centered card's — and each render path stands exactly one.
+  const shell = (tab: AdminTab, content: React.JSX.Element) => (
+    <div className="flex min-h-screen">
+      <AdminSidebar
+        active={tab}
+        collapsed={sidebarFolded}
+        onToggle={toggleSidebar}
+        onNavigate={navigate}
+      />
+      <div className="min-w-0 flex-1">{content}</div>
+    </div>
+  );
+
   if (view.kind === "account") {
     return (
       <UserDetailScreen
         id={view.id}
-        account={
-          account
-            ? { name: account.name, email: account.email, image: account.image ?? undefined }
-            : undefined
-        }
+        account={viewer}
         onSignOut={signOut}
-        onBack={closeAccount}
+        onBack={() => navigate("users")}
+        frame={(content) => shell("users", content)}
+        now={now}
+      />
+    );
+  }
+
+  if (view.kind === "users") {
+    return (
+      <UsersScreen
+        hideAdmins={hideAdmins}
+        onHideAdminsChange={setHideAdmins}
+        account={viewer}
+        onSignOut={signOut}
+        onOpenAccount={openAccount}
+        frame={(content) => shell("users", content)}
         now={now}
       />
     );
@@ -1416,13 +1926,17 @@ export function AdminDashboard(): React.JSX.Element {
 
   switch (state.status) {
     case "loading":
-      return <Centered title="Loading…">Reading the service's own tables.</Centered>;
+      return shell(
+        "dashboard",
+        <Centered title="Loading…">Reading the service's own tables.</Centered>,
+      );
     case "signed-out":
       return <SignInCard />;
     case "forbidden":
       return <ForbiddenCard email={account?.email} onSignOut={() => void signOut()} />;
     case "error":
-      return (
+      return shell(
+        "dashboard",
         <Centered title="Could not load">
           {state.detail}
           <div className="mt-6">
@@ -1430,25 +1944,22 @@ export function AdminDashboard(): React.JSX.Element {
               {refreshing ? "Trying…" : "Try again"}
             </button>
           </div>
-        </Centered>
+        </Centered>,
       );
     case "ready":
-      return (
+      return shell(
+        "dashboard",
         <Dashboard
           metrics={state.metrics}
           hideAdmins={hideAdmins}
           onHideAdminsChange={setHideAdmins}
-          account={
-            account
-              ? { name: account.name, email: account.email, image: account.image ?? undefined }
-              : undefined
-          }
+          account={viewer}
           onSignOut={() => void signOut()}
           refreshing={refreshing}
           onRefresh={load}
           onOpenAccount={openAccount}
           now={now}
-        />
+        />,
       );
   }
 }
