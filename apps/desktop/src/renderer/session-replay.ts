@@ -1,3 +1,4 @@
+import type { Properties } from "posthog-js";
 import posthog from "posthog-js/dist/module.full.no-external";
 import type { SessionReplayBootstrap } from "#shared/contracts";
 
@@ -36,6 +37,57 @@ import type { SessionReplayBootstrap } from "#shared/contracts";
  * is indistinguishable from one that was never started.
  */
 export const POSTHOG_HOST = "https://us.i.posthog.com";
+
+/**
+ * What this window says its address is, in place of the one it has.
+ *
+ * The renderer is a `file://` page, so its real address is a path on the
+ * developer's own disk — a packaged install sits under `/Users/<name>/`, which
+ * names them. A logical address rather than an empty one, because these
+ * properties also feed the library's own URL matching, and matching against
+ * nothing is its own surprise.
+ */
+const RENDERER_ADDRESS = "app://luke/panel";
+
+/**
+ * The properties the library fills with this page's address. On a `file://`
+ * page every one of them is that path and nothing else, so each is replaced
+ * outright rather than inspected.
+ *
+ * Named one by one because a value set is what this repository keeps rather
+ * than a walk over whatever arrived — but unlike the counted events, nothing
+ * here is compile-enforced: a library that starts recording the address under
+ * a seventh name would carry it until this list learns the name too. That is
+ * the cost of the stock configuration, and it is why the list sits beside the
+ * comment explaining it.
+ */
+const ADDRESS_PROPERTIES = [
+  "$current_url",
+  "$pathname",
+  "$initial_current_url",
+  "$initial_pathname",
+  "$session_entry_url",
+  "$session_entry_pathname",
+] as const;
+
+/**
+ * Takes this machine's path out of everything on its way to the processor.
+ *
+ * Switching pageviews off withholds the address from one event and no others:
+ * the library attaches it to every event it sends and to the person's
+ * first-seen properties. This is where it actually stops.
+ *
+ * The referrer properties are left alone deliberately. A page opened as a file
+ * has no referrer, so the library records the same `$direct` it would for any
+ * unreferred visit, and that says nothing about the machine.
+ */
+function withoutLocalAddress(properties: Properties): Properties {
+  const scrubbed: Properties = { ...properties };
+  for (const property of ADDRESS_PROPERTIES) {
+    if (property in scrubbed) scrubbed[property] = RENDERER_ADDRESS;
+  }
+  return scrubbed;
+}
 
 /**
  * The project the recording is filed under, fixed at build time the way the
@@ -117,15 +169,28 @@ function startSessionReplay(bootstrap: SessionReplayBootstrap): void {
     api_host: POSTHOG_HOST,
     defaults: "2025-11-30",
     // The one place the library's defaults cannot stand: both of these carry
-    // the page's own address, and this page is a `file://` one, so its
-    // address names a path on the developer's own disk rather than anything
-    // about Luke.
+    // the page's own address, and this page is a `file://` one, so its address
+    // names a path on the developer's own disk rather than anything about
+    // Luke. Switching them off is only half of it — see `before_send`, which
+    // is what takes that path off everything else.
     capture_pageview: false,
     capture_pageleave: false,
     capture_exceptions: true,
     person_profiles: "always",
     persistence: "localStorage",
     debug: false,
+    get_current_url: () => RENDERER_ADDRESS,
+    before_send: (event) => {
+      if (!event) return event;
+      // `$set` and `$set_once` carry the address too, as the person's
+      // first-seen properties, where it would outlive every event holding it.
+      return {
+        ...event,
+        properties: withoutLocalAddress(event.properties),
+        ...(event.$set ? { $set: withoutLocalAddress(event.$set) } : undefined),
+        ...(event.$set_once ? { $set_once: withoutLocalAddress(event.$set_once) } : undefined),
+      };
+    },
   });
   // Stopping opts out, and that is written into the same storage this client
   // reads at launch — so without opting back in here, a run that had ever
