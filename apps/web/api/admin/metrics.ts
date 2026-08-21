@@ -1,11 +1,10 @@
-import type { AdminViewer } from "../../server/admin/admin-access.js";
 import {
   adminIntegrations,
   buildAdminMetrics,
   handleAdminMetrics,
 } from "../../server/admin/admin-metrics.js";
 import { readAdminMetricsSource } from "../../server/admin/admin-queries.js";
-import { auth } from "../../server/auth.js";
+import { resolveSessionViewer } from "../../server/admin/viewer.js";
 import { getDatabase } from "../../server/db/index.js";
 import { HOSTED_OPENAI_ENVIRONMENT } from "../../server/hosted/openai.js";
 import { POSTHOG_ENVIRONMENT } from "../../server/hosted/posthog.js";
@@ -25,16 +24,6 @@ function configured(name: string): boolean {
  */
 export default {
   fetch(request: Request): Promise<Response> {
-    const resolveViewer = async (incoming: Request): Promise<AdminViewer | undefined> => {
-      // A getSession failure must propagate: the handler turns a thrown viewer
-      // seam into a 503, where swallowing it here would misreport an auth
-      // outage as a signed-out 401 and offer a sign-in that cannot succeed.
-      const authenticated = await auth.api.getSession({ headers: incoming.headers });
-      const account = authenticated?.user;
-      if (!account) return undefined;
-      return { userId: account.id, role: account.role };
-    };
-
     const integrations = adminIntegrations({
       hostedTier: configured(HOSTED_OPENAI_ENVIRONMENT.API_KEY),
       analyticsRecording: configured(POSTHOG_ENVIRONMENT.PROJECT_API_KEY),
@@ -48,7 +37,7 @@ export default {
 
     return handleAdminMetrics({
       request,
-      resolveViewer,
+      resolveViewer: resolveSessionViewer,
       readMetrics: async (now, scope) =>
         buildAdminMetrics(
           await readAdminMetricsSource(getDatabase(), { now, integrations, scope }),

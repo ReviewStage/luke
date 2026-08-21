@@ -3,7 +3,7 @@ import type { createDatabase } from "../db/index.js";
 import { account, session, user } from "../db/schema.js";
 import { hostedUsage } from "../db/usage-schema.js";
 import { HOSTED_DAILY_LIMIT, HOSTED_METER, utcDayKey } from "../hosted/quota.js";
-import { USER_ROLE } from "./admin-access.js";
+import { isAdminRole, USER_ROLE } from "./admin-access.js";
 import {
   ADMIN_METRICS_WINDOW_DAYS,
   type AdminIntegration,
@@ -13,10 +13,11 @@ import {
   type AdminUsageDay,
   lastNDayKeys,
 } from "./admin-metrics.js";
+import type { AdminUserSource } from "./admin-user.js";
 import { ADMIN_METRICS_SCOPE, type AdminMetricsScope } from "./http.js";
 
-/** How many of the heaviest hosted-tier users the dashboard names. */
-export const ADMIN_TOP_USERS_LIMIT = 5;
+/** How many of the most active hosted-tier accounts the overview names. */
+export const ADMIN_TOP_USERS_LIMIT = 10;
 
 type Database = ReturnType<typeof createDatabase>;
 
@@ -131,10 +132,16 @@ async function readUsageMetrics(
       .from(hostedUsage)
       .innerJoin(user, eq(hostedUsage.userId, user.id))
       .where(and(gte(hostedUsage.day, windowStartDay), scopeCondition(scope))),
+    // Ordered by days present before volume spent: the table asks who shows
+    // up daily, and thirty quiet days outrank one heavy one. Volume breaks the
+    // ties that a short window makes common.
     database
       .select({
+        id: user.id,
         name: user.name,
         email: user.email,
+        activeDays: count(),
+        lastActiveDay: sql<string>`max(${hostedUsage.day})`,
         voiceCalls: sum(hostedUsage.voiceCalls),
         attentionReviews: sum(hostedUsage.attentionReviews),
       })
@@ -142,7 +149,10 @@ async function readUsageMetrics(
       .innerJoin(user, eq(hostedUsage.userId, user.id))
       .where(and(gte(hostedUsage.day, windowStartDay), scopeCondition(scope)))
       .groupBy(user.id, user.name, user.email)
-      .orderBy(desc(sql`sum(${hostedUsage.voiceCalls}) + sum(${hostedUsage.attentionReviews})`))
+      .orderBy(
+        desc(count()),
+        desc(sql`sum(${hostedUsage.voiceCalls}) + sum(${hostedUsage.attentionReviews})`),
+      )
       .limit(ADMIN_TOP_USERS_LIMIT),
   ]);
 
@@ -158,8 +168,11 @@ async function readUsageMetrics(
     const voiceCalls = toNumber(row.voiceCalls);
     const attentionReviews = toNumber(row.attentionReviews);
     return {
+      id: row.id,
       name: row.name,
       email: row.email,
+      activeDays: toNumber(row.activeDays),
+      lastActiveDay: row.lastActiveDay,
       voiceCalls,
       attentionReviews,
       total: voiceCalls + attentionReviews,
@@ -264,5 +277,101 @@ export async function readAdminMetricsSource(
     usage,
     reliability,
     systemHealth: { database: health, integrations: input.integrations },
+  };
+}
+
+/**
+ * Reads everything one account's page shows, or nothing when no user row
+ * carries the id. No probe and no empty fallback here: the detail page has no
+ * health card to report an outage on, so a database that does not answer is
+ * left to throw and become the handler's 503, where the metrics read instead
+ * degrades to a page that can say so.
+ */
+export async function readAdminUserSource(
+  database: Database,
+  input: { userId: string; now: number },
+): Promise<AdminUserSource | undefined> {
+  const dayKeys = lastNDayKeys(input.now, ADMIN_METRICS_WINDOW_DAYS);
+  const windowStartDay = dayKeys[0] ?? utcDayKey(input.now);
+
+  const [userRows, accountRows, windowRows, [allTimeRow], [quotaRow]] = await Promise.all([
+    database
+      .select({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        image: user.image,
+        role: user.role,
+        createdAt: user.createdAt,
+      })
+      .from(user)
+      .where(eq(user.id, input.userId))
+      .limit(1),
+    database
+      .select({ providerId: account.providerId })
+      .from(account)
+      .where(eq(account.userId, input.userId)),
+    database
+      .select({
+        day: hostedUsage.day,
+        voiceCalls: hostedUsage.voiceCalls,
+        attentionReviews: hostedUsage.attentionReviews,
+      })
+      .from(hostedUsage)
+      .where(and(eq(hostedUsage.userId, input.userId), gte(hostedUsage.day, windowStartDay))),
+    database
+      .select({
+        activeDays: count(),
+        firstActiveDay: sql<string | null>`min(${hostedUsage.day})`,
+        lastActiveDay: sql<string | null>`max(${hostedUsage.day})`,
+        voiceCalls: sum(hostedUsage.voiceCalls),
+        attentionReviews: sum(hostedUsage.attentionReviews),
+      })
+      .from(hostedUsage)
+      .where(eq(hostedUsage.userId, input.userId)),
+    database
+      .select({ value: count() })
+      .from(hostedUsage)
+      .where(
+        and(
+          eq(hostedUsage.userId, input.userId),
+          gte(hostedUsage.day, windowStartDay),
+          ceilingReached(),
+        ),
+      ),
+  ]);
+
+  const row = userRows[0];
+  if (!row) return undefined;
+
+  const byDay = new Map<string, AdminUsageDay>();
+  for (const usageRow of windowRows) {
+    byDay.set(usageRow.day, {
+      voiceCalls: usageRow.voiceCalls,
+      attentionReviews: usageRow.attentionReviews,
+    });
+  }
+
+  return {
+    account: {
+      id: row.id,
+      name: row.name,
+      email: row.email,
+      image: row.image,
+      admin: isAdminRole(row.role),
+      createdAt: row.createdAt.getTime(),
+      signInMethods: accountRows.map((linked) => linked.providerId),
+    },
+    usage: {
+      byDay,
+      allTime: {
+        activeDays: toNumber(allTimeRow?.activeDays),
+        firstActiveDay: allTimeRow?.firstActiveDay ?? null,
+        lastActiveDay: allTimeRow?.lastActiveDay ?? null,
+        voiceCalls: toNumber(allTimeRow?.voiceCalls),
+        attentionReviews: toNumber(allTimeRow?.attentionReviews),
+      },
+      quotaLimitedDaysWindow: toNumber(quotaRow?.value),
+    },
   };
 }

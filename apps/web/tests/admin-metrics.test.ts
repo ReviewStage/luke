@@ -166,6 +166,23 @@ test("a trend over an empty window is zero on both runs rather than absent", () 
   assert.equal(metrics.users.newInWindow, 0);
 });
 
+test("the most active accounts pass through the builder untouched", () => {
+  const topUsers = [
+    {
+      id: "user-9",
+      name: "Ada Lovelace",
+      email: "ada@example.com",
+      activeDays: 12,
+      lastActiveDay: "2026-08-17",
+      voiceCalls: 3,
+      attentionReviews: 40,
+      total: 43,
+    },
+  ];
+  const metrics = buildAdminMetrics(source({ usage: { ...source().usage, topUsers } }), NOON_UTC);
+  assert.deepEqual(metrics.featureUsage.topUsers, topUsers);
+});
+
 test("the daily ceilings are reported from the hosted quota, not restated", () => {
   const metrics = buildAdminMetrics(source(), NOON_UTC);
   assert.equal(metrics.reliability.voiceDailyLimit, HOSTED_DAILY_LIMIT[HOSTED_METER.VOICE_CALL]);

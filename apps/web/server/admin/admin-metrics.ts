@@ -67,14 +67,24 @@ export interface AdminSignInMethods {
 }
 
 /**
- * A heaviest user of the hosted tier over the window. This is the one place the
- * dashboard names an individual account, and it names it to the maintainer who
- * operates the service, from that service's own user row — the same two fields
- * the account already holds and the analytics person record already carries.
+ * A most-active account of the hosted tier over the window, ordered by the
+ * days it showed up rather than the volume it spent: the question the table
+ * answers is who lives in Luke daily, which a single heavy day cannot fake.
+ * The overview names an individual account here and nowhere else, and it
+ * names it to the maintainer who operates the service, from that service's
+ * own user row — the same fields the account already holds and the analytics
+ * person record already carries. The id is carried so the row can open the
+ * account's own page, and it goes back into the detail endpoint's gate,
+ * never into a rendered string.
  */
 export interface AdminTopUser {
+  id: string;
   name: string;
   email: string;
+  /** Window days with a hosted-usage row — the account showed up that day. */
+  activeDays: number;
+  /** The account's most recent active day inside the window, as YYYY-MM-DD. */
+  lastActiveDay: string;
   voiceCalls: number;
   attentionReviews: number;
   total: number;
@@ -214,12 +224,12 @@ export function lastNDayKeys(now: number, days: number): string[] {
   return keys;
 }
 
-function sum(values: readonly number[]): number {
+export function sum(values: readonly number[]): number {
   return values.reduce((total, value) => total + value, 0);
 }
 
 /** The last `days` of a windowed series beside the `days` before them. */
-function trailingTrend(counts: readonly number[], days: number): AdminTrend {
+export function trailingTrend(counts: readonly number[], days: number): AdminTrend {
   return {
     days,
     recent: sum(counts.slice(-days)),
