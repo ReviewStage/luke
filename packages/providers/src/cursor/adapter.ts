@@ -537,8 +537,10 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
       status,
       observedAt,
       // The Cursor app opens any cloud agent by id — the same address its own
-      // dashboard fires — so every cloud row wears the app's mark; the row's
-      // own press keeps the agent page Cursor reported.
+      // dashboard fires — so the row's own press and the app's mark carry
+      // that one address, the way a local Codex row and its ChatGPT mark
+      // share the thread's. The agent page URL Cursor also reports stays
+      // reachable inside the app; the pull request keeps its own chip.
       applications: [cursorApplication(cursorCloudAgentLink(agent.id))],
       canReceiveMessage: this.#agentTakesMessages(agent, run),
       // The two controls are exclusive by construction: an active run offers
@@ -556,7 +558,7 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
         // a run that has pushed nothing still has a starting point worth naming.
         ...(run?.branch ? { branch: run.branch } : agent.ref ? { branch: agent.ref } : undefined),
         ...(status === SESSION_STATUS.ERROR ? { error: CURSOR_RUN_FAILED_MESSAGE } : undefined),
-        ...(agent.url ? { link: agent.url } : undefined),
+        link: cursorCloudAgentLink(agent.id),
         ...(run?.pullRequestUrl ? { change: run.pullRequestUrl } : undefined),
       },
     };

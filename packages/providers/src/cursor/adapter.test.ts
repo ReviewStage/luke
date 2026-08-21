@@ -288,11 +288,11 @@ test("observes a running agent under the name Cursor gave it", async () => {
   assert.deepEqual(observations[0]?.detail, {
     repository: "luke",
     branch: TEST_RUN_BRANCH,
-    link: "https://cursor.com/agents/agent-running",
+    link: "cursor://anysphere.cursor-deeplink/background-agent?bcId=agent-running",
     change: TEST_PULL_REQUEST_URL,
   });
-  // The row's own press keeps the agent page Cursor reported; the app mark
-  // carries the in-app address the same agent answers to.
+  // The row's own press and the app mark share the one in-app address, the
+  // way a local Codex row and its ChatGPT mark share the thread's.
   assert.deepEqual(observations[0]?.applications, [
     {
       id: SESSION_APPLICATION_ID.CURSOR,

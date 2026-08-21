@@ -44,7 +44,7 @@ What Luke reads:
 | Codex | Cloud | The user's own Codex CLI, under its ChatGPT login | — | — | `chatgpt.com` task page |
 | Conductor | Cloud | `api.conductor.build`, under an API key | Final assistant message, while idle | — | `conductor:` deep link |
 | Cursor | Local | Agent transcripts under `~/.cursor/projects/` | — | Yes | `cursor:` chat deep link, for the app's own chats |
-| Cursor | Cloud | `api.cursor.com`, under `CURSOR_API_KEY` | Run result | — | Agent URL |
+| Cursor | Cloud | `api.cursor.com`, under `CURSOR_API_KEY` | Run result | — | `cursor:` deep link into the app |
 | Devin | Local | The Devin CLI's session database | — | Yes | — |
 | Devin | Cloud | `api.devin.ai`, under a `cog_` access token | — | — | Session URL |
 | Gemini CLI | Local | Session recordings under `~/.gemini/tmp/<project>/chats/` | Last agent message | Yes | — |
@@ -131,9 +131,11 @@ The bounds the tables cannot carry:
 - **Cursor, cloud** — cancel and archive are never offered at once; a message
   is a follow-up run, only after the latest run finished on an unarchived
   agent; the new agent's task is required because Cursor cannot make an idle
-  workspace. The row's press keeps the agent page Cursor reported, and the
-  Cursor app mark carries the in-app address the same agent answers to — see
-  [Apps](#apps).
+  workspace. A row opens in the Cursor app — its press and its Cursor app
+  mark share the one `/background-agent` address the app's own dashboard
+  fires, composed from the observed agent id — and the agent page URL Cursor
+  also reports is not offered, because two presses should not answer one row
+  differently — see [Apps](#apps).
 - **Devin** — the local database has no address, no recap, and no error
   detail; the cloud archive is offered only once the turn positively settled.
 - **Gemini CLI** — bounded tails only (honoring `GEMINI_CLI_HOME`), never
