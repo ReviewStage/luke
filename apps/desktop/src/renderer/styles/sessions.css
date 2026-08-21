@@ -166,6 +166,7 @@
   padding: 0 8px;
   border-left: 1px solid var(--hairline);
   border-radius: 0 10px 10px 0;
+  background: none;
   color: var(--text-tertiary);
   place-items: center;
   transition:
