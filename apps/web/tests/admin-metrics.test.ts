@@ -4,6 +4,7 @@ import type { AdminViewer } from "../server/admin/admin-access";
 import {
   ADMIN_INTEGRATION,
   ADMIN_METRICS_WINDOW_DAYS,
+  ADMIN_TREND_DAYS,
   type AdminMetrics,
   type AdminMetricsSource,
   adminIntegrations,
@@ -26,14 +27,12 @@ function source(overrides: Partial<AdminMetricsSource> = {}): AdminMetricsSource
   return {
     users: {
       total: 0,
-      newLast7Days: 0,
-      newLast30Days: 0,
       activeSessions: 0,
       activeSessionUsers: 0,
       signInMethods: { google: 0, github: 0, other: 0 },
       signupsByDay: new Map(),
     },
-    usage: { byDay: new Map(), activeUsersToday: 0, topUsers: [] },
+    usage: { byDay: new Map(), activeUsersToday: 0, activeUsersWindow: 0, topUsers: [] },
     reliability: { quotaLimitedUserDaysToday: 0, quotaLimitedUserDaysWindow: 0 },
     systemHealth: { database: { reachable: true, latencyMs: 4 }, integrations: [] },
     ...overrides,
@@ -56,6 +55,7 @@ test("the usage series is zero-filled and totalled across the window", () => {
           ["2026-08-10", { voiceCalls: 5, attentionReviews: 0 }],
         ]),
         activeUsersToday: 2,
+        activeUsersWindow: 9,
         topUsers: [],
       },
     }),
@@ -67,6 +67,7 @@ test("the usage series is zero-filled and totalled across the window", () => {
   assert.equal(metrics.featureUsage.attentionReviewsToday, 41);
   assert.equal(metrics.featureUsage.voiceCallsWindow, 8);
   assert.equal(metrics.featureUsage.attentionReviewsWindow, 41);
+  assert.equal(metrics.featureUsage.activeUsersWindow, 9);
   const emptyDay = metrics.featureUsage.daily.find((day) => day.day === "2026-08-01");
   assert.deepEqual(emptyDay, { day: "2026-08-01", voiceCalls: 0, attentionReviews: 0 });
 });
@@ -89,6 +90,80 @@ test("the signup series is zero-filled over the same window", () => {
   assert.equal(metrics.users.dailySignups.length, ADMIN_METRICS_WINDOW_DAYS);
   assert.equal(metrics.users.dailySignups[0]?.count, 1);
   assert.equal(metrics.users.dailySignups.at(-1)?.count, 2);
+});
+
+test("the window's signup count is the series' own sum, never a second reading", () => {
+  const metrics = buildAdminMetrics(
+    source({
+      users: {
+        ...source().users,
+        signupsByDay: new Map([
+          ["2026-08-17", 2],
+          ["2026-08-02", 5],
+          ["2026-07-19", 1],
+          // Outside the window: the series drops it, so the total must too.
+          ["2026-07-18", 99],
+        ]),
+      },
+    }),
+    NOON_UTC,
+  );
+  assert.equal(
+    metrics.users.newInWindow,
+    metrics.users.dailySignups.reduce((total, day) => total + day.count, 0),
+  );
+  assert.equal(metrics.users.newInWindow, 8);
+});
+
+test("the window holds both runs of a trend, so `prior` is never a truncated one", () => {
+  assert.ok(ADMIN_TREND_DAYS * 2 <= ADMIN_METRICS_WINDOW_DAYS);
+});
+
+test("a trend is the trailing run beside the run immediately before it", () => {
+  const metrics = buildAdminMetrics(
+    source({
+      users: {
+        ...source().users,
+        signupsByDay: new Map([
+          // The recent run is 2026-08-11 through 2026-08-17; the prior run is
+          // the seven days before it, and 2026-08-03 falls outside both.
+          ["2026-08-17", 3],
+          ["2026-08-11", 1],
+          ["2026-08-10", 6],
+          ["2026-08-04", 2],
+          ["2026-08-03", 50],
+        ]),
+      },
+      usage: {
+        byDay: new Map([
+          ["2026-08-12", { voiceCalls: 4, attentionReviews: 1 }],
+          ["2026-08-05", { voiceCalls: 2, attentionReviews: 0 }],
+        ]),
+        activeUsersToday: 0,
+        activeUsersWindow: 3,
+        topUsers: [],
+      },
+    }),
+    NOON_UTC,
+  );
+
+  assert.deepEqual(metrics.users.signupTrend, { days: ADMIN_TREND_DAYS, recent: 4, prior: 8 });
+  assert.deepEqual(metrics.featureUsage.usageTrend, {
+    days: ADMIN_TREND_DAYS,
+    recent: 5,
+    prior: 2,
+  });
+});
+
+test("a trend over an empty window is zero on both runs rather than absent", () => {
+  const metrics = buildAdminMetrics(source(), NOON_UTC);
+  assert.deepEqual(metrics.users.signupTrend, { days: ADMIN_TREND_DAYS, recent: 0, prior: 0 });
+  assert.deepEqual(metrics.featureUsage.usageTrend, {
+    days: ADMIN_TREND_DAYS,
+    recent: 0,
+    prior: 0,
+  });
+  assert.equal(metrics.users.newInWindow, 0);
 });
 
 test("the daily ceilings are reported from the hosted quota, not restated", () => {

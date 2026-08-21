@@ -1,13 +1,18 @@
 import { createAuthClient } from "better-auth/react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   AdminDailySignups,
   AdminDailyUsage,
   AdminIntegration,
   AdminMetrics,
   AdminTopUser,
+  AdminTrend,
 } from "../server/admin/admin-metrics";
-import { ADMIN_METRICS_SCOPE, ADMIN_METRICS_SCOPE_PARAM } from "../server/admin/http";
+import {
+  ADMIN_HTTP_STATUS,
+  ADMIN_METRICS_SCOPE,
+  ADMIN_METRICS_SCOPE_PARAM,
+} from "../server/admin/http";
 import { accountInitials } from "./account-initials";
 import { GitHubMark, GoogleMark } from "./account-marks";
 import { AUTH_BUTTON } from "./auth-surface";
@@ -24,7 +29,9 @@ const METRICS_PATH = "/api/admin/metrics";
  * already signed in — on a session the maintainer never chose to spend here.
  * The dashboard opens only after a sign-in pressed on this page once; the
  * press is remembered locally, and from then on an existing session resumes
- * the way it does on any signed-in page.
+ * the way it does on any signed-in page. Signing out takes the press back with
+ * the session, or the next cookie earned elsewhere on the site would open the
+ * dashboard on a consent the maintainer gave once and then withdrew.
  */
 const SIGN_IN_CHOSEN_STORAGE_KEY = "luke-admin-sign-in-chosen";
 
@@ -44,6 +51,15 @@ function rememberSignInChosen(): void {
   }
 }
 
+function forgetSignInChosen(): void {
+  try {
+    window.localStorage.removeItem(SIGN_IN_CHOSEN_STORAGE_KEY);
+  } catch {
+    // Storage refused: the key outlives the session, and the card is the only
+    // thing lost — the endpoint still answers 401 to a request with no cookie.
+  }
+}
+
 /** The signed-in account the header names; read from the session, shown as-is. */
 interface ViewerAccount {
   name: string;
@@ -51,8 +67,9 @@ interface ViewerAccount {
   image: string | undefined;
 }
 
-const SIGN_OUT_BUTTON =
-  "cursor-pointer rounded-md border border-border bg-card px-3 py-1.5 text-sm font-medium transition-colors duration-150 hover:bg-muted";
+/** The page's one button treatment: sign out, refresh, and try again all wear it. */
+const PLAIN_BUTTON =
+  "cursor-pointer rounded-md border border-border bg-card px-3 py-1.5 text-sm font-medium transition-colors duration-150 hover:bg-muted disabled:cursor-default disabled:opacity-60 disabled:hover:bg-card";
 
 /** What the fetch resolved to: the gate's refusals stay distinct here. */
 type DashboardState =
@@ -92,6 +109,44 @@ function formatDayTick(day: string): string {
   });
 }
 
+/** How often the header's age re-reads the clock, so a page left open says so. */
+const AGE_TICK_MS = 30_000;
+
+function formatAge(ageMs: number): string {
+  const minutes = Math.floor(ageMs / 60_000);
+  if (minutes < 1) return "moments ago";
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} h ago`;
+  return `${Math.floor(hours / 24)} d ago`;
+}
+
+const TREND_TONE = {
+  UP: "text-complete",
+  DOWN: "text-attention",
+  FLAT: "text-muted-foreground",
+} as const;
+
+function trendTone(trend: AdminTrend): string {
+  if (trend.recent > trend.prior) return TREND_TONE.UP;
+  if (trend.recent < trend.prior) return TREND_TONE.DOWN;
+  return TREND_TONE.FLAT;
+}
+
+/**
+ * How the run moved against the one before it, as a percentage where there is
+ * one to state. A prior run of zero has none — every rise from nothing is
+ * infinite — so the move stands as its own count rather than a figure that
+ * reads as precision it does not have.
+ */
+function formatTrendMove(trend: AdminTrend): string {
+  const delta = trend.recent - trend.prior;
+  if (delta === 0) return "flat";
+  const sign = delta > 0 ? "+" : "−";
+  if (trend.prior === 0) return `${sign}${formatNumber(Math.abs(delta))}`;
+  return `${sign}${Math.abs(Math.round((delta / trend.prior) * 100))}%`;
+}
+
 function StatCard({
   label,
   value,
@@ -117,16 +172,61 @@ function SectionHeading({ children }: { children: React.ReactNode }): React.JSX.
 }
 
 /**
+ * A chart's own heading: what it draws on the left, and how its trailing run
+ * moved against the run before it on the right. The comparison sits with the
+ * bars rather than on a card of its own, because it is read as a caption on
+ * the shape above it.
+ */
+function ChartHeading({ label, trend }: { label: string; trend: AdminTrend }): React.JSX.Element {
+  return (
+    <div className="mb-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-xs">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="inline-flex items-baseline gap-1.5">
+        <span className={`font-medium tabular-nums ${trendTone(trend)}`}>
+          {formatTrendMove(trend)}
+        </span>
+        <span className="text-muted-foreground">
+          {formatNumber(trend.recent)} in the last {trend.days} days, against{" "}
+          {formatNumber(trend.prior)} before
+        </span>
+      </span>
+    </div>
+  );
+}
+
+/** The window's own ends, so the bars above them are anchored in time. */
+function ChartAxis({ daily }: { daily: readonly { day: string }[] }): React.JSX.Element | null {
+  const first = daily[0]?.day;
+  const last = daily[daily.length - 1]?.day;
+  if (first === undefined || last === undefined) return null;
+  return (
+    <div className="mt-2 flex justify-between font-mono text-[10px] text-muted-foreground">
+      <span>{formatDayTick(first)}</span>
+      <span>{formatDayTick(last)}</span>
+    </div>
+  );
+}
+
+/**
  * A trailing-window bar chart drawn from divs rather than a charting library:
  * the series is small and the page ships no dependency for it. Voice and
  * attention stack so one bar reads as a day's total while its split stays
  * visible; a title carries the exact numbers for a pointer, and the whole
  * series is described once for a reader.
  */
-function UsageChart({ daily }: { daily: readonly AdminDailyUsage[] }): React.JSX.Element {
+function UsageChart({
+  daily,
+  trend,
+}: {
+  daily: readonly AdminDailyUsage[];
+  trend: AdminTrend;
+}): React.JSX.Element {
   const max = Math.max(1, ...daily.map((day) => day.voiceCalls + day.attentionReviews));
+  const voiceTotal = daily.reduce((total, day) => total + day.voiceCalls, 0);
+  const attentionTotal = daily.reduce((total, day) => total + day.attentionReviews, 0);
   return (
     <div className="rounded-lg border border-border bg-card p-5">
+      <ChartHeading label="Hosted-tier calls per day" trend={trend} />
       <div className="mb-4 flex items-center gap-4 text-xs text-muted-foreground">
         <span className="inline-flex items-center gap-1.5">
           <span className="inline-block size-2.5 rounded-[2px] bg-primary" aria-hidden="true" />
@@ -140,7 +240,7 @@ function UsageChart({ daily }: { daily: readonly AdminDailyUsage[] }): React.JSX
       <div
         className="flex h-40 items-end gap-[3px]"
         role="img"
-        aria-label={`Daily hosted-tier usage across the last ${daily.length} days.`}
+        aria-label={`Daily hosted-tier usage across the last ${daily.length} days: ${formatNumber(voiceTotal)} voice calls and ${formatNumber(attentionTotal)} attention reviews.`}
       >
         {daily.map((day) => {
           const total = day.voiceCalls + day.attentionReviews;
@@ -163,23 +263,27 @@ function UsageChart({ daily }: { daily: readonly AdminDailyUsage[] }): React.JSX
           );
         })}
       </div>
-      <div className="mt-2 flex justify-between font-mono text-[10px] text-muted-foreground">
-        <span>{daily.length > 0 ? formatDayTick(daily[0]?.day ?? "") : ""}</span>
-        <span>{daily.length > 0 ? formatDayTick(daily[daily.length - 1]?.day ?? "") : ""}</span>
-      </div>
+      <ChartAxis daily={daily} />
     </div>
   );
 }
 
-function SignupsChart({ daily }: { daily: readonly AdminDailySignups[] }): React.JSX.Element {
+function SignupsChart({
+  daily,
+  trend,
+}: {
+  daily: readonly AdminDailySignups[];
+  trend: AdminTrend;
+}): React.JSX.Element {
   const max = Math.max(1, ...daily.map((day) => day.count));
+  const total = daily.reduce((sum, day) => sum + day.count, 0);
   return (
     <div className="rounded-lg border border-border bg-card p-5">
-      <div className="mb-4 text-xs text-muted-foreground">New accounts per day</div>
+      <ChartHeading label="New accounts per day" trend={trend} />
       <div
         className="flex h-28 items-end gap-[3px]"
         role="img"
-        aria-label={`New accounts per day across the last ${daily.length} days.`}
+        aria-label={`New accounts per day across the last ${daily.length} days: ${formatNumber(total)} in total.`}
       >
         {daily.map((day) => (
           <div
@@ -198,6 +302,7 @@ function SignupsChart({ daily }: { daily: readonly AdminDailySignups[] }): React
           </div>
         ))}
       </div>
+      <ChartAxis daily={daily} />
     </div>
   );
 }
@@ -406,12 +511,18 @@ function Dashboard({
   onHideAdminsChange,
   account,
   onSignOut,
+  refreshing,
+  onRefresh,
+  now,
 }: {
   metrics: AdminMetrics;
   hideAdmins: boolean;
   onHideAdminsChange: (hide: boolean) => void;
   account: ViewerAccount | undefined;
   onSignOut: () => void;
+  refreshing: boolean;
+  onRefresh: () => void;
+  now: number;
 }): React.JSX.Element {
   const providerTotal =
     metrics.users.signInMethods.google +
@@ -438,9 +549,16 @@ function Dashboard({
             />
             Hide admins
           </label>
-          <span className="font-mono text-xs text-muted-foreground">
-            {metrics.windowDays}-day window · generated {formatTimestamp(metrics.generatedAt)} UTC
+          <span
+            className="font-mono text-xs text-muted-foreground"
+            title={`${formatTimestamp(metrics.generatedAt)} UTC`}
+          >
+            {metrics.windowDays}-day window · generated{" "}
+            {formatAge(Math.max(0, now - metrics.generatedAt))}
           </span>
+          <button type="button" className={PLAIN_BUTTON} onClick={onRefresh} disabled={refreshing}>
+            {refreshing ? "Refreshing…" : "Refresh"}
+          </button>
           {account ? (
             <>
               <span className="h-8 w-px bg-border" aria-hidden="true" />
@@ -450,132 +568,141 @@ function Dashboard({
         </div>
       </header>
 
-      <SectionHeading>User activity</SectionHeading>
-      <div className="grid grid-cols-2 gap-3 min-[720px]:grid-cols-4">
-        <StatCard label="Total accounts" value={formatNumber(metrics.users.total)} />
-        <StatCard
-          label="New · 7 days"
-          value={formatNumber(metrics.users.newLast7Days)}
-          hint={`${formatNumber(metrics.users.newLast30Days)} in 30 days`}
-        />
-        <StatCard
-          label="Active sessions"
-          value={formatNumber(metrics.users.activeSessions)}
-          hint={`${formatNumber(metrics.users.activeSessionUsers)} distinct accounts`}
-        />
-        <StatCard
-          label="Active today"
-          value={formatNumber(metrics.featureUsage.activeUsersToday)}
-          hint="accounts using the hosted tier"
-        />
-      </div>
-      <div className="mt-3 grid gap-3 min-[720px]:grid-cols-[1.6fr_1fr]">
-        <SignupsChart daily={metrics.users.dailySignups} />
-        <div className="rounded-lg border border-border bg-card p-5">
-          <div className="mb-4 text-xs text-muted-foreground">Linked sign-in methods</div>
-          <div className="grid gap-3">
-            <ProviderBar
-              label="GitHub"
-              value={metrics.users.signInMethods.github}
-              total={providerTotal}
-            />
-            <ProviderBar
-              label="Google"
-              value={metrics.users.signInMethods.google}
-              total={providerTotal}
-            />
-            {metrics.users.signInMethods.other > 0 ? (
+      {/* A refetch dims the answer already on screen rather than replacing it:
+          the numbers below stay the last ones actually read, and the dimming
+          says so while the next read is in flight. */}
+      <div
+        className="transition-opacity duration-150 data-[busy=true]:opacity-50"
+        data-busy={refreshing}
+        aria-busy={refreshing}
+      >
+        <SectionHeading>User activity</SectionHeading>
+        <div className="grid grid-cols-2 gap-3 min-[720px]:grid-cols-4">
+          <StatCard label="Total accounts" value={formatNumber(metrics.users.total)} />
+          <StatCard
+            label={`New · ${metrics.users.signupTrend.days} days`}
+            value={formatNumber(metrics.users.signupTrend.recent)}
+            hint={`${formatNumber(metrics.users.newInWindow)} in ${metrics.windowDays} days`}
+          />
+          <StatCard
+            label="Active sessions"
+            value={formatNumber(metrics.users.activeSessions)}
+            hint={`${formatNumber(metrics.users.activeSessionUsers)} distinct accounts`}
+          />
+          <StatCard
+            label="Active today"
+            value={formatNumber(metrics.featureUsage.activeUsersToday)}
+            hint={`${formatNumber(metrics.featureUsage.activeUsersWindow)} accounts in ${metrics.windowDays} days`}
+          />
+        </div>
+        <div className="mt-3 grid gap-3 min-[720px]:grid-cols-[1.6fr_1fr]">
+          <SignupsChart daily={metrics.users.dailySignups} trend={metrics.users.signupTrend} />
+          <div className="rounded-lg border border-border bg-card p-5">
+            <div className="mb-4 text-xs text-muted-foreground">Linked sign-in methods</div>
+            <div className="grid gap-3">
               <ProviderBar
-                label="Other"
-                value={metrics.users.signInMethods.other}
+                label="GitHub"
+                value={metrics.users.signInMethods.github}
                 total={providerTotal}
               />
-            ) : null}
+              <ProviderBar
+                label="Google"
+                value={metrics.users.signInMethods.google}
+                total={providerTotal}
+              />
+              {metrics.users.signInMethods.other > 0 ? (
+                <ProviderBar
+                  label="Other"
+                  value={metrics.users.signInMethods.other}
+                  total={providerTotal}
+                />
+              ) : null}
+            </div>
           </div>
         </div>
-      </div>
 
-      <SectionHeading>Feature usage · hosted tier</SectionHeading>
-      <div className="grid grid-cols-2 gap-3 min-[720px]:grid-cols-4">
-        <StatCard
-          label="Voice · today"
-          value={formatNumber(metrics.featureUsage.voiceCallsToday)}
-          hint={`${formatNumber(metrics.featureUsage.voiceCallsWindow)} in ${metrics.windowDays} days`}
-        />
-        <StatCard
-          label="Attention · today"
-          value={formatNumber(metrics.featureUsage.attentionReviewsToday)}
-          hint={`${formatNumber(metrics.featureUsage.attentionReviewsWindow)} in ${metrics.windowDays} days`}
-        />
-        <StatCard
-          label="Voice ceiling"
-          value={formatNumber(metrics.reliability.voiceDailyLimit)}
-          hint="calls per account per day"
-        />
-        <StatCard
-          label="Attention ceiling"
-          value={formatNumber(metrics.reliability.attentionDailyLimit)}
-          hint="reviews per account per day"
-        />
-      </div>
-      <div className="mt-3">
-        <UsageChart daily={metrics.featureUsage.daily} />
-      </div>
-      <SectionHeading>Heaviest hosted-tier accounts</SectionHeading>
-      <TopUsersTable users={metrics.featureUsage.topUsers} />
-
-      <SectionHeading>Reliability</SectionHeading>
-      <div className="grid grid-cols-2 gap-3">
-        <StatCard
-          label="Throttled account-days · today"
-          value={formatNumber(metrics.reliability.quotaLimitedUserDaysToday)}
-          hint="an account that reached a daily ceiling"
-        />
-        <StatCard
-          label={`Throttled account-days · ${metrics.windowDays} days`}
-          value={formatNumber(metrics.reliability.quotaLimitedUserDaysWindow)}
-        />
-      </div>
-      <p className="mt-3 text-sm text-muted-foreground">
-        A hosted request that reaches a daily ceiling is refused with{" "}
-        <code className="font-mono text-xs">quota-exhausted</code>; the count above is the closest
-        rejection signal the service's own tables hold. Per-request error rates and client-side
-        failures are recorded as product-analytics events, which live with the analytics processor
-        rather than in this database.
-      </p>
-
-      <SectionHeading>System health</SectionHeading>
-      <div className="grid gap-3 min-[720px]:grid-cols-[1fr_1.4fr]">
-        <div className="rounded-lg border border-border bg-card px-5 py-4">
-          <div className="font-mono text-xs tracking-[0.2px] text-muted-foreground uppercase">
-            Database
-          </div>
-          <div
-            className="mt-2 inline-flex items-center gap-2 text-xl font-semibold"
-            data-tone={db.reachable ? "complete" : "attention"}
-          >
-            <span
-              className="inline-block size-2.5 rounded-full data-[on=true]:bg-complete data-[on=false]:bg-attention"
-              data-on={db.reachable}
-              aria-hidden="true"
-            />
-            <span className={db.reachable ? "text-complete" : "text-attention"}>
-              {db.reachable ? "Reachable" : "Unreachable"}
-            </span>
-          </div>
-          <div className="mt-1 text-sm text-muted-foreground">
-            probe round-trip {formatNumber(db.latencyMs)} ms
-          </div>
+        <SectionHeading>Feature usage · hosted tier</SectionHeading>
+        <div className="grid grid-cols-2 gap-3 min-[720px]:grid-cols-4">
+          <StatCard
+            label="Voice · today"
+            value={formatNumber(metrics.featureUsage.voiceCallsToday)}
+            hint={`${formatNumber(metrics.featureUsage.voiceCallsWindow)} in ${metrics.windowDays} days`}
+          />
+          <StatCard
+            label="Attention · today"
+            value={formatNumber(metrics.featureUsage.attentionReviewsToday)}
+            hint={`${formatNumber(metrics.featureUsage.attentionReviewsWindow)} in ${metrics.windowDays} days`}
+          />
+          <StatCard
+            label="Voice ceiling"
+            value={formatNumber(metrics.reliability.voiceDailyLimit)}
+            hint="calls per account per day"
+          />
+          <StatCard
+            label="Attention ceiling"
+            value={formatNumber(metrics.reliability.attentionDailyLimit)}
+            hint="reviews per account per day"
+          />
         </div>
-        <div className="rounded-lg border border-border bg-card px-5 py-4">
-          <div className="mb-1 font-mono text-xs tracking-[0.2px] text-muted-foreground uppercase">
-            Integrations
+        <div className="mt-3">
+          <UsageChart daily={metrics.featureUsage.daily} trend={metrics.featureUsage.usageTrend} />
+        </div>
+        <SectionHeading>Heaviest hosted-tier accounts</SectionHeading>
+        <TopUsersTable users={metrics.featureUsage.topUsers} />
+
+        <SectionHeading>Reliability</SectionHeading>
+        <div className="grid grid-cols-2 gap-3">
+          <StatCard
+            label="Throttled account-days · today"
+            value={formatNumber(metrics.reliability.quotaLimitedUserDaysToday)}
+            hint="an account that reached a daily ceiling"
+          />
+          <StatCard
+            label={`Throttled account-days · ${metrics.windowDays} days`}
+            value={formatNumber(metrics.reliability.quotaLimitedUserDaysWindow)}
+          />
+        </div>
+        <p className="mt-3 text-sm text-muted-foreground">
+          A hosted request that reaches a daily ceiling is refused with{" "}
+          <code className="font-mono text-xs">quota-exhausted</code>; the count above is the closest
+          rejection signal the service's own tables hold. Per-request error rates and client-side
+          failures are recorded as product-analytics events, which live with the analytics processor
+          rather than in this database.
+        </p>
+
+        <SectionHeading>System health</SectionHeading>
+        <div className="grid gap-3 min-[720px]:grid-cols-[1fr_1.4fr]">
+          <div className="rounded-lg border border-border bg-card px-5 py-4">
+            <div className="font-mono text-xs tracking-[0.2px] text-muted-foreground uppercase">
+              Database
+            </div>
+            <div
+              className="mt-2 inline-flex items-center gap-2 text-xl font-semibold"
+              data-tone={db.reachable ? "complete" : "attention"}
+            >
+              <span
+                className="inline-block size-2.5 rounded-full data-[on=true]:bg-complete data-[on=false]:bg-attention"
+                data-on={db.reachable}
+                aria-hidden="true"
+              />
+              <span className={db.reachable ? "text-complete" : "text-attention"}>
+                {db.reachable ? "Reachable" : "Unreachable"}
+              </span>
+            </div>
+            <div className="mt-1 text-sm text-muted-foreground">
+              probe round-trip {formatNumber(db.latencyMs)} ms
+            </div>
           </div>
-          <ul className="m-0 list-none p-0">
-            {metrics.systemHealth.integrations.map((integration) => (
-              <IntegrationRow key={integration.key} integration={integration} />
-            ))}
-          </ul>
+          <div className="rounded-lg border border-border bg-card px-5 py-4">
+            <div className="mb-1 font-mono text-xs tracking-[0.2px] text-muted-foreground uppercase">
+              Integrations
+            </div>
+            <ul className="m-0 list-none p-0">
+              {metrics.systemHealth.integrations.map((integration) => (
+                <IntegrationRow key={integration.key} integration={integration} />
+              ))}
+            </ul>
+          </div>
         </div>
       </div>
     </div>
@@ -662,6 +789,32 @@ function Centered({
   );
 }
 
+/** What one answer from the metrics endpoint means, with the gate's refusals kept distinct. */
+async function readDashboardState(response: Response): Promise<DashboardState> {
+  // A followed cross-origin redirect means something sat in front of the API —
+  // a preview's deployment protection is the usual culprit — so the body is a
+  // login page, not JSON.
+  if (response.redirected) return { status: "error", detail: ERROR_DETAIL.PROTECTED };
+  if (response.status === ADMIN_HTTP_STATUS.UNAUTHORIZED) return { status: "signed-out" };
+  if (response.status === ADMIN_HTTP_STATUS.FORBIDDEN) return { status: "forbidden" };
+  if (response.status === ADMIN_HTTP_STATUS.SERVICE_UNAVAILABLE) {
+    return { status: "error", detail: ERROR_DETAIL.UNAVAILABLE };
+  }
+  if (!response.ok) return { status: "error", detail: ERROR_DETAIL.GENERIC };
+  // SAFETY: a 200 from the admin metrics endpoint is an AdminMetrics body by its contract.
+  return { status: "ready", metrics: (await response.json()) as AdminMetrics };
+}
+
+/** A clock of its own, so the header's age stays true without refetching to learn it. */
+function useNow(intervalMs: number): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), intervalMs);
+    return () => window.clearInterval(timer);
+  }, [intervalMs]);
+  return now;
+}
+
 export function AdminDashboard(): React.JSX.Element {
   // A first visit is signed-out from the very first frame: it never fetches,
   // so a loading state would pose as a request that is not in flight.
@@ -673,10 +826,13 @@ export function AdminDashboard(): React.JSX.Element {
   // explicit ask to include them. The scope is the server's filter — aggregates
   // cannot be unpicked client-side — so flipping it refetches.
   const [hideAdmins, setHideAdmins] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const inFlight = useRef<AbortController>(null);
+  const now = useNow(AGE_TICK_MS);
   const session = authClient.useSession();
   const account = session.data?.user;
 
-  useEffect(() => {
+  const load = useCallback(() => {
     // A session earned elsewhere on the site does not open the dashboard by
     // itself: until a sign-in has been pressed on this page once, the card is
     // the answer, whatever cookie the browser holds.
@@ -684,52 +840,48 @@ export function AdminDashboard(): React.JSX.Element {
       setState({ status: "signed-out" });
       return;
     }
-    let live = true;
-    setState({ status: "loading" });
+    // One read at a time: a scope flipped twice, or a refresh pressed on a slow
+    // answer, would otherwise leave two in flight and let the older one land
+    // last and overwrite the newer.
+    inFlight.current?.abort();
+    const controller = new AbortController();
+    inFlight.current = controller;
+    // Only a read with nothing to replace clears the page. A refetch — the
+    // scope toggle, the refresh button — keeps the last answer up until the
+    // next one arrives, because blanking a read page for a press that changes
+    // one filter throws away the reader's place and reads as a fault.
+    setState((current) => (current.status === "ready" ? current : { status: "loading" }));
+    setRefreshing(true);
     const path = hideAdmins
       ? METRICS_PATH
       : `${METRICS_PATH}?${ADMIN_METRICS_SCOPE_PARAM}=${ADMIN_METRICS_SCOPE.ALL}`;
     void (async () => {
       try {
-        const response = await fetch(path, { headers: { accept: "application/json" } });
-        if (!live) return;
-        // A followed cross-origin redirect means something sat in front of the
-        // API — a preview's deployment protection is the usual culprit — so the
-        // body is a login page, not JSON.
-        if (response.redirected) {
-          setState({ status: "error", detail: ERROR_DETAIL.PROTECTED });
-          return;
-        }
-        if (response.status === 401) {
-          setState({ status: "signed-out" });
-          return;
-        }
-        if (response.status === 403) {
-          setState({ status: "forbidden" });
-          return;
-        }
-        if (response.status === 503) {
-          setState({ status: "error", detail: ERROR_DETAIL.UNAVAILABLE });
-          return;
-        }
-        if (!response.ok) {
-          setState({ status: "error", detail: ERROR_DETAIL.GENERIC });
-          return;
-        }
-        // SAFETY: a 200 from the admin metrics endpoint is an AdminMetrics body by its contract.
-        const metrics = (await response.json()) as AdminMetrics;
-        if (live) setState({ status: "ready", metrics });
+        const next = await readDashboardState(
+          await fetch(path, {
+            headers: { accept: "application/json" },
+            signal: controller.signal,
+          }),
+        );
+        if (!controller.signal.aborted) setState(next);
       } catch {
-        if (live) setState({ status: "error", detail: ERROR_DETAIL.GENERIC });
+        if (!controller.signal.aborted) {
+          setState({ status: "error", detail: ERROR_DETAIL.GENERIC });
+        }
+      } finally {
+        if (!controller.signal.aborted) setRefreshing(false);
       }
     })();
-    return () => {
-      live = false;
-    };
   }, [hideAdmins]);
+
+  useEffect(() => {
+    load();
+    return () => inFlight.current?.abort();
+  }, [load]);
 
   const signOut = async () => {
     await authClient.signOut();
+    forgetSignInChosen();
     setState({ status: "signed-out" });
   };
 
@@ -745,14 +897,23 @@ export function AdminDashboard(): React.JSX.Element {
           the admin role. Admin access is the <code className="font-mono">admin</code> role on your
           account, set directly in the database.
           <div className="mt-6">
-            <button type="button" className={SIGN_OUT_BUTTON} onClick={() => void signOut()}>
+            <button type="button" className={PLAIN_BUTTON} onClick={() => void signOut()}>
               Sign out
             </button>
           </div>
         </Centered>
       );
     case "error":
-      return <Centered title="Could not load">{state.detail}</Centered>;
+      return (
+        <Centered title="Could not load">
+          {state.detail}
+          <div className="mt-6">
+            <button type="button" className={PLAIN_BUTTON} onClick={load} disabled={refreshing}>
+              {refreshing ? "Trying…" : "Try again"}
+            </button>
+          </div>
+        </Centered>
+      );
     case "ready":
       return (
         <Dashboard
@@ -765,6 +926,9 @@ export function AdminDashboard(): React.JSX.Element {
               : undefined
           }
           onSignOut={() => void signOut()}
+          refreshing={refreshing}
+          onRefresh={load}
+          now={now}
         />
       );
   }

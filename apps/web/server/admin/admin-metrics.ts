@@ -22,6 +22,13 @@ import {
 /** The trailing window every rate and series here covers, in whole UTC days. */
 export const ADMIN_METRICS_WINDOW_DAYS = 30;
 
+/**
+ * The trailing run each trend compares against the run immediately before it.
+ * The window must hold both runs, or `prior` would be the truncated head of one
+ * and read as a fall that never happened.
+ */
+export const ADMIN_TREND_DAYS = 7;
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export interface AdminUsageDay {
@@ -37,6 +44,19 @@ export interface AdminDailyUsage extends AdminUsageDay {
 export interface AdminDailySignups {
   day: string;
   count: number;
+}
+
+/**
+ * A trailing run of days beside the run before it — the one thing a count on
+ * its own cannot say, which is whether it is going up. Both runs are folded
+ * from the same zero-filled series the page draws, so the comparison can never
+ * disagree with the bars above it.
+ */
+export interface AdminTrend {
+  /** The length of each run, in whole UTC days. */
+  days: number;
+  recent: number;
+  prior: number;
 }
 
 /** How accounts reached the service, counted from their linked provider rows. */
@@ -118,8 +138,9 @@ export interface AdminMetrics {
   windowDays: number;
   users: {
     total: number;
-    newLast7Days: number;
-    newLast30Days: number;
+    /** Accounts created inside the window, the same rows the signup series draws. */
+    newInWindow: number;
+    signupTrend: AdminTrend;
     activeSessions: number;
     activeSessionUsers: number;
     signInMethods: AdminSignInMethods;
@@ -131,6 +152,9 @@ export interface AdminMetrics {
     voiceCallsWindow: number;
     attentionReviewsWindow: number;
     activeUsersToday: number;
+    /** Distinct accounts that spent anything in the window — the engaged base behind today's number. */
+    activeUsersWindow: number;
+    usageTrend: AdminTrend;
     daily: AdminDailyUsage[];
     topUsers: AdminTopUser[];
   };
@@ -155,8 +179,6 @@ export interface AdminMetrics {
 export interface AdminMetricsSource {
   users: {
     total: number;
-    newLast7Days: number;
-    newLast30Days: number;
     activeSessions: number;
     activeSessionUsers: number;
     signInMethods: AdminSignInMethods;
@@ -165,6 +187,7 @@ export interface AdminMetricsSource {
   usage: {
     byDay: ReadonlyMap<string, AdminUsageDay>;
     activeUsersToday: number;
+    activeUsersWindow: number;
     topUsers: readonly AdminTopUser[];
   };
   reliability: {
@@ -191,6 +214,19 @@ export function lastNDayKeys(now: number, days: number): string[] {
   return keys;
 }
 
+function sum(values: readonly number[]): number {
+  return values.reduce((total, value) => total + value, 0);
+}
+
+/** The last `days` of a windowed series beside the `days` before them. */
+function trailingTrend(counts: readonly number[], days: number): AdminTrend {
+  return {
+    days,
+    recent: sum(counts.slice(-days)),
+    prior: sum(counts.slice(-days * 2, -days)),
+  };
+}
+
 /** Shapes the queried source into the answer, zero-filling and totalling in one place. */
 export function buildAdminMetrics(source: AdminMetricsSource, now: number): AdminMetrics {
   const dayKeys = lastNDayKeys(now, ADMIN_METRICS_WINDOW_DAYS);
@@ -210,8 +246,13 @@ export function buildAdminMetrics(source: AdminMetricsSource, now: number): Admi
     };
   });
 
-  const voiceCallsWindow = daily.reduce((sum, day) => sum + day.voiceCalls, 0);
-  const attentionReviewsWindow = daily.reduce((sum, day) => sum + day.attentionReviews, 0);
+  // Every windowed count is folded from the zero-filled series rather than
+  // queried beside it: a rolling `now - 30 days` count and a series of whole
+  // UTC days cover different spans, so two reads of "the last 30 days" would
+  // disagree by the part-day between them and the page would contradict itself.
+  const signupCounts = dailySignups.map((day) => day.count);
+  const voiceCallsWindow = sum(daily.map((day) => day.voiceCalls));
+  const attentionReviewsWindow = sum(daily.map((day) => day.attentionReviews));
   const today = source.usage.byDay.get(todayKey);
 
   return {
@@ -219,8 +260,8 @@ export function buildAdminMetrics(source: AdminMetricsSource, now: number): Admi
     windowDays: ADMIN_METRICS_WINDOW_DAYS,
     users: {
       total: source.users.total,
-      newLast7Days: source.users.newLast7Days,
-      newLast30Days: source.users.newLast30Days,
+      newInWindow: sum(signupCounts),
+      signupTrend: trailingTrend(signupCounts, ADMIN_TREND_DAYS),
       activeSessions: source.users.activeSessions,
       activeSessionUsers: source.users.activeSessionUsers,
       signInMethods: source.users.signInMethods,
@@ -232,6 +273,11 @@ export function buildAdminMetrics(source: AdminMetricsSource, now: number): Admi
       voiceCallsWindow,
       attentionReviewsWindow,
       activeUsersToday: source.usage.activeUsersToday,
+      activeUsersWindow: source.usage.activeUsersWindow,
+      usageTrend: trailingTrend(
+        daily.map((day) => day.voiceCalls + day.attentionReviews),
+        ADMIN_TREND_DAYS,
+      ),
       daily,
       topUsers: [...source.usage.topUsers],
     },

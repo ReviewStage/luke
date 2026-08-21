@@ -18,8 +18,6 @@ import { ADMIN_METRICS_SCOPE, type AdminMetricsScope } from "./http.js";
 /** How many of the heaviest hosted-tier users the dashboard names. */
 export const ADMIN_TOP_USERS_LIMIT = 5;
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
 type Database = ReturnType<typeof createDatabase>;
 
 /**
@@ -58,46 +56,31 @@ async function readUserMetrics(
   scope: AdminMetricsScope,
 ): Promise<AdminMetricsSource["users"]> {
   const dayExpression = sql<string>`to_char(${user.createdAt} at time zone 'UTC', 'YYYY-MM-DD')`;
-  const [
-    [totalRow],
-    [newLast7Row],
-    [newLast30Row],
-    [activeSessionRow],
-    [activeSessionUsersRow],
-    providerRows,
-    signupRows,
-  ] = await Promise.all([
-    database.select({ value: count() }).from(user).where(scopeCondition(scope)),
-    database
-      .select({ value: count() })
-      .from(user)
-      .where(and(gte(user.createdAt, new Date(now - 7 * DAY_MS)), scopeCondition(scope))),
-    database
-      .select({ value: count() })
-      .from(user)
-      .where(and(gte(user.createdAt, new Date(now - 30 * DAY_MS)), scopeCondition(scope))),
-    database
-      .select({ value: count() })
-      .from(session)
-      .innerJoin(user, eq(session.userId, user.id))
-      .where(and(gt(session.expiresAt, new Date(now)), scopeCondition(scope))),
-    database
-      .select({ value: sql<number>`count(distinct ${session.userId})` })
-      .from(session)
-      .innerJoin(user, eq(session.userId, user.id))
-      .where(and(gt(session.expiresAt, new Date(now)), scopeCondition(scope))),
-    database
-      .select({ providerId: account.providerId, value: count() })
-      .from(account)
-      .innerJoin(user, eq(account.userId, user.id))
-      .where(scopeCondition(scope))
-      .groupBy(account.providerId),
-    database
-      .select({ day: dayExpression, value: count() })
-      .from(user)
-      .where(and(gte(user.createdAt, windowStart), scopeCondition(scope)))
-      .groupBy(dayExpression),
-  ]);
+  const [[totalRow], [activeSessionRow], [activeSessionUsersRow], providerRows, signupRows] =
+    await Promise.all([
+      database.select({ value: count() }).from(user).where(scopeCondition(scope)),
+      database
+        .select({ value: count() })
+        .from(session)
+        .innerJoin(user, eq(session.userId, user.id))
+        .where(and(gt(session.expiresAt, new Date(now)), scopeCondition(scope))),
+      database
+        .select({ value: sql<number>`count(distinct ${session.userId})` })
+        .from(session)
+        .innerJoin(user, eq(session.userId, user.id))
+        .where(and(gt(session.expiresAt, new Date(now)), scopeCondition(scope))),
+      database
+        .select({ providerId: account.providerId, value: count() })
+        .from(account)
+        .innerJoin(user, eq(account.userId, user.id))
+        .where(scopeCondition(scope))
+        .groupBy(account.providerId),
+      database
+        .select({ day: dayExpression, value: count() })
+        .from(user)
+        .where(and(gte(user.createdAt, windowStart), scopeCondition(scope)))
+        .groupBy(dayExpression),
+    ]);
 
   const signInMethods: AdminSignInMethods = { google: 0, github: 0, other: 0 };
   for (const row of providerRows) {
@@ -112,8 +95,6 @@ async function readUserMetrics(
 
   return {
     total: toNumber(totalRow?.value),
-    newLast7Days: toNumber(newLast7Row?.value),
-    newLast30Days: toNumber(newLast30Row?.value),
     activeSessions: toNumber(activeSessionRow?.value),
     activeSessionUsers: toNumber(activeSessionUsersRow?.value),
     signInMethods,
@@ -127,7 +108,7 @@ async function readUsageMetrics(
   windowStartDay: string,
   scope: AdminMetricsScope,
 ): Promise<AdminMetricsSource["usage"]> {
-  const [usageRows, [activeTodayRow], topUserRows] = await Promise.all([
+  const [usageRows, [activeTodayRow], [activeWindowRow], topUserRows] = await Promise.all([
     database
       .select({
         day: hostedUsage.day,
@@ -143,6 +124,13 @@ async function readUsageMetrics(
       .from(hostedUsage)
       .innerJoin(user, eq(hostedUsage.userId, user.id))
       .where(and(eq(hostedUsage.day, todayKey), scopeCondition(scope))),
+    // Distinct rather than a row count: the window holds one row per account
+    // per day, so counting rows would answer account-days, not accounts.
+    database
+      .select({ value: sql<number>`count(distinct ${hostedUsage.userId})` })
+      .from(hostedUsage)
+      .innerJoin(user, eq(hostedUsage.userId, user.id))
+      .where(and(gte(hostedUsage.day, windowStartDay), scopeCondition(scope))),
     database
       .select({
         name: user.name,
@@ -178,7 +166,12 @@ async function readUsageMetrics(
     };
   });
 
-  return { byDay, activeUsersToday: toNumber(activeTodayRow?.value), topUsers };
+  return {
+    byDay,
+    activeUsersToday: toNumber(activeTodayRow?.value),
+    activeUsersWindow: toNumber(activeWindowRow?.value),
+    topUsers,
+  };
 }
 
 /**
@@ -226,14 +219,12 @@ function emptySource(
   return {
     users: {
       total: 0,
-      newLast7Days: 0,
-      newLast30Days: 0,
       activeSessions: 0,
       activeSessionUsers: 0,
       signInMethods: { google: 0, github: 0, other: 0 },
       signupsByDay: new Map(),
     },
-    usage: { byDay: new Map(), activeUsersToday: 0, topUsers: [] },
+    usage: { byDay: new Map(), activeUsersToday: 0, activeUsersWindow: 0, topUsers: [] },
     reliability: { quotaLimitedUserDaysToday: 0, quotaLimitedUserDaysWindow: 0 },
     systemHealth: { database, integrations },
   };
