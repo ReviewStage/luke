@@ -1,8 +1,7 @@
-import { auth } from "../../server/auth.js";
 import {
   ADMIN_EMAILS_ENVIRONMENT,
-  adminEmailsFromEnv,
   type AdminViewer,
+  adminEmailsFromEnv,
   isAdminViewer,
 } from "../../server/admin/admin-access.js";
 import {
@@ -14,6 +13,7 @@ import {
   readAdminMetricsSource,
   readViewerGithubAccountIds,
 } from "../../server/admin/admin-queries.js";
+import { auth } from "../../server/auth.js";
 import { getDatabase } from "../../server/db/index.js";
 import { HOSTED_OPENAI_ENVIRONMENT } from "../../server/hosted/openai.js";
 import { POSTHOG_ENVIRONMENT } from "../../server/hosted/posthog.js";

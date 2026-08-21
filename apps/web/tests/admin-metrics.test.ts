@@ -4,9 +4,9 @@ import type { AdminViewer } from "../server/admin/admin-access";
 import {
   ADMIN_INTEGRATION,
   ADMIN_METRICS_WINDOW_DAYS,
-  adminIntegrations,
   type AdminMetrics,
   type AdminMetricsSource,
+  adminIntegrations,
   buildAdminMetrics,
   handleAdminMetrics,
   lastNDayKeys,
@@ -110,9 +110,10 @@ test("integration health reads presence, in a fixed order, never a value", () =>
   assert.equal(rows[1]?.key, ADMIN_INTEGRATION.ANALYTICS_RECORDING.key);
   assert.equal(rows[1]?.configured, false);
   assert.equal(rows.length, 6);
+  assert.equal(rows.filter((row) => row.configured).length, 4);
   for (const row of rows) {
-    assert.equal(typeof row.configured, "boolean");
     assert.ok(row.label.length > 0);
+    assert.ok(row.key.length > 0);
   }
 });
 
@@ -171,6 +172,7 @@ test("the gate answers 405, 401, 403, and 200 as three distinct outcomes", async
   });
   assert.equal(ok.status, 200);
   assert.equal(readFor, "user-1");
+  // SAFETY: handleAdminMetrics answered 200, whose body is an AdminMetrics document.
   const body = (await ok.json()) as AdminMetrics;
   assert.equal(body.generatedAt, NOON_UTC);
   assert.equal(body.windowDays, ADMIN_METRICS_WINDOW_DAYS);

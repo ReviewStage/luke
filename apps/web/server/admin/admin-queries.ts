@@ -20,8 +20,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 type Database = ReturnType<typeof createDatabase>;
 
-/** Postgres returns a bigint sum as a string; a missing group as null. */
-function toNumber(value: unknown): number {
+/** Postgres returns a `count` as a number and a bigint `sum` as a string or null. */
+function toNumber(value: number | string | null | undefined): number {
   const parsed = Number(value ?? 0);
   return Number.isFinite(parsed) ? parsed : 0;
 }
@@ -42,7 +42,9 @@ export async function readViewerGithubAccountIds(
   return rows.map((row) => row.accountId);
 }
 
-async function probeDatabase(database: Database): Promise<{ reachable: boolean; latencyMs: number }> {
+async function probeDatabase(
+  database: Database,
+): Promise<{ reachable: boolean; latencyMs: number }> {
   const startedAt = Date.now();
   try {
     await database.execute(sql`select 1`);
@@ -132,10 +134,7 @@ async function readUsageMetrics(
       .from(hostedUsage)
       .where(gte(hostedUsage.day, windowStartDay))
       .groupBy(hostedUsage.day),
-    database
-      .select({ value: count() })
-      .from(hostedUsage)
-      .where(eq(hostedUsage.day, todayKey)),
+    database.select({ value: count() }).from(hostedUsage).where(eq(hostedUsage.day, todayKey)),
     database
       .select({
         name: user.name,
@@ -162,10 +161,24 @@ async function readUsageMetrics(
   const topUsers: AdminTopUser[] = topUserRows.map((row) => {
     const voiceCalls = toNumber(row.voiceCalls);
     const attentionReviews = toNumber(row.attentionReviews);
-    return { name: row.name, email: row.email, voiceCalls, attentionReviews, total: voiceCalls + attentionReviews };
+    return {
+      name: row.name,
+      email: row.email,
+      voiceCalls,
+      attentionReviews,
+      total: voiceCalls + attentionReviews,
+    };
   });
 
   return { byDay, activeUsersToday: toNumber(activeTodayRow?.value), topUsers };
+}
+
+/** Either meter at or past its daily ceiling — the row a spend was refused on. */
+function ceilingReached(): SQL<unknown> | undefined {
+  return or(
+    gte(hostedUsage.voiceCalls, HOSTED_DAILY_LIMIT[HOSTED_METER.VOICE_CALL]),
+    gte(hostedUsage.attentionReviews, HOSTED_DAILY_LIMIT[HOSTED_METER.ATTENTION_REVIEW]),
+  );
 }
 
 async function readReliabilityMetrics(
@@ -173,20 +186,15 @@ async function readReliabilityMetrics(
   todayKey: string,
   windowStartDay: string,
 ): Promise<AdminMetricsSource["reliability"]> {
-  const ceilingReached = or(
-    gte(hostedUsage.voiceCalls, HOSTED_DAILY_LIMIT[HOSTED_METER.VOICE_CALL]),
-    gte(hostedUsage.attentionReviews, HOSTED_DAILY_LIMIT[HOSTED_METER.ATTENTION_REVIEW]),
-  ) as SQL<unknown>;
-
   const [[todayRow], [windowRow]] = await Promise.all([
     database
       .select({ value: count() })
       .from(hostedUsage)
-      .where(and(eq(hostedUsage.day, todayKey), ceilingReached)),
+      .where(and(eq(hostedUsage.day, todayKey), ceilingReached())),
     database
       .select({ value: count() })
       .from(hostedUsage)
-      .where(and(gte(hostedUsage.day, windowStartDay), ceilingReached)),
+      .where(and(gte(hostedUsage.day, windowStartDay), ceilingReached())),
   ]);
 
   return {
@@ -240,5 +248,10 @@ export async function readAdminMetricsSource(
     readReliabilityMetrics(database, todayKey, windowStartDay),
   ]);
 
-  return { users, usage, reliability, systemHealth: { database: health, integrations: input.integrations } };
+  return {
+    users,
+    usage,
+    reliability,
+    systemHealth: { database: health, integrations: input.integrations },
+  };
 }

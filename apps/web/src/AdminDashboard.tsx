@@ -7,8 +7,8 @@ import type {
   AdminMetrics,
   AdminTopUser,
 } from "../server/admin/admin-metrics";
-import { SOCIAL_PROVIDER, SOCIAL_PROVIDER_LABEL, type SocialProvider } from "./sign-in-provider";
 import { LukeMark } from "./SiteChrome";
+import { SOCIAL_PROVIDER, SOCIAL_PROVIDER_LABEL, type SocialProvider } from "./sign-in-provider";
 
 const authClient = createAuthClient();
 
@@ -66,9 +66,7 @@ function StatCard({
 }
 
 function SectionHeading({ children }: { children: React.ReactNode }): React.JSX.Element {
-  return (
-    <h2 className="mt-12 mb-4 text-lg font-semibold tracking-[-0.01em]">{children}</h2>
-  );
+  return <h2 className="mt-12 mb-4 text-lg font-semibold tracking-[-0.01em]">{children}</h2>;
 }
 
 /**
@@ -208,7 +206,9 @@ function TopUsersTable({ users }: { users: readonly AdminTopUser[] }): React.JSX
                 <div className="font-medium">{entry.name}</div>
                 <div className="text-xs text-muted-foreground">{entry.email}</div>
               </td>
-              <td className="px-5 py-3 text-right tabular-nums">{formatNumber(entry.voiceCalls)}</td>
+              <td className="px-5 py-3 text-right tabular-nums">
+                {formatNumber(entry.voiceCalls)}
+              </td>
               <td className="px-5 py-3 text-right tabular-nums">
                 {formatNumber(entry.attentionReviews)}
               </td>
@@ -494,6 +494,7 @@ export function AdminDashboard(): React.JSX.Element {
           setState({ status: "error" });
           return;
         }
+        // SAFETY: a 200 from the admin metrics endpoint is an AdminMetrics body by its contract.
         const metrics = (await response.json()) as AdminMetrics;
         if (live) setState({ status: "ready", metrics });
       } catch {
