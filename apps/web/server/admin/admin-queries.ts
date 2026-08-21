@@ -14,6 +14,7 @@ import {
   lastNDayKeys,
 } from "./admin-metrics.js";
 import type { AdminUserSource } from "./admin-user.js";
+import { ADMIN_USERS_LIMIT, type AdminUserListSource } from "./admin-users.js";
 import { ADMIN_METRICS_SCOPE, type AdminMetricsScope } from "./http.js";
 
 /** How many of the most active hosted-tier accounts the overview names. */
@@ -373,5 +374,62 @@ export async function readAdminUserSource(
       },
       quotaLimitedDaysWindow: toNumber(quotaRow?.value),
     },
+  };
+}
+
+/**
+ * Reads the whole account roster with each account's window aggregates. The
+ * usage rows arrive through a left join carrying the window bound in its own
+ * condition, so an account that never touched the hosted tier is still a row
+ * — with zero active days and no last-active day — instead of vanishing the
+ * way it does from every inner-joined aggregate above. Most recently active
+ * first, the never-active tail ordered by youngest account, and the roster
+ * cut at the stated bound while `total` still counts everyone.
+ */
+export async function readAdminUsersSource(
+  database: Database,
+  input: { now: number; scope: AdminMetricsScope },
+): Promise<AdminUserListSource> {
+  const dayKeys = lastNDayKeys(input.now, ADMIN_METRICS_WINDOW_DAYS);
+  const windowStartDay = dayKeys[0] ?? utcDayKey(input.now);
+
+  const [[totalRow], rows] = await Promise.all([
+    database.select({ value: count() }).from(user).where(scopeCondition(input.scope)),
+    database
+      .select({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        createdAt: user.createdAt,
+        activeDays: sql<number | string | null>`count(${hostedUsage.day})`,
+        lastActiveDay: sql<string | null>`max(${hostedUsage.day})`,
+        voiceCalls: sum(hostedUsage.voiceCalls),
+        attentionReviews: sum(hostedUsage.attentionReviews),
+      })
+      .from(user)
+      .leftJoin(
+        hostedUsage,
+        and(eq(hostedUsage.userId, user.id), gte(hostedUsage.day, windowStartDay)),
+      )
+      .where(scopeCondition(input.scope))
+      .groupBy(user.id, user.name, user.email, user.role, user.createdAt)
+      .orderBy(sql`max(${hostedUsage.day}) desc nulls last`, desc(user.createdAt))
+      .limit(ADMIN_USERS_LIMIT),
+  ]);
+
+  return {
+    total: toNumber(totalRow?.value),
+    rows: rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      email: row.email,
+      admin: isAdminRole(row.role),
+      createdAt: row.createdAt.getTime(),
+      activeDays: toNumber(row.activeDays),
+      lastActiveDay: row.lastActiveDay,
+      voiceCalls: toNumber(row.voiceCalls),
+      attentionReviews: toNumber(row.attentionReviews),
+    })),
   };
 }
