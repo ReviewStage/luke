@@ -217,7 +217,6 @@ interface CursorAgent {
   lastActivityAt: number;
   latestRunId?: string;
   ref?: string;
-  url?: string;
 }
 
 interface CursorRun {
@@ -264,7 +263,6 @@ function agentFromRecord(record: WireRecord): CursorAgent | undefined {
   );
   const latestRunId = textFromRecord(record, CURSOR_FIELD.LATEST_RUN_ID);
   const name = textFromRecord(record, CURSOR_FIELD.NAME)?.slice(0, maximumSessionTitleLength);
-  const url = textFromRecord(record, CURSOR_FIELD.URL);
   return {
     id,
     lastActivityAt,
@@ -273,7 +271,6 @@ function agentFromRecord(record: WireRecord): CursorAgent | undefined {
     archived: textFromRecord(record, CURSOR_FIELD.STATUS) === CURSOR_AGENT_STATUS.ARCHIVED,
     ...(latestRunId ? { latestRunId } : undefined),
     ...(ref ? { ref } : undefined),
-    ...(url ? { url } : undefined),
   };
 }
 

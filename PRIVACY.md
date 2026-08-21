@@ -453,7 +453,7 @@ boundary the Linear section below describes.
 - For Cursor, Luke reads agents owned by the supplied key and their latest runs,
   and — on a much slower cadence, within Cursor's documented limits — the list
   of repositories the key may launch agents in. It processes identifiers, agent
-  names and links, repository URLs, starting refs and run branches, timestamps,
+  names, repository URLs, starting refs and run branches, timestamps,
   archive and run status, provider-designated run results, and pull-request
   links. Each agent's row opens through a `cursor://` address into the Cursor
   app — carried by the row's own press and its Cursor app mark alike,

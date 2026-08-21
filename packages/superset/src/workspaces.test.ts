@@ -148,7 +148,7 @@ test("binds Cursor's agents CLI under Superset's own name for it", async (t) => 
   // Superset records the app's agents as `cursor` and the `agents` CLI as
   // `cursor-agent`; both are Cursor sessions to Luke.
   database.exec(`
-    INSERT INTO workspaces VALUES (
+    INSERT INTO workspaces (id, project_id, pull_request_id, name, branch, updated_at) VALUES (
       'workspace-1', NULL, NULL, 'square-geometry', 'main', 200
     );
     INSERT INTO terminal_agent_bindings VALUES (
