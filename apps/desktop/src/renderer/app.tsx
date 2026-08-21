@@ -7,10 +7,9 @@ import {
 } from "@sidecar/credentials";
 import type { FeedbackImage, FeedbackKind } from "@sidecar/feedback";
 import { FEEDBACK_KIND, FEEDBACK_LIMITS, feedbackKindForLifecycleEvent } from "@sidecar/feedback";
-import { FIXTURE_EPOCH_MS } from "@sidecar/fixtures";
+import { FIXTURE_EPOCH_MS, FIXTURE_SPEAKING_CAPTION } from "@sidecar/fixtures";
 import { FEEDBACK_COMPOSER_KIND } from "@sidecar/guide";
 import type { HostedUsageAnswer } from "@sidecar/hosted";
-import type { IssueIdentity } from "@sidecar/issues";
 import {
   APP_TOOL_KIND,
   dispatchByKind,
@@ -132,6 +131,9 @@ import {
   DEFAULT_SESSION_VIEW,
   type DisplaySession,
   displaySessions,
+  fixtureMentionChips,
+  MENTION_CHIP_KIND,
+  type MentionChip,
   type SessionFilter,
   type SessionView,
   sameSessionFilters,
@@ -303,47 +305,6 @@ function notchStyle(display: DisplayDiagnostic): CSSProperties {
     "--notch-housing-width": `${display.notch.housingWidth}px`,
   });
 }
-
-/** The two rosters a mention chip can stand for, deciding what its press does. */
-const MENTION_CHIP_KIND = {
-  SESSION: "session",
-  ISSUE: "issue",
-} as const;
-
-/**
- * One app mark trailing a session chip's name: the same associations the
- * session's own row wears, answering where the chat is also held. Copied onto
- * the chip rather than looked up at draw time, so the band held through its
- * fade-out keeps wearing them after the roster moves on.
- */
-type MentionChipApplication = {
-  id: string;
-  name: string;
-};
-
-/**
- * One pressable chip of the notice band: the mark and words it draws, and the
- * identity its press hands to the main process — where it is validated
- * against the observed roster again before any address reaches the system.
- * Resolved onto the chip when its mention is, so the band held through its
- * fade-out keeps saying what it said.
- */
-type MentionChip =
-  | {
-      kind: typeof MENTION_CHIP_KIND.SESSION;
-      id: string;
-      markId: string;
-      title: string;
-      identity: SessionIdentity;
-      applications: readonly MentionChipApplication[];
-    }
-  | {
-      kind: typeof MENTION_CHIP_KIND.ISSUE;
-      id: string;
-      markId: string;
-      title: string;
-      identity: IssueIdentity;
-    };
 
 function surfaceHeightStyle(
   panelHeight: number | undefined,
@@ -2151,7 +2112,14 @@ export function App(): React.JSX.Element {
   // it at its foot: the rows are up in the list, but the chips are what say
   // which of them Luke is talking about. Only the slot and the composer go
   // without — those are shapes someone asked for.
+  //
+  // A fixture run's own sentence is matched against the rows the fixture
+  // draws, because it observes no provider and both halves below resolve
+  // against a roster it never fills.
   const spokenOf: readonly MentionChip[] = [
+    ...(fixtureSpeaking && bootstrap.fixtureMode
+      ? fixtureMentionChips(FIXTURE_SPEAKING_CAPTION, bootstrap.fixture.sessions)
+      : []),
     ...mentionedSessions.flatMap((mention): readonly MentionChip[] => {
       const session = sessions.find(
         (candidate) =>

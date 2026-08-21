@@ -91,6 +91,7 @@ export {
 export {
   firstWholeNameIndex,
   MAXIMUM_MENTIONED_SESSIONS,
+  type MentionableSession,
   MINIMUM_MENTION_TITLE_LENGTH,
   mentionedSessions,
   SESSION_MENTION_KIND,

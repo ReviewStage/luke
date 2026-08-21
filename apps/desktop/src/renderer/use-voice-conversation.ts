@@ -1,4 +1,5 @@
 import type { SessionNoticeAsk } from "@sidecar/attention";
+import { FIXTURE_SPEAKING_CAPTION } from "@sidecar/fixtures";
 import { type AppGuideSnapshot, EMPTY_APP_GUIDE } from "@sidecar/guide";
 import { mentionedIssues, type TrackedIssue } from "@sidecar/issues";
 import {
@@ -42,19 +43,6 @@ import { type AppActionCarrier, RealtimeVoiceSession } from "./realtime-session"
 import { SpokenNoticeAnnouncer } from "./spoken-notices";
 import { useStateWithRef } from "./use-state-with-ref";
 import { WAVEFORM_VOICE, type WaveformVoice } from "./waveform";
-
-/**
- * What the speaking evidence run captions the reply with. A capture run never
- * opens a call, so there are no words to draw unless the fixture supplies
- * them — and it must, or the caption strip ships unphotographed. Synthetic,
- * like every fixture, and long enough to wrap: a one-line fixture would leave
- * the wrapped form of the strip unphotographed too. It names four of the
- * fixture roster's own sessions and one of its workspaces, so the photograph
- * holds both kinds of mention chip and the band at every row it can grow to,
- * exactly as they would stand over a live reply walking the roster.
- */
-export const FIXTURE_SPEAKING_CAPTION =
-  "Bootstrap the desktop shell and Review trust constraints are finished, lisbon-v2 is packaging the macOS build, and Follow a cloud agent and Watch a cloud session are waiting on you.";
 
 /**
  * What a changed voice on a live call should do. The API locks a session's

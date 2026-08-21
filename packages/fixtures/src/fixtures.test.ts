@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { fixtureSnapshot } from "@sidecar/fixtures";
+import { FIXTURE_SPEAKING_CAPTION, fixtureSnapshot } from "@sidecar/fixtures";
+import { mentionedSessions, SESSION_MENTION_KIND } from "@sidecar/session";
 import { attentionCount } from "./fixtures.js";
 
 test("the smoke fixture is stable and contains no duplicate identities", () => {
@@ -10,6 +11,31 @@ test("the smoke fixture is stable and contains no duplicate identities", () => {
   assert.equal(snapshot.scenario, "smoke");
   assert.equal(new Set(identities).size, identities.length);
   assert.equal(attentionCount(snapshot), 1);
+});
+
+test("the spoken sentence names rows of the roster it is captured beside", () => {
+  const snapshot = fixtureSnapshot("smoke");
+  const mentions = mentionedSessions(
+    FIXTURE_SPEAKING_CAPTION,
+    snapshot.sessions.map((session) => ({
+      providerId: session.providerId,
+      providerSessionId: session.id,
+      title: session.title,
+      observedAt: session.observedAt,
+      ...(session.workspace
+        ? { workspace: { providerWorkspaceId: session.workspace.id, name: session.workspace.name } }
+        : undefined),
+    })),
+  );
+
+  // Both kinds, so the photographed band holds a chat chip and a workspace
+  // one, and enough of them to wrap: a sentence that stopped naming these
+  // would ship the band unphotographed without failing anything else.
+  assert.deepEqual(
+    mentions.map((mention) => mention.providerSessionId),
+    ["claude-review", "conductor-chat-tidy", "cursor-agent", "devin-session"],
+  );
+  assert.ok(mentions.some((mention) => mention.kind === SESSION_MENTION_KIND.WORKSPACE));
 });
 
 test("unknown fixtures remain explicit", () => {

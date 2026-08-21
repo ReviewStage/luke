@@ -1,4 +1,4 @@
-import type { NormalizedSession, SessionIdentity } from "./session.js";
+import type { SessionIdentity } from "./session.js";
 
 /**
  * The most sessions one reply's mentions may put on the notice band. The band
@@ -31,6 +31,25 @@ export const SESSION_MENTION_KIND = {
 } as const;
 
 export type SessionMentionKind = (typeof SESSION_MENTION_KIND)[keyof typeof SESSION_MENTION_KIND];
+
+/**
+ * What a row has to offer to be named by a reply: its identity, the two names
+ * a mention may be made by, and when it was last seen — the tiebreak when one
+ * workspace name fronts several chats. Stated as its own shape rather than as
+ * `NormalizedSession`, which every observed row already satisfies, because a
+ * row the surface draws without having observed it — the fixture roster an
+ * evidence run photographs — has to earn its chips by the same matching, and
+ * these are the only fields the matching reads.
+ */
+export interface MentionableSession extends SessionIdentity {
+  title: string;
+  observedAt: number;
+  workspace?: {
+    providerWorkspaceId: string;
+    scopeId?: string;
+    name?: string;
+  };
+}
 
 /**
  * One thing a spoken reply named, resolved to a session the roster observes.
@@ -72,7 +91,7 @@ export function firstWholeNameIndex(caption: string, name: string): number | und
 /** One name the caption may be searched for, and the session it stands for. */
 interface MentionCandidate {
   kind: SessionMentionKind;
-  session: NormalizedSession;
+  session: MentionableSession;
   /** Whether the name stopped being attributable to one thing and is dead. */
   ambiguous: boolean;
 }
@@ -89,7 +108,7 @@ interface MentionCandidate {
  *   mention cannot say which was meant, and a chip that might open the wrong
  *   one is worse than no chip.
  */
-function mentionCandidates(sessions: readonly NormalizedSession[]): Map<string, MentionCandidate> {
+function mentionCandidates(sessions: readonly MentionableSession[]): Map<string, MentionCandidate> {
   const candidates = new Map<string, MentionCandidate>();
   for (const session of sessions) {
     const title = session.title.trim().toLowerCase();
@@ -161,11 +180,11 @@ function mentionCandidates(sessions: readonly NormalizedSession[]): Map<string, 
  */
 export function mentionedSessions(
   caption: string | undefined,
-  sessions: readonly NormalizedSession[],
+  sessions: readonly MentionableSession[],
 ): readonly SessionMention[] {
   if (!caption) return [];
   const spoken = caption.toLowerCase();
-  const mentions: { at: number; kind: SessionMentionKind; session: NormalizedSession }[] = [];
+  const mentions: { at: number; kind: SessionMentionKind; session: MentionableSession }[] = [];
   for (const [name, candidate] of mentionCandidates(sessions)) {
     if (candidate.ambiguous) continue;
     const at = firstWholeNameIndex(spoken, name);
