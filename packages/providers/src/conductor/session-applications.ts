@@ -87,6 +87,32 @@ export function conductorWorkspaceLink(workspaceId: string, conductorChatId?: st
 }
 
 /**
+ * The address that asks Conductor's own app to create a new workspace in the
+ * repository whose main worktree is `rootPath`, seeded with the developer's
+ * opening prompt when they gave one. It is Conductor's own documented creation
+ * link — the same shape its Linear "open in Conductor" button fires, minus the
+ * issue id — so a create stays what an open is: an address handed to the
+ * operating system, which Conductor's own scheme handler acts on.
+ *
+ * The format is exact and not a `URL`'s to give: Conductor's handler reaches
+ * this branch only for a link whose host is none it knows, then re-parses the
+ * raw string by splitting on `&` and reading each `key=value`. So the encoded
+ * `path` and `prompt` are the whole authority — no host, no `?` — because a
+ * host or a query marker would fold into the first key and drop the path,
+ * which silently retargets the create at Conductor's first repository. Both
+ * values are fully percent-encoded, so a path or prompt carrying `&` or `=`
+ * cannot split the document, and Conductor matches `path` against a
+ * repository's own main-worktree path exactly.
+ */
+export function conductorCreateWorkspaceLink(rootPath: string, prompt?: string): string {
+  const query = [
+    `path=${encodeURIComponent(rootPath)}`,
+    ...(prompt ? [`prompt=${encodeURIComponent(prompt)}`] : []),
+  ].join("&");
+  return `conductor://${query}`;
+}
+
+/**
  * The one workspace state that means the user filed the whole workspace away
  * on Conductor's own surface. Its other states — active, ready, sleeping —
  * are all still-open workspaces.
@@ -186,7 +212,7 @@ export interface ConductorSessionApplicationReaderOptions {
   sqlite?: SqliteModuleLoader;
 }
 
-function defaultConductorDatabasePath(): string {
+export function defaultConductorDatabasePath(): string {
   return path.join(
     os.homedir(),
     "Library",

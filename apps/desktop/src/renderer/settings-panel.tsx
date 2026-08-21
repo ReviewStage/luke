@@ -20,6 +20,7 @@ import {
   type RealtimeVoiceSpeed,
 } from "@sidecar/realtime";
 import {
+  CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
   isProviderId,
   PROVIDER_ID,
   type ProviderId,
@@ -1327,6 +1328,9 @@ function CredentialsSection({
   const supersetWorkspace = workspaceProviders.find(
     (option) => option.id === SUPERSET_WORKSPACE_PROVIDER_ID,
   );
+  const conductorLocalWorkspace = workspaceProviders.find(
+    (option) => option.id === CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
+  );
   return (
     <section className="settings-section" style={cssCustomProperties({ "--row-index": 2 })}>
       <h2>
@@ -1352,32 +1356,44 @@ function CredentialsSection({
             : undefined;
         const workspaceProvider = workspaceProviders.find((option) => option.id === provider.id);
         return (
-          <ProviderCredential
-            key={provider.id}
-            provider={provider}
-            source={settings.credentialSources[provider.id]}
-            storageUnavailable={storageUnavailable}
-            control={control}
-            panelOpen={panelOpen}
-          >
-            {agentRow ? (
-              <WorkspaceAgentRow
-                provider={provider}
-                providerId={agentRow}
-                {...(settings.workspaceAgentDefaults?.[agentRow]
-                  ? { selection: settings.workspaceAgentDefaults[agentRow] }
-                  : undefined)}
-                onChange={preferences.onWorkspaceAgentDefaultChange}
-              />
-            ) : null}
-            {workspaceProvider ? (
-              <WorkspaceProjectRow
-                provider={workspaceProvider}
+          <Fragment key={provider.id}>
+            <ProviderCredential
+              provider={provider}
+              source={settings.credentialSources[provider.id]}
+              storageUnavailable={storageUnavailable}
+              control={control}
+              panelOpen={panelOpen}
+            >
+              {agentRow ? (
+                <WorkspaceAgentRow
+                  provider={provider}
+                  providerId={agentRow}
+                  {...(settings.workspaceAgentDefaults?.[agentRow]
+                    ? { selection: settings.workspaceAgentDefaults[agentRow] }
+                    : undefined)}
+                  onChange={preferences.onWorkspaceAgentDefaultChange}
+                />
+              ) : null}
+              {workspaceProvider ? (
+                <WorkspaceProjectRow
+                  provider={workspaceProvider}
+                  settings={settings}
+                  preferences={preferences}
+                />
+              ) : null}
+            </ProviderCredential>
+            {/* Right below the cloud Conductor key row: the local app on this
+                Mac, recognized with no key. Its own block so the two Conductors
+                read as the different places they are — a repository here versus
+                a cloud project behind a key — rather than one name twice. */}
+            {provider.id === PROVIDER_ID.CONDUCTOR && conductorLocalWorkspace ? (
+              <ConductorLocalIntegration
+                workspaceProvider={conductorLocalWorkspace}
                 settings={settings}
                 preferences={preferences}
               />
             ) : null}
-          </ProviderCredential>
+          </Fragment>
         );
       })}
       {/* Last because the list reads alphabetically. Superset is the other
@@ -1870,6 +1886,44 @@ export interface SupersetControl {
   agents: readonly string[];
   defaultAgent?: string;
   onDefaultAgentChange: (agent: string | undefined) => Promise<string | undefined>;
+}
+
+/**
+ * Local Conductor: the app on this Mac, recognized read-only from its own
+ * index with no key and nothing to connect, so the block has no Connect and no
+ * disconnect — it stands only while repositories are actually detected, and its
+ * whole control is the default-project row every workspace creator draws. It
+ * is deliberately its own block beside the cloud Conductor key row, so the two
+ * Conductors are told apart by where they are rather than sharing one name.
+ */
+function ConductorLocalIntegration({
+  workspaceProvider,
+  settings,
+  preferences,
+}: {
+  /** Local Conductor's repositories, present only once a read reported any. */
+  workspaceProvider: WorkspaceProviderOption;
+  settings: AppSettings;
+  preferences: PreferenceWrites;
+}): React.JSX.Element {
+  return (
+    <div className="credential" {...searchAnchorProps(CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID)}>
+      <div className="credential-row">
+        <span className="credential-identity">
+          <span className="credential-mark">
+            <ProviderMark providerId={CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID} />
+          </span>
+          <span className="credential-name">{workspaceProvider.name}</span>
+          <CheckIcon />
+        </span>
+      </div>
+      <WorkspaceProjectRow
+        provider={workspaceProvider}
+        settings={settings}
+        preferences={preferences}
+      />
+    </div>
+  );
 }
 
 function SupersetIntegration({

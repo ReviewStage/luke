@@ -2,6 +2,7 @@ import { GOOGLE_CALENDAR_ID } from "@sidecar/calendar/vocabulary";
 import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials";
 import { ISSUE_TRACKER_ID, type IssueTrackerId } from "@sidecar/issues";
 import {
+  CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
   PROVIDER_ID,
   type ProviderId,
   SESSION_APPLICATION_ID,
@@ -457,7 +458,8 @@ export type MarkId =
   | typeof APPLE_CALENDAR_ID
   | typeof GOOGLE_CALENDAR_ID
   | typeof CREDENTIAL_PROVIDER_ID.OPENAI
-  | typeof SUPERSET_WORKSPACE_PROVIDER_ID;
+  | typeof SUPERSET_WORKSPACE_PROVIDER_ID
+  | typeof CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID;
 
 const PROVIDER_MARKS = {
   [APPLE_CALENDAR_ID]: AppleCalendarMark,
@@ -466,6 +468,9 @@ const PROVIDER_MARKS = {
   [SESSION_APPLICATION_ID.CMUX]: CmuxMark,
   [PROVIDER_ID.CODEX]: CodexMark,
   [PROVIDER_ID.CONDUCTOR]: ConductorMark,
+  // Local Conductor creation wears the same mark as the cloud provider: both
+  // are Conductor making a workspace, told apart only by where it lands.
+  [CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID]: ConductorMark,
   [PROVIDER_ID.COPILOT]: CopilotMark,
   [PROVIDER_ID.CURSOR]: CursorMark,
   // Cursor the app draws Cursor's own mark: the id differs from the agent's

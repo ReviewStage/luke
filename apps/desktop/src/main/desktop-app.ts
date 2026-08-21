@@ -29,6 +29,7 @@ import {
   CmuxSessionApplicationReader,
   CmuxSessionApplicationSnapshot,
   CodexCloudSessionAdapter,
+  ConductorLocalWorkspaceAdapter,
   ConductorSessionApplicationReader,
   ConductorSessionApplicationSnapshot,
   defaultOrcaDataDirectory,
@@ -44,6 +45,7 @@ import {
   attentionSpeechFromReviews,
 } from "@sidecar/realtime";
 import {
+  CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
   CreatedWorkspaceOpenTracker,
   InMemorySessionRegistry,
   isProviderId,
@@ -173,6 +175,14 @@ const sessionRegistry = new InMemorySessionRegistry();
 // "unknown".
 const codexCloudAdapter = new CodexCloudSessionAdapter();
 const conductorSessionApplications = new ConductorSessionApplicationReader();
+// The local counterpart of the cloud Conductor adapter's creation path: it
+// reads the repositories Conductor holds and creates a workspace in one by
+// handing Conductor's own creation deep link to the operating system. It
+// observes no sessions of its own, so it joins the workspace-project offer and
+// the act router rather than the observation registry.
+const conductorLocalWorkspaceAdapter = new ConductorLocalWorkspaceAdapter({
+  openExternal: (url) => shell.openExternal(url),
+});
 const orcaWorkspaces = new OrcaWorkspaceReader({
   dataDirectory: process.env.ORCA_USER_DATA_PATH ?? defaultOrcaDataDirectory(),
 });
@@ -683,6 +693,7 @@ async function applyVoiceCredential(): Promise<void> {
 
 function adapterFor(providerId: string) {
   if (providerId === SUPERSET_WORKSPACE_PROVIDER_ID) return supersetWorkspaceAdapter;
+  if (providerId === CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID) return conductorLocalWorkspaceAdapter;
   return isProviderId(providerId) ? providerRegistry[providerId].adapter : undefined;
 }
 
@@ -711,7 +722,13 @@ async function rememberWorkspaceDefaults(
   agent: string | undefined,
 ): Promise<void> {
   const providerId = adapter.provider.id;
-  if (!isProviderId(providerId) && providerId !== SUPERSET_WORKSPACE_PROVIDER_ID) return;
+  if (
+    !isProviderId(providerId) &&
+    providerId !== SUPERSET_WORKSPACE_PROVIDER_ID &&
+    providerId !== CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID
+  ) {
+    return;
+  }
   try {
     if (
       (await settingsStore.get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field)) === undefined
@@ -1055,13 +1072,16 @@ function registerIpc(): void {
  */
 function offeredWorkspaceProjects(): readonly ObservedWorkspaceProject[] {
   if (!runMode.observesProviders) return [];
-  return [...orderedRegistrations.map(({ adapter }) => adapter), supersetWorkspaceAdapter].flatMap(
-    (adapter) =>
-      adapter.workspaceProjects().map((project) => ({
-        ...project,
-        providerId: adapter.provider.id,
-        providerName: adapter.provider.displayName,
-      })),
+  return [
+    ...orderedRegistrations.map(({ adapter }) => adapter),
+    supersetWorkspaceAdapter,
+    conductorLocalWorkspaceAdapter,
+  ].flatMap((adapter) =>
+    adapter.workspaceProjects().map((project) => ({
+      ...project,
+      providerId: adapter.provider.id,
+      providerName: adapter.provider.displayName,
+    })),
   );
 }
 
@@ -1113,6 +1133,13 @@ async function refreshProviderSessions(generation: number): Promise<void> {
     process.stderr.write(`cmux application observation failed: ${message}\n`);
     return new CmuxSessionApplicationSnapshot();
   });
+  // Re-reads the repositories Conductor holds so the local create offer tracks
+  // its index. A failed read empties the offer inside the adapter, so a create
+  // is never validated against repositories a later read could no longer see.
+  const conductorRepositoriesPromise = conductorLocalWorkspaceAdapter.refresh().catch((error) => {
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`Conductor repository observation failed: ${message}\n`);
+  });
   let supersetSnapshot = new SupersetWorkspaceSnapshot([]);
   let supersetOrganization: string | undefined;
   let supersetAgentDefault: string | undefined;
@@ -1144,6 +1171,7 @@ async function refreshProviderSessions(generation: number): Promise<void> {
   const conductorSnapshot = await conductorSnapshotPromise;
   const orcaSnapshot = await orcaSnapshotPromise;
   const cmuxSnapshot = await cmuxSnapshotPromise;
+  await conductorRepositoriesPromise;
   const supersetActionsEnabled = supersetOrganization !== undefined;
   if (actionsWereEnabled !== supersetActionsEnabled) {
     if (supersetActionsEnabled) {

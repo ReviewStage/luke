@@ -21,6 +21,18 @@ export const PROVIDER_ID = {
 export type ProviderId = (typeof PROVIDER_ID)[keyof typeof PROVIDER_ID];
 
 /**
+ * The provider id the local Conductor workspace creator answers to. It names
+ * no observed session provider — `isProviderId` stays false for it — because a
+ * local Conductor chat is already observed by the agent that runs it. The id
+ * exists only so the repositories Conductor holds can offer their creation
+ * projects apart from the cloud Conductor adapter, which owns
+ * `PROVIDER_ID.CONDUCTOR`: a creation request resolves to exactly one adapter,
+ * so a local repository and a cloud project must route under ids of their own,
+ * even as both wear Conductor's name and mark.
+ */
+export const CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID = "conductor-local";
+
+/**
  * The order any list of providers reads in. It is the registry's own order
  * rather than one derived from live sessions, so a list of agents does not
  * reshuffle as their sessions come and go.

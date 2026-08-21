@@ -162,7 +162,18 @@ Trust constraints:
   conversation, lands only in a project its provider reported on the latest
   observation pass and documents a creation endpoint for; the ask names a
   reported project, never a repository URL or path of its own, and a provider
-  that documents no such endpoint offers nowhere to create. The ask may carry
+  that documents no such endpoint offers nowhere to create. A local manager's
+  documented creation endpoint may be its own deep link rather than a network
+  call: for a workspace on this machine (Conductor today) the ask is honored
+  by handing that link to the operating system the way an open is, except that
+  where an open reaches no provider this one asks the manager to make exactly
+  what the developer asked. The project it names is still a reported one — a
+  repository that manager's own index listed on the latest pass — and the path
+  the create lands on is the one that report carried, read back from the
+  offered project rather than composed by the ask; a manager that lists no
+  repository offers nowhere to create, and the link carries the opening task
+  alone, since Conductor's creation link documents no agent, model, or name.
+  The ask may carry
   the new agent's opening task, the developer's own words, bounded and
   delivered like a message to an existing session, through the provider's
   documented endpoints, and each project says whether it takes one, needs

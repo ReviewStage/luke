@@ -2,6 +2,7 @@ export { CompositeSessionProviderAdapter } from "./composite-provider-adapter.js
 export {
   CLI_CONNECTION,
   type CliConnection,
+  CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
   isProviderId,
   maximumObservedWorkspaceProjects,
   maximumWorkspaceNameLength,
