@@ -18,6 +18,7 @@ import {
   ADMIN_USER_ID_PARAM,
 } from "../server/admin/http";
 import { accountInitials } from "./account-initials";
+import { accountLabel } from "./account-label";
 import { GitHubMark, GoogleMark } from "./account-marks";
 import { AUTH_BUTTON } from "./auth-surface";
 import {
@@ -530,8 +531,10 @@ function ActiveAccountsTable({
                     onOpen(entry.id);
                   }}
                 >
-                  <div className="font-medium">{entry.name}</div>
-                  <div className="text-xs text-muted-foreground">{entry.email}</div>
+                  <div className="font-medium">{accountLabel(entry)}</div>
+                  {accountLabel(entry) === entry.email ? null : (
+                    <div className="text-xs text-muted-foreground">{entry.email}</div>
+                  )}
                 </a>
               </td>
               <td className="px-5 py-3 text-right tabular-nums">
@@ -676,7 +679,7 @@ function AccountMenu({
         className="flex cursor-pointer items-center rounded-full transition-opacity duration-150 hover:opacity-80"
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label={`Account menu for ${account.name || account.email}`}
+        aria-label={`Account menu for ${accountLabel(account)}`}
         onClick={() => setOpen(!open)}
       >
         <AccountAvatar account={account} />
@@ -1300,9 +1303,7 @@ function UserDetailPage({
           />
           <div>
             <div className="flex flex-wrap items-center gap-2.5">
-              <h1 className="text-2xl font-semibold tracking-[-0.01em]">
-                {subject.name || subject.email}
-              </h1>
+              <h1 className="text-2xl font-semibold tracking-[-0.01em]">{accountLabel(subject)}</h1>
               {subject.admin ? (
                 <span className="rounded-full border border-border px-2 py-0.5 font-mono text-[10px] tracking-[0.2px] text-muted-foreground uppercase">
                   Admin
@@ -1447,7 +1448,7 @@ const USERS_SORT_FIRST_DIRECTION = {
  * is an ISO date, so its lexicographic order is its chronological one.
  */
 const USERS_SORT_VALUE = {
-  [USERS_SORT_KEY.ACCOUNT]: (row) => (row.name || row.email).toLowerCase(),
+  [USERS_SORT_KEY.ACCOUNT]: (row) => accountLabel(row).toLowerCase(),
   [USERS_SORT_KEY.JOINED]: (row) => row.createdAt,
   [USERS_SORT_KEY.LAST_SEEN]: (row) => row.lastSeenAt,
   [USERS_SORT_KEY.ACTIVE_DAYS]: (row) => row.activeDays,
@@ -1707,14 +1708,16 @@ function UsersTable({
                   />
                   <div>
                     <div className="flex items-center gap-2 font-medium">
-                      {row.name}
+                      {accountLabel(row)}
                       {row.admin ? (
                         <span className="rounded-full border border-border px-1.5 py-px font-mono text-[10px] tracking-[0.2px] text-muted-foreground uppercase">
                           Admin
                         </span>
                       ) : null}
                     </div>
-                    <div className="text-xs text-muted-foreground">{row.email}</div>
+                    {accountLabel(row) === row.email ? null : (
+                      <div className="text-xs text-muted-foreground">{row.email}</div>
+                    )}
                   </div>
                 </a>
               </td>
