@@ -15,6 +15,13 @@
       "when": 1786949863756,
       "tag": "0001_bright_morbius",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1787274933957,
+      "tag": "0002_living_zarek",
+      "breakpoints": true
     }
   ]
 }

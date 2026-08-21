@@ -2,6 +2,7 @@ import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { betterAuth } from "better-auth";
 import { jwt, lastLoginMethod } from "better-auth/plugins";
+import { USER_ROLE } from "./admin/admin-access.js";
 import {
   ACCOUNT_TOKEN_STORAGE,
   denyOAuthClientPrivileges,
@@ -19,6 +20,16 @@ export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET,
   database: drizzleAdapter(getDatabase(), { provider: "pg", schema }),
   account: ACCOUNT_TOKEN_STORAGE,
+  // Admin access is a plain-text `role` on the user, managed by Better Auth:
+  // declared here, generated into the schema by `auth:generate`, and returned on
+  // the session so the dashboard reads it without a query of its own. `input:
+  // false` keeps a sign-up from asserting its own role — the role is set only by
+  // a maintainer's own write to the database, never by anything Luke runs.
+  user: {
+    additionalFields: {
+      role: { type: "string", required: false, defaultValue: USER_ROLE.USER, input: false },
+    },
+  },
   disabledPaths: ["/token"],
   socialProviders: {
     google: {
