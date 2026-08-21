@@ -32,6 +32,20 @@
 Notable changes to Luke, newest first. Each heading is a released version and
 the date its release was published.
 
+## 0.3.7 — 2026-08-20
+
+### Improvements
+
+- Luke opens local Cursor chats through Cursor's own agent route
+  ([#363](https://github.com/ReviewStage/luke/pull/363))
+
+### Fixes
+
+- Fixed the ready-to-install update status using unnecessary extra copy
+  ([#373](https://github.com/ReviewStage/luke/pull/373))
+- Fixed Developer ID releases omitting native helpers from the packaged app
+  ([#375](https://github.com/ReviewStage/luke/pull/375))
+
 ## 0.3.6 — 2026-08-20
 
 ### Improvements

@@ -64,7 +64,7 @@ function packagerOptions(signing = resolveSigningMode({})) {
     appUpdateConfigPath: `/repo/apps/desktop/.build/${APP_UPDATE_CONFIG_FILE_NAME}`,
     entitlementsPath,
     signing,
-    version: "0.3.6",
+    version: "0.3.7",
   });
 }
 
@@ -98,7 +98,7 @@ test("the bundle carries the updater config electron-updater reads before every 
   );
 });
 
-test("workspace package versions agree on v0.3.6", () => {
+test("workspace package versions agree on v0.3.7", () => {
   // Enumerated rather than listed, so a package added to the workspace is held
   // to the release version without anyone remembering to name it here.
   const packagePaths = [
@@ -122,7 +122,7 @@ test("workspace package versions agree on v0.3.6", () => {
 
   assert.deepEqual(
     versions.map(({ version }) => version),
-    packagePaths.map(() => "0.3.6"),
+    packagePaths.map(() => "0.3.7"),
   );
 });
 
