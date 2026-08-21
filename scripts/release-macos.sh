@@ -21,5 +21,4 @@ fi
 "$SCRIPT_DIRECTORY/check.sh"
 
 cd "$SIDECAR_REPO_ROOT"
-pnpm package
-node "$SIDECAR_DESKTOP_APP_ROOT/scripts/release.mjs" "$@"
+pnpm --filter @luke/desktop release "$@"

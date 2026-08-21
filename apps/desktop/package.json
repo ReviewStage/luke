@@ -30,15 +30,13 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "build:native": "node scripts/build-native.mjs",
-    "package": "pnpm build:native && pnpm build && node scripts/package.mjs",
-    "package:builder": "pnpm build:native && pnpm build && node scripts/prepare-builder-assets.mjs && electron-builder --config electron-builder.ts --mac --arm64 --publish never",
-    "release:builder": "LUKE_ELECTRON_BUILDER_NOTARIZE=1 pnpm package:builder",
+    "package": "pnpm build:native && pnpm build && node scripts/prepare-builder-assets.mjs && electron-builder --config electron-builder.ts --mac --arm64 --publish never",
+    "release": "LUKE_ELECTRON_BUILDER_NOTARIZE=1 pnpm package",
     "start": "pnpm build:native && pnpm build && electron .",
     "test": "tsx --test 'src/**/*.test.ts'",
     "typecheck": "tsc --project tsconfig.json"
   },
   "devDependencies": {
-    "@electron/packager": "20.2.1",
     "@sidecar/account": "workspace:*",
     "@sidecar/analytics": "workspace:*",
     "@sidecar/attention": "workspace:*",

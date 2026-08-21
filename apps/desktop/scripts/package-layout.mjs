@@ -4,7 +4,7 @@ export const PACKAGED_ARCHITECTURE = "arm64";
 
 /**
  * The native helpers, named once. Each is a native source and the binary it
- * becomes: the build compiles this list and the packager ships it, so a helper
+ * becomes: the build compiles this list and packaging ships it, so a helper
  * cannot be built without reaching the bundle or shipped without being built.
  * Swift sources become standalone executables the app spawns; the `.m` source
  * becomes a Node-API addon the main process loads, because it works on the
@@ -48,22 +48,10 @@ export const NATIVE_HELPERS = [
   },
 ];
 
-export const packageIgnorePatterns = [
-  /^\/(?:\.build|native|node_modules|out|scripts|src)(?:$|\/)/,
-  /^\/(?:\.gitignore|pnpm-lock\.yaml|tsconfig\.json)$/,
-  /\.map$/,
-];
+export function packagedAppPath(repoRoot, architecture = PACKAGED_ARCHITECTURE) {
+  return path.join(repoRoot, "artifacts", "release-builder", `mac-${architecture}`, "Luke.app");
+}
 
 export function packagedAppExecutable(repoRoot, architecture = PACKAGED_ARCHITECTURE) {
-  return path.join(
-    repoRoot,
-    "apps",
-    "desktop",
-    "out",
-    `Luke-darwin-${architecture}`,
-    "Luke.app",
-    "Contents",
-    "MacOS",
-    "Luke",
-  );
+  return path.join(packagedAppPath(repoRoot, architecture), "Contents", "MacOS", "Luke");
 }

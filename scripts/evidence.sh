@@ -12,7 +12,7 @@ sidecar_ensure_dependencies
 
 cd "$SIDECAR_REPO_ROOT"
 pnpm package
-PACKAGED_APP=$(find "$SIDECAR_DESKTOP_APP_ROOT/out" -type d -path '*/Luke.app' -print -quit)
+PACKAGED_APP=$(node -e "import('./apps/desktop/scripts/package-layout.mjs').then((layout) => process.stdout.write(layout.packagedAppPath(process.cwd())))")
 APP_EXECUTABLE="$PACKAGED_APP/Contents/MacOS/Luke"
 if [[ ! -x "$APP_EXECUTABLE" ]]; then
     printf 'error: packaged app executable was not found\n' >&2
