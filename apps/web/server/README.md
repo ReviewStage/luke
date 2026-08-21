@@ -80,9 +80,15 @@ The Preview environment needs `BETTER_AUTH_URL`, `BETTER_AUTH_SECRET`,
 production, which is the end that exchanges the code. The two ends encrypt with
 `BETTER_AUTH_SECRET` unless `BETTER_AUTH_PROXY_SECRET` is set, and whichever it
 is has to hold the same value in both environments, or the profile arrives
-undecryptable. Prefer setting `BETTER_AUTH_PROXY_SECRET` on both: a preview then
-never holds the secret that signs production's sessions, and a leaked proxy
-secret forges nothing.
+undecryptable. Set `BETTER_AUTH_PROXY_SECRET` on both rather than sharing the
+main one: a preview then never holds the key that signs production's sessions
+and decrypts its stored provider tokens. It does not make the shared key
+harmless. A profile encrypted with the proxy secret is what
+`/api/auth/oauth-proxy-callback` trusts, and the state it is bound to can be
+had by starting a sign-in, so the proxy secret mints sessions on every
+deployment that carries the plugin, production included. It is a production
+credential wherever it is stored, and Preview is the least guarded place it is
+stored.
 
 Vercel Deployment Protection sits in front of all of this. The redirect back
 from production lands on the protected preview like any other request, so the
