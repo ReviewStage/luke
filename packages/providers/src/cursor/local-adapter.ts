@@ -9,8 +9,11 @@ import {
   UNKNOWN_WORKSPACE_LABEL,
 } from "@sidecar/session";
 import {
+  isRecord,
   isWireString,
+  oneLine,
   resolveOptions,
+  text,
   unparsedWire,
   type WireBoundaryInput,
   type WireRecord,
@@ -36,9 +39,10 @@ import {
   type SqliteDatabase,
   type SqliteModuleLoader,
 } from "../shared/local-sqlite.js";
+import { transcriptContentBlocks } from "../shared/local-transcript.js";
 import { CURSOR_PROVIDER } from "./adapter.js";
 import { cursorApplication, cursorChatLink } from "./app-links.js";
-import { readCursorSessionTranscript } from "./transcript.js";
+import { CURSOR_TOOL_INPUT_KEY, readCursorSessionTranscript } from "./transcript.js";
 
 /** A turn Cursor failed records its own reason, which is transcript content. */
 const CURSOR_TURN_FAILED_MESSAGE = "The turn failed";
@@ -113,14 +117,20 @@ const CURSOR_TURN_STATUS = {
   ERROR: "error",
 } as const;
 
-/** Who a message record belongs to. Its content is never read. */
+/** Who a message record belongs to. The conversation's words are never read. */
 const CURSOR_ROLE = {
   ASSISTANT: "assistant",
   USER: "user",
 } as const;
 
+/** The one content block observation reads: the tool call a turn is running. */
+const CURSOR_CONTENT_TYPE = {
+  TOOL_USE: "tool_use",
+} as const;
+
 const CURSOR_LOCAL_ADAPTER_DEFAULTS = {
   MAXIMUM_PROJECT_DIRECTORIES: 200,
+  MAXIMUM_ACTIVITY_LENGTH: 80,
 } as const;
 
 export interface CursorLocalAdapterOptions {
@@ -278,21 +288,57 @@ function isMessageRecord(record: WireRecord): boolean {
   return Object.values(CURSOR_ROLE).some((knownRole) => knownRole === role);
 }
 
-/**
- * How the newest turn ended, or nothing while one is still open. Cursor marks
- * the end of a turn explicitly, so an open turn is read from the absence of
- * that mark rather than inferred from what the assistant last said — which is
- * transcript content, and is not read here at all. A record this build does not
- * know is passed over rather than taken for either.
- */
-function closedTurn(tail: string): { failed: boolean } | undefined {
-  for (const record of tailRecords(tail).toReversed()) {
-    if (record[CURSOR_RECORD_FIELD.TYPE] === CURSOR_RECORD_TYPE.TURN_ENDED) {
-      return { failed: record[CURSOR_RECORD_FIELD.STATUS] === CURSOR_TURN_STATUS.ERROR };
-    }
-    if (isMessageRecord(record)) return undefined;
+/** What the bounded tail says about the newest turn. */
+interface ParsedCursorTail {
+  /** How the newest turn ended, or nothing while one is still open. */
+  turn?: { failed: boolean };
+  /** The tool call the open turn is running, named the way Codex's rows name theirs. */
+  activity?: string;
+}
+
+/** Names the tool a turn called, preferring whichever input says what it is for. */
+function activityFromToolUse(block: WireRecord): string | undefined {
+  const name = text(block.name);
+  if (!name) return undefined;
+  const input = isRecord(block.input) ? block.input : {};
+  for (const key of CURSOR_TOOL_INPUT_KEY) {
+    const detail = oneLine(text(input[key]), CURSOR_LOCAL_ADAPTER_DEFAULTS.MAXIMUM_ACTIVITY_LENGTH);
+    if (detail) return `${name}: ${detail}`;
   }
-  return undefined;
+  return name;
+}
+
+/**
+ * Reads the turn boundary and the current tool call out of a transcript tail.
+ * Cursor marks the end of a turn explicitly, so an open turn is read from the
+ * absence of that mark rather than inferred from what the assistant last said
+ * — the conversation's words are not read here at all, only the tool-call
+ * blocks that say what the turn is doing right now. A record this build does
+ * not know is passed over rather than taken for either.
+ */
+function parseCursorTail(tail: string): ParsedCursorTail {
+  const parsed: ParsedCursorTail = {};
+  for (const record of tailRecords(tail)) {
+    if (record[CURSOR_RECORD_FIELD.TYPE] === CURSOR_RECORD_TYPE.TURN_ENDED) {
+      parsed.turn = { failed: record[CURSOR_RECORD_FIELD.STATUS] === CURSOR_TURN_STATUS.ERROR };
+      // A turn that ended is not running its last call, and holding it would
+      // keep a stale line on the row until some other tool runs.
+      parsed.activity = undefined;
+      continue;
+    }
+    if (!isMessageRecord(record)) continue;
+    parsed.turn = undefined;
+    if (record[CURSOR_RECORD_FIELD.ROLE] === CURSOR_ROLE.USER) {
+      // A new turn is not running the previous turn's call either.
+      parsed.activity = undefined;
+      continue;
+    }
+    for (const block of transcriptContentBlocks(record, false)) {
+      if (block.type !== CURSOR_CONTENT_TYPE.TOOL_USE) continue;
+      parsed.activity = activityFromToolUse(block) ?? parsed.activity;
+    }
+  }
+  return parsed;
 }
 
 /**
@@ -400,14 +446,21 @@ function matchingChats(
 }
 
 /**
- * What Cursor knows about a local session beyond its state: the folder, that
- * a turn failed, and — for a chat the app holds — the chat's own address.
- * Cursor records why a turn failed, but that reason is written from the turn
- * itself, so the fact of the failure is reported and its wording is not —
- * the same fixed line the cloud half reports for a failed run.
+ * What Cursor knows about a local session beyond its state: the folder, the
+ * tool call an open turn is running, that a turn failed, and — for a chat the
+ * app holds — the chat's own address. Cursor records why a turn failed, but
+ * that reason is written from the turn itself, so the fact of the failure is
+ * reported and its wording is not — the same fixed line the cloud half
+ * reports for a failed run.
  */
-function detailFor(label: string, status: SessionStatus, link: string | undefined): SessionDetail {
+function detailFor(
+  label: string,
+  status: SessionStatus,
+  link: string | undefined,
+  activity: string | undefined,
+): SessionDetail {
   return {
+    ...(activity ? { activity } : undefined),
     repository: label,
     ...(link ? { link } : undefined),
     ...(status === SESSION_STATUS.ERROR ? { error: CURSOR_TURN_FAILED_MESSAGE } : undefined),
@@ -428,12 +481,13 @@ function defaultGlobalStorageStatePath(): string {
 
 /**
  * Observes the Cursor sessions that run on this machine, from the transcripts
- * Cursor already writes for itself. It reads no message content, needs no
- * credential, and reports nothing that Cursor has not written down.
+ * Cursor already writes for itself. It reads the turn markers and the open
+ * turn's tool calls — never the conversation's words — needs no credential,
+ * and reports nothing that Cursor has not written down.
  */
 export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
   CursorTranscriptCandidate,
-  { failed: boolean } | undefined
+  ParsedCursorTail
 > {
   readonly provider = CURSOR_PROVIDER;
 
@@ -506,10 +560,8 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
     });
   }
 
-  protected async parse(
-    candidate: CursorTranscriptCandidate,
-  ): Promise<{ failed: boolean } | undefined> {
-    return closedTurn(await readTail(candidate.filePath, this.#readTailBytes));
+  protected async parse(candidate: CursorTranscriptCandidate): Promise<ParsedCursorTail> {
+    return parseCursorTail(await readTail(candidate.filePath, this.#readTailBytes));
   }
 
   /**
@@ -520,12 +572,12 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
    */
   protected observation(
     candidate: CursorTranscriptCandidate,
-    turn: { failed: boolean } | undefined,
+    parsed: ParsedCursorTail,
     now: number,
     activeSessionFreshnessMs: number,
   ): ProviderSessionObservation {
     const label = this.#workspaceLabels.label(candidate.projectDirectoryName);
-    const status = statusFromTurn(turn, candidate.mtimeMs, now, activeSessionFreshnessMs);
+    const status = statusFromTurn(parsed.turn, candidate.mtimeMs, now, activeSessionFreshnessMs);
     const link = this.#appChats.has(candidate.providerSessionId)
       ? cursorChatLink(candidate.providerSessionId)
       : undefined;
@@ -537,7 +589,7 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
       // written is the only account Cursor keeps of when this session last did
       // anything.
       observedAt: candidate.mtimeMs,
-      detail: detailFor(label, status, link),
+      detail: detailFor(label, status, link, parsed.activity),
       ...(link ? { applications: [cursorApplication(link)] } : undefined),
     };
   }
