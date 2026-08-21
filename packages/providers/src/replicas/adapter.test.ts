@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { SESSION_STATUS } from "@sidecar/session";
+import type { JsonObject } from "@sidecar/wire/testing";
 import { HTTP_STATUS, jsonResponse, recordingFetch } from "@sidecar/wire/testing";
 import type { CloudFetch } from "../shared/cloud-session-adapter.js";
 import { describeCloudAdapterContract } from "../testing/cloud-adapter-contract.js";
@@ -10,7 +11,8 @@ const TEST_TIME = Date.parse("2026-08-21T02:45:00.000Z");
 const TEST_BASE_URL = "https://replicas.test";
 const TEST_API_KEY = "replicas-test-key";
 const TEST_REPOSITORY_URL = "https://github.com/reviewstage/luke";
-const SECRET_NAME_TEXT = "SECRET_NAME_TEXT";
+/** The developer's own words in the retained history, which must never leave it. */
+const SECRET_PROMPT_TEXT = "SECRET_PROMPT_TEXT";
 
 /** The documented workspace lifecycle, verified against the published OpenAPI. */
 const TEST_STATUS = {
@@ -23,6 +25,7 @@ const TEST_STATUS = {
 
 interface TestWorkspace {
   id: string;
+  name?: string;
   status?: string;
   repositoryUrl?: string;
   repositoryName?: string;
@@ -30,19 +33,63 @@ interface TestWorkspace {
   pullRequestUrls?: readonly string[];
   createdAt: number;
   lastActivityAt?: number;
+  codingAgent?: string;
+  historyEvents?: readonly JsonObject[];
+  refuseHistory?: boolean;
 }
 
 function isoTimestamp(timestampMs: number): string {
   return new Date(timestampMs).toISOString();
 }
 
+function claudeAssistant(text: string): JsonObject {
+  return {
+    timestamp: isoTimestamp(TEST_TIME - 10_000),
+    type: "claude-assistant",
+    payload: {
+      type: "assistant",
+      message: { content: [{ type: "text", text }] },
+    },
+  };
+}
+
+function claudeResult(): JsonObject {
+  return {
+    timestamp: isoTimestamp(TEST_TIME - 9_000),
+    type: "claude-result",
+    payload: { type: "result", subtype: "success" },
+  };
+}
+
+/** Tool results travel as user events, and a prompt does too. */
+function claudeUser(text: string): JsonObject {
+  return {
+    timestamp: isoTimestamp(TEST_TIME - 8_000),
+    type: "claude-user",
+    payload: { type: "user", message: { content: [{ type: "text", text }] } },
+  };
+}
+
+function codexAssistant(text: string): JsonObject {
+  return {
+    timestamp: isoTimestamp(TEST_TIME - 10_000),
+    type: "response_item",
+    payload: { type: "message", role: "assistant", content: [{ type: "output_text", text }] },
+  };
+}
+
+function cursorAssistant(text: string): JsonObject {
+  return {
+    timestamp: isoTimestamp(TEST_TIME - 10_000),
+    type: "cursor-assistant",
+    payload: { text },
+  };
+}
+
 function workspacePayload(workspace: TestWorkspace) {
   return {
     id: workspace.id,
-    // Replicas derives a workspace's name from the opening task whenever the
-    // user did not type one, so it is transcript content that no observation
-    // may carry.
-    name: `${SECRET_NAME_TEXT}-branch-name`,
+    name: workspace.name ?? "fix-login-timeout",
     status: workspace.status ?? TEST_STATUS.ACTIVE,
     source: "dashboard",
     created_at: isoTimestamp(workspace.createdAt),
@@ -67,10 +114,11 @@ function workspacePayload(workspace: TestWorkspace) {
 
 /**
  * Serves the subset of the Replica API the adapter is allowed to use: the
- * organization's replica list, and the documented message endpoint. The
- * per-workspace reads are deliberately not served — they wake a sleeping
- * workspace, so a request to one is a failure of the pass, not a route this
- * fake forgot — and neither is the dashboard's viewer-scoped workspace list.
+ * organization's replica list, the retained-history read, and the documented
+ * message endpoint. The reads that wake a workspace — `GET /v1/replica/{id}`
+ * and its chats list — are deliberately not served, so a request to one is a
+ * failure of the pass, not a route this fake forgot; a workspace marked
+ * `refuseHistory` answers the conflict a pre-retention engine answers.
  */
 function fakeReplicasApi(workspaces: readonly TestWorkspace[]) {
   return recordingFetch((request) => {
@@ -85,6 +133,27 @@ function fakeReplicasApi(workspaces: readonly TestWorkspace[]) {
     ) {
       const known = workspaces.some((workspace) => workspace.id === segments[2]);
       return known ? jsonResponse({ status: "sent" }) : jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
+    }
+    if (
+      method === "GET" &&
+      segments.length === 4 &&
+      segments[0] === "v1" &&
+      segments[1] === "replica" &&
+      segments[3] === "history"
+    ) {
+      const workspace = workspaces.find((candidate) => candidate.id === segments[2]);
+      if (!workspace || workspace.refuseHistory) {
+        return jsonResponse({}, HTTP_STATUS.CONFLICT);
+      }
+      return jsonResponse({
+        thread_id: null,
+        events: [...(workspace.historyEvents ?? [])],
+        total: workspace.historyEvents?.length ?? 0,
+        has_more: false,
+        coding_agent: workspace.codingAgent ?? null,
+        waking: null,
+        senders: [],
+      });
     }
     if (
       method !== "GET" ||
@@ -161,10 +230,11 @@ test("declares every provider operation on one adapter interface", () => {
   assert.ok(adapter.spawnWorkspaceAgent instanceof Function);
 });
 
-test("observes an active workspace without exposing its task-derived name", async () => {
+test("observes an active workspace titled by the name Replicas gave it", async () => {
   const api = fakeReplicasApi([
     {
       id: "workspace-active",
+      name: "fix-login-timeout",
       status: TEST_STATUS.ACTIVE,
       createdAt: TEST_TIME - 60_000,
       lastActivityAt: TEST_TIME - 30_000,
@@ -176,22 +246,44 @@ test("observes an active workspace without exposing its task-derived name", asyn
   assert.deepEqual(REPLICAS_PROVIDER, { id: "replicas", displayName: "Replicas" });
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.providerSessionId, "workspace-active");
-  assert.equal(observations[0]?.title, "luke");
+  assert.equal(observations[0]?.title, "fix-login-timeout");
   assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
   assert.equal(observations[0]?.observedAt, TEST_TIME - 30_000);
   assert.equal(observations[0]?.controls, undefined);
-  // The row is worded by the surface from these fields, never by the adapter.
-  assert.equal(observations[0]?.recap, undefined);
   // The list projection reports no address of the workspace's own, so the row
   // honestly offers nowhere to open rather than a composed dashboard URL.
   assert.deepEqual(observations[0]?.detail, { repository: "luke" });
-  assert.equal(JSON.stringify(observations).includes(SECRET_NAME_TEXT), false);
 });
 
-test("reads the whole pass with one list call and never a per-workspace read", async () => {
-  // `GET /v1/replica/{id}` is documented to wake a sleeping workspace, so the
-  // pass must be answerable from the list alone: one request, however many
-  // workspaces it reports and whatever states they are in.
+test("falls back to the repository for a workspace the list did not name", async () => {
+  const api = fakeReplicasApi([
+    { id: "workspace-unnamed", name: "", createdAt: TEST_TIME - 1_000 },
+  ]);
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  assert.equal(observations[0]?.title, "luke");
+  assert.equal(observations[0]?.detail?.repository, "luke");
+});
+
+test("stands archived workspaces behind no row, the way the dashboard hides them", async () => {
+  const api = fakeReplicasApi([
+    activeWorkspace("workspace-open", TEST_TIME - 1_000),
+    { id: "workspace-filed", status: TEST_STATUS.ARCHIVED, createdAt: TEST_TIME - 2_000 },
+  ]);
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  assert.deepEqual(
+    observations.map((observation) => observation.providerSessionId),
+    ["workspace-open"],
+  );
+});
+
+test("reads the pass from the list and bounded history tails, never a waking read", async () => {
+  // `GET /v1/replica/{id}` and the chats list are documented to wake a
+  // sleeping workspace, so the pass is answerable from the list and the
+  // retained history alone — the fake refuses everything else.
   const api = fakeReplicasApi([
     activeWorkspace("workspace-one", TEST_TIME - 1_000),
     { id: "workspace-two", status: TEST_STATUS.SLEEPING, createdAt: TEST_TIME - 2_000 },
@@ -201,13 +293,39 @@ test("reads the whole pass with one list call and never a per-workspace read", a
   const observations = await adapterFor(api.fetch).observe();
 
   assert.equal(observations.length, 3);
+  const list = api.requests[0];
+  assert.equal(list?.pathname, "/v1/replica");
+  assert.equal(list?.search, "?limit=100");
+  assert.equal(list?.method, "GET");
+  assert.equal(list?.authorization, `Bearer ${TEST_API_KEY}`);
+  // History is read for the active and the sleeping workspace; an errored one
+  // has no retained conversation worth asking for.
   assert.deepEqual(
-    api.requests.map((request) => request.pathname),
-    ["/v1/replica"],
+    api.requests
+      .slice(1)
+      .map((request) => request.pathname)
+      .sort(),
+    ["/v1/replica/workspace-one/history", "/v1/replica/workspace-two/history"],
   );
-  assert.equal(api.requests[0]?.search, "?limit=100");
-  assert.equal(api.requests[0]?.method, "GET");
-  assert.equal(api.requests[0]?.authorization, `Bearer ${TEST_API_KEY}`);
+  assert.equal(api.requests[1]?.search, "?limit=40");
+});
+
+test("reads a workspace's history once until its activity moves", async () => {
+  const workspaces = [activeWorkspace("workspace-cached", TEST_TIME - 1_000)];
+  const api = fakeReplicasApi(workspaces);
+  const adapter = adapterFor(api.fetch);
+
+  await adapter.observe();
+  await adapter.observe();
+  const unchanged = api.requests.filter((request) => request.pathname.endsWith("/history")).length;
+
+  const touched = workspaces[0];
+  if (touched) touched.lastActivityAt = TEST_TIME - 500;
+  await adapter.observe();
+  const moved = api.requests.filter((request) => request.pathname.endsWith("/history")).length;
+
+  assert.equal(unchanged, 1);
+  assert.equal(moved, 2);
 });
 
 test("maps every status Replicas reports onto a state Luke can show", async () => {
@@ -217,7 +335,6 @@ test("maps every status Replicas reports onto a state Luke can show", async () =
         [TEST_STATUS.PREPARING, "preparing"],
         [TEST_STATUS.ACTIVE, "active"],
         [TEST_STATUS.SLEEPING, "sleeping"],
-        [TEST_STATUS.ARCHIVED, "archived"],
         [TEST_STATUS.ERROR, "error"],
         ["some-later-status", "later-status"],
       ] as const
@@ -237,7 +354,6 @@ test("maps every status Replicas reports onto a state Luke can show", async () =
       ["workspace-preparing", SESSION_STATUS.WORKING],
       ["workspace-active", SESSION_STATUS.WORKING],
       ["workspace-sleeping", SESSION_STATUS.COMPLETE],
-      ["workspace-archived", SESSION_STATUS.COMPLETE],
       ["workspace-error", SESSION_STATUS.ERROR],
       ["workspace-later-status", SESSION_STATUS.UNKNOWN],
     ],
@@ -250,33 +366,130 @@ test("maps every status Replicas reports onto a state Luke can show", async () =
   );
 });
 
-test("keeps reporting a workspace active since this morning as working", async () => {
-  // `last_activity_at` marks activity rather than a heartbeat, and Replicas
-  // itself retires a workspace that has gone quiet, so an active workspace is
-  // working however long ago it was last touched.
-  const startedAt = TEST_TIME - 60 * 60 * 1000;
-  const api = fakeReplicasApi([activeWorkspace("workspace-long-turn", startedAt)]);
+test("marks a workspace with the agent its retained history names", async () => {
+  const api = fakeReplicasApi([
+    {
+      ...activeWorkspace("workspace-claude", TEST_TIME - 1_000),
+      codingAgent: "claude",
+    },
+    {
+      // A kind this build has no identity for rides the model slot in the
+      // provider's own word instead, so it is not lost for lacking a mark.
+      ...activeWorkspace("workspace-pi", TEST_TIME - 2_000),
+      codingAgent: "pi",
+    },
+    activeWorkspace("workspace-unread", TEST_TIME - 3_000),
+  ]);
 
   const observations = await adapterFor(api.fetch).observe();
 
-  assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
-  assert.equal(observations[0]?.observedAt, startedAt);
+  assert.deepEqual(observations[0]?.agent, { id: "claude-code", displayName: "Claude Code" });
+  assert.equal(observations[0]?.detail?.model, undefined);
+  assert.equal(observations[1]?.agent, undefined);
+  assert.equal(observations[1]?.detail?.model, "pi");
+  assert.equal(observations[2]?.agent, undefined);
 });
 
-test("keeps a sleeping workspace settled however long ago it went quiet", async () => {
-  const sleptAt = TEST_TIME - 8 * 60 * 60 * 1000;
+test("reports the parting words as the recap once the turn actually parted", async () => {
+  const api = fakeReplicasApi([
+    {
+      // The result event closes the turn, so the words may speak while the
+      // workspace is still awake.
+      ...activeWorkspace("workspace-settled", TEST_TIME - 1_000),
+      codingAgent: "claude",
+      historyEvents: [
+        claudeUser(SECRET_PROMPT_TEXT),
+        claudeAssistant("Renamed the flag and updated both call sites."),
+        claudeResult(),
+      ],
+    },
+    {
+      // No result yet: the words are mid-turn, half a sentence posing as an
+      // outcome, so the active row keeps quiet.
+      ...activeWorkspace("workspace-mid-turn", TEST_TIME - 2_000),
+      codingAgent: "claude",
+      historyEvents: [claudeAssistant("Starting by reading the failing test")],
+    },
+    {
+      // An event after the result is the next turn already moving, so the
+      // words in hand are the previous turn's, not parting ones.
+      ...activeWorkspace("workspace-asked-again", TEST_TIME - 3_000),
+      codingAgent: "claude",
+      historyEvents: [
+        claudeAssistant("Done. The fixture now covers both paths."),
+        claudeResult(),
+        claudeUser(SECRET_PROMPT_TEXT),
+      ],
+    },
+  ]);
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  assert.equal(observations[0]?.recap, "Renamed the flag and updated both call sites.");
+  assert.equal(observations[1]?.recap, undefined);
+  assert.equal(observations[2]?.recap, undefined);
+  // The developer's own words in the history never leave it: the recap is the
+  // agent's message alone, and no prompt or tool result reaches a row.
+  assert.equal(JSON.stringify(observations).includes(SECRET_PROMPT_TEXT), false);
+});
+
+test("treats a sleeping workspace as settled enough for its parting words", async () => {
+  const sleptAt = TEST_TIME - 2 * 60 * 60 * 1000;
   const api = fakeReplicasApi([
     {
       id: "workspace-asleep",
       status: TEST_STATUS.SLEEPING,
-      createdAt: sleptAt,
+      createdAt: sleptAt - 60_000,
       lastActivityAt: sleptAt,
+      codingAgent: "codex",
+      // Codex documents no turn-completion marker in this stream, so its
+      // words wait for the sleep that proves the turn is over.
+      historyEvents: [codexAssistant("Opened PR 17 with the schema migration.")],
     },
   ]);
 
   const observations = await adapterFor(api.fetch).observe();
 
   assert.equal(observations[0]?.status, SESSION_STATUS.COMPLETE);
+  assert.deepEqual(observations[0]?.agent, { id: "codex", displayName: "Codex" });
+  assert.equal(observations[0]?.recap, "Opened PR 17 with the schema migration.");
+});
+
+test("refuses a recap from an event family whose payload is not specified", async () => {
+  const sleptAt = TEST_TIME - 60 * 60 * 1000;
+  const api = fakeReplicasApi([
+    {
+      id: "workspace-cursor",
+      status: TEST_STATUS.SLEEPING,
+      createdAt: sleptAt - 60_000,
+      lastActivityAt: sleptAt,
+      codingAgent: "cursor",
+      // Replicas documents Cursor payload sub-shapes as not yet specified, so
+      // words are refused rather than guessed out of them.
+      historyEvents: [cursorAssistant("looks plausible but unspecified")],
+    },
+  ]);
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  assert.deepEqual(observations[0]?.agent, { id: "cursor", displayName: "Cursor" });
+  assert.equal(observations[0]?.recap, undefined);
+});
+
+test("keeps the pass when a workspace's history is refused", async () => {
+  const api = fakeReplicasApi([
+    { ...activeWorkspace("workspace-refused", TEST_TIME - 1_000), refuseHistory: true },
+    {
+      ...activeWorkspace("workspace-read", TEST_TIME - 2_000),
+      codingAgent: "opencode",
+    },
+  ]);
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  assert.equal(observations.length, 2);
+  assert.equal(observations[0]?.agent, undefined);
+  assert.deepEqual(observations[1]?.agent, { id: "opencode", displayName: "OpenCode" });
 });
 
 test("orders the pass by latest activity rather than by creation", async () => {
@@ -295,31 +508,6 @@ test("orders the pass by latest activity rather than by creation", async () => {
     observations.map((observation) => observation.providerSessionId),
     ["workspace-touched-now", "workspace-created-late", "workspace-created-early"],
   );
-});
-
-test("labels a workspace by its repository, and by neither its name nor nothing", async () => {
-  const api = fakeReplicasApi([
-    {
-      id: "workspace-repository",
-      repositoryUrl: "https://github.com/reviewstage/sidecar.git",
-      createdAt: TEST_TIME - 1_000,
-    },
-    {
-      id: "workspace-name-only",
-      repositoryUrl: "",
-      repositoryName: "fallback-repository",
-      createdAt: TEST_TIME - 2_000,
-    },
-    { id: "workspace-repositoryless", omitRepositories: true, createdAt: TEST_TIME - 3_000 },
-  ]);
-
-  const observations = await adapterFor(api.fetch).observe();
-
-  assert.equal(observations[0]?.title, "sidecar");
-  assert.equal(observations[0]?.detail?.repository, "sidecar");
-  assert.equal(observations[1]?.title, "fallback-repository");
-  assert.equal(observations[2]?.title, "workspace");
-  assert.equal(JSON.stringify(observations).includes(SECRET_NAME_TEXT), false);
 });
 
 test("reports the newest pull request as the workspace's published change", async () => {
@@ -361,14 +549,18 @@ test("reports why an errored workspace stopped rather than leaving it idle", asy
 });
 
 test("drops a workspace it cannot place in time without losing the rest of the pass", async () => {
-  const fetch: CloudFetch = async () =>
-    jsonResponse({
+  const fetch: CloudFetch = async (url) => {
+    if (new URL(url).pathname.endsWith("/history")) {
+      return jsonResponse({}, HTTP_STATUS.CONFLICT);
+    }
+    return jsonResponse({
       replicas: [
         { status: TEST_STATUS.ACTIVE, created_at: isoTimestamp(TEST_TIME - 1_000) },
         { id: "workspace-undated", status: TEST_STATUS.ACTIVE },
         workspacePayload({ id: "workspace-dated", createdAt: TEST_TIME - 1_000 }),
       ],
     });
+  };
 
   const observations = await adapterFor(fetch).observe();
 
@@ -398,8 +590,7 @@ test("advertises a message only for the statuses Replicas documents taking one",
     { id: "workspace-active", status: TEST_STATUS.ACTIVE, createdAt: TEST_TIME - 1_000 },
     { id: "workspace-sleeping", status: TEST_STATUS.SLEEPING, createdAt: TEST_TIME - 2_000 },
     { id: "workspace-preparing", status: TEST_STATUS.PREPARING, createdAt: TEST_TIME - 3_000 },
-    { id: "workspace-archived", status: TEST_STATUS.ARCHIVED, createdAt: TEST_TIME - 4_000 },
-    { id: "workspace-error", status: TEST_STATUS.ERROR, createdAt: TEST_TIME - 5_000 },
+    { id: "workspace-error", status: TEST_STATUS.ERROR, createdAt: TEST_TIME - 4_000 },
   ]);
 
   const observations = await adapterFor(api.fetch).observe();
@@ -411,11 +602,9 @@ test("advertises a message only for the statuses Replicas documents taking one",
   // A sleeping workspace is documented to wake when interacted with, an act
   // the user's own send performs knowingly.
   assert.equal(messageable.get("workspace-sleeping"), true);
-  // An archived workspace would wake the same way, but archiving is the
-  // user's own filing; how a preparing or errored workspace handles a message
-  // is documented nowhere. None of them is promised one.
+  // How a preparing or errored workspace handles a message is documented
+  // nowhere, so neither is promised one.
   assert.equal(messageable.get("workspace-preparing"), false);
-  assert.equal(messageable.get("workspace-archived"), false);
   assert.equal(messageable.get("workspace-error"), false);
 });
 
