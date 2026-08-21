@@ -1181,7 +1181,7 @@ function UserDetailScreen({
 }: {
   id: string;
   account: ViewerAccount | undefined;
-  onSignOut: () => void;
+  onSignOut: () => Promise<void>;
   onBack: () => void;
   now: number;
 }): React.JSX.Element {
@@ -1190,6 +1190,18 @@ function UserDetailScreen({
   );
   const [refreshing, setRefreshing] = useState(false);
   const inFlight = useRef<AbortController>(null);
+
+  // The parent's sign-out resets the overview, but this screen renders in the
+  // overview's place and holds a ready answer of its own — left alone, the
+  // account's identity and usage would stand on screen after the consent
+  // behind them was withdrawn. So the withdrawal lands here too: the open
+  // read is dropped first, for the same reason the overview drops its own.
+  const signOut = async () => {
+    inFlight.current?.abort();
+    setRefreshing(false);
+    await onSignOut();
+    setState({ status: "signed-out" });
+  };
 
   const load = useCallback(() => {
     // The same local consent the overview asks for: a deep link into an
@@ -1241,7 +1253,7 @@ function UserDetailScreen({
     case "signed-out":
       return <SignInCard />;
     case "forbidden":
-      return <ForbiddenCard email={account?.email} onSignOut={onSignOut} />;
+      return <ForbiddenCard email={account?.email} onSignOut={() => void signOut()} />;
     case "missing":
       return (
         <Centered title="No such account">
@@ -1269,7 +1281,7 @@ function UserDetailScreen({
         <UserDetailPage
           detail={state.detail}
           account={account}
-          onSignOut={onSignOut}
+          onSignOut={() => void signOut()}
           onBack={onBack}
           refreshing={refreshing}
           onRefresh={load}
@@ -1395,7 +1407,7 @@ export function AdminDashboard(): React.JSX.Element {
             ? { name: account.name, email: account.email, image: account.image ?? undefined }
             : undefined
         }
-        onSignOut={() => void signOut()}
+        onSignOut={signOut}
         onBack={closeAccount}
         now={now}
       />
