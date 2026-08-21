@@ -1085,6 +1085,28 @@ export function App(): React.JSX.Element {
   );
 
   /**
+   * A Connect press: the same entry {@link beginEntry} opens, with the
+   * provider's key page opened in the same press. Someone connecting has no
+   * key yet, so the first thing they need is the page that issues one — the
+   * consent and CLI connectors already work this way, because their browser
+   * half *is* the connection. The entry starts `away` for the same reason
+   * {@link fetchKey} marks it: the person this slot is now waiting for is
+   * reading a browser, so giving up leaves the browser alone rather than
+   * bringing the panel back over it. The page is still opened by provider id,
+   * so the only addresses reachable are the ones the credential registry
+   * fixes.
+   */
+  const connectEntry = useCallback(
+    (providerId: CredentialProviderId) => {
+      standDownPage.current = standDownReturnPage({ kind: PANEL_STAND_DOWN.KEY, providerId });
+      slotOccupant.current = PANEL_STAND_DOWN.KEY;
+      window.sidecar.openProviderApiKeys(providerId);
+      credentialsEntry.begin({ providerId, draft: "", busy: false, away: true });
+    },
+    [credentialsEntry.begin],
+  );
+
+  /**
    * Sends the browser to the provider's key page. The entry remembers that it
    * did: from here on, the person this slot is waiting for is reading a page
    * that Luke — which floats above every window — would otherwise be sitting on
@@ -1122,6 +1144,7 @@ export function App(): React.JSX.Element {
   const credentials: CredentialEntryControl = {
     entry: credentialsEntry.entry,
     begin: beginEntry,
+    connect: connectEntry,
     change: (draft) => credentialsEntry.patch({ draft }),
     fetchKey,
     cancel: credentialsEntry.cancel,

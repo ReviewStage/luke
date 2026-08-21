@@ -13,6 +13,7 @@ function control(entry?: CredentialEntry): CredentialEntryControl {
   return {
     entry,
     begin: () => undefined,
+    connect: () => undefined,
     change: () => undefined,
     fetchKey: () => undefined,
     cancel: () => undefined,
