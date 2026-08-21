@@ -3,14 +3,18 @@ import {
   maximumSessionRecapLength,
   PROVIDER_ID,
   type ProviderSessionObservation,
+  SESSION_APPLICATION_ID,
+  SESSION_APPLICATION_SCOPE,
   SESSION_STATUS,
   type SessionProvider,
   type SessionStatus,
 } from "@sidecar/session";
 import { isRecord, type WireRecord } from "@sidecar/wire";
 import {
+  CLOUD_FAILURE,
   type CloudAdapterOptions,
   type CloudRequest,
+  CloudRequestError,
   CloudSessionAdapter,
   type CloudWriteRoute,
   isDefined,
@@ -38,6 +42,18 @@ const REPLICAS_ENVIRONMENT = {
 } as const;
 
 const REPLICAS_DEFAULT_API_URL = "https://api.tryreplicas.com";
+
+/**
+ * The dashboard's own address for one workspace, composed from the observed
+ * id the way Conductor's deep link is: opening stays what every open is — an
+ * address handed to the operating system, reaching no provider — and it
+ * lands on the exact workspace the row is, never near it.
+ */
+const REPLICAS_WORKSPACE_LINK_BASE = "https://tryreplicas.com/home/workspace/";
+
+function replicasWorkspaceLink(workspaceId: string): string {
+  return `${REPLICAS_WORKSPACE_LINK_BASE}${encodeURIComponent(workspaceId)}`;
+}
 
 const REPLICAS_ROUTE_SEGMENT = {
   HISTORY: "history",
@@ -395,6 +411,16 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
    */
   #historyByWorkspace = new Map<string, ReplicasHistoryEnrichment>();
 
+  /**
+   * Whether the history endpoint refused this credential outright. The list
+   * already answered under the same key, so the refusal is that endpoint's
+   * answer about itself, never a judgment on the key — but it will answer the
+   * same way next pass, so the enrichment stands down for the credential's
+   * lifetime instead of asking a dozen refused questions every fifteen
+   * seconds. The rows keep everything the list carries.
+   */
+  #historyRefused = false;
+
   constructor(options: ReplicasAdapterOptions) {
     super(
       {
@@ -408,6 +434,7 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
 
   protected override forgetCachedIdentity(): void {
     this.#historyByWorkspace.clear();
+    this.#historyRefused = false;
   }
 
   protected async collect(
@@ -451,14 +478,18 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
   /**
    * Reads the retained history of the newest workspaces whose activity moved
    * since it was last read. Bounded twice — how many workspaces one pass will
-   * read, and how far into each tail — and each read is tolerated apart, so a
-   * workspace whose history is refused (sleeping on an engine from before
-   * retention) costs its own enrichment and nothing else's.
+   * read, and how far into each tail — and every failure is contained here,
+   * the unauthorized one included: the list already answered under this
+   * credential, so a history refusal is that endpoint's answer about itself,
+   * and an enrichment must never be able to clear the roster the list just
+   * served. A workspace whose history is refused (sleeping on an engine from
+   * before retention) costs its own enrichment and nothing else's.
    */
   async #refreshHistories(
     request: CloudRequest,
     workspaces: readonly ReplicasWorkspace[],
   ): Promise<void> {
+    if (this.#historyRefused) return;
     const listed = new Set(workspaces.map((workspace) => workspace.id));
     for (const id of this.#historyByWorkspace.keys()) {
       if (!listed.has(id)) this.#historyByWorkspace.delete(id);
@@ -474,12 +505,18 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
 
     await Promise.all(
       stale.map(async (workspace) => {
-        const body = await this.tolerateItemFailure(() =>
-          request([...REPLICAS_ROUTE.REPLICAS, workspace.id, REPLICAS_ROUTE_SEGMENT.HISTORY], {
-            [REPLICAS_QUERY.LIMIT]: String(REPLICAS_ADAPTER_DEFAULTS.HISTORY_EVENT_LIMIT),
-          }),
-        );
-        if (!body) return;
+        let body: WireRecord;
+        try {
+          body = await request(
+            [...REPLICAS_ROUTE.REPLICAS, workspace.id, REPLICAS_ROUTE_SEGMENT.HISTORY],
+            { [REPLICAS_QUERY.LIMIT]: String(REPLICAS_ADAPTER_DEFAULTS.HISTORY_EVENT_LIMIT) },
+          );
+        } catch (error) {
+          // A parsing bug is not a provider answer and must not hide here.
+          if (!(error instanceof CloudRequestError)) throw error;
+          if (error.failure === CLOUD_FAILURE.UNAUTHORIZED) this.#historyRefused = true;
+          return;
+        }
         this.#historyByWorkspace.set(
           workspace.id,
           enrichmentFromHistory(body, workspace.observedAt),
@@ -513,6 +550,19 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
         workspace.status !== undefined && REPLICAS_MESSAGEABLE_STATUSES.has(workspace.status),
       ...(history?.agent ? { agent: history.agent } : undefined),
       ...(recap ? { recap } : undefined),
+      // The Replicas mark rides as an app association like every other app
+      // holding a chat — the row leads with the agent the history names, and
+      // the app chip says where it runs — carrying the same exact address the
+      // row opens with, so the one glyph means the same thing here and on a
+      // Conductor row.
+      applications: [
+        {
+          id: SESSION_APPLICATION_ID.REPLICAS,
+          displayName: REPLICAS_PROVIDER_NAME,
+          scope: SESSION_APPLICATION_SCOPE.SESSION,
+          link: replicasWorkspaceLink(workspace.id),
+        },
+      ],
       detail: {
         repository: workspace.repositoryLabel,
         // An agent kind this build has no identity for rides the model slot
@@ -525,9 +575,7 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
         ...(status === SESSION_STATUS.ERROR
           ? { error: REPLICAS_WORKSPACE_ERROR_MESSAGE }
           : undefined),
-        // Deliberately no link: the list projection reports no address of the
-        // workspace's own, and an address composed here would not be one the
-        // provider reported.
+        link: replicasWorkspaceLink(workspace.id),
       },
     };
   }

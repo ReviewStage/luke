@@ -250,9 +250,21 @@ test("observes an active workspace titled by the name Replicas gave it", async (
   assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
   assert.equal(observations[0]?.observedAt, TEST_TIME - 30_000);
   assert.equal(observations[0]?.controls, undefined);
-  // The list projection reports no address of the workspace's own, so the row
-  // honestly offers nowhere to open rather than a composed dashboard URL.
-  assert.deepEqual(observations[0]?.detail, { repository: "luke" });
+  // The row opens on the dashboard's own address for exactly this workspace,
+  // composed from the observed id the way Conductor's deep link is, and the
+  // Replicas mark rides as the app association carrying the same address.
+  assert.deepEqual(observations[0]?.detail, {
+    repository: "luke",
+    link: "https://tryreplicas.com/home/workspace/workspace-active",
+  });
+  assert.deepEqual(observations[0]?.applications, [
+    {
+      id: "replicas",
+      displayName: "Replicas",
+      scope: "session",
+      link: "https://tryreplicas.com/home/workspace/workspace-active",
+    },
+  ]);
 });
 
 test("falls back to the repository for a workspace the list did not name", async () => {
@@ -492,6 +504,33 @@ test("keeps the pass when a workspace's history is refused", async () => {
   assert.deepEqual(observations[1]?.agent, { id: "opencode", displayName: "OpenCode" });
 });
 
+test("keeps the roster when the history endpoint refuses the credential", async () => {
+  // The list already answered under this key, so a history refusal is that
+  // endpoint's answer about itself, never a judgment on the key: it must not
+  // clear the roster the list just served — and it will answer the same way
+  // next pass, so the enrichment stands down instead of asking a dozen
+  // refused questions every pass.
+  const api = fakeReplicasApi([activeWorkspace("workspace-active", TEST_TIME - 1_000)]);
+  const gatedFetch: CloudFetch = async (url, init) =>
+    new URL(url).pathname.endsWith("/history")
+      ? jsonResponse({}, HTTP_STATUS.FORBIDDEN)
+      : api.fetch(url, init);
+  const adapter = adapterFor(gatedFetch);
+
+  const first = await adapter.observe();
+  const second = await adapter.observe();
+
+  assert.equal(first.length, 1);
+  assert.equal(first[0]?.agent, undefined);
+  assert.equal(second.length, 1);
+  // Only the two list calls reached the fake: the refused history was not
+  // asked again.
+  assert.deepEqual(
+    api.requests.map((request) => request.pathname),
+    ["/v1/replica", "/v1/replica"],
+  );
+});
+
 test("orders the pass by latest activity rather than by creation", async () => {
   // The documented list answers newest `created_at` first, but a workspace
   // created yesterday can be the one active now, so the pass sorts by the
@@ -527,8 +566,11 @@ test("reports the newest pull request as the workspace's published change", asyn
 
   assert.equal(observations[0]?.detail?.change, "https://github.com/reviewstage/luke/pull/405");
   // The pull request is the row's published work, never its address: a press
-  // on the row must land on the session itself or nowhere.
-  assert.equal(observations[0]?.detail?.link, undefined);
+  // on the row lands on the workspace itself.
+  assert.equal(
+    observations[0]?.detail?.link,
+    "https://tryreplicas.com/home/workspace/workspace-published",
+  );
   assert.equal(observations[1]?.detail?.change, undefined);
 });
 
