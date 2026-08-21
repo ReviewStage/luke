@@ -73,6 +73,7 @@ export {
   type SessionLocation,
   type SessionProvider,
   type SessionStatus,
+  type SessionWorkspace,
   sessionChangeNumber,
   sessionMessageText,
   sessionRosterRetentionMs,

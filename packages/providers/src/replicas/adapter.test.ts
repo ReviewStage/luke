@@ -23,6 +23,14 @@ const TEST_STATUS = {
   ERROR: "error",
 } as const;
 
+interface TestChat {
+  id: string;
+  provider?: string;
+  title?: string;
+  updatedAt: number;
+  parentChatId?: string;
+}
+
 interface TestWorkspace {
   id: string;
   name?: string;
@@ -36,6 +44,7 @@ interface TestWorkspace {
   codingAgent?: string;
   historyEvents?: readonly JsonObject[];
   refuseHistory?: boolean;
+  chats?: readonly TestChat[];
 }
 
 function isoTimestamp(timestampMs: number): string {
@@ -112,18 +121,51 @@ function workspacePayload(workspace: TestWorkspace) {
   };
 }
 
+function conversationPayload(workspace: TestWorkspace, chat: TestChat) {
+  return {
+    chat_id: chat.id,
+    workspace_id: workspace.id,
+    workspace_name: workspace.name ?? "fix-login-timeout",
+    workspace_status: workspace.status ?? TEST_STATUS.ACTIVE,
+    workspace_source: "dashboard",
+    workspace_created_at: isoTimestamp(workspace.createdAt),
+    workspace_user_id: null,
+    workspace_creator_email: null,
+    environment_id: null,
+    provider: chat.provider ?? null,
+    title: chat.title ?? null,
+    created_at: isoTimestamp(chat.updatedAt - 60_000),
+    updated_at: isoTimestamp(chat.updatedAt),
+    parent_chat_id: chat.parentChatId ?? null,
+    senders: [],
+  };
+}
+
 /**
  * Serves the subset of the Replica API the adapter is allowed to use: the
- * organization's replica list, the retained-history read, and the documented
- * message endpoint. The reads that wake a workspace — `GET /v1/replica/{id}`
- * and its chats list — are deliberately not served, so a request to one is a
- * failure of the pass, not a route this fake forgot; a workspace marked
- * `refuseHistory` answers the conflict a pre-retention engine answers.
+ * organization's replica list, the conversations read, the retained-history
+ * read, and the documented message endpoint. The reads that wake a workspace
+ * — `GET /v1/replica/{id}` and its chats list — are deliberately not served,
+ * so a request to one is a failure of the pass, not a route this fake
+ * forgot; a workspace marked `refuseHistory` answers the conflict a
+ * pre-retention engine answers.
  */
 function fakeReplicasApi(workspaces: readonly TestWorkspace[]) {
   return recordingFetch((request) => {
     const { pathname, searchParams, method } = request;
     const segments = pathname.split("/").filter((segment) => segment.length > 0);
+    if (method === "GET" && pathname === "/v1/organization/conversations") {
+      const workspace = workspaces.find(
+        (candidate) => candidate.id === searchParams.get("workspace_id"),
+      );
+      const chats = workspace?.chats ?? [];
+      return jsonResponse({
+        conversations: workspace ? chats.map((chat) => conversationPayload(workspace, chat)) : [],
+        total: chats.length,
+        limit: Number(searchParams.get("limit") ?? "20"),
+        next_cursor: null,
+      });
+    }
     if (
       method === "POST" &&
       segments.length === 4 &&
@@ -292,10 +334,11 @@ test("stands archived workspaces behind no row, the way the dashboard hides them
   );
 });
 
-test("reads the pass from the list and bounded history tails, never a waking read", async () => {
-  // `GET /v1/replica/{id}` and the chats list are documented to wake a
-  // sleeping workspace, so the pass is answerable from the list and the
-  // retained history alone — the fake refuses everything else.
+test("reads the pass from the list, chats, and history tails, never a waking read", async () => {
+  // `GET /v1/replica/{id}` and its chats list are documented to wake a
+  // sleeping workspace, so the pass is answerable from the list, the
+  // conversations read, and the retained history alone — the fake refuses
+  // everything else.
   const api = fakeReplicasApi([
     activeWorkspace("workspace-one", TEST_TIME - 1_000),
     { id: "workspace-two", status: TEST_STATUS.SLEEPING, createdAt: TEST_TIME - 2_000 },
@@ -310,16 +353,25 @@ test("reads the pass from the list and bounded history tails, never a waking rea
   assert.equal(list?.search, "?limit=100");
   assert.equal(list?.method, "GET");
   assert.equal(list?.authorization, `Bearer ${TEST_API_KEY}`);
-  // History is read for the active and the sleeping workspace; an errored one
-  // has no retained conversation worth asking for.
+  // Chats and history are read for the active and the sleeping workspace; an
+  // errored one has no retained conversation worth asking for.
   assert.deepEqual(
     api.requests
       .slice(1)
       .map((request) => request.pathname)
       .sort(),
-    ["/v1/replica/workspace-one/history", "/v1/replica/workspace-two/history"],
+    [
+      "/v1/organization/conversations",
+      "/v1/organization/conversations",
+      "/v1/replica/workspace-one/history",
+      "/v1/replica/workspace-two/history",
+    ],
   );
-  assert.equal(api.requests[1]?.search, "?limit=40");
+  const conversations = api.requests.find(
+    (request) => request.pathname === "/v1/organization/conversations",
+  );
+  assert.equal(conversations?.search.includes("workspace_id=workspace-"), true);
+  assert.equal(api.requests.at(-1)?.search, "?limit=40");
 });
 
 test("reads a workspace's history once until its activity moves", async () => {
@@ -543,9 +595,9 @@ test("keeps the pass when a workspace's history is refused", async () => {
 test("keeps the roster when the history endpoint refuses the credential", async () => {
   // The list already answered under this key, so a history refusal is that
   // endpoint's answer about itself, never a judgment on the key: it must not
-  // clear the roster the list just served — and it will answer the same way
-  // next pass, so the enrichment stands down instead of asking a dozen
-  // refused questions every pass.
+  // clear the roster the list just served — and it would answer the same way
+  // until the workspace moves, so that workspace's history is not asked for
+  // again before it does.
   const api = fakeReplicasApi([activeWorkspace("workspace-active", TEST_TIME - 1_000)]);
   const gatedFetch: CloudFetch = async (url, init) =>
     new URL(url).pathname.endsWith("/history")
@@ -559,12 +611,131 @@ test("keeps the roster when the history endpoint refuses the credential", async 
   assert.equal(first.length, 1);
   assert.equal(first[0]?.agent, undefined);
   assert.equal(second.length, 1);
-  // Only the two list calls reached the fake: the refused history was not
-  // asked again.
+  // Only the lists and the one chats read reached the fake: the refused
+  // history was not asked again while the workspace stood still.
   assert.deepEqual(
     api.requests.map((request) => request.pathname),
-    ["/v1/replica", "/v1/replica"],
+    ["/v1/replica", "/v1/organization/conversations", "/v1/replica"],
   );
+});
+
+test("lists a workspace's chats as their own rows under one workspace tray", async () => {
+  const api = fakeReplicasApi([
+    {
+      ...activeWorkspace("workspace-shared", TEST_TIME - 1_000),
+      name: "fix-login-timeout",
+      pullRequestUrls: ["https://github.com/reviewstage/luke/pull/402"],
+      codingAgent: "claude",
+      historyEvents: [
+        claudeAssistant("Renamed the flag and updated both call sites."),
+        claudeResult(),
+      ],
+      chats: [
+        {
+          id: "chat-older",
+          provider: "codex",
+          title: "Port the fixtures",
+          updatedAt: TEST_TIME - 60_000,
+        },
+        {
+          id: "chat-newest",
+          provider: "claude",
+          title: "Fix the login timeout",
+          updatedAt: TEST_TIME - 1_000,
+        },
+        // A spawned sub-agent's chat is the parent's work, so it draws no row.
+        {
+          id: "chat-spawned",
+          provider: "claude",
+          updatedAt: TEST_TIME - 500,
+          parentChatId: "chat-newest",
+        },
+      ],
+    },
+  ]);
+  const adapter = adapterFor(api.fetch);
+
+  const observations = await adapter.observe();
+
+  assert.deepEqual(
+    observations.map((observation) => observation.providerSessionId),
+    ["chat-newest", "chat-older"],
+  );
+  // Each chat leads with its own agent and title; the workspace's name rides
+  // the grouping, so the tray names all of its chats at once.
+  assert.equal(observations[0]?.title, "Fix the login timeout");
+  assert.deepEqual(observations[0]?.agent, { id: "claude-code", displayName: "Claude Code" });
+  assert.equal(observations[1]?.title, "Port the fixtures");
+  assert.deepEqual(observations[1]?.agent, { id: "codex", displayName: "Codex" });
+  assert.deepEqual(observations[0]?.workspace, {
+    providerWorkspaceId: "workspace-shared",
+    name: "fix-login-timeout",
+    scopeId: "replicas",
+    managerName: "Replicas",
+  });
+  assert.deepEqual(observations[1]?.workspace, observations[0]?.workspace);
+  // The workspace's compute lifecycle is the newest chat's status — the
+  // platform's activity is wherever the latest words landed — while an older
+  // chat's turn ended back at its own timestamp.
+  assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
+  assert.equal(observations[1]?.status, SESSION_STATUS.COMPLETE);
+  // The settled recap and the workspace's pull request ride the newest chat
+  // once rather than every row repeating them.
+  assert.equal(observations[0]?.recap, "Renamed the flag and updated both call sites.");
+  assert.equal(observations[1]?.recap, undefined);
+  assert.equal(observations[0]?.detail?.change, "https://github.com/reviewstage/luke/pull/402");
+  assert.equal(observations[1]?.detail?.change, undefined);
+  // The history read was pinned to the newest chat, so the parting words are
+  // attributably that chat's.
+  const history = api.requests.find((request) => request.pathname.endsWith("/history"));
+  assert.equal(history?.search.includes("chat_id=chat-newest"), true);
+
+  const result = await adapter.sendMessage({
+    providerSessionId: "chat-older",
+    text: "Pick this back up",
+  });
+  assert.deepEqual(result, { status: "accepted" });
+  const write = api.requests.at(-1);
+  assert.equal(write?.pathname, "/v1/replica/workspace-shared/messages");
+  assert.deepEqual(JSON.parse(write?.body ?? ""), {
+    message: "Pick this back up",
+    chat_id: "chat-older",
+  });
+});
+
+test("keeps workspace rows when the conversations read refuses the credential", async () => {
+  // The conversations read answers organization keys alone, so a personal
+  // key is refused identically every pass: the chat listing stands down for
+  // the credential's lifetime, and the workspace rows stand.
+  const api = fakeReplicasApi([
+    {
+      ...activeWorkspace("workspace-active", TEST_TIME - 1_000),
+      codingAgent: "claude",
+      chats: [{ id: "chat-unlisted", provider: "claude", updatedAt: TEST_TIME - 1_000 }],
+    },
+  ]);
+  const gatedFetch: CloudFetch = async (url, init) =>
+    new URL(url).pathname === "/v1/organization/conversations"
+      ? jsonResponse({}, HTTP_STATUS.FORBIDDEN)
+      : api.fetch(url, init);
+  const adapter = adapterFor(gatedFetch);
+
+  const first = await adapter.observe();
+  const second = await adapter.observe();
+
+  assert.deepEqual(
+    first.map((observation) => observation.providerSessionId),
+    ["workspace-active"],
+  );
+  assert.deepEqual(first[0]?.agent, { id: "claude-code", displayName: "Claude Code" });
+  assert.equal(second.length, 1);
+  // The refused conversations read was asked exactly once; the history read
+  // still ran, unpinned, because the chats were never listed.
+  assert.deepEqual(
+    api.requests.map((request) => request.pathname),
+    ["/v1/replica", "/v1/replica/workspace-active/history", "/v1/replica"],
+  );
+  assert.equal(api.requests[1]?.search.includes("chat_id"), false);
 });
 
 test("orders the pass by latest activity rather than by creation", async () => {
