@@ -77,6 +77,15 @@ const CURSOR_GLOBAL_STORAGE_STATE_SEGMENTS = [
 const CURSOR_APP_CHAT_KEY_PREFIX = "composerData:";
 const CURSOR_APP_CHAT_QUERY = "SELECT 1 FROM cursorDiskKV WHERE key = ?";
 
+/**
+ * The app's per-chat header row, which is where Cursor records that the user
+ * filed a chat away. Only the presence of a positively archived row is ever
+ * read — the header's own value column is the chat's name and standing, which
+ * Cursor writes from the conversation, and observation never opens it.
+ */
+const CURSOR_APP_ARCHIVED_CHAT_QUERY =
+  "SELECT 1 FROM composerHeaders WHERE composerId = ? AND isArchived = 1";
+
 const CURSOR_TRANSCRIPT_FILE_EXTENSION = ".jsonl";
 const CURSOR_WORKSPACE_FILE = "workspace.json";
 
@@ -304,13 +313,25 @@ function statusFromTurn(
   return localSessionStatus(status, observedAt, now, freshnessMs);
 }
 
+/** What the app's own index says about the observed chats. */
+interface CursorAppChatIndex {
+  /** The chats the app holds a window record for, which can carry an address. */
+  held: ReadonlySet<string>;
+  /** The chats the user positively filed away, which draw no row. */
+  archived: ReadonlySet<string>;
+}
+
+const EMPTY_APP_CHAT_INDEX: CursorAppChatIndex = { held: new Set(), archived: new Set() };
+
 /**
- * Reads which of the observed chats Cursor's app holds, as the presence of
- * each chat's key in the app's own index — a point lookup per chat, never a
- * value, because the values are the conversations themselves. An absent app,
- * an unreadable or mid-write database, or a schema this build does not know
- * holds nothing, which withholds addresses rather than inventing ones the
- * app cannot resolve — and never fails the pass the rows come from.
+ * Reads which of the observed chats Cursor's app holds, and which of them the
+ * user has archived — each as the presence of a row in the app's own index, a
+ * point lookup per chat, never a value, because the values are the
+ * conversations themselves. An absent app, an unreadable or mid-write
+ * database, or a schema this build does not know holds nothing, which
+ * withholds addresses and keeps every row rather than inventing an address
+ * the app cannot resolve or a filing away nobody performed — and never fails
+ * the pass the rows come from.
  */
 class CursorAppChatRegistry {
   readonly #statePath: string;
@@ -324,29 +345,57 @@ class CursorAppChatRegistry {
   // The index read is auxiliary to observing at all: a database Cursor holds
   // mid-write, or one this build cannot parse, answers nothing — never a
   // failed pass, because losing the app addresses must not cost the rows.
-  async heldChats(providerSessionIds: readonly string[]): Promise<ReadonlySet<string>> {
-    if (providerSessionIds.length === 0) return new Set();
+  async index(providerSessionIds: readonly string[]): Promise<CursorAppChatIndex> {
+    if (providerSessionIds.length === 0) return EMPTY_APP_CHAT_INDEX;
     let database: SqliteDatabase | undefined;
     try {
       database = await openReadOnlyDatabase(this.#sqlite, this.#statePath);
     } catch {
-      return new Set();
+      return EMPTY_APP_CHAT_INDEX;
     }
-    if (!database) return new Set();
+    if (!database) return EMPTY_APP_CHAT_INDEX;
     try {
-      const statement = database.prepare(CURSOR_APP_CHAT_QUERY);
-      const held = new Set<string>();
-      for (const providerSessionId of providerSessionIds) {
-        if (statement.all(`${CURSOR_APP_CHAT_KEY_PREFIX}${providerSessionId}`).length > 0) {
-          held.add(providerSessionId);
-        }
-      }
-      return held;
-    } catch {
-      return new Set();
+      // Each lookup stands its own failure alone: a Cursor build too old to
+      // keep header rows still addresses the chats it holds, and one whose
+      // chat index this build cannot read still honours what the user filed
+      // away.
+      return {
+        held: matchingChats(
+          database,
+          CURSOR_APP_CHAT_QUERY,
+          providerSessionIds,
+          (id) => `${CURSOR_APP_CHAT_KEY_PREFIX}${id}`,
+        ),
+        archived: matchingChats(
+          database,
+          CURSOR_APP_ARCHIVED_CHAT_QUERY,
+          providerSessionIds,
+          (id) => id,
+        ),
+      };
     } finally {
       database.close();
     }
+  }
+}
+
+function matchingChats(
+  database: SqliteDatabase,
+  query: string,
+  providerSessionIds: readonly string[],
+  parameter: (providerSessionId: string) => string,
+): ReadonlySet<string> {
+  try {
+    const statement = database.prepare(query);
+    const matched = new Set<string>();
+    for (const providerSessionId of providerSessionIds) {
+      if (statement.all(parameter(providerSessionId)).length > 0) {
+        matched.add(providerSessionId);
+      }
+    }
+    return matched;
+  } catch {
+    return new Set();
   }
 }
 
@@ -423,23 +472,29 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
     this.#transcriptMaximumRenderedLength = options.transcriptMaximumRenderedLength;
   }
 
-  protected discover(): Promise<CursorTranscriptCandidate[]> {
-    return discoverSessionFiles({
+  protected async discover(): Promise<CursorTranscriptCandidate[]> {
+    const candidates = await discoverSessionFiles({
       projectsDirectory: path.join(this.#cursorHome, CURSOR_DIRECTORY.PROJECTS),
       sessionsDirectoryName: CURSOR_DIRECTORY.TRANSCRIPTS,
       maximumProjectDirectories: this.#maximumProjectDirectories,
       sessionFilesIn: transcriptsIn,
     });
+    const index = await this.#appChatRegistry.index(
+      candidates.map((candidate) => candidate.providerSessionId),
+    );
+    this.#appChats = index.held;
+    // A chat the user filed away in the app draws no row, the same answer an
+    // archived cloud agent gives. The transcript Cursor keeps for it is left
+    // unread; a chat the index cannot vouch for either way stays.
+    return candidates.filter((candidate) => !index.archived.has(candidate.providerSessionId));
   }
 
   protected override async prepare(
     candidates: readonly CursorTranscriptCandidate[],
   ): Promise<void> {
-    const [appChats] = await Promise.all([
-      this.#appChatRegistry.heldChats(candidates.map((candidate) => candidate.providerSessionId)),
-      this.#workspaceLabels.resolve(candidates.map((candidate) => candidate.projectDirectoryName)),
-    ]);
-    this.#appChats = appChats;
+    await this.#workspaceLabels.resolve(
+      candidates.map((candidate) => candidate.projectDirectoryName),
+    );
   }
 
   override readTranscript(providerSessionId: string): Promise<string | undefined> {
