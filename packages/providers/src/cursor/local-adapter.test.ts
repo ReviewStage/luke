@@ -269,12 +269,13 @@ test("tells a turn that finished from one that failed", async (t) => {
   const state = await temporaryCursorState(t);
   await writeWorkspaceRecord(state, "9f1c", "/Users/test/luke");
   await registerAppChats(state, ["session-finished", "session-failed"]);
+  const partingWords = "All checks are green and the branch is pushed.";
   await writeTranscript(
     state,
     "Users-test-luke",
     "session-finished",
     [
-      messageRecord(TEST_ROLE.ASSISTANT, TEST_CONTENT_TYPE.TEXT),
+      { role: TEST_ROLE.ASSISTANT, message: { content: [{ type: "text", text: partingWords }] } },
       turnEndedRecord(TEST_TURN_STATUS.SUCCESS),
     ],
     TEST_TIME - 5_000,
@@ -284,7 +285,7 @@ test("tells a turn that finished from one that failed", async (t) => {
     "Users-test-luke",
     "session-failed",
     [
-      messageRecord(TEST_ROLE.ASSISTANT, TEST_CONTENT_TYPE.TOOL_USE),
+      messageRecord(TEST_ROLE.ASSISTANT, TEST_CONTENT_TYPE.TEXT),
       turnEndedRecord(TEST_TURN_STATUS.ERROR),
     ],
     TEST_TIME - 10_000,
@@ -299,12 +300,55 @@ test("tells a turn that finished from one that failed", async (t) => {
       ["session-failed", SESSION_STATUS.ERROR],
     ],
   );
-  // The failure is reported; the reason Cursor recorded for it is not.
+  // A cleanly settled turn's parting words are the recap, the one bounded
+  // read of the conversation's words an observation makes.
+  assert.equal(observations[0]?.recap, partingWords);
+  // A failed turn keeps none: the agent's parting words predate what went
+  // wrong. The failure is reported; the reason Cursor recorded for it is not.
+  assert.equal(observations[1]?.recap, undefined);
   assert.deepEqual(observations[1]?.detail, {
     repository: "luke",
     link: "cursor://anysphere.cursor-deeplink/agent?id=session-failed",
     error: "The turn failed",
   });
+  assert.equal(JSON.stringify(observations).includes(SECRET_TRANSCRIPT_TEXT), false);
+});
+
+test("a recap stands only while its turn is the newest word", async (t) => {
+  const state = await temporaryCursorState(t);
+  await writeWorkspaceRecord(state, "9f1c", "/Users/test/luke");
+  const settledTurn = [
+    { role: TEST_ROLE.ASSISTANT, message: { content: [{ type: "text", text: "Done." }] } },
+    turnEndedRecord(TEST_TURN_STATUS.SUCCESS),
+  ];
+  // A new prompt opens a turn the old parting words no longer sum up.
+  await writeTranscript(
+    state,
+    "Users-test-luke",
+    "session-reprompted",
+    [...settledTurn, messageRecord(TEST_ROLE.USER, TEST_CONTENT_TYPE.TEXT)],
+    TEST_TIME - 5_000,
+  );
+  // Parting words longer than a recap may carry are cut, not refused.
+  await writeTranscript(
+    state,
+    "Users-test-luke",
+    "session-longhand",
+    [
+      {
+        role: TEST_ROLE.ASSISTANT,
+        message: { content: [{ type: "text", text: "y".repeat(700) }] },
+      },
+      turnEndedRecord(TEST_TURN_STATUS.SUCCESS),
+    ],
+    TEST_TIME - 10_000,
+  );
+
+  const observations = await adapterFor(state).observe();
+
+  assert.equal(observations[0]?.recap, undefined);
+  assert.equal(observations[1]?.recap?.length, 500);
+  assert.ok(observations[1]?.recap?.endsWith("…"));
   assert.equal(JSON.stringify(observations).includes(SECRET_TRANSCRIPT_TEXT), false);
 });
 
