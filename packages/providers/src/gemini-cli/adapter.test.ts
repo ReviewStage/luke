@@ -3,7 +3,11 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
-import { SESSION_STATUS, UNKNOWN_WORKSPACE_LABEL } from "@sidecar/session";
+import {
+  SESSION_COMPLETION_CAUSE,
+  SESSION_STATUS,
+  UNKNOWN_WORKSPACE_LABEL,
+} from "@sidecar/session";
 import type { ParsedJsonObject } from "@sidecar/wire/testing";
 import { GEMINI_CLI_PROVIDER, GeminiCliSessionAdapter } from "./adapter.js";
 
@@ -467,4 +471,309 @@ test("answers every write as unsupported", async (t) => {
     "unsupported",
   );
   assert.equal(adapter.workspaceProjects().length, 0);
+});
+
+// ---------------------------------------------------------------------------
+// Hook-event refinement. Every test here layers a spool the observation hook
+// would have written over a recording, because that is the arrangement in
+// production: the tail is always read, and the event only sharpens it. The
+// spool is keyed by the full session id the recording's metadata line names,
+// never by the file stem the adapter reports as `providerSessionId`.
+// ---------------------------------------------------------------------------
+
+const FULL_SESSION_ID = "abcd1234-4d5e-6789-abcd-ef0123456789";
+
+async function temporaryHookSpool(t: TestContext): Promise<string> {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "luke-gemini-spool-"));
+  t.after(async () => {
+    await fs.rm(directory, { recursive: true, force: true });
+  });
+  return directory;
+}
+
+async function writeHookEvent(
+  spoolDirectory: string,
+  sessionId: string,
+  event: string,
+  mtimeMs: number,
+): Promise<void> {
+  const filePath = path.join(spoolDirectory, `${sessionId}.json`);
+  await fs.writeFile(filePath, JSON.stringify({ event }));
+  await fs.utimes(filePath, mtimeMs / 1000, mtimeMs / 1000);
+}
+
+/** A recording mid-turn: the reply reached for a tool that has not returned. */
+function midTurnRecords(timestamp: string): ParsedJsonObject[] {
+  return [
+    metadataRecord(FULL_SESSION_ID, "2026-08-20T11:00:00.000Z"),
+    geminiMessage("m1", timestamp, {
+      toolCalls: [
+        {
+          id: "t1",
+          name: "run_shell_command",
+          args: { command: "pnpm test" },
+          status: "executing",
+          timestamp,
+        },
+      ],
+    }),
+  ];
+}
+
+/** A recording whose last turn settled cleanly. */
+function settledRecords(timestamp: string): ParsedJsonObject[] {
+  return [
+    metadataRecord(FULL_SESSION_ID, "2026-08-20T11:00:00.000Z"),
+    geminiMessage("m1", timestamp),
+  ];
+}
+
+test("a session-end event completes a row nothing in the recording could settle", async (t) => {
+  const geminiHome = await temporaryGeminiHome(t);
+  const spool = await temporaryHookSpool(t);
+  await writeSessionFile(
+    geminiHome,
+    "luke",
+    "session-2026-08-20T11-00-abcd1234",
+    settledRecords("2026-08-20T11:40:00.000Z"),
+    TEST_TIME - 5 * 60 * 1000,
+  );
+  await writeHookEvent(spool, FULL_SESSION_ID, "session-end", TEST_TIME - 60_000);
+
+  const adapter = new GeminiCliSessionAdapter({
+    geminiHome,
+    hookEventsDirectory: () => spool,
+    now: () => TEST_TIME,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.COMPLETE);
+  assert.equal(observation?.completionCause, SESSION_COMPLETION_CAUSE.SESSION_CLOSED);
+  // The event also dates the session: the spool is written only by Luke's own
+  // script, so its clock cannot suffer the recordings' bulk-touch problem.
+  assert.equal(observation?.observedAt, TEST_TIME - 60_000);
+});
+
+test("a permission prompt the tail has not written yet turns the row to waiting", async (t) => {
+  const geminiHome = await temporaryGeminiHome(t);
+  const spool = await temporaryHookSpool(t);
+  // Mid-turn by every record: the CLI can hold a confirmation before the
+  // awaiting call reaches the recording, so without the event this session
+  // reads as working.
+  await writeSessionFile(
+    geminiHome,
+    "luke",
+    "session-2026-08-20T11-00-abcd1234",
+    midTurnRecords("2026-08-20T11:40:00.000Z"),
+    TEST_TIME - 5 * 60 * 1000,
+  );
+  await writeHookEvent(spool, FULL_SESSION_ID, "notification", TEST_TIME - 60_000);
+
+  const adapter = new GeminiCliSessionAdapter({
+    geminiHome,
+    hookEventsDirectory: () => spool,
+    now: () => TEST_TIME,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.WAITING);
+  assert.equal(observation?.holdingForDeveloper, true);
+  assert.equal(observation?.observedAt, TEST_TIME - 60_000);
+});
+
+test("a stop event keeps a finished turn waiting past the freshness decay", async (t) => {
+  const geminiHome = await temporaryGeminiHome(t);
+  const spool = await temporaryHookSpool(t);
+  // Twenty minutes past the last record, the tail alone decays to unknown.
+  await writeSessionFile(
+    geminiHome,
+    "luke",
+    "session-2026-08-20T11-00-abcd1234",
+    settledRecords("2026-08-20T11:40:00.000Z"),
+    TEST_TIME - 20 * 60 * 1000,
+  );
+  await writeHookEvent(spool, FULL_SESSION_ID, "stop", TEST_TIME - 60_000);
+
+  const adapter = new GeminiCliSessionAdapter({
+    activeSessionFreshnessMs: 15 * 60 * 1000,
+    geminiHome,
+    hookEventsDirectory: () => spool,
+    now: () => TEST_TIME,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.WAITING);
+});
+
+test("an event the conversation has moved past refines nothing", async (t) => {
+  const geminiHome = await temporaryGeminiHome(t);
+  const spool = await temporaryHookSpool(t);
+  await writeSessionFile(
+    geminiHome,
+    "luke",
+    "session-2026-08-20T11-00-abcd1234",
+    midTurnRecords("2026-08-20T11:59:00.000Z"),
+    TEST_TIME - 60_000,
+  );
+  // A stop from a minute before the conversation's last record: hooks were
+  // off, or the write raced. The session is demonstrably mid-turn again.
+  await writeHookEvent(spool, FULL_SESSION_ID, "stop", TEST_TIME - 2 * 60 * 1000);
+
+  const adapter = new GeminiCliSessionAdapter({
+    geminiHome,
+    hookEventsDirectory: () => spool,
+    now: () => TEST_TIME,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.WORKING);
+  assert.equal(observation?.observedAt, Date.parse("2026-08-20T11:59:00.000Z"));
+});
+
+test("a notification the conversation has answered stands down at once", async (t) => {
+  const geminiHome = await temporaryGeminiHome(t);
+  const spool = await temporaryHookSpool(t);
+  // The permission was granted and the tool ran: a record newer than the
+  // notification, though within the tolerance the other events enjoy.
+  await writeSessionFile(
+    geminiHome,
+    "luke",
+    "session-2026-08-20T11-00-abcd1234",
+    midTurnRecords("2026-08-20T11:59:59.000Z"),
+    TEST_TIME - 1_000,
+  );
+  await writeHookEvent(spool, FULL_SESSION_ID, "notification", TEST_TIME - 3_000);
+
+  const adapter = new GeminiCliSessionAdapter({
+    geminiHome,
+    hookEventsDirectory: () => spool,
+    now: () => TEST_TIME,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.WORKING);
+});
+
+test("a stop event does not unsay an error the CLI recorded", async (t) => {
+  const geminiHome = await temporaryGeminiHome(t);
+  const spool = await temporaryHookSpool(t);
+  await writeSessionFile(
+    geminiHome,
+    "luke",
+    "session-2026-08-20T11-00-abcd1234",
+    [
+      metadataRecord(FULL_SESSION_ID, "2026-08-20T11:00:00.000Z"),
+      { id: "m1", type: "error", timestamp: "2026-08-20T11:59:00.000Z", content: "Quota exceeded" },
+    ],
+    TEST_TIME - 60_000,
+  );
+  await writeHookEvent(spool, FULL_SESSION_ID, "stop", TEST_TIME - 59_000);
+
+  const adapter = new GeminiCliSessionAdapter({
+    geminiHome,
+    hookEventsDirectory: () => spool,
+    now: () => TEST_TIME,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.ERROR);
+});
+
+test("the spool joins on the metadata line's full id, never the file stem", async (t) => {
+  const geminiHome = await temporaryGeminiHome(t);
+  const spool = await temporaryHookSpool(t);
+  await writeSessionFile(
+    geminiHome,
+    "stemmed",
+    "session-2026-08-20T11-00-abcd1234",
+    settledRecords("2026-08-20T11:40:00.000Z"),
+    TEST_TIME - 5 * 60 * 1000,
+  );
+  // A recording whose slice carries no metadata line offers nothing to join.
+  await writeSessionFile(
+    geminiHome,
+    "unnamed",
+    "session-2026-08-20T11-00-00000000",
+    [geminiMessage("m1", "2026-08-20T11:59:00.000Z")],
+    TEST_TIME - 60_000,
+  );
+  await writeHookEvent(
+    spool,
+    "session-2026-08-20T11-00-abcd1234",
+    "session-end",
+    TEST_TIME - 60_000,
+  );
+  await writeHookEvent(spool, FULL_SESSION_ID, "session-end", TEST_TIME - 60_000);
+
+  const adapter = new GeminiCliSessionAdapter({
+    geminiHome,
+    hookEventsDirectory: () => spool,
+    now: () => TEST_TIME,
+  });
+  const observations = await adapter.observe();
+  const byId = new Map(
+    observations.map((observation) => [observation.providerSessionId, observation]),
+  );
+
+  assert.equal(byId.get("session-2026-08-20T11-00-abcd1234")?.status, SESSION_STATUS.COMPLETE);
+  assert.equal(byId.get("session-2026-08-20T11-00-00000000")?.status, SESSION_STATUS.WAITING);
+  assert.equal(byId.get("session-2026-08-20T11-00-00000000")?.completionCause, undefined);
+});
+
+test("a spool that cannot be read costs only the refinement", async (t) => {
+  const geminiHome = await temporaryGeminiHome(t);
+  await writeSessionFile(
+    geminiHome,
+    "luke",
+    "session-2026-08-20T11-00-abcd1234",
+    midTurnRecords("2026-08-20T11:59:00.000Z"),
+    TEST_TIME - 60_000,
+  );
+
+  const adapter = new GeminiCliSessionAdapter({
+    geminiHome,
+    hookEventsDirectory: () => path.join(geminiHome, "no-such-spool"),
+    now: () => TEST_TIME,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.WORKING);
+});
+
+test("a prompt event never clears the hold the recording already shows", async (t) => {
+  const geminiHome = await temporaryGeminiHome(t);
+  const spool = await temporaryHookSpool(t);
+  await writeSessionFile(
+    geminiHome,
+    "luke",
+    "session-2026-08-20T11-00-abcd1234",
+    [
+      metadataRecord(FULL_SESSION_ID, "2026-08-20T11:00:00.000Z"),
+      geminiMessage("m1", "2026-08-20T11:59:58.000Z", {
+        toolCalls: [
+          {
+            id: "t1",
+            name: "write_file",
+            args: { file_path: "/Users/test/luke/README.md" },
+            status: "awaiting_approval",
+            timestamp: "2026-08-20T11:59:58.000Z",
+          },
+        ],
+      }),
+    ],
+    TEST_TIME - 1_000,
+  );
+  // The prompt opened the very turn now holding, so it stands newer than the
+  // record — and must still lose to it.
+  await writeHookEvent(spool, FULL_SESSION_ID, "prompt", TEST_TIME - 1_000);
+
+  const adapter = new GeminiCliSessionAdapter({
+    geminiHome,
+    hookEventsDirectory: () => spool,
+    now: () => TEST_TIME,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.WAITING);
+  assert.equal(observation?.holdingForDeveloper, true);
 });

@@ -5,6 +5,8 @@ import { defaultCodexHome } from "./codex/adapter.js";
 import { CODEX_HOOK_SCRIPT_NAME } from "./codex/hooks.js";
 import { CURSOR_HOOK_SCRIPT_NAME } from "./cursor/hooks.js";
 import { defaultCursorHome } from "./cursor/local-adapter.js";
+import { GEMINI_HOOK_SCRIPT_NAME } from "./gemini-cli/hooks.js";
+import { defaultGeminiCliHome } from "./gemini-cli/records.js";
 import type { ObservationHookInstallation } from "./shared/hook-merge.js";
 
 const SPOOL_DIRECTORY = "events";
@@ -30,6 +32,11 @@ const OBSERVATION_HOOK_PROVIDERS = {
     directoryName: "cursor-hooks",
     scriptName: CURSOR_HOOK_SCRIPT_NAME,
     providerHome: defaultCursorHome,
+  },
+  [PROVIDER_ID.GEMINI_CLI]: {
+    directoryName: "gemini-cli-hooks",
+    scriptName: GEMINI_HOOK_SCRIPT_NAME,
+    providerHome: defaultGeminiCliHome,
   },
 } as const;
 
