@@ -173,21 +173,20 @@ type CursorRunStatus = (typeof CURSOR_RUN_STATUS)[keyof typeof CURSOR_RUN_STATUS
 /**
  * The run states in which a run has positively stopped. The archive is offered
  * only over one of these — never over a run still moving, one still being
- * created, or one whose state could not be read at all. Cancelled and expired
- * runs draw no row at all and are excluded before this set is consulted.
+ * created, or one whose state could not be read at all.
  */
 const CURSOR_SETTLED_RUN_STATUSES: ReadonlySet<CursorRunStatus> = new Set([
   CURSOR_RUN_STATUS.FINISHED,
+  CURSOR_RUN_STATUS.CANCELLED,
+  CURSOR_RUN_STATUS.EXPIRED,
   CURSOR_RUN_STATUS.ERROR,
 ]);
 
 /**
  * A finished run has stopped and is holding for the user, which is what Luke
- * reports as waiting. One that is still being created, or that failed, is left
- * unknown rather than promoted to a state Luke cannot verify. Cancelled and
- * expired runs are excluded by the filter in `#observationFor` before any
- * observation is built, so those entries are never consulted; they remain for
- * type completeness.
+ * reports as waiting. A run that was cancelled or expired stopped for good. One
+ * that is still being created, or that failed, is left unknown rather than
+ * promoted to a state Luke cannot verify.
  */
 const SESSION_STATUS_BY_CURSOR_RUN_STATUS = {
   [CURSOR_RUN_STATUS.RUNNING]: SESSION_STATUS.WORKING,
@@ -514,12 +513,6 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
     const run = latestRunId
       ? await this.tolerateItemFailure(() => this.#latestRun(request, agent.id, latestRunId))
       : undefined;
-    // A cancelled run is the user's own act of dismissal, and an expired run
-    // is Cursor's housekeeping over one nobody came back for — either draws no
-    // row at all rather than a completed one.
-    if (run?.status === CURSOR_RUN_STATUS.CANCELLED || run?.status === CURSOR_RUN_STATUS.EXPIRED) {
-      return undefined;
-    }
     // The run's timestamp is the moment its state was entered; the agent's is
     // only the last resort, because it also moves for edits that are not work.
     const observedAt = run?.updatedAt ?? agent.lastActivityAt;
