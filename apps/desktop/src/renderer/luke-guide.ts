@@ -496,6 +496,20 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "fields alone.",
     },
     {
+      label: "Messaging local Cursor chats",
+      detail:
+        "A local Cursor chat whose turn has settled can take the developer's own message, " +
+        "typed on its row or asked of Luke in conversation: Luke runs Cursor's own agents " +
+        "CLI, resuming exactly that chat in its own folder with the message as its one " +
+        "prompt, and the reply lands in the same transcript the row already reads. It is " +
+        "offered only where that is honest — the CLI installed and signed in, the chat's " +
+        "folder named by Cursor's own records, the turn not still running — and not for " +
+        "chats the Cursor app's own windows hold, whose rows open the exact chat in the " +
+        "app instead, because Cursor does not document whether an app window would show a " +
+        "turn landed behind it. A Superset-managed Cursor chat still messages through " +
+        "Superset's own terminal, which shows the message where the agent actually runs.",
+    },
+    {
       label: "Creating workspaces",
       detail:
         "Where a connected provider documents a creation endpoint — Conductor, Cursor, and " +
