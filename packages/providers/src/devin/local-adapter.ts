@@ -4,6 +4,7 @@ import {
   agedStatus,
   maximumSessionTitleLength,
   type ProviderSessionObservation,
+  SESSION_COMPLETION_CAUSE,
   SESSION_STATUS,
   type SessionDetail,
   type SessionStatus,
@@ -17,6 +18,8 @@ import {
   type WireRecord,
 } from "@sidecar/wire";
 import {
+  type HookStatusRefinement,
+  hookRefinedStatus,
   LocalSessionAdapter,
   uniquePaths,
   workspaceLabel,
@@ -29,6 +32,12 @@ import {
   type SqliteModuleLoader,
 } from "../shared/local-sqlite.js";
 import { DEVIN_PROVIDER, millisecondsFromRecord } from "./adapter.js";
+import {
+  DEVIN_HOOK_EVENT,
+  type DevinHookEvent,
+  type ObservedDevinHookEvent,
+  readDevinHookEvent,
+} from "./hooks.js";
 import { readDevinSessionTranscript } from "./transcript.js";
 
 /**
@@ -176,6 +185,14 @@ export interface DevinLocalAdapterOptions {
   activeSessionFreshnessMs?: number;
   sqlite?: SqliteModuleLoader;
   transcriptMaximumRenderedLength?: number;
+  /**
+   * Where the observation hook spools its events, when hooks are on at all.
+   * Read lazily like the cloud adapters' credentials, because the app decides
+   * the path after this adapter is declared. Absent — or answering nothing —
+   * the adapter reads the session database alone, exactly as it always has:
+   * the hooks only ever sharpen what the rows already showed.
+   */
+  hookEventsDirectory?: () => string | undefined;
 }
 
 /**
@@ -301,6 +318,30 @@ function activityFromToolCallRows(rows: readonly DevinRow[]): string | undefined
   return undefined;
 }
 
+/**
+ * What the refinement actually buys here is the states the session database
+ * cannot show: a tool call holding for approval writes no node while it
+ * holds, a settled turn and a session walked away from write the same rows,
+ * and the database records no closure at all. The stale notification decays
+ * to unknown for the same reason Codex's does — a hold nobody has answered in
+ * a window is indistinguishable from a session left behind, and must never
+ * read as anything livelier.
+ */
+const DEVIN_HOOK_STATUS_REFINEMENT = {
+  definitive: [{ event: DEVIN_HOOK_EVENT.SESSION_END, fresh: SESSION_STATUS.COMPLETE }],
+  fresh: [
+    {
+      event: DEVIN_HOOK_EVENT.NOTIFICATION,
+      fresh: SESSION_STATUS.WAITING,
+      stale: SESSION_STATUS.UNKNOWN,
+    },
+    { event: DEVIN_HOOK_EVENT.PROMPT, fresh: SESSION_STATUS.WORKING },
+    { event: DEVIN_HOOK_EVENT.STOP, fresh: SESSION_STATUS.WAITING },
+  ],
+  notificationEvent: DEVIN_HOOK_EVENT.NOTIFICATION,
+  sessionEndEvent: DEVIN_HOOK_EVENT.SESSION_END,
+} as const satisfies HookStatusRefinement<DevinHookEvent>;
+
 function detailFromSnapshot(snapshot: DevinLocalSessionSnapshot): SessionDetail {
   return {
     ...(snapshot.activity ? { activity: snapshot.activity } : undefined),
@@ -311,15 +352,29 @@ function detailFromSnapshot(snapshot: DevinLocalSessionSnapshot): SessionDetail 
 
 function observationFromSnapshot(
   snapshot: DevinLocalSessionSnapshot,
+  hookEvent: ObservedDevinHookEvent | undefined,
   now: number,
   activeSessionFreshnessMs: number,
 ): ProviderSessionObservation {
+  const refined = hookRefinedStatus({
+    refinement: DEVIN_HOOK_STATUS_REFINEMENT,
+    hookEvent,
+    providerAtMs: snapshot.observedAt,
+    statusAt: (observedAt) =>
+      statusFromTurn(snapshot.turn, observedAt, now, activeSessionFreshnessMs),
+    now,
+    activeSessionFreshnessMs,
+  });
   return {
     providerSessionId: snapshot.providerSessionId,
     title: sessionTitle(snapshot.title, snapshot.workingDirectory),
-    status: statusFromTurn(snapshot.turn, snapshot.observedAt, now, activeSessionFreshnessMs),
-    observedAt: snapshot.observedAt,
+    status: refined.status,
+    ...(refined.sessionClosed
+      ? { completionCause: SESSION_COMPLETION_CAUSE.SESSION_CLOSED }
+      : undefined),
+    observedAt: refined.observedAt,
     detail: detailFromSnapshot(snapshot),
+    ...(refined.holdingForDeveloper ? { holdingForDeveloper: true } : undefined),
   };
 }
 
@@ -355,12 +410,14 @@ export class DevinLocalSessionAdapter extends LocalSessionAdapter {
   readonly #cliDirectory: string;
   readonly #sqlite: SqliteModuleLoader;
   readonly #transcriptMaximumRenderedLength: number | undefined;
+  readonly #hookEventsDirectory: (() => string | undefined) | undefined;
 
   constructor(options: DevinLocalAdapterOptions = {}) {
     super(options);
     this.#cliDirectory = options.cliDirectory ?? defaultDevinCliDirectory();
     this.#sqlite = options.sqlite ?? defaultSqliteModule;
     this.#transcriptMaximumRenderedLength = options.transcriptMaximumRenderedLength;
+    this.#hookEventsDirectory = options.hookEventsDirectory;
   }
 
   async observe(): Promise<readonly ProviderSessionObservation[]> {
@@ -378,8 +435,14 @@ export class DevinLocalSessionAdapter extends LocalSessionAdapter {
       // A database whose schema was unusable answers nothing; the next
       // candidate may still answer.
       if (snapshots === undefined) continue;
+      const hookEvents = await this.#hookEvents(snapshots);
       return snapshots.map((snapshot) =>
-        observationFromSnapshot(snapshot, now, this.activeSessionFreshnessMs),
+        observationFromSnapshot(
+          snapshot,
+          hookEvents.get(snapshot.providerSessionId),
+          now,
+          this.activeSessionFreshnessMs,
+        ),
       );
     }
     return [];
@@ -460,6 +523,30 @@ export class DevinLocalSessionAdapter extends LocalSessionAdapter {
     return activityFromToolCallRows(
       this.#rowsFor(database, DEVIN_TOOL_CALL_QUERY, [providerSessionId]),
     );
+  }
+
+  /**
+   * Reads what the observation hook last said about each session. The spool
+   * is a refinement, never a dependency: a directory that is missing,
+   * unreadable, or holding something unexpected reads as no event, and the
+   * row's own verdict stands.
+   */
+  async #hookEvents(
+    snapshots: readonly DevinLocalSessionSnapshot[],
+  ): Promise<Map<string, ObservedDevinHookEvent>> {
+    const events = new Map<string, ObservedDevinHookEvent>();
+    const hookEventsDirectory = this.#hookEventsDirectory?.();
+    if (!hookEventsDirectory) return events;
+    await Promise.all(
+      snapshots.map(async (snapshot) => {
+        const event = await readDevinHookEvent(
+          hookEventsDirectory,
+          snapshot.providerSessionId,
+        ).catch(() => undefined);
+        if (event) events.set(snapshot.providerSessionId, event);
+      }),
+    );
+    return events;
   }
 
   /** A node or tool table this build cannot read costs a field, not the pass. */
