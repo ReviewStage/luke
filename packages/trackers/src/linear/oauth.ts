@@ -113,6 +113,7 @@ function signInPage(granted: boolean): string {
         badge: "Connected",
         title: "Connected to Linear",
         body: "You can close this tab and return to Luke.",
+        closesItself: true,
       })
     : accountLoopbackPage({
         tone: LOOPBACK_PAGE_TONE.ATTENTION,
