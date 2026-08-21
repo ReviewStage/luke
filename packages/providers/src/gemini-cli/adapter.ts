@@ -360,13 +360,17 @@ export class GeminiCliSessionAdapter extends LocalFileSessionAdapter<
     // mtimes the way any bulk touch would. The file's date remains the
     // fallback for a slice holding no conversation stamp at all.
     const observedAt = parsed.timestampMs ?? candidate.mtimeMs;
+    const status = statusFromTail(parsed, observedAt, now, activeSessionFreshnessMs);
     return {
       providerSessionId: candidate.providerSessionId,
       title: titleFromTail(parsed, workspace),
-      status: statusFromTail(parsed, observedAt, now, activeSessionFreshnessMs),
+      status,
       observedAt,
       ...(parsed.recap ? { recap: parsed.recap } : undefined),
       detail: detailFromTail(parsed, workspace),
+      ...(status === SESSION_STATUS.WAITING && parsed.holdingForApproval === true
+        ? { holdingForDeveloper: true }
+        : undefined),
     };
   }
 

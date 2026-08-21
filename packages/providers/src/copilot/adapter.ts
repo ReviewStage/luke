@@ -257,13 +257,15 @@ export class CopilotSessionAdapter extends CloudSessionAdapter {
   }
 
   #observationFor(task: CopilotTask, now: number): ProviderSessionObservation {
+    const status = this.#statusFor(task, now);
     return {
       providerSessionId: task.id,
       // The provider is already on the row as its mark and in the context line,
       // so the title carries only what tells one Copilot task from another.
       title: task.repositoryLabel,
-      status: this.#statusFor(task, now),
+      status,
       observedAt: task.observedAt,
+      ...(status === SESSION_STATUS.WAITING ? { holdingForDeveloper: true } : undefined),
       detail: {
         repository: task.repositoryLabel,
         ...(task.branch ? { branch: task.branch } : undefined),

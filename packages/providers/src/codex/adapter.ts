@@ -767,6 +767,11 @@ function observationFromThreadRow(
     ...(rollout?.lastAgentMessage ? { recap: rollout.lastAgentMessage } : undefined),
     detail,
     ...(detail.link ? { applications: [chatGptApplication(detail.link)] } : undefined),
+    ...(status === SESSION_STATUS.WAITING &&
+    eventStands &&
+    hookEvent?.event === CODEX_HOOK_EVENT.NOTIFICATION
+      ? { holdingForDeveloper: true }
+      : undefined),
   };
   if (isCodexRealtimeDelegationThread(row)) observation.realtimeVoice = true;
   if (rollout?.realtimeVoiceLive === true) observation.realtimeVoiceLive = true;

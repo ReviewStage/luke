@@ -170,6 +170,7 @@ const sameSession = exhaustiveSame<NormalizedSession>({
     sameItems(first.applications, second.applications, sameApplication),
   controls: (first, second) => sameItems(first.controls, second.controls, sameControl),
   canReceiveMessage: (first, second) => first.canReceiveMessage === second.canReceiveMessage,
+  holdingForDeveloper: (first, second) => first.holdingForDeveloper === second.holdingForDeveloper,
   canRename: (first, second) => first.canRename === second.canRename,
   spawnableAgents: (first, second) =>
     sameItems(first.spawnableAgents, second.spawnableAgents, Object.is),

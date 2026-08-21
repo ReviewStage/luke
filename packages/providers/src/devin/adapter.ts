@@ -446,6 +446,10 @@ export class DevinSessionAdapter extends CloudSessionAdapter {
 
   #observationFor(session: DevinSession, now: number): ProviderSessionObservation {
     const status = this.#statusFor(session, now);
+    const holdingForDeveloper =
+      status === SESSION_STATUS.WAITING &&
+      (session.detail === DEVIN_RUNNING_DETAIL.WAITING_FOR_USER ||
+        session.detail === DEVIN_RUNNING_DETAIL.WAITING_FOR_APPROVAL);
     return {
       providerSessionId: session.id,
       // What Devin named it, then where the work landed. The adapter reports
@@ -453,6 +457,7 @@ export class DevinSessionAdapter extends CloudSessionAdapter {
       title: session.name ?? session.repository ?? UNKNOWN_SESSION_LABEL,
       status,
       observedAt: session.observedAt,
+      ...(holdingForDeveloper ? { holdingForDeveloper: true } : undefined),
       canReceiveMessage: this.#sessionTakesMessages(session),
       ...(this.#sessionTakesArchive(session)
         ? { controls: [DEVIN_ARCHIVE_SESSION_CONTROL] }

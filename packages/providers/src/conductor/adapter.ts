@@ -267,9 +267,11 @@ type ConductorSessionStatus =
 
 /**
  * An idle Conductor session has finished its turn and is holding for the user,
- * which is what Luke reports as waiting. A session the provider reports as
- * errored stopped on something the user has to deal with, and it carries the
- * message that says what.
+ * which is what Luke reports as waiting on the row. That is not itself an
+ * ask: a waiting notice still needs the recap to ask, because a settled turn
+ * that merely leaves the next prompt to them is silence. A session the
+ * provider reports as errored stopped on something the user has to deal with,
+ * and it carries the message that says what.
  */
 const SESSION_STATUS_BY_CONDUCTOR_STATUS = {
   [CONDUCTOR_SESSION_STATUS.IDLE]: SESSION_STATUS.WAITING,

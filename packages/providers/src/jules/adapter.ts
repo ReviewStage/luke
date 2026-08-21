@@ -264,6 +264,7 @@ export class JulesSessionAdapter extends CloudSessionAdapter {
       status,
       observedAt: session.observedAt,
       canReceiveMessage: session.state !== undefined && JULES_MESSAGEABLE_STATES.has(session.state),
+      ...(status === SESSION_STATUS.WAITING ? { holdingForDeveloper: true } : undefined),
       ...(session.state === JULES_STATE.AWAITING_PLAN_APPROVAL
         ? { controls: [JULES_APPROVE_PLAN_CONTROL] }
         : undefined),
