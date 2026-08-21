@@ -10,7 +10,6 @@ import {
   SESSION_APPLICATION_SCOPE,
   SESSION_STATUS,
   type SessionApplication,
-  type SessionControl,
   type SessionDetail,
   type SessionProvider,
   type SessionStatus,
@@ -68,16 +67,6 @@ const REPLICAS_REQUEST_HEADERS = {
 };
 
 /**
- * The organization header the `/v1/workspaces` routes demand in production —
- * observed live: they answer a bare key "Missing Replicas-Org-Id header"
- * where the `/v1/replica` routes accept the same key alone. The value is
- * never composed here: it is the `organization_id` the provider's own
- * environments read reports, an identifier the same pass carried, and until
- * one has been read those routes are simply not asked.
- */
-const REPLICAS_ORGANIZATION_HEADER = "Replicas-Org-Id";
-
-/**
  * The dashboard's own address for one workspace, composed from the observed
  * id the way Conductor's deep link is: opening stays what every open is — an
  * address handed to the operating system, reaching no provider — and it
@@ -92,16 +81,13 @@ function replicasWorkspaceLink(workspaceId: string): string {
 }
 
 const REPLICAS_ROUTE_SEGMENT = {
-  ARCHIVE: "archive",
   CHATS: "chats",
   ENVIRONMENTS: "environments",
   HISTORY: "history",
   MESSAGES: "messages",
   REPLICA: "replica",
   REPOSITORIES: "repositories",
-  SLEEP: "sleep",
   V1: "v1",
-  WORKSPACES: "workspaces",
 } as const;
 
 /**
@@ -111,19 +97,19 @@ const REPLICAS_ROUTE_SEGMENT = {
  * touching a workspace, and `GET /v1/environments` with
  * `GET /v1/replica/repositories` are the same kind of record read — they are
  * where a creation ask's projects come from.
- * `GET /v1/workspaces/{id}/chats` is the server-side chat registry — the one
- * that keeps chats visible and queues their messages while a workspace
- * sleeps — documented to list "active, sleeping, and pending chats", so it
- * answers for a sleeping workspace without touching its engine.
  * `GET /v1/replica/{id}` is documented to wake a sleeping or archived
  * workspace, so it is issued only for a workspace the same pass's list just
  * reported awake, where there is nothing to wake; `GET /v1/replica/{id}/history`
  * answers from retention without waking and refuses with a conflict when it
  * cannot. The engine-backed chats list under `/v1/replica/{id}/chats` wakes
- * and is never read, and the dashboard's own `GET /v1/workspaces` is not
- * read either: it is shaped around a signed-in viewer, and a key stands for
- * the organization rather than for a viewer, so what it answers a key is not
- * the roster the user sees.
+ * and is never read. Nothing under `/v1/workspaces` is used at all, spec
+ * notwithstanding: verified live, that whole family — the chat registry,
+ * the sleep and archive acts, the dashboard list — answers an API key
+ * "Invalid token" (with the organization header) or "Missing Replicas-Org-Id
+ * header" (without), because it serves the dashboard's own session tokens.
+ * The chats a sleeping workspace keeps on the roster are the ones its awake
+ * detail last listed, and a fresh launch draws it as one workspace row until
+ * it wakes.
  */
 const REPLICAS_ROUTE = {
   REPLICAS: [REPLICAS_ROUTE_SEGMENT.V1, REPLICAS_ROUTE_SEGMENT.REPLICA],
@@ -133,8 +119,6 @@ const REPLICAS_ROUTE = {
     REPLICAS_ROUTE_SEGMENT.REPLICA,
     REPLICAS_ROUTE_SEGMENT.REPOSITORIES,
   ],
-  /** Where the chat registry and the sleep and archive acts live. */
-  WORKSPACE_ACTS: [REPLICAS_ROUTE_SEGMENT.V1, REPLICAS_ROUTE_SEGMENT.WORKSPACES],
 } as const;
 
 const REPLICAS_QUERY = {
@@ -157,7 +141,6 @@ const REPLICAS_FIELD = {
   LAST_ACTIVITY_AT: "last_activity_at",
   MESSAGE: "message",
   NAME: "name",
-  ORGANIZATION_ID: "organization_id",
   PROCESSING: "processing",
   PROVIDER: "provider",
   PULL_REQUESTS: "pull_requests",
@@ -300,24 +283,6 @@ const REPLICAS_CODEX_EVENT_TYPES: ReadonlySet<string> = new Set([
 const REPLICAS_ACP_EVENT_PREFIX = "acp-";
 const REPLICAS_ACP_PROVIDER_FIELD = "provider";
 
-/**
- * The two workspace acts a row can advertise, each the dashboard's own
- * sidebar action through its documented endpoint. Archiving is offered only
- * on a workspace already asleep — positively settled, the same bar
- * Superset's delete holds — and sleep only on an awake workspace every one
- * of whose chats was positively seen idle, so neither can cut a turn.
- */
-const REPLICAS_ARCHIVE_CONTROL_ID = "archive-workspace";
-const REPLICAS_SLEEP_CONTROL_ID = "sleep-workspace";
-
-function replicasArchiveControl(workspaceId: string): SessionControl {
-  return { id: REPLICAS_ARCHIVE_CONTROL_ID, label: "Archive", target: workspaceId };
-}
-
-function replicasSleepControl(workspaceId: string): SessionControl {
-  return { id: REPLICAS_SLEEP_CONTROL_ID, label: "Put to sleep", target: workspaceId };
-}
-
 const REPLICAS_ADAPTER_DEFAULTS = {
   /** The documented maximum, so one call reaches as deep into the history as it can. */
   WORKSPACE_PAGE_SIZE: 100,
@@ -440,53 +405,6 @@ function workspaceFromRecord(record: WireRecord): ReplicasWorkspace | undefined 
     repositoryLabel: repositoryLabelFromRecord(record),
     status: knownValue(REPLICAS_STATUS, textFromRecord(record, REPLICAS_FIELD.STATUS)),
     ...(pullRequestUrl ? { pullRequestUrl } : undefined),
-  };
-}
-
-/**
- * The chat registry spells its fields in camelCase, alone among the reads,
- * so its keys live apart rather than doubling up the snake_case table. Its
- * `lastMessageText` is deliberately never read: the field carries whoever
- * spoke last, the developer included, and words that are not attributably
- * the agent's may not reach a row.
- */
-const REPLICAS_WORKSPACE_CHAT_FIELD = {
-  CHATS: "chats",
-  CREATED_AT: "createdAt",
-  ID: "id",
-  PARENT_CHAT_ID: "parentChatId",
-  PROCESSING: "processing",
-  PROVIDER: "provider",
-  TITLE: "title",
-  UPDATED_AT: "updatedAt",
-} as const;
-
-/**
- * One chat from the workspace's chat registry, turn state included. A
- * spawned sub-agent's chat is skipped the way the local adapters skip
- * subagent sessions: its work is the parent chat's, and a row for it would
- * double what one conversation did.
- */
-function chatFromRegistryRecord(record: WireRecord): ReplicasChat | undefined {
-  const id = textFromRecord(record, REPLICAS_WORKSPACE_CHAT_FIELD.ID);
-  const observedAt =
-    timestampFromRecord(record, REPLICAS_WORKSPACE_CHAT_FIELD.UPDATED_AT) ??
-    timestampFromRecord(record, REPLICAS_WORKSPACE_CHAT_FIELD.CREATED_AT);
-  if (!id || observedAt === undefined) return undefined;
-  if (textFromRecord(record, REPLICAS_WORKSPACE_CHAT_FIELD.PARENT_CHAT_ID)) return undefined;
-
-  const agentKind = textFromRecord(record, REPLICAS_WORKSPACE_CHAT_FIELD.PROVIDER)?.slice(
-    0,
-    REPLICAS_ADAPTER_DEFAULTS.MAXIMUM_AGENT_KIND_LENGTH,
-  );
-  const title = textFromRecord(record, REPLICAS_WORKSPACE_CHAT_FIELD.TITLE);
-  const processing = record[REPLICAS_WORKSPACE_CHAT_FIELD.PROCESSING];
-  return {
-    id,
-    observedAt,
-    ...(agentKind ? { agentKind } : undefined),
-    ...(title ? { title } : undefined),
-    ...(isWireBoolean(processing) ? { processing } : undefined),
   };
 }
 
@@ -680,18 +598,19 @@ const REPLICAS_ENRICHABLE_STATUSES: ReadonlySet<ReplicasStatus> = new Set([
  * Replicas is a workspace app hosting agents rather than an agent: a
  * workspace holds chats running Claude Code, Codex, Cursor, and others, the
  * way Conductor's does. The rows are the chats, read with their turn state
- * from the server-side chat registry — which answers for active and
- * sleeping workspaces alike, under any key, without touching an engine —
- * each led by its own agent, grouped under the workspace, with the Replicas
- * mark riding as the app. A workspace with no readable chats is its own
- * row, so nothing the list reported ever drops.
+ * from the awake detail read — each led by its own agent, grouped under the
+ * workspace, with the Replicas mark riding as the app. A workspace that
+ * goes to sleep keeps the chats last seen while it was awake, and one whose
+ * chats were never readable is its own row, so nothing the list reported
+ * ever drops.
  */
 export class ReplicasSessionAdapter extends CloudSessionAdapter {
   /**
-   * The chats each workspace held when they were last read, keyed to the
-   * activity timestamp: an awake workspace is re-read every pass, because a
-   * turn ending is exactly the change worth noticing, while a sleeping one
-   * is settled and re-read only when it moves.
+   * The chats each workspace held when its awake detail was last read. An
+   * awake workspace is re-read every pass, because a turn ending is exactly
+   * the change worth noticing; a workspace that goes to sleep keeps the
+   * chats last seen while it was awake, since no key-answerable read lists a
+   * sleeping workspace's chats without waking it.
    */
   #chatsByWorkspace = new Map<string, ReplicasChatSnapshot>();
 
@@ -723,14 +642,6 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
   /** The environments the latest pass reported, offered as creation projects. */
   #projects: readonly WorkspaceProject[] = [];
 
-  /**
-   * The organization the key stands for, exactly as the environments read
-   * reported it. It rides every request as the header the `/v1/workspaces`
-   * routes demand in production, and those routes are simply not asked until
-   * it has been read.
-   */
-  #organizationId: string | undefined;
-
   constructor(options: ReplicasAdapterOptions) {
     super(
       {
@@ -743,12 +654,7 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
   }
 
   protected override requestHeaders() {
-    return {
-      ...REPLICAS_REQUEST_HEADERS,
-      ...(this.#organizationId
-        ? { [REPLICAS_ORGANIZATION_HEADER]: this.#organizationId }
-        : undefined),
-    } satisfies Readonly<Record<string, string>>;
+    return REPLICAS_REQUEST_HEADERS satisfies Readonly<Record<string, string>>;
   }
 
   protected override forgetCachedIdentity(): void {
@@ -758,7 +664,6 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
     this.#detailsRefused = false;
     this.#workspaceByChat.clear();
     this.#projects = [];
-    this.#organizationId = undefined;
   }
 
   protected async collect(
@@ -790,18 +695,14 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
       .filter((workspace) => workspace.status && REPLICAS_ENRICHABLE_STATUSES.has(workspace.status))
       .slice(0, REPLICAS_ADAPTER_DEFAULTS.ENRICHED_WORKSPACE_LIMIT);
     this.#pruneCaches(workspaces);
-    // Projects first, alone: the environments read is also where the
-    // organization header the chat registry demands is learned.
-    await this.#refreshProjects(request);
-    const registryListed = await this.#refreshChats(request, enrichable);
     await Promise.all([
+      this.#refreshProjects(request),
       this.#refreshDetails(
         request,
         enrichable.filter((workspace) => workspace.status === REPLICAS_STATUS.ACTIVE),
-        registryListed,
       ),
-      this.#refreshHistories(request, enrichable),
     ]);
+    await this.#refreshHistories(request, enrichable);
 
     this.#workspaceByChat.clear();
     return workspaces.flatMap((workspace) => this.#observationsFor(workspace, now));
@@ -830,31 +731,6 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
         ...(chatWorkspaceId ? { [REPLICAS_FIELD.CHAT_ID]: providerSessionId } : undefined),
       },
     };
-  }
-
-  protected override controlRoute(
-    _providerSessionId: string,
-    control: SessionControl,
-  ): CloudWriteRoute | undefined {
-    // The workspace acted on is the advertised control's own target, so it is
-    // the workspace of the observation the user pressed, under the credential
-    // that observed it. Both endpoints document an empty request.
-    if (!control.target) return undefined;
-    if (control.id === REPLICAS_ARCHIVE_CONTROL_ID) {
-      return {
-        segments: [
-          ...REPLICAS_ROUTE.WORKSPACE_ACTS,
-          control.target,
-          REPLICAS_ROUTE_SEGMENT.ARCHIVE,
-        ],
-      };
-    }
-    if (control.id === REPLICAS_SLEEP_CONTROL_ID) {
-      return {
-        segments: [...REPLICAS_ROUTE.WORKSPACE_ACTS, control.target, REPLICAS_ROUTE_SEGMENT.SLEEP],
-      };
-    }
-    return undefined;
   }
 
   /**
@@ -956,10 +832,6 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
       if (!(error instanceof CloudRequestError)) throw error;
       return;
     }
-    this.#organizationId =
-      recordsFromPage(environments, REPLICAS_FIELD.ENVIRONMENTS)
-        .map((record) => textFromRecord(record, REPLICAS_FIELD.ORGANIZATION_ID))
-        .find(isDefined) ?? this.#organizationId;
     const repositoryNameById = new Map<string, string>();
     for (const record of recordsFromPage(repositories, REPLICAS_FIELD.REPOSITORIES)) {
       const id = textFromRecord(record, REPLICAS_FIELD.ID);
@@ -1013,11 +885,7 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
    * included, so an awake workspace's rows survive the registry's
    * organization-header demands.
    */
-  async #refreshDetails(
-    request: CloudRequest,
-    awake: readonly ReplicasWorkspace[],
-    registryListed: ReadonlySet<string>,
-  ): Promise<void> {
+  async #refreshDetails(request: CloudRequest, awake: readonly ReplicasWorkspace[]): Promise<void> {
     if (this.#detailsRefused) return;
     await Promise.all(
       awake.map(async (workspace) => {
@@ -1032,14 +900,12 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
         }
         const replica = body[REPLICAS_FIELD.REPLICA];
         if (!isRecord(replica)) return;
-        if (!registryListed.has(workspace.id)) {
-          const chats = recordsFromPage(replica, REPLICAS_FIELD.CHATS)
-            .map(chatFromDetailRecord)
-            .filter(isDefined)
-            .sort((first, second) => second.observedAt - first.observedAt)
-            .slice(0, REPLICAS_ADAPTER_DEFAULTS.CHAT_LIMIT);
-          this.#chatsByWorkspace.set(workspace.id, { observedAt: workspace.observedAt, chats });
-        }
+        const chats = recordsFromPage(replica, REPLICAS_FIELD.CHATS)
+          .map(chatFromDetailRecord)
+          .filter(isDefined)
+          .sort((first, second) => second.observedAt - first.observedAt)
+          .slice(0, REPLICAS_ADAPTER_DEFAULTS.CHAT_LIMIT);
+        this.#chatsByWorkspace.set(workspace.id, { observedAt: workspace.observedAt, chats });
         const statuses = replica[REPLICAS_FIELD.REPOSITORY_STATUSES];
         const firstStatus = Array.isArray(statuses) ? statuses.filter(isRecord)[0] : undefined;
         const branch = firstStatus
@@ -1058,63 +924,6 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
         });
       }),
     );
-  }
-
-  /**
-   * Lists each workspace's chats from the server-side chat registry, which
-   * answers for active, sleeping, and pending workspaces alike without
-   * touching an engine — the one chat source that covers a sleeping
-   * workspace. Its routes demand the organization header, so nothing is
-   * asked until the environments read has said which organization the key
-   * stands for. An awake workspace is re-read every pass — a turn ending
-   * changes `processing` without moving the activity timestamp — while a
-   * sleeping one is settled and re-read only when it moves. A refusal is
-   * contained to the workspace it answered for, and the chats it already
-   * listed stand rather than vanish. Answers which workspaces it listed, so
-   * the detail read fills in exactly the rest.
-   */
-  async #refreshChats(
-    request: CloudRequest,
-    enrichable: readonly ReplicasWorkspace[],
-  ): Promise<ReadonlySet<string>> {
-    const listed = new Set<string>();
-    if (!this.#organizationId) return listed;
-    await Promise.all(
-      enrichable
-        .filter(
-          (workspace) =>
-            workspace.status === REPLICAS_STATUS.ACTIVE ||
-            this.#chatsByWorkspace.get(workspace.id)?.observedAt !== workspace.observedAt,
-        )
-        .map(async (workspace) => {
-          let body: WireRecord;
-          try {
-            body = await request([
-              ...REPLICAS_ROUTE.WORKSPACE_ACTS,
-              workspace.id,
-              REPLICAS_ROUTE_SEGMENT.CHATS,
-            ]);
-          } catch (error) {
-            // A parsing bug is not a provider answer and must not hide here.
-            if (!(error instanceof CloudRequestError)) throw error;
-            if (error.failure === CLOUD_FAILURE.UNAUTHORIZED) {
-              this.#chatsByWorkspace.set(workspace.id, {
-                observedAt: workspace.observedAt,
-                chats: this.#chatsByWorkspace.get(workspace.id)?.chats ?? [],
-              });
-            }
-            return;
-          }
-          const chats = recordsFromPage(body, REPLICAS_WORKSPACE_CHAT_FIELD.CHATS)
-            .map(chatFromRegistryRecord)
-            .filter(isDefined)
-            .sort((first, second) => second.observedAt - first.observedAt)
-            .slice(0, REPLICAS_ADAPTER_DEFAULTS.CHAT_LIMIT);
-          this.#chatsByWorkspace.set(workspace.id, { observedAt: workspace.observedAt, chats });
-          listed.add(workspace.id);
-        }),
-    );
-    return listed;
   }
 
   /**
@@ -1182,7 +991,6 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
     const agentKind = detail?.agentKind ?? history?.agentKind;
     const mappedKind = knownValue(REPLICAS_AGENT_KIND, agentKind);
     const agent = mappedKind ? REPLICAS_AGENT_BY_KIND[mappedKind] : history?.agent;
-    const controls = this.#controlsFor(workspace);
     return {
       providerSessionId: workspace.id,
       // The workspace's own name titles the row — the identity the dashboard
@@ -1197,7 +1005,6 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
       ...(agent ? { agent } : undefined),
       ...this.#recapFor(workspace, undefined),
       ...this.#spawnAdvertisement(workspace),
-      ...(controls.length > 0 ? { controls } : undefined),
       applications: this.#applicationsFor(workspace),
       detail: {
         repository: workspace.repositoryLabel,
@@ -1243,7 +1050,6 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
         ? undefined
         : chat.agentKind
       : history?.agentKind;
-    const controls = this.#controlsFor(workspace);
     return {
       providerSessionId: chat.id,
       // The chat's own title leads, the way a Conductor chat's name does;
@@ -1257,7 +1063,6 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
       ...(status === SESSION_STATUS.WAITING ? { holdingForDeveloper: true } : undefined),
       ...(newest ? this.#recapFor(workspace, chat) : undefined),
       ...this.#spawnAdvertisement(workspace),
-      ...(controls.length > 0 ? { controls } : undefined),
       // The workspace this chat is one voice of, so several chats gather
       // under one tray carrying the Replicas mark once, the way Conductor's
       // and Superset's workspaces gather theirs.
@@ -1298,23 +1103,6 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
       );
     }
     return newest ? this.#statusFor(workspace) : SESSION_STATUS.COMPLETE;
-  }
-
-  /**
-   * The two dashboard acts a row can advertise. Archive is offered only on a
-   * workspace already asleep — positively settled — and sleep only on an
-   * awake one every one of whose chats was positively seen idle this pass,
-   * so neither act can cut a turn; a workspace whose turn state is unknown
-   * advertises neither rather than a gamble.
-   */
-  #controlsFor(workspace: ReplicasWorkspace): SessionControl[] {
-    if (workspace.status === REPLICAS_STATUS.SLEEPING) {
-      return [replicasArchiveControl(workspace.id)];
-    }
-    if (workspace.status !== REPLICAS_STATUS.ACTIVE) return [];
-    const chats = this.#chatsByWorkspace.get(workspace.id)?.chats ?? [];
-    const allIdle = chats.length > 0 && chats.every((chat) => chat.processing === false);
-    return allIdle ? [replicasSleepControl(workspace.id)] : [];
   }
 
   /** The recap fields a row may carry, or nothing while the words are mid-turn. */

@@ -15,8 +15,6 @@ const TEST_REPOSITORY_URL = "https://github.com/reviewstage/luke";
 const SECRET_PROMPT_TEXT = "SECRET_PROMPT_TEXT";
 /** The reads a creation offer is built from, present in every pass. */
 const PROJECT_READ_PATHS = ["/v1/environments", "/v1/replica/repositories"];
-/** The organization the fake's environments name, as the header must echo it. */
-const TEST_ORGANIZATION_ID = "organization-reviewstage";
 
 /** The documented workspace lifecycle, verified against the published OpenAPI. */
 const TEST_STATUS = {
@@ -32,7 +30,6 @@ interface TestChat {
   provider?: string;
   title?: string;
   updatedAt: number;
-  parentChatId?: string;
   processing?: boolean;
 }
 
@@ -153,33 +150,15 @@ function detailChatPayload(chat: TestChat) {
 }
 
 /**
- * A chat as the workspace chat registry spells it — camelCase, with the
- * turn state, and a `lastMessageText` that may be the developer's own words,
- * which is exactly why the adapter must never read it.
- */
-function registryChatPayload(chat: TestChat) {
-  return {
-    id: chat.id,
-    provider: chat.provider ?? "claude",
-    title: chat.title ?? "",
-    createdAt: isoTimestamp(chat.updatedAt - 60_000),
-    updatedAt: isoTimestamp(chat.updatedAt),
-    processing: chat.processing ?? false,
-    parentChatId: chat.parentChatId ?? null,
-    lastMessageText: SECRET_PROMPT_TEXT,
-  };
-}
-
-/**
  * Serves the subset of the Replica API the adapter is allowed to use: the
- * organization's replica list, the workspace chat registry, the awake detail
- * read, the retained-history read, the environments and repositories the
- * creation offer is built from, and the documented writes. The one read the
- * fake still refuses is the engine-backed chats list under
- * `/v1/replica/{id}/chats`, which wakes a sleeping workspace, so a request
- * to it is a failure of the pass, not a route this fake forgot; a workspace
- * marked `refuseHistory` answers the conflict a pre-retention engine
- * answers.
+ * organization's replica list, the awake detail read, the retained-history
+ * read, the environments and repositories the creation offer is built from,
+ * and the documented writes. The engine-backed chats list under
+ * `/v1/replica/{id}/chats` — which wakes a sleeping workspace — and the
+ * whole key-refusing `/v1/workspaces` family answer refusals, so a request
+ * to either is a failure of the pass, not a route this fake forgot; a
+ * workspace marked `refuseHistory` answers the conflict a pre-retention
+ * engine answers.
  */
 function fakeReplicasApi(
   workspaces: readonly TestWorkspace[],
@@ -191,13 +170,11 @@ function fakeReplicasApi(
   return recordingFetch((request) => {
     const { pathname, searchParams, method } = request;
     const segments = pathname.split("/").filter((segment) => segment.length > 0);
-    // Production demands the organization header on every `/v1/workspaces`
-    // route, answering a bare key exactly this refusal — observed live — so
-    // the fake does too, and nothing passes that forgot to learn it.
+    // Nothing under `/v1/workspaces` answers an API key in production —
+    // verified live — so the fake refuses the family outright, and a request
+    // to it is a failure of the pass, not a route this fake forgot.
     if (segments[0] === "v1" && segments[1] === "workspaces") {
-      if (request.headers.get("replicas-org-id") !== TEST_ORGANIZATION_ID) {
-        return jsonResponse({ error: "Missing Replicas-Org-Id header" }, HTTP_STATUS.BAD_REQUEST);
-      }
+      return jsonResponse({ error: "Invalid token" }, HTTP_STATUS.UNAUTHORIZED);
     }
     if (method === "GET" && pathname === "/v1/environments") {
       // Every organization has at least its Global environment, so the
@@ -206,7 +183,7 @@ function fakeReplicasApi(
       return jsonResponse({
         environments: environments.map((environment) => ({
           id: environment.id,
-          organization_id: TEST_ORGANIZATION_ID,
+          organization_id: "organization-reviewstage",
           name: environment.name,
           is_global: environment.isGlobal ?? false,
           repository_id: environment.repositoryId ?? null,
@@ -219,20 +196,6 @@ function fakeReplicasApi(
           ...repository,
           default_branch: "main",
         })),
-      });
-    }
-    if (
-      method === "GET" &&
-      segments.length === 4 &&
-      segments[0] === "v1" &&
-      segments[1] === "workspaces" &&
-      segments[3] === "chats"
-    ) {
-      const workspace = workspaces.find((candidate) => candidate.id === segments[2]);
-      if (!workspace) return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
-      return jsonResponse({
-        chats: (workspace.chats ?? []).map(registryChatPayload),
-        deletedChats: [],
       });
     }
     if (method === "POST" && pathname === "/v1/replica") {
@@ -248,16 +211,6 @@ function fakeReplicasApi(
           createdAt: TEST_TIME,
         }),
       });
-    }
-    if (
-      method === "POST" &&
-      segments.length === 4 &&
-      segments[0] === "v1" &&
-      segments[1] === "workspaces" &&
-      (segments[3] === "sleep" || segments[3] === "archive")
-    ) {
-      const known = workspaces.some((workspace) => workspace.id === segments[2]);
-      return known ? jsonResponse({ status: "ok" }) : jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
     }
     if (
       method === "POST" &&
@@ -462,11 +415,12 @@ test("stands archived workspaces behind no row, the way the dashboard hides them
   );
 });
 
-test("reads the chat registry, awake detail, and history tails, never a waking read", async () => {
-  // The chat registry answers for active and sleeping workspaces alike; the
-  // detail read is documented to wake a sleeping workspace, so it is issued
-  // only for a workspace the same pass's list reported awake; and an errored
-  // workspace has no retained conversation worth asking for.
+test("reads awake detail and history tails, never a waking or key-refused read", async () => {
+  // The detail read is documented to wake a sleeping workspace, so it is
+  // issued only for a workspace the same pass's list reported awake; nothing
+  // under `/v1/workspaces` is asked at all, because that family answers only
+  // the dashboard's session tokens; and an errored workspace has no retained
+  // conversation worth asking for.
   const api = fakeReplicasApi([
     activeWorkspace("workspace-one", TEST_TIME - 1_000),
     { id: "workspace-two", status: TEST_STATUS.SLEEPING, createdAt: TEST_TIME - 2_000 },
@@ -487,8 +441,6 @@ test("reads the chat registry, awake detail, and history tails, never a waking r
     "/v1/replica/workspace-one",
     "/v1/replica/workspace-one/history",
     "/v1/replica/workspace-two/history",
-    "/v1/workspaces/workspace-one/chats",
-    "/v1/workspaces/workspace-two/chats",
   ]);
 });
 
@@ -576,96 +528,68 @@ test("reports each chat's own turn: processing works, idle holds, stale idle goe
   assert.equal(byId.get("chat-working")?.detail?.branch, "feature/login-timeout");
 });
 
-test("lists a sleeping workspace's chats from the registry without touching it", async () => {
-  const sleptAt = TEST_TIME - 2 * 60 * 60 * 1000;
-  const api = fakeReplicasApi([
+test("keeps the chats last seen awake once the workspace sleeps, touching nothing", async () => {
+  // No key-answerable read lists a sleeping workspace's chats without waking
+  // it — the chat registry answers only the dashboard's session tokens,
+  // verified live — so the rows a workspace settles into are the chats its
+  // awake detail last listed, drawn as settled.
+  const workspaces: TestWorkspace[] = [
     {
-      id: "workspace-asleep",
+      id: "workspace-shared",
       name: "fix-login-timeout",
-      status: TEST_STATUS.SLEEPING,
-      createdAt: sleptAt - 60_000,
-      lastActivityAt: sleptAt,
+      status: TEST_STATUS.ACTIVE,
+      createdAt: TEST_TIME - 60_000,
+      lastActivityAt: TEST_TIME - 1_000,
       chats: [
-        { id: "chat-a", provider: "claude", title: "Fix the login timeout", updatedAt: sleptAt },
-        { id: "chat-b", provider: "codex", title: "Port the fixtures", updatedAt: sleptAt - 1_000 },
-        // A spawned sub-agent's chat is the parent's work, so it draws no row.
-        { id: "chat-spawned", provider: "claude", updatedAt: sleptAt, parentChatId: "chat-a" },
+        {
+          id: "chat-a",
+          provider: "claude",
+          title: "Fix the login timeout",
+          updatedAt: TEST_TIME - 1_000,
+        },
+        {
+          id: "chat-b",
+          provider: "codex",
+          title: "Port the fixtures",
+          updatedAt: TEST_TIME - 2_000,
+        },
       ],
     },
-  ]);
+  ];
+  const api = fakeReplicasApi(workspaces);
+  const adapter = adapterFor(api.fetch);
 
-  const observations = await adapterFor(api.fetch).observe();
+  const awake = await adapter.observe();
+  const workspace = workspaces[0];
+  if (workspace) workspace.status = TEST_STATUS.SLEEPING;
+  const asleep = await adapter.observe();
 
   assert.deepEqual(
-    observations.map((observation) => [observation.providerSessionId, observation.status]),
+    awake.map((observation) => observation.providerSessionId),
+    ["chat-a", "chat-b"],
+  );
+  assert.deepEqual(
+    asleep.map((observation) => [observation.providerSessionId, observation.status]),
     [
       ["chat-a", SESSION_STATUS.COMPLETE],
       ["chat-b", SESSION_STATUS.COMPLETE],
     ],
   );
-  assert.equal(observations[0]?.title, "Fix the login timeout");
-  assert.deepEqual(observations[0]?.agent, { id: "claude-code", displayName: "Claude Code" });
-  assert.deepEqual(observations[1]?.agent, { id: "codex", displayName: "Codex" });
-  assert.deepEqual(observations[0]?.workspace, {
-    providerWorkspaceId: "workspace-asleep",
+  assert.equal(asleep[0]?.title, "Fix the login timeout");
+  assert.deepEqual(asleep[0]?.agent, { id: "claude-code", displayName: "Claude Code" });
+  assert.deepEqual(asleep[1]?.agent, { id: "codex", displayName: "Codex" });
+  assert.deepEqual(asleep[0]?.workspace, {
+    providerWorkspaceId: "workspace-shared",
     name: "fix-login-timeout",
     scopeId: "replicas",
     managerName: "Replicas",
   });
-  // The detail read would wake a sleeping workspace, so it was never asked.
+  // The detail read would wake a sleeping workspace, so the second pass
+  // issued exactly one: the first pass's, while the workspace was awake.
   assert.equal(
-    api.requests.some((request) => request.pathname === "/v1/replica/workspace-asleep"),
-    false,
+    api.requests.filter((request) => request.pathname === "/v1/replica/workspace-shared").length,
+    1,
   );
-  // The registry's `lastMessageText` may be the developer's own words, so
-  // the adapter never reads it and nothing of it reaches a row.
-  assert.equal(JSON.stringify(observations).includes(SECRET_PROMPT_TEXT), false);
-});
-
-test("offers the dashboard's own sleep and archive acts, each only when settled", async () => {
-  const api = fakeReplicasApi([
-    {
-      ...activeWorkspace("workspace-idle", TEST_TIME - 1_000),
-      chats: [
-        { id: "chat-idle", provider: "claude", updatedAt: TEST_TIME - 1_000, processing: false },
-      ],
-    },
-    {
-      ...activeWorkspace("workspace-busy", TEST_TIME - 2_000),
-      chats: [
-        { id: "chat-busy", provider: "claude", updatedAt: TEST_TIME - 2_000, processing: true },
-      ],
-    },
-    {
-      id: "workspace-asleep",
-      status: TEST_STATUS.SLEEPING,
-      createdAt: TEST_TIME - 3_000,
-      lastActivityAt: TEST_TIME - 3_000,
-    },
-  ]);
-  const adapter = adapterFor(api.fetch);
-  const observations = await adapter.observe();
-  const byId = new Map(observations.map((entry) => [entry.providerSessionId, entry]));
-
-  // Sleep is offered only on an awake workspace every one of whose chats was
-  // positively seen idle; archive only on one already asleep.
-  const sleepControl = { id: "sleep-workspace", label: "Put to sleep", target: "workspace-idle" };
-  assert.deepEqual(byId.get("chat-idle")?.controls, [sleepControl]);
-  assert.equal(byId.get("chat-busy")?.controls, undefined);
-  assert.deepEqual(byId.get("workspace-asleep")?.controls, [
-    { id: "archive-workspace", label: "Archive", target: "workspace-asleep" },
-  ]);
-
-  const slept = await adapter.executeControl({
-    providerSessionId: "chat-idle",
-    control: sleepControl,
-  });
-  assert.deepEqual(slept, { status: "accepted" });
-  const write = api.requests.at(-1);
-  assert.equal(write?.method, "POST");
-  assert.equal(write?.pathname, "/v1/workspaces/workspace-idle/sleep");
-  // Both acts document an empty request, so none is sent.
-  assert.equal(write?.body, undefined);
 });
 
 test("starts another agent through the documented chat and message endpoints", async () => {
@@ -964,103 +888,13 @@ test("keeps the roster when the history endpoint refuses the credential", async 
   assert.equal(first[0]?.agent, undefined);
   assert.equal(second.length, 1);
   // The refused history was not asked again while the workspace stood still;
-  // the chat registry and the awake detail read keep their every-pass
-  // cadence.
+  // the awake detail read keeps its every-pass cadence.
   assert.deepEqual(observedPaths(api).sort(), [
     "/v1/replica",
     "/v1/replica",
     "/v1/replica/workspace-active",
     "/v1/replica/workspace-active",
-    "/v1/workspaces/workspace-active/chats",
-    "/v1/workspaces/workspace-active/chats",
   ]);
-});
-
-test("learns the organization from the environments read and sends its header", async () => {
-  // Production's `/v1/workspaces` routes answer a bare key "Missing
-  // Replicas-Org-Id header" — observed live — so the registry is asked only
-  // once the provider's own environments read has named the organization,
-  // and every request carries the header from then on.
-  const api = fakeReplicasApi([
-    {
-      ...activeWorkspace("workspace-active", TEST_TIME - 1_000),
-      chats: [{ id: "chat-a", provider: "claude", updatedAt: TEST_TIME - 1_000 }],
-    },
-  ]);
-
-  const observations = await adapterFor(api.fetch).observe();
-
-  assert.deepEqual(
-    observations.map((observation) => observation.providerSessionId),
-    ["chat-a"],
-  );
-  const registry = api.requests.find((request) => request.pathname.startsWith("/v1/workspaces/"));
-  assert.equal(registry?.headers.get("replicas-org-id"), "organization-reviewstage");
-});
-
-test("lists an awake workspace's chats from its detail when the registry refuses", async () => {
-  const api = fakeReplicasApi([
-    {
-      ...activeWorkspace("workspace-active", TEST_TIME - 1_000),
-      chats: [
-        { id: "chat-working", provider: "claude", updatedAt: TEST_TIME - 1_000, processing: true },
-      ],
-    },
-  ]);
-  const gatedFetch: CloudFetch = async (url, init) => {
-    const { pathname } = new URL(url);
-    return pathname.startsWith("/v1/workspaces/") && pathname.endsWith("/chats")
-      ? jsonResponse({}, HTTP_STATUS.BAD_REQUEST)
-      : api.fetch(url, init);
-  };
-
-  const observations = await adapterFor(gatedFetch).observe();
-
-  assert.deepEqual(
-    observations.map((observation) => [observation.providerSessionId, observation.status]),
-    [["chat-working", SESSION_STATUS.WORKING]],
-  );
-});
-
-test("keeps workspace rows when the chat registry refuses a workspace", async () => {
-  // The list already answered under this key, so a registry refusal is
-  // contained to the workspace it answered for: the workspace-level row
-  // stands, and a settled workspace's refusal is not asked again until it
-  // moves.
-  const sleptAt = TEST_TIME - 60 * 60 * 1000;
-  const api = fakeReplicasApi([
-    {
-      id: "workspace-asleep",
-      status: TEST_STATUS.SLEEPING,
-      createdAt: sleptAt - 60_000,
-      lastActivityAt: sleptAt,
-      codingAgent: "claude",
-      chats: [{ id: "chat-unlisted", provider: "claude", updatedAt: sleptAt }],
-    },
-  ]);
-  const gatedFetch: CloudFetch = async (url, init) =>
-    new URL(url).pathname.endsWith("/chats")
-      ? jsonResponse({}, HTTP_STATUS.FORBIDDEN)
-      : api.fetch(url, init);
-  const adapter = adapterFor(gatedFetch);
-
-  const first = await adapter.observe();
-  const second = await adapter.observe();
-
-  assert.deepEqual(
-    first.map((observation) => observation.providerSessionId),
-    ["workspace-asleep"],
-  );
-  assert.deepEqual(first[0]?.agent, { id: "claude-code", displayName: "Claude Code" });
-  assert.equal(second.length, 1);
-  // The refused registry was asked exactly once; the history read still ran,
-  // unpinned, because the chats were never listed.
-  assert.deepEqual(observedPaths(api), [
-    "/v1/replica",
-    "/v1/replica/workspace-asleep/history",
-    "/v1/replica",
-  ]);
-  assert.equal(api.requests[1]?.search.includes("chat_id"), false);
 });
 
 test("orders the pass by latest activity rather than by creation", async () => {
