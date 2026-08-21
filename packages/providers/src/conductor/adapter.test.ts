@@ -882,12 +882,13 @@ test("reports every chat in a workspace, each grouped under it", async () => {
     });
     // The Conductor mark rides each chat as an app association carrying the
     // chat's own exact address, so the trailing mark opens the same place the
-    // row does.
+    // row does — and the address names the exact chat, so the association is
+    // the session's own and its mark rides the row even inside the tray.
     assert.deepEqual(observation.applications, [
       {
         id: "conductor",
         displayName: "Conductor",
-        scope: "workspace",
+        scope: "session",
         link: observation.detail?.link,
       },
     ]);

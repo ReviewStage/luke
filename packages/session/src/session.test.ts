@@ -89,6 +89,114 @@ test("filters a roster to the sessions still worth a row, keeping their order", 
   );
 });
 
+test("the grouping manager's mark leads the row and the press follows it", () => {
+  const normalized = normalizeSession(
+    { id: "codex", displayName: "Codex" },
+    {
+      providerSessionId: "run:grouped",
+      title: "Implement the shared session core",
+      status: SESSION_STATUS.WORKING,
+      observedAt: TEST_NOW,
+      detail: { link: "codex://threads/run-grouped" },
+      applications: [
+        {
+          id: "chatgpt",
+          displayName: "ChatGPT",
+          scope: "session",
+          link: "codex://threads/run-grouped",
+        },
+        {
+          id: "conductor",
+          displayName: "Conductor",
+          scope: "session",
+          link: "conductor://workspace?id=ws&session=chat",
+        },
+      ],
+      workspace: {
+        providerWorkspaceId: "ws",
+        name: "lisbon-v2",
+        scopeId: "conductor",
+        managerName: "Conductor",
+      },
+    },
+  );
+
+  // The manager that grouped the chat leads its marks ahead of the fixed
+  // order, and the row's press follows the first linked mark — so the chat
+  // opens where its manager holds it, with the agent's own route kept on its
+  // own mark.
+  assert.deepEqual(
+    normalized.applications.map((application) => application.id),
+    ["conductor", "chatgpt"],
+  );
+  assert.equal(normalized.detail.link, "conductor://workspace?id=ws&session=chat");
+  assert.equal(normalized.applications[1]?.link, "codex://threads/run-grouped");
+});
+
+test("a manager without a linked mark cedes the press down the marks", () => {
+  const normalized = normalizeSession(
+    { id: "codex", displayName: "Codex" },
+    {
+      providerSessionId: "run:orca",
+      title: "Implement the shared session core",
+      status: SESSION_STATUS.WORKING,
+      observedAt: TEST_NOW,
+      detail: { link: "codex://threads/run-orca" },
+      applications: [
+        { id: "orca", displayName: "Orca", scope: "workspace" },
+        {
+          id: "chatgpt",
+          displayName: "ChatGPT",
+          scope: "session",
+          link: "codex://threads/run-orca",
+        },
+      ],
+      workspace: { providerWorkspaceId: "worktree", scopeId: "orca", managerName: "Orca" },
+    },
+  );
+
+  assert.deepEqual(
+    normalized.applications.map((application) => application.id),
+    ["orca", "chatgpt"],
+  );
+  assert.equal(normalized.detail.link, "codex://threads/run-orca");
+});
+
+test("an ungrouped row keeps the fixed mark order and its provider's press", () => {
+  const normalized = normalizeSession(
+    { id: "codex", displayName: "Codex" },
+    {
+      providerSessionId: "run:plain",
+      title: "Implement the shared session core",
+      status: SESSION_STATUS.WORKING,
+      observedAt: TEST_NOW,
+      detail: { link: "https://example.com/run-plain" },
+      applications: [
+        {
+          id: "conductor",
+          displayName: "Conductor",
+          scope: "session",
+          link: "conductor://workspace?id=ws&session=chat",
+        },
+        {
+          id: "chatgpt",
+          displayName: "ChatGPT",
+          scope: "session",
+          link: "codex://threads/run-plain",
+        },
+      ],
+    },
+  );
+
+  // With no grouping there is no lead: the fixed order stands, and the press
+  // follows the first linked mark it yields.
+  assert.deepEqual(
+    normalized.applications.map((application) => application.id),
+    ["chatgpt", "conductor"],
+  );
+  assert.equal(normalized.detail.link, "codex://threads/run-plain");
+});
+
 test("reads the pull request's number off every host's address shape", () => {
   assert.equal(sessionChangeNumber("https://github.com/reviewstage/luke/pull/245"), 245);
   assert.equal(

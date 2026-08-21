@@ -273,9 +273,12 @@ export class SupersetWorkspaceSnapshot {
         ? supersetTerminalLink(context.workspaceId, context.terminalId)
         : supersetWorkspaceLink(context.workspaceId);
       // The app that wrote the host state is the scheme's handler, so the
-      // address stands without the CLI login the acts below wait for. A native
-      // provider address still wins as the row's primary press; the Superset
-      // association keeps its own exact terminal address independently.
+      // address stands without the CLI login the acts below wait for. The
+      // association carries the exact terminal address; which mark a grouped
+      // row's press follows is the session normalization's call — the
+      // workspace's manager leads the marks and the press follows the first
+      // linked one — so the fill here only covers a row nothing else
+      // addressed.
       if (!detail.link) detail.link = applicationLink;
       const applications = observation.applications?.some(
         (application) => application.id === SESSION_APPLICATION_ID.SUPERSET,

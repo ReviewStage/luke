@@ -141,8 +141,9 @@ const smokeFixture: FixtureSnapshot = {
     // grouped under the workspace's — the name the user knows the work by,
     // which never was a branch. The pair is what proves a run of chats joins
     // into one card in the one screenshot the evidence is reviewed from —
-    // each row led by the agent's own mark, with the Conductor mark carried
-    // once on the tray header the way a Superset workspace carries its own.
+    // each row led by the agent's own mark and trailed by the Conductor mark
+    // that opens its exact chat, with the tray header carrying the manager's
+    // mark once the way a Superset workspace carries its own.
     {
       id: "conductor-chat-package",
       title: "amber-shoal",
@@ -154,7 +155,7 @@ const smokeFixture: FixtureSnapshot = {
         {
           id: SESSION_APPLICATION_ID.CONDUCTOR,
           name: "Conductor",
-          scope: SESSION_APPLICATION_SCOPE.WORKSPACE,
+          scope: SESSION_APPLICATION_SCOPE.SESSION,
         },
       ],
       detail: "Packaging the macOS build.",
@@ -186,7 +187,7 @@ const smokeFixture: FixtureSnapshot = {
         {
           id: SESSION_APPLICATION_ID.CONDUCTOR,
           name: "Conductor",
-          scope: SESSION_APPLICATION_SCOPE.WORKSPACE,
+          scope: SESSION_APPLICATION_SCOPE.SESSION,
         },
       ],
       detail: "",

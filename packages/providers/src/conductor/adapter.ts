@@ -914,11 +914,14 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
       // The Conductor mark rides as an app association like every other app
       // holding a chat, carrying the same exact address the row opens with,
       // so the one glyph means the same thing on a cloud row and a local one.
+      // The address names the exact chat, so the association is the
+      // session's own and rides the row even inside the workspace's tray;
+      // the tray header's manager mark comes from the workspace above.
       applications: [
         {
           id: SESSION_APPLICATION_ID.CONDUCTOR,
           displayName: CONDUCTOR_PROVIDER_NAME,
-          scope: SESSION_APPLICATION_SCOPE.WORKSPACE,
+          scope: SESSION_APPLICATION_SCOPE.SESSION,
           ...(session.deepLink ? { link: session.deepLink } : undefined),
         },
       ],

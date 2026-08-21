@@ -162,12 +162,16 @@ is read solely for where those sessions live — and, for Conductor, whether the
 user filed them away there. Matching is by exact provider session id — never
 by title or filesystem path — and an absent app, an unreadable file, or a
 schema this build does not know means no annotation.
+A row's marks are led by the app whose workspace groups the chat, and the
+row's own press follows its first linked mark: a grouped chat opens where its
+manager holds it — ahead of the agent's own app — while every mark keeps its
+own exact route.
 
 | App | Reads | Adds to matched rows | Writes |
 | --- | --- | --- | --- |
 | ChatGPT | Nothing | A mark opening the exact Codex thread | None |
 | cmux | Hook-session stores under `~/.cmuxterm` | Mark, exact `cmux:` pane address | None |
-| Conductor | Local session index (`conductor.db`) | Mark, workspace grouping, `conductor:` chat address, filed-away filtering | None |
+| Conductor | Local session index (`conductor.db`) | Mark on each chat, chat name as the row's title, workspace grouping, `conductor:` chat address as the row's press, filed-away filtering | None |
 | Cursor | Chat-key presence in the app's own index | Mark and `cursor:` address opening the exact chat, on app-held local chats and every cloud agent | None |
 | Orca | Hook-status cache and worktree names | Mark, worktree grouping | None |
 | Superset | Host state (`host.db`) | Mark, grouping, `superset:` workspace address; a standing row for each unarchived worktree with no agent terminal | Message, open workspace, close terminal, add agent, new workspace, rename, delete workspace — through its CLI, while logged in |
@@ -185,14 +189,24 @@ schema this build does not know means no annotation.
   the row's own link where no other manager gave it one; no grouping, because
   cmux names its workspaces only by identifier; no writes, because cmux's
   control socket is password-guarded and undocumented for outside callers.
-- **Conductor** — the index is never used to open an agent transcript, and a
-  schema that predates workspaces annotates without grouping. The address,
+- **Conductor** — the index is never used to open an agent transcript. The
+  name Conductor gave a chat — the one its own sidebar shows — titles the
+  matched row the way it titles a cloud-observed chat's; the schema's
+  `Untitled` default is no name at all, a sub-agent keeps its own title, and
+  a schema that predates chat titles keeps the titles the providers derived,
+  as one that predates workspaces annotates without grouping. The workspace
+  grouping is named the way Conductor's own sidebar names it: the chosen
+  workspace name, then the pull request's title where only a PR names the
+  work, then the directory name. The address,
   `conductor://workspace?id=<workspace>&session=<chat>`, is composed on this
   machine from the observed workspace and chat ids — the same deep link
-  Conductor's own notifications fire — and stands in as the row's own link
-  where the chat's agent gave it none; a sub-agent's address is its ancestor
-  chat's, where its conversation lives in Conductor's window, and a
-  pre-workspace schema has no workspace id to address, so its rows keep none.
+  Conductor's own notifications fire. It names the exact chat, so the mark
+  carrying it rides each matched row, inside a workspace tray too, and a
+  chat Conductor grouped is led by that mark — so the row's press follows
+  it, under the one ordering rule above; a sub-agent's address is its
+  ancestor chat's, where its conversation lives in Conductor's window, and
+  a pre-workspace schema has no workspace id to address, so its rows keep
+  none.
   A chat the user filed away on Conductor's own surface — the chat hidden on
   its own, or its whole workspace archived — is dropped from the roster with
   its sub-agents, the same way the cloud adapter drops an archived

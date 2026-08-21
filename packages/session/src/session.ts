@@ -696,6 +696,23 @@ function normalizeApplications(
 }
 
 /**
+ * The app whose workspace groups the chat leads the row's marks: a grouped
+ * chat is worked in its manager's window before anywhere else, so the
+ * manager's mark comes first and the fixed order carries the rest. The row's
+ * own press follows the first linked mark below, which is what makes this
+ * ordering the one place a press's precedence is decided.
+ */
+function applicationsLedByManager(
+  applications: readonly SessionApplication[],
+  managerScopeId: string | undefined,
+): readonly SessionApplication[] {
+  if (!managerScopeId) return applications;
+  const lead = applications.find((application) => application.id === managerScopeId);
+  if (!lead) return applications;
+  return [lead, ...applications.filter((application) => application !== lead)];
+}
+
+/**
  * Bounds every field a provider reported and drops the ones it left empty, so
  * a renderer can treat any present field as worth drawing.
  */
@@ -832,6 +849,18 @@ export function normalizeSession(
   const renameTarget = boundedText(observation.renameTarget, maximumSessionDetailLength);
   const workspace = normalizeWorkspace(observation.workspace);
   const agent = normalizeAgent(observation.agent, providerId);
+  const applications = applicationsLedByManager(
+    normalizeApplications(observation.applications),
+    workspace?.scopeId,
+  );
+  const detail = normalizeSessionDetail(observation.detail);
+  // The row opens where its first linked mark leads. The marks are ordered by
+  // who owns the chat — its workspace's manager ahead of the fixed order — so
+  // the press's precedence is decided by that one ordering rather than by
+  // whichever enricher wrote the row's link last, and a row with no linked
+  // mark keeps the address its provider reported.
+  const pressLink = applications.find((application) => application.link)?.link;
+  if (pressLink) detail.link = pressLink;
 
   const session: NormalizedSession = {
     providerId,
@@ -844,8 +873,8 @@ export function normalizeSession(
     status,
     observedAt,
     location: normalizeLocation(observation.location),
-    detail: normalizeSessionDetail(observation.detail),
-    applications: normalizeApplications(observation.applications),
+    detail,
+    applications,
     controls: normalizeControls(observation.controls),
     // Anything but an explicit yes is a no, so an adapter that has not thought
     // about messaging reports a session that cannot be messaged.

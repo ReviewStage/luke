@@ -1,6 +1,7 @@
 import os from "node:os";
 import path from "node:path";
 import {
+  maximumSessionTitleLength,
   PROVIDER_ID,
   type ProviderSessionObservation,
   SESSION_APPLICATION_ID,
@@ -53,6 +54,7 @@ export function conductorAgent(value: string | undefined): SessionProvider | und
 
 const CONDUCTOR_SESSION_FIELD = {
   AGENT_TYPE: "agent_type",
+  CHAT_TITLE: "chat_title",
   CONDUCTOR_SESSION_ID: "conductor_session_id",
   HIDDEN: "hidden",
   PROVIDER_SESSION_ID: "provider_session_id",
@@ -60,6 +62,14 @@ const CONDUCTOR_SESSION_FIELD = {
   WORKSPACE_NAME: "workspace_name",
   WORKSPACE_STATE: "workspace_state",
 } as const;
+
+/**
+ * The schema's default for a chat nobody has named yet. It is the absence of
+ * a name rather than one anybody chose — Conductor replaces it the moment it
+ * generates a real title — so it reads as no name at all, and the provider's
+ * own title keeps the row.
+ */
+const CONDUCTOR_UNNAMED_CHAT_TITLE = "Untitled";
 
 /**
  * The address of one chat in Conductor's own app — the same deep link
@@ -86,8 +96,11 @@ const CONDUCTOR_ARCHIVED_WORKSPACE_STATE = "archived";
 /**
  * Conductor's provider-session column kept its original Claude-specific name
  * as more agents were added. The alias is the meaning Luke reads from it. The
- * workspace join carries the name the user knows the work by — the chosen
- * workspace name, or the directory name Conductor fell back to itself — and
+ * chat's title is the name the user reads in Conductor's own sidebar, and the
+ * workspace join carries the name the user knows the work by, laddered the
+ * way Conductor's own sidebar labels a workspace — the chosen workspace name,
+ * then the pull request's title where only a PR names the work, then the
+ * directory name Conductor fell back to itself — and
  * the workspace's lifecycle state, because an archived state is the one place
  * Conductor records that the user filed the workspace away. A chat filed away
  * on its own is Conductor's hidden flag, which its schema has carried since
@@ -99,9 +112,33 @@ const CONDUCTOR_SESSION_QUERY = `
     sessions.claude_session_id AS ${CONDUCTOR_SESSION_FIELD.PROVIDER_SESSION_ID},
     sessions.agent_type AS ${CONDUCTOR_SESSION_FIELD.AGENT_TYPE},
     sessions.id AS ${CONDUCTOR_SESSION_FIELD.CONDUCTOR_SESSION_ID},
+    sessions.title AS ${CONDUCTOR_SESSION_FIELD.CHAT_TITLE},
     sessions.is_hidden AS ${CONDUCTOR_SESSION_FIELD.HIDDEN},
     workspaces.id AS ${CONDUCTOR_SESSION_FIELD.WORKSPACE_ID},
-    COALESCE(workspaces.workspace_name, workspaces.directory_name)
+    COALESCE(workspaces.workspace_name, workspaces.pr_title, workspaces.directory_name)
+      AS ${CONDUCTOR_SESSION_FIELD.WORKSPACE_NAME},
+    workspaces.state AS ${CONDUCTOR_SESSION_FIELD.WORKSPACE_STATE}
+  FROM sessions
+  LEFT JOIN workspaces ON workspaces.id = sessions.workspace_id
+  WHERE sessions.claude_session_id IS NOT NULL
+    AND sessions.agent_type IS NOT NULL
+`;
+
+/**
+ * The same read against a database from before Conductor titled its chats.
+ * The sessions still annotate, group, and file away; their rows simply keep
+ * the titles their own providers derived. Conductor stored a workspace's PR
+ * title, its lifecycle state, and the hidden flag all before its chosen
+ * name, so any schema this tier can read holds everything else it asks for.
+ */
+const CONDUCTOR_SESSION_QUERY_WITHOUT_TITLES = `
+  SELECT
+    sessions.claude_session_id AS ${CONDUCTOR_SESSION_FIELD.PROVIDER_SESSION_ID},
+    sessions.agent_type AS ${CONDUCTOR_SESSION_FIELD.AGENT_TYPE},
+    sessions.id AS ${CONDUCTOR_SESSION_FIELD.CONDUCTOR_SESSION_ID},
+    sessions.is_hidden AS ${CONDUCTOR_SESSION_FIELD.HIDDEN},
+    workspaces.id AS ${CONDUCTOR_SESSION_FIELD.WORKSPACE_ID},
+    COALESCE(workspaces.workspace_name, workspaces.pr_title, workspaces.directory_name)
       AS ${CONDUCTOR_SESSION_FIELD.WORKSPACE_NAME},
     workspaces.state AS ${CONDUCTOR_SESSION_FIELD.WORKSPACE_STATE}
   FROM sessions
@@ -128,6 +165,8 @@ const CONDUCTOR_SESSION_QUERY_WITHOUT_WORKSPACES = `
 interface ConductorSessionContext {
   /** Conductor's own id for the chat, which its deep link takes as the focus. */
   conductorSessionId?: string;
+  /** The name Conductor gave the chat, absent while it is still unnamed. */
+  chatTitle?: string;
   workspaceId?: string;
   workspaceName?: string;
   /**
@@ -162,6 +201,12 @@ function agentType(value: UnparsedWireValue): ConductorAgentType | undefined {
   return Object.values(CONDUCTOR_AGENT_TYPE).find((candidate) => candidate === parsed);
 }
 
+function chatTitle(value: UnparsedWireValue): string | undefined {
+  const parsed = text(value);
+  if (!parsed || parsed === CONDUCTOR_UNNAMED_CHAT_TITLE) return undefined;
+  return parsed.slice(0, maximumSessionTitleLength);
+}
+
 /**
  * Reads Conductor's own session-to-provider mapping without opening any agent
  * transcript. An absent app, an older schema, or a failed auxiliary read means
@@ -183,15 +228,15 @@ export class ConductorSessionApplicationSnapshot {
 
   /**
    * Adds Conductor beside any app associations the provider already reported,
-   * and groups the chat under the Conductor workspace it belongs to, the way
-   * a Superset-managed chat groups under its Superset workspace. Only local
-   * observations can match a local Conductor database; a cloud row with a
-   * coincidentally equal provider id is never annotated. A sub-agent inherits
-   * its nearest Conductor-known ancestor's association and workspace: the
-   * child is Conductor's work even though only the parent is in its index —
-   * and a chat the user filed away in Conductor is dropped from the roster
-   * with its sub-agents, because the agent's transcript outlives the chat the
-   * user already said goodbye to.
+   * titles the chat by the name Conductor gave it, and groups it under the
+   * Conductor workspace it belongs to, the way a Superset-managed chat groups
+   * under its Superset workspace. Only local observations can match a local
+   * Conductor database; a cloud row with a coincidentally equal provider id
+   * is never annotated. A sub-agent inherits its nearest Conductor-known
+   * ancestor's association and workspace: the child is Conductor's work even
+   * though only the parent is in its index — and a chat the user filed away
+   * in Conductor is dropped from the roster with its sub-agents, because the
+   * agent's transcript outlives the chat the user already said goodbye to.
    */
   enrich(
     providerId: string,
@@ -236,9 +281,8 @@ export class ConductorSessionApplicationSnapshot {
         return [observation];
       }
       // The workspace is claimed only where no other manager already grouped
-      // the chat, and the association's scope follows it: carried by the
-      // workspace, the mark sits once on the tray header; carried by the
-      // session alone, it stays on the row.
+      // the chat; the claim is what carries the manager's mark on the tray
+      // header, once, above the chats it holds.
       const workspace =
         context.workspaceId && !observation.workspace
           ? {
@@ -252,22 +296,38 @@ export class ConductorSessionApplicationSnapshot {
       // link without one — and a sub-agent's inherited context addresses the
       // ancestor chat, which is where its conversation lives. The app that
       // wrote the index is the scheme's handler, so the address stands with
-      // no credential at all. A native provider address still wins as the
-      // row's primary press; the Conductor association keeps its own.
+      // no credential at all.
       const link = context.workspaceId
         ? conductorWorkspaceLink(context.workspaceId, context.conductorSessionId)
         : undefined;
+      // The association names the exact chat — its address does, when it has
+      // one — so it is the session's own and rides the row even inside the
+      // workspace's tray, where the tray header's manager mark comes from
+      // the workspace claim above rather than from this.
       const application: SessionApplication = {
         id: SESSION_APPLICATION_ID.CONDUCTOR,
         displayName: CONDUCTOR_APPLICATION_NAME,
-        scope: workspace ? SESSION_APPLICATION_SCOPE.WORKSPACE : SESSION_APPLICATION_SCOPE.SESSION,
+        scope: SESSION_APPLICATION_SCOPE.SESSION,
         ...(link ? { link } : undefined),
       };
+      // The address fills the row's link only where nothing else gave one.
+      // Which app a grouped row's press follows is not decided here: the
+      // session normalization orders every row's marks with its workspace's
+      // manager in the lead and points the press at the first linked mark,
+      // so Conductor's precedence over an agent's own app falls out of the
+      // grouping rather than out of any Conductor-specific write.
       const detail =
         link && !observation.detail?.link ? { ...observation.detail, link } : observation.detail;
+      // The name Conductor gave the chat is what the user reads in Conductor's
+      // own sidebar, so it titles the row here the way it titles a
+      // cloud-observed chat's — but only on the chat itself, never inherited:
+      // a sub-agent labelled with its parent's name would read as the same
+      // conversation twice while saying nothing about its own work.
+      const title = conductorSessions.get(observation.providerSessionId)?.chatTitle;
       return [
         {
           ...observation,
+          ...(title ? { title } : undefined),
           ...(detail ? { detail } : undefined),
           applications: [...(observation.applications ?? []), application],
           ...(workspace ? { workspace } : undefined),
@@ -316,6 +376,7 @@ export class ConductorSessionApplicationReader {
       const providerSessionId = text(record[CONDUCTOR_SESSION_FIELD.PROVIDER_SESSION_ID]);
       if (!type || !providerSessionId) continue;
       const conductorSessionId = text(record[CONDUCTOR_SESSION_FIELD.CONDUCTOR_SESSION_ID]);
+      const title = chatTitle(record[CONDUCTOR_SESSION_FIELD.CHAT_TITLE]);
       const workspaceId = text(record[CONDUCTOR_SESSION_FIELD.WORKSPACE_ID]);
       const workspaceName = text(record[CONDUCTOR_SESSION_FIELD.WORKSPACE_NAME]);
       // Filed away only on a positive record: a hidden flag or workspace
@@ -328,6 +389,7 @@ export class ConductorSessionApplicationReader {
       const sessions = sessionsByProvider.get(providerId) ?? new Map();
       sessions.set(providerSessionId, {
         ...(conductorSessionId ? { conductorSessionId } : undefined),
+        ...(title ? { chatTitle: title } : undefined),
         ...(workspaceId ? { workspaceId } : undefined),
         ...(workspaceName ? { workspaceName } : undefined),
         ...(filedAway ? { filedAway } : undefined),
@@ -338,17 +400,18 @@ export class ConductorSessionApplicationReader {
   }
 
   /**
-   * The joined read first, then the plain one where the schema predates
-   * workspaces: losing the grouping must not cost the annotation itself.
+   * The fullest read first, then progressively older schemas: losing the
+   * chat titles must not cost the grouping, and losing the grouping must not
+   * cost the annotation itself.
    */
   #queryRows(database: SqliteDatabase): UnparsedWireValue[] {
-    try {
-      return database.prepare(CONDUCTOR_SESSION_QUERY).all();
-    } catch (error) {
-      if (error instanceof Error && canIgnoreSqliteError(error)) {
-        return database.prepare(CONDUCTOR_SESSION_QUERY_WITHOUT_WORKSPACES).all();
+    for (const query of [CONDUCTOR_SESSION_QUERY, CONDUCTOR_SESSION_QUERY_WITHOUT_TITLES]) {
+      try {
+        return database.prepare(query).all();
+      } catch (error) {
+        if (!(error instanceof Error && canIgnoreSqliteError(error))) throw error;
       }
-      throw error;
     }
+    return database.prepare(CONDUCTOR_SESSION_QUERY_WITHOUT_WORKSPACES).all();
   }
 }
