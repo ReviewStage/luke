@@ -1,5 +1,6 @@
 import { createAuthClient } from "better-auth/react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Bar, BarChart, CartesianGrid, LabelList, XAxis, YAxis } from "recharts";
 import type {
   AdminDailySignups,
   AdminDailyUsage,
@@ -19,6 +20,14 @@ import {
 import { accountInitials } from "./account-initials";
 import { GitHubMark, GoogleMark } from "./account-marks";
 import { AUTH_BUTTON } from "./auth-surface";
+import {
+  type ChartConfig,
+  ChartContainer,
+  ChartLegend,
+  ChartLegendContent,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "./components/ui/chart";
 import { LukeMark } from "./SiteChrome";
 import { SOCIAL_PROVIDER, SOCIAL_PROVIDER_LABEL, type SocialProvider } from "./sign-in-provider";
 
@@ -277,25 +286,16 @@ function ChartHeading({ label, trend }: { label: string; trend: AdminTrend }): R
   );
 }
 
-/** The window's own ends, so the bars above them are anchored in time. */
-function ChartAxis({ daily }: { daily: readonly { day: string }[] }): React.JSX.Element | null {
-  const first = daily[0]?.day;
-  const last = daily[daily.length - 1]?.day;
-  if (first === undefined || last === undefined) return null;
-  return (
-    <div className="mt-2 flex justify-between font-mono text-[10px] text-muted-foreground">
-      <span>{formatDayTick(first)}</span>
-      <span>{formatDayTick(last)}</span>
-    </div>
-  );
-}
+const USAGE_CHART = {
+  voiceCalls: { label: "Voice calls", color: "var(--chart-1)" },
+  attentionReviews: { label: "Attention reviews", color: "var(--chart-2)" },
+} satisfies ChartConfig;
 
 /**
- * A trailing-window bar chart drawn from divs rather than a charting library:
- * the series is small and the page ships no dependency for it. Voice and
- * attention stack so one bar reads as a day's total while its split stays
- * visible; a title carries the exact numbers for a pointer, and the whole
- * series is described once for a reader.
+ * A trailing-window stacked bar chart on shadcn/ui's chart primitives. Voice
+ * and attention stack so one bar reads as a day's total while its split stays
+ * visible; the tooltip carries each day's exact numbers, and the legend names
+ * the two series.
  */
 function UsageChart({
   daily,
@@ -304,53 +304,45 @@ function UsageChart({
   daily: readonly AdminDailyUsage[];
   trend: AdminTrend;
 }): React.JSX.Element {
-  const max = Math.max(1, ...daily.map((day) => day.voiceCalls + day.attentionReviews));
-  const voiceTotal = daily.reduce((total, day) => total + day.voiceCalls, 0);
-  const attentionTotal = daily.reduce((total, day) => total + day.attentionReviews, 0);
   return (
     <div className="rounded-lg border border-border bg-card p-5">
       <ChartHeading label="Hosted-tier calls per day" trend={trend} />
-      <div className="mb-4 flex items-center gap-4 text-xs text-muted-foreground">
-        <span className="inline-flex items-center gap-1.5">
-          <span className="inline-block size-2.5 rounded-[2px] bg-primary" aria-hidden="true" />
-          Voice calls
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="inline-block size-2.5 rounded-[2px] bg-complete" aria-hidden="true" />
-          Attention reviews
-        </span>
-      </div>
-      <div
-        className="flex h-40 items-end gap-[3px]"
-        role="img"
-        aria-label={`Daily hosted-tier usage across the last ${daily.length} days: ${formatNumber(voiceTotal)} voice calls and ${formatNumber(attentionTotal)} attention reviews.`}
-      >
-        {daily.map((day) => {
-          const total = day.voiceCalls + day.attentionReviews;
-          return (
-            <div
-              key={day.day}
-              className="flex h-full flex-1 flex-col justify-end"
-              title={`${formatDayTick(day.day)}: ${formatNumber(day.voiceCalls)} voice, ${formatNumber(day.attentionReviews)} attention`}
-            >
-              <div
-                className="w-full rounded-t-[2px] bg-complete"
-                style={{ height: `${(day.attentionReviews / max) * 100}%` }}
-              />
-              <div
-                className="w-full bg-primary"
-                style={{ height: `${(day.voiceCalls / max) * 100}%` }}
-              />
-              {total === 0 ? <div className="h-px w-full bg-border" /> : null}
-            </div>
-          );
-        })}
-      </div>
-      <ChartAxis daily={daily} />
+      <ChartContainer config={USAGE_CHART} className="aspect-auto h-48 w-full">
+        <BarChart data={[...daily]}>
+          <CartesianGrid vertical={false} />
+          <XAxis
+            dataKey="day"
+            tickLine={false}
+            axisLine={false}
+            tickMargin={8}
+            minTickGap={32}
+            tickFormatter={formatDayTick}
+          />
+          <YAxis width={36} tickLine={false} axisLine={false} allowDecimals={false} />
+          <ChartTooltip
+            content={
+              <ChartTooltipContent labelFormatter={(value) => formatDayTick(String(value))} />
+            }
+          />
+          <ChartLegend content={<ChartLegendContent />} />
+          <Bar dataKey="voiceCalls" stackId="calls" fill="var(--color-voiceCalls)" />
+          <Bar
+            dataKey="attentionReviews"
+            stackId="calls"
+            fill="var(--color-attentionReviews)"
+            radius={[4, 4, 0, 0]}
+          />
+        </BarChart>
+      </ChartContainer>
     </div>
   );
 }
 
+const SIGNUPS_CHART = {
+  count: { label: "New accounts", color: "var(--chart-1)" },
+} satisfies ChartConfig;
+
+/** One series, so the heading names it and no legend box restates the heading. */
 function SignupsChart({
   daily,
   trend,
@@ -358,59 +350,96 @@ function SignupsChart({
   daily: readonly AdminDailySignups[];
   trend: AdminTrend;
 }): React.JSX.Element {
-  const max = Math.max(1, ...daily.map((day) => day.count));
-  const total = daily.reduce((sum, day) => sum + day.count, 0);
   return (
     <div className="rounded-lg border border-border bg-card p-5">
       <ChartHeading label="New accounts per day" trend={trend} />
-      <div
-        className="flex h-28 items-end gap-[3px]"
-        role="img"
-        aria-label={`New accounts per day across the last ${daily.length} days: ${formatNumber(total)} in total.`}
-      >
-        {daily.map((day) => (
-          <div
-            key={day.day}
-            className="flex h-full flex-1 flex-col justify-end"
-            title={`${formatDayTick(day.day)}: ${formatNumber(day.count)} new`}
-          >
-            {day.count === 0 ? (
-              <div className="h-px w-full bg-border" />
-            ) : (
-              <div
-                className="w-full rounded-t-[2px] bg-foreground/70"
-                style={{ height: `${(day.count / max) * 100}%` }}
-              />
-            )}
-          </div>
-        ))}
-      </div>
-      <ChartAxis daily={daily} />
+      <ChartContainer config={SIGNUPS_CHART} className="aspect-auto h-40 w-full">
+        <BarChart data={[...daily]}>
+          <CartesianGrid vertical={false} />
+          <XAxis
+            dataKey="day"
+            tickLine={false}
+            axisLine={false}
+            tickMargin={8}
+            minTickGap={32}
+            tickFormatter={formatDayTick}
+          />
+          <YAxis width={36} tickLine={false} axisLine={false} allowDecimals={false} />
+          <ChartTooltip
+            content={
+              <ChartTooltipContent labelFormatter={(value) => formatDayTick(String(value))} />
+            }
+          />
+          <Bar dataKey="count" fill="var(--color-count)" radius={[4, 4, 0, 0]} />
+        </BarChart>
+      </ChartContainer>
     </div>
   );
 }
 
-function ProviderBar({
-  label,
-  value,
-  total,
+const SIGN_IN_METHODS_CHART = {
+  accounts: { label: "Accounts", color: "var(--chart-1)" },
+} satisfies ChartConfig;
+
+/**
+ * How the accounts sign in, as horizontal bars. One measure across nominal
+ * categories, so every bar wears the first slot's hue and the end labels
+ * carry the exact count and share the meter rows used to state. A method
+ * nobody has linked draws no bar at all: a zero-length bar parks its end
+ * label at the plot origin, where two empty methods would stack their labels
+ * over the category axis.
+ */
+function SignInMethodsChart({
+  methods,
 }: {
-  label: string;
-  value: number;
-  total: number;
+  methods: AdminMetrics["users"]["signInMethods"];
 }): React.JSX.Element {
-  const share = total > 0 ? Math.round((value / total) * 100) : 0;
+  const total = methods.github + methods.google + methods.other;
+  const rows = [
+    { method: "GitHub", accounts: methods.github },
+    { method: "Google", accounts: methods.google },
+    { method: "Other", accounts: methods.other },
+  ]
+    .filter((row) => row.accounts > 0)
+    .map((row) => ({
+      ...row,
+      label: `${formatNumber(row.accounts)} · ${Math.round((row.accounts / total) * 100)}%`,
+    }));
+
+  if (rows.length === 0) {
+    return (
+      <div className="rounded-lg border border-border bg-card p-5">
+        <div className="mb-4 text-xs text-muted-foreground">Linked sign-in methods</div>
+        <p className="m-0 py-6 text-center text-sm text-muted-foreground">
+          No linked sign-in methods recorded yet.
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <div>
-      <div className="mb-1 flex items-baseline justify-between text-sm">
-        <span>{label}</span>
-        <span className="tabular-nums text-muted-foreground">
-          {formatNumber(value)} · {share}%
-        </span>
-      </div>
-      <div className="h-2 overflow-hidden rounded-full bg-muted">
-        <div className="h-full rounded-full bg-primary" style={{ width: `${share}%` }} />
-      </div>
+    <div className="rounded-lg border border-border bg-card p-5">
+      <div className="mb-4 text-xs text-muted-foreground">Linked sign-in methods</div>
+      <ChartContainer
+        config={SIGN_IN_METHODS_CHART}
+        className="aspect-auto w-full"
+        style={{ height: rows.length * 40 }}
+      >
+        <BarChart data={rows} layout="vertical" margin={{ right: 96 }}>
+          <XAxis type="number" hide />
+          <YAxis dataKey="method" type="category" tickLine={false} axisLine={false} width={56} />
+          <ChartTooltip content={<ChartTooltipContent />} />
+          <Bar dataKey="accounts" fill="var(--color-accounts)" radius={4} barSize={18}>
+            <LabelList
+              dataKey="label"
+              position="right"
+              offset={8}
+              className="fill-muted-foreground"
+              fontSize={12}
+            />
+          </Bar>
+        </BarChart>
+      </ChartContainer>
     </div>
   );
 }
@@ -841,10 +870,6 @@ function Dashboard({
   onOpenAccount: (id: string) => void;
   now: number;
 }): React.JSX.Element {
-  const providerTotal =
-    metrics.users.signInMethods.google +
-    metrics.users.signInMethods.github +
-    metrics.users.signInMethods.other;
   const db = metrics.systemHealth.database;
 
   return (
@@ -910,28 +935,7 @@ function Dashboard({
         </div>
         <div className="mt-3 grid gap-3 min-[720px]:grid-cols-[1.6fr_1fr]">
           <SignupsChart daily={metrics.users.dailySignups} trend={metrics.users.signupTrend} />
-          <div className="rounded-lg border border-border bg-card p-5">
-            <div className="mb-4 text-xs text-muted-foreground">Linked sign-in methods</div>
-            <div className="grid gap-3">
-              <ProviderBar
-                label="GitHub"
-                value={metrics.users.signInMethods.github}
-                total={providerTotal}
-              />
-              <ProviderBar
-                label="Google"
-                value={metrics.users.signInMethods.google}
-                total={providerTotal}
-              />
-              {metrics.users.signInMethods.other > 0 ? (
-                <ProviderBar
-                  label="Other"
-                  value={metrics.users.signInMethods.other}
-                  total={providerTotal}
-                />
-              ) : null}
-            </div>
-          </div>
+          <SignInMethodsChart methods={metrics.users.signInMethods} />
         </div>
 
         <SectionHeading>Feature usage · hosted tier</SectionHeading>

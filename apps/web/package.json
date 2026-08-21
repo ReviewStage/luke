@@ -38,6 +38,7 @@
     "posthog-js": "1.418.3",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "recharts": "3.8.0",
     "tailwindcss": "4.3.3"
   },
   "devDependencies": {
