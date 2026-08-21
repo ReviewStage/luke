@@ -536,14 +536,16 @@ export async function removeObservationHooks<Event extends string>(
 
 /**
  * Reads what the hook last said about one session: the token, dated by the
- * spool file's own mtime — the one clock the script and the reader share
- * without writing timestamps at all. Only Luke's script writes here, so the
+ * spool file's own mtime — the one clock the writer and the reader share
+ * without writing timestamps at all. Only Luke's own hook writes here, so the
  * mtime cannot suffer the bulk-touch problem a provider's own files do.
  * Anything unexpected — no file, a foreign shape, an unknown token — reads as
  * no event, because the state this refines is always there to fall back on.
+ * Taking the token vocabulary rather than a whole spec keeps one reader for
+ * every spool, the script-written ones and the managed plugin's alike.
  */
 export async function readObservationHookEvent<Event extends string>(
-  spec: ObservationHookSpec<Event>,
+  events: readonly Event[],
   spoolDirectory: string,
   providerSessionId: string,
 ): Promise<ObservedHookEvent<Event> | undefined> {
@@ -567,9 +569,9 @@ export async function readObservationHookEvent<Event extends string>(
     }
     const wire = readWireRecord(unparsedWire(parsed));
     if (!wire) return undefined;
-    const tokens: readonly string[] = eventTokens(spec);
+    const tokens: readonly string[] = events;
     if (!isWireString(wire.event) || !tokens.includes(wire.event)) return undefined;
-    // SAFETY: eventTokens validated wire.event against the hook spec's allowed events.
+    // SAFETY: the includes check above validated wire.event against the allowed events.
     return { event: wire.event as Event, atMs: stats.mtimeMs };
   } finally {
     await handle.close();
@@ -613,6 +615,6 @@ export function observationHooksFor<Event extends string>(spec: ObservationHookS
     remove: (installation: ObservationHookInstallation) =>
       removeObservationHooks(spec, installation),
     read: (spoolDirectory: string, providerSessionId: string) =>
-      readObservationHookEvent(spec, spoolDirectory, providerSessionId),
+      readObservationHookEvent(eventTokens(spec), spoolDirectory, providerSessionId),
   } as const;
 }

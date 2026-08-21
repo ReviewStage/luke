@@ -27,6 +27,7 @@ import { installGeminiObservationHooks } from "./gemini-cli/hooks.js";
 import type { ObservationHookProviderId } from "./hook-registry.js";
 import { JulesSessionAdapter } from "./jules/adapter.js";
 import { OpenCodeSessionAdapter } from "./opencode/adapter.js";
+import { installOpenCodeObservationPlugin } from "./opencode/hooks.js";
 import {
   HOOK_SPOOL_MAXIMUM_AGE_MS,
   type ObservationHookInstallation,
@@ -79,6 +80,7 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
   const codexInstallation = hookInstallation(PROVIDER_ID.CODEX);
   const cursorInstallation = hookInstallation(PROVIDER_ID.CURSOR);
   const geminiInstallation = hookInstallation(PROVIDER_ID.GEMINI_CLI);
+  const opencodeInstallation = hookInstallation(PROVIDER_ID.OPENCODE);
   const claude = new ClaudeCodeSessionAdapter({
     hookEventsDirectory: () => claudeInstallation().spoolDirectory,
   });
@@ -173,6 +175,18 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
       }),
       credential: CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.JULES],
     },
-    [PROVIDER_ID.OPENCODE]: { adapter: new OpenCodeSessionAdapter() },
+    [PROVIDER_ID.OPENCODE]: {
+      adapter: new OpenCodeSessionAdapter({
+        hookEventsDirectory: () => opencodeInstallation().spoolDirectory,
+      }),
+      // The registration is a managed plugin file in OpenCode's own plugin
+      // directory rather than a merged entry, but it converges and prunes on
+      // the same launch cadence as every other provider's.
+      registerObservationHook: observationHookRegistration(
+        installOpenCodeObservationPlugin,
+        opencodeInstallation,
+        now,
+      ),
+    },
   } satisfies Readonly<Record<ProviderId, ProviderRegistration>>;
 }
