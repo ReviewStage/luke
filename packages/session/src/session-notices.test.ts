@@ -296,6 +296,23 @@ test("a waiting recap that only has a URL query string is not an ask", () => {
   );
 });
 
+test("a question that ends on a URL is still an ask", () => {
+  const tracker = new SessionNoticeTracker();
+  tracker.notices([session(conductor, "ask", SESSION_STATUS.WORKING)], 1_000);
+
+  const notices = tracker.notices(
+    [
+      session(conductor, "ask", SESSION_STATUS.WAITING, {
+        recap: "Should I open https://github.com/review/luke/pull/12?",
+      }),
+    ],
+    2_000,
+  );
+
+  assert.equal(notices.length, 1);
+  assert.equal(notices[0]?.status, SESSION_NOTICE_STATUS.WAITING);
+});
+
 test("a permission hold is a waiting notice even without a question in the recap", () => {
   const tracker = new SessionNoticeTracker();
   tracker.notices([session(claude, "held", SESSION_STATUS.WORKING)], 1_000);

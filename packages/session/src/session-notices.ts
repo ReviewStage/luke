@@ -89,13 +89,17 @@ export interface SessionNotice {
  * without the developer. A provider that saw a permission, an approval, or
  * an open question says so on the observation; a recap that itself asks is
  * the same evidence when the adapter could not tell. A query string inside
- * a URL is not a question.
+ * a URL is not a question. A `?` that ends a sentence after a link still
+ * is: a query string has characters after the mark, and a trailing ask
+ * does not.
  */
 function waitingHoldsForDeveloper(session: NormalizedSession): boolean {
   if (session.status !== SESSION_STATUS.WAITING) return false;
   if (session.holdingForDeveloper === true) return true;
   if (!session.recap) return false;
-  return session.recap.replace(/\bhttps?:\/\/\S+/gi, "").includes("?");
+  return session.recap
+    .replace(/\bhttps?:\/\/[^\s?]+(?:\?[^\s#]+)?(?:#[^\s]+)?/gi, "")
+    .includes("?");
 }
 
 interface TrackedSessionState {
