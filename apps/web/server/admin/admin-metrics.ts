@@ -1,6 +1,13 @@
 import { HOSTED_DAILY_LIMIT, HOSTED_METER, utcDayKey } from "../hosted/quota.js";
 import { type AdminViewer, isAdminRole } from "./admin-access.js";
-import { ADMIN_ERROR, ADMIN_HTTP_STATUS, errorResponse, jsonResponse } from "./http.js";
+import {
+  ADMIN_ERROR,
+  ADMIN_HTTP_STATUS,
+  type AdminMetricsScope,
+  adminMetricsScope,
+  errorResponse,
+  jsonResponse,
+} from "./http.js";
 
 /**
  * What the admin dashboard reads about the service, and only what the service's
@@ -248,7 +255,7 @@ export interface AdminMetricsOptions {
    * `viewer.role` is the account's own `role`, read from the session.
    */
   resolveViewer: (request: Request) => Promise<AdminViewer | undefined>;
-  readMetrics: (now: number) => Promise<AdminMetrics>;
+  readMetrics: (now: number, scope: AdminMetricsScope) => Promise<AdminMetrics>;
   now?: () => number;
 }
 
@@ -281,7 +288,10 @@ export async function handleAdminMetrics(options: AdminMetricsOptions): Promise<
 
   const now = (options.now ?? Date.now)();
   try {
-    return jsonResponse(ADMIN_HTTP_STATUS.OK, await options.readMetrics(now));
+    return jsonResponse(
+      ADMIN_HTTP_STATUS.OK,
+      await options.readMetrics(now, adminMetricsScope(request.url)),
+    );
   } catch {
     return errorResponse(ADMIN_HTTP_STATUS.SERVICE_UNAVAILABLE, ADMIN_ERROR.UNAVAILABLE);
   }
