@@ -1,6 +1,6 @@
 {
   "name": "luke",
-  "version": "0.3.7",
+  "version": "0.3.8",
   "private": true,
   "description": "A notch-attached desktop sidecar for coding-agent sessions",
   "packageManager": "pnpm@9.15.0",
