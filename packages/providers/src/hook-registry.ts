@@ -7,14 +7,31 @@ import { CURSOR_HOOK_SCRIPT_NAME } from "./cursor/hooks.js";
 import { defaultCursorHome } from "./cursor/local-adapter.js";
 import { GEMINI_HOOK_SCRIPT_NAME } from "./gemini-cli/hooks.js";
 import { defaultGeminiCliHome } from "./gemini-cli/records.js";
+import {
+  defaultOpenCodeConfigDirectory,
+  OPENCODE_PLUGIN_FILE_NAME,
+  openCodePluginDirectory,
+} from "./opencode/hooks.js";
 import type { ObservationHookInstallation } from "./shared/hook-merge.js";
 
 const SPOOL_DIRECTORY = "events";
 
+interface ObservationHookProviderEntry {
+  directoryName: string;
+  scriptName: string;
+  providerHome: () => string;
+  /**
+   * Where the installed artifact lives when it is not under Luke's own data:
+   * a provider that loads whole plugin files from a directory of its own has
+   * its one artifact resolve there, while the spool stays under Luke's.
+   */
+  artifactDirectory?: (providerHome: string) => string;
+}
+
 /**
  * One row per provider that registers observation hooks at all: the directory
- * each arrangement keeps under Luke's own application data, the script inside
- * it, and the provider home its registration merges into. Widening this table
+ * each arrangement keeps under Luke's own application data, the artifact it
+ * installs, and the provider home the arrangement joins. Widening this table
  * to another provider is a product decision, not an implementation detail.
  */
 const OBSERVATION_HOOK_PROVIDERS = {
@@ -38,7 +55,13 @@ const OBSERVATION_HOOK_PROVIDERS = {
     scriptName: GEMINI_HOOK_SCRIPT_NAME,
     providerHome: defaultGeminiCliHome,
   },
-} as const;
+  [PROVIDER_ID.OPENCODE]: {
+    directoryName: "opencode-hooks",
+    scriptName: OPENCODE_PLUGIN_FILE_NAME,
+    providerHome: defaultOpenCodeConfigDirectory,
+    artifactDirectory: openCodePluginDirectory,
+  },
+} as const satisfies Readonly<Record<string, ObservationHookProviderEntry>>;
 
 export type ObservationHookProviderId = keyof typeof OBSERVATION_HOOK_PROVIDERS;
 
@@ -57,11 +80,15 @@ export class ObservationHookRegistry {
   }
 
   installation(providerId: ObservationHookProviderId): ObservationHookInstallation {
-    const entry = OBSERVATION_HOOK_PROVIDERS[providerId];
+    const entry: ObservationHookProviderEntry = OBSERVATION_HOOK_PROVIDERS[providerId];
     const directory = path.join(this.#userDataDirectory(), entry.directoryName);
+    const providerHome = entry.providerHome();
     return {
-      providerHome: entry.providerHome(),
-      hookScriptPath: path.join(directory, entry.scriptName),
+      providerHome,
+      hookScriptPath: path.join(
+        entry.artifactDirectory?.(providerHome) ?? directory,
+        entry.scriptName,
+      ),
       spoolDirectory: path.join(directory, SPOOL_DIRECTORY),
     };
   }

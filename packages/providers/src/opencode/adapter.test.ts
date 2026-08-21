@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
-import { SESSION_STATUS } from "@sidecar/session";
+import { SESSION_COMPLETION_CAUSE, SESSION_STATUS } from "@sidecar/session";
 import type { ParsedJsonObject } from "@sidecar/wire/testing";
 import { OPENCODE_PROVIDER, OpenCodeSessionAdapter } from "./adapter.js";
 
@@ -836,4 +836,192 @@ test("returns an empty snapshot when OpenCode has no local state", async (t) => 
   });
 
   assert.deepEqual(await adapter.observe(), []);
+});
+
+async function writeHookEvent(
+  spoolDirectory: string,
+  sessionId: string,
+  token: string,
+  atMs: number,
+): Promise<void> {
+  await fs.mkdir(spoolDirectory, { recursive: true });
+  const filePath = path.join(spoolDirectory, `${sessionId}.json`);
+  await fs.writeFile(filePath, JSON.stringify({ event: token }));
+  await fs.utimes(filePath, atMs / 1000, atMs / 1000);
+}
+
+/** A session whose open turn the database alone would read as working. */
+async function writeWorkingSession(dataDirectory: string, sessionId: string): Promise<void> {
+  await writeOpenCodeState(
+    dataDirectory,
+    [{ id: sessionId, directory: "/Users/test/luke", observedAt: TEST_TIME - 1_000 }],
+    {
+      messages: [
+        {
+          id: "msg_01",
+          sessionId,
+          time: TEST_TIME - 1_000,
+          data: { role: "assistant", time: { created: TEST_TIME - 1_000 } },
+        },
+      ],
+    },
+  );
+}
+
+test("a fresh permission ask reads as holding for the developer", async (t) => {
+  const dataDirectory = await temporaryDataDirectory(t);
+  const spoolDirectory = path.join(dataDirectory, "events");
+  await writeWorkingSession(dataDirectory, "ses_holding");
+  await writeHookEvent(spoolDirectory, "ses_holding", "notification", TEST_TIME);
+
+  const adapter = new OpenCodeSessionAdapter({
+    dataDirectory,
+    now: () => TEST_TIME,
+    hookEventsDirectory: () => spoolDirectory,
+  });
+  const [observation] = await adapter.observe();
+
+  // The database shows an open turn — a permission holds without writing a
+  // record — so only the plugin's event can say the session is waiting on
+  // its developer.
+  assert.equal(observation?.status, SESSION_STATUS.WAITING);
+  assert.equal(observation?.holdingForDeveloper, true);
+  assert.equal(observation?.observedAt, TEST_TIME);
+});
+
+test("a session-end event reads as complete with the closure as its cause", async (t) => {
+  const dataDirectory = await temporaryDataDirectory(t);
+  const spoolDirectory = path.join(dataDirectory, "events");
+  await writeWorkingSession(dataDirectory, "ses_closed");
+  await writeHookEvent(spoolDirectory, "ses_closed", "session-end", TEST_TIME);
+
+  const adapter = new OpenCodeSessionAdapter({
+    dataDirectory,
+    now: () => TEST_TIME,
+    hookEventsDirectory: () => spoolDirectory,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.COMPLETE);
+  assert.equal(observation?.completionCause, SESSION_COMPLETION_CAUSE.SESSION_CLOSED);
+});
+
+test("a stop-failure event reads as an error the records cannot show", async (t) => {
+  const dataDirectory = await temporaryDataDirectory(t);
+  const spoolDirectory = path.join(dataDirectory, "events");
+  await writeWorkingSession(dataDirectory, "ses_broken");
+  await writeHookEvent(spoolDirectory, "ses_broken", "stop-failure", TEST_TIME);
+
+  const adapter = new OpenCodeSessionAdapter({
+    dataDirectory,
+    now: () => TEST_TIME,
+    hookEventsDirectory: () => spoolDirectory,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.ERROR);
+});
+
+test("a stop event sharpens an open turn the process abandoned", async (t) => {
+  const dataDirectory = await temporaryDataDirectory(t);
+  const spoolDirectory = path.join(dataDirectory, "events");
+  await writeWorkingSession(dataDirectory, "ses_ended");
+  await writeHookEvent(spoolDirectory, "ses_ended", "stop", TEST_TIME);
+
+  const adapter = new OpenCodeSessionAdapter({
+    dataDirectory,
+    now: () => TEST_TIME,
+    hookEventsDirectory: () => spoolDirectory,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.WAITING);
+  assert.equal(observation?.holdingForDeveloper, undefined);
+});
+
+test("a hook event behind the provider's own clock refines nothing", async (t) => {
+  const dataDirectory = await temporaryDataDirectory(t);
+  const spoolDirectory = path.join(dataDirectory, "events");
+  await writeWorkingSession(dataDirectory, "ses_moved_on");
+  // A minute behind the session's newest write: the turn it described has
+  // already been moved past, so the open turn stands.
+  await writeHookEvent(spoolDirectory, "ses_moved_on", "stop", TEST_TIME - 60_000);
+
+  const adapter = new OpenCodeSessionAdapter({
+    dataDirectory,
+    now: () => TEST_TIME,
+    hookEventsDirectory: () => spoolDirectory,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.WORKING);
+});
+
+test("a prompt event reads a finished turn as already working again", async (t) => {
+  const dataDirectory = await temporaryDataDirectory(t);
+  const spoolDirectory = path.join(dataDirectory, "events");
+  await writeOpenCodeState(
+    dataDirectory,
+    [{ id: "ses_reprompted", directory: "/Users/test/luke", observedAt: TEST_TIME - 1_000 }],
+    {
+      messages: [
+        {
+          id: "msg_01",
+          sessionId: "ses_reprompted",
+          time: TEST_TIME - 1_000,
+          data: {
+            role: "assistant",
+            time: { created: TEST_TIME - 2_000, completed: TEST_TIME - 1_000 },
+          },
+        },
+      ],
+    },
+  );
+  await writeHookEvent(spoolDirectory, "ses_reprompted", "prompt", TEST_TIME);
+
+  const adapter = new OpenCodeSessionAdapter({
+    dataDirectory,
+    now: () => TEST_TIME,
+    hookEventsDirectory: () => spoolDirectory,
+  });
+  const [observation] = await adapter.observe();
+
+  // The plugin can know about a turn the database has not recorded yet.
+  assert.equal(observation?.status, SESSION_STATUS.WORKING);
+});
+
+test("legacy JSON sessions take the same refinement as database rows", async (t) => {
+  const dataDirectory = await temporaryDataDirectory(t);
+  const spoolDirectory = path.join(dataDirectory, "events");
+  await writeLegacySession(dataDirectory, "project-one", {
+    id: "ses_legacy_holding",
+    title: "Legacy but holding",
+    directory: "/Users/test/luke",
+    time: { created: TEST_TIME - 5_000, updated: TEST_TIME - 1_000 },
+  });
+  await writeLegacyMessage(dataDirectory, "ses_legacy_holding", "msg_01", {
+    role: "assistant",
+    time: { created: TEST_TIME - 1_000 },
+  });
+  // The file's clock is part of the legacy snapshot's own date, so it must
+  // sit at the fixture's time rather than the test run's.
+  const sessionFilePath = path.join(
+    dataDirectory,
+    "storage",
+    "session",
+    "project-one",
+    "ses_legacy_holding.json",
+  );
+  await fs.utimes(sessionFilePath, (TEST_TIME - 1_000) / 1000, (TEST_TIME - 1_000) / 1000);
+  await writeHookEvent(spoolDirectory, "ses_legacy_holding", "notification", TEST_TIME);
+
+  const adapter = new OpenCodeSessionAdapter({
+    dataDirectory,
+    now: () => TEST_TIME,
+    hookEventsDirectory: () => spoolDirectory,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.WAITING);
+  assert.equal(observation?.holdingForDeveloper, true);
 });

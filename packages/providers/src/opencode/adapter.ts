@@ -4,6 +4,7 @@ import {
   maximumSessionTitleLength,
   PROVIDER_ID,
   type ProviderSessionObservation,
+  SESSION_COMPLETION_CAUSE,
   SESSION_STATUS,
   type SessionDetail,
   type SessionProvider,
@@ -22,6 +23,8 @@ import {
 import {
   discoverSessionFiles,
   fileStats,
+  type HookStatusRefinement,
+  hookRefinedStatus,
   LocalSessionAdapter,
   localSessionStatus,
   readDirectory,
@@ -41,6 +44,12 @@ import {
   type SqliteModuleLoader,
   textFromRow,
 } from "../shared/local-sqlite.js";
+import {
+  type ObservedOpenCodeHookEvent,
+  OPENCODE_HOOK_EVENT,
+  type OpenCodeHookEvent,
+  readOpenCodeHookEvent,
+} from "./hooks.js";
 import { readOpenCodeSessionTranscript } from "./transcript.js";
 
 const OPENCODE_PROVIDER_ID = PROVIDER_ID.OPENCODE;
@@ -195,6 +204,14 @@ export interface OpenCodeAdapterOptions {
   activeSessionFreshnessMs?: number;
   sqlite?: SqliteModuleLoader;
   transcriptMaximumRenderedLength?: number;
+  /**
+   * Where the observation plugin spools its events, when hooks are on at all.
+   * Read lazily like the cloud adapters' credentials, because the app decides
+   * the path after this adapter is declared. Absent — or answering nothing —
+   * the adapter reads OpenCode's own state alone, exactly as it always has:
+   * the plugin only ever sharpens what that already showed.
+   */
+  hookEventsDirectory?: () => string | undefined;
 }
 
 /**
@@ -322,6 +339,28 @@ function activityFromPartRows(rows: readonly OpenCodeRow[]): string | undefined 
 }
 
 /**
+ * What the refinement actually buys here is the states OpenCode's own records
+ * cannot show: a permission holding for the developer writes nothing to the
+ * database while it holds, and a deleted session's rows are simply gone,
+ * indistinguishable from a database this build could not read. A failed turn
+ * is definite alongside a closed session because a failure can land in
+ * records this build cannot open.
+ */
+const OPENCODE_HOOK_STATUS_REFINEMENT = {
+  definitive: [
+    { event: OPENCODE_HOOK_EVENT.STOP_FAILURE, fresh: SESSION_STATUS.ERROR },
+    { event: OPENCODE_HOOK_EVENT.SESSION_END, fresh: SESSION_STATUS.COMPLETE },
+  ],
+  fresh: [
+    { event: OPENCODE_HOOK_EVENT.PROMPT, fresh: SESSION_STATUS.WORKING },
+    { event: OPENCODE_HOOK_EVENT.STOP, fresh: SESSION_STATUS.WAITING },
+    { event: OPENCODE_HOOK_EVENT.NOTIFICATION, fresh: SESSION_STATUS.WAITING },
+  ],
+  notificationEvent: OPENCODE_HOOK_EVENT.NOTIFICATION,
+  sessionEndEvent: OPENCODE_HOOK_EVENT.SESSION_END,
+} as const satisfies HookStatusRefinement<OpenCodeHookEvent>;
+
+/**
  * The share page is the one address OpenCode publishes that names this exact
  * session, and only a session its own user chose to share carries one.
  */
@@ -339,13 +378,30 @@ function observationFromSnapshot(
   snapshot: OpenCodeSessionSnapshot,
   now: number,
   activeSessionFreshnessMs: number,
+  hookEvent?: ObservedOpenCodeHookEvent,
 ): ProviderSessionObservation {
+  // OpenCode stamps its session and message times in epoch milliseconds, the
+  // same clock the spool file's mtime keeps, so the snapshot's own date is
+  // the providerAtMs the tolerance runs against.
+  const refined = hookRefinedStatus({
+    refinement: OPENCODE_HOOK_STATUS_REFINEMENT,
+    hookEvent,
+    providerAtMs: snapshot.observedAt,
+    statusAt: (observedAt) =>
+      statusFromTurn(snapshot.turn, observedAt, now, activeSessionFreshnessMs),
+    now,
+    activeSessionFreshnessMs,
+  });
   return {
     providerSessionId: snapshot.providerSessionId,
     title: sessionTitle(snapshot.title, snapshot.directory),
-    status: statusFromTurn(snapshot.turn, snapshot.observedAt, now, activeSessionFreshnessMs),
-    observedAt: snapshot.observedAt,
+    status: refined.status,
+    ...(refined.sessionClosed
+      ? { completionCause: SESSION_COMPLETION_CAUSE.SESSION_CLOSED }
+      : undefined),
+    observedAt: refined.observedAt,
     detail: detailFromSnapshot(snapshot),
+    ...(refined.holdingForDeveloper ? { holdingForDeveloper: true } : undefined),
   };
 }
 
@@ -439,6 +495,7 @@ export class OpenCodeSessionAdapter extends LocalSessionAdapter {
   readonly #dataDirectory: string;
   readonly #sqlite: SqliteModuleLoader;
   readonly #transcriptMaximumRenderedLength: number | undefined;
+  readonly #hookEventsDirectory: (() => string | undefined) | undefined;
   /**
    * What each legacy file said as of the mtime it was read at. Sessions are
    * never capped, so this is what keeps the no-database fallback's pass cheap:
@@ -457,6 +514,14 @@ export class OpenCodeSessionAdapter extends LocalSessionAdapter {
     this.#dataDirectory = options.dataDirectory ?? defaultOpenCodeDataDirectory();
     this.#sqlite = options.sqlite ?? defaultSqliteModule;
     this.#transcriptMaximumRenderedLength = options.transcriptMaximumRenderedLength;
+    this.#hookEventsDirectory = options.hookEventsDirectory;
+  }
+
+  /** The spool's last word about one session, or nothing while hooks are off. */
+  async #hookEventFor(providerSessionId: string): Promise<ObservedOpenCodeHookEvent | undefined> {
+    const hookEventsDirectory = this.#hookEventsDirectory?.();
+    if (!hookEventsDirectory) return undefined;
+    return readOpenCodeHookEvent(hookEventsDirectory, providerSessionId).catch(() => undefined);
   }
 
   async observe(): Promise<readonly ProviderSessionObservation[]> {
@@ -474,8 +539,15 @@ export class OpenCodeSessionAdapter extends LocalSessionAdapter {
       // A database whose schema was unusable answers nothing; the next
       // candidate, or the legacy files, may still answer.
       if (snapshots === undefined) continue;
-      return snapshots.map((snapshot) =>
-        observationFromSnapshot(snapshot, now, this.activeSessionFreshnessMs),
+      return Promise.all(
+        snapshots.map(async (snapshot) =>
+          observationFromSnapshot(
+            snapshot,
+            now,
+            this.activeSessionFreshnessMs,
+            await this.#hookEventFor(snapshot.providerSessionId),
+          ),
+        ),
       );
     }
     return this.#legacyObservations();
@@ -598,7 +670,12 @@ export class OpenCodeSessionAdapter extends LocalSessionAdapter {
       snapshot.turn = await this.#legacyTurn(storageDirectory, candidate.providerSessionId);
       observations.set(
         candidate.providerSessionId,
-        observationFromSnapshot(snapshot, now, this.activeSessionFreshnessMs),
+        observationFromSnapshot(
+          snapshot,
+          now,
+          this.activeSessionFreshnessMs,
+          await this.#hookEventFor(candidate.providerSessionId),
+        ),
       );
     }
 
