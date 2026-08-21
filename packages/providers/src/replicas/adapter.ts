@@ -19,7 +19,7 @@ import {
   type WorkspaceAgentSelection,
   type WorkspaceProject,
 } from "@sidecar/session";
-import { isRecord, isWireBoolean, type WireRecord } from "@sidecar/wire";
+import { isRecord, isWireBoolean, text, type WireRecord } from "@sidecar/wire";
 import {
   CLOUD_FAILURE,
   type CloudAdapterOptions,
@@ -141,6 +141,7 @@ const REPLICAS_FIELD = {
   IS_GLOBAL: "is_global",
   LAST_ACTIVITY_AT: "last_activity_at",
   MESSAGE: "message",
+  MODEL: "model",
   NAME: "name",
   PROCESSING: "processing",
   PROVIDER: "provider",
@@ -249,6 +250,13 @@ const REPLICAS_EVENT_TYPE = {
   /** Signals a Claude turn's completion: the parting words have parted. */
   CLAUDE_RESULT: "claude-result",
   CODEX_RESPONSE_ITEM: "response_item",
+  /**
+   * Replicas' own normalized token accounting, streamed for every agent
+   * family with the chat's model beside the counts — observed live under
+   * both a Claude and a Codex chat — which makes it the one cross-family
+   * place a chat's model is named.
+   */
+  CONTEXT_USAGE: "context-usage",
 } as const;
 
 /** The discriminants inside a Codex `response_item` that mark a text message. */
@@ -260,6 +268,22 @@ const REPLICAS_CODEX_ITEM = {
 
 /** The block type carrying prose inside a Claude SDK message. */
 const REPLICAS_CLAUDE_BLOCK_TEXT = "text";
+
+/** The block type carrying a tool call inside a Claude SDK message. */
+const REPLICAS_CLAUDE_BLOCK_TOOL_USE = "tool_use";
+
+/** The Codex response item carrying a tool call, named by its function. */
+const REPLICAS_CODEX_FUNCTION_CALL = "function_call";
+
+/** The fields a Claude result event reports its turn's ending in. */
+const REPLICAS_RESULT_FIELD = {
+  IS_ERROR: "is_error",
+  ERRORS: "errors",
+  SUBTYPE: "subtype",
+} as const;
+
+/** The one result subtype Claude documents as a clean completion. */
+const REPLICAS_RESULT_SUCCESS = "success";
 
 /**
  * Every event family Replicas documents wears its agent on the event type
@@ -312,8 +336,18 @@ const REPLICAS_ADAPTER_DEFAULTS = {
    * chatter after the last message and reach the message itself.
    */
   HISTORY_EVENT_LIMIT: 40,
+  /** How many of a workspace's newest chats earn their own tail read. */
+  CHAT_HISTORY_LIMIT: 4,
+  /**
+   * How many tails one pass will read in total, newest first across every
+   * workspace. The per-subject cache means a steady pass re-reads only what
+   * moved, so this bounds the burst, not the steady state.
+   */
+  HISTORY_READ_LIMIT: 16,
   MAXIMUM_AGENT_KIND_LENGTH: 40,
   MAXIMUM_BRANCH_LABEL_LENGTH: 60,
+  MAXIMUM_ERROR_LENGTH: 120,
+  MAXIMUM_MODEL_LABEL_LENGTH: 60,
   MAXIMUM_WORKSPACE_NAME_LENGTH: 60,
 } as const;
 
@@ -360,20 +394,36 @@ interface ReplicasWorkspaceDetail {
 }
 
 /**
- * What one history read taught about a workspace, held until its activity
- * moves. `recapSettled` records whether the turn behind the parting words
- * actually completed — Claude's own result event says so — because whether
- * the words may be shown is decided per pass, where a workspace that has
- * since gone to sleep is settled however its turn ended. An entry with
- * nothing in it is a read that was refused, kept so the same refusal is not
- * asked for again until the workspace moves.
+ * What one history read taught about its subject — a chat, or a chatless
+ * workspace — held until that subject's own activity moves. `recapSettled`
+ * records whether the turn behind the parting words actually completed —
+ * Claude's own result event says so — because whether the words may be shown
+ * is decided per pass, where a subject that has since settled shows them
+ * however its turn ended. The model is the one Replicas' own token
+ * accounting names, the error is a failed final turn's own words, and the
+ * activity is the current turn's newest tool — shown only while the chat is
+ * actually processing. An entry with nothing in it is a read that was
+ * refused, kept so the same refusal is not asked for again until the
+ * subject moves.
  */
 interface ReplicasHistoryEnrichment {
   observedAt: number;
   agent?: SessionProvider;
   agentKind?: string;
+  model?: string;
   recap?: string;
   recapSettled?: boolean;
+  error?: string;
+  activity?: string;
+}
+
+/** One history read to make: a chat's own tail, or a chatless workspace's. */
+interface ReplicasHistorySubject {
+  /** The cache key: the chat's id, or the workspace's own for a chatless one. */
+  subjectId: string;
+  workspaceId: string;
+  chatId?: string;
+  observedAt: number;
 }
 
 /**
@@ -502,6 +552,20 @@ function assistantTextFromEvent(event: WireRecord): string | undefined {
   return undefined;
 }
 
+/**
+ * The agent kind joins the model label — `kimi · moonshotai/kimi-k2.6` —
+ * because which harness runs a chat is as much its configuration as which
+ * model does, and a kind with no mark of its own has nowhere else to say
+ * itself.
+ */
+function modelLabel(
+  unmappedKind: string | undefined,
+  model: string | undefined,
+): string | undefined {
+  const label = [unmappedKind, model].filter(isDefined).join(" · ");
+  return label || undefined;
+}
+
 /** One line of bounded parting words, flattened the way every recap is drawn. */
 function recapText(text: string): string | undefined {
   const flattened = text.replace(/\s+/g, " ").trim();
@@ -544,28 +608,118 @@ function enrichmentFromHistory(body: WireRecord, observedAt: number): ReplicasHi
 
   let recap: string | undefined;
   let recapSettled = false;
+  let model: string | undefined;
+  let error: string | undefined;
+  let activity: string | undefined;
   for (const event of events) {
+    const type = textFromRecord(event, REPLICAS_FIELD.TYPE);
+    const payload = event.payload;
+    // Replicas' own token accounting names the chat's model for every agent
+    // family alike, so the newest sighting is the model the chat runs now.
+    if (type === REPLICAS_EVENT_TYPE.CONTEXT_USAGE && isRecord(payload)) {
+      model =
+        textFromRecord(payload, REPLICAS_FIELD.MODEL)?.slice(
+          0,
+          REPLICAS_ADAPTER_DEFAULTS.MAXIMUM_MODEL_LABEL_LENGTH,
+        ) ?? model;
+      continue;
+    }
     const text = assistantTextFromEvent(event);
     if (text !== undefined) {
       recap = recapText(text);
+      recapSettled = false;
+      error = undefined;
+      activity = toolNameFromEvent(event) ?? activity;
+      continue;
+    }
+    // The current turn's newest tool: cleared by the result that ends the
+    // turn, so what survives the walk is what the chat is running now.
+    const tool = toolNameFromEvent(event);
+    if (tool) {
+      activity = tool;
+      error = undefined;
       recapSettled = false;
       continue;
     }
     // The result closes the turn whose words are in hand — and only while it
     // stays the tail's last word: any event after it is the next turn already
     // moving, which makes the words in hand the previous turn's, not the
-    // parting ones an active row may show.
-    recapSettled =
-      recap !== undefined &&
-      textFromRecord(event, REPLICAS_FIELD.TYPE) === REPLICAS_EVENT_TYPE.CLAUDE_RESULT;
+    // parting ones an active row may show. A failed result carries its own
+    // words on the same terms.
+    if (type === REPLICAS_EVENT_TYPE.CLAUDE_RESULT) {
+      recapSettled = recap !== undefined;
+      error = isRecord(payload) ? errorFromResult(payload) : undefined;
+      activity = undefined;
+      continue;
+    }
+    recapSettled = false;
+    error = undefined;
   }
 
   return {
     observedAt,
     ...(mappedKind ? { agent: REPLICAS_AGENT_BY_KIND[mappedKind] } : undefined),
     ...(agentKind && !mappedKind ? { agentKind } : undefined),
+    ...(model ? { model } : undefined),
     ...(recap ? { recap, recapSettled } : undefined),
+    ...(error ? { error } : undefined),
+    ...(activity ? { activity } : undefined),
   };
+}
+
+/**
+ * The tool a turn's event is running, for the two formally specified
+ * families: a Claude assistant message's tool_use blocks, and a Codex
+ * function call. The name is the provider's own word for the tool, reported
+ * rather than worded.
+ */
+function toolNameFromEvent(event: WireRecord): string | undefined {
+  const type = textFromRecord(event, REPLICAS_FIELD.TYPE);
+  const payload = event.payload;
+  if (!isRecord(payload)) return undefined;
+  if (type === REPLICAS_EVENT_TYPE.CLAUDE_ASSISTANT) {
+    const message = payload[REPLICAS_FIELD.MESSAGE];
+    const content = isRecord(message) ? message[REPLICAS_FIELD.CONTENT] : undefined;
+    if (!Array.isArray(content)) return undefined;
+    return content
+      .filter(isRecord)
+      .filter(
+        (block) => textFromRecord(block, REPLICAS_FIELD.TYPE) === REPLICAS_CLAUDE_BLOCK_TOOL_USE,
+      )
+      .map((block) => textFromRecord(block, REPLICAS_FIELD.NAME))
+      .filter(isDefined)
+      .at(-1)
+      ?.slice(0, REPLICAS_ADAPTER_DEFAULTS.MAXIMUM_AGENT_KIND_LENGTH);
+  }
+  if (
+    type === REPLICAS_EVENT_TYPE.CODEX_RESPONSE_ITEM &&
+    textFromRecord(payload, REPLICAS_FIELD.TYPE) === REPLICAS_CODEX_FUNCTION_CALL
+  ) {
+    return textFromRecord(payload, REPLICAS_FIELD.NAME)?.slice(
+      0,
+      REPLICAS_ADAPTER_DEFAULTS.MAXIMUM_AGENT_KIND_LENGTH,
+    );
+  }
+  return undefined;
+}
+
+/**
+ * A failed final turn's own words, from the result event Claude documents
+ * carrying them: `is_error`, or any subtype other than a clean completion,
+ * with the first error line as the reason and the fact of the failure when
+ * none was written down.
+ */
+function errorFromResult(payload: WireRecord): string | undefined {
+  const subtype = textFromRecord(payload, REPLICAS_RESULT_FIELD.SUBTYPE);
+  const failed =
+    payload[REPLICAS_RESULT_FIELD.IS_ERROR] === true ||
+    (subtype !== undefined && subtype !== REPLICAS_RESULT_SUCCESS);
+  if (!failed) return undefined;
+  const errors = payload[REPLICAS_RESULT_FIELD.ERRORS];
+  const firstError = Array.isArray(errors) ? errors.find((line) => text(line)) : undefined;
+  return (
+    text(firstError)?.slice(0, REPLICAS_ADAPTER_DEFAULTS.MAXIMUM_ERROR_LENGTH) ?? "The turn failed"
+  );
 }
 
 /**
@@ -639,15 +793,17 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
   #detailByWorkspace = new Map<string, ReplicasWorkspaceDetail>();
 
   /**
-   * What the last history read said, per workspace, on the activity key. An
-   * unauthorized answer leaves an empty entry — that workspace's history is
-   * not this key's to read, and asking again before it moves would get the
+   * What the last tail read said, per subject — a chat under its own id, a
+   * chatless workspace under its — each keyed to the subject's own activity
+   * timestamp, so a chat nobody touched costs nothing to keep enriched. An
+   * unauthorized answer leaves an empty entry — that history is not this
+   * key's to read, and asking again before the subject moves would get the
    * same refusal — while a transient failure leaves no entry, so the next
-   * pass simply asks again. Contained per workspace on purpose: the list
+   * pass simply asks again. Contained per subject on purpose: the list
    * already answered under this credential, so no history refusal is a
    * judgment on the key, and none may clear the roster the list just served.
    */
-  #historyByWorkspace = new Map<string, ReplicasHistoryEnrichment>();
+  #historyBySubject = new Map<string, ReplicasHistoryEnrichment>();
 
   /** A stand-down for the awake detail read, should a key be refused it. */
   #detailsRefused = false;
@@ -681,7 +837,7 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
   protected override forgetCachedIdentity(): void {
     this.#chatsByWorkspace.clear();
     this.#detailByWorkspace.clear();
-    this.#historyByWorkspace.clear();
+    this.#historyBySubject.clear();
     this.#detailsRefused = false;
     this.#workspaceByChat.clear();
     this.#projects = [];
@@ -821,14 +977,20 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
 
   #pruneCaches(workspaces: readonly ReplicasWorkspace[]): void {
     const listed = new Set(workspaces.map((workspace) => workspace.id));
-    for (const cache of [
-      this.#chatsByWorkspace,
-      this.#detailByWorkspace,
-      this.#historyByWorkspace,
-    ]) {
+    for (const cache of [this.#chatsByWorkspace, this.#detailByWorkspace]) {
       for (const id of cache.keys()) {
         if (!listed.has(id)) cache.delete(id);
       }
+    }
+    // A history subject is a chat or a chatless workspace, so what keeps an
+    // entry alive is the chat staying listed under a listed workspace.
+    const subjects = new Set(listed);
+    for (const [workspaceId, snapshot] of this.#chatsByWorkspace) {
+      if (!listed.has(workspaceId)) continue;
+      for (const chat of snapshot.chats) subjects.add(chat.id);
+    }
+    for (const id of this.#historyBySubject.keys()) {
+      if (!subjects.has(id)) this.#historyBySubject.delete(id);
     }
   }
 
@@ -948,47 +1110,70 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
   }
 
   /**
-   * Reads the retained history of the workspaces whose activity moved since
-   * it was last read — pinned to the newest chat when the chats are known,
-   * so the parting words are attributably that chat's. Every failure is
-   * contained here: a workspace whose history is refused (not this key's to
-   * read, or sleeping on an engine from before retention) costs its own
-   * enrichment and nothing else's, and is not asked again until it moves.
+   * Reads the retained tails whose subjects moved since they were last read:
+   * each of a workspace's newest chats under its own id — so every chat's
+   * model, parting words, failed turn, and running tool are attributably its
+   * own — and a chatless workspace unpinned. Newest first across every
+   * workspace, bounded per pass, and cached per subject, so a steady pass
+   * costs nothing here. Every failure is contained where it lands: a subject
+   * whose history is refused costs its own enrichment and nothing else's,
+   * and is not asked again until it moves.
    */
   async #refreshHistories(
     request: CloudRequest,
-    stale: readonly ReplicasWorkspace[],
+    enrichable: readonly ReplicasWorkspace[],
   ): Promise<void> {
+    const subjects: ReplicasHistorySubject[] = [];
+    for (const workspace of enrichable) {
+      const chats = this.#chatsByWorkspace.get(workspace.id)?.chats ?? [];
+      if (chats.length === 0) {
+        subjects.push({
+          subjectId: workspace.id,
+          workspaceId: workspace.id,
+          observedAt: workspace.observedAt,
+        });
+        continue;
+      }
+      for (const chat of chats.slice(0, REPLICAS_ADAPTER_DEFAULTS.CHAT_HISTORY_LIMIT)) {
+        subjects.push({
+          subjectId: chat.id,
+          workspaceId: workspace.id,
+          chatId: chat.id,
+          observedAt: chat.observedAt,
+        });
+      }
+    }
+    const stale = subjects
+      .filter(
+        (subject) =>
+          this.#historyBySubject.get(subject.subjectId)?.observedAt !== subject.observedAt,
+      )
+      .sort((first, second) => second.observedAt - first.observedAt)
+      .slice(0, REPLICAS_ADAPTER_DEFAULTS.HISTORY_READ_LIMIT);
     await Promise.all(
-      stale
-        .filter(
-          (workspace) =>
-            this.#historyByWorkspace.get(workspace.id)?.observedAt !== workspace.observedAt,
-        )
-        .map(async (workspace) => {
-          const newestChat = this.#chatsByWorkspace.get(workspace.id)?.chats[0];
-          let body: WireRecord;
-          try {
-            body = await request(
-              [...REPLICAS_ROUTE.REPLICAS, workspace.id, REPLICAS_ROUTE_SEGMENT.HISTORY],
-              {
-                ...(newestChat ? { [REPLICAS_QUERY.CHAT_ID]: newestChat.id } : undefined),
-                [REPLICAS_QUERY.LIMIT]: String(REPLICAS_ADAPTER_DEFAULTS.HISTORY_EVENT_LIMIT),
-              },
-            );
-          } catch (error) {
-            // A parsing bug is not a provider answer and must not hide here.
-            if (!(error instanceof CloudRequestError)) throw error;
-            if (error.failure === CLOUD_FAILURE.UNAUTHORIZED) {
-              this.#historyByWorkspace.set(workspace.id, { observedAt: workspace.observedAt });
-            }
-            return;
-          }
-          this.#historyByWorkspace.set(
-            workspace.id,
-            enrichmentFromHistory(body, workspace.observedAt),
+      stale.map(async (subject) => {
+        let body: WireRecord;
+        try {
+          body = await request(
+            [...REPLICAS_ROUTE.REPLICAS, subject.workspaceId, REPLICAS_ROUTE_SEGMENT.HISTORY],
+            {
+              ...(subject.chatId ? { [REPLICAS_QUERY.CHAT_ID]: subject.chatId } : undefined),
+              [REPLICAS_QUERY.LIMIT]: String(REPLICAS_ADAPTER_DEFAULTS.HISTORY_EVENT_LIMIT),
+            },
           );
-        }),
+        } catch (error) {
+          // A parsing bug is not a provider answer and must not hide here.
+          if (!(error instanceof CloudRequestError)) throw error;
+          if (error.failure === CLOUD_FAILURE.UNAUTHORIZED) {
+            this.#historyBySubject.set(subject.subjectId, { observedAt: subject.observedAt });
+          }
+          return;
+        }
+        this.#historyBySubject.set(
+          subject.subjectId,
+          enrichmentFromHistory(body, subject.observedAt),
+        );
+      }),
     );
   }
 
@@ -1007,7 +1192,7 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
 
   #workspaceObservation(workspace: ReplicasWorkspace): ProviderSessionObservation {
     const status = this.#statusFor(workspace);
-    const history = this.#historyByWorkspace.get(workspace.id);
+    const history = this.#historyBySubject.get(workspace.id);
     const detail = this.#detailByWorkspace.get(workspace.id);
     const agentKind = detail?.agentKind ?? history?.agentKind;
     const mappedKind = knownValue(REPLICAS_AGENT_KIND, agentKind);
@@ -1030,10 +1215,13 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
       detail: {
         repository: workspace.repositoryLabel,
         ...(detail?.branch ? { branch: detail.branch } : undefined),
-        // An agent kind this build has no identity for rides the model slot
-        // in the provider's own word, the way Conductor's unmapped kinds do,
-        // so it is not lost for lacking a mark.
-        ...(agent === undefined && agentKind ? { model: agentKind } : undefined),
+        // The model the token accounting names, with an unmapped agent kind
+        // riding beside it in the provider's own word, the way Conductor's
+        // unmapped kinds do, so neither is lost for lacking a mark.
+        ...(modelLabel(agent === undefined ? agentKind : undefined, history?.model)
+          ? { model: modelLabel(agent === undefined ? agentKind : undefined, history?.model) }
+          : undefined),
+        ...(history?.error ? { error: history.error } : undefined),
         ...this.#sharedDetail(workspace, status),
       },
     };
@@ -1055,13 +1243,13 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
     now: number,
   ): ProviderSessionObservation {
     const status = this.#chatStatus(workspace, chat, newest, now);
-    const history = newest ? this.#historyByWorkspace.get(workspace.id) : undefined;
+    // The chat's own tail, read under its own id, so nothing here can bleed
+    // from a sibling's conversation.
+    const history = this.#historyBySubject.get(chat.id);
     const detail = this.#detailByWorkspace.get(workspace.id);
     // The chat's own agent is the listing's word — a stored fact, not the
-    // engine's "currently active" answer. The history's derived kind stands
-    // in only where the listing gave none, and only on the newest chat,
-    // whose conversation the history read was pinned to: another chat's
-    // agent must never bleed onto this row.
+    // engine's "currently active" answer — and the tail's derived kind
+    // stands in only where the listing gave none.
     const mappedListed = knownValue(REPLICAS_AGENT_KIND, chat.agentKind);
     const agent = chat.agentKind
       ? mappedListed && REPLICAS_AGENT_BY_KIND[mappedListed]
@@ -1082,7 +1270,7 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
       canReceiveMessage: this.#canReceiveMessage(workspace),
       ...(agent ? { agent } : undefined),
       ...(status === SESSION_STATUS.WAITING ? { holdingForDeveloper: true } : undefined),
-      ...(newest ? this.#recapFor(workspace, chat) : undefined),
+      ...this.#recapFor(workspace, chat),
       ...this.#spawnAdvertisement(workspace),
       // The workspace this chat is one voice of, so several chats gather
       // under one tray carrying the Replicas mark once, the way Conductor's
@@ -1092,16 +1280,30 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
       detail: {
         repository: workspace.repositoryLabel,
         ...(detail?.branch ? { branch: detail.branch } : undefined),
-        ...(unmappedKind ? { model: unmappedKind } : undefined),
+        // The model Replicas' own token accounting names for this chat; an
+        // agent kind with no identity of its own rides beside it in the
+        // provider's word, the way Conductor's unmapped kinds do.
+        ...(modelLabel(unmappedKind, history?.model)
+          ? { model: modelLabel(unmappedKind, history?.model) }
+          : undefined),
+        // The current turn's newest tool, only while the chat is actually
+        // running one — an idle chat's last tool is history, not activity.
+        ...(chat.processing === true && history?.activity
+          ? { activity: history.activity }
+          : undefined),
+        // The chat's own failed turn outranks everything its row could say;
+        // the workspace's wake failure stays on the newest chat alone, where
+        // the workspace's own state already speaks.
+        ...(history?.error
+          ? { error: history.error }
+          : newest && status === SESSION_STATUS.ERROR
+            ? { error: REPLICAS_WORKSPACE_ERROR_MESSAGE }
+            : undefined),
         // The pull request is the workspace's shared change — its chats work
         // one branch — so every chat reports it and the tray header says it
         // once, the hoist proving the reports one change by their shared
-        // number. A wake failure stays on the newest chat alone, where the
-        // workspace's own state already speaks.
+        // number.
         ...(workspace.pullRequestUrl ? { change: workspace.pullRequestUrl } : undefined),
-        ...(newest && status === SESSION_STATUS.ERROR
-          ? { error: REPLICAS_WORKSPACE_ERROR_MESSAGE }
-          : undefined),
         link: replicasWorkspaceLink(workspace.id),
       },
     };
@@ -1135,7 +1337,7 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
     workspace: ReplicasWorkspace,
     chat: ReplicasChat | undefined,
   ): { recap: string } | undefined {
-    const history = this.#historyByWorkspace.get(workspace.id);
+    const history = this.#historyBySubject.get(chat?.id ?? workspace.id);
     // The parting words are a recap only once the turn has actually parted:
     // Claude's own result event says a turn completed, a chat positively
     // seen idle has finished its turn, and a workspace asleep is settled

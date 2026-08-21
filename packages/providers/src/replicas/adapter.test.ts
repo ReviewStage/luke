@@ -33,6 +33,8 @@ interface TestChat {
   processing?: boolean;
   /** A pre-created harness slot: never touched since the engine made it. */
   untouched?: boolean;
+  /** This chat's own retained tail, served when history is pinned to it. */
+  historyEvents?: readonly JsonObject[];
 }
 
 interface TestWorkspace {
@@ -102,6 +104,45 @@ function codexAssistant(text: string): JsonObject {
     timestamp: isoTimestamp(TEST_TIME - 10_000),
     type: "response_item",
     payload: { type: "message", role: "assistant", content: [{ type: "output_text", text }] },
+  };
+}
+
+/** Replicas' own normalized token accounting, the one cross-family model source. */
+function contextUsage(provider: string, model: string): JsonObject {
+  return {
+    timestamp: isoTimestamp(TEST_TIME - 11_000),
+    type: "context-usage",
+    payload: {
+      provider,
+      source: `${provider}_context`,
+      model,
+      totalTokens: 1000,
+      maxTokens: 10000,
+    },
+  };
+}
+
+function claudeToolUse(tool: string): JsonObject {
+  return {
+    timestamp: isoTimestamp(TEST_TIME - 7_000),
+    type: "claude-assistant",
+    payload: {
+      type: "assistant",
+      message: { content: [{ type: "tool_use", name: tool, id: "tool-1", input: {} }] },
+    },
+  };
+}
+
+function claudeFailedResult(message?: string): JsonObject {
+  return {
+    timestamp: isoTimestamp(TEST_TIME - 6_000),
+    type: "claude-result",
+    payload: {
+      type: "result",
+      subtype: "error",
+      is_error: true,
+      ...(message ? { errors: [message] } : undefined),
+    },
   };
 }
 
@@ -235,9 +276,12 @@ function fakeReplicasApi(
       if (!workspace || workspace.refuseHistory) {
         return jsonResponse({}, HTTP_STATUS.CONFLICT);
       }
+      const pinned = (workspace.chats ?? []).find(
+        (chat) => chat.id === searchParams.get("chat_id"),
+      );
       return jsonResponse({
         thread_id: null,
-        events: [...(workspace.historyEvents ?? [])],
+        events: [...(pinned?.historyEvents ?? workspace.historyEvents ?? [])],
         total: workspace.historyEvents?.length ?? 0,
         has_more: false,
         coding_agent: workspace.codingAgent ?? null,
@@ -838,6 +882,69 @@ test("derives the agent from the retained events when none is currently active",
   assert.deepEqual(observations[1]?.agent, { id: "codex", displayName: "Codex" });
   assert.equal(observations[2]?.agent, undefined);
   assert.equal(observations[2]?.detail?.model, "kimi");
+});
+
+test("enriches each chat from its own tail: model, tool, failure, and recap", async () => {
+  const api = fakeReplicasApi([
+    {
+      ...activeWorkspace("workspace-rich", TEST_TIME - 1_000),
+      chats: [
+        {
+          // Mid-turn: the model Replicas' accounting names, and the tool the
+          // current turn is running — no recap, because nothing has parted.
+          id: "chat-running",
+          provider: "claude",
+          title: "Fix the login timeout",
+          updatedAt: TEST_TIME - 1_000,
+          processing: true,
+          historyEvents: [
+            contextUsage("claude", "claude-opus-5"),
+            claudeAssistant("Looking at the failing test."),
+            claudeToolUse("Bash"),
+          ],
+        },
+        {
+          // Settled: its own parting words, attributably its own.
+          id: "chat-settled",
+          provider: "claude",
+          title: "Port the fixtures",
+          updatedAt: TEST_TIME - 2_000,
+          processing: false,
+          historyEvents: [
+            contextUsage("claude", "claude-opus-5"),
+            claudeAssistant("Ported both fixtures to the new shape."),
+            claudeResult(),
+          ],
+        },
+        {
+          // Failed: the turn's own words as the row's reason.
+          id: "chat-failed",
+          provider: "codex",
+          title: "Codex",
+          updatedAt: TEST_TIME - 3_000,
+          processing: false,
+          historyEvents: [
+            contextUsage("codex", "gpt-5.6-sol"),
+            claudeUser(SECRET_PROMPT_TEXT),
+            claudeFailedResult("The sandbox ran out of disk"),
+          ],
+        },
+      ],
+    },
+  ]);
+
+  const observations = await adapterFor(api.fetch).observe();
+  const byId = new Map(observations.map((entry) => [entry.providerSessionId, entry]));
+
+  assert.equal(byId.get("chat-running")?.detail?.model, "claude-opus-5");
+  assert.equal(byId.get("chat-running")?.detail?.activity, "Bash");
+  assert.equal(byId.get("chat-running")?.recap, undefined);
+  assert.equal(byId.get("chat-settled")?.recap, "Ported both fixtures to the new shape.");
+  // An idle chat's last tool is history, not activity.
+  assert.equal(byId.get("chat-settled")?.detail?.activity, undefined);
+  assert.equal(byId.get("chat-failed")?.detail?.model, "gpt-5.6-sol");
+  assert.equal(byId.get("chat-failed")?.detail?.error, "The sandbox ran out of disk");
+  assert.equal(JSON.stringify(observations).includes(SECRET_PROMPT_TEXT), false);
 });
 
 test("reports the parting words as the recap once the turn actually parted", async () => {
