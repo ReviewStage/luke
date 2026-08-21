@@ -38,6 +38,7 @@ import {
   tallyValue,
   toggledSessionFilters,
   workspaceTrayActions,
+  workspaceTrayChange,
 } from "./session-model";
 
 const CLAUDE_PROVIDER = { id: PROVIDER_ID.CLAUDE_CODE, displayName: "Claude Code" };
@@ -1090,6 +1091,62 @@ test("an ungrouped session's acts never read as a workspace's", () => {
   assert.ok(action);
   assert.equal(actsOnWorkspace(row, action), false);
   assert.deepEqual(workspaceTrayActions([row]), []);
+});
+
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+test("a tray's shared pull request is said once, through the chat that reported it", () => {
+  const chatOf = (id: string, change?: string) =>
+    normalizeSession(CONDUCTOR_PROVIDER, {
+      providerSessionId: id,
+      title: `Chat ${id}`,
+      status: SESSION_STATUS.COMPLETE,
+      observedAt: 1_000,
+      ...(change ? { detail: { change } } : undefined),
+      workspace: { providerWorkspaceId: "workspace-lisbon", name: "lisbon-v2" },
+    });
+  const changeUrl = "https://github.com/example/luke/pull/245";
+
+  // Every chat reporting the one change collapses to one header chip, opened
+  // through the first chat that reported it.
+  const shared = displaySessions(bootstrap(false), [
+    chatOf("chat-one", changeUrl),
+    chatOf("chat-two", changeUrl),
+  ]);
+  const hoisted = workspaceTrayChange(shared);
+  assert.equal(hoisted?.session.id, "chat-one");
+  assert.equal(hoisted?.changeNumber, 245);
+
+  // A single reporting chat is trivially the workspace's one change, even
+  // when its address names no number for the chip to wear.
+  const lone = displaySessions(bootstrap(false), [
+    chatOf("chat-one", "https://github.com/example/luke/pulls"),
+    chatOf("chat-two"),
+  ]);
+  const loneHoisted = workspaceTrayChange(lone);
+  assert.equal(loneHoisted?.session.id, "chat-one");
+  assert.equal(loneHoisted?.changeNumber, undefined);
+
+  // Two chats naming different numbers are two changes; the header offering
+  // one would hide the other, so each stays on its own row.
+  const differing = displaySessions(bootstrap(false), [
+    chatOf("chat-one", changeUrl),
+    chatOf("chat-two", "https://github.com/example/luke/pull/246"),
+  ]);
+  assert.equal(workspaceTrayChange(differing), undefined);
+
+  // Reports the numbers cannot compare may be one change or two, and the
+  // header must not gamble on which; they stay on their rows.
+  const unnumbered = displaySessions(bootstrap(false), [
+    chatOf("chat-one", changeUrl),
+    chatOf("chat-two", "https://github.com/example/luke/pulls"),
+  ]);
+  assert.equal(workspaceTrayChange(unnumbered), undefined);
+
+  // A tray with no reported change offers no chip at all.
+  assert.equal(
+    workspaceTrayChange(displaySessions(bootstrap(false), [chatOf("chat-one")])),
+    undefined,
+  );
 });
 
 test("a row carries its workspace by name, falling back to the id", () => {

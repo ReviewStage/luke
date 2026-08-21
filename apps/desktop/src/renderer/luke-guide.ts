@@ -379,7 +379,8 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "orderable by urgency or recency by the same button or ask. " +
         "A row can be opened, messaged, or controlled " +
         "where its provider allows. A session whose provider reported a pull request grows a " +
-        "chip that opens it in the browser. A row the developer asked Luke to listen for wears " +
+        "chip that opens it in the browser — said once on a workspace tray's header when its " +
+        "chats share the one change. A row the developer asked Luke to listen for wears " +
         "a listening mark beside its age. Luke's own composer at the foot takes a typed ask.",
     },
     {
@@ -445,7 +446,8 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "individually where its latest roster entry offers that act. A Superset, Conductor, " +
         "or Orca " +
         "tray carries the managing app's mark once in its header rather than repeating it on " +
-        "every child row.",
+        "every child row, and the header also carries the workspace's acts and the one " +
+        "pull-request chip its chats share, where each row would have repeated them.",
     },
     {
       label: "The Settings tab",
