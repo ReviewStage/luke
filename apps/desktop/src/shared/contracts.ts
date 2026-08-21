@@ -376,13 +376,16 @@ export interface AppSettings {
    */
   shareUsageData: boolean;
   /**
-   * Whether Luke also records what his own panel draws and sends it with the
-   * counts. Unlike the counts, a recording is the rendered surface rather
-   * than a fixed vocabulary, so what keeps a session out of one is masking
-   * rather than a shape it has no way to travel in: every region that draws
-   * observed or typed material is blurred or blocked before the recorder
-   * sees it. On by default, off whenever `shareUsageData` is off, and
-   * excluded from every reset scope for the same reason sharing is.
+   * Whether Luke also records what his own panel draws, and sends it to the
+   * analytics processor directly rather than through his own service. It does
+   * not share the counts' guarantee and must never be described as though it
+   * did: a recording is the rendered surface, so a session title, branch,
+   * recap, error line, and the account's own name and address travel because
+   * they are drawn, and only what is typed into a field is masked. The same
+   * client autocaptures the text of whatever was clicked and reports
+   * unhandled errors, so this switch governs those too. On by default, off
+   * whenever `shareUsageData` is off, and excluded from every reset scope for
+   * the same reason sharing is.
    */
   sessionReplay: boolean;
   /**
@@ -542,6 +545,8 @@ export interface DisplayDiagnostic {
  * and `sessionReplay` and is told the moment either moves, so reading them
  * live is what lets a switch turned off stop a recording where it stands —
  * and a switch turned back on start one — rather than at the next launch.
+ * Where a recording goes is not here either: the processor's address is fixed
+ * by the build, in the renderer beside the connect policy that names it.
  */
 export interface SessionReplayBootstrap {
   /**
@@ -552,12 +557,12 @@ export interface SessionReplayBootstrap {
    */
   permitted: boolean;
   /**
-   * The address the recorder posts to: Luke's own origin, never the
-   * processor's. Fixed by the build like the update feed's, and named in the
-   * renderer's own connect policy — a build pointed at some other service
-   * records nothing, because its CSP names one origin and this is not it.
+   * This build's own version, for the recorder to file what it sends under.
+   * It rides here rather than on a channel of its own because the renderer
+   * has no way to read it: the bundle is written once and the version is a
+   * fact of the packaged app around it.
    */
-  ingestHost: string;
+  appVersion: string;
   /**
    * The account's opaque id, absent while signed out. It is the same id the
    * hosted endpoints resolve a bearer token to, so a recording lands on the

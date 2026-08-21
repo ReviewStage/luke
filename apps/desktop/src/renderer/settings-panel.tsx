@@ -109,7 +109,6 @@ import {
 } from "./microphone-access";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
 import { CloudBadge, ProviderMark } from "./provider-marks";
-import { REPLAY_BLOCK_CLASS } from "./session-replay-masking";
 import {
   BackIcon,
   CheckIcon,
@@ -734,7 +733,7 @@ function ProviderCredential({
         /* Named as a group, because Cancel, Save, and the link to the
            provider's own page are the same three words on every row. */
         <fieldset
-          className={`credential-editor ${REPLAY_BLOCK_CLASS}`}
+          className="credential-editor"
           aria-label={`${provider.displayName} ${credential}`}
         >
           <label className="settings-field" htmlFor={fieldId}>
@@ -3609,11 +3608,12 @@ function UsageDataSection({
       />
       <SwitchRow
         label="Record my screen in Luke"
-        ariaLabel="Record what Luke's own panel draws, with session material blurred"
+        ariaLabel="Record what Luke's own panel draws, session material included"
         errand={APP_SETTING_ID.SESSION_REPLAY}
-        // What the recording cannot show is the whole of what makes it
-        // offerable, so the row says that rather than what it does show.
-        detail="Session titles, recaps, what you type, and keys are blurred out."
+        // The recording shows the panel as drawn, so the row says what
+        // travels rather than what does not: a switch that named its one
+        // exception would read as though the rest were covered too.
+        detail="A video of the panel: session titles, summaries, and your name. Not what you type."
         changed={settings.sessionReplay !== APP_SETTING_DEFAULTS.sessionReplay}
         checked={settings.sessionReplay}
         // Off is off: the recorder never starts while the counts are not being

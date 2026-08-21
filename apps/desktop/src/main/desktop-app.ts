@@ -454,16 +454,8 @@ const productEvents = new ProductEventSender({
 const recordProductEvent: RecordProductEvent = (name, properties) =>
   productEvents.record(name, properties);
 /**
- * Where the recorder would post: Luke's own origin, never the processor's,
- * and fixed by the build exactly as the update feed's address is. It rides
- * the one development override the account service has, so a build pointed at
- * a local service names a local proxy — and, having no CSP entry, records
- * nothing rather than sending a developer's own screen to production.
- */
-const SESSION_REPLAY_INGEST_HOST = `${HOSTED_SERVICE_BASE_URL}/ingest`;
-/**
  * What this run can tell the renderer about recording: whether it is the kind
- * of run that may record at all, where a recording would go, and whom it
+ * of run that may record at all, which build it is, and whom a recording
  * would belong to. The two switches are the renderer's own to read, because it
  * is told when they move; this is re-answered whenever the account moves,
  * which is the other half of the same question.
@@ -477,7 +469,7 @@ async function sessionReplayBootstrap(): Promise<SessionReplayBootstrap> {
   const accountId = (await settingsStore.readAccount())?.id;
   return {
     permitted: runMode.sendsNetwork && accountId !== undefined,
-    ingestHost: SESSION_REPLAY_INGEST_HOST,
+    appVersion: app.getVersion(),
     ...(accountId ? { accountId } : undefined),
   };
 }

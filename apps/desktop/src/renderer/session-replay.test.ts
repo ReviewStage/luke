@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import type { SessionReplayBootstrap } from "#shared/contracts";
-import { sessionReplayWanted } from "./session-replay";
+import { POSTHOG_HOST, sessionReplayWanted } from "./session-replay";
 
 /**
  * The gate, on its own. Recording is the one thing Luke sends that a fixed
@@ -12,7 +13,7 @@ import { sessionReplayWanted } from "./session-replay";
 function bootstrap(over: Partial<SessionReplayBootstrap> = {}): SessionReplayBootstrap {
   return {
     permitted: true,
-    ingestHost: "https://tryluke.dev/ingest",
+    appVersion: "1.2.3",
     accountId: "user-1",
     ...over,
   };
@@ -38,4 +39,18 @@ test("sharing is the outer switch: recording cannot outlive it", () => {
 
 test("no account means no recording, because none could be erased with one", () => {
   assert.equal(sessionReplayWanted(bootstrap({ accountId: undefined }), true, true), false);
+});
+
+/**
+ * The recorder's host and the renderer's connect policy are two literals in
+ * two files, and nothing at run time reconciles them: a host the policy does
+ * not name is refused by the browser, which looks exactly like a recording
+ * that never started. Asserted as the whole list rather than as containment,
+ * so widening what this renderer may reach at all has to be done deliberately
+ * here as well.
+ */
+test("the connect policy names the recorder's host, and only what else is reached", () => {
+  const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
+  const connectSrc = html.match(/connect-src ([^;"]+)/)?.[1];
+  assert.deepEqual(connectSrc?.split(" "), ["https://api.openai.com", POSTHOG_HOST]);
 });

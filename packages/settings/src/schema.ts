@@ -655,10 +655,11 @@ export const APP_SETTING_SCHEMA = {
         id: APP_SETTING_ID.SESSION_REPLAY,
         label: "Record my screen in Luke",
         description:
-          "Whether Luke records what his own panel draws — which rows you press, where you " +
-          "stall — and sends it with the usage counts. Session titles, recaps, error lines, " +
-          "anything you type, and every key field are blurred out of the recording before it " +
-          "leaves your Mac. Off whenever Share usage data is off. On to begin with.",
+          "Whether Luke records what his own panel draws and sends it, as a video of the " +
+          "panel rather than a count. Everything drawn is in it: session titles, branches, " +
+          "summaries, error lines, and your own name and address. Only what you type into a " +
+          "field is hidden. It is the panel alone and never the rest of your screen. Off " +
+          "whenever Share usage data is off. On to begin with.",
         kind: APP_SETTING_KIND.TOGGLE,
         value: appToggleText(settings.sessionReplay),
         defaultValue: appToggleText(defaultValue),

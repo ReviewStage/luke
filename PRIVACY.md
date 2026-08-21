@@ -25,18 +25,27 @@ summaries, prompts, or error text. Your name and email are attached to your
 usage record, so the counts belong to an account rather than to an anonymous
 identifier.
 
+That fixed list covers the counts Luke sends through our own service, and not
+what screen recording sends. While Record my screen in Luke is on, the
+recorder also reports what you clicked — including the text on it, such as a
+session's title — and any error Luke's own panel runs into, with its message
+and the code path it came from. Turning that switch off stops those as well.
+
 **Screen recordings.** Luke also records what his own panel draws — which rows
 you pressed, which pages you opened, how long you spent — and sends it with the
 usage data. This is on by default, and you can turn it off under Record my
 screen in Luke in Settings; turning off Share usage data stops it as well.
 
-A recording is the panel and nothing else. Luke never records your screen, your
-editor, your terminal, or any other app. Inside the panel, text is blurred
-before the recording leaves your Mac: session titles, branches, summaries,
-error text, your name and email, and anything you type are replaced with blocks
-rather than sent. API keys and sign-in codes are cut out entirely, so not even
-their length travels. What remains is the shape of the panel and what you did
-to it.
+A recording is a video of the panel, so it shows what the panel showed you.
+That includes session titles, branches, summaries and error text, your name
+and email address, and any screenshot you attached to the feedback form. The
+one thing hidden is what you type into a field, which is replaced with blocks
+before the recording leaves your Mac — so an API key or a sign-in code you
+enter is not in it.
+
+A recording is still the panel and nothing else. Luke never records your
+screen, your editor, your terminal, or any other app, and nothing behind or
+beside the panel is in the video.
 
 **Feedback.** If you use the feedback form, we receive what you typed, the name
 and email you signed it with, and any screenshots you attached.
@@ -58,7 +67,9 @@ and email you signed it with, and any screenshots you attached.
 - Google, if you connect Google Calendar. We request your calendar list and your
   availability. Google returns busy times only, so event titles and attendees
   are never available to Luke.
-- PostHog, for usage data and screen recordings, sent through our own service.
+- PostHog, for usage data and screen recordings. The counts go through our own
+  service; the recordings, and the clicks and errors that ride with them, go
+  from Luke to PostHog directly.
 - GitHub, to check for updates. These requests are unauthenticated and carry
   nothing about you.
 
@@ -70,9 +81,11 @@ local sessions works with no network connection.
 ## Our website
 
 tryluke.dev counts page views, presses, and sign-in steps using PostHog, and
-records the pages themselves. Anything you type is blurred. These requests go
-through tryluke.dev rather than to PostHog directly, so PostHog does not see
-your network address.
+records the pages themselves. Anything you type is blurred, and so is the text
+of whatever you clicked. Your browser contacts PostHog directly for this, so
+PostHog sees your network address — as it does for the app's screen
+recordings, which are sent directly too. The app's usage counts are not: they
+reach PostHog through our own service.
 
 ## Storage
 
@@ -85,7 +98,8 @@ recordings are held by PostHog.
 ## Your choices
 
 - Turn off Share usage data in Settings to stop usage data and screen recordings.
-- Turn off Record my screen in Luke to stop only the recordings.
+- Turn off Record my screen in Luke to stop the recordings, and the clicks
+  and errors sent with them, while leaving the counts on.
 - Disconnect any provider, issue tracker, or calendar to stop it being read.
 - Delete your OpenAI key to turn voice off.
 - Luke does not use your microphone until you start a turn.

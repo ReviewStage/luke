@@ -1,23 +1,41 @@
 import posthog from "posthog-js/dist/module.full.no-external";
 import type { SessionReplayBootstrap } from "#shared/contracts";
-import { REPLAY_MASKING } from "./session-replay-masking";
 
 /**
- * Recording what Luke's own panel draws, and the masking that is the whole
- * reason it may be drawn at all.
+ * Recording what Luke's own panel draws, on the library's own defaults.
  *
- * This is the second of the two things Luke sends about his own use, and it is
- * the opposite shape from the first. A counted event can only say what
- * `packages/analytics/src/product-events.ts` declared, so a session title has
- * no form it could travel in. A recording is the rendered surface: everything
- * on screen travels *unless* it is masked. The allowlist protects the events
- * by construction; only `session-replay-masking.ts` protects a recording, and
- * it is load-bearing in a way no other configuration in this app is.
+ * This is not the counted-event stream and does not share its guarantee. A
+ * counted event can only say what `packages/analytics/src/product-events.ts`
+ * declared, so a session title has no form it could travel in; those events
+ * go to Luke's own service and are read against the allowlist a second time
+ * there. This client is the analytics library configured as it ships, posting
+ * straight to the processor, and everything it sends is outside that
+ * allowlist: a recording is the rendered panel, so a session title, branch,
+ * recap, error line, and the account's own name and address all travel
+ * because they are drawn; autocapture puts the text of whatever was clicked
+ * on an event; and an unhandled error travels with its message and stack.
+ * Only what is typed into a field stays masked, which is the library's own
+ * default rather than anything asked for here.
  *
- * This file decides only whether to record, and it decides nothing on its own:
- * the main process says whether this run may, and the developer's two switches
+ * `PRIVACY.md` says all of that plainly, and it has to keep saying it: this
+ * file is the whole of what decides it, and there is nothing else standing
+ * between what the panel draws and what leaves the machine.
+ *
+ * What this file decides on its own is only whether to record at all: the
+ * main process says whether this run may, and the developer's two switches
  * say whether it does.
  */
+
+/**
+ * Where everything here posts. The processor's own address rather than Luke's
+ * origin: nothing forwards on the user's behalf any more, so the processor
+ * sees the address a request arrives from.
+ *
+ * Exported so the connect policy in `index.html` can be asserted against it.
+ * The two are separate literals, and a recording the policy refuses to send
+ * is indistinguishable from one that was never started.
+ */
+export const POSTHOG_HOST = "https://us.i.posthog.com";
 
 /**
  * The project the recording is filed under, fixed at build time the way the
@@ -88,36 +106,68 @@ function startSessionReplay(bootstrap: SessionReplayBootstrap): void {
     // it, so a recording resumed after a switch or an account change is
     // started rather than re-configured — but it must still be told whose
     // recording it is, because the person may have changed since the last one.
+    optIn();
+    registerBuild(bootstrap);
     posthog.identify(bootstrap.accountId);
     posthog.startSessionRecording();
     return;
   }
   initialized = true;
   posthog.init(key, {
-    api_host: bootstrap.ingestHost,
-    // The desktop's counted events travel through Luke's own service, where
-    // the allowlist is read a second time. This client sends recordings and
-    // nothing else, so every other way it could produce an event is off: an
-    // autocapture would collect the text and attributes of whatever was
-    // clicked, and a pageview from a `file://` renderer names a path on the
-    // developer's own disk.
-    autocapture: false,
+    api_host: POSTHOG_HOST,
+    defaults: "2025-11-30",
+    // The one place the library's defaults cannot stand: both of these carry
+    // the page's own address, and this page is a `file://` one, so its
+    // address names a path on the developer's own disk rather than anything
+    // about Luke.
     capture_pageview: false,
     capture_pageleave: false,
-    disable_surveys: true,
-    // The account is known before anything is recorded, so there is never an
-    // anonymous person to merge afterwards.
-    person_profiles: "identified_only",
-    // Location is resolved from the address a request arrives from, and by the
-    // time one does it is the proxy's rather than the user's — so this asks
-    // for the honest answer rather than a resolved one.
-    ip: false,
-    session_recording: REPLAY_MASKING,
+    capture_exceptions: true,
+    person_profiles: "always",
+    persistence: "localStorage",
+    debug: false,
   });
+  // Stopping opts out, and that is written into the same storage this client
+  // reads at launch — so without opting back in here, a run that had ever
+  // been stopped would come up recording nothing while every switch said it
+  // was recording.
+  optIn();
+  registerBuild(bootstrap);
   // The same opaque id the counted events resolve to, so a recording and the
   // counts around it belong to one person — which is also what makes deleting
   // the account erase the recordings with it.
   posthog.identify(bootstrap.accountId);
+}
+
+/**
+ * Opting in and out rather than only starting and stopping the recorder,
+ * because this client sends more than recordings. On the library's own
+ * configuration it also autocaptures what was clicked and reports unhandled
+ * errors, and neither answers to `stopSessionRecording`. The switch says
+ * "record my screen", so everything this client would send has to stop with
+ * it — otherwise the developer turns off the one thing they were shown and
+ * the rest keeps travelling.
+ *
+ * The opt-in names no event, because the `$opt_in` the library captures by
+ * default is a count of the switch moving, which Luke's own counted events
+ * already hold.
+ */
+function optIn(): void {
+  posthog.opt_in_capturing({ captureEventName: false });
+}
+
+/**
+ * Which build these came from, registered on every start rather than once at
+ * init: stopping calls `reset`, which clears the registered properties along
+ * with the person, so a recording resumed afterwards would otherwise say
+ * nothing about the version it came from.
+ */
+function registerBuild(bootstrap: SessionReplayBootstrap): void {
+  posthog.register({
+    app_name: "desktop",
+    app_version: bootstrap.appVersion,
+    platform: navigator.platform,
+  });
 }
 
 function stopSessionReplay(): void {
@@ -129,4 +179,5 @@ function stopSessionReplay(): void {
   // else would file their recordings under the person who signed out — which
   // is the one thing filing under an account is supposed to prevent.
   posthog.reset();
+  posthog.opt_out_capturing();
 }

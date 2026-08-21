@@ -5,7 +5,6 @@ import { CREDENTIAL_SOURCE, SUPERSET_SIGN_IN_STAGE } from "#shared/contracts";
 import { CREDENTIAL_PLACEHOLDER, useStagedFocus } from "./credential-entry";
 import { HIT_REGION } from "./panel-state";
 import { ProviderMark } from "./provider-marks";
-import { REPLAY_BLOCK_CLASS } from "./session-replay-masking";
 import { ExternalIcon } from "./settings-icons";
 
 /**
@@ -67,11 +66,7 @@ export function SupersetSignInSlot({
 
   return (
     <div className="slot-stage" data-drawn={String(drawn)} aria-hidden={!drawn} inert={!drawn}>
-      <div
-        className={`key-slot sign-in-slot ${REPLAY_BLOCK_CLASS}`}
-        ref={measure}
-        data-hit-region={HIT_REGION.SLOT}
-      >
+      <div className="key-slot sign-in-slot" ref={measure} data-hit-region={HIT_REGION.SLOT}>
         {waiting || exchanging ? (
           <>
             {/* What to paste, in Superset's own word for it, where every key

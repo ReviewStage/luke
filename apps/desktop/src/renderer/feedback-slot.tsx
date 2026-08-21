@@ -13,7 +13,6 @@ import { imageFiles } from "./feedback-images";
 import { LukeFace } from "./luke-face";
 import { HIT_REGION } from "./panel-state";
 import { parseMilliseconds, parsePixels, STILL_MS } from "./session-motion";
-import { REPLAY_BLOCK_CLASS } from "./session-replay-masking";
 import { ImageIcon, RemoveIcon } from "./settings-icons";
 
 const MESSAGE_FIELD_ID = "feedback-message";
@@ -325,7 +324,7 @@ export function FeedbackSlot({
                 disabled={busy}
                 onClick={() => openPreview(index)}
               >
-                <img className={REPLAY_BLOCK_CLASS} src={feedbackImageUrl(image)} alt="" />
+                <img src={feedbackImageUrl(image)} alt="" />
               </button>
               <button
                 type="button"
@@ -396,11 +395,7 @@ export function FeedbackSlot({
               heldPreview.current = undefined;
             }}
           >
-            <img
-              className={REPLAY_BLOCK_CLASS}
-              src={feedbackImageUrl(shownPreview)}
-              alt={shownPreview.name}
-            />
+            <img src={feedbackImageUrl(shownPreview)} alt={shownPreview.name} />
           </button>
         ) : null}
 

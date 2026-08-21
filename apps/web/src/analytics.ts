@@ -6,28 +6,22 @@ import type { PostHog } from "posthog-js";
  * session drop-off is only visible from the point someone already has an
  * account.
  *
- * The browser no longer talks to the analytics processor directly. Everything
- * here goes to this site's own `/ingest` path, which the deployment forwards,
- * so the processor sees the deployment's address rather than the visitor's —
- * the same shape the desktop's counted events have always had, where they
- * reach the processor through Luke's own service.
+ * The browser talks to the analytics processor directly, so the processor
+ * sees the visitor's address and user agent. Nothing forwards on their behalf
+ * — where the desktop's *counted* events still reach it through Luke's own
+ * service, and its recorder now posts here directly too. Say so in
+ * `PRIVACY.md` rather than letting the counted events' stronger claim bleed
+ * onto either.
  *
- * The options below are the posture in configuration form rather than
- * defaults worth reading past. What the site records and the app records are
- * deliberately different: this is a marketing page whose copy is public and
- * whose only typed field is a sign-in, where the app's panel is almost
- * entirely what a provider wrote about somebody's work. So the app masks all
- * text and this does not — but inputs are masked in both, and neither
- * collects the text of what was clicked.
+ * The two masking options below are this file's own, and are the one place
+ * this half is narrower than the app's: the panel records what a provider
+ * wrote about somebody's work and no longer masks it, where this is a
+ * marketing page whose copy is public and whose only typed field is a
+ * sign-in. Masking the words costs nothing here, so nothing here spends it.
  */
 
 const PROJECT_API_KEY = import.meta.env.VITE_POSTHOG_PROJECT_API_KEY;
-/**
- * This site's own proxy path, which `vercel.json` forwards to the processor.
- * The override stays for a local run, where there is no deployment in front
- * of the page to do the forwarding.
- */
-const HOST = import.meta.env.VITE_POSTHOG_HOST ?? "/ingest";
+const HOST = import.meta.env.VITE_POSTHOG_HOST ?? "https://us.i.posthog.com";
 
 export const SITE_EVENT = {
   DOWNLOAD_PRESS: "site:download_press",
@@ -59,9 +53,6 @@ export function startSiteAnalytics(): void {
   client = import("posthog-js").then(({ default: posthog }) => {
     posthog.init(projectApiKey, {
       api_host: HOST,
-      // Where the processor's own interface lives, which the proxy path is
-      // not. Without this, a recording's links point back at this site.
-      ui_host: "https://us.posthog.com",
       autocapture: true,
       capture_pageview: true,
       capture_pageleave: false,

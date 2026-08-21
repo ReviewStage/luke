@@ -13,7 +13,6 @@ import {
 } from "./credential-entry";
 import { HIT_REGION } from "./panel-state";
 import { CloudBadge, ProviderMark } from "./provider-marks";
-import { REPLAY_BLOCK_CLASS } from "./session-replay-masking";
 import { ExternalIcon } from "./settings-icons";
 
 /**
@@ -97,11 +96,7 @@ export function KeySlot({
     <div className="slot-stage" data-drawn={String(drawn)} aria-hidden={!live} inert={!live}>
       {/* No grouping role: the field names the provider itself, and everything
           beside it acts on that one field. */}
-      <div
-        className={`key-slot ${REPLAY_BLOCK_CLASS}`}
-        ref={measure}
-        data-hit-region={HIT_REGION.SLOT}
-      >
+      <div className="key-slot" ref={measure} data-hit-region={HIT_REGION.SLOT}>
         {/* What to paste, in the provider's own word for it. The line this
             opened from labels its field the same way, and the placeholder
             beneath is the one both share, so neither has to repeat the other. */}
