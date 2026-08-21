@@ -9,12 +9,21 @@ import {
   type SessionProvider,
   type SessionStatus,
 } from "@sidecar/session";
-import { isRecord, oneLine, text, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
+import {
+  isRecord,
+  oneLine,
+  recordFromJsonLine,
+  text,
+  type UnparsedWireValue,
+  type WireRecord,
+} from "@sidecar/wire";
 import {
   discoverSessionFiles,
   fileStats,
   LOCAL_ADAPTER_DEFAULTS,
   LocalFileSessionAdapter,
+  LocalSessionAdapter,
+  type LocalSessionAdapterOptions,
   localSessionStatus,
   readDirectory,
   readTail,
@@ -25,9 +34,22 @@ import {
   workspaceLabel,
 } from "../shared/local-session-adapter.js";
 import {
+  canIgnoreSqliteError,
+  defaultSqliteModule,
+  openReadOnlyDatabase,
+  type SqliteDatabase,
+  type SqliteModuleLoader,
+  textFromRow,
+} from "../shared/local-sqlite.js";
+import {
   defaultGrokBuildHome,
+  GROK_DATABASE_FILE,
   GROK_EVENT_TYPE,
+  GROK_MESSAGE_COLUMN,
+  GROK_MESSAGE_PART,
+  GROK_MESSAGE_ROLE,
   GROK_PHASE,
+  GROK_SESSION_COLUMN,
   GROK_SESSION_FILE,
   GROK_SESSIONS_DIRECTORY,
   GROK_SETTLED_TOOL_STATUSES,
@@ -35,7 +57,9 @@ import {
   GROK_TURN_OUTCOME,
   GROK_UPDATE_KIND,
   grokContentText,
+  grokMessageParts,
   grokToolDetail,
+  grokToolInputDetail,
   grokToolName,
   grokUpdateFrom,
   grokUpdateKind,
@@ -60,6 +84,7 @@ export interface GrokBuildAdapterOptions {
   now?: () => number;
   activeSessionFreshnessMs?: number;
   transcriptMaximumRenderedLength?: number;
+  sqlite?: SqliteModuleLoader;
 }
 
 /**
@@ -352,25 +377,20 @@ function detailFrom(parsed: ParsedGrokSession, workspace: string): SessionDetail
 }
 
 /**
- * Observes the Grok Build sessions on this machine from the recordings the
- * CLI already writes for itself under its own sessions store. It runs no
- * server, needs no credential, registers no hook — the CLI's own lifecycle
- * log already tells a settled turn from a permission prompt — and opens
- * everything read-only.
+ * The 1.0.x directory store, still the whole answer on a machine whose CLI
+ * never wrote the database.
  */
-export class GrokBuildSessionAdapter extends LocalFileSessionAdapter<
+class GrokBuildLegacySessionStore extends LocalFileSessionAdapter<
   GrokSessionCandidate,
   ParsedGrokSession
 > {
   readonly provider = GROK_BUILD_PROVIDER;
 
   readonly #grokHome: string;
-  readonly #transcriptMaximumRenderedLength: number | undefined;
 
-  constructor(options: GrokBuildAdapterOptions = {}) {
+  constructor(grokHome: string, options: LocalSessionAdapterOptions) {
     super(options);
-    this.#grokHome = options.grokHome ?? defaultGrokBuildHome();
-    this.#transcriptMaximumRenderedLength = options.transcriptMaximumRenderedLength;
+    this.#grokHome = grokHome;
   }
 
   protected discover(): Promise<GrokSessionCandidate[]> {
@@ -411,18 +431,228 @@ export class GrokBuildSessionAdapter extends LocalFileSessionAdapter<
       status,
       observedAt,
       ...(parsed.recap ? { recap: parsed.recap } : undefined),
+      ...(parsed.cwd ? { directory: parsed.cwd } : undefined),
       detail: detailFrom(parsed, workspace),
       ...(status === SESSION_STATUS.WAITING && parsed.tip === GROK_SESSION_TIP.HOLDING
         ? { holdingForDeveloper: true }
         : undefined),
     };
   }
+}
+
+/**
+ * The database's bookkeeping about one session: everything the CLI wrote
+ * about it, never the conversation behind it.
+ */
+interface GrokDatabaseSessionSnapshot {
+  providerSessionId: string;
+  title?: string;
+  recap?: string;
+  model?: string;
+  directory?: string;
+  observedAt: number;
+  turn?: GrokDatabaseTurn;
+}
+
+/** Whose move the newest stored message says it is. */
+interface GrokDatabaseTurn {
+  settled: boolean;
+  activity?: string;
+  atMs?: number;
+}
+
+const GROK_SESSION_QUERY = `
+  SELECT id, title, recap_text, model, cwd_last, created_at, updated_at
+  FROM sessions
+  ORDER BY updated_at DESC
+`;
+
+const GROK_LAST_MESSAGE_QUERY = `
+  SELECT role, message_json, created_at
+  FROM messages
+  WHERE session_id = ?
+  ORDER BY seq DESC
+  LIMIT 1
+`;
+
+function timestampMsFromColumn(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  const stampMs = Date.parse(value);
+  return Number.isFinite(stampMs) ? stampMs : undefined;
+}
+
+/**
+ * Whose move the newest stored message says it is. Messages land in batches
+ * as a turn's steps finish, so an assistant message that is words alone is a
+ * settled turn, one still carrying a tool call is a turn whose call has not
+ * answered yet, and a user or tool message — or none at all — is a turn the
+ * model is still working. The database records no failure and no permission
+ * prompt, so a database session is never an error and never holds for the
+ * developer; the freshness decay is what tells a long quiet turn from an
+ * abandoned one.
+ */
+function turnFromMessageRow(row: WireRecord): GrokDatabaseTurn {
+  const atMs = timestampMsFromColumn(textFromRow(row, GROK_MESSAGE_COLUMN.CREATED_AT));
+  const message = recordFromJsonLine(textFromRow(row, GROK_MESSAGE_COLUMN.MESSAGE_JSON) ?? "");
+  if (!message || textFromRow(row, GROK_MESSAGE_COLUMN.ROLE) !== GROK_MESSAGE_ROLE.ASSISTANT) {
+    return { settled: false, ...(atMs !== undefined ? { atMs } : undefined) };
+  }
+  const toolCall = grokMessageParts(message).find(
+    (part) => text(part.type) === GROK_MESSAGE_PART.TOOL_CALL,
+  );
+  if (!toolCall) return { settled: true, ...(atMs !== undefined ? { atMs } : undefined) };
+  const name = text(toolCall.toolName);
+  const input = isRecord(toolCall.input) ? toolCall.input : undefined;
+  const detail = input
+    ? grokToolInputDetail(input, GROK_ADAPTER_DEFAULTS.MAXIMUM_ACTIVITY_LENGTH)
+    : undefined;
+  return {
+    settled: false,
+    ...(name ? { activity: detail ? `${name}: ${detail}` : name } : undefined),
+    ...(atMs !== undefined ? { atMs } : undefined),
+  };
+}
+
+function snapshotFromSessionRow(row: WireRecord): GrokDatabaseSessionSnapshot | undefined {
+  const providerSessionId = textFromRow(row, GROK_SESSION_COLUMN.ID);
+  if (!providerSessionId) return undefined;
+  return {
+    providerSessionId,
+    title: textFromRow(row, GROK_SESSION_COLUMN.TITLE),
+    recap: textFromRow(row, GROK_SESSION_COLUMN.RECAP_TEXT),
+    model: textFromRow(row, GROK_SESSION_COLUMN.MODEL),
+    directory: textFromRow(row, GROK_SESSION_COLUMN.CWD_LAST),
+    observedAt: Math.max(
+      timestampMsFromColumn(textFromRow(row, GROK_SESSION_COLUMN.UPDATED_AT)) ?? 0,
+      timestampMsFromColumn(textFromRow(row, GROK_SESSION_COLUMN.CREATED_AT)) ?? 0,
+    ),
+  };
+}
+
+function observationFromSnapshot(
+  snapshot: GrokDatabaseSessionSnapshot,
+  now: number,
+  activeSessionFreshnessMs: number,
+): ProviderSessionObservation {
+  const workspace = workspaceLabel(snapshot.directory);
+  const observedAt = Math.max(snapshot.observedAt, snapshot.turn?.atMs ?? 0);
+  const settled = snapshot.turn?.settled === true;
+  const status = localSessionStatus(
+    settled ? SESSION_STATUS.WAITING : SESSION_STATUS.WORKING,
+    observedAt,
+    now,
+    activeSessionFreshnessMs,
+  );
+  return {
+    providerSessionId: snapshot.providerSessionId,
+    title: oneLine(snapshot.title, maximumSessionTitleLength) ?? workspace,
+    status,
+    observedAt,
+    // The recap the CLI wrote itself is reported only behind a settled turn:
+    // while a newer turn runs, it describes the turn before and would pose
+    // as an outcome the session has not reached.
+    ...(settled && snapshot.recap
+      ? { recap: oneLine(snapshot.recap, maximumSessionRecapLength) }
+      : undefined),
+    ...(snapshot.directory ? { directory: snapshot.directory } : undefined),
+    detail: {
+      ...(snapshot.turn?.activity ? { activity: snapshot.turn.activity } : undefined),
+      repository: workspace,
+      ...(snapshot.model ? { model: snapshot.model } : undefined),
+    },
+  };
+}
+
+/**
+ * Observes the Grok Build sessions on this machine from the state the CLI
+ * already writes for itself: the SQLite database every install since 1.1.x
+ * keeps, or the per-session directories of the releases before it. It runs
+ * no server, needs no credential, registers no hook, and opens everything
+ * read-only.
+ */
+export class GrokBuildSessionAdapter extends LocalSessionAdapter {
+  readonly provider = GROK_BUILD_PROVIDER;
+
+  readonly #grokHome: string;
+  readonly #sqlite: SqliteModuleLoader;
+  readonly #transcriptMaximumRenderedLength: number | undefined;
+  readonly #legacyStore: GrokBuildLegacySessionStore;
+
+  constructor(options: GrokBuildAdapterOptions = {}) {
+    super(options);
+    this.#grokHome = options.grokHome ?? defaultGrokBuildHome();
+    this.#sqlite = options.sqlite ?? defaultSqliteModule;
+    this.#transcriptMaximumRenderedLength = options.transcriptMaximumRenderedLength;
+    this.#legacyStore = new GrokBuildLegacySessionStore(this.#grokHome, options);
+  }
+
+  async observe(): Promise<readonly ProviderSessionObservation[]> {
+    const database = await openReadOnlyDatabase(
+      this.#sqlite,
+      path.join(this.#grokHome, GROK_DATABASE_FILE),
+    );
+    if (database) {
+      let snapshots: GrokDatabaseSessionSnapshot[] | undefined;
+      let now = 0;
+      try {
+        now = this.observationTime();
+        snapshots = this.#databaseSnapshots(database);
+      } finally {
+        database.close();
+      }
+      // A database whose schema was unusable answers nothing; the legacy
+      // directories may still answer.
+      if (snapshots !== undefined) {
+        return snapshots.map((snapshot) =>
+          observationFromSnapshot(snapshot, now, this.activeSessionFreshnessMs),
+        );
+      }
+    }
+    return this.#legacyStore.observe();
+  }
 
   override readTranscript(providerSessionId: string): Promise<string | undefined> {
     return readGrokBuildSessionTranscript({
       grokHome: this.#grokHome,
       providerSessionId,
+      sqlite: this.#sqlite,
       maximumRenderedLength: this.#transcriptMaximumRenderedLength,
     });
+  }
+
+  /** The session rows, or nothing when the query does not fit this database. */
+  #databaseSnapshots(database: SqliteDatabase): GrokDatabaseSessionSnapshot[] | undefined {
+    let rows: WireRecord[];
+    try {
+      rows = database.prepare(GROK_SESSION_QUERY).all().filter(isRecord);
+    } catch (error) {
+      if (error instanceof Error && canIgnoreSqliteError(error)) return undefined;
+      throw error;
+    }
+    const snapshots = rows
+      .map(snapshotFromSessionRow)
+      .filter((snapshot): snapshot is GrokDatabaseSessionSnapshot => snapshot !== undefined);
+    // Every reported session gets its turn read, because a session without
+    // one would default to working on freshness alone — inventing live work
+    // for a row whose turn actually settled. Each read is an indexed point
+    // query against one session's id, not a scan.
+    for (const snapshot of snapshots) {
+      snapshot.turn = this.#turnFor(database, snapshot.providerSessionId);
+    }
+    return snapshots;
+  }
+
+  /** The newest message's bookkeeping, or nothing this build can read. */
+  #turnFor(database: SqliteDatabase, providerSessionId: string): GrokDatabaseTurn | undefined {
+    try {
+      const row = database
+        .prepare(GROK_LAST_MESSAGE_QUERY)
+        .all(providerSessionId)
+        .filter(isRecord)[0];
+      return row ? turnFromMessageRow(row) : undefined;
+    } catch (error) {
+      if (error instanceof Error && canIgnoreSqliteError(error)) return undefined;
+      throw error;
+    }
   }
 }

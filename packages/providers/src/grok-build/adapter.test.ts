@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
 import { SESSION_STATUS } from "@sidecar/session";
 import type { ParsedJsonObject } from "@sidecar/wire/testing";
@@ -399,4 +400,237 @@ test("answers every write as unsupported", async (t) => {
     "unsupported",
   );
   assert.equal(adapter.workspaceProjects().length, 0);
+});
+
+interface DatabaseSession {
+  id: string;
+  title?: string;
+  recapText?: string;
+  model?: string;
+  cwd?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  messages?: readonly { role: string; message: ParsedJsonObject; createdAt?: string }[];
+}
+
+function writeDatabase(grokHome: string, sessions: readonly DatabaseSession[]): void {
+  const database = new DatabaseSync(path.join(grokHome, "grok.db"));
+  database.exec(`
+    CREATE TABLE workspaces (
+      id TEXT PRIMARY KEY,
+      scope_key TEXT NOT NULL UNIQUE,
+      canonical_path TEXT NOT NULL,
+      git_root TEXT,
+      display_name TEXT NOT NULL,
+      last_seen_at TEXT NOT NULL
+    ) STRICT;
+    CREATE TABLE sessions (
+      id TEXT PRIMARY KEY,
+      workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      title TEXT,
+      recap_text TEXT,
+      recap_model TEXT,
+      recap_updated_at TEXT,
+      model TEXT NOT NULL,
+      mode TEXT NOT NULL,
+      cwd_at_start TEXT NOT NULL,
+      cwd_last TEXT NOT NULL,
+      status TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    ) STRICT;
+    CREATE TABLE messages (
+      session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      seq INTEGER NOT NULL,
+      role TEXT NOT NULL,
+      message_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (session_id, seq)
+    ) STRICT;
+    INSERT INTO workspaces VALUES
+      ('workspace-1', '/Users/test/luke', '/Users/test/luke', NULL, 'luke', '2026-08-20T11:00:00.000Z');
+  `);
+  const insertSession = database.prepare(`
+    INSERT INTO sessions VALUES (?, 'workspace-1', ?, ?, NULL, NULL, ?, 'agent', ?, ?, 'active', ?, ?)
+  `);
+  const insertMessage = database.prepare("INSERT INTO messages VALUES (?, ?, ?, ?, ?)");
+  for (const session of sessions) {
+    const cwd = session.cwd ?? "/Users/test/luke";
+    insertSession.run(
+      session.id,
+      session.title ?? null,
+      session.recapText ?? null,
+      session.model ?? "grok-4.6",
+      cwd,
+      cwd,
+      session.createdAt ?? "2026-08-20T11:50:00.000Z",
+      session.updatedAt ?? "2026-08-20T11:59:00.000Z",
+    );
+    (session.messages ?? []).forEach((message, index) => {
+      insertMessage.run(
+        session.id,
+        index + 1,
+        message.role,
+        JSON.stringify(message.message),
+        message.createdAt ?? session.updatedAt ?? "2026-08-20T11:59:00.000Z",
+      );
+    });
+  }
+  database.close();
+}
+
+test("observes a settled database session with its title, model, and recap", async (t) => {
+  const grokHome = await temporaryGrokHome(t);
+  writeDatabase(grokHome, [
+    {
+      id: "a6a2199d2d4b",
+      title: "Fix the flaky check",
+      recapText: "Done; the tests pass.",
+      model: "grok-4.3",
+      messages: [
+        { role: "user", message: { role: "user", content: SECRET_TRANSCRIPT_TEXT } },
+        {
+          role: "assistant",
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: SECRET_TRANSCRIPT_TEXT }],
+          },
+        },
+      ],
+    },
+  ]);
+
+  const adapter = new GrokBuildSessionAdapter({ grokHome, now: () => TEST_TIME });
+  const observations = await adapter.observe();
+
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0]?.providerSessionId, "a6a2199d2d4b");
+  assert.equal(observations[0]?.title, "Fix the flaky check");
+  assert.equal(observations[0]?.status, SESSION_STATUS.WAITING);
+  assert.equal(observations[0]?.observedAt, Date.parse("2026-08-20T11:59:00.000Z"));
+  assert.equal(observations[0]?.recap, "Done; the tests pass.");
+  assert.equal(observations[0]?.directory, "/Users/test/luke");
+  assert.equal(observations[0]?.detail?.repository, "luke");
+  assert.equal(observations[0]?.detail?.model, "grok-4.3");
+  assert.ok(!JSON.stringify(observations).includes(SECRET_TRANSCRIPT_TEXT));
+});
+
+test("reports a database session's open tool call as working, named by its input", async (t) => {
+  const grokHome = await temporaryGrokHome(t);
+  writeDatabase(grokHome, [
+    {
+      id: "b71ca44c1918",
+      title: "Clean the scratch space",
+      // The recap the previous turn wrote must not pose as this turn's outcome.
+      recapText: SECRET_TRANSCRIPT_TEXT,
+      messages: [
+        { role: "user", message: { role: "user", content: SECRET_TRANSCRIPT_TEXT } },
+        {
+          role: "assistant",
+          message: {
+            role: "assistant",
+            content: [
+              {
+                type: "tool-call",
+                toolCallId: "call-1",
+                toolName: "bash",
+                input: { command: "rm -rf /tmp/scratch" },
+              },
+            ],
+          },
+        },
+      ],
+    },
+  ]);
+
+  const adapter = new GrokBuildSessionAdapter({ grokHome, now: () => TEST_TIME });
+  const observations = await adapter.observe();
+
+  assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
+  assert.equal(observations[0]?.detail?.activity, "bash: rm -rf /tmp/scratch");
+  assert.equal(observations[0]?.recap, undefined);
+  assert.ok(!JSON.stringify(observations).includes(SECRET_TRANSCRIPT_TEXT));
+});
+
+test("keeps a fresh database turn working and decays a quiet one to unknown", async (t) => {
+  const grokHome = await temporaryGrokHome(t);
+  writeDatabase(grokHome, [
+    {
+      id: "c3c4070829ed",
+      updatedAt: "2026-08-20T11:59:30.000Z",
+      messages: [
+        {
+          role: "user",
+          message: { role: "user", content: SECRET_TRANSCRIPT_TEXT },
+          createdAt: "2026-08-20T11:59:30.000Z",
+        },
+      ],
+    },
+    {
+      id: "d4d5181930fe",
+      createdAt: "2026-08-20T08:59:00.000Z",
+      updatedAt: "2026-08-20T09:00:00.000Z",
+      messages: [
+        {
+          role: "user",
+          message: { role: "user", content: SECRET_TRANSCRIPT_TEXT },
+          createdAt: "2026-08-20T09:00:00.000Z",
+        },
+      ],
+    },
+  ]);
+
+  const adapter = new GrokBuildSessionAdapter({
+    grokHome,
+    now: () => TEST_TIME,
+    activeSessionFreshnessMs: 15 * 60 * 1000,
+  });
+  const observations = await adapter.observe();
+  const byId = new Map(
+    observations.map((observation) => [observation.providerSessionId, observation]),
+  );
+
+  assert.equal(byId.get("c3c4070829ed")?.status, SESSION_STATUS.WORKING);
+  assert.equal(byId.get("d4d5181930fe")?.status, SESSION_STATUS.UNKNOWN);
+});
+
+test("titles an untitled database session by its working directory", async (t) => {
+  const grokHome = await temporaryGrokHome(t);
+  writeDatabase(grokHome, [
+    {
+      id: "e5e6292a41af",
+      cwd: "/Users/test/other-repo",
+      createdAt: "2026-08-20T08:59:00.000Z",
+      updatedAt: "2026-08-20T09:00:00.000Z",
+    },
+  ]);
+
+  const adapter = new GrokBuildSessionAdapter({ grokHome, now: () => TEST_TIME });
+  const observations = await adapter.observe();
+
+  assert.equal(observations[0]?.title, "other-repo");
+  assert.equal(observations[0]?.detail?.repository, "other-repo");
+  // No stored message: nothing marks the turn settled, so recency decides.
+  assert.equal(observations[0]?.status, SESSION_STATUS.UNKNOWN);
+});
+
+test("answers from the database alone once the CLI has written one", async (t) => {
+  const grokHome = await temporaryGrokHome(t);
+  writeDatabase(grokHome, [{ id: "f6f73a3b52c0", title: "The database session" }]);
+  await writeSession(
+    grokHome,
+    LUKE_PROJECT_DIRECTORY,
+    SESSION_ID.SETTLED,
+    {
+      summary: summaryDocument(SESSION_ID.SETTLED, "The legacy session"),
+      events: [event("2026-08-20T11:59:00.000Z", "turn_ended", { outcome: "completed" })],
+    },
+    TEST_TIME - 1_000,
+  );
+
+  const adapter = new GrokBuildSessionAdapter({ grokHome, now: () => TEST_TIME });
+  const observations = await adapter.observe();
+
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0]?.providerSessionId, "f6f73a3b52c0");
 });

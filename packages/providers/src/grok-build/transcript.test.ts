@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
 import type { ParsedJsonObject } from "@sidecar/wire/testing";
 import { readGrokBuildSessionTranscript } from "./transcript.js";
@@ -123,6 +124,93 @@ test("cuts a long conversation from the front and says so", async (t) => {
   assert.ok(transcript.startsWith("[earlier turns omitted]\n"));
   assert.ok(transcript.endsWith("Grok: Second answer, kept."));
   assert.ok(!transcript.includes("First question"));
+});
+
+function writeDatabaseSession(
+  grokHome: string,
+  sessionId: string,
+  messages: readonly { role: string; message: ParsedJsonObject }[],
+): void {
+  const database = new DatabaseSync(path.join(grokHome, "grok.db"));
+  database.exec(`
+    CREATE TABLE sessions (id TEXT PRIMARY KEY) STRICT;
+    CREATE TABLE messages (
+      session_id TEXT NOT NULL,
+      seq INTEGER NOT NULL,
+      role TEXT NOT NULL,
+      message_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (session_id, seq)
+    ) STRICT;
+  `);
+  const insert = database.prepare("INSERT INTO messages VALUES (?, ?, ?, ?, ?)");
+  messages.forEach((message, index) => {
+    insert.run(
+      sessionId,
+      index + 1,
+      message.role,
+      JSON.stringify(message.message),
+      "2026-08-20T11:59:00.000Z",
+    );
+  });
+  database.close();
+}
+
+test("renders a database conversation with its tool calls and answers", async (t) => {
+  const grokHome = await temporaryGrokHome(t);
+  writeDatabaseSession(grokHome, "a6a2199d2d4b", [
+    { role: "user", message: { role: "user", content: "Run the checks." } },
+    {
+      role: "assistant",
+      message: {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "call-1",
+            toolName: "bash",
+            input: { command: "./scripts/check.sh" },
+          },
+        ],
+      },
+    },
+    {
+      role: "tool",
+      message: {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-1",
+            toolName: "bash",
+            output: { type: "json", value: { success: true, output: "All checks passed." } },
+          },
+        ],
+      },
+    },
+    {
+      role: "assistant",
+      message: {
+        role: "assistant",
+        content: [{ type: "text", text: "Everything is green." }],
+      },
+    },
+  ]);
+
+  const transcript = await readGrokBuildSessionTranscript({
+    grokHome,
+    providerSessionId: "a6a2199d2d4b",
+  });
+
+  assert.equal(
+    transcript,
+    [
+      "Developer: Run the checks.",
+      "→ bash: ./scripts/check.sh",
+      "← All checks passed.",
+      "Grok: Everything is green.",
+    ].join("\n"),
+  );
 });
 
 test("names nothing for an id outside the shape the CLI mints", async (t) => {

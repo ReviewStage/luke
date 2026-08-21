@@ -1,5 +1,5 @@
 import path from "node:path";
-import { oneLine, text, type WireRecord } from "@sidecar/wire";
+import { isRecord, oneLine, recordFromJsonLine, text, type WireRecord } from "@sidecar/wire";
 import {
   readDirectory,
   readTail,
@@ -7,31 +7,47 @@ import {
   tailRecords,
 } from "../shared/local-session-adapter.js";
 import {
+  canIgnoreSqliteError,
+  defaultSqliteModule,
+  openReadOnlyDatabase,
+  type SqliteDatabase,
+  type SqliteModuleLoader,
+  textFromRow,
+} from "../shared/local-sqlite.js";
+import {
   boundedTranscript,
   TRANSCRIPT_BOUNDS,
   transcriptLine,
 } from "../shared/local-transcript.js";
 import {
   defaultGrokBuildHome,
+  GROK_DATABASE_FILE,
+  GROK_MESSAGE_COLUMN,
+  GROK_MESSAGE_PART,
+  GROK_MESSAGE_ROLE,
   GROK_SESSION_FILE,
   GROK_SESSIONS_DIRECTORY,
   GROK_SETTLED_TOOL_STATUSES,
   GROK_STOP_REASON,
   GROK_UPDATE_KIND,
   grokContentText,
+  grokMessageParts,
+  grokMessageText,
   grokToolDetail,
+  grokToolInputDetail,
   grokToolName,
+  grokToolResultText,
   grokUpdateFrom,
   grokUpdateKind,
 } from "./records.js";
 
 /**
  * On-demand reading of one Grok Build session's transcript, for a question
- * the developer just asked. The `updates.jsonl` recording under the CLI's own
- * sessions store is the transcript — the same file the adapter reads its tail
- * from, here read deeper and rendered into a bounded conversation, and
- * discarded. Nothing here is retained, watched, or written; a session is
- * re-read the next time it is asked about.
+ * the developer just asked. The conversation the CLI already stores is the
+ * transcript — the `messages` rows of its database, or the `updates.jsonl`
+ * recording of the directory store before it — read bounded, rendered into a
+ * bounded conversation, and discarded. Nothing here is retained, watched, or
+ * written; a session is re-read the next time it is asked about.
  */
 
 const GROK_SPEAKER_NAME = "Grok";
@@ -49,6 +65,91 @@ export interface GrokBuildTranscriptRequest {
   providerSessionId: string;
   readTailBytes?: number;
   maximumRenderedLength?: number;
+  sqlite?: SqliteModuleLoader;
+}
+
+/** How many stored messages one transcript read may load, newest first. */
+const GROK_TRANSCRIPT_MESSAGE_LIMIT = 200;
+
+const GROK_TRANSCRIPT_MESSAGES_QUERY = `
+  SELECT role, message_json
+  FROM messages
+  WHERE session_id = ?
+  ORDER BY seq DESC
+  LIMIT ?
+`;
+
+function linesFromStoredMessage(role: string | undefined, message: WireRecord): string[] {
+  if (role === GROK_MESSAGE_ROLE.USER) {
+    const prompt = oneLine(grokMessageText(message), TRANSCRIPT_BOUNDS.MAXIMUM_MESSAGE_LENGTH);
+    return prompt ? [transcriptLine.developer(prompt)] : [];
+  }
+  if (role === GROK_MESSAGE_ROLE.ASSISTANT) {
+    const lines: string[] = [];
+    const words = oneLine(grokMessageText(message), TRANSCRIPT_BOUNDS.MAXIMUM_MESSAGE_LENGTH);
+    if (words) lines.push(transcriptLine.agent(GROK_SPEAKER_NAME, words));
+    for (const part of grokMessageParts(message)) {
+      if (text(part.type) !== GROK_MESSAGE_PART.TOOL_CALL) continue;
+      const name = text(part.toolName);
+      if (!name) continue;
+      const input = isRecord(part.input) ? part.input : undefined;
+      const detail = input
+        ? grokToolInputDetail(input, TRANSCRIPT_BOUNDS.MAXIMUM_TOOL_LENGTH)
+        : undefined;
+      lines.push(transcriptLine.toolCall(name, detail));
+    }
+    return lines;
+  }
+  if (role === GROK_MESSAGE_ROLE.TOOL) {
+    return grokMessageParts(message)
+      .filter((part) => text(part.type) === GROK_MESSAGE_PART.TOOL_RESULT)
+      .map((part) => oneLine(grokToolResultText(part), TRANSCRIPT_BOUNDS.MAXIMUM_TOOL_LENGTH))
+      .filter((answer): answer is string => answer !== undefined)
+      .map((answer) => transcriptLine.toolResult(answer));
+  }
+  return [];
+}
+
+/**
+ * The session's recent conversation out of the database, rendered — or
+ * nothing when no database exists, it holds no such session, or its schema is
+ * not one this build reads.
+ */
+async function databaseTranscript(
+  grokHome: string,
+  providerSessionId: string,
+  sqlite: SqliteModuleLoader,
+  maximumRenderedLength: number,
+): Promise<string | undefined> {
+  const database = await openReadOnlyDatabase(sqlite, path.join(grokHome, GROK_DATABASE_FILE));
+  if (!database) return undefined;
+  try {
+    const rows = messageRows(database, providerSessionId);
+    if (rows.length === 0) return undefined;
+    const lines = [...rows]
+      .reverse()
+      .flatMap((row) =>
+        linesFromStoredMessage(
+          textFromRow(row, GROK_MESSAGE_COLUMN.ROLE),
+          recordFromJsonLine(textFromRow(row, GROK_MESSAGE_COLUMN.MESSAGE_JSON) ?? "") ?? {},
+        ),
+      );
+    return boundedTranscript(lines, maximumRenderedLength);
+  } finally {
+    database.close();
+  }
+}
+
+function messageRows(database: SqliteDatabase, providerSessionId: string): WireRecord[] {
+  try {
+    return database
+      .prepare(GROK_TRANSCRIPT_MESSAGES_QUERY)
+      .all(providerSessionId, GROK_TRANSCRIPT_MESSAGE_LIMIT)
+      .filter(isRecord);
+  } catch (error) {
+    if (error instanceof Error && canIgnoreSqliteError(error)) return [];
+    throw error;
+  }
 }
 
 /** One message accumulated from its stream chunks, or one tool exchange. */
@@ -165,19 +266,27 @@ async function transcriptFilePath(
 
 /**
  * Reads one session's recent transcript into a bounded rendering, or nothing
- * when no recording exists for that id.
+ * when no store holds a recording for that id: the database's own rows when
+ * it knows the session, the legacy directory recording otherwise.
  */
 export async function readGrokBuildSessionTranscript(
   request: GrokBuildTranscriptRequest,
 ): Promise<string | undefined> {
   const grokHome = request.grokHome ?? defaultGrokBuildHome();
+  const maximumRenderedLength =
+    request.maximumRenderedLength ?? TRANSCRIPT_BOUNDS.MAXIMUM_RENDERED_LENGTH;
+  const fromDatabase = await databaseTranscript(
+    grokHome,
+    request.providerSessionId,
+    request.sqlite ?? defaultSqliteModule,
+    maximumRenderedLength,
+  );
+  if (fromDatabase !== undefined) return fromDatabase;
+
   const filePath = await transcriptFilePath(grokHome, request.providerSessionId);
   if (!filePath) return undefined;
 
   const tail = await readTail(filePath, request.readTailBytes ?? TRANSCRIPT_BOUNDS.READ_TAIL_BYTES);
   const lines = renderUpdates(tailRecords(tail));
-  return boundedTranscript(
-    lines,
-    request.maximumRenderedLength ?? TRANSCRIPT_BOUNDS.MAXIMUM_RENDERED_LENGTH,
-  );
+  return boundedTranscript(lines, maximumRenderedLength);
 }

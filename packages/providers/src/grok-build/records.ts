@@ -10,15 +10,18 @@ import {
 } from "@sidecar/wire";
 
 /**
- * The vocabulary of Grok Build's session store, shared by the adapter that
- * observes it and the transcript read that renders it. The CLI keeps each
- * session as a directory under `~/.grok/sessions/<percent-encoded-cwd>/`,
- * holding three recordings this code reads: `summary.json`, the session's own
- * metadata (title, model, working directory, clocks); `events.jsonl`, the
- * CLI's append-only turn lifecycle (phases, permission prompts, turn
- * outcomes), which is what answers whose move it is; and `updates.jsonl`, the
- * conversation itself as ACP `session/update` notifications, which is what a
- * recap or a transcript rendering is read from.
+ * The vocabulary of Grok Build's session stores, shared by the adapter that
+ * observes them and the transcript read that renders them. The CLI has kept
+ * sessions in two shapes. Since 1.1.x everything lives in one SQLite database,
+ * `~/.grok/grok.db`: a `sessions` row carries the title, the recap the CLI
+ * writes itself, the model, and the working directory, and the newest
+ * `messages` row answers whose move it is. The 1.0.x releases kept each
+ * session as a directory under `~/.grok/sessions/<percent-encoded-cwd>/`
+ * instead, holding three recordings: `summary.json`, the session's metadata;
+ * `events.jsonl`, the turn lifecycle (phases, permission prompts, turn
+ * outcomes); and `updates.jsonl`, the conversation as ACP `session/update`
+ * notifications. A machine whose CLI has written the database answers from
+ * it alone; the directories are read only where no database exists.
  */
 
 /**
@@ -28,6 +31,9 @@ import {
  */
 const GROK_ENVIRONMENT = { HOME: "GROK_HOME" } as const;
 const GROK_DIRECTORY_NAME = ".grok";
+
+/** Where the CLI keeps every session since 1.1.x. */
+export const GROK_DATABASE_FILE = "grok.db";
 
 export const GROK_SESSIONS_DIRECTORY = "sessions";
 
@@ -145,7 +151,74 @@ export function grokToolName(update: WireRecord): string | undefined {
 export function grokToolDetail(update: WireRecord, maximumLength: number): string | undefined {
   const rawInput = update.rawInput;
   if (!isRecord(rawInput)) return undefined;
-  return GROK_TOOL_INPUT_KEY.map((key) => oneLine(text(rawInput[key]), maximumLength)).find(
+  return grokToolInputDetail(rawInput, maximumLength);
+}
+
+export function grokToolInputDetail(input: WireRecord, maximumLength: number): string | undefined {
+  return GROK_TOOL_INPUT_KEY.map((key) => oneLine(text(input[key]), maximumLength)).find(
     (candidate) => candidate !== undefined,
   );
+}
+
+/** The columns this code reads off the database's `sessions` rows. */
+export const GROK_SESSION_COLUMN = {
+  ID: "id",
+  TITLE: "title",
+  RECAP_TEXT: "recap_text",
+  MODEL: "model",
+  CWD_LAST: "cwd_last",
+  CREATED_AT: "created_at",
+  UPDATED_AT: "updated_at",
+} as const;
+
+/** The columns this code reads off the database's `messages` rows. */
+export const GROK_MESSAGE_COLUMN = {
+  ROLE: "role",
+  MESSAGE_JSON: "message_json",
+  CREATED_AT: "created_at",
+} as const;
+
+/** The roles the database's `messages` rows carry that this code reads. */
+export const GROK_MESSAGE_ROLE = {
+  USER: "user",
+  ASSISTANT: "assistant",
+  TOOL: "tool",
+} as const;
+
+/** The content-part kinds inside a stored message that this code reads. */
+export const GROK_MESSAGE_PART = {
+  TEXT: "text",
+  TOOL_CALL: "tool-call",
+  TOOL_RESULT: "tool-result",
+} as const;
+
+/** The parts of a stored message's content, or none for plain-string content. */
+export function grokMessageParts(message: WireRecord): WireRecord[] {
+  return Array.isArray(message.content) ? message.content.filter(isRecord) : [];
+}
+
+/** The words of a stored message: its string content, or its text parts. */
+export function grokMessageText(message: WireRecord): string | undefined {
+  if (isWireString(message.content)) return text(message.content);
+  const words = grokMessageParts(message)
+    .filter((part) => text(part.type) === GROK_MESSAGE_PART.TEXT)
+    .map((part) => text(part.text))
+    .filter((part): part is string => part !== undefined);
+  return words.length > 0 ? words.join(" ") : undefined;
+}
+
+/**
+ * The words a stored tool result carries. The CLI wraps a result as
+ * `output: { type, value }`, where the value is the tool's own JSON — a
+ * string, or an object whose `output` field holds the printable answer. A
+ * structured value with no such field is a shape this rendering cannot carry
+ * faithfully, so it takes no words.
+ */
+export function grokToolResultText(part: WireRecord): string | undefined {
+  const output = part.output;
+  if (!isRecord(output)) return undefined;
+  const value = output.value;
+  if (isWireString(value)) return text(value);
+  if (isRecord(value)) return text(value.output);
+  return undefined;
 }

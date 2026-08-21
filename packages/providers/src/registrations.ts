@@ -180,8 +180,9 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
         now,
       ),
     },
-    // Grok Build's own lifecycle log already records turn boundaries and open
-    // permission prompts, so its adapter needs no observation hook.
+    // Grok Build's own stores already say whose move it is — the database's
+    // newest message, or the 1.0.x lifecycle log with its permission prompts
+    // — so its adapter needs no observation hook.
     [PROVIDER_ID.GROK_BUILD]: { adapter: new GrokBuildSessionAdapter() },
     [PROVIDER_ID.JULES]: {
       adapter: new JulesSessionAdapter({
