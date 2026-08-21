@@ -4,6 +4,8 @@ import { pathToFileURL } from "node:url";
 import { AccountClient, AccountSessionManager, accountGateOpen } from "@sidecar/account";
 import {
   PRODUCT_EVENT,
+  PRODUCT_SUPERSET_ACT,
+  PRODUCT_UPDATE_ACT,
   ProductEventSender,
   productSessionCountBucket,
   type RecordProductEvent,
@@ -99,6 +101,7 @@ import {
   type MicrophoneStatus,
   type ObservedAccountCalendars,
   type OutputAudioState,
+  type SessionReplayBootstrap,
   SUPERSET_SIGN_IN_STAGE,
   SUPERSET_WORKSPACE_PROVIDER_ID,
 } from "#shared/contracts";
@@ -232,6 +235,7 @@ const accountSession = new AccountSessionManager({
     account = next;
     broadcastAccount();
     void broadcastVoiceAvailability();
+    void broadcastSessionReplay();
     // The transition alone: which provider signed in is already on the person
     // from the browser's own sign-in, so nothing about it needs to travel again.
     if (signedIn && !wasSignedIn) productEvents.record(PRODUCT_EVENT.ACCOUNT_SIGN_IN, {});
@@ -450,6 +454,51 @@ const productEvents = new ProductEventSender({
 const recordProductEvent: RecordProductEvent = (name, properties) =>
   productEvents.record(name, properties);
 /**
+ * What this run can tell the renderer about recording: whether it is the kind
+ * of run that may record at all, which build it is, and whom a recording
+ * would belong to. The two switches are the renderer's own to read, because it
+ * is told when they move; this is re-answered whenever the account moves,
+ * which is the other half of the same question.
+ *
+ * `sendsNetwork` is the same suppression the event sender takes — recording
+ * must be off wherever counting is — and an account is required because a
+ * recording under no person could neither join the counts nor be erased with
+ * them.
+ */
+async function sessionReplayBootstrap(): Promise<SessionReplayBootstrap> {
+  // The in-memory snapshot leads the stored account, and this reads the
+  // snapshot first because of it: a sign-out reports its transition before it
+  // clears the store, so a bootstrap that asked the store alone would answer
+  // with the id of the person who has just left — and `applySessionReplay`
+  // would see nothing change and leave the recording running.
+  const signedIn = account.status === ACCOUNT_STATUS.SIGNED_IN;
+  const accountId = signedIn ? (await settingsStore.readAccount())?.id : undefined;
+  return {
+    permitted: runMode.sendsNetwork && accountId !== undefined,
+    appVersion: app.getVersion(),
+    ...(accountId ? { accountId } : undefined),
+  };
+}
+
+/**
+ * Stops recording now, ahead of an act that ends the account it is filed
+ * under. Both acts need it and neither can wait for their own transition:
+ * a sign-out reports itself before the store clears, and a deletion awaits
+ * the hosted erasure first — so a broadcast that arrived afterwards would
+ * leave the renderer free to flush recordings under a person who has left,
+ * or one whose erasure is already queued, recreating what was just deleted.
+ *
+ * The generation moves with it, so a read already in flight cannot land
+ * behind this and re-arm what it just stopped.
+ */
+function haltSessionReplay(): void {
+  sessionReplayBroadcastGeneration += 1;
+  panels.broadcast(channels.sessionReplayChanged, {
+    permitted: false,
+    appVersion: app.getVersion(),
+  });
+}
+/**
  * The output's switches as last read, and the helper that reads them. The
  * state lives here rather than in the renderer so bootstrap can carry the
  * answer a push has already delivered; `undefined` is "cannot be read", which
@@ -482,15 +531,25 @@ const supersetSignIn = new SupersetSignIn({
   openExternal: (url) => shell.openExternal(url),
   onChange: (state) => {
     panels.broadcast(channels.supersetSignInChanged, state);
-    if (state.stage === SUPERSET_SIGN_IN_STAGE.CONNECTED) void sessionObservationLoop.refresh();
+    if (state.stage !== SUPERSET_SIGN_IN_STAGE.CONNECTED) return;
+    void sessionObservationLoop.refresh();
+    // The edge into connected, which is where a sign-in actually lands: the
+    // code submission only reaches `exchanging`, and the CLI answers on its
+    // own time. Counted here so a sign-in that failed after the code counts
+    // nothing at all.
+    recordProductEvent(PRODUCT_EVENT.SUPERSET_ACT, {
+      superset_act: PRODUCT_SUPERSET_ACT.SIGN_IN_COMPLETE,
+    });
   },
 });
 const hotkeys = new HotkeyRegistrar({
   registersGlobalKeys: runMode.registersGlobalKeys,
   hasCredentials: () => voiceCapabilities.realtimeCredentials !== undefined,
+  recordProductEvent,
   host: {
     voiceHost: () => panels.voiceHost(),
     displayIdFor: (sender) => panels.displayIdFor(sender),
+    modeFor: (displayId) => panels.modeFor(displayId),
     setMode: (displayId, mode, requestFocus) => {
       panels.setMode(displayId, mode, requestFocus);
     },
@@ -648,6 +707,31 @@ function broadcastAccount(): void {
  */
 async function broadcastVoiceAvailability(): Promise<void> {
   panels.broadcast(channels.settingsChanged, await settingsStore.snapshot());
+}
+
+/**
+ * Tells every panel what an account transition just did to recording, for the
+ * reason directly above and one more.
+ *
+ * A recording belongs to an account: it is filed under the id the counted
+ * events resolve to, and that is what makes deleting the account erase the
+ * recordings with it. So a sign-out must end the recording rather than leave
+ * it running under the account the developer just left, and a sign-in must be
+ * able to start one without waiting for a relaunch — the bootstrap answer was
+ * true only of the account that was signed in when the panel loaded.
+ */
+let sessionReplayBroadcastGeneration = 0;
+
+async function broadcastSessionReplay(): Promise<void> {
+  // Guarded like the workspace projects' broadcast, and for a sharper reason.
+  // The account is read asynchronously, and a sign-out reports the transition
+  // before it clears the stored account — so an in-flight read can still see
+  // the old id, and a late reply would restart recording under the person who
+  // just left, after a newer answer had already stopped it.
+  const generation = ++sessionReplayBroadcastGeneration;
+  const replay = await sessionReplayBootstrap();
+  if (generation !== sessionReplayBroadcastGeneration) return;
+  panels.broadcast(channels.sessionReplayChanged, replay);
 }
 
 /**
@@ -866,11 +950,15 @@ function registerIpc(): void {
       // shown, or held quiet, before the account gate opens.
       calendars: accountCapabilitiesActive() ? observedCalendars : [],
       meetingQuiet: accountCapabilitiesActive() && meetingQuietActive,
+      sessionReplay: await sessionReplayBootstrap(),
       settings: await settingsStore.snapshot(),
     };
   });
   ipcMain.handle(channels.beginSupersetSignIn, async (event) => {
     if (!trustedSender(event)) throw new Error("Untrusted renderer");
+    recordProductEvent(PRODUCT_EVENT.SUPERSET_ACT, {
+      superset_act: PRODUCT_SUPERSET_ACT.SIGN_IN_START,
+    });
     return supersetSignIn.begin();
   });
   ipcMain.handle(channels.submitSupersetSignInCode, (event, code: UnparsedWireValue) => {
@@ -887,7 +975,11 @@ function registerIpc(): void {
     if (trustedSender(event)) supersetSignIn.reopen();
   });
   ipcMain.on(channels.cancelSupersetSignIn, (event) => {
-    if (trustedSender(event)) supersetSignIn.cancel();
+    if (!trustedSender(event)) return;
+    supersetSignIn.cancel();
+    recordProductEvent(PRODUCT_EVENT.SUPERSET_ACT, {
+      superset_act: PRODUCT_SUPERSET_ACT.SIGN_IN_CANCEL,
+    });
   });
   ipcMain.handle(channels.disconnectSuperset, async (event) => {
     if (!trustedSender(event)) throw new Error("Untrusted renderer");
@@ -896,10 +988,21 @@ function registerIpc(): void {
     // login is gone; the refreshed pass retires the rows the login was buying.
     supersetSignIn.cancel();
     void sessionObservationLoop.refresh();
+    recordProductEvent(PRODUCT_EVENT.SUPERSET_ACT, {
+      superset_act: PRODUCT_SUPERSET_ACT.DISCONNECT,
+    });
     return undefined;
   });
 
-  registerAccountSessionIpc({ ipcMain, trustedSender, accountSession });
+  registerAccountSessionIpc({
+    ipcMain,
+    trustedSender,
+    accountSession,
+    recordProductEvent,
+    flushProductEvents: () => productEvents.flush(),
+    haltSessionReplay,
+    resumeSessionReplay: () => void broadcastSessionReplay(),
+  });
 
   registerWindowSurfaceIpc({
     ipcMain,
@@ -908,6 +1011,7 @@ function registerIpc(): void {
     requestMicrophone,
     microphoneRoute: () => microphoneRoute,
     microphoneRouteWatcher: () => microphoneRouteWatcher,
+    recordProductEvent,
   });
 
   registerSettingsRowsIpc({
@@ -961,6 +1065,7 @@ function registerIpc(): void {
   // with the standing snapshot rather than make a request it must not.
   ipcMain.handle(channels.checkForUpdates, (event) => {
     if (!trustedSender(event)) throw new Error("Untrusted renderer");
+    recordProductEvent(PRODUCT_EVENT.UPDATE_ACT, { update_act: PRODUCT_UPDATE_ACT.CHECK });
     return updateService.check();
   });
 
@@ -969,6 +1074,11 @@ function registerIpc(): void {
   // stages the swap — so a stray send installs nothing.
   ipcMain.on(channels.installUpdate, (event) => {
     if (!trustedSender(event)) return;
+    // Counted before the install is asked for, and flushed with it: the act
+    // schedules a restart, and a count queued behind that would be dropped by
+    // the quit rather than sent.
+    recordProductEvent(PRODUCT_EVENT.UPDATE_ACT, { update_act: PRODUCT_UPDATE_ACT.INSTALL });
+    void productEvents.flush();
     updateService.install();
   });
 
@@ -978,6 +1088,7 @@ function registerIpc(): void {
   // steer where a press goes.
   ipcMain.on(channels.openLatestRelease, (event) => {
     if (!trustedSender(event)) return;
+    recordProductEvent(PRODUCT_EVENT.UPDATE_ACT, { update_act: PRODUCT_UPDATE_ACT.RELEASE_OPEN });
     void shell.openExternal(UPDATE_ENDPOINT.LATEST_RELEASE_PAGE_URL);
   });
 
@@ -1037,7 +1148,16 @@ function registerIpc(): void {
       if (!runMode.sendsNetwork) {
         return { delivered: false, reason: "A fixture run sends nothing." };
       }
-      return feedbackDelivery.deliver(parsed);
+      const result = await feedbackDelivery.deliver(parsed);
+      // The count is of notes that actually reached the founders, and it says
+      // how many images rode along as a rung of the same ladder session counts
+      // travel on — never a filename, a caption, or a word of the note.
+      if (result.delivered) {
+        recordProductEvent(PRODUCT_EVENT.FEEDBACK_SEND, {
+          image_count: productSessionCountBucket(parsed.images.length),
+        });
+      }
+      return result;
     },
   );
 

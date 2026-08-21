@@ -1,3 +1,4 @@
+import { PRODUCT_SURFACE_EVENT } from "@sidecar/analytics";
 import { GOOGLE_CALENDAR_ID, GOOGLE_CALENDAR_NAME } from "@sidecar/calendar/vocabulary";
 import type { CredentialProvider } from "@sidecar/credentials";
 import {
@@ -70,6 +71,7 @@ import {
   VOICE_SOURCE,
   type VoiceSource,
 } from "#shared/contracts";
+import { SETTINGS_VIEW_COUNTED_AS } from "#shared/product-vocabulary";
 import {
   CREDENTIAL_PLACEHOLDER,
   type CredentialEntryControl,
@@ -212,6 +214,7 @@ export interface PreferenceWrites {
   onDuckOtherMediaChange: (enabled: boolean) => Promise<string | undefined>;
   /** Turns the counting of Luke's own feature use on or off. */
   onShareUsageDataChange: (enabled: boolean) => Promise<string | undefined>;
+  onSessionReplayChange: (enabled: boolean) => Promise<string | undefined>;
   /**
    * Chooses which credential Luke speaks and reviews sessions on. The store
    * answers with why when it refuses, and the toggle is where that answer
@@ -954,6 +957,7 @@ function SwitchRow({
   ariaLabel,
   errand,
   changed,
+  disabled,
   onChange,
 }: {
   label: string;
@@ -965,6 +969,12 @@ function SwitchRow({
   errand?: ErrandTarget;
   /** Whether the stored value differs from the default, which earns the mark. */
   changed?: boolean;
+  /**
+   * Whether another switch has already decided this one's answer. Drawn rather
+   * than hidden, so a switch a wider one is holding off still says what it is
+   * and where it stands.
+   */
+  disabled?: boolean;
   onChange: (enabled: boolean) => Promise<string | undefined>;
 }): React.JSX.Element {
   const { busy, rejection, run } = useSettingWrite(onChange);
@@ -985,7 +995,7 @@ function SwitchRow({
           aria-label={ariaLabel ?? label}
           className="switch"
           {...(errand ? errandTargetProps(errand) : undefined)}
-          disabled={busy}
+          disabled={busy || disabled === true}
           onClick={() => run(!checked)}
         >
           <span className="switch-thumb" />
@@ -2308,7 +2318,12 @@ function SettingsNavRow({
       type="button"
       id={settingsNavRowId(view)}
       className="settings-nav"
-      onClick={() => onOpen(view)}
+      onClick={() => {
+        window.sidecar.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.SETTINGS_VIEW_OPEN, {
+          settings_view: SETTINGS_VIEW_COUNTED_AS[view],
+        });
+        onOpen(view);
+      }}
     >
       <span className="settings-nav-mark" aria-hidden="true">
         {page.icon}
@@ -3590,6 +3605,22 @@ function UsageDataSection({
         changed={settings.shareUsageData !== APP_SETTING_DEFAULTS.shareUsageData}
         checked={settings.shareUsageData}
         onChange={preferences.onShareUsageDataChange}
+      />
+      <SwitchRow
+        label="Record my screen in Luke"
+        ariaLabel="Record what Luke's own panel draws, session material included"
+        errand={APP_SETTING_ID.SESSION_REPLAY}
+        // The recording shows the panel as drawn, so the row says what
+        // travels rather than what does not: a switch that named its one
+        // exception would read as though the rest were covered too.
+        detail="A video of the panel: session titles, summaries, and your name. Not what you type."
+        changed={settings.sessionReplay !== APP_SETTING_DEFAULTS.sessionReplay}
+        checked={settings.sessionReplay}
+        // Off is off: the recorder never starts while the counts are not being
+        // sent either, so a row that looked live under a stopped switch would
+        // be describing something that is not happening.
+        disabled={!settings.shareUsageData}
+        onChange={preferences.onSessionReplayChange}
       />
     </section>
   );

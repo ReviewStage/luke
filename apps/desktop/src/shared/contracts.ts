@@ -3,6 +3,7 @@ import {
   type AccountProvider,
   type AccountSnapshot,
 } from "@sidecar/account/snapshot";
+import type { ProductEventPropertiesFor, ProductSurfaceEventName } from "@sidecar/analytics";
 import type { AttentionRequestResult, SessionNoticeAsk } from "@sidecar/attention";
 import type { ObservedAccountCalendars } from "@sidecar/calendar/observation";
 import type { CredentialProviderId } from "@sidecar/credentials";
@@ -367,13 +368,26 @@ export interface AppSettings {
   showOnAllDisplays: boolean;
   /**
    * Whether Luke counts how his own features are used and sends those counts
-   * to his own service. On by default, and the only thing that ever leaves
-   * unbidden: every event name and every property value is fixed by the build,
-   * so nothing observed and nothing typed or spoken can travel in one. It is
-   * excluded from every reset scope, because a reset that turned it back on
-   * would be a consent nobody gave.
+   * to his own service. On by default, and the outer switch over everything
+   * that leaves unbidden: every event name and every property value is fixed
+   * by the build, so nothing observed and nothing typed or spoken can travel
+   * in one. It is excluded from every reset scope, because a reset that
+   * turned it back on would be a consent nobody gave.
    */
   shareUsageData: boolean;
+  /**
+   * Whether Luke also records what his own panel draws, and sends it to the
+   * analytics processor directly rather than through his own service. It does
+   * not share the counts' guarantee and must never be described as though it
+   * did: a recording is the rendered surface, so a session title, branch,
+   * recap, error line, and the account's own name and address travel because
+   * they are drawn, and only what is typed into a field is masked. The same
+   * client autocaptures the text of whatever was clicked and reports
+   * unhandled errors, so this switch governs those too. On by default, off
+   * whenever `shareUsageData` is off, and excluded from every reset scope for
+   * the same reason sharing is.
+   */
+  sessionReplay: boolean;
   /**
    * How Luke stands on a display without a camera housing: a drawn notch
    * pressed into the top edge, or the free-floating bubble every such display
@@ -530,6 +544,42 @@ export interface DisplayDiagnostic {
   notch: ResolvedNotchGeometry;
 }
 
+/**
+ * How screen recording is armed, decided in the main process and handed over
+ * at bootstrap and again on every account transition.
+ *
+ * It carries what the renderer cannot work out for itself and nothing else.
+ * The two switches are not here: the renderer already holds `shareUsageData`
+ * and `sessionReplay` and is told the moment either moves, so reading them
+ * live is what lets a switch turned off stop a recording where it stands —
+ * and a switch turned back on start one — rather than at the next launch.
+ * Where a recording goes is not here either: the processor's address is fixed
+ * by the build, in the renderer beside the connect policy that names it.
+ */
+export interface SessionReplayBootstrap {
+  /**
+   * Whether this run may record at all, whatever the switches say. False for
+   * a fixture and a capture run, which must stay deterministic and send
+   * nothing, and false with no account, because a recording filed under
+   * nobody could be neither joined to its counts nor erased with them.
+   */
+  permitted: boolean;
+  /**
+   * This build's own version, for the recorder to file what it sends under.
+   * It rides here rather than on a channel of its own because the renderer
+   * has no way to read it: the bundle is written once and the version is a
+   * fact of the packaged app around it.
+   */
+  appVersion: string;
+  /**
+   * The account's opaque id, absent while signed out. It is the same id the
+   * hosted endpoints resolve a bearer token to, so a recording lands on the
+   * person the counted events already belong to — which is also what makes
+   * deleting the account erase the recordings with it.
+   */
+  accountId?: string;
+}
+
 export interface AppBootstrap {
   mode: WindowMode;
   /** Capture-only: start drawn as the peek, which normally needs a pointer. */
@@ -611,6 +661,8 @@ export interface AppBootstrap {
   calendars: readonly ObservedAccountCalendars[];
   /** Whether the calendar's quiet is holding announcements right now. */
   meetingQuiet: boolean;
+  /** Whether, where, and for whom this run may record its own surface. */
+  sessionReplay: SessionReplayBootstrap;
   settings: AppSettings;
 }
 
@@ -984,6 +1036,21 @@ export interface AppBridge {
   requestHostedUsage(): Promise<HostedUsageAnswer | undefined>;
   notifyReady(): void;
   quit(): void;
+  /**
+   * Counts one thing the surface did that the main process cannot see: which
+   * tab is drawn, which settings page a row opened, whether a search field was
+   * summoned, how the panel was opened, whether an ask reached a conversation.
+   *
+   * Deliberately the narrowest channel in this bridge. It carries a name from
+   * `PRODUCT_SURFACE_EVENT` and that event's own enumerated properties, and the
+   * main process validates both against the same allowlist before anything is
+   * queued — so this is not a way for the renderer to send text, and not a way
+   * for it to reach the acts the main process counts for itself.
+   */
+  recordSurfaceEvent<Name extends ProductSurfaceEventName>(
+    name: Name,
+    properties: ProductEventPropertiesFor<Name>,
+  ): void;
   onLifecycle(callback: (eventName: string) => void): () => void;
   /** This window's own display, whenever its geometry or housing changes. */
   onDisplayChanged(callback: (display: DisplayDiagnostic) => void): () => void;
@@ -994,6 +1061,14 @@ export interface AppBridge {
    */
   onSettingsChanged(callback: (settings: AppSettings) => void): () => void;
   onAccountChanged(callback: (account: AccountSnapshot) => void): () => void;
+  /**
+   * Recording's answer for the account that is signed in *now*. It arrives on
+   * every account transition, because a recording belongs to an account: one
+   * left running after a sign-out would be filed under the person who just
+   * left, and a sign-in after launch would otherwise record nothing until the
+   * app was restarted.
+   */
+  onSessionReplayChanged(callback: (replay: SessionReplayBootstrap) => void): () => void;
   /** Where the app stands against the latest release, whenever that changes. */
   onUpdateChanged(callback: (update: UpdateSnapshot) => void): () => void;
   onSessionsChanged(callback: (sessions: readonly NormalizedSession[]) => void): () => void;
@@ -1059,6 +1134,7 @@ export const channels = {
   signOut: "app:sign-out",
   deleteAccount: "app:delete-account",
   accountChanged: "app:account-changed",
+  sessionReplayChanged: "app:session-replay-changed",
   setExpanded: "app:set-expanded",
   setPointerInterception: "app:set-pointer-interception",
   requestMicrophone: "app:request-microphone",
@@ -1135,4 +1211,5 @@ export const channels = {
   workspaceProjectsChanged: "app:workspace-projects-changed",
   issuesChanged: "app:issues-changed",
   quit: "app:quit",
+  recordSurfaceEvent: "app:record-surface-event",
 } as const;

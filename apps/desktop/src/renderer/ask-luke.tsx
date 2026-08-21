@@ -1,3 +1,4 @@
+import { PRODUCT_ASK_OUTCOME, PRODUCT_SURFACE_EVENT } from "@sidecar/analytics";
 import { REALTIME_STATUS, type RealtimeStatus } from "@sidecar/realtime";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { useCallback, useRef, useState } from "react";
@@ -153,6 +154,12 @@ export function AskLuke({
       // words — and needs nothing drawn here: the conversation has already
       // landed the sentence on the caption strip below.
       const reason = await ask(text);
+      // What the ask carried never travels; whether it reached a conversation
+      // at all does, because a field people type into and are refused by is
+      // indistinguishable from one nobody uses without it.
+      window.sidecar.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.ASK_SUBMIT, {
+        ask_outcome: reason ? PRODUCT_ASK_OUTCOME.REFUSED : PRODUCT_ASK_OUTCOME.SENT,
+      });
       if (!reason) {
         // The ask has become the conversation's; the field empties for the
         // next one, and the caret stays for it.

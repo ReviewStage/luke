@@ -21,6 +21,11 @@ export const APP_SETTING_ID = {
   SUPERSET_AGENT: "superset_agent",
   VOICE_SOURCE: "voice_source",
   SHARE_USAGE_DATA: "share_usage_data",
+  SESSION_REPLAY: "session_replay",
+  TALK_HOTKEY: "talk_hotkey",
+  ASK_HOTKEY: "ask_hotkey",
+  STOP_HOTKEY: "stop_hotkey",
+  CALENDAR_SELECTED: "calendar_selected",
 } as const;
 
 export type AppSettingId = (typeof APP_SETTING_ID)[keyof typeof APP_SETTING_ID];

@@ -79,7 +79,12 @@ export function registerTrackerConnectionIpc(dependencies: TrackerConnectionIpcD
     apply(result) {
       // The roster is about a board Luke can no longer read, so it goes with
       // the grant rather than sitting there until the next pass.
-      if (!result.reason) refresh();
+      if (!result.reason) {
+        refresh();
+        recordProductEvent(PRODUCT_EVENT.TRACKER_DISCONNECT, {
+          tracker_id: ISSUE_TRACKER_ID.LINEAR,
+        });
+      }
     },
     refusal: "Could not disconnect Linear on this system.",
   });

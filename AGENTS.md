@@ -231,27 +231,65 @@ Trust constraints:
   outputs out of its transcripts, so a Cursor reading carries none) and a
   provider whose stored shape this build cannot render faithfully keeps the
   honest refusal instead.
-- Analytics may name only what the build already fixed. An event is a name from
-  `packages/analytics/src/product-events.ts` and properties whose values
-  come from `as const` sets in that same file, validated by one reader both the
+- Counting is three streams with three different guarantees, and the
+  difference is the thing to keep straight. Only the first carries the
+  guarantee, and the other two must never be described as though they
+  borrowed it. The counted event stream may name only what the build
+  already fixed: an event is a name from
+  `packages/analytics/src/product-events.ts` and properties whose values come
+  from `as const` sets in that same file, validated by one reader both the
   desktop and the service run and which builds its output from the allowlist
   rather than from what arrived. No observed value (a title, a branch, a path,
   a recap, a prompt, an error line) may reach a property, and no property may
   take free text; counts travel as buckets and versions as release versions.
-  The desktop posts to Luke's own service and never to an analytics provider,
-  and the account is the bearer token's, so no identity travels from the
-  desktop at all. The service attaches the account's own name and address to
+  That guarantee is structural: there is no shape such a value could travel in.
+  The desktop posts events to Luke's own service and never to an analytics
+  provider, and the account is the bearer token's, so nothing identifying
+  travels with them. The service attaches the account's own name and address to
   the analytics person record, read from its own user row, never from the
   request, and never onto an event, because an event property is what the
-  allowlist governs and a person property is not.
-  Nothing is sent in a fixture or evidence run, or while the developer has
-  switched sharing off. It is a switch that is on by default, sits on the settings
-  front page, and belongs to no reset scope, because a reset that turned
-  counting back on would be a consent nobody gave. Widening the event list or a
-  property's value set is a product decision, not an implementation detail. The
-  allowlist in that file is the whole boundary; `PRIVACY.md` describes what
-  counting is and moves only when its character does, as it would if a property
-  could ever take free text.
+  allowlist governs and a person property is not. The renderer has one narrow
+  way in — a fixed set of surface events the main process cannot see for itself
+  — validated against that same allowlist in the main process before anything is
+  queued, and reaching none of the acts. What the allowlist governs is that
+  endpoint, `/api/events`, and not the analytics project: the two streams below
+  reach the project without passing it, so a claim about the allowlist is a
+  claim about Luke's own service alone.
+- The other two leave from the renderer, straight to the analytics provider,
+  and both come from the one client in
+  `apps/desktop/src/renderer/session-replay.ts`, configured as the library
+  ships rather than hardened. The first of them is what that client captures
+  beside a recording: an autocaptured event names the text of whatever was
+  clicked, so pressing a session row sends that row's title, recap, and
+  branch, and an unhandled error travels with its message and stack, which can
+  carry a path or a title. Nothing validates either — no allowlist stands
+  between the panel and the provider — and `productEventFromWire` never sees
+  them. Both stop with the recording switch, because the client opts out
+  rather than only stopping the recorder; a switch that named recording and
+  left these running would be a consent nobody gave.
+- The replay stream has the opposite shape from the counted events. It records
+  the rendered panel, so everything drawn travels: a session's title, branch,
+  recap, and error line, the account's own name and address, and any
+  screenshot attached to the feedback composer, which is drawn as its own
+  bytes and which input masking does not reach. The one thing withheld is what
+  is typed into a field, and that is the library's default rather than a
+  posture Luke keeps. There is no masking module to consult and nothing that
+  makes a new component silent by construction, so what a recording may see is
+  decided by what the panel draws — which makes drawing something new on the
+  panel a decision about what leaves the machine. It is still Luke's own panel
+  and never the machine's screen. Recording posts to the provider directly; it
+  is the one place an account id travels to the desktop, and it travels
+  because a recording filed under nobody could neither join the counts nor be
+  erased with them.
+  None of the three sends anything in a fixture or evidence run, or while the
+  developer has switched sharing off. The counts have their own switch and the
+  other two share the recording one, both on by default on the settings front
+  page, both belonging to no reset scope, because a reset that turned either
+  back on would be a consent nobody gave; sharing is the outer one, and
+  recording cannot outlive it. Widening the event list, a property's value set,
+  or what the recording client may capture is a product decision, not an
+  implementation detail. `PRIVACY.md` describes all three in kind and moves
+  when any of them changes character.
 - The issue tracker follows the same rule at one remove, and is connected the
   way the calendar is rather than the way a cloud provider is. Luke reads the
   issues a tracker lists for the user under a grant the tracker's own consent

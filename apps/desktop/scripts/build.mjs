@@ -76,6 +76,12 @@ await Promise.all([
     minify: true,
     define: {
       "process.env.NODE_ENV": '"production"',
+      // The analytics project the screen recorder files into, from the
+      // packaging environment rather than source, on the calendar secret's
+      // terms above. A build without one records nothing at all — the same
+      // kill switch the site's own counting has, so a local run or an
+      // unconfigured build cannot record into a stranger's project.
+      PACKAGED_POSTHOG_PROJECT_API_KEY: JSON.stringify(process.env.POSTHOG_PROJECT_API_KEY ?? ""),
     },
     sourcemap: true,
     logLevel: "info",

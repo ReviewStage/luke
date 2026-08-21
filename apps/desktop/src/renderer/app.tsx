@@ -1,3 +1,8 @@
+import {
+  PRODUCT_PANEL_SOURCE,
+  PRODUCT_SEARCH_SURFACE,
+  PRODUCT_SURFACE_EVENT,
+} from "@sidecar/analytics";
 import type { SessionNoticeAsk } from "@sidecar/attention";
 import type { CredentialProviderId } from "@sidecar/credentials";
 import {
@@ -59,6 +64,7 @@ import type {
   ObservedAccountCalendars,
   OutputAudioState,
   SessionOpenResult,
+  SessionReplayBootstrap,
   SettingsResetScope,
   SettingsUpdateResult,
   SupersetSignInSnapshot,
@@ -145,6 +151,7 @@ import {
 } from "./session-model";
 import { parsePixels } from "./session-motion";
 import { SESSION_OPTIONS_CONTROL_ID, SESSION_OPTIONS_ID } from "./session-parts";
+import { applySessionReplay } from "./session-replay";
 import { focusSearchField, SESSION_SEARCH_INPUT_ID } from "./session-search";
 import type {
   MicrophoneControl,
@@ -541,10 +548,45 @@ export function App(): React.JSX.Element {
    * coming down — so the snapshot the next spoken change composes against is
    * never older than the panel it is drawn on.
    */
+  /**
+   * What this run was told about recording, kept so a settings change can
+   * re-decide without asking for another bootstrap. Absent until bootstrap
+   * answers, which is also the whole window in which nothing can record.
+   */
+  const replayBootstrap = useRef<SessionReplayBootstrap | undefined>(undefined);
+  /**
+   * Recording follows the account as well as the switches: a sign-out ends it
+   * rather than leaving it filed under the person who just left, and a sign-in
+   * can start one without waiting for a relaunch.
+   *
+   * It rides the raced-bootstrap rule for a sharper reason than the lists do.
+   * Sign-out and deletion halt recording before the account is cleared, so the
+   * bootstrap answer still in flight behind that halt describes a person who
+   * has already left — and applying it would restart recording under them, or
+   * under one whose erasure has just been queued. A push is the newer reading,
+   * so the older snapshot is dropped rather than allowed to clobber it.
+   */
+  const acceptSessionReplayBootstrap = useBootstrapRacedChannel(
+    (onChange) => window.sidecar.onSessionReplayChanged(onChange),
+    (replay: SessionReplayBootstrap) => {
+      replayBootstrap.current = replay;
+      const current = answeredSettings.current;
+      if (current) {
+        applySessionReplay(replay, current.shareUsageData, current.sessionReplay);
+      }
+    },
+  );
+
   const applySettings = useCallback(
     (next: AppSettings) => {
       answeredSettings.current = next;
       setSettings(next);
+      // Every settings change lands here — the panel's own writes, a spoken
+      // change, and a push from another window alike — so this is the one
+      // place recording has to follow the switches from.
+      if (replayBootstrap.current) {
+        applySessionReplay(replayBootstrap.current, next.shareUsageData, next.sessionReplay);
+      }
     },
     [setSettings],
   );
@@ -618,6 +660,11 @@ export function App(): React.JSX.Element {
       // a credential entry returning from the key slot, the evidence run that
       // starts in it — set their page right after this reset.
       setSettingsView(SETTINGS_VIEW.ROOT);
+      // `PanelTab` and the counted tab are the same union: the vocabulary
+      // derives its set from the guide's, which is what `PANEL_TAB` aliases.
+      window.sidecar.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.PANEL_TAB_CHANGE, {
+        panel_tab: next,
+      });
     },
     [setSettingsView, setTab],
   );
@@ -904,6 +951,14 @@ export function App(): React.JSX.Element {
     async (enabled: boolean) =>
       applySettingsReply(
         await window.sidecar.updateSetting(APP_SETTING_SCHEMA.shareUsageData.field, enabled),
+      ),
+    [applySettingsReply],
+  );
+
+  const changeSessionReplay = useCallback(
+    async (enabled: boolean) =>
+      applySettingsReply(
+        await window.sidecar.updateSetting(APP_SETTING_SCHEMA.sessionReplay.field, enabled),
       ),
     [applySettingsReply],
   );
@@ -1790,6 +1845,9 @@ export function App(): React.JSX.Element {
     changeTab(PANEL_TAB.SESSIONS);
     setSearchOpen(true);
     focusSearchField(SESSION_SEARCH_INPUT_ID);
+    window.sidecar.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.SEARCH_OPEN, {
+      search_surface: PRODUCT_SEARCH_SURFACE.SESSIONS,
+    });
   }, [changeTab]);
 
   /**
@@ -1812,6 +1870,9 @@ export function App(): React.JSX.Element {
   const openSettingsSearch = useCallback(() => {
     setSettingsSearchOpen(true);
     focusSearchField(SETTINGS_SEARCH_INPUT_ID);
+    window.sidecar.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.SEARCH_OPEN, {
+      search_surface: PRODUCT_SEARCH_SURFACE.SETTINGS,
+    });
   }, []);
 
   /**
@@ -2541,7 +2602,14 @@ export function App(): React.JSX.Element {
       // the focus is the point and stays where the keyboard put it.
       if (event.detail > 0) event.currentTarget.blur();
       cancelHover();
-      void changeMode(presentationOf() !== PANEL_PRESENTATION.PANEL);
+      const opening = presentationOf() !== PANEL_PRESENTATION.PANEL;
+      // The press closes as often as it opens, and a close is not an open.
+      if (opening) {
+        window.sidecar.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.PANEL_OPEN, {
+          panel_source: PRODUCT_PANEL_SOURCE.CAPSULE,
+        });
+      }
+      void changeMode(opening);
     },
     [cancelHover, changeMode, presentationOf],
   );
@@ -2583,6 +2651,7 @@ export function App(): React.JSX.Element {
       acceptIssuesBootstrap(value.issues);
       acceptCalendarsBootstrap(value.calendars);
       acceptMeetingQuietBootstrap(value.meetingQuiet);
+      acceptSessionReplayBootstrap(value.sessionReplay);
       acceptSettingsBootstrap(value.settings);
       // The stored filter chips and search words come back with the panel:
       // each is a standing way of viewing the list, and this is the one
@@ -2679,6 +2748,7 @@ export function App(): React.JSX.Element {
     acceptMeetingQuietBootstrap,
     acceptOutputAudioBootstrap,
     acceptProjectsBootstrap,
+    acceptSessionReplayBootstrap,
     acceptSessionsBootstrap,
     acceptSettingsBootstrap,
     acceptUpdateBootstrap,
@@ -3184,6 +3254,7 @@ export function App(): React.JSX.Element {
     onVoiceCaptionsChange: changeVoiceCaptions,
     onDuckOtherMediaChange: changeDuckOtherMedia,
     onShareUsageDataChange: changeShareUsageData,
+    onSessionReplayChange: changeSessionReplay,
     onVoiceSourceChange: changeVoiceSource,
     onPreferBuiltInMicrophoneChange: changePreferBuiltInMicrophone,
     onQuietDuringMeetingsChange: changeQuietDuringMeetings,

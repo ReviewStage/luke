@@ -110,6 +110,7 @@ export interface StoredAppSettings {
   quietDuringMeetings: boolean;
   showOnAllDisplays: boolean;
   shareUsageData: boolean;
+  sessionReplay: boolean;
   formFactor?: PanelFormFactor;
   /** The session list's chosen filter chips, absent while nothing narrows it. */
   sessionFilters?: readonly SessionFilter[];
@@ -474,9 +475,12 @@ export const APP_SETTING_SCHEMA = {
     guard: hotkey,
     settingsPage: SETTINGS_PAGE.SHORTCUTS,
     resetScope: SETTINGS_RESET_SCOPE.SHORTCUTS,
-    // The talk-key fact reports the registered chord and its manual path.
-    guideEntry: settingGuideEntry("voiceHotkey", [], () => undefined),
+    // The talk-key fact reports the registered chord and its manual path, so
+    // the guide builds no setting for it; the id is listed all the same, so
+    // the chord's page is named and a change to it can be counted.
+    guideEntry: settingGuideEntry("voiceHotkey", [APP_SETTING_ID.TALK_HOTKEY], () => undefined),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.TALK_HOTKEY,
+    analytics: { id: APP_SETTING_ID.TALK_HOTKEY, value: choiceAnalytics },
   },
   askHotkey: {
     field: "askHotkey",
@@ -484,9 +488,12 @@ export const APP_SETTING_SCHEMA = {
     guard: hotkey,
     settingsPage: SETTINGS_PAGE.SHORTCUTS,
     resetScope: SETTINGS_RESET_SCOPE.SHORTCUTS,
-    // The ask-key fact reports the registered chord and its manual path.
-    guideEntry: settingGuideEntry("askHotkey", [], () => undefined),
+    // The ask-key fact reports the registered chord and its manual path, so
+    // the guide builds no setting for it; the id is listed all the same, so
+    // the chord's page is named and a change to it can be counted.
+    guideEntry: settingGuideEntry("askHotkey", [APP_SETTING_ID.ASK_HOTKEY], () => undefined),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.ASK_HOTKEY,
+    analytics: { id: APP_SETTING_ID.ASK_HOTKEY, value: choiceAnalytics },
   },
   stopHotkey: {
     field: "stopHotkey",
@@ -494,9 +501,12 @@ export const APP_SETTING_SCHEMA = {
     guard: hotkey,
     settingsPage: SETTINGS_PAGE.SHORTCUTS,
     resetScope: SETTINGS_RESET_SCOPE.SHORTCUTS,
-    // The stop-key fact reports the registered chord and its manual path.
-    guideEntry: settingGuideEntry("stopHotkey", [], () => undefined),
+    // The stop-key fact reports the registered chord and its manual path, so
+    // the guide builds no setting for it; the id is listed all the same, so
+    // the chord's page is named and a change to it can be counted.
+    guideEntry: settingGuideEntry("stopHotkey", [APP_SETTING_ID.STOP_HOTKEY], () => undefined),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.STOP_HOTKEY,
+    analytics: { id: APP_SETTING_ID.STOP_HOTKEY, value: choiceAnalytics },
   },
   duckOtherMedia: {
     field: "duckOtherMedia",
@@ -649,6 +659,42 @@ export const APP_SETTING_SCHEMA = {
     mainProcessSideEffect: SETTING_SIDE_EFFECT.USAGE_SHARING,
     spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
     analytics: { id: APP_SETTING_ID.SHARE_USAGE_DATA, value: toggleAnalytics },
+  },
+  sessionReplay: {
+    field: "sessionReplay",
+    default: true,
+    guard: boolean(true),
+    settingsPage: SETTINGS_PAGE.ROOT,
+    // No reset scope, for the reason sharing has none: a reset that turned
+    // recording back on would be a consent nobody gave. It is also why this
+    // switch stands on its own rather than riding the sharing one — sharing
+    // off stops recording too, but recording off has to be reachable without
+    // giving up the counts.
+    guideEntry: settingGuideEntry(
+      "sessionReplay",
+      [APP_SETTING_ID.SESSION_REPLAY],
+      (settings, defaultValue) => ({
+        id: APP_SETTING_ID.SESSION_REPLAY,
+        label: "Record my screen in Luke",
+        description:
+          "Whether Luke records what his own panel draws and sends it, as a video of the " +
+          "panel rather than a count. Everything drawn is in it: session titles, branches, " +
+          "summaries, error lines, and your own name and address. Only what you type into a " +
+          "field is hidden. It is the panel alone and never the rest of your screen. Off " +
+          "whenever Share usage data is off. On to begin with.",
+        kind: APP_SETTING_KIND.TOGGLE,
+        value: appToggleText(settings.sessionReplay),
+        defaultValue: appToggleText(defaultValue),
+        adjustable: true,
+        manual: USAGE_DATA_SECTION,
+      }),
+    ),
+    // None in the main process: the recorder lives in the renderer, which
+    // brings itself into line from the settings change it is already handed.
+    // A side effect declared here would be one the switch never runs.
+    mainProcessSideEffect: SETTING_SIDE_EFFECT.NONE,
+    spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
+    analytics: { id: APP_SETTING_ID.SESSION_REPLAY, value: toggleAnalytics },
   },
   formFactor: {
     field: "formFactor",
@@ -818,6 +864,10 @@ export const APP_SETTING_SCHEMA = {
       },
     ),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.NONE,
+    // The model and the effort ride one stored write, so one id counts the
+    // pair: a separate effort count would say a second change happened where
+    // the developer made one.
+    analytics: { id: APP_SETTING_ID.WORKSPACE_AGENT_MODEL, value: choiceAnalytics },
   },
   workspaceProjectDefaults: {
     field: "workspaceProjectDefaults",
@@ -867,6 +917,7 @@ export const APP_SETTING_SCHEMA = {
       ],
     ),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.NONE,
+    analytics: { id: APP_SETTING_ID.SUPERSET_AGENT, value: choiceAnalytics },
   },
 } as const satisfies {
   [Field in AppSettingField]: SettingDefinition<Field>;
@@ -999,13 +1050,19 @@ export const APP_SETTING_DEFAULTS = APP_SETTING_FIELDS.reduce(
   },
 );
 
-export const SETTING_PAGE =
-  // SAFETY: Each entry maps one settings id to the page its schema declares.
-  Object.fromEntries(
+export const SETTING_PAGE = {
+  // SAFETY: Each entry maps one settings id to the page its schema declares;
+  // the `satisfies` below is what checks the set ends up complete.
+  ...(Object.fromEntries(
     Object.values(APP_SETTING_SCHEMA).flatMap((definition) =>
       definition.guideEntry.ids.map((id) => [id, definition.settingsPage]),
     ),
-  ) as Record<AppSettingId, SettingsPage>;
+  ) as Record<AppSettingId, SettingsPage>),
+  // Which calendars count is chosen on the rows themselves rather than
+  // through a settings field, so it is the one id whose page cannot be
+  // derived from the schema. Named here so the `Record` stays total.
+  [APP_SETTING_ID.CALENDAR_SELECTED]: SETTINGS_PAGE.CONNECTIONS,
+} satisfies Record<AppSettingId, SettingsPage>;
 
 export function settingsScopeChanged(
   settings: Pick<StoredAppSettings, AppSettingField>,

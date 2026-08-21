@@ -6,16 +6,18 @@ import type { PostHog } from "posthog-js";
  * session drop-off is only visible from the point someone already has an
  * account.
  *
- * This half has a weaker privacy posture than the app's and must be described
- * as such. The browser talks to the analytics processor directly, so the
- * processor sees the visitor's address and user agent — where the desktop's
- * events reach it through Luke's own service with location resolution
- * switched off. Do not let the app's stronger claim bleed onto the site.
+ * The browser talks to the analytics processor directly, so the processor
+ * sees the visitor's address and user agent. Nothing forwards on their behalf
+ * — where the desktop's *counted* events still reach it through Luke's own
+ * service, and its recorder now posts here directly too. Say so in
+ * `PRIVACY.md` rather than letting the counted events' stronger claim bleed
+ * onto either.
  *
- * The options below are the posture in configuration form rather than
- * defaults worth reading past: autocapture would collect the text and
- * attributes of whatever was clicked, and recording would collect the page
- * itself.
+ * The two masking options below are this file's own, and are the one place
+ * this half is narrower than the app's: the panel records what a provider
+ * wrote about somebody's work and no longer masks it, where this is a
+ * marketing page whose copy is public and whose only typed field is a
+ * sign-in. Masking the words costs nothing here, so nothing here spends it.
  */
 
 const PROJECT_API_KEY = import.meta.env.VITE_POSTHOG_PROJECT_API_KEY;
@@ -51,9 +53,7 @@ export function startSiteAnalytics(): void {
   client = import("posthog-js").then(({ default: posthog }) => {
     posthog.init(projectApiKey, {
       api_host: HOST,
-      // The DOM text and attributes of whatever was clicked; never collected.
-      autocapture: false,
-      disable_session_recording: true,
+      autocapture: true,
       capture_pageview: true,
       capture_pageleave: false,
       // Visitors stay personless until they sign in, which is both cheaper
@@ -61,8 +61,17 @@ export function startSiteAnalytics(): void {
       // knows. The identify at consent is what links their earlier page views
       // to the account, so no aliasing is needed.
       person_profiles: "identified_only",
+      // Autocapture's own two: an event says what was clicked and where, never
+      // the words on it. Recording is configured separately below, because
+      // rrweb does not read either of these.
       mask_all_text: true,
       mask_all_element_attributes: true,
+      session_recording: {
+        // The sign-in address is the only thing anybody types on this site,
+        // and it is the one thing here worth masking.
+        maskAllInputs: true,
+        blockSelector: ".ph-block",
+      },
     });
     return posthog;
   });

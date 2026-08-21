@@ -108,6 +108,9 @@ importers:
       esbuild:
         specifier: 0.28.2
         version: 0.28.2
+      posthog-js:
+        specifier: 1.418.3
+        version: 1.418.3
       react:
         specifier: 19.2.8
         version: 19.2.8

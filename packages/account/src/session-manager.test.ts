@@ -7,6 +7,7 @@ import { AccountSessionManager } from "./session-manager.js";
 const STORED: StoredAccount = {
   accessToken: "access",
   refreshToken: "refresh",
+  id: "user-1",
   email: "dev@example.com",
   provider: ACCOUNT_PROVIDER.GITHUB,
 };

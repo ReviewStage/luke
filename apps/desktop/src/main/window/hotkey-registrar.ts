@@ -1,3 +1,4 @@
+import { PRODUCT_EVENT, PRODUCT_PANEL_SOURCE, type RecordProductEvent } from "@sidecar/analytics";
 import {
   askHotkeyCandidates,
   stopHotkeyCandidates,
@@ -40,6 +41,8 @@ export interface TalkKeyHandle {
 export interface HotkeyHost {
   voiceHost(): BrowserWindow | undefined;
   displayIdFor(sender: WebContents): number | undefined;
+  /** How the panel stands now, so a key that summons into an open one knows. */
+  modeFor(displayId: number): WindowMode;
   setMode(displayId: number, mode: WindowMode, requestFocus: boolean): void;
   broadcast(channel: string, payload: UnparsedWireValue): void;
 }
@@ -49,6 +52,7 @@ export interface HotkeyRegistrarOptions {
   /** A capture run drives the panel itself and must not grab a system key. */
   registersGlobalKeys: boolean;
   hasCredentials: () => boolean;
+  recordProductEvent: RecordProductEvent;
   shortcut?: ShortcutSurface;
   createTalkKeyWatcher?: (edges: TalkKeyEdges) => TalkKeyHandle;
 }
@@ -66,6 +70,7 @@ export class HotkeyRegistrar {
   readonly #host: HotkeyHost;
   readonly #registersGlobalKeys: boolean;
   readonly #hasCredentials: () => boolean;
+  readonly #recordProductEvent: RecordProductEvent;
   readonly #shortcut: ShortcutSurface;
   readonly #createTalkKeyWatcher: (edges: TalkKeyEdges) => TalkKeyHandle;
 
@@ -89,6 +94,7 @@ export class HotkeyRegistrar {
     this.#host = options.host;
     this.#registersGlobalKeys = options.registersGlobalKeys;
     this.#hasCredentials = options.hasCredentials;
+    this.#recordProductEvent = options.recordProductEvent;
     this.#shortcut = options.shortcut ?? globalShortcut;
     this.#createTalkKeyWatcher =
       options.createTalkKeyWatcher ?? ((edges) => new TalkKeyWatcher(edges));
@@ -260,8 +266,16 @@ export class HotkeyRegistrar {
         const host = this.#host.voiceHost();
         const displayId = host ? this.#host.displayIdFor(host.webContents) : undefined;
         if (displayId === undefined) return;
+        const opening = this.#host.modeFor(displayId) !== "expanded";
         this.#host.setMode(displayId, "expanded", true);
         this.#send(host?.webContents, channels.lifecycle, "ask:focus");
+        // The key summons the field wherever the panel already stood, so only
+        // the press that actually opened one is an opening.
+        if (opening) {
+          this.#recordProductEvent(PRODUCT_EVENT.PANEL_OPEN, {
+            panel_source: PRODUCT_PANEL_SOURCE.HOTKEY,
+          });
+        }
       });
       if (!registered) continue;
       this.#ask = accelerator;

@@ -1,6 +1,6 @@
 # Privacy
 
-Last updated: 20 August 2026
+Last updated: 21 August 2026
 
 Luke is a macOS app that watches your coding agent sessions. This policy
 explains what we collect, who we send it to, and how to turn it off.
@@ -20,9 +20,32 @@ you signed in, and a daily count of how much voice and review you have used.
 **Usage data.** We count how Luke's features are used. This is on by default,
 and you can turn it off under Share usage data in Settings. The counts are
 event names and values from a fixed list. Nothing you type or say, and nothing
-from a session, can appear in one: no titles, branches, file paths, summaries,
-prompts, or error text. Your name and email are attached to your usage record,
-so the counts belong to an account rather than to an anonymous identifier.
+from a session, can appear in a count: no titles, branches, file paths,
+summaries, prompts, or error text. Your name and email are attached to your
+usage record, so the counts belong to an account rather than to an anonymous
+identifier.
+
+That fixed list covers the counts Luke sends through our own service, and not
+what screen recording sends. While Record my screen in Luke is on, the
+recorder also reports what you clicked — including the text on it, such as a
+session's title — and any error Luke's own panel runs into, with its message
+and the code path it came from. Turning that switch off stops those as well.
+
+**Screen recordings.** Luke also records what his own panel draws — which rows
+you pressed, which pages you opened, how long you spent — and sends it with the
+usage data. This is on by default, and you can turn it off under Record my
+screen in Luke in Settings; turning off Share usage data stops it as well.
+
+A recording is a video of the panel, so it shows what the panel showed you.
+That includes session titles, branches, summaries and error text, your name
+and email address, and any screenshot you attached to the feedback form. The
+one thing hidden is what you type into a field, which is replaced with blocks
+before the recording leaves your Mac — so an API key or a sign-in code you
+enter is not in it.
+
+A recording is still the panel and nothing else. Luke never records your
+screen, your editor, your terminal, or any other app, and nothing behind or
+beside the panel is in the video.
 
 **Feedback.** If you use the feedback form, we receive what you typed, the name
 and email you signed it with, and any screenshots you attached.
@@ -44,7 +67,9 @@ and email you signed it with, and any screenshots you attached.
 - Google, if you connect Google Calendar. We request your calendar list and your
   availability. Google returns busy times only, so event titles and attendees
   are never available to Luke.
-- PostHog, for usage data, sent through our own service.
+- PostHog, for usage data and screen recordings. The counts go through our own
+  service; the recordings, and the clicks and errors that ride with them, go
+  from Luke to PostHog directly.
 - GitHub, to check for updates. These requests are unauthenticated and carry
   nothing about you.
 
@@ -55,21 +80,26 @@ local sessions works with no network connection.
 
 ## Our website
 
-tryluke.dev counts page views and sign-in steps using PostHog. Unlike the app,
-your browser contacts PostHog directly, so PostHog sees your network address, as
-it would with any third-party script.
+tryluke.dev counts page views, presses, and sign-in steps using PostHog, and
+records the pages themselves. Anything you type is blurred, and so is the text
+of whatever you clicked. Your browser contacts PostHog directly for this, so
+PostHog sees your network address — as it does for the app's screen
+recordings, which are sent directly too. The app's usage counts are not: they
+reach PostHog through our own service.
 
 ## Storage
 
 Your settings, provider API keys, and calendar access stay on your Mac. Keys and
 calendar access are encrypted and stored in the macOS Keychain.
 
-Your account information is held by our own service. Usage counts are held by
-PostHog.
+Your account information is held by our own service. Usage counts and screen
+recordings are held by PostHog.
 
 ## Your choices
 
-- Turn off Share usage data in Settings to stop usage data.
+- Turn off Share usage data in Settings to stop usage data and screen recordings.
+- Turn off Record my screen in Luke to stop the recordings, and the clicks
+  and errors sent with them, while leaving the counts on.
 - Disconnect any provider, issue tracker, or calendar to stop it being read.
 - Delete your OpenAI key to turn voice off.
 - Luke does not use your microphone until you start a turn.
@@ -78,7 +108,7 @@ PostHog.
 
 You can delete your account from the Account section in Settings. This erases
 your account, your sign-in records, and your usage counts, and asks PostHog to
-erase your usage data. It does not affect your Google or GitHub account, and
+erase your usage data and your recordings. It does not affect your Google or GitHub account, and
 anything stored only on your Mac stays there until you remove it.
 
 ## Google user data
