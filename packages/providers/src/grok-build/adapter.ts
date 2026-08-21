@@ -642,7 +642,13 @@ export class GrokBuildSessionAdapter extends LocalSessionAdapter {
     return snapshots;
   }
 
-  /** The newest message's bookkeeping, or nothing this build can read. */
+  /**
+   * The newest message's bookkeeping, or nothing this build can read. A
+   * messages table this build cannot read costs the turn, not the pass: the
+   * database is still the current store, and yielding to the legacy
+   * directories over one table would resurrect a past generation's sessions
+   * while dropping the ones actually running.
+   */
   #turnFor(database: SqliteDatabase, providerSessionId: string): GrokDatabaseTurn | undefined {
     try {
       const row = database
