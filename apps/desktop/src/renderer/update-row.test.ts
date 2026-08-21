@@ -49,8 +49,7 @@ test("a download under way names the version and how far along it is", () => {
 test("a downloaded build offers the restart that installs it", () => {
   const row = updateRow(supported({ status: UPDATE_STATUS.READY, latestVersion: "0.2.0" }));
   assert.equal(row.action, UPDATE_ROW_ACTION.RESTART);
-  assert.ok(row.detail.includes("Restart"), "the row says a restart finishes the update");
-  assert.ok(row.detail.includes("quit"), "the row says quitting installs it too");
+  assert.equal(row.detail, "Version 0.2.0 is downloaded.");
   assert.equal(row.current, false);
 });
 
