@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -24,6 +25,7 @@ import {
   RELEASE_VOLUME_NAME,
   releaseDmgFileName,
   releaseZipFileName,
+  resetBuilderReleaseArtifactDirectory,
   resolveNotaryCredentials,
   stapleArguments,
 } from "../apps/desktop/scripts/release-config.mjs";
@@ -83,6 +85,11 @@ test("electron-builder owns the branded DMG layout", () => {
       x: DMG_WINDOW.POSITIONS.APP.X,
       y: DMG_WINDOW.POSITIONS.APP.Y,
       type: "file",
+      path: path.join(
+        builderReleaseArtifactDirectory(repoRoot),
+        `mac-${PACKAGED_ARCHITECTURE}`,
+        "Luke.app",
+      ),
       name: "Luke.app",
     },
     {
@@ -302,6 +309,22 @@ test("release artifacts stay under the repository artifacts directory", () => {
     builderReleaseArtifactDirectory("/repo"),
     path.join("/repo", "artifacts", "release-builder"),
   );
+});
+
+test("every builder run starts without artifacts or signatures from an earlier run", () => {
+  const testRoot = fs.mkdtempSync(path.join(os.tmpdir(), "luke-builder-reset-"));
+  try {
+    const outputDirectory = builderReleaseArtifactDirectory(testRoot);
+    const staleFramework = path.join(outputDirectory, "mac-arm64", "Luke.app", "stale-signature");
+    fs.mkdirSync(path.dirname(staleFramework), { recursive: true });
+    fs.writeFileSync(staleFramework, "old build");
+
+    resetBuilderReleaseArtifactDirectory(testRoot);
+
+    assert.equal(fs.existsSync(outputDirectory), false);
+  } finally {
+    fs.rmSync(testRoot, { recursive: true, force: true });
+  }
 });
 
 test("electron-builder release output is stable and publishable by GitHub", () => {

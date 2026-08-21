@@ -18,7 +18,7 @@ import {
   resolveSigningMode,
   SIGNING_MODE,
 } from "./package-config.mjs";
-import { NATIVE_HELPERS } from "./package-layout.mjs";
+import { NATIVE_HELPERS, PACKAGED_ARCHITECTURE } from "./package-layout.mjs";
 import { builderReleaseArtifactDirectory, RELEASE_VOLUME_NAME } from "./release-config.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -28,6 +28,11 @@ const desktopPackage = JSON.parse(fs.readFileSync(path.join(appRoot, "package.js
 const packageAssets = packageAssetPaths({ appRoot });
 const productName = desktopPackage.productName;
 const electronBuilderMetadataName = "luke";
+const electronBuilderMacAppPath = path.join(
+  builderReleaseArtifactDirectory(repoRoot),
+  `mac-${PACKAGED_ARCHITECTURE}`,
+  `${productName}.app`,
+);
 
 export const ELECTRON_BUILDER_UPDATE_CACHE_DIR_NAME = APP_UPDATE_CACHE_DIR_NAME;
 export const ELECTRON_BUILDER_UPDATE_FEED_URL = APP_UPDATE_FEED_URL;
@@ -91,7 +96,7 @@ export function createElectronBuilderConfig(env = process.env) {
       executableName: productName,
       icon: packageAssets.iconPath,
       identity: developerIdSigned ? signing.identity : "-",
-      hardenedRuntime: true,
+      hardenedRuntime: developerIdSigned,
       gatekeeperAssess: false,
       notarize: false,
       entitlements: packageAssets.entitlementsPath,
@@ -129,6 +134,7 @@ export function createElectronBuilderConfig(env = process.env) {
           x: DMG_WINDOW.POSITIONS.APP.X,
           y: DMG_WINDOW.POSITIONS.APP.Y,
           type: "file",
+          path: electronBuilderMacAppPath,
           name: `${productName}.app`,
         },
         {
