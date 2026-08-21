@@ -466,12 +466,37 @@ const recordProductEvent: RecordProductEvent = (name, properties) =>
  * them.
  */
 async function sessionReplayBootstrap(): Promise<SessionReplayBootstrap> {
-  const accountId = (await settingsStore.readAccount())?.id;
+  // The in-memory snapshot leads the stored account, and this reads the
+  // snapshot first because of it: a sign-out reports its transition before it
+  // clears the store, so a bootstrap that asked the store alone would answer
+  // with the id of the person who has just left — and `applySessionReplay`
+  // would see nothing change and leave the recording running.
+  const signedIn = account.status === ACCOUNT_STATUS.SIGNED_IN;
+  const accountId = signedIn ? (await settingsStore.readAccount())?.id : undefined;
   return {
     permitted: runMode.sendsNetwork && accountId !== undefined,
     appVersion: app.getVersion(),
     ...(accountId ? { accountId } : undefined),
   };
+}
+
+/**
+ * Stops recording now, ahead of an act that ends the account it is filed
+ * under. Both acts need it and neither can wait for their own transition:
+ * a sign-out reports itself before the store clears, and a deletion awaits
+ * the hosted erasure first — so a broadcast that arrived afterwards would
+ * leave the renderer free to flush recordings under a person who has left,
+ * or one whose erasure is already queued, recreating what was just deleted.
+ *
+ * The generation moves with it, so a read already in flight cannot land
+ * behind this and re-arm what it just stopped.
+ */
+function haltSessionReplay(): void {
+  sessionReplayBroadcastGeneration += 1;
+  panels.broadcast(channels.sessionReplayChanged, {
+    permitted: false,
+    appVersion: app.getVersion(),
+  });
 }
 /**
  * The output's switches as last read, and the helper that reads them. The
@@ -975,6 +1000,7 @@ function registerIpc(): void {
     accountSession,
     recordProductEvent,
     flushProductEvents: () => productEvents.flush(),
+    haltSessionReplay,
   });
 
   registerWindowSurfaceIpc({

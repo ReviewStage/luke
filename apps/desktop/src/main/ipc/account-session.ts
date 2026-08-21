@@ -17,11 +17,25 @@ export interface AccountSessionIpcDependencies {
    * would leave churn visible only as people who stopped appearing.
    */
   flushProductEvents: () => Promise<void>;
+  /**
+   * Stops recording before either act runs. Neither can wait for its own
+   * account transition to be broadcast: a sign-out reports itself before the
+   * store clears, and a deletion awaits the hosted erasure first — so a
+   * recording still running is one filed under a person who has left, or one
+   * whose erasure is already queued, which it would recreate.
+   */
+  haltSessionReplay: () => void;
 }
 
 export function registerAccountSessionIpc(dependencies: AccountSessionIpcDependencies): void {
-  const { ipcMain, trustedSender, accountSession, recordProductEvent, flushProductEvents } =
-    dependencies;
+  const {
+    ipcMain,
+    trustedSender,
+    accountSession,
+    recordProductEvent,
+    flushProductEvents,
+    haltSessionReplay,
+  } = dependencies;
   // Which provider a sign-in was begun with is deliberately not counted. The
   // funnel wants how many begin against how many land, and `account:sign_in`
   // already marks the landing; naming the provider narrows the crowd an act
@@ -45,12 +59,14 @@ export function registerAccountSessionIpc(dependencies: AccountSessionIpcDepende
   ipcMain.handle(channels.signOut, async (event) => {
     if (!trustedSender(event)) throw new Error("Untrusted renderer");
     recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACT, { account_act: PRODUCT_ACCOUNT_ACT.SIGN_OUT });
+    haltSessionReplay();
     await flushProductEvents();
     return accountSession.signOut({ revokeRemote: true });
   });
   ipcMain.handle(channels.deleteAccount, async (event) => {
     if (!trustedSender(event)) throw new Error("Untrusted renderer");
     recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACT, { account_act: PRODUCT_ACCOUNT_ACT.DELETE });
+    haltSessionReplay();
     await flushProductEvents();
     return accountSession.deleteEverywhere();
   });
