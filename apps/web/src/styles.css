@@ -226,6 +226,120 @@
   }
 }
 
+/* Works-with tiles
+   The provider marks are the product's own artwork, published for the dark
+   surface the renderer draws them on — several are light silhouettes — so on
+   the light page each sits on its own small tile of the product's ground
+   instead of being recoloured for the page, which the marks' contract forbids.
+   The brand tokens and the per-mark optical scales are the renderer's
+   (apps/desktop/src/renderer/styles/base.css), restated here for the marks
+   this page shows because the page's palette deliberately stays out of the
+   mock's scope above. */
+.mark-tile {
+  --mark-claude-code: #d97757;
+  --mark-cmux-left: #12c7f5;
+  --mark-cmux-middle: #2d8cff;
+  --mark-cmux-right: #6c5cff;
+  --mark-codex-top: #b1a7ff;
+  --mark-codex-middle: #7a9dff;
+  --mark-codex-bottom: #3941ff;
+  --mark-conductor: #eae8e6;
+  --mark-copilot: #ffffff;
+  --mark-cursor: #ffffff;
+  --mark-devin: #ffffff;
+  --mark-jules: #715cd7;
+  --mark-opencode: #ffffff;
+  --mark-opencode-block: #5a5858;
+  --mark-orca: #ffffff;
+  --mark-superset-top: #b9b7b5;
+  --mark-superset-bottom: #858483;
+
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  /* The product surface's own fill and text colour, so a tile reads as a chip
+     of the mock and a mark with no brand token — ChatGPT's — inherits the
+     colour it inherits in the renderer. */
+  background: #000;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.mark-tile .provider-mark {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+}
+
+/* The renderer's optical scales, verbatim: the marks fill their boxes very
+   differently, and each scale brings one to the same optical weight without
+   touching its proportion. */
+.mark-tile .provider-mark[data-mark="claude-code"] {
+  color: var(--mark-claude-code);
+  transform: scale(1.12);
+}
+
+.mark-tile .provider-mark[data-mark="chatgpt"] {
+  transform: scale(0.94);
+}
+
+.mark-tile .provider-mark[data-mark="cmux"] {
+  transform: scale(1.9);
+}
+
+.mark-tile .provider-mark[data-mark="codex"] {
+  transform: scale(0.94);
+}
+
+.mark-tile .provider-mark[data-mark="conductor"] {
+  color: var(--mark-conductor);
+  transform: scale(0.93);
+}
+
+.mark-tile .provider-mark[data-mark="copilot"] {
+  color: var(--mark-copilot);
+  transform: scale(0.94);
+}
+
+.mark-tile .provider-mark[data-mark="cursor"] {
+  color: var(--mark-cursor);
+  transform: scale(0.94);
+}
+
+.mark-tile .provider-mark[data-mark="devin"] {
+  color: var(--mark-devin);
+  transform: scale(1.22);
+}
+
+.mark-tile .provider-mark[data-mark="gemini-cli"] {
+  transform: scale(0.94);
+}
+
+.mark-tile .provider-mark[data-mark="jules"] {
+  color: var(--mark-jules);
+  transform: scale(0.94);
+}
+
+.mark-tile .provider-mark[data-mark="opencode"] {
+  color: var(--mark-opencode);
+  transform: scale(0.94);
+}
+
+.mark-tile .provider-mark[data-mark="orca"] {
+  color: var(--mark-orca);
+  transform: scale(1.18);
+}
+
+/* Superset's bracket mark is two and a half times as wide as it is tall and
+   takes no scale — that is the published proportion, shown whole. A wider box
+   inside the square tile is what brings its ink to the others' weight. */
+.mark-tile .provider-mark[data-mark="superset"] {
+  width: 26px;
+}
+
 /* Notch mock
    Ported from apps/desktop/src/renderer/styles/base.css and styles/sessions.css.
    The class names are the renderer's own so the two sheets stay diffable; the
