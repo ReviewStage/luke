@@ -54,9 +54,12 @@ test("clearing returns focus to the toggle the X sat beside", () => {
 test("the narrowed pill is the wrapper, so the X can sit inside it", () => {
   assert.match(rule(".options-control"), /display: inline-flex;/);
   assert.match(rule(".options-control"), /align-items: center;/);
+  // The radius stands on the wrapper in both states rather than only while
+  // narrowed: the errand's ring takes its corners from the element it marks,
+  // and at rest the wrapper hugs the toggle's own rounded box exactly.
+  assert.match(rule(".options-control"), /border-radius: 10px;/);
   const pill = rule('.options-control[data-narrowed="true"]');
   assert.match(pill, /background: var\(--raised\);/);
-  assert.match(pill, /border-radius: 10px;/);
 });
 
 test("the X is the pill's own right segment, split off by a hairline", () => {

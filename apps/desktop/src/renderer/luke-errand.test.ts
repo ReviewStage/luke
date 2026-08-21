@@ -7,7 +7,7 @@ import {
   type AppGuideSetting,
   SESSION_LIST_SORT,
 } from "@sidecar/guide";
-import { REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
+import { REALTIME_VOICE, REALTIME_VOICE_SPEED, SESSION_LIST_ALL } from "@sidecar/realtime";
 import { PANEL_FORM_FACTOR } from "@sidecar/surface";
 import type { AppSettings } from "#shared/contracts";
 import {
@@ -135,7 +135,7 @@ test("showing a tab is signed on that tab", () => {
 });
 
 test("a narrowing or a re-ordering is signed on the control that carries it", () => {
-  // The options button says how the list is being shown, so it comes first —
+  // The options control says how the list is being shown, so it comes first —
   // and it is only drawn beside a list with something to choose between, which
   // is why the tab stands behind it rather than instead of it.
   assert.deepEqual(
@@ -149,6 +149,16 @@ test("a narrowing or a re-ordering is signed on the control that carries it", ()
       sort: SESSION_LIST_SORT.RECENCY,
     }),
     [ERRAND_TARGET.LIST_OPTIONS, ERRAND_TARGET.SESSIONS_TAB],
+  );
+});
+
+test("asking for the whole list back is signed on the X that clears it by hand", () => {
+  // The X is only drawn while a selection stands — asking for everything when
+  // everything is already shown leaves nothing to clear — so the options
+  // control and the tab stand behind it rather than nowhere.
+  assert.deepEqual(
+    errandTargets({ kind: "panel", tab: APP_PANEL_TAB.SESSIONS, filters: [SESSION_LIST_ALL] }),
+    [ERRAND_TARGET.LIST_CLEAR, ERRAND_TARGET.LIST_OPTIONS, ERRAND_TARGET.SESSIONS_TAB],
   );
 });
 
