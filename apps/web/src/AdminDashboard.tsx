@@ -19,6 +19,7 @@ import {
 } from "../server/admin/http";
 import { accountInitials } from "./account-initials";
 import { GitHubMark, GoogleMark } from "./account-marks";
+import { settleRead } from "./admin-refresh";
 import { AUTH_BUTTON } from "./auth-surface";
 import {
   type ChartConfig,
@@ -178,13 +179,16 @@ interface ViewerAccount {
 const PLAIN_BUTTON =
   "cursor-pointer rounded-md border border-border bg-card px-3 py-1.5 text-sm font-medium transition-colors duration-150 hover:bg-muted disabled:cursor-default disabled:opacity-60 disabled:hover:bg-card";
 
-/** What the fetch resolved to: the gate's refusals stay distinct here. */
+/**
+ * What the fetch resolved to: the gate's refusals stay distinct here, and a
+ * ready answer carries the one failure a later refresh may have landed on it.
+ */
 type DashboardState =
   | { status: "loading" }
   | { status: "signed-out" }
   | { status: "forbidden" }
   | { status: "error"; detail: string }
-  | { status: "ready"; metrics: AdminMetrics };
+  | { status: "ready"; metrics: AdminMetrics; refreshFailure: string | undefined };
 
 const ERROR_DETAIL = {
   UNAVAILABLE: "The service did not answer. It may be briefly unavailable — try again shortly.",
@@ -876,8 +880,45 @@ function GeneratedStamp({
   );
 }
 
+/**
+ * The failure a refresh landed on an answer that stays shown: the numbers on
+ * screen are still the last ones actually read — the header's stamp keeps
+ * describing them — and this band says the newer read did not arrive. The
+ * status region stands in the page whether or not it has anything to say,
+ * because a live region inserted together with its news is announced by
+ * nothing.
+ */
+function RefreshFailureNotice({
+  failure,
+  refreshing,
+  onRetry,
+}: {
+  failure: string | undefined;
+  refreshing: boolean;
+  onRetry: () => void;
+}): React.JSX.Element {
+  return (
+    <div role="status">
+      {failure ? (
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-x-6 gap-y-2 rounded-lg border border-border bg-card px-5 py-3 text-sm">
+          <span>
+            <span className="font-medium text-attention">Refresh failed.</span>{" "}
+            <span className="text-muted-foreground">
+              Still showing the earlier answer. {failure}
+            </span>
+          </span>
+          <button type="button" className={PLAIN_BUTTON} onClick={onRetry} disabled={refreshing}>
+            {refreshing ? "Trying…" : "Try again"}
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function Dashboard({
   metrics,
+  refreshFailure,
   hideAdmins,
   onHideAdminsChange,
   account,
@@ -888,6 +929,7 @@ function Dashboard({
   now,
 }: {
   metrics: AdminMetrics;
+  refreshFailure: string | undefined;
   hideAdmins: boolean;
   onHideAdminsChange: (hide: boolean) => void;
   account: ViewerAccount | undefined;
@@ -932,6 +974,8 @@ function Dashboard({
           </>
         }
       />
+
+      <RefreshFailureNotice failure={refreshFailure} refreshing={refreshing} onRetry={onRefresh} />
 
       {/* A refetch dims the answer already on screen rather than replacing it:
           the numbers below stay the last ones actually read, and the dimming
@@ -1181,7 +1225,11 @@ async function readDashboardState(response: Response): Promise<DashboardState> {
   }
   if (!response.ok) return { status: "error", detail: ERROR_DETAIL.METRICS };
   // SAFETY: a 200 from the admin metrics endpoint is an AdminMetrics body by its contract.
-  return { status: "ready", metrics: (await response.json()) as AdminMetrics };
+  return {
+    status: "ready",
+    metrics: (await response.json()) as AdminMetrics,
+    refreshFailure: undefined,
+  };
 }
 
 /** What the detail fetch resolved to: the overview's states plus a gone account. */
@@ -1191,7 +1239,7 @@ type DetailState =
   | { status: "forbidden" }
   | { status: "missing" }
   | { status: "error"; detail: string }
-  | { status: "ready"; detail: AdminUserDetail };
+  | { status: "ready"; detail: AdminUserDetail; refreshFailure: string | undefined };
 
 async function readDetailState(response: Response): Promise<DetailState> {
   if (response.redirected) return { status: "error", detail: ERROR_DETAIL.PROTECTED };
@@ -1203,7 +1251,11 @@ async function readDetailState(response: Response): Promise<DetailState> {
   }
   if (!response.ok) return { status: "error", detail: ERROR_DETAIL.ACCOUNT };
   // SAFETY: a 200 from the admin user endpoint is an AdminUserDetail body by its contract.
-  return { status: "ready", detail: (await response.json()) as AdminUserDetail };
+  return {
+    status: "ready",
+    detail: (await response.json()) as AdminUserDetail,
+    refreshFailure: undefined,
+  };
 }
 
 /** A linked provider's row value drawn as its label where the page knows one. */
@@ -1215,6 +1267,7 @@ function signInMethodLabel(providerId: string): string {
 
 function UserDetailPage({
   detail,
+  refreshFailure,
   account,
   onSignOut,
   onBack,
@@ -1223,6 +1276,7 @@ function UserDetailPage({
   now,
 }: {
   detail: AdminUserDetail;
+  refreshFailure: string | undefined;
   account: ViewerAccount | undefined;
   onSignOut: () => void;
   onBack: () => void;
@@ -1263,6 +1317,8 @@ function UserDetailPage({
           </>
         }
       />
+
+      <RefreshFailureNotice failure={refreshFailure} refreshing={refreshing} onRetry={onRefresh} />
 
       <div
         className="transition-opacity duration-150 data-[busy=true]:opacity-50"
@@ -1387,7 +1443,7 @@ type UsersState =
   | { status: "signed-out" }
   | { status: "forbidden" }
   | { status: "error"; detail: string }
-  | { status: "ready"; list: AdminUserList };
+  | { status: "ready"; list: AdminUserList; refreshFailure: string | undefined };
 
 async function readUsersState(response: Response): Promise<UsersState> {
   if (response.redirected) return { status: "error", detail: ERROR_DETAIL.PROTECTED };
@@ -1398,7 +1454,11 @@ async function readUsersState(response: Response): Promise<UsersState> {
   }
   if (!response.ok) return { status: "error", detail: ERROR_DETAIL.USERS };
   // SAFETY: a 200 from the admin users endpoint is an AdminUserList body by its contract.
-  return { status: "ready", list: (await response.json()) as AdminUserList };
+  return {
+    status: "ready",
+    list: (await response.json()) as AdminUserList,
+    refreshFailure: undefined,
+  };
 }
 
 /** The roster's sortable columns, one per header the table draws. */
@@ -1735,6 +1795,7 @@ function UsersTable({
 
 function UsersPage({
   list,
+  refreshFailure,
   hideAdmins,
   onHideAdminsChange,
   account,
@@ -1746,6 +1807,7 @@ function UsersPage({
   now,
 }: {
   list: AdminUserList;
+  refreshFailure: string | undefined;
   hideAdmins: boolean;
   onHideAdminsChange: (hide: boolean) => void;
   account: ViewerAccount | undefined;
@@ -1791,6 +1853,8 @@ function UsersPage({
           </>
         }
       />
+
+      <RefreshFailureNotice failure={refreshFailure} refreshing={refreshing} onRetry={onRefresh} />
 
       <div
         className="transition-opacity duration-150 data-[busy=true]:opacity-50"
@@ -1889,10 +1953,12 @@ function UsersScreen({
             signal: controller.signal,
           }),
         );
-        if (!controller.signal.aborted) setState(next);
+        if (!controller.signal.aborted) setState((current) => settleRead(current, next));
       } catch {
         if (!controller.signal.aborted) {
-          setState({ status: "error", detail: ERROR_DETAIL.USERS });
+          setState((current) =>
+            settleRead(current, { status: "error", detail: ERROR_DETAIL.USERS }),
+          );
         }
       } finally {
         if (!controller.signal.aborted) setRefreshing(false);
@@ -1918,7 +1984,7 @@ function UsersScreen({
       setState((current) =>
         current.status === "ready"
           ? {
-              status: "ready",
+              ...current,
               list: {
                 ...current.list,
                 rows: current.list.rows.map((row) =>
@@ -1979,6 +2045,7 @@ function UsersScreen({
       return frame(
         <UsersPage
           list={state.list}
+          refreshFailure={state.refreshFailure}
           hideAdmins={hideAdmins}
           onHideAdminsChange={onHideAdminsChange}
           account={account}
@@ -2055,10 +2122,12 @@ function UserDetailScreen({
             signal: controller.signal,
           }),
         );
-        if (!controller.signal.aborted) setState(next);
+        if (!controller.signal.aborted) setState((current) => settleRead(current, next));
       } catch {
         if (!controller.signal.aborted) {
-          setState({ status: "error", detail: ERROR_DETAIL.ACCOUNT });
+          setState((current) =>
+            settleRead(current, { status: "error", detail: ERROR_DETAIL.ACCOUNT }),
+          );
         }
       } finally {
         if (!controller.signal.aborted) setRefreshing(false);
@@ -2104,6 +2173,7 @@ function UserDetailScreen({
       return frame(
         <UserDetailPage
           detail={state.detail}
+          refreshFailure={state.refreshFailure}
           account={account}
           onSignOut={() => void signOut()}
           onBack={onBack}
@@ -2202,10 +2272,12 @@ export function AdminDashboard(): React.JSX.Element {
             signal: controller.signal,
           }),
         );
-        if (!controller.signal.aborted) setState(next);
+        if (!controller.signal.aborted) setState((current) => settleRead(current, next));
       } catch {
         if (!controller.signal.aborted) {
-          setState({ status: "error", detail: ERROR_DETAIL.METRICS });
+          setState((current) =>
+            settleRead(current, { status: "error", detail: ERROR_DETAIL.METRICS }),
+          );
         }
       } finally {
         if (!controller.signal.aborted) setRefreshing(false);
@@ -2311,6 +2383,7 @@ export function AdminDashboard(): React.JSX.Element {
         "dashboard",
         <Dashboard
           metrics={state.metrics}
+          refreshFailure={state.refreshFailure}
           hideAdmins={hideAdmins}
           onHideAdminsChange={changeHideAdmins}
           account={viewer}
