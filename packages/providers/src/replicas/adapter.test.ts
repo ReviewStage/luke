@@ -27,6 +27,7 @@ interface TestWorkspace {
   repositoryUrl?: string;
   repositoryName?: string;
   omitRepositories?: boolean;
+  pullRequestUrls?: readonly string[];
   createdAt: number;
   lastActivityAt?: number;
 }
@@ -56,15 +57,20 @@ function workspacePayload(workspace: TestWorkspace) {
             url: workspace.repositoryUrl ?? TEST_REPOSITORY_URL,
           },
         ],
-    pull_requests: [],
+    pull_requests: (workspace.pullRequestUrls ?? []).map((url, index) => ({
+      repository: workspace.repositoryName ?? "reviewstage/luke",
+      number: index + 1,
+      url,
+    })),
   };
 }
 
 /**
  * Serves the subset of the Replica API the adapter is allowed to use: the
- * list, and the documented message endpoint. The per-workspace reads are
- * deliberately not served — they wake a sleeping workspace, so a request to
- * one is a failure of the pass, not a route this fake forgot.
+ * organization's replica list, and the documented message endpoint. The
+ * per-workspace reads are deliberately not served — they wake a sleeping
+ * workspace, so a request to one is a failure of the pass, not a route this
+ * fake forgot — and neither is the dashboard's viewer-scoped workspace list.
  */
 function fakeReplicasApi(workspaces: readonly TestWorkspace[]) {
   return recordingFetch((request) => {
@@ -80,10 +86,12 @@ function fakeReplicasApi(workspaces: readonly TestWorkspace[]) {
       const known = workspaces.some((workspace) => workspace.id === segments[2]);
       return known ? jsonResponse({ status: "sent" }) : jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
     }
-    if (method !== "GET" || segments.length !== 2 || segments[0] !== "v1") {
-      return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
-    }
-    if (segments[1] !== "replica") {
+    if (
+      method !== "GET" ||
+      segments.length !== 2 ||
+      segments[0] !== "v1" ||
+      segments[1] !== "replica"
+    ) {
       return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
     }
 
@@ -312,6 +320,28 @@ test("labels a workspace by its repository, and by neither its name nor nothing"
   assert.equal(observations[1]?.title, "fallback-repository");
   assert.equal(observations[2]?.title, "workspace");
   assert.equal(JSON.stringify(observations).includes(SECRET_NAME_TEXT), false);
+});
+
+test("reports the newest pull request as the workspace's published change", async () => {
+  const api = fakeReplicasApi([
+    {
+      id: "workspace-published",
+      pullRequestUrls: [
+        "https://github.com/reviewstage/luke/pull/402",
+        "https://github.com/reviewstage/luke/pull/405",
+      ],
+      createdAt: TEST_TIME - 1_000,
+    },
+    { id: "workspace-unpublished", createdAt: TEST_TIME - 2_000 },
+  ]);
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  assert.equal(observations[0]?.detail?.change, "https://github.com/reviewstage/luke/pull/405");
+  // The pull request is the row's published work, never its address: a press
+  // on the row must land on the session itself or nowhere.
+  assert.equal(observations[0]?.detail?.link, undefined);
+  assert.equal(observations[1]?.detail?.change, undefined);
 });
 
 test("reports why an errored workspace stopped rather than leaving it idle", async () => {

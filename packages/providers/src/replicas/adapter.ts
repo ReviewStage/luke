@@ -44,12 +44,17 @@ const REPLICAS_ROUTE_SEGMENT = {
 } as const;
 
 /**
- * The one read-only route Luke calls: the workspace list, which answers from
- * Replicas' own records without touching a workspace. The per-workspace reads
- * (`GET /v1/replica/{id}`, its chats, its history) are documented to *wake* a
- * sleeping or archived workspace — compute the user is billed for — so an
- * observation pass, which must be able to change nothing, never issues one,
- * and the roster carries only what the list projection reports.
+ * The one read-only route Luke calls: `GET /v1/replica`, the list the API
+ * guide itself walks programmatic use through, which answers with the
+ * organization's workspaces from Replicas' own records without touching one.
+ * The per-workspace reads (`GET /v1/replica/{id}`, its chats, its history)
+ * are documented to *wake* a sleeping or archived workspace — compute the
+ * user is billed for — so an observation pass, which must be able to change
+ * nothing, never issues one. The richer `GET /v1/workspaces` list is not
+ * called either, for a different reason: it is the dashboard's own view,
+ * shaped around a signed-in viewer (owned and shared view modes, share ids),
+ * and a key stands for the organization rather than for a viewer, so what it
+ * answers a key is not the roster the user sees.
  */
 const REPLICAS_ROUTE = {
   REPLICAS: [REPLICAS_ROUTE_SEGMENT.V1, REPLICAS_ROUTE_SEGMENT.REPLICA],
@@ -65,6 +70,7 @@ const REPLICAS_FIELD = {
   LAST_ACTIVITY_AT: "last_activity_at",
   MESSAGE: "message",
   NAME: "name",
+  PULL_REQUESTS: "pull_requests",
   REPLICAS: "replicas",
   REPOSITORIES: "repositories",
   STATUS: "status",
@@ -86,11 +92,15 @@ type ReplicasStatus = (typeof REPLICAS_STATUS)[keyof typeof REPLICAS_STATUS];
  * Preparing and active are the platform working on the user's behalf — setup,
  * a wake, or an agent mid-task — and Replicas itself retires a workspace that
  * has gone quiet, so active ends when the platform says the work stopped
- * rather than by a clock on this side. Sleeping and archived are both settled:
- * the work reached a pause nobody has come back from, which is what Copilot's
- * archived tasks report too. An errored workspace stopped on something it
- * cannot get past on its own. The projection never says a chat is holding for
- * the user, so no status maps to waiting rather than one pretending to.
+ * rather than by a clock on this side. A finish therefore reads as working
+ * until the auto-sleep: the one projection that reports turn completion is
+ * the dashboard's viewer-scoped list, which answers a signed-in viewer rather
+ * than a key, so the honest lifecycle stands. Sleeping and archived are both
+ * settled — the work reached a pause nobody has come back from, which is what
+ * Copilot's archived tasks report too — and an errored workspace stopped on
+ * something it cannot get past on its own. The projection never says a chat
+ * is holding for the user, so no status maps to waiting rather than one
+ * pretending to.
  */
 const SESSION_STATUS_BY_REPLICAS_STATUS = {
   [REPLICAS_STATUS.PREPARING]: SESSION_STATUS.WORKING,
@@ -117,6 +127,7 @@ interface ReplicasWorkspace {
   repositoryLabel: string;
   status: ReplicasStatus | undefined;
   observedAt: number;
+  pullRequestUrl?: string;
 }
 
 /**
@@ -132,6 +143,17 @@ function repositoryLabelFromRecord(record: WireRecord): string {
   );
 }
 
+/**
+ * The address of the newest pull request the workspace has opened. The list
+ * reports every one; the last entry is reported here, and with one open — the
+ * common case — there is no choice to make.
+ */
+function pullRequestUrlFromRecord(record: WireRecord): string | undefined {
+  const pullRequests = record[REPLICAS_FIELD.PULL_REQUESTS];
+  const last = Array.isArray(pullRequests) ? pullRequests.filter(isRecord).at(-1) : undefined;
+  return last ? textFromRecord(last, REPLICAS_FIELD.URL) : undefined;
+}
+
 function workspaceFromRecord(record: WireRecord): ReplicasWorkspace | undefined {
   const id = textFromRecord(record, REPLICAS_FIELD.ID);
   const observedAt =
@@ -139,6 +161,7 @@ function workspaceFromRecord(record: WireRecord): ReplicasWorkspace | undefined 
     timestampFromRecord(record, REPLICAS_FIELD.CREATED_AT);
   if (!id || observedAt === undefined) return undefined;
 
+  const pullRequestUrl = pullRequestUrlFromRecord(record);
   return {
     id,
     observedAt,
@@ -147,6 +170,7 @@ function workspaceFromRecord(record: WireRecord): ReplicasWorkspace | undefined 
     // no fallback to it.
     repositoryLabel: repositoryLabelFromRecord(record),
     status: knownValue(REPLICAS_STATUS, textFromRecord(record, REPLICAS_FIELD.STATUS)),
+    ...(pullRequestUrl ? { pullRequestUrl } : undefined),
   };
 }
 
@@ -172,6 +196,16 @@ const REPLICAS_MESSAGEABLE_STATUSES: ReadonlySet<ReplicasStatus> = new Set([
  * it reports nothing at all without a credential. The one write it supports
  * is a user-typed message, through the documented message endpoint, for a
  * workspace whose status Replicas documents taking one.
+ *
+ * Replicas is a workspace app hosting agents rather than an agent: a
+ * workspace's chats run Claude Code, Codex, Cursor, and others, the way
+ * Conductor's do. The row is the workspace all the same — the thing Replicas
+ * itself lists, statuses, sleeps, and bills — and it reports no `agent`,
+ * because no read that leaves a workspace asleep says which agent runs it:
+ * `coding_agent` lives on the per-workspace read that wakes, and the
+ * organization conversations export answers only organization keys, pages
+ * like the export it is, and reports no turn state. A host that does not say
+ * which agent runs a chat reports none rather than a guess.
  */
 export class ReplicasSessionAdapter extends CloudSessionAdapter {
   constructor(options: ReplicasAdapterOptions) {
@@ -190,11 +224,11 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
     _now: number,
   ): Promise<readonly ProviderSessionObservation[]> {
     // One call per pass. The list projection already carries the status, the
-    // timestamps, and the repositories, so there is nothing a per-workspace
-    // read would add that is worth waking a workspace for. Workspaces are
-    // never capped — one page of the documented maximum is the request's only
-    // bound — and the page arrives ordered by creation, so the sort below is
-    // what puts the latest activity first.
+    // timestamps, the repositories, and the pull requests, so there is
+    // nothing a per-workspace read would add that is worth waking a workspace
+    // for. Workspaces are never capped — one page of the documented maximum
+    // is the request's only bound — and the page arrives ordered by creation,
+    // so the sort below is what puts the latest activity first.
     const body = await request(REPLICAS_ROUTE.REPLICAS, {
       [REPLICAS_QUERY.LIMIT]: String(REPLICAS_ADAPTER_DEFAULTS.WORKSPACE_PAGE_SIZE),
     });
@@ -230,6 +264,9 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
         workspace.status !== undefined && REPLICAS_MESSAGEABLE_STATUSES.has(workspace.status),
       detail: {
         repository: workspace.repositoryLabel,
+        // The work the workspace has published, exactly as Devin and Cursor
+        // report theirs: the pull request's own address.
+        ...(workspace.pullRequestUrl ? { change: workspace.pullRequestUrl } : undefined),
         ...(status === SESSION_STATUS.ERROR
           ? { error: REPLICAS_WORKSPACE_ERROR_MESSAGE }
           : undefined),
