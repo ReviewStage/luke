@@ -143,6 +143,30 @@ function rememberSidebarCollapsed(collapsed: boolean): void {
   }
 }
 
+/**
+ * Whether the "Hide admins" filter was left off, remembered the way the
+ * sidebar fold is: locally, as the presence of a key marking the exception,
+ * so a browser that refuses storage simply opens with admins hidden.
+ */
+const HIDE_ADMINS_STORAGE_KEY = "luke-admin-hide-admins";
+
+function adminsLeftHidden(): boolean {
+  try {
+    return window.localStorage.getItem(HIDE_ADMINS_STORAGE_KEY) === null;
+  } catch {
+    return true;
+  }
+}
+
+function rememberAdminsHidden(hide: boolean): void {
+  try {
+    if (hide) window.localStorage.removeItem(HIDE_ADMINS_STORAGE_KEY);
+    else window.localStorage.setItem(HIDE_ADMINS_STORAGE_KEY, "false");
+  } catch {
+    // Storage refused: admins hide again on the next visit.
+  }
+}
+
 /** The signed-in account the header names; read from the session, shown as-is. */
 interface ViewerAccount {
   name: string;
@@ -2108,10 +2132,14 @@ export function AdminDashboard(): React.JSX.Element {
     signInChosenHere() ? { status: "loading" } : { status: "signed-out" },
   );
   // Admin accounts are the maintainers' own; their traffic reads as noise in
-  // every count, so the dashboard opens with them hidden and the toggle is the
-  // explicit ask to include them. The scope is the server's filter — aggregates
-  // cannot be unpicked client-side — so flipping it refetches.
-  const [hideAdmins, setHideAdmins] = useState(true);
+  // every count, so admins start hidden and the toggle is the explicit ask to
+  // include them, remembered across visits. The scope is the server's filter —
+  // aggregates cannot be unpicked client-side — so flipping it refetches.
+  const [hideAdmins, setHideAdmins] = useState(adminsLeftHidden);
+  const changeHideAdmins = (hide: boolean) => {
+    rememberAdminsHidden(hide);
+    setHideAdmins(hide);
+  };
   const [refreshing, setRefreshing] = useState(false);
   const inFlight = useRef<AbortController>(null);
   const now = useNow(AGE_TICK_MS);
@@ -2246,7 +2274,7 @@ export function AdminDashboard(): React.JSX.Element {
     return (
       <UsersScreen
         hideAdmins={hideAdmins}
-        onHideAdminsChange={setHideAdmins}
+        onHideAdminsChange={changeHideAdmins}
         account={viewer}
         onSignOut={signOut}
         onOpenAccount={openAccount}
@@ -2284,7 +2312,7 @@ export function AdminDashboard(): React.JSX.Element {
         <Dashboard
           metrics={state.metrics}
           hideAdmins={hideAdmins}
-          onHideAdminsChange={setHideAdmins}
+          onHideAdminsChange={changeHideAdmins}
           account={viewer}
           onSignOut={() => void signOut()}
           refreshing={refreshing}
