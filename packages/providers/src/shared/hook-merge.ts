@@ -95,6 +95,13 @@ export interface ObservationHookSpec<Event extends string> {
    * for a provider whose entries take a timeout at all.
    */
   timeoutSeconds?: number;
+  /**
+   * The same bound for a provider whose configuration documents the entry
+   * timeout in milliseconds (Gemini CLI) rather than seconds. Both land on
+   * the same `timeout` key — only the provider knows its unit — so a spec
+   * declares exactly one of the two.
+   */
+  timeoutMilliseconds?: number;
   /** The envelope field naming the session the event belongs to. */
   sessionIdField: string;
   /**
@@ -330,7 +337,8 @@ function registrationEntry<Event extends string>(
     registration.event,
     spec.repliesWithJson === true,
   );
-  const timeout = spec.timeoutSeconds !== undefined ? { timeout: spec.timeoutSeconds } : undefined;
+  const timeoutValue = spec.timeoutSeconds ?? spec.timeoutMilliseconds;
+  const timeout = timeoutValue !== undefined ? { timeout: timeoutValue } : undefined;
   if (spec.entryNesting === HOOK_ENTRY_NESTING.FLAT) {
     return { ...matcher, command, ...timeout };
   }

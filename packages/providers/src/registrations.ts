@@ -23,6 +23,7 @@ import { CursorLocalSessionAdapter } from "./cursor/local-adapter.js";
 import { DEVIN_PROVIDER, DevinSessionAdapter } from "./devin/adapter.js";
 import { DevinLocalSessionAdapter } from "./devin/local-adapter.js";
 import { GeminiCliSessionAdapter } from "./gemini-cli/adapter.js";
+import { installGeminiObservationHooks } from "./gemini-cli/hooks.js";
 import type { ObservationHookProviderId } from "./hook-registry.js";
 import { JulesSessionAdapter } from "./jules/adapter.js";
 import { OpenCodeSessionAdapter } from "./opencode/adapter.js";
@@ -77,6 +78,7 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
   const claudeInstallation = hookInstallation(PROVIDER_ID.CLAUDE_CODE);
   const codexInstallation = hookInstallation(PROVIDER_ID.CODEX);
   const cursorInstallation = hookInstallation(PROVIDER_ID.CURSOR);
+  const geminiInstallation = hookInstallation(PROVIDER_ID.GEMINI_CLI);
   const claude = new ClaudeCodeSessionAdapter({
     hookEventsDirectory: () => claudeInstallation().spoolDirectory,
   });
@@ -155,7 +157,16 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
       adapter: devin,
       credential: CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.DEVIN],
     },
-    [PROVIDER_ID.GEMINI_CLI]: { adapter: new GeminiCliSessionAdapter() },
+    [PROVIDER_ID.GEMINI_CLI]: {
+      adapter: new GeminiCliSessionAdapter({
+        hookEventsDirectory: () => geminiInstallation().spoolDirectory,
+      }),
+      registerObservationHook: observationHookRegistration(
+        installGeminiObservationHooks,
+        geminiInstallation,
+        now,
+      ),
+    },
     [PROVIDER_ID.JULES]: {
       adapter: new JulesSessionAdapter({
         readApiKey: () => options.readApiKey(CREDENTIAL_PROVIDER_ID.JULES),

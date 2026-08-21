@@ -33,9 +33,9 @@ test("declares credentials and observation hooks beside their adapters", () => {
   assert.ok(registrations[PROVIDER_ID.CLAUDE_CODE].registerObservationHook instanceof Function);
   assert.ok(registrations[PROVIDER_ID.CODEX].registerObservationHook instanceof Function);
   assert.ok(registrations[PROVIDER_ID.CURSOR].registerObservationHook instanceof Function);
+  assert.ok(registrations[PROVIDER_ID.GEMINI_CLI].registerObservationHook instanceof Function);
   assert.equal("credential" in registrations[PROVIDER_ID.OPENCODE], false);
   assert.equal("credential" in registrations[PROVIDER_ID.GEMINI_CLI], false);
-  assert.equal("registerObservationHook" in registrations[PROVIDER_ID.GEMINI_CLI], false);
 });
 
 test("every registration exposes the one total adapter interface", () => {

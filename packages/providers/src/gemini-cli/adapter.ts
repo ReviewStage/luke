@@ -4,6 +4,7 @@ import {
   maximumSessionTitleLength,
   PROVIDER_ID,
   type ProviderSessionObservation,
+  SESSION_COMPLETION_CAUSE,
   SESSION_STATUS,
   type SessionDetail,
   type SessionProvider,
@@ -12,10 +13,13 @@ import {
 import { isRecord, isWireString, oneLine, text, type WireRecord } from "@sidecar/wire";
 import {
   discoverSessionFiles,
+  type HookStatusRefinement,
+  hookRefinedStatus,
   LOCAL_ADAPTER_DEFAULTS,
   LocalFileSessionAdapter,
   localSessionStatus,
   readDirectory,
+  readHead,
   readTail,
   readTextFile,
   type SessionFileCandidate,
@@ -24,6 +28,7 @@ import {
   tailRecords,
   workspaceLabel,
 } from "../shared/local-session-adapter.js";
+import { GEMINI_HOOK_EVENT, type GeminiHookEvent, readGeminiHookEvent } from "./hooks.js";
 import {
   defaultGeminiCliHome,
   GEMINI_CHATS_DIRECTORY,
@@ -60,6 +65,8 @@ const GEMINI_LEGACY_HASH_DIRECTORY_PATTERN = /^[0-9a-f]{64}$/;
 const GEMINI_ADAPTER_DEFAULTS = {
   MAXIMUM_PROJECT_DIRECTORIES: 200,
   MAXIMUM_ACTIVITY_LENGTH: 80,
+  /** Enough of a recording's start to hold its one opening metadata line. */
+  READ_HEAD_BYTES: 16 * 1024,
 } as const;
 
 export const GEMINI_CLI_PROVIDER: SessionProvider = {
@@ -72,6 +79,14 @@ export interface GeminiCliAdapterOptions {
   now?: () => number;
   activeSessionFreshnessMs?: number;
   transcriptMaximumRenderedLength?: number;
+  /**
+   * Where the observation hook spools its events, when hooks are on at all.
+   * Read lazily like the cloud adapters' credentials, because the app decides
+   * the path after this adapter is declared. Absent — or answering nothing —
+   * the adapter reads the recordings alone, exactly as it always has: the
+   * hooks only ever sharpen what the tail already showed.
+   */
+  hookEventsDirectory?: () => string | undefined;
 }
 
 function timestampMsFrom(record: WireRecord): number | undefined {
@@ -121,6 +136,8 @@ function conversationClockMs(records: readonly WireRecord[]): number | undefined
  */
 interface ParsedGeminiSessionTail {
   summary?: string;
+  /** The full id the opening metadata line names, keying the hook spool. */
+  sessionId?: string;
   model?: string;
   timestampMs?: number;
   tipType?: string;
@@ -206,8 +223,9 @@ export function parseGeminiSessionTail(tail: string): ParsedGeminiSessionTail {
  * cannot: a reply holding a call for permission — or one whose calls all
  * settled — is holding for the developer, and one with a call still open is
  * working. A killed process leaves an open call on disk forever, so an open
- * turn gone quiet is unknown rather than still working. Nothing on disk marks
- * a session closed, so a local Gemini session is never complete.
+ * turn gone quiet is unknown rather than still working. Nothing in the
+ * recording marks a session closed, so the tail alone never reports a local
+ * Gemini session complete; the hook's own `session-end` is what can.
  */
 function statusFromTail(
   parsed: ParsedGeminiSessionTail,
@@ -221,6 +239,38 @@ function statusFromTail(
     (parsed.holdingForApproval === true || parsed.toolCallsOpen !== true);
   const status = settled ? SESSION_STATUS.WAITING : SESSION_STATUS.WORKING;
   return localSessionStatus(status, observedAt, now, freshnessMs);
+}
+
+/**
+ * What the refinement buys here is what the recording cannot say: the
+ * `session-end` token is the one thing that can ever report a local Gemini
+ * session complete, a notification marks a hold the moment it starts rather
+ * than when the awaiting call reaches the tail, and a stop keeps a settled
+ * turn waiting past the freshness decay.
+ */
+const GEMINI_HOOK_STATUS_REFINEMENT = {
+  definitive: [{ event: GEMINI_HOOK_EVENT.SESSION_END, fresh: SESSION_STATUS.COMPLETE }],
+  fresh: [
+    { event: GEMINI_HOOK_EVENT.PROMPT, fresh: SESSION_STATUS.WORKING },
+    { event: GEMINI_HOOK_EVENT.STOP, fresh: SESSION_STATUS.WAITING },
+    { event: GEMINI_HOOK_EVENT.NOTIFICATION, fresh: SESSION_STATUS.WAITING },
+  ],
+  notificationEvent: GEMINI_HOOK_EVENT.NOTIFICATION,
+  sessionEndEvent: GEMINI_HOOK_EVENT.SESSION_END,
+} as const satisfies HookStatusRefinement<GeminiHookEvent>;
+
+/**
+ * The session's full id, from the metadata line the CLI writes once as a
+ * recording opens. The file's own name truncates the id to eight characters,
+ * but the hook envelope names sessions whole, so this line is the one join
+ * between the spool and the recording it refines.
+ */
+function sessionIdFromHead(head: string): string | undefined {
+  for (const record of tailRecords(head)) {
+    const sessionId = text(record.sessionId);
+    if (sessionId) return sessionId;
+  }
+  return undefined;
 }
 
 /**
@@ -296,8 +346,9 @@ function workspaceFrom(projectRoot: string | undefined, projectDirectory: string
 /**
  * Observes the Gemini CLI sessions on this machine from the recordings the
  * CLI already writes for itself: the append-only JSONL files under its own
- * per-project chats directories. It runs no server, needs no credential,
- * registers no hook, and opens everything read-only.
+ * per-project chats directories. It runs no server, needs no credential, and
+ * opens everything read-only; the observation hook registered beside it only
+ * ever sharpens what those recordings already showed.
  */
 export class GeminiCliSessionAdapter extends LocalFileSessionAdapter<
   GeminiSessionFileCandidate,
@@ -307,6 +358,7 @@ export class GeminiCliSessionAdapter extends LocalFileSessionAdapter<
 
   readonly #geminiHome: string;
   readonly #transcriptMaximumRenderedLength: number | undefined;
+  readonly #hookEventsDirectory: (() => string | undefined) | undefined;
   /** What each project's marker named, refreshed every pass and never grown past it. */
   #projectRoots = new Map<string, string | undefined>();
 
@@ -314,6 +366,7 @@ export class GeminiCliSessionAdapter extends LocalFileSessionAdapter<
     super(options);
     this.#geminiHome = options.geminiHome ?? defaultGeminiCliHome();
     this.#transcriptMaximumRenderedLength = options.transcriptMaximumRenderedLength;
+    this.#hookEventsDirectory = options.hookEventsDirectory;
   }
 
   protected discover(): Promise<GeminiSessionFileCandidate[]> {
@@ -340,17 +393,25 @@ export class GeminiCliSessionAdapter extends LocalFileSessionAdapter<
   }
 
   protected async parse(candidate: GeminiSessionFileCandidate): Promise<ParsedGeminiSessionTail> {
-    return parseGeminiSessionTail(
+    const parsed = parseGeminiSessionTail(
       await readTail(candidate.filePath, LOCAL_ADAPTER_DEFAULTS.READ_TAIL_BYTES),
     );
+    // The head is read only where a spool could answer for it: the full id
+    // matters to nothing else this adapter reports.
+    if (this.#hookEventsDirectory !== undefined) {
+      parsed.sessionId = sessionIdFromHead(
+        await readHead(candidate.filePath, GEMINI_ADAPTER_DEFAULTS.READ_HEAD_BYTES),
+      );
+    }
+    return parsed;
   }
 
-  protected observation(
+  protected async observation(
     candidate: GeminiSessionFileCandidate,
     parsed: ParsedGeminiSessionTail,
     now: number,
     activeSessionFreshnessMs: number,
-  ): ProviderSessionObservation {
+  ): Promise<ProviderSessionObservation> {
     const workspace = workspaceFrom(
       this.#projectRoots.get(candidate.projectDirectory),
       candidate.projectDirectory,
@@ -359,18 +420,34 @@ export class GeminiCliSessionAdapter extends LocalFileSessionAdapter<
     // summary bookkeeping to old sessions at later startups, bumping their
     // mtimes the way any bulk touch would. The file's date remains the
     // fallback for a slice holding no conversation stamp at all.
-    const observedAt = parsed.timestampMs ?? candidate.mtimeMs;
-    const status = statusFromTail(parsed, observedAt, now, activeSessionFreshnessMs);
+    const conversationAt = parsed.timestampMs ?? candidate.mtimeMs;
+    const hookEventsDirectory = this.#hookEventsDirectory?.();
+    const hookEvent =
+      hookEventsDirectory !== undefined && parsed.sessionId !== undefined
+        ? await readGeminiHookEvent(hookEventsDirectory, parsed.sessionId).catch(() => undefined)
+        : undefined;
+    const refined = hookRefinedStatus({
+      refinement: GEMINI_HOOK_STATUS_REFINEMENT,
+      hookEvent,
+      providerAtMs: conversationAt,
+      statusAt: (observedAt) => statusFromTail(parsed, observedAt, now, activeSessionFreshnessMs),
+      now,
+      activeSessionFreshnessMs,
+    });
+    const holdingForDeveloper =
+      refined.holdingForDeveloper ||
+      (refined.status === SESSION_STATUS.WAITING && parsed.holdingForApproval === true);
     return {
       providerSessionId: candidate.providerSessionId,
       title: titleFromTail(parsed, workspace),
-      status,
-      observedAt,
+      status: refined.status,
+      ...(refined.sessionClosed
+        ? { completionCause: SESSION_COMPLETION_CAUSE.SESSION_CLOSED }
+        : undefined),
+      observedAt: refined.observedAt,
       ...(parsed.recap ? { recap: parsed.recap } : undefined),
       detail: detailFromTail(parsed, workspace),
-      ...(status === SESSION_STATUS.WAITING && parsed.holdingForApproval === true
-        ? { holdingForDeveloper: true }
-        : undefined),
+      ...(holdingForDeveloper ? { holdingForDeveloper: true } : undefined),
     };
   }
 
