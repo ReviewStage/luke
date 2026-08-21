@@ -16,6 +16,7 @@ export const PROVIDER_ID = {
   GEMINI_CLI: "gemini-cli",
   JULES: "jules",
   OPENCODE: "opencode",
+  REPLICAS: "replicas",
 } as const;
 
 export type ProviderId = (typeof PROVIDER_ID)[keyof typeof PROVIDER_ID];

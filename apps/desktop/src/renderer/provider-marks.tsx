@@ -28,6 +28,7 @@ import {
   OPENCODE_BLOCK_PATH,
   OPENCODE_FRAME_PATH,
   ORCA_PATH,
+  REPLICAS_PATH,
   SUPERSET_PATH,
 } from "@sidecar/surface";
 import { useId } from "react";
@@ -61,7 +62,9 @@ import { APPLE_CALENDAR_ID } from "#shared/apple-calendar";
  * https://jules.google), OpenAI via Simple Icons (CC0-1.0), Linear via Simple Icons (CC0-1.0, sourced from
  * https://linear.app), OpenCode's two-tone terminal mark verbatim from
  * the favicon https://opencode.ai serves, Orca's whale mark verbatim from the
- * logo the Orca repository publishes (stablyai/orca, MIT), and Superset's bracket mark traced
+ * logo the Orca repository publishes (stablyai/orca, MIT), Replicas' pixel R
+ * verbatim from the site mark https://tryreplicas.com serves
+ * (R-logo-new.svg), and Superset's bracket mark traced
  * from the pixel grid of the favicon https://superset.sh serves — the one
  * square mark Superset publishes — keeping the vertical metallic gradient the
  * favicon draws it with. Each keeps its own brand colour
@@ -289,6 +292,20 @@ function JulesMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
+function ReplicasMark({ className }: MarkProps): React.JSX.Element {
+  return (
+    <svg
+      className={className}
+      data-mark={PROVIDER_ID.REPLICAS}
+      viewBox="0 0 225 300"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path fill="currentColor" d={REPLICAS_PATH} />
+    </svg>
+  );
+}
+
 function AppleCalendarMark({ className }: MarkProps): React.JSX.Element {
   // Drawn after the macOS Calendar app icon — white tile, red weekday line,
   // and the 17 Apple's marketing icon shows — in its own colours, because
@@ -484,6 +501,7 @@ const PROVIDER_MARKS = {
   [CREDENTIAL_PROVIDER_ID.OPENAI]: OpenAiMark,
   [PROVIDER_ID.OPENCODE]: OpenCodeMark,
   [SESSION_APPLICATION_ID.ORCA]: OrcaMark,
+  [PROVIDER_ID.REPLICAS]: ReplicasMark,
   [SUPERSET_WORKSPACE_PROVIDER_ID]: SupersetMark,
 } as const satisfies Readonly<Record<MarkId, (props: MarkProps) => React.JSX.Element>>;
 

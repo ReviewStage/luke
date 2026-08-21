@@ -82,6 +82,7 @@ export const PRODUCT_CONNECTION_ID = {
   JULES: PROVIDER_ID.JULES,
   LINEAR: ISSUE_TRACKER_ID.LINEAR,
   OPENAI: "openai",
+  REPLICAS: PROVIDER_ID.REPLICAS,
 } as const;
 
 export type ProductConnectionId =
