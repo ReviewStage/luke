@@ -880,6 +880,12 @@ export function AdminDashboard(): React.JSX.Element {
   }, [load]);
 
   const signOut = async () => {
+    // The header stays live through a refetch, so this press can land on an open
+    // read. It is dropped first: an answer that left carrying the old cookie
+    // would otherwise resolve behind the sign-out and put the dashboard back up
+    // on a consent that was just withdrawn.
+    inFlight.current?.abort();
+    setRefreshing(false);
     await authClient.signOut();
     forgetSignInChosen();
     setState({ status: "signed-out" });
