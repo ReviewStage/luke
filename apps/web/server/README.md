@@ -108,3 +108,60 @@ one atomic upsert before each upstream call, checked against the ceilings in
 `server/hosted/quota.ts`. The ceilings bound how often calls open, not how
 long they run; a spend limit on the OpenAI project behind the key is the
 backstop and should be configured with it.
+
+# Admin dashboard
+
+`api/admin/metrics.ts` answers `/api/admin` (served by `admin.html`), a
+maintainer-only view of the service's own operational tables. Its logic lives in
+`server/admin/` behind injected seams, the same shape the hosted endpoints keep,
+but its response vocabulary is its own — deliberately not `server/hosted/http.ts`,
+whose slugs are the desktop's wire contract in `@sidecar/hosted`. This surface is
+browser-only and the desktop never validates it.
+
+Authorization is two steps and fails closed. The gate is a first-party browser
+session — resolved through Better Auth's own `getSession`, the cookie a
+maintainer signs in for on this site, not the desktop's bearer token — and then
+an allowlist. `server/admin/admin-access.ts` names the two maintainers by their
+GitHub account ids, which are public and immutable and so are compiled in like
+the desktop OAuth client rather than read from the environment; an anonymous
+request is `401 not-signed-in` (the page offers sign-in) and a signed-in account
+off the allowlist is `403 not-authorized`. A deployment names further admins by
+email through `LUKE_ADMIN_EMAILS` (comma-separated), which is how an account that
+signed in with Google rather than GitHub, or a maintainer added later, is
+admitted without a code change. A blank or absent value is an empty list, never
+a wildcard.
+
+Everything the dashboard shows is an aggregate of rows Luke already stores for
+its own operation, read by a maintainer on their own service — it is not the
+desktop observing sessions, and it widens no analytics event, so it moves
+neither the product-event allowlist nor `PRIVACY.md`. The data sources are:
+
+- **User activity** — the `user` table (total accounts, rolling 7- and 30-day
+  signups, and a daily signup series) and the `session` table (sessions whose
+  `expires_at` is still in the future, and the distinct accounts behind them).
+  Linked sign-in methods are counted from the `account` table's `provider_id`.
+- **Feature usage** — the `hosted_usage` table: voice calls and attention
+  reviews, today and across the 30-day window, the daily series, the accounts
+  active today, and the heaviest accounts. The heaviest-accounts table is the
+  one place an individual is named, from the service's own user row, to the
+  maintainer who operates it.
+- **Reliability** — `hosted_usage` rows that reached a daily ceiling, the
+  closest rejection signal these tables hold. Per-request error rates and
+  client failures are product-analytics events and live with the analytics
+  processor, not in this database; the dashboard says so rather than inventing
+  a number.
+- **System health** — a `select 1` probe (reachability and its round-trip) and
+  which integrations the deployment has keys for, reported as presence booleans
+  only. No secret value crosses into the response.
+
+The shaping that has off-by-one risk — the trailing day window and its
+zero-filled series — lives in the pure `buildAdminMetrics` in
+`server/admin/admin-metrics.ts`, tested without a database; the Drizzle
+aggregation is in `server/admin/admin-queries.ts`. A database that fails the
+probe short-circuits to an empty source whose health card reports the outage,
+rather than a page of zeros under a green light.
+
+The dashboard needs no secret of its own. It reuses the auth service's
+configuration (`BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, and at least one social
+provider) and reads `LUKE_ADMIN_EMAILS` optionally. Without the two compiled-in
+GitHub ids matching or an email on that list, no one is admitted.

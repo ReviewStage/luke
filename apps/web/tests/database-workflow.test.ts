@@ -32,6 +32,7 @@ test("Vercel routes nested auth paths before its detected API 404", () => {
     { src: "/api/auth/(.*)", dest: "/api/auth/[...all].ts" },
     { src: "/privacy", dest: "/privacy.html" },
     { src: "/changelog", dest: "/changelog.html" },
+    { src: "/admin", dest: "/admin.html" },
   ]);
   assert.equal("rewrites" in vercelConfig, false);
 });
