@@ -3,7 +3,6 @@ import test from "node:test";
 import type { AdminViewer } from "../server/admin/admin-access";
 import {
   ADMIN_INTEGRATION,
-  ADMIN_METRICS_WINDOW_DAYS,
   ADMIN_RETENTION_WEEKS,
   ADMIN_TREND_DAYS,
   type AdminMetrics,
@@ -16,13 +15,19 @@ import {
   lastNWeekStartKeys,
   SIGN_IN_PROVIDER_ID,
   utcWeekStartKey,
+  windowFetchDays,
 } from "../server/admin/admin-metrics";
 import {
   ADMIN_ERROR,
   ADMIN_METRICS_SCOPE,
   ADMIN_METRICS_SCOPE_PARAM,
+  ADMIN_METRICS_WINDOW,
+  ADMIN_METRICS_WINDOW_DEFAULT,
+  ADMIN_METRICS_WINDOW_PARAM,
   type AdminMetricsScope,
+  type AdminMetricsWindow,
   adminMetricsScope,
+  adminMetricsWindow,
 } from "../server/admin/http";
 import { posthogProjectConsoleUrl } from "../server/hosted/posthog";
 import { HOSTED_DAILY_LIMIT, HOSTED_METER } from "../server/hosted/quota";
@@ -67,8 +72,8 @@ test("an empty account table is zero on every method", () => {
 });
 
 test("the window is a contiguous run of day keys ending on today", () => {
-  const keys = lastNDayKeys(NOON_UTC, ADMIN_METRICS_WINDOW_DAYS);
-  assert.equal(keys.length, ADMIN_METRICS_WINDOW_DAYS);
+  const keys = lastNDayKeys(NOON_UTC, ADMIN_METRICS_WINDOW.MONTH);
+  assert.equal(keys.length, ADMIN_METRICS_WINDOW.MONTH);
   assert.equal(keys[0], "2026-07-19");
   assert.equal(keys[keys.length - 1], "2026-08-17");
 });
@@ -87,9 +92,10 @@ test("the usage series is zero-filled and totalled across the window", () => {
       },
     }),
     NOON_UTC,
+    ADMIN_METRICS_WINDOW_DEFAULT,
   );
 
-  assert.equal(metrics.featureUsage.daily.length, ADMIN_METRICS_WINDOW_DAYS);
+  assert.equal(metrics.featureUsage.daily.length, ADMIN_METRICS_WINDOW_DEFAULT);
   assert.equal(metrics.featureUsage.voiceCallsToday, 3);
   assert.equal(metrics.featureUsage.attentionReviewsToday, 41);
   assert.equal(metrics.featureUsage.voiceCallsWindow, 8);
@@ -112,9 +118,10 @@ test("the signup series is zero-filled over the same window", () => {
       },
     }),
     NOON_UTC,
+    ADMIN_METRICS_WINDOW_DEFAULT,
   );
   assert.equal(metrics.users.total, 12);
-  assert.equal(metrics.users.dailySignups.length, ADMIN_METRICS_WINDOW_DAYS);
+  assert.equal(metrics.users.dailySignups.length, ADMIN_METRICS_WINDOW_DEFAULT);
   assert.equal(metrics.users.dailySignups[0]?.count, 1);
   assert.equal(metrics.users.dailySignups.at(-1)?.count, 2);
 });
@@ -134,6 +141,7 @@ test("the window's signup count is the series' own sum, never a second reading",
       },
     }),
     NOON_UTC,
+    ADMIN_METRICS_WINDOW_DEFAULT,
   );
   assert.equal(
     metrics.users.newInWindow,
@@ -142,8 +150,13 @@ test("the window's signup count is the series' own sum, never a second reading",
   assert.equal(metrics.users.newInWindow, 8);
 });
 
-test("the window holds both runs of a trend, so `prior` is never a truncated one", () => {
-  assert.ok(ADMIN_TREND_DAYS * 2 <= ADMIN_METRICS_WINDOW_DAYS);
+test("the fetch holds both runs of a trend, so `prior` is never a truncated one", () => {
+  for (const windowDays of Object.values(ADMIN_METRICS_WINDOW)) {
+    assert.ok(ADMIN_TREND_DAYS * 2 <= windowFetchDays(windowDays));
+    assert.ok(windowDays <= windowFetchDays(windowDays));
+  }
+  assert.equal(windowFetchDays(ADMIN_METRICS_WINDOW.WEEK), ADMIN_TREND_DAYS * 2);
+  assert.equal(windowFetchDays(ADMIN_METRICS_WINDOW.QUARTER), ADMIN_METRICS_WINDOW.QUARTER);
 });
 
 test("a trend is the trailing run beside the run immediately before it", () => {
@@ -172,6 +185,7 @@ test("a trend is the trailing run beside the run immediately before it", () => {
       },
     }),
     NOON_UTC,
+    ADMIN_METRICS_WINDOW_DEFAULT,
   );
 
   assert.deepEqual(metrics.users.signupTrend, { days: ADMIN_TREND_DAYS, recent: 4, prior: 8 });
@@ -182,8 +196,55 @@ test("a trend is the trailing run beside the run immediately before it", () => {
   });
 });
 
+test("a 7-day window narrows the series while its trend still sees the week before", () => {
+  const metrics = buildAdminMetrics(
+    source({
+      users: {
+        ...source().users,
+        signupsByDay: new Map([
+          // Inside the 7-day window (2026-08-11 through 2026-08-17).
+          ["2026-08-17", 2],
+          // Outside the window but inside the trend's prior run.
+          ["2026-08-06", 5],
+        ]),
+      },
+      usage: {
+        byDay: new Map([
+          ["2026-08-16", { voiceCalls: 3, attentionReviews: 1 }],
+          ["2026-08-05", { voiceCalls: 2, attentionReviews: 0 }],
+        ]),
+        activeUsersToday: 0,
+        activeUsersWindow: 1,
+        topUsers: [],
+      },
+    }),
+    NOON_UTC,
+    ADMIN_METRICS_WINDOW.WEEK,
+  );
+
+  assert.equal(metrics.windowDays, ADMIN_METRICS_WINDOW.WEEK);
+  assert.equal(metrics.users.dailySignups.length, ADMIN_METRICS_WINDOW.WEEK);
+  assert.equal(metrics.featureUsage.daily.length, ADMIN_METRICS_WINDOW.WEEK);
+  assert.equal(metrics.users.newInWindow, 2);
+  assert.equal(metrics.featureUsage.voiceCallsWindow, 3);
+  assert.equal(metrics.featureUsage.attentionReviewsWindow, 1);
+  assert.deepEqual(metrics.users.signupTrend, { days: ADMIN_TREND_DAYS, recent: 2, prior: 5 });
+  assert.deepEqual(metrics.featureUsage.usageTrend, {
+    days: ADMIN_TREND_DAYS,
+    recent: 4,
+    prior: 2,
+  });
+});
+
+test("a 90-day window widens the series to its own length", () => {
+  const metrics = buildAdminMetrics(source(), NOON_UTC, ADMIN_METRICS_WINDOW.QUARTER);
+  assert.equal(metrics.windowDays, ADMIN_METRICS_WINDOW.QUARTER);
+  assert.equal(metrics.users.dailySignups.length, ADMIN_METRICS_WINDOW.QUARTER);
+  assert.equal(metrics.featureUsage.daily.length, ADMIN_METRICS_WINDOW.QUARTER);
+});
+
 test("a trend over an empty window is zero on both runs rather than absent", () => {
-  const metrics = buildAdminMetrics(source(), NOON_UTC);
+  const metrics = buildAdminMetrics(source(), NOON_UTC, ADMIN_METRICS_WINDOW_DEFAULT);
   assert.deepEqual(metrics.users.signupTrend, { days: ADMIN_TREND_DAYS, recent: 0, prior: 0 });
   assert.deepEqual(metrics.featureUsage.usageTrend, {
     days: ADMIN_TREND_DAYS,
@@ -206,7 +267,7 @@ test("a week is named by its Monday, whichever day the instant falls on", () => 
 });
 
 test("retention cohorts are the trailing weeks, and unreached weeks are absent", () => {
-  const metrics = buildAdminMetrics(source(), NOON_UTC);
+  const metrics = buildAdminMetrics(source(), NOON_UTC, ADMIN_METRICS_WINDOW_DEFAULT);
   assert.equal(metrics.retention.weeks, ADMIN_RETENTION_WEEKS);
   assert.equal(metrics.retention.cohorts.length, ADMIN_RETENTION_WEEKS);
   assert.equal(metrics.retention.cohorts[0]?.weekStart, "2026-06-29");
@@ -242,6 +303,7 @@ test("a cohort's shares are its active accounts over its size, week by week", ()
       },
     }),
     NOON_UTC,
+    ADMIN_METRICS_WINDOW_DEFAULT,
   );
 
   const cohort = metrics.retention.cohorts[0];
@@ -273,6 +335,7 @@ test("only the current week's cells are in progress, in every cohort", () => {
       },
     }),
     NOON_UTC,
+    ADMIN_METRICS_WINDOW_DEFAULT,
   );
 
   for (const cohort of metrics.retention.cohorts) {
@@ -288,7 +351,7 @@ test("only the current week's cells are in progress, in every cohort", () => {
 });
 
 test("a cohort with no accounts keeps its count and states no share", () => {
-  const metrics = buildAdminMetrics(source(), NOON_UTC);
+  const metrics = buildAdminMetrics(source(), NOON_UTC, ADMIN_METRICS_WINDOW_DEFAULT);
   for (const cohort of metrics.retention.cohorts) {
     assert.equal(cohort.size, 0);
     for (const cell of cohort.cells) {
@@ -311,18 +374,22 @@ test("the most active accounts pass through the builder untouched", () => {
       total: 43,
     },
   ];
-  const metrics = buildAdminMetrics(source({ usage: { ...source().usage, topUsers } }), NOON_UTC);
+  const metrics = buildAdminMetrics(
+    source({ usage: { ...source().usage, topUsers } }),
+    NOON_UTC,
+    ADMIN_METRICS_WINDOW_DEFAULT,
+  );
   assert.deepEqual(metrics.featureUsage.topUsers, topUsers);
 });
 
 test("the daily ceilings are reported from the hosted quota, not restated", () => {
-  const metrics = buildAdminMetrics(source(), NOON_UTC);
+  const metrics = buildAdminMetrics(source(), NOON_UTC, ADMIN_METRICS_WINDOW_DEFAULT);
   assert.equal(metrics.reliability.voiceDailyLimit, HOSTED_DAILY_LIMIT[HOSTED_METER.VOICE_CALL]);
   assert.equal(
     metrics.reliability.attentionDailyLimit,
     HOSTED_DAILY_LIMIT[HOSTED_METER.ATTENTION_REVIEW],
   );
-  assert.equal(metrics.windowDays, ADMIN_METRICS_WINDOW_DAYS);
+  assert.equal(metrics.windowDays, ADMIN_METRICS_WINDOW_DEFAULT);
   assert.equal(metrics.generatedAt, NOON_UTC);
 });
 
@@ -336,6 +403,7 @@ test("the analytics console address rides through when configured and stays abse
       },
     }),
     NOON_UTC,
+    ADMIN_METRICS_WINDOW_DEFAULT,
   );
   assert.equal(configured.reliability.analyticsConsoleUrl, "https://us.posthog.com/project/12345");
 
@@ -349,13 +417,14 @@ test("the analytics console address rides through when configured and stays abse
       },
     }),
     NOON_UTC,
+    ADMIN_METRICS_WINDOW_DEFAULT,
   );
   assert.equal(
     overriddenHost.reliability.analyticsConsoleUrl,
     "https://eu.posthog.com/project/12345",
   );
 
-  const absent = buildAdminMetrics(source(), NOON_UTC);
+  const absent = buildAdminMetrics(source(), NOON_UTC, ADMIN_METRICS_WINDOW_DEFAULT);
   assert.equal(absent.reliability.analyticsConsoleUrl, undefined);
 });
 
@@ -389,8 +458,11 @@ const ADMIN_VIEWER: AdminViewer = {
   role: "admin",
 };
 
-function emptyMetrics(now: number): AdminMetrics {
-  return buildAdminMetrics(source(), now);
+function emptyMetrics(
+  now: number,
+  windowDays: AdminMetricsWindow = ADMIN_METRICS_WINDOW_DEFAULT,
+): AdminMetrics {
+  return buildAdminMetrics(source(), now, windowDays);
 }
 
 test("the gate answers 405, 401, 403, and 200 as distinct outcomes", async () => {
@@ -430,7 +502,7 @@ test("the gate answers 405, 401, 403, and 200 as distinct outcomes", async () =>
   // SAFETY: handleAdminMetrics answered 200, whose body is an AdminMetrics document.
   const body = (await ok.json()) as AdminMetrics;
   assert.equal(body.generatedAt, NOON_UTC);
-  assert.equal(body.windowDays, ADMIN_METRICS_WINDOW_DAYS);
+  assert.equal(body.windowDays, ADMIN_METRICS_WINDOW_DEFAULT);
   // An unconfigured analytics project travels as absence, never a placeholder.
   assert.ok(!("analyticsConsoleUrl" in body.reliability));
 });
@@ -465,6 +537,63 @@ test("the handler reads metrics at the scope the request asked for", async () =>
   );
   assert.equal((await respond(widened)).status, 200);
   assert.deepEqual(scopes, [ADMIN_METRICS_SCOPE.NON_ADMINS, ADMIN_METRICS_SCOPE.ALL]);
+});
+
+test("the window defaults to 30 days; anything outside the set is nothing, never a guess", () => {
+  assert.equal(
+    adminMetricsWindow("https://luke.test/api/admin/metrics"),
+    ADMIN_METRICS_WINDOW_DEFAULT,
+  );
+  assert.equal(
+    adminMetricsWindow("https://luke.test/api/admin/metrics?window=7"),
+    ADMIN_METRICS_WINDOW.WEEK,
+  );
+  assert.equal(
+    adminMetricsWindow("https://luke.test/api/admin/metrics?window=90"),
+    ADMIN_METRICS_WINDOW.QUARTER,
+  );
+  assert.equal(adminMetricsWindow("https://luke.test/api/admin/metrics?window=13"), undefined);
+  assert.equal(adminMetricsWindow("https://luke.test/api/admin/metrics?window="), undefined);
+  assert.equal(adminMetricsWindow("https://luke.test/api/admin/metrics?window=quarter"), undefined);
+});
+
+test("the handler reads metrics at the window the request asked for", async () => {
+  const windows: AdminMetricsWindow[] = [];
+  const readMetrics = async (
+    now: number,
+    _scope: AdminMetricsScope,
+    windowDays: AdminMetricsWindow,
+  ): Promise<AdminMetrics> => {
+    windows.push(windowDays);
+    return emptyMetrics(now, windowDays);
+  };
+  const respond = (request: Request) =>
+    handleAdminMetrics({ request, resolveViewer: async () => ADMIN_VIEWER, readMetrics });
+
+  assert.equal((await respond(metricsRequest())).status, 200);
+  const week = new Request(
+    `https://luke.test/api/admin/metrics?${ADMIN_METRICS_WINDOW_PARAM}=${ADMIN_METRICS_WINDOW.WEEK}`,
+  );
+  const okWeek = await respond(week);
+  assert.equal(okWeek.status, 200);
+  // SAFETY: handleAdminMetrics answered 200, whose body is an AdminMetrics document.
+  assert.equal(((await okWeek.json()) as AdminMetrics).windowDays, ADMIN_METRICS_WINDOW.WEEK);
+  assert.deepEqual(windows, [ADMIN_METRICS_WINDOW_DEFAULT, ADMIN_METRICS_WINDOW.WEEK]);
+});
+
+test("a window outside the set is a 400 that reads nothing", async () => {
+  let reads = 0;
+  const response = await handleAdminMetrics({
+    request: new Request(`https://luke.test/api/admin/metrics?${ADMIN_METRICS_WINDOW_PARAM}=13`),
+    resolveViewer: async () => ADMIN_VIEWER,
+    readMetrics: async (now) => {
+      reads += 1;
+      return emptyMetrics(now);
+    },
+  });
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).error, ADMIN_ERROR.INVALID_WINDOW);
+  assert.equal(reads, 0);
 });
 
 test("metrics are not read for a request that fails the gate", async () => {

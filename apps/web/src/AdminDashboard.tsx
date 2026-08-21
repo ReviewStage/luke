@@ -16,7 +16,11 @@ import {
   ADMIN_HTTP_STATUS,
   ADMIN_METRICS_SCOPE,
   ADMIN_METRICS_SCOPE_PARAM,
+  ADMIN_METRICS_WINDOW,
+  ADMIN_METRICS_WINDOW_DEFAULT,
+  ADMIN_METRICS_WINDOW_PARAM,
   ADMIN_USER_ID_PARAM,
+  type AdminMetricsWindow,
 } from "../server/admin/http";
 import { accountInitials } from "./account-initials";
 import { accountLabel } from "./account-label";
@@ -51,6 +55,7 @@ const FAVORITE_PATH = "/api/admin/favorite";
 const ACCOUNT_VIEW_PARAM = "user";
 const TAB_PARAM = "view";
 const USERS_TAB_VALUE = "users";
+const WINDOW_VIEW_PARAM = "days";
 
 /** The sidebar's two destinations; an open account highlights Users. */
 type AdminTab = "dashboard" | "users";
@@ -66,14 +71,52 @@ function viewFromLocation(): AdminView {
   return { kind: "dashboard" };
 }
 
+/**
+ * The window the address bar names, so a 90-day view is shareable and survives
+ * a reload. An address naming no window, or one outside the set, is the
+ * default view rather than a broken page — a link is the reader's, not a
+ * request the API gets to refuse.
+ */
+function windowFromLocation(): AdminMetricsWindow {
+  const value = new URLSearchParams(window.location.search).get(WINDOW_VIEW_PARAM);
+  return (
+    Object.values(ADMIN_METRICS_WINDOW).find((candidate) => String(candidate) === value) ??
+    ADMIN_METRICS_WINDOW_DEFAULT
+  );
+}
+
+/**
+ * A page address from its own params, carrying the window the address bar
+ * currently names, so navigating between views keeps the chosen window. The
+ * default window rides as no param at all, keeping the plain addresses plain.
+ */
+function hrefWithWindow(params: URLSearchParams): string {
+  const windowDays = windowFromLocation();
+  if (windowDays !== ADMIN_METRICS_WINDOW_DEFAULT) {
+    params.set(WINDOW_VIEW_PARAM, String(windowDays));
+  }
+  const query = params.toString();
+  return query ? `${window.location.pathname}?${query}` : window.location.pathname;
+}
+
 function accountHref(id: string): string {
-  return `${window.location.pathname}?${ACCOUNT_VIEW_PARAM}=${encodeURIComponent(id)}`;
+  const params = new URLSearchParams();
+  params.set(ACCOUNT_VIEW_PARAM, id);
+  return hrefWithWindow(params);
 }
 
 function tabHref(tab: AdminTab): string {
-  return tab === "users"
-    ? `${window.location.pathname}?${TAB_PARAM}=${USERS_TAB_VALUE}`
-    : window.location.pathname;
+  const params = new URLSearchParams();
+  if (tab === "users") params.set(TAB_PARAM, USERS_TAB_VALUE);
+  return hrefWithWindow(params);
+}
+
+function windowHref(windowDays: AdminMetricsWindow): string {
+  const params = new URLSearchParams(window.location.search);
+  if (windowDays === ADMIN_METRICS_WINDOW_DEFAULT) params.delete(WINDOW_VIEW_PARAM);
+  else params.set(WINDOW_VIEW_PARAM, String(windowDays));
+  const query = params.toString();
+  return query ? `${window.location.pathname}?${query}` : window.location.pathname;
 }
 
 /**
@@ -1061,11 +1104,60 @@ function RefreshFailureNotice({
   );
 }
 
+/**
+ * The window every windowed read answers to, as one control of three fixed
+ * lengths. The choice lives in the address bar, so the press hands it up
+ * rather than keeping state of its own, and flipping it refetches the way the
+ * scope toggle does.
+ */
+function WindowSwitcher({
+  value,
+  onChange,
+}: {
+  value: AdminMetricsWindow;
+  onChange: (windowDays: AdminMetricsWindow) => void;
+}): React.JSX.Element {
+  return (
+    <div className="inline-flex rounded-md border border-border bg-card p-0.5">
+      {Object.values(ADMIN_METRICS_WINDOW).map((windowDays) => (
+        <button
+          key={windowDays}
+          type="button"
+          aria-label={`${windowDays}-day window`}
+          aria-pressed={value === windowDays}
+          data-active={value === windowDays}
+          className="cursor-pointer rounded px-2 py-0.5 text-xs font-medium text-muted-foreground transition-colors duration-150 outline-offset-2 hover:text-foreground data-[active=true]:bg-muted data-[active=true]:text-foreground"
+          onClick={() => onChange(windowDays)}
+        >
+          {windowDays}d
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** A windowed read's address: the default scope and window ride as no params. */
+function windowedReadPath(
+  base: string,
+  hideAdmins: boolean,
+  windowDays: AdminMetricsWindow,
+): string {
+  const params = new URLSearchParams();
+  if (!hideAdmins) params.set(ADMIN_METRICS_SCOPE_PARAM, ADMIN_METRICS_SCOPE.ALL);
+  if (windowDays !== ADMIN_METRICS_WINDOW_DEFAULT) {
+    params.set(ADMIN_METRICS_WINDOW_PARAM, String(windowDays));
+  }
+  const query = params.toString();
+  return query ? `${base}?${query}` : base;
+}
+
 function Dashboard({
   metrics,
   refreshFailure,
   hideAdmins,
   onHideAdminsChange,
+  windowDays,
+  onWindowDaysChange,
   account,
   onSignOut,
   refreshing,
@@ -1077,6 +1169,8 @@ function Dashboard({
   refreshFailure: string | undefined;
   hideAdmins: boolean;
   onHideAdminsChange: (hide: boolean) => void;
+  windowDays: AdminMetricsWindow;
+  onWindowDaysChange: (windowDays: AdminMetricsWindow) => void;
   account: ViewerAccount | undefined;
   onSignOut: () => void;
   refreshing: boolean;
@@ -1094,6 +1188,7 @@ function Dashboard({
         onSignOut={onSignOut}
         controls={
           <>
+            <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
             <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground select-none">
               <input
                 type="checkbox"
@@ -1984,6 +2079,8 @@ function UsersPage({
   refreshFailure,
   hideAdmins,
   onHideAdminsChange,
+  windowDays,
+  onWindowDaysChange,
   account,
   onSignOut,
   onOpenAccount,
@@ -1996,6 +2093,8 @@ function UsersPage({
   refreshFailure: string | undefined;
   hideAdmins: boolean;
   onHideAdminsChange: (hide: boolean) => void;
+  windowDays: AdminMetricsWindow;
+  onWindowDaysChange: (windowDays: AdminMetricsWindow) => void;
   account: ViewerAccount | undefined;
   onSignOut: () => void;
   onOpenAccount: (id: string) => void;
@@ -2018,6 +2117,7 @@ function UsersPage({
         onSignOut={onSignOut}
         controls={
           <>
+            <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
             <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground select-none">
               <input
                 type="checkbox"
@@ -2087,6 +2187,8 @@ function UsersPage({
 function UsersScreen({
   hideAdmins,
   onHideAdminsChange,
+  windowDays,
+  onWindowDaysChange,
   account,
   onSignOut,
   onOpenAccount,
@@ -2095,6 +2197,8 @@ function UsersScreen({
 }: {
   hideAdmins: boolean;
   onHideAdminsChange: (hide: boolean) => void;
+  windowDays: AdminMetricsWindow;
+  onWindowDaysChange: (windowDays: AdminMetricsWindow) => void;
   account: ViewerAccount | undefined;
   onSignOut: () => Promise<void>;
   onOpenAccount: (id: string) => void;
@@ -2128,9 +2232,7 @@ function UsersScreen({
     inFlight.current = controller;
     setState((current) => (current.status === "ready" ? current : { status: "loading" }));
     setRefreshing(true);
-    const path = hideAdmins
-      ? USERS_PATH
-      : `${USERS_PATH}?${ADMIN_METRICS_SCOPE_PARAM}=${ADMIN_METRICS_SCOPE.ALL}`;
+    const path = windowedReadPath(USERS_PATH, hideAdmins, windowDays);
     void (async () => {
       try {
         const next = await readUsersState(
@@ -2151,7 +2253,7 @@ function UsersScreen({
         if (!controller.signal.aborted) setRefreshing(false);
       }
     })();
-  }, [hideAdmins]);
+  }, [hideAdmins, windowDays]);
 
   useEffect(() => {
     load();
@@ -2235,6 +2337,8 @@ function UsersScreen({
           refreshFailure={state.refreshFailure}
           hideAdmins={hideAdmins}
           onHideAdminsChange={onHideAdminsChange}
+          windowDays={windowDays}
+          onWindowDaysChange={onWindowDaysChange}
           account={account}
           onSignOut={() => void signOut()}
           onOpenAccount={onOpenAccount}
@@ -2405,11 +2509,16 @@ export function AdminDashboard(): React.JSX.Element {
   const session = authClient.useSession();
   const account = session.data?.user;
 
-  // The address bar owns which view is open, so a tab or an account page can
-  // be reloaded, shared, and left with the browser's own back button.
+  // The address bar owns which view is open — and which window it covers — so
+  // a tab, an account page, or a 90-day view can be reloaded, shared, and left
+  // with the browser's own back button.
   const [view, setView] = useState<AdminView>(viewFromLocation);
+  const [windowDays, setWindowDays] = useState<AdminMetricsWindow>(windowFromLocation);
   useEffect(() => {
-    const onPopState = () => setView(viewFromLocation());
+    const onPopState = () => {
+      setView(viewFromLocation());
+      setWindowDays(windowFromLocation());
+    };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
@@ -2420,6 +2529,13 @@ export function AdminDashboard(): React.JSX.Element {
   const navigate = useCallback((tab: AdminTab) => {
     window.history.pushState(null, "", tabHref(tab));
     setView(tab === "users" ? { kind: "users" } : { kind: "dashboard" });
+  }, []);
+  const changeWindow = useCallback((next: AdminMetricsWindow) => {
+    setWindowDays((current) => {
+      if (next === current) return current;
+      window.history.pushState(null, "", windowHref(next));
+      return next;
+    });
   }, []);
 
   const [sidebarFolded, setSidebarFolded] = useState(sidebarLeftCollapsed);
@@ -2450,9 +2566,7 @@ export function AdminDashboard(): React.JSX.Element {
     // one filter throws away the reader's place and reads as a fault.
     setState((current) => (current.status === "ready" ? current : { status: "loading" }));
     setRefreshing(true);
-    const path = hideAdmins
-      ? METRICS_PATH
-      : `${METRICS_PATH}?${ADMIN_METRICS_SCOPE_PARAM}=${ADMIN_METRICS_SCOPE.ALL}`;
+    const path = windowedReadPath(METRICS_PATH, hideAdmins, windowDays);
     void (async () => {
       try {
         const next = await readDashboardState(
@@ -2473,7 +2587,7 @@ export function AdminDashboard(): React.JSX.Element {
         if (!controller.signal.aborted) setRefreshing(false);
       }
     })();
-  }, [hideAdmins]);
+  }, [hideAdmins, windowDays]);
 
   useEffect(() => {
     // The dashboard's read waits while another view is open; coming back
@@ -2537,6 +2651,8 @@ export function AdminDashboard(): React.JSX.Element {
       <UsersScreen
         hideAdmins={hideAdmins}
         onHideAdminsChange={changeHideAdmins}
+        windowDays={windowDays}
+        onWindowDaysChange={changeWindow}
         account={viewer}
         onSignOut={signOut}
         onOpenAccount={openAccount}
@@ -2576,6 +2692,8 @@ export function AdminDashboard(): React.JSX.Element {
           refreshFailure={state.refreshFailure}
           hideAdmins={hideAdmins}
           onHideAdminsChange={changeHideAdmins}
+          windowDays={windowDays}
+          onWindowDaysChange={changeWindow}
           account={viewer}
           onSignOut={() => void signOut()}
           refreshing={refreshing}

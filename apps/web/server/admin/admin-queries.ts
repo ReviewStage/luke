@@ -20,7 +20,6 @@ import { hostedUsage } from "../db/usage-schema.js";
 import { HOSTED_DAILY_LIMIT, HOSTED_METER, utcDayKey } from "../hosted/quota.js";
 import { isAdminRole, USER_ROLE } from "./admin-access.js";
 import {
-  ADMIN_METRICS_WINDOW_DAYS,
   ADMIN_RETENTION_WEEKS,
   type AdminIntegration,
   type AdminMetricsSource,
@@ -30,10 +29,11 @@ import {
   lastNDayKeys,
   lastNWeekStartKeys,
   utcWeekStartKey,
+  windowFetchDays,
 } from "./admin-metrics.js";
 import type { AdminUserSource } from "./admin-user.js";
 import { ADMIN_USERS_LIMIT, type AdminUserListSource } from "./admin-users.js";
-import { ADMIN_METRICS_SCOPE, type AdminMetricsScope } from "./http.js";
+import { ADMIN_METRICS_SCOPE, type AdminMetricsScope, type AdminMetricsWindow } from "./http.js";
 
 /** How many of the most active hosted-tier accounts the overview names. */
 export const ADMIN_TOP_USERS_LIMIT = 10;
@@ -72,7 +72,7 @@ async function probeDatabase(
 async function readUserMetrics(
   database: Database,
   now: number,
-  windowStart: Date,
+  fetchStart: Date,
   scope: AdminMetricsScope,
 ): Promise<AdminMetricsSource["users"]> {
   const dayExpression = sql<string>`to_char(${user.createdAt} at time zone 'UTC', 'YYYY-MM-DD')`;
@@ -100,7 +100,7 @@ async function readUserMetrics(
       database
         .select({ day: dayExpression, value: count() })
         .from(user)
-        .where(and(gte(user.createdAt, windowStart), scopeCondition(scope)))
+        .where(and(gte(user.createdAt, fetchStart), scopeCondition(scope)))
         .groupBy(dayExpression),
     ]);
 
@@ -120,9 +120,13 @@ async function readUsageMetrics(
   database: Database,
   todayKey: string,
   windowStartDay: string,
+  fetchStartDay: string,
   scope: AdminMetricsScope,
 ): Promise<AdminMetricsSource["usage"]> {
   const [usageRows, [activeTodayRow], [activeWindowRow], topUserRows] = await Promise.all([
+    // The daily rows alone read from the wider fetch bound: the builder's
+    // trends need both of their runs even when the window is shorter, while
+    // every windowed aggregate below stays on the window's own bound.
     database
       .select({
         day: hostedUsage.day,
@@ -131,7 +135,7 @@ async function readUsageMetrics(
       })
       .from(hostedUsage)
       .innerJoin(user, eq(hostedUsage.userId, user.id))
-      .where(and(gte(hostedUsage.day, windowStartDay), scopeCondition(scope)))
+      .where(and(gte(hostedUsage.day, fetchStartDay), scopeCondition(scope)))
       .groupBy(hostedUsage.day),
     database
       .select({ value: count() })
@@ -334,19 +338,21 @@ export async function readAdminMetricsSource(
     integrations: readonly AdminIntegration[];
     analyticsConsoleUrl?: string;
     scope: AdminMetricsScope;
+    windowDays: AdminMetricsWindow;
   },
 ): Promise<AdminMetricsSource> {
   const health = await probeDatabase(database);
   if (!health.reachable) return emptySource(input.integrations, health, input.analyticsConsoleUrl);
 
-  const dayKeys = lastNDayKeys(input.now, ADMIN_METRICS_WINDOW_DAYS);
-  const windowStartDay = dayKeys[0] ?? utcDayKey(input.now);
+  const windowStartDay = lastNDayKeys(input.now, input.windowDays)[0] ?? utcDayKey(input.now);
+  const fetchStartDay =
+    lastNDayKeys(input.now, windowFetchDays(input.windowDays))[0] ?? utcDayKey(input.now);
   const todayKey = utcDayKey(input.now);
-  const windowStart = new Date(`${windowStartDay}T00:00:00.000Z`);
+  const fetchStart = new Date(`${fetchStartDay}T00:00:00.000Z`);
 
   const [users, usage, retention, reliability] = await Promise.all([
-    readUserMetrics(database, input.now, windowStart, input.scope),
-    readUsageMetrics(database, todayKey, windowStartDay, input.scope),
+    readUserMetrics(database, input.now, fetchStart, input.scope),
+    readUsageMetrics(database, todayKey, windowStartDay, fetchStartDay, input.scope),
     readRetentionMetrics(database, input.now, input.scope),
     readReliabilityMetrics(database, todayKey, windowStartDay, input.scope),
   ]);
@@ -369,10 +375,13 @@ export async function readAdminMetricsSource(
  */
 export async function readAdminUserSource(
   database: Database,
-  input: { userId: string; now: number },
+  input: { userId: string; now: number; windowDays: AdminMetricsWindow },
 ): Promise<AdminUserSource | undefined> {
-  const dayKeys = lastNDayKeys(input.now, ADMIN_METRICS_WINDOW_DAYS);
-  const windowStartDay = dayKeys[0] ?? utcDayKey(input.now);
+  const windowStartDay = lastNDayKeys(input.now, input.windowDays)[0] ?? utcDayKey(input.now);
+  // The daily rows read from the wider bound so the builder's trends hold
+  // both runs; the throttle count below stays on the window's own.
+  const fetchStartDay =
+    lastNDayKeys(input.now, windowFetchDays(input.windowDays))[0] ?? utcDayKey(input.now);
 
   const [userRows, accountRows, windowRows, [allTimeRow], [quotaRow]] = await Promise.all([
     database
@@ -398,7 +407,7 @@ export async function readAdminUserSource(
         attentionReviews: hostedUsage.attentionReviews,
       })
       .from(hostedUsage)
-      .where(and(eq(hostedUsage.userId, input.userId), gte(hostedUsage.day, windowStartDay))),
+      .where(and(eq(hostedUsage.userId, input.userId), gte(hostedUsage.day, fetchStartDay))),
     database
       .select({
         activeDays: count(),
@@ -469,10 +478,14 @@ export async function readAdminUserSource(
  */
 export async function readAdminUsersSource(
   database: Database,
-  input: { now: number; scope: AdminMetricsScope; viewerId: string },
+  input: {
+    now: number;
+    scope: AdminMetricsScope;
+    viewerId: string;
+    windowDays: AdminMetricsWindow;
+  },
 ): Promise<AdminUserListSource> {
-  const dayKeys = lastNDayKeys(input.now, ADMIN_METRICS_WINDOW_DAYS);
-  const windowStartDay = dayKeys[0] ?? utcDayKey(input.now);
+  const windowStartDay = lastNDayKeys(input.now, input.windowDays)[0] ?? utcDayKey(input.now);
 
   const [[totalRow], lastSeenRows, rows] = await Promise.all([
     database.select({ value: count() }).from(user).where(scopeCondition(input.scope)),

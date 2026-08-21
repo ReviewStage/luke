@@ -1,11 +1,12 @@
 import type { AdminViewer } from "./admin-access.js";
 import { isAdminRole } from "./admin-access.js";
-import { ADMIN_METRICS_WINDOW_DAYS } from "./admin-metrics.js";
 import {
   ADMIN_ERROR,
   ADMIN_HTTP_STATUS,
   type AdminMetricsScope,
+  type AdminMetricsWindow,
   adminMetricsScope,
+  adminMetricsWindow,
   errorResponse,
   jsonResponse,
 } from "./http.js";
@@ -69,10 +70,14 @@ export interface AdminUserListSource {
 }
 
 /** Stamps the queried roster with the window the aggregates cover. */
-export function buildAdminUserList(source: AdminUserListSource, now: number): AdminUserList {
+export function buildAdminUserList(
+  source: AdminUserListSource,
+  now: number,
+  windowDays: AdminMetricsWindow,
+): AdminUserList {
   return {
     generatedAt: now,
-    windowDays: ADMIN_METRICS_WINDOW_DAYS,
+    windowDays,
     total: source.total,
     limit: ADMIN_USERS_LIMIT,
     rows: [...source.rows],
@@ -83,14 +88,19 @@ export interface AdminUsersOptions {
   request: Request;
   resolveViewer: (request: Request) => Promise<AdminViewer | undefined>;
   /** Reads the roster as one viewer sees it: the favorites are theirs. */
-  readUsers: (now: number, scope: AdminMetricsScope, viewerId: string) => Promise<AdminUserList>;
+  readUsers: (
+    now: number,
+    scope: AdminMetricsScope,
+    viewerId: string,
+    windowDays: AdminMetricsWindow,
+  ) => Promise<AdminUserList>;
   now?: () => number;
 }
 
 /**
  * Answers the roster read behind the same gate and refusals the metrics read
- * stands behind, at the same scope vocabulary: the Users tab hides admin
- * accounts by default the way every dashboard count does.
+ * stands behind, at the same scope and window vocabulary: the Users tab hides
+ * admin accounts by default the way every dashboard count does.
  */
 export async function handleAdminUsers(options: AdminUsersOptions): Promise<Response> {
   const { request } = options;
@@ -111,11 +121,16 @@ export async function handleAdminUsers(options: AdminUsersOptions): Promise<Resp
     return errorResponse(ADMIN_HTTP_STATUS.FORBIDDEN, ADMIN_ERROR.NOT_AUTHORIZED);
   }
 
+  const windowDays = adminMetricsWindow(request.url);
+  if (windowDays === undefined) {
+    return errorResponse(ADMIN_HTTP_STATUS.BAD_REQUEST, ADMIN_ERROR.INVALID_WINDOW);
+  }
+
   const now = (options.now ?? Date.now)();
   try {
     return jsonResponse(
       ADMIN_HTTP_STATUS.OK,
-      await options.readUsers(now, adminMetricsScope(request.url), viewer.userId),
+      await options.readUsers(now, adminMetricsScope(request.url), viewer.userId, windowDays),
     );
   } catch {
     return errorResponse(ADMIN_HTTP_STATUS.SERVICE_UNAVAILABLE, ADMIN_ERROR.UNAVAILABLE);

@@ -1,7 +1,6 @@
 import type { AdminViewer } from "./admin-access.js";
 import { isAdminRole } from "./admin-access.js";
 import {
-  ADMIN_METRICS_WINDOW_DAYS,
   ADMIN_TREND_DAYS,
   type AdminDailyUsage,
   type AdminTrend,
@@ -13,6 +12,8 @@ import {
 import {
   ADMIN_ERROR,
   ADMIN_HTTP_STATUS,
+  type AdminMetricsWindow,
+  adminMetricsWindow,
   adminUserId,
   errorResponse,
   jsonResponse,
@@ -91,8 +92,19 @@ export interface AdminUserDetail {
 }
 
 /** Shapes one account's queried source into the page's answer. */
-export function buildAdminUserDetail(source: AdminUserSource, now: number): AdminUserDetail {
-  const dayKeys = lastNDayKeys(now, ADMIN_METRICS_WINDOW_DAYS);
+export function buildAdminUserDetail(
+  source: AdminUserSource,
+  now: number,
+  windowDays: AdminMetricsWindow,
+): AdminUserDetail {
+  const dayKeys = lastNDayKeys(now, windowDays);
+  // The trends read the byDay map through their own trailing keys, like the
+  // overview's, so a 7-day view still compares against the week before it.
+  const trendKeys = lastNDayKeys(now, ADMIN_TREND_DAYS * 2);
+  const trendTotals = trendKeys.map((day) => {
+    const row = source.usage.byDay.get(day);
+    return (row?.voiceCalls ?? 0) + (row?.attentionReviews ?? 0);
+  });
 
   const daily = dayKeys.map((day) => {
     const row = source.usage.byDay.get(day);
@@ -113,17 +125,14 @@ export function buildAdminUserDetail(source: AdminUserSource, now: number): Admi
 
   return {
     generatedAt: now,
-    windowDays: ADMIN_METRICS_WINDOW_DAYS,
+    windowDays,
     account: source.account,
     activity: {
       daily,
-      usageTrend: trailingTrend(
-        daily.map((day) => day.voiceCalls + day.attentionReviews),
-        ADMIN_TREND_DAYS,
-      ),
+      usageTrend: trailingTrend(trendTotals, ADMIN_TREND_DAYS),
       activeDaysWindow: activeFlags.filter(Boolean).length,
       activeDaysTrend: trailingTrend(
-        activeFlags.map((active) => (active ? 1 : 0)),
+        trendTotals.map((total) => (total > 0 ? 1 : 0)),
         ADMIN_TREND_DAYS,
       ),
       currentStreakDays,
@@ -139,16 +148,21 @@ export interface AdminUserOptions {
   request: Request;
   resolveViewer: (request: Request) => Promise<AdminViewer | undefined>;
   /** The named account's detail, or nothing when no user row carries that id. */
-  readUser: (userId: string, now: number) => Promise<AdminUserDetail | undefined>;
+  readUser: (
+    userId: string,
+    now: number,
+    windowDays: AdminMetricsWindow,
+  ) => Promise<AdminUserDetail | undefined>;
   now?: () => number;
 }
 
 /**
  * Answers one account's read behind the same gate the overview's metrics
  * stand behind, with the same distinct refusals, plus the two of its own: a
- * request that named no account is a 400 before any seam is touched, and an
- * id no user row carries is a 404 the page can word as the account being
- * gone rather than the service being down.
+ * request that named no account, like one naming a window outside the fixed
+ * set, is a 400 before any seam is touched, and an id no user row carries is
+ * a 404 the page can word as the account being gone rather than the service
+ * being down.
  */
 export async function handleAdminUser(options: AdminUserOptions): Promise<Response> {
   const { request } = options;
@@ -174,9 +188,14 @@ export async function handleAdminUser(options: AdminUserOptions): Promise<Respon
     return errorResponse(ADMIN_HTTP_STATUS.BAD_REQUEST, ADMIN_ERROR.MISSING_USER_ID);
   }
 
+  const windowDays = adminMetricsWindow(request.url);
+  if (windowDays === undefined) {
+    return errorResponse(ADMIN_HTTP_STATUS.BAD_REQUEST, ADMIN_ERROR.INVALID_WINDOW);
+  }
+
   const now = (options.now ?? Date.now)();
   try {
-    const detail = await options.readUser(userId, now);
+    const detail = await options.readUser(userId, now, windowDays);
     if (detail === undefined) {
       return errorResponse(ADMIN_HTTP_STATUS.NOT_FOUND, ADMIN_ERROR.USER_NOT_FOUND);
     }
