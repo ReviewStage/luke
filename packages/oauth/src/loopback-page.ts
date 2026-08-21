@@ -27,7 +27,23 @@ export interface LoopbackPage {
   badge: string;
   title: string;
   body: string;
+  /**
+   * A success page the user needs nothing more from asks the browser to close
+   * its own tab once the outcome has had time to be read. Best-effort by
+   * design: a browser may refuse to close a tab the user navigated, so the
+   * body keeps saying the tab can be closed by hand.
+   */
+  closesItself?: boolean;
 }
+
+/** Long enough to read the outcome; short enough to not overstay it. */
+const CLOSE_DELAY_MS = 5_000;
+
+/**
+ * Inline and fixed by the build like everything else on the page — the
+ * self-contained rule above forbids fetching a script, not carrying one.
+ */
+const CLOSE_SCRIPT = `<script>setTimeout(function () { window.close(); }, ${CLOSE_DELAY_MS});</script>`;
 
 /**
  * The face, drawn from the same generated constants the renderer draws it
@@ -98,6 +114,6 @@ export function accountLoopbackPage(page: LoopbackPage): string {
     markSvg() +
     `<div><span class="pill" data-tone="${page.tone}">${page.badge}</span></div>` +
     `<h1>${page.title}</h1><p>${page.body}</p>` +
-    `</section></main></body></html>`
+    `</section></main>${page.closesItself ? CLOSE_SCRIPT : ""}</body></html>`
   );
 }

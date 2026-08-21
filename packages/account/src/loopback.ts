@@ -25,6 +25,7 @@ const LOOPBACK_ANSWER = {
       badge: "Signed in",
       title: "Signed in to Luke",
       body: "You can close this tab and return to Luke.",
+      closesItself: true,
     },
   },
   NOT_VERIFIED: {
