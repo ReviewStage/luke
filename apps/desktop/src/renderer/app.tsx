@@ -857,14 +857,17 @@ export function App(): React.JSX.Element {
   // The query funnels through the view the way the selection does — typing,
   // a spoken ask, Escape clearing the field — so the store follows the view
   // from one place, never in a fixture or capture run. Unlike a chip press
-  // the query changes at typing speed, so the write waits out the keystrokes
-  // and stores only where the words settled.
+  // the query changes at typing speed, so a write waits out the keystrokes
+  // and stores only where the words settled — except letting go, which writes
+  // at once: a clear is a discrete act rather than a keystroke on the way
+  // somewhere, and a quit inside a waited write would bring back a search the
+  // developer deliberately let go.
   useEffect(() => {
     if (!bootstrap || bootstrap.fixtureMode) return;
     storedSessionQuery.current ??= bootstrap.settings.sessionSearchQuery ?? "";
     const query = sessionView.query;
     if (storedSessionQuery.current === query) return;
-    const settled = window.setTimeout(() => {
+    const store = () => {
       storedSessionQuery.current = query;
       void window.sidecar
         .updateSetting(
@@ -872,7 +875,12 @@ export function App(): React.JSX.Element {
           query !== "" ? query : undefined,
         )
         .then(applySettingsReply);
-    }, SEARCH_QUERY_STORE_DELAY_MS);
+    };
+    if (query === "") {
+      store();
+      return;
+    }
+    const settled = window.setTimeout(store, SEARCH_QUERY_STORE_DELAY_MS);
     return () => window.clearTimeout(settled);
   }, [bootstrap, sessionView.query, applySettingsReply]);
 
