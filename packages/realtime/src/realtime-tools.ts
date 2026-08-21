@@ -1126,7 +1126,8 @@ export const REALTIME_TOOLS = {
         "Open one observed session where its provider keeps it — only when the developer asks " +
         "to open, go to, or jump into that specific session. An ask to show, see, or list " +
         'sessions or agents — "show me the cloud agents" — filters the panel through ' +
-        "show_panel instead, never this.",
+        "show_panel instead, never this. An ask to open one session per provider uses this tool " +
+        "once per matching provider in the same response, without filtering the panel first.",
       parameters: {
         type: "object",
         properties: {

@@ -34,7 +34,19 @@ export const maximumVoiceContextSessions = 25;
  * and each app whose exact address an open ask may pick — by name alone,
  * because the address behind it stays on the machine.
  */
-function sessionCapabilityText(session: NormalizedSession): string {
+interface SessionRecency {
+  readonly mostRecentForProvider: boolean;
+  readonly mostRecentOpenableForProvider: boolean;
+}
+
+function sessionCanOpen(session: NormalizedSession): boolean {
+  return (
+    session.detail.link !== undefined ||
+    session.applications.some((application) => application.link !== undefined)
+  );
+}
+
+function sessionCapabilityText(session: NormalizedSession, recency: SessionRecency): string {
   const openableApplications = session.applications.filter(
     (application) => application.link !== undefined,
   );
@@ -50,6 +62,8 @@ function sessionCapabilityText(session: NormalizedSession): string {
         ]
       : []),
     `transcript=${session.location === SESSION_LOCATION.LOCAL}`,
+    ...(recency.mostRecentForProvider ? ["most_recent_for_provider=true"] : []),
+    ...(recency.mostRecentOpenableForProvider ? ["most_recent_openable_for_provider=true"] : []),
     ...(session.detail.change ? ["pull_request=true"] : []),
     ...(session.controls.length > 0
       ? [
@@ -64,6 +78,33 @@ function sessionCapabilityText(session: NormalizedSession): string {
     ...(session.renameTarget ? ["workspace can be renamed"] : []),
   ];
   return capabilities.join("; ");
+}
+
+function firstSessionByProvider(
+  sessions: readonly NormalizedSession[],
+  predicate: (session: NormalizedSession) => boolean = () => true,
+): ReadonlyMap<string, NormalizedSession> {
+  const newest = new Map<string, NormalizedSession>();
+  for (const session of sessions) {
+    if (!predicate(session)) continue;
+    const current = newest.get(session.providerId);
+    if (!current || session.observedAt > current.observedAt)
+      newest.set(session.providerId, session);
+  }
+  return newest;
+}
+
+function prioritizedContextSessions(
+  sessions: readonly NormalizedSession[],
+): readonly NormalizedSession[] {
+  const mostRecent = firstSessionByProvider(sessions);
+  const mostRecentOpenable = firstSessionByProvider(sessions, sessionCanOpen);
+  const prioritized = new Set<NormalizedSession>([
+    ...mostRecentOpenable.values(),
+    ...mostRecent.values(),
+    ...sessions,
+  ]);
+  return [...prioritized].slice(0, maximumVoiceContextSessions);
 }
 
 /**
@@ -140,8 +181,11 @@ function sessionSpokenName(session: NormalizedSession): string {
  * workspace a chat belongs to when its provider groups them, the apps that
  * independently associate themselves with it, the developer's
  * standing ask where one stands, what each session can be asked to do, and the
- * identity a tool call names it by. No transcript, file path, or command output
- * is ever included.
+ * identity a tool call names it by. The newest session and newest openable
+ * session within each provider are labelled explicitly, so a recency ask is a
+ * selection rather than an ambiguity; those rows are also kept inside the
+ * bound before the remaining roster fills it. No transcript, file path, or
+ * command output is ever included.
  *
  * `now` is the wall clock against which each session's age is read. Pass
  * `Date.now()` for live use; pass a fixed epoch for reproducible fixture or
@@ -155,10 +199,13 @@ export function sessionContextText(
   if (sessions.length === 0) return "No coding-agent sessions are currently observed.";
 
   const asks = noticeAsksByIdentity(noticeAsks);
-  const overflow = sessions.length - maximumVoiceContextSessions;
+  const mostRecent = firstSessionByProvider(sessions);
+  const mostRecentOpenable = firstSessionByProvider(sessions, sessionCanOpen);
+  const included = prioritizedContextSessions(sessions);
+  const overflow = sessions.length - included.length;
   return [
     "Currently observed sessions:",
-    ...sessions.slice(0, maximumVoiceContextSessions).map((session) => {
+    ...included.map((session) => {
       const ask = asks.get(session.providerId)?.get(session.providerSessionId);
       return [
         // A hosted chat is named by the agent having the conversation, with
@@ -193,7 +240,10 @@ export function sessionContextText(
         // Only this segment speaks for the developer, on the attention
         // update's own rule: words inside a title, recap, or error never do.
         ...(ask ? [`the developer's standing ask: "${ask}"`] : []),
-        `[${sessionCapabilityText(session)}]`,
+        `[${sessionCapabilityText(session, {
+          mostRecentForProvider: mostRecent.get(session.providerId) === session,
+          mostRecentOpenableForProvider: mostRecentOpenable.get(session.providerId) === session,
+        })}]`,
       ].join(" — ");
     }),
     // A session past the bound must read as unlisted, never as nonexistent:

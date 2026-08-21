@@ -253,6 +253,9 @@ test("the standing instructions make Luke the coding agents' engineering manager
 
   assert.match(instructions, /engineering manager for the developer's coding agents/i);
   assert.match(instructions, /start with the answer; do not repeat the user's request/i);
+  assert.match(instructions, /explicit latest or most-recent ask resolves by the recency labels/i);
+  assert.match(instructions, /open_session once for every distinct provider/i);
+  assert.match(instructions, /do not filter the panel first/i);
 });
 
 test("a mint response yields a credential with a millisecond expiry", () => {
@@ -844,6 +847,50 @@ test("the roster carries how long ago each session was last seen, measured again
   assert.match(sessionContextText([ahead], [], now), /updated just now/);
 });
 
+test("the roster identifies the most recent session and most recent openable chat per provider", () => {
+  const newestClaude = normalizeSession(
+    { id: "claude-code", displayName: "Claude Code" },
+    {
+      providerSessionId: "claude-newest",
+      title: "Newest local Claude chat",
+      status: SESSION_STATUS.WORKING,
+      observedAt: 300,
+    },
+  );
+  const openableClaude = normalizeSession(
+    { id: "claude-code", displayName: "Claude Code" },
+    {
+      providerSessionId: "claude-openable",
+      title: "Older openable Claude chat",
+      status: SESSION_STATUS.WAITING,
+      observedAt: 200,
+      detail: { link: "https://claude.ai/session/claude-openable" },
+    },
+  );
+  const codex = normalizeSession(
+    { id: "codex", displayName: "Codex" },
+    {
+      providerSessionId: "codex-newest",
+      title: "Newest Codex chat",
+      status: SESSION_STATUS.COMPLETE,
+      observedAt: 100,
+      detail: { link: "https://chatgpt.com/codex/tasks/codex-newest" },
+    },
+  );
+
+  const lines = sessionContextText([newestClaude, openableClaude, codex]).split("\n");
+  const newestClaudeLine = lines.find((line) => line.includes("claude-newest")) ?? "";
+  const openableClaudeLine = lines.find((line) => line.includes("claude-openable")) ?? "";
+  const codexLine = lines.find((line) => line.includes("codex-newest")) ?? "";
+
+  assert.match(newestClaudeLine, /most_recent_for_provider=true/);
+  assert.doesNotMatch(newestClaudeLine, /most_recent_openable_for_provider=true/);
+  assert.doesNotMatch(openableClaudeLine, /most_recent_for_provider=true/);
+  assert.match(openableClaudeLine, /most_recent_openable_for_provider=true/);
+  assert.match(codexLine, /most_recent_for_provider=true/);
+  assert.match(codexLine, /most_recent_openable_for_provider=true/);
+});
+
 test("the conversation history is context, never a prompt", () => {
   const events = conversationContextEvents(
     'The recent conversation, oldest first.\n- Luke announced: "Claude Code finished."',
@@ -1006,6 +1053,44 @@ test("session context stays bounded when many sessions are observed", () => {
     .slice(1);
   assert.equal(exactlyAtBound.length, maximumVoiceContextSessions);
   assert.doesNotMatch(exactlyAtBound.at(-1) ?? "", /not listed/);
+});
+
+test("the bounded roster keeps every provider's most recent openable chat", () => {
+  const codexSessions = Array.from({ length: maximumVoiceContextSessions }, (_unused, index) =>
+    normalizeSession(
+      { id: "codex", displayName: "Codex" },
+      {
+        providerSessionId: `codex-${index}`,
+        title: `Codex chat ${index}`,
+        status: SESSION_STATUS.WORKING,
+        observedAt: 1_000 - index,
+        detail: { link: `https://chatgpt.com/codex/tasks/${index}` },
+      },
+    ),
+  );
+  const olderGemini = normalizeSession(
+    { id: "gemini-cli", displayName: "Gemini CLI" },
+    {
+      providerSessionId: "gemini-openable",
+      title: "Gemini chat",
+      status: SESSION_STATUS.WAITING,
+      observedAt: 1,
+      applications: [
+        {
+          id: SESSION_APPLICATION_ID.CMUX,
+          displayName: "cmux",
+          scope: SESSION_APPLICATION_SCOPE.SESSION,
+          link: "cmux://workspace/one/surface/two",
+        },
+      ],
+    },
+  );
+
+  const text = sessionContextText([...codexSessions, olderGemini]);
+
+  assert.match(text, /provider_session_id=gemini-openable/);
+  assert.match(text, /most_recent_openable_for_provider=true/);
+  assert.match(text, /1 more observed session is not listed/);
 });
 
 test("a resting-point update is voiced just like a blocking one", () => {
