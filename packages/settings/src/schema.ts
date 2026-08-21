@@ -452,9 +452,12 @@ export const APP_SETTING_SCHEMA = {
     guard: hotkey,
     settingsPage: SETTINGS_PAGE.SHORTCUTS,
     resetScope: SETTINGS_RESET_SCOPE.SHORTCUTS,
-    // The talk-key fact reports the registered chord and its manual path.
-    guideEntry: settingGuideEntry("voiceHotkey", [], () => undefined),
+    // The talk-key fact reports the registered chord and its manual path, so
+    // the guide builds no setting for it; the id is listed all the same, so
+    // the chord's page is named and a change to it can be counted.
+    guideEntry: settingGuideEntry("voiceHotkey", [APP_SETTING_ID.TALK_HOTKEY], () => undefined),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.TALK_HOTKEY,
+    analytics: { id: APP_SETTING_ID.TALK_HOTKEY, value: choiceAnalytics },
   },
   askHotkey: {
     field: "askHotkey",
@@ -462,9 +465,12 @@ export const APP_SETTING_SCHEMA = {
     guard: hotkey,
     settingsPage: SETTINGS_PAGE.SHORTCUTS,
     resetScope: SETTINGS_RESET_SCOPE.SHORTCUTS,
-    // The ask-key fact reports the registered chord and its manual path.
-    guideEntry: settingGuideEntry("askHotkey", [], () => undefined),
+    // The ask-key fact reports the registered chord and its manual path, so
+    // the guide builds no setting for it; the id is listed all the same, so
+    // the chord's page is named and a change to it can be counted.
+    guideEntry: settingGuideEntry("askHotkey", [APP_SETTING_ID.ASK_HOTKEY], () => undefined),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.ASK_HOTKEY,
+    analytics: { id: APP_SETTING_ID.ASK_HOTKEY, value: choiceAnalytics },
   },
   stopHotkey: {
     field: "stopHotkey",
@@ -472,9 +478,12 @@ export const APP_SETTING_SCHEMA = {
     guard: hotkey,
     settingsPage: SETTINGS_PAGE.SHORTCUTS,
     resetScope: SETTINGS_RESET_SCOPE.SHORTCUTS,
-    // The stop-key fact reports the registered chord and its manual path.
-    guideEntry: settingGuideEntry("stopHotkey", [], () => undefined),
+    // The stop-key fact reports the registered chord and its manual path, so
+    // the guide builds no setting for it; the id is listed all the same, so
+    // the chord's page is named and a change to it can be counted.
+    guideEntry: settingGuideEntry("stopHotkey", [APP_SETTING_ID.STOP_HOTKEY], () => undefined),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.STOP_HOTKEY,
+    analytics: { id: APP_SETTING_ID.STOP_HOTKEY, value: choiceAnalytics },
   },
   duckOtherMedia: {
     field: "duckOtherMedia",
@@ -780,6 +789,10 @@ export const APP_SETTING_SCHEMA = {
       },
     ),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.NONE,
+    // The model and the effort ride one stored write, so one id counts the
+    // pair: a separate effort count would say a second change happened where
+    // the developer made one.
+    analytics: { id: APP_SETTING_ID.WORKSPACE_AGENT_MODEL, value: choiceAnalytics },
   },
   workspaceProjectDefaults: {
     field: "workspaceProjectDefaults",
@@ -829,6 +842,7 @@ export const APP_SETTING_SCHEMA = {
       ],
     ),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.NONE,
+    analytics: { id: APP_SETTING_ID.SUPERSET_AGENT, value: choiceAnalytics },
   },
 } as const satisfies {
   [Field in AppSettingField]: SettingDefinition<Field>;
@@ -961,13 +975,19 @@ export const APP_SETTING_DEFAULTS = APP_SETTING_FIELDS.reduce(
   },
 );
 
-export const SETTING_PAGE =
-  // SAFETY: Each entry maps one settings id to the page its schema declares.
-  Object.fromEntries(
+export const SETTING_PAGE = {
+  // SAFETY: Each entry maps one settings id to the page its schema declares;
+  // the `satisfies` below is what checks the set ends up complete.
+  ...(Object.fromEntries(
     Object.values(APP_SETTING_SCHEMA).flatMap((definition) =>
       definition.guideEntry.ids.map((id) => [id, definition.settingsPage]),
     ),
-  ) as Record<AppSettingId, SettingsPage>;
+  ) as Record<AppSettingId, SettingsPage>),
+  // Which calendars count is chosen on the rows themselves rather than
+  // through a settings field, so it is the one id whose page cannot be
+  // derived from the schema. Named here so the `Record` stays total.
+  [APP_SETTING_ID.CALENDAR_SELECTED]: SETTINGS_PAGE.CONNECTIONS,
+} satisfies Record<AppSettingId, SettingsPage>;
 
 export function settingsScopeChanged(
   settings: Pick<StoredAppSettings, AppSettingField>,
