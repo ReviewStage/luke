@@ -1419,6 +1419,44 @@ interface UsersSort {
 }
 
 /**
+ * The last sort chosen, remembered the way the sidebar's collapse is: locally,
+ * so a refresh reopens the roster in the order it was left. A stored value the
+ * sets above no longer name reads as no sort at all — the server's own order —
+ * rather than a guess at what an old build meant by it.
+ */
+const USERS_SORT_STORAGE_KEY = "luke-admin-users-sort";
+
+/** No sort key contains the separator, so the stored token splits back apart. */
+const USERS_SORT_STORAGE_SEPARATOR = ":";
+
+function usersSortLeft(): UsersSort | undefined {
+  try {
+    const stored = window.localStorage.getItem(USERS_SORT_STORAGE_KEY);
+    if (stored === null) return undefined;
+    const [key, direction] = stored.split(USERS_SORT_STORAGE_SEPARATOR);
+    const knownKey = Object.values(USERS_SORT_KEY).find((candidate) => candidate === key);
+    const knownDirection = Object.values(SORT_DIRECTION).find(
+      (candidate) => candidate === direction,
+    );
+    if (knownKey === undefined || knownDirection === undefined) return undefined;
+    return { key: knownKey, direction: knownDirection };
+  } catch {
+    return undefined;
+  }
+}
+
+function rememberUsersSort(sort: UsersSort): void {
+  try {
+    window.localStorage.setItem(
+      USERS_SORT_STORAGE_KEY,
+      `${sort.key}${USERS_SORT_STORAGE_SEPARATOR}${sort.direction}`,
+    );
+  } catch {
+    // Storage refused: the roster opens in the server's order on the next visit.
+  }
+}
+
+/**
  * Orders the roster for one sort. No sort keeps the server's order — most
  * recently active first — and ties keep it too, since the sort is stable. An
  * account with no active day yet sits below the dated rows in either
@@ -1488,19 +1526,20 @@ function UsersTable({
   windowDays: number;
   onOpen: (id: string) => void;
 }): React.JSX.Element {
-  const [sort, setSort] = useState<UsersSort>();
+  const [sort, setSort] = useState<UsersSort | undefined>(usersSortLeft);
   const toggleSort = (key: UsersSortKey) => {
-    setSort((current) =>
-      current?.key === key
+    const next: UsersSort =
+      sort?.key === key
         ? {
             key,
             direction:
-              current.direction === SORT_DIRECTION.ASCENDING
+              sort.direction === SORT_DIRECTION.ASCENDING
                 ? SORT_DIRECTION.DESCENDING
                 : SORT_DIRECTION.ASCENDING,
           }
-        : { key, direction: USERS_SORT_FIRST_DIRECTION[key] },
-    );
+        : { key, direction: USERS_SORT_FIRST_DIRECTION[key] };
+    rememberUsersSort(next);
+    setSort(next);
   };
 
   if (rows.length === 0) {
