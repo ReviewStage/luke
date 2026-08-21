@@ -305,6 +305,9 @@ function AccountAvatar({ account }: { account: ViewerAccount }): React.JSX.Eleme
         src={account.image}
         alt=""
         className="size-8 rounded-full object-cover"
+        // Google's avatar host answers 403 to a request carrying a Referer, so
+        // without this a Google-signed-in admin falls to initials every time.
+        referrerPolicy="no-referrer"
         onError={() => setImageFailed(true)}
       />
     );
