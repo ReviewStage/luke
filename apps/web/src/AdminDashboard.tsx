@@ -1501,20 +1501,23 @@ function rememberUsersSort(sort: UsersSort): void {
 }
 
 /**
- * Orders the roster for one sort. No sort keeps the server's order — most
- * recently active first — and ties keep it too, since the sort is stable. An
- * account with no active day yet sits below the dated rows in either
- * direction: it has no place in a chronology, and flipping one should not
- * bury the answer under the blanks.
+ * Orders the roster for one sort. Favorites stand above everything first —
+ * the star marks the accounts the admin actually watches, so no column order
+ * may bury them — and the sort chosen orders each tier on its own. No sort
+ * keeps the server's order — most recently active first — and ties keep it
+ * too, since the sort is stable. An account with no active day yet sits below
+ * the dated rows of its tier in either direction: it has no place in a
+ * chronology, and flipping one should not bury the answer under the blanks.
  */
 function sortUsersRows(
   rows: readonly AdminUserListRow[],
   sort: UsersSort | undefined,
 ): readonly AdminUserListRow[] {
-  if (!sort) return rows;
-  const value = USERS_SORT_VALUE[sort.key];
-  const flip = sort.direction === SORT_DIRECTION.DESCENDING ? -1 : 1;
+  const value = sort ? USERS_SORT_VALUE[sort.key] : undefined;
+  const flip = sort?.direction === SORT_DIRECTION.DESCENDING ? -1 : 1;
   return [...rows].sort((a, b) => {
+    if (a.favorite !== b.favorite) return a.favorite ? -1 : 1;
+    if (value === undefined) return 0;
     const left = value(a);
     const right = value(b);
     if (left === null) return right === null ? 0 : 1;
