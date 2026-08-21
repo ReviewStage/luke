@@ -235,6 +235,7 @@ const providerRegistry = providerRegistrations({
   readApiKey: (providerId) => settingsStore.readApiKey(providerId),
   claudeHookInstallation: () => observationHooks.claudeInstallation(),
   codexHookInstallation: () => observationHooks.codexInstallation(),
+  cursorHookInstallation: () => observationHooks.cursorInstallation(),
   codexCloudAdapter,
 });
 // The record enforces completeness; the shared list preserves provider order.

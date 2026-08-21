@@ -99,8 +99,8 @@ Trust constraints:
 - One registration is the exception the previous rule's word "require" leaves
   room for, and it is bounded on every side: Luke may merge an observation
   hook into a provider's own user-level hook configuration (today Claude
-  Code's `settings.json` and Codex's `hooks.json`, and nothing else of either
-  provider's) so local rows can tell a turn that just ended from a session
+  Code's `settings.json` and the `hooks.json` of Codex and Cursor, and nothing
+  else of any provider's) so local rows can tell a turn that just ended from a session
   walked away from, and can see a tool call holding for permission at all. The
   hook itself writes one fixed status token into a spool under Luke's own
   application data, named by the session's id; the envelope the provider hands

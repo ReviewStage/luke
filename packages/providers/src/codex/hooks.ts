@@ -1,4 +1,5 @@
 import {
+  HOOK_ENTRY_NESTING,
   HOOK_SPOOL_MAXIMUM_AGE_MS,
   type ObservationHookSpec,
   type ObservedHookEvent,
@@ -76,6 +77,7 @@ const CODEX_HOOK_SPEC: ObservationHookSpec<CodexHookEvent> = {
   // Codex thread ids are UUIDs: hex and hyphens, like Claude Code's.
   sessionIdPattern: "[0-9a-fA-F-]{8,64}",
   subagentField: "agent_id",
+  entryNesting: HOOK_ENTRY_NESTING.NESTED,
 };
 
 export interface CodexHookInstallation {

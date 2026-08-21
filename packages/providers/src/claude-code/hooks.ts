@@ -1,6 +1,7 @@
 import os from "node:os";
 import path from "node:path";
 import {
+  HOOK_ENTRY_NESTING,
   HOOK_SPOOL_MAXIMUM_AGE_MS,
   type ObservationHookSpec,
   type ObservedHookEvent,
@@ -81,6 +82,7 @@ const CLAUDE_HOOK_SPEC: ObservationHookSpec<ClaudeHookEvent> = {
   // The shape Claude Code mints: hex and hyphens.
   sessionIdPattern: "[0-9a-fA-F-]{8,64}",
   subagentField: "agent_id",
+  entryNesting: HOOK_ENTRY_NESTING.NESTED,
 };
 
 /** Where Claude Code keeps its transcripts and its user-level settings. */

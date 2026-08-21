@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import {
   maximumSessionRecapLength,
   type ProviderSessionObservation,
+  SESSION_COMPLETION_CAUSE,
   SESSION_STATUS,
   type SessionDetail,
   type SessionStatus,
@@ -24,12 +25,14 @@ import {
   type DirectoryEntry,
   discoverSessionFiles,
   fileStats,
+  type HookStatusRefinement,
   LOCAL_ADAPTER_DEFAULTS,
   LocalFileSessionAdapter,
   localSessionStatus,
   readDirectory,
   readTail,
   readTextFile,
+  refineStatusWithHookEvent,
   type SessionFileCandidate,
   tailRecords,
   workspaceLabel,
@@ -43,6 +46,12 @@ import {
 import { transcriptContentBlocks, transcriptMessageText } from "../shared/local-transcript.js";
 import { CURSOR_PROVIDER } from "./adapter.js";
 import { cursorApplication, cursorChatLink } from "./app-links.js";
+import {
+  CURSOR_HOOK_EVENT,
+  type CursorHookEvent,
+  type ObservedCursorHookEvent,
+  readCursorHookEvent,
+} from "./hooks.js";
 import { CURSOR_TOOL_INPUT_KEY, readCursorSessionTranscript } from "./transcript.js";
 
 /** A turn Cursor failed records its own reason, which is transcript content. */
@@ -132,6 +141,7 @@ const CURSOR_CONTENT_TYPE = {
 const CURSOR_LOCAL_ADAPTER_DEFAULTS = {
   MAXIMUM_PROJECT_DIRECTORIES: 200,
   MAXIMUM_ACTIVITY_LENGTH: 80,
+  HOOK_EVENT_TOLERANCE_MS: 5_000,
 } as const;
 
 export interface CursorLocalAdapterOptions {
@@ -145,6 +155,14 @@ export interface CursorLocalAdapterOptions {
   transcriptReadTailBytes?: number;
   transcriptMaximumRenderedLength?: number;
   readTailBytes?: number;
+  /**
+   * Where the observation hook spools its events, when hooks are on at all.
+   * Read lazily like the cloud adapters' credentials, because the app decides
+   * the path after this adapter is declared. Absent — or answering nothing —
+   * the adapter reads the transcripts alone, exactly as it always has: the
+   * hooks only ever sharpen what those already showed.
+   */
+  hookEventsDirectory?: () => string | undefined;
 }
 
 interface CursorTranscriptCandidate extends SessionFileCandidate {
@@ -384,6 +402,33 @@ interface CursorAppChatIndex {
 const EMPTY_APP_CHAT_INDEX: CursorAppChatIndex = { held: new Set(), archived: new Set() };
 
 /**
+ * Sharpens the transcript's verdict with what the observation hook last said,
+ * in the order the meanings bind. A closed session is definite: the hook
+ * saying so outranks the transcript, and a transcript that says error is
+ * never talked out of it by a softer event. Past that, the events refine only
+ * a fresh session — the decay to `UNKNOWN` exists because a hook can go
+ * silent (a killed process fires no `sessionEnd`), so an old "waiting" must
+ * age the same way an old transcript does. What the refinement actually buys
+ * is the state the transcript cannot show at all: a chat whose window or CLI
+ * closed looks exactly like one holding for its developer.
+ */
+const CURSOR_HOOK_STATUS_REFINEMENT = {
+  definitive: [{ event: CURSOR_HOOK_EVENT.SESSION_END, fresh: SESSION_STATUS.COMPLETE }],
+  fresh: [
+    { event: CURSOR_HOOK_EVENT.PROMPT, fresh: SESSION_STATUS.WORKING },
+    { event: CURSOR_HOOK_EVENT.STOP, fresh: SESSION_STATUS.WAITING },
+  ],
+} as const satisfies HookStatusRefinement<CursorHookEvent>;
+
+function statusWithHookEvent(
+  status: SessionStatus,
+  event: CursorHookEvent,
+  isFresh: boolean,
+): SessionStatus {
+  return refineStatusWithHookEvent(status, event, isFresh, CURSOR_HOOK_STATUS_REFINEMENT);
+}
+
+/**
  * Reads which of the observed chats Cursor's app holds, and which of them the
  * user has archived — each as the presence of a row in the app's own index, a
  * point lookup per chat, never a value, because the values are the
@@ -481,7 +526,7 @@ function detailFor(
   };
 }
 
-function defaultCursorHome(): string {
+export function defaultCursorHome(): string {
   return path.join(os.homedir(), ".cursor");
 }
 
@@ -514,9 +559,11 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
   readonly #readTailBytes: number;
   readonly #transcriptReadTailBytes: number | undefined;
   readonly #transcriptMaximumRenderedLength: number | undefined;
+  readonly #hookEventsDirectory: (() => string | undefined) | undefined;
 
   constructor(options: CursorLocalAdapterOptions = {}) {
     super(options);
+    this.#hookEventsDirectory = options.hookEventsDirectory;
     this.#cursorHome = options.cursorHome ?? defaultCursorHome();
     this.#workspaceLabels = new CursorWorkspaceLabels(
       options.workspaceStorageDirectory ?? defaultWorkspaceStorageDirectory(),
@@ -585,14 +632,35 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
    * reaches an observation — and the location is left unsaid, which is how an
    * adapter reading this machine reports one that runs on it.
    */
-  protected observation(
+  protected async observation(
     candidate: CursorTranscriptCandidate,
     parsed: ParsedCursorTail,
     now: number,
     activeSessionFreshnessMs: number,
-  ): ProviderSessionObservation {
+  ): Promise<ProviderSessionObservation> {
     const label = this.#workspaceLabels.label(candidate.projectDirectoryName);
-    const status = statusFromTurn(parsed.turn, candidate.mtimeMs, now, activeSessionFreshnessMs);
+    const hookEventsDirectory = this.#hookEventsDirectory?.();
+    const hookEvent: ObservedCursorHookEvent | undefined = hookEventsDirectory
+      ? await readCursorHookEvent(hookEventsDirectory, candidate.providerSessionId).catch(
+          () => undefined,
+        )
+      : undefined;
+    // A transcript carries no timestamps of its own, so when it was last
+    // written is Cursor's only account of when this session last did anything.
+    // A hook event trailing that clock by more than the tolerance describes a
+    // turn the transcript already moved past, so it is ignored whole; one that
+    // stands is proof the session moved — only Luke's own script writes the
+    // spool — and dates the session for the freshness decay as well.
+    const transcriptAt = candidate.mtimeMs;
+    const eventStands =
+      hookEvent !== undefined &&
+      hookEvent.atMs + CURSOR_LOCAL_ADAPTER_DEFAULTS.HOOK_EVENT_TOLERANCE_MS >= transcriptAt;
+    const observedAt = eventStands ? Math.max(transcriptAt, hookEvent.atMs) : transcriptAt;
+    let status = statusFromTurn(parsed.turn, observedAt, now, activeSessionFreshnessMs);
+    if (eventStands) {
+      const isFresh = now - observedAt <= activeSessionFreshnessMs;
+      status = statusWithHookEvent(status, hookEvent.event, isFresh);
+    }
     const link = this.#appChats.has(candidate.providerSessionId)
       ? cursorChatLink(candidate.providerSessionId)
       : undefined;
@@ -600,12 +668,12 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
       providerSessionId: candidate.providerSessionId,
       title: label,
       status,
-      // A transcript carries no timestamps of its own, so when it was last
-      // written is the only account Cursor keeps of when this session last did
-      // anything.
-      observedAt: candidate.mtimeMs,
+      observedAt,
       detail: detailFor(label, status, link, parsed.activity),
       ...(parsed.recap ? { recap: parsed.recap } : undefined),
+      ...(status === SESSION_STATUS.COMPLETE
+        ? { completionCause: SESSION_COMPLETION_CAUSE.SESSION_CLOSED }
+        : undefined),
       ...(link ? { applications: [cursorApplication(link)] } : undefined),
     };
   }

@@ -21,6 +21,11 @@ const registrations = providerRegistrations({
     hookScriptPath: "/missing/codex-hook",
     spoolDirectory: "/missing/codex-spool",
   }),
+  cursorHookInstallation: () => ({
+    cursorHome: "/missing/cursor",
+    hookScriptPath: "/missing/cursor-hook",
+    spoolDirectory: "/missing/cursor-spool",
+  }),
 });
 
 test("registers every provider exactly once", () => {
@@ -37,6 +42,7 @@ test("declares credentials and observation hooks beside their adapters", () => {
   assert.equal(registrations[PROVIDER_ID.CURSOR].credential?.id, CREDENTIAL_PROVIDER_ID.CURSOR);
   assert.ok(registrations[PROVIDER_ID.CLAUDE_CODE].registerObservationHook instanceof Function);
   assert.ok(registrations[PROVIDER_ID.CODEX].registerObservationHook instanceof Function);
+  assert.ok(registrations[PROVIDER_ID.CURSOR].registerObservationHook instanceof Function);
   assert.equal("credential" in registrations[PROVIDER_ID.OPENCODE], false);
   assert.equal("credential" in registrations[PROVIDER_ID.GEMINI_CLI], false);
   assert.equal("registerObservationHook" in registrations[PROVIDER_ID.GEMINI_CLI], false);

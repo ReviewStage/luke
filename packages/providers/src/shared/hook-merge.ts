@@ -57,6 +57,18 @@ export interface ObservationHookRegistration<Event extends string> {
 }
 
 /**
+ * How a provider's configuration file shapes one registered entry. Claude Code
+ * and Codex nest commands inside a `hooks` list per entry; Cursor's entries
+ * are the command records themselves.
+ */
+export const HOOK_ENTRY_NESTING = {
+  NESTED: "nested",
+  FLAT: "flat",
+} as const;
+
+export type HookEntryNesting = (typeof HOOK_ENTRY_NESTING)[keyof typeof HOOK_ENTRY_NESTING];
+
+/**
  * Everything one provider decides about its observation hooks. The guarantees
  * — merge beside the user's entries, refuse an unparseable file, converge at
  * every launch, no envelope text on disk — are the module's; the spec only
@@ -96,6 +108,20 @@ export interface ObservationHookSpec<Event extends string> {
    * recording them would flap the row.
    */
   subagentField?: string;
+  /** How the provider's configuration file shapes one registered entry. */
+  entryNesting: HookEntryNesting;
+  /**
+   * Whether the provider reads the hook's stdout as its JSON answer. The
+   * script then prints the empty decision on every path out, so an observer
+   * that decides nothing is never mistaken for a hook that failed to answer.
+   */
+  repliesWithJson?: boolean;
+  /**
+   * Root fields the provider's configuration documents beside `hooks`, filled
+   * in only where the file does not already carry them — a file being created
+   * gets the documented shape, and the user's own values are never rewritten.
+   */
+  rootDefaults?: Readonly<Record<string, WireValue>>;
 }
 
 /** Where one installed arrangement lives: the provider's home, and Luke's own. */
@@ -134,6 +160,16 @@ function observationHookScript<Event extends string>(
   spec: ObservationHookSpec<Event>,
   spoolDirectory: string,
 ): string {
+  // A provider that reads stdout as the hook's JSON answer is handed the
+  // empty decision on every path out; every other provider gets a plain exit.
+  const leave = spec.repliesWithJson ? "reply_and_leave" : "exit 0";
+  const replyFunction = spec.repliesWithJson
+    ? `
+# The provider reads stdout as the hook's JSON answer, so every path out
+# replies with the empty decision — observing decides nothing.
+reply_and_leave() { printf '{}'; exit 0; }
+`
+    : "";
   const subagentSkip = spec.subagentField
     ? `
 # A subagent's turns are not the session's: they start and stop while the
@@ -143,7 +179,7 @@ function observationHookScript<Event extends string>(
 # that turn.
 if printf '%s' "$ENVELOPE" \\
   | grep -qE '"${spec.subagentField}"[[:space:]]*:[[:space:]]*"[^"]+"'; then
-  exit 0
+  ${leave}
 fi
 `
     : "";
@@ -154,18 +190,18 @@ fi
 # status token into Luke's own spool — never into any provider file — naming
 # the file by the session's own id. The envelope handed in is read only for
 # that id; its text never reaches disk. Luke installs and removes this file.
-
+${replyFunction}
 SPOOL_DIRECTORY="${spoolDirectory}"
 
 # The token is fixed at registration, one per hook entry, so nothing handed in
 # can choose what is written.
 case "$1" in
   ${eventTokens(spec).join("|")}) EVENT_TOKEN="$1" ;;
-  *) exit 0 ;;
+  *) ${leave} ;;
 esac
 
 # No spool means observation hooks are off or Luke is gone; leave quietly.
-[ -d "$SPOOL_DIRECTORY" ] || exit 0
+[ -d "$SPOOL_DIRECTORY" ] || ${leave}
 
 # The envelope rides in as the argument after the token where the provider
 # passes one, and on stdin where it pipes instead.
@@ -176,15 +212,15 @@ ${subagentSkip}
 SESSION_ID=$(printf '%s' "$ENVELOPE" \\
   | grep -oE '"${spec.sessionIdField}"[[:space:]]*:[[:space:]]*"${spec.sessionIdPattern}"' \\
   | head -n 1 | grep -oE '${spec.sessionIdPattern}')
-[ -n "$SESSION_ID" ] || exit 0
+[ -n "$SESSION_ID" ] || ${leave}
 
 # One tiny file per session, replaced on every event: only the newest event
 # matters, and replacement is what bounds the spool. Writing beside the spool
 # file and moving over it keeps a concurrent reader off half a write.
 TEMPORARY_FILE="$SPOOL_DIRECTORY/.$SESSION_ID.$$.tmp"
-printf '{"event":"%s"}' "$EVENT_TOKEN" > "$TEMPORARY_FILE" || exit 0
+printf '{"event":"%s"}' "$EVENT_TOKEN" > "$TEMPORARY_FILE" || ${leave}
 mv -f "$TEMPORARY_FILE" "$SPOOL_DIRECTORY/$SESSION_ID${HOOK_EVENT_FILE_EXTENSION}"
-`;
+${spec.repliesWithJson ? "reply_and_leave\n" : ""}`;
 }
 
 /**
@@ -192,13 +228,17 @@ mv -f "$TEMPORARY_FILE" "$SPOOL_DIRECTORY/$SESSION_ID${HOOK_EVENT_FILE_EXTENSION
  * script being present and executable, so an entry outliving an uninstalled
  * Luke is an instant no-op rather than a "not found" in every session on the
  * machine — and always exiting zero, so no provider can read a missing spool
- * as a decision.
+ * as a decision. Where the provider reads stdout as the hook's JSON answer,
+ * the guard's own fallback drains the piped envelope and replies with the
+ * empty decision, exactly as the script itself would have.
  */
 function observationHookCommand<Event extends string>(
   hookScriptPath: string,
   event: Event,
+  repliesWithJson: boolean,
 ): string {
-  return `[ -x "${hookScriptPath}" ] && "${hookScriptPath}" ${event} || true`;
+  const fallback = repliesWithJson ? `{ cat >/dev/null 2>&1; printf '{}'; }` : "true";
+  return `[ -x "${hookScriptPath}" ] && "${hookScriptPath}" ${event} || ${fallback}`;
 }
 
 /**
@@ -248,13 +288,23 @@ function mutableHooks(root: MutableWireRecord): MutableWireRecord {
   return hooks ? { ...hooks } : createMutableWireRecord();
 }
 
-function stripLukeEntries(events: MutableWireRecord, scriptName: string): boolean {
+function stripLukeEntries(
+  events: MutableWireRecord,
+  scriptName: string,
+  entryNesting: HookEntryNesting,
+): boolean {
   let stripped = false;
   for (const [eventName, entries] of Object.entries(events)) {
     if (!Array.isArray(entries)) continue;
     let strippedHere = false;
     const kept = entries.flatMap((entry) => {
       if (!isRecord(entry)) return [entry];
+      if (entryNesting === HOOK_ENTRY_NESTING.FLAT) {
+        // A flat entry is the command record itself, so ours is dropped whole.
+        if (!isLukeHookCommand(entry.command, scriptName)) return [entry];
+        strippedHere = true;
+        return [];
+      }
       const cleaned = withoutLukeHooks(entry, scriptName);
       if (cleaned !== entry) strippedHere = true;
       return cleaned === undefined ? [] : [cleaned];
@@ -265,6 +315,26 @@ function stripLukeEntries(events: MutableWireRecord, scriptName: string): boolea
     else events[eventName] = kept;
   }
   return stripped;
+}
+
+/** One registered entry, in the shape the provider's configuration documents. */
+function registrationEntry<Event extends string>(
+  spec: ObservationHookSpec<Event>,
+  registration: ObservationHookRegistration<Event>,
+  hookScriptPath: string,
+): WireValue {
+  const matcher =
+    registration.matcher !== undefined ? { matcher: registration.matcher } : undefined;
+  const command = observationHookCommand(
+    hookScriptPath,
+    registration.event,
+    spec.repliesWithJson === true,
+  );
+  const timeout = spec.timeoutSeconds !== undefined ? { timeout: spec.timeoutSeconds } : undefined;
+  if (spec.entryNesting === HOOK_ENTRY_NESTING.FLAT) {
+    return { ...matcher, command, ...timeout };
+  }
+  return { ...matcher, hooks: [{ type: "command", command, ...timeout }] };
 }
 
 /**
@@ -292,26 +362,19 @@ export function configurationWithObservationHooks<Event extends string>(
     root = { ...record };
   }
 
+  if (spec.rootDefaults) {
+    for (const [key, value] of Object.entries(spec.rootDefaults)) {
+      if (!(key in root)) root[key] = value;
+    }
+  }
   const events = mutableHooks(root);
   root.hooks = events;
-  stripLukeEntries(events, spec.scriptName);
+  stripLukeEntries(events, spec.scriptName, spec.entryNesting);
 
   for (const [eventName, registration] of Object.entries(spec.registration)) {
     const existing = events[eventName];
     const kept = Array.isArray(existing) ? existing : [];
-    events[eventName] = [
-      ...kept,
-      {
-        ...(registration.matcher !== undefined ? { matcher: registration.matcher } : undefined),
-        hooks: [
-          {
-            type: "command",
-            command: observationHookCommand(hookScriptPath, registration.event),
-            ...(spec.timeoutSeconds !== undefined ? { timeout: spec.timeoutSeconds } : undefined),
-          },
-        ],
-      },
-    ];
+    events[eventName] = [...kept, registrationEntry(spec, registration, hookScriptPath)];
   }
 
   return `${JSON.stringify(root, undefined, 2)}\n`;
@@ -338,7 +401,7 @@ export function configurationWithoutObservationHooks<Event extends string>(
   const root = { ...parsedRecord };
   const events = mutableHooks(root);
   if (!readWireRecord(unparsedWire(root.hooks))) return undefined;
-  if (!stripLukeEntries(events, spec.scriptName)) return undefined;
+  if (!stripLukeEntries(events, spec.scriptName, spec.entryNesting)) return undefined;
   if (Object.keys(events).length === 0) delete root.hooks;
   else root.hooks = events;
 

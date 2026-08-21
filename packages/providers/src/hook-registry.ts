@@ -6,10 +6,13 @@ import {
 } from "./claude-code/hooks.js";
 import { defaultCodexHome } from "./codex/adapter.js";
 import { CODEX_HOOK_SCRIPT_NAME, type CodexHookInstallation } from "./codex/hooks.js";
+import { CURSOR_HOOK_SCRIPT_NAME, type CursorHookInstallation } from "./cursor/hooks.js";
+import { defaultCursorHome } from "./cursor/local-adapter.js";
 
 const HOOK_DIRECTORY = {
   CLAUDE_CODE: "claude-code-hooks",
   CODEX: "codex-hooks",
+  CURSOR: "cursor-hooks",
 } as const;
 const SPOOL_DIRECTORY = "events";
 
@@ -38,6 +41,13 @@ export class ObservationHookRegistry {
     return {
       codexHome: defaultCodexHome(),
       ...this.#paths(HOOK_DIRECTORY.CODEX, CODEX_HOOK_SCRIPT_NAME),
+    };
+  }
+
+  cursorInstallation(): CursorHookInstallation {
+    return {
+      cursorHome: defaultCursorHome(),
+      ...this.#paths(HOOK_DIRECTORY.CURSOR, CURSOR_HOOK_SCRIPT_NAME),
     };
   }
 
