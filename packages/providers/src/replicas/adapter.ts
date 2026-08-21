@@ -84,11 +84,9 @@ function replicasWorkspaceLink(workspaceId: string): string {
 const REPLICAS_ROUTE_SEGMENT = {
   ARCHIVE: "archive",
   CHATS: "chats",
-  CONVERSATIONS: "conversations",
   ENVIRONMENTS: "environments",
   HISTORY: "history",
   MESSAGES: "messages",
-  ORGANIZATION: "organization",
   REPLICA: "replica",
   REPOSITORIES: "repositories",
   SLEEP: "sleep",
@@ -102,48 +100,43 @@ const REPLICAS_ROUTE_SEGMENT = {
  * programmatic use through, answered from Replicas' own records without
  * touching a workspace, and `GET /v1/environments` with
  * `GET /v1/replica/repositories` are the same kind of record read — they are
- * where a creation ask's projects come from. `GET /v1/organization/conversations`
- * is documented outright as answering "without waking workspaces".
+ * where a creation ask's projects come from.
+ * `GET /v1/workspaces/{id}/chats` is the server-side chat registry — the one
+ * that keeps chats visible and queues their messages while a workspace
+ * sleeps — documented to list "active, sleeping, and pending chats", so it
+ * answers for a sleeping workspace without touching its engine.
  * `GET /v1/replica/{id}` is documented to wake a sleeping or archived
  * workspace, so it is issued only for a workspace the same pass's list just
  * reported awake, where there is nothing to wake; `GET /v1/replica/{id}/history`
  * answers from retention without waking and refuses with a conflict when it
- * cannot. The chats list under a workspace wakes and is never read, and the
- * dashboard's own `GET /v1/workspaces` is not read either: it is shaped
- * around a signed-in viewer, and a key stands for the organization rather
- * than for a viewer, so what it answers a key is not the roster the user
- * sees.
+ * cannot. The engine-backed chats list under `/v1/replica/{id}/chats` wakes
+ * and is never read, and the dashboard's own `GET /v1/workspaces` is not
+ * read either: it is shaped around a signed-in viewer, and a key stands for
+ * the organization rather than for a viewer, so what it answers a key is not
+ * the roster the user sees.
  */
 const REPLICAS_ROUTE = {
   REPLICAS: [REPLICAS_ROUTE_SEGMENT.V1, REPLICAS_ROUTE_SEGMENT.REPLICA],
-  CONVERSATIONS: [
-    REPLICAS_ROUTE_SEGMENT.V1,
-    REPLICAS_ROUTE_SEGMENT.ORGANIZATION,
-    REPLICAS_ROUTE_SEGMENT.CONVERSATIONS,
-  ],
   ENVIRONMENTS: [REPLICAS_ROUTE_SEGMENT.V1, REPLICAS_ROUTE_SEGMENT.ENVIRONMENTS],
   REPOSITORIES: [
     REPLICAS_ROUTE_SEGMENT.V1,
     REPLICAS_ROUTE_SEGMENT.REPLICA,
     REPLICAS_ROUTE_SEGMENT.REPOSITORIES,
   ],
-  /** Where the documented sleep and archive acts live, beside the pull-request acts. */
+  /** Where the chat registry and the sleep and archive acts live. */
   WORKSPACE_ACTS: [REPLICAS_ROUTE_SEGMENT.V1, REPLICAS_ROUTE_SEGMENT.WORKSPACES],
 } as const;
 
 const REPLICAS_QUERY = {
   CHAT_ID: "chat_id",
   LIMIT: "limit",
-  WORKSPACE_ID: "workspace_id",
 } as const;
 
 const REPLICAS_FIELD = {
   BRANCH: "branch",
   CHAT_ID: "chat_id",
-  CHATS: "chats",
   CODING_AGENT: "coding_agent",
   CONTENT: "content",
-  CONVERSATIONS: "conversations",
   CREATED_AT: "created_at",
   ENVIRONMENT_ID: "environment_id",
   ENVIRONMENTS: "environments",
@@ -153,8 +146,6 @@ const REPLICAS_FIELD = {
   LAST_ACTIVITY_AT: "last_activity_at",
   MESSAGE: "message",
   NAME: "name",
-  PARENT_CHAT_ID: "parent_chat_id",
-  PROCESSING: "processing",
   PROVIDER: "provider",
   PULL_REQUESTS: "pull_requests",
   REPLICA: "replica",
@@ -167,7 +158,6 @@ const REPLICAS_FIELD = {
   TEXT: "text",
   TITLE: "title",
   TYPE: "type",
-  UPDATED_AT: "updated_at",
   URL: "url",
 } as const;
 
@@ -360,9 +350,9 @@ interface ReplicasChat {
   title?: string;
   observedAt: number;
   /**
-   * Whether the chat is doing work right now, known only from the awake
-   * detail read; the conversations export reports no turn state, so a chat
-   * it listed leaves this unset rather than guessed.
+   * Whether the chat is doing work right now, as the registry reported it.
+   * Optional only for a snapshot read by an earlier build of this pass; the
+   * registry always says.
    */
   processing?: boolean;
 }
@@ -440,45 +430,43 @@ function workspaceFromRecord(record: WireRecord): ReplicasWorkspace | undefined 
 }
 
 /**
- * One chat from the conversations export. A spawned sub-agent's chat is
- * skipped the way the local adapters skip subagent sessions: its work is the
- * parent chat's, and a row for it would double what one conversation did.
+ * The chat registry spells its fields in camelCase, alone among the reads,
+ * so its keys live apart rather than doubling up the snake_case table. Its
+ * `lastMessageText` is deliberately never read: the field carries whoever
+ * spoke last, the developer included, and words that are not attributably
+ * the agent's may not reach a row.
  */
-function chatFromConversationRecord(record: WireRecord): ReplicasChat | undefined {
-  const id = textFromRecord(record, REPLICAS_FIELD.CHAT_ID);
-  const observedAt =
-    timestampFromRecord(record, REPLICAS_FIELD.UPDATED_AT) ??
-    timestampFromRecord(record, REPLICAS_FIELD.CREATED_AT);
-  if (!id || observedAt === undefined) return undefined;
-  if (textFromRecord(record, REPLICAS_FIELD.PARENT_CHAT_ID)) return undefined;
+const REPLICAS_WORKSPACE_CHAT_FIELD = {
+  CHATS: "chats",
+  CREATED_AT: "createdAt",
+  ID: "id",
+  PARENT_CHAT_ID: "parentChatId",
+  PROCESSING: "processing",
+  PROVIDER: "provider",
+  TITLE: "title",
+  UPDATED_AT: "updatedAt",
+} as const;
 
-  const agentKind = textFromRecord(record, REPLICAS_FIELD.PROVIDER)?.slice(
+/**
+ * One chat from the workspace's chat registry, turn state included. A
+ * spawned sub-agent's chat is skipped the way the local adapters skip
+ * subagent sessions: its work is the parent chat's, and a row for it would
+ * double what one conversation did.
+ */
+function chatFromRegistryRecord(record: WireRecord): ReplicasChat | undefined {
+  const id = textFromRecord(record, REPLICAS_WORKSPACE_CHAT_FIELD.ID);
+  const observedAt =
+    timestampFromRecord(record, REPLICAS_WORKSPACE_CHAT_FIELD.UPDATED_AT) ??
+    timestampFromRecord(record, REPLICAS_WORKSPACE_CHAT_FIELD.CREATED_AT);
+  if (!id || observedAt === undefined) return undefined;
+  if (textFromRecord(record, REPLICAS_WORKSPACE_CHAT_FIELD.PARENT_CHAT_ID)) return undefined;
+
+  const agentKind = textFromRecord(record, REPLICAS_WORKSPACE_CHAT_FIELD.PROVIDER)?.slice(
     0,
     REPLICAS_ADAPTER_DEFAULTS.MAXIMUM_AGENT_KIND_LENGTH,
   );
-  const title = textFromRecord(record, REPLICAS_FIELD.TITLE);
-  return {
-    id,
-    observedAt,
-    ...(agentKind ? { agentKind } : undefined),
-    ...(title ? { title } : undefined),
-  };
-}
-
-/** One chat from the awake detail read, which alone reports the turn state. */
-function chatFromDetailRecord(record: WireRecord): ReplicasChat | undefined {
-  const id = textFromRecord(record, REPLICAS_FIELD.ID);
-  const observedAt =
-    timestampFromRecord(record, REPLICAS_FIELD.UPDATED_AT) ??
-    timestampFromRecord(record, REPLICAS_FIELD.CREATED_AT);
-  if (!id || observedAt === undefined) return undefined;
-
-  const agentKind = textFromRecord(record, REPLICAS_FIELD.PROVIDER)?.slice(
-    0,
-    REPLICAS_ADAPTER_DEFAULTS.MAXIMUM_AGENT_KIND_LENGTH,
-  );
-  const title = textFromRecord(record, REPLICAS_FIELD.TITLE);
-  const processing = record[REPLICAS_FIELD.PROCESSING];
+  const title = textFromRecord(record, REPLICAS_WORKSPACE_CHAT_FIELD.TITLE);
+  const processing = record[REPLICAS_WORKSPACE_CHAT_FIELD.PROCESSING];
   return {
     id,
     observedAt,
@@ -648,12 +636,12 @@ const REPLICAS_ENRICHABLE_STATUSES: ReadonlySet<ReplicasStatus> = new Set([
  *
  * Replicas is a workspace app hosting agents rather than an agent: a
  * workspace holds chats running Claude Code, Codex, Cursor, and others, the
- * way Conductor's does. The rows are the chats wherever a non-waking read
- * lists them — the awake detail read for a workspace the same pass saw
- * awake, the organization conversations export (organization keys alone)
- * for the sleeping rest — each led by its own agent, grouped under the
- * workspace, with the Replicas mark riding as the app. A workspace with no
- * readable chats is its own row, so nothing the list reported ever drops.
+ * way Conductor's does. The rows are the chats, read with their turn state
+ * from the server-side chat registry — which answers for active and
+ * sleeping workspaces alike, under any key, without touching an engine —
+ * each led by its own agent, grouped under the workspace, with the Replicas
+ * mark riding as the app. A workspace with no readable chats is its own
+ * row, so nothing the list reported ever drops.
  */
 export class ReplicasSessionAdapter extends CloudSessionAdapter {
   /**
@@ -678,16 +666,7 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
    */
   #historyByWorkspace = new Map<string, ReplicasHistoryEnrichment>();
 
-  /**
-   * Whether the conversations export refused this credential. It is
-   * documented for organization keys alone, so under a personal key it
-   * answers the same refusal every time; the sleeping workspaces' chat
-   * listing stands down for the credential's lifetime instead of asking a
-   * refused question every pass, and their workspace-level rows stand.
-   */
-  #conversationsRefused = false;
-
-  /** The same stand-down for the awake detail read, should a key be refused it. */
+  /** A stand-down for the awake detail read, should a key be refused it. */
   #detailsRefused = false;
 
   /**
@@ -720,7 +699,6 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
     this.#chatsByWorkspace.clear();
     this.#detailByWorkspace.clear();
     this.#historyByWorkspace.clear();
-    this.#conversationsRefused = false;
     this.#detailsRefused = false;
     this.#workspaceByChat.clear();
     this.#projects = [];
@@ -732,13 +710,12 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
   ): Promise<readonly ProviderSessionObservation[]> {
     // One list call, then bounded per-workspace reads for the newest
     // workspaces. The list carries the status, the timestamps, the
-    // repositories, and the pull requests; the awake detail read adds each
-    // chat's turn state and the working branch; the conversations export
-    // lists a sleeping workspace's chats; the retained history adds the
-    // parting words. Workspaces are never capped — one page of the
-    // documented maximum is the request's only bound — and the page arrives
-    // ordered by creation, so the sort below is what puts the latest
-    // activity first.
+    // repositories, and the pull requests; the chat registry lists each
+    // workspace's chats with their turn state; the awake detail read adds
+    // the working branch; the retained history adds the parting words.
+    // Workspaces are never capped — one page of the documented maximum is
+    // the request's only bound — and the page arrives ordered by creation,
+    // so the sort below is what puts the latest activity first.
     const body = await request(REPLICAS_ROUTE.REPLICAS, {
       [REPLICAS_QUERY.LIMIT]: String(REPLICAS_ADAPTER_DEFAULTS.WORKSPACE_PAGE_SIZE),
     });
@@ -762,10 +739,7 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
         request,
         enrichable.filter((workspace) => workspace.status === REPLICAS_STATUS.ACTIVE),
       ),
-      this.#refreshChats(
-        request,
-        enrichable.filter((workspace) => workspace.status === REPLICAS_STATUS.SLEEPING),
-      ),
+      this.#refreshChats(request, enrichable),
     ]);
     await this.#refreshHistories(request, enrichable);
 
@@ -959,14 +933,16 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
   }
 
   /**
-   * Reads each awake workspace's detail — its chats with their turn state,
-   * and its working branch. The read is documented to wake a sleeping or
-   * archived workspace, so it is issued only for a workspace the same
-   * pass's list just reported awake, where there is nothing to wake; a
-   * workspace that fell asleep in the second between the two reads would be
-   * woken back, which Replicas prices at nothing and the next pass reports
-   * honestly, but the window is a second against a lifecycle measured in
-   * hours. Failures are contained the way every enrichment's are.
+   * Reads each awake workspace's detail for the two facts the chat registry
+   * does not carry: the working branch, and the workspace's currently active
+   * agent for a row with no chats to say so. The read is documented to wake
+   * a sleeping or archived workspace, so it is issued only for a workspace
+   * the same pass's list just reported awake, where there is nothing to
+   * wake; a workspace that fell asleep in the second between the two reads
+   * would be woken back, which Replicas prices at nothing and the next pass
+   * reports honestly, but the window is a second against a lifecycle
+   * measured in hours. Failures are contained the way every enrichment's
+   * are, and nothing but this garnish is lost to one.
    */
   async #refreshDetails(request: CloudRequest, awake: readonly ReplicasWorkspace[]): Promise<void> {
     if (this.#detailsRefused) return;
@@ -983,12 +959,6 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
         }
         const replica = body[REPLICAS_FIELD.REPLICA];
         if (!isRecord(replica)) return;
-        const chats = recordsFromPage(replica, REPLICAS_FIELD.CHATS)
-          .map(chatFromDetailRecord)
-          .filter(isDefined)
-          .sort((first, second) => second.observedAt - first.observedAt)
-          .slice(0, REPLICAS_ADAPTER_DEFAULTS.CHAT_LIMIT);
-        this.#chatsByWorkspace.set(workspace.id, { observedAt: workspace.observedAt, chats });
         const statuses = replica[REPLICAS_FIELD.REPOSITORY_STATUSES];
         const firstStatus = Array.isArray(statuses) ? statuses.filter(isRecord)[0] : undefined;
         const branch = firstStatus
@@ -1010,38 +980,46 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
   }
 
   /**
-   * Lists the chats of the sleeping workspaces whose activity moved, through
-   * the documented conversations export — "without waking workspaces", in
-   * its own words. The awake workspaces' chats come from the detail read,
-   * which also carries their turn state; this read is what keeps a settled
-   * workspace's chats on the roster after it sleeps.
+   * Lists each workspace's chats from the server-side chat registry, which
+   * answers for active, sleeping, and pending workspaces alike without
+   * touching an engine, under any key. An awake workspace is re-read every
+   * pass — a turn ending changes `processing` without moving the activity
+   * timestamp — while a sleeping one is settled and re-read only when it
+   * moves. A refusal is contained to the workspace it answered for, and the
+   * chats it already listed stand rather than vanish.
    */
   async #refreshChats(
     request: CloudRequest,
-    sleeping: readonly ReplicasWorkspace[],
+    enrichable: readonly ReplicasWorkspace[],
   ): Promise<void> {
-    if (this.#conversationsRefused) return;
     await Promise.all(
-      sleeping
+      enrichable
         .filter(
           (workspace) =>
+            workspace.status === REPLICAS_STATUS.ACTIVE ||
             this.#chatsByWorkspace.get(workspace.id)?.observedAt !== workspace.observedAt,
         )
         .map(async (workspace) => {
           let body: WireRecord;
           try {
-            body = await request(REPLICAS_ROUTE.CONVERSATIONS, {
-              [REPLICAS_QUERY.WORKSPACE_ID]: workspace.id,
-              [REPLICAS_QUERY.LIMIT]: String(REPLICAS_ADAPTER_DEFAULTS.CHAT_LIMIT),
-            });
+            body = await request([
+              ...REPLICAS_ROUTE.WORKSPACE_ACTS,
+              workspace.id,
+              REPLICAS_ROUTE_SEGMENT.CHATS,
+            ]);
           } catch (error) {
             // A parsing bug is not a provider answer and must not hide here.
             if (!(error instanceof CloudRequestError)) throw error;
-            if (error.failure === CLOUD_FAILURE.UNAUTHORIZED) this.#conversationsRefused = true;
+            if (error.failure === CLOUD_FAILURE.UNAUTHORIZED) {
+              this.#chatsByWorkspace.set(workspace.id, {
+                observedAt: workspace.observedAt,
+                chats: this.#chatsByWorkspace.get(workspace.id)?.chats ?? [],
+              });
+            }
             return;
           }
-          const chats = recordsFromPage(body, REPLICAS_FIELD.CONVERSATIONS)
-            .map(chatFromConversationRecord)
+          const chats = recordsFromPage(body, REPLICAS_WORKSPACE_CHAT_FIELD.CHATS)
+            .map(chatFromRegistryRecord)
             .filter(isDefined)
             .sort((first, second) => second.observedAt - first.observedAt)
             .slice(0, REPLICAS_ADAPTER_DEFAULTS.CHAT_LIMIT);

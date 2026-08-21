@@ -138,46 +138,34 @@ function workspacePayload(workspace: TestWorkspace) {
   };
 }
 
-function detailChatPayload(chat: TestChat) {
+/**
+ * A chat as the workspace chat registry spells it — camelCase, with the
+ * turn state, and a `lastMessageText` that may be the developer's own words,
+ * which is exactly why the adapter must never read it.
+ */
+function registryChatPayload(chat: TestChat) {
   return {
     id: chat.id,
     provider: chat.provider ?? "claude",
     title: chat.title ?? "",
-    created_at: isoTimestamp(chat.updatedAt - 60_000),
-    updated_at: isoTimestamp(chat.updatedAt),
+    createdAt: isoTimestamp(chat.updatedAt - 60_000),
+    updatedAt: isoTimestamp(chat.updatedAt),
     processing: chat.processing ?? false,
-  };
-}
-
-function conversationPayload(workspace: TestWorkspace, chat: TestChat) {
-  return {
-    chat_id: chat.id,
-    workspace_id: workspace.id,
-    workspace_name: workspace.name ?? "fix-login-timeout",
-    workspace_status: workspace.status ?? TEST_STATUS.ACTIVE,
-    workspace_source: "dashboard",
-    workspace_created_at: isoTimestamp(workspace.createdAt),
-    workspace_user_id: null,
-    workspace_creator_email: null,
-    environment_id: null,
-    provider: chat.provider ?? null,
-    title: chat.title ?? null,
-    created_at: isoTimestamp(chat.updatedAt - 60_000),
-    updated_at: isoTimestamp(chat.updatedAt),
-    parent_chat_id: chat.parentChatId ?? null,
-    senders: [],
+    parentChatId: chat.parentChatId ?? null,
+    lastMessageText: SECRET_PROMPT_TEXT,
   };
 }
 
 /**
  * Serves the subset of the Replica API the adapter is allowed to use: the
- * organization's replica list, the awake detail read, the conversations
- * export, the retained-history read, the environments and repositories the
+ * organization's replica list, the workspace chat registry, the awake detail
+ * read, the retained-history read, the environments and repositories the
  * creation offer is built from, and the documented writes. The one read the
- * fake still refuses is the per-workspace chats list, which wakes a sleeping
- * workspace, so a request to it is a failure of the pass, not a route this
- * fake forgot; a workspace marked `refuseHistory` answers the conflict a
- * pre-retention engine answers.
+ * fake still refuses is the engine-backed chats list under
+ * `/v1/replica/{id}/chats`, which wakes a sleeping workspace, so a request
+ * to it is a failure of the pass, not a route this fake forgot; a workspace
+ * marked `refuseHistory` answers the conflict a pre-retention engine
+ * answers.
  */
 function fakeReplicasApi(
   workspaces: readonly TestWorkspace[],
@@ -207,16 +195,18 @@ function fakeReplicasApi(
         })),
       });
     }
-    if (method === "GET" && pathname === "/v1/organization/conversations") {
-      const workspace = workspaces.find(
-        (candidate) => candidate.id === searchParams.get("workspace_id"),
-      );
-      const chats = workspace?.chats ?? [];
+    if (
+      method === "GET" &&
+      segments.length === 4 &&
+      segments[0] === "v1" &&
+      segments[1] === "workspaces" &&
+      segments[3] === "chats"
+    ) {
+      const workspace = workspaces.find((candidate) => candidate.id === segments[2]);
+      if (!workspace) return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
       return jsonResponse({
-        conversations: workspace ? chats.map((chat) => conversationPayload(workspace, chat)) : [],
-        total: chats.length,
-        limit: Number(searchParams.get("limit") ?? "20"),
-        next_cursor: null,
+        chats: (workspace.chats ?? []).map(registryChatPayload),
+        deletedChats: [],
       });
     }
     if (method === "POST" && pathname === "/v1/replica") {
@@ -287,7 +277,10 @@ function fakeReplicasApi(
           ...workspacePayload(workspace),
           coding_agent: workspace.codingAgent ?? null,
           waking: null,
-          chats: (workspace.chats ?? []).map(detailChatPayload),
+          // The detail read's own chat list is deliberately absent, so the
+          // suite proves the rows never depend on it: the registry is the one
+          // chat source.
+          chats: [],
           repository_statuses: workspace.branch
             ? [
                 {
@@ -446,11 +439,11 @@ test("stands archived workspaces behind no row, the way the dashboard hides them
   );
 });
 
-test("reads awake detail, sleeping chats, and history tails, never a waking read", async () => {
-  // The detail read is documented to wake a sleeping workspace, so it is
-  // issued only for a workspace the same pass's list reported awake; a
-  // sleeping workspace's chats come from the conversations export instead,
-  // and an errored one has no retained conversation worth asking for.
+test("reads the chat registry, awake detail, and history tails, never a waking read", async () => {
+  // The chat registry answers for active and sleeping workspaces alike; the
+  // detail read is documented to wake a sleeping workspace, so it is issued
+  // only for a workspace the same pass's list reported awake; and an errored
+  // workspace has no retained conversation worth asking for.
   const api = fakeReplicasApi([
     activeWorkspace("workspace-one", TEST_TIME - 1_000),
     { id: "workspace-two", status: TEST_STATUS.SLEEPING, createdAt: TEST_TIME - 2_000 },
@@ -468,10 +461,11 @@ test("reads awake detail, sleeping chats, and history tails, never a waking read
   // Every request pins the dated API version, as Replicas' own guide says to.
   assert.equal(list?.headers.get("x-replicas-api-version"), "2026-05-17");
   assert.deepEqual(observedPaths(api).slice(1).sort(), [
-    "/v1/organization/conversations",
     "/v1/replica/workspace-one",
     "/v1/replica/workspace-one/history",
     "/v1/replica/workspace-two/history",
+    "/v1/workspaces/workspace-one/chats",
+    "/v1/workspaces/workspace-two/chats",
   ]);
 });
 
@@ -559,7 +553,7 @@ test("reports each chat's own turn: processing works, idle holds, stale idle goe
   assert.equal(byId.get("chat-working")?.detail?.branch, "feature/login-timeout");
 });
 
-test("lists a sleeping workspace's chats from the conversations export", async () => {
+test("lists a sleeping workspace's chats from the registry without touching it", async () => {
   const sleptAt = TEST_TIME - 2 * 60 * 60 * 1000;
   const api = fakeReplicasApi([
     {
@@ -600,6 +594,9 @@ test("lists a sleeping workspace's chats from the conversations export", async (
     api.requests.some((request) => request.pathname === "/v1/replica/workspace-asleep"),
     false,
   );
+  // The registry's `lastMessageText` may be the developer's own words, so
+  // the adapter never reads it and nothing of it reaches a row.
+  assert.equal(JSON.stringify(observations).includes(SECRET_PROMPT_TEXT), false);
 });
 
 test("offers the dashboard's own sleep and archive acts, each only when settled", async () => {
@@ -944,20 +941,23 @@ test("keeps the roster when the history endpoint refuses the credential", async 
   assert.equal(first[0]?.agent, undefined);
   assert.equal(second.length, 1);
   // The refused history was not asked again while the workspace stood still;
-  // the awake detail read keeps its every-pass cadence.
-  assert.deepEqual(observedPaths(api), [
+  // the chat registry and the awake detail read keep their every-pass
+  // cadence.
+  assert.deepEqual(observedPaths(api).sort(), [
+    "/v1/replica",
     "/v1/replica",
     "/v1/replica/workspace-active",
-    "/v1/replica",
     "/v1/replica/workspace-active",
+    "/v1/workspaces/workspace-active/chats",
+    "/v1/workspaces/workspace-active/chats",
   ]);
 });
 
-test("keeps workspace rows when the conversations export refuses the credential", async () => {
-  // The conversations export answers organization keys alone, so a personal
-  // key is refused identically every pass: the sleeping workspaces' chat
-  // listing stands down for the credential's lifetime, and their
-  // workspace-level rows stand.
+test("keeps workspace rows when the chat registry refuses a workspace", async () => {
+  // The list already answered under this key, so a registry refusal is
+  // contained to the workspace it answered for: the workspace-level row
+  // stands, and a settled workspace's refusal is not asked again until it
+  // moves.
   const sleptAt = TEST_TIME - 60 * 60 * 1000;
   const api = fakeReplicasApi([
     {
@@ -970,7 +970,7 @@ test("keeps workspace rows when the conversations export refuses the credential"
     },
   ]);
   const gatedFetch: CloudFetch = async (url, init) =>
-    new URL(url).pathname === "/v1/organization/conversations"
+    new URL(url).pathname.endsWith("/chats")
       ? jsonResponse({}, HTTP_STATUS.FORBIDDEN)
       : api.fetch(url, init);
   const adapter = adapterFor(gatedFetch);
@@ -984,7 +984,7 @@ test("keeps workspace rows when the conversations export refuses the credential"
   );
   assert.deepEqual(first[0]?.agent, { id: "claude-code", displayName: "Claude Code" });
   assert.equal(second.length, 1);
-  // The refused export was asked exactly once; the history read still ran,
+  // The refused registry was asked exactly once; the history read still ran,
   // unpinned, because the chats were never listed.
   assert.deepEqual(observedPaths(api), [
     "/v1/replica",
