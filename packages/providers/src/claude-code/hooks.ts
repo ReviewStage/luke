@@ -2,7 +2,6 @@ import os from "node:os";
 import path from "node:path";
 import {
   HOOK_ENTRY_NESTING,
-  HOOK_SPOOL_MAXIMUM_AGE_MS,
   type ObservationHookSpec,
   type ObservedHookEvent,
   observationHooksFor,
@@ -10,7 +9,7 @@ import {
 
 /**
  * Claude Code's observation hooks, described for the shared machinery in
- * `observation-hooks.ts`: which file the registration merges into, which
+ * `hook-merge.ts`: which file the registration merges into, which
  * lifecycle moments are registered, and what the envelope Claude Code pipes
  * the script looks like. Everything the arrangement guarantees — the merge
  * beside the user's entries, the refusal to rewrite an unparseable file, the
@@ -31,8 +30,6 @@ export const CLAUDE_HOOK_SCRIPT_NAME = "luke-claude-observation-hook.sh";
 
 /** How long Claude Code lets the spool write run before giving up on it. */
 const CLAUDE_HOOK_TIMEOUT_SECONDS = 10;
-
-export const CLAUDE_HOOK_SPOOL_MAXIMUM_AGE_MS = HOOK_SPOOL_MAXIMUM_AGE_MS;
 
 /**
  * The tokens the script may write, fixed at registration: each hook entry
@@ -91,21 +88,8 @@ export function defaultClaudeHome(): string {
   return configuredHome || path.join(os.homedir(), ".claude");
 }
 
-export interface ClaudeCodeHookInstallation {
-  /** Claude Code's own home, holding the `settings.json` entries merge into. */
-  claudeHome: string;
-  /** Where Luke keeps the script, under Luke's own application data. */
-  hookScriptPath: string;
-  /** Where the script writes its event files, under Luke's own data too. */
-  spoolDirectory: string;
-}
-
-const claudeHooks = observationHooksFor(
-  CLAUDE_HOOK_SPEC,
-  (installation: ClaudeCodeHookInstallation) => installation.claudeHome,
-);
+const claudeHooks = observationHooksFor(CLAUDE_HOOK_SPEC);
 
 export const installClaudeCodeObservationHooks = claudeHooks.install;
 export const removeClaudeCodeObservationHooks = claudeHooks.remove;
 export const readClaudeHookEvent = claudeHooks.read;
-export const pruneClaudeHookSpool = claudeHooks.prune;

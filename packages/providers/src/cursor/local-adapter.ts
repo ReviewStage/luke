@@ -33,13 +33,13 @@ import {
   discoverSessionFiles,
   fileStats,
   type HookStatusRefinement,
+  hookRefinedStatus,
   LOCAL_ADAPTER_DEFAULTS,
   LocalFileSessionAdapter,
   localSessionStatus,
   readDirectory,
   readTail,
   readTextFile,
-  refineStatusWithHookEvent,
   type SessionFileCandidate,
   tailRecords,
   workspaceLabel,
@@ -159,7 +159,6 @@ const CURSOR_CONTENT_TYPE = {
 const CURSOR_LOCAL_ADAPTER_DEFAULTS = {
   MAXIMUM_PROJECT_DIRECTORIES: 200,
   MAXIMUM_ACTIVITY_LENGTH: 80,
-  HOOK_EVENT_TOLERANCE_MS: 5_000,
 } as const;
 
 export interface CursorLocalAdapterOptions {
@@ -444,15 +443,11 @@ interface CursorAppChatIndex {
 const EMPTY_APP_CHAT_INDEX: CursorAppChatIndex = { held: new Set(), archived: new Set() };
 
 /**
- * Sharpens the transcript's verdict with what the observation hook last said,
- * in the order the meanings bind. A closed session is definite: the hook
- * saying so outranks the transcript, and a transcript that says error is
- * never talked out of it by a softer event. Past that, the events refine only
- * a fresh session — the decay to `UNKNOWN` exists because a hook can go
- * silent (a killed process fires no `sessionEnd`), so an old "waiting" must
- * age the same way an old transcript does. What the refinement actually buys
- * is the state the transcript cannot show at all: a chat whose window or CLI
- * closed looks exactly like one holding for its developer.
+ * What the refinement actually buys here is the state the transcript cannot
+ * show at all: a chat whose window or CLI closed looks exactly like one
+ * holding for its developer. No notification token is registered — Cursor
+ * documents no event that fires only while a call holds for approval — so
+ * the refinement names no such moment, the honest absence.
  */
 const CURSOR_HOOK_STATUS_REFINEMENT = {
   definitive: [{ event: CURSOR_HOOK_EVENT.SESSION_END, fresh: SESSION_STATUS.COMPLETE }],
@@ -460,15 +455,8 @@ const CURSOR_HOOK_STATUS_REFINEMENT = {
     { event: CURSOR_HOOK_EVENT.PROMPT, fresh: SESSION_STATUS.WORKING },
     { event: CURSOR_HOOK_EVENT.STOP, fresh: SESSION_STATUS.WAITING },
   ],
+  sessionEndEvent: CURSOR_HOOK_EVENT.SESSION_END,
 } as const satisfies HookStatusRefinement<CursorHookEvent>;
-
-function statusWithHookEvent(
-  status: SessionStatus,
-  event: CursorHookEvent,
-  isFresh: boolean,
-): SessionStatus {
-  return refineStatusWithHookEvent(status, event, isFresh, CURSOR_HOOK_STATUS_REFINEMENT);
-}
 
 /**
  * Reads which of the observed chats Cursor's app holds, and which of them the
@@ -868,20 +856,17 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
       : undefined;
     // A transcript carries no timestamps of its own, so when it was last
     // written is Cursor's only account of when this session last did anything.
-    // A hook event trailing that clock by more than the tolerance describes a
-    // turn the transcript already moved past, so it is ignored whole; one that
-    // stands is proof the session moved — only Luke's own script writes the
-    // spool — and dates the session for the freshness decay as well.
     const transcriptAt = candidate.mtimeMs;
-    const eventStands =
-      hookEvent !== undefined &&
-      hookEvent.atMs + CURSOR_LOCAL_ADAPTER_DEFAULTS.HOOK_EVENT_TOLERANCE_MS >= transcriptAt;
-    const observedAt = eventStands ? Math.max(transcriptAt, hookEvent.atMs) : transcriptAt;
-    let status = statusFromTurn(parsed.turn, observedAt, now, activeSessionFreshnessMs);
-    if (eventStands) {
-      const isFresh = now - observedAt <= activeSessionFreshnessMs;
-      status = statusWithHookEvent(status, hookEvent.event, isFresh);
-    }
+    const refined = hookRefinedStatus({
+      refinement: CURSOR_HOOK_STATUS_REFINEMENT,
+      hookEvent,
+      providerAtMs: transcriptAt,
+      statusAt: (observedAt) =>
+        statusFromTurn(parsed.turn, observedAt, now, activeSessionFreshnessMs),
+      now,
+      activeSessionFreshnessMs,
+    });
+    const { status, observedAt } = refined;
     const appHeld = this.#appChats.has(candidate.providerSessionId);
     const link = appHeld ? cursorChatLink(candidate.providerSessionId) : undefined;
     // A message is advertised only where the CLI's documented resume can
@@ -919,7 +904,7 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
       detail: detailFor(label, status, link, parsed.activity),
       ...(parsed.recap ? { recap: parsed.recap } : undefined),
       ...(canReceiveMessage ? { canReceiveMessage: true } : undefined),
-      ...(status === SESSION_STATUS.COMPLETE
+      ...(refined.sessionClosed
         ? { completionCause: SESSION_COMPLETION_CAUSE.SESSION_CLOSED }
         : undefined),
       ...(link ? { applications: [cursorApplication(link)] } : undefined),

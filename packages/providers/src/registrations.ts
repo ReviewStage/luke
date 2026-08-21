@@ -11,35 +11,26 @@ import {
   type SessionProviderAdapter,
 } from "@sidecar/session";
 import { ClaudeCodeSessionAdapter } from "./claude-code/adapter.js";
-import {
-  CLAUDE_HOOK_SPOOL_MAXIMUM_AGE_MS,
-  type ClaudeCodeHookInstallation,
-  installClaudeCodeObservationHooks,
-  pruneClaudeHookSpool,
-} from "./claude-code/hooks.js";
+import { installClaudeCodeObservationHooks } from "./claude-code/hooks.js";
 import { CODEX_PROVIDER, CodexSessionAdapter } from "./codex/adapter.js";
 import type { CodexCloudSessionAdapter } from "./codex/cloud-adapter.js";
-import {
-  CODEX_HOOK_SPOOL_MAXIMUM_AGE_MS,
-  type CodexHookInstallation,
-  installCodexObservationHooks,
-  pruneCodexHookSpool,
-} from "./codex/hooks.js";
+import { installCodexObservationHooks } from "./codex/hooks.js";
 import { ConductorSessionAdapter } from "./conductor/adapter.js";
 import { CopilotSessionAdapter } from "./copilot/adapter.js";
 import { CURSOR_PROVIDER, CursorSessionAdapter } from "./cursor/adapter.js";
-import {
-  CURSOR_HOOK_SPOOL_MAXIMUM_AGE_MS,
-  type CursorHookInstallation,
-  installCursorObservationHooks,
-  pruneCursorHookSpool,
-} from "./cursor/hooks.js";
+import { installCursorObservationHooks } from "./cursor/hooks.js";
 import { CursorLocalSessionAdapter } from "./cursor/local-adapter.js";
 import { DEVIN_PROVIDER, DevinSessionAdapter } from "./devin/adapter.js";
 import { DevinLocalSessionAdapter } from "./devin/local-adapter.js";
 import { GeminiCliSessionAdapter } from "./gemini-cli/adapter.js";
+import type { ObservationHookProviderId } from "./hook-registry.js";
 import { JulesSessionAdapter } from "./jules/adapter.js";
 import { OpenCodeSessionAdapter } from "./opencode/adapter.js";
+import {
+  HOOK_SPOOL_MAXIMUM_AGE_MS,
+  type ObservationHookInstallation,
+  pruneObservationHookSpool,
+} from "./shared/hook-merge.js";
 
 export interface ProviderRegistration {
   adapter: SessionProviderAdapter;
@@ -49,9 +40,9 @@ export interface ProviderRegistration {
 
 export interface ProviderRegistrationOptions {
   readApiKey: (providerId: CredentialProviderId) => Promise<string | undefined>;
-  claudeHookInstallation: () => ClaudeCodeHookInstallation;
-  codexHookInstallation: () => CodexHookInstallation;
-  cursorHookInstallation: () => CursorHookInstallation;
+  observationHookInstallation: (
+    providerId: ObservationHookProviderId,
+  ) => ObservationHookInstallation;
   /**
    * Constructed by the caller rather than here, because the app also asks it
    * what the latest pass learned about the Codex CLI login — the settings
@@ -62,10 +53,32 @@ export interface ProviderRegistrationOptions {
   now?: () => number;
 }
 
+/**
+ * One provider's launch convergence: install the arrangement, then prune the
+ * spool it writes into, so the spool's size tracks the sessions actually
+ * alive rather than every session ever observed.
+ */
+function observationHookRegistration(
+  installHooks: (installation: ObservationHookInstallation) => Promise<void>,
+  installation: () => ObservationHookInstallation,
+  now: () => number,
+): () => Promise<void> {
+  return async () => {
+    const resolved = installation();
+    await installHooks(resolved);
+    await pruneObservationHookSpool(resolved.spoolDirectory, HOOK_SPOOL_MAXIMUM_AGE_MS, now());
+  };
+}
+
 export function providerRegistrations(options: ProviderRegistrationOptions) {
   const now = options.now ?? Date.now;
+  const hookInstallation = (providerId: ObservationHookProviderId) => () =>
+    options.observationHookInstallation(providerId);
+  const claudeInstallation = hookInstallation(PROVIDER_ID.CLAUDE_CODE);
+  const codexInstallation = hookInstallation(PROVIDER_ID.CODEX);
+  const cursorInstallation = hookInstallation(PROVIDER_ID.CURSOR);
   const claude = new ClaudeCodeSessionAdapter({
-    hookEventsDirectory: () => options.claudeHookInstallation().spoolDirectory,
+    hookEventsDirectory: () => claudeInstallation().spoolDirectory,
   });
   // Codex runs sessions in two places: on this machine, observed from its own
   // transcripts, and in Codex cloud, observed through the Codex CLI's
@@ -74,7 +87,7 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
     provider: CODEX_PROVIDER,
     adapters: [
       new CodexSessionAdapter({
-        hookEventsDirectory: () => options.codexHookInstallation().spoolDirectory,
+        hookEventsDirectory: () => codexInstallation().spoolDirectory,
       }),
       options.codexCloudAdapter,
     ],
@@ -83,7 +96,7 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
     provider: CURSOR_PROVIDER,
     adapters: [
       new CursorLocalSessionAdapter({
-        hookEventsDirectory: () => options.cursorHookInstallation().spoolDirectory,
+        hookEventsDirectory: () => cursorInstallation().spoolDirectory,
       }),
       new CursorSessionAdapter({
         readApiKey: () => options.readApiKey(CREDENTIAL_PROVIDER_ID.CURSOR),
@@ -103,27 +116,19 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
   return {
     [PROVIDER_ID.CLAUDE_CODE]: {
       adapter: claude,
-      registerObservationHook: async () => {
-        const installation = options.claudeHookInstallation();
-        await installClaudeCodeObservationHooks(installation);
-        await pruneClaudeHookSpool(
-          installation.spoolDirectory,
-          CLAUDE_HOOK_SPOOL_MAXIMUM_AGE_MS,
-          now(),
-        );
-      },
+      registerObservationHook: observationHookRegistration(
+        installClaudeCodeObservationHooks,
+        claudeInstallation,
+        now,
+      ),
     },
     [PROVIDER_ID.CODEX]: {
       adapter: codex,
-      registerObservationHook: async () => {
-        const installation = options.codexHookInstallation();
-        await installCodexObservationHooks(installation);
-        await pruneCodexHookSpool(
-          installation.spoolDirectory,
-          CODEX_HOOK_SPOOL_MAXIMUM_AGE_MS,
-          now(),
-        );
-      },
+      registerObservationHook: observationHookRegistration(
+        installCodexObservationHooks,
+        codexInstallation,
+        now,
+      ),
     },
     [PROVIDER_ID.CONDUCTOR]: {
       adapter: new ConductorSessionAdapter({
@@ -140,15 +145,11 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
     [PROVIDER_ID.CURSOR]: {
       adapter: cursor,
       credential: CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.CURSOR],
-      registerObservationHook: async () => {
-        const installation = options.cursorHookInstallation();
-        await installCursorObservationHooks(installation);
-        await pruneCursorHookSpool(
-          installation.spoolDirectory,
-          CURSOR_HOOK_SPOOL_MAXIMUM_AGE_MS,
-          now(),
-        );
-      },
+      registerObservationHook: observationHookRegistration(
+        installCursorObservationHooks,
+        cursorInstallation,
+        now,
+      ),
     },
     [PROVIDER_ID.DEVIN]: {
       adapter: devin,

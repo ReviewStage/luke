@@ -233,9 +233,7 @@ const observationHooks = new ObservationHookRegistry(() => app.getPath("userData
 // from three parallel lists here.
 const providerRegistry = providerRegistrations({
   readApiKey: (providerId) => settingsStore.readApiKey(providerId),
-  claudeHookInstallation: () => observationHooks.claudeInstallation(),
-  codexHookInstallation: () => observationHooks.codexInstallation(),
-  cursorHookInstallation: () => observationHooks.cursorInstallation(),
+  observationHookInstallation: (providerId) => observationHooks.installation(providerId),
   codexCloudAdapter,
 });
 // The record enforces completeness; the shared list preserves provider order.

@@ -1,6 +1,5 @@
 import {
   HOOK_ENTRY_NESTING,
-  HOOK_SPOOL_MAXIMUM_AGE_MS,
   type ObservationHookSpec,
   type ObservedHookEvent,
   observationHooksFor,
@@ -8,7 +7,7 @@ import {
 
 /**
  * Codex's observation hooks, described for the shared machinery in
- * `observation-hooks.ts`. Codex keeps user-level hooks in a `hooks.json` of
+ * `hook-merge.ts`. Codex keeps user-level hooks in a `hooks.json` of
  * their own inside its home, nested the same way Claude Code's are, and hands
  * a registered command its envelope as JSON on stdin. The envelope's
  * `session_id` is the same thread id the adapter reads from `threads.id`, so
@@ -30,8 +29,6 @@ export const CODEX_HOOK_SCRIPT_NAME = "luke-codex-observation-hook.sh";
 
 /** How long Codex lets the spool write run before giving up on it. */
 const CODEX_HOOK_TIMEOUT_SECONDS = 10;
-
-export const CODEX_HOOK_SPOOL_MAXIMUM_AGE_MS = HOOK_SPOOL_MAXIMUM_AGE_MS;
 
 /**
  * The tokens the script may write, fixed at registration: each hook entry
@@ -80,21 +77,8 @@ const CODEX_HOOK_SPEC: ObservationHookSpec<CodexHookEvent> = {
   entryNesting: HOOK_ENTRY_NESTING.NESTED,
 };
 
-export interface CodexHookInstallation {
-  /** Codex's own home, holding the `hooks.json` entries merge into. */
-  codexHome: string;
-  /** Where Luke keeps the script, under Luke's own application data. */
-  hookScriptPath: string;
-  /** Where the script writes its event files, under Luke's own data too. */
-  spoolDirectory: string;
-}
-
-const codexHooks = observationHooksFor(
-  CODEX_HOOK_SPEC,
-  (installation: CodexHookInstallation) => installation.codexHome,
-);
+const codexHooks = observationHooksFor(CODEX_HOOK_SPEC);
 
 export const installCodexObservationHooks = codexHooks.install;
 export const removeCodexObservationHooks = codexHooks.remove;
 export const readCodexHookEvent = codexHooks.read;
-export const pruneCodexHookSpool = codexHooks.prune;

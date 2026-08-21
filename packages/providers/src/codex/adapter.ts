@@ -25,10 +25,10 @@ import {
 } from "@sidecar/wire";
 import {
   type HookStatusRefinement,
+  hookRefinedStatus,
   LocalSessionAdapter,
   readTail,
   readTextFile,
-  refineStatusWithHookEvent,
   uniquePaths,
   workspaceLabel,
 } from "../shared/local-session-adapter.js";
@@ -187,15 +187,6 @@ const CODEX_ADAPTER_DEFAULTS = {
    */
   READ_SESSION_INDEX_TAIL_BYTES: 128 * 1024,
   MAXIMUM_ACTIVITY_LENGTH: 80,
-  /**
-   * How much older than the thread row's clock a hook event may run and still
-   * describe the same moment. The hook fires as a turn boundary happens and
-   * Codex touches the row moments later under its own clock, so a boundary's
-   * event usually trails the row it belongs with by a breath — never by more
-   * than this. An event further behind describes a turn the thread has
-   * already moved past, and refines nothing.
-   */
-  HOOK_EVENT_TOLERANCE_MS: 5_000,
 } as const;
 
 const CODEX_REALTIME_DELEGATION_MARKER = "<realtime_delegation>";
@@ -657,16 +648,9 @@ function statusFromRow(
 }
 
 /**
- * Sharpens the row's verdict with what the observation hook last said, in the
- * order the meanings bind. A closed or failed session is definite: the hook
- * saying closed outranks the row, and a row that says complete or error is
- * never talked out of it by a softer event. Past those, the events refine
- * only a fresh session — the decay to `UNKNOWN` exists because a hook can go
- * silent (a killed process
- * fires no `SessionEnd`), so an old "waiting" must age the same way an old
- * row does. What the refinement actually buys is the states the state
- * database cannot show: a tool call holding for approval writes no records
- * while it holds, and a turn's true end can sit past the rollout's read.
+ * What the refinement actually buys here is the states the state database
+ * cannot show: a tool call holding for approval writes no records while it
+ * holds, and a turn's true end can sit past the rollout's read.
  */
 const CODEX_HOOK_STATUS_REFINEMENT = {
   definitive: [{ event: CODEX_HOOK_EVENT.SESSION_END, fresh: SESSION_STATUS.COMPLETE }],
@@ -679,15 +663,9 @@ const CODEX_HOOK_STATUS_REFINEMENT = {
     { event: CODEX_HOOK_EVENT.PROMPT, fresh: SESSION_STATUS.WORKING },
     { event: CODEX_HOOK_EVENT.STOP, fresh: SESSION_STATUS.WAITING },
   ],
+  notificationEvent: CODEX_HOOK_EVENT.NOTIFICATION,
+  sessionEndEvent: CODEX_HOOK_EVENT.SESSION_END,
 } as const satisfies HookStatusRefinement<CodexHookEvent>;
-
-function statusWithHookEvent(
-  status: ProviderSessionObservation["status"],
-  event: CodexHookEvent,
-  isFresh: boolean,
-): ProviderSessionObservation["status"] {
-  return refineStatusWithHookEvent(status, event, isFresh, CODEX_HOOK_STATUS_REFINEMENT);
-}
 
 function detailFromRow(
   row: CodexThreadRow,
@@ -730,48 +708,31 @@ function observationFromThreadRow(
   const providerSessionId = textFromRow(row, CODEX_THREAD_COLUMN.ID);
   if (!providerSessionId) return undefined;
 
-  // A hook event trailing the row's clock by more than the tolerance
-  // describes a turn the thread has already moved past, so it is ignored
-  // whole. One that stands is proof the session moved — only Luke's own
-  // script writes the spool — and dates the session for the freshness decay
-  // as well. A notification alone gets no tolerance: it means the session is
-  // holding for approval, and holding writes nothing, so a row touched at or
-  // past the event is itself the news that the hold ended.
   const rowAt = timestampFromRow(row);
-  const toleranceMs =
-    hookEvent?.event === CODEX_HOOK_EVENT.NOTIFICATION
-      ? 0
-      : CODEX_ADAPTER_DEFAULTS.HOOK_EVENT_TOLERANCE_MS;
-  const eventStands = hookEvent !== undefined && hookEvent.atMs + toleranceMs >= rowAt;
-  const observedAt = eventStands ? Math.max(rowAt, hookEvent.atMs) : rowAt;
-  let status = statusFromRow(rollout, observedAt, now, activeSessionFreshnessMs);
-  if (eventStands) {
-    const isFresh = now - observedAt <= activeSessionFreshnessMs;
-    status = statusWithHookEvent(status, hookEvent.event, isFresh);
-  }
-  const completionCause =
-    status === SESSION_STATUS.COMPLETE &&
-    eventStands &&
-    hookEvent.event === CODEX_HOOK_EVENT.SESSION_END
-      ? SESSION_COMPLETION_CAUSE.SESSION_CLOSED
-      : undefined;
+  const refined = hookRefinedStatus({
+    refinement: CODEX_HOOK_STATUS_REFINEMENT,
+    hookEvent,
+    providerAtMs: rowAt,
+    statusAt: (observedAt) => statusFromRow(rollout, observedAt, now, activeSessionFreshnessMs),
+    now,
+    activeSessionFreshnessMs,
+  });
+  const completionCause = refined.sessionClosed
+    ? SESSION_COMPLETION_CAUSE.SESSION_CLOSED
+    : undefined;
   const detail = detailFromRow(row, rollout);
   const parentProviderSessionId = delegationSourceFromRow(row);
   const observation: ProviderSessionObservation = {
     providerSessionId,
     ...(parentProviderSessionId ? { parentProviderSessionId } : undefined),
     title: titleFromRow(row, names),
-    status,
+    status: refined.status,
     ...(completionCause ? { completionCause } : undefined),
-    observedAt,
+    observedAt: refined.observedAt,
     ...(rollout?.lastAgentMessage ? { recap: rollout.lastAgentMessage } : undefined),
     detail,
     ...(detail.link ? { applications: [chatGptApplication(detail.link)] } : undefined),
-    ...(status === SESSION_STATUS.WAITING &&
-    eventStands &&
-    hookEvent?.event === CODEX_HOOK_EVENT.NOTIFICATION
-      ? { holdingForDeveloper: true }
-      : undefined),
+    ...(refined.holdingForDeveloper ? { holdingForDeveloper: true } : undefined),
   };
   if (isCodexRealtimeDelegationThread(row)) observation.realtimeVoice = true;
   if (rollout?.realtimeVoiceLive === true) observation.realtimeVoiceLive = true;

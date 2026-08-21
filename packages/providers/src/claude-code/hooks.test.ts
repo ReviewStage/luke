@@ -7,11 +7,13 @@ import test, { type TestContext } from "node:test";
 import { promisify } from "node:util";
 import type { ParsedJsonObject } from "@sidecar/wire/testing";
 import {
+  type ObservationHookInstallation,
+  pruneObservationHookSpool,
+} from "../shared/hook-merge.js";
+import {
   CLAUDE_HOOK_EVENT,
   CLAUDE_HOOK_SCRIPT_NAME,
-  type ClaudeCodeHookInstallation,
   installClaudeCodeObservationHooks,
-  pruneClaudeHookSpool,
   readClaudeHookEvent,
   removeClaudeCodeObservationHooks,
 } from "./hooks.js";
@@ -34,25 +36,25 @@ const REGISTERED_EVENT_NAMES = [
   "SessionEnd",
 ] as const;
 
-async function temporaryInstallation(t: TestContext): Promise<ClaudeCodeHookInstallation> {
+async function temporaryInstallation(t: TestContext): Promise<ObservationHookInstallation> {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "luke-claude-hooks-"));
   t.after(async () => {
     await fs.rm(directory, { recursive: true, force: true });
   });
-  const claudeHome = path.join(directory, "claude-home");
-  await fs.mkdir(claudeHome, { recursive: true });
+  const providerHome = path.join(directory, "claude-home");
+  await fs.mkdir(providerHome, { recursive: true });
   return {
-    claudeHome,
+    providerHome,
     hookScriptPath: path.join(directory, "luke-data", CLAUDE_HOOK_SCRIPT_NAME),
     spoolDirectory: path.join(directory, "luke-data", "events"),
   };
 }
 
-function settingsPath(installation: ClaudeCodeHookInstallation): string {
-  return path.join(installation.claudeHome, CLAUDE_SETTINGS_FILE_NAME);
+function settingsPath(installation: ObservationHookInstallation): string {
+  return path.join(installation.providerHome, CLAUDE_SETTINGS_FILE_NAME);
 }
 
-async function readSettings(installation: ClaudeCodeHookInstallation): Promise<ParsedJsonObject> {
+async function readSettings(installation: ObservationHookInstallation): Promise<ParsedJsonObject> {
   return JSON.parse(await fs.readFile(settingsPath(installation), "utf8"));
 }
 
@@ -83,7 +85,7 @@ function entryCommands(entries: unknown[]): string[] {
  * envelope rides in from a file beside the script through `sh -c`.
  */
 async function pipeToHookScript(
-  installation: ClaudeCodeHookInstallation,
+  installation: ObservationHookInstallation,
   eventArgument: string,
   envelope: string,
 ): Promise<void> {
@@ -151,13 +153,13 @@ test("creates the settings file for a Claude home that has none yet", async (t) 
 
 test("touches nothing on a machine with no Claude home at all", async (t) => {
   const installation = await temporaryInstallation(t);
-  await fs.rm(installation.claudeHome, { recursive: true, force: true });
+  await fs.rm(installation.providerHome, { recursive: true, force: true });
 
   await installClaudeCodeObservationHooks(installation);
 
   // No provider directory is created on the provider's behalf, and no script
   // or spool is staged for sessions that cannot exist.
-  await assert.rejects(fs.stat(installation.claudeHome));
+  await assert.rejects(fs.stat(installation.providerHome));
   await assert.rejects(fs.stat(installation.hookScriptPath));
   await assert.rejects(fs.stat(installation.spoolDirectory));
 });
@@ -384,12 +386,16 @@ test("pruning drops only the events past the observation window", async (t) => {
   await fs.utimes(freshPath, (TEST_TIME - 60_000) / 1000, (TEST_TIME - 60_000) / 1000);
   await fs.utimes(stalePath, (TEST_TIME - 2 * dayMs) / 1000, (TEST_TIME - 2 * dayMs) / 1000);
 
-  await pruneClaudeHookSpool(installation.spoolDirectory, dayMs, TEST_TIME);
+  await pruneObservationHookSpool(installation.spoolDirectory, dayMs, TEST_TIME);
 
   await fs.stat(freshPath);
   await assert.rejects(fs.stat(stalePath));
   // A spool that does not exist is nothing to prune rather than a failure.
-  await pruneClaudeHookSpool(path.join(installation.spoolDirectory, "absent"), dayMs, TEST_TIME);
+  await pruneObservationHookSpool(
+    path.join(installation.spoolDirectory, "absent"),
+    dayMs,
+    TEST_TIME,
+  );
 });
 
 test("removal leaves a file with no Luke entries byte-for-byte alone", async (t) => {
@@ -412,7 +418,7 @@ test("the settings write keeps the file's own mode and leaves no debris", async 
 
   // The rename replaced the file, and the user's own protection rode along.
   assert.equal((await fs.stat(settingsPath(installation))).mode & 0o777, 0o600);
-  const leftovers = (await fs.readdir(installation.claudeHome)).filter((name) =>
+  const leftovers = (await fs.readdir(installation.providerHome)).filter((name) =>
     name.includes(".luke-tmp"),
   );
   assert.deepEqual(leftovers, []);
@@ -421,7 +427,7 @@ test("the settings write keeps the file's own mode and leaves no debris", async 
 test("the settings write lands through a symlink rather than replacing it", async (t) => {
   const installation = await temporaryInstallation(t);
   // A dotfiles-managed home: settings.json is a link into a synced store.
-  const syncedPath = path.join(installation.claudeHome, "synced-settings.json");
+  const syncedPath = path.join(installation.providerHome, "synced-settings.json");
   await fs.writeFile(syncedPath, "{}\n");
   await fs.symlink(syncedPath, settingsPath(installation));
 
