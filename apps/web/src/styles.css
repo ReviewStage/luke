@@ -30,10 +30,12 @@
 @import "@fontsource-variable/bricolage-grotesque/wght.css";
 
 /* Only the tokens the page actually draws with. shadcn/ui's contract is a
-   superset — popover, secondary, destructive, sidebar, chart — and a token
-   nothing reads is drift waiting to happen. Every value is declared in
-   `:root` below and merely aliased here, so the plain-CSS blocks further down
-   read the same vocabulary the utilities do. */
+   superset — popover, secondary, destructive, sidebar — and a token nothing
+   reads is drift waiting to happen. Every value is declared in `:root` below
+   and merely aliased here, so the plain-CSS blocks further down read the same
+   vocabulary the utilities do. The chart slots stay out of this block for the
+   same reason: the admin dashboard's chart configs read `--chart-*` directly,
+   and no utility class does. */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -155,6 +157,16 @@
   --attention-tint: rgba(255, 160, 73, 0.14);
   --complete: #6fdca4;
   --complete-tint: rgba(111, 220, 164, 0.14);
+
+  /* The admin dashboard's chart series, declared here because that page is
+     the one chart surface and it opts into this theme. The accent cyan and
+     the state green themselves sit too light for a mark on the black card —
+     side by side they blur (ΔE 13.6) — so each slot is a darker step of the
+     same hue family, validated as a categorical pair against the card
+     (worst CVD ΔE 15.4, both ≥ 3:1): voice keeps the working cyan's family,
+     attention reviews keep complete's. */
+  --chart-1: #2f9bd8;
+  --chart-2: #35a877;
 }
 
 @layer base {
