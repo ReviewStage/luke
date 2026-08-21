@@ -97,6 +97,24 @@ test("the address goes from the frames the recorder opens with", () => {
   );
 });
 
+test("a bare path names the machine as surely as a whole address does", () => {
+  // The library reports a path beside the address, and an exception names the
+  // script each frame came from rather than the document — so matching the
+  // document's own address exactly would have let both through.
+  namesNobody(
+    withoutLocalAddress({
+      $pathname: "/Users/someone/Applications/Luke.app/renderer/index.html",
+      $exception_list: [
+        {
+          stacktrace: {
+            frames: [{ filename: "/Users/someone/Applications/Luke.app/renderer/renderer.js" }],
+          },
+        },
+      ],
+    }),
+  );
+});
+
 test("everything that is not the address comes through as it came", () => {
   // A page opened as a file has no referrer, so the library reports the same
   // `$direct` any unreferred visit gets, and that says nothing about anyone.

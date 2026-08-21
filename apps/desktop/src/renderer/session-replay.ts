@@ -51,15 +51,46 @@ export const POSTHOG_HOST = "https://us.i.posthog.com";
 const RENDERER_ADDRESS = "app://luke/panel";
 
 /**
- * Whether a value is this page's own address, in any of the forms it takes:
- * the whole `file://` address, or the bare path the library reports beside it.
+ * Where macOS keeps home folders, and so where the account name sits in any
+ * absolute path on this machine. A path under it is the thing this whole
+ * parser exists to stop, whatever produced it.
+ */
+const ACCOUNTS_DIRECTORY = "/Users/";
+
+/**
+ * The directory this page was loaded from, which is also where its scripts
+ * are — so it is where a captured exception's stack frames point, and those
+ * name `renderer.js` rather than the document itself.
  *
  * Read off `globalThis` rather than `window` so the parser can be exercised
  * with no document at all, where there is no address to match and every value
  * passes through.
  */
+function loadedFrom(): string | undefined {
+  const path = globalThis.location?.pathname;
+  if (path === undefined) return undefined;
+  const directory = path.slice(0, path.lastIndexOf("/") + 1);
+  // A page at the filesystem root would match everything, which is not a
+  // narrowing at all; the two rules either side of this still cover it.
+  return directory.length > 1 ? directory : undefined;
+}
+
+/**
+ * Whether a value is an address on this machine, in any of the forms one takes
+ * here: the whole `file://` address, a path under the directory this page and
+ * its scripts were loaded from, or any absolute path under the accounts
+ * directory.
+ *
+ * Three rules rather than one equality, because equality only ever matched the
+ * document. The library also reports a bare path beside the address, an
+ * exception names the script each frame came from, and either can be spelled
+ * differently from `location.pathname` — encoded, or simply a sibling file —
+ * and still name the same person.
+ */
 function namesThisMachine(value: string): boolean {
-  return value.startsWith("file://") || value === globalThis.location?.pathname;
+  if (value.startsWith("file://") || value.startsWith(ACCOUNTS_DIRECTORY)) return true;
+  const directory = loadedFrom();
+  return directory !== undefined && value.startsWith(directory);
 }
 
 /**
