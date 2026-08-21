@@ -59,9 +59,9 @@ Trust constraints:
   because the delete is unrecoverable and takes every sibling chat's terminal
   with it. A managed row here is also the standing row an idle workspace
   earns for itself: a worktree with no agent terminal at all, read from the
-  same observed host state, is settled by construction — there is no agent
+  same observed host state, is settled by construction, since there is no agent
   whose turn could be cut, and a workspace whose only terminal Luke cannot
-  map draws no row rather than a gamble — while the main checkout and
+  map draws no row rather than a gamble, while the main checkout and
   anything Superset already archived stand behind no row and can never be
   offered the delete. This does not authorize any other Superset CLI command,
   deletion
@@ -365,16 +365,16 @@ What Luke may show:
   issues, or a transcript rendering, which travel only on conversations the
   developer opens, and the rendering only in the turn that asked for it. A
   developer-opened conversation also carries a bounded history of the recent
-  exchange itself — the developer's own asks, typed or spoken and handed back
+  exchange itself (the developer's own asks, typed or spoken and handed back
   as text by the same service that heard them, the words Luke already spoke
-  or announced, and the acts he carried at the developer's ask — so the one
+  or announced, and the acts he carried at the developer's ask) so the one
   conversation survives the calls that transport it: an announcement read out
   on Luke's own call, or a call retired idle, is still remembered by the next
   one. Every history line already traveled to the same service once, on the
   call that said it; a transcript reading enters the history only as the fact
   that one was read, never a word of the rendering; each line's identity is
   the roster-validated one the words traveled with, offered only while that
-  session is still observed; and the history lives in memory alone — written
+  session is still observed; and the history lives in memory alone, written
   to no disk, dying with the app, and never sent on Luke's speak-only call. Its
   trigger is a deterministic status edge or the evaluator finding an update
   that satisfies the developer's standing ask, never a model speaking
