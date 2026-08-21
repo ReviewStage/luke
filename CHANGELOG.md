@@ -32,6 +32,29 @@
 Notable changes to Luke, newest first. Each heading is a released version and
 the date its release was published.
 
+## 0.3.8 — 2026-08-20
+
+### Improvements
+
+- Luke uses Conductor's own chat names and opens each local chat directly
+  ([#362](https://github.com/ReviewStage/luke/pull/362))
+
+### Fixes
+
+- Fixed panel content sitting flush against the strip instead of keeping a
+  consistent inset ([#377](https://github.com/ReviewStage/luke/pull/377))
+- Fixed macOS releases failing while electron-builder assembled the installer
+  DMG ([#380](https://github.com/ReviewStage/luke/pull/380))
+
+![Luke's panel with consistent spacing beneath the strip](apps/web/public/changelog/0.3.8/fixes.png)
+
+### Miscellaneous
+
+- Updated the macOS release pipeline to use electron-builder alone
+  ([#367](https://github.com/ReviewStage/luke/pull/367))
+- Updated the README, privacy policy, contribution guide, and security policy
+  for launch ([#379](https://github.com/ReviewStage/luke/pull/379))
+
 ## 0.3.7 — 2026-08-20
 
 ### Improvements
