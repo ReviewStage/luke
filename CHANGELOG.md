@@ -41,6 +41,8 @@ the date its release was published.
 
 ### Fixes
 
+- Fixed Luke announcing that a chat is waiting when it does not need a reply
+  ([#374](https://github.com/ReviewStage/luke/pull/374))
 - Fixed the ready-to-install update status using unnecessary extra copy
   ([#373](https://github.com/ReviewStage/luke/pull/373))
 - Fixed Developer ID releases omitting native helpers from the packaged app
