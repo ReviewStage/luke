@@ -32,6 +32,15 @@ export const POSTHOG_DEFAULTS = {
   REQUEST_TIMEOUT_MS: 5_000,
 } as const;
 
+/**
+ * One project's console page, on the app host the private API lives on —
+ * never the ingestion host, which serves no pages. This is an address for a
+ * maintainer's browser, not an endpoint Luke calls.
+ */
+export function posthogProjectConsoleUrl(projectId: string): string {
+  return `${POSTHOG_DEFAULTS.API_HOST}/project/${encodeURIComponent(projectId)}`;
+}
+
 export type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
 
 /**

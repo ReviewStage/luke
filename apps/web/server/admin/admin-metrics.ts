@@ -205,6 +205,12 @@ export interface AdminMetrics {
     /** (user, day) rows that reached a ceiling — throttling made visible, since a rejected call still counts. */
     quotaLimitedUserDaysToday: number;
     quotaLimitedUserDaysWindow: number;
+    /**
+     * The analytics project's console, where the per-request error rates this
+     * section cannot show actually live. Absent when the deployment names no
+     * project, so the page states the absence rather than drawing a dead link.
+     */
+    analyticsConsoleUrl?: string;
   };
   systemHealth: {
     database: AdminDatabaseHealth;
@@ -234,6 +240,8 @@ export interface AdminMetricsSource {
   reliability: {
     quotaLimitedUserDaysToday: number;
     quotaLimitedUserDaysWindow: number;
+    /** Read from the environment like the integrations, not from a table. */
+    analyticsConsoleUrl?: string;
   };
   systemHealth: {
     database: AdminDatabaseHealth;
@@ -327,6 +335,7 @@ export function buildAdminMetrics(source: AdminMetricsSource, now: number): Admi
       attentionDailyLimit: HOSTED_DAILY_LIMIT[HOSTED_METER.ATTENTION_REVIEW],
       quotaLimitedUserDaysToday: source.reliability.quotaLimitedUserDaysToday,
       quotaLimitedUserDaysWindow: source.reliability.quotaLimitedUserDaysWindow,
+      analyticsConsoleUrl: source.reliability.analyticsConsoleUrl,
     },
     systemHealth: {
       database: source.systemHealth.database,

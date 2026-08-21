@@ -7,7 +7,7 @@ import { readAdminMetricsSource } from "../../server/admin/admin-queries.js";
 import { resolveSessionViewer } from "../../server/admin/viewer.js";
 import { getDatabase } from "../../server/db/index.js";
 import { HOSTED_OPENAI_ENVIRONMENT } from "../../server/hosted/openai.js";
-import { POSTHOG_ENVIRONMENT } from "../../server/hosted/posthog.js";
+import { POSTHOG_ENVIRONMENT, posthogProjectConsoleUrl } from "../../server/hosted/posthog.js";
 
 /** An environment value counts as configured only when it holds a non-blank string. */
 function configured(name: string): boolean {
@@ -35,12 +35,22 @@ export default {
       authSecret: configured("BETTER_AUTH_SECRET"),
     });
 
+    // The project id names which console to open, never a secret; the key
+    // presence booleans above are still the only thing said about the keys.
+    const projectId = (process.env[POSTHOG_ENVIRONMENT.PROJECT_ID] ?? "").trim();
+    const analyticsConsoleUrl = projectId ? posthogProjectConsoleUrl(projectId) : undefined;
+
     return handleAdminMetrics({
       request,
       resolveViewer: resolveSessionViewer,
       readMetrics: async (now, scope) =>
         buildAdminMetrics(
-          await readAdminMetricsSource(getDatabase(), { now, integrations, scope }),
+          await readAdminMetricsSource(getDatabase(), {
+            now,
+            integrations,
+            analyticsConsoleUrl,
+            scope,
+          }),
           now,
         ),
     });
