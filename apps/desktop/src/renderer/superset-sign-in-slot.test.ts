@@ -34,7 +34,7 @@ test("the browser stage speaks the key popups' own language", () => {
 
 test("the slot introduces itself the way every other slot does", () => {
   const markup = render({ stage: SUPERSET_SIGN_IN_STAGE.BROWSER_CODE, organizations: [] });
-  assert.match(markup, /class="key-slot sign-in-slot"/);
+  assert.match(markup, /class="key-slot sign-in-slot ph-block"/);
   assert.match(markup, /data-mark="superset"/);
 });
 

@@ -13,6 +13,20 @@ export interface AccountTokens {
 }
 
 export interface AccountIdentity {
+  /**
+   * The account's own opaque id, exactly as the service's `sub` claim gives
+   * it. It is the same id the hosted endpoints resolve a bearer token to, so
+   * anything the desktop files under it lands on the person the desktop's own
+   * counted events already belong to — and is erased with them when the
+   * account is deleted. Nothing about the user can be read out of it.
+   *
+   * Optional, and its absence is never a refusal. Every hosted endpoint
+   * resolves this same claim from the bearer token itself, so an identity
+   * without one is signed in exactly as before and only the things that need
+   * to name a person locally stand down. Refusing the sign-in instead would
+   * trade an account for a feature.
+   */
+  id?: string;
   email: string;
   name?: string;
   pictureUrl?: string;
@@ -167,6 +181,7 @@ export class AccountClient {
     }
     const pictureUrl = accountPictureUrl(body.picture);
     return {
+      ...(isWireString(body.sub) && body.sub ? { id: body.sub } : undefined),
       email: body.email,
       ...(isWireString(body.name) && body.name ? { name: body.name } : undefined),
       ...(pictureUrl ? { pictureUrl } : undefined),
@@ -188,6 +203,13 @@ export class AccountClient {
 export interface StoredAccount {
   accessToken: string;
   refreshToken: string;
+  /**
+   * The identity's opaque id; see `AccountIdentity`. Optional here alone,
+   * because an account signed in by a build that predates it was stored
+   * without one: dropping such an account would sign the user out on upgrade
+   * for a field nothing they do depends on. The next identity read fills it.
+   */
+  id?: string;
   email: string;
   name?: string;
   pictureUrl?: string;

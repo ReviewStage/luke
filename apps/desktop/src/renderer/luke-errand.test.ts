@@ -62,6 +62,7 @@ function settings(): AppSettings {
     voiceSource: VOICE_SOURCE.ACCOUNT,
     preferBuiltInMicrophone: false,
     shareUsageData: false,
+    sessionReplay: false,
     calendarAccounts: [],
     showOnAllDisplays: false,
     formFactor: PANEL_FORM_FACTOR.BUBBLE,

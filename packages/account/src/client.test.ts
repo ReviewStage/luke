@@ -109,7 +109,7 @@ test("sign-out revokes the refresh token as a public client", async () => {
   assert.equal(form.get("token_type_hint"), "refresh_token");
 });
 
-test("userinfo returns only the renderer-safe identity fields", async () => {
+test("userinfo returns the identity fields and nothing else the claim carried", async () => {
   const fetch: FetchLike = async (_input, init) => {
     assert.equal(new Headers(init?.headers).get("authorization"), "Bearer access-token");
     return json({
@@ -125,9 +125,29 @@ test("userinfo returns only the renderer-safe identity fields", async () => {
   });
 
   assert.deepEqual(await client.userInfo("access-token", ACCOUNT_PROVIDER.GITHUB), {
+    id: "internal-user-id",
     email: "developer@example.com",
     name: "Developer",
     provider: ACCOUNT_PROVIDER.GITHUB,
+  });
+});
+
+/**
+ * The id is the one field nothing user-facing needs, so its absence must cost
+ * an account nothing: every hosted endpoint resolves the same claim from the
+ * bearer token, and only what has to name a person on this machine stands
+ * down without it.
+ */
+test("an identity with no subject claim still signs in, without an id", async () => {
+  const client = new AccountClient({
+    baseUrl: "https://tryluke.dev/api/auth",
+    clientId: "luke-desktop",
+    fetch: async () => json({ email: "developer@example.com" }),
+  });
+
+  assert.deepEqual(await client.userInfo("access", ACCOUNT_PROVIDER.GOOGLE), {
+    email: "developer@example.com",
+    provider: ACCOUNT_PROVIDER.GOOGLE,
   });
 });
 

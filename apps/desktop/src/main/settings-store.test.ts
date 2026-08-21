@@ -756,6 +756,7 @@ test("keeps both keys when two providers are saved at once", async (t) => {
     preferBuiltInMicrophone: true,
     quietDuringMeetings: true,
     shareUsageData: true,
+    sessionReplay: true,
     showOnAllDisplays: false,
   });
   const reopened = storeIn(directory, { providers: TEST_PROVIDERS });
@@ -960,6 +961,7 @@ test("keeps a Conductor key stored by an earlier version working", async (t) => 
     preferBuiltInMicrophone: true,
     quietDuringMeetings: true,
     shareUsageData: true,
+    sessionReplay: true,
     showOnAllDisplays: false,
   });
   assert.equal(await storeIn(directory).readApiKey(CONDUCTOR), "conductor-replacement-key");
@@ -985,6 +987,7 @@ test("carries a key belonging to a provider this build does not know", async (t)
     preferBuiltInMicrophone: true,
     quietDuringMeetings: true,
     shareUsageData: true,
+    sessionReplay: true,
     showOnAllDisplays: false,
   });
 });
@@ -1023,6 +1026,7 @@ test("keeps Luke out of the Dock until asked, and remembers the answer", async (
     preferBuiltInMicrophone: true,
     quietDuringMeetings: true,
     shareUsageData: true,
+    sessionReplay: true,
     showOnAllDisplays: false,
   });
   // The choice outlives the run that heard it.

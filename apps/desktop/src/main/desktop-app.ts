@@ -101,6 +101,7 @@ import {
   type MicrophoneStatus,
   type ObservedAccountCalendars,
   type OutputAudioState,
+  type SessionReplayBootstrap,
   SUPERSET_SIGN_IN_STAGE,
   SUPERSET_WORKSPACE_PROVIDER_ID,
 } from "#shared/contracts";
@@ -451,6 +452,33 @@ const productEvents = new ProductEventSender({
 // count an act without being handed anything it could flush, stop, or read.
 const recordProductEvent: RecordProductEvent = (name, properties) =>
   productEvents.record(name, properties);
+/**
+ * Where the recorder would post: Luke's own origin, never the processor's,
+ * and fixed by the build exactly as the update feed's address is. It rides
+ * the one development override the account service has, so a build pointed at
+ * a local service names a local proxy — and, having no CSP entry, records
+ * nothing rather than sending a developer's own screen to production.
+ */
+const SESSION_REPLAY_INGEST_HOST = `${HOSTED_SERVICE_BASE_URL}/ingest`;
+/**
+ * What this run can tell the renderer about recording: whether it is the kind
+ * of run that may record at all, where a recording would go, and whom it
+ * would belong to. The two switches are the renderer's own to read, because
+ * it is told when they move and this is answered once.
+ *
+ * `sendsNetwork` is the same suppression the event sender takes — recording
+ * must be off wherever counting is — and an account is required because a
+ * recording under no person could neither join the counts nor be erased with
+ * them.
+ */
+async function sessionReplayBootstrap(): Promise<SessionReplayBootstrap> {
+  const accountId = (await settingsStore.readAccount())?.id;
+  return {
+    permitted: runMode.sendsNetwork && accountId !== undefined,
+    ingestHost: SESSION_REPLAY_INGEST_HOST,
+    ...(accountId ? { accountId } : undefined),
+  };
+}
 /**
  * The output's switches as last read, and the helper that reads them. The
  * state lives here rather than in the renderer so bootstrap can carry the
@@ -878,6 +906,7 @@ function registerIpc(): void {
       // shown, or held quiet, before the account gate opens.
       calendars: accountCapabilitiesActive() ? observedCalendars : [],
       meetingQuiet: accountCapabilitiesActive() && meetingQuietActive,
+      sessionReplay: await sessionReplayBootstrap(),
       settings: await settingsStore.snapshot(),
     };
   });

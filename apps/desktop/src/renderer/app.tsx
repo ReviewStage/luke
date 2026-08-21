@@ -64,6 +64,7 @@ import type {
   ObservedAccountCalendars,
   OutputAudioState,
   SessionOpenResult,
+  SessionReplayBootstrap,
   SettingsResetScope,
   SettingsUpdateResult,
   SupersetSignInSnapshot,
@@ -150,6 +151,7 @@ import {
 } from "./session-model";
 import { parsePixels } from "./session-motion";
 import { SESSION_OPTIONS_CONTROL_ID, SESSION_OPTIONS_ID } from "./session-parts";
+import { applySessionReplay } from "./session-replay";
 import { focusSearchField, SESSION_SEARCH_INPUT_ID } from "./session-search";
 import type {
   MicrophoneControl,
@@ -538,10 +540,23 @@ export function App(): React.JSX.Element {
    * coming down — so the snapshot the next spoken change composes against is
    * never older than the panel it is drawn on.
    */
+  /**
+   * What this run was told about recording, kept so a settings change can
+   * re-decide without asking for another bootstrap. Absent until bootstrap
+   * answers, which is also the whole window in which nothing can record.
+   */
+  const replayBootstrap = useRef<SessionReplayBootstrap | undefined>(undefined);
+
   const applySettings = useCallback(
     (next: AppSettings) => {
       answeredSettings.current = next;
       setSettings(next);
+      // Every settings change lands here — the panel's own writes, a spoken
+      // change, and a push from another window alike — so this is the one
+      // place recording has to follow the switches from.
+      if (replayBootstrap.current) {
+        applySessionReplay(replayBootstrap.current, next.shareUsageData, next.sessionReplay);
+      }
     },
     [setSettings],
   );
@@ -870,6 +885,14 @@ export function App(): React.JSX.Element {
     async (enabled: boolean) =>
       applySettingsReply(
         await window.sidecar.updateSetting(APP_SETTING_SCHEMA.shareUsageData.field, enabled),
+      ),
+    [applySettingsReply],
+  );
+
+  const changeSessionReplay = useCallback(
+    async (enabled: boolean) =>
+      applySettingsReply(
+        await window.sidecar.updateSetting(APP_SETTING_SCHEMA.sessionReplay.field, enabled),
       ),
     [applySettingsReply],
   );
@@ -2561,6 +2584,12 @@ export function App(): React.JSX.Element {
       acceptIssuesBootstrap(value.issues);
       acceptCalendarsBootstrap(value.calendars);
       acceptMeetingQuietBootstrap(value.meetingQuiet);
+      replayBootstrap.current = value.sessionReplay;
+      applySessionReplay(
+        value.sessionReplay,
+        value.settings.shareUsageData,
+        value.settings.sessionReplay,
+      );
       acceptSettingsBootstrap(value.settings);
       // The stored filter chips come back with the panel: a chosen narrowing
       // is a standing way of viewing the list, and this is the one moment it
@@ -3150,6 +3179,7 @@ export function App(): React.JSX.Element {
     onVoiceCaptionsChange: changeVoiceCaptions,
     onDuckOtherMediaChange: changeDuckOtherMedia,
     onShareUsageDataChange: changeShareUsageData,
+    onSessionReplayChange: changeSessionReplay,
     onVoiceSourceChange: changeVoiceSource,
     onPreferBuiltInMicrophoneChange: changePreferBuiltInMicrophone,
     onQuietDuringMeetingsChange: changeQuietDuringMeetings,

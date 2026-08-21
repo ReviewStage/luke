@@ -66,6 +66,7 @@ function settings(overrides: Partial<AppSettings> = {}): AppSettings {
       voiceSource: VOICE_SOURCE.ACCOUNT,
       preferBuiltInMicrophone: true,
       shareUsageData: true,
+      sessionReplay: true,
     },
     overrides,
   );
@@ -869,6 +870,7 @@ test("every adjustable setting is carried to the bridge call its row uses", asyn
     "formFactor:notch",
     "preferBuiltInMicrophone:true",
     "quietDuringMeetings:true",
+    "sessionReplay:true",
     "shareUsageData:true",
     "showInDock:true",
     "showOnAllDisplays:true",

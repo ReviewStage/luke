@@ -376,6 +376,16 @@ export interface AppSettings {
    */
   shareUsageData: boolean;
   /**
+   * Whether Luke also records what his own panel draws and sends it with the
+   * counts. Unlike the counts, a recording is the rendered surface rather
+   * than a fixed vocabulary, so what keeps a session out of one is masking
+   * rather than a shape it has no way to travel in: every region that draws
+   * observed or typed material is blurred or blocked before the recorder
+   * sees it. On by default, off whenever `shareUsageData` is off, and
+   * excluded from every reset scope for the same reason sharing is.
+   */
+  sessionReplay: boolean;
+  /**
    * How Luke stands on a display without a camera housing: a drawn notch
    * pressed into the top edge, or the free-floating bubble every such display
    * gets by default. A display with a real notch answers to neither.
@@ -523,6 +533,40 @@ export interface DisplayDiagnostic {
   notch: ResolvedNotchGeometry;
 }
 
+/**
+ * How screen recording is armed for this run, decided in the main process and
+ * handed over once at bootstrap.
+ *
+ * It carries what the renderer cannot work out for itself and nothing else.
+ * The two switches are not here: the renderer already holds `shareUsageData`
+ * and `sessionReplay` and is told the moment either moves, so reading them
+ * live is what lets a switch turned off stop a recording where it stands —
+ * and a switch turned back on start one — rather than at the next launch.
+ */
+export interface SessionReplayBootstrap {
+  /**
+   * Whether this run may record at all, whatever the switches say. False for
+   * a fixture and a capture run, which must stay deterministic and send
+   * nothing, and false with no account, because a recording filed under
+   * nobody could be neither joined to its counts nor erased with them.
+   */
+  permitted: boolean;
+  /**
+   * The address the recorder posts to: Luke's own origin, never the
+   * processor's. Fixed by the build like the update feed's, and named in the
+   * renderer's own connect policy — a build pointed at some other service
+   * records nothing, because its CSP names one origin and this is not it.
+   */
+  ingestHost: string;
+  /**
+   * The account's opaque id, absent while signed out. It is the same id the
+   * hosted endpoints resolve a bearer token to, so a recording lands on the
+   * person the counted events already belong to — which is also what makes
+   * deleting the account erase the recordings with it.
+   */
+  accountId?: string;
+}
+
 export interface AppBootstrap {
   mode: WindowMode;
   /** Capture-only: start drawn as the peek, which normally needs a pointer. */
@@ -604,6 +648,8 @@ export interface AppBootstrap {
   calendars: readonly ObservedAccountCalendars[];
   /** Whether the calendar's quiet is holding announcements right now. */
   meetingQuiet: boolean;
+  /** Whether, where, and for whom this run may record its own surface. */
+  sessionReplay: SessionReplayBootstrap;
   settings: AppSettings;
 }
 

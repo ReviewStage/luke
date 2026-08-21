@@ -110,6 +110,7 @@ export interface StoredAppSettings {
   quietDuringMeetings: boolean;
   showOnAllDisplays: boolean;
   shareUsageData: boolean;
+  sessionReplay: boolean;
   formFactor?: PanelFormFactor;
   /** The session list's chosen filter chips, absent while nothing narrows it. */
   sessionFilters?: readonly SessionFilter[];
@@ -636,6 +637,41 @@ export const APP_SETTING_SCHEMA = {
     mainProcessSideEffect: SETTING_SIDE_EFFECT.USAGE_SHARING,
     spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
     analytics: { id: APP_SETTING_ID.SHARE_USAGE_DATA, value: toggleAnalytics },
+  },
+  sessionReplay: {
+    field: "sessionReplay",
+    default: true,
+    guard: boolean(true),
+    settingsPage: SETTINGS_PAGE.ROOT,
+    // No reset scope, for the reason sharing has none: a reset that turned
+    // recording back on would be a consent nobody gave. It is also why this
+    // switch stands on its own rather than riding the sharing one — sharing
+    // off stops recording too, but recording off has to be reachable without
+    // giving up the counts.
+    guideEntry: settingGuideEntry(
+      "sessionReplay",
+      [APP_SETTING_ID.SESSION_REPLAY],
+      (settings, defaultValue) => ({
+        id: APP_SETTING_ID.SESSION_REPLAY,
+        label: "Record my screen in Luke",
+        description:
+          "Whether Luke records what his own panel draws — which rows you press, where you " +
+          "stall — and sends it with the usage counts. Session titles, recaps, error lines, " +
+          "anything you type, and every key field are blurred out of the recording before it " +
+          "leaves your Mac. Off whenever Share usage data is off. On to begin with.",
+        kind: APP_SETTING_KIND.TOGGLE,
+        value: appToggleText(settings.sessionReplay),
+        defaultValue: appToggleText(defaultValue),
+        adjustable: true,
+        manual: USAGE_DATA_SECTION,
+      }),
+    ),
+    // None in the main process: the recorder lives in the renderer, which
+    // brings itself into line from the settings change it is already handed.
+    // A side effect declared here would be one the switch never runs.
+    mainProcessSideEffect: SETTING_SIDE_EFFECT.NONE,
+    spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
+    analytics: { id: APP_SETTING_ID.SESSION_REPLAY, value: toggleAnalytics },
   },
   formFactor: {
     field: "formFactor",

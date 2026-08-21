@@ -109,6 +109,7 @@ import {
 } from "./microphone-access";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
 import { CloudBadge, ProviderMark } from "./provider-marks";
+import { REPLAY_BLOCK_CLASS } from "./session-replay-masking";
 import {
   BackIcon,
   CheckIcon,
@@ -214,6 +215,7 @@ export interface PreferenceWrites {
   onDuckOtherMediaChange: (enabled: boolean) => Promise<string | undefined>;
   /** Turns the counting of Luke's own feature use on or off. */
   onShareUsageDataChange: (enabled: boolean) => Promise<string | undefined>;
+  onSessionReplayChange: (enabled: boolean) => Promise<string | undefined>;
   /**
    * Chooses which credential Luke speaks and reviews sessions on. The store
    * answers with why when it refuses, and the toggle is where that answer
@@ -732,7 +734,7 @@ function ProviderCredential({
         /* Named as a group, because Cancel, Save, and the link to the
            provider's own page are the same three words on every row. */
         <fieldset
-          className="credential-editor"
+          className={`credential-editor ${REPLAY_BLOCK_CLASS}`}
           aria-label={`${provider.displayName} ${credential}`}
         >
           <label className="settings-field" htmlFor={fieldId}>
@@ -3604,6 +3606,21 @@ function UsageDataSection({
         changed={settings.shareUsageData !== APP_SETTING_DEFAULTS.shareUsageData}
         checked={settings.shareUsageData}
         onChange={preferences.onShareUsageDataChange}
+      />
+      <SwitchRow
+        label="Record my screen in Luke"
+        ariaLabel="Record what Luke's own panel draws, with session material blurred"
+        errand={APP_SETTING_ID.SESSION_REPLAY}
+        // What the recording cannot show is the whole of what makes it
+        // offerable, so the row says that rather than what it does show.
+        detail="Session titles, recaps, what you type, and keys are blurred out."
+        changed={settings.sessionReplay !== APP_SETTING_DEFAULTS.sessionReplay}
+        checked={settings.sessionReplay}
+        // Off is off: the recorder never starts while the counts are not being
+        // sent either, so a row that looked live under a stopped switch would
+        // be describing something that is not happening.
+        disabled={!settings.shareUsageData}
+        onChange={preferences.onSessionReplayChange}
       />
     </section>
   );

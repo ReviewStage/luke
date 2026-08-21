@@ -154,6 +154,8 @@ interface PersistedSettings extends StoredAppSettings {
   /** Account tokens encrypted together; only display identity stays plaintext. */
   account?: {
     tokenCipher: string;
+    /** Absent for an account stored before the id was kept; see `StoredAccount`. */
+    id?: string;
     email: string;
     name?: string;
     pictureUrl?: string;
@@ -197,6 +199,7 @@ function storedAccount(record: WireRecord): PersistedSettings["account"] {
   }
   return {
     tokenCipher: account.tokenCipher,
+    ...(isWireString(account.id) && account.id ? { id: account.id } : undefined),
     email: account.email,
     ...(isWireString(account.name) && account.name ? { name: account.name } : undefined),
     ...(isWireString(account.pictureUrl) && account.pictureUrl
@@ -630,6 +633,7 @@ export class SettingsStore {
       quietDuringMeetings: persisted.quietDuringMeetings,
       showOnAllDisplays: persisted.showOnAllDisplays,
       shareUsageData: persisted.shareUsageData,
+      sessionReplay: persisted.sessionReplay,
       formFactor: persisted.formFactor ?? DEFAULT_PANEL_FORM_FACTOR,
       ...(persisted.sessionFilters ? { sessionFilters: persisted.sessionFilters } : undefined),
       ...(persisted.defaultWorkspaceProvider
@@ -659,6 +663,7 @@ export class SettingsStore {
       return {
         accessToken,
         refreshToken,
+        ...(account.id ? { id: account.id } : undefined),
         email: account.email,
         ...(account.name ? { name: account.name } : undefined),
         ...(account.pictureUrl ? { pictureUrl: account.pictureUrl } : undefined),
@@ -702,6 +707,7 @@ export class SettingsStore {
         version: SETTINGS_FILE_VERSION,
         account: {
           tokenCipher,
+          ...(account.id ? { id: account.id } : undefined),
           email: account.email,
           ...(account.name ? { name: account.name } : undefined),
           ...(account.pictureUrl ? { pictureUrl: account.pictureUrl } : undefined),

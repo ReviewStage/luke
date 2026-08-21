@@ -43,6 +43,7 @@ function settings(overrides: Partial<AppSettings> = {}): AppSettings {
     calendarAccounts: [],
     showOnAllDisplays: false,
     shareUsageData: true,
+    sessionReplay: true,
     formFactor: PANEL_FORM_FACTOR.BUBBLE,
     ...overrides,
   };
