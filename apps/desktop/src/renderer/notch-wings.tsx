@@ -163,8 +163,9 @@ export function countBadgeFit(
 }
 
 /**
- * The wing's strip, as slots: each provider's mark, then — when the
- * providers outnumber the slots — the count standing in for the rest. The
+ * The wing's strip, as slots: the mark of each app holding tracked work,
+ * then — when the apps outnumber the slots — the count standing in for the
+ * rest. The
  * marks are a summary, and a summary that hides its own remainder reads as a
  * complete list, so whatever does not fit is counted rather than dropped. The
  * count is a slot like any other, so it takes the last one rather than being

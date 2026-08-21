@@ -632,6 +632,10 @@
   transform: scale(0.94);
 }
 
+.mock .provider-mark[data-mark="chatgpt"] {
+  transform: scale(0.94);
+}
+
 .mock .provider-mark[data-mark="conductor"] {
   color: var(--mark-conductor);
   transform: scale(0.93);
