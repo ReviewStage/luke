@@ -1,3 +1,4 @@
+import { isRecord, text, type UnparsedWireValue } from "@sidecar/wire";
 import type { Properties } from "posthog-js";
 import posthog from "posthog-js/dist/module.full.no-external";
 import type { SessionReplayBootstrap } from "#shared/contracts";
@@ -81,12 +82,40 @@ const ADDRESS_PROPERTIES = [
  * has no referrer, so the library records the same `$direct` it would for any
  * unreferred visit, and that says nothing about the machine.
  */
-function withoutLocalAddress(properties: Properties): Properties {
+export function withoutLocalAddress(properties: Properties): Properties {
   const scrubbed: Properties = { ...properties };
   for (const property of ADDRESS_PROPERTIES) {
     if (property in scrubbed) scrubbed[property] = RENDERER_ADDRESS;
   }
   return scrubbed;
+}
+
+/**
+ * Where the recorder writes the page's address inside a recording: rrweb's
+ * opening frame, and again whenever it believes the page moved. The recorder
+ * reads `window.location.href` itself and this version of the library offers
+ * no lever over it, so the address is taken out here, on the way past.
+ *
+ * The frames arrive as the recorder built them rather than as anything this
+ * build declared, so they are parsed at this boundary rather than trusted:
+ * anything that is not a frame carrying an address is passed along untouched.
+ */
+export function withoutRecordedAddress(snapshotData: UnparsedWireValue): UnparsedWireValue {
+  if (!Array.isArray(snapshotData)) return snapshotData;
+  return snapshotData.map((frame) => {
+    const record = isRecord(frame) ? frame : undefined;
+    if (!record) return frame;
+    const data = isRecord(record.data) ? record.data : undefined;
+    if (!data) return frame;
+    // The opening frame carries the address directly; a move carries it one
+    // level further in, under the tag the recorder gives its own events.
+    if (text(data.href) !== undefined) {
+      return { ...record, data: { ...data, href: RENDERER_ADDRESS } };
+    }
+    const payload = isRecord(data.payload) ? data.payload : undefined;
+    if (!payload || text(payload.href) === undefined) return frame;
+    return { ...record, data: { ...data, payload: { ...payload, href: RENDERER_ADDRESS } } };
+  });
 }
 
 /**
@@ -184,9 +213,18 @@ function startSessionReplay(bootstrap: SessionReplayBootstrap): void {
       if (!event) return event;
       // `$set` and `$set_once` carry the address too, as the person's
       // first-seen properties, where it would outlive every event holding it.
+      const properties = withoutLocalAddress(event.properties);
+      if (properties.$snapshot_data) {
+        // SAFETY: `Properties` types its values as `any`, so this narrows to
+        // the widest thing that can be parsed rather than asserting a shape;
+        // `withoutRecordedAddress` establishes the frames' shape itself and
+        // passes back untouched anything that does not hold an address.
+        const frames = properties.$snapshot_data as UnparsedWireValue;
+        properties.$snapshot_data = withoutRecordedAddress(frames);
+      }
       return {
         ...event,
-        properties: withoutLocalAddress(event.properties),
+        properties,
         ...(event.$set ? { $set: withoutLocalAddress(event.$set) } : undefined),
         ...(event.$set_once ? { $set_once: withoutLocalAddress(event.$set_once) } : undefined),
       };
