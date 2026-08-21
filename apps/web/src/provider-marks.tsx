@@ -1,4 +1,4 @@
-import { PROVIDER_ID } from "@sidecar/session";
+import { PROVIDER_ID, SESSION_APPLICATION_ID } from "@sidecar/session";
 import {
   CLAUDE_CODE_PATH,
   CLOUD_BADGE_PATH,
@@ -6,6 +6,7 @@ import {
   CONDUCTOR_MARK_PATHS,
   CURSOR_PATH,
   DEVIN_PATH,
+  OPENAI_PATH,
 } from "@sidecar/surface";
 import { useId } from "react";
 
@@ -14,15 +15,17 @@ import { useId } from "react";
  * `@sidecar/surface` from `design/generate-surface-shared.mjs`, the same table
  * the desktop renderer reads, so a provider publishing an updated mark cannot
  * land in one surface and not the other. The React that traces it stays here:
- * the mock only needs the five the smoke fixture uses, plus the badge that
+ * the mock only needs what the smoke fixture draws — the five providers its
+ * rows lead with, the apps its wing counts them under, plus the badge that
  * rides them.
  *
  * Each is the provider's own mark, reproduced rather than redrawn — Claude
  * Code via Simple Icons (CC0-1.0, sourced from code.claude.com), Codex via
  * @lobehub/icons (MIT), Conductor's letter mark verbatim from the published
  * brand kit at https://www.conductor.build/brandkit, Cursor via Simple Icons
- * (CC0-1.0, sourced from https://cursor.com/brand), and Devin's verbatim from
- * the mark https://devin.ai serves as its own favicon and site header. Each
+ * (CC0-1.0, sourced from https://cursor.com/brand), Devin's verbatim from
+ * the mark https://devin.ai serves as its own favicon and site header, and
+ * ChatGPT's OpenAI mark via Simple Icons (CC0-1.0). Each
  * keeps its own brand colour (see the `--mark-*` custom properties). Cursor
  * and Devin publish one silhouette rather than a colour, so both are drawn in
  * the light form their brand uses on a dark surface. They are trademarks of
@@ -126,6 +129,20 @@ function DevinMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
+function ChatGptMark({ className }: MarkProps): React.JSX.Element {
+  return (
+    <svg
+      className={className}
+      data-mark={SESSION_APPLICATION_ID.CHATGPT}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path fill="currentColor" d={OPENAI_PATH} />
+    </svg>
+  );
+}
+
 /** Drawn here, not a brand: a provider the mock has no mark for still needs a slot. */
 function UnknownProviderMark({ className }: MarkProps): React.JSX.Element {
   return (
@@ -138,9 +155,12 @@ function UnknownProviderMark({ className }: MarkProps): React.JSX.Element {
 
 const PROVIDER_MARKS = new Map<string, (props: MarkProps) => React.JSX.Element>([
   [PROVIDER_ID.CLAUDE_CODE, ClaudeCodeMark],
+  [SESSION_APPLICATION_ID.CHATGPT, ChatGptMark],
   [PROVIDER_ID.CODEX, CodexMark],
   [PROVIDER_ID.CONDUCTOR, ConductorMark],
   [PROVIDER_ID.CURSOR, CursorMark],
+  // Cursor the app draws Cursor's own mark, exactly as the desktop maps it.
+  [SESSION_APPLICATION_ID.CURSOR, CursorMark],
   [PROVIDER_ID.DEVIN, DevinMark],
 ]);
 

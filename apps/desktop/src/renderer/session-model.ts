@@ -482,7 +482,7 @@ export interface SessionTally {
   idle: number;
   /** The urgency the count badge and the notch capsule adopt. */
   urgency: SessionUrgency;
-  /** One agent each, seated where its first session reads under the sort. */
+  /** One app each, seated where its first session reads under the sort. */
   providers: readonly ProviderTally[];
 }
 
@@ -1105,8 +1105,8 @@ export function arrangeSessions(
 
 /**
  * Counted across everything tracked, whatever the list is narrowed to — but
- * read in the sort the list is read in, so the providers sit in the order
- * their first sessions do and the wing's marks match the rows. With no view in
+ * read in the sort the list is read in, so the apps sit in the order their
+ * first sessions do and the wing's marks follow the rows. With no view in
  * force — the capsule, say — the sessions read by urgency, which is also the
  * sort the panel opens on.
  */
@@ -1126,12 +1126,15 @@ export function sessionTally(
     else if (session.urgency === SESSION_URGENCY.COMPLETE) counts.complete += 1;
     else counts.idle += 1;
 
-    // The wing draws the agent having the conversation, the same identity the
-    // row's own mark leads with, so a hosted chat counts under its agent.
-    const markId = session.agentId ?? session.providerId;
+    // The wing draws the app holding the chat — the lead of the row's own
+    // application marks, which the workspace manager already heads — so the
+    // strip says where the tracked work is held rather than which agent runs
+    // it. A chat no app holds still counts under its provider's own mark.
+    const application = session.applications[0];
+    const markId = application?.id ?? session.providerId;
     const tally = providers.get(markId) ?? {
       providerId: markId,
-      provider: session.agent ?? session.provider,
+      provider: application?.name ?? session.provider,
       total: 0,
       attention: 0,
     };

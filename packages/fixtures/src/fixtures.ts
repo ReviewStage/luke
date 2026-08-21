@@ -192,9 +192,9 @@ const smokeFixture: FixtureSnapshot = {
     // among the least urgent, so the fixture tells the two orderings apart
     // rather than agreeing with both. A provider that reported no activity,
     // failure, or recap: the surface words the state itself, and this row is
-    // what proves it does. Its agent went unreported, so the Conductor mark
-    // stands in for the agent's — the honest fallback this row is also proof
-    // of — which keeps the fixture at five distinct wing marks.
+    // what proves it does. Its agent went unreported, so the row's mark falls
+    // back to the Conductor mark — the honest fallback this row is also proof
+    // of.
     {
       id: "conductor-chat-tidy",
       title: "gentle-cove",
@@ -250,12 +250,14 @@ const smokeFixture: FixtureSnapshot = {
       hasChange: true,
       changeNumber: 31,
     },
-    // A fifth session keeps every state and every provider mark visible in the
-    // one screenshot the visual evidence is reviewed from. It is also one more
-    // provider than the wings hold — the face has the place nearest the
-    // housing — so the same screenshot proves the remainder is counted rather
-    // than dropped. Reporting a repository and no branch, it is also the row
-    // that shows the identifier line falling back.
+    // A fifth session keeps every state visible in the one screenshot the
+    // visual evidence is reviewed from, and keeps the wing at five distinct
+    // marks — the apps holding the fixture's chats, and this provider's own
+    // where no app holds one. That is one more mark than the wings hold — the
+    // face has the place nearest the housing — so the same screenshot proves
+    // the remainder is counted rather than dropped. Reporting a repository
+    // and no branch, it is also the row that shows the identifier line
+    // falling back.
     {
       id: "devin-session",
       title: "Watch a cloud session",

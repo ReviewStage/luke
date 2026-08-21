@@ -73,10 +73,14 @@ const TALLY_URGENCY: SessionUrgency =
 const TALLY_CAPTION =
   ATTENTION_COUNT > 0 ? `${ATTENTION_COUNT} ${ATTENTION_COUNT === 1 ? "needs" : "need"} you` : "";
 
-/** Providers in the order the wing draws them: first to need a person first. */
-const WING_PROVIDERS = MOCK_SESSIONS.map((session) => session.providerId).filter(
-  (providerId, index, all) => all.indexOf(providerId) === index,
-);
+/**
+ * The wing's marks as the renderer's `sessionTally` seats them, first to need
+ * a person first: each chat counts under the app holding it — the lead of its
+ * application marks — or under its provider's own where no app holds one.
+ */
+const WING_PROVIDERS = MOCK_SESSIONS.map(
+  (session) => session.applications?.[0]?.id ?? session.providerId,
+).filter((markId, index, all) => all.indexOf(markId) === index);
 
 /**
  * `wingMarkCapacity` and its constants in the renderer's notch-wings.tsx: what

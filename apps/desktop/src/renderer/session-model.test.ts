@@ -274,7 +274,7 @@ test("a speaking disposition needs a person even while the session works", () =>
   assert.equal(session?.urgency, SESSION_URGENCY.ATTENTION);
 });
 
-test("the tally counts per state and per provider", () => {
+test("the tally counts per state and per app", () => {
   const tally = sessionTally(displaySessions(bootstrap(true), []));
 
   assert.deepEqual(
@@ -293,35 +293,36 @@ test("the tally counts per state and per provider", () => {
       providers: undefined,
     },
   );
-  // Providers follow the order their most urgent session takes, and a hosted
-  // chat counts under the agent having the conversation: Conductor's working
-  // Claude chat counts beside the local Claude Code session under one mark,
-  // while its agent-less chat stays under Conductor's own. Five is one more
-  // than the wings hold, so the fixture also proves the remainder is counted
-  // rather than dropped.
+  // Apps follow the order their most urgent session takes, and a chat counts
+  // under the app holding it: both Conductor chats land under Conductor's
+  // mark whatever agent runs them, the Codex chat under ChatGPT, its lead
+  // app, and a chat no app holds — the local Claude Code session, the Devin
+  // cloud session — under its provider's own. Five is one more than the
+  // wings hold, so the fixture also proves the remainder is counted rather
+  // than dropped.
   assert.deepEqual(tally.providers, [
-    { providerId: PROVIDER_ID.CLAUDE_CODE, provider: "Claude Code", total: 2, attention: 1 },
-    { providerId: PROVIDER_ID.CODEX, provider: "Codex", total: 1, attention: 0 },
-    { providerId: PROVIDER_ID.CURSOR, provider: "Cursor", total: 1, attention: 0 },
-    { providerId: PROVIDER_ID.CONDUCTOR, provider: "Conductor", total: 1, attention: 0 },
+    { providerId: PROVIDER_ID.CLAUDE_CODE, provider: "Claude Code", total: 1, attention: 1 },
+    { providerId: SESSION_APPLICATION_ID.CHATGPT, provider: "ChatGPT", total: 1, attention: 0 },
+    { providerId: SESSION_APPLICATION_ID.CONDUCTOR, provider: "Conductor", total: 2, attention: 0 },
+    { providerId: SESSION_APPLICATION_ID.CURSOR, provider: "Cursor", total: 1, attention: 0 },
     { providerId: PROVIDER_ID.DEVIN, provider: "Devin", total: 1, attention: 0 },
   ]);
 });
 
 // The wing's marks and the rows are two drawings of the same order, so
-// choosing the other sort re-seats the providers with the sessions: a mark
-// that stayed put while the rows re-sorted would name the top row's agent
-// wrong. The counts are counts, and no ordering may change them.
-test("the providers re-seat with the rows when the other sort is chosen", () => {
+// choosing the other sort re-seats the apps with the sessions: a mark that
+// stayed put while the rows re-sorted would name the top row's app wrong.
+// The counts are counts, and no ordering may change them.
+test("the apps re-seat with the rows when the other sort is chosen", () => {
   const recent = sessionTally(FIXTURE_SESSIONS, SESSION_SORT.RECENCY);
 
   assert.deepEqual(
     recent.providers.map((provider) => provider.providerId),
     [
-      PROVIDER_ID.CONDUCTOR,
-      PROVIDER_ID.CODEX,
+      SESSION_APPLICATION_ID.CONDUCTOR,
+      SESSION_APPLICATION_ID.CHATGPT,
       PROVIDER_ID.CLAUDE_CODE,
-      PROVIDER_ID.CURSOR,
+      SESSION_APPLICATION_ID.CURSOR,
       PROVIDER_ID.DEVIN,
     ],
   );
@@ -1473,11 +1474,12 @@ test("a hosted chat carries its agent for the mark, the chips, and the search", 
     ["conductor-claude"],
   );
 
-  // The wing counts the chat under the agent having the conversation.
+  // The wing counts the chat under the app holding it — here the hosting
+  // provider itself, since no app association was reported — not the agent.
   const tally = sessionTally(rows);
   assert.deepEqual(
     tally.providers.map((provider) => provider.providerId),
-    [PROVIDER_ID.CLAUDE_CODE, PROVIDER_ID.CODEX],
+    [PROVIDER_ID.CONDUCTOR, PROVIDER_ID.CODEX],
   );
 });
 
