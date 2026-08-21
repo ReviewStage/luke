@@ -1,7 +1,7 @@
 # Luke brand assets
 
 Luke's identity is the **L-face**: a monoline capital-L nose that curls into a smile,
-with two eyes above it. The wordmark is **face-first caps** — the face *is* the L,
+with two eyes above it. The wordmark is **face-first caps**: the face *is* the L,
 followed by custom U·K·E letterforms weight-matched to the face's stroke.
 
 Everything here is generated. Do not hand-edit the SVGs; instead tweak the parameters
@@ -48,7 +48,7 @@ microphone's colour, and CSS animation, so the renderer's `--face-motion` token 
 a capture run or for reduced motion. SMIL answers to neither without JavaScript.
 
 So the generator emits its two inputs as well, from the same table these SVGs are
-cut from — they are generated files and are not to be hand-edited either:
+cut from. They are generated files and are not to be hand-edited either:
 
 | File | What it carries |
 |---|---|
@@ -73,7 +73,7 @@ Dock image between the two.
 Asset viewBoxes are computed from the artwork's bounding box, not the drawing canvas:
 static marks and wordmarks are trimmed tight (+6 units padding), and the app-icon glyph
 spans ~58% of the tile width (typical macOS glyph-in-tile proportion). Only the animated
-`motion/` marks keep the full 240×240 canvas — they need headroom to move.
+`motion/` marks keep the full 240×240 canvas, because they need headroom to move.
 
 ## Files
 
@@ -84,19 +84,19 @@ spans ~58% of the tile width (typical macOS glyph-in-tile proportion). Only the 
 | `luke-wordmark-talking-{light,dark}.svg` | Animated hero: the face talks mid-word |
 | `icon/luke-icon-{light,dark}.svg` + `luke-icon-{light,dark}-{16…1024}.png` | App icon (squircle tile), per mode |
 | `dmg/luke-dmg-background.svg` + `luke-dmg-background{,@2x}.png` | Neutral installer background with a branded drag-and-drop arrow |
-| `mark/luke-mark-square{,-transparent}-{light,dark}.svg` + `-1024.png` | The face at the static mark's tight fill on a square canvas, per mode: over the icon's gradient with square corners (the avatar shape for surfaces that round their own tiles, GitHub among them), and the same crop with no tile. A transparent avatar shows GitHub's badge background color instead — pair the dark set with `#1c1c1e`, the space-black end of the dark icon tile, which reads on either GitHub theme |
+| `mark/luke-mark-square{,-transparent}-{light,dark}.svg` + `-1024.png` | The face at the static mark's tight fill on a square canvas, per mode: over the icon's gradient with square corners (the avatar shape for surfaces that round their own tiles, GitHub among them), and the same crop with no tile. A transparent avatar shows GitHub's badge background color instead, so pair the dark set with `#1c1c1e`, the space-black end of the dark icon tile, which reads on either GitHub theme |
 | `mark/luke-mark-square-black.svg` + `-1024.png` | The dark mark once more over flat pure black (`#000000`) instead of the tile's gradient, for surfaces that want the mark on true black |
-| `logo/luke-logo-{light,dark}.svg` + `-{256,512}.png` | The wordmark lockup as a shareable logo set, per mode: transparent background, no tile and no rounded corners. The PNGs are cut at 256 and 512 wide — a lockup goes into headers and docs, not a 1024 avatar tile |
-| `social/luke-og-card.svg` | The 1200×630 link-preview card the web pages' `og:image` points at — the wordmark on the landing page's dark ground. One card, dark only: a link preview follows no UI theme. Its PNG is the one derivative cut outside this directory, into `apps/web/public/luke-og-card.png`, because Vite serves `public/` at the site root and scrapers fetch the card from `https://tryluke.dev/luke-og-card.png` |
-| `button/luke-cta-{download,site}-{light,dark}.svg` | The repository README's two buttons — the download and the landing page — drawn as the site's hero CTAs, per mode |
+| `logo/luke-logo-{light,dark}.svg` + `-{256,512}.png` | The wordmark lockup as a shareable logo set, per mode: transparent background, no tile and no rounded corners. The PNGs are cut at 256 and 512 wide, because a lockup goes into headers and docs, not a 1024 avatar tile |
+| `social/luke-og-card.svg` | The 1200×630 link-preview card the web pages' `og:image` points at: the wordmark on the landing page's dark ground. One card, dark only: a link preview follows no UI theme. Its PNG is the one derivative cut outside this directory, into `apps/web/public/luke-og-card.png`, because Vite serves `public/` at the site root and scrapers fetch the card from `https://tryluke.dev/luke-og-card.png` |
+| `button/luke-cta-{download,site}-{light,dark}.svg` | The download and landing-page buttons, drawn as the site's hero CTAs, per mode. The repository README carries the download button alone |
 | `motion/luke-<state>-{light,dark}.svg` | Animated state marks (below) |
 
 ## Motion states
 
-Animations are SMIL, baked into each SVG — they play anywhere SVG animation is
+Animations are SMIL, baked into each SVG, so they play anywhere SVG animation is
 supported (browsers, most macOS contexts) and survive copy/paste. Motion is always
-whole-head or eyes-only; the mouth never morphs (chosen deliberately — mouth morphing
-read as unnatural).
+whole-head or eyes-only; the mouth never morphs (chosen deliberately, because mouth
+morphing read as unnatural).
 
 Where each one is used in the app is in the README at the repository root; the
 three the app has no moment for are noted there too.

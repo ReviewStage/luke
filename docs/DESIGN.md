@@ -10,8 +10,8 @@ to pass that review is to build from them.
 ## The vocabulary
 
 One spring drives everything that needs to travel: `--spring` for the surface
-and anything that travels with it, `--spring-fast` — the same damping ratio at
-a higher frequency — for small elements like switch thumbs. Settings pages and
+and anything that travels with it, `--spring-fast` (the same damping ratio at
+a higher frequency) for small elements like switch thumbs. Settings pages and
 the tab selection indicator change at once; task navigation does not travel.
 Durations and delays come only from the tokens in
 `packages/surface/src/generated/motion-tokens.css` (`--duration-shape`,
@@ -20,7 +20,7 @@ Durations and delays come only from the tokens in
 `--row-stagger`). Never write a literal
 millisecond into a rule: reduced motion and capture runs zero the tokens, and
 a literal is a motion those runs cannot stop. The one sanctioned exception is
-an endless loop — a spinner, a breathing idle, the face's own motions — whose
+an endless loop (a spinner, a breathing idle, the face's own motions) whose
 `animation-play-state` answers `--loop-motion` or `--face-motion`: those runs
 stop it by pausing rather than by zeroing, so its duration may be a literal,
 and a loop that carries one must answer a play-state token. A finite companion
@@ -34,8 +34,8 @@ constant that mirrors a CSS total (`COLLAPSE_ANIMATION_MS`) names the
 ## The surface owns size; everything else owns transform and opacity
 
 The black surface is a leaf element and the only thing whose width and height
-animate. Everything layered on it moves with `transform`, `opacity`, and — for
-reveals — `clip-path`. Animating width, height, padding, or font-size on an
+animate. Everything layered on it moves with `transform`, `opacity`, and, for
+reveals, `clip-path`. Animating width, height, padding, or font-size on an
 element that holds text re-shapes that text on every frame, and that is what
 makes motion stutter.
 
@@ -49,8 +49,8 @@ the mask neither changes layout nor moves content; no other layered content
 gets a size-animation exception.
 
 **Never make the surface chase.** The surface's size is measured off content
-and animated by one transition. If content grows gradually — its own height
-animating frame by frame — every frame re-measures, and the surface's
+and animated by one transition. If content grows gradually, its own height
+animating frame by frame, every frame re-measures, and the surface's
 transition restarts toward a moving target: it lags hundreds of milliseconds
 and the content is drawn on the desktop. Content changes must land in the
 layout **at once**, so the surface takes one clean spring to a fixed
@@ -65,8 +65,8 @@ Three rules, one per element involved:
    and position on the frame it mounts. This is what keeps the surface to one
    spring.
 2. **It becomes visible only over black.** The element arrives with the pair
-   every arriving element rides — opacity over `--duration-quick`, any travel
-   on `--spring` — delayed until the surface has grown under it. A large
+   every arriving element rides (opacity over `--duration-quick`, any travel
+   on `--spring`) delayed until the surface has grown under it. A large
    element cannot rely on a fade alone: reveal it with a `clip-path` that
    rides the **surface's own delay, duration, and spring**, so the shape's
    edge is what uncovers it (the caption and the feedback preview both do
@@ -80,7 +80,7 @@ Ordering comes from delay, and direction decides it: against a **growing**
 edge, trail it (`--slot-delay`-class delays keep a traveling element behind
 the surface, over black); against a **shrinking** edge, lead it
 (`--duration-exit`-class delays keep it above the edge on the way up). When in
-doubt, sample both edges over time — an element whose visible edge ever passes
+doubt, sample both edges over time. An element whose visible edge ever passes
 the surface's is wrong, whatever it looks like at speed.
 
 ## Content leaving a shrinking shape
@@ -89,13 +89,13 @@ Content leaves first, over `--duration-exit`, and only its end releases the
 room: the surface must never shrink out from under something still drawn. For
 elements that unmount, hold them mounted through their own exit (the key slot
 and the feedback preview both keep drawing what they last held) and take them
-out when the exit finishes — never on the frame the state changed.
+out when the exit finishes, never on the frame the state changed.
 
 ## Mount animations, not `@starting-style`, for reveals
 
 An element that animates on mount cannot transition from a style it never
 held. `@starting-style` exists for this, but the engine quietly skips some
-properties transitioned from it — `clip-path` among them — while running
+properties transitioned from it (`clip-path` among them) while running
 others from the same block, which ships a half-applied choreography. Use a CSS
 **animation** with `backwards` fill instead: an animation on a freshly matched
 selector starts without fail, and the `from` keyframe holds the covered pose
@@ -115,7 +115,7 @@ with a single named delay (`--slot-delay`) when one thing follows the shape.
 A motion change is verified, not eyeballed: drive the real app and sample the
 moving edges over time (the repo's evidence and verify scripts on macOS; a
 headless run with CDP sampling anywhere). The claim to check is always the
-same — content never crosses the shape, and the surface runs each move as one
+same: content never crosses the shape, and the surface runs each move as one
 transition. Chromium serializes `inset()` with collapsed components; parse
 computed clip-paths accordingly before trusting a sample.
 
@@ -153,14 +153,14 @@ opens rather than once.
 
 Three categories, and only the first is ever cut:
 
-- **Describes** — restates the control, reassures, or explains the app to
+- **Describes.** Restates the control, reassures, or explains the app to
   itself. "Their volume dips while you and Luke are talking, and returns
   after." under a switch reading *Quiet Music and Spotify*. Delete it. If the
   line seems necessary, the label is what to fix.
-- **Instructs** — tells the developer something they cannot act without.
+- **Instructs.** Tells the developer something they cannot act without.
   "Create a key in Jules under Settings · API key. It is shown only once."
   Nobody can guess that. Keep it.
-- **Reports state** — is the row's content. "Version 0.2.0 is available to
+- **Reports state.** This is the row's content. "Version 0.2.0 is available to
   download." Keep it.
 
 Prose describing the app's own layout rots, because it duplicates a fact that
@@ -176,7 +176,7 @@ What follows from this everywhere else:
   for Updates*.
 - One wording per idea across the whole product. A confirmation, a sign-in
   failure, or a bound refused must not be phrased three ways in three files.
-- A bound the developer hit is stated plainly — "That message is empty or too
+- A bound the developer hit is stated plainly: "That message is empty or too
   long." A poetic restatement of the same bound tells them nothing they can
   act on.
 - Consent copy names the data categories, destination, account association,
@@ -189,8 +189,8 @@ What follows from this everywhere else:
   table in the script, re-run it, and commit what it writes;
   `repository-checks.sh` runs it with `--check`.
 
-Copy that reaches a model rather than the screen — `luke-guide.ts`, the
-realtime instructions — obeys a different rule. Verbosity there is not slop,
+Copy that reaches a model rather than the screen (`luke-guide.ts`, the
+realtime instructions) obeys a different rule. Verbosity there is not slop,
 but a capability the guide does not describe is one Luke will deny having, so
 compress the prose and never drop the fact. One rule per line beats three
 fused with em-dashes: the instruction to be brief has to be readable itself.

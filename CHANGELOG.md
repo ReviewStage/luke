@@ -7,15 +7,15 @@
      is a contract with that page: exactly `## <version> — <YYYY-MM-DD>`, which
      becomes the release's sticky version-and-date rail. Inside a release, a
      big feature gets a `###` section of its own, named for the feature and
-     described in prose — with a screenshot where one helps. Everything else
+     described in prose, with a screenshot where one helps. Everything else
      gathers under the three standing sections, in this order: `### Improvements`
      for what got better, `### Fixes` for what got repaired, and
-     `### Miscellaneous` for what fits neither — brand, packaging, and the
+     `### Miscellaneous` for what fits neither: brand, packaging, and the
      like. A standing section's bullets are each one sentence with no period
      at the end. One voice per section: feature prose and Improvements speak
      in the present tense to "you", with Luke as the actor; Fixes each read
      "Fixed <symptom you could see>"; Miscellaneous bullets read
-     "Added/Updated …". "Now" only where the old behavior is the contrast —
+     "Added/Updated …". "Now" only where the old behavior is the contrast;
      a new capability speaks in plain present tense. Name things concretely
      and lead with the benefit. Link pull requests where relevant.
      Screenshots live in apps/web/public/changelog/<version>/, one file per
@@ -23,9 +23,9 @@
      image for a section keeps the slug as its prefix), and are written here
      repository-relative (apps/web/public/changelog/<version>/<slug>.png) so
      GitHub renders them too; the page rewrites that prefix to the site root.
-     A release's screenshots are frozen with it — they show what shipped, so
+     A release's screenshots are frozen with it. They show what shipped, so
      a UI change gets a new screenshot in the release that changed it, never
-     an edit to an old one — and every capture uses fixture data
+     an edit to an old one, and every capture uses fixture data
      (./scripts/run.sh --fixture smoke), because a real session's title or
      branch committed to history stays there. -->
 
@@ -254,13 +254,13 @@ Linear issues show as chips under the notch.
 
 ### Usage data
 
-Luke now counts how his own features are used — a launch, a provider connected,
-sessions observed, a call opened — and sends those counts to Luke's own service,
+Luke now counts how his own features are used (a launch, a provider connected,
+sessions observed, a call opened) and sends those counts to Luke's own service,
 tied to your account, so we can see what is worth building next. This is on by default, and the
 switch is Share usage data in the new Usage data section on the Settings tab's
 front page; turning it off stops it at once. Every event name and every value
-is fixed by the build, so nothing about a session — no title, branch, path,
-recap, or transcript — and nothing you type or say can travel in one, and
+is fixed by the build, so nothing about a session (no title, branch, path,
+recap, or transcript) and nothing you type or say can travel in one, and
 nothing is sent while you are signed out. [Privacy](PRIVACY.md) lists every
 event and property by name.
 

@@ -14,4 +14,4 @@ this package to sit higher than its name suggests.
 
 The hosted attention evaluator lives here for the same reason. It reads the
 hosted service, and `@sidecar/attention` cannot depend on this package without
-closing the loop — so the evaluator sits with the service it speaks to.
+closing the loop, so the evaluator sits with the service it speaks to.

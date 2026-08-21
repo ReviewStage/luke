@@ -3,10 +3,10 @@
 The release workflow builds, signs, notarizes, staples, and validates an arm64 macOS app
 with electron-builder. It creates `Luke-X.Y.Z-macos-arm64.zip` with a matching
 `.sha256` file, and a notarized `Luke-X.Y.Z-arm64.dmg` with its own `.sha256` plus a
-version-free copy named `Luke.dmg` — the asset the website's download button reaches
+version-free copy named `Luke.dmg`, the asset the website's download button reaches
 through `releases/latest/download/Luke.dmg`, which is why its name must never change.
 Beside them electron-builder writes a version-free `latest-mac.yml`, the electron-updater
-manifest the app updates from through `releases/latest/download/latest-mac.yml` — the
+manifest the app updates from through `releases/latest/download/latest-mac.yml`. The
 manifest names the zip beside it with a relative URL and carries its sha512, so its name
 must never change either.
 
@@ -15,7 +15,7 @@ Pushing a `vX.Y.Z` tag publishes or updates a GitHub Release. A manual
 DMG, and checksums are retained as workflow artifacts for 14 days.
 
 While the Apple secrets below are not configured, a tag push skips the workflow cleanly
-and releases are cut by hand instead — see "Manual release" below. Configuring the
+and releases are cut by hand instead; see "Manual release" below. Configuring the
 secrets is what turns the tag push into the whole release.
 
 ## Required GitHub Actions secrets
@@ -27,7 +27,7 @@ secrets is what turns the tag push into the whole release.
 | `APPLE_API_KEY_P8_BASE64` | Base64-encoded App Store Connect API private key | The downloaded `.p8` file from App Store Connect |
 | `APPLE_API_KEY_ID` | Identifies the App Store Connect API key | App Store Connect, Users and Access, Integrations |
 | `APPLE_API_ISSUER_ID` | Identifies the App Store Connect API key issuer | App Store Connect, Users and Access, Integrations |
-| `GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET` | Google Calendar desktop OAuth client secret, baked into the app bundle at package time — a build without it ships no calendar sign-in | Google Cloud console, the Luke project's Desktop client under APIs & Services → Credentials |
+| `GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET` | Google Calendar desktop OAuth client secret, baked into the app bundle at package time; a build without it ships no calendar sign-in | Google Cloud console, the Luke project's Desktop client under APIs & Services → Credentials |
 
 ### Export the signing certificate
 
@@ -67,7 +67,7 @@ workflow artifact. It does not create a GitHub Release.
 ## Cut a release
 
 First land the version bump and packaging changes. The same change must add the
-release's entry to `CHANGELOG.md` at the repository root — the landing page renders that
+release's entry to `CHANGELOG.md` at the repository root. The landing page renders that
 file at `/changelog`, and `scripts/repository-checks.sh` refuses a desktop version the
 changelog does not name, so a bump cannot land without its notes. The tag must exactly
 match `apps/desktop/package.json`; for version `0.1.0`:
@@ -112,7 +112,7 @@ git tag v0.1.1 && git push origin v0.1.1
 ./scripts/release/publish-github.sh   # creates the release and uploads every asset
 ```
 
-The calendar secret is baked into the app bundle while packaging — the Google Calendar
+The calendar secret is baked into the app bundle while packaging. The Google Calendar
 sign-in exists only in builds carrying it, so the builder refuses to run without the
 variable rather than shipping a DMG the integration is silently missing from. It is the
 same value the Actions secret holds; take it from the Luke project's Desktop OAuth
@@ -123,7 +123,7 @@ and the publish script is what knows the asset set: the versioned DMG and zip wi
 checksums, plus the version-free `Luke.dmg` the website's download link depends on and
 the version-free `latest-mac.yml` the app updates from. It
 refuses to publish when the tag does not match `apps/desktop/package.json`, and it
-creates a published, non-draft release — the `releases/latest` link and the app's own
+creates a published, non-draft release. The `releases/latest` link and the app's own
 update check both ignore drafts and prereleases, so a draft is a release nobody can
 reach. Re-running it is safe: assets are replaced with `--clobber`.
 

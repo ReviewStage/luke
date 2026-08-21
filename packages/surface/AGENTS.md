@@ -5,7 +5,7 @@ layout sizes the window and the drawing share, the provider-mark path data,
 and the session urgency value set, labels, and order are described. It writes
 four committed outputs into `packages/sidecar-core/src/`: `motion-tokens.css`,
 `motion-tokens.ts`, `provider-mark-paths.ts`, and `session-display.ts`. None of
-the four may be hand-edited — change the tables in the script, re-run it, and
+the four may be hand-edited. Change the tables in the script, re-run it, and
 commit what it writes. `repository-checks.sh` runs it with `--check`.
 
 The desktop renderer and the marketing mock both consume those outputs. The

@@ -34,7 +34,7 @@ filesystem routing phase, so it cannot reach the Better Auth handler; keep this
 rule in `routes`, ahead of the detected routes.
 
 Each deployment build runs `pnpm auth:seed` after the migration and before Vite,
-so every database the application reaches already carries the client — including
+so every database the application reaches already carries the client, including
 the branch database Neon creates for a Preview deployment, which would otherwise
 be migrated but empty. The Drizzle seed is idempotent, upserting the one public
 OAuth client compiled into Luke, which is what makes running it on every build
@@ -65,22 +65,22 @@ resolved to a user through the auth service's own `/oauth2/userinfo` endpoint,
 called in process.
 
 The endpoints need one secret: `OPENAI_API_KEY`. Without it both answer 503
-and the hosted tier is simply off — the same kill switch as the feedback
-endpoint — which is the intended state for Preview deployments, so a preview
+and the hosted tier is simply off, the same kill switch as the feedback
+endpoint, which is the intended state for Preview deployments, so a preview
 never spends the production key. `LUKE_REALTIME_MODEL` and
 `LUKE_ATTENTION_MODEL` optionally override the models, under the same names
 the desktop honours; a blank value is treated as absent.
 
 `api/account/delete.ts` erases the signed-in user on the same bearer
 resolution: the desktop's Delete account confirm is the only caller. Deleting
-the `user` row is the entire act — sessions, provider accounts, OAuth grants,
+the `user` row is the entire act: sessions, provider accounts, OAuth grants,
 and usage counters all reference it with `onDelete: "cascade"`, so nothing of
 the account outlives the request.
 
 `api/events.ts` records what a signed-in desktop counted about its own use, on
 the same bearer resolution. The desktop never talks to the analytics processor:
 it posts an allowlisted batch here, and this is the one place a `distinct_id`
-is attached — from the resolved account, never from the body, which has no
+is attached, from the resolved account and never from the body, which has no
 place to name one. `productEventBatchFromWire` in `@sidecar/analytics` is the whole
 admission policy, and it builds each event from that event's property
 allowlist, so nothing outside the vocabulary survives the read.
@@ -90,7 +90,7 @@ product analytics is simply off, which is the intended state for Preview
 deployments. `POSTHOG_HOST` optionally overrides the ingestion host.
 `POSTHOG_PERSONAL_API_KEY` and `POSTHOG_PROJECT_ID` are what let
 `api/account/delete.ts` ask PostHog to erase the person before the account row
-goes — a private endpoint, so it takes a personal key rather than the project
+goes. It is a private endpoint, so it takes a personal key rather than the project
 token, and `POSTHOG_API_HOST` overrides *its* host, which is not the ingestion
 host. Without that pair the delete simply has no erasure seam to run. Every
 forwarded event carries `$geoip_disable`, without which an event arriving with
@@ -103,7 +103,7 @@ is a build-time variable that lets the site's own pages talk to PostHog
 directly, so PostHog sees a visitor's address there. A build without it never
 loads the library at all.
 
-Use is metered per user per UTC day in the Luke-owned `hosted_usage` table —
+Use is metered per user per UTC day in the Luke-owned `hosted_usage` table:
 one atomic upsert before each upstream call, checked against the ceilings in
 `server/hosted/quota.ts`. The ceilings bound how often calls open, not how
 long they run; a spend limit on the OpenAI project behind the key is the
