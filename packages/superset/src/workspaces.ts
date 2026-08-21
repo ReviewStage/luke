@@ -171,6 +171,11 @@ export interface SupersetSessionContext {
   branch?: string;
   pullRequestUrl?: string;
   spawnableAgents: readonly string[];
+  /**
+   * The worktree a directory-matched chat was anchored by, carried only on
+   * such matches so a fresh snapshot can re-anchor them against its own read.
+   */
+  worktreePath?: string;
 }
 
 /**
@@ -284,10 +289,12 @@ export class SupersetWorkspaceSnapshot {
   readonly #sessions = new Map<string, Map<string, SupersetSessionContext>>();
   readonly #worktreesByPath = new Map<string, SupersetSessionContext>();
   /**
-   * The chats this snapshot matched by worktree path, remembered under the
-   * chat's own identity so the act router resolves an act against the exact
-   * context its advertisement rode — the same lifetime an id-recorded
-   * context has, since the snapshot itself is replaced every pass.
+   * The chats matched by worktree path, remembered under the chat's own
+   * identity so the act router resolves an act against the same context its
+   * advertisement rode. Every enrich pass rewrites a chat's entry from its
+   * latest observation — confirming, moving, or dropping it — and a fresh
+   * snapshot adopts its predecessor's entries so the acts a drawn row still
+   * advertises keep resolving between the snapshot standing and that pass.
    */
   readonly #directoryMatches = new Map<string, Map<string, SupersetSessionContext>>();
 
@@ -332,22 +339,66 @@ export class SupersetWorkspaceSnapshot {
     providerId: string,
     observation: ProviderSessionObservation,
   ): SupersetSessionContext | undefined {
-    const recorded = this.context(providerId, observation.providerSessionId);
+    const recorded = this.#sessions.get(providerId)?.get(observation.providerSessionId);
     if (recorded) return recorded;
-    if (observation.location === SESSION_LOCATION.CLOUD || !observation.directory) {
+    // The observation is the match's whole authority, so it is re-decided
+    // here from the observation alone, never read back from the remembered
+    // entry: a chat that moved directories or stopped reporting one loses
+    // its entry on the same pass.
+    const worktree =
+      observation.location !== SESSION_LOCATION.CLOUD && observation.directory
+        ? this.#worktreesByPath.get(observation.directory)
+        : undefined;
+    if (!worktree) {
+      this.#directoryMatches.get(providerId)?.delete(observation.providerSessionId);
       return undefined;
     }
-    const worktree = this.#worktreesByPath.get(observation.directory);
-    if (!worktree) return undefined;
+    return this.#rememberDirectoryMatch(
+      providerId,
+      observation.providerSessionId,
+      worktree,
+      observation.directory ?? "",
+    );
+  }
+
+  #rememberDirectoryMatch(
+    providerId: string,
+    providerSessionId: string,
+    worktree: SupersetSessionContext,
+    worktreePath: string,
+  ): SupersetSessionContext {
     const context: SupersetSessionContext = {
       ...worktree,
       providerId,
-      providerSessionId: observation.providerSessionId,
+      providerSessionId,
+      worktreePath,
     };
     const matches = this.#directoryMatches.get(providerId) ?? new Map();
-    matches.set(observation.providerSessionId, context);
+    matches.set(providerSessionId, context);
     this.#directoryMatches.set(providerId, matches);
     return context;
+  }
+
+  /**
+   * Carries the previous snapshot's directory matches into this one, each
+   * re-anchored to this snapshot's own read: an entry survives only while
+   * the same worktree still stands, and is rebuilt from that worktree's
+   * fresh fields. Without this, an act pressed between this snapshot
+   * standing and the next enrich pass would find nothing behind the
+   * advertisement the drawn row still carries; the workspace-scoped acts an
+   * adopted entry resolves stay honest either way, because they act on the
+   * workspace whose worktree was just re-read, not on the chat.
+   */
+  adoptDirectoryMatches(previous: SupersetWorkspaceSnapshot): void {
+    for (const [providerId, matches] of previous.#directoryMatches) {
+      for (const [providerSessionId, match] of matches) {
+        const worktree = match.worktreePath
+          ? this.#worktreesByPath.get(match.worktreePath)
+          : undefined;
+        if (!worktree || !match.worktreePath) continue;
+        this.#rememberDirectoryMatch(providerId, providerSessionId, worktree, match.worktreePath);
+      }
+    }
   }
 
   actableContext(
