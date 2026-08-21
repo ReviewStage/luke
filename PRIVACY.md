@@ -2,86 +2,89 @@
 
 Last updated: 20 August 2026
 
-Luke watches coding-agent sessions on your Mac. This describes what stays on
-your machine, what leaves it, and what you can turn off.
+Luke is a macOS app that watches your coding agent sessions. This policy
+explains what we collect, who we send it to, and how to turn it off.
 
-## What stays on your Mac
+## Information we collect
 
-Luke reads the session files your coding agents already write, on disk, in
-read-only mode. Titles, status, repository, branch, model, current tool, errors,
-and the recap a provider wrote are held in memory to draw the panel. Message
-history, file contents, and command output are not read during observation, and
-nothing observed is written to disk.
+**On your Mac.** Luke reads the session files your coding agents already write.
+It uses the session title, status, repository, branch, model, current tool,
+errors, and the summary the agent wrote. It does not read message history, file
+contents, or command output while observing, and it does not write any of this
+to disk. This information stays on your Mac unless a feature below sends it.
 
-Your settings, provider API keys, and calendar grants stay on your Mac. Keys and
-grants are encrypted with Electron `safeStorage`, backed by the macOS login
-Keychain, and never reach the app's window process.
+**Your account.** Signing in with Google or GitHub gives us your name, email
+address, and which of the two you used. We also keep the records needed to keep
+you signed in, and a daily count of how much voice and review you have used.
 
-## Your Luke account
+**Usage data.** We count how Luke's features are used. This is on by default,
+and you can turn it off under Share usage data in Settings. The counts are
+event names and values from a fixed list. Nothing you type or say, and nothing
+from a session, can appear in one: no titles, branches, file paths, summaries,
+prompts, or error text. Your name and email are attached to your usage record,
+so the counts belong to an account rather than to an anonymous identifier.
 
-Signing in with Google or GitHub gives Luke your name, email address, and which
-provider you used. That is all the account holds, beyond the records needed to
-keep you signed in and a daily count of voice and review usage.
+**Feedback.** If you use the feedback form, we receive what you typed, the name
+and email you signed it with, and any screenshots you attached.
 
-## What leaves your Mac
+## Who we send it to
 
-- **OpenAI**, for voice and the attention review. A spoken turn sends its audio;
-  a typed turn sends your words. Both also send bounded fields about your
-  sessions: title, status, repository or branch, current tool, error, and recap.
-  Never message history, file contents, or command output. Requests use
-  `store: false`. Voice runs on your Luke account's allowance or on your own
-  OpenAI key.
-- **Coding agent providers you connect** (Conductor, Cursor, Devin, GitHub
-  Copilot, Jules) and **Linear**, under a key or grant you supply. Luke reads
-  your sessions or issues. It writes only when you ask for a specific act, such
-  as sending a message or moving an issue, and only what that act carries.
-- **Google Calendar**, if you connect it. Luke requests availability and your
-  calendar list, and Google returns busy intervals only. Event titles and
-  attendees are never accessible to Luke.
-- **Luke's own service**, for your account, the usage allowance, product
-  analytics, and anything you type into the feedback form.
-- **GitHub**, for update checks. These are unauthenticated and carry nothing
-  about you.
+- OpenAI, for voice and session summaries. A spoken turn sends its audio and a
+  typed turn sends your words. Both also send the session fields listed above.
+  We do not send message history, file contents, or command output, and we ask
+  OpenAI not to store the request.
+- Coding agent providers you connect (Conductor, Cursor, Devin, GitHub Copilot,
+  Jules) and Linear, using the key or account access you supply. Luke reads your
+  sessions or issues, and sends something back only when you ask it to, such as
+  a message you wrote or an issue you moved.
+- Google, if you connect Google Calendar. We request your calendar list and your
+  availability. Google returns busy times only, so event titles and attendees
+  are never available to Luke.
+- PostHog, for usage data, sent through our own service.
+- GitHub, to check for updates. These requests are unauthenticated and carry
+  nothing about you.
 
-Connecting nothing means Luke sends nothing to any provider. Reading local
-sessions requires no network at all.
+We do not sell your information or use it for advertising.
 
-## Usage data
+If you connect nothing, Luke sends nothing to any provider, and reading your
+local sessions works with no network connection.
 
-Luke counts how his own features are used, and **this is on by default**. The
-switch is **Share usage data**, on the front page of Luke's Settings tab.
+## Our website
 
-The counts are event names and values from a list fixed in the build, forwarded
-to PostHog through Luke's own service. Nothing you type or say, and nothing from
-a session, can travel in one: no titles, branches, paths, recaps, prompts, or
-error text. The desktop sends no identity; the service attaches your account
-name and email to the analytics record.
+tryluke.dev counts page views and sign-in steps using PostHog. Unlike the app,
+your browser contacts PostHog directly, so PostHog sees your network address, as
+it would with any third-party script.
 
-The website, tryluke.dev, counts page views and sign-in steps through PostHog
-directly, which means PostHog sees your network address there as it would for
-any third-party script.
+## Storage
+
+Your settings, provider API keys, and calendar access stay on your Mac. Keys and
+calendar access are encrypted and stored in the macOS Keychain.
+
+Your account information is held by our own service. Usage counts are held by
+PostHog.
 
 ## Your choices
 
-Turn off **Share usage data** to stop analytics. Disconnect any provider,
-tracker, or calendar to stop its reads. Delete your OpenAI key to stop voice.
-Luke never opens the microphone until you start a turn.
+- Turn off Share usage data in Settings to stop usage data.
+- Disconnect any provider, issue tracker, or calendar to stop it being read.
+- Delete your OpenAI key to turn voice off.
+- Luke does not use your microphone until you start a turn.
 
-## Deleting your account
+## Deleting your data
 
-Delete your account from the Account section at the foot of Luke's Settings tab.
-That erases your account record, sign-in records, and usage counts, and asks
-PostHog to erase your analytics record. It does not touch your Google or GitHub
-identity, and anything stored only on your Mac stays until you remove it.
+You can delete your account from the Account section in Settings. This erases
+your account, your sign-in records, and your usage counts, and asks PostHog to
+erase your usage data. It does not affect your Google or GitHub account, and
+anything stored only on your Mac stays there until you remove it.
 
 ## Google user data
 
 Luke's use of information received from Google APIs adheres to the
 [Google API Services User Data Policy](https://developers.google.com/terms/api-services-user-data-policy),
-including the Limited Use requirements. Calendar availability is used only to
-hold Luke's spoken announcements while you are in a meeting. It is never
+including the Limited Use requirements. We use your calendar availability only
+to hold Luke's spoken announcements while you are in a meeting. It is not
 transferred, sold, or used for advertising, and no human reads it.
 
 ## Contact
 
-Questions about this policy: **founders@stagereview.app**
+Email founders@stagereview.app with any questions about this policy.
