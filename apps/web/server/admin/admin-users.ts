@@ -47,6 +47,8 @@ export interface AdminUserListRow {
   lastSeenAt: number | null;
   voiceCalls: number;
   attentionReviews: number;
+  /** Whether the viewing admin starred this account, theirs alone to see. */
+  favorite: boolean;
 }
 
 export interface AdminUserList {
@@ -78,7 +80,8 @@ export function buildAdminUserList(source: AdminUserListSource, now: number): Ad
 export interface AdminUsersOptions {
   request: Request;
   resolveViewer: (request: Request) => Promise<AdminViewer | undefined>;
-  readUsers: (now: number, scope: AdminMetricsScope) => Promise<AdminUserList>;
+  /** Reads the roster as one viewer sees it: the favorites are theirs. */
+  readUsers: (now: number, scope: AdminMetricsScope, viewerId: string) => Promise<AdminUserList>;
   now?: () => number;
 }
 
@@ -110,7 +113,7 @@ export async function handleAdminUsers(options: AdminUsersOptions): Promise<Resp
   try {
     return jsonResponse(
       ADMIN_HTTP_STATUS.OK,
-      await options.readUsers(now, adminMetricsScope(request.url)),
+      await options.readUsers(now, adminMetricsScope(request.url), viewer.userId),
     );
   } catch {
     return errorResponse(ADMIN_HTTP_STATUS.SERVICE_UNAVAILABLE, ADMIN_ERROR.UNAVAILABLE);
