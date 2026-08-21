@@ -1375,3 +1375,190 @@ test("returns an empty snapshot when Cursor has no local sessions", async (t) =>
 
   assert.deepEqual(await adapterFor(state).observe(), []);
 });
+
+const CURSOR_CHATS_DIRECTORY = "chats";
+
+/**
+ * One chat in the CLI's chat store: a metadata record beside the conversation
+ * store. The store's blobs are the conversation itself, which observation must
+ * never read, so the fixture plants transcript text there and the tests assert
+ * it never surfaces.
+ */
+async function writeChatStore(
+  state: CursorState,
+  hashDirectoryName: string,
+  sessionId: string,
+  meta: ParsedJsonObject,
+  mtimeMs: number,
+): Promise<void> {
+  const chatDirectory = path.join(
+    state.cursorHome,
+    CURSOR_CHATS_DIRECTORY,
+    hashDirectoryName,
+    sessionId,
+  );
+  await fs.mkdir(chatDirectory, { recursive: true });
+  const metaPath = path.join(chatDirectory, "meta.json");
+  await fs.writeFile(metaPath, JSON.stringify(meta));
+  await fs.utimes(metaPath, mtimeMs / 1000, mtimeMs / 1000);
+  const storePath = path.join(chatDirectory, "store.db");
+  await fs.writeFile(storePath, SECRET_TRANSCRIPT_TEXT);
+  await fs.utimes(storePath, mtimeMs / 1000, mtimeMs / 1000);
+}
+
+function chatStoreMeta(overrides: ParsedJsonObject = {}): ParsedJsonObject {
+  return {
+    schemaVersion: 1,
+    hasConversation: true,
+    createdAtMs: TEST_TIME - 60_000,
+    updatedAtMs: TEST_TIME - 5_000,
+    cwd: "/Users/test/worktree",
+    ...overrides,
+  };
+}
+
+test("observes a chat only the chat store holds, named and placed by its own record", async (t) => {
+  const state = await temporaryCursorState(t);
+  await writeChatStore(
+    state,
+    "a34afeeb",
+    "ses-store-only",
+    chatStoreMeta({ title: "Math Question" }),
+    TEST_TIME - 5_000,
+  );
+
+  const observations = await adapterFor(state).observe();
+
+  assert.equal(observations.length, 1);
+  const observation = observations[0];
+  assert.equal(observation?.providerSessionId, "ses-store-only");
+  assert.equal(observation?.title, "Math Question");
+  assert.equal(observation?.directory, "/Users/test/worktree");
+  assert.equal(observation?.detail?.repository, "worktree");
+  // The store is written while a turn runs, so a store that just moved is a
+  // chat doing something; the blob graph holds the conversation and stays
+  // unread, so no tool call, recap, or message advertisement can ride.
+  assert.equal(observation?.status, SESSION_STATUS.WORKING);
+  assert.equal(observation?.recap, undefined);
+  assert.equal(observation?.canReceiveMessage, undefined);
+  assert.ok(!JSON.stringify(observations).includes(SECRET_TRANSCRIPT_TEXT));
+});
+
+test("a chat store gone quiet is unknown, because its turn boundary is unreadable", async (t) => {
+  const state = await temporaryCursorState(t);
+  await writeChatStore(
+    state,
+    "a34afeeb",
+    "ses-quiet",
+    chatStoreMeta({ title: "Older work", updatedAtMs: TEST_TIME - YEAR_MS }),
+    TEST_TIME - YEAR_MS,
+  );
+
+  const observations = await adapterFor(state).observe();
+
+  assert.equal(observations[0]?.status, SESSION_STATUS.UNKNOWN);
+});
+
+test("skips a chat record this build does not know, or one with no conversation", async (t) => {
+  const state = await temporaryCursorState(t);
+  await writeChatStore(
+    state,
+    "a34afeeb",
+    "ses-future",
+    chatStoreMeta({ schemaVersion: 2 }),
+    TEST_TIME - 5_000,
+  );
+  await writeChatStore(
+    state,
+    "a34afeeb",
+    "ses-empty",
+    chatStoreMeta({ hasConversation: false }),
+    TEST_TIME - 5_000,
+  );
+
+  assert.deepEqual(await adapterFor(state).observe(), []);
+});
+
+test("the chat store names and places a chat whose transcript is observed", async (t) => {
+  const state = await temporaryCursorState(t);
+  await writeTranscript(
+    state,
+    "Users-test-superset-worktrees-repo-square-geometry",
+    "ses-both",
+    [
+      messageRecord(TEST_ROLE.USER, TEST_CONTENT_TYPE.TEXT),
+      messageRecord(TEST_ROLE.ASSISTANT, TEST_CONTENT_TYPE.TEXT),
+      turnEndedRecord(TEST_TURN_STATUS.SUCCESS),
+    ],
+    TEST_TIME - 5_000,
+  );
+  await writeChatStore(
+    state,
+    "a34afeeb",
+    "ses-both",
+    chatStoreMeta({
+      title: "Square geometry",
+      cwd: "/Users/test/.superset/worktrees/repo/square-geometry",
+    }),
+    TEST_TIME - 4_000,
+  );
+
+  const observations = await adapterFor(state).observe();
+
+  // One row: the transcript is the richer record and keeps the turn's own
+  // verdict, while the store supplies the name and exact folder the
+  // transcript never wrote down.
+  assert.equal(observations.length, 1);
+  const observation = observations[0];
+  assert.equal(observation?.title, "Square geometry");
+  assert.equal(observation?.directory, "/Users/test/.superset/worktrees/repo/square-geometry");
+  assert.equal(observation?.status, SESSION_STATUS.WAITING);
+});
+
+test("a chat resumed from another folder reads its freshest record", async (t) => {
+  const state = await temporaryCursorState(t);
+  await writeChatStore(
+    state,
+    "hash-old",
+    "ses-moved",
+    chatStoreMeta({ title: "Where it started", cwd: "/Users/test/first" }),
+    TEST_TIME - 60_000,
+  );
+  await writeChatStore(
+    state,
+    "hash-new",
+    "ses-moved",
+    chatStoreMeta({ title: "Where it moved", cwd: "/Users/test/second" }),
+    TEST_TIME - 5_000,
+  );
+
+  const observations = await adapterFor(state).observe();
+
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0]?.title, "Where it moved");
+  assert.equal(observations[0]?.directory, "/Users/test/second");
+});
+
+test("leaves a chat-store chat the app filed away off the roster", async (t) => {
+  const state = await temporaryCursorState(t);
+  await writeChatStore(state, "a34afeeb", "ses-filed", chatStoreMeta(), TEST_TIME - 5_000);
+  await writeChatHeaders(state, [{ sessionId: "ses-filed", archived: true }]);
+
+  assert.deepEqual(await adapterFor(state).observe(), []);
+});
+
+test("a transcript chat reports the folder a resume would be pinned to", async (t) => {
+  const state = await temporaryCursorState(t);
+  await writeWorkspaceRecord(state, "9f1c", "/Users/test/luke");
+  await writeTranscript(
+    state,
+    "Users-test-luke",
+    "ses-pinned",
+    [turnEndedRecord(TEST_TURN_STATUS.SUCCESS)],
+    TEST_TIME - 5_000,
+  );
+
+  const observations = await adapterFor(state).observe();
+
+  assert.equal(observations[0]?.directory, "/Users/test/luke");
+});
