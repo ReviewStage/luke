@@ -1014,6 +1014,41 @@ export function workspaceTrayActions(
   return [...acts.values()];
 }
 
+/** The tray header's pull request, and the chat whose report carries it. */
+export interface WorkspaceTrayChange {
+  session: DisplaySession;
+  changeNumber?: number;
+}
+
+/**
+ * The pull request a tray's header offers: a workspace's chats work one
+ * branch, so each chat reporting the change draws the same chip and the tray
+ * reads as several pull requests when every press opens the one — the header
+ * says it once, where the workspace is named once. Hoisted only while the
+ * reports are provably one change: a single reporting chat, or every report
+ * naming the same number. Two chats naming different numbers are two changes,
+ * and reports the numbers cannot compare stay on their own rows rather than
+ * letting the header stand one chip for what may be two. The first reporting
+ * chat is the one the press travels through, which keeps the open validated
+ * against the same roster row that reported it.
+ */
+export function workspaceTrayChange(
+  sessions: readonly DisplaySession[],
+): WorkspaceTrayChange | undefined {
+  const reporting = sessions.filter((session) => session.hasChange);
+  const [first] = reporting;
+  if (!first) return undefined;
+  const oneChange =
+    reporting.length === 1 ||
+    (first.changeNumber !== undefined &&
+      reporting.every((session) => session.changeNumber === first.changeNumber));
+  if (!oneChange) return undefined;
+  return {
+    session: first,
+    ...(first.changeNumber !== undefined ? { changeNumber: first.changeNumber } : undefined),
+  };
+}
+
 export function sessionListRuns(sessions: readonly DisplaySession[]): readonly SessionListRun[] {
   const runs: SessionListRun[] = [];
   for (let index = 0; index < sessions.length; index += 1) {

@@ -33,7 +33,9 @@ import {
   sessionListRuns,
   sessionRunKeys,
   type WorkspaceTrayAction,
+  type WorkspaceTrayChange,
   workspaceTrayActions,
+  workspaceTrayChange,
 } from "./session-model";
 import {
   LEAVING_ATTRIBUTE,
@@ -155,12 +157,16 @@ function RowActionButton({
 function SessionRowActions({
   session,
   actions,
+  withChange,
   writes,
 }: {
   session: DisplaySession;
   /** The actions this row draws itself: inside a tray, the workspace-level
    * ones live in the tray's own header. */
   actions: readonly SessionAction[];
+  /** Whether this row draws the pull-request chip itself: inside a tray whose
+   * header carries the workspace's one change, it does not. */
+  withChange: boolean;
   writes: SessionWriteHandlers;
 }): React.JSX.Element {
   const [sending, setSending] = useState(false);
@@ -301,7 +307,7 @@ function SessionRowActions({
           onRun={(actionId) => void runAction(actionId)}
         />
       ))}
-      {session.hasChange ? (
+      {withChange ? (
         <button
           type="button"
           className="row-action"
@@ -329,13 +335,18 @@ function SessionRowActions({
  * several different acts when any press did the whole thing. The press still
  * travels as a session write — through the first chat that advertised the act
  * — so it is validated against the same roster row that promised it, and its
- * outcome answers on the header's own line the way a row's writes do.
+ * outcome answers on the header's own line the way a row's writes do. The
+ * workspace's one pull request rides here on the same reasoning: the chats
+ * share a branch, so the chip repeated on each row read as several changes,
+ * and its open travels through the chat that reported it the way an act does.
  */
 function WorkspaceTrayActs({
   acts,
+  change,
   writes,
 }: {
   acts: readonly WorkspaceTrayAction[];
+  change?: WorkspaceTrayChange | undefined;
   writes: SessionWriteHandlers;
 }): React.JSX.Element {
   const [pendingAction, setPendingAction] = useState<string | undefined>(undefined);
@@ -368,6 +379,18 @@ function WorkspaceTrayActs({
     [writes],
   );
 
+  const openChange = useCallback(async () => {
+    if (!change) return;
+    const result = await writes.openChange(change.session);
+    // An opened page is its own answer; only a failure needs the line.
+    if (result.status === SESSION_OPEN_RESULT_STATUS.OPENED) return;
+    setFeedback(
+      result.status === SESSION_OPEN_RESULT_STATUS.REJECTED
+        ? result.reason
+        : "The workspace no longer reports a pull request.",
+    );
+  }, [change, writes]);
+
   return (
     <>
       {acts.map((act) => (
@@ -379,6 +402,19 @@ function WorkspaceTrayActs({
           onRun={() => void run(act)}
         />
       ))}
+      {change ? (
+        <button
+          type="button"
+          className="row-action"
+          title="Open the pull request this workspace published"
+          // Opening the pull request hands an address to the system, not a
+          // write to a provider, so it stays offered while a provider write is
+          // in flight.
+          onClick={() => void openChange()}
+        >
+          {change.changeNumber !== undefined ? `#${change.changeNumber}` : "Pull request"}
+        </button>
+      ) : null}
       {feedback ? <small className="row-feedback">{feedback}</small> : null}
     </>
   );
@@ -415,6 +451,7 @@ function SessionRow({
   now,
   leaving,
   inWorkspaceTray = false,
+  changeInTrayHeader = false,
   highlight,
   onOpen,
   onOpenApplication,
@@ -426,6 +463,9 @@ function SessionRow({
   leaving: boolean;
   /** Whether this row is drawn inside its workspace's tray. */
   inWorkspaceTray?: boolean;
+  /** Whether the tray's header carries the workspace's one pull-request chip,
+   * so this row leaves its own report unsaid. */
+  changeInTrayHeader?: boolean;
   /** The search's words, marked on the row's lines so it says why it matched. */
   highlight?: readonly string[] | undefined;
   onOpen: (session: DisplaySession) => void;
@@ -440,7 +480,10 @@ function SessionRow({
   const actions = inWorkspaceTray
     ? session.actions.filter((action) => !actsOnWorkspace(session, action))
     : session.actions;
-  const withActions = session.canMessage || actions.length > 0 || session.hasChange;
+  // The workspace's pull request is the tray header's chip on the same terms:
+  // repeated on every chat of the branch it read as several changes.
+  const withChange = session.hasChange && !changeInTrayHeader;
+  const withActions = session.canMessage || actions.length > 0 || withChange;
   const shared = {
     className: "session-row",
     "data-state": session.urgency,
@@ -636,7 +679,12 @@ function SessionRow({
       ) : (
         <div className="row-main">{content}</div>
       )}
-      <SessionRowActions session={session} actions={actions} writes={writes} />
+      <SessionRowActions
+        session={session}
+        actions={actions}
+        withChange={withChange}
+        writes={writes}
+      />
     </article>
   );
 }
@@ -663,7 +711,8 @@ export function runDrawsTray(run: SessionListRun): boolean {
  * window — but it does carry the acts that belong to the workspace rather
  * than to any one chat: an archive files away every chat in the tray, so its
  * chip sits where the workspace is named once instead of on each row it
- * would empty. The header names the tray in the reading order the same way
+ * would empty, and the one pull request the chats share sits beside it on the
+ * same reasoning. The header names the tray in the reading order the same way
  * it does on screen: the workspace once, then its chats. A tray is a member of the
  * arrival stack in its rows' stead: it fans in at its lead row's turn, and
  * the rows ride it rather than fanning a second time inside it. A wrapper
@@ -672,6 +721,7 @@ export function runDrawsTray(run: SessionListRun): boolean {
 function SessionRun({
   run,
   sessions,
+  change,
   highlight,
   writes,
   children,
@@ -681,6 +731,10 @@ function SessionRun({
    * read from and carried through. A leaving row's session is already gone
    * from the model, so it can neither offer an act nor carry one. */
   sessions: readonly DisplaySession[];
+  /** The workspace's one pull request, when the header carries it. Handed in
+   * rather than read here, because the rows suppressing their own chips must
+   * answer to the same reading. */
+  change?: WorkspaceTrayChange | undefined;
   /** The search's words, marked on the tray's own header lines too. */
   highlight?: readonly string[] | undefined;
   writes: SessionWriteHandlers;
@@ -726,7 +780,9 @@ function SessionRun({
               </span>
             ) : null}
           </span>
-          {acts.length > 0 ? <WorkspaceTrayActs acts={acts} writes={writes} /> : null}
+          {acts.length > 0 || change ? (
+            <WorkspaceTrayActs acts={acts} {...(change ? { change } : undefined)} writes={writes} />
+          ) : null}
         </header>
       ) : null}
       {children}
@@ -935,11 +991,13 @@ export function PanelBody({
                     (row): row is RosterRow<DisplaySession> => row !== undefined && !row.leaving,
                   )
                   .map((row) => row.item);
+                const change = tray ? workspaceTrayChange(living) : undefined;
                 return (
                   <SessionRun
                     key={runKeys[at]}
                     run={run}
                     sessions={living}
+                    {...(change ? { change } : undefined)}
                     highlight={highlight}
                     writes={writes}
                   >
@@ -953,6 +1011,7 @@ export function PanelBody({
                           now={now}
                           leaving={row.leaving}
                           inWorkspaceTray={tray}
+                          changeInTrayHeader={change !== undefined}
                           highlight={highlight}
                           onOpen={onOpenSession}
                           onOpenApplication={onOpenSessionApplication}

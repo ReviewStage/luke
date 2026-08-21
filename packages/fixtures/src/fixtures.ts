@@ -160,7 +160,9 @@ const smokeFixture: FixtureSnapshot = {
     // into one card in the one screenshot the evidence is reviewed from —
     // each row led by the agent's own mark and trailed by the Conductor mark
     // that opens its exact chat, with the tray header carrying the manager's
-    // mark once the way a Superset workspace carries its own.
+    // mark once the way a Superset workspace carries its own. Both chats
+    // report the workspace's one pull request, so the same screenshot proves
+    // the chip is said once on the tray header rather than on each row.
     {
       id: "conductor-chat-package",
       title: "amber-shoal",
@@ -181,6 +183,8 @@ const smokeFixture: FixtureSnapshot = {
       urgency: SESSION_URGENCY.WORKING,
       location: SESSION_LOCATION.CLOUD,
       observedAt: minutesBeforeEpoch(6),
+      hasChange: true,
+      changeNumber: 245,
       workspace: {
         id: "conductor-lisbon",
         name: "lisbon-v2",
@@ -213,6 +217,8 @@ const smokeFixture: FixtureSnapshot = {
       urgency: SESSION_URGENCY.COMPLETE,
       location: SESSION_LOCATION.CLOUD,
       observedAt: minutesBeforeEpoch(1),
+      hasChange: true,
+      changeNumber: 245,
       workspace: {
         id: "conductor-lisbon",
         name: "lisbon-v2",
