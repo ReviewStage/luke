@@ -38,6 +38,13 @@ export interface AdminUserListRow {
   activeDays: number;
   /** The account's most recent active day inside the window, if any. */
   lastActiveDay: string | null;
+  /**
+   * When the account last touched the service at all, in epoch milliseconds:
+   * its freshest auth-session write, which a plain sign-in moves where the
+   * hosted-tier aggregates above stay at zero. Null for an account whose
+   * sessions have all been pruned.
+   */
+  lastSeenAt: number | null;
   voiceCalls: number;
   attentionReviews: number;
 }

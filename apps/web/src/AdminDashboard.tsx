@@ -1366,6 +1366,7 @@ async function readUsersState(response: Response): Promise<UsersState> {
 const USERS_SORT_KEY = {
   ACCOUNT: "account",
   JOINED: "joined",
+  LAST_SEEN: "lastSeen",
   ACTIVE_DAYS: "activeDays",
   LAST_ACTIVE: "lastActive",
   VOICE: "voice",
@@ -1386,6 +1387,7 @@ type SortDirection = (typeof SORT_DIRECTION)[keyof typeof SORT_DIRECTION];
 const USERS_SORT_FIRST_DIRECTION = {
   [USERS_SORT_KEY.ACCOUNT]: SORT_DIRECTION.ASCENDING,
   [USERS_SORT_KEY.JOINED]: SORT_DIRECTION.DESCENDING,
+  [USERS_SORT_KEY.LAST_SEEN]: SORT_DIRECTION.DESCENDING,
   [USERS_SORT_KEY.ACTIVE_DAYS]: SORT_DIRECTION.DESCENDING,
   [USERS_SORT_KEY.LAST_ACTIVE]: SORT_DIRECTION.DESCENDING,
   [USERS_SORT_KEY.VOICE]: SORT_DIRECTION.DESCENDING,
@@ -1400,6 +1402,7 @@ const USERS_SORT_FIRST_DIRECTION = {
 const USERS_SORT_VALUE = {
   [USERS_SORT_KEY.ACCOUNT]: (row) => (row.name || row.email).toLowerCase(),
   [USERS_SORT_KEY.JOINED]: (row) => row.createdAt,
+  [USERS_SORT_KEY.LAST_SEEN]: (row) => row.lastSeenAt,
   [USERS_SORT_KEY.ACTIVE_DAYS]: (row) => row.activeDays,
   [USERS_SORT_KEY.LAST_ACTIVE]: (row) => row.lastActiveDay,
   [USERS_SORT_KEY.VOICE]: (row) => row.voiceCalls,
@@ -1523,6 +1526,13 @@ function UsersTable({
               numeric
             />
             <SortableHeader
+              label="Last seen"
+              sortKey={USERS_SORT_KEY.LAST_SEEN}
+              sort={sort}
+              onSort={toggleSort}
+              numeric
+            />
+            <SortableHeader
               label="Active days"
               sortKey={USERS_SORT_KEY.ACTIVE_DAYS}
               sort={sort}
@@ -1582,6 +1592,9 @@ function UsersTable({
                 </a>
               </td>
               <td className="px-5 py-3 text-right tabular-nums">{formatDate(row.createdAt)}</td>
+              <td className="px-5 py-3 text-right tabular-nums">
+                {row.lastSeenAt === null ? "—" : formatDate(row.lastSeenAt)}
+              </td>
               <td className="px-5 py-3 text-right tabular-nums">
                 {formatNumber(row.activeDays)}
                 <span className="text-muted-foreground"> of {formatNumber(windowDays)}</span>
@@ -1682,7 +1695,9 @@ function UsersPage({
         <p className="mt-3 text-sm text-muted-foreground">
           Every account the service holds, most recently active first, whether or not it ever
           touched the hosted tier — active days count the window's UTC days with hosted voice or
-          attention. A heading sorts by its column, and a row opens the account's own page.
+          attention, while last seen is the account's freshest sign-in session, which a plain
+          sign-in moves without any hosted use. A heading sorts by its column, and a row opens the
+          account's own page.
           {list.total > list.rows.length
             ? ` Only the ${formatNumber(list.rows.length)} most recently active accounts are listed here, and the filter searches those alone.`
             : ""}
