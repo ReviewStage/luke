@@ -1012,6 +1012,12 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
     const reportedAt = reported?.updatedAt ?? session.workspace.lastActivityAt;
     const transcript = transcripts?.get(session.id);
     const remembered = this.#memories.get(session.id);
+    // A chat is remembered only once its status has actually been read.
+    // Seeded from a failed read, the workspace's fallback timestamp would
+    // stand as the moment no later read could displace — pinning a sibling's
+    // activity, or a wake's, onto this chat. Until then each pass reports the
+    // fallback afresh, and the first readable status is the true first sight.
+    if (remembered === undefined && reported?.status === undefined) return reportedAt;
     const statusMoved =
       remembered !== undefined &&
       remembered.status !== undefined &&

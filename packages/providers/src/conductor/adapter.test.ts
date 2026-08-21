@@ -1259,6 +1259,43 @@ test("a failed read never counts as the chat's work moving", async () => {
   assert.equal(statusless[0]?.observedAt, walkedAwayAt);
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+test("a chat first seen through a failed status read is not pinned to the fallback", async () => {
+  // With no readable status there is nothing to remember yet: seeding from
+  // the workspace's fallback timestamp would stand as a moment no later read
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+  // could displace, so the first readable status is the true first sight.
+  const walkedAwayAt = TEST_TIME - 2 * 60 * 60 * 1000;
+  const workspace = ownedWorkspace("workspace-first-unreadable", TEST_TIME - 1_000);
+  const chat: TestSession = {
+    id: IDLE_SESSION_UUID,
+    workspaceId: "workspace-first-unreadable",
+    name: TEST_SESSION_NAME,
+    transcriptTail: TEST_TRANSCRIPT_TAIL,
+    status: TEST_CONDUCTOR_STATUS.IDLE,
+    statusUpdatedAt: walkedAwayAt,
+    statusHttpStatus: HTTP_STATUS.SERVER_ERROR,
+  };
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [workspace],
+    sessions: [chat],
+  });
+  let now = TEST_TIME;
+  const adapter = adapterFor(api.fetch, { now: () => now });
+
+  const unreadable = await adapter.observe();
+  assert.equal(unreadable[0]?.status, SESSION_STATUS.UNKNOWN);
+  assert.equal(unreadable[0]?.observedAt, workspace.lastActivityAt);
+
+  now = TEST_TIME + 60_000;
+  delete chat.statusHttpStatus;
+  const readable = await adapter.observe();
+  assert.equal(readable[0]?.status, SESSION_STATUS.UNKNOWN);
+  assert.equal(readable[0]?.observedAt, walkedAwayAt);
+});
+
 test("ignores workspaces created by another user and workspaces without a creator", async () => {
   const api = fakeConductorApi({
     userId: TEST_USER_ID,
