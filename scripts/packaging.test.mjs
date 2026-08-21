@@ -132,6 +132,10 @@ test("packaging is pinned to Apple Silicon and the builder output directory", ()
     path.join("/repo", "artifacts", "release-builder", "mac-arm64", "Luke.app"),
   );
   assert.equal(
+    config.dmg.contents[0].path,
+    path.join(repoRoot, "artifacts", "release-builder", "mac-arm64", "Luke.app"),
+  );
+  assert.equal(
     packagedAppExecutable("/repo"),
     path.join(
       "/repo",
@@ -315,7 +319,9 @@ test("iconutil receives explicit input and output paths", () => {
 test("signing configuration separates ad-hoc and Developer ID modes", () => {
   const adHocSigning = resolveSigningMode({});
   assert.deepEqual(adHocSigning, { mode: SIGNING_MODE.AD_HOC });
-  assert.equal(builderConfig().mac.identity, "-");
+  const adHocBuilder = builderConfig();
+  assert.equal(adHocBuilder.mac.identity, "-");
+  assert.equal(adHocBuilder.mac.hardenedRuntime, false);
 
   const identity = "Developer ID Application: X (TEAM)";
   const developerIdSigning = resolveSigningMode({ LUKE_CODESIGN_IDENTITY: identity });

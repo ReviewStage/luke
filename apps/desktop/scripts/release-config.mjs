@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import { PACKAGED_ARCHITECTURE } from "./package-config.mjs";
 
@@ -38,6 +39,10 @@ export function releaseZipFileName(version) {
 
 export function builderReleaseArtifactDirectory(repoRoot) {
   return path.join(repoRoot, "artifacts", "release-builder");
+}
+
+export function resetBuilderReleaseArtifactDirectory(repoRoot) {
+  fs.rmSync(builderReleaseArtifactDirectory(repoRoot), { recursive: true, force: true });
 }
 
 // A developer's Mac holds a stored notarytool profile; a CI runner has only
