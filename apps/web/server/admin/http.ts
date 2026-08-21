@@ -77,10 +77,16 @@ export function adminUserId(url: string): string | undefined {
   return value;
 }
 
+/**
+ * Every admin answer is viewer-gated account data, so every path — refusals
+ * included, since even a refusal names how far a viewer got — is marked
+ * no-store: a shared machine's browser or an intermediary cache must never
+ * replay one admin's view to whoever sits down next.
+ */
 export function jsonResponse<Body extends object>(status: number, body: Body): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", "cache-control": "no-store" },
   });
 }
 
