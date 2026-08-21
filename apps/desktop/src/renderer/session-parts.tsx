@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { ERRAND_TARGET, errandTargetProps } from "./luke-errand";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
 import { ProviderMark } from "./provider-marks";
@@ -207,6 +208,7 @@ export function SessionOptionsButton({
   /** Drops every chosen chip. Offered only while a selection stands. */
   onClear: () => void;
 }): React.JSX.Element {
+  const toggle = useRef<HTMLButtonElement | null>(null);
   const narrowed = list.filters.length > 0;
   const named = selectedFilterOptions(list).slice(0, NARROWED_ON_BUTTON);
   const beyond = list.filters.length - named.length;
@@ -219,6 +221,7 @@ export function SessionOptionsButton({
       data-narrowed={String(narrowed)}
     >
       <button
+        ref={toggle}
         type="button"
         id={SESSION_OPTIONS_BUTTON_ID}
         className="options-button"
@@ -252,7 +255,13 @@ export function SessionOptionsButton({
           className="options-clear"
           aria-label="Clear filters"
           title="Clear filters"
-          onClick={onClear}
+          onClick={() => {
+            onClear();
+            // The X unmounts with the selection. Return focus to the toggle
+            // it sat beside, the way the search clear returns to its field,
+            // so a keyboard press is not dumped onto the document.
+            toggle.current?.focus();
+          }}
         >
           <CloseIcon />
         </button>

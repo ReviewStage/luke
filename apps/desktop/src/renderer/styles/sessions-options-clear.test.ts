@@ -44,6 +44,13 @@ test("clearing the control drops every chosen chip", () => {
   assert.match(body, /onClear=\{\(\) => onFiltersChange\(\[\]\)\}/);
 });
 
+test("clearing returns focus to the toggle the X sat beside", () => {
+  const clear = parts.indexOf('className="options-clear"');
+  const handler = parts.slice(clear, parts.indexOf("</button>", clear));
+  assert.match(handler, /onClear\(\);/);
+  assert.match(handler, /toggle\.current\?\.focus\(\)/);
+});
+
 test("the narrowed pill is the wrapper, so the X can sit inside it", () => {
   assert.match(rule(".options-control"), /display: inline-flex;/);
   assert.match(rule(".options-control"), /align-items: center;/);
