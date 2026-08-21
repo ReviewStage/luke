@@ -1093,11 +1093,15 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
         repository: workspace.repositoryLabel,
         ...(detail?.branch ? { branch: detail.branch } : undefined),
         ...(unmappedKind ? { model: unmappedKind } : undefined),
-        // The pull request and a wake failure are the workspace's facts, so
-        // they ride its newest chat once rather than every row repeating
-        // them; the address is every chat's, because the workspace page is
-        // where each one is read.
-        ...(newest ? this.#sharedDetail(workspace, status) : undefined),
+        // The pull request is the workspace's shared change — its chats work
+        // one branch — so every chat reports it and the tray header says it
+        // once, the hoist proving the reports one change by their shared
+        // number. A wake failure stays on the newest chat alone, where the
+        // workspace's own state already speaks.
+        ...(workspace.pullRequestUrl ? { change: workspace.pullRequestUrl } : undefined),
+        ...(newest && status === SESSION_STATUS.ERROR
+          ? { error: REPLICAS_WORKSPACE_ERROR_MESSAGE }
+          : undefined),
         link: replicasWorkspaceLink(workspace.id),
       },
     };

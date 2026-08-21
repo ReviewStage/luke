@@ -1012,6 +1012,32 @@ test("reports the newest pull request as the workspace's published change", asyn
   assert.equal(observations[1]?.detail?.change, undefined);
 });
 
+test("reports the workspace's pull request on every chat, for the tray to say once", async () => {
+  // The workspace's chats work one branch, so each chat reports the shared
+  // change and the tray header hoists the chip once — the reports prove
+  // themselves one change by their shared number.
+  const api = fakeReplicasApi([
+    {
+      ...activeWorkspace("workspace-shared", TEST_TIME - 1_000),
+      pullRequestUrls: ["https://github.com/reviewstage/luke/pull/402"],
+      chats: [
+        { id: "chat-a", provider: "claude", title: "Claude Code", updatedAt: TEST_TIME - 1_000 },
+        { id: "chat-b", provider: "codex", title: "Codex", updatedAt: TEST_TIME - 2_000 },
+      ],
+    },
+  ]);
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  assert.deepEqual(
+    observations.map((observation) => observation.detail?.change),
+    [
+      "https://github.com/reviewstage/luke/pull/402",
+      "https://github.com/reviewstage/luke/pull/402",
+    ],
+  );
+});
+
 test("reports why an errored workspace stopped rather than leaving it idle", async () => {
   const api = fakeReplicasApi([
     {

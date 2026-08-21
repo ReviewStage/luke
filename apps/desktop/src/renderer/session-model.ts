@@ -117,6 +117,7 @@ function sessionFilterFromSpoken(value: string): SessionFilter | undefined {
     return value;
   }
   if (isSessionApplicationId(value)) return value;
+  if (isHostedAgentId(value)) return value;
   return isProviderId(value) ? value : undefined;
 }
 
