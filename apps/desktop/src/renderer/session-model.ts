@@ -474,13 +474,13 @@ export function searchTokens(query: string): readonly string[] {
  * The lines a query is read against: everything the row itself can say — its
  * title, the sentence under it, the branch and repository, the workspace it is
  * a chat of — plus identifiers the row does not always spend a line on: the
- * agent's name and its model, kept on the mark's hover, and a chat's own name,
- * which a lone chat cedes its title line to its workspace for. Those still
- * find the session — each is a name the provider's own surface knows it by —
- * so a row can match without a mark to show for it; the marks only ever land
- * on the lines the row draws. The status word is its own line because the
- * detail sentence only falls back to it: a row busy saying what it is doing
- * must still answer for the state it is in.
+ * agent's name and its model, kept on the mark's hover, and the workspace of
+ * a lone chat, which earns no tray to name it. Those still find the session —
+ * each is a name the provider's own surface knows it by — so a row can match
+ * without a mark to show for it; the marks only ever land on the lines the
+ * row draws. The status word is its own line because the detail sentence only
+ * falls back to it: a row busy saying what it is doing must still answer for
+ * the state it is in.
  */
 function searchableLines(session: DisplaySession): readonly string[] {
   const lines = [

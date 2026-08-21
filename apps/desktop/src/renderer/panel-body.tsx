@@ -459,11 +459,12 @@ function SessionRow({
   // inside a tray leaves a bare repository unsaid: the tray's own header has
   // already named it, once, for every chat it holds.
   const place = session.branch ?? (inWorkspaceTray ? undefined : session.repository);
-  // A lone chat is its workspace: with no tray to name it, the row takes the
-  // workspace's name — the name the user knows the work by — because the
-  // chat's own generated name only earns a line once there is a sibling to
-  // tell it from.
-  const title = !inWorkspaceTray && session.workspace ? session.workspace.name : session.title;
+  // The chat's own name titles the row even where no tray names the
+  // workspace: it is the most specific fact the row has, and a provider whose
+  // chat has no name of its own already falls the title back to something
+  // workspace-shaped. The workspace's name still matches a search, and the
+  // acts aimed at the whole workspace still collapse onto this row.
+  const title = session.title;
   const applications = session.applications.filter(
     (application) =>
       !inWorkspaceTray ||
@@ -650,9 +651,9 @@ export function runDrawsTray(run: SessionListRun): boolean {
  * the tray: a single card that visibly contains them, named once at its top —
  * the workspace's name on the left, and at the far end the glyph leading the
  * repository — with the chats divided by hairlines inside.
- * A workspace holding one chat earns no tray — its row already says
- * everything the tray would — and an ungrouped session never does; either
- * way the wrapper stays, drawing as nothing. It has to: a workspace crosses
+ * A workspace holding one chat earns no tray — its one row carries the
+ * workspace's acts and mark itself — and an ungrouped session never does;
+ * either way the wrapper stays, drawing as nothing. It has to: a workspace crosses
  * between one chat and several as siblings come and go, and if that crossing
  * changed the row's parent element, React would remount the row and wipe a
  * follow-up someone was typing into it. The chrome is a class, never a

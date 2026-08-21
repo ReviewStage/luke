@@ -36,11 +36,35 @@ function createConductorDatabase(databasePath: string): DatabaseSync {
       claude_session_id TEXT,
       agent_type TEXT,
       workspace_id TEXT,
+      title TEXT DEFAULT 'Untitled',
       is_hidden INTEGER DEFAULT 0
     );
     CREATE TABLE workspaces (
       id TEXT PRIMARY KEY,
       workspace_name TEXT,
+      pr_title TEXT,
+      directory_name TEXT,
+      state TEXT DEFAULT 'active'
+    );
+  `);
+  return database;
+}
+
+/** The schema from before Conductor titled chats, for the middle fallback read. */
+function createConductorDatabaseWithoutTitles(databasePath: string): DatabaseSync {
+  const database = new DatabaseSync(databasePath, {});
+  database.exec(`
+    CREATE TABLE sessions (
+      id TEXT PRIMARY KEY,
+      claude_session_id TEXT,
+      agent_type TEXT,
+      workspace_id TEXT,
+      is_hidden INTEGER DEFAULT 0
+    );
+    CREATE TABLE workspaces (
+      id TEXT PRIMARY KEY,
+      workspace_name TEXT,
+      pr_title TEXT,
       directory_name TEXT,
       state TEXT DEFAULT 'active'
     );
@@ -67,13 +91,20 @@ function writeSession(
   providerSessionId: string,
   agentType: string,
   workspaceId?: string,
-  hidden?: boolean,
+  options?: { title?: string; hidden?: boolean },
 ): void {
   database
     .prepare(
-      "INSERT INTO sessions (id, claude_session_id, agent_type, workspace_id, is_hidden) VALUES (?, ?, ?, ?, ?)",
+      "INSERT INTO sessions (id, claude_session_id, agent_type, workspace_id, title, is_hidden) VALUES (?, ?, ?, ?, ?, ?)",
     )
-    .run(id, providerSessionId, agentType, workspaceId ?? null, hidden ? 1 : 0);
+    .run(
+      id,
+      providerSessionId,
+      agentType,
+      workspaceId ?? null,
+      options?.title ?? "Untitled",
+      options?.hidden ? 1 : 0,
+    );
 }
 
 function writeWorkspace(
@@ -81,13 +112,19 @@ function writeWorkspace(
   id: string,
   workspaceName: string | undefined,
   directoryName: string,
-  state?: string,
+  options?: { prTitle?: string; state?: string },
 ): void {
   database
     .prepare(
-      "INSERT INTO workspaces (id, workspace_name, directory_name, state) VALUES (?, ?, ?, ?)",
+      "INSERT INTO workspaces (id, workspace_name, pr_title, directory_name, state) VALUES (?, ?, ?, ?, ?)",
     )
-    .run(id, workspaceName ?? null, directoryName, state ?? "active");
+    .run(
+      id,
+      workspaceName ?? null,
+      options?.prTitle ?? null,
+      directoryName,
+      options?.state ?? "active",
+    );
 }
 
 test("indexes supported provider session ids from Conductor records", async (t) => {
@@ -291,8 +328,10 @@ test("groups a matched chat under its Conductor workspace like a manager", async
     { ...OBSERVED_CHAT, providerSessionId: "sibling", title: "Sibling" },
   ]);
 
-  // The workspace carries the mark, so the association's scope follows it —
-  // and the name falls back to the directory Conductor itself falls back to.
+  // The workspace claim carries the manager's mark on the tray header, and
+  // the name falls back to the directory Conductor itself falls back to. The
+  // association stays the session's own — its address names the exact chat —
+  // so its mark rides the row even inside the tray.
   assert.deepEqual(observations[0]?.workspace, {
     providerWorkspaceId: "workspace-named",
     name: "lisbon-v2",
@@ -303,7 +342,7 @@ test("groups a matched chat under its Conductor workspace like a manager", async
     {
       id: SESSION_APPLICATION_ID.CONDUCTOR,
       displayName: "Conductor",
-      scope: SESSION_APPLICATION_SCOPE.WORKSPACE,
+      scope: SESSION_APPLICATION_SCOPE.SESSION,
       link: "conductor://workspace?id=workspace-named&session=chat-named",
     },
   ]);
@@ -320,7 +359,65 @@ test("groups a matched chat under its Conductor workspace like a manager", async
   );
 });
 
-test("a provider-reported address keeps the row press; the mark keeps its own", async (t) => {
+test("a nameless workspace groups under its PR title before its directory", async (t) => {
+  const databasePath = await temporaryDatabasePath(t);
+  const database = createConductorDatabase(databasePath);
+  try {
+    writeWorkspace(database, "workspace-pr", undefined, "kingstown", {
+      prTitle: "fix(panel): keep the tray label honest",
+    });
+    writeWorkspace(database, "workspace-chosen", "lisbon-v2", "kingstown", {
+      prTitle: "feat(panel): the PR a chosen name outranks",
+    });
+    writeSession(database, "chat-pr", "local", TEST_CONDUCTOR_AGENT_TYPE.CLAUDE, "workspace-pr");
+    writeSession(
+      database,
+      "chat-chosen",
+      "sibling",
+      TEST_CONDUCTOR_AGENT_TYPE.CLAUDE,
+      "workspace-chosen",
+    );
+  } finally {
+    database.close();
+  }
+  const snapshot = await new ConductorSessionApplicationReader({ databasePath }).read();
+  const observations = snapshot.enrich(PROVIDER_ID.CLAUDE_CODE, [
+    OBSERVED_CHAT,
+    { ...OBSERVED_CHAT, providerSessionId: "sibling", title: "Sibling" },
+  ]);
+
+  // The ladder is Conductor's own sidebar's: the PR title names work nobody
+  // named directly, and a chosen workspace name still outranks it.
+  assert.equal(observations[0]?.workspace?.name, "fix(panel): keep the tray label honest");
+  assert.equal(observations[1]?.workspace?.name, "lisbon-v2");
+});
+
+test("titles a matched chat by the name Conductor gave it", async (t) => {
+  const databasePath = await temporaryDatabasePath(t);
+  const database = createConductorDatabase(databasePath);
+  try {
+    writeSession(database, "chat-named", "local", TEST_CONDUCTOR_AGENT_TYPE.CLAUDE, undefined, {
+      title: "Fix the transcript parser",
+    });
+    writeSession(database, "chat-unnamed", "sibling", TEST_CONDUCTOR_AGENT_TYPE.CLAUDE);
+  } finally {
+    database.close();
+  }
+  const snapshot = await new ConductorSessionApplicationReader({ databasePath }).read();
+  const observations = snapshot.enrich(PROVIDER_ID.CLAUDE_CODE, [
+    OBSERVED_CHAT,
+    { ...OBSERVED_CHAT, providerSessionId: "sibling", title: "Sibling" },
+  ]);
+
+  // The name the user reads in Conductor's own sidebar titles the row, the
+  // way it titles a cloud-observed chat's.
+  assert.equal(observations[0]?.title, "Fix the transcript parser");
+  // The schema's default is the absence of a name rather than one anybody
+  // chose, so the provider's own title keeps the row.
+  assert.equal(observations[1]?.title, "Sibling");
+});
+
+test("the annotation fills only an absent row link; precedence is not its call", async (t) => {
   const databasePath = await temporaryDatabasePath(t);
   const database = createConductorDatabase(databasePath);
   try {
@@ -337,12 +434,29 @@ test("a provider-reported address keeps the row press; the mark keeps its own", 
   }
   const snapshot = await new ConductorSessionApplicationReader({ databasePath }).read();
   const observations = snapshot.enrich(PROVIDER_ID.CLAUDE_CODE, [
-    { ...OBSERVED_CHAT, detail: { link: "https://example.com/session/local" } },
+    {
+      ...OBSERVED_CHAT,
+      detail: { link: "codex://threads/local" },
+      applications: [
+        {
+          id: SESSION_APPLICATION_ID.CHATGPT,
+          displayName: "ChatGPT",
+          scope: SESSION_APPLICATION_SCOPE.SESSION,
+          link: "codex://threads/local",
+        },
+      ],
+    },
   ]);
 
-  assert.equal(observations[0]?.detail?.link, "https://example.com/session/local");
+  // The annotation itself never rewrites a press another hand gave the row:
+  // Conductor's precedence over the agent's own app is the session
+  // normalization's call, made from the grouping — the manager's mark leads
+  // and the press follows the first linked mark — so each association here
+  // only carries its own exact route.
+  assert.equal(observations[0]?.detail?.link, "codex://threads/local");
+  assert.equal(observations[0]?.applications?.[0]?.link, "codex://threads/local");
   assert.equal(
-    observations[0]?.applications?.[0]?.link,
+    observations[0]?.applications?.[1]?.link,
     "conductor://workspace?id=workspace-named&session=chat-named",
   );
 });
@@ -358,6 +472,7 @@ test("a spawned descendant inherits its ancestor's Conductor workspace", async (
       "local",
       TEST_CONDUCTOR_AGENT_TYPE.CODEX,
       "workspace-parent",
+      { title: "Rework the pipeline" },
     );
   } finally {
     database.close();
@@ -380,6 +495,34 @@ test("a spawned descendant inherits its ancestor's Conductor workspace", async (
   assert.equal(
     observations[1]?.detail?.link,
     "conductor://workspace?id=workspace-parent&session=chat-parent",
+  );
+  // The chat's Conductor name is the chat's alone: the sub-agent keeps its
+  // own title rather than reading as the same conversation twice.
+  assert.equal(observations[0]?.title, "Rework the pipeline");
+  assert.equal(observations[1]?.title, "Child");
+});
+
+test("a schema from before chat titles still annotates and groups", async (t) => {
+  const databasePath = await temporaryDatabasePath(t);
+  const database = createConductorDatabaseWithoutTitles(databasePath);
+  try {
+    writeWorkspace(database, "workspace-named", "lisbon-v2", "kingstown");
+    database
+      .prepare(
+        "INSERT INTO sessions (id, claude_session_id, agent_type, workspace_id) VALUES (?, ?, ?, ?)",
+      )
+      .run("chat-untitled", "local", TEST_CONDUCTOR_AGENT_TYPE.CLAUDE, "workspace-named");
+  } finally {
+    database.close();
+  }
+  const snapshot = await new ConductorSessionApplicationReader({ databasePath }).read();
+  const observations = snapshot.enrich(PROVIDER_ID.CLAUDE_CODE, [OBSERVED_CHAT]);
+
+  assert.equal(observations[0]?.title, "Local");
+  assert.equal(observations[0]?.workspace?.name, "lisbon-v2");
+  assert.equal(
+    observations[0]?.applications?.[0]?.link,
+    "conductor://workspace?id=workspace-named&session=chat-untitled",
   );
 });
 
@@ -406,13 +549,19 @@ test("keeps another manager's workspace and stays on the row instead", async (t)
   };
   const snapshot = await new ConductorSessionApplicationReader({ databasePath }).read();
   const observations = snapshot.enrich(PROVIDER_ID.CLAUDE_CODE, [
-    { ...OBSERVED_CHAT, workspace: supersetWorkspace },
+    {
+      ...OBSERVED_CHAT,
+      workspace: supersetWorkspace,
+      detail: { link: "superset://workspace/workspace-superset" },
+    },
   ]);
 
-  // The first manager to group the chat keeps it; Conductor still identifies
-  // itself, on the row, where no tray header would carry its mark — and the
-  // mark keeps the chat's own Conductor address either way.
+  // The first manager to group the chat keeps it — its press included:
+  // Conductor outranks only the chat's agent's own app, never another
+  // manager. Conductor still identifies itself, on the row, and the mark
+  // keeps the chat's own Conductor address either way.
   assert.deepEqual(observations[0]?.workspace, supersetWorkspace);
+  assert.equal(observations[0]?.detail?.link, "superset://workspace/workspace-superset");
   assert.deepEqual(observations[0]?.applications, [
     {
       id: SESSION_APPLICATION_ID.CONDUCTOR,
@@ -427,8 +576,10 @@ test("drops chats filed away in Conductor: hidden chats and archived workspaces"
   const databasePath = await temporaryDatabasePath(t);
   const database = createConductorDatabase(databasePath);
   try {
-    writeWorkspace(database, "workspace-open", "lisbon-v2", "kingstown", "ready");
-    writeWorkspace(database, "workspace-filed", "adana-v1", "kingstown", "archived");
+    writeWorkspace(database, "workspace-open", "lisbon-v2", "kingstown", { state: "ready" });
+    writeWorkspace(database, "workspace-filed", "adana-v1", "kingstown", {
+      state: "archived",
+    });
     writeSession(database, "chat-open", "open", TEST_CONDUCTOR_AGENT_TYPE.CLAUDE, "workspace-open");
     writeSession(
       database,
@@ -436,7 +587,7 @@ test("drops chats filed away in Conductor: hidden chats and archived workspaces"
       "hidden",
       TEST_CONDUCTOR_AGENT_TYPE.CLAUDE,
       "workspace-open",
-      true,
+      { hidden: true },
     );
     writeSession(
       database,
