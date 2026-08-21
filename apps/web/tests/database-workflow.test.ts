@@ -33,6 +33,31 @@ test("Vercel routes nested auth paths before its detected API 404", () => {
     { src: "/privacy", dest: "/privacy.html" },
     { src: "/changelog", dest: "/changelog.html" },
     { src: "/admin", dest: "/admin.html" },
+    { src: "/ingest/static/(.*)", dest: "https://us-assets.i.posthog.com/static/$1" },
+    { src: "/ingest/(.*)", dest: "https://us.i.posthog.com/$1" },
   ]);
+  // Still `routes` rather than `rewrites`, and the two cannot be mixed. The
+  // auth entry is why: `routes` run before the filesystem and the detected
+  // API's own 404, where a rewrite runs after it — which is what this test's
+  // name has been guarding since before the proxy existed.
   assert.equal("rewrites" in vercelConfig, false);
+});
+
+/**
+ * The analytics proxy, on the same terms as the routes above it. It exists so
+ * neither half of the counting reaches the processor from a user's own
+ * machine: the site's script and the desktop's recorder both post to Luke's
+ * own origin, and the visitor's address is this deployment's to forward or
+ * not rather than something the processor is handed by the browser.
+ */
+test("the analytics proxy sends assets and ingestion to their own hosts", () => {
+  const proxied = vercelConfig.routes.filter((route) => route.dest.startsWith("https://"));
+  assert.deepEqual(
+    proxied.map((route) => route.src),
+    ["/ingest/static/(.*)", "/ingest/(.*)"],
+    "the asset path must be matched before the ingestion catch-all swallows it",
+  );
+  for (const route of proxied) {
+    assert.match(route.dest, /^https:\/\/[a-z0-9.-]+\.i\.posthog\.com\//);
+  }
 });

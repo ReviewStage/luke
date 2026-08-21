@@ -5,6 +5,11 @@
     { "src": "/api/auth/(.*)", "dest": "/api/auth/[...all].ts" },
     { "src": "/privacy", "dest": "/privacy.html" },
     { "src": "/changelog", "dest": "/changelog.html" },
-    { "src": "/admin", "dest": "/admin.html" }
+    { "src": "/admin", "dest": "/admin.html" },
+    {
+      "src": "/ingest/static/(.*)",
+      "dest": "https://us-assets.i.posthog.com/static/$1"
+    },
+    { "src": "/ingest/(.*)", "dest": "https://us.i.posthog.com/$1" }
   ]
 }

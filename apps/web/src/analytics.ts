@@ -6,20 +6,28 @@ import type { PostHog } from "posthog-js";
  * session drop-off is only visible from the point someone already has an
  * account.
  *
- * This half has a weaker privacy posture than the app's and must be described
- * as such. The browser talks to the analytics processor directly, so the
- * processor sees the visitor's address and user agent — where the desktop's
- * events reach it through Luke's own service with location resolution
- * switched off. Do not let the app's stronger claim bleed onto the site.
+ * The browser no longer talks to the analytics processor directly. Everything
+ * here goes to this site's own `/ingest` path, which the deployment forwards,
+ * so the processor sees the deployment's address rather than the visitor's —
+ * the same shape the desktop's counted events have always had, where they
+ * reach the processor through Luke's own service.
  *
  * The options below are the posture in configuration form rather than
- * defaults worth reading past: autocapture would collect the text and
- * attributes of whatever was clicked, and recording would collect the page
- * itself.
+ * defaults worth reading past. What the site records and the app records are
+ * deliberately different: this is a marketing page whose copy is public and
+ * whose only typed field is a sign-in, where the app's panel is almost
+ * entirely what a provider wrote about somebody's work. So the app masks all
+ * text and this does not — but inputs are masked in both, and neither
+ * collects the text of what was clicked.
  */
 
 const PROJECT_API_KEY = import.meta.env.VITE_POSTHOG_PROJECT_API_KEY;
-const HOST = import.meta.env.VITE_POSTHOG_HOST ?? "https://us.i.posthog.com";
+/**
+ * This site's own proxy path, which `vercel.json` forwards to the processor.
+ * The override stays for a local run, where there is no deployment in front
+ * of the page to do the forwarding.
+ */
+const HOST = import.meta.env.VITE_POSTHOG_HOST ?? "/ingest";
 
 export const SITE_EVENT = {
   DOWNLOAD_PRESS: "site:download_press",
@@ -51,9 +59,10 @@ export function startSiteAnalytics(): void {
   client = import("posthog-js").then(({ default: posthog }) => {
     posthog.init(projectApiKey, {
       api_host: HOST,
-      // The DOM text and attributes of whatever was clicked; never collected.
-      autocapture: false,
-      disable_session_recording: true,
+      // Where the processor's own interface lives, which the proxy path is
+      // not. Without this, a recording's links point back at this site.
+      ui_host: "https://us.posthog.com",
+      autocapture: true,
       capture_pageview: true,
       capture_pageleave: false,
       // Visitors stay personless until they sign in, which is both cheaper
@@ -61,8 +70,17 @@ export function startSiteAnalytics(): void {
       // knows. The identify at consent is what links their earlier page views
       // to the account, so no aliasing is needed.
       person_profiles: "identified_only",
+      // Autocapture's own two: an event says what was clicked and where, never
+      // the words on it. Recording is configured separately below, because
+      // rrweb does not read either of these.
       mask_all_text: true,
       mask_all_element_attributes: true,
+      session_recording: {
+        // The sign-in address is the only thing anybody types on this site,
+        // and it is the one thing here worth masking.
+        maskAllInputs: true,
+        blockSelector: ".ph-block",
+      },
     });
     return posthog;
   });
