@@ -174,6 +174,12 @@ const SESSION_ID_PATTERN = /${OPENCODE_SESSION_ID_PATTERN}/;
 // nothing in an event can choose what is written.
 const EVENT_TOKENS = ${JSON.stringify(OPENCODE_PLUGIN_REGISTRATION, undefined, 2)};
 
+// OpenCode fires handlers without awaiting them, so two events for one
+// session can be in flight at once; a temp name shared between them would
+// let one write's rename race the other's. The process id still keeps two
+// OpenCode instances off each other's writes.
+let writeSequence = 0;
+
 async function record(sessionId, token) {
   if (typeof sessionId !== "string" || !SESSION_ID_PATTERN.test(sessionId)) return;
   // No spool means observation hooks are off or Luke is gone; leave quietly
@@ -184,7 +190,11 @@ async function record(sessionId, token) {
   // matters, and replacement is what bounds the spool. Writing beside the
   // spool file and renaming over it keeps a concurrent reader off half a
   // write.
-  const temporaryPath = path.join(SPOOL_DIRECTORY, "." + sessionId + "." + process.pid + ".tmp");
+  writeSequence += 1;
+  const temporaryPath = path.join(
+    SPOOL_DIRECTORY,
+    "." + sessionId + "." + process.pid + "." + writeSequence + ".tmp",
+  );
   await fs.writeFile(temporaryPath, JSON.stringify({ event: token }));
   await fs.rename(temporaryPath, path.join(SPOOL_DIRECTORY, sessionId + ".json"));
 }

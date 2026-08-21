@@ -61,6 +61,26 @@ for (const load of Object.values(plugin)) {
   await execFileAsync(process.execPath, ["--input-type=module", "-e", driver]);
 }
 
+/**
+ * Fires several events the way OpenCode actually dispatches them: without
+ * awaiting one before the next, so every handler for one session can be in
+ * flight at once.
+ */
+async function firePluginEventsConcurrently(
+  installation: ObservationHookInstallation,
+  events: readonly ParsedJsonObject[],
+): Promise<void> {
+  const driver = `
+import { pathToFileURL } from "node:url";
+const plugin = await import(pathToFileURL(${JSON.stringify(installation.hookScriptPath)}).href);
+for (const load of Object.values(plugin)) {
+  const hooks = await load({});
+  await Promise.all(${JSON.stringify(events)}.map((event) => hooks.event({ event })));
+}
+`;
+  await execFileAsync(process.execPath, ["--input-type=module", "-e", driver]);
+}
+
 async function spooledContent(
   installation: ObservationHookInstallation,
   providerSessionId: string,
@@ -348,5 +368,29 @@ test("reads nothing from a token outside OpenCode's own vocabulary", async (t) =
   assert.equal(
     await readOpenCodeHookEvent(installation.spoolDirectory, TEST_SESSION_ID),
     undefined,
+  );
+});
+
+test("concurrent events for one session each land whole", async (t) => {
+  const installation = await temporaryInstallation(t);
+  await installOpenCodeObservationPlugin(installation);
+
+  // OpenCode fires the event hook without awaiting it, so these writes race;
+  // each must use its own temporary sibling, or one rename strands the other.
+  await firePluginEventsConcurrently(installation, [
+    { type: "permission.asked", properties: { id: "per_1", sessionID: TEST_SESSION_ID } },
+    { type: "session.idle", properties: { sessionID: TEST_SESSION_ID } },
+    {
+      type: "permission.replied",
+      properties: { sessionID: TEST_SESSION_ID, requestID: "per_1", reply: "once" },
+    },
+  ]);
+
+  // Whichever write finished last, the spool holds one whole token and no
+  // temporary debris.
+  assert.deepEqual(await fs.readdir(installation.spoolDirectory), [`${TEST_SESSION_ID}.json`]);
+  const content = await spooledContent(installation, TEST_SESSION_ID);
+  assert.ok(
+    ['{"event":"notification"}', '{"event":"stop"}', '{"event":"prompt"}'].includes(content),
   );
 });
