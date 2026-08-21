@@ -512,6 +512,40 @@ test("advertises a message only where the CLI's resume can honestly land one", a
   );
 });
 
+test("a prompt the hook already knows about withdraws the advertisement", async (t) => {
+  const state = await temporaryCursorState(t);
+  await writeWorkspaceRecord(state, "9f1c", "/Users/test/luke");
+  // The tail still shows a settled turn, but the hook heard a new prompt the
+  // transcript has not written yet: a resume now would race the open turn.
+  await writeTranscript(
+    state,
+    "Users-test-luke",
+    "cli-chat-reprompted",
+    [turnEndedRecord(TEST_TURN_STATUS.SUCCESS)],
+    TEST_TIME - 60_000,
+  );
+  const spoolDirectory = path.join(state.cursorHome, "luke-spool");
+  await fs.mkdir(spoolDirectory, { recursive: true });
+  const promptEvent = path.join(spoolDirectory, "cli-chat-reprompted.json");
+  await fs.writeFile(promptEvent, '{"event":"prompt"}');
+  await fs.utimes(promptEvent, (TEST_TIME - 5_000) / 1000, (TEST_TIME - 5_000) / 1000);
+
+  const adapter = new CursorLocalSessionAdapter({
+    ...state,
+    now: () => TEST_TIME,
+    hookEventsDirectory: () => spoolDirectory,
+    cursorAgent: {
+      locate: async () => "/opt/test/cursor-agent",
+      probeLogin: async () => true,
+      launch: async () => "running" as const,
+    },
+  });
+  const observations = await adapter.observe();
+
+  assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
+  assert.equal(observations[0]?.canReceiveMessage, undefined);
+});
+
 test("a machine without the CLI advertises no message at all", async (t) => {
   const state = await temporaryCursorState(t);
   await writeWorkspaceRecord(state, "9f1c", "/Users/test/luke");

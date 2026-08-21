@@ -783,7 +783,6 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
   protected override async prepare(
     candidates: readonly CursorTranscriptCandidate[],
   ): Promise<void> {
-    this.#sendTargets.clear();
     const projectDirectoryNames = [
       ...new Set(candidates.map((candidate) => candidate.projectDirectoryName)),
     ];
@@ -886,17 +885,21 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
     const appHeld = this.#appChats.has(candidate.providerSessionId);
     const link = appHeld ? cursorChatLink(candidate.providerSessionId) : undefined;
     // A message is advertised only where the CLI's documented resume can
-    // honestly land one: the turn is settled — a resume into an open turn
-    // would race it — the folder to pin the resume to is named by Cursor's
-    // own record, the CLI is installed, and the app does not hold the chat,
+    // honestly land one: the turn is settled and nothing newer says work is
+    // running — a prompt hook can know about a turn the transcript has not
+    // written yet — the folder to pin the resume to is named by Cursor's own
+    // record, the CLI is installed, and the app does not hold the chat,
     // because Cursor does not document whether an app window shows a turn
     // landed behind it, and a message the developer cannot see land is worse
-    // than none.
+    // than none. A target outlives the pass that advertised it — clearing at
+    // the pass's start would fail a send arriving mid-pass — and a session
+    // gone from the roster is caught by the act-time transcript re-check.
     const folderPath =
       this.#trustedFoldersByProject.get(candidate.projectDirectoryName) ??
       this.#workspaceLabels.folder(candidate.projectDirectoryName);
     const canReceiveMessage =
       parsed.turn !== undefined &&
+      status !== SESSION_STATUS.WORKING &&
       folderPath !== undefined &&
       this.#cursorAgentBinaryPath !== undefined &&
       !appHeld;
