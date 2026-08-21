@@ -585,18 +585,6 @@ html[data-keyboard="true"] button.session-row:focus-visible {
   white-space: nowrap;
 }
 
-.row-title-line {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 6px;
-}
-
-.row-title-line strong {
-  min-width: 0;
-  flex: 1 1 auto;
-}
-
 /* When an exact app mark is independently pressable, the title carries the
    row's preferred open action. It remains typographically indistinguishable
    from the strong text it replaces; only hover and keyboard focus reveal the
@@ -613,57 +601,6 @@ html[data-keyboard="true"] button.session-row:focus-visible {
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-/* App associations follow the title as bare marks: the leading mark already
-   says which agent this is, while these answer where the same local chat also
-   appears. Their fixed trailing seat keeps them visible when a long provider
-   title ellipsizes. */
-.row-applications {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 5px;
-  color: var(--text-secondary);
-}
-
-.row-application {
-  display: grid;
-  place-items: center;
-}
-
-/* An exact destination earns a real button, but no resting container: its app
-   mark stays the same bare mark as an informative association. The small hover
-   ground is feedback for the pointer, not a badge drawn around the identity. */
-.row-application-button {
-  width: 19px;
-  height: 19px;
-  margin: -4px;
-  padding: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: inherit;
-  transition:
-    background-color var(--duration-hover) ease,
-    color var(--duration-hover) ease;
-}
-
-.row-application-button:hover {
-  background: rgba(255, 255, 255, 0.09);
-  color: var(--text-primary);
-}
-
-.row-application .provider-mark {
-  width: 11px;
-  height: 11px;
-}
-
-.row-application .provider-mark[data-mark="superset"] {
-  width: 19px;
-}
-
-.row-application-button:has(.provider-mark[data-mark="superset"]) {
-  width: 27px;
 }
 
 /* A workspace's chats sit in a tray: one card that visibly contains them,
@@ -905,16 +842,25 @@ html[data-keyboard="true"] button.session-row:focus-visible {
   flex: 0 0 auto;
 }
 
-/* When the session was last seen, where every Apple surface puts it. Top-right
-   against the title's line rather than centred on the row, so two-line and
-   three-line rows hold it at the same height. */
-.row-when {
+/* The row's trailing column: the age on top, the app marks under it. Pinned
+   top-right against the title's line rather than centred on the row, so
+   two-line and three-line rows hold the age at the same height — where every
+   Apple surface puts it. */
+.row-side {
   display: flex;
   flex: 0 0 auto;
+  flex-direction: column;
   align-self: flex-start;
+  align-items: flex-end;
+  gap: 5px;
+  padding-top: 2px;
+}
+
+/* When the session was last seen. */
+.row-when {
+  display: flex;
   align-items: center;
   gap: 4px;
-  padding-top: 2px;
   color: var(--text-tertiary);
   font-size: 10px;
   font-variant-numeric: tabular-nums;
@@ -928,6 +874,56 @@ html[data-keyboard="true"] button.session-row:focus-visible {
   width: 11px;
   height: 11px;
   flex: 0 0 auto;
+}
+
+/* App associations sit under the age as bare marks: the leading mark already
+   says which agent this is, while these answer where the same local chat also
+   appears. Their seat in the trailing column keeps them clear of the title,
+   which can ellipsize without ever pushing them off the row. */
+.row-applications {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-secondary);
+}
+
+.row-application {
+  display: grid;
+  place-items: center;
+}
+
+/* An exact destination earns a real button, but no resting container: its app
+   mark stays the same bare mark as an informative association. The small hover
+   ground is feedback for the pointer, not a badge drawn around the identity. */
+.row-application-button {
+  width: 19px;
+  height: 19px;
+  margin: -4px;
+  padding: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  transition:
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+}
+
+.row-application-button:hover {
+  background: rgba(255, 255, 255, 0.09);
+  color: var(--text-primary);
+}
+
+.row-application .provider-mark {
+  width: 11px;
+  height: 11px;
+}
+
+.row-application .provider-mark[data-mark="superset"] {
+  width: 19px;
+}
+
+.row-application-button:has(.provider-mark[data-mark="superset"]) {
+  width: 27px;
 }
 
 /* A row with a second line stacks, and hands its box's padding down: the first
