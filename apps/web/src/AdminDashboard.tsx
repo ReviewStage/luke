@@ -100,7 +100,7 @@ function UsageChart({ daily }: { daily: readonly AdminDailyUsage[] }): React.JSX
           return (
             <div
               key={day.day}
-              className="flex flex-1 flex-col justify-end"
+              className="flex h-full flex-1 flex-col justify-end"
               title={`${formatDayTick(day.day)}: ${formatNumber(day.voiceCalls)} voice, ${formatNumber(day.attentionReviews)} attention`}
             >
               <div
@@ -137,7 +137,7 @@ function SignupsChart({ daily }: { daily: readonly AdminDailySignups[] }): React
         {daily.map((day) => (
           <div
             key={day.day}
-            className="flex flex-1 flex-col justify-end"
+            className="flex h-full flex-1 flex-col justify-end"
             title={`${formatDayTick(day.day)}: ${formatNumber(day.count)} new`}
           >
             {day.count === 0 ? (
