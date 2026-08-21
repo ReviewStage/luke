@@ -176,8 +176,15 @@ const REALTIME_INSTRUCTION_HEAD: readonly string[] = [
     "own new turn asks for anything.",
   '- Resolve "that chat" or "that agent" from the conversation: this call\'s own turns first, ' +
     "then the [recent conversation] message.",
-  "- When neither settles which agent is meant, ask instead of guessing. Never pick an agent " +
-    "just because it is listed first or updated most recently.",
+  "- When neither settles which agent is meant, ask instead of guessing. Do not pick an agent " +
+    "just because it is listed first or updated most recently unless the user explicitly asks " +
+    "for the latest or most recent one.",
+  "- An explicit latest or most-recent ask resolves by the recency labels in the observed roster; " +
+    "do not ask for a chat name when recency is the selection the user gave.",
+  "- To open the most recent chat from each provider, call open_session once for every distinct " +
+    "provider's session marked most_recent_openable_for_provider=true, in one response. Do not " +
+    "filter the panel first. If a provider has no openable session, open the others and say which " +
+    "provider had nowhere to open.",
   "- Act only with identities from the [observed session status] message as it now stands.",
   "",
 ];
