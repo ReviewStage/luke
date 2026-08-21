@@ -440,13 +440,15 @@ function chatFromDetailRecord(record: WireRecord): ReplicasChat | undefined {
   const title = textFromRecord(record, REPLICAS_FIELD.TITLE);
   const processing = record[REPLICAS_FIELD.PROCESSING];
   // The engine pre-creates one chat slot per agent harness, so a workspace's
-  // detail lists eight chats where the user opened three — observed live. A
-  // slot is told from a conversation by never having been touched: no title,
-  // no turn running, and never updated past its creation. A real chat hides
-  // behind this only between its creation and its first message, and returns
-  // the moment either lands.
+  // detail lists eight chats where the user opened three — observed live,
+  // each slot wearing its harness's own name as a default title, so the
+  // title says nothing. A slot is told from a conversation by the one fact a
+  // conversation cannot avoid: something happened after creation. Verified
+  // against live slots, an untouched one's update timestamp equals its
+  // creation to the millisecond, and a chat's first use moves it; a turn
+  // mid-flight counts as touched even before the timestamps do.
   const untouched = updatedAt === undefined || (createdAt !== undefined && updatedAt <= createdAt);
-  if (!title && processing !== true && untouched) return undefined;
+  if (processing !== true && untouched) return undefined;
   return {
     id,
     observedAt,

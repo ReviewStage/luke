@@ -711,32 +711,50 @@ test("offers the reported environments as projects and creates a workspace in on
 test("draws no row for the untouched chat slot the engine keeps per harness", async () => {
   // The detail read lists one pre-created slot per agent harness beside the
   // chats the user actually opened — observed live as eight rows where three
-  // conversations existed. A slot has never been touched: no title, no turn,
-  // never updated past its creation.
+  // conversations existed. Each slot wears its harness's own name as a
+  // default title, so the title says nothing; only never having been touched
+  // tells a slot from a conversation.
   const api = fakeReplicasApi([
     {
       ...activeWorkspace("workspace-slots", TEST_TIME - 1_000),
       chats: [
-        {
-          id: "chat-real",
-          provider: "claude",
-          title: "Fix the login timeout",
-          updatedAt: TEST_TIME - 1_000,
-        },
-        // A fresh real chat mid-first-turn has no title yet, but its turn is
-        // running, so it keeps its row.
+        // A used slot: the boot-time creation stamp, moved by its first use.
+        { id: "chat-real", provider: "claude", title: "Claude Code", updatedAt: TEST_TIME - 1_000 },
+        // A fresh real chat mid-first-turn: untouched timestamps, but its
+        // turn is running, so it keeps its row.
         {
           id: "chat-fresh",
           provider: "codex",
+          title: "Codex",
           updatedAt: TEST_TIME - 2_000,
           processing: true,
           untouched: true,
         },
-        { id: "slot-cursor", provider: "cursor", updatedAt: TEST_TIME - 3_000, untouched: true },
-        { id: "slot-pi", provider: "pi", updatedAt: TEST_TIME - 3_000, untouched: true },
+        {
+          id: "slot-cursor",
+          provider: "cursor",
+          title: "Cursor",
+          updatedAt: TEST_TIME - 3_000,
+          untouched: true,
+        },
+        {
+          id: "slot-pi",
+          provider: "pi",
+          title: "Pi",
+          updatedAt: TEST_TIME - 3_000,
+          untouched: true,
+        },
         {
           id: "slot-deepseek",
           provider: "deepseek",
+          title: "DeepSeek Harness",
+          updatedAt: TEST_TIME - 3_000,
+          untouched: true,
+        },
+        {
+          id: "slot-relay",
+          provider: "relay",
+          title: "Relay",
           updatedAt: TEST_TIME - 3_000,
           untouched: true,
         },
