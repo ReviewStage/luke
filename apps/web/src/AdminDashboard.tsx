@@ -511,61 +511,63 @@ function ActiveAccountsTable({
   }
   return (
     <div className="overflow-hidden rounded-lg border border-border bg-card">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-border text-left font-mono text-xs text-muted-foreground uppercase">
-            <th className="px-5 py-3 font-medium">Account</th>
-            <th className="px-5 py-3 text-right font-medium">Active days</th>
-            <th className="px-5 py-3 text-right font-medium">Last active</th>
-            <th className="px-5 py-3 text-right font-medium">Voice</th>
-            <th className="px-5 py-3 text-right font-medium">Attention</th>
-            <th className="px-5 py-3 text-right font-medium">Total</th>
-          </tr>
-        </thead>
-        <tbody>
-          {users.map((entry) => (
-            <tr
-              key={entry.id}
-              className="cursor-pointer border-b border-border transition-colors duration-150 last:border-0 hover:bg-muted"
-              onClick={() => onOpen(entry.id)}
-            >
-              <td className="px-5 py-3">
-                <a
-                  href={accountHref(entry.id)}
-                  className="block outline-offset-2"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    if (!plainLeftClick(event)) return;
-                    event.preventDefault();
-                    onOpen(entry.id);
-                  }}
-                >
-                  <div className="font-medium">{accountLabel(entry)}</div>
-                  {accountLabel(entry) === entry.email ? null : (
-                    <div className="text-xs text-muted-foreground">{entry.email}</div>
-                  )}
-                </a>
-              </td>
-              <td className="px-5 py-3 text-right tabular-nums">
-                {formatNumber(entry.activeDays)}
-                <span className="text-muted-foreground"> of {formatNumber(windowDays)}</span>
-              </td>
-              <td className="px-5 py-3 text-right tabular-nums">
-                {formatDayTick(entry.lastActiveDay)}
-              </td>
-              <td className="px-5 py-3 text-right tabular-nums">
-                {formatNumber(entry.voiceCalls)}
-              </td>
-              <td className="px-5 py-3 text-right tabular-nums">
-                {formatNumber(entry.attentionReviews)}
-              </td>
-              <td className="px-5 py-3 text-right font-semibold tabular-nums">
-                {formatNumber(entry.total)}
-              </td>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[640px] text-sm">
+          <thead>
+            <tr className="border-b border-border text-left font-mono text-xs text-muted-foreground uppercase">
+              <th className="px-5 py-3 font-medium">Account</th>
+              <th className="px-5 py-3 text-right font-medium">Active days</th>
+              <th className="px-5 py-3 text-right font-medium">Last active</th>
+              <th className="px-5 py-3 text-right font-medium">Voice</th>
+              <th className="px-5 py-3 text-right font-medium">Attention</th>
+              <th className="px-5 py-3 text-right font-medium">Total</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {users.map((entry) => (
+              <tr
+                key={entry.id}
+                className="cursor-pointer border-b border-border transition-colors duration-150 last:border-0 hover:bg-muted"
+                onClick={() => onOpen(entry.id)}
+              >
+                <td className="px-5 py-3">
+                  <a
+                    href={accountHref(entry.id)}
+                    className="block outline-offset-2"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      if (!plainLeftClick(event)) return;
+                      event.preventDefault();
+                      onOpen(entry.id);
+                    }}
+                  >
+                    <div className="font-medium">{accountLabel(entry)}</div>
+                    {accountLabel(entry) === entry.email ? null : (
+                      <div className="text-xs text-muted-foreground">{entry.email}</div>
+                    )}
+                  </a>
+                </td>
+                <td className="px-5 py-3 text-right tabular-nums">
+                  {formatNumber(entry.activeDays)}
+                  <span className="text-muted-foreground"> of {formatNumber(windowDays)}</span>
+                </td>
+                <td className="px-5 py-3 text-right tabular-nums">
+                  {formatDayTick(entry.lastActiveDay)}
+                </td>
+                <td className="px-5 py-3 text-right tabular-nums">
+                  {formatNumber(entry.voiceCalls)}
+                </td>
+                <td className="px-5 py-3 text-right tabular-nums">
+                  {formatNumber(entry.attentionReviews)}
+                </td>
+                <td className="px-5 py-3 text-right font-semibold tabular-nums">
+                  {formatNumber(entry.total)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -1700,132 +1702,136 @@ function UsersTable({
   const sorted = sortUsersRows(rows, sort);
   return (
     <div className="overflow-hidden rounded-lg border border-border bg-card">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-border text-left font-mono text-xs text-muted-foreground uppercase">
-            <th className="w-0 py-3 pr-0 pl-5">
-              <span className="sr-only">Favorite</span>
-            </th>
-            <SortableHeader
-              label="Account"
-              sortKey={USERS_SORT_KEY.ACCOUNT}
-              sort={sort}
-              onSort={toggleSort}
-            />
-            <SortableHeader
-              label="Joined"
-              sortKey={USERS_SORT_KEY.JOINED}
-              sort={sort}
-              onSort={toggleSort}
-              numeric
-            />
-            <SortableHeader
-              label="Last seen"
-              sortKey={USERS_SORT_KEY.LAST_SEEN}
-              sort={sort}
-              onSort={toggleSort}
-              numeric
-            />
-            <SortableHeader
-              label="Active days"
-              sortKey={USERS_SORT_KEY.ACTIVE_DAYS}
-              sort={sort}
-              onSort={toggleSort}
-              numeric
-            />
-            <SortableHeader
-              label="Last active"
-              sortKey={USERS_SORT_KEY.LAST_ACTIVE}
-              sort={sort}
-              onSort={toggleSort}
-              numeric
-            />
-            <SortableHeader
-              label="Voice"
-              sortKey={USERS_SORT_KEY.VOICE}
-              sort={sort}
-              onSort={toggleSort}
-              numeric
-            />
-            <SortableHeader
-              label="Attention"
-              sortKey={USERS_SORT_KEY.ATTENTION}
-              sort={sort}
-              onSort={toggleSort}
-              numeric
-            />
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((row) => (
-            <tr
-              key={row.id}
-              className="group cursor-pointer border-b border-border transition-colors duration-150 last:border-0 hover:bg-muted"
-              onClick={() => onOpen(row.id)}
-            >
-              <td className="w-0 py-3 pr-0 pl-5">
-                <button
-                  type="button"
-                  className="flex cursor-pointer text-muted-foreground opacity-0 transition-opacity duration-150 outline-offset-2 group-hover:opacity-100 hover:text-foreground focus-visible:opacity-100 data-[favorite=true]:text-attention data-[favorite=true]:opacity-100"
-                  data-favorite={row.favorite}
-                  aria-pressed={row.favorite}
-                  aria-label={`${row.favorite ? "Unfavorite" : "Favorite"} ${row.name || row.email}`}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onToggleFavorite(row.id, !row.favorite);
-                  }}
-                >
-                  <StarIcon filled={row.favorite} />
-                </button>
-              </td>
-              <td className="px-5 py-3">
-                <a
-                  href={accountHref(row.id)}
-                  className="flex items-center gap-3 outline-offset-2"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    if (!plainLeftClick(event)) return;
-                    event.preventDefault();
-                    onOpen(row.id);
-                  }}
-                >
-                  <AccountAvatar
-                    account={{ name: row.name, email: row.email, image: row.image ?? undefined }}
-                  />
-                  <div>
-                    <div className="flex items-center gap-2 font-medium">
-                      {accountLabel(row)}
-                      {row.admin ? (
-                        <span className="rounded-full border border-border px-1.5 py-px font-mono text-[10px] tracking-[0.2px] text-muted-foreground uppercase">
-                          Admin
-                        </span>
-                      ) : null}
-                    </div>
-                    {accountLabel(row) === row.email ? null : (
-                      <div className="text-xs text-muted-foreground">{row.email}</div>
-                    )}
-                  </div>
-                </a>
-              </td>
-              <td className="px-5 py-3 text-right tabular-nums">{formatDate(row.createdAt)}</td>
-              <td className="px-5 py-3 text-right tabular-nums">
-                {row.lastSeenAt === null ? "—" : formatDate(row.lastSeenAt)}
-              </td>
-              <td className="px-5 py-3 text-right tabular-nums">
-                {formatNumber(row.activeDays)}
-                <span className="text-muted-foreground"> of {formatNumber(windowDays)}</span>
-              </td>
-              <td className="px-5 py-3 text-right tabular-nums">
-                {row.lastActiveDay ? formatDayTick(row.lastActiveDay) : "—"}
-              </td>
-              <td className="px-5 py-3 text-right tabular-nums">{formatNumber(row.voiceCalls)}</td>
-              <td className="px-5 py-3 text-right tabular-nums">
-                {formatNumber(row.attentionReviews)}
-              </td>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[760px] text-sm">
+          <thead>
+            <tr className="border-b border-border text-left font-mono text-xs text-muted-foreground uppercase">
+              <th className="w-0 py-3 pr-0 pl-5">
+                <span className="sr-only">Favorite</span>
+              </th>
+              <SortableHeader
+                label="Account"
+                sortKey={USERS_SORT_KEY.ACCOUNT}
+                sort={sort}
+                onSort={toggleSort}
+              />
+              <SortableHeader
+                label="Joined"
+                sortKey={USERS_SORT_KEY.JOINED}
+                sort={sort}
+                onSort={toggleSort}
+                numeric
+              />
+              <SortableHeader
+                label="Last seen"
+                sortKey={USERS_SORT_KEY.LAST_SEEN}
+                sort={sort}
+                onSort={toggleSort}
+                numeric
+              />
+              <SortableHeader
+                label="Active days"
+                sortKey={USERS_SORT_KEY.ACTIVE_DAYS}
+                sort={sort}
+                onSort={toggleSort}
+                numeric
+              />
+              <SortableHeader
+                label="Last active"
+                sortKey={USERS_SORT_KEY.LAST_ACTIVE}
+                sort={sort}
+                onSort={toggleSort}
+                numeric
+              />
+              <SortableHeader
+                label="Voice"
+                sortKey={USERS_SORT_KEY.VOICE}
+                sort={sort}
+                onSort={toggleSort}
+                numeric
+              />
+              <SortableHeader
+                label="Attention"
+                sortKey={USERS_SORT_KEY.ATTENTION}
+                sort={sort}
+                onSort={toggleSort}
+                numeric
+              />
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {sorted.map((row) => (
+              <tr
+                key={row.id}
+                className="group cursor-pointer border-b border-border transition-colors duration-150 last:border-0 hover:bg-muted"
+                onClick={() => onOpen(row.id)}
+              >
+                <td className="w-0 py-3 pr-0 pl-5">
+                  <button
+                    type="button"
+                    className="flex cursor-pointer text-muted-foreground opacity-0 transition-opacity duration-150 outline-offset-2 group-hover:opacity-100 hover:text-foreground focus-visible:opacity-100 data-[favorite=true]:text-attention data-[favorite=true]:opacity-100"
+                    data-favorite={row.favorite}
+                    aria-pressed={row.favorite}
+                    aria-label={`${row.favorite ? "Unfavorite" : "Favorite"} ${row.name || row.email}`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onToggleFavorite(row.id, !row.favorite);
+                    }}
+                  >
+                    <StarIcon filled={row.favorite} />
+                  </button>
+                </td>
+                <td className="px-5 py-3">
+                  <a
+                    href={accountHref(row.id)}
+                    className="flex items-center gap-3 outline-offset-2"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      if (!plainLeftClick(event)) return;
+                      event.preventDefault();
+                      onOpen(row.id);
+                    }}
+                  >
+                    <AccountAvatar
+                      account={{ name: row.name, email: row.email, image: row.image ?? undefined }}
+                    />
+                    <div>
+                      <div className="flex items-center gap-2 font-medium">
+                        {accountLabel(row)}
+                        {row.admin ? (
+                          <span className="rounded-full border border-border px-1.5 py-px font-mono text-[10px] tracking-[0.2px] text-muted-foreground uppercase">
+                            Admin
+                          </span>
+                        ) : null}
+                      </div>
+                      {accountLabel(row) === row.email ? null : (
+                        <div className="text-xs text-muted-foreground">{row.email}</div>
+                      )}
+                    </div>
+                  </a>
+                </td>
+                <td className="px-5 py-3 text-right tabular-nums">{formatDate(row.createdAt)}</td>
+                <td className="px-5 py-3 text-right tabular-nums">
+                  {row.lastSeenAt === null ? "—" : formatDate(row.lastSeenAt)}
+                </td>
+                <td className="px-5 py-3 text-right tabular-nums">
+                  {formatNumber(row.activeDays)}
+                  <span className="text-muted-foreground"> of {formatNumber(windowDays)}</span>
+                </td>
+                <td className="px-5 py-3 text-right tabular-nums">
+                  {row.lastActiveDay ? formatDayTick(row.lastActiveDay) : "—"}
+                </td>
+                <td className="px-5 py-3 text-right tabular-nums">
+                  {formatNumber(row.voiceCalls)}
+                </td>
+                <td className="px-5 py-3 text-right tabular-nums">
+                  {formatNumber(row.attentionReviews)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
