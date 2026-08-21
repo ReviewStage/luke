@@ -382,11 +382,13 @@ test("observes an active workspace titled by the name Replicas gave it", async (
     repository: "luke",
     link: "https://tryreplicas.com/home/workspace/workspace-active",
   });
+  // Workspace-scoped, like Superset's: inside a tray the manager is named
+  // once on the header, and only a lone chat's row keeps the chip.
   assert.deepEqual(observations[0]?.applications, [
     {
       id: "replicas",
       displayName: "Replicas",
-      scope: "session",
+      scope: "workspace",
       link: "https://tryreplicas.com/home/workspace/workspace-active",
     },
   ]);

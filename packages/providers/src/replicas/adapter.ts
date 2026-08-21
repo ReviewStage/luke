@@ -1178,17 +1178,20 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
   }
 
   /**
-   * The Replicas mark rides as an app association like every other app
-   * holding a chat — the row leads with the agent, and the app chip says
-   * where it runs — carrying the same exact address the row opens with, so
-   * the one glyph means the same thing here and on a Conductor row.
+   * The Replicas mark rides as the workspace's own app association — scope
+   * workspace, because the one address Replicas documents is the workspace
+   * page, not any chat's own route — so inside a tray the manager is named
+   * once on the header, the way Superset's is, and a lone chat keeps the
+   * chip because no tray names it. Conductor's association stays
+   * session-scoped on the same reasoning read the other way: its address
+   * names the exact chat, so it is the session's own and rides every row.
    */
   #applicationsFor(workspace: ReplicasWorkspace): SessionApplication[] {
     return [
       {
         id: SESSION_APPLICATION_ID.REPLICAS,
         displayName: REPLICAS_PROVIDER_NAME,
-        scope: SESSION_APPLICATION_SCOPE.SESSION,
+        scope: SESSION_APPLICATION_SCOPE.WORKSPACE,
         link: replicasWorkspaceLink(workspace.id),
       },
     ];
