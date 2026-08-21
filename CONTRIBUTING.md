@@ -15,7 +15,7 @@ request.
 
 ## Set up
 
-Requires an Apple silicon Mac on macOS 14 or newer, Node.js 22.12 or newer,
+Requires an Apple Silicon Mac on macOS 14 or newer, Node.js 24 or newer,
 pnpm 9.15.0, and the Xcode Command Line Tools.
 
 ```sh

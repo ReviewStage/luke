@@ -32,7 +32,9 @@ and email you signed it with, and any screenshots you attached.
 - OpenAI, for voice and session summaries. A spoken turn sends its audio and a
   typed turn sends your words. Both also send the session fields listed above.
   We do not send message history, file contents, or command output, and we ask
-  OpenAI not to store the request.
+  OpenAI not to store the request. Luke keeps your conversation with it in
+  memory so it carries across calls, and sends it again when you open the next
+  one. It is never written to disk and is discarded when you quit Luke.
 - Coding agent providers you connect (Conductor, Cursor, Devin, GitHub Copilot,
   Jules) and Linear, using the key or account access you supply. Luke reads your
   sessions or issues, and sends something back only when you ask it to, such as
