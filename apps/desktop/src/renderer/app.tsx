@@ -2007,9 +2007,10 @@ export function App(): React.JSX.Element {
           // its values would show more than the sentence names.
           const filters = action.filters ? (spoken ?? []) : undefined;
           // Caught rather than applied, on the settings switch's terms: the
-          // narrowing is what Luke is on his way to the options button to do, and
-          // a list that has already re-sorted itself by the time he gets there
-          // makes the flight a report rather than the act.
+          // narrowing is what Luke is on his way to the options control — or
+          // its clear X, for a whole-list ask — to do, and a list that has
+          // already re-sorted itself by the time he gets there makes the
+          // flight a report rather than the act.
           const view =
             filters || action.sort || action.query !== undefined
               ? {

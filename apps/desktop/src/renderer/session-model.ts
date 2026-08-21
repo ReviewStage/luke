@@ -2,6 +2,7 @@ import type { SessionNoticeAsk } from "@sidecar/attention";
 import type { SessionSnapshot } from "@sidecar/fixtures";
 import { SESSION_LIST_SORT, type SessionListSort } from "@sidecar/guide";
 import type { IssueIdentity } from "@sidecar/issues";
+import { SESSION_LIST_ALL } from "@sidecar/realtime";
 import {
   ATTENTION_DISPOSITION,
   isProviderId,
@@ -103,9 +104,6 @@ export function sameSessionFilters(
   return first.length === second.length && first.every((filter) => second.includes(filter));
 }
 
-/** The spoken name for the unnarrowed list, shared with the voice tool's vocabulary. */
-const SPOKEN_ALL = "all";
-
 /** One spoken value read as the chip it names, or nothing when no chip holds it. */
 function sessionFilterFromSpoken(value: string): SessionFilter | undefined {
   if (
@@ -133,7 +131,7 @@ function sessionFilterFromSpoken(value: string): SessionFilter | undefined {
 export function sessionFiltersFromSpoken(
   values: readonly string[],
 ): readonly SessionFilter[] | undefined {
-  if (values.length === 1 && values[0] === SPOKEN_ALL) return [];
+  if (values.length === 1 && values[0] === SESSION_LIST_ALL) return [];
   const selection: SessionFilter[] = [];
   for (const value of values) {
     const filter = sessionFilterFromSpoken(value);

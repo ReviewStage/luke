@@ -1,5 +1,5 @@
 import { APP_PANEL_TAB, type AppPanelTab } from "@sidecar/guide";
-import type { AppToolAction } from "@sidecar/realtime";
+import { type AppToolAction, SESSION_LIST_ALL } from "@sidecar/realtime";
 import { useEffect, useRef } from "react";
 import { flushSync } from "react-dom";
 import { LukeFace } from "./luke-face";
@@ -81,6 +81,7 @@ export const ERRAND_TARGET = {
   SESSIONS_TAB: "tab-sessions",
   SETTINGS_TAB: "tab-settings",
   LIST_OPTIONS: "list-options",
+  LIST_CLEAR: "list-clear",
   LIST_SEARCH: "list-search",
 } as const;
 
@@ -117,7 +118,7 @@ export function errandOriginProps() {
 
 /**
  * Where an act should be signed, best first. More than one because the panel
- * does not always draw the best answer: the options button carries both the
+ * does not always draw the best answer: the options control carries the
  * narrowing and the ordering, but it is only offered beside a list with
  * something to choose between, so the tab stands behind it. The flight takes
  * the first candidate actually drawn, and an act with none flies nowhere.
@@ -130,11 +131,18 @@ export function errandTargets(action: AppToolAction): readonly ErrandTarget[] {
   }
   if (action.kind !== "panel") return [];
   const tab = tabErrandTarget(action.tab);
+  // Asking for the whole list back is what the X on the options control does
+  // by hand, so that is where it is signed. The X is only drawn while a
+  // selection stands — asking for everything when everything is already shown
+  // leaves nothing to clear — so the control and the tab stand behind it.
+  const clearing = action.filters?.includes(SESSION_LIST_ALL) === true;
   // A narrowing or a re-ordering is the news; the tab is only where it
   // happened, and it may not have changed at all.
   const narrowed =
     action.filters !== undefined || action.sort !== undefined
-      ? [ERRAND_TARGET.LIST_OPTIONS, tab]
+      ? clearing
+        ? [ERRAND_TARGET.LIST_CLEAR, ERRAND_TARGET.LIST_OPTIONS, tab]
+        : [ERRAND_TARGET.LIST_OPTIONS, tab]
       : [tab];
   // A search is signed on the magnifier that opens its field, ahead of
   // whatever else the same ask changed: the field appearing is the loudest
@@ -824,11 +832,12 @@ export function LukeErrand({ errand, onLanded, onReturned }: LukeErrandProps): R
       // errand may stand back down.
       beat = window.setTimeout(() => {
         // The control changes shape at the tap and not before: the options
-        // button grows a label as the list narrows — by a provider's whole
-        // name and mark, which is the widest it gets — and a pop-up is as wide
-        // as the value it is showing. So the ring is measured after the change
-        // is in the DOM rather than at the launch, when it would be the
-        // outline of a control that is about to stop existing.
+        // control grows a label and a clear segment as the list narrows — by
+        // a provider's whole name and mark plus the X, which is the widest it
+        // gets — and a pop-up is as wide as the value it is showing. So the
+        // ring is measured after the change is in the DOM rather than at the
+        // launch, when it would be the outline of a control that is about to
+        // stop existing.
         //
         // Flushed rather than waited a frame for. The release is a React state
         // change made from a timer, which React is free to commit on its own
@@ -840,6 +849,8 @@ export function LukeErrand({ errand, onLanded, onReturned }: LukeErrandProps): R
         const landing = errandBound(stage.getBoundingClientRect(), target.getBoundingClientRect());
         // A control the change took off the panel has no outline worth
         // drawing, and a zero box would draw a ring at the stage's corner.
+        // The clear X is the ordinary case rather than a corner: it unmounts
+        // with the very selection its tap just cleared.
         if (landing.width === 0 || landing.height === 0) return;
         ringElement.style.left = `${landing.left}px`;
         ringElement.style.top = `${landing.top}px`;
