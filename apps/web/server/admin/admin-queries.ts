@@ -21,12 +21,15 @@ import { HOSTED_DAILY_LIMIT, HOSTED_METER, utcDayKey } from "../hosted/quota.js"
 import { isAdminRole, USER_ROLE } from "./admin-access.js";
 import {
   ADMIN_METRICS_WINDOW_DAYS,
+  ADMIN_RETENTION_WEEKS,
   type AdminIntegration,
   type AdminMetricsSource,
   type AdminTopUser,
   type AdminUsageDay,
   countSignInMethods,
   lastNDayKeys,
+  lastNWeekStartKeys,
+  utcWeekStartKey,
 } from "./admin-metrics.js";
 import type { AdminUserSource } from "./admin-user.js";
 import { ADMIN_USERS_LIMIT, type AdminUserListSource } from "./admin-users.js";
@@ -198,6 +201,64 @@ async function readUsageMetrics(
 }
 
 /**
+ * Both week expressions truncate with Postgres's `date_trunc('week')`, which
+ * lands on Monday — the same Monday `utcWeekStartKey` derives — so the SQL
+ * and the fold name a week identically. A signup instant is a timestamp and
+ * a usage day a YYYY-MM-DD string, hence the two shapes of the same cast.
+ */
+const signupWeek = sql<string>`to_char(date_trunc('week', ${user.createdAt} at time zone 'UTC'), 'YYYY-MM-DD')`;
+const activityWeek = sql<string>`to_char(date_trunc('week', ${hostedUsage.day}::date), 'YYYY-MM-DD')`;
+
+async function readRetentionMetrics(
+  database: Database,
+  now: number,
+  scope: AdminMetricsScope,
+): Promise<AdminMetricsSource["retention"]> {
+  const weekKeys = lastNWeekStartKeys(now, ADMIN_RETENTION_WEEKS);
+  const oldestWeekStartDay = weekKeys[0] ?? utcWeekStartKey(now);
+  const oldestWeekStart = new Date(`${oldestWeekStartDay}T00:00:00.000Z`);
+
+  const [sizeRows, activeRows] = await Promise.all([
+    database
+      .select({ week: signupWeek, value: count() })
+      .from(user)
+      .where(and(gte(user.createdAt, oldestWeekStart), scopeCondition(scope)))
+      .groupBy(signupWeek),
+    // Distinct accounts per (signup week, activity week) pair: a cohort
+    // member with several active days in one week is retained once, not
+    // once per day.
+    database
+      .select({
+        signupWeek,
+        activityWeek,
+        value: sql<number>`count(distinct ${hostedUsage.userId})`,
+      })
+      .from(hostedUsage)
+      .innerJoin(user, eq(hostedUsage.userId, user.id))
+      .where(
+        and(
+          gte(user.createdAt, oldestWeekStart),
+          gte(hostedUsage.day, oldestWeekStartDay),
+          scopeCondition(scope),
+        ),
+      )
+      .groupBy(signupWeek, activityWeek),
+  ]);
+
+  const cohortSizes = new Map<string, number>();
+  for (const row of sizeRows) cohortSizes.set(row.week, toNumber(row.value));
+
+  const activeByCohortWeek = new Map<string, Map<string, number>>();
+  for (const row of activeRows) {
+    const byWeek = activeByCohortWeek.get(row.signupWeek) ?? new Map<string, number>();
+    byWeek.set(row.activityWeek, toNumber(row.value));
+    activeByCohortWeek.set(row.signupWeek, byWeek);
+  }
+
+  return { cohortSizes, activeByCohortWeek };
+}
+
+/**
  * Either meter past its daily ceiling — the row a spend was refused on. The
  * spend that lands exactly on the limit is still allowed, and a refused
  * attempt still increments, so only a count strictly past the limit proves a
@@ -249,6 +310,7 @@ function emptySource(
       signupsByDay: new Map(),
     },
     usage: { byDay: new Map(), activeUsersToday: 0, activeUsersWindow: 0, topUsers: [] },
+    retention: { cohortSizes: new Map(), activeByCohortWeek: new Map() },
     reliability: {
       quotaLimitedUserDaysToday: 0,
       quotaLimitedUserDaysWindow: 0,
@@ -282,15 +344,17 @@ export async function readAdminMetricsSource(
   const todayKey = utcDayKey(input.now);
   const windowStart = new Date(`${windowStartDay}T00:00:00.000Z`);
 
-  const [users, usage, reliability] = await Promise.all([
+  const [users, usage, retention, reliability] = await Promise.all([
     readUserMetrics(database, input.now, windowStart, input.scope),
     readUsageMetrics(database, todayKey, windowStartDay, input.scope),
+    readRetentionMetrics(database, input.now, input.scope),
     readReliabilityMetrics(database, todayKey, windowStartDay, input.scope),
   ]);
 
   return {
     users,
     usage,
+    retention,
     reliability: { ...reliability, analyticsConsoleUrl: input.analyticsConsoleUrl },
     systemHealth: { database: health, integrations: input.integrations },
   };
