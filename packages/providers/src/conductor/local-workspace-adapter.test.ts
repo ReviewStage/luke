@@ -224,6 +224,41 @@ test("creating a workspace fires Conductor's create link for the offered reposit
   );
 });
 
+test("a failed refresh empties the offer rather than keeping a stale one", async (t) => {
+  const databasePath = await temporaryDatabasePath(t);
+  // The file must exist for the read-only open to be attempted; the mock below
+  // stands in for its contents, succeeding once and then failing.
+  createReposDatabase(databasePath).close();
+  let calls = 0;
+  const sqlite = async () => ({
+    DatabaseSync: class {
+      enableDefensive(): void {}
+      close(): void {}
+      prepare() {
+        return {
+          all: () => {
+            calls += 1;
+            if (calls > 1) throw new Error("disk I/O error");
+            return [
+              { id: "repo-luke", name: "luke", remote_url: null, root_path: "/Users/dev/luke" },
+            ];
+          },
+        };
+      }
+    },
+  });
+  const adapter = new ConductorLocalWorkspaceAdapter({
+    reader: new ConductorRepositoryReader({ databasePath, sqlite }),
+    openExternal: async () => {},
+  });
+  await adapter.refresh();
+  assert.equal(adapter.workspaceProjects().length, 1);
+  // A non-ignorable read failure surfaces, and must leave nothing behind to
+  // validate a later create against.
+  await assert.rejects(() => adapter.refresh());
+  assert.deepEqual(adapter.workspaceProjects(), []);
+});
+
 test("creating a workspace with no task lands clean, with no send warning", async (t) => {
   const databasePath = await temporaryDatabasePath(t);
   const database = createReposDatabase(databasePath);

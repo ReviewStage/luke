@@ -723,7 +723,13 @@ async function rememberWorkspaceDefaults(
   agent: string | undefined,
 ): Promise<void> {
   const providerId = adapter.provider.id;
-  if (!isProviderId(providerId) && providerId !== SUPERSET_WORKSPACE_PROVIDER_ID) return;
+  if (
+    !isProviderId(providerId) &&
+    providerId !== SUPERSET_WORKSPACE_PROVIDER_ID &&
+    providerId !== CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID
+  ) {
+    return;
+  }
   try {
     if (
       (await settingsStore.get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field)) === undefined

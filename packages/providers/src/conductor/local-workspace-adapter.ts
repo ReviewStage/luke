@@ -198,7 +198,18 @@ export class ConductorLocalWorkspaceAdapter extends SessionProviderAdapterBase {
    * read could no longer see.
    */
   async refresh(): Promise<void> {
-    this.#projects = (await this.#reader.read()).map((repository) => ({
+    let repositories: readonly ConductorRepository[];
+    try {
+      repositories = await this.#reader.read();
+    } catch (error) {
+      // A read that fails empties the offer before the throw surfaces, so a
+      // create is never validated against repositories a later pass could no
+      // longer see — where Conductor's unmatched-path fallback would otherwise
+      // land a workspace in the wrong repository. The caller still logs it.
+      this.#projects = [];
+      throw error;
+    }
+    this.#projects = repositories.map((repository) => ({
       providerProjectId: repository.id,
       repository: repository.repositoryLabel,
       // Conductor makes an idle workspace happily and takes the opening task

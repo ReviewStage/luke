@@ -19,6 +19,7 @@ import {
   type RealtimeVoiceSpeed,
 } from "@sidecar/realtime";
 import {
+  CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
   isProviderId,
   isSessionFilter,
   PROVIDER_ID,
@@ -231,6 +232,10 @@ function voiceSpeedWord(speed: RealtimeVoiceSpeed | undefined): string {
 
 function workspaceProviderName(providerId: WorkspaceProviderId): string {
   if (providerId === SUPERSET_WORKSPACE_PROVIDER_ID) return "Superset";
+  // Local Conductor names itself apart from the cloud provider's plain
+  // "Conductor"; the string mirrors the adapter's own display name, which lives
+  // a layer up and must not be imported down here.
+  if (providerId === CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID) return "Conductor (local)";
   if (isCredentialProviderId(providerId)) return CREDENTIAL_PROVIDERS[providerId].displayName;
   // The one workspace-capable provider with no credential row to take a
   // display name from.
