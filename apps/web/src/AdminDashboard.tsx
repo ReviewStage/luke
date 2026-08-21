@@ -1576,7 +1576,7 @@ function UsersTable({
               <td className="px-5 py-3">
                 <a
                   href={accountHref(row.id)}
-                  className="block outline-offset-2"
+                  className="flex items-center gap-3 outline-offset-2"
                   onClick={(event) => {
                     event.stopPropagation();
                     if (!plainLeftClick(event)) return;
@@ -1584,15 +1584,20 @@ function UsersTable({
                     onOpen(row.id);
                   }}
                 >
-                  <div className="flex items-center gap-2 font-medium">
-                    {row.name}
-                    {row.admin ? (
-                      <span className="rounded-full border border-border px-1.5 py-px font-mono text-[10px] tracking-[0.2px] text-muted-foreground uppercase">
-                        Admin
-                      </span>
-                    ) : null}
+                  <AccountAvatar
+                    account={{ name: row.name, email: row.email, image: row.image ?? undefined }}
+                  />
+                  <div>
+                    <div className="flex items-center gap-2 font-medium">
+                      {row.name}
+                      {row.admin ? (
+                        <span className="rounded-full border border-border px-1.5 py-px font-mono text-[10px] tracking-[0.2px] text-muted-foreground uppercase">
+                          Admin
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="text-xs text-muted-foreground">{row.email}</div>
                   </div>
-                  <div className="text-xs text-muted-foreground">{row.email}</div>
                 </a>
               </td>
               <td className="px-5 py-3 text-right tabular-nums">{formatDate(row.createdAt)}</td>

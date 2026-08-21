@@ -31,6 +31,8 @@ export interface AdminUserListRow {
   id: string;
   name: string;
   email: string;
+  /** The avatar URL the sign-in provider gave the account, when it gave one. */
+  image: string | null;
   admin: boolean;
   /** When the account was created, in epoch milliseconds. */
   createdAt: number;

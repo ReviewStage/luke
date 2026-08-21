@@ -22,6 +22,7 @@ const ROW = {
   id: "user-9",
   name: "Ada Lovelace",
   email: "ada@example.com",
+  image: null,
   admin: false,
   createdAt: Date.parse("2026-06-01T08:00:00.000Z"),
   activeDays: 12,
