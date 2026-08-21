@@ -703,8 +703,18 @@ async function broadcastVoiceAvailability(): Promise<void> {
  * able to start one without waiting for a relaunch — the bootstrap answer was
  * true only of the account that was signed in when the panel loaded.
  */
+let sessionReplayBroadcastGeneration = 0;
+
 async function broadcastSessionReplay(): Promise<void> {
-  panels.broadcast(channels.sessionReplayChanged, await sessionReplayBootstrap());
+  // Guarded like the workspace projects' broadcast, and for a sharper reason.
+  // The account is read asynchronously, and a sign-out reports the transition
+  // before it clears the stored account — so an in-flight read can still see
+  // the old id, and a late reply would restart recording under the person who
+  // just left, after a newer answer had already stopped it.
+  const generation = ++sessionReplayBroadcastGeneration;
+  const replay = await sessionReplayBootstrap();
+  if (generation !== sessionReplayBroadcastGeneration) return;
+  panels.broadcast(channels.sessionReplayChanged, replay);
 }
 
 /**

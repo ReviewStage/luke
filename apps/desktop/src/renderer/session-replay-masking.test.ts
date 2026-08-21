@@ -43,3 +43,29 @@ test("the attributes a recording needs to be readable at all survive", () => {
 test("no canvas is recorded, because no text rule reaches pixels", () => {
   assert.equal(REPLAY_MASKING.captureCanvas.recordCanvas, false);
 });
+
+/**
+ * Inline image bytes are the one case where keeping an attribute readable and
+ * keeping a recording honest actually conflict. A screenshot the developer
+ * attached to the feedback composer is drawn as a `data:` URI, and no text
+ * rule — not `maskTextSelector`, not `maskAllInputs`, not `recordCanvas` —
+ * reaches an `<img>`'s pixels.
+ */
+test("an inline image's own bytes never travel, whatever markup forgets", () => {
+  const { maskAttributeFn } = REPLAY_MASKING;
+  const screenshot = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==";
+  for (const name of ["src", "srcset", "href", "poster", "SRC"]) {
+    assert.equal(maskAttributeFn(name, screenshot), "", name);
+  }
+  // Leading whitespace and case are not a way around it.
+  assert.equal(maskAttributeFn("src", "  DATA:image/png;base64,AAAA"), "");
+});
+
+test("an asset this build ships still loads, so the panel is recognisable", () => {
+  const { maskAttributeFn } = REPLAY_MASKING;
+  assert.equal(maskAttributeFn("src", "renderer.js"), "renderer.js");
+  assert.equal(
+    maskAttributeFn("src", "https://avatars.githubusercontent.com/u/1"),
+    "https://avatars.githubusercontent.com/u/1",
+  );
+});

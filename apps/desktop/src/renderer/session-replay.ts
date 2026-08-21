@@ -85,8 +85,10 @@ function startSessionReplay(bootstrap: SessionReplayBootstrap): void {
   started = true;
   if (initialized) {
     // The client is built once per window. A second `init` would not rebuild
-    // it, so a recording resumed after the switch came back on is started
-    // rather than re-configured.
+    // it, so a recording resumed after a switch or an account change is
+    // started rather than re-configured — but it must still be told whose
+    // recording it is, because the person may have changed since the last one.
+    posthog.identify(bootstrap.accountId);
     posthog.startSessionRecording();
     return;
   }
@@ -120,5 +122,11 @@ function startSessionReplay(bootstrap: SessionReplayBootstrap): void {
 
 function stopSessionReplay(): void {
   started = false;
-  if (initialized) posthog.stopSessionRecording();
+  if (!initialized) return;
+  posthog.stopSessionRecording();
+  // The person goes with the recording. Without this the client keeps the
+  // previous account's id and its anonymous session, so signing in as someone
+  // else would file their recordings under the person who signed out — which
+  // is the one thing filing under an account is supposed to prevent.
+  posthog.reset();
 }

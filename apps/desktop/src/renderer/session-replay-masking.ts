@@ -38,6 +38,9 @@ const MASKED_ATTRIBUTES: ReadonlySet<string> = new Set([
   "value",
 ]);
 
+/** Where an element's pixels come from, which may be the bytes themselves. */
+const SOURCE_ATTRIBUTES: ReadonlySet<string> = new Set(["src", "srcset", "href", "poster"]);
+
 /**
  * What the recorder is allowed to see, and the whole of what keeps a recording
  * offerable. Everything else in this file only decides whether to start.
@@ -61,8 +64,20 @@ const MASKED_ATTRIBUTES: ReadonlySet<string> = new Set([
 export const REPLAY_MASKING = {
   maskAllInputs: true,
   maskTextSelector: "*",
-  maskAttributeFn: (name: string, value: string) =>
-    MASKED_ATTRIBUTES.has(name.toLowerCase()) ? "" : value,
+  maskAttributeFn: (name: string, value: string) => {
+    const attribute = name.toLowerCase();
+    if (MASKED_ATTRIBUTES.has(attribute)) return "";
+    // An inline image is its own bytes rather than a reference to a file this
+    // build ships, so it is content by construction: the feedback composer
+    // draws a screenshot the developer attached this way, and a screenshot can
+    // hold anything that was on their screen. The chips are blocked outright
+    // too — this is the rule that holds when markup forgets, and the reason
+    // `src` is otherwise left alone is that every other one names an asset.
+    if (SOURCE_ATTRIBUTES.has(attribute) && value.trimStart().toLowerCase().startsWith("data:")) {
+      return "";
+    }
+    return value;
+  },
   // Blocked rather than masked: a masked credential still reports how many
   // characters it has, and the shape of a key is a fact about the key.
   blockSelector: `.${REPLAY_BLOCK_CLASS}`,
