@@ -1562,3 +1562,29 @@ test("a transcript chat reports the folder a resume would be pinned to", async (
 
   assert.equal(observations[0]?.directory, "/Users/test/luke");
 });
+
+test("the store's clock keeps an open turn working while only the store moves", async (t) => {
+  const state = await temporaryCursorState(t);
+  // The transcript went quiet long ago and the metadata record's own
+  // timestamp with it — but the store's files just moved, which is what an
+  // open turn looks like from the store's side.
+  await writeTranscript(
+    state,
+    "Users-test-luke",
+    "ses-open",
+    [messageRecord(TEST_ROLE.USER, TEST_CONTENT_TYPE.TEXT)],
+    TEST_TIME - YEAR_MS,
+  );
+  await writeChatStore(
+    state,
+    "a34afeeb",
+    "ses-open",
+    chatStoreMeta({ updatedAtMs: TEST_TIME - YEAR_MS }),
+    TEST_TIME - 5_000,
+  );
+
+  const observations = await adapterFor(state).observe();
+
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
+});

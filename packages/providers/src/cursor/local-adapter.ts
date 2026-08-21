@@ -223,6 +223,12 @@ interface CursorTranscriptCandidate extends SessionFileCandidate {
    * transcript itself never records.
    */
   meta?: CursorChatStoreMeta;
+  /**
+   * The store's own file clock for the same chat — its journal is what moves
+   * while a turn runs, which neither the transcript nor the metadata record's
+   * timestamp shows.
+   */
+  storeAtMs?: number;
 }
 
 interface CursorChatStoreCandidate extends SessionFileCandidate {
@@ -944,13 +950,15 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
     // Newest first from discovery, so a chat resumed from another folder — the
     // store keys chats by folder, and a resume re-files one — reads its
     // freshest record.
-    const metaById = new Map<string, CursorChatStoreMeta>();
+    const metaById = new Map<string, { meta: CursorChatStoreMeta; atMs: number }>();
     const transcriptIds = new Set(transcripts.map((candidate) => candidate.providerSessionId));
     const stores: CursorChatStoreCandidate[] = [];
     for (const file of storeFiles) {
       const meta = metaByFile.get(file.filePath);
       if (!meta) continue;
-      if (!metaById.has(file.providerSessionId)) metaById.set(file.providerSessionId, meta);
+      if (!metaById.has(file.providerSessionId)) {
+        metaById.set(file.providerSessionId, { meta, atMs: file.mtimeMs });
+      }
       // A chat with a transcript is read from the transcript — the richer
       // record — and its store metadata rides that candidate instead.
       if (transcriptIds.has(file.providerSessionId)) continue;
@@ -958,8 +966,8 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
     }
     const candidates: CursorSessionCandidate[] = [
       ...transcripts.map((candidate) => {
-        const meta = metaById.get(candidate.providerSessionId);
-        return meta ? { ...candidate, meta } : candidate;
+        const store = metaById.get(candidate.providerSessionId);
+        return store ? { ...candidate, meta: store.meta, storeAtMs: store.atMs } : candidate;
       }),
       ...stores,
     ].sort((first, second) => second.mtimeMs - first.mtimeMs);
@@ -1119,7 +1127,11 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
     // written is Cursor's only account of when this session last did anything —
     // sharpened by the chat store's own clock where the store holds this chat,
     // because the store is written while a turn runs and the transcript is not.
-    const transcriptAt = Math.max(candidate.mtimeMs, candidate.meta?.updatedAtMs ?? 0);
+    const transcriptAt = Math.max(
+      candidate.mtimeMs,
+      candidate.storeAtMs ?? 0,
+      candidate.meta?.updatedAtMs ?? 0,
+    );
     const refined = hookRefinedStatus({
       refinement: CURSOR_HOOK_STATUS_REFINEMENT,
       hookEvent,
@@ -1232,8 +1244,7 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
     this.#sendTargets.delete(candidate.providerSessionId);
     return {
       providerSessionId: candidate.providerSessionId,
-      title:
-        header?.name ?? oneLine(candidate.meta.title, maximumSessionTitleLength) ?? label,
+      title: header?.name ?? oneLine(candidate.meta.title, maximumSessionTitleLength) ?? label,
       status,
       observedAt,
       ...(candidate.meta.cwd ? { directory: candidate.meta.cwd } : undefined),
