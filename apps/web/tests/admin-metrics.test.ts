@@ -4,6 +4,7 @@ import type { AdminViewer } from "../server/admin/admin-access";
 import {
   ADMIN_INTEGRATION,
   ADMIN_METRICS_WINDOW_DAYS,
+  ADMIN_RETENTION_WEEKS,
   ADMIN_TREND_DAYS,
   type AdminMetrics,
   type AdminMetricsSource,
@@ -12,7 +13,9 @@ import {
   countSignInMethods,
   handleAdminMetrics,
   lastNDayKeys,
+  lastNWeekStartKeys,
   SIGN_IN_PROVIDER_ID,
+  utcWeekStartKey,
 } from "../server/admin/admin-metrics";
 import {
   ADMIN_ERROR,
@@ -36,6 +39,7 @@ function source(overrides: Partial<AdminMetricsSource> = {}): AdminMetricsSource
       signupsByDay: new Map(),
     },
     usage: { byDay: new Map(), activeUsersToday: 0, activeUsersWindow: 0, topUsers: [] },
+    retention: { cohortSizes: new Map(), activeByCohortWeek: new Map() },
     reliability: { quotaLimitedUserDaysToday: 0, quotaLimitedUserDaysWindow: 0 },
     systemHealth: { database: { reachable: true, latencyMs: 4 }, integrations: [] },
     ...overrides,
@@ -187,6 +191,111 @@ test("a trend over an empty window is zero on both runs rather than absent", () 
     prior: 0,
   });
   assert.equal(metrics.users.newInWindow, 0);
+});
+
+test("a week is named by its Monday, whichever day the instant falls on", () => {
+  // 2026-08-17 is itself a Monday; 2026-08-20 is the Thursday of its week.
+  assert.equal(utcWeekStartKey(NOON_UTC), "2026-08-17");
+  assert.equal(utcWeekStartKey(Date.parse("2026-08-20T09:00:00.000Z")), "2026-08-17");
+  assert.equal(utcWeekStartKey(Date.parse("2026-08-16T23:59:59.999Z")), "2026-08-10");
+
+  const keys = lastNWeekStartKeys(NOON_UTC, ADMIN_RETENTION_WEEKS);
+  assert.equal(keys.length, ADMIN_RETENTION_WEEKS);
+  assert.equal(keys[0], "2026-06-29");
+  assert.equal(keys.at(-1), "2026-08-17");
+});
+
+test("retention cohorts are the trailing weeks, and unreached weeks are absent", () => {
+  const metrics = buildAdminMetrics(source(), NOON_UTC);
+  assert.equal(metrics.retention.weeks, ADMIN_RETENTION_WEEKS);
+  assert.equal(metrics.retention.cohorts.length, ADMIN_RETENTION_WEEKS);
+  assert.equal(metrics.retention.cohorts[0]?.weekStart, "2026-06-29");
+  assert.equal(metrics.retention.cohorts.at(-1)?.weekStart, "2026-08-17");
+  // The triangle: each cohort's cells run from its own week to the current
+  // one, so the oldest cohort holds every offset and the newest only Wk 0.
+  for (const [index, cohort] of metrics.retention.cohorts.entries()) {
+    assert.equal(cohort.cells.length, ADMIN_RETENTION_WEEKS - index);
+    assert.deepEqual(
+      cohort.cells.map((cell) => cell.offset),
+      cohort.cells.map((_, offset) => offset),
+    );
+  }
+});
+
+test("a cohort's shares are its active accounts over its size, week by week", () => {
+  const metrics = buildAdminMetrics(
+    source({
+      retention: {
+        cohortSizes: new Map([["2026-06-29", 4]]),
+        activeByCohortWeek: new Map([
+          [
+            "2026-06-29",
+            new Map([
+              ["2026-06-29", 4],
+              ["2026-07-06", 3],
+              ["2026-07-20", 1],
+              // Before the cohort's own week: no cell exists to carry it.
+              ["2026-06-22", 2],
+            ]),
+          ],
+        ]),
+      },
+    }),
+    NOON_UTC,
+  );
+
+  const cohort = metrics.retention.cohorts[0];
+  assert.equal(cohort?.size, 4);
+  assert.deepEqual(
+    cohort?.cells.map((cell) => [cell.activeAccounts, cell.share]),
+    [
+      [4, 1],
+      [3, 0.75],
+      [0, 0],
+      [1, 0.25],
+      [0, 0],
+      [0, 0],
+      [0, 0],
+      [0, 0],
+    ],
+  );
+});
+
+test("only the current week's cells are in progress, in every cohort", () => {
+  const metrics = buildAdminMetrics(
+    source({
+      retention: {
+        cohortSizes: new Map([
+          ["2026-06-29", 2],
+          ["2026-08-17", 5],
+        ]),
+        activeByCohortWeek: new Map([["2026-08-17", new Map([["2026-08-17", 3]])]]),
+      },
+    }),
+    NOON_UTC,
+  );
+
+  for (const cohort of metrics.retention.cohorts) {
+    const last = cohort.cells.at(-1);
+    assert.equal(last?.inProgress, true);
+    for (const cell of cohort.cells.slice(0, -1)) assert.equal(cell.inProgress, false);
+  }
+  const current = metrics.retention.cohorts.at(-1);
+  assert.equal(current?.size, 5);
+  assert.deepEqual(current?.cells, [
+    { offset: 0, activeAccounts: 3, share: 0.6, inProgress: true },
+  ]);
+});
+
+test("a cohort with no accounts keeps its count and states no share", () => {
+  const metrics = buildAdminMetrics(source(), NOON_UTC);
+  for (const cohort of metrics.retention.cohorts) {
+    assert.equal(cohort.size, 0);
+    for (const cell of cohort.cells) {
+      assert.equal(cell.activeAccounts, 0);
+      assert.equal(cell.share, null);
+    }
+  }
 });
 
 test("the most active accounts pass through the builder untouched", () => {

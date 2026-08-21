@@ -30,6 +30,14 @@ export const ADMIN_METRICS_WINDOW_DAYS = 30;
 export const ADMIN_TREND_DAYS = 7;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const WEEK_MS = 7 * DAY_MS;
+
+/**
+ * How many trailing UTC weeks the retention grid covers — its cohort rows and
+ * its offset columns alike, so the oldest cohort is the one row whose every
+ * offset the calendar has already reached.
+ */
+export const ADMIN_RETENTION_WEEKS = 8;
 
 export interface AdminUsageDay {
   voiceCalls: number;
@@ -95,6 +103,29 @@ export function countSignInMethods(
     else other.add(link.userId);
   }
   return { google: google.size, github: github.size, other: other.size };
+}
+
+/**
+ * One cell of the retention grid: of the accounts created in the cohort's
+ * week, how many used the hosted tier during the week `offset` weeks after it.
+ * `share` is null for a cohort with nobody to take a share of — a percentage
+ * of nothing would pose as precision — and a week the calendar has not
+ * reached is no cell at all rather than a zero.
+ */
+export interface AdminRetentionCell {
+  offset: number;
+  activeAccounts: number;
+  share: number | null;
+  /** The cell's week is the one `generatedAt` falls in, still accruing. */
+  inProgress: boolean;
+}
+
+export interface AdminRetentionCohort {
+  /** The cohort's UTC week, named by its Monday as YYYY-MM-DD. */
+  weekStart: string;
+  /** Accounts created during this week. */
+  size: number;
+  cells: AdminRetentionCell[];
 }
 
 /**
@@ -199,6 +230,11 @@ export interface AdminMetrics {
     daily: AdminDailyUsage[];
     topUsers: AdminTopUser[];
   };
+  retention: {
+    weeks: number;
+    /** Oldest cohort first; each row's cells stop at the current week. */
+    cohorts: AdminRetentionCohort[];
+  };
   reliability: {
     voiceDailyLimit: number;
     attentionDailyLimit: number;
@@ -237,6 +273,12 @@ export interface AdminMetricsSource {
     activeUsersWindow: number;
     topUsers: readonly AdminTopUser[];
   };
+  retention: {
+    /** Accounts created per UTC week, keyed by the week's Monday. */
+    cohortSizes: ReadonlyMap<string, number>;
+    /** Distinct accounts active per week, keyed by signup week then activity week. */
+    activeByCohortWeek: ReadonlyMap<string, ReadonlyMap<string, number>>;
+  };
   reliability: {
     quotaLimitedUserDaysToday: number;
     quotaLimitedUserDaysWindow: number;
@@ -261,6 +303,58 @@ export function lastNDayKeys(now: number, days: number): string[] {
     keys.push(utcDayKey(now - offset * DAY_MS));
   }
   return keys;
+}
+
+/**
+ * The Monday of the UTC week holding `instant`, as its YYYY-MM-DD key. Weeks
+ * start on Monday because Postgres's `date_trunc('week')` lands there, and
+ * the queries and this fold must name a week identically or every cohort
+ * would shear against its own activity.
+ */
+export function utcWeekStartKey(instant: number): string {
+  const daysSinceEpoch = Math.floor(instant / DAY_MS);
+  // The epoch, 1970-01-01, was a Thursday: three days past its week's Monday.
+  const daysSinceMonday = (daysSinceEpoch + 3) % 7;
+  return utcDayKey((daysSinceEpoch - daysSinceMonday) * DAY_MS);
+}
+
+/** The trailing weeks' Monday keys, oldest first and ending on `now`'s own week. */
+export function lastNWeekStartKeys(now: number, weeks: number): string[] {
+  const keys: string[] = [];
+  for (let offset = weeks - 1; offset >= 0; offset -= 1) {
+    keys.push(utcWeekStartKey(now - offset * WEEK_MS));
+  }
+  return keys;
+}
+
+/**
+ * Folds the queried cohort counts into the grid the dashboard draws. Each
+ * cohort's cells run from its own week to the current one and no further:
+ * a week the calendar has not reached is absent rather than a zero, which is
+ * what shapes the triangle, and the current week's cell in every row is
+ * marked still accruing.
+ */
+function buildRetentionCohorts(
+  retention: AdminMetricsSource["retention"],
+  now: number,
+): AdminRetentionCohort[] {
+  const weekKeys = lastNWeekStartKeys(now, ADMIN_RETENTION_WEEKS);
+  const currentWeek = utcWeekStartKey(now);
+
+  return weekKeys.map((weekStart, index) => {
+    const size = retention.cohortSizes.get(weekStart) ?? 0;
+    const activeByWeek = retention.activeByCohortWeek.get(weekStart);
+    const cells = weekKeys.slice(index).map((week, offset) => {
+      const activeAccounts = activeByWeek?.get(week) ?? 0;
+      return {
+        offset,
+        activeAccounts,
+        share: size === 0 ? null : activeAccounts / size,
+        inProgress: week === currentWeek,
+      };
+    });
+    return { weekStart, size, cells };
+  });
 }
 
 export function sum(values: readonly number[]): number {
@@ -329,6 +423,10 @@ export function buildAdminMetrics(source: AdminMetricsSource, now: number): Admi
       ),
       daily,
       topUsers: [...source.usage.topUsers],
+    },
+    retention: {
+      weeks: ADMIN_RETENTION_WEEKS,
+      cohorts: buildRetentionCohorts(source.retention, now),
     },
     reliability: {
       voiceDailyLimit: HOSTED_DAILY_LIMIT[HOSTED_METER.VOICE_CALL],
