@@ -156,7 +156,9 @@ const ERROR_DETAIL = {
   UNAVAILABLE: "The service did not answer. It may be briefly unavailable — try again shortly.",
   PROTECTED:
     "The request was redirected before it reached the dashboard. A preview deployment behind Vercel Deployment Protection intercepts the API call; disable protection for this deployment, or use a production URL.",
-  GENERIC: "The metrics endpoint did not answer. Try again shortly.",
+  METRICS: "The metrics endpoint did not answer. Try again shortly.",
+  USERS: "The users endpoint did not answer. Try again shortly.",
+  ACCOUNT: "The account endpoint did not answer. Try again shortly.",
 } as const;
 
 const numberFormat = new Intl.NumberFormat("en-US");
@@ -1142,7 +1144,7 @@ async function readDashboardState(response: Response): Promise<DashboardState> {
   if (response.status === ADMIN_HTTP_STATUS.SERVICE_UNAVAILABLE) {
     return { status: "error", detail: ERROR_DETAIL.UNAVAILABLE };
   }
-  if (!response.ok) return { status: "error", detail: ERROR_DETAIL.GENERIC };
+  if (!response.ok) return { status: "error", detail: ERROR_DETAIL.METRICS };
   // SAFETY: a 200 from the admin metrics endpoint is an AdminMetrics body by its contract.
   return { status: "ready", metrics: (await response.json()) as AdminMetrics };
 }
@@ -1164,7 +1166,7 @@ async function readDetailState(response: Response): Promise<DetailState> {
   if (response.status === ADMIN_HTTP_STATUS.SERVICE_UNAVAILABLE) {
     return { status: "error", detail: ERROR_DETAIL.UNAVAILABLE };
   }
-  if (!response.ok) return { status: "error", detail: ERROR_DETAIL.GENERIC };
+  if (!response.ok) return { status: "error", detail: ERROR_DETAIL.ACCOUNT };
   // SAFETY: a 200 from the admin user endpoint is an AdminUserDetail body by its contract.
   return { status: "ready", detail: (await response.json()) as AdminUserDetail };
 }
@@ -1355,7 +1357,7 @@ async function readUsersState(response: Response): Promise<UsersState> {
   if (response.status === ADMIN_HTTP_STATUS.SERVICE_UNAVAILABLE) {
     return { status: "error", detail: ERROR_DETAIL.UNAVAILABLE };
   }
-  if (!response.ok) return { status: "error", detail: ERROR_DETAIL.GENERIC };
+  if (!response.ok) return { status: "error", detail: ERROR_DETAIL.USERS };
   // SAFETY: a 200 from the admin users endpoint is an AdminUserList body by its contract.
   return { status: "ready", list: (await response.json()) as AdminUserList };
 }
@@ -1535,6 +1537,7 @@ function UsersScreen({
   account,
   onSignOut,
   onOpenAccount,
+  frame,
   now,
 }: {
   hideAdmins: boolean;
@@ -1542,6 +1545,8 @@ function UsersScreen({
   account: ViewerAccount | undefined;
   onSignOut: () => Promise<void>;
   onOpenAccount: (id: string) => void;
+  /** Applied around every answer but the gate's own cards, which stand alone. */
+  frame: (content: React.JSX.Element) => React.JSX.Element;
   now: number;
 }): React.JSX.Element {
   const [state, setState] = useState<UsersState>(() =>
@@ -1584,7 +1589,7 @@ function UsersScreen({
         if (!controller.signal.aborted) setState(next);
       } catch {
         if (!controller.signal.aborted) {
-          setState({ status: "error", detail: ERROR_DETAIL.GENERIC });
+          setState({ status: "error", detail: ERROR_DETAIL.USERS });
         }
       } finally {
         if (!controller.signal.aborted) setRefreshing(false);
@@ -1599,13 +1604,13 @@ function UsersScreen({
 
   switch (state.status) {
     case "loading":
-      return <Centered title="Loading…">Reading the service's own tables.</Centered>;
+      return frame(<Centered title="Loading…">Reading the service's own tables.</Centered>);
     case "signed-out":
       return <SignInCard />;
     case "forbidden":
       return <ForbiddenCard email={account?.email} onSignOut={() => void signOut()} />;
     case "error":
-      return (
+      return frame(
         <Centered title="Could not load">
           {state.detail}
           <div className="mt-6">
@@ -1613,10 +1618,10 @@ function UsersScreen({
               {refreshing ? "Trying…" : "Try again"}
             </button>
           </div>
-        </Centered>
+        </Centered>,
       );
     case "ready":
-      return (
+      return frame(
         <UsersPage
           list={state.list}
           hideAdmins={hideAdmins}
@@ -1627,7 +1632,7 @@ function UsersScreen({
           refreshing={refreshing}
           onRefresh={load}
           now={now}
-        />
+        />,
       );
   }
 }
@@ -1637,12 +1642,15 @@ function UserDetailScreen({
   account,
   onSignOut,
   onBack,
+  frame,
   now,
 }: {
   id: string;
   account: ViewerAccount | undefined;
   onSignOut: () => Promise<void>;
   onBack: () => void;
+  /** Applied around every answer but the gate's own cards, which stand alone. */
+  frame: (content: React.JSX.Element) => React.JSX.Element;
   now: number;
 }): React.JSX.Element {
   const [state, setState] = useState<DetailState>(() =>
@@ -1694,7 +1702,7 @@ function UserDetailScreen({
         if (!controller.signal.aborted) setState(next);
       } catch {
         if (!controller.signal.aborted) {
-          setState({ status: "error", detail: ERROR_DETAIL.GENERIC });
+          setState({ status: "error", detail: ERROR_DETAIL.ACCOUNT });
         }
       } finally {
         if (!controller.signal.aborted) setRefreshing(false);
@@ -1709,13 +1717,13 @@ function UserDetailScreen({
 
   switch (state.status) {
     case "loading":
-      return <Centered title="Loading…">Reading the account's own rows.</Centered>;
+      return frame(<Centered title="Loading…">Reading the account's own rows.</Centered>);
     case "signed-out":
       return <SignInCard />;
     case "forbidden":
       return <ForbiddenCard email={account?.email} onSignOut={() => void signOut()} />;
     case "missing":
-      return (
+      return frame(
         <Centered title="No such account">
           No account carries this id — it may have been deleted since its row was read.
           <div className="mt-6">
@@ -1723,10 +1731,10 @@ function UserDetailScreen({
               Back to users
             </button>
           </div>
-        </Centered>
+        </Centered>,
       );
     case "error":
-      return (
+      return frame(
         <Centered title="Could not load">
           {state.detail}
           <div className="mt-6">
@@ -1734,10 +1742,10 @@ function UserDetailScreen({
               {refreshing ? "Trying…" : "Try again"}
             </button>
           </div>
-        </Centered>
+        </Centered>,
       );
     case "ready":
-      return (
+      return frame(
         <UserDetailPage
           detail={state.detail}
           account={account}
@@ -1746,7 +1754,7 @@ function UserDetailScreen({
           refreshing={refreshing}
           onRefresh={load}
           now={now}
-        />
+        />,
       );
   }
 }
@@ -1837,7 +1845,7 @@ export function AdminDashboard(): React.JSX.Element {
         if (!controller.signal.aborted) setState(next);
       } catch {
         if (!controller.signal.aborted) {
-          setState({ status: "error", detail: ERROR_DETAIL.GENERIC });
+          setState({ status: "error", detail: ERROR_DETAIL.METRICS });
         }
       } finally {
         if (!controller.signal.aborted) setRefreshing(false);
@@ -1870,10 +1878,12 @@ export function AdminDashboard(): React.JSX.Element {
     ? { name: account.name, email: account.email, image: account.image ?? undefined }
     : undefined;
 
-  // The entry gate's cards — sign-in and the non-admin refusal — stand alone:
-  // navigation drawn beside a consent card would pose as somewhere to go.
-  // Everything else wears the sidebar, including a deep-linked view answering
-  // its own refusal, because there the frame is what the address named.
+  // The gate's cards — sign-in and the non-admin refusal — stand alone on
+  // every view: navigation drawn beside a consent card would pose as
+  // somewhere to go. Everything past the gate wears the sidebar, which is why
+  // the screens below take the shell as a frame to apply themselves, only
+  // around the answers that earn it. The content region is a div, not a
+  // second `main`: the gate cards carry the page's `main` when they stand.
   const shell = (tab: AdminTab, content: React.JSX.Element) => (
     <div className="flex min-h-screen">
       <AdminSidebar
@@ -1882,34 +1892,34 @@ export function AdminDashboard(): React.JSX.Element {
         onToggle={toggleSidebar}
         onNavigate={navigate}
       />
-      <main className="min-w-0 flex-1">{content}</main>
+      <div className="min-w-0 flex-1">{content}</div>
     </div>
   );
 
   if (view.kind === "account") {
-    return shell(
-      "users",
+    return (
       <UserDetailScreen
         id={view.id}
         account={viewer}
         onSignOut={signOut}
         onBack={() => navigate("users")}
+        frame={(content) => shell("users", content)}
         now={now}
-      />,
+      />
     );
   }
 
   if (view.kind === "users") {
-    return shell(
-      "users",
+    return (
       <UsersScreen
         hideAdmins={hideAdmins}
         onHideAdminsChange={setHideAdmins}
         account={viewer}
         onSignOut={signOut}
         onOpenAccount={openAccount}
+        frame={(content) => shell("users", content)}
         now={now}
-      />,
+      />
     );
   }
 
