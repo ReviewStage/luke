@@ -11,7 +11,13 @@ import {
   handleAdminMetrics,
   lastNDayKeys,
 } from "../server/admin/admin-metrics";
-import { ADMIN_ERROR } from "../server/admin/http";
+import {
+  ADMIN_ERROR,
+  ADMIN_METRICS_SCOPE,
+  ADMIN_METRICS_SCOPE_PARAM,
+  type AdminMetricsScope,
+  adminMetricsScope,
+} from "../server/admin/http";
 import { HOSTED_DAILY_LIMIT, HOSTED_METER } from "../server/hosted/quota";
 
 const NOON_UTC = Date.parse("2026-08-17T12:00:00.000Z");
@@ -166,6 +172,38 @@ test("the gate answers 405, 401, 403, and 200 as distinct outcomes", async () =>
   const body = (await ok.json()) as AdminMetrics;
   assert.equal(body.generatedAt, NOON_UTC);
   assert.equal(body.windowDays, ADMIN_METRICS_WINDOW_DAYS);
+});
+
+test("the scope defaults to hiding admins; only the explicit `all` widens it", () => {
+  assert.equal(
+    adminMetricsScope("https://luke.test/api/admin/metrics"),
+    ADMIN_METRICS_SCOPE.NON_ADMINS,
+  );
+  assert.equal(
+    adminMetricsScope("https://luke.test/api/admin/metrics?scope=all"),
+    ADMIN_METRICS_SCOPE.ALL,
+  );
+  assert.equal(
+    adminMetricsScope("https://luke.test/api/admin/metrics?scope=everyone"),
+    ADMIN_METRICS_SCOPE.NON_ADMINS,
+  );
+});
+
+test("the handler reads metrics at the scope the request asked for", async () => {
+  const scopes: AdminMetricsScope[] = [];
+  const readMetrics = async (now: number, scope: AdminMetricsScope): Promise<AdminMetrics> => {
+    scopes.push(scope);
+    return emptyMetrics(now);
+  };
+  const respond = (request: Request) =>
+    handleAdminMetrics({ request, resolveViewer: async () => ADMIN_VIEWER, readMetrics });
+
+  assert.equal((await respond(metricsRequest())).status, 200);
+  const widened = new Request(
+    `https://luke.test/api/admin/metrics?${ADMIN_METRICS_SCOPE_PARAM}=${ADMIN_METRICS_SCOPE.ALL}`,
+  );
+  assert.equal((await respond(widened)).status, 200);
+  assert.deepEqual(scopes, [ADMIN_METRICS_SCOPE.NON_ADMINS, ADMIN_METRICS_SCOPE.ALL]);
 });
 
 test("metrics are not read for a request that fails the gate", async () => {

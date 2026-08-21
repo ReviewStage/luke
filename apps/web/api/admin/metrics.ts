@@ -49,8 +49,11 @@ export default {
     return handleAdminMetrics({
       request,
       resolveViewer,
-      readMetrics: async (now) =>
-        buildAdminMetrics(await readAdminMetricsSource(getDatabase(), { now, integrations }), now),
+      readMetrics: async (now, scope) =>
+        buildAdminMetrics(
+          await readAdminMetricsSource(getDatabase(), { now, integrations, scope }),
+          now,
+        ),
     });
   },
 };

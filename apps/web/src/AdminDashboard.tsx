@@ -7,6 +7,7 @@ import type {
   AdminMetrics,
   AdminTopUser,
 } from "../server/admin/admin-metrics";
+import { ADMIN_METRICS_SCOPE, ADMIN_METRICS_SCOPE_PARAM } from "../server/admin/http";
 import { LukeMark } from "./SiteChrome";
 import { SOCIAL_PROVIDER, SOCIAL_PROVIDER_LABEL, type SocialProvider } from "./sign-in-provider";
 
@@ -251,7 +252,15 @@ function IntegrationRow({ integration }: { integration: AdminIntegration }): Rea
   );
 }
 
-function Dashboard({ metrics }: { metrics: AdminMetrics }): React.JSX.Element {
+function Dashboard({
+  metrics,
+  hideAdmins,
+  onHideAdminsChange,
+}: {
+  metrics: AdminMetrics;
+  hideAdmins: boolean;
+  onHideAdminsChange: (hide: boolean) => void;
+}): React.JSX.Element {
   const providerTotal =
     metrics.users.signInMethods.google +
     metrics.users.signInMethods.github +
@@ -267,9 +276,20 @@ function Dashboard({ metrics }: { metrics: AdminMetrics }): React.JSX.Element {
           </span>
           <span className="font-brand text-base font-bold tracking-[-0.01em]">Luke admin</span>
         </div>
-        <span className="font-mono text-xs text-muted-foreground">
-          {metrics.windowDays}-day window · generated {formatTimestamp(metrics.generatedAt)} UTC
-        </span>
+        <div className="flex items-center gap-4">
+          <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground select-none">
+            <input
+              type="checkbox"
+              className="size-3.5 cursor-pointer accent-primary"
+              checked={hideAdmins}
+              onChange={(event) => onHideAdminsChange(event.target.checked)}
+            />
+            Hide admins
+          </label>
+          <span className="font-mono text-xs text-muted-foreground">
+            {metrics.windowDays}-day window · generated {formatTimestamp(metrics.generatedAt)} UTC
+          </span>
+        </div>
       </header>
 
       <SectionHeading>User activity</SectionHeading>
@@ -482,12 +502,21 @@ function Centered({
 
 export function AdminDashboard(): React.JSX.Element {
   const [state, setState] = useState<DashboardState>({ status: "loading" });
+  // Admin accounts are the maintainers' own; their traffic reads as noise in
+  // every count, so the dashboard opens with them hidden and the toggle is the
+  // explicit ask to include them. The scope is the server's filter — aggregates
+  // cannot be unpicked client-side — so flipping it refetches.
+  const [hideAdmins, setHideAdmins] = useState(true);
 
   useEffect(() => {
     let live = true;
+    setState({ status: "loading" });
+    const path = hideAdmins
+      ? METRICS_PATH
+      : `${METRICS_PATH}?${ADMIN_METRICS_SCOPE_PARAM}=${ADMIN_METRICS_SCOPE.ALL}`;
     void (async () => {
       try {
-        const response = await fetch(METRICS_PATH, { headers: { accept: "application/json" } });
+        const response = await fetch(path, { headers: { accept: "application/json" } });
         if (!live) return;
         // A followed cross-origin redirect means something sat in front of the
         // API — a preview's deployment protection is the usual culprit — so the
@@ -522,7 +551,7 @@ export function AdminDashboard(): React.JSX.Element {
     return () => {
       live = false;
     };
-  }, []);
+  }, [hideAdmins]);
 
   const body = useMemo(() => {
     switch (state.status) {
@@ -541,9 +570,15 @@ export function AdminDashboard(): React.JSX.Element {
       case "error":
         return <Centered title="Could not load">{state.detail}</Centered>;
       case "ready":
-        return <Dashboard metrics={state.metrics} />;
+        return (
+          <Dashboard
+            metrics={state.metrics}
+            hideAdmins={hideAdmins}
+            onHideAdminsChange={setHideAdmins}
+          />
+        );
     }
-  }, [state]);
+  }, [state, hideAdmins]);
 
   return body;
 }
