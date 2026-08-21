@@ -1,17 +1,20 @@
-import { ACCOUNT_PROVIDER, type AccountProvider } from "#shared/contracts";
-
 /**
- * The two identity providers' own marks, traced for the sign-in surface. They
- * are brand marks like a session provider's, not glyphs of ours: the Google G
- * keeps its four official colours, and the GitHub mark rides `currentColor`
- * the way GitHub's own guidance draws it on a dark ground. The web admin
- * sign-in traces its own copy in `apps/web/src/account-marks.tsx`, duplicated
- * on purpose the way `provider-marks.tsx` is: the React that traces a mark
- * stays in each app rather than entering the shared surface vocabulary.
+ * The two identity providers' own marks, traced for the admin sign-in card.
+ * They are brand marks, not glyphs of ours: the Google G keeps its four
+ * official colours, and the GitHub mark rides `currentColor` the way GitHub's
+ * own guidance draws it on a dark ground. They are the desktop sign-in gate's
+ * marks (`apps/desktop/src/renderer/account-marks.tsx`), duplicated on purpose
+ * the way `provider-marks.tsx` duplicates the session marks: the React that
+ * traces a mark stays in each app. Do not restyle the geometry or recolour
+ * them; change both copies if a provider publishes an updated mark.
  */
-export function GoogleMark(): React.JSX.Element {
+interface MarkProps {
+  className?: string;
+}
+
+export function GoogleMark({ className }: MarkProps): React.JSX.Element {
   return (
-    <svg className="account-mark" viewBox="0 0 18 18" aria-hidden="true" focusable="false">
+    <svg className={className} viewBox="0 0 18 18" aria-hidden="true" focusable="false">
       <path
         fill="#4285F4"
         d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"
@@ -32,10 +35,10 @@ export function GoogleMark(): React.JSX.Element {
   );
 }
 
-export function GitHubMark(): React.JSX.Element {
+export function GitHubMark({ className }: MarkProps): React.JSX.Element {
   return (
     <svg
-      className="account-mark"
+      className={className}
       viewBox="0 0 16 16"
       fill="currentColor"
       aria-hidden="true"
@@ -44,13 +47,4 @@ export function GitHubMark(): React.JSX.Element {
       <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z" />
     </svg>
   );
-}
-
-/** The pressed provider's own mark, for the surfaces that name one by id. */
-export function AccountProviderMark({
-  provider,
-}: {
-  provider: AccountProvider;
-}): React.JSX.Element {
-  return provider === ACCOUNT_PROVIDER.GITHUB ? <GitHubMark /> : <GoogleMark />;
 }

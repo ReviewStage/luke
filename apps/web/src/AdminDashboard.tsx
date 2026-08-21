@@ -1,5 +1,5 @@
 import { createAuthClient } from "better-auth/react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type {
   AdminDailySignups,
   AdminDailyUsage,
@@ -8,12 +8,49 @@ import type {
   AdminTopUser,
 } from "../server/admin/admin-metrics";
 import { ADMIN_METRICS_SCOPE, ADMIN_METRICS_SCOPE_PARAM } from "../server/admin/http";
+import { GitHubMark, GoogleMark } from "./account-marks";
+import { AUTH_BUTTON } from "./auth-surface";
 import { LukeMark } from "./SiteChrome";
 import { SOCIAL_PROVIDER, SOCIAL_PROVIDER_LABEL, type SocialProvider } from "./sign-in-provider";
 
 const authClient = createAuthClient();
 
 const METRICS_PATH = "/api/admin/metrics";
+
+/**
+ * The site's session cookie is shared with the sign-in flow the desktop app
+ * opens in this browser, so the first visit to this page would otherwise land
+ * already signed in — on a session the maintainer never chose to spend here.
+ * The dashboard opens only after a sign-in pressed on this page once; the
+ * press is remembered locally, and from then on an existing session resumes
+ * the way it does on any signed-in page.
+ */
+const SIGN_IN_CHOSEN_STORAGE_KEY = "luke-admin-sign-in-chosen";
+
+function signInChosenHere(): boolean {
+  try {
+    return window.localStorage.getItem(SIGN_IN_CHOSEN_STORAGE_KEY) !== null;
+  } catch {
+    return false;
+  }
+}
+
+function rememberSignInChosen(): void {
+  try {
+    window.localStorage.setItem(SIGN_IN_CHOSEN_STORAGE_KEY, "true");
+  } catch {
+    // Storage refused: the card simply asks again on the next visit.
+  }
+}
+
+/** The signed-in account the header names; read from the session, shown as-is. */
+interface ViewerAccount {
+  name: string;
+  email: string;
+}
+
+const SIGN_OUT_BUTTON =
+  "cursor-pointer rounded-md border border-border bg-card px-3 py-1.5 text-sm font-medium transition-colors duration-150 hover:bg-muted";
 
 /** What the fetch resolved to: the gate's refusals stay distinct here. */
 type DashboardState =
@@ -256,10 +293,14 @@ function Dashboard({
   metrics,
   hideAdmins,
   onHideAdminsChange,
+  account,
+  onSignOut,
 }: {
   metrics: AdminMetrics;
   hideAdmins: boolean;
   onHideAdminsChange: (hide: boolean) => void;
+  account: ViewerAccount | undefined;
+  onSignOut: () => void;
 }): React.JSX.Element {
   const providerTotal =
     metrics.users.signInMethods.google +
@@ -269,14 +310,14 @@ function Dashboard({
 
   return (
     <div className="mx-auto max-w-[1040px] px-6 py-10">
-      <header className="flex items-center justify-between gap-4">
+      <header className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
         <div className="inline-flex items-center gap-2">
           <span className="inline-flex w-6 text-foreground" aria-hidden="true">
             <LukeMark className="h-auto w-full" />
           </span>
           <span className="font-brand text-base font-bold tracking-[-0.01em]">Luke admin</span>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-4">
           <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground select-none">
             <input
               type="checkbox"
@@ -289,6 +330,18 @@ function Dashboard({
           <span className="font-mono text-xs text-muted-foreground">
             {metrics.windowDays}-day window · generated {formatTimestamp(metrics.generatedAt)} UTC
           </span>
+          {account ? (
+            <>
+              <span className="h-8 w-px bg-border" aria-hidden="true" />
+              <div className="text-right">
+                <div className="text-sm leading-tight font-medium">{account.name}</div>
+                <div className="text-xs text-muted-foreground">{account.email}</div>
+              </div>
+              <button type="button" className={SIGN_OUT_BUTTON} onClick={onSignOut}>
+                Sign out
+              </button>
+            </>
+          ) : null}
         </div>
       </header>
 
@@ -439,7 +492,9 @@ function SignInCard(): React.JSX.Element {
     if (result.error) {
       setPending(undefined);
       setFailed(true);
+      return;
     }
+    rememberSignInChosen();
   };
 
   return (
@@ -455,20 +510,22 @@ function SignInCard(): React.JSX.Element {
         <div className="mt-8 mb-4 grid gap-3">
           <button
             type="button"
-            className="min-h-[46px] cursor-pointer rounded-md border border-border bg-card font-semibold transition-[background-color,transform] duration-150 hover:not-disabled:-translate-y-px hover:not-disabled:bg-muted disabled:cursor-wait disabled:opacity-[0.56] motion-reduce:transition-none"
+            className={`${AUTH_BUTTON} inline-flex items-center justify-center gap-2.5`}
             disabled={pending !== undefined}
             onClick={() => void begin(SOCIAL_PROVIDER.GITHUB)}
           >
+            <GitHubMark className="size-[15px] shrink-0" />
             {pending === SOCIAL_PROVIDER.GITHUB
               ? "Opening…"
               : `Continue with ${SOCIAL_PROVIDER_LABEL[SOCIAL_PROVIDER.GITHUB]}`}
           </button>
           <button
             type="button"
-            className="min-h-[46px] cursor-pointer rounded-md border border-border bg-card font-semibold transition-[background-color,transform] duration-150 hover:not-disabled:-translate-y-px hover:not-disabled:bg-muted disabled:cursor-wait disabled:opacity-[0.56] motion-reduce:transition-none"
+            className={`${AUTH_BUTTON} inline-flex items-center justify-center gap-2.5`}
             disabled={pending !== undefined}
             onClick={() => void begin(SOCIAL_PROVIDER.GOOGLE)}
           >
+            <GoogleMark className="size-[15px] shrink-0" />
             {pending === SOCIAL_PROVIDER.GOOGLE
               ? "Opening…"
               : `Continue with ${SOCIAL_PROVIDER_LABEL[SOCIAL_PROVIDER.GOOGLE]}`}
@@ -507,8 +564,17 @@ export function AdminDashboard(): React.JSX.Element {
   // explicit ask to include them. The scope is the server's filter — aggregates
   // cannot be unpicked client-side — so flipping it refetches.
   const [hideAdmins, setHideAdmins] = useState(true);
+  const session = authClient.useSession();
+  const account = session.data?.user;
 
   useEffect(() => {
+    // A session earned elsewhere on the site does not open the dashboard by
+    // itself: until a sign-in has been pressed on this page once, the card is
+    // the answer, whatever cookie the browser holds.
+    if (!signInChosenHere()) {
+      setState({ status: "signed-out" });
+      return;
+    }
     let live = true;
     setState({ status: "loading" });
     const path = hideAdmins
@@ -553,32 +619,40 @@ export function AdminDashboard(): React.JSX.Element {
     };
   }, [hideAdmins]);
 
-  const body = useMemo(() => {
-    switch (state.status) {
-      case "loading":
-        return <Centered title="Loading…">Reading the service's own tables.</Centered>;
-      case "signed-out":
-        return <SignInCard />;
-      case "forbidden":
-        return (
-          <Centered title="Not authorized">
-            You are signed in, but this account does not have the admin role. Admin access is the{" "}
-            <code className="font-mono">admin</code> role on your account, set directly in the
-            database.
-          </Centered>
-        );
-      case "error":
-        return <Centered title="Could not load">{state.detail}</Centered>;
-      case "ready":
-        return (
-          <Dashboard
-            metrics={state.metrics}
-            hideAdmins={hideAdmins}
-            onHideAdminsChange={setHideAdmins}
-          />
-        );
-    }
-  }, [state, hideAdmins]);
+  const signOut = async () => {
+    await authClient.signOut();
+    setState({ status: "signed-out" });
+  };
 
-  return body;
+  switch (state.status) {
+    case "loading":
+      return <Centered title="Loading…">Reading the service's own tables.</Centered>;
+    case "signed-out":
+      return <SignInCard />;
+    case "forbidden":
+      return (
+        <Centered title="Not authorized">
+          You are signed in{account ? ` as ${account.email}` : ""}, but this account does not have
+          the admin role. Admin access is the <code className="font-mono">admin</code> role on your
+          account, set directly in the database.
+          <div className="mt-6">
+            <button type="button" className={SIGN_OUT_BUTTON} onClick={() => void signOut()}>
+              Sign out
+            </button>
+          </div>
+        </Centered>
+      );
+    case "error":
+      return <Centered title="Could not load">{state.detail}</Centered>;
+    case "ready":
+      return (
+        <Dashboard
+          metrics={state.metrics}
+          hideAdmins={hideAdmins}
+          onHideAdminsChange={setHideAdmins}
+          account={account ? { name: account.name, email: account.email } : undefined}
+          onSignOut={() => void signOut()}
+        />
+      );
+  }
 }
