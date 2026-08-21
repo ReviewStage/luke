@@ -1001,6 +1001,7 @@ function registerIpc(): void {
     recordProductEvent,
     flushProductEvents: () => productEvents.flush(),
     haltSessionReplay,
+    resumeSessionReplay: () => void broadcastSessionReplay(),
   });
 
   registerWindowSurfaceIpc({

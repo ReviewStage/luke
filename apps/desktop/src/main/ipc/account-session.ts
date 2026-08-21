@@ -25,6 +25,14 @@ export interface AccountSessionIpcDependencies {
    * whose erasure is already queued, which it would recreate.
    */
   haltSessionReplay: () => void;
+  /**
+   * Re-answers what recording may do, for an act that did not happen. A halt
+   * ahead of a refused sign-out or a failed deletion is one the account
+   * transition never follows, so without this the panel stays halted while the
+   * user is still signed in — and no settings change can lift it, because they
+   * all re-apply the same stale answer.
+   */
+  resumeSessionReplay: () => void;
 }
 
 export function registerAccountSessionIpc(dependencies: AccountSessionIpcDependencies): void {
@@ -35,6 +43,7 @@ export function registerAccountSessionIpc(dependencies: AccountSessionIpcDepende
     recordProductEvent,
     flushProductEvents,
     haltSessionReplay,
+    resumeSessionReplay,
   } = dependencies;
   // Which provider a sign-in was begun with is deliberately not counted. The
   // funnel wants how many begin against how many land, and `account:sign_in`
@@ -61,13 +70,26 @@ export function registerAccountSessionIpc(dependencies: AccountSessionIpcDepende
     recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACT, { account_act: PRODUCT_ACCOUNT_ACT.SIGN_OUT });
     haltSessionReplay();
     await flushProductEvents();
-    return accountSession.signOut({ revokeRemote: true });
+    try {
+      return await accountSession.signOut({ revokeRemote: true });
+    } catch (error) {
+      resumeSessionReplay();
+      throw error;
+    }
   });
   ipcMain.handle(channels.deleteAccount, async (event) => {
     if (!trustedSender(event)) throw new Error("Untrusted renderer");
     recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACT, { account_act: PRODUCT_ACCOUNT_ACT.DELETE });
     haltSessionReplay();
     await flushProductEvents();
-    return accountSession.deleteEverywhere();
+    try {
+      return await accountSession.deleteEverywhere();
+    } catch (error) {
+      // The account still stands — deletion is documented to reject with it
+      // intact — so recording has to be allowed back rather than left off
+      // until the next launch.
+      resumeSessionReplay();
+      throw error;
+    }
   });
 }
