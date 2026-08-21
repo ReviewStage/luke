@@ -6,10 +6,10 @@ import path from "node:path";
 import test, { type TestContext } from "node:test";
 import { promisify } from "node:util";
 import type { ParsedJsonObject } from "@sidecar/wire/testing";
+import type { ObservationHookInstallation } from "../shared/hook-merge.js";
 import {
   CODEX_HOOK_EVENT,
   CODEX_HOOK_SCRIPT_NAME,
-  type CodexHookInstallation,
   installCodexObservationHooks,
   readCodexHookEvent,
   removeCodexObservationHooks,
@@ -32,25 +32,25 @@ const REGISTERED_EVENT_NAMES = [
   "SessionEnd",
 ] as const;
 
-async function temporaryInstallation(t: TestContext): Promise<CodexHookInstallation> {
+async function temporaryInstallation(t: TestContext): Promise<ObservationHookInstallation> {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "luke-codex-hooks-"));
   t.after(async () => {
     await fs.rm(directory, { recursive: true, force: true });
   });
-  const codexHome = path.join(directory, "codex-home");
-  await fs.mkdir(codexHome, { recursive: true });
+  const providerHome = path.join(directory, "codex-home");
+  await fs.mkdir(providerHome, { recursive: true });
   return {
-    codexHome,
+    providerHome,
     hookScriptPath: path.join(directory, "luke-data", CODEX_HOOK_SCRIPT_NAME),
     spoolDirectory: path.join(directory, "luke-data", "events"),
   };
 }
 
-function hooksPath(installation: CodexHookInstallation): string {
-  return path.join(installation.codexHome, CODEX_HOOKS_FILE_NAME);
+function hooksPath(installation: ObservationHookInstallation): string {
+  return path.join(installation.providerHome, CODEX_HOOKS_FILE_NAME);
 }
 
-async function readHooksFile(installation: CodexHookInstallation): Promise<ParsedJsonObject> {
+async function readHooksFile(installation: ObservationHookInstallation): Promise<ParsedJsonObject> {
   return JSON.parse(await fs.readFile(hooksPath(installation), "utf8"));
 }
 
@@ -81,7 +81,7 @@ function entryCommands(entries: unknown[]): string[] {
  * the envelope rides in from a file beside the script through `sh -c`.
  */
 async function pipeToHookScript(
-  installation: CodexHookInstallation,
+  installation: ObservationHookInstallation,
   eventArgument: string,
   envelope: string,
 ): Promise<void> {
@@ -101,7 +101,7 @@ async function pipeToHookScript(
  * must not sit waiting on a pipe no one is writing.
  */
 async function callHookScript(
-  installation: CodexHookInstallation,
+  installation: ObservationHookInstallation,
   eventArgument: string,
   envelope: string,
 ): Promise<void> {
@@ -152,11 +152,11 @@ test("registers every lifecycle event beside the user's own hooks", async (t) =>
 
 test("touches nothing on a machine with no Codex home at all", async (t) => {
   const installation = await temporaryInstallation(t);
-  await fs.rm(installation.codexHome, { recursive: true, force: true });
+  await fs.rm(installation.providerHome, { recursive: true, force: true });
 
   await installCodexObservationHooks(installation);
 
-  await assert.rejects(fs.stat(installation.codexHome));
+  await assert.rejects(fs.stat(installation.providerHome));
   await assert.rejects(fs.stat(installation.hookScriptPath));
   await assert.rejects(fs.stat(installation.spoolDirectory));
 });

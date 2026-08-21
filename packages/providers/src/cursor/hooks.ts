@@ -1,6 +1,5 @@
 import {
   HOOK_ENTRY_NESTING,
-  HOOK_SPOOL_MAXIMUM_AGE_MS,
   type ObservationHookSpec,
   type ObservedHookEvent,
   observationHooksFor,
@@ -32,8 +31,6 @@ export const CURSOR_HOOK_SCRIPT_NAME = "luke-cursor-observation-hook.sh";
 
 /** How long Cursor lets the spool write run before giving up on it. */
 const CURSOR_HOOK_TIMEOUT_SECONDS = 10;
-
-export const CURSOR_HOOK_SPOOL_MAXIMUM_AGE_MS = HOOK_SPOOL_MAXIMUM_AGE_MS;
 
 /**
  * The tokens the script may write, fixed at registration: each hook entry
@@ -76,21 +73,8 @@ const CURSOR_HOOK_SPEC: ObservationHookSpec<CursorHookEvent> = {
   rootDefaults: { version: 1 },
 };
 
-export interface CursorHookInstallation {
-  /** Cursor's own home, holding the `hooks.json` entries merge into. */
-  cursorHome: string;
-  /** Where Luke keeps the script, under Luke's own application data. */
-  hookScriptPath: string;
-  /** Where the script writes its event files, under Luke's own data too. */
-  spoolDirectory: string;
-}
-
-const cursorHooks = observationHooksFor(
-  CURSOR_HOOK_SPEC,
-  (installation: CursorHookInstallation) => installation.cursorHome,
-);
+const cursorHooks = observationHooksFor(CURSOR_HOOK_SPEC);
 
 export const installCursorObservationHooks = cursorHooks.install;
 export const removeCursorObservationHooks = cursorHooks.remove;
 export const readCursorHookEvent = cursorHooks.read;
-export const pruneCursorHookSpool = cursorHooks.prune;

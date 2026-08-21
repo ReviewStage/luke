@@ -23,13 +23,13 @@ import {
 import {
   discoverSessionFiles,
   type HookStatusRefinement,
+  hookRefinedStatus,
   LOCAL_ADAPTER_DEFAULTS,
   LocalFileSessionAdapter,
   localSessionStatus,
   readDirectory,
   readHead,
   readTail,
-  refineStatusWithHookEvent,
   type SessionFileCandidate,
   sessionIdFromFileName,
   statDirectoryEntry,
@@ -111,15 +111,6 @@ const CLAUDE_ADAPTER_DEFAULTS = {
    * is the only account left, and the mtime fallback stands.
    */
   CLOCK_RESCUE_TAIL_BYTES: 512 * 1024,
-  /**
-   * How much older than the transcript's clock a hook event may run and still
-   * describe the same moment. The hook fires as a turn boundary happens and
-   * the closing records land moments later under their own timestamps, so a
-   * boundary's event usually trails the record it belongs with by a breath —
-   * never by more than this. An event further behind describes a turn the
-   * transcript has already moved past, and refines nothing.
-   */
-  HOOK_EVENT_TOLERANCE_MS: 5_000,
 } as const;
 
 export const CLAUDE_CODE_PROVIDER: SessionProvider = {
@@ -427,15 +418,11 @@ function statusFromTail(
 }
 
 /**
- * Sharpens the tail's verdict with what the observation hook last said, in the
- * order the meanings bind. A failed or closed session is definite in either
- * direction: the hook saying so outranks the tail, and a tail that says so is
- * never talked out of it by a softer event. Past those, the events refine only
- * a fresh session — the decay to `UNKNOWN` exists because a hook can go
- * silent (a crash fires no `SessionEnd`), so an old "waiting" must age the
- * same way an old tail does. What the refinement actually buys is the states
- * the transcript cannot show: a tool call holding for permission writes no
- * records while it holds, and a turn's true end can sit past the tail's read.
+ * What the refinement actually buys here is the states the transcript cannot
+ * show: a tool call holding for permission writes no records while it holds,
+ * and a turn's true end can sit past the tail's read. A failed turn is
+ * definite alongside a closed session because the tail may hold nothing about
+ * either.
  */
 const CLAUDE_HOOK_STATUS_REFINEMENT = {
   definitive: [
@@ -447,15 +434,9 @@ const CLAUDE_HOOK_STATUS_REFINEMENT = {
     { event: CLAUDE_HOOK_EVENT.STOP, fresh: SESSION_STATUS.WAITING },
     { event: CLAUDE_HOOK_EVENT.NOTIFICATION, fresh: SESSION_STATUS.WAITING },
   ],
+  notificationEvent: CLAUDE_HOOK_EVENT.NOTIFICATION,
+  sessionEndEvent: CLAUDE_HOOK_EVENT.SESSION_END,
 } as const satisfies HookStatusRefinement<ClaudeHookEvent>;
-
-function statusWithHookEvent(
-  status: ProviderSessionObservation["status"],
-  event: ClaudeHookEvent,
-  isFresh: boolean,
-): ProviderSessionObservation["status"] {
-  return refineStatusWithHookEvent(status, event, isFresh, CLAUDE_HOOK_STATUS_REFINEMENT);
-}
 
 /**
  * Claude Code names its own sessions, and that name is what a developer is
@@ -501,29 +482,17 @@ function observationFromSessionFile(
   // read as active just now. The file's date remains the fallback for a
   // transcript in which no conversation clock could be found at all.
   const transcriptAt = parsed.timestampMs ?? candidate.mtimeMs;
-  // A hook event trailing the transcript's clock by more than the tolerance
-  // describes a turn the transcript already moved past, so it is ignored
-  // whole. One that stands is proof the session moved — only Luke's own
-  // script writes the spool, so its date cannot suffer the bulk-touch problem
-  // above — and dates the session for the freshness decay as well. A
-  // notification alone gets no tolerance: it means the session is holding for
-  // the user, and holding writes nothing, so a record at or past the event is
-  // itself the news that the hold ended — a granted permission must not read
-  // as waiting for even one more pass.
-  const toleranceMs =
-    hookEvent?.event === CLAUDE_HOOK_EVENT.NOTIFICATION
-      ? 0
-      : CLAUDE_ADAPTER_DEFAULTS.HOOK_EVENT_TOLERANCE_MS;
-  const eventStands = hookEvent !== undefined && hookEvent.atMs + toleranceMs >= transcriptAt;
-  const observedAt = eventStands ? Math.max(transcriptAt, hookEvent.atMs) : transcriptAt;
-  let status = statusFromTail(parsed, observedAt, now, activeSessionFreshnessMs);
-  if (eventStands) {
-    const isFresh = now - observedAt <= activeSessionFreshnessMs;
-    status = statusWithHookEvent(status, hookEvent.event, isFresh);
-  }
+  const refined = hookRefinedStatus({
+    refinement: CLAUDE_HOOK_STATUS_REFINEMENT,
+    hookEvent,
+    providerAtMs: transcriptAt,
+    statusAt: (observedAt) => statusFromTail(parsed, observedAt, now, activeSessionFreshnessMs),
+    now,
+    activeSessionFreshnessMs,
+  });
   const completionCause =
-    status === SESSION_STATUS.COMPLETE
-      ? eventStands && hookEvent.event === CLAUDE_HOOK_EVENT.SESSION_END
+    refined.status === SESSION_STATUS.COMPLETE
+      ? refined.sessionClosed
         ? SESSION_COMPLETION_CAUSE.SESSION_CLOSED
         : parsed.eventType === CLAUDE_EVENT_TYPE.RESULT
           ? SESSION_COMPLETION_CAUSE.WORK_FINISHED
@@ -532,16 +501,12 @@ function observationFromSessionFile(
   return {
     providerSessionId: candidate.providerSessionId,
     title: titleFromTail(parsed),
-    status,
+    status: refined.status,
     ...(completionCause ? { completionCause } : undefined),
-    observedAt,
+    observedAt: refined.observedAt,
     ...(parsed.awaySummary ? { recap: parsed.awaySummary } : undefined),
     detail: detailFromTail(parsed),
-    ...(status === SESSION_STATUS.WAITING &&
-    eventStands &&
-    hookEvent?.event === CLAUDE_HOOK_EVENT.NOTIFICATION
-      ? { holdingForDeveloper: true }
-      : undefined),
+    ...(refined.holdingForDeveloper ? { holdingForDeveloper: true } : undefined),
   };
 }
 

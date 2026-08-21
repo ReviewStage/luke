@@ -11,20 +11,10 @@ const registrations = providerRegistrations({
   codexCloudAdapter: new CodexCloudSessionAdapter({
     run: async () => ({ exitCode: 1, stdout: "" }),
   }),
-  claudeHookInstallation: () => ({
-    claudeHome: "/missing/claude",
-    hookScriptPath: "/missing/claude-hook",
-    spoolDirectory: "/missing/claude-spool",
-  }),
-  codexHookInstallation: () => ({
-    codexHome: "/missing/codex",
-    hookScriptPath: "/missing/codex-hook",
-    spoolDirectory: "/missing/codex-spool",
-  }),
-  cursorHookInstallation: () => ({
-    cursorHome: "/missing/cursor",
-    hookScriptPath: "/missing/cursor-hook",
-    spoolDirectory: "/missing/cursor-spool",
+  observationHookInstallation: (providerId) => ({
+    providerHome: `/missing/${providerId}`,
+    hookScriptPath: `/missing/${providerId}-hook`,
+    spoolDirectory: `/missing/${providerId}-spool`,
   }),
 });
 

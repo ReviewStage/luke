@@ -6,10 +6,10 @@ import path from "node:path";
 import test, { type TestContext } from "node:test";
 import { promisify } from "node:util";
 import type { ParsedJsonObject } from "@sidecar/wire/testing";
+import type { ObservationHookInstallation } from "../shared/hook-merge.js";
 import {
   CURSOR_HOOK_EVENT,
   CURSOR_HOOK_SCRIPT_NAME,
-  type CursorHookInstallation,
   installCursorObservationHooks,
   readCursorHookEvent,
   removeCursorObservationHooks,
@@ -31,25 +31,25 @@ const REGISTERED_EVENT_NAMES = [
   "sessionEnd",
 ] as const;
 
-async function temporaryInstallation(t: TestContext): Promise<CursorHookInstallation> {
+async function temporaryInstallation(t: TestContext): Promise<ObservationHookInstallation> {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "luke-cursor-hooks-"));
   t.after(async () => {
     await fs.rm(directory, { recursive: true, force: true });
   });
-  const cursorHome = path.join(directory, "cursor-home");
-  await fs.mkdir(cursorHome, { recursive: true });
+  const providerHome = path.join(directory, "cursor-home");
+  await fs.mkdir(providerHome, { recursive: true });
   return {
-    cursorHome,
+    providerHome,
     hookScriptPath: path.join(directory, "luke-data", CURSOR_HOOK_SCRIPT_NAME),
     spoolDirectory: path.join(directory, "luke-data", "events"),
   };
 }
 
-function hooksPath(installation: CursorHookInstallation): string {
-  return path.join(installation.cursorHome, CURSOR_HOOKS_FILE_NAME);
+function hooksPath(installation: ObservationHookInstallation): string {
+  return path.join(installation.providerHome, CURSOR_HOOKS_FILE_NAME);
 }
 
-async function readHooksFile(installation: CursorHookInstallation): Promise<ParsedJsonObject> {
+async function readHooksFile(installation: ObservationHookInstallation): Promise<ParsedJsonObject> {
   return JSON.parse(await fs.readFile(hooksPath(installation), "utf8"));
 }
 
@@ -76,7 +76,7 @@ function entryCommands(entries: unknown[]): string[] {
  * JSON answer.
  */
 async function pipeToHookScript(
-  installation: CursorHookInstallation,
+  installation: ObservationHookInstallation,
   eventArgument: string,
   envelope: string,
 ): Promise<string> {
@@ -147,11 +147,11 @@ test("the user's own schema version is never rewritten", async (t) => {
 
 test("touches nothing on a machine with no Cursor home at all", async (t) => {
   const installation = await temporaryInstallation(t);
-  await fs.rm(installation.cursorHome, { recursive: true, force: true });
+  await fs.rm(installation.providerHome, { recursive: true, force: true });
 
   await installCursorObservationHooks(installation);
 
-  await assert.rejects(fs.stat(installation.cursorHome));
+  await assert.rejects(fs.stat(installation.providerHome));
   await assert.rejects(fs.stat(installation.hookScriptPath));
   await assert.rejects(fs.stat(installation.spoolDirectory));
 });
