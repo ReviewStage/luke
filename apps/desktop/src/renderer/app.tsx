@@ -35,6 +35,7 @@ import {
   type PanelFormFactor,
   SESSION_NOTICE_HEIGHT,
   SESSION_NOTICE_MAX_ROWS,
+  VOICE_BAND_INSET,
   VOICE_CAPTION_MAX_HEIGHT,
 } from "@sidecar/surface";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
@@ -246,8 +247,8 @@ const FEEDBACK_KIND_FOR_COMPOSER = {
  * for more height than the window holds.
  * Padding is the caption's own computed padding, not a restated number, so a
  * retune in the stylesheet grows the surface by exactly what the text is
- * inset — including the bottom inset the stylesheet hands to the band while
- * the hint stands.
+ * inset — the one inset above the words, with whatever stands below the block
+ * carrying the gap on that side.
  */
 function captionSizeStyle(
   textHeight: number | undefined,
@@ -279,14 +280,20 @@ function captionBlockSize(textHeight: number, volumeHint: boolean, padding: numb
  * holds every reserved row so the growth can be revealed by its clip, which
  * means only the inner stack's height says how many rows the chips actually
  * made. The clamp is the rows the window reserved — past it the chips scroll
- * inside the band instead of growing the shape. The 6px around the measured
- * chips is the band's 3px stand-off from the strip, top and bottom, which
- * one reserved row already accounts for. Unmeasured falls back to
- * `--notice-size`, one row, in the stylesheet.
+ * inside the band instead of growing the shape. The inset added to the
+ * measured chips is the band's own stand-off from the strip above it, the
+ * same one every band under the strip carries; the gap below the last row is
+ * the next band's, or the shape's. Because the chips wrap at that inset too,
+ * the sum lands on an exact multiple of `--notice-size` — the reserved row —
+ * however many rows they made. Unmeasured falls back to `--notice-size`, one
+ * row, in the stylesheet.
  */
 function noticeGrowthStyle(rowsHeight: number | undefined): CSSProperties {
   if (!rowsHeight) return {};
-  const growth = Math.min(SESSION_NOTICE_HEIGHT * SESSION_NOTICE_MAX_ROWS, rowsHeight + 6);
+  const growth = Math.min(
+    SESSION_NOTICE_HEIGHT * SESSION_NOTICE_MAX_ROWS,
+    rowsHeight + VOICE_BAND_INSET,
+  );
   return cssCustomProperties({ "--notice-growth": `${growth}px` });
 }
 

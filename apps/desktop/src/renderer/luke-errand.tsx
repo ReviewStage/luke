@@ -486,6 +486,7 @@ const MOTION_TOKEN = {
   CAPTION_SIZE: "--caption-size",
   CAPTION_MAX: "--caption-max",
   VOLUME_HINT_SIZE: "--volume-hint-size",
+  BAND_INSET: "--voice-band-inset",
 } as const;
 
 type MotionToken = (typeof MOTION_TOKEN)[keyof typeof MOTION_TOKEN];
@@ -701,11 +702,13 @@ export function LukeErrand({ errand, onLanded, onReturned }: LukeErrandProps): R
       // An already-visible control with room to spare is left exactly where it
       // is, which is the usual case.
       // The room the reply takes off the panel's foot is the caption block
-      // plus the volume hint's band below it — two stacked elements, summed
-      // here the same way the shape's growth sums them.
+      // plus the volume hint's band below it and the inset that closes the
+      // stack against the shape's edge — summed here the same way the shape's
+      // growth sums them.
       const captionSize =
         parsePixels(token(MOTION_TOKEN.CAPTION_SIZE)) +
-        parsePixels(token(MOTION_TOKEN.VOLUME_HINT_SIZE));
+        parsePixels(token(MOTION_TOKEN.VOLUME_HINT_SIZE)) +
+        parsePixels(token(MOTION_TOKEN.BAND_INSET));
       keepInView(
         stage,
         target,

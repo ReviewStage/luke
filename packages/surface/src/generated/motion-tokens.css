@@ -78,6 +78,7 @@
   --slot-delay: calc(var(--duration-exit) + var(--peek-delay));
   --bubble-lift: 4px;
   --caption-max: 210px;
+  --voice-band-inset: 6px;
   --notice-size: 26px;
   --notice-max-rows: 3;
   --panel-width: 620px;
