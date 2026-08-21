@@ -8,8 +8,9 @@
  * issue pair are the two acts a connected tracker takes. Creating a workspace
  * and the standing-ask pair — keeping the developer's ask to hear about a
  * session, and letting it go — are the acts with no row yet to mirror. The
- * last three are the same presses turned toward the app itself: a settings
- * change, showing the panel, and opening the feedback composer.
+ * last four are the same presses turned toward the app itself: a settings
+ * change, showing the panel, opening the feedback composer, and the Updates
+ * row's button.
  *
  * All run the same gauntlet: a call is validated against the observed roster
  * (or the guide) before anything leaves the renderer, and the main process
@@ -22,14 +23,19 @@ import { attentionRequestText, maximumAttentionRequestLength } from "@sidecar/at
 import {
   APP_PANEL_TAB,
   APP_SETTING_KIND,
+  APP_UPDATE_ACT,
+  APP_UPDATE_WAIT,
   type AppGuideSetting,
   type AppGuideSnapshot,
+  type AppGuideUpdate,
   type AppPanelTab,
+  type AppUpdateAct,
   appGuideSetting,
   appToggleValue,
   FEEDBACK_COMPOSER_KIND,
   type FeedbackComposerKind,
   isAppPanelTab,
+  isAppUpdateAct,
   isFeedbackComposerKind,
   isSessionListSort,
   SESSION_LIST_SORT,
@@ -108,6 +114,7 @@ export const APP_TOOL_KIND = {
   SETTING: "setting",
   PANEL: "panel",
   FEEDBACK: "feedback",
+  UPDATE: "update",
 } as const;
 
 export type AppToolKind = (typeof APP_TOOL_KIND)[keyof typeof APP_TOOL_KIND];
@@ -232,6 +239,7 @@ export type AppToolAction =
       query?: string;
     }
   | { kind: typeof APP_TOOL_KIND.FEEDBACK; composer: FeedbackComposerKind; draft?: string }
+  | { kind: typeof APP_TOOL_KIND.UPDATE; act: AppUpdateAct }
   | { kind: "refused"; reason: string };
 
 /** An app act that passed the renderer's half of the gauntlet. */
@@ -1034,6 +1042,38 @@ function validateOpenFeedbackComposer(parsed: WireRecord, _context: AppToolConte
 }
 
 /**
+ * What stands where the asked-for act would be, so a refusal can say why the
+ * row is not offering it — the row's own detail says where the build stands,
+ * and this names the one press that stands instead.
+ */
+const UPDATE_BUTTON_STANDING = {
+  [APP_UPDATE_ACT.CHECK]: "Its button offers a check right now.",
+  [APP_UPDATE_ACT.DOWNLOAD]: "Its button offers the releases page in the browser right now.",
+  [APP_UPDATE_ACT.RESTART]: "Its button offers Restart to update right now.",
+  [APP_UPDATE_WAIT.CHECKING]: "Nothing is pressable while the check is out.",
+  [APP_UPDATE_WAIT.DOWNLOADING]: "Nothing is pressable while the download runs.",
+} as const satisfies Record<AppGuideUpdate["button"], string>;
+
+function validateRunUpdateAction(parsed: WireRecord, context: AppToolContext): AppToolAction {
+  // The guide's update entry is the roster here: a run that reported nothing
+  // about updates — a fixture, a pure caller — advertises no act to run.
+  const update = context.guide.update;
+  if (!update) {
+    return { kind: "refused", reason: "This run does not report where updates stand." };
+  }
+  const act = parsed.action;
+  if (!isAppUpdateAct(act)) {
+    return { kind: "refused", reason: "The Updates button checks, downloads, or restarts." };
+  }
+  // One button, one act: only the press the row is actually drawing runs, so
+  // the refusal is the row's own words plus what stands in the act's place.
+  if (act !== update.button) {
+    return { kind: "refused", reason: `${update.detail} ${UPDATE_BUTTON_STANDING[update.button]}` };
+  }
+  return { kind: APP_TOOL_KIND.UPDATE, act };
+}
+
+/**
  * The acts Luke can carry, keyed the way a value set is: adding a tool is
  * adding a key, and the family sets, the spoken count, and the schema list
  * follow. Each row's `validate` is the renderer's half of the gauntlet — the
@@ -1398,6 +1438,29 @@ export const REALTIME_TOOLS = {
       },
     },
     validate: validateOpenFeedbackComposer,
+  },
+  RUN_UPDATE_ACTION: {
+    name: "run_update_action",
+    family: REALTIME_TOOL_FAMILY.APP,
+    schema: {
+      description:
+        "Press the Updates row's button for the developer: check for updates, open the latest " +
+        "release's page in the browser to download by hand, or restart into an update already " +
+        "downloaded. Only the act the button currently offers runs — the app guide's Updates " +
+        "line names it.",
+      parameters: {
+        type: "object",
+        properties: {
+          action: {
+            type: "string",
+            enum: Object.values(APP_UPDATE_ACT),
+            description: "The act to run, as the guide's Updates line offers it.",
+          },
+        },
+        required: ["action"],
+      },
+    },
+    validate: validateRunUpdateAction,
   },
 } as const satisfies Record<string, RealtimeToolSpec>;
 

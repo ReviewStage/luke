@@ -8,7 +8,7 @@ import {
 import type { FeedbackImage, FeedbackKind } from "@sidecar/feedback";
 import { FEEDBACK_KIND, FEEDBACK_LIMITS, feedbackKindForLifecycleEvent } from "@sidecar/feedback";
 import { FIXTURE_EPOCH_MS, FIXTURE_SPEAKING_CAPTION } from "@sidecar/fixtures";
-import { FEEDBACK_COMPOSER_KIND } from "@sidecar/guide";
+import { APP_UPDATE_ACT, FEEDBACK_COMPOSER_KIND } from "@sidecar/guide";
 import type { HostedUsageAnswer } from "@sidecar/hosted";
 import {
   APP_TOOL_KIND,
@@ -38,6 +38,7 @@ import {
   VOICE_CAPTION_MAX_HEIGHT,
 } from "@sidecar/surface";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
+import type { WireRecord } from "@sidecar/wire";
 import {
   type CSSProperties,
   useCallback,
@@ -172,6 +173,7 @@ import {
   stripHoldNext,
 } from "./strip-hold";
 import { SupersetSignInSlot } from "./superset-sign-in-slot";
+import { updateRow } from "./update-row";
 import { useBootstrapRacedChannel } from "./use-bootstrap-raced-channel";
 import { useMeasuredHeight } from "./use-measured-height";
 import { panelEntryOpen, usePanelEntry } from "./use-panel-entry";
@@ -1992,6 +1994,31 @@ export function App(): React.JSX.Element {
             ...(notes.length > 0 ? { note: notes.join(" ") } : undefined),
           };
         },
+        [APP_TOOL_KIND.UPDATE]: async (action): Promise<WireRecord> => {
+          // The Updates row's own three presses, behind the same bridge calls
+          // its button uses; the main process holds its own guards — a check
+          // never interrupts a download, an install runs only on a build in
+          // hand, and the releases page is an address fixed by the build.
+          if (action.act === APP_UPDATE_ACT.CHECK) {
+            // Answered rather than fire-and-forget, like the row's own press,
+            // so the outcome voiced is the answer the check actually returned.
+            const answered = await window.sidecar.checkForUpdates();
+            setUpdate(answered);
+            return { status: "checked", outcome: updateRow(answered).detail };
+          }
+          if (action.act === APP_UPDATE_ACT.DOWNLOAD) {
+            window.sidecar.openLatestRelease();
+            return {
+              status: "opened",
+              note: "The latest release's page is open in the browser; the download itself is by hand from there.",
+            };
+          }
+          window.sidecar.installUpdate();
+          return {
+            status: "restarting",
+            note: "Luke is quitting to install the downloaded release; this conversation ends with it.",
+          };
+        },
       }),
     [
       accountNow,
@@ -2627,6 +2654,7 @@ export function App(): React.JSX.Element {
       const guide = buildLukeGuide({
         account: account ?? bootstrap.account,
         settings: current,
+        update: update ?? bootstrap.update,
         voiceAvailable: current.voiceAvailable,
         microphoneStatus,
         hotkey: {
@@ -2641,6 +2669,7 @@ export function App(): React.JSX.Element {
     [
       bootstrap,
       account,
+      update,
       microphoneStatus,
       voiceHotkey,
       askHotkeyChange,

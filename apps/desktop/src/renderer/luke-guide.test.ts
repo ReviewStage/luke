@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials";
-import { APP_SETTING_KIND, APP_TOGGLE_VALUE, type AppGuideSetting } from "@sidecar/guide";
+import {
+  APP_SETTING_KIND,
+  APP_TOGGLE_VALUE,
+  APP_UPDATE_ACT,
+  APP_UPDATE_WAIT,
+  type AppGuideSetting,
+} from "@sidecar/guide";
 import {
   REALTIME_DEFAULTS,
   REALTIME_VOICE,
@@ -11,13 +17,14 @@ import {
 import { PROVIDER_ID, type WorkspaceAgentSelection } from "@sidecar/session";
 import { VOICE_SOURCE } from "@sidecar/settings";
 import { PANEL_FORM_FACTOR } from "@sidecar/surface";
-import type { AppSettings, SettingsUpdateResult } from "#shared/contracts";
+import type { AppSettings, SettingsUpdateResult, UpdateSnapshot } from "#shared/contracts";
 import {
   ACCOUNT_PROVIDER,
   ACCOUNT_STATUS,
   CLI_CONNECTION,
   CREDENTIAL_SOURCE,
   SECRET_STORAGE,
+  UPDATE_STATUS,
 } from "#shared/contracts";
 import { spokenSettingBridge } from "#testing/spoken-setting-bridge";
 import {
@@ -64,9 +71,14 @@ function settings(overrides: Partial<AppSettings> = {}): AppSettings {
   );
 }
 
+function idleUpdate(upToDate = false): UpdateSnapshot {
+  return { status: UPDATE_STATUS.IDLE, currentVersion: "0.3.8", installSupported: true, upToDate };
+}
+
 function guideInput(overrides: Partial<LukeGuideInput> = {}): LukeGuideInput {
   return {
     settings: settings(),
+    update: idleUpdate(),
     voiceAvailable: true,
     microphoneStatus: "granted",
     hotkey: { hotkey: "⌥Space", held: true },
@@ -900,5 +912,80 @@ test("the store's refusal comes back as the spoken outcome", async () => {
   assert.deepEqual(outcome, {
     status: "refused",
     reason: "The settings file could not be written.",
+  });
+});
+
+test("the guide's update entry reads from the same row the settings page draws", () => {
+  const entry = (update: UpdateSnapshot) => buildLukeGuide(guideInput({ update })).update;
+
+  assert.deepEqual(entry(idleUpdate()), {
+    version: "0.3.8",
+    detail: "The latest release has not been checked for yet.",
+    button: APP_UPDATE_ACT.CHECK,
+  });
+  assert.deepEqual(entry(idleUpdate(true)), {
+    version: "0.3.8",
+    detail: "This is the latest release.",
+    button: APP_UPDATE_ACT.CHECK,
+  });
+  assert.deepEqual(
+    entry({
+      status: UPDATE_STATUS.READY,
+      currentVersion: "0.3.8",
+      installSupported: true,
+      latestVersion: "0.3.9",
+    }),
+    {
+      version: "0.3.8",
+      detail: "Version 0.3.9 is downloaded.",
+      button: APP_UPDATE_ACT.RESTART,
+    },
+  );
+  assert.deepEqual(
+    entry({
+      status: UPDATE_STATUS.CHECKING,
+      currentVersion: "0.3.8",
+      installSupported: true,
+    }),
+    {
+      version: "0.3.8",
+      detail: "Checking the latest release…",
+      button: APP_UPDATE_WAIT.CHECKING,
+    },
+  );
+  // A build that cannot install itself offers the browser, worded as the row
+  // words it — the spoken vocabulary calls that press "download".
+  assert.deepEqual(
+    entry({
+      status: UPDATE_STATUS.IDLE,
+      currentVersion: "0.3.8",
+      installSupported: false,
+      upToDate: false,
+    }),
+    {
+      version: "0.3.8",
+      detail: "This build updates by hand: the releases page has the latest.",
+      button: APP_UPDATE_ACT.DOWNLOAD,
+    },
+  );
+});
+
+test("a progress tick is not news to the guide", () => {
+  const downloading = (percent: number): UpdateSnapshot => ({
+    status: UPDATE_STATUS.DOWNLOADING,
+    currentVersion: "0.3.8",
+    installSupported: true,
+    latestVersion: "0.3.9",
+    progress: { percent, transferredBytes: percent, totalBytes: 100 },
+  });
+
+  const early = buildLukeGuide(guideInput({ update: downloading(5) })).update;
+  const late = buildLukeGuide(guideInput({ update: downloading(95) })).update;
+
+  assert.deepEqual(early, late);
+  assert.deepEqual(early, {
+    version: "0.3.8",
+    detail: "Downloading version 0.3.9…",
+    button: APP_UPDATE_WAIT.DOWNLOADING,
   });
 });

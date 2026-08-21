@@ -75,10 +75,64 @@ export interface AppGuideFact {
   detail: string;
 }
 
+/**
+ * The three acts the Updates row's button ever performs, which are also the
+ * only values a spoken update ask may name. The row offers exactly one at a
+ * time, so which of these an ask can reach is the guide's `update` entry's
+ * question, answered by the validator.
+ */
+export const APP_UPDATE_ACT = {
+  /** Ask the release manifest for the latest build. */
+  CHECK: "check",
+  /** Open the latest release's page in the browser. */
+  DOWNLOAD: "download",
+  /** Restart into the downloaded release. */
+  RESTART: "restart",
+} as const;
+
+export type AppUpdateAct = (typeof APP_UPDATE_ACT)[keyof typeof APP_UPDATE_ACT];
+
+const APP_UPDATE_ACT_LIST: readonly AppUpdateAct[] = Object.values(APP_UPDATE_ACT);
+
+/** Guards an act arriving from a tool call's untrusted arguments. */
+export function isAppUpdateAct(value: UnparsedWireValue): value is AppUpdateAct {
+  return isListedGuideValue(value, APP_UPDATE_ACT_LIST);
+}
+
+/** The two waits during which the Updates row's button offers nothing. */
+export const APP_UPDATE_WAIT = {
+  /** A check is already out. */
+  CHECKING: "checking",
+  /** A newer build is downloading itself. */
+  DOWNLOADING: "downloading",
+} as const;
+
+export type AppUpdateWait = (typeof APP_UPDATE_WAIT)[keyof typeof APP_UPDATE_WAIT];
+
+/** What the Updates row's button is right now: one act, or one wait. */
+export type AppUpdateButton = AppUpdateAct | AppUpdateWait;
+
+/**
+ * The Updates row, as the guide describes it: the running version, where the
+ * build stands in the row's own words, and the one act its button offers —
+ * or the wait it is disabled for. A spoken update ask is validated against
+ * `button`, so the guide is the outer bound here exactly as it is for a
+ * setting: an act the row is not offering is one no ask can run.
+ */
+export interface AppGuideUpdate {
+  /** The running version, as the Updates row names it. */
+  version: string;
+  /** Where the build stands, in the row's own words. */
+  detail: string;
+  button: AppUpdateButton;
+}
+
 /** Everything the conversation may know about the app itself. */
 export interface AppGuideSnapshot {
   facts: readonly AppGuideFact[];
   settings: readonly AppGuideSetting[];
+  /** Absent only for a run that reports nothing about updates. */
+  update?: AppGuideUpdate;
 }
 
 /** The guide before the app has said anything, which allows nothing. */
@@ -222,14 +276,20 @@ function settingLine(setting: AppGuideSetting): string {
  * changes. The
  * ids are printed in the same breath as the values so a spoken change can
  * name a setting the way tool calls name sessions — exactly as listed.
+ * The update line prints the button on the same terms: it is the value a
+ * spoken update ask is validated against, so it is said where the state is.
  */
 export function appGuideContextText(guide: AppGuideSnapshot): string {
   if (guide.facts.length === 0 && guide.settings.length === 0) {
     return "The app guide has not been provided.";
   }
+  const update = guide.update;
   return [
     "App guide — what Luke is and how Luke is configured:",
     ...guide.facts.map((fact) => `- ${fact.label}: ${fact.detail}`),
+    ...(update
+      ? [`- Updates now: ${update.detail} [version=${update.version}; button=${update.button}]`]
+      : []),
     "Settings:",
     ...guide.settings.map(settingLine),
   ].join("\n");

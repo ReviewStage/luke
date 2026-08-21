@@ -24,7 +24,15 @@ import {
   CREDENTIAL_PROVIDERS,
   VOICE_CREDENTIAL_PROVIDER_ID,
 } from "@sidecar/credentials";
-import type { AppGuideFact, AppGuideSetting, AppGuideSnapshot } from "@sidecar/guide";
+import {
+  APP_UPDATE_ACT,
+  APP_UPDATE_WAIT,
+  type AppGuideFact,
+  type AppGuideSetting,
+  type AppGuideSnapshot,
+  type AppGuideUpdate,
+  type AppUpdateButton,
+} from "@sidecar/guide";
 import { PROVIDER_ID, type WorkspaceAgentSelection, workspaceAgentModels } from "@sidecar/session";
 import {
   APP_SETTING_ID,
@@ -42,6 +50,7 @@ import type {
   CredentialSource,
   MicrophoneStatus,
   SettingsUpdateResult,
+  UpdateSnapshot,
 } from "#shared/contracts";
 import {
   ACCOUNT_PROVIDER,
@@ -49,7 +58,9 @@ import {
   CLI_CONNECTION,
   CREDENTIAL_SOURCE,
   SECRET_STORAGE,
+  UPDATE_STATUS,
 } from "#shared/contracts";
+import { UPDATE_ROW_ACTION, type UpdateRowAction, updateRow } from "./update-row";
 
 export type { AppSettingId } from "@sidecar/settings";
 /** The ids a spoken change names Luke's settings by. */
@@ -79,6 +90,8 @@ export interface LukeGuideInput {
   /** Optional only for pure callers that predate accounts; the app always supplies it. */
   account?: AccountSnapshot;
   settings: AppSettings;
+  /** Where the build stands, for the guide's Updates entry. */
+  update: UpdateSnapshot;
   /** Whether a Realtime credential can be minted at all. */
   voiceAvailable: boolean;
   microphoneStatus: MicrophoneStatus;
@@ -276,6 +289,32 @@ function voiceKeyFact(settings: AppSettings, voiceAvailable: boolean): AppGuideF
             `service, and OpenAI bills you for what you use. `) +
       `The key is typed by hand into ${VOICE_SOURCE_SECTION} — never read from the environment, ` +
       `never spoken, and never repeated back.`,
+  };
+}
+
+/** The row's button, in the words a spoken update ask names an act by. */
+const UPDATE_BUTTON_FOR_ROW_ACTION = {
+  [UPDATE_ROW_ACTION.CHECK]: APP_UPDATE_ACT.CHECK,
+  [UPDATE_ROW_ACTION.CHECKING]: APP_UPDATE_WAIT.CHECKING,
+  [UPDATE_ROW_ACTION.DOWNLOADING]: APP_UPDATE_WAIT.DOWNLOADING,
+  [UPDATE_ROW_ACTION.RESTART]: APP_UPDATE_ACT.RESTART,
+  [UPDATE_ROW_ACTION.GET]: APP_UPDATE_ACT.DOWNLOAD,
+} as const satisfies Record<UpdateRowAction, AppUpdateButton>;
+
+/**
+ * The guide's Updates entry, read from the same row the settings page draws
+ * so the sentence out loud and the button on screen can never disagree. The
+ * download's progress is stripped before the row is read: the guide re-sends
+ * its context whenever its text changes, and a percent tick is not news.
+ */
+function updateGuideEntry(update: UpdateSnapshot): AppGuideUpdate {
+  const steady =
+    update.status === UPDATE_STATUS.DOWNLOADING ? { ...update, progress: undefined } : update;
+  const row = updateRow(steady);
+  return {
+    version: update.currentVersion,
+    detail: row.detail,
+    button: UPDATE_BUTTON_FOR_ROW_ACTION[row.action],
   };
 }
 
@@ -672,7 +711,9 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "finds one — while it does, the Settings tab wears a dot and the section stands at the " +
         "top of that page — and installs when Luke next quits: the row offers Restart to update, " +
         "or it simply lands on the next quit. If a download or install fails, the row says so " +
-        "and offers the fixed releases page in the browser instead.",
+        "and offers the fixed releases page in the browser instead. The button's press can also " +
+        "be asked of Luke — check for updates, open the releases page, restart to update — and " +
+        "only the one act the row currently offers runs.",
     },
     {
       label: "Usage data",
@@ -696,7 +737,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
 
   const settings = settingGuideEntries(input.settings);
 
-  return { facts, settings };
+  return { facts, settings, update: updateGuideEntry(input.update) };
 }
 
 /**
