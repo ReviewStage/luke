@@ -216,6 +216,29 @@ test("creating a workspace fires Conductor's create link for the offered reposit
   const parsed = parseConductorCreateLink(opened[0] ?? "");
   assert.equal(parsed.path, "/Users/dev/repos/luke");
   assert.equal(parsed.prompt, "Start on the parser");
+  // Conductor pre-fills the prompt but does not send it, so a create carrying a
+  // task warns rather than reading as an agent already at work.
+  assert.match(
+    "warning" in result ? (result.warning ?? "") : "",
+    /ready in its composer.*press Return|press Return.*send/i,
+  );
+});
+
+test("creating a workspace with no task lands clean, with no send warning", async (t) => {
+  const databasePath = await temporaryDatabasePath(t);
+  const database = createReposDatabase(databasePath);
+  writeRepo(database, { id: "repo-luke", name: "luke", rootPath: "/Users/dev/repos/luke" });
+  database.close();
+
+  const adapter = new ConductorLocalWorkspaceAdapter({
+    reader: new ConductorRepositoryReader({ databasePath }),
+    openExternal: async () => {},
+  });
+  await adapter.refresh();
+  const result = await adapter.createWorkspace({ providerProjectId: "repo-luke" });
+  assert.equal(result.status, PROVIDER_ACT_RESULT_STATUS.ACCEPTED);
+  // Nothing was pre-filled, so there is nothing to press Return on.
+  assert.ok(!("warning" in result && result.warning));
 });
 
 test("creating a workspace uses the offered root path, never the request's", async (t) => {

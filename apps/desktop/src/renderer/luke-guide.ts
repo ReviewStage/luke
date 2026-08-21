@@ -251,8 +251,11 @@ function integrationsFact(settings: AppSettings): AppGuideFact {
     "index, and a conversation ask can create a new workspace in any repository Conductor holds " +
     "locally — shown as “Conductor (local)” in the create picker and its own block under " +
     "Providers. A local creation opens the new workspace in Conductor itself and may carry an " +
-    "opening task, but no agent, model, or name choice, so it runs the repository's own default " +
-    "agent and wears the name Conductor gives it; the default repository a nameless ask lands in " +
+    "opening task, which Conductor pre-fills in the new workspace's composer but does not send — " +
+    "its link cannot, so Luke says the prompt is ready and the developer presses Return in " +
+    "Conductor to start it. It carries no agent, model, or name choice, so it runs the " +
+    "repository's own default agent and wears the name Conductor gives it; the default repository " +
+    "a nameless ask lands in " +
     "is chosen under Conductor (local) in Settings, and until one is chosen Luke asks. Local " +
     "Conductor chats stay read-only otherwise: Luke cannot message, archive, or add an agent to " +
     "one, because Conductor documents no local way in for those.";

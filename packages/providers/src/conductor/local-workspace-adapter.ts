@@ -161,12 +161,15 @@ export interface ConductorLocalWorkspaceAdapterOptions {
  * repositories the latest read of Conductor's index reported — and, only for
  * one of exactly those, to fire the create link the developer just asked for.
  *
- * The developer's opening task rides the link as Conductor's `prompt`; the
- * link carries no agent, model, or name, because Conductor's creation link
- * documents none, so a new local workspace runs the repository's own default
- * agent and wears the name Conductor gives it. The workspace it lands in is
- * always the offered project's own root path, read back here rather than taken
- * from the request, so a create can only ever reach a repository this pass saw.
+ * The developer's opening task rides the link as Conductor's `prompt`, which
+ * Conductor pre-fills in the new workspace's composer but does not send — its
+ * link documents no way to, so a create carrying a task reports that the prompt
+ * waits there for the developer's own send. The link carries no agent, model,
+ * or name, because Conductor's creation link documents none, so a new local
+ * workspace runs the repository's own default agent and wears the name
+ * Conductor gives it. The workspace it lands in is always the offered project's
+ * own root path, read back here rather than taken from the request, so a create
+ * can only ever reach a repository this pass saw.
  */
 export class ConductorLocalWorkspaceAdapter extends SessionProviderAdapterBase {
   readonly provider = {
@@ -240,6 +243,18 @@ export class ConductorLocalWorkspaceAdapter extends SessionProviderAdapterBase {
     // own window, and hands back no session id, so none is reported and the
     // created-workspace open tracker stays out of it: the workspace opens
     // where it was made.
-    return { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED };
+    //
+    // Conductor's creation link pre-fills the opening task in the new
+    // workspace's composer but does not send it — its link documents no way to,
+    // and a local chat has no message endpoint to send it after — so a create
+    // carrying a task says so, rather than letting the agent look started when
+    // the prompt is only waiting for the developer's own send.
+    return request.task
+      ? {
+          status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED,
+          warning:
+            "Conductor opened the new workspace with your prompt ready in its composer — press Return there to send it, since Conductor's create link can't send it for you.",
+        }
+      : { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED };
   }
 }
