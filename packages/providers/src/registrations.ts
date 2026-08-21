@@ -28,6 +28,12 @@ import {
 import { ConductorSessionAdapter } from "./conductor/adapter.js";
 import { CopilotSessionAdapter } from "./copilot/adapter.js";
 import { CURSOR_PROVIDER, CursorSessionAdapter } from "./cursor/adapter.js";
+import {
+  CURSOR_HOOK_SPOOL_MAXIMUM_AGE_MS,
+  type CursorHookInstallation,
+  installCursorObservationHooks,
+  pruneCursorHookSpool,
+} from "./cursor/hooks.js";
 import { CursorLocalSessionAdapter } from "./cursor/local-adapter.js";
 import { DEVIN_PROVIDER, DevinSessionAdapter } from "./devin/adapter.js";
 import { DevinLocalSessionAdapter } from "./devin/local-adapter.js";
@@ -45,6 +51,7 @@ export interface ProviderRegistrationOptions {
   readApiKey: (providerId: CredentialProviderId) => Promise<string | undefined>;
   claudeHookInstallation: () => ClaudeCodeHookInstallation;
   codexHookInstallation: () => CodexHookInstallation;
+  cursorHookInstallation: () => CursorHookInstallation;
   /**
    * Constructed by the caller rather than here, because the app also asks it
    * what the latest pass learned about the Codex CLI login — the settings
@@ -75,7 +82,9 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
   const cursor = new CompositeSessionProviderAdapter({
     provider: CURSOR_PROVIDER,
     adapters: [
-      new CursorLocalSessionAdapter(),
+      new CursorLocalSessionAdapter({
+        hookEventsDirectory: () => options.cursorHookInstallation().spoolDirectory,
+      }),
       new CursorSessionAdapter({
         readApiKey: () => options.readApiKey(CREDENTIAL_PROVIDER_ID.CURSOR),
       }),
@@ -131,6 +140,15 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
     [PROVIDER_ID.CURSOR]: {
       adapter: cursor,
       credential: CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.CURSOR],
+      registerObservationHook: async () => {
+        const installation = options.cursorHookInstallation();
+        await installCursorObservationHooks(installation);
+        await pruneCursorHookSpool(
+          installation.spoolDirectory,
+          CURSOR_HOOK_SPOOL_MAXIMUM_AGE_MS,
+          now(),
+        );
+      },
     },
     [PROVIDER_ID.DEVIN]: {
       adapter: devin,

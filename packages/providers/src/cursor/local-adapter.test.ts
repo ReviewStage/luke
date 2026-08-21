@@ -7,6 +7,7 @@ import { pathToFileURL } from "node:url";
 import {
   SESSION_APPLICATION_ID,
   SESSION_APPLICATION_SCOPE,
+  SESSION_COMPLETION_CAUSE,
   SESSION_STATUS,
 } from "@sidecar/session";
 import type { MutableWireRecord, ParsedJsonObject } from "@sidecar/wire/testing";
@@ -463,6 +464,50 @@ test("bounds the phrase a tool call is named by", async (t) => {
   assert.ok(activity?.startsWith("Shell: run x"));
   assert.ok(activity !== undefined && activity.length <= "Shell: ".length + 80);
   assert.ok(activity?.endsWith("…"));
+});
+
+test("the observation hook sharpens what the transcript alone cannot say", async (t) => {
+  const state = await temporaryCursorState(t);
+  await writeWorkspaceRecord(state, "9f1c", "/Users/test/luke");
+  const settled = [
+    messageRecord(TEST_ROLE.ASSISTANT, TEST_CONTENT_TYPE.TEXT),
+    turnEndedRecord(TEST_TURN_STATUS.SUCCESS),
+  ];
+  // A chat whose window or CLI closed looks exactly like one holding for its
+  // developer; the hook's session-end token is the one thing that tells them
+  // apart.
+  await writeTranscript(state, "Users-test-luke", "session-closed", settled, TEST_TIME - 60_000);
+  // A stale event — one the transcript has already moved past — is ignored.
+  await writeTranscript(state, "Users-test-luke", "session-moved-on", settled, TEST_TIME - 5_000);
+  const spoolDirectory = path.join(state.cursorHome, "luke-spool");
+  await fs.mkdir(spoolDirectory, { recursive: true });
+  const closedEvent = path.join(spoolDirectory, "session-closed.json");
+  await fs.writeFile(closedEvent, '{"event":"session-end"}');
+  await fs.utimes(closedEvent, (TEST_TIME - 30_000) / 1000, (TEST_TIME - 30_000) / 1000);
+  const staleEvent = path.join(spoolDirectory, "session-moved-on.json");
+  await fs.writeFile(staleEvent, '{"event":"session-end"}');
+  await fs.utimes(staleEvent, (TEST_TIME - 60_000) / 1000, (TEST_TIME - 60_000) / 1000);
+
+  const adapter = new CursorLocalSessionAdapter({
+    ...state,
+    now: () => TEST_TIME,
+    hookEventsDirectory: () => spoolDirectory,
+  });
+  const observations = await adapter.observe();
+
+  assert.deepEqual(
+    observations.map((observation) => [
+      observation.providerSessionId,
+      observation.status,
+      observation.completionCause,
+    ]),
+    [
+      ["session-moved-on", SESSION_STATUS.WAITING, undefined],
+      ["session-closed", SESSION_STATUS.COMPLETE, SESSION_COMPLETION_CAUSE.SESSION_CLOSED],
+    ],
+  );
+  // The event that stands dates the session as well.
+  assert.equal(observations[1]?.observedAt, TEST_TIME - 30_000);
 });
 
 test("offers the app's address only for the chats the app itself holds", async (t) => {
