@@ -1029,9 +1029,9 @@ test("leaves a filed-away chat off the roster while its workspace stays", async 
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("keeps reporting a long turn as working", async () => {
-  // Conductor stamps a status with the moment it was entered, so a turn that
+  // Only waiting decays with age, so a turn that started an hour ago and is
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  // started an hour ago and is still running must not read as stale.
+  // still running must not read as stale.
   const startedAt = TEST_TIME - 60 * 60 * 1000;
   const api = fakeConductorApi({
     userId: TEST_USER_ID,
@@ -1092,6 +1092,208 @@ test("does not treat a long-idle chat as waiting because its workspace is busy",
   assert.equal(observations[0]?.status, SESSION_STATUS.UNKNOWN);
   assert.equal(observations[1]?.providerSessionId, "session-just-finished");
   assert.equal(observations[1]?.status, SESSION_STATUS.WAITING);
+});
+
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+test("keeps a walked-away chat stale across the wake its own press caused", async () => {
+  // Opening a stale chat in Conductor's app wakes its sleeping workspace, and
+  // the wake rewrites the session record: `updatedAt` and the workspace's
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+  // `lastActivityAt` both jump to now while the chat itself did nothing.
+  const walkedAwayAt = TEST_TIME - 2 * 60 * 60 * 1000;
+  const workspace = ownedWorkspace("workspace-woken", walkedAwayAt);
+  const chat: TestSession = {
+    id: IDLE_SESSION_UUID,
+    workspaceId: "workspace-woken",
+    name: TEST_SESSION_NAME,
+    transcriptTail: TEST_TRANSCRIPT_TAIL,
+    status: TEST_CONDUCTOR_STATUS.IDLE,
+    statusUpdatedAt: walkedAwayAt,
+  };
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [workspace],
+    sessions: [chat],
+  });
+  let now = TEST_TIME;
+  const adapter = adapterFor(api.fetch, { now: () => now });
+
+  const beforeWake = await adapter.observe();
+  assert.equal(beforeWake[0]?.status, SESSION_STATUS.UNKNOWN);
+  assert.equal(beforeWake[0]?.observedAt, walkedAwayAt);
+
+  now = TEST_TIME + 60_000;
+  chat.statusUpdatedAt = now;
+  workspace.lastActivityAt = now;
+
+  const afterWake = await adapter.observe();
+  assert.equal(afterWake[0]?.status, SESSION_STATUS.UNKNOWN);
+  assert.equal(afterWake[0]?.observedAt, walkedAwayAt);
+});
+
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+test("adopts the provider's timestamp again the moment the chat's work moves", async () => {
+  const walkedAwayAt = TEST_TIME - 2 * 60 * 60 * 1000;
+  const workspace = ownedWorkspace("workspace-resumed", walkedAwayAt);
+  const chat: TestSession = {
+    id: IDLE_SESSION_UUID,
+    workspaceId: "workspace-resumed",
+    name: TEST_SESSION_NAME,
+    transcriptTail: TEST_TRANSCRIPT_TAIL,
+    status: TEST_CONDUCTOR_STATUS.IDLE,
+    statusUpdatedAt: walkedAwayAt,
+  };
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [workspace],
+    sessions: [chat],
+  });
+  let now = TEST_TIME;
+  const adapter = adapterFor(api.fetch, { now: () => now });
+  await adapter.observe();
+
+  // The user sends the woken chat a message: the status itself moves.
+  now = TEST_TIME + 60_000;
+  chat.status = TEST_CONDUCTOR_STATUS.WORKING;
+  chat.statusUpdatedAt = now;
+  workspace.lastActivityAt = now;
+  const working = await adapter.observe();
+  assert.equal(working[0]?.status, SESSION_STATUS.WORKING);
+  assert.equal(working[0]?.observedAt, now);
+
+  // The turn settles with new parting words: freshly waiting, on the
+  // provider's own timestamp for the settle.
+  const settledAt = TEST_TIME + 120_000;
+  now = settledAt + 5_000;
+  chat.status = TEST_CONDUCTOR_STATUS.IDLE;
+  chat.statusUpdatedAt = settledAt;
+  chat.transcriptTail = "## Assistant\n\nShipped; anything else?";
+  const settled = await adapter.observe();
+  assert.equal(settled[0]?.status, SESSION_STATUS.WAITING);
+  assert.equal(settled[0]?.observedAt, settledAt);
+});
+
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+test("a whole turn between passes still reads as fresh through its parting words", async () => {
+  // A short turn can start and settle inside one refresh interval, so both
+  // passes read idle — the new parting words are what say the work moved.
+  const walkedAwayAt = TEST_TIME - 2 * 60 * 60 * 1000;
+  const workspace = ownedWorkspace("workspace-quick-turn", walkedAwayAt);
+  const chat: TestSession = {
+    id: IDLE_SESSION_UUID,
+    workspaceId: "workspace-quick-turn",
+    name: TEST_SESSION_NAME,
+    transcriptTail: TEST_TRANSCRIPT_TAIL,
+    status: TEST_CONDUCTOR_STATUS.IDLE,
+    statusUpdatedAt: walkedAwayAt,
+  };
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [workspace],
+    sessions: [chat],
+  });
+  let now = TEST_TIME;
+  const adapter = adapterFor(api.fetch, { now: () => now });
+  await adapter.observe();
+
+  const settledAt = TEST_TIME + 60_000;
+  now = settledAt + 5_000;
+  chat.statusUpdatedAt = settledAt;
+  chat.transcriptTail = "## Assistant\n\nDone; want the follow-up too?";
+  const settled = await adapter.observe();
+  assert.equal(settled[0]?.status, SESSION_STATUS.WAITING);
+  assert.equal(settled[0]?.observedAt, settledAt);
+  assert.equal(settled[0]?.recap, "Done; want the follow-up too?");
+});
+
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+test("a failed read never counts as the chat's work moving", async () => {
+  const walkedAwayAt = TEST_TIME - 2 * 60 * 60 * 1000;
+  const workspace = ownedWorkspace("workspace-unreadable", walkedAwayAt);
+  const chat: TestSession = {
+    id: IDLE_SESSION_UUID,
+    workspaceId: "workspace-unreadable",
+    name: TEST_SESSION_NAME,
+    transcriptTail: TEST_TRANSCRIPT_TAIL,
+    status: TEST_CONDUCTOR_STATUS.IDLE,
+    statusUpdatedAt: walkedAwayAt,
+  };
+  const testApi: TestApi = {
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [workspace],
+    sessions: [chat],
+  };
+  const api = fakeConductorApi(testApi);
+  let now = TEST_TIME;
+  const adapter = adapterFor(api.fetch, { now: () => now });
+  await adapter.observe();
+
+  // A wake bumps the timestamps on a pass whose transcripts read fails: the
+  // recap is unknowable, which says nothing about the chat, not that it moved.
+  now = TEST_TIME + 60_000;
+  chat.statusUpdatedAt = now;
+  workspace.lastActivityAt = now;
+  testApi.sqlHttpStatus = HTTP_STATUS.SERVER_ERROR;
+  const unreadable = await adapter.observe();
+  assert.equal(unreadable[0]?.status, SESSION_STATUS.UNKNOWN);
+  assert.equal(unreadable[0]?.observedAt, walkedAwayAt);
+
+  // The transcripts answer again with the same parting words: still nothing
+  // moved, so the wake's timestamps stay a side effect.
+  now = TEST_TIME + 120_000;
+  delete testApi.sqlHttpStatus;
+  const readable = await adapter.observe();
+  assert.equal(readable[0]?.status, SESSION_STATUS.UNKNOWN);
+  assert.equal(readable[0]?.observedAt, walkedAwayAt);
+
+  // The status read failing likewise leaves the walked-away moment standing
+  // rather than falling back to the workspace's wake-bumped activity.
+  now = TEST_TIME + 180_000;
+  chat.statusHttpStatus = HTTP_STATUS.SERVER_ERROR;
+  const statusless = await adapter.observe();
+  assert.equal(statusless[0]?.status, SESSION_STATUS.UNKNOWN);
+  assert.equal(statusless[0]?.observedAt, walkedAwayAt);
+});
+
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+test("a chat first seen through a failed status read is not pinned to the fallback", async () => {
+  // With no readable status there is nothing to remember yet: seeding from
+  // the workspace's fallback timestamp would stand as a moment no later read
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+  // could displace, so the first readable status is the true first sight.
+  const walkedAwayAt = TEST_TIME - 2 * 60 * 60 * 1000;
+  const workspace = ownedWorkspace("workspace-first-unreadable", TEST_TIME - 1_000);
+  const chat: TestSession = {
+    id: IDLE_SESSION_UUID,
+    workspaceId: "workspace-first-unreadable",
+    name: TEST_SESSION_NAME,
+    transcriptTail: TEST_TRANSCRIPT_TAIL,
+    status: TEST_CONDUCTOR_STATUS.IDLE,
+    statusUpdatedAt: walkedAwayAt,
+    statusHttpStatus: HTTP_STATUS.SERVER_ERROR,
+  };
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [workspace],
+    sessions: [chat],
+  });
+  let now = TEST_TIME;
+  const adapter = adapterFor(api.fetch, { now: () => now });
+
+  const unreadable = await adapter.observe();
+  assert.equal(unreadable[0]?.status, SESSION_STATUS.UNKNOWN);
+  assert.equal(unreadable[0]?.observedAt, workspace.lastActivityAt);
+
+  now = TEST_TIME + 60_000;
+  delete chat.statusHttpStatus;
+  const readable = await adapter.observe();
+  assert.equal(readable[0]?.status, SESSION_STATUS.UNKNOWN);
+  assert.equal(readable[0]?.observedAt, walkedAwayAt);
 });
 
 test("ignores workspaces created by another user and workspaces without a creator", async () => {
