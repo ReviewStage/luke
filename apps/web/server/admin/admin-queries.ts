@@ -1,4 +1,18 @@
-import { and, count, desc, eq, gt, gte, isNull, ne, or, type SQL, sql, sum } from "drizzle-orm";
+import {
+  and,
+  count,
+  desc,
+  eq,
+  gt,
+  gte,
+  isNull,
+  max,
+  ne,
+  or,
+  type SQL,
+  sql,
+  sum,
+} from "drizzle-orm";
 import type { createDatabase } from "../db/index.js";
 import { account, session, user } from "../db/schema.js";
 import { hostedUsage } from "../db/usage-schema.js";
@@ -384,7 +398,9 @@ export async function readAdminUserSource(
  * — with zero active days and no last-active day — instead of vanishing the
  * way it does from every inner-joined aggregate above. Most recently active
  * first, the never-active tail ordered by youngest account, and the roster
- * cut at the stated bound while `total` still counts everyone.
+ * cut at the stated bound while `total` still counts everyone. Last-seen
+ * instants ride a query of their own: a second one-to-many join would fan
+ * the usage aggregates out across each account's session rows.
  */
 export async function readAdminUsersSource(
   database: Database,
@@ -393,8 +409,14 @@ export async function readAdminUsersSource(
   const dayKeys = lastNDayKeys(input.now, ADMIN_METRICS_WINDOW_DAYS);
   const windowStartDay = dayKeys[0] ?? utcDayKey(input.now);
 
-  const [[totalRow], rows] = await Promise.all([
+  const [[totalRow], lastSeenRows, rows] = await Promise.all([
     database.select({ value: count() }).from(user).where(scopeCondition(input.scope)),
+    database
+      .select({ userId: session.userId, lastSeenAt: max(session.updatedAt) })
+      .from(session)
+      .innerJoin(user, eq(session.userId, user.id))
+      .where(scopeCondition(input.scope))
+      .groupBy(session.userId),
     database
       .select({
         id: user.id,
@@ -418,6 +440,11 @@ export async function readAdminUsersSource(
       .limit(ADMIN_USERS_LIMIT),
   ]);
 
+  const lastSeenByUser = new Map<string, Date>();
+  for (const seen of lastSeenRows) {
+    if (seen.lastSeenAt) lastSeenByUser.set(seen.userId, seen.lastSeenAt);
+  }
+
   return {
     total: toNumber(totalRow?.value),
     rows: rows.map((row) => ({
@@ -428,6 +455,7 @@ export async function readAdminUsersSource(
       createdAt: row.createdAt.getTime(),
       activeDays: toNumber(row.activeDays),
       lastActiveDay: row.lastActiveDay,
+      lastSeenAt: lastSeenByUser.get(row.id)?.getTime() ?? null,
       voiceCalls: toNumber(row.voiceCalls),
       attentionReviews: toNumber(row.attentionReviews),
     })),

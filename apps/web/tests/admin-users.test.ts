@@ -26,6 +26,7 @@ const ROW = {
   createdAt: Date.parse("2026-06-01T08:00:00.000Z"),
   activeDays: 12,
   lastActiveDay: "2026-08-17",
+  lastSeenAt: Date.parse("2026-08-17T09:30:00.000Z"),
   voiceCalls: 120,
   attentionReviews: 400,
 };
