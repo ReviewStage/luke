@@ -13,6 +13,8 @@ const TEST_API_KEY = "replicas-test-key";
 const TEST_REPOSITORY_URL = "https://github.com/reviewstage/luke";
 /** The developer's own words in the retained history, which must never leave it. */
 const SECRET_PROMPT_TEXT = "SECRET_PROMPT_TEXT";
+/** The reads a creation offer is built from, present in every pass. */
+const PROJECT_READ_PATHS = ["/v1/environments", "/v1/replica/repositories"];
 
 /** The documented workspace lifecycle, verified against the published OpenAPI. */
 const TEST_STATUS = {
@@ -29,6 +31,7 @@ interface TestChat {
   title?: string;
   updatedAt: number;
   parentChatId?: string;
+  processing?: boolean;
 }
 
 interface TestWorkspace {
@@ -38,6 +41,7 @@ interface TestWorkspace {
   repositoryUrl?: string;
   repositoryName?: string;
   omitRepositories?: boolean;
+  branch?: string;
   pullRequestUrls?: readonly string[];
   createdAt: number;
   lastActivityAt?: number;
@@ -45,6 +49,19 @@ interface TestWorkspace {
   historyEvents?: readonly JsonObject[];
   refuseHistory?: boolean;
   chats?: readonly TestChat[];
+}
+
+interface TestEnvironment {
+  id: string;
+  name: string;
+  repositoryId?: string;
+  isGlobal?: boolean;
+}
+
+interface TestRepository {
+  id: string;
+  name: string;
+  url: string;
 }
 
 function isoTimestamp(timestampMs: number): string {
@@ -121,6 +138,17 @@ function workspacePayload(workspace: TestWorkspace) {
   };
 }
 
+function detailChatPayload(chat: TestChat) {
+  return {
+    id: chat.id,
+    provider: chat.provider ?? "claude",
+    title: chat.title ?? "",
+    created_at: isoTimestamp(chat.updatedAt - 60_000),
+    updated_at: isoTimestamp(chat.updatedAt),
+    processing: chat.processing ?? false,
+  };
+}
+
 function conversationPayload(workspace: TestWorkspace, chat: TestChat) {
   return {
     chat_id: chat.id,
@@ -143,17 +171,42 @@ function conversationPayload(workspace: TestWorkspace, chat: TestChat) {
 
 /**
  * Serves the subset of the Replica API the adapter is allowed to use: the
- * organization's replica list, the conversations read, the retained-history
- * read, and the documented message endpoint. The reads that wake a workspace
- * — `GET /v1/replica/{id}` and its chats list — are deliberately not served,
- * so a request to one is a failure of the pass, not a route this fake
- * forgot; a workspace marked `refuseHistory` answers the conflict a
+ * organization's replica list, the awake detail read, the conversations
+ * export, the retained-history read, the environments and repositories the
+ * creation offer is built from, and the documented writes. The one read the
+ * fake still refuses is the per-workspace chats list, which wakes a sleeping
+ * workspace, so a request to it is a failure of the pass, not a route this
+ * fake forgot; a workspace marked `refuseHistory` answers the conflict a
  * pre-retention engine answers.
  */
-function fakeReplicasApi(workspaces: readonly TestWorkspace[]) {
+function fakeReplicasApi(
+  workspaces: readonly TestWorkspace[],
+  options: {
+    environments?: readonly TestEnvironment[];
+    repositories?: readonly TestRepository[];
+  } = {},
+) {
   return recordingFetch((request) => {
     const { pathname, searchParams, method } = request;
     const segments = pathname.split("/").filter((segment) => segment.length > 0);
+    if (method === "GET" && pathname === "/v1/environments") {
+      return jsonResponse({
+        environments: (options.environments ?? []).map((environment) => ({
+          id: environment.id,
+          name: environment.name,
+          is_global: environment.isGlobal ?? false,
+          repository_id: environment.repositoryId ?? null,
+        })),
+      });
+    }
+    if (method === "GET" && pathname === "/v1/replica/repositories") {
+      return jsonResponse({
+        repositories: (options.repositories ?? []).map((repository) => ({
+          ...repository,
+          default_branch: "main",
+        })),
+      });
+    }
     if (method === "GET" && pathname === "/v1/organization/conversations") {
       const workspace = workspaces.find(
         (candidate) => candidate.id === searchParams.get("workspace_id"),
@@ -166,12 +219,36 @@ function fakeReplicasApi(workspaces: readonly TestWorkspace[]) {
         next_cursor: null,
       });
     }
+    if (method === "POST" && pathname === "/v1/replica") {
+      const body = JSON.parse(request.body ?? "{}");
+      if (!body.name || !body.message || !body.environment_id) {
+        return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
+      }
+      return jsonResponse({
+        replica: workspacePayload({
+          id: "workspace-created",
+          name: body.name,
+          status: TEST_STATUS.PREPARING,
+          createdAt: TEST_TIME,
+        }),
+      });
+    }
+    if (
+      method === "POST" &&
+      segments.length === 4 &&
+      segments[0] === "v1" &&
+      segments[1] === "workspaces" &&
+      (segments[3] === "sleep" || segments[3] === "archive")
+    ) {
+      const known = workspaces.some((workspace) => workspace.id === segments[2]);
+      return known ? jsonResponse({ status: "ok" }) : jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
+    }
     if (
       method === "POST" &&
       segments.length === 4 &&
       segments[0] === "v1" &&
       segments[1] === "replica" &&
-      segments[3] === "messages"
+      (segments[3] === "messages" || segments[3] === "chats")
     ) {
       const known = workspaces.some((workspace) => workspace.id === segments[2]);
       return known ? jsonResponse({ status: "sent" }) : jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
@@ -195,6 +272,35 @@ function fakeReplicasApi(workspaces: readonly TestWorkspace[]) {
         coding_agent: workspace.codingAgent ?? null,
         waking: null,
         senders: [],
+      });
+    }
+    if (
+      method === "GET" &&
+      segments.length === 3 &&
+      segments[0] === "v1" &&
+      segments[1] === "replica"
+    ) {
+      const workspace = workspaces.find((candidate) => candidate.id === segments[2]);
+      if (!workspace) return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
+      return jsonResponse({
+        replica: {
+          ...workspacePayload(workspace),
+          coding_agent: workspace.codingAgent ?? null,
+          waking: null,
+          chats: (workspace.chats ?? []).map(detailChatPayload),
+          repository_statuses: workspace.branch
+            ? [
+                {
+                  repository: workspace.repositoryName ?? "reviewstage/luke",
+                  branch: workspace.branch,
+                  default_branch: "main",
+                  pr_urls: [],
+                  start_hooks_completed: true,
+                  git_diff: null,
+                },
+              ]
+            : [],
+        },
       });
     }
     if (
@@ -248,6 +354,13 @@ function activeWorkspace(id: string, lastActivityAt: number): TestWorkspace {
   };
 }
 
+/** The paths a pass requested, with the standing project reads left out. */
+function observedPaths(api: { requests: { pathname: string }[] }): string[] {
+  return api.requests
+    .map((request) => request.pathname)
+    .filter((pathname) => !PROJECT_READ_PATHS.includes(pathname));
+}
+
 describeCloudAdapterContract("Replicas", (options) => {
   const api = fakeReplicasApi([activeWorkspace("contract-workspace", TEST_TIME - 1_000)]);
   const fetch: CloudFetch = async (url, init) => {
@@ -291,7 +404,6 @@ test("observes an active workspace titled by the name Replicas gave it", async (
   assert.equal(observations[0]?.title, "fix-login-timeout");
   assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
   assert.equal(observations[0]?.observedAt, TEST_TIME - 30_000);
-  assert.equal(observations[0]?.controls, undefined);
   // The row opens on the dashboard's own address for exactly this workspace,
   // composed from the observed id the way Conductor's deep link is, and the
   // Replicas mark rides as the app association carrying the same address.
@@ -334,11 +446,11 @@ test("stands archived workspaces behind no row, the way the dashboard hides them
   );
 });
 
-test("reads the pass from the list, chats, and history tails, never a waking read", async () => {
-  // `GET /v1/replica/{id}` and its chats list are documented to wake a
-  // sleeping workspace, so the pass is answerable from the list, the
-  // conversations read, and the retained history alone — the fake refuses
-  // everything else.
+test("reads awake detail, sleeping chats, and history tails, never a waking read", async () => {
+  // The detail read is documented to wake a sleeping workspace, so it is
+  // issued only for a workspace the same pass's list reported awake; a
+  // sleeping workspace's chats come from the conversations export instead,
+  // and an errored one has no retained conversation worth asking for.
   const api = fakeReplicasApi([
     activeWorkspace("workspace-one", TEST_TIME - 1_000),
     { id: "workspace-two", status: TEST_STATUS.SLEEPING, createdAt: TEST_TIME - 2_000 },
@@ -353,25 +465,14 @@ test("reads the pass from the list, chats, and history tails, never a waking rea
   assert.equal(list?.search, "?limit=100");
   assert.equal(list?.method, "GET");
   assert.equal(list?.authorization, `Bearer ${TEST_API_KEY}`);
-  // Chats and history are read for the active and the sleeping workspace; an
-  // errored one has no retained conversation worth asking for.
-  assert.deepEqual(
-    api.requests
-      .slice(1)
-      .map((request) => request.pathname)
-      .sort(),
-    [
-      "/v1/organization/conversations",
-      "/v1/organization/conversations",
-      "/v1/replica/workspace-one/history",
-      "/v1/replica/workspace-two/history",
-    ],
-  );
-  const conversations = api.requests.find(
-    (request) => request.pathname === "/v1/organization/conversations",
-  );
-  assert.equal(conversations?.search.includes("workspace_id=workspace-"), true);
-  assert.equal(api.requests.at(-1)?.search, "?limit=40");
+  // Every request pins the dated API version, as Replicas' own guide says to.
+  assert.equal(list?.headers.get("x-replicas-api-version"), "2026-05-17");
+  assert.deepEqual(observedPaths(api).slice(1).sort(), [
+    "/v1/organization/conversations",
+    "/v1/replica/workspace-one",
+    "/v1/replica/workspace-one/history",
+    "/v1/replica/workspace-two/history",
+  ]);
 });
 
 test("reads a workspace's history once until its activity moves", async () => {
@@ -422,12 +523,243 @@ test("maps every status Replicas reports onto a state Luke can show", async () =
       ["workspace-later-status", SESSION_STATUS.UNKNOWN],
     ],
   );
-  // The list projection never says a chat is holding for the user, so no row
-  // may claim to be.
+});
+
+test("reports each chat's own turn: processing works, idle holds, stale idle goes quiet", async () => {
+  const api = fakeReplicasApi([
+    {
+      ...activeWorkspace("workspace-turns", TEST_TIME - 1_000),
+      branch: "feature/login-timeout",
+      chats: [
+        { id: "chat-working", provider: "claude", updatedAt: TEST_TIME - 1_000, processing: true },
+        { id: "chat-holding", provider: "codex", updatedAt: TEST_TIME - 2_000, processing: false },
+        {
+          id: "chat-walked-away",
+          provider: "claude",
+          updatedAt: TEST_TIME - 2 * 60 * 60 * 1000,
+          processing: false,
+        },
+      ],
+    },
+  ]);
+
+  const observations = await adapterFor(api.fetch).observe();
+  const byId = new Map(observations.map((entry) => [entry.providerSessionId, entry]));
+
+  assert.equal(byId.get("chat-working")?.status, SESSION_STATUS.WORKING);
+  assert.equal(byId.get("chat-working")?.holdingForDeveloper, undefined);
+  // An idle chat in an awake workspace has finished its turn and is holding
+  // for the user, the way an idle Conductor chat is.
+  assert.equal(byId.get("chat-holding")?.status, SESSION_STATUS.WAITING);
+  assert.equal(byId.get("chat-holding")?.holdingForDeveloper, true);
+  // Once the ask goes stale it stops calling.
+  assert.equal(byId.get("chat-walked-away")?.status, SESSION_STATUS.UNKNOWN);
+  // The working branch the detail read reported rides every chat of the
+  // workspace.
+  assert.equal(byId.get("chat-working")?.detail?.branch, "feature/login-timeout");
+});
+
+test("lists a sleeping workspace's chats from the conversations export", async () => {
+  const sleptAt = TEST_TIME - 2 * 60 * 60 * 1000;
+  const api = fakeReplicasApi([
+    {
+      id: "workspace-asleep",
+      name: "fix-login-timeout",
+      status: TEST_STATUS.SLEEPING,
+      createdAt: sleptAt - 60_000,
+      lastActivityAt: sleptAt,
+      chats: [
+        { id: "chat-a", provider: "claude", title: "Fix the login timeout", updatedAt: sleptAt },
+        { id: "chat-b", provider: "codex", title: "Port the fixtures", updatedAt: sleptAt - 1_000 },
+        // A spawned sub-agent's chat is the parent's work, so it draws no row.
+        { id: "chat-spawned", provider: "claude", updatedAt: sleptAt, parentChatId: "chat-a" },
+      ],
+    },
+  ]);
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  assert.deepEqual(
+    observations.map((observation) => [observation.providerSessionId, observation.status]),
+    [
+      ["chat-a", SESSION_STATUS.COMPLETE],
+      ["chat-b", SESSION_STATUS.COMPLETE],
+    ],
+  );
+  assert.equal(observations[0]?.title, "Fix the login timeout");
+  assert.deepEqual(observations[0]?.agent, { id: "claude-code", displayName: "Claude Code" });
+  assert.deepEqual(observations[1]?.agent, { id: "codex", displayName: "Codex" });
+  assert.deepEqual(observations[0]?.workspace, {
+    providerWorkspaceId: "workspace-asleep",
+    name: "fix-login-timeout",
+    scopeId: "replicas",
+    managerName: "Replicas",
+  });
+  // The detail read would wake a sleeping workspace, so it was never asked.
   assert.equal(
-    observations.some((observation) => observation.holdingForDeveloper === true),
+    api.requests.some((request) => request.pathname === "/v1/replica/workspace-asleep"),
     false,
   );
+});
+
+test("offers the dashboard's own sleep and archive acts, each only when settled", async () => {
+  const api = fakeReplicasApi([
+    {
+      ...activeWorkspace("workspace-idle", TEST_TIME - 1_000),
+      chats: [
+        { id: "chat-idle", provider: "claude", updatedAt: TEST_TIME - 1_000, processing: false },
+      ],
+    },
+    {
+      ...activeWorkspace("workspace-busy", TEST_TIME - 2_000),
+      chats: [
+        { id: "chat-busy", provider: "claude", updatedAt: TEST_TIME - 2_000, processing: true },
+      ],
+    },
+    {
+      id: "workspace-asleep",
+      status: TEST_STATUS.SLEEPING,
+      createdAt: TEST_TIME - 3_000,
+      lastActivityAt: TEST_TIME - 3_000,
+    },
+  ]);
+  const adapter = adapterFor(api.fetch);
+  const observations = await adapter.observe();
+  const byId = new Map(observations.map((entry) => [entry.providerSessionId, entry]));
+
+  // Sleep is offered only on an awake workspace every one of whose chats was
+  // positively seen idle; archive only on one already asleep.
+  const sleepControl = { id: "sleep-workspace", label: "Put to sleep", target: "workspace-idle" };
+  assert.deepEqual(byId.get("chat-idle")?.controls, [sleepControl]);
+  assert.equal(byId.get("chat-busy")?.controls, undefined);
+  assert.deepEqual(byId.get("workspace-asleep")?.controls, [
+    { id: "archive-workspace", label: "Archive", target: "workspace-asleep" },
+  ]);
+
+  const slept = await adapter.executeControl({
+    providerSessionId: "chat-idle",
+    control: sleepControl,
+  });
+  assert.deepEqual(slept, { status: "accepted" });
+  const write = api.requests.at(-1);
+  assert.equal(write?.method, "POST");
+  assert.equal(write?.pathname, "/v1/workspaces/workspace-idle/sleep");
+  // Both acts document an empty request, so none is sent.
+  assert.equal(write?.body, undefined);
+});
+
+test("starts another agent through the documented chat and message endpoints", async () => {
+  const api = fakeReplicasApi([
+    {
+      ...activeWorkspace("workspace-active", TEST_TIME - 1_000),
+      chats: [
+        {
+          id: "chat-existing",
+          provider: "claude",
+          updatedAt: TEST_TIME - 1_000,
+          processing: false,
+        },
+      ],
+    },
+  ]);
+  const adapter = adapterFor(api.fetch);
+  const observations = await adapter.observe();
+
+  // Every documented agent kind is advertised, targeted at the workspace.
+  assert.deepEqual(observations[0]?.spawnableAgents, [
+    "claude",
+    "codex",
+    "cursor",
+    "deepseek",
+    "fx",
+    "kimi",
+    "opencode",
+    "pi",
+  ]);
+  assert.equal(observations[0]?.spawnTarget, "workspace-active");
+
+  // With an opening task the whole ask is one documented message send, which
+  // takes the agent kind beside the developer's words.
+  const withTask = await adapter.spawnWorkspaceAgent({
+    providerSessionId: "chat-existing",
+    agent: "codex",
+    task: "Port the fixtures to the new shape",
+  });
+  assert.deepEqual(withTask, { status: "accepted" });
+  const messageWrite = api.requests.at(-1);
+  assert.equal(messageWrite?.pathname, "/v1/replica/workspace-active/messages");
+  assert.deepEqual(JSON.parse(messageWrite?.body ?? ""), {
+    message: "Port the fixtures to the new shape",
+    coding_agent: "codex",
+  });
+
+  // Without one it is the documented chat creation.
+  const withoutTask = await adapter.spawnWorkspaceAgent({
+    providerSessionId: "chat-existing",
+    agent: "opencode",
+    name: "Refactor pass",
+  });
+  assert.deepEqual(withoutTask, { status: "accepted" });
+  const chatWrite = api.requests.at(-1);
+  assert.equal(chatWrite?.pathname, "/v1/replica/workspace-active/chats");
+  assert.deepEqual(JSON.parse(chatWrite?.body ?? ""), {
+    provider: "opencode",
+    title: "Refactor pass",
+  });
+
+  // An agent kind the observation never listed is refused before a request.
+  const refused = await adapter.spawnWorkspaceAgent({
+    providerSessionId: "chat-existing",
+    agent: "not-an-agent",
+  });
+  assert.deepEqual(refused, { status: "unsupported" });
+});
+
+test("offers the reported environments as projects and creates a workspace in one", async () => {
+  const api = fakeReplicasApi([activeWorkspace("workspace-existing", TEST_TIME - 1_000)], {
+    environments: [
+      { id: "environment-luke", name: "Luke", repositoryId: "repository-luke" },
+      { id: "environment-unbound", name: "Scratch" },
+      { id: "environment-global", name: "Global", isGlobal: true },
+    ],
+    repositories: [{ id: "repository-luke", name: "reviewstage/luke", url: TEST_REPOSITORY_URL }],
+  });
+  const adapter = adapterFor(api.fetch);
+  await adapter.observe();
+
+  // Environments are the projects, labelled by their bound repository — or
+  // their own name when unbound — and the Global defaults bundle offers no
+  // creation, matching the dashboard.
+  assert.deepEqual(adapter.workspaceProjects(), [
+    {
+      providerProjectId: "environment-luke",
+      repository: "luke",
+      targetName: "Luke",
+      taskSupport: "required",
+    },
+    { providerProjectId: "environment-unbound", repository: "Scratch", taskSupport: "required" },
+  ]);
+
+  const created = await adapter.createWorkspace({
+    providerProjectId: "environment-luke",
+    task: "Fix the login timeout and open a pull request",
+  });
+
+  assert.deepEqual(created, { status: "accepted", providerSessionId: "workspace-created" });
+  const write = api.requests.at(-1);
+  assert.equal(write?.method, "POST");
+  assert.equal(write?.pathname, "/v1/replica");
+  // The required name is the developer's own words slugged the way the
+  // dashboard slugs one; the task rides as the required initial message.
+  assert.deepEqual(JSON.parse(write?.body ?? ""), {
+    name: "fix-the-login-timeout-and-open-a-pull-request",
+    message: "Fix the login timeout and open a pull request",
+    environment_id: "environment-luke",
+  });
+
+  // A task-less ask is refused rather than a workspace created idle.
+  const taskless = await adapter.createWorkspace({ providerProjectId: "environment-luke" });
+  assert.equal(taskless.status, "rejected");
 });
 
 test("marks a workspace with the agent its retained history names", async () => {
@@ -611,107 +943,30 @@ test("keeps the roster when the history endpoint refuses the credential", async 
   assert.equal(first.length, 1);
   assert.equal(first[0]?.agent, undefined);
   assert.equal(second.length, 1);
-  // Only the lists and the one chats read reached the fake: the refused
-  // history was not asked again while the workspace stood still.
-  assert.deepEqual(
-    api.requests.map((request) => request.pathname),
-    ["/v1/replica", "/v1/organization/conversations", "/v1/replica"],
-  );
-});
-
-test("lists a workspace's chats as their own rows under one workspace tray", async () => {
-  const api = fakeReplicasApi([
-    {
-      ...activeWorkspace("workspace-shared", TEST_TIME - 1_000),
-      name: "fix-login-timeout",
-      pullRequestUrls: ["https://github.com/reviewstage/luke/pull/402"],
-      codingAgent: "claude",
-      historyEvents: [
-        claudeAssistant("Renamed the flag and updated both call sites."),
-        claudeResult(),
-      ],
-      chats: [
-        {
-          id: "chat-older",
-          provider: "codex",
-          title: "Port the fixtures",
-          updatedAt: TEST_TIME - 60_000,
-        },
-        {
-          id: "chat-newest",
-          provider: "claude",
-          title: "Fix the login timeout",
-          updatedAt: TEST_TIME - 1_000,
-        },
-        // A spawned sub-agent's chat is the parent's work, so it draws no row.
-        {
-          id: "chat-spawned",
-          provider: "claude",
-          updatedAt: TEST_TIME - 500,
-          parentChatId: "chat-newest",
-        },
-      ],
-    },
+  // The refused history was not asked again while the workspace stood still;
+  // the awake detail read keeps its every-pass cadence.
+  assert.deepEqual(observedPaths(api), [
+    "/v1/replica",
+    "/v1/replica/workspace-active",
+    "/v1/replica",
+    "/v1/replica/workspace-active",
   ]);
-  const adapter = adapterFor(api.fetch);
-
-  const observations = await adapter.observe();
-
-  assert.deepEqual(
-    observations.map((observation) => observation.providerSessionId),
-    ["chat-newest", "chat-older"],
-  );
-  // Each chat leads with its own agent and title; the workspace's name rides
-  // the grouping, so the tray names all of its chats at once.
-  assert.equal(observations[0]?.title, "Fix the login timeout");
-  assert.deepEqual(observations[0]?.agent, { id: "claude-code", displayName: "Claude Code" });
-  assert.equal(observations[1]?.title, "Port the fixtures");
-  assert.deepEqual(observations[1]?.agent, { id: "codex", displayName: "Codex" });
-  assert.deepEqual(observations[0]?.workspace, {
-    providerWorkspaceId: "workspace-shared",
-    name: "fix-login-timeout",
-    scopeId: "replicas",
-    managerName: "Replicas",
-  });
-  assert.deepEqual(observations[1]?.workspace, observations[0]?.workspace);
-  // The workspace's compute lifecycle is the newest chat's status — the
-  // platform's activity is wherever the latest words landed — while an older
-  // chat's turn ended back at its own timestamp.
-  assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
-  assert.equal(observations[1]?.status, SESSION_STATUS.COMPLETE);
-  // The settled recap and the workspace's pull request ride the newest chat
-  // once rather than every row repeating them.
-  assert.equal(observations[0]?.recap, "Renamed the flag and updated both call sites.");
-  assert.equal(observations[1]?.recap, undefined);
-  assert.equal(observations[0]?.detail?.change, "https://github.com/reviewstage/luke/pull/402");
-  assert.equal(observations[1]?.detail?.change, undefined);
-  // The history read was pinned to the newest chat, so the parting words are
-  // attributably that chat's.
-  const history = api.requests.find((request) => request.pathname.endsWith("/history"));
-  assert.equal(history?.search.includes("chat_id=chat-newest"), true);
-
-  const result = await adapter.sendMessage({
-    providerSessionId: "chat-older",
-    text: "Pick this back up",
-  });
-  assert.deepEqual(result, { status: "accepted" });
-  const write = api.requests.at(-1);
-  assert.equal(write?.pathname, "/v1/replica/workspace-shared/messages");
-  assert.deepEqual(JSON.parse(write?.body ?? ""), {
-    message: "Pick this back up",
-    chat_id: "chat-older",
-  });
 });
 
-test("keeps workspace rows when the conversations read refuses the credential", async () => {
-  // The conversations read answers organization keys alone, so a personal
-  // key is refused identically every pass: the chat listing stands down for
-  // the credential's lifetime, and the workspace rows stand.
+test("keeps workspace rows when the conversations export refuses the credential", async () => {
+  // The conversations export answers organization keys alone, so a personal
+  // key is refused identically every pass: the sleeping workspaces' chat
+  // listing stands down for the credential's lifetime, and their
+  // workspace-level rows stand.
+  const sleptAt = TEST_TIME - 60 * 60 * 1000;
   const api = fakeReplicasApi([
     {
-      ...activeWorkspace("workspace-active", TEST_TIME - 1_000),
+      id: "workspace-asleep",
+      status: TEST_STATUS.SLEEPING,
+      createdAt: sleptAt - 60_000,
+      lastActivityAt: sleptAt,
       codingAgent: "claude",
-      chats: [{ id: "chat-unlisted", provider: "claude", updatedAt: TEST_TIME - 1_000 }],
+      chats: [{ id: "chat-unlisted", provider: "claude", updatedAt: sleptAt }],
     },
   ]);
   const gatedFetch: CloudFetch = async (url, init) =>
@@ -725,16 +980,17 @@ test("keeps workspace rows when the conversations read refuses the credential", 
 
   assert.deepEqual(
     first.map((observation) => observation.providerSessionId),
-    ["workspace-active"],
+    ["workspace-asleep"],
   );
   assert.deepEqual(first[0]?.agent, { id: "claude-code", displayName: "Claude Code" });
   assert.equal(second.length, 1);
-  // The refused conversations read was asked exactly once; the history read
-  // still ran, unpinned, because the chats were never listed.
-  assert.deepEqual(
-    api.requests.map((request) => request.pathname),
-    ["/v1/replica", "/v1/replica/workspace-active/history", "/v1/replica"],
-  );
+  // The refused export was asked exactly once; the history read still ran,
+  // unpinned, because the chats were never listed.
+  assert.deepEqual(observedPaths(api), [
+    "/v1/replica",
+    "/v1/replica/workspace-asleep/history",
+    "/v1/replica",
+  ]);
   assert.equal(api.requests[1]?.search.includes("chat_id"), false);
 });
 
@@ -799,9 +1055,8 @@ test("reports why an errored workspace stopped rather than leaving it idle", asy
 
 test("drops a workspace it cannot place in time without losing the rest of the pass", async () => {
   const fetch: CloudFetch = async (url) => {
-    if (new URL(url).pathname.endsWith("/history")) {
-      return jsonResponse({}, HTTP_STATUS.CONFLICT);
-    }
+    const { pathname } = new URL(url);
+    if (pathname !== "/v1/replica") return jsonResponse({}, HTTP_STATUS.CONFLICT);
     return jsonResponse({
       replicas: [
         { status: TEST_STATUS.ACTIVE, created_at: isoTimestamp(TEST_TIME - 1_000) },
@@ -877,4 +1132,31 @@ test("hands a user message to Replicas through its documented message endpoint",
   // The body carries the developer's words and nothing else: no agent choice,
   // no chat target, no mode flag — the workspace's own defaults stand.
   assert.deepEqual(JSON.parse(write?.body ?? ""), { message: "Use the existing fixture instead" });
+});
+
+test("hands a chat row's message to its own chat", async () => {
+  const api = fakeReplicasApi([
+    {
+      ...activeWorkspace("workspace-shared", TEST_TIME - 1_000),
+      chats: [
+        { id: "chat-newest", provider: "claude", updatedAt: TEST_TIME - 1_000, processing: false },
+        { id: "chat-older", provider: "codex", updatedAt: TEST_TIME - 60_000, processing: false },
+      ],
+    },
+  ]);
+  const adapter = adapterFor(api.fetch);
+  await adapter.observe();
+
+  const result = await adapter.sendMessage({
+    providerSessionId: "chat-older",
+    text: "Pick this back up",
+  });
+
+  assert.deepEqual(result, { status: "accepted" });
+  const write = api.requests.at(-1);
+  assert.equal(write?.pathname, "/v1/replica/workspace-shared/messages");
+  assert.deepEqual(JSON.parse(write?.body ?? ""), {
+    message: "Pick this back up",
+    chat_id: "chat-older",
+  });
 });
