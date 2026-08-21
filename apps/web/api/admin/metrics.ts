@@ -1,18 +1,11 @@
-import {
-  ADMIN_EMAILS_ENVIRONMENT,
-  type AdminViewer,
-  adminEmailsFromEnv,
-  isAdminViewer,
-} from "../../server/admin/admin-access.js";
+import type { AdminViewer } from "../../server/admin/admin-access.js";
+import { isAdminUser } from "../../server/admin/admin-grants.js";
 import {
   adminIntegrations,
   buildAdminMetrics,
   handleAdminMetrics,
 } from "../../server/admin/admin-metrics.js";
-import {
-  readAdminMetricsSource,
-  readViewerGithubAccountIds,
-} from "../../server/admin/admin-queries.js";
+import { readAdminMetricsSource } from "../../server/admin/admin-queries.js";
 import { auth } from "../../server/auth.js";
 import { getDatabase } from "../../server/db/index.js";
 import { HOSTED_OPENAI_ENVIRONMENT } from "../../server/hosted/openai.js";
@@ -26,9 +19,10 @@ function configured(name: string): boolean {
 /**
  * The admin dashboard's read. The logic lives behind seams in `server/admin/`;
  * this file hands it the deployment's real ones — the browser session the
- * maintainer signed in for, the account's own linked GitHub ids, the admin
- * email allowlist, and which integrations the environment has keys for. No
- * secret value crosses into the answer: only whether each key is present.
+ * maintainer signed in for, that account's own `admin_user` row, and which
+ * integrations the environment has keys for. Admin status is read from the
+ * database, never asserted by the request, and no secret value crosses into the
+ * answer: only whether each key is present.
  */
 export default {
   fetch(request: Request): Promise<Response> {
@@ -41,11 +35,9 @@ export default {
       return {
         userId: account.id,
         email: account.email ?? undefined,
-        githubAccountIds: await readViewerGithubAccountIds(getDatabase(), account.id),
+        isAdmin: await isAdminUser(getDatabase(), account.id),
       };
     };
-
-    const adminEmails = adminEmailsFromEnv(process.env[ADMIN_EMAILS_ENVIRONMENT]);
 
     const integrations = adminIntegrations({
       hostedTier: configured(HOSTED_OPENAI_ENVIRONMENT.API_KEY),
@@ -61,7 +53,6 @@ export default {
     return handleAdminMetrics({
       request,
       resolveViewer,
-      isAdmin: (viewer) => isAdminViewer(viewer, adminEmails),
       readMetrics: async (now) =>
         buildAdminMetrics(await readAdminMetricsSource(getDatabase(), { now, integrations }), now),
     });

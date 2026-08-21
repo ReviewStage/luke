@@ -1,5 +1,5 @@
 import { HOSTED_DAILY_LIMIT, HOSTED_METER, utcDayKey } from "../hosted/quota.js";
-import { type AdminViewer, isAdminViewer } from "./admin-access.js";
+import type { AdminViewer } from "./admin-access.js";
 import { ADMIN_ERROR, ADMIN_HTTP_STATUS, errorResponse, jsonResponse } from "./http.js";
 
 /**
@@ -243,19 +243,22 @@ export function buildAdminMetrics(source: AdminMetricsSource, now: number): Admi
 
 export interface AdminMetricsOptions {
   request: Request;
-  /** The signed-in browser viewer, or nothing when no valid session is present. */
+  /**
+   * The signed-in browser viewer, or nothing when no valid session is present.
+   * `viewer.isAdmin` is the `admin_user` row read in the wrapper's seam.
+   */
   resolveViewer: (request: Request) => Promise<AdminViewer | undefined>;
-  /** Whether that viewer is on the admin allowlist; the wrapper closes over the env allowlist. */
-  isAdmin: (viewer: AdminViewer) => boolean;
   readMetrics: (now: number) => Promise<AdminMetrics>;
   now?: () => number;
 }
 
 /**
- * Answers the dashboard's read, gated in two steps that stay distinct: an
- * anonymous request is a 401 the page answers with a sign-in, and a signed-in
- * non-admin is a 403 the page answers with a plain refusal. The metrics are
- * read only past both.
+ * Answers the dashboard's read, gated in steps that stay distinct: an anonymous
+ * request is a 401 the page answers with a sign-in, a signed-in non-admin is a
+ * 403 the page answers with a plain refusal, and metrics are read only past
+ * both. A seam that throws — auth or the database not answering — is a 503 JSON
+ * refusal rather than an unhandled crash, so the page can say "try again"
+ * instead of failing to parse a platform error page.
  */
 export async function handleAdminMetrics(options: AdminMetricsOptions): Promise<Response> {
   const { request } = options;
@@ -263,16 +266,23 @@ export async function handleAdminMetrics(options: AdminMetricsOptions): Promise<
     return errorResponse(ADMIN_HTTP_STATUS.METHOD_NOT_ALLOWED, ADMIN_ERROR.METHOD_NOT_ALLOWED);
   }
 
-  const viewer = await options.resolveViewer(request);
+  let viewer: AdminViewer | undefined;
+  try {
+    viewer = await options.resolveViewer(request);
+  } catch {
+    return errorResponse(ADMIN_HTTP_STATUS.SERVICE_UNAVAILABLE, ADMIN_ERROR.UNAVAILABLE);
+  }
   if (!viewer) {
     return errorResponse(ADMIN_HTTP_STATUS.UNAUTHORIZED, ADMIN_ERROR.NOT_SIGNED_IN);
   }
-  if (!options.isAdmin(viewer)) {
+  if (!viewer.isAdmin) {
     return errorResponse(ADMIN_HTTP_STATUS.FORBIDDEN, ADMIN_ERROR.NOT_AUTHORIZED);
   }
 
   const now = (options.now ?? Date.now)();
-  return jsonResponse(ADMIN_HTTP_STATUS.OK, await options.readMetrics(now));
+  try {
+    return jsonResponse(ADMIN_HTTP_STATUS.OK, await options.readMetrics(now));
+  } catch {
+    return errorResponse(ADMIN_HTTP_STATUS.SERVICE_UNAVAILABLE, ADMIN_ERROR.UNAVAILABLE);
+  }
 }
-
-export { isAdminViewer };

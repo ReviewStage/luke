@@ -124,18 +124,17 @@ function metricsRequest(method = "GET"): Request {
 const ADMIN_VIEWER: AdminViewer = {
   userId: "user-1",
   email: "dean@example.com",
-  githubAccountIds: ["29683763"],
+  isAdmin: true,
 };
 
 function emptyMetrics(now: number): AdminMetrics {
   return buildAdminMetrics(source(), now);
 }
 
-test("the gate answers 405, 401, 403, and 200 as three distinct outcomes", async () => {
+test("the gate answers 405, 401, 403, and 200 as distinct outcomes", async () => {
   const wrongMethod = await handleAdminMetrics({
     request: metricsRequest("POST"),
     resolveViewer: async () => ADMIN_VIEWER,
-    isAdmin: () => true,
     readMetrics: async (now) => emptyMetrics(now),
   });
   assert.equal(wrongMethod.status, 405);
@@ -144,7 +143,6 @@ test("the gate answers 405, 401, 403, and 200 as three distinct outcomes", async
   const anonymous = await handleAdminMetrics({
     request: metricsRequest(),
     resolveViewer: async () => undefined,
-    isAdmin: () => true,
     readMetrics: async (now) => emptyMetrics(now),
   });
   assert.equal(anonymous.status, 401);
@@ -152,26 +150,19 @@ test("the gate answers 405, 401, 403, and 200 as three distinct outcomes", async
 
   const forbidden = await handleAdminMetrics({
     request: metricsRequest(),
-    resolveViewer: async () => ({ ...ADMIN_VIEWER, githubAccountIds: [], email: "x@example.com" }),
-    isAdmin: () => false,
+    resolveViewer: async () => ({ ...ADMIN_VIEWER, isAdmin: false }),
     readMetrics: async (now) => emptyMetrics(now),
   });
   assert.equal(forbidden.status, 403);
   assert.equal((await forbidden.json()).error, ADMIN_ERROR.NOT_AUTHORIZED);
 
-  let readFor: string | undefined;
   const ok = await handleAdminMetrics({
     request: metricsRequest(),
     resolveViewer: async () => ADMIN_VIEWER,
-    isAdmin: (viewer) => {
-      readFor = viewer.userId;
-      return true;
-    },
     readMetrics: async (now) => emptyMetrics(now),
     now: () => NOON_UTC,
   });
   assert.equal(ok.status, 200);
-  assert.equal(readFor, "user-1");
   // SAFETY: handleAdminMetrics answered 200, whose body is an AdminMetrics document.
   const body = (await ok.json()) as AdminMetrics;
   assert.equal(body.generatedAt, NOON_UTC);
@@ -183,7 +174,6 @@ test("metrics are not read for a request that fails the gate", async () => {
   const response = await handleAdminMetrics({
     request: metricsRequest(),
     resolveViewer: async () => undefined,
-    isAdmin: () => true,
     readMetrics: async (now) => {
       reads += 1;
       return emptyMetrics(now);
@@ -191,4 +181,26 @@ test("metrics are not read for a request that fails the gate", async () => {
   });
   assert.equal(response.status, 401);
   assert.equal(reads, 0);
+});
+
+test("a seam that throws is a 503 refusal rather than a crash", async () => {
+  const viewerThrew = await handleAdminMetrics({
+    request: metricsRequest(),
+    resolveViewer: async () => {
+      throw new Error("auth is down");
+    },
+    readMetrics: async (now) => emptyMetrics(now),
+  });
+  assert.equal(viewerThrew.status, 503);
+  assert.equal((await viewerThrew.json()).error, ADMIN_ERROR.UNAVAILABLE);
+
+  const readThrew = await handleAdminMetrics({
+    request: metricsRequest(),
+    resolveViewer: async () => ADMIN_VIEWER,
+    readMetrics: async () => {
+      throw new Error("database is down");
+    },
+  });
+  assert.equal(readThrew.status, 503);
+  assert.equal((await readThrew.json()).error, ADMIN_ERROR.UNAVAILABLE);
 });

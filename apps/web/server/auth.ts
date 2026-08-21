@@ -2,6 +2,8 @@ import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { betterAuth } from "better-auth";
 import { jwt, lastLoginMethod } from "better-auth/plugins";
+import { ADMIN_SEED_EMAILS_ENVIRONMENT, adminSeedEmailsFromEnv } from "./admin/admin-access.js";
+import { promoteSeededAdmin } from "./admin/admin-grants.js";
 import {
   ACCOUNT_TOKEN_STORAGE,
   denyOAuthClientPrivileges,
@@ -19,6 +21,22 @@ export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET,
   database: drizzleAdapter(getDatabase(), { provider: "pg", schema }),
   account: ACCOUNT_TOKEN_STORAGE,
+  // The one place an admin grant is written: on the sign-in that creates a
+  // session, an account whose address is on LUKE_ADMIN_EMAILS is seeded its
+  // admin row. Idempotent and a no-op when the seed list is empty, so ordinary
+  // sign-ins pay nothing and the dashboard read stays entirely read-only.
+  databaseHooks: {
+    session: {
+      create: {
+        after: async (session) => {
+          await promoteSeededAdmin(getDatabase(), {
+            userId: session.userId,
+            seedEmails: adminSeedEmailsFromEnv(process.env[ADMIN_SEED_EMAILS_ENVIRONMENT]),
+          });
+        },
+      },
+    },
+  },
   disabledPaths: ["/token"],
   socialProviders: {
     google: {

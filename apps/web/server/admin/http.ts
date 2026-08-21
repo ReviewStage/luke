@@ -13,14 +13,17 @@ export const ADMIN_HTTP_STATUS = {
   UNAUTHORIZED: 401,
   FORBIDDEN: 403,
   METHOD_NOT_ALLOWED: 405,
+  SERVICE_UNAVAILABLE: 503,
 } as const;
 
 export const ADMIN_ERROR = {
   /** No signed-in browser session; the page should offer sign-in. */
   NOT_SIGNED_IN: "not-signed-in",
-  /** Signed in, but the account is not on the admin allowlist. */
+  /** Signed in, but the account has no admin row. */
   NOT_AUTHORIZED: "not-authorized",
   METHOD_NOT_ALLOWED: "method-not-allowed",
+  /** A seam (auth or the database) did not answer; the answer is a JSON refusal, never a crash. */
+  UNAVAILABLE: "unavailable",
 } as const;
 
 export type AdminError = (typeof ADMIN_ERROR)[keyof typeof ADMIN_ERROR];

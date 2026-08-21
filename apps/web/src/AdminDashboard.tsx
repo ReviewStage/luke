@@ -14,13 +14,20 @@ const authClient = createAuthClient();
 
 const METRICS_PATH = "/api/admin/metrics";
 
-/** What the fetch resolved to: the gate's two refusals stay distinct here. */
+/** What the fetch resolved to: the gate's refusals stay distinct here. */
 type DashboardState =
   | { status: "loading" }
   | { status: "signed-out" }
   | { status: "forbidden" }
-  | { status: "error" }
+  | { status: "error"; detail: string }
   | { status: "ready"; metrics: AdminMetrics };
+
+const ERROR_DETAIL = {
+  UNAVAILABLE: "The service did not answer. It may be briefly unavailable — try again shortly.",
+  PROTECTED:
+    "The request was redirected before it reached the dashboard. A preview deployment behind Vercel Deployment Protection intercepts the API call; disable protection for this deployment, or use a production URL.",
+  GENERIC: "The metrics endpoint did not answer. Try again shortly.",
+} as const;
 
 const numberFormat = new Intl.NumberFormat("en-US");
 
@@ -482,6 +489,13 @@ export function AdminDashboard(): React.JSX.Element {
       try {
         const response = await fetch(METRICS_PATH, { headers: { accept: "application/json" } });
         if (!live) return;
+        // A followed cross-origin redirect means something sat in front of the
+        // API — a preview's deployment protection is the usual culprit — so the
+        // body is a login page, not JSON.
+        if (response.redirected) {
+          setState({ status: "error", detail: ERROR_DETAIL.PROTECTED });
+          return;
+        }
         if (response.status === 401) {
           setState({ status: "signed-out" });
           return;
@@ -490,15 +504,19 @@ export function AdminDashboard(): React.JSX.Element {
           setState({ status: "forbidden" });
           return;
         }
+        if (response.status === 503) {
+          setState({ status: "error", detail: ERROR_DETAIL.UNAVAILABLE });
+          return;
+        }
         if (!response.ok) {
-          setState({ status: "error" });
+          setState({ status: "error", detail: ERROR_DETAIL.GENERIC });
           return;
         }
         // SAFETY: a 200 from the admin metrics endpoint is an AdminMetrics body by its contract.
         const metrics = (await response.json()) as AdminMetrics;
         if (live) setState({ status: "ready", metrics });
       } catch {
-        if (live) setState({ status: "error" });
+        if (live) setState({ status: "error", detail: ERROR_DETAIL.GENERIC });
       }
     })();
     return () => {
@@ -515,15 +533,13 @@ export function AdminDashboard(): React.JSX.Element {
       case "forbidden":
         return (
           <Centered title="Not authorized">
-            You are signed in, but this dashboard is restricted to Luke's maintainers.
+            You are signed in, but this account has no admin grant. Admin access is a row in the
+            database, granted to the accounts named in{" "}
+            <code className="font-mono">LUKE_ADMIN_EMAILS</code> when they sign in.
           </Centered>
         );
       case "error":
-        return (
-          <Centered title="Could not load">
-            The metrics endpoint did not answer. Try again shortly.
-          </Centered>
-        );
+        return <Centered title="Could not load">{state.detail}</Centered>;
       case "ready":
         return <Dashboard metrics={state.metrics} />;
     }

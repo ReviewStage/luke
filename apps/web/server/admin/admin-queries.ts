@@ -26,22 +26,6 @@ function toNumber(value: number | string | null | undefined): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-/**
- * The GitHub account ids linked to one user, which is what the admin gate reads
- * a viewer's identity from. A Google-only account has none, and is admitted
- * only by the email allowlist.
- */
-export async function readViewerGithubAccountIds(
-  database: Database,
-  userId: string,
-): Promise<string[]> {
-  const rows = await database
-    .select({ accountId: account.accountId })
-    .from(account)
-    .where(and(eq(account.userId, userId), eq(account.providerId, "github")));
-  return rows.map((row) => row.accountId);
-}
-
 async function probeDatabase(
   database: Database,
 ): Promise<{ reachable: boolean; latencyMs: number }> {
