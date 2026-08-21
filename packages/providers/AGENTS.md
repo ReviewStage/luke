@@ -2,20 +2,15 @@
 
 The code cannot state a provider's capability surface in one place. An adapter
 has a capability exactly when it overrides the method, so the truth is spread
-across every adapter, and two documents describe it for a reader instead:
-`PRIVACY.md`, which is authoritative, and the README's agent table, which is
-the short version.
+across every adapter, and nothing writes it down in full. Two documents
+describe it in outline: the README's agent table, which names the providers,
+and `PRIVACY.md`, which says what kind of data each connection reads and
+writes.
 
-**When you change what a provider can do, update `PRIVACY.md` in the same
-change.** That means adding or removing a provider or tracker, widening or
-narrowing what an adapter observes, adding or dropping a control, a message
-path, a workspace act, a recap source, or a hook, or changing how a credential
-connects. Add or remove the row in the README's table in the same change when
-the set of providers itself moves.
+**Add or remove the README's table row in the same change as a provider.**
+Update `PRIVACY.md` when a change alters what kind of data leaves the machine
+or which third party receives it, rather than for every capability that moves.
 
 No lever enforces this. A capability the documents do not describe is one a
 reader will not know Luke has, and a stale entry describes a Luke that does not
-exist, so the rule is the whole guard. `PRIVACY.md`'s product-analytics section
-is bound the same way and by nothing but this rule: it names every event and
-every property by name, so an event added, renamed, or given a wider value set
-leaves that document describing a Luke that no longer exists.
+exist, so the rule is the whole guard.

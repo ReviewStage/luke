@@ -197,8 +197,10 @@ Trust constraints:
   switched sharing off. It is a switch that is on by default, sits on the settings
   front page, and belongs to no reset scope, because a reset that turned
   counting back on would be a consent nobody gave. Widening the event list or a
-  property's value set is a product decision, not an implementation detail, and
-  moves `PRIVACY.md` in the same change.
+  property's value set is a product decision, not an implementation detail. The
+  allowlist in that file is the whole boundary; `PRIVACY.md` describes what
+  counting is and moves only when its character does, as it would if a property
+  could ever take free text.
 - The issue tracker follows the same rule at one remove, and is connected the
   way the calendar is rather than the way a cloud provider is. Luke reads the
   issues a tracker lists for the user under a grant the tracker's own consent
