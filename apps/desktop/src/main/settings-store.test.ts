@@ -486,6 +486,67 @@ test("a corrupt session filter value reads as unset rather than narrowing the li
   assert.equal((await storeIn(directory).snapshot()).sessionFilters, undefined);
 });
 
+test("the session search query starts unset and survives a reopen as typed", async (t) => {
+  const directory = await temporaryDirectory(t);
+  // A view preference is not a credential, so storing it must reach the
+  // Keychain not at all.
+  const cipher = countingCipher();
+  const store = storeIn(directory, { cipher });
+
+  assert.equal((await store.snapshot()).sessionSearchQuery, undefined);
+  const held = await store.set(APP_SETTING_SCHEMA.sessionSearchQuery.field, "Fix CI  on main");
+
+  assert.equal(held.settings.sessionSearchQuery, "Fix CI  on main");
+  assert.equal((await storeIn(directory).snapshot()).sessionSearchQuery, "Fix CI  on main");
+  assert.equal(cipher.calls.isAvailable, 0);
+  assert.equal(cipher.calls.encrypt, 0);
+});
+
+test("clearing the session search query reads as unset after a reopen", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+  await store.set(APP_SETTING_SCHEMA.sessionSearchQuery.field, "conductor");
+
+  const cleared = await store.set(APP_SETTING_SCHEMA.sessionSearchQuery.field, undefined);
+
+  assert.equal(cleared.settings.sessionSearchQuery, undefined);
+  assert.equal((await storeIn(directory).snapshot()).sessionSearchQuery, undefined);
+});
+
+test("storing the session search query never disturbs a stored key", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+  await store.setApiKey(CONDUCTOR, TEST_API_KEY);
+
+  await store.set(APP_SETTING_SCHEMA.sessionSearchQuery.field, "review");
+
+  assert.equal(await storeIn(directory).readApiKey(CONDUCTOR), TEST_API_KEY);
+});
+
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+test("a stored query of nothing but whitespace reads as unset rather than narrowing", async (t) => {
+  const directory = await temporaryDirectory(t);
+  await fs.writeFile(
+    path.join(directory, SETTINGS_FILE_NAME),
+    JSON.stringify({ version: 2, apiKeys: {}, sessionSearchQuery: "   " }),
+    "utf8",
+  );
+
+  assert.equal((await storeIn(directory).snapshot()).sessionSearchQuery, undefined);
+});
+
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+test("a corrupt session search query reads as unset rather than refilling the field", async (t) => {
+  const directory = await temporaryDirectory(t);
+  await fs.writeFile(
+    path.join(directory, SETTINGS_FILE_NAME),
+    JSON.stringify({ version: 2, apiKeys: {}, sessionSearchQuery: 7 }),
+    "utf8",
+  );
+
+  assert.equal((await storeIn(directory).snapshot()).sessionSearchQuery, undefined);
+});
+
 test("a calendar account stores its grant encrypted and survives a reopen", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);

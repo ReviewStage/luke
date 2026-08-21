@@ -200,6 +200,14 @@ import {
 const FEEDBACK_NOTICE_MS = 6_000;
 
 /**
+ * How long a changed search query waits before it is stored. The query moves
+ * at typing speed and the store is a file write per change, so only where the
+ * words settle is worth writing — long enough to sit out a burst of
+ * keystrokes, short enough that quitting mid-thought still keeps the search.
+ */
+const SEARCH_QUERY_STORE_DELAY_MS = 400;
+
+/**
  * The bridge acts behind each consent service's wait: the documented connect
  * the slot's send runs, the main-process side a mid-wait cancel must stop,
  * and — for the browser flows alone — the way a lost tab reopens. One row
@@ -686,15 +694,15 @@ export function App(): React.JSX.Element {
       setSettingsSearchOpen(false);
     },
     onCapsuleList: () => {
-      // A search is a question about the list as it was, so it closes with
-      // the panel — a remembered query could hide the very session the
-      // capsule is reporting — and the order goes back with it, so the top
-      // row keeps matching the mark the capsule kept. The filter chips stay:
-      // a chosen narrowing is a standing way of viewing the list, and the
-      // capsule stays honest over it because its tally is taken before the
-      // list is narrowed.
-      setSessionView((current) => ({ ...DEFAULT_SESSION_VIEW, filters: current.filters }));
-      setSearchOpen(false);
+      // The order goes back when the panel does, so the top row keeps
+      // matching the mark the capsule kept. The filter chips and the search
+      // stay: each is a standing way of viewing the list, and the capsule
+      // stays honest over both because its tally is taken before the list is
+      // narrowed. The search field stays open with its query — a session the
+      // query hides is admitted by the field on screen and the count it
+      // carries — waiting where the developer left it, like a search held
+      // while Settings shows.
+      setSessionView((current) => ({ ...current, sort: DEFAULT_SESSION_VIEW.sort }));
     },
     onCapsuleTab: () => changeTab(PANEL_TAB.SESSIONS),
   });
@@ -839,6 +847,42 @@ export function App(): React.JSX.Element {
       )
       .then(applySettingsReply);
   }, [bootstrap, sessionView.filters, applySettingsReply]);
+
+  /**
+   * The search query as last stored, on the filter selection's own terms:
+   * seeded from bootstrap's snapshot so restoring the stored words must not
+   * read as fresh typing to store again.
+   */
+  const storedSessionQuery = useRef<string | undefined>(undefined);
+  // The query funnels through the view the way the selection does — typing,
+  // a spoken ask, Escape clearing the field — so the store follows the view
+  // from one place, never in a fixture or capture run. Unlike a chip press
+  // the query changes at typing speed, so a write waits out the keystrokes
+  // and stores only where the words settled — except letting go, which writes
+  // at once: a clear is a discrete act rather than a keystroke on the way
+  // somewhere, and a quit inside a waited write would bring back a search the
+  // developer deliberately let go.
+  useEffect(() => {
+    if (!bootstrap || bootstrap.fixtureMode) return;
+    storedSessionQuery.current ??= bootstrap.settings.sessionSearchQuery ?? "";
+    const query = sessionView.query;
+    if (storedSessionQuery.current === query) return;
+    const store = () => {
+      storedSessionQuery.current = query;
+      void window.sidecar
+        .updateSetting(
+          APP_SETTING_SCHEMA.sessionSearchQuery.field,
+          query !== "" ? query : undefined,
+        )
+        .then(applySettingsReply);
+    };
+    if (query === "") {
+      store();
+      return;
+    }
+    const settled = window.setTimeout(store, SEARCH_QUERY_STORE_DELAY_MS);
+    return () => window.clearTimeout(settled);
+  }, [bootstrap, sessionView.query, applySettingsReply]);
 
   const changeVoiceCaptions = useCallback(
     async (enabled: boolean) =>
@@ -2539,14 +2583,23 @@ export function App(): React.JSX.Element {
       acceptCalendarsBootstrap(value.calendars);
       acceptMeetingQuietBootstrap(value.meetingQuiet);
       acceptSettingsBootstrap(value.settings);
-      // The stored filter chips come back with the panel: a chosen narrowing
-      // is a standing way of viewing the list, and this is the one moment it
-      // is read from the store — from here on the view leads and the store
-      // follows. Never in a fixture or capture run, whose evidence must not
-      // vary with what a developer last chose.
+      // The stored filter chips and search words come back with the panel:
+      // each is a standing way of viewing the list, and this is the one
+      // moment they are read from the store — from here on the view leads and
+      // the store follows. Never in a fixture or capture run, whose evidence
+      // must not vary with what a developer last chose.
       const storedFilters = value.settings.sessionFilters;
-      if (!value.fixtureMode && storedFilters !== undefined) {
-        setSessionView((current) => ({ ...current, filters: storedFilters }));
+      const storedQuery = value.settings.sessionSearchQuery;
+      if (!value.fixtureMode && (storedFilters !== undefined || storedQuery !== undefined)) {
+        setSessionView((current) => ({
+          ...current,
+          ...(storedFilters !== undefined ? { filters: storedFilters } : undefined),
+          ...(storedQuery !== undefined ? { query: storedQuery } : undefined),
+        }));
+        // A restored query opens the field it refills, on the rule the
+        // field's own closing keeps: a narrowing in force behind no visible
+        // control would hide sessions with nothing on screen admitting it.
+        if (storedQuery !== undefined) setSearchOpen(true);
       }
       acceptAccountBootstrap(value.account);
       acceptUpdateBootstrap(value.update);
@@ -3055,11 +3108,14 @@ export function App(): React.JSX.Element {
   // to find that is not already on screen. Its being open goes when its button
   // does — and the query goes with it, by the same rule the emptied filter
   // follows, because a narrowing left in force behind no visible control would
-  // hide sessions with nothing admitting it. The tab is not part of this gate:
-  // a search held while Settings shows is still the sessions tab's own state,
-  // waiting where the developer left it.
+  // hide sessions with nothing admitting it. Only a roster actually read may
+  // decide that, on the emptied filter's own gate: an unread roster says
+  // nothing about how many sessions there are, and a search restored at
+  // launch must not be let go on its silence. The tab is not part of this
+  // gate: a search held while Settings shows is still the sessions tab's own
+  // state, waiting where the developer left it.
   const offerSearch = tab === PANEL_TAB.SESSIONS && list.total > 1;
-  if (searchOpen && list.total <= 1) {
+  if (searchOpen && sessionsSettled && list.total <= 1) {
     setSearchOpen(false);
     if (sessionView.query !== "") setSessionView({ ...sessionView, query: "" });
   }

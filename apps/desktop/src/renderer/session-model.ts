@@ -193,14 +193,15 @@ export interface SessionView {
 }
 
 /**
- * What the panel opens on before any stored view arrives. The filters are the
- * one part of the view that outlives a closing: a chosen narrowing is a
- * standing way of viewing the list, restored from the stored settings at
- * launch and kept across capsule closings — and the capsule stays honest over
- * it because its tally is taken before the list is narrowed. The order is not
- * remembered, so the top row keeps matching the mark the capsule kept, and a
- * search is forgotten on the same terms — it is a question about the list as
- * it was, not a standing way of viewing it.
+ * What the panel opens on before any stored view arrives. The filters and the
+ * search are the parts of the view that outlive a closing: each is a standing
+ * way of viewing the list, restored from the stored settings at launch and
+ * kept across capsule closings — and the capsule stays honest over both
+ * because its tally is taken before the list is narrowed. A restored search
+ * brings its field back open, so the narrowing is never in force behind no
+ * visible control, and clearing or closing the field is what lets it go. The
+ * order alone is not remembered, so the top row keeps matching the mark the
+ * capsule kept.
  */
 export const DEFAULT_SESSION_VIEW: SessionView = {
   filters: [],

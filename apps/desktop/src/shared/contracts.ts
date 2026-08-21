@@ -383,12 +383,20 @@ export interface AppSettings {
   /**
    * The session list's chosen filter chips, absent while nothing narrows it.
    * A chosen narrowing is a standing way of viewing the list, so it survives
-   * the panel closing and the app restarting; the search query and the order
-   * deliberately do not travel with it. Fixture and capture runs leave it
-   * unread, because their evidence must not vary with what a developer last
-   * chose.
+   * the panel closing and the app restarting; the order deliberately does not
+   * travel with it. Fixture and capture runs leave it unread, because their
+   * evidence must not vary with what a developer last chose.
    */
   sessionFilters?: readonly SessionFilter[];
+  /**
+   * The session list's held search words, absent while nothing is searched.
+   * A held search stands with the chips as a way of viewing the list, so it
+   * survives on the same terms and comes back with its field open — a
+   * narrowing must never be in force behind no visible control. Clearing or
+   * closing the field is what lets the words go. Fixture and capture runs
+   * leave it unread, like the chips.
+   */
+  sessionSearchQuery?: string;
   /**
    * The provider a conversational ask creates a new workspace in when the ask
    * names none, absent until one has been chosen. It starts unset on purpose:

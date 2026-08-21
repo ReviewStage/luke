@@ -794,7 +794,12 @@ test("the guide describes the search, its three ways in, and their shared bound"
     fact.detail,
     /title, status word or status line, branch, repository, workspace, agent, associated app, or model/,
   );
-  assert.match(fact.detail, /no search survives the panel closing/);
+  // A held search now outlives the panel, and the guide must say so with its
+  // bound — clearing or closing the field is the one way a search is let go —
+  // or Luke will promise words he forgot, or forget words he promised to keep.
+  assert.match(fact.detail, /clearing or closing is what lets a search go/);
+  assert.match(fact.detail, /survives the panel closing and the app restarting/);
+  assert.match(fact.detail, /comes back with its field open/);
 });
 
 test("the feedback fact says what a spoken open may do, and that sending stays by hand", () => {
