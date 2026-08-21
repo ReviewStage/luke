@@ -73,7 +73,10 @@ export function createElectronBuilderConfig(env = process.env) {
     npmRebuild: false,
     files: ["dist/**/*", "package.json", "!dist/**/*.map"],
     extraResources: [
-      ...packageAssets.helperPaths,
+      ...packageAssets.helperPaths.map((helperPath) => ({
+        from: helperPath,
+        to: path.basename(helperPath),
+      })),
       {
         from: packageAssets.licensePath,
         to: path.basename(packageAssets.licensePath),

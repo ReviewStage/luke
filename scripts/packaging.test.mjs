@@ -244,9 +244,13 @@ test("every native helper is built and shipped, or neither happens", () => {
       // and is simply absent from the app someone downloads.
       `${helper.binary} reaches the bundle`,
     );
+    const builderResource = builderShipped.find(
+      (resource) => resource.to === (helper.bundle ?? helper.binary),
+    );
+    assert.ok(builderResource, `${helper.binary} reaches the electron-builder bundle`);
     assert.ok(
-      builderShipped.some((resourcePath) => resourcePath.endsWith(helper.bundle ?? helper.binary)),
-      `${helper.binary} reaches the electron-builder bundle`,
+      builderResource.from.endsWith(helper.bundle ?? helper.binary),
+      `${helper.binary} is copied from its built output`,
     );
     const explicitlySigned = builderBinaries.some((resourcePath) =>
       resourcePath.endsWith(helper.binary),
