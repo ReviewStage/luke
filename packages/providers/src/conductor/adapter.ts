@@ -346,6 +346,25 @@ interface ConductorTranscript {
   recap?: string;
 }
 
+/**
+ * One chat's last readable facts, beside the moment reported for them.
+ * Conductor's status `updatedAt` is the session record's write time, not the
+ * moment its status was entered: opening a stale chat wakes its sleeping
+ * workspace, and the wake alone rewrites the record. Judged on that timestamp,
+ * a chat walked away from hours ago flips back to freshly waiting at a press
+ * that asked it nothing — so the moment is advanced only when the facts
+ * themselves moved. A fact a pass could not read is `undefined` here and never
+ * compared, because a failed read says nothing about the chat; `recapKnown`
+ * tells a transcript that answered with nothing from one never read at all.
+ */
+interface ConductorSessionMemory {
+  status: ConductorSessionStatus | undefined;
+  errorMessage: string | undefined;
+  recapKnown: boolean;
+  recap: string | undefined;
+  observedAt: number;
+}
+
 export const CONDUCTOR_PROVIDER: SessionProvider = {
   id: CONDUCTOR_PROVIDER_ID,
   displayName: CONDUCTOR_PROVIDER_NAME,
@@ -418,6 +437,13 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
    * this cache holds, so it can never name a project observation did not see.
    */
   #projects: readonly ConductorProject[] = [];
+  /**
+   * Each observed chat's last readable facts, for telling a record a workspace
+   * wake touched from a chat whose work moved. In memory only: the first pass
+   * after a launch has no earlier reading and takes the provider's timestamp
+   * at its word.
+   */
+  readonly #memories = new Map<string, ConductorSessionMemory>();
 
   constructor(options: ConductorAdapterOptions) {
     super(
@@ -433,6 +459,7 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
   protected override forgetCachedIdentity(): void {
     this.#userId = undefined;
     this.#projects = [];
+    this.#memories.clear();
   }
 
   /**
@@ -630,6 +657,13 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
       if (!settled) settledWorkspaceIds.delete(session.workspace.id);
     });
 
+    // A chat gone from the listing frees its memory here: the roster owns
+    // retention, and remembering a filed-away chat would only grow the map.
+    const observedSessionIds = new Set(sessions.map((session) => session.id));
+    for (const sessionId of this.#memories.keys()) {
+      if (!observedSessionIds.has(sessionId)) this.#memories.delete(sessionId);
+    }
+
     // One row per chat, each grouped under its workspace. The grouping names
     // the workspace once, which leaves each chat free to say what it alone is
     // doing, be opened where it alone lives, and take the message meant for it
@@ -639,7 +673,7 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
         this.#observationFor(
           session,
           reportedStatuses[index],
-          transcripts?.get(session.id),
+          transcripts,
           workspaceLifecycles.get(session.workspace.id),
           settledWorkspaceIds,
           now,
@@ -845,16 +879,13 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
   #observationFor(
     session: ConductorSession,
     reported: ConductorReportedStatus | undefined,
-    transcript: ConductorTranscript | undefined,
+    transcripts: ReadonlyMap<string, ConductorTranscript> | undefined,
     lifecycle: ConductorWorkspaceLifecycle | undefined,
     settledWorkspaceIds: ReadonlySet<string>,
     now: number,
   ): ProviderSessionObservation | undefined {
-    // A workspace timestamp covers every chat in that workspace, so it would
-    // make chats a user left hours ago look like they just stopped. The status
-    // timestamp is per-session; the workspace timestamp is only the last
-    // resort.
-    const observedAt = reported?.updatedAt ?? session.workspace.lastActivityAt;
+    const transcript = transcripts?.get(session.id);
+    const observedAt = this.#observedMoment(session, reported, transcripts);
     const status = this.#statusFor(reported?.status, observedAt, now);
     // The parting words are a recap only once the turn has actually parted:
     // read for an idle chat, they say where the agent left the work; read
@@ -957,6 +988,51 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
         ...(session.deepLink ? { link: session.deepLink } : undefined),
       },
     };
+  }
+
+  /**
+   * The moment this chat's work last moved. Conductor's own timestamps cannot
+   * carry it alone: the workspace's covers every sibling chat, and the status
+   * endpoint's `updatedAt` is the record's write time, bumped by a workspace
+   * wake — the side effect of merely opening a stale chat — as readily as by
+   * a turn. So the provider's timestamp is adopted only when the chat's own
+   * facts moved: its status, the failure it reports, or its parting words.
+   * Unchanged facts keep the moment already reported, which is what lets a
+   * chat walked away from stay walked away from across the wake its press
+   * caused. Comparison needs both readings, so a fact this pass or the
+   * remembered one could not read never counts as movement, and first sight
+   * takes the provider at its word — including, on the first pass after a
+   * launch, a wake that happened just before it.
+   */
+  #observedMoment(
+    session: ConductorSession,
+    reported: ConductorReportedStatus | undefined,
+    transcripts: ReadonlyMap<string, ConductorTranscript> | undefined,
+  ): number {
+    const reportedAt = reported?.updatedAt ?? session.workspace.lastActivityAt;
+    const transcript = transcripts?.get(session.id);
+    const remembered = this.#memories.get(session.id);
+    const statusMoved =
+      remembered !== undefined &&
+      remembered.status !== undefined &&
+      reported?.status !== undefined &&
+      (reported.status !== remembered.status || reported.errorMessage !== remembered.errorMessage);
+    const recapMoved =
+      remembered !== undefined &&
+      remembered.recapKnown &&
+      transcripts !== undefined &&
+      transcript?.recap !== remembered.recap;
+    const observedAt =
+      remembered === undefined || statusMoved || recapMoved ? reportedAt : remembered.observedAt;
+    this.#memories.set(session.id, {
+      status: reported?.status ?? remembered?.status,
+      errorMessage:
+        reported?.status !== undefined ? reported.errorMessage : remembered?.errorMessage,
+      recapKnown: transcripts !== undefined || remembered?.recapKnown === true,
+      recap: transcripts !== undefined ? transcript?.recap : remembered?.recap,
+      observedAt,
+    });
+    return observedAt;
   }
 
   #statusFor(
