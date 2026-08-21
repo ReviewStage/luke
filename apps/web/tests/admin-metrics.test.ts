@@ -9,8 +9,10 @@ import {
   type AdminMetricsSource,
   adminIntegrations,
   buildAdminMetrics,
+  countSignInMethods,
   handleAdminMetrics,
   lastNDayKeys,
+  SIGN_IN_PROVIDER_ID,
 } from "../server/admin/admin-metrics";
 import {
   ADMIN_ERROR,
@@ -38,6 +40,26 @@ function source(overrides: Partial<AdminMetricsSource> = {}): AdminMetricsSource
     ...overrides,
   };
 }
+
+test("sign-in methods count accounts, not linked rows", () => {
+  const methods = countSignInMethods([
+    // One account holding both methods counts once under each.
+    { userId: "user-1", providerId: SIGN_IN_PROVIDER_ID.GOOGLE },
+    { userId: "user-1", providerId: SIGN_IN_PROVIDER_ID.GITHUB },
+    { userId: "user-2", providerId: SIGN_IN_PROVIDER_ID.GITHUB },
+    // Two rows of one provider are still one account with it linked.
+    { userId: "user-3", providerId: SIGN_IN_PROVIDER_ID.GITHUB },
+    { userId: "user-3", providerId: SIGN_IN_PROVIDER_ID.GITHUB },
+    // Two unnamed providers pool into one `other` account, not two.
+    { userId: "user-4", providerId: "sso-alpha" },
+    { userId: "user-4", providerId: "sso-beta" },
+  ]);
+  assert.deepEqual(methods, { google: 1, github: 3, other: 1 });
+});
+
+test("an empty account table is zero on every method", () => {
+  assert.deepEqual(countSignInMethods([]), { google: 0, github: 0, other: 0 });
+});
 
 test("the window is a contiguous run of day keys ending on today", () => {
   const keys = lastNDayKeys(NOON_UTC, ADMIN_METRICS_WINDOW_DAYS);

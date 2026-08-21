@@ -59,11 +59,42 @@ export interface AdminTrend {
   prior: number;
 }
 
-/** How accounts reached the service, counted from their linked provider rows. */
+/** The provider ids the dashboard names; every other linked provider pools into `other`. */
+export const SIGN_IN_PROVIDER_ID = {
+  GOOGLE: "google",
+  GITHUB: "github",
+} as const;
+
+/**
+ * How many accounts linked each sign-in method. An account that linked more
+ * than one method counts once under each, so the methods can legitimately sum
+ * past the account total — never past it per method.
+ */
 export interface AdminSignInMethods {
   google: number;
   github: number;
   other: number;
+}
+
+/**
+ * Folds the linked (account, provider) pairs the query reads into per-method
+ * account counts. The dedupe lives here rather than in a grouped SQL count
+ * because `other` pools every unnamed provider: an account that linked two of
+ * them is still one account, which per-provider counts summed after the fact
+ * would state as two.
+ */
+export function countSignInMethods(
+  links: readonly { userId: string; providerId: string }[],
+): AdminSignInMethods {
+  const google = new Set<string>();
+  const github = new Set<string>();
+  const other = new Set<string>();
+  for (const link of links) {
+    if (link.providerId === SIGN_IN_PROVIDER_ID.GOOGLE) google.add(link.userId);
+    else if (link.providerId === SIGN_IN_PROVIDER_ID.GITHUB) github.add(link.userId);
+    else other.add(link.userId);
+  }
+  return { google: google.size, github: github.size, other: other.size };
 }
 
 /**

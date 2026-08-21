@@ -384,17 +384,20 @@ const SIGN_IN_METHODS_CHART = {
 /**
  * How the accounts sign in, as horizontal bars. One measure across nominal
  * categories, so every bar wears the first slot's hue and the end labels
- * carry the exact count and share the meter rows used to state. A method
- * nobody has linked draws no bar at all: a zero-length bar parks its end
- * label at the plot origin, where two empty methods would stack their labels
- * over the category axis.
+ * carry the exact count and its share of all accounts — shares that can sum
+ * past 100%, since an account may link more than one method, which is why
+ * each label says "of accounts" instead of posing as a slice of the bars. A
+ * method nobody has linked draws no bar at all: a zero-length bar parks its
+ * end label at the plot origin, where two empty methods would stack their
+ * labels over the category axis.
  */
 function SignInMethodsChart({
   methods,
+  totalAccounts,
 }: {
   methods: AdminMetrics["users"]["signInMethods"];
+  totalAccounts: number;
 }): React.JSX.Element {
-  const total = methods.github + methods.google + methods.other;
   const rows = [
     { method: "GitHub", accounts: methods.github },
     { method: "Google", accounts: methods.google },
@@ -403,7 +406,9 @@ function SignInMethodsChart({
     .filter((row) => row.accounts > 0)
     .map((row) => ({
       ...row,
-      label: `${formatNumber(row.accounts)} · ${Math.round((row.accounts / total) * 100)}%`,
+      label: `${formatNumber(row.accounts)} · ${Math.round(
+        (row.accounts / totalAccounts) * 100,
+      )}% of accounts`,
     }));
 
   if (rows.length === 0) {
@@ -425,7 +430,7 @@ function SignInMethodsChart({
         className="aspect-auto w-full"
         style={{ height: rows.length * 40 }}
       >
-        <BarChart data={rows} layout="vertical" margin={{ right: 96 }}>
+        <BarChart data={rows} layout="vertical" margin={{ right: 160 }}>
           <XAxis type="number" hide />
           <YAxis dataKey="method" type="category" tickLine={false} axisLine={false} width={56} />
           <ChartTooltip content={<ChartTooltipContent />} />
@@ -935,7 +940,10 @@ function Dashboard({
         </div>
         <div className="mt-3 grid gap-3 min-[720px]:grid-cols-[1.6fr_1fr]">
           <SignupsChart daily={metrics.users.dailySignups} trend={metrics.users.signupTrend} />
-          <SignInMethodsChart methods={metrics.users.signInMethods} />
+          <SignInMethodsChart
+            methods={metrics.users.signInMethods}
+            totalAccounts={metrics.users.total}
+          />
         </div>
 
         <SectionHeading>Feature usage · hosted tier</SectionHeading>
