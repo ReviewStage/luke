@@ -23,7 +23,6 @@
 
 <p align="center">
   <a href="https://tryluke.dev">Website</a> ·
-  <a href="docs/PROVIDERS.md">Providers</a> ·
   <a href="PRIVACY.md">Privacy</a> ·
   <a href="CHANGELOG.md">Changelog</a>
 </p>
@@ -75,9 +74,8 @@ already expose. He does not run your agents, wrap them, or type for them.
   session list he last observed.
 - Voice is the only feature that sends audio off your Mac.
 
-[docs/PROVIDERS.md](docs/PROVIDERS.md) lists what Luke reads and may write for
-each agent and app. [PRIVACY.md](PRIVACY.md) describes what leaves your
-machine.
+[PRIVACY.md](PRIVACY.md) describes what Luke reads, what he may write, and what
+leaves your machine.
 
 ## Supported agents and apps
 

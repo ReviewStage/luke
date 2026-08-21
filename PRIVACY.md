@@ -488,7 +488,10 @@ boundary the Linear section below describes.
 Observation never calls a provider write route. Luke calls one only when you
 ask for the act it performs — a message typed on a session's row or asked for
 out loud, which Conductor, Cursor, Devin, and Jules document and Copilot does
-not; a control a session's provider advertised (cancelling a Conductor turn or
+not, each only in the states its provider documents it for: Conductor while a
+chat is idle or working, Cursor after a run has finished on an unarchived
+agent, Devin while a session is running or suspended, and Jules while it is
+planning, in progress, awaiting plan approval, or awaiting user feedback; a control a session's provider advertised (cancelling a Conductor turn or
 archiving its workspace, cancelling a Cursor run or archiving its agent,
 archiving a Devin session, approving a Jules plan); a new workspace: a
 Conductor workspace in one of the projects Conductor reports, or a Cursor agent

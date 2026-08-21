@@ -428,7 +428,7 @@ works in that subtree:
 |---|---|
 | `apps/desktop/src/renderer/AGENTS.md` | The sandbox rule, panel motion, brand artwork, and Luke's knowledge of himself |
 | `packages/AGENTS.md` | The acyclic package graph, the `.js` import rule, the Vercel doors, and how a barrel leaks |
-| `packages/providers/AGENTS.md` | The `docs/PROVIDERS.md` obligation |
+| `packages/providers/AGENTS.md` | Keeping `PRIVACY.md` and the README's agent table true to the adapters |
 | `packages/surface/AGENTS.md` | The shared surface vocabulary and its generated outputs |
 | `packages/realtime/AGENTS.md` | Why `protocol` and `tools` ship together |
 | `packages/analytics/AGENTS.md` | The product-event allowlist and its `PRIVACY.md` obligation |
