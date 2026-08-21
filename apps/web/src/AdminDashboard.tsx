@@ -36,6 +36,7 @@ const authClient = createAuthClient();
 const METRICS_PATH = "/api/admin/metrics";
 const USER_DETAIL_PATH = "/api/admin/user";
 const USERS_PATH = "/api/admin/users";
+const FAVORITE_PATH = "/api/admin/favorite";
 
 /**
  * The page's own addresses, distinct from the API's parameters so a pasted
@@ -1527,14 +1528,32 @@ function SortableHeader({
   );
 }
 
+function StarIcon({ filled }: { filled: boolean }): React.JSX.Element {
+  return (
+    <svg
+      className="size-4 shrink-0"
+      viewBox="0 0 16 16"
+      fill={filled ? "currentColor" : "none"}
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M8 1.9l1.87 3.79 4.18.61-3.02 2.95.71 4.16L8 11.44l-3.74 1.97.71-4.16-3.02-2.95 4.18-.61L8 1.9z" />
+    </svg>
+  );
+}
+
 function UsersTable({
   rows,
   windowDays,
   onOpen,
+  onToggleFavorite,
 }: {
   rows: readonly AdminUserListRow[];
   windowDays: number;
   onOpen: (id: string) => void;
+  onToggleFavorite: (id: string, favorite: boolean) => void;
 }): React.JSX.Element {
   const [sort, setSort] = useState<UsersSort | undefined>(usersSortLeft);
   const toggleSort = (key: UsersSortKey) => {
@@ -1565,6 +1584,9 @@ function UsersTable({
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-border text-left font-mono text-xs text-muted-foreground uppercase">
+            <th className="w-0 py-3 pr-0 pl-5">
+              <span className="sr-only">Favorite</span>
+            </th>
             <SortableHeader
               label="Account"
               sortKey={USERS_SORT_KEY.ACCOUNT}
@@ -1619,9 +1641,24 @@ function UsersTable({
           {sorted.map((row) => (
             <tr
               key={row.id}
-              className="cursor-pointer border-b border-border transition-colors duration-150 last:border-0 hover:bg-muted"
+              className="group cursor-pointer border-b border-border transition-colors duration-150 last:border-0 hover:bg-muted"
               onClick={() => onOpen(row.id)}
             >
+              <td className="w-0 py-3 pr-0 pl-5">
+                <button
+                  type="button"
+                  className="flex cursor-pointer text-muted-foreground opacity-0 transition-opacity duration-150 outline-offset-2 group-hover:opacity-100 hover:text-foreground focus-visible:opacity-100 data-[favorite=true]:text-attention data-[favorite=true]:opacity-100"
+                  data-favorite={row.favorite}
+                  aria-pressed={row.favorite}
+                  aria-label={`${row.favorite ? "Unfavorite" : "Favorite"} ${row.name || row.email}`}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onToggleFavorite(row.id, !row.favorite);
+                  }}
+                >
+                  <StarIcon filled={row.favorite} />
+                </button>
+              </td>
               <td className="px-5 py-3">
                 <a
                   href={accountHref(row.id)}
@@ -1679,6 +1716,7 @@ function UsersPage({
   account,
   onSignOut,
   onOpenAccount,
+  onToggleFavorite,
   refreshing,
   onRefresh,
   now,
@@ -1689,6 +1727,7 @@ function UsersPage({
   account: ViewerAccount | undefined;
   onSignOut: () => void;
   onOpenAccount: (id: string) => void;
+  onToggleFavorite: (id: string, favorite: boolean) => void;
   refreshing: boolean;
   onRefresh: () => void;
   now: number;
@@ -1748,14 +1787,20 @@ function UsersPage({
           </span>
         </div>
         <div className="mt-4">
-          <UsersTable rows={rows} windowDays={list.windowDays} onOpen={onOpenAccount} />
+          <UsersTable
+            rows={rows}
+            windowDays={list.windowDays}
+            onOpen={onOpenAccount}
+            onToggleFavorite={onToggleFavorite}
+          />
         </div>
         <p className="mt-3 text-sm text-muted-foreground">
           Every account the service holds, most recently active first, whether or not it ever
           touched the hosted tier — active days count the window's UTC days with hosted voice or
           attention, while last seen is the account's freshest sign-in session, which a plain
-          sign-in moves without any hosted use. A heading sorts by its column, and a row opens the
-          account's own page.
+          sign-in moves without any hosted use. A heading sorts by its column, a row opens the
+          account's own page, and a row's star favorites the account for you alone, following your
+          sign-in rather than this browser.
           {list.total > list.rows.length
             ? ` Only the ${formatNumber(list.rows.length)} most recently active accounts are listed here, and the filter searches those alone.`
             : ""}
@@ -1836,6 +1881,58 @@ function UsersScreen({
     return () => inFlight.current?.abort();
   }, [load]);
 
+  // The star answers the press at once, while one write chain per account
+  // carries the newest intent to the service: presses faster than the network
+  // coalesce into the chain's next request instead of racing it out of order.
+  // A landed write redraws its own outcome, so a roster refresh that crossed
+  // it mid-flight cannot leave a stale star, and a failed one puts the star
+  // back only when no newer press has spoken since.
+  const favoriteIntents = useRef(new Map<string, boolean>());
+  const favoriteWriting = useRef(new Set<string>());
+  const toggleFavorite = useCallback((id: string, favorite: boolean) => {
+    const draw = (value: boolean) =>
+      setState((current) =>
+        current.status === "ready"
+          ? {
+              status: "ready",
+              list: {
+                ...current.list,
+                rows: current.list.rows.map((row) =>
+                  row.id === id ? { ...row, favorite: value } : row,
+                ),
+              },
+            }
+          : current,
+      );
+    draw(favorite);
+    favoriteIntents.current.set(id, favorite);
+    if (favoriteWriting.current.has(id)) return;
+    favoriteWriting.current.add(id);
+    void (async () => {
+      try {
+        for (;;) {
+          const want = favoriteIntents.current.get(id);
+          if (want === undefined) return;
+          favoriteIntents.current.delete(id);
+          let landed = false;
+          try {
+            const response = await fetch(
+              `${FAVORITE_PATH}?${ADMIN_USER_ID_PARAM}=${encodeURIComponent(id)}`,
+              { method: want ? "PUT" : "DELETE", headers: { accept: "application/json" } },
+            );
+            landed = response.ok;
+          } catch {
+            landed = false;
+          }
+          if (landed) draw(want);
+          else if (!favoriteIntents.current.has(id)) draw(!want);
+        }
+      } finally {
+        favoriteWriting.current.delete(id);
+      }
+    })();
+  }, []);
+
   switch (state.status) {
     case "loading":
       return frame(<Centered title="Loading…">Reading the service's own tables.</Centered>);
@@ -1863,6 +1960,7 @@ function UsersScreen({
           account={account}
           onSignOut={() => void signOut()}
           onOpenAccount={onOpenAccount}
+          onToggleFavorite={toggleFavorite}
           refreshing={refreshing}
           onRefresh={load}
           now={now}

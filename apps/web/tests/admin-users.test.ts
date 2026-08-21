@@ -30,6 +30,7 @@ const ROW = {
   lastSeenAt: Date.parse("2026-08-17T09:30:00.000Z"),
   voiceCalls: 120,
   attentionReviews: 400,
+  favorite: false,
 };
 
 function listSource(overrides: Partial<AdminUserListSource> = {}): AdminUserListSource {
@@ -91,10 +92,16 @@ test("the gate answers 405, 401, 403, and 200 as distinct outcomes", async () =>
   assert.equal(body.rows[0]?.id, "user-9");
 });
 
-test("the roster is read at the scope the request asked for, and not past a failed gate", async () => {
+test("the roster is read at the scope the request asked for, as the viewer, and not past a failed gate", async () => {
   const scopes: AdminMetricsScope[] = [];
-  const countingRead = async (now: number, scope: AdminMetricsScope): Promise<AdminUserList> => {
+  const viewerIds: string[] = [];
+  const countingRead = async (
+    now: number,
+    scope: AdminMetricsScope,
+    viewerId: string,
+  ): Promise<AdminUserList> => {
     scopes.push(scope);
+    viewerIds.push(viewerId);
     return readUsers(now);
   };
   const respond = (request: Request) =>
@@ -104,6 +111,7 @@ test("the roster is read at the scope the request asked for, and not past a fail
   const widened = usersRequest("GET", `?${ADMIN_METRICS_SCOPE_PARAM}=${ADMIN_METRICS_SCOPE.ALL}`);
   assert.equal((await respond(widened)).status, 200);
   assert.deepEqual(scopes, [ADMIN_METRICS_SCOPE.NON_ADMINS, ADMIN_METRICS_SCOPE.ALL]);
+  assert.deepEqual(viewerIds, [ADMIN_VIEWER.userId, ADMIN_VIEWER.userId]);
 
   const gated = await handleAdminUsers({
     request: usersRequest(),

@@ -13,6 +13,7 @@ import {
   sql,
   sum,
 } from "drizzle-orm";
+import { adminFavorite } from "../db/favorite-schema.js";
 import type { createDatabase } from "../db/index.js";
 import { account, session, user } from "../db/schema.js";
 import { hostedUsage } from "../db/usage-schema.js";
@@ -404,7 +405,7 @@ export async function readAdminUserSource(
  */
 export async function readAdminUsersSource(
   database: Database,
-  input: { now: number; scope: AdminMetricsScope },
+  input: { now: number; scope: AdminMetricsScope; viewerId: string },
 ): Promise<AdminUserListSource> {
   const dayKeys = lastNDayKeys(input.now, ADMIN_METRICS_WINDOW_DAYS);
   const windowStartDay = dayKeys[0] ?? utcDayKey(input.now);
@@ -429,11 +430,18 @@ export async function readAdminUsersSource(
         lastActiveDay: sql<string | null>`max(${hostedUsage.day})`,
         voiceCalls: sum(hostedUsage.voiceCalls),
         attentionReviews: sum(hostedUsage.attentionReviews),
+        // At most one star row joins per account, so aggregating its presence
+        // leaves the usage aggregates' fan-out untouched.
+        favorite: sql<boolean>`bool_or(${adminFavorite.adminId} is not null)`,
       })
       .from(user)
       .leftJoin(
         hostedUsage,
         and(eq(hostedUsage.userId, user.id), gte(hostedUsage.day, windowStartDay)),
+      )
+      .leftJoin(
+        adminFavorite,
+        and(eq(adminFavorite.userId, user.id), eq(adminFavorite.adminId, input.viewerId)),
       )
       .where(scopeCondition(input.scope))
       .groupBy(user.id, user.name, user.email, user.image, user.role, user.createdAt)
@@ -460,6 +468,37 @@ export async function readAdminUsersSource(
       lastSeenAt: lastSeenByUser.get(row.id)?.getTime() ?? null,
       voiceCalls: toNumber(row.voiceCalls),
       attentionReviews: toNumber(row.attentionReviews),
+      favorite: row.favorite === true,
     })),
   };
+}
+
+/**
+ * Sets whether one admin favorites one account, answering whether the account
+ * exists at all: a press on a roster the account has since left should read as
+ * the account being gone, not the write landing nowhere. Both writes land
+ * twice without complaint — the star's presence is the whole state.
+ */
+export async function writeAdminFavorite(
+  database: Database,
+  input: { adminId: string; userId: string; favorite: boolean },
+): Promise<boolean> {
+  const [target] = await database
+    .select({ id: user.id })
+    .from(user)
+    .where(eq(user.id, input.userId))
+    .limit(1);
+  if (!target) return false;
+
+  if (input.favorite) {
+    await database
+      .insert(adminFavorite)
+      .values({ adminId: input.adminId, userId: input.userId })
+      .onConflictDoNothing();
+  } else {
+    await database
+      .delete(adminFavorite)
+      .where(and(eq(adminFavorite.adminId, input.adminId), eq(adminFavorite.userId, input.userId)));
+  }
+  return true;
 }
