@@ -244,9 +244,21 @@ function integrationsFact(settings: AppSettings): AppGuideFact {
     "the CLI's way of switching organizations — and disconnecting from it runs the CLI's own " +
     "sign-out, clearing the login the CLI stored. The default agent for a creation ask that names " +
     "none is chosen under Superset in Settings; until one is chosen, Luke asks.";
+  const conductor =
+    " Conductor comes two ways, told apart by where the work lands. Conductor cloud connects " +
+    "with a key under Providers and creates workspaces in the cloud projects that key " +
+    "lists. Conductor on this Mac needs no key: it is recognized read-only from Conductor's own " +
+    "index, and a conversation ask can create a new workspace in any repository Conductor holds " +
+    "locally — shown as “Conductor (local)” in the create picker and its own block under " +
+    "Providers. A local creation opens the new workspace in Conductor itself and may carry an " +
+    "opening task, but no agent, model, or name choice, so it runs the repository's own default " +
+    "agent and wears the name Conductor gives it; the default repository a nameless ask lands in " +
+    "is chosen under Conductor (local) in Settings, and until one is chosen Luke asks. Local " +
+    "Conductor chats stay read-only otherwise: Luke cannot message, archive, or add an agent to " +
+    "one, because Conductor documents no local way in for those.";
   return {
     label: "Integrations",
-    detail: `${linear}${apple}${calendar}${superset}`.trim(),
+    detail: `${linear}${apple}${calendar}${superset}${conductor}`.trim(),
   };
 }
 

@@ -4,6 +4,10 @@ export {
 } from "./cmux/session-applications.js";
 export { CodexCloudSessionAdapter } from "./codex/cloud-adapter.js";
 export {
+  ConductorLocalWorkspaceAdapter,
+  ConductorRepositoryReader,
+} from "./conductor/local-workspace-adapter.js";
+export {
   ConductorSessionApplicationReader,
   ConductorSessionApplicationSnapshot,
 } from "./conductor/session-applications.js";

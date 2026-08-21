@@ -4,7 +4,11 @@ import {
   CREDENTIAL_PROVIDER_ID,
   VOICE_CREDENTIAL_PROVIDER,
 } from "@sidecar/credentials";
-import { PROVIDER_ID, workspaceAgentModels } from "@sidecar/session";
+import {
+  CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
+  PROVIDER_ID,
+  workspaceAgentModels,
+} from "@sidecar/session";
 import {
   APP_SETTING_ID,
   type AppSettingId,
@@ -120,6 +124,7 @@ export const SETTINGS_SEARCH_ROW = {
  */
 const DEFAULT_PROJECT_ROW_ID = {
   [PROVIDER_ID.CONDUCTOR]: "default-project-conductor",
+  [CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID]: "default-project-conductor-local",
   [PROVIDER_ID.CODEX]: "default-project-codex",
   [PROVIDER_ID.CURSOR]: "default-project-cursor",
   [SUPERSET_WORKSPACE_PROVIDER_ID]: "default-project-superset",
@@ -371,6 +376,20 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           page: SETTINGS_VIEW.CONNECTIONS,
           icon: <PlugIcon />,
           haystack: ["Superset", "workspaces sign in connect integration"],
+        }
+      : undefined,
+    // Drawn only while local Conductor is actually detected — the block stands
+    // on the same repositories its row offers, so it is searchable exactly when
+    // it is on screen.
+    input.workspaceProjects.some(
+      (provider) => provider.id === CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
+    )
+      ? {
+          id: CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
+          label: "Conductor (local)",
+          page: SETTINGS_VIEW.CONNECTIONS,
+          icon: <ProviderMark providerId={CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID} />,
+          haystack: ["Conductor local", "workspaces create this Mac no key integration"],
         }
       : undefined,
     input.settings.appleCalendarAvailable
