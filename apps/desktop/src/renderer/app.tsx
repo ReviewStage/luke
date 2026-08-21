@@ -173,7 +173,7 @@ import {
   stripHoldNext,
 } from "./strip-hold";
 import { SupersetSignInSlot } from "./superset-sign-in-slot";
-import { updateRow } from "./update-row";
+import { UPDATE_ROW_ACTION, updateRow } from "./update-row";
 import { useBootstrapRacedChannel } from "./use-bootstrap-raced-channel";
 import { useMeasuredHeight } from "./use-measured-height";
 import { panelEntryOpen, usePanelEntry } from "./use-panel-entry";
@@ -2013,6 +2013,20 @@ export function App(): React.JSX.Element {
               note: "The latest release's page is open in the browser; the download itself is by hand from there.",
             };
           }
+          // Re-read at the act what the button reads at its press: the guide
+          // the call was validated against is a snapshot, and an install that
+          // failed or landed between the two must answer as the row now
+          // stands. The main process quietly refuses a stale ask either way;
+          // this makes the refusal a sentence rather than a claimed restart
+          // that never comes.
+          const standing = update ?? bootstrap?.update;
+          const row = standing ? updateRow(standing) : undefined;
+          if (row?.action !== UPDATE_ROW_ACTION.RESTART) {
+            return {
+              status: "refused",
+              reason: row?.detail ?? "This run does not report where updates stand.",
+            };
+          }
           window.sidecar.installUpdate();
           return {
             status: "restarting",
@@ -2026,6 +2040,7 @@ export function App(): React.JSX.Element {
       changeMode,
       settingsNow,
       bootstrap,
+      update,
       drawErrandHold,
       feedbackEntry.latest,
       presentationOf,
