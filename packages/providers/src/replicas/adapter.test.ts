@@ -15,6 +15,8 @@ const TEST_REPOSITORY_URL = "https://github.com/reviewstage/luke";
 const SECRET_PROMPT_TEXT = "SECRET_PROMPT_TEXT";
 /** The reads a creation offer is built from, present in every pass. */
 const PROJECT_READ_PATHS = ["/v1/environments", "/v1/replica/repositories"];
+/** The organization the fake's environments name, as the header must echo it. */
+const TEST_ORGANIZATION_ID = "organization-reviewstage";
 
 /** The documented workspace lifecycle, verified against the published OpenAPI. */
 const TEST_STATUS = {
@@ -138,6 +140,18 @@ function workspacePayload(workspace: TestWorkspace) {
   };
 }
 
+/** A chat as the awake detail read spells it, in snake_case. */
+function detailChatPayload(chat: TestChat) {
+  return {
+    id: chat.id,
+    provider: chat.provider ?? "claude",
+    title: chat.title ?? "",
+    created_at: isoTimestamp(chat.updatedAt - 60_000),
+    updated_at: isoTimestamp(chat.updatedAt),
+    processing: chat.processing ?? false,
+  };
+}
+
 /**
  * A chat as the workspace chat registry spells it — camelCase, with the
  * turn state, and a `lastMessageText` that may be the developer's own words,
@@ -177,10 +191,22 @@ function fakeReplicasApi(
   return recordingFetch((request) => {
     const { pathname, searchParams, method } = request;
     const segments = pathname.split("/").filter((segment) => segment.length > 0);
+    // Production demands the organization header on every `/v1/workspaces`
+    // route, answering a bare key exactly this refusal — observed live — so
+    // the fake does too, and nothing passes that forgot to learn it.
+    if (segments[0] === "v1" && segments[1] === "workspaces") {
+      if (request.headers.get("replicas-org-id") !== TEST_ORGANIZATION_ID) {
+        return jsonResponse({ error: "Missing Replicas-Org-Id header" }, HTTP_STATUS.BAD_REQUEST);
+      }
+    }
     if (method === "GET" && pathname === "/v1/environments") {
+      // Every organization has at least its Global environment, so the
+      // organization id is always learnable from this read.
+      const environments = options.environments ?? [{ id: "environment-global", name: "Global" }];
       return jsonResponse({
-        environments: (options.environments ?? []).map((environment) => ({
+        environments: environments.map((environment) => ({
           id: environment.id,
+          organization_id: TEST_ORGANIZATION_ID,
           name: environment.name,
           is_global: environment.isGlobal ?? false,
           repository_id: environment.repositoryId ?? null,
@@ -277,10 +303,7 @@ function fakeReplicasApi(
           ...workspacePayload(workspace),
           coding_agent: workspace.codingAgent ?? null,
           waking: null,
-          // The detail read's own chat list is deliberately absent, so the
-          // suite proves the rows never depend on it: the registry is the one
-          // chat source.
-          chats: [],
+          chats: (workspace.chats ?? []).map(detailChatPayload),
           repository_statuses: workspace.branch
             ? [
                 {
@@ -951,6 +974,52 @@ test("keeps the roster when the history endpoint refuses the credential", async 
     "/v1/workspaces/workspace-active/chats",
     "/v1/workspaces/workspace-active/chats",
   ]);
+});
+
+test("learns the organization from the environments read and sends its header", async () => {
+  // Production's `/v1/workspaces` routes answer a bare key "Missing
+  // Replicas-Org-Id header" — observed live — so the registry is asked only
+  // once the provider's own environments read has named the organization,
+  // and every request carries the header from then on.
+  const api = fakeReplicasApi([
+    {
+      ...activeWorkspace("workspace-active", TEST_TIME - 1_000),
+      chats: [{ id: "chat-a", provider: "claude", updatedAt: TEST_TIME - 1_000 }],
+    },
+  ]);
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  assert.deepEqual(
+    observations.map((observation) => observation.providerSessionId),
+    ["chat-a"],
+  );
+  const registry = api.requests.find((request) => request.pathname.startsWith("/v1/workspaces/"));
+  assert.equal(registry?.headers.get("replicas-org-id"), "organization-reviewstage");
+});
+
+test("lists an awake workspace's chats from its detail when the registry refuses", async () => {
+  const api = fakeReplicasApi([
+    {
+      ...activeWorkspace("workspace-active", TEST_TIME - 1_000),
+      chats: [
+        { id: "chat-working", provider: "claude", updatedAt: TEST_TIME - 1_000, processing: true },
+      ],
+    },
+  ]);
+  const gatedFetch: CloudFetch = async (url, init) => {
+    const { pathname } = new URL(url);
+    return pathname.startsWith("/v1/workspaces/") && pathname.endsWith("/chats")
+      ? jsonResponse({}, HTTP_STATUS.BAD_REQUEST)
+      : api.fetch(url, init);
+  };
+
+  const observations = await adapterFor(gatedFetch).observe();
+
+  assert.deepEqual(
+    observations.map((observation) => [observation.providerSessionId, observation.status]),
+    [["chat-working", SESSION_STATUS.WORKING]],
+  );
 });
 
 test("keeps workspace rows when the chat registry refuses a workspace", async () => {

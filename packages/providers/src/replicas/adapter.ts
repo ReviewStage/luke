@@ -68,6 +68,16 @@ const REPLICAS_REQUEST_HEADERS = {
 };
 
 /**
+ * The organization header the `/v1/workspaces` routes demand in production —
+ * observed live: they answer a bare key "Missing Replicas-Org-Id header"
+ * where the `/v1/replica` routes accept the same key alone. The value is
+ * never composed here: it is the `organization_id` the provider's own
+ * environments read reports, an identifier the same pass carried, and until
+ * one has been read those routes are simply not asked.
+ */
+const REPLICAS_ORGANIZATION_HEADER = "Replicas-Org-Id";
+
+/**
  * The dashboard's own address for one workspace, composed from the observed
  * id the way Conductor's deep link is: opening stays what every open is — an
  * address handed to the operating system, reaching no provider — and it
@@ -135,6 +145,7 @@ const REPLICAS_QUERY = {
 const REPLICAS_FIELD = {
   BRANCH: "branch",
   CHAT_ID: "chat_id",
+  CHATS: "chats",
   CODING_AGENT: "coding_agent",
   CONTENT: "content",
   CREATED_AT: "created_at",
@@ -146,6 +157,8 @@ const REPLICAS_FIELD = {
   LAST_ACTIVITY_AT: "last_activity_at",
   MESSAGE: "message",
   NAME: "name",
+  ORGANIZATION_ID: "organization_id",
+  PROCESSING: "processing",
   PROVIDER: "provider",
   PULL_REQUESTS: "pull_requests",
   REPLICA: "replica",
@@ -158,6 +171,7 @@ const REPLICAS_FIELD = {
   TEXT: "text",
   TITLE: "title",
   TYPE: "type",
+  UPDATED_AT: "updated_at",
   URL: "url",
 } as const;
 
@@ -477,6 +491,35 @@ function chatFromRegistryRecord(record: WireRecord): ReplicasChat | undefined {
 }
 
 /**
+ * One chat from the awake detail read, which spells its chat fields in
+ * snake_case and carries the same turn state. It is the fallback chat source
+ * for a workspace the registry did not answer for — the registry's routes
+ * demand the organization header, and the first pass may not have learned
+ * one yet.
+ */
+function chatFromDetailRecord(record: WireRecord): ReplicasChat | undefined {
+  const id = textFromRecord(record, REPLICAS_FIELD.ID);
+  const observedAt =
+    timestampFromRecord(record, REPLICAS_FIELD.UPDATED_AT) ??
+    timestampFromRecord(record, REPLICAS_FIELD.CREATED_AT);
+  if (!id || observedAt === undefined) return undefined;
+
+  const agentKind = textFromRecord(record, REPLICAS_FIELD.PROVIDER)?.slice(
+    0,
+    REPLICAS_ADAPTER_DEFAULTS.MAXIMUM_AGENT_KIND_LENGTH,
+  );
+  const title = textFromRecord(record, REPLICAS_FIELD.TITLE);
+  const processing = record[REPLICAS_FIELD.PROCESSING];
+  return {
+    id,
+    observedAt,
+    ...(agentKind ? { agentKind } : undefined),
+    ...(title ? { title } : undefined),
+    ...(isWireBoolean(processing) ? { processing } : undefined),
+  };
+}
+
+/**
  * The prose of one assistant message, for the two agent families whose event
  * payloads Replicas formally specifies: a Claude assistant event carries the
  * SDK message's content blocks, and a Codex response item carries output
@@ -680,6 +723,14 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
   /** The environments the latest pass reported, offered as creation projects. */
   #projects: readonly WorkspaceProject[] = [];
 
+  /**
+   * The organization the key stands for, exactly as the environments read
+   * reported it. It rides every request as the header the `/v1/workspaces`
+   * routes demand in production, and those routes are simply not asked until
+   * it has been read.
+   */
+  #organizationId: string | undefined;
+
   constructor(options: ReplicasAdapterOptions) {
     super(
       {
@@ -692,7 +743,12 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
   }
 
   protected override requestHeaders() {
-    return REPLICAS_REQUEST_HEADERS satisfies Readonly<Record<string, string>>;
+    return {
+      ...REPLICAS_REQUEST_HEADERS,
+      ...(this.#organizationId
+        ? { [REPLICAS_ORGANIZATION_HEADER]: this.#organizationId }
+        : undefined),
+    } satisfies Readonly<Record<string, string>>;
   }
 
   protected override forgetCachedIdentity(): void {
@@ -702,6 +758,7 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
     this.#detailsRefused = false;
     this.#workspaceByChat.clear();
     this.#projects = [];
+    this.#organizationId = undefined;
   }
 
   protected async collect(
@@ -733,15 +790,18 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
       .filter((workspace) => workspace.status && REPLICAS_ENRICHABLE_STATUSES.has(workspace.status))
       .slice(0, REPLICAS_ADAPTER_DEFAULTS.ENRICHED_WORKSPACE_LIMIT);
     this.#pruneCaches(workspaces);
+    // Projects first, alone: the environments read is also where the
+    // organization header the chat registry demands is learned.
+    await this.#refreshProjects(request);
+    const registryListed = await this.#refreshChats(request, enrichable);
     await Promise.all([
-      this.#refreshProjects(request),
       this.#refreshDetails(
         request,
         enrichable.filter((workspace) => workspace.status === REPLICAS_STATUS.ACTIVE),
+        registryListed,
       ),
-      this.#refreshChats(request, enrichable),
+      this.#refreshHistories(request, enrichable),
     ]);
-    await this.#refreshHistories(request, enrichable);
 
     this.#workspaceByChat.clear();
     return workspaces.flatMap((workspace) => this.#observationsFor(workspace, now));
@@ -877,10 +937,12 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
 
   /**
    * The environments a creation ask can land in, read from the same records
-   * the list is. Both reads are tolerated apart from the pass — a roster
-   * must not fail because the creation offer could not refresh — and the
-   * offer is replaced only by a complete answer, so a transient failure
-   * keeps the last one rather than withdrawing it.
+   * the list is — and the one place the organization the key stands for is
+   * named, so the header the chat registry demands is learned here. Both
+   * reads are tolerated apart from the pass — a roster must not fail because
+   * the creation offer could not refresh — and the offer is replaced only by
+   * a complete answer, so a transient failure keeps the last one rather than
+   * withdrawing it.
    */
   async #refreshProjects(request: CloudRequest): Promise<void> {
     let environments: WireRecord;
@@ -894,6 +956,10 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
       if (!(error instanceof CloudRequestError)) throw error;
       return;
     }
+    this.#organizationId =
+      recordsFromPage(environments, REPLICAS_FIELD.ENVIRONMENTS)
+        .map((record) => textFromRecord(record, REPLICAS_FIELD.ORGANIZATION_ID))
+        .find(isDefined) ?? this.#organizationId;
     const repositoryNameById = new Map<string, string>();
     for (const record of recordsFromPage(repositories, REPLICAS_FIELD.REPOSITORIES)) {
       const id = textFromRecord(record, REPLICAS_FIELD.ID);
@@ -942,9 +1008,16 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
    * would be woken back, which Replicas prices at nothing and the next pass
    * reports honestly, but the window is a second against a lifecycle
    * measured in hours. Failures are contained the way every enrichment's
-   * are, and nothing but this garnish is lost to one.
+   * are. It is also the fallback chat source: a workspace the registry did
+   * not answer for this pass still lists its chats here, turn state
+   * included, so an awake workspace's rows survive the registry's
+   * organization-header demands.
    */
-  async #refreshDetails(request: CloudRequest, awake: readonly ReplicasWorkspace[]): Promise<void> {
+  async #refreshDetails(
+    request: CloudRequest,
+    awake: readonly ReplicasWorkspace[],
+    registryListed: ReadonlySet<string>,
+  ): Promise<void> {
     if (this.#detailsRefused) return;
     await Promise.all(
       awake.map(async (workspace) => {
@@ -959,6 +1032,14 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
         }
         const replica = body[REPLICAS_FIELD.REPLICA];
         if (!isRecord(replica)) return;
+        if (!registryListed.has(workspace.id)) {
+          const chats = recordsFromPage(replica, REPLICAS_FIELD.CHATS)
+            .map(chatFromDetailRecord)
+            .filter(isDefined)
+            .sort((first, second) => second.observedAt - first.observedAt)
+            .slice(0, REPLICAS_ADAPTER_DEFAULTS.CHAT_LIMIT);
+          this.#chatsByWorkspace.set(workspace.id, { observedAt: workspace.observedAt, chats });
+        }
         const statuses = replica[REPLICAS_FIELD.REPOSITORY_STATUSES];
         const firstStatus = Array.isArray(statuses) ? statuses.filter(isRecord)[0] : undefined;
         const branch = firstStatus
@@ -982,16 +1063,22 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
   /**
    * Lists each workspace's chats from the server-side chat registry, which
    * answers for active, sleeping, and pending workspaces alike without
-   * touching an engine, under any key. An awake workspace is re-read every
-   * pass — a turn ending changes `processing` without moving the activity
-   * timestamp — while a sleeping one is settled and re-read only when it
-   * moves. A refusal is contained to the workspace it answered for, and the
-   * chats it already listed stand rather than vanish.
+   * touching an engine — the one chat source that covers a sleeping
+   * workspace. Its routes demand the organization header, so nothing is
+   * asked until the environments read has said which organization the key
+   * stands for. An awake workspace is re-read every pass — a turn ending
+   * changes `processing` without moving the activity timestamp — while a
+   * sleeping one is settled and re-read only when it moves. A refusal is
+   * contained to the workspace it answered for, and the chats it already
+   * listed stand rather than vanish. Answers which workspaces it listed, so
+   * the detail read fills in exactly the rest.
    */
   async #refreshChats(
     request: CloudRequest,
     enrichable: readonly ReplicasWorkspace[],
-  ): Promise<void> {
+  ): Promise<ReadonlySet<string>> {
+    const listed = new Set<string>();
+    if (!this.#organizationId) return listed;
     await Promise.all(
       enrichable
         .filter(
@@ -1024,8 +1111,10 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
             .sort((first, second) => second.observedAt - first.observedAt)
             .slice(0, REPLICAS_ADAPTER_DEFAULTS.CHAT_LIMIT);
           this.#chatsByWorkspace.set(workspace.id, { observedAt: workspace.observedAt, chats });
+          listed.add(workspace.id);
         }),
     );
+    return listed;
   }
 
   /**
