@@ -76,9 +76,7 @@ export function updateRow(update: UpdateSnapshot): UpdateRow {
       };
     case UPDATE_STATUS.READY:
       return {
-        detail:
-          `Version ${update.latestVersion} is downloaded. Restart Luke to finish ` +
-          "installing — or it installs on your next quit.",
+        detail: `Version ${update.latestVersion} is downloaded.`,
         action: UPDATE_ROW_ACTION.RESTART,
         current: false,
       };
