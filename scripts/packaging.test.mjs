@@ -248,12 +248,15 @@ test("every native helper is built and shipped, or neither happens", () => {
       builderShipped.some((resourcePath) => resourcePath.endsWith(helper.bundle ?? helper.binary)),
       `${helper.binary} reaches the electron-builder bundle`,
     );
-    const signedPath = helper.bundle
-      ? path.join(helper.bundle, "Contents", "MacOS", helper.binary)
-      : helper.binary;
-    assert.ok(
-      builderBinaries.some((resourcePath) => resourcePath.endsWith(signedPath)),
-      `${helper.binary} is signed by electron-builder`,
+    const explicitlySigned = builderBinaries.some((resourcePath) =>
+      resourcePath.endsWith(helper.binary),
+    );
+    assert.equal(
+      explicitlySigned,
+      helper.bundle === undefined,
+      helper.bundle
+        ? `${helper.bundle} is signed as a nested app bundle, not again as a loose binary`
+        : `${helper.binary} is signed explicitly by electron-builder`,
     );
     // A spawned helper is a Swift executable; an in-process addon is
     // Objective-C, loaded through Node-API, and named so the loader can tell.

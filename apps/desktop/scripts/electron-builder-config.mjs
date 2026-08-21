@@ -94,7 +94,7 @@ export function createElectronBuilderConfig(env = process.env) {
       entitlements: packageAssets.entitlementsPath,
       entitlementsInherit: packageAssets.entitlementsPath,
       minimumSystemVersion: MACOS_DEPLOYMENT_TARGET,
-      binaries: NATIVE_HELPERS.map(macBinaryPath),
+      binaries: NATIVE_HELPERS.filter((helper) => !helper.bundle).map(macBinaryPath),
       extendInfo: {
         CFBundleName: productName,
         CFBundleDisplayName: productName,
