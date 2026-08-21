@@ -307,8 +307,13 @@ Trust constraints:
   whose code signature does not match the running app's. The running build
   is replaced only at a quit (the row's restart press, or whenever the user
   next quits) and an install is asked for at most once, because repeat asks
-  race the binary swap. A transient network failure is silence for the next
-  timed check; any other failure is an answer on the row whose way forward
+  race the binary swap. The row's button is also a press that can be asked
+  of Luke, only in a turn the developer opened themselves: the ask is
+  validated in the renderer against the one act the row currently offers and
+  lands on the same main-process guards the button's own press does, so it
+  reaches nothing the button does not — the check, the restart, or the fixed
+  releases page in the browser. A transient network failure is silence for
+  the next timed check; any other failure is an answer on the row whose way forward
   is the browser, at the releases page fixed by the build, the same page
   that serves a build which cannot install in place at all. Widening what
   the updater sends, reads, or does is a product decision, not an

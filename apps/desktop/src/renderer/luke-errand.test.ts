@@ -10,7 +10,13 @@ import {
 import { REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
 import { PANEL_FORM_FACTOR } from "@sidecar/surface";
 import type { AppSettings } from "#shared/contracts";
-import { CLI_CONNECTION, CREDENTIAL_SOURCE, SECRET_STORAGE, VOICE_SOURCE } from "#shared/contracts";
+import {
+  CLI_CONNECTION,
+  CREDENTIAL_SOURCE,
+  SECRET_STORAGE,
+  UPDATE_STATUS,
+  VOICE_SOURCE,
+} from "#shared/contracts";
 import {
   captionRoom,
   ERRAND_TARGET,
@@ -64,6 +70,12 @@ function settings(): AppSettings {
 
 const guideInput: LukeGuideInput = {
   settings: settings(),
+  update: {
+    status: UPDATE_STATUS.IDLE,
+    currentVersion: "0.3.8",
+    installSupported: true,
+    upToDate: false,
+  },
   voiceAvailable: true,
   microphoneStatus: "granted",
   hotkey: { hotkey: "⌥Space", held: true },

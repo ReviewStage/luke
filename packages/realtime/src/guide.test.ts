@@ -3,7 +3,10 @@ import test from "node:test";
 import {
   APP_PANEL_TAB,
   APP_SETTING_KIND,
+  APP_UPDATE_ACT,
+  APP_UPDATE_WAIT,
   type AppGuideSnapshot,
+  type AppUpdateButton,
   appGuideContextText,
   appToggleText,
   appToggleValue,
@@ -162,6 +165,7 @@ test("only the app's own tools are routed to the guide", () => {
   assert.equal(isAppToolCall(call(REALTIME_TOOL.CHANGE_APP_SETTING, "{}")), true);
   assert.equal(isAppToolCall(call(REALTIME_TOOL.SHOW_PANEL, "{}")), true);
   assert.equal(isAppToolCall(call(REALTIME_TOOL.OPEN_FEEDBACK_COMPOSER, "{}")), true);
+  assert.equal(isAppToolCall(call(REALTIME_TOOL.RUN_UPDATE_ACTION, "{}")), true);
   assert.equal(isAppToolCall(call(REALTIME_TOOL.SEND_SESSION_MESSAGE, "{}")), false);
 });
 
@@ -479,4 +483,98 @@ test("a spoken draft is bounded like a typed ask", () => {
 test("an app tool call the build does not know is refused", () => {
   const action = appToolAction(call("rename_the_app", "{}"), GUIDE, []);
   assert.equal(action.kind, "refused");
+});
+
+function guideWithUpdate(button: AppUpdateButton, detail: string): AppGuideSnapshot {
+  return { ...GUIDE, update: { version: "0.3.8", detail, button } };
+}
+
+test("a spoken update ask runs only the act the row's button offers", () => {
+  const ask = (argumentsJson: string, guide: AppGuideSnapshot) =>
+    appToolAction(call(REALTIME_TOOL.RUN_UPDATE_ACTION, argumentsJson), guide, []);
+
+  const offersCheck = guideWithUpdate(
+    APP_UPDATE_ACT.CHECK,
+    "The latest release has not been checked for yet.",
+  );
+  assert.deepEqual(ask('{"action":"check"}', offersCheck), {
+    kind: "update",
+    act: APP_UPDATE_ACT.CHECK,
+  });
+  // One button, one act: what the row is not drawing, no ask can press.
+  const restartWhileCheckable = ask('{"action":"restart"}', offersCheck);
+  assert.equal(restartWhileCheckable.kind, "refused");
+  if (restartWhileCheckable.kind === "refused") {
+    assert.match(restartWhileCheckable.reason, /not been checked for yet/);
+    assert.match(restartWhileCheckable.reason, /offers a check/);
+  }
+
+  const offersRestart = guideWithUpdate(APP_UPDATE_ACT.RESTART, "Version 0.3.9 is downloaded.");
+  assert.deepEqual(ask('{"action":"restart"}', offersRestart), {
+    kind: "update",
+    act: APP_UPDATE_ACT.RESTART,
+  });
+
+  const offersBrowser = guideWithUpdate(
+    APP_UPDATE_ACT.DOWNLOAD,
+    "This build updates by hand: the releases page has the latest.",
+  );
+  assert.deepEqual(ask('{"action":"download"}', offersBrowser), {
+    kind: "update",
+    act: APP_UPDATE_ACT.DOWNLOAD,
+  });
+  assert.equal(ask('{"action":"check"}', offersBrowser).kind, "refused");
+});
+
+test("a spoken update ask waits out a check or download already running", () => {
+  const ask = (argumentsJson: string, guide: AppGuideSnapshot) =>
+    appToolAction(call(REALTIME_TOOL.RUN_UPDATE_ACTION, argumentsJson), guide, []);
+
+  const checking = ask(
+    '{"action":"check"}',
+    guideWithUpdate(APP_UPDATE_WAIT.CHECKING, "Checking the latest release…"),
+  );
+  assert.equal(checking.kind, "refused");
+  if (checking.kind === "refused") assert.match(checking.reason, /while the check is out/);
+
+  const downloading = ask(
+    '{"action":"restart"}',
+    guideWithUpdate(APP_UPDATE_WAIT.DOWNLOADING, "Downloading version 0.3.9…"),
+  );
+  assert.equal(downloading.kind, "refused");
+  if (downloading.kind === "refused") assert.match(downloading.reason, /while the download runs/);
+});
+
+test("a spoken update ask outside the vocabulary, or with no row to press, is refused", () => {
+  const offersCheck = guideWithUpdate(APP_UPDATE_ACT.CHECK, "This is the latest release.");
+
+  assert.equal(
+    appToolAction(call(REALTIME_TOOL.RUN_UPDATE_ACTION, '{"action":"install"}'), offersCheck, [])
+      .kind,
+    "refused",
+  );
+  assert.equal(
+    appToolAction(call(REALTIME_TOOL.RUN_UPDATE_ACTION, "{}"), offersCheck, []).kind,
+    "refused",
+  );
+  // A guide with no update entry — a run that reports nothing about updates —
+  // advertises no act at all.
+  const unreported = appToolAction(
+    call(REALTIME_TOOL.RUN_UPDATE_ACTION, '{"action":"check"}'),
+    GUIDE,
+    [],
+  );
+  assert.equal(unreported.kind, "refused");
+});
+
+test("the guide's text names the update button beside the state it stands in", () => {
+  const text = appGuideContextText(
+    guideWithUpdate(APP_UPDATE_ACT.CHECK, "This is the latest release."),
+  );
+
+  assert.match(text, /Updates now: This is the latest release\./);
+  assert.match(text, /version=0\.3\.8/);
+  assert.match(text, /button=check/);
+  // A guide never told about updates says nothing about them.
+  assert.doesNotMatch(appGuideContextText(GUIDE), /Updates now:/);
 });
