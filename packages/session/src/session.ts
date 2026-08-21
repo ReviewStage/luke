@@ -200,6 +200,11 @@ export const SESSION_APPLICATION_ID = {
   CHATGPT: "chatgpt",
   CMUX: "cmux",
   CONDUCTOR: "conductor",
+  // Cursor the app is deliberately not Cursor the agent: the app chip counts
+  // the chats the Cursor app can open — app-held local chats and cloud
+  // agents — where the agent chip counts every Cursor chat, CLI ones
+  // included, so the two ride separate axes under separate ids.
+  CURSOR: "cursor-app",
   ORCA: "orca",
   SUPERSET: "superset",
 } as const;
@@ -257,6 +262,7 @@ export const SESSION_LINK_SCHEME = {
   CMUX: "cmux:",
   CODEX: "codex:",
   CONDUCTOR: "conductor:",
+  CURSOR: "cursor:",
   SUPERSET: "superset:",
 } as const;
 

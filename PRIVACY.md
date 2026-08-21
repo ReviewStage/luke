@@ -250,7 +250,13 @@ is said back to you under the field you typed in.
   end and how it ended. Observation does not read message content, and reports
   the fact of a failed turn rather than the reason Cursor recorded for it. A
   session is labelled by the folder it runs in, which Luke reads from Cursor's
-  own record of that folder, not from the chat's generated name.
+  own record of that folder, not from the chat's generated name. A chat the
+  Cursor app itself holds carries the chat's `cursor://` address and the
+  Cursor app mark, composed on this machine from the chat's own observed
+  identifier; whether the app holds a chat is read from Cursor's own index,
+  opened read-only, as the presence of the chat's key alone — never the
+  value, which is the conversation itself. Opening the address hands it to
+  macOS like any row press, and nothing is sent to Cursor.
 - For Superset, Luke discovers each `host/<organization-id>/host.db`, opens it
   in read-only defensive mode, and reads three fixed queries' worth of rows:
   from the terminal-to-agent bindings, each workspace's name, identifier,
@@ -447,9 +453,13 @@ boundary the Linear section below describes.
 - For Cursor, Luke reads agents owned by the supplied key and their latest runs,
   and — on a much slower cadence, within Cursor's documented limits — the list
   of repositories the key may launch agents in. It processes identifiers, agent
-  names and links, repository URLs, starting refs and run branches, timestamps,
+  names, repository URLs, starting refs and run branches, timestamps,
   archive and run status, provider-designated run results, and pull-request
-  links.
+  links. Each agent's row opens through a `cursor://` address into the Cursor
+  app — carried by the row's own press and its Cursor app mark alike,
+  composed on this machine from the observed agent identifier; opening it
+  hands the address to macOS like any row press, and nothing is sent to
+  Cursor by drawing or pressing it.
 - For Devin, Luke reads who the token authenticates as — the identity route
   answers a user id, an organization id, and which kind of credential it is,
   and a token that is not a person's own personal access token is observed as

@@ -4,7 +4,11 @@ import os from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
 import { pathToFileURL } from "node:url";
-import { SESSION_STATUS } from "@sidecar/session";
+import {
+  SESSION_APPLICATION_ID,
+  SESSION_APPLICATION_SCOPE,
+  SESSION_STATUS,
+} from "@sidecar/session";
 import type { MutableWireRecord, ParsedJsonObject } from "@sidecar/wire/testing";
 import { CURSOR_PROVIDER } from "./adapter.js";
 import { CursorLocalSessionAdapter } from "./local-adapter.js";
@@ -38,6 +42,7 @@ const TEST_CONTENT_TYPE = {
 interface CursorState {
   cursorHome: string;
   workspaceStorageDirectory: string;
+  globalStorageStatePath: string;
 }
 
 function messageRecord(role: string, contentType: string): ParsedJsonObject {
@@ -66,7 +71,28 @@ async function temporaryCursorState(t: TestContext): Promise<CursorState> {
   return {
     cursorHome: path.join(directory, "cursor-home"),
     workspaceStorageDirectory: path.join(directory, "workspace-storage"),
+    globalStorageStatePath: path.join(directory, "global-storage-state.vscdb"),
   };
+}
+
+/**
+ * The app's own index of the chats its windows hold. The values are the
+ * conversations themselves, which observation must never read, so the fixture
+ * plants transcript text there and the tests assert it never surfaces.
+ */
+async function registerAppChats(state: CursorState, sessionIds: readonly string[]): Promise<void> {
+  const { DatabaseSync } = await import("node:sqlite");
+  const database = new DatabaseSync(state.globalStorageStatePath, {});
+  try {
+    database.exec("CREATE TABLE IF NOT EXISTS cursorDiskKV (key TEXT PRIMARY KEY, value BLOB)");
+    for (const sessionId of sessionIds) {
+      database
+        .prepare("INSERT OR REPLACE INTO cursorDiskKV (key, value) VALUES (?, ?)")
+        .run(`composerData:${sessionId}`, JSON.stringify({ conversation: SECRET_TRANSCRIPT_TEXT }));
+    }
+  } finally {
+    database.close();
+  }
 }
 
 async function writeTranscript(
@@ -162,6 +188,7 @@ function adapterFor(
 test("observes an open turn as work, labelled by its folder and free of transcript text", async (t) => {
   const state = await temporaryCursorState(t);
   await writeWorkspaceRecord(state, "9f1c", "/Users/test/luke");
+  await registerAppChats(state, ["0b1f4b0e-2c5a-4d1e-9a3c-6d5f7e8a9b0c"]);
   await writeTranscript(
     state,
     "Users-test-luke",
@@ -184,7 +211,22 @@ test("observes an open turn as work, labelled by its folder and free of transcri
   assert.equal(observations[0]?.observedAt, TEST_TIME - 5_000);
   assert.equal(observations[0]?.controls, undefined);
   assert.equal(observations[0]?.recap, undefined);
-  assert.deepEqual(observations[0]?.detail, { repository: "luke" });
+  // The address is the same /agent route Cursor's own deep-link handler
+  // resolves, composed from the observed chat id alone — offered because the
+  // app's own index holds this chat, which is also what seats the Cursor app
+  // mark beside the agent identity, the way ChatGPT rides a Codex chat.
+  assert.deepEqual(observations[0]?.detail, {
+    repository: "luke",
+    link: "cursor://anysphere.cursor-deeplink/agent?id=0b1f4b0e-2c5a-4d1e-9a3c-6d5f7e8a9b0c",
+  });
+  assert.deepEqual(observations[0]?.applications, [
+    {
+      id: SESSION_APPLICATION_ID.CURSOR,
+      displayName: "Cursor",
+      scope: SESSION_APPLICATION_SCOPE.SESSION,
+      link: "cursor://anysphere.cursor-deeplink/agent?id=0b1f4b0e-2c5a-4d1e-9a3c-6d5f7e8a9b0c",
+    },
+  ]);
   // Nothing says this session runs anywhere but here, which is what leaves it
   // local once the registry normalizes it.
   assert.equal(observations[0]?.location, undefined);
@@ -194,6 +236,7 @@ test("observes an open turn as work, labelled by its folder and free of transcri
 test("tells a turn that finished from one that failed", async (t) => {
   const state = await temporaryCursorState(t);
   await writeWorkspaceRecord(state, "9f1c", "/Users/test/luke");
+  await registerAppChats(state, ["session-finished", "session-failed"]);
   await writeTranscript(
     state,
     "Users-test-luke",
@@ -227,9 +270,78 @@ test("tells a turn that finished from one that failed", async (t) => {
   // The failure is reported; the reason Cursor recorded for it is not.
   assert.deepEqual(observations[1]?.detail, {
     repository: "luke",
+    link: "cursor://anysphere.cursor-deeplink/agent?id=session-failed",
     error: "The turn failed",
   });
   assert.equal(JSON.stringify(observations).includes(SECRET_TRANSCRIPT_TEXT), false);
+});
+
+test("offers the app's address only for the chats the app itself holds", async (t) => {
+  const state = await temporaryCursorState(t);
+  await writeWorkspaceRecord(state, "9f1c", "/Users/test/luke");
+  await registerAppChats(state, ["app-chat"]);
+  const records = [messageRecord(TEST_ROLE.USER, TEST_CONTENT_TYPE.TEXT)];
+  await writeTranscript(state, "Users-test-luke", "app-chat", records, TEST_TIME - 5_000);
+  // A chat Cursor's `agents` CLI started writes its transcript beside the
+  // app's without registering in any window; its row keeps no provider
+  // address, which is what lets a manager's own address stand in — or an
+  // unmanaged terminal's row honestly open nowhere.
+  await writeTranscript(state, "Users-test-luke", "cli-chat", records, TEST_TIME - 10_000);
+
+  const observations = await adapterFor(state).observe();
+
+  assert.deepEqual(
+    observations.map((observation) => [observation.providerSessionId, observation.detail?.link]),
+    [
+      ["app-chat", "cursor://anysphere.cursor-deeplink/agent?id=app-chat"],
+      ["cli-chat", undefined],
+    ],
+  );
+  // The app association follows the same gate: the app rides only its own.
+  assert.equal(observations[0]?.applications?.[0]?.id, SESSION_APPLICATION_ID.CURSOR);
+  assert.equal(observations[1]?.applications, undefined);
+  assert.equal(JSON.stringify(observations).includes(SECRET_TRANSCRIPT_TEXT), false);
+});
+
+test("a malformed app index never costs the rows themselves", async (t) => {
+  const state = await temporaryCursorState(t);
+  await writeWorkspaceRecord(state, "9f1c", "/Users/test/luke");
+  // Not a database at all — the shape a torn write or a foreign file leaves.
+  await fs.writeFile(state.globalStorageStatePath, "not a sqlite database");
+  await writeTranscript(
+    state,
+    "Users-test-luke",
+    "app-chat",
+    [messageRecord(TEST_ROLE.USER, TEST_CONTENT_TYPE.TEXT)],
+    TEST_TIME - 5_000,
+  );
+
+  const observations = await adapterFor(state).observe();
+
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0]?.detail?.link, undefined);
+  assert.equal(observations[0]?.applications, undefined);
+});
+
+test("an app index this build cannot read withholds addresses rather than guessing", async (t) => {
+  const state = await temporaryCursorState(t);
+  await writeWorkspaceRecord(state, "9f1c", "/Users/test/luke");
+  const { DatabaseSync } = await import("node:sqlite");
+  const database = new DatabaseSync(state.globalStorageStatePath, {});
+  database.exec("CREATE TABLE unrelated (id TEXT PRIMARY KEY)");
+  database.close();
+  await writeTranscript(
+    state,
+    "Users-test-luke",
+    "app-chat",
+    [messageRecord(TEST_ROLE.USER, TEST_CONTENT_TYPE.TEXT)],
+    TEST_TIME - 5_000,
+  );
+
+  const observations = await adapterFor(state).observe();
+
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0]?.detail?.link, undefined);
 });
 
 test("passes over trailing records this build does not know", async (t) => {

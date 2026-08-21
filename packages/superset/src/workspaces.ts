@@ -25,6 +25,9 @@ const SUPERSET_AGENT_PROVIDER = {
   codex: PROVIDER_ID.CODEX,
   copilot: PROVIDER_ID.COPILOT,
   cursor: PROVIDER_ID.CURSOR,
+  // Superset binds Cursor's `agents` CLI under its own name, beside the id
+  // it uses for the app's agents; both are Cursor sessions to Luke.
+  "cursor-agent": PROVIDER_ID.CURSOR,
   gemini: PROVIDER_ID.GEMINI_CLI,
   opencode: PROVIDER_ID.OPENCODE,
 } as const satisfies Readonly<Record<string, string>>;

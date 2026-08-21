@@ -468,6 +468,9 @@ const PROVIDER_MARKS = {
   [PROVIDER_ID.CONDUCTOR]: ConductorMark,
   [PROVIDER_ID.COPILOT]: CopilotMark,
   [PROVIDER_ID.CURSOR]: CursorMark,
+  // Cursor the app draws Cursor's own mark: the id differs from the agent's
+  // only so the two filter chips can answer different questions.
+  [SESSION_APPLICATION_ID.CURSOR]: CursorMark,
   [PROVIDER_ID.DEVIN]: DevinMark,
   [PROVIDER_ID.GEMINI_CLI]: GeminiCliMark,
   [GOOGLE_CALENDAR_ID]: GoogleCalendarMark,

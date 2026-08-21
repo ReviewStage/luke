@@ -30,7 +30,14 @@ import {
   tailRecords,
   workspaceLabel,
 } from "../shared/local-session-adapter.js";
+import {
+  defaultSqliteModule,
+  openReadOnlyDatabase,
+  type SqliteDatabase,
+  type SqliteModuleLoader,
+} from "../shared/local-sqlite.js";
 import { CURSOR_PROVIDER } from "./adapter.js";
+import { cursorApplication, cursorChatLink } from "./app-links.js";
 import { readCursorSessionTranscript } from "./transcript.js";
 
 /** A turn Cursor failed records its own reason, which is transcript content. */
@@ -51,6 +58,24 @@ const CURSOR_WORKSPACE_STORAGE_SEGMENTS = [
   "User",
   "workspaceStorage",
 ] as const;
+
+/** Where the app indexes the chats its own windows hold, one record per chat. */
+const CURSOR_GLOBAL_STORAGE_STATE_SEGMENTS = [
+  "Library",
+  "Application Support",
+  "Cursor",
+  "User",
+  "globalStorage",
+  "state.vscdb",
+] as const;
+
+/**
+ * The app's record of one chat it holds, keyed by the chat's id. Only the
+ * key's presence is ever read — the value is the conversation itself, and
+ * observation never opens message content.
+ */
+const CURSOR_APP_CHAT_KEY_PREFIX = "composerData:";
+const CURSOR_APP_CHAT_QUERY = "SELECT 1 FROM cursorDiskKV WHERE key = ?";
 
 const CURSOR_TRANSCRIPT_FILE_EXTENSION = ".jsonl";
 const CURSOR_WORKSPACE_FILE = "workspace.json";
@@ -92,6 +117,8 @@ const CURSOR_LOCAL_ADAPTER_DEFAULTS = {
 export interface CursorLocalAdapterOptions {
   cursorHome?: string;
   workspaceStorageDirectory?: string;
+  globalStorageStatePath?: string;
+  sqlite?: SqliteModuleLoader;
   now?: () => number;
   maximumProjectDirectories?: number;
   activeSessionFreshnessMs?: number;
@@ -278,20 +305,62 @@ function statusFromTurn(
 }
 
 /**
- * What Cursor knows about a local session beyond its state: the folder, and
- * that a turn failed. Cursor records why it failed, but that reason is written
- * from the turn itself, so the fact of the failure is reported and its wording
- * is not — the same fixed line the cloud half reports for a failed run.
- *
- * No address, unlike the cloud half, which reports the agent's own page. Cursor
- * registers `cursor://` for its windows but publishes no route to a chat: its
- * handler answers a prompt, a command, a rule, and a background agent, and none
- * of them is a chat that already exists. The folder the chat was held in is not
- * the chat, so it is not offered as one.
+ * Reads which of the observed chats Cursor's app holds, as the presence of
+ * each chat's key in the app's own index — a point lookup per chat, never a
+ * value, because the values are the conversations themselves. An absent app,
+ * an unreadable or mid-write database, or a schema this build does not know
+ * holds nothing, which withholds addresses rather than inventing ones the
+ * app cannot resolve — and never fails the pass the rows come from.
  */
-function detailFor(label: string, status: SessionStatus): SessionDetail {
+class CursorAppChatRegistry {
+  readonly #statePath: string;
+  readonly #sqlite: SqliteModuleLoader;
+
+  constructor(statePath: string, sqlite: SqliteModuleLoader) {
+    this.#statePath = statePath;
+    this.#sqlite = sqlite;
+  }
+
+  // The index read is auxiliary to observing at all: a database Cursor holds
+  // mid-write, or one this build cannot parse, answers nothing — never a
+  // failed pass, because losing the app addresses must not cost the rows.
+  async heldChats(providerSessionIds: readonly string[]): Promise<ReadonlySet<string>> {
+    if (providerSessionIds.length === 0) return new Set();
+    let database: SqliteDatabase | undefined;
+    try {
+      database = await openReadOnlyDatabase(this.#sqlite, this.#statePath);
+    } catch {
+      return new Set();
+    }
+    if (!database) return new Set();
+    try {
+      const statement = database.prepare(CURSOR_APP_CHAT_QUERY);
+      const held = new Set<string>();
+      for (const providerSessionId of providerSessionIds) {
+        if (statement.all(`${CURSOR_APP_CHAT_KEY_PREFIX}${providerSessionId}`).length > 0) {
+          held.add(providerSessionId);
+        }
+      }
+      return held;
+    } catch {
+      return new Set();
+    } finally {
+      database.close();
+    }
+  }
+}
+
+/**
+ * What Cursor knows about a local session beyond its state: the folder, that
+ * a turn failed, and — for a chat the app holds — the chat's own address.
+ * Cursor records why a turn failed, but that reason is written from the turn
+ * itself, so the fact of the failure is reported and its wording is not —
+ * the same fixed line the cloud half reports for a failed run.
+ */
+function detailFor(label: string, status: SessionStatus, link: string | undefined): SessionDetail {
   return {
     repository: label,
+    ...(link ? { link } : undefined),
     ...(status === SESSION_STATUS.ERROR ? { error: CURSOR_TURN_FAILED_MESSAGE } : undefined),
   };
 }
@@ -302,6 +371,10 @@ function defaultCursorHome(): string {
 
 function defaultWorkspaceStorageDirectory(): string {
   return path.join(os.homedir(), ...CURSOR_WORKSPACE_STORAGE_SEGMENTS);
+}
+
+function defaultGlobalStorageStatePath(): string {
+  return path.join(os.homedir(), ...CURSOR_GLOBAL_STORAGE_STATE_SEGMENTS);
 }
 
 /**
@@ -317,6 +390,8 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
 
   readonly #cursorHome: string;
   readonly #workspaceLabels: CursorWorkspaceLabels;
+  readonly #appChatRegistry: CursorAppChatRegistry;
+  #appChats: ReadonlySet<string> = new Set();
   readonly #maximumProjectDirectories: number;
   readonly #readTailBytes: number;
   readonly #transcriptReadTailBytes: number | undefined;
@@ -327,6 +402,10 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
     this.#cursorHome = options.cursorHome ?? defaultCursorHome();
     this.#workspaceLabels = new CursorWorkspaceLabels(
       options.workspaceStorageDirectory ?? defaultWorkspaceStorageDirectory(),
+    );
+    this.#appChatRegistry = new CursorAppChatRegistry(
+      options.globalStorageStatePath ?? defaultGlobalStorageStatePath(),
+      options.sqlite ?? defaultSqliteModule,
     );
     const resolved = resolveOptions(
       options,
@@ -353,10 +432,14 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
     });
   }
 
-  protected override prepare(candidates: readonly CursorTranscriptCandidate[]): Promise<void> {
-    return this.#workspaceLabels.resolve(
-      candidates.map((candidate) => candidate.projectDirectoryName),
-    );
+  protected override async prepare(
+    candidates: readonly CursorTranscriptCandidate[],
+  ): Promise<void> {
+    const [appChats] = await Promise.all([
+      this.#appChatRegistry.heldChats(candidates.map((candidate) => candidate.providerSessionId)),
+      this.#workspaceLabels.resolve(candidates.map((candidate) => candidate.projectDirectoryName)),
+    ]);
+    this.#appChats = appChats;
   }
 
   override readTranscript(providerSessionId: string): Promise<string | undefined> {
@@ -388,6 +471,9 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
   ): ProviderSessionObservation {
     const label = this.#workspaceLabels.label(candidate.projectDirectoryName);
     const status = statusFromTurn(turn, candidate.mtimeMs, now, activeSessionFreshnessMs);
+    const link = this.#appChats.has(candidate.providerSessionId)
+      ? cursorChatLink(candidate.providerSessionId)
+      : undefined;
     return {
       providerSessionId: candidate.providerSessionId,
       title: label,
@@ -396,7 +482,8 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
       // written is the only account Cursor keeps of when this session last did
       // anything.
       observedAt: candidate.mtimeMs,
-      detail: detailFor(label, status),
+      detail: detailFor(label, status, link),
+      ...(link ? { applications: [cursorApplication(link)] } : undefined),
     };
   }
 }

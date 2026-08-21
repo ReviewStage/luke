@@ -43,8 +43,8 @@ What Luke reads:
 | Codex | Local | Session index and rollout files under `~/.codex` | Last agent message, or the turn's error | Yes | `codex:` thread |
 | Codex | Cloud | The user's own Codex CLI, under its ChatGPT login | — | — | `chatgpt.com` task page |
 | Conductor | Cloud | `api.conductor.build`, under an API key | Final assistant message, while idle | — | `conductor:` deep link |
-| Cursor | Local | Agent transcripts under `~/.cursor/projects/` | — | Yes | — |
-| Cursor | Cloud | `api.cursor.com`, under `CURSOR_API_KEY` | Run result | — | Agent URL |
+| Cursor | Local | Agent transcripts under `~/.cursor/projects/` | — | Yes | `cursor:` chat deep link, for the app's own chats |
+| Cursor | Cloud | `api.cursor.com`, under `CURSOR_API_KEY` | Run result | — | `cursor:` deep link into the app |
 | Devin | Local | The Devin CLI's session database | — | Yes | — |
 | Devin | Cloud | `api.devin.ai`, under a `cog_` access token | — | — | Session URL |
 | Gemini CLI | Local | Session recordings under `~/.gemini/tmp/<project>/chats/` | Last agent message | Yes | — |
@@ -118,11 +118,24 @@ The bounds the tables cannot carry:
   the build's table. Conductor on this Mac is an app — see [Apps](#apps).
 - **Cursor, local** — rows report turn state and failure without Cursor's
   reason, which is not stored, and the readout renders what Cursor wrote down,
-  which excludes tool outputs.
+  which excludes tool outputs. A chat the Cursor app holds carries its own
+  address, `cursor://anysphere.cursor-deeplink/agent?id=<chat>`, composed on
+  this machine from the chat's observed id — the same route Cursor's
+  deep-link handler resolves, opening the exact chat whether Cursor is
+  running or not — and wears the app's own mark: Cursor on this Mac is an
+  app as well as an agent — see [Apps](#apps). A chat the `agents` CLI
+  started keeps no provider address — an app that manages its terminal
+  stands its own in, the way cmux, Superset, and Conductor rows already do,
+  and a CLI chat in an unmanaged terminal honestly opens nowhere, like every
+  other terminal-only agent.
 - **Cursor, cloud** — cancel and archive are never offered at once; a message
   is a follow-up run, only after the latest run finished on an unarchived
   agent; the new agent's task is required because Cursor cannot make an idle
-  workspace.
+  workspace. A row opens in the Cursor app — its press and its Cursor app
+  mark share the one `/background-agent` address the app's own dashboard
+  fires, composed from the observed agent id — and the agent page URL Cursor
+  also reports is not offered, because two presses should not answer one row
+  differently — see [Apps](#apps).
 - **Devin** — the local database has no address, no recap, and no error
   detail; the cloud archive is offered only once the turn positively settled.
 - **Gemini CLI** — bounded tails only (honoring `GEMINI_CLI_HOME`), never
@@ -155,6 +168,7 @@ schema this build does not know means no annotation.
 | ChatGPT | Nothing | A mark opening the exact Codex thread | None |
 | cmux | Hook-session stores under `~/.cmuxterm` | Mark, exact `cmux:` pane address | None |
 | Conductor | Local session index (`conductor.db`) | Mark, workspace grouping, `conductor:` chat address, filed-away filtering | None |
+| Cursor | Chat-key presence in the app's own index | Mark and `cursor:` address opening the exact chat, on app-held local chats and every cloud agent | None |
 | Orca | Hook-status cache and worktree names | Mark, worktree grouping | None |
 | Superset | Host state (`host.db`) | Mark, grouping, `superset:` workspace address; a standing row for each unarchived worktree with no agent terminal | Message, open workspace, close terminal, add agent, new workspace, rename, delete workspace — through its CLI, while logged in |
 
@@ -187,6 +201,19 @@ schema this build does not know means no annotation.
   absent app, an unreadable index, or a schema too old to say leaves every
   observation standing. Conductor documents no message endpoint for a local
   chat, so the association adds no send control.
+- **Cursor** — the agent's own app, riding the rows it can open the way
+  ChatGPT rides a Codex chat: the agent stays the row's identity, and the
+  mark's press opens the exact chat in the app. A local chat qualifies when
+  the app's own index holds it — read as the presence of the chat's key
+  alone, because the values are the conversations, and observation never
+  opens message content — through the handler's `/agent` route; every cloud
+  agent qualifies through its `/background-agent` route, the same address
+  Cursor's own dashboard fires, composed here from the observed agent id. The
+  app deliberately keeps its own filter id rather than the agent's: the app
+  chip counts the chats the Cursor app can open, the agent chip every Cursor
+  chat, and the two chips narrow each other across their axes. A chat the
+  `agents` CLI started registers in no window, so it carries no Cursor app
+  mark and none of the app's address.
 - **Orca** — the hook-status cache also carries conversational fields — the
   last prompt, a message preview, a tool's input — and none of them are ever
   read. A sub-agent

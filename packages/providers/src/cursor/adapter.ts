@@ -28,6 +28,7 @@ import {
   textFromRecord,
   timestampFromRecord,
 } from "../shared/cloud-session-adapter.js";
+import { cursorApplication, cursorCloudAgentLink } from "./app-links.js";
 
 // Shared with the credential registry so the key the user saves and the
 // provider Luke observes with it can never name different things.
@@ -216,7 +217,6 @@ interface CursorAgent {
   lastActivityAt: number;
   latestRunId?: string;
   ref?: string;
-  url?: string;
 }
 
 interface CursorRun {
@@ -263,7 +263,6 @@ function agentFromRecord(record: WireRecord): CursorAgent | undefined {
   );
   const latestRunId = textFromRecord(record, CURSOR_FIELD.LATEST_RUN_ID);
   const name = textFromRecord(record, CURSOR_FIELD.NAME)?.slice(0, maximumSessionTitleLength);
-  const url = textFromRecord(record, CURSOR_FIELD.URL);
   return {
     id,
     lastActivityAt,
@@ -272,7 +271,6 @@ function agentFromRecord(record: WireRecord): CursorAgent | undefined {
     archived: textFromRecord(record, CURSOR_FIELD.STATUS) === CURSOR_AGENT_STATUS.ARCHIVED,
     ...(latestRunId ? { latestRunId } : undefined),
     ...(ref ? { ref } : undefined),
-    ...(url ? { url } : undefined),
   };
 }
 
@@ -535,6 +533,12 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
       title: agent.name ?? repository ?? UNKNOWN_AGENT_LABEL,
       status,
       observedAt,
+      // The Cursor app opens any cloud agent by id — the same address its own
+      // dashboard fires — so the row's own press and the app's mark carry
+      // that one address, the way a local Codex row and its ChatGPT mark
+      // share the thread's. The agent page URL Cursor also reports stays
+      // reachable inside the app; the pull request keeps its own chip.
+      applications: [cursorApplication(cursorCloudAgentLink(agent.id))],
       canReceiveMessage: this.#agentTakesMessages(agent, run),
       // The two controls are exclusive by construction: an active run offers
       // its stop, a settled agent offers to be filed away, and an archived one
@@ -551,7 +555,7 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
         // a run that has pushed nothing still has a starting point worth naming.
         ...(run?.branch ? { branch: run.branch } : agent.ref ? { branch: agent.ref } : undefined),
         ...(status === SESSION_STATUS.ERROR ? { error: CURSOR_RUN_FAILED_MESSAGE } : undefined),
-        ...(agent.url ? { link: agent.url } : undefined),
+        link: cursorCloudAgentLink(agent.id),
         ...(run?.pullRequestUrl ? { change: run.pullRequestUrl } : undefined),
       },
     };

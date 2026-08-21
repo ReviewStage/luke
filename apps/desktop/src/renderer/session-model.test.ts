@@ -411,6 +411,15 @@ test("the filters offered are grouped by axis, coarse to fine, counted", () => {
           count: 3,
           markId: SESSION_APPLICATION_ID.CONDUCTOR,
         },
+        {
+          // The app chip counts the chats the Cursor app can open; the agent
+          // chip below counts every Cursor chat. Separate ids keep the two
+          // questions on their own axes.
+          filter: SESSION_APPLICATION_ID.CURSOR,
+          label: "Cursor",
+          count: 1,
+          markId: SESSION_APPLICATION_ID.CURSOR,
+        },
       ],
     },
     {
