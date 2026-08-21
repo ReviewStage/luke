@@ -50,6 +50,15 @@ export interface CredentialEntryControl {
   entry?: CredentialEntry;
   /** Opens a field for a provider, replacing whatever was being entered. */
   begin(providerId: CredentialProviderId): void;
+  /**
+   * Begins the entry the way a Connect press asks for it: the field and the
+   * page that issues the key, together. Someone connecting has no key yet, so
+   * the browser goes to the provider's key page in the same press — the way
+   * every consent and CLI connector already opens one — and the entry starts
+   * already `away`. A replace stays on {@link begin}, because whoever is
+   * rotating a key may already be holding the new one.
+   */
+  connect(providerId: CredentialProviderId): void;
   change(draft: string): void;
   /**
    * Sends the browser to the provider's key page and stands the panel down to

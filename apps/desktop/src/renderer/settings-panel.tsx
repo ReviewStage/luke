@@ -559,10 +559,17 @@ function ProviderCredential({
 
   // Every control that offers to write one begins the one entry — which takes
   // the panel down to the slot — and clears whatever the last attempt was
-  // rejected for on the way.
+  // rejected for on the way. Connect also opens the provider's key page,
+  // because whoever is connecting has no key yet; the pencil does not, because
+  // whoever is replacing one may already be holding the replacement.
   const beginEntry = () => {
     setRemovalRejection(undefined);
     control.begin(provider.id);
+  };
+
+  const connectEntry = () => {
+    setRemovalRejection(undefined);
+    control.connect(provider.id);
   };
 
   // The trash asks; only the answer acts. Nothing here can hand a key back, so
@@ -667,7 +674,7 @@ function ProviderCredential({
                 disabled={beginBlocked}
                 aria-label={`Connect ${provider.displayName}`}
                 title={held ? HELD_TITLE : undefined}
-                onClick={beginEntry}
+                onClick={connectEntry}
               >
                 Connect
               </button>
@@ -3173,7 +3180,7 @@ function WhatLukeRunsOnSection({
         keyStored={keyStored}
         storageLocked={storageLocked}
         onChoose={preferences.onVoiceSourceChange}
-        onConnect={() => credentials.begin(VOICE_CREDENTIAL_PROVIDER.id)}
+        onConnect={() => credentials.connect(VOICE_CREDENTIAL_PROVIDER.id)}
       />
       {/* Each half's own contents, drawn under the toggle for whichever is
           live. They answer the same two questions in the two ways the sources

@@ -188,7 +188,9 @@ function providersFact(settings: AppSettings): AppGuideFact {
     label: "Cloud providers",
     detail:
       `${roster.join(", ")}. Connecting one takes the key its row names, typed by hand into ` +
-      `${CONNECTIONS_PAGE}, under Providers — never spoken, and never repeated back. ` +
+      `${CONNECTIONS_PAGE}, under Providers — never spoken, and never repeated back. The row's ` +
+      "Connect press opens the provider's own key page in the browser and leaves the field " +
+      "waiting under the notch, so the key is fetched and pasted in one trip. " +
       "Local providers such as Claude Code need no key and are observed on their own. " +
       `Codex cloud tasks (${CODEX_CLOUD_CONNECTION_WORD[settings.codexCloudConnection]}) take ` +
       "no key in Luke at all: they are observed through the Codex CLI's own login, and the " +
