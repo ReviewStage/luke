@@ -63,7 +63,7 @@ const CURSOR_CONTENT_TYPE = {
 } as const;
 
 /** Tool inputs whose value names the work, in the order they read best. */
-const CURSOR_TOOL_INPUT_KEY = [
+export const CURSOR_TOOL_INPUT_KEY = [
   "description",
   "file_path",
   "pattern",

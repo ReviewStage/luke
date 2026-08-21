@@ -308,6 +308,119 @@ test("tells a turn that finished from one that failed", async (t) => {
   assert.equal(JSON.stringify(observations).includes(SECRET_TRANSCRIPT_TEXT), false);
 });
 
+test("names the tool call an open turn is running", async (t) => {
+  const state = await temporaryCursorState(t);
+  await writeWorkspaceRecord(state, "9f1c", "/Users/test/luke");
+  await writeTranscript(
+    state,
+    "Users-test-luke",
+    "session-working",
+    [
+      messageRecord(TEST_ROLE.USER, TEST_CONTENT_TYPE.TEXT),
+      {
+        role: TEST_ROLE.ASSISTANT,
+        message: {
+          content: [
+            { type: TEST_CONTENT_TYPE.TEXT, text: SECRET_TRANSCRIPT_TEXT },
+            { type: TEST_CONTENT_TYPE.TOOL_USE, name: "Grep", input: { pattern: "statusFrom" } },
+            { type: TEST_CONTENT_TYPE.TOOL_USE, name: "Read", input: { file_path: "a/b.ts" } },
+          ],
+        },
+      },
+    ],
+    TEST_TIME - 5_000,
+  );
+
+  const observations = await adapterFor(state).observe();
+
+  assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
+  // The newest call is what the turn is doing right now, named by the input
+  // that says what it is for; the message text beside it never surfaces.
+  assert.equal(observations[0]?.detail?.activity, "Read: a/b.ts");
+  assert.equal(JSON.stringify(observations).includes(SECRET_TRANSCRIPT_TEXT), false);
+});
+
+test("a turn that ended is no longer running its last tool call", async (t) => {
+  const state = await temporaryCursorState(t);
+  await writeWorkspaceRecord(state, "9f1c", "/Users/test/luke");
+  const toolCall = {
+    role: TEST_ROLE.ASSISTANT,
+    message: {
+      content: [{ type: TEST_CONTENT_TYPE.TOOL_USE, name: "Shell", input: { command: "ls" } }],
+    },
+  };
+  await writeTranscript(
+    state,
+    "Users-test-luke",
+    "session-settled",
+    [toolCall, turnEndedRecord(TEST_TURN_STATUS.SUCCESS)],
+    TEST_TIME - 5_000,
+  );
+  // A new prompt opens a turn that is not running the previous turn's call.
+  await writeTranscript(
+    state,
+    "Users-test-luke",
+    "session-reprompted",
+    [toolCall, messageRecord(TEST_ROLE.USER, TEST_CONTENT_TYPE.TEXT)],
+    TEST_TIME - 10_000,
+  );
+  // A block with no tool name says nothing about what the turn is doing.
+  await writeTranscript(
+    state,
+    "Users-test-luke",
+    "session-unnamed-call",
+    [messageRecord(TEST_ROLE.ASSISTANT, TEST_CONTENT_TYPE.TOOL_USE)],
+    TEST_TIME - 15_000,
+  );
+
+  const observations = await adapterFor(state).observe();
+
+  assert.deepEqual(
+    observations.map((observation) => [
+      observation.providerSessionId,
+      observation.detail?.activity,
+    ]),
+    [
+      ["session-settled", undefined],
+      ["session-reprompted", undefined],
+      ["session-unnamed-call", undefined],
+    ],
+  );
+  assert.equal(JSON.stringify(observations).includes(SECRET_TRANSCRIPT_TEXT), false);
+});
+
+test("bounds the phrase a tool call is named by", async (t) => {
+  const state = await temporaryCursorState(t);
+  await writeWorkspaceRecord(state, "9f1c", "/Users/test/luke");
+  await writeTranscript(
+    state,
+    "Users-test-luke",
+    "session-long-call",
+    [
+      {
+        role: TEST_ROLE.ASSISTANT,
+        message: {
+          content: [
+            {
+              type: TEST_CONTENT_TYPE.TOOL_USE,
+              name: "Shell",
+              input: { command: `run ${"x".repeat(200)}` },
+            },
+          ],
+        },
+      },
+    ],
+    TEST_TIME - 5_000,
+  );
+
+  const observations = await adapterFor(state).observe();
+
+  const activity = observations[0]?.detail?.activity;
+  assert.ok(activity?.startsWith("Shell: run x"));
+  assert.ok(activity !== undefined && activity.length <= "Shell: ".length + 80);
+  assert.ok(activity?.endsWith("…"));
+});
+
 test("offers the app's address only for the chats the app itself holds", async (t) => {
   const state = await temporaryCursorState(t);
   await writeWorkspaceRecord(state, "9f1c", "/Users/test/luke");
