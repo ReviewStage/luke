@@ -2651,6 +2651,17 @@ export function App(): React.JSX.Element {
         beginFeedback(feedbackKind, false, draft);
       }
     });
+    // Recording follows the account as well as the switches: a sign-out ends
+    // it rather than leaving it filed under the person who just left, and a
+    // sign-in can start one without waiting for a relaunch. The switches are
+    // read from the settings this window is already holding.
+    const removeSessionReplay = window.sidecar.onSessionReplayChanged((replay) => {
+      replayBootstrap.current = replay;
+      const current = answeredSettings.current;
+      if (current) {
+        applySessionReplay(replay, current.shareUsageData, current.sessionReplay);
+      }
+    });
     const removeDisplay = window.sidecar.onDisplayChanged(setDisplay);
     const removeNoticeAsks = window.sidecar.onNoticeAsksChanged(setNoticeAsks);
     const removeSupersetSignIn = window.sidecar.onSupersetSignInChanged((next) => {
@@ -2665,6 +2676,7 @@ export function App(): React.JSX.Element {
     return () => {
       cancelHover();
       removeLifecycle();
+      removeSessionReplay();
       removeDisplay();
       removeNoticeAsks();
       removeSupersetSignIn();
@@ -3372,10 +3384,7 @@ export function App(): React.JSX.Element {
                 }
                 return superset;
               })(),
-              onQuit: () => {
-                window.sidecar.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.APP_QUIT, {});
-                window.sidecar.quit();
-              },
+              onQuit: () => window.sidecar.quit(),
               shortcuts,
               searchOpen: settingsSearchOpen,
               onSearchClose: closeSettingsSearch,

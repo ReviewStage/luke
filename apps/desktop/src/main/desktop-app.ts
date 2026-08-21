@@ -235,6 +235,7 @@ const accountSession = new AccountSessionManager({
     account = next;
     broadcastAccount();
     void broadcastVoiceAvailability();
+    void broadcastSessionReplay();
     // The transition alone: which provider signed in is already on the person
     // from the browser's own sign-in, so nothing about it needs to travel again.
     if (signedIn && !wasSignedIn) productEvents.record(PRODUCT_EVENT.ACCOUNT_SIGN_IN, {});
@@ -463,8 +464,9 @@ const SESSION_REPLAY_INGEST_HOST = `${HOSTED_SERVICE_BASE_URL}/ingest`;
 /**
  * What this run can tell the renderer about recording: whether it is the kind
  * of run that may record at all, where a recording would go, and whom it
- * would belong to. The two switches are the renderer's own to read, because
- * it is told when they move and this is answered once.
+ * would belong to. The two switches are the renderer's own to read, because it
+ * is told when they move; this is re-answered whenever the account moves,
+ * which is the other half of the same question.
  *
  * `sendsNetwork` is the same suppression the event sender takes — recording
  * must be off wherever counting is — and an account is required because a
@@ -688,6 +690,21 @@ function broadcastAccount(): void {
  */
 async function broadcastVoiceAvailability(): Promise<void> {
   panels.broadcast(channels.settingsChanged, await settingsStore.snapshot());
+}
+
+/**
+ * Tells every panel what an account transition just did to recording, for the
+ * reason directly above and one more.
+ *
+ * A recording belongs to an account: it is filed under the id the counted
+ * events resolve to, and that is what makes deleting the account erase the
+ * recordings with it. So a sign-out must end the recording rather than leave
+ * it running under the account the developer just left, and a sign-in must be
+ * able to start one without waiting for a relaunch — the bootstrap answer was
+ * true only of the account that was signed in when the panel loaded.
+ */
+async function broadcastSessionReplay(): Promise<void> {
+  panels.broadcast(channels.sessionReplayChanged, await sessionReplayBootstrap());
 }
 
 /**

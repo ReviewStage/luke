@@ -534,8 +534,8 @@ export interface DisplayDiagnostic {
 }
 
 /**
- * How screen recording is armed for this run, decided in the main process and
- * handed over once at bootstrap.
+ * How screen recording is armed, decided in the main process and handed over
+ * at bootstrap and again on every account transition.
  *
  * It carries what the renderer cannot work out for itself and nothing else.
  * The two switches are not here: the renderer already holds `shareUsageData`
@@ -1048,6 +1048,14 @@ export interface AppBridge {
    */
   onSettingsChanged(callback: (settings: AppSettings) => void): () => void;
   onAccountChanged(callback: (account: AccountSnapshot) => void): () => void;
+  /**
+   * Recording's answer for the account that is signed in *now*. It arrives on
+   * every account transition, because a recording belongs to an account: one
+   * left running after a sign-out would be filed under the person who just
+   * left, and a sign-in after launch would otherwise record nothing until the
+   * app was restarted.
+   */
+  onSessionReplayChanged(callback: (replay: SessionReplayBootstrap) => void): () => void;
   /** Where the app stands against the latest release, whenever that changes. */
   onUpdateChanged(callback: (update: UpdateSnapshot) => void): () => void;
   onSessionsChanged(callback: (sessions: readonly NormalizedSession[]) => void): () => void;
@@ -1113,6 +1121,7 @@ export const channels = {
   signOut: "app:sign-out",
   deleteAccount: "app:delete-account",
   accountChanged: "app:account-changed",
+  sessionReplayChanged: "app:session-replay-changed",
   setExpanded: "app:set-expanded",
   setPointerInterception: "app:set-pointer-interception",
   requestMicrophone: "app:request-microphone",

@@ -33,7 +33,6 @@ import {
 export const PRODUCT_EVENT = {
   APP_LAUNCH: "app:launch",
   APP_DAY_ACTIVE: "app:day_active",
-  APP_QUIT: "app:quit",
   ACCOUNT_SIGN_IN: "account:sign_in",
   ACCOUNT_ACT: "account:act",
   PROVIDER_CONNECT: "provider:connect",
@@ -69,7 +68,7 @@ export type ProductEventName = (typeof PRODUCT_EVENT)[keyof typeof PRODUCT_EVENT
 /**
  * The events the renderer may ask the main process to count, and the whole of
  * what the surface channel carries. Everything else is emitted where the act
- * itself happens, in the main process; these five are surface motion the main
+ * itself happens, in the main process; these are surface motion the main
  * process cannot see — which tab is drawn, which page a row opened, whether a
  * search field was summoned. Keeping the set small and separate is what makes
  * the channel narrow: the handler validates against this union rather than
@@ -81,7 +80,6 @@ export const PRODUCT_SURFACE_EVENT = {
   SETTINGS_VIEW_OPEN: PRODUCT_EVENT.SETTINGS_VIEW_OPEN,
   SEARCH_OPEN: PRODUCT_EVENT.SEARCH_OPEN,
   ASK_SUBMIT: PRODUCT_EVENT.ASK_SUBMIT,
-  APP_QUIT: PRODUCT_EVENT.APP_QUIT,
 } as const;
 
 export type ProductSurfaceEventName =
@@ -413,7 +411,6 @@ export const PRODUCT_EVENT_PROPERTY_VALUES = {
 export const PRODUCT_EVENT_PROPERTIES = {
   [PRODUCT_EVENT.APP_LAUNCH]: [PRODUCT_EVENT_PROPERTY.APP_VERSION],
   [PRODUCT_EVENT.APP_DAY_ACTIVE]: [PRODUCT_EVENT_PROPERTY.APP_VERSION],
-  [PRODUCT_EVENT.APP_QUIT]: [],
   [PRODUCT_EVENT.ACCOUNT_SIGN_IN]: [],
   [PRODUCT_EVENT.ACCOUNT_ACT]: [PRODUCT_EVENT_PROPERTY.ACCOUNT_ACT],
   [PRODUCT_EVENT.PROVIDER_CONNECT]: [PRODUCT_EVENT_PROPERTY.CONNECTION_ID],
