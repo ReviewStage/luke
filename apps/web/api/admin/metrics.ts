@@ -26,9 +26,10 @@ function configured(name: string): boolean {
 export default {
   fetch(request: Request): Promise<Response> {
     const resolveViewer = async (incoming: Request): Promise<AdminViewer | undefined> => {
-      const authenticated = await auth.api
-        .getSession({ headers: incoming.headers })
-        .catch(() => null);
+      // A getSession failure must propagate: the handler turns a thrown viewer
+      // seam into a 503, where swallowing it here would misreport an auth
+      // outage as a signed-out 401 and offer a sign-in that cannot succeed.
+      const authenticated = await auth.api.getSession({ headers: incoming.headers });
       const account = authenticated?.user;
       if (!account) return undefined;
       return { userId: account.id, role: account.role };

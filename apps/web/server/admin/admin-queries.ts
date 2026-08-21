@@ -157,11 +157,16 @@ async function readUsageMetrics(
   return { byDay, activeUsersToday: toNumber(activeTodayRow?.value), topUsers };
 }
 
-/** Either meter at or past its daily ceiling — the row a spend was refused on. */
+/**
+ * Either meter past its daily ceiling — the row a spend was refused on. The
+ * spend that lands exactly on the limit is still allowed, and a refused
+ * attempt still increments, so only a count strictly past the limit proves a
+ * refusal happened.
+ */
 function ceilingReached(): SQL<unknown> | undefined {
   return or(
-    gte(hostedUsage.voiceCalls, HOSTED_DAILY_LIMIT[HOSTED_METER.VOICE_CALL]),
-    gte(hostedUsage.attentionReviews, HOSTED_DAILY_LIMIT[HOSTED_METER.ATTENTION_REVIEW]),
+    gt(hostedUsage.voiceCalls, HOSTED_DAILY_LIMIT[HOSTED_METER.VOICE_CALL]),
+    gt(hostedUsage.attentionReviews, HOSTED_DAILY_LIMIT[HOSTED_METER.ATTENTION_REVIEW]),
   );
 }
 
