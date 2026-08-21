@@ -32,6 +32,18 @@
 Notable changes to Luke, newest first. Each heading is a released version and
 the date its release was published.
 
+## 0.3.6 — 2026-08-20
+
+### Improvements
+
+- Luke lets an open spoken ask name the app where its answer belongs
+  ([#369](https://github.com/ReviewStage/luke/pull/369))
+
+### Fixes
+
+- Fixed Developer ID releases failing while signing the nested Calendar helper
+  ([#370](https://github.com/ReviewStage/luke/pull/370))
+
 ## 0.3.5 — 2026-08-20
 
 ### Improvements
