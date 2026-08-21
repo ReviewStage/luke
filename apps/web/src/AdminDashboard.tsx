@@ -848,7 +848,7 @@ function Dashboard({
   const db = metrics.systemHealth.database;
 
   return (
-    <div className="mx-auto max-w-[1040px] px-6 py-10">
+    <main className="mx-auto max-w-[1040px] px-6 py-10">
       <PageHeader
         title="Dashboard"
         account={account}
@@ -1027,7 +1027,7 @@ function Dashboard({
           </div>
         </div>
       </div>
-    </div>
+    </main>
   );
 }
 
@@ -1205,7 +1205,7 @@ function UserDetailPage({
       : formatNumber(activity.currentStreakDays);
 
   return (
-    <div className="mx-auto max-w-[1040px] px-6 py-10">
+    <main className="mx-auto max-w-[1040px] px-6 py-10">
       <PageHeader
         title="Account"
         account={account}
@@ -1338,7 +1338,7 @@ function UserDetailPage({
           which live with the analytics processor rather than in this database.
         </p>
       </div>
-    </div>
+    </main>
   );
 }
 
@@ -1468,7 +1468,7 @@ function UsersPage({
     : list.rows;
 
   return (
-    <div className="mx-auto max-w-[1040px] px-6 py-10">
+    <main className="mx-auto max-w-[1040px] px-6 py-10">
       <PageHeader
         title="Users"
         account={account}
@@ -1527,7 +1527,7 @@ function UsersPage({
             : ""}
         </p>
       </div>
-    </div>
+    </main>
   );
 }
 
@@ -1882,8 +1882,9 @@ export function AdminDashboard(): React.JSX.Element {
   // every view: navigation drawn beside a consent card would pose as
   // somewhere to go. Everything past the gate wears the sidebar, which is why
   // the screens below take the shell as a frame to apply themselves, only
-  // around the answers that earn it. The content region is a div, not a
-  // second `main`: the gate cards carry the page's `main` when they stand.
+  // around the answers that earn it. The content region is a div because the
+  // `main` landmark belongs to whatever stands inside it — a page's own root
+  // or a centered card's — and each render path stands exactly one.
   const shell = (tab: AdminTab, content: React.JSX.Element) => (
     <div className="flex min-h-screen">
       <AdminSidebar
