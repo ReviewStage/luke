@@ -5,6 +5,7 @@ import {
   PANEL_WIDTH,
   SESSION_NOTICE_HEIGHT,
   SESSION_NOTICE_MAX_ROWS,
+  VOICE_BAND_INSET,
   VOICE_CAPTION_MAX_HEIGHT,
 } from "./generated/motion-tokens.js";
 
@@ -93,15 +94,18 @@ export interface NotchWindowLayout extends Rectangle {
 export const CAPSULE_SIDE_WIDTH = 36;
 export const PEEK_SIDE_GROWTH = 88;
 export const SURFACE_MARGIN = 40;
-// BUBBLE_LIFT, VOICE_CAPTION_MAX_HEIGHT, SESSION_NOTICE_HEIGHT,
-// SESSION_NOTICE_MAX_ROWS, PANEL_WIDTH, and PANEL_MAX_HEIGHT come from the shared surface
+// BUBBLE_LIFT, VOICE_CAPTION_MAX_HEIGHT, VOICE_BAND_INSET,
+// SESSION_NOTICE_HEIGHT, SESSION_NOTICE_MAX_ROWS, PANEL_WIDTH, and
+// PANEL_MAX_HEIGHT come from the shared surface
 // tokens, so the window the main process sizes and the shape the renderer
 // draws cannot drift. The bubble's lift is derived: the pill matches the 24pt
 // menu bar it floats beside — the 32px compact strip minus the lift on each
 // side. The compact window holds the caption block for the same reason it
 // holds the peek's width — speech must never cost an IPC resize — and every
 // row the notice band can grow to below it, because a reply may name several
-// sessions under captioned speech.
+// sessions under captioned speech. One inset closes the stack: every band
+// carries the gap above itself, so the last one still needs its own gap
+// before the shape's bottom edge.
 const peekSideWidth = CAPSULE_SIDE_WIDTH + PEEK_SIDE_GROWTH;
 
 /**
@@ -190,6 +194,7 @@ export function positionNotchWindow(
           Math.ceil(Math.max(32, notch.topInset)) +
             VOICE_CAPTION_MAX_HEIGHT +
             SESSION_NOTICE_HEIGHT * SESSION_NOTICE_MAX_ROWS +
+            VOICE_BAND_INSET +
             SURFACE_MARGIN,
           display.bounds.height,
         );

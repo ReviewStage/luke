@@ -197,10 +197,17 @@
      whole. `--caption-max` arrives from the shared surface tokens, the
      same number the compact window already holds below the capsule, so growing
      into it costs no IPC. `--caption-size` is the block's height right now —
-     measured off the wrapped text by the renderer, padding included, never
-     past the max less the volume hint's band while one stands. How much of
-     that room the shape is currently using: the caption states below raise
-     it, and every other state leaves the capsule's own height. */
+     the words as measured by the renderer plus the one inset above them,
+     never past the max less the volume hint's band while one stands. How
+     much of that room the shape is currently using: the caption states below
+     raise it, and every other state leaves the capsule's own height.
+
+     Every band grown below the strip is sized this way — its own inset plus
+     its content — so a stack of them is evenly spaced by construction and
+     the shape closes the column with one more inset below the last. That
+     final inset is what `--caption-growth` adds on top of the bands it
+     sums; `--voice-band-inset` itself arrives from the shared surface
+     tokens, because the compact window has to reserve it too. */
   --caption-growth: 0px;
   /* The volume hint's band below the caption block, 0 until the hint stands.
      The hint's own rule raises it, and every place that spends
@@ -209,10 +216,10 @@
      height. */
   --volume-hint-size: 0px;
   /* The notice band under the housing — one row for the chips naming the
-     sessions the reply being spoken is about — arrives as `--notice-size`
-     from the shared surface tokens, because the compact window reserves its
-     room on top of the caption's: the chips stand directly under the housing,
-     and captioned words drop below their band. */
+     sessions the reply being spoken is about, the inset above them included —
+     arrives as `--notice-size` from the shared surface tokens, because the
+     compact window reserves its room on top of the caption's: the chips stand
+     directly under the housing, and captioned words drop below their band. */
   /* The one width the caption block, the volume hint, and the notice band all
      lay out at: the peek less one convex corner a side, so their last row ends
      inside the shape's bottom curve. The open panel overrides it with its own
@@ -221,6 +228,13 @@
      against it. */
   --voice-band-width-compact: calc(var(--peek-width) - var(--notch-convex-radius) * 2);
   --voice-band-width: var(--voice-band-width-compact);
+  /* Where the three of them measure their travel from. Each is positioned at
+     the strip's full height and then moved by this, because a bubble's shape
+     is the strip inset by `--shape-top` on both edges: the strip a band hangs
+     off ends that much higher than the element's own top, and the shape's
+     bottom edge that much lower than its growth. Beside a housing the shape
+     starts at the display's edge, the lift is zero, and this is nothing. */
+  --voice-band-origin: calc(0px - var(--shape-top, 0px));
   /* Wide enough for a key, a way out, and a way on, and no wider — the page the
      key was copied from is behind this and has to stay readable. The floor is
      what those three need on a display with no housing to grow from. */
@@ -260,6 +274,12 @@
 .app-stage[data-presentation="panel"] {
   --notch-concave-radius: calc(var(--panel-radius) * 0.489);
   --wing-bound: var(--panel-width);
+  /* The open panel is the one shape drawn downward from the lift rather than
+     inward from both edges of the strip: its height is its own measured
+     height, and the bands ride at its foot. So the same edge they hang off is
+     that much below the element's top here, not above it — without the sign
+     change a bubble's panel closed on a gap twice the lift too wide. */
+  --voice-band-origin: var(--shape-top, 0px);
   /* The panel hands the caption block, the volume hint, and the notice band
      its usable width — the content column between the panel's insets, which
      also clears the bottom corners' curve beside the band's last row. The
@@ -525,10 +545,16 @@ button:disabled {
 /* Luke's words follow him onto the shape: the compact states grow a caption
    block below the housing while there are words to draw. Gated on the words
    rather than on the turn, because the first of them arrives a beat after the
-   reply starts and a shape grown around nothing reads as a twitch. */
+   reply starts and a shape grown around nothing reads as a twitch. The bands
+   carry the inset above themselves, so the growth adds the one below the
+   last of them. */
 .app-stage[data-presentation="capsule"][data-caption="true"],
 .app-stage[data-presentation="peek"][data-caption="true"] {
-  --caption-growth: calc(var(--caption-size, 28px) + var(--volume-hint-size));
+  --caption-growth: calc(
+    var(--caption-size, 20px) +
+    var(--volume-hint-size) +
+    var(--voice-band-inset)
+  );
 }
 
 /* While there are words, the capsule holds the peek's width whatever the
@@ -1365,7 +1391,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 .voice-caption {
   /* Named so the widen keyframe can hold it while animating the sides: an
      animation owns the whole clip-path while it runs. */
-  --voice-band-clip-bottom: calc(var(--caption-max) - var(--caption-size, 28px));
+  --voice-band-clip-bottom: calc(var(--caption-max) - var(--caption-size, 20px));
   position: absolute;
   z-index: 3;
   top: var(--capsule-height);
@@ -1373,11 +1399,15 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   overflow: hidden;
   width: var(--voice-band-width);
   height: var(--caption-max);
-  padding: 5px 0 9px;
+  /* The block's own inset, above the words and nowhere else: whatever stands
+     below it — the volume hint's band, or the shape's bottom edge — carries
+     the gap on that side, so the words are the same distance from the thing
+     above them as from the thing below however the stack is composed. */
+  padding: var(--voice-band-inset) 0 0;
   clip-path: inset(0 0 var(--voice-band-clip-bottom));
   opacity: 0;
   pointer-events: none;
-  transform: translate(-50%, calc(var(--caption-rest, 0px) - var(--shape-top, 0px)));
+  transform: translate(-50%, calc(var(--caption-rest, 0px) + var(--voice-band-origin)));
   /* The transform and the clip wait out `--duration-exit` like the surface
      does: leaving a state, the words travel with the shape rather than ahead
      of it. */
@@ -1410,8 +1440,9 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   --caption-rest: calc(
     var(--panel-height, var(--panel-height-max)) -
     var(--capsule-height) -
-    var(--caption-size, 28px) -
-    var(--volume-hint-size)
+    var(--caption-size, 20px) -
+    var(--volume-hint-size) -
+    var(--voice-band-inset)
   );
 }
 
@@ -1430,7 +1461,12 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
    the panel is up, so the height the panel reports is already right when a
    captioned expand begins. */
 .app-stage[data-caption="true"] .expanded-panel {
-  padding-bottom: calc(18px + var(--caption-size, 28px) + var(--volume-hint-size));
+  padding-bottom: calc(
+    18px +
+    var(--caption-size, 20px) +
+    var(--volume-hint-size) +
+    var(--voice-band-inset)
+  );
 }
 
 /* The stack holds one block per response, so two responses spoken
@@ -1475,30 +1511,22 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 /* Why the words above are the only part of Luke arriving: the Mac's output is
    muted or at zero. It stands in a band of its own directly below the caption
    block: `--volume-hint-size` mirrors VOLUME_HINT_BAND_HEIGHT in
-   volume-hint.ts — the 22px row this element draws plus the caption's 9px
-   bottom inset, which the rule below moves under the row — and the renderer
-   takes the band off the block's maximum. The block and the band partition
-   the reserved room rather than layering in it: the caption's clip ends
-   where the band begins, so no line can be revealed over the hint. The
-   travel is the caption's own transform plus
-   the block's current size, so the row springs down the shape's edge exactly
-   as the shape grows for new lines. Above the hover strip (z-index 4) because
-   it holds the one button on the compact shape that is not the strip: Got it
-   has to answer the press. */
+   volume-hint.ts — the inset every band carries above itself plus the 20px
+   row this element draws — and the renderer takes the band off the block's
+   maximum. The block and the band partition the reserved room rather than
+   layering in it: the caption's clip ends where the band begins, so no line
+   can be revealed over the hint. The travel is the caption's own transform
+   plus the block's current size and that inset, so the row springs down the
+   shape's edge exactly as the shape grows for new lines. Above the hover
+   strip (z-index 4) because it holds the one button on the compact shape
+   that is not the strip: Got it has to answer the press. */
 .app-stage[data-volume-hint="true"] {
-  --volume-hint-size: 31px;
-}
-
-/* While the hint stands, the block's bottom inset belongs below the hint —
-   the hint is what meets the shape's bottom edge then. The renderer measures
-   the caption's padding off the computed style, so the words' budget follows
-   this move by measurement rather than by a restated number. */
-.app-stage[data-volume-hint="true"] .voice-caption {
-  padding-bottom: 0;
+  --volume-hint-size: calc(var(--voice-band-inset) + 20px);
 }
 
 /* The row's height mirrors VOLUME_HINT_HEIGHT in volume-hint.ts — the two
-   must agree. */
+   must agree — and is exactly what it draws: the pill a chip is, with the
+   sentence beside it. */
 .volume-hint {
   position: absolute;
   z-index: 5;
@@ -1509,12 +1537,17 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   justify-content: center;
   gap: 9px;
   width: var(--voice-band-width);
-  height: 22px;
+  height: 20px;
   opacity: 0;
   pointer-events: none;
   transform: translate(
     -50%,
-    calc(var(--caption-rest, 0px) - var(--shape-top, 0px) + var(--caption-size, 28px))
+    calc(
+      var(--caption-rest, 0px) +
+      var(--voice-band-origin) +
+      var(--caption-size, 20px) +
+      var(--voice-band-inset)
+    )
   );
   /* The transform waits out `--duration-exit` like the caption's does, so
      leaving a state the row travels with the shape rather than ahead of it. */
@@ -1549,11 +1582,17 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   white-space: nowrap;
 }
 
-/* Shaped like the quiet buttons, scaled to a 22px row. */
+/* The notice chip's pill exactly — same height, padding, and radius — because
+   the two are the pressable things that appear under the housing and a row of
+   one standing a pixel taller than a row of the other is a difference nobody
+   meant. */
 .volume-hint-dismiss {
+  display: flex;
   flex: 0 0 auto;
-  padding: 3px 8px;
-  border-radius: 7px;
+  align-items: center;
+  height: 20px;
+  padding: 0 9px;
+  border-radius: 10px;
   background: var(--raised);
   color: var(--text-primary);
   font-size: 9.5px;
@@ -1580,10 +1619,12 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
    stands alone, so the mentions are pressable either way. `--caption-rest`
    is the caption block's own lift, the same variable the panel's foot
    spends, so the words and the volume hint inside their block both take the
-   drop from one assignment. */
+   drop from one assignment — and it is the band's growth exactly, because
+   the growth ends where the chips do and the block below carries its own
+   inset. */
 .app-stage[data-presentation="capsule"][data-notice="true"],
 .app-stage[data-presentation="peek"][data-notice="true"] {
-  --caption-growth: var(--notice-growth, var(--notice-size));
+  --caption-growth: calc(var(--notice-growth, var(--notice-size)) + var(--voice-band-inset));
   --caption-rest: var(--notice-growth, var(--notice-size));
 }
 
@@ -1592,9 +1633,10 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 .app-stage[data-presentation="capsule"][data-caption="true"][data-notice="true"],
 .app-stage[data-presentation="peek"][data-caption="true"][data-notice="true"] {
   --caption-growth: calc(
-    var(--caption-size, 28px) +
+    var(--caption-size, 20px) +
     var(--volume-hint-size) +
-    var(--notice-growth, var(--notice-size))
+    var(--notice-growth, var(--notice-size)) +
+    var(--voice-band-inset)
   );
 }
 
@@ -1681,19 +1723,26 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   left: 50%;
   overflow-y: auto;
   /* The state's own band width, shared with the caption block: the band's
-     last row ends 3px above the shape's edge, where the bottom corners curve
-     in, and a chip wider than the state's width would poke past the curve
-     onto the desktop. A definite width, not a cap: `left: 50%` leaves an
-     absolutely positioned box only the right half of the stage as available
-     space, so a shrink-to-fit band resolves to half its intended width and
-     stacks one chip to a row — the translate recentres the box but never
-     gives the width back. */
+     last row ends one inset above the shape's edge, where the bottom corners
+     curve in, and a chip wider than the state's width would poke past the
+     curve onto the desktop. A definite width, not a cap: `left: 50%` leaves
+     an absolutely positioned box only the right half of the stage as
+     available space, so a shrink-to-fit band resolves to half its intended
+     width and stacks one chip to a row — the translate recentres the box but
+     never gives the width back. */
   width: var(--voice-band-width);
-  height: calc(var(--notice-size) * var(--notice-max-rows) - 6px);
+  /* Every reserved row of chips and nothing else: each `--notice-size` is a
+     chip row plus the inset above it, and the band's own inset rides in the
+     transform below, so taking one off leaves exactly the rows. That is what
+     lets the clip measure rows rather than rows-plus-a-gap. */
+  height: calc(var(--notice-size) * var(--notice-max-rows) - var(--voice-band-inset));
   clip-path: inset(0 0 var(--voice-band-clip-bottom));
   opacity: 0;
   pointer-events: none;
-  transform: translate(-50%, calc(3px - var(--shape-top, 0px) + var(--notice-rest, 0px)));
+  transform: translate(
+    -50%,
+    calc(var(--voice-band-inset) + var(--voice-band-origin) + var(--notice-rest, 0px))
+  );
   transition:
     opacity var(--duration-exit) var(--motion-exit),
     transform var(--duration-shape) var(--spring) var(--duration-exit),
@@ -1702,13 +1751,16 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 
 /* The rows inside the box: the chips wrap here, so this stack's natural
    height — never the clipped box's — is what the renderer measures into
-   `--notice-growth`. */
+   `--notice-growth`. They wrap at the band's own inset, which is what makes a
+   two-row band as evenly spaced inside as it is against the strip above and
+   the shape's edge below — and what makes each measured row land on an exact
+   `--notice-size`, the row the window reserved. */
 .session-notice-rows {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: var(--voice-band-inset);
   width: 100%;
 }
 
@@ -1806,7 +1858,8 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   --notice-rest: calc(
     var(--panel-height, var(--panel-height-max)) -
     var(--capsule-height) -
-    var(--notice-growth, var(--notice-size))
+    var(--notice-growth, var(--notice-size)) -
+    var(--voice-band-inset)
   );
 }
 
@@ -1814,9 +1867,10 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   --notice-rest: calc(
     var(--panel-height, var(--panel-height-max)) -
     var(--capsule-height) -
-    var(--caption-size, 28px) -
+    var(--caption-size, 20px) -
     var(--volume-hint-size) -
-    var(--notice-growth, var(--notice-size))
+    var(--notice-growth, var(--notice-size)) -
+    var(--voice-band-inset)
   );
 }
 
@@ -1868,15 +1922,16 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
    the notice stands rather than only while the panel is up, so the height
    the panel reports is already right when an expand begins mid-announcement. */
 .app-stage[data-notice="true"] .expanded-panel {
-  padding-bottom: calc(18px + var(--notice-growth, var(--notice-size)));
+  padding-bottom: calc(18px + var(--notice-growth, var(--notice-size)) + var(--voice-band-inset));
 }
 
 .app-stage[data-caption="true"][data-notice="true"] .expanded-panel {
   padding-bottom: calc(
     18px +
-    var(--caption-size, 28px) +
+    var(--caption-size, 20px) +
     var(--volume-hint-size) +
-    var(--notice-growth, var(--notice-size))
+    var(--notice-growth, var(--notice-size)) +
+    var(--voice-band-inset)
   );
 }
 

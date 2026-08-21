@@ -28,7 +28,12 @@ export const BUBBLE_LIFT = 4;
  * because the block grows to the words and nothing scrolls. CSS: `--caption-max`. */
 export const VOICE_CAPTION_MAX_HEIGHT = 210;
 
-/** One chip row of the session notice band. CSS: `--notice-size`. */
+/** The one gap between the strip, each band grown below it, and the shape's
+ * bottom edge. CSS: `--voice-band-inset`. */
+export const VOICE_BAND_INSET = 6;
+
+/** One chip row of the session notice band, the inset above it included.
+ * CSS: `--notice-size`. */
 export const SESSION_NOTICE_HEIGHT = 26;
 
 /** Chip rows the band may grow to before scrolling. CSS: `--notice-max-rows`. */

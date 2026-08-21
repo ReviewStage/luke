@@ -1,3 +1,4 @@
+import { VOICE_BAND_INSET } from "@sidecar/surface";
 import type { OutputAudioState } from "#shared/contracts";
 
 /**
@@ -29,22 +30,22 @@ export const VOLUME_HINT_REARM_MS = 15 * 60_000;
 
 /**
  * The hint row's height, mirrored by `.volume-hint` in the stylesheet — the
- * two must agree.
+ * two must agree. The row is exactly its content: the same pill a notice chip
+ * is, with the sentence beside it, so the inset above and below the row is
+ * the inset around what is actually drawn.
  */
-export const VOLUME_HINT_HEIGHT = 22;
+export const VOLUME_HINT_HEIGHT = 20;
 
 /**
- * The band the shape grows for the hint: the row plus the caption block's own
- * 9px bottom inset, which moves below the row while the hint stands — the
- * hint is what meets the shape's bottom edge then, so the breathing room
- * belongs under it. Mirrored by `--volume-hint-size` and the zeroed caption
- * padding in the stylesheet — the three must agree. The band is a stacked
- * element of its own, never part of the caption block: it is taken off the
- * block's maximum, so the words above scroll a row sooner and the clip that
- * reveals them ends where the band begins — no pace of scroll can draw a
- * line over the hint.
+ * The band the shape grows for the hint: the row plus the one inset every
+ * band under the strip carries above itself. Mirrored by `--volume-hint-size`
+ * in the stylesheet — the two must agree. The band is a stacked element of
+ * its own, never part of the caption block: it is taken off the block's
+ * maximum, so the words above scroll a row sooner and the clip that reveals
+ * them ends where the band begins — no pace of scroll can draw a line over
+ * the hint.
  */
-export const VOLUME_HINT_BAND_HEIGHT = VOLUME_HINT_HEIGHT + 9;
+export const VOLUME_HINT_BAND_HEIGHT = VOICE_BAND_INSET + VOLUME_HINT_HEIGHT;
 
 /** A "Got it", remembered against the stretch of silence it was given in. */
 export interface VolumeHintDismissal {

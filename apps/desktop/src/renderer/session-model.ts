@@ -1,10 +1,13 @@
 import type { SessionNoticeAsk } from "@sidecar/attention";
+import type { SessionSnapshot } from "@sidecar/fixtures";
 import { SESSION_LIST_SORT, type SessionListSort } from "@sidecar/guide";
+import type { IssueIdentity } from "@sidecar/issues";
 import {
   ATTENTION_DISPOSITION,
   isProviderId,
   isSessionApplicationId,
   matchesFilterSelection,
+  mentionedSessions,
   type NormalizedSession,
   PROVIDER_ID_LIST,
   type ProviderId,
@@ -12,6 +15,7 @@ import {
   SESSION_FILTER,
   SESSION_FILTER_AXIS,
   SESSION_LOCATION,
+  SESSION_MENTION_KIND,
   SESSION_STATUS,
   type SessionApplicationId,
   type SessionApplicationScope,
@@ -19,6 +23,7 @@ import {
   type SessionDiffSummary,
   type SessionFilter,
   type SessionFilterAxis,
+  type SessionIdentity,
   type SessionLocation,
   sessionChangeNumber,
   sessionFilterAxis,
@@ -315,6 +320,101 @@ export interface DisplaySession {
 }
 
 /** One filter someone can choose, and how many sessions it alone would leave. */
+/** The two rosters a mention chip can stand for, deciding what its press does. */
+export const MENTION_CHIP_KIND = {
+  SESSION: "session",
+  ISSUE: "issue",
+} as const;
+
+/**
+ * One app mark trailing a session chip's name: the same associations the
+ * session's own row wears, answering where the chat is also held. Copied onto
+ * the chip rather than looked up at draw time, so the band held through its
+ * fade-out keeps wearing them after the roster moves on.
+ */
+export type MentionChipApplication = {
+  id: string;
+  name: string;
+};
+
+/**
+ * One pressable chip of the notice band: the mark and words it draws, and the
+ * identity its press hands to the main process — where it is validated
+ * against the observed roster again before any address reaches the system.
+ * Resolved onto the chip when its mention is, so the band held through its
+ * fade-out keeps saying what it said.
+ */
+export type MentionChip =
+  | {
+      kind: typeof MENTION_CHIP_KIND.SESSION;
+      id: string;
+      markId: string;
+      title: string;
+      identity: SessionIdentity;
+      applications: readonly MentionChipApplication[];
+    }
+  | {
+      kind: typeof MENTION_CHIP_KIND.ISSUE;
+      id: string;
+      markId: string;
+      title: string;
+      identity: IssueIdentity;
+    };
+
+/**
+ * The chips a fixture run's own sentence earns. A fixture run observes no
+ * provider, so the roster a reply's mentions resolve against is empty and the
+ * band would stand at no rows at all — while the sentence the profile speaks
+ * was written to name four of the fixture's sessions and one of its
+ * workspaces precisely so the evidence photographs it. The rows the surface
+ * is already drawing answer for the roster here, matched by the same rules a
+ * live reply is matched by, so what the PNG shows is the band a live reply
+ * naming the same things would draw.
+ */
+export function fixtureMentionChips(
+  caption: string,
+  sessions: readonly SessionSnapshot[],
+): readonly MentionChip[] {
+  const rows = sessions.map((session) => ({
+    providerId: session.providerId,
+    providerSessionId: session.id,
+    title: session.title,
+    observedAt: session.observedAt,
+    ...(session.workspace
+      ? {
+          workspace: {
+            providerWorkspaceId: session.workspace.id,
+            ...(session.workspace.scopeId ? { scopeId: session.workspace.scopeId } : undefined),
+            name: session.workspace.name,
+          },
+        }
+      : undefined),
+  }));
+  return mentionedSessions(caption, rows).flatMap((mention): readonly MentionChip[] => {
+    const session = sessions.find(
+      (candidate) =>
+        candidate.providerId === mention.providerId && candidate.id === mention.providerSessionId,
+    );
+    if (!session) return [];
+    const markId = session.agentId ?? session.providerId;
+    return [
+      {
+        kind: MENTION_CHIP_KIND.SESSION,
+        id: session.id,
+        markId,
+        title:
+          mention.kind === SESSION_MENTION_KIND.WORKSPACE && session.workspace !== undefined
+            ? session.workspace.name
+            : session.title,
+        identity: { providerId: session.providerId, providerSessionId: session.id },
+        applications: (session.applications ?? []).flatMap((application) =>
+          application.id === markId ? [] : [{ id: application.id, name: application.name }],
+        ),
+      },
+    ];
+  });
+}
+
 export interface SessionFilterOption {
   filter: SessionFilter;
   label: string;

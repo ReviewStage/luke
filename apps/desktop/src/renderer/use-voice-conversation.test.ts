@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { FIXTURE_SPEAKING_CAPTION } from "@sidecar/fixtures";
 import { ISSUE_TRACKER_ID, normalizeTrackedIssue, type TrackedIssue } from "@sidecar/issues";
 import {
   ATTENTION_SPEECH_SOURCE,
@@ -20,7 +21,6 @@ import {
   activeVoiceStream,
   announcerNotices,
   evaluatorSummaries,
-  FIXTURE_SPEAKING_CAPTION,
   liveSpeedApplies,
   lukeCaptionsToShow,
   replyIssueMentions,

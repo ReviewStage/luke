@@ -85,16 +85,17 @@ validate_evidence() {
 # The window is a stage, not the shape: every window holds the panel's width,
 # so a mode change never moves it, and a compact one still holds the peek the
 # capsule grows into, the caption block a whole reply is shown in, every chip
-# row the notice band can wrap into, and room for a spring to overshoot —
-# 38 + 210 + 26 × 3 + 40 tall on the pinned housing.
+# row the notice band can wrap into, the inset that closes the stack against
+# the shape's bottom edge, and room for a spring to overshoot —
+# 38 + 210 + 26 × 3 + 6 + 40 tall on the pinned housing.
 validate_evidence "$SIDECAR_EXPANDED_EVIDENCE_PATH" 700 560
-validate_evidence "$SIDECAR_COMPACT_EVIDENCE_PATH" 700 366
-validate_evidence "$SIDECAR_PEEK_EVIDENCE_PATH" 700 366
+validate_evidence "$SIDECAR_COMPACT_EVIDENCE_PATH" 700 372
+validate_evidence "$SIDECAR_PEEK_EVIDENCE_PATH" 700 372
 # The slot is drawn in the expanded window, which is why stepping aside for a
 # browser costs no resize at all.
 validate_evidence "$SIDECAR_SLOT_EVIDENCE_PATH" 700 560
-validate_evidence "$SIDECAR_SPEAKING_EVIDENCE_PATH" 700 366
-validate_evidence "$SIDECAR_MUTED_EVIDENCE_PATH" 700 366
+validate_evidence "$SIDECAR_SPEAKING_EVIDENCE_PATH" 700 372
+validate_evidence "$SIDECAR_MUTED_EVIDENCE_PATH" 700 372
 
 printf 'Expanded visual evidence: %s\n' "$SIDECAR_EXPANDED_EVIDENCE_PATH"
 printf 'Compact visual evidence: %s\n' "$SIDECAR_COMPACT_EVIDENCE_PATH"

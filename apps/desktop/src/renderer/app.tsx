@@ -7,10 +7,9 @@ import {
 } from "@sidecar/credentials";
 import type { FeedbackImage, FeedbackKind } from "@sidecar/feedback";
 import { FEEDBACK_KIND, FEEDBACK_LIMITS, feedbackKindForLifecycleEvent } from "@sidecar/feedback";
-import { FIXTURE_EPOCH_MS } from "@sidecar/fixtures";
+import { FIXTURE_EPOCH_MS, FIXTURE_SPEAKING_CAPTION } from "@sidecar/fixtures";
 import { FEEDBACK_COMPOSER_KIND } from "@sidecar/guide";
 import type { HostedUsageAnswer } from "@sidecar/hosted";
-import type { IssueIdentity } from "@sidecar/issues";
 import {
   APP_TOOL_KIND,
   dispatchByKind,
@@ -35,6 +34,7 @@ import {
   type PanelFormFactor,
   SESSION_NOTICE_HEIGHT,
   SESSION_NOTICE_MAX_ROWS,
+  VOICE_BAND_INSET,
   VOICE_CAPTION_MAX_HEIGHT,
 } from "@sidecar/surface";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
@@ -131,6 +131,9 @@ import {
   DEFAULT_SESSION_VIEW,
   type DisplaySession,
   displaySessions,
+  fixtureMentionChips,
+  MENTION_CHIP_KIND,
+  type MentionChip,
   type SessionFilter,
   type SessionView,
   sameSessionFilters,
@@ -246,8 +249,8 @@ const FEEDBACK_KIND_FOR_COMPOSER = {
  * for more height than the window holds.
  * Padding is the caption's own computed padding, not a restated number, so a
  * retune in the stylesheet grows the surface by exactly what the text is
- * inset — including the bottom inset the stylesheet hands to the band while
- * the hint stands.
+ * inset — the one inset above the words, with whatever stands below the block
+ * carrying the gap on that side.
  */
 function captionSizeStyle(
   textHeight: number | undefined,
@@ -279,14 +282,20 @@ function captionBlockSize(textHeight: number, volumeHint: boolean, padding: numb
  * holds every reserved row so the growth can be revealed by its clip, which
  * means only the inner stack's height says how many rows the chips actually
  * made. The clamp is the rows the window reserved — past it the chips scroll
- * inside the band instead of growing the shape. The 6px around the measured
- * chips is the band's 3px stand-off from the strip, top and bottom, which
- * one reserved row already accounts for. Unmeasured falls back to
- * `--notice-size`, one row, in the stylesheet.
+ * inside the band instead of growing the shape. The inset added to the
+ * measured chips is the band's own stand-off from the strip above it, the
+ * same one every band under the strip carries; the gap below the last row is
+ * the next band's, or the shape's. Because the chips wrap at that inset too,
+ * the sum lands on an exact multiple of `--notice-size` — the reserved row —
+ * however many rows they made. Unmeasured falls back to `--notice-size`, one
+ * row, in the stylesheet.
  */
 function noticeGrowthStyle(rowsHeight: number | undefined): CSSProperties {
   if (!rowsHeight) return {};
-  const growth = Math.min(SESSION_NOTICE_HEIGHT * SESSION_NOTICE_MAX_ROWS, rowsHeight + 6);
+  const growth = Math.min(
+    SESSION_NOTICE_HEIGHT * SESSION_NOTICE_MAX_ROWS,
+    rowsHeight + VOICE_BAND_INSET,
+  );
   return cssCustomProperties({ "--notice-growth": `${growth}px` });
 }
 
@@ -296,47 +305,6 @@ function notchStyle(display: DisplayDiagnostic): CSSProperties {
     "--notch-housing-width": `${display.notch.housingWidth}px`,
   });
 }
-
-/** The two rosters a mention chip can stand for, deciding what its press does. */
-const MENTION_CHIP_KIND = {
-  SESSION: "session",
-  ISSUE: "issue",
-} as const;
-
-/**
- * One app mark trailing a session chip's name: the same associations the
- * session's own row wears, answering where the chat is also held. Copied onto
- * the chip rather than looked up at draw time, so the band held through its
- * fade-out keeps wearing them after the roster moves on.
- */
-type MentionChipApplication = {
-  id: string;
-  name: string;
-};
-
-/**
- * One pressable chip of the notice band: the mark and words it draws, and the
- * identity its press hands to the main process — where it is validated
- * against the observed roster again before any address reaches the system.
- * Resolved onto the chip when its mention is, so the band held through its
- * fade-out keeps saying what it said.
- */
-type MentionChip =
-  | {
-      kind: typeof MENTION_CHIP_KIND.SESSION;
-      id: string;
-      markId: string;
-      title: string;
-      identity: SessionIdentity;
-      applications: readonly MentionChipApplication[];
-    }
-  | {
-      kind: typeof MENTION_CHIP_KIND.ISSUE;
-      id: string;
-      markId: string;
-      title: string;
-      identity: IssueIdentity;
-    };
 
 function surfaceHeightStyle(
   panelHeight: number | undefined,
@@ -2144,7 +2112,14 @@ export function App(): React.JSX.Element {
   // it at its foot: the rows are up in the list, but the chips are what say
   // which of them Luke is talking about. Only the slot and the composer go
   // without — those are shapes someone asked for.
+  //
+  // A fixture run's own sentence is matched against the rows the fixture
+  // draws, because it observes no provider and both halves below resolve
+  // against a roster it never fills.
   const spokenOf: readonly MentionChip[] = [
+    ...(fixtureSpeaking && bootstrap.fixtureMode
+      ? fixtureMentionChips(FIXTURE_SPEAKING_CAPTION, bootstrap.fixture.sessions)
+      : []),
     ...mentionedSessions.flatMap((mention): readonly MentionChip[] => {
       const session = sessions.find(
         (candidate) =>

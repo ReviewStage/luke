@@ -12,6 +12,7 @@ export {
   PANEL_WIDTH,
   SESSION_NOTICE_HEIGHT,
   SESSION_NOTICE_MAX_ROWS,
+  VOICE_BAND_INSET,
   VOICE_CAPTION_MAX_HEIGHT,
 } from "./generated/motion-tokens.js";
 export {
