@@ -182,6 +182,39 @@ const REPLICAS_CODEX_ITEM = {
 /** The block type carrying prose inside a Claude SDK message. */
 const REPLICAS_CLAUDE_BLOCK_TEXT = "text";
 
+/**
+ * Every event family Replicas documents wears its agent on the event type
+ * itself: each family's types are documented as prefixed with the agent's
+ * own word, and Codex's two types are the only unprefixed ones. So even when
+ * `coding_agent` answers null — it names the *currently active* agent, and a
+ * settled workspace may have none — the newest retained event still says
+ * whose conversation this is, read from the documented discriminator rather
+ * than guessed.
+ */
+const REPLICAS_EVENT_KIND_PREFIXES = [
+  ["claude-", REPLICAS_AGENT_KIND.CLAUDE],
+  ["codex-", REPLICAS_AGENT_KIND.CODEX],
+  ["cursor-", REPLICAS_AGENT_KIND.CURSOR],
+  ["deepseek-", "deepseek"],
+  ["fx-", "fx"],
+  ["opencode-", REPLICAS_AGENT_KIND.OPENCODE],
+  ["pi-", "pi"],
+] as const satisfies readonly (readonly [string, string])[];
+
+/** Codex streams the only unprefixed event types Replicas documents. */
+const REPLICAS_CODEX_EVENT_TYPES: ReadonlySet<string> = new Set([
+  "event_msg",
+  REPLICAS_EVENT_TYPE.CODEX_RESPONSE_ITEM,
+]);
+
+/**
+ * ACP events are the one family whose agent is not in the type: fx and Kimi
+ * Code both stream `acp-*` events, and the payload's own `provider` field is
+ * documented to say which.
+ */
+const REPLICAS_ACP_EVENT_PREFIX = "acp-";
+const REPLICAS_ACP_PROVIDER_FIELD = "provider";
+
 const REPLICAS_ADAPTER_DEFAULTS = {
   /** The documented maximum, so one call reaches as deep into the history as it can. */
   WORKSPACE_PAGE_SIZE: 100,
@@ -337,16 +370,43 @@ function recapText(text: string): string | undefined {
  * says it did — because words read mid-turn are half a sentence posing as an
  * outcome, and only a settled workspace may show unclosed ones.
  */
+/**
+ * The agent family of one retained event, from the documented discriminator:
+ * the type's own agent prefix, Codex's two unprefixed types, or the provider
+ * an ACP event's payload names. An event this build cannot place answers
+ * nothing rather than a guess.
+ */
+function agentKindFromEvent(event: WireRecord): string | undefined {
+  const type = textFromRecord(event, REPLICAS_FIELD.TYPE);
+  if (!type) return undefined;
+  if (REPLICAS_CODEX_EVENT_TYPES.has(type)) return REPLICAS_AGENT_KIND.CODEX;
+  if (type.startsWith(REPLICAS_ACP_EVENT_PREFIX)) {
+    const payload = event.payload;
+    return isRecord(payload)
+      ? textFromRecord(payload, REPLICAS_ACP_PROVIDER_FIELD)?.slice(
+          0,
+          REPLICAS_ADAPTER_DEFAULTS.MAXIMUM_AGENT_KIND_LENGTH,
+        )
+      : undefined;
+  }
+  return REPLICAS_EVENT_KIND_PREFIXES.find(([prefix]) => type.startsWith(prefix))?.[1];
+}
+
 function enrichmentFromHistory(body: WireRecord, observedAt: number): ReplicasHistoryEnrichment {
-  const agentKind = textFromRecord(body, REPLICAS_FIELD.CODING_AGENT)?.slice(
-    0,
-    REPLICAS_ADAPTER_DEFAULTS.MAXIMUM_AGENT_KIND_LENGTH,
-  );
+  const events = recordsFromPage(body, REPLICAS_FIELD.EVENTS);
+  // The provider's own word wins when it gives one; `coding_agent` names the
+  // *currently active* agent, so a settled workspace answers null, and the
+  // newest placeable event says whose conversation this is instead.
+  const agentKind =
+    textFromRecord(body, REPLICAS_FIELD.CODING_AGENT)?.slice(
+      0,
+      REPLICAS_ADAPTER_DEFAULTS.MAXIMUM_AGENT_KIND_LENGTH,
+    ) ?? events.map(agentKindFromEvent).filter(isDefined).at(-1);
   const mappedKind = knownValue(REPLICAS_AGENT_KIND, agentKind);
 
   let recap: string | undefined;
   let recapSettled = false;
-  for (const event of recordsFromPage(body, REPLICAS_FIELD.EVENTS)) {
+  for (const event of events) {
     const text = assistantTextFromEvent(event);
     if (text !== undefined) {
       recap = recapText(text);

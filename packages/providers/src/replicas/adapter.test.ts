@@ -402,6 +402,42 @@ test("marks a workspace with the agent its retained history names", async () => 
   assert.equal(observations[2]?.agent, undefined);
 });
 
+test("derives the agent from the retained events when none is currently active", async () => {
+  // `coding_agent` names the *currently active* agent, so a settled workspace
+  // answers null — but every documented event family wears its agent on the
+  // event type itself, so the newest placeable event still says whose
+  // conversation this is.
+  const api = fakeReplicasApi([
+    {
+      ...activeWorkspace("workspace-claude-events", TEST_TIME - 1_000),
+      historyEvents: [claudeAssistant("Reading the failing test first.")],
+    },
+    {
+      ...activeWorkspace("workspace-codex-events", TEST_TIME - 2_000),
+      historyEvents: [codexAssistant("Ported the fixture to the new shape.")],
+    },
+    {
+      // fx and Kimi Code share the ACP family, told apart by the payload's
+      // own provider field; kimi has no mark, so it rides the model slot.
+      ...activeWorkspace("workspace-acp-events", TEST_TIME - 3_000),
+      historyEvents: [
+        {
+          timestamp: isoTimestamp(TEST_TIME - 10_000),
+          type: "acp-session-update",
+          payload: { provider: "kimi", update: {} },
+        },
+      ],
+    },
+  ]);
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  assert.deepEqual(observations[0]?.agent, { id: "claude-code", displayName: "Claude Code" });
+  assert.deepEqual(observations[1]?.agent, { id: "codex", displayName: "Codex" });
+  assert.equal(observations[2]?.agent, undefined);
+  assert.equal(observations[2]?.detail?.model, "kimi");
+});
+
 test("reports the parting words as the recap once the turn actually parted", async () => {
   const api = fakeReplicasApi([
     {
