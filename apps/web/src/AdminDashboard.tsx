@@ -1,5 +1,5 @@
 import { createAuthClient } from "better-auth/react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   AdminDailySignups,
   AdminDailyUsage,
@@ -8,6 +8,7 @@ import type {
   AdminTopUser,
 } from "../server/admin/admin-metrics";
 import { ADMIN_METRICS_SCOPE, ADMIN_METRICS_SCOPE_PARAM } from "../server/admin/http";
+import { accountInitials } from "./account-initials";
 import { GitHubMark, GoogleMark } from "./account-marks";
 import { AUTH_BUTTON } from "./auth-surface";
 import { LukeMark } from "./SiteChrome";
@@ -47,6 +48,7 @@ function rememberSignInChosen(): void {
 interface ViewerAccount {
   name: string;
   email: string;
+  image: string | undefined;
 }
 
 const SIGN_OUT_BUTTON =
@@ -289,6 +291,112 @@ function IntegrationRow({ integration }: { integration: AdminIntegration }): Rea
   );
 }
 
+/**
+ * The account's own avatar, falling back to its initials. A provider's avatar
+ * URL can outlive the image it named, so a failed fetch falls back to the
+ * letters rather than leaving a broken frame in the header.
+ */
+function AccountAvatar({ account }: { account: ViewerAccount }): React.JSX.Element {
+  const [imageFailed, setImageFailed] = useState(false);
+
+  if (account.image !== undefined && !imageFailed) {
+    return (
+      <img
+        src={account.image}
+        alt=""
+        className="size-8 rounded-full object-cover"
+        onError={() => setImageFailed(true)}
+      />
+    );
+  }
+  return (
+    <span
+      className="grid size-8 place-items-center rounded-full bg-muted text-xs font-semibold"
+      aria-hidden="true"
+    >
+      {accountInitials(account.name, account.email)}
+    </span>
+  );
+}
+
+/**
+ * The focus ring is drawn inside the item: the page's own `:focus-visible`
+ * outline would otherwise sit astride the panel's border, which reads as a
+ * seam rather than as focus.
+ */
+const ACCOUNT_MENU_ITEM =
+  "block w-full cursor-pointer px-3 py-2 text-left text-sm font-medium transition-colors duration-150 outline-offset-[-2px] hover:bg-muted focus-visible:bg-muted";
+
+function AccountMenu({
+  account,
+  onSignOut,
+}: {
+  account: ViewerAccount;
+  onSignOut: () => void;
+}): React.JSX.Element {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const itemRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    itemRef.current?.focus();
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && containerRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setOpen(false);
+      triggerRef.current?.focus();
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <button
+        type="button"
+        ref={triggerRef}
+        className="flex cursor-pointer items-center rounded-full transition-opacity duration-150 hover:opacity-80"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={`Account menu for ${account.name || account.email}`}
+        onClick={() => setOpen(!open)}
+      >
+        <AccountAvatar account={account} />
+      </button>
+      {open ? (
+        <div
+          role="menu"
+          className="absolute top-[calc(100%+8px)] right-0 z-10 min-w-[200px] rounded-lg border border-border bg-card py-1 text-left shadow-[0_16px_48px_rgba(0,0,0,0.32)]"
+        >
+          <div className="border-b border-border px-3 py-2">
+            <div className="text-sm leading-tight font-medium">{account.name}</div>
+            <div className="truncate text-xs text-muted-foreground">{account.email}</div>
+          </div>
+          <button
+            type="button"
+            ref={itemRef}
+            role="menuitem"
+            className={ACCOUNT_MENU_ITEM}
+            onClick={onSignOut}
+          >
+            Sign out
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function Dashboard({
   metrics,
   hideAdmins,
@@ -333,13 +441,7 @@ function Dashboard({
           {account ? (
             <>
               <span className="h-8 w-px bg-border" aria-hidden="true" />
-              <div className="text-right">
-                <div className="text-sm leading-tight font-medium">{account.name}</div>
-                <div className="text-xs text-muted-foreground">{account.email}</div>
-              </div>
-              <button type="button" className={SIGN_OUT_BUTTON} onClick={onSignOut}>
-                Sign out
-              </button>
+              <AccountMenu account={account} onSignOut={onSignOut} />
             </>
           ) : null}
         </div>
@@ -654,7 +756,11 @@ export function AdminDashboard(): React.JSX.Element {
           metrics={state.metrics}
           hideAdmins={hideAdmins}
           onHideAdminsChange={setHideAdmins}
-          account={account ? { name: account.name, email: account.email } : undefined}
+          account={
+            account
+              ? { name: account.name, email: account.email, image: account.image ?? undefined }
+              : undefined
+          }
           onSignOut={() => void signOut()}
         />
       );
