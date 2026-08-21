@@ -1827,8 +1827,14 @@ function UsersScreen({
     return () => inFlight.current?.abort();
   }, [load]);
 
-  // The star answers the press at once; a write the service refused or never
-  // received puts it back, rather than leaving a favorite nobody keeps.
+  // The star answers the press at once, while one write chain per account
+  // carries the newest intent to the service: presses faster than the network
+  // coalesce into the chain's next request instead of racing it out of order.
+  // A landed write redraws its own outcome, so a roster refresh that crossed
+  // it mid-flight cannot leave a stale star, and a failed one puts the star
+  // back only when no newer press has spoken since.
+  const favoriteIntents = useRef(new Map<string, boolean>());
+  const favoriteWriting = useRef(new Set<string>());
   const toggleFavorite = useCallback((id: string, favorite: boolean) => {
     const draw = (value: boolean) =>
       setState((current) =>
@@ -1845,15 +1851,30 @@ function UsersScreen({
           : current,
       );
     draw(favorite);
+    favoriteIntents.current.set(id, favorite);
+    if (favoriteWriting.current.has(id)) return;
+    favoriteWriting.current.add(id);
     void (async () => {
       try {
-        const response = await fetch(
-          `${FAVORITE_PATH}?${ADMIN_USER_ID_PARAM}=${encodeURIComponent(id)}`,
-          { method: favorite ? "PUT" : "DELETE", headers: { accept: "application/json" } },
-        );
-        if (!response.ok) draw(!favorite);
-      } catch {
-        draw(!favorite);
+        for (;;) {
+          const want = favoriteIntents.current.get(id);
+          if (want === undefined) return;
+          favoriteIntents.current.delete(id);
+          let landed = false;
+          try {
+            const response = await fetch(
+              `${FAVORITE_PATH}?${ADMIN_USER_ID_PARAM}=${encodeURIComponent(id)}`,
+              { method: want ? "PUT" : "DELETE", headers: { accept: "application/json" } },
+            );
+            landed = response.ok;
+          } catch {
+            landed = false;
+          }
+          if (landed) draw(want);
+          else if (!favoriteIntents.current.has(id)) draw(!want);
+        }
+      } finally {
+        favoriteWriting.current.delete(id);
       }
     })();
   }, []);
