@@ -558,7 +558,11 @@ function Centered({
 }
 
 export function AdminDashboard(): React.JSX.Element {
-  const [state, setState] = useState<DashboardState>({ status: "loading" });
+  // A first visit is signed-out from the very first frame: it never fetches,
+  // so a loading state would pose as a request that is not in flight.
+  const [state, setState] = useState<DashboardState>(() =>
+    signInChosenHere() ? { status: "loading" } : { status: "signed-out" },
+  );
   // Admin accounts are the maintainers' own; their traffic reads as noise in
   // every count, so the dashboard opens with them hidden and the toggle is the
   // explicit ask to include them. The scope is the server's filter — aggregates
