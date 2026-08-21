@@ -32,6 +32,33 @@
 Notable changes to Luke, newest first. Each heading is a released version and
 the date its release was published.
 
+## 0.3.5 — 2026-08-20
+
+### Improvements
+
+- Luke keeps your voice conversation history across calls so you can continue
+  where you left off
+  ([#354](https://github.com/ReviewStage/luke/pull/354))
+- Luke records your spoken turns alongside his replies in the conversation
+  history
+  ([#355](https://github.com/ReviewStage/luke/pull/355))
+- Luke can search the session list when you ask out loud
+  ([#364](https://github.com/ReviewStage/luke/pull/364))
+- Luke shows Superset workspaces without chats as standing rows you can delete
+  ([#365](https://github.com/ReviewStage/luke/pull/365))
+
+### Fixes
+
+- Fixed the session count appearing before the roster finished loading
+  ([#361](https://github.com/ReviewStage/luke/pull/361))
+- Fixed idle voice calls lingering after their conversation history took over
+  ([#356](https://github.com/ReviewStage/luke/pull/356))
+
+### Miscellaneous
+
+- Updated every declared Node.js version to match the repository version
+  ([#366](https://github.com/ReviewStage/luke/pull/366))
+
 ## 0.3.4 — 2026-08-20
 
 ### Improvements
