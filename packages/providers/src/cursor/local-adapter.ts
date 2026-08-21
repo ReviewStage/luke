@@ -2,6 +2,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  maximumSessionRecapLength,
   type ProviderSessionObservation,
   SESSION_STATUS,
   type SessionDetail,
@@ -39,7 +40,7 @@ import {
   type SqliteDatabase,
   type SqliteModuleLoader,
 } from "../shared/local-sqlite.js";
-import { transcriptContentBlocks } from "../shared/local-transcript.js";
+import { transcriptContentBlocks, transcriptMessageText } from "../shared/local-transcript.js";
 import { CURSOR_PROVIDER } from "./adapter.js";
 import { cursorApplication, cursorChatLink } from "./app-links.js";
 import { CURSOR_TOOL_INPUT_KEY, readCursorSessionTranscript } from "./transcript.js";
@@ -294,6 +295,8 @@ interface ParsedCursorTail {
   turn?: { failed: boolean };
   /** The tool call the open turn is running, named the way Codex's rows name theirs. */
   activity?: string;
+  /** A cleanly settled turn's parting words, the same standing as Codex's recap. */
+  recap?: string;
 }
 
 /** Names the tool a turn called, preferring whichever input says what it is for. */
@@ -309,30 +312,41 @@ function activityFromToolUse(block: WireRecord): string | undefined {
 }
 
 /**
- * Reads the turn boundary and the current tool call out of a transcript tail.
- * Cursor marks the end of a turn explicitly, so an open turn is read from the
- * absence of that mark rather than inferred from what the assistant last said
- * — the conversation's words are not read here at all, only the tool-call
- * blocks that say what the turn is doing right now. A record this build does
- * not know is passed over rather than taken for either.
+ * Reads the turn boundary, the current tool call, and a settled turn's recap
+ * out of a transcript tail. Cursor marks the end of a turn explicitly, so an
+ * open turn is read from the absence of that mark rather than inferred from
+ * what the assistant last said. The conversation's words stay in the records
+ * they were parsed from, with one bounded exception: a cleanly settled turn's
+ * parting words become the session's recap, the same standing as the recap
+ * Codex writes — a failed turn keeps none, because the agent's parting words
+ * predate what went wrong. A record this build does not know is passed over
+ * rather than taken for anything.
  */
 function parseCursorTail(tail: string): ParsedCursorTail {
   const parsed: ParsedCursorTail = {};
+  let partingWords: string | undefined;
   for (const record of tailRecords(tail)) {
     if (record[CURSOR_RECORD_FIELD.TYPE] === CURSOR_RECORD_TYPE.TURN_ENDED) {
-      parsed.turn = { failed: record[CURSOR_RECORD_FIELD.STATUS] === CURSOR_TURN_STATUS.ERROR };
+      const failed = record[CURSOR_RECORD_FIELD.STATUS] === CURSOR_TURN_STATUS.ERROR;
+      parsed.turn = { failed };
       // A turn that ended is not running its last call, and holding it would
       // keep a stale line on the row until some other tool runs.
       parsed.activity = undefined;
+      parsed.recap = failed ? undefined : oneLine(partingWords, maximumSessionRecapLength);
+      partingWords = undefined;
       continue;
     }
     if (!isMessageRecord(record)) continue;
     parsed.turn = undefined;
     if (record[CURSOR_RECORD_FIELD.ROLE] === CURSOR_ROLE.USER) {
-      // A new turn is not running the previous turn's call either.
+      // A new turn is not running the previous turn's call, and its work is
+      // not summed up by the previous turn's parting words.
       parsed.activity = undefined;
+      parsed.recap = undefined;
+      partingWords = undefined;
       continue;
     }
+    partingWords = transcriptMessageText(record, false) ?? partingWords;
     for (const block of transcriptContentBlocks(record, false)) {
       if (block.type !== CURSOR_CONTENT_TYPE.TOOL_USE) continue;
       parsed.activity = activityFromToolUse(block) ?? parsed.activity;
@@ -481,9 +495,10 @@ function defaultGlobalStorageStatePath(): string {
 
 /**
  * Observes the Cursor sessions that run on this machine, from the transcripts
- * Cursor already writes for itself. It reads the turn markers and the open
- * turn's tool calls — never the conversation's words — needs no credential,
- * and reports nothing that Cursor has not written down.
+ * Cursor already writes for itself. It reads the turn markers, the open
+ * turn's tool calls, and a settled turn's parting words as the recap — nothing
+ * else of the conversation — needs no credential, and reports nothing that
+ * Cursor has not written down.
  */
 export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
   CursorTranscriptCandidate,
@@ -590,6 +605,7 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
       // anything.
       observedAt: candidate.mtimeMs,
       detail: detailFor(label, status, link, parsed.activity),
+      ...(parsed.recap ? { recap: parsed.recap } : undefined),
       ...(link ? { applications: [cursorApplication(link)] } : undefined),
     };
   }
