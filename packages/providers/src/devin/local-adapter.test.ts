@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
-import { SESSION_STATUS } from "@sidecar/session";
+import { SESSION_COMPLETION_CAUSE, SESSION_STATUS } from "@sidecar/session";
 import type { MutableWireRecord, ParsedJsonObject } from "@sidecar/wire/testing";
 import { DEVIN_PROVIDER } from "./adapter.js";
 import { DevinLocalSessionAdapter } from "./local-adapter.js";
@@ -647,6 +647,216 @@ test("observes nothing where the runtime has no sqlite module", async (t) => {
     },
   });
   assert.deepEqual(await adapter.observe(), []);
+});
+
+// ---------------------------------------------------------------------------
+// Hook-event refinement. Every test here layers a spool the observation hook
+// would have written over the session database, because that is the
+// arrangement in production: the rows and chains are always read, and the
+// event only sharpens them.
+// ---------------------------------------------------------------------------
+
+async function temporaryHookSpool(t: TestContext): Promise<string> {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "luke-devin-spool-"));
+  t.after(async () => {
+    await fs.rm(directory, { recursive: true, force: true });
+  });
+  return directory;
+}
+
+async function writeHookEvent(
+  spoolDirectory: string,
+  providerSessionId: string,
+  event: string,
+  mtimeMs: number,
+): Promise<void> {
+  const filePath = path.join(spoolDirectory, `${providerSessionId}.json`);
+  await fs.writeFile(filePath, JSON.stringify({ event }));
+  await fs.utimes(filePath, mtimeMs / 1000, mtimeMs / 1000);
+}
+
+/** A session mid-turn by every record: the developer's prompt is the tip. */
+async function writeOpenTurnState(
+  cliDirectory: string,
+  sessionId: string,
+  observedAt: number,
+): Promise<void> {
+  await writeDevinState(
+    cliDirectory,
+    [{ id: sessionId, workingDirectory: "/Users/test/luke", observedAt, mainChainId: 0 }],
+    {
+      nodes: [
+        { sessionId, nodeId: 0, time: observedAt, message: chatMessage("user", "run the suite") },
+      ],
+    },
+  );
+}
+
+/** A session whose turn settled: the assistant's reply is the tip. */
+async function writeSettledTurnState(
+  cliDirectory: string,
+  sessionId: string,
+  observedAt: number,
+): Promise<void> {
+  await writeDevinState(
+    cliDirectory,
+    [{ id: sessionId, workingDirectory: "/Users/test/luke", observedAt, mainChainId: 1 }],
+    {
+      nodes: [
+        { sessionId, nodeId: 0, time: observedAt, message: chatMessage("user", "hello") },
+        {
+          sessionId,
+          nodeId: 1,
+          parentNodeId: 0,
+          time: observedAt,
+          message: chatMessage("assistant", "Hi!"),
+        },
+      ],
+    },
+  );
+}
+
+test("a permission request the database cannot show turns the row to waiting", async (t) => {
+  const cliDirectory = await temporaryCliDirectory(t);
+  const spool = await temporaryHookSpool(t);
+  // Mid-turn by every record: a call holding for approval writes no node
+  // further, so without the event this session reads as working.
+  await writeOpenTurnState(cliDirectory, "held-call", TEST_TIME - 5 * 60_000);
+  await writeHookEvent(spool, "held-call", "notification", TEST_TIME - 60_000);
+
+  const adapter = new DevinLocalSessionAdapter({
+    cliDirectory,
+    hookEventsDirectory: () => spool,
+    now: () => TEST_TIME,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.WAITING);
+  assert.equal(observation?.holdingForDeveloper, true);
+  // The event also dates the session: the spool is written only by Luke's own
+  // script, so its clock is the moment the session actually moved.
+  assert.equal(observation?.observedAt, TEST_TIME - 60_000);
+});
+
+test("a session-end event settles a row the database would leave waiting", async (t) => {
+  const cliDirectory = await temporaryCliDirectory(t);
+  const spool = await temporaryHookSpool(t);
+  await writeSettledTurnState(cliDirectory, "closed-out", TEST_TIME - 5 * 60_000);
+  await writeHookEvent(spool, "closed-out", "session-end", TEST_TIME - 60_000);
+
+  const adapter = new DevinLocalSessionAdapter({
+    cliDirectory,
+    hookEventsDirectory: () => spool,
+    now: () => TEST_TIME,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.COMPLETE);
+  assert.equal(observation?.completionCause, SESSION_COMPLETION_CAUSE.SESSION_CLOSED);
+});
+
+test("a stop event keeps a finished turn waiting past the freshness decay", async (t) => {
+  const cliDirectory = await temporaryCliDirectory(t);
+  const spool = await temporaryHookSpool(t);
+  // Twenty minutes past the row's clock, the database alone decays to unknown.
+  await writeSettledTurnState(cliDirectory, "still-waiting", TEST_TIME - 20 * 60_000);
+  await writeHookEvent(spool, "still-waiting", "stop", TEST_TIME - 60_000);
+
+  const adapter = new DevinLocalSessionAdapter({
+    activeSessionFreshnessMs: 15 * 60_000,
+    cliDirectory,
+    hookEventsDirectory: () => spool,
+    now: () => TEST_TIME,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.WAITING);
+});
+
+test("an event the session has moved past refines nothing", async (t) => {
+  const cliDirectory = await temporaryCliDirectory(t);
+  const spool = await temporaryHookSpool(t);
+  await writeOpenTurnState(cliDirectory, "moved-on", TEST_TIME - 60_000);
+  // A stop from a minute before the row's clock: hooks were off, or the write
+  // raced. The session is demonstrably mid-turn again.
+  await writeHookEvent(spool, "moved-on", "stop", TEST_TIME - 2 * 60_000);
+
+  const adapter = new DevinLocalSessionAdapter({
+    cliDirectory,
+    hookEventsDirectory: () => spool,
+    now: () => TEST_TIME,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.WORKING);
+  assert.equal(observation?.observedAt, TEST_TIME - 60_000);
+});
+
+test("a prompt event reads a fresh turn as working before the node shows it", async (t) => {
+  const cliDirectory = await temporaryCliDirectory(t);
+  const spool = await temporaryHookSpool(t);
+  await writeSettledTurnState(cliDirectory, "prompted", TEST_TIME - 60_000);
+  await writeHookEvent(spool, "prompted", "prompt", TEST_TIME - 5_000);
+
+  const adapter = new DevinLocalSessionAdapter({
+    cliDirectory,
+    hookEventsDirectory: () => spool,
+    now: () => TEST_TIME,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.WORKING);
+});
+
+test("a notification the session has answered stands down at once", async (t) => {
+  const cliDirectory = await temporaryCliDirectory(t);
+  const spool = await temporaryHookSpool(t);
+  // The approval was granted and the call ran: a row touched after the
+  // notification, though within the tolerance the other events enjoy.
+  await writeOpenTurnState(cliDirectory, "approved", TEST_TIME - 1_000);
+  await writeHookEvent(spool, "approved", "notification", TEST_TIME - 3_000);
+
+  const adapter = new DevinLocalSessionAdapter({
+    cliDirectory,
+    hookEventsDirectory: () => spool,
+    now: () => TEST_TIME,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.WORKING);
+});
+
+test("a spool that cannot be read costs only the refinement", async (t) => {
+  const cliDirectory = await temporaryCliDirectory(t);
+  await writeOpenTurnState(cliDirectory, "unrefined", TEST_TIME - 1_000);
+
+  const adapter = new DevinLocalSessionAdapter({
+    cliDirectory,
+    hookEventsDirectory: () => path.join(cliDirectory, "no-such-spool"),
+    now: () => TEST_TIME,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.WORKING);
+});
+
+test("a permission hold that outlives the freshness window never reads as work", async (t) => {
+  const cliDirectory = await temporaryCliDirectory(t);
+  const spool = await temporaryHookSpool(t);
+  // An open turn past the window already decays to unknown; the stale hold
+  // must land in the same place rather than revive it as waiting.
+  await writeOpenTurnState(cliDirectory, "long-hold", TEST_TIME - 30 * 60_000);
+  await writeHookEvent(spool, "long-hold", "notification", TEST_TIME - 20 * 60_000);
+
+  const adapter = new DevinLocalSessionAdapter({
+    activeSessionFreshnessMs: 15 * 60_000,
+    cliDirectory,
+    hookEventsDirectory: () => spool,
+    now: () => TEST_TIME,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.UNKNOWN);
 });
 
 test("honors the CLI's own database override", async (t) => {

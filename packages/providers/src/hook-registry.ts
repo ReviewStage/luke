@@ -5,6 +5,7 @@ import { defaultCodexHome } from "./codex/adapter.js";
 import { CODEX_HOOK_SCRIPT_NAME } from "./codex/hooks.js";
 import { CURSOR_HOOK_SCRIPT_NAME } from "./cursor/hooks.js";
 import { defaultCursorHome } from "./cursor/local-adapter.js";
+import { DEVIN_HOOK_SCRIPT_NAME, defaultDevinConfigHome } from "./devin/hooks.js";
 import { GEMINI_HOOK_SCRIPT_NAME } from "./gemini-cli/hooks.js";
 import { defaultGeminiCliHome } from "./gemini-cli/records.js";
 import {
@@ -49,6 +50,14 @@ const OBSERVATION_HOOK_PROVIDERS = {
     directoryName: "cursor-hooks",
     scriptName: CURSOR_HOOK_SCRIPT_NAME,
     providerHome: defaultCursorHome,
+  },
+  [PROVIDER_ID.DEVIN]: {
+    directoryName: "devin-hooks",
+    scriptName: DEVIN_HOOK_SCRIPT_NAME,
+    // The configuration home, not the data home the session database lives
+    // under: the registration merges into the CLI's user-level config.json,
+    // and the CLI creates this directory for itself on its first run.
+    providerHome: defaultDevinConfigHome,
   },
   [PROVIDER_ID.GEMINI_CLI]: {
     directoryName: "gemini-cli-hooks",

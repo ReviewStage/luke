@@ -21,6 +21,7 @@ import { CURSOR_PROVIDER, CursorSessionAdapter } from "./cursor/adapter.js";
 import { installCursorObservationHooks } from "./cursor/hooks.js";
 import { CursorLocalSessionAdapter } from "./cursor/local-adapter.js";
 import { DEVIN_PROVIDER, DevinSessionAdapter } from "./devin/adapter.js";
+import { installDevinObservationHooks } from "./devin/hooks.js";
 import { DevinLocalSessionAdapter } from "./devin/local-adapter.js";
 import { GeminiCliSessionAdapter } from "./gemini-cli/adapter.js";
 import { installGeminiObservationHooks } from "./gemini-cli/hooks.js";
@@ -79,6 +80,7 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
   const claudeInstallation = hookInstallation(PROVIDER_ID.CLAUDE_CODE);
   const codexInstallation = hookInstallation(PROVIDER_ID.CODEX);
   const cursorInstallation = hookInstallation(PROVIDER_ID.CURSOR);
+  const devinInstallation = hookInstallation(PROVIDER_ID.DEVIN);
   const geminiInstallation = hookInstallation(PROVIDER_ID.GEMINI_CLI);
   const opencodeInstallation = hookInstallation(PROVIDER_ID.OPENCODE);
   const claude = new ClaudeCodeSessionAdapter({
@@ -110,7 +112,9 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
   const devin = new CompositeSessionProviderAdapter({
     provider: DEVIN_PROVIDER,
     adapters: [
-      new DevinLocalSessionAdapter(),
+      new DevinLocalSessionAdapter({
+        hookEventsDirectory: () => devinInstallation().spoolDirectory,
+      }),
       new DevinSessionAdapter({
         readApiKey: () => options.readApiKey(CREDENTIAL_PROVIDER_ID.DEVIN),
       }),
@@ -158,6 +162,11 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
     [PROVIDER_ID.DEVIN]: {
       adapter: devin,
       credential: CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.DEVIN],
+      registerObservationHook: observationHookRegistration(
+        installDevinObservationHooks,
+        devinInstallation,
+        now,
+      ),
     },
     [PROVIDER_ID.GEMINI_CLI]: {
       adapter: new GeminiCliSessionAdapter({
