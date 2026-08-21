@@ -14,6 +14,7 @@ import {
   type ProviderSessionObservation,
   SESSION_APPLICATION_ID,
   SESSION_APPLICATION_SCOPE,
+  SESSION_LOCATION,
   SESSION_STATUS,
 } from "@sidecar/session";
 import { type WireRecord, wireRecord } from "@sidecar/wire";
@@ -113,6 +114,34 @@ const SUPERSET_CHATLESS_WORKSPACE_QUERY = `
 `;
 
 /**
+ * Every worktree a chat could be running in without Superset having recorded
+ * which chat it is. Superset's own events for some agents (OpenCode today)
+ * never carry the agent's session id, so the binding row says only that an
+ * agent of that kind ran somewhere in the workspace. The worktree path is the
+ * one thing both sides wrote down independently — Superset when it made the
+ * worktree, the agent's own record of the directory it ran in — so it is what
+ * a chat with no recorded id is matched by. Only the worktree shape
+ * qualifies: a main checkout is the user's own working copy, where an agent
+ * run by hand would be branded Superset's by nothing more than sharing the
+ * folder.
+ */
+const SUPERSET_WORKTREE_DIRECTORY_QUERY = `
+  SELECT
+    workspaces.id AS workspace_id,
+    workspaces.name AS workspace_name,
+    workspaces.worktree_path,
+    workspaces.branch,
+    workspaces.updated_at,
+    projects.name AS project_name,
+    pull_requests.url AS pull_request_url
+  FROM workspaces
+  LEFT JOIN projects ON projects.id = workspaces.project_id
+  LEFT JOIN pull_requests ON pull_requests.id = workspaces.pull_request_id
+  WHERE workspaces.type = 'worktree'
+    AND workspaces.archived_at IS NULL
+`;
+
+/**
  * What one binding row says about the session it manages. Deliberately no
  * host identifier: the host state read here is this machine's own — the
  * directories under `host/` are named by organization, not by machine — so
@@ -142,6 +171,11 @@ export interface SupersetSessionContext {
   branch?: string;
   pullRequestUrl?: string;
   spawnableAgents: readonly string[];
+  /**
+   * The worktree a directory-matched chat was anchored by, carried only on
+   * such matches so a fresh snapshot can re-anchor them against its own read.
+   */
+  worktreePath?: string;
 }
 
 /**
@@ -230,10 +264,44 @@ function contextFromWorkspaceRow(
   return context;
 }
 
+/**
+ * A workspace offered for matching by its worktree path: the same
+ * workspace-shaped, terminal-less context a chatless row carries, keyed by
+ * the directory a chat Superset recorded no session id for would be
+ * running in.
+ */
+export interface SupersetWorktreeContext {
+  worktreePath: string;
+  context: SupersetSessionContext;
+}
+
+function worktreeContextFromRow(
+  organizationId: string,
+  row: WireRecord,
+  spawnableAgents: readonly string[],
+): SupersetWorktreeContext | undefined {
+  const worktreePath = textFromRow(row, "worktree_path");
+  const context = contextFromWorkspaceRow(organizationId, row, spawnableAgents);
+  return worktreePath && context ? { worktreePath, context } : undefined;
+}
+
 export class SupersetWorkspaceSnapshot {
   readonly #sessions = new Map<string, Map<string, SupersetSessionContext>>();
+  readonly #worktreesByPath = new Map<string, SupersetSessionContext>();
+  /**
+   * The chats matched by worktree path, remembered under the chat's own
+   * identity so the act router resolves an act against the same context its
+   * advertisement rode. Every enrich pass rewrites a chat's entry from its
+   * latest observation — confirming, moving, or dropping it — and a fresh
+   * snapshot adopts its predecessor's entries so the acts a drawn row still
+   * advertises keep resolving between the snapshot standing and that pass.
+   */
+  readonly #directoryMatches = new Map<string, Map<string, SupersetSessionContext>>();
 
-  constructor(contexts: readonly SupersetSessionContext[]) {
+  constructor(
+    contexts: readonly SupersetSessionContext[],
+    worktrees: readonly SupersetWorktreeContext[] = [],
+  ) {
     for (const context of contexts) {
       const provider = this.#sessions.get(context.providerId) ?? new Map();
       const existing = provider.get(context.providerSessionId);
@@ -242,10 +310,95 @@ export class SupersetWorkspaceSnapshot {
       }
       this.#sessions.set(context.providerId, provider);
     }
+    for (const worktree of worktrees) {
+      const existing = this.#worktreesByPath.get(worktree.worktreePath);
+      if (!existing || existing.updatedAt < worktree.context.updatedAt) {
+        this.#worktreesByPath.set(worktree.worktreePath, worktree.context);
+      }
+    }
   }
 
   context(providerId: string, providerSessionId: string): SupersetSessionContext | undefined {
-    return this.#sessions.get(providerId)?.get(providerSessionId);
+    return (
+      this.#sessions.get(providerId)?.get(providerSessionId) ??
+      this.#directoryMatches.get(providerId)?.get(providerSessionId)
+    );
+  }
+
+  /**
+   * The recorded context for a chat, or the worktree standing in for one
+   * Superset never recorded: a local chat whose provider wrote down the same
+   * directory Superset made a live worktree at is that workspace's chat, even
+   * though the binding row carries no session id to say which. The match
+   * earns everything the workspace's own identity carries — the grouping and
+   * the workspace-scoped acts — but no terminal, because no observed binding
+   * identifies the exact terminal this chat is behind, and a message must
+   * land on the chat it was typed at.
+   */
+  #contextFor(
+    providerId: string,
+    observation: ProviderSessionObservation,
+  ): SupersetSessionContext | undefined {
+    const recorded = this.#sessions.get(providerId)?.get(observation.providerSessionId);
+    if (recorded) return recorded;
+    // The observation is the match's whole authority, so it is re-decided
+    // here from the observation alone, never read back from the remembered
+    // entry: a chat that moved directories or stopped reporting one loses
+    // its entry on the same pass.
+    const worktree =
+      observation.location !== SESSION_LOCATION.CLOUD && observation.directory
+        ? this.#worktreesByPath.get(observation.directory)
+        : undefined;
+    if (!worktree) {
+      this.#directoryMatches.get(providerId)?.delete(observation.providerSessionId);
+      return undefined;
+    }
+    return this.#rememberDirectoryMatch(
+      providerId,
+      observation.providerSessionId,
+      worktree,
+      observation.directory ?? "",
+    );
+  }
+
+  #rememberDirectoryMatch(
+    providerId: string,
+    providerSessionId: string,
+    worktree: SupersetSessionContext,
+    worktreePath: string,
+  ): SupersetSessionContext {
+    const context: SupersetSessionContext = {
+      ...worktree,
+      providerId,
+      providerSessionId,
+      worktreePath,
+    };
+    const matches = this.#directoryMatches.get(providerId) ?? new Map();
+    matches.set(providerSessionId, context);
+    this.#directoryMatches.set(providerId, matches);
+    return context;
+  }
+
+  /**
+   * Carries the previous snapshot's directory matches into this one, each
+   * re-anchored to this snapshot's own read: an entry survives only while
+   * the same worktree still stands, and is rebuilt from that worktree's
+   * fresh fields. Without this, an act pressed between this snapshot
+   * standing and the next enrich pass would find nothing behind the
+   * advertisement the drawn row still carries; the workspace-scoped acts an
+   * adopted entry resolves stay honest either way, because they act on the
+   * workspace whose worktree was just re-read, not on the chat.
+   */
+  adoptDirectoryMatches(previous: SupersetWorkspaceSnapshot): void {
+    for (const [providerId, matches] of previous.#directoryMatches) {
+      for (const [providerSessionId, match] of matches) {
+        const worktree = match.worktreePath
+          ? this.#worktreesByPath.get(match.worktreePath)
+          : undefined;
+        if (!worktree || !match.worktreePath) continue;
+        this.#rememberDirectoryMatch(providerId, providerSessionId, worktree, match.worktreePath);
+      }
+    }
   }
 
   actableContext(
@@ -263,7 +416,7 @@ export class SupersetWorkspaceSnapshot {
     activeOrganizationId?: string,
   ): readonly ProviderSessionObservation[] {
     return observations.map((observation) => {
-      const context = this.context(providerId, observation.providerSessionId);
+      const context = this.#contextFor(providerId, observation);
       if (!context) return observation;
       const detail = { ...observation.detail };
       if (context.projectName) detail.repository = context.projectName;
@@ -425,24 +578,28 @@ export class SupersetWorkspaceReader {
   async read(): Promise<SupersetWorkspaceSnapshot> {
     const hostDirectory = path.join(this.#homeDirectory, "host");
     const entries = await readDirectory(hostDirectory);
-    const contexts = (
-      await Promise.all(
-        entries
-          .filter((entry) => entry.isDirectory())
-          .map((entry) =>
-            this.#readOrganization(entry.name, path.join(hostDirectory, entry.name, "host.db")),
-          ),
-      )
-    ).flat();
-    return new SupersetWorkspaceSnapshot(contexts);
+    const organizations = await Promise.all(
+      entries
+        .filter((entry) => entry.isDirectory())
+        .map((entry) =>
+          this.#readOrganization(entry.name, path.join(hostDirectory, entry.name, "host.db")),
+        ),
+    );
+    return new SupersetWorkspaceSnapshot(
+      organizations.flatMap((organization) => organization.contexts),
+      organizations.flatMap((organization) => organization.worktrees),
+    );
   }
 
   async #readOrganization(
     organizationId: string,
     databasePath: string,
-  ): Promise<readonly SupersetSessionContext[]> {
+  ): Promise<{
+    contexts: readonly SupersetSessionContext[];
+    worktrees: readonly SupersetWorktreeContext[];
+  }> {
     const database = await openReadOnlyDatabase(this.#sqlite, databasePath);
-    if (!database) return [];
+    if (!database) return { contexts: [], worktrees: [] };
     try {
       const spawnableAgents = database
         .prepare(SUPERSET_AGENT_QUERY)
@@ -462,12 +619,45 @@ export class SupersetWorkspaceReader {
           const context = contextFromRow(organizationId, row, spawnableAgents);
           return context ? [context] : [];
         });
-      return [...bound, ...this.#chatlessWorkspaces(database, organizationId, spawnableAgents)];
+      return {
+        contexts: [
+          ...bound,
+          ...this.#chatlessWorkspaces(database, organizationId, spawnableAgents),
+        ],
+        worktrees: this.#worktreeDirectories(database, organizationId, spawnableAgents),
+      };
     } catch (error) {
-      if (error instanceof Error && canIgnoreSqliteError(error)) return [];
+      if (error instanceof Error && canIgnoreSqliteError(error))
+        return { contexts: [], worktrees: [] };
       throw error;
     } finally {
       database.close();
+    }
+  }
+
+  /**
+   * Read behind its own guard like the chatless rows: a host database from a
+   * Superset without the worktree columns loses only the path matching, never
+   * the chats whose session ids Superset did record.
+   */
+  #worktreeDirectories(
+    database: SqliteDatabase,
+    organizationId: string,
+    spawnableAgents: readonly string[],
+  ): readonly SupersetWorktreeContext[] {
+    try {
+      return database
+        .prepare(SUPERSET_WORKTREE_DIRECTORY_QUERY)
+        .all()
+        .flatMap((value) => {
+          const row = wireRecord(value);
+          if (!row) return [];
+          const worktree = worktreeContextFromRow(organizationId, row, spawnableAgents);
+          return worktree ? [worktree] : [];
+        });
+    } catch (error) {
+      if (error instanceof Error && canIgnoreSqliteError(error)) return [];
+      throw error;
     }
   }
 

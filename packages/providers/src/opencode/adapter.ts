@@ -400,6 +400,7 @@ function observationFromSnapshot(
       ? { completionCause: SESSION_COMPLETION_CAUSE.SESSION_CLOSED }
       : undefined),
     observedAt: refined.observedAt,
+    ...(snapshot.directory ? { directory: snapshot.directory } : undefined),
     detail: detailFromSnapshot(snapshot),
     ...(refined.holdingForDeveloper ? { holdingForDeveloper: true } : undefined),
   };

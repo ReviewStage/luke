@@ -8,6 +8,7 @@ import {
   PROVIDER_ID,
   SESSION_APPLICATION_ID,
   SESSION_APPLICATION_SCOPE,
+  SESSION_LOCATION,
   SESSION_STATUS,
 } from "@sidecar/session";
 import { SUPERSET_WORKSPACE_PROVIDER_ID } from "../../../apps/desktop/src/shared/contracts.js";
@@ -38,7 +39,8 @@ function createSchema(database: DatabaseSync): void {
       branch TEXT NOT NULL,
       updated_at INTEGER NOT NULL,
       type TEXT NOT NULL DEFAULT 'worktree',
-      archived_at INTEGER
+      archived_at INTEGER,
+      worktree_path TEXT
     );
     CREATE TABLE terminal_agent_bindings (
       terminal_id TEXT PRIMARY KEY,
@@ -171,6 +173,178 @@ test("binds Cursor's agents CLI under Superset's own name for it", async (t) => 
     ])[0]?.detail?.link,
     "superset://v2-workspace/workspace-1?terminalId=terminal-1",
   );
+});
+
+test("matches a chat Superset recorded no session id for by its worktree", async (t) => {
+  const home = await temporarySupersetHome(t);
+  const database = await writeHostDatabase(home, "host-local");
+  createSchema(database);
+  // Superset's own events for OpenCode never carry the agent's session id, so
+  // the binding row stands with agent_session_id NULL for the chat's whole
+  // life. The worktree path is what both sides recorded independently.
+  database.exec(`
+    INSERT INTO projects VALUES ('project-1', 'Luke');
+    INSERT INTO workspaces (id, project_id, pull_request_id, name, branch, updated_at, worktree_path) VALUES
+      ('workspace-1', 'project-1', NULL, 'parallel-hippopotamus', 'feat/grok-bot', 200,
+       '/Users/test/.superset/worktrees/repo-1/parallel-hippopotamus');
+    INSERT INTO host_agent_configs VALUES ('claude', 0), ('opencode', 1);
+    INSERT INTO terminal_agent_bindings VALUES (
+      'terminal-1', 'workspace-1', 'opencode', NULL, 'Start'
+    );
+  `);
+  database.close();
+
+  const snapshot = await new SupersetWorkspaceReader({ homeDirectory: home }).read();
+  const observation = {
+    providerSessionId: "ses_grok",
+    title: "Add Grok Bot support",
+    status: SESSION_STATUS.WAITING,
+    observedAt: 100,
+    directory: "/Users/test/.superset/worktrees/repo-1/parallel-hippopotamus",
+  };
+
+  const enriched = snapshot.enrich(PROVIDER_ID.OPENCODE, [observation], "host-local")[0];
+  assert.deepEqual(enriched?.workspace, {
+    providerWorkspaceId: "workspace-1",
+    name: "parallel-hippopotamus",
+    scopeId: SUPERSET_WORKSPACE_PROVIDER_ID,
+    managerName: "Superset",
+  });
+  assert.deepEqual(enriched?.applications, [
+    {
+      id: SESSION_APPLICATION_ID.SUPERSET,
+      displayName: "Superset",
+      scope: SESSION_APPLICATION_SCOPE.WORKSPACE,
+      link: "superset://v2-workspace/workspace-1",
+    },
+  ]);
+  assert.equal(enriched?.detail?.link, "superset://v2-workspace/workspace-1");
+  assert.equal(enriched?.detail?.repository, "Luke");
+  assert.equal(enriched?.detail?.branch, "feat/grok-bot");
+  // No observed binding identifies the exact terminal this chat is behind, so
+  // a message has nowhere it can be known to land — the workspace-scoped acts
+  // still ride, because the workspace's identity is exactly known.
+  assert.equal(enriched?.canReceiveMessage, undefined);
+  assert.equal(enriched?.renameTarget, "workspace-1");
+  assert.deepEqual(enriched?.spawnableAgents, ["claude", "opencode"]);
+  assert.equal(enriched?.spawnTarget, "workspace-1");
+  assert.deepEqual(enriched?.controls, [
+    {
+      id: SUPERSET_CONTROL_ID.DELETE_WORKSPACE,
+      label: "Delete workspace",
+      target: "workspace-1",
+    },
+  ]);
+
+  // The act router resolves the matched chat against the same snapshot the
+  // advertisement rode, terminal-less like a chatless workspace row.
+  const context = snapshot.actableContext(PROVIDER_ID.OPENCODE, "ses_grok", "host-local");
+  assert.equal(context?.workspaceId, "workspace-1");
+  assert.equal(context?.terminalId, undefined);
+
+  // A chat somewhere else, or one a cloud provider holds under a
+  // coincidentally equal path, is never Superset's.
+  const elsewhere = snapshot.enrich(
+    PROVIDER_ID.OPENCODE,
+    [{ ...observation, providerSessionId: "ses_other", directory: "/Users/test/luke" }],
+    "host-local",
+  )[0];
+  assert.equal(elsewhere?.workspace, undefined);
+  const cloud = snapshot.enrich(
+    PROVIDER_ID.OPENCODE,
+    [{ ...observation, providerSessionId: "ses_cloud", location: SESSION_LOCATION.CLOUD }],
+    "host-local",
+  )[0];
+  assert.equal(cloud?.workspace, undefined);
+  assert.equal(snapshot.actableContext(PROVIDER_ID.OPENCODE, "ses_cloud", "host-local"), undefined);
+});
+
+test("carries directory matches into the next snapshot until enrichment re-decides", async (t) => {
+  const home = await temporarySupersetHome(t);
+  const database = await writeHostDatabase(home, "host-local");
+  createSchema(database);
+  database.exec(`
+    INSERT INTO workspaces (id, project_id, pull_request_id, name, branch, updated_at, worktree_path) VALUES
+      ('workspace-1', NULL, NULL, 'parallel-hippopotamus', 'feat/grok-bot', 200,
+       '/Users/test/.superset/worktrees/repo-1/parallel-hippopotamus');
+    INSERT INTO terminal_agent_bindings VALUES (
+      'terminal-1', 'workspace-1', 'opencode', NULL, 'Start'
+    );
+  `);
+  database.close();
+
+  const reader = new SupersetWorkspaceReader({ homeDirectory: home });
+  const observation = {
+    providerSessionId: "ses_grok",
+    title: "Add Grok Bot support",
+    status: SESSION_STATUS.WAITING,
+    observedAt: 100,
+    directory: "/Users/test/.superset/worktrees/repo-1/parallel-hippopotamus",
+  };
+  const first = await reader.read();
+  first.enrich(PROVIDER_ID.OPENCODE, [observation], "host-local");
+
+  // A drawn row keeps advertising its acts until the next enrichment pass
+  // commits, so the fresh snapshot must answer them before that pass runs.
+  const second = await reader.read();
+  assert.equal(second.actableContext(PROVIDER_ID.OPENCODE, "ses_grok", "host-local"), undefined);
+  second.adoptDirectoryMatches(first);
+  assert.equal(
+    second.actableContext(PROVIDER_ID.OPENCODE, "ses_grok", "host-local")?.workspaceId,
+    "workspace-1",
+  );
+
+  // The observation is the match's whole authority: a chat re-observed
+  // somewhere else loses the adopted entry on the same pass.
+  second.enrich(
+    PROVIDER_ID.OPENCODE,
+    [{ ...observation, directory: "/Users/test/elsewhere" }],
+    "host-local",
+  );
+  assert.equal(second.actableContext(PROVIDER_ID.OPENCODE, "ses_grok", "host-local"), undefined);
+
+  // A worktree gone from the latest read anchors nothing, however recently
+  // it was matched.
+  const archived = await writeHostDatabase(home, "host-local");
+  archived.exec("UPDATE workspaces SET archived_at = 300");
+  archived.close();
+  const third = await reader.read();
+  third.adoptDirectoryMatches(first);
+  assert.equal(third.actableContext(PROVIDER_ID.OPENCODE, "ses_grok", "host-local"), undefined);
+});
+
+test("path matching claims only live worktrees, never the main checkout or an archive", async (t) => {
+  const home = await temporarySupersetHome(t);
+  const database = await writeHostDatabase(home, "host-local");
+  createSchema(database);
+  database.exec(`
+    INSERT INTO workspaces (id, project_id, pull_request_id, name, branch, updated_at, type, archived_at, worktree_path) VALUES
+      ('workspace-main', NULL, NULL, 'main', 'main', 500, 'main', NULL, '/Users/test/luke'),
+      ('workspace-archived', NULL, NULL, 'filed-away', 'old', 400, 'worktree', 350,
+       '/Users/test/.superset/worktrees/repo-1/filed-away');
+  `);
+  database.close();
+
+  const snapshot = await new SupersetWorkspaceReader({ homeDirectory: home }).read();
+  for (const directory of [
+    "/Users/test/luke",
+    "/Users/test/.superset/worktrees/repo-1/filed-away",
+  ]) {
+    const enriched = snapshot.enrich(
+      PROVIDER_ID.OPENCODE,
+      [
+        {
+          providerSessionId: `ses_${directory}`,
+          title: "By hand",
+          status: SESSION_STATUS.WAITING,
+          observedAt: 100,
+          directory,
+        },
+      ],
+      "host-local",
+    )[0];
+    assert.equal(enriched?.workspace, undefined);
+  }
 });
 
 test("keeps the newest duplicate binding across host databases", async (t) => {

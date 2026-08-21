@@ -268,6 +268,9 @@ test("observes an OpenCode session under the name OpenCode gave it", async (t) =
   assert.equal(observations[0]?.title, "Wire the notch geometry to the housing");
   assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
   assert.equal(observations[0]?.controls, undefined);
+  // The raw directory rides for workspace managers to match by; the bounded
+  // repository label below is what a surface draws.
+  assert.equal(observations[0]?.directory, "/Users/test/luke");
   assert.deepEqual(observations[0]?.detail, {
     repository: "luke",
     model: "claude-sonnet-5 · high",
@@ -741,6 +744,7 @@ test("observes legacy JSON sessions when no database exists", async (t) => {
   assert.equal(observations[0]?.providerSessionId, "ses_legacy");
   assert.equal(observations[0]?.title, "Migrate the settings store");
   assert.equal(observations[0]?.status, SESSION_STATUS.WAITING);
+  assert.equal(observations[0]?.directory, "/Users/test/luke");
   assert.deepEqual(observations[0]?.detail, { repository: "luke" });
 });
 

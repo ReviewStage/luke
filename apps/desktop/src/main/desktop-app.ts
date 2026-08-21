@@ -1153,6 +1153,10 @@ async function refreshProviderSessions(generation: number): Promise<void> {
     const message = error instanceof Error ? error.message : String(error);
     process.stderr.write(`Superset observation failed: ${message}\n`);
   }
+  // The fresh snapshot answers acts the drawn rows still advertise from
+  // before this pass's enrichment runs, so the directory matches enrichment
+  // made carry over, re-anchored to the worktrees just read.
+  supersetSnapshot.adoptDirectoryMatches(observedSupersetWorkspaces);
   observedSupersetWorkspaces = supersetSnapshot;
   observedSupersetOrganization = supersetOrganization;
   // Refreshed outside the read's own try so a failed pass hands the adapter
