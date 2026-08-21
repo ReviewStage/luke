@@ -498,57 +498,23 @@ function SessionRow({
         {session.realtimeVoice ? <AudioBadge /> : null}
       </span>
       <span className="row-copy">
-        <span className="row-title-line">
-          <strong>
-            {session.openable && hasOpenableApplication ? (
-              <button
-                type="button"
-                className="row-title-open"
-                title={`Open in ${openLabel}`}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onOpen(session);
-                }}
-              >
-                <Highlighted text={title} tokens={highlight} />
-              </button>
-            ) : (
+        <strong>
+          {session.openable && hasOpenableApplication ? (
+            <button
+              type="button"
+              className="row-title-open"
+              title={`Open in ${openLabel}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                onOpen(session);
+              }}
+            >
               <Highlighted text={title} tokens={highlight} />
-            )}
-          </strong>
-          {applications.length > 0 ? (
-            <span className="row-applications">
-              {applications.map((application) => {
-                const applicationId = application.id;
-                return application.openable && isSessionApplicationId(applicationId) ? (
-                  <button
-                    type="button"
-                    className="row-application row-application-button"
-                    title={`Open in ${application.name}`}
-                    aria-label={`Open in ${application.name}`}
-                    key={applicationId}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onOpenApplication(session, applicationId);
-                    }}
-                  >
-                    <ProviderMark providerId={applicationId} />
-                  </button>
-                ) : (
-                  <span
-                    className="row-application"
-                    role="img"
-                    aria-label={`Also in ${application.name}`}
-                    title={application.name}
-                    key={applicationId}
-                  >
-                    <ProviderMark providerId={applicationId} />
-                  </span>
-                );
-              })}
-            </span>
-          ) : null}
-        </span>
+            </button>
+          ) : (
+            <Highlighted text={title} tokens={highlight} />
+          )}
+        </strong>
         <small className="row-doing">
           {session.urgency === SESSION_URGENCY.WORKING ? (
             <span className="row-spinner" aria-hidden="true" />
@@ -577,10 +543,44 @@ function SessionRow({
           </small>
         ) : null}
       </span>
-      <small className="row-when">
-        {session.noticeAsk ? <ListeningGlyph ask={session.noticeAsk} /> : null}
-        {observedAgoLabel(session.observedAt, now)}
-      </small>
+      <span className="row-side">
+        <small className="row-when">
+          {session.noticeAsk ? <ListeningGlyph ask={session.noticeAsk} /> : null}
+          {observedAgoLabel(session.observedAt, now)}
+        </small>
+        {applications.length > 0 ? (
+          <span className="row-applications">
+            {applications.map((application) => {
+              const applicationId = application.id;
+              return application.openable && isSessionApplicationId(applicationId) ? (
+                <button
+                  type="button"
+                  className="row-application row-application-button"
+                  title={`Open in ${application.name}`}
+                  aria-label={`Open in ${application.name}`}
+                  key={applicationId}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onOpenApplication(session, applicationId);
+                  }}
+                >
+                  <ProviderMark providerId={applicationId} />
+                </button>
+              ) : (
+                <span
+                  className="row-application"
+                  role="img"
+                  aria-label={`Also in ${application.name}`}
+                  title={application.name}
+                  key={applicationId}
+                >
+                  <ProviderMark providerId={applicationId} />
+                </span>
+              );
+            })}
+          </span>
+        ) : null}
+      </span>
     </>
   );
 
