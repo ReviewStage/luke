@@ -3,6 +3,7 @@ import {
   type AccountProvider,
   type AccountSnapshot,
 } from "@sidecar/account/snapshot";
+import type { ProductEventPropertiesFor, ProductSurfaceEventName } from "@sidecar/analytics";
 import type { AttentionRequestResult, SessionNoticeAsk } from "@sidecar/attention";
 import type { ObservedAccountCalendars } from "@sidecar/calendar/observation";
 import type { CredentialProviderId } from "@sidecar/credentials";
@@ -367,11 +368,11 @@ export interface AppSettings {
   showOnAllDisplays: boolean;
   /**
    * Whether Luke counts how his own features are used and sends those counts
-   * to his own service. On by default, and the only thing that ever leaves
-   * unbidden: every event name and every property value is fixed by the build,
-   * so nothing observed and nothing typed or spoken can travel in one. It is
-   * excluded from every reset scope, because a reset that turned it back on
-   * would be a consent nobody gave.
+   * to his own service. On by default, and the outer switch over everything
+   * that leaves unbidden: every event name and every property value is fixed
+   * by the build, so nothing observed and nothing typed or spoken can travel
+   * in one. It is excluded from every reset scope, because a reset that
+   * turned it back on would be a consent nobody gave.
    */
   shareUsageData: boolean;
   /**
@@ -976,6 +977,21 @@ export interface AppBridge {
   requestHostedUsage(): Promise<HostedUsageAnswer | undefined>;
   notifyReady(): void;
   quit(): void;
+  /**
+   * Counts one thing the surface did that the main process cannot see: which
+   * tab is drawn, which settings page a row opened, whether a search field was
+   * summoned, how the panel was opened, whether an ask reached a conversation.
+   *
+   * Deliberately the narrowest channel in this bridge. It carries a name from
+   * `PRODUCT_SURFACE_EVENT` and that event's own enumerated properties, and the
+   * main process validates both against the same allowlist before anything is
+   * queued — so this is not a way for the renderer to send text, and not a way
+   * for it to reach the acts the main process counts for itself.
+   */
+  recordSurfaceEvent<Name extends ProductSurfaceEventName>(
+    name: Name,
+    properties: ProductEventPropertiesFor<Name>,
+  ): void;
   onLifecycle(callback: (eventName: string) => void): () => void;
   /** This window's own display, whenever its geometry or housing changes. */
   onDisplayChanged(callback: (display: DisplayDiagnostic) => void): () => void;
@@ -1127,4 +1143,5 @@ export const channels = {
   workspaceProjectsChanged: "app:workspace-projects-changed",
   issuesChanged: "app:issues-changed",
   quit: "app:quit",
+  recordSurfaceEvent: "app:record-surface-event",
 } as const;

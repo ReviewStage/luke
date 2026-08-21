@@ -121,6 +121,9 @@ const bridge: AppBridge = {
   requestHostedUsage: invokeMethod<"requestHostedUsage">(channels.requestHostedUsage),
   notifyReady: () => ipcRenderer.send(channels.rendererReady),
   quit: () => ipcRenderer.send(channels.quit),
+  recordSurfaceEvent: (name, properties) => {
+    ipcRenderer.send(channels.recordSurfaceEvent, name, properties);
+  },
   onLifecycle: subscribe(channels.lifecycle),
   onDisplayChanged: subscribe(channels.displayChanged),
   onSettingsChanged: subscribe(channels.settingsChanged),

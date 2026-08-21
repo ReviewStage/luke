@@ -1,5 +1,11 @@
-import { PRODUCT_EVENT, type RecordProductEvent } from "@sidecar/analytics";
+import {
+  PRODUCT_CALENDAR_SOURCE,
+  PRODUCT_EVENT,
+  PRODUCT_SETTING_VALUE,
+  type RecordProductEvent,
+} from "@sidecar/analytics";
 import type { GoogleCalendarReader, GoogleCalendarSignIn } from "@sidecar/calendar";
+import { APP_SETTING_ID } from "@sidecar/guide";
 import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from "electron";
 import { APPLE_CALENDAR_ACCESS } from "#shared/apple-calendar";
@@ -67,7 +73,9 @@ export function registerCalendarConnectionIpc(
     apply(result) {
       if (!result.reason) {
         void refresh();
-        recordProductEvent(PRODUCT_EVENT.CALENDAR_CONNECT, {});
+        recordProductEvent(PRODUCT_EVENT.CALENDAR_CONNECT, {
+          calendar_source: PRODUCT_CALENDAR_SOURCE.GOOGLE,
+        });
       }
     },
     refusal: "Could not connect Google Calendar on this system.",
@@ -87,7 +95,12 @@ export function registerCalendarConnectionIpc(
     },
     save: (accountId) => settingsStore.removeCalendarAccount(accountId),
     apply(result) {
-      if (!result.reason) void refresh();
+      if (!result.reason) {
+        void refresh();
+        recordProductEvent(PRODUCT_EVENT.CALENDAR_DISCONNECT, {
+          calendar_source: PRODUCT_CALENDAR_SOURCE.GOOGLE,
+        });
+      }
     },
     refusal: "Could not disconnect that account on this system.",
   });
@@ -95,10 +108,16 @@ export function registerCalendarConnectionIpc(
   // any older wait, so a switch flipped minutes after giving up cannot land
   // a connection nobody is watching for.
   let appleConnectGeneration = 0;
+  // Whether the save that just ran actually stored a grant. Neither half of
+  // the result answers it: a superseded wait returns the snapshot with no
+  // reason at all, and a snapshot already carrying a connection cannot say
+  // whether this attempt is what put it there.
+  let appleConnectStored = false;
   registerSetting(channels.connectAppleCalendar, {
     validate: () => undefined,
     async save() {
       const generation = ++appleConnectGeneration;
+      appleConnectStored = false;
       // The system's own consent is the whole connect flow: no browser, no
       // loopback, no token to store. What comes back seeds the choice the
       // way Google's primary calendar seeds an account's — the calendar new
@@ -122,10 +141,17 @@ export function registerCalendarConnectionIpc(
         };
       }
       const seed = outcome.defaultCalendarId ?? outcome.calendars[0]?.id;
+      appleConnectStored = true;
       return settingsStore.connectAppleCalendar(seed ? [seed] : []);
     },
     apply(result) {
-      if (!result.reason) void refresh();
+      if (result.reason) return;
+      void refresh();
+      if (appleConnectStored) {
+        recordProductEvent(PRODUCT_EVENT.CALENDAR_CONNECT, {
+          calendar_source: PRODUCT_CALENDAR_SOURCE.APPLE,
+        });
+      }
     },
     refusal: "Could not connect Apple Calendar on this system.",
   });
@@ -139,7 +165,12 @@ export function registerCalendarConnectionIpc(
     validate: () => undefined,
     save: () => settingsStore.disconnectAppleCalendar(),
     apply(result) {
-      if (!result.reason) void refresh();
+      if (!result.reason) {
+        void refresh();
+        recordProductEvent(PRODUCT_EVENT.CALENDAR_DISCONNECT, {
+          calendar_source: PRODUCT_CALENDAR_SOURCE.APPLE,
+        });
+      }
     },
     refusal: "Could not disconnect Apple Calendar on this system.",
   });
@@ -199,8 +230,17 @@ export function registerCalendarConnectionIpc(
     },
     save: ({ accountId, calendarId, selected }) =>
       settingsStore.setCalendarSelected(accountId, calendarId, selected),
-    apply(result) {
-      if (!result.reason) void refresh();
+    apply(result, { selected }) {
+      if (result.reason) return;
+      void refresh();
+      // Which calendar, and whose account, never travel: the switch went on
+      // or off is the whole of it. This one is counted here rather than by
+      // the settings rows' own recorder because the choice lives on the
+      // calendar rows rather than in the settings schema.
+      recordProductEvent(PRODUCT_EVENT.SETTING_UPDATE, {
+        setting_id: APP_SETTING_ID.CALENDAR_SELECTED,
+        setting_value: selected ? PRODUCT_SETTING_VALUE.ON : PRODUCT_SETTING_VALUE.OFF,
+      });
     },
     refusal: "Could not save that calendar choice on this system.",
   });

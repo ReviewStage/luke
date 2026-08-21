@@ -50,9 +50,11 @@ function harness(options: { credentials?: boolean; registers?: boolean } = {}) {
         },
       };
     },
+    recordProductEvent: () => undefined,
     host: {
       voiceHost: () => undefined,
       displayIdFor: () => undefined,
+      modeFor: () => "compact",
       setMode: () => undefined,
       broadcast: (channel, payload) => broadcasts.push({ channel, payload }),
     },

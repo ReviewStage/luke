@@ -4,6 +4,8 @@ import { pathToFileURL } from "node:url";
 import { AccountClient, AccountSessionManager, accountGateOpen } from "@sidecar/account";
 import {
   PRODUCT_EVENT,
+  PRODUCT_SUPERSET_ACT,
+  PRODUCT_UPDATE_ACT,
   ProductEventSender,
   productSessionCountBucket,
   type RecordProductEvent,
@@ -482,15 +484,25 @@ const supersetSignIn = new SupersetSignIn({
   openExternal: (url) => shell.openExternal(url),
   onChange: (state) => {
     panels.broadcast(channels.supersetSignInChanged, state);
-    if (state.stage === SUPERSET_SIGN_IN_STAGE.CONNECTED) void sessionObservationLoop.refresh();
+    if (state.stage !== SUPERSET_SIGN_IN_STAGE.CONNECTED) return;
+    void sessionObservationLoop.refresh();
+    // The edge into connected, which is where a sign-in actually lands: the
+    // code submission only reaches `exchanging`, and the CLI answers on its
+    // own time. Counted here so a sign-in that failed after the code counts
+    // nothing at all.
+    recordProductEvent(PRODUCT_EVENT.SUPERSET_ACT, {
+      superset_act: PRODUCT_SUPERSET_ACT.SIGN_IN_COMPLETE,
+    });
   },
 });
 const hotkeys = new HotkeyRegistrar({
   registersGlobalKeys: runMode.registersGlobalKeys,
   hasCredentials: () => voiceCapabilities.realtimeCredentials !== undefined,
+  recordProductEvent,
   host: {
     voiceHost: () => panels.voiceHost(),
     displayIdFor: (sender) => panels.displayIdFor(sender),
+    modeFor: (displayId) => panels.modeFor(displayId),
     setMode: (displayId, mode, requestFocus) => {
       panels.setMode(displayId, mode, requestFocus);
     },
@@ -871,6 +883,9 @@ function registerIpc(): void {
   });
   ipcMain.handle(channels.beginSupersetSignIn, async (event) => {
     if (!trustedSender(event)) throw new Error("Untrusted renderer");
+    recordProductEvent(PRODUCT_EVENT.SUPERSET_ACT, {
+      superset_act: PRODUCT_SUPERSET_ACT.SIGN_IN_START,
+    });
     return supersetSignIn.begin();
   });
   ipcMain.handle(channels.submitSupersetSignInCode, (event, code: UnparsedWireValue) => {
@@ -887,7 +902,11 @@ function registerIpc(): void {
     if (trustedSender(event)) supersetSignIn.reopen();
   });
   ipcMain.on(channels.cancelSupersetSignIn, (event) => {
-    if (trustedSender(event)) supersetSignIn.cancel();
+    if (!trustedSender(event)) return;
+    supersetSignIn.cancel();
+    recordProductEvent(PRODUCT_EVENT.SUPERSET_ACT, {
+      superset_act: PRODUCT_SUPERSET_ACT.SIGN_IN_CANCEL,
+    });
   });
   ipcMain.handle(channels.disconnectSuperset, async (event) => {
     if (!trustedSender(event)) throw new Error("Untrusted renderer");
@@ -896,10 +915,19 @@ function registerIpc(): void {
     // login is gone; the refreshed pass retires the rows the login was buying.
     supersetSignIn.cancel();
     void sessionObservationLoop.refresh();
+    recordProductEvent(PRODUCT_EVENT.SUPERSET_ACT, {
+      superset_act: PRODUCT_SUPERSET_ACT.DISCONNECT,
+    });
     return undefined;
   });
 
-  registerAccountSessionIpc({ ipcMain, trustedSender, accountSession });
+  registerAccountSessionIpc({
+    ipcMain,
+    trustedSender,
+    accountSession,
+    recordProductEvent,
+    flushProductEvents: () => productEvents.flush(),
+  });
 
   registerWindowSurfaceIpc({
     ipcMain,
@@ -908,6 +936,7 @@ function registerIpc(): void {
     requestMicrophone,
     microphoneRoute: () => microphoneRoute,
     microphoneRouteWatcher: () => microphoneRouteWatcher,
+    recordProductEvent,
   });
 
   registerSettingsRowsIpc({
@@ -961,6 +990,7 @@ function registerIpc(): void {
   // with the standing snapshot rather than make a request it must not.
   ipcMain.handle(channels.checkForUpdates, (event) => {
     if (!trustedSender(event)) throw new Error("Untrusted renderer");
+    recordProductEvent(PRODUCT_EVENT.UPDATE_ACT, { update_act: PRODUCT_UPDATE_ACT.CHECK });
     return updateService.check();
   });
 
@@ -969,6 +999,11 @@ function registerIpc(): void {
   // stages the swap — so a stray send installs nothing.
   ipcMain.on(channels.installUpdate, (event) => {
     if (!trustedSender(event)) return;
+    // Counted before the install is asked for, and flushed with it: the act
+    // schedules a restart, and a count queued behind that would be dropped by
+    // the quit rather than sent.
+    recordProductEvent(PRODUCT_EVENT.UPDATE_ACT, { update_act: PRODUCT_UPDATE_ACT.INSTALL });
+    void productEvents.flush();
     updateService.install();
   });
 
@@ -978,6 +1013,7 @@ function registerIpc(): void {
   // steer where a press goes.
   ipcMain.on(channels.openLatestRelease, (event) => {
     if (!trustedSender(event)) return;
+    recordProductEvent(PRODUCT_EVENT.UPDATE_ACT, { update_act: PRODUCT_UPDATE_ACT.RELEASE_OPEN });
     void shell.openExternal(UPDATE_ENDPOINT.LATEST_RELEASE_PAGE_URL);
   });
 
@@ -1037,7 +1073,16 @@ function registerIpc(): void {
       if (!runMode.sendsNetwork) {
         return { delivered: false, reason: "A fixture run sends nothing." };
       }
-      return feedbackDelivery.deliver(parsed);
+      const result = await feedbackDelivery.deliver(parsed);
+      // The count is of notes that actually reached the founders, and it says
+      // how many images rode along as a rung of the same ladder session counts
+      // travel on — never a filename, a caption, or a word of the note.
+      if (result.delivered) {
+        recordProductEvent(PRODUCT_EVENT.FEEDBACK_SEND, {
+          image_count: productSessionCountBucket(parsed.images.length),
+        });
+      }
+      return result;
     },
   );
 

@@ -31,6 +31,10 @@ export function registerVoiceRuntimeIpc(dependencies: VoiceRuntimeIpcDependencie
     if (!trustedSender(event) || (active !== true && active !== false)) return;
     const displayId = panels.displayIdFor(event.sender);
     if (displayId !== undefined) panels.setVoiceExchange(displayId, active);
+    // The opening edge alone. Counting both would make one exchange two, and
+    // the pair says nothing the start does not: how long it ran is the voice
+    // service's question, not this one's.
+    if (active) dependencies.recordProductEvent(PRODUCT_EVENT.VOICE_EXCHANGE, {});
   });
   ipcMain.on(channels.openMicrophoneSettings, (event) => {
     if (!trustedSender(event)) return;

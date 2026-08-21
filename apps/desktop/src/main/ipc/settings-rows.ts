@@ -274,6 +274,12 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
     save: (scope) => settingsStore.resetSettings(scope),
     async apply(result, scope, event) {
       if (result.reason) return;
+      // One event for the reset itself rather than a `setting:update` per
+      // field it touched. A scope returns a whole group at once, so per-field
+      // counts would read as a burst of deliberate changes nobody made — and
+      // the scope's own name is not counted for the same reason the fields
+      // are not: the fact that people reset is the question here.
+      recordProductEvent(PRODUCT_EVENT.SETTINGS_RESET, {});
       for (const field of APP_SETTING_FIELDS) {
         const definition = APP_SETTING_SCHEMA[field];
         if (!("resetScope" in definition) || definition.resetScope !== scope) continue;

@@ -259,6 +259,15 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       )?.url;
       if (!url) return { status: SESSION_OPEN_RESULT_STATUS.UNSUPPORTED };
       await openExternal(url);
+      // A roster reports its tracker id as a string; only one this build's own
+      // vocabulary names has anything to be counted under, exactly as the
+      // session opens narrow their provider id.
+      if (isIssueTrackerId(identity.trackerId)) {
+        recordProductEvent(PRODUCT_EVENT.ISSUE_ACT_SEND, {
+          tracker_id: identity.trackerId,
+          issue_act: PRODUCT_ISSUE_ACT.ISSUE_OPEN,
+        });
+      }
       return { status: SESSION_OPEN_RESULT_STATUS.OPENED };
     },
     failure: () => ({
@@ -445,6 +454,9 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       }
       attentionRequests.set(identity, ask);
       broadcastNoticeAsks();
+      countSessionAct(identity.providerId, PRODUCT_SESSION_ACT.NOTICE_REQUEST, {
+        status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED,
+      });
       // The status rides the acceptance because the ask may already be
       // answered: a session asked about after it finished has no later finish
       // coming, and the reply should say so rather than promise one.
@@ -471,6 +483,9 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
         };
       }
       broadcastNoticeAsks();
+      countSessionAct(identity.providerId, PRODUCT_SESSION_ACT.NOTICE_WITHDRAW, {
+        status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED,
+      });
       return { status: ATTENTION_REQUEST_RESULT_STATUS.ACCEPTED, sessionStatus: session.status };
     },
   );

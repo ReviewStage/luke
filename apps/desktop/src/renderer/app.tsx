@@ -1,3 +1,8 @@
+import {
+  PRODUCT_PANEL_SOURCE,
+  PRODUCT_SEARCH_SURFACE,
+  PRODUCT_SURFACE_EVENT,
+} from "@sidecar/analytics";
 import type { SessionNoticeAsk } from "@sidecar/attention";
 import type { CredentialProviderId } from "@sidecar/credentials";
 import {
@@ -610,6 +615,11 @@ export function App(): React.JSX.Element {
       // a credential entry returning from the key slot, the evidence run that
       // starts in it — set their page right after this reset.
       setSettingsView(SETTINGS_VIEW.ROOT);
+      // `PanelTab` and the counted tab are the same union: the vocabulary
+      // derives its set from the guide's, which is what `PANEL_TAB` aliases.
+      window.sidecar.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.PANEL_TAB_CHANGE, {
+        panel_tab: next,
+      });
     },
     [setSettingsView, setTab],
   );
@@ -1746,6 +1756,9 @@ export function App(): React.JSX.Element {
     changeTab(PANEL_TAB.SESSIONS);
     setSearchOpen(true);
     focusSearchField(SESSION_SEARCH_INPUT_ID);
+    window.sidecar.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.SEARCH_OPEN, {
+      search_surface: PRODUCT_SEARCH_SURFACE.SESSIONS,
+    });
   }, [changeTab]);
 
   /**
@@ -1768,6 +1781,9 @@ export function App(): React.JSX.Element {
   const openSettingsSearch = useCallback(() => {
     setSettingsSearchOpen(true);
     focusSearchField(SETTINGS_SEARCH_INPUT_ID);
+    window.sidecar.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.SEARCH_OPEN, {
+      search_surface: PRODUCT_SEARCH_SURFACE.SETTINGS,
+    });
   }, []);
 
   /**
@@ -2496,7 +2512,14 @@ export function App(): React.JSX.Element {
       // the focus is the point and stays where the keyboard put it.
       if (event.detail > 0) event.currentTarget.blur();
       cancelHover();
-      void changeMode(presentationOf() !== PANEL_PRESENTATION.PANEL);
+      const opening = presentationOf() !== PANEL_PRESENTATION.PANEL;
+      // The press closes as often as it opens, and a close is not an open.
+      if (opening) {
+        window.sidecar.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.PANEL_OPEN, {
+          panel_source: PRODUCT_PANEL_SOURCE.CAPSULE,
+        });
+      }
+      void changeMode(opening);
     },
     [cancelHover, changeMode, presentationOf],
   );
@@ -3319,7 +3342,10 @@ export function App(): React.JSX.Element {
                 }
                 return superset;
               })(),
-              onQuit: () => window.sidecar.quit(),
+              onQuit: () => {
+                window.sidecar.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.APP_QUIT, {});
+                window.sidecar.quit();
+              },
               shortcuts,
               searchOpen: settingsSearchOpen,
               onSearchClose: closeSettingsSearch,

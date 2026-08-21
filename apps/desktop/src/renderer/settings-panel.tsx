@@ -1,3 +1,4 @@
+import { PRODUCT_SURFACE_EVENT } from "@sidecar/analytics";
 import { GOOGLE_CALENDAR_ID, GOOGLE_CALENDAR_NAME } from "@sidecar/calendar/vocabulary";
 import type { CredentialProvider } from "@sidecar/credentials";
 import {
@@ -70,6 +71,7 @@ import {
   VOICE_SOURCE,
   type VoiceSource,
 } from "#shared/contracts";
+import { SETTINGS_VIEW_COUNTED_AS } from "#shared/product-vocabulary";
 import {
   CREDENTIAL_PLACEHOLDER,
   type CredentialEntryControl,
@@ -954,6 +956,7 @@ function SwitchRow({
   ariaLabel,
   errand,
   changed,
+  disabled,
   onChange,
 }: {
   label: string;
@@ -965,6 +968,12 @@ function SwitchRow({
   errand?: ErrandTarget;
   /** Whether the stored value differs from the default, which earns the mark. */
   changed?: boolean;
+  /**
+   * Whether another switch has already decided this one's answer. Drawn rather
+   * than hidden, so a switch a wider one is holding off still says what it is
+   * and where it stands.
+   */
+  disabled?: boolean;
   onChange: (enabled: boolean) => Promise<string | undefined>;
 }): React.JSX.Element {
   const { busy, rejection, run } = useSettingWrite(onChange);
@@ -985,7 +994,7 @@ function SwitchRow({
           aria-label={ariaLabel ?? label}
           className="switch"
           {...(errand ? errandTargetProps(errand) : undefined)}
-          disabled={busy}
+          disabled={busy || disabled === true}
           onClick={() => run(!checked)}
         >
           <span className="switch-thumb" />
@@ -2308,7 +2317,12 @@ function SettingsNavRow({
       type="button"
       id={settingsNavRowId(view)}
       className="settings-nav"
-      onClick={() => onOpen(view)}
+      onClick={() => {
+        window.sidecar.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.SETTINGS_VIEW_OPEN, {
+          settings_view: SETTINGS_VIEW_COUNTED_AS[view],
+        });
+        onOpen(view);
+      }}
     >
       <span className="settings-nav-mark" aria-hidden="true">
         {page.icon}
