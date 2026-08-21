@@ -96,6 +96,29 @@ Trust constraints:
   absence stands rather than an improvised control. Widening the invocation
   set further, or observing another provider this way, is a product decision,
   not an implementation detail.
+- A message to a local Cursor chat is the same bounded CLI exception at one
+  remove: Cursor's own `cursor-agent` CLI documents resuming a chat by id and
+  taking one prompt non-interactively, so the one write Luke makes through it
+  is the message the developer just asked to send to a chat the latest
+  observation advertised for one. The advertisement itself is bounded on
+  every side — the turn is settled, because a resume into an open turn would
+  race it; the folder is the one Cursor's own workspace record names, because
+  the resume must be pinned there with `--workspace` or the CLI forks the
+  chat's transcript under the invoking directory's project; the CLI is
+  installed; and the Cursor app does not hold the chat, because Cursor does
+  not document whether an app window shows a turn landed behind it, and a
+  message the developer cannot see land is worse than none. The invocation is
+  direct without a shell, its arguments fixed by the build beside the
+  observed chat id, the observed folder, and the developer's own words as a
+  single argument behind an end-of-options separator. The moment of the act
+  re-checks what the advertisement rested on: the login is probed again by
+  exit code alone, and the chat's transcript must still stand, because the
+  CLI silently starts a fresh chat under an id it does not know, so a stale
+  id must refuse rather than fork. Nothing is read out of the launched turn —
+  the transcript observation already reads is the report — and a turn that
+  outlives the short refusal window is a delivered message, never a process
+  to kill. This authorizes no other `cursor-agent` command; widening it is a
+  product decision, not an implementation detail.
 - One registration is the exception the previous rule's word "require" leaves
   room for, and it is bounded on every side: Luke may merge an observation
   hook into a provider's own user-level hook configuration (today Claude

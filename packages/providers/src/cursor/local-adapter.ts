@@ -1,17 +1,24 @@
+import { execFile, spawn } from "node:child_process";
+import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   maximumSessionRecapLength,
+  PROVIDER_ACT_RESULT_STATUS,
+  type ProviderMessageResult,
+  type ProviderSessionMessage,
   type ProviderSessionObservation,
   SESSION_COMPLETION_CAUSE,
   SESSION_STATUS,
   type SessionDetail,
   type SessionStatus,
+  sessionMessageText,
   UNKNOWN_WORKSPACE_LABEL,
 } from "@sidecar/session";
 import {
   isRecord,
+  isWireNumber,
   isWireString,
   oneLine,
   resolveOptions,
@@ -103,6 +110,17 @@ const CURSOR_APP_ARCHIVED_CHAT_QUERY =
 const CURSOR_TRANSCRIPT_FILE_EXTENSION = ".jsonl";
 const CURSOR_WORKSPACE_FILE = "workspace.json";
 
+/**
+ * Cursor's own record, inside a project directory, of the folder the project
+ * runs in and the fact that its CLI trusts it. Where it exists it names the
+ * exact folder — no reduced-name matching — and a folder the CLI trusts is
+ * one a resume pinned there will not refuse.
+ */
+const CURSOR_WORKSPACE_TRUSTED_FILE = ".workspace-trusted";
+const CURSOR_WORKSPACE_TRUSTED_FIELD = {
+  WORKSPACE_PATH: "workspacePath",
+} as const;
+
 const CURSOR_WORKSPACE_FIELD = {
   /** A window opened on a single folder. Cursor omits it for every other window. */
   FOLDER: "folder",
@@ -163,6 +181,14 @@ export interface CursorLocalAdapterOptions {
    * hooks only ever sharpen what those already showed.
    */
   hookEventsDirectory?: () => string | undefined;
+  /** How the adapter reaches Cursor's own CLI; tests inject one that spawns nothing. */
+  cursorAgent?: CursorAgentRunner;
+}
+
+/** Everything a send must still know about one chat that advertised taking one. */
+interface CursorSendTarget {
+  folderPath: string;
+  transcriptFilePath: string;
 }
 
 interface CursorTranscriptCandidate extends SessionFileCandidate {
@@ -217,6 +243,7 @@ function folderPathFromWorkspaceRecord(source: string): string | undefined {
 class CursorWorkspaceLabels {
   readonly #directory: string;
   readonly #labelsByProjectName = new Map<string, string | undefined>();
+  readonly #foldersByProjectName = new Map<string, string | undefined>();
   readonly #readWorkspaceRecords = new Set<string>();
 
   constructor(directory: string) {
@@ -231,7 +258,7 @@ class CursorWorkspaceLabels {
   async resolve(projectDirectoryNames: readonly string[]): Promise<void> {
     if (
       projectDirectoryNames.every((name) =>
-        this.#labelsByProjectName.has(canonicalProjectName(name)),
+        this.#foldersByProjectName.has(canonicalProjectName(name)),
       )
     ) {
       return;
@@ -254,17 +281,32 @@ class CursorWorkspaceLabels {
     );
   }
 
+  /**
+   * The folder Cursor's own record names for a project, when exactly one does.
+   * Stricter than the label on purpose: two folders can reduce to one project
+   * name and still agree on what to call it, but a message pinned to the wrong
+   * folder would fork the chat it meant to continue, so any ambiguity names
+   * nowhere to send.
+   */
+  folder(projectDirectoryName: string): string | undefined {
+    return this.#foldersByProjectName.get(canonicalProjectName(projectDirectoryName));
+  }
+
   #record(folderPath: string): void {
     const projectName = canonicalProjectName(folderPath);
     const label = workspaceLabel(folderPath);
     if (!this.#labelsByProjectName.has(projectName)) {
       this.#labelsByProjectName.set(projectName, label);
+      this.#foldersByProjectName.set(projectName, folderPath);
       return;
     }
     // Two folders can reduce to one project name. When they disagree about
     // what to call it, Luke names neither.
     if (this.#labelsByProjectName.get(projectName) !== label) {
       this.#labelsByProjectName.set(projectName, undefined);
+    }
+    if (this.#foldersByProjectName.get(projectName) !== folderPath) {
+      this.#foldersByProjectName.set(projectName, undefined);
     }
   }
 }
@@ -526,6 +568,134 @@ function detailFor(
   };
 }
 
+/**
+ * The invocations this adapter may make of Cursor's own `cursor-agent` CLI,
+ * fixed by the build the way a cloud adapter's routes are. `status` answers by
+ * exit code alone whether the CLI holds the user's login. The send is the
+ * CLI's documented resume: `--resume` names the observed chat, `--workspace`
+ * pins the turn to the folder Cursor's own record names — a resume run
+ * anywhere else appends the turn under that other folder's project and forks
+ * the chat it meant to continue — `--print` keeps it non-interactive, and the
+ * `--` before the message ends option parsing, so the developer's own words
+ * can never read as a flag.
+ */
+const CURSOR_AGENT_CLI = {
+  BINARY: "cursor-agent",
+  LOGIN_PROBE_ARGV: ["status"],
+  RESUME_FLAG: "--resume",
+  WORKSPACE_FLAG: "--workspace",
+  SEND_ARGV: ["--print", "--output-format", "json"],
+  ARGUMENT_SEPARATOR: "--",
+} as const;
+
+const CURSOR_SEND_DEFAULTS = {
+  LOGIN_PROBE_TIMEOUT_MS: 8_000,
+  /**
+   * How long a launched resume is watched for an early refusal — a folder the
+   * CLI does not trust, a login gone since the probe — before the turn is let
+   * run. A resumed turn is a whole agent turn and can take minutes; holding
+   * the send open for it would be a deadline that kills the very turn it
+   * delivered, so past this window the send is delivered and the transcript
+   * the adapter already observes is the report.
+   */
+  EARLY_REFUSAL_WINDOW_MS: 8_000,
+} as const;
+
+/**
+ * Where `cursor-agent` actually lands on a Mac, beside whatever PATH an app
+ * launched from the Finder inherits: the CLI's own installer uses
+ * `~/.local/bin`, and package managers use the usual two.
+ */
+function wellKnownCursorAgentDirectories(): readonly string[] {
+  return [path.join(os.homedir(), ".local", "bin"), "/opt/homebrew/bin", "/usr/local/bin"];
+}
+
+/** The one launch result: an exit inside the refusal window, or a turn running. */
+export type CursorAgentLaunch = { exitCode: number } | "running";
+
+/**
+ * How the adapter reaches Cursor's own CLI, injectable so tests never spawn
+ * one. Every method runs the binary directly — no shell, so nothing in an
+ * argument can become a second command.
+ */
+export interface CursorAgentRunner {
+  /** The installed binary's path, or nothing on a machine without one. */
+  locate(): Promise<string | undefined>;
+  /** Whether the CLI holds a login, by exit code alone; stdout is never read. */
+  probeLogin(binaryPath: string): Promise<boolean>;
+  /** Starts the resume detached and watches only for an early refusal. */
+  launch(binaryPath: string, argv: readonly string[]): Promise<CursorAgentLaunch>;
+}
+
+async function locateCursorAgent(): Promise<string | undefined> {
+  const pathDirectories = (process.env.PATH ?? "").split(path.delimiter).filter(Boolean);
+  for (const directory of [...pathDirectories, ...wellKnownCursorAgentDirectories()]) {
+    const candidate = path.join(directory, CURSOR_AGENT_CLI.BINARY);
+    try {
+      await fs.access(candidate, fs.constants.X_OK);
+      return candidate;
+    } catch {
+      // Not here; the next directory may hold it.
+    }
+  }
+  return undefined;
+}
+
+const defaultCursorAgentRunner: CursorAgentRunner = {
+  locate: locateCursorAgent,
+  probeLogin: (binaryPath) =>
+    new Promise((resolve, reject) => {
+      execFile(
+        binaryPath,
+        CURSOR_AGENT_CLI.LOGIN_PROBE_ARGV,
+        { timeout: CURSOR_SEND_DEFAULTS.LOGIN_PROBE_TIMEOUT_MS, windowsHide: true },
+        (error) => {
+          if (error === null) {
+            resolve(true);
+            return;
+          }
+          // SAFETY: Node's execFile callback reports command failures as ErrnoException objects.
+          const commandError = error as NodeJS.ErrnoException & { code?: unknown };
+          if (isWireNumber(commandError.code)) {
+            resolve(false);
+            return;
+          }
+          reject(new Error(`${CURSOR_AGENT_CLI.BINARY} could not be run`));
+        },
+      );
+    }),
+  launch: (binaryPath, argv) =>
+    new Promise((resolve) => {
+      // Detached with no pipes: the turn's output lives in the transcript the
+      // adapter already observes, and the send must not hold a handle open
+      // for however long the turn runs.
+      const child = spawn(binaryPath, [...argv], {
+        detached: true,
+        stdio: "ignore",
+        windowsHide: true,
+      });
+      let settled = false;
+      const settle = (result: CursorAgentLaunch) => {
+        if (settled) return;
+        settled = true;
+        resolve(result);
+      };
+      const window = setTimeout(() => {
+        child.unref();
+        settle("running");
+      }, CURSOR_SEND_DEFAULTS.EARLY_REFUSAL_WINDOW_MS);
+      window.unref();
+      child.once("exit", (code) => {
+        clearTimeout(window);
+        settle({ exitCode: code ?? 1 });
+      });
+      child.once("error", () => {
+        clearTimeout(window);
+        settle({ exitCode: 1 });
+      });
+    }),
+};
+
 export function defaultCursorHome(): string {
   return path.join(os.homedir(), ".cursor");
 }
@@ -560,10 +730,15 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
   readonly #transcriptReadTailBytes: number | undefined;
   readonly #transcriptMaximumRenderedLength: number | undefined;
   readonly #hookEventsDirectory: (() => string | undefined) | undefined;
+  readonly #cursorAgent: CursorAgentRunner;
+  #cursorAgentBinaryPath: string | undefined;
+  #trustedFoldersByProject: ReadonlyMap<string, string> = new Map();
+  readonly #sendTargets = new Map<string, CursorSendTarget>();
 
   constructor(options: CursorLocalAdapterOptions = {}) {
     super(options);
     this.#hookEventsDirectory = options.hookEventsDirectory;
+    this.#cursorAgent = options.cursorAgent ?? defaultCursorAgentRunner;
     this.#cursorHome = options.cursorHome ?? defaultCursorHome();
     this.#workspaceLabels = new CursorWorkspaceLabels(
       options.workspaceStorageDirectory ?? defaultWorkspaceStorageDirectory(),
@@ -608,9 +783,56 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
   protected override async prepare(
     candidates: readonly CursorTranscriptCandidate[],
   ): Promise<void> {
-    await this.#workspaceLabels.resolve(
-      candidates.map((candidate) => candidate.projectDirectoryName),
+    this.#sendTargets.clear();
+    const projectDirectoryNames = [
+      ...new Set(candidates.map((candidate) => candidate.projectDirectoryName)),
+    ];
+    const [binaryPath, trustedFolders] = await Promise.all([
+      // Located every pass, so an install or removal is honoured on the next
+      // one — the same cadence a signed-out CLI is honoured on.
+      this.#cursorAgent.locate().catch(() => undefined),
+      this.#trustedFolders(projectDirectoryNames),
+      this.#workspaceLabels.resolve(projectDirectoryNames),
+    ]);
+    this.#cursorAgentBinaryPath = binaryPath;
+    this.#trustedFoldersByProject = trustedFolders;
+  }
+
+  /**
+   * The folder each project's own `.workspace-trusted` record names, where one
+   * exists. It is the send path's preferred source: exact where the workspace
+   * records need reduced-name matching, and present exactly where the CLI
+   * already trusts the folder a resume would be pinned to.
+   */
+  async #trustedFolders(
+    projectDirectoryNames: readonly string[],
+  ): Promise<ReadonlyMap<string, string>> {
+    const folders = new Map<string, string>();
+    await Promise.all(
+      projectDirectoryNames.map(async (projectDirectoryName) => {
+        const record = await readTextFile(
+          path.join(
+            this.#cursorHome,
+            CURSOR_DIRECTORY.PROJECTS,
+            projectDirectoryName,
+            CURSOR_WORKSPACE_TRUSTED_FILE,
+          ),
+        );
+        if (!record) return;
+        let parsed: WireBoundaryInput;
+        try {
+          parsed = JSON.parse(record);
+        } catch {
+          return;
+        }
+        const wire = wireRecord(unparsedWire(parsed));
+        const workspacePath = wire?.[CURSOR_WORKSPACE_TRUSTED_FIELD.WORKSPACE_PATH];
+        if (isWireString(workspacePath) && path.isAbsolute(workspacePath)) {
+          folders.set(projectDirectoryName, workspacePath);
+        }
+      }),
     );
+    return folders;
   }
 
   override readTranscript(providerSessionId: string): Promise<string | undefined> {
@@ -661,9 +883,31 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
       const isFresh = now - observedAt <= activeSessionFreshnessMs;
       status = statusWithHookEvent(status, hookEvent.event, isFresh);
     }
-    const link = this.#appChats.has(candidate.providerSessionId)
-      ? cursorChatLink(candidate.providerSessionId)
-      : undefined;
+    const appHeld = this.#appChats.has(candidate.providerSessionId);
+    const link = appHeld ? cursorChatLink(candidate.providerSessionId) : undefined;
+    // A message is advertised only where the CLI's documented resume can
+    // honestly land one: the turn is settled — a resume into an open turn
+    // would race it — the folder to pin the resume to is named by Cursor's
+    // own record, the CLI is installed, and the app does not hold the chat,
+    // because Cursor does not document whether an app window shows a turn
+    // landed behind it, and a message the developer cannot see land is worse
+    // than none.
+    const folderPath =
+      this.#trustedFoldersByProject.get(candidate.projectDirectoryName) ??
+      this.#workspaceLabels.folder(candidate.projectDirectoryName);
+    const canReceiveMessage =
+      parsed.turn !== undefined &&
+      folderPath !== undefined &&
+      this.#cursorAgentBinaryPath !== undefined &&
+      !appHeld;
+    if (canReceiveMessage && folderPath !== undefined) {
+      this.#sendTargets.set(candidate.providerSessionId, {
+        folderPath,
+        transcriptFilePath: candidate.filePath,
+      });
+    } else {
+      this.#sendTargets.delete(candidate.providerSessionId);
+    }
     return {
       providerSessionId: candidate.providerSessionId,
       title: label,
@@ -671,10 +915,88 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
       observedAt,
       detail: detailFor(label, status, link, parsed.activity),
       ...(parsed.recap ? { recap: parsed.recap } : undefined),
+      ...(canReceiveMessage ? { canReceiveMessage: true } : undefined),
       ...(status === SESSION_STATUS.COMPLETE
         ? { completionCause: SESSION_COMPLETION_CAUSE.SESSION_CLOSED }
         : undefined),
       ...(link ? { applications: [cursorApplication(link)] } : undefined),
     };
+  }
+
+  /**
+   * Hands the developer's own message to one observed chat through Cursor's
+   * documented CLI resume — the bounded exception CLAUDE.md's trust
+   * constraints describe. The chat must have advertised taking one on the
+   * latest pass, and the moment of the act re-checks what the advertisement
+   * rested on: the transcript must still stand — the CLI silently starts a
+   * fresh chat under an id it does not know, so a stale id must refuse rather
+   * than fork — and the login is probed again, because a CLI signed out since
+   * the pass must refuse before anything runs. Nothing is read out of a
+   * launched turn: the transcript the adapter already observes is the report.
+   */
+  override async sendMessage(message: ProviderSessionMessage): Promise<ProviderMessageResult> {
+    const text = sessionMessageText(message.text);
+    if (!text) {
+      return {
+        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+        reason: "That message is empty or too long.",
+      };
+    }
+    const target = this.#sendTargets.get(message.providerSessionId);
+    if (!target) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+    const stats = await fileStats(target.transcriptFilePath);
+    if (!stats?.isFile()) {
+      return {
+        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+        reason: "That chat's transcript is gone, so nothing was sent.",
+      };
+    }
+    const binaryPath =
+      this.#cursorAgentBinaryPath ?? (await this.#cursorAgent.locate().catch(() => undefined));
+    if (!binaryPath) {
+      return {
+        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+        reason: "Cursor's agent CLI is not installed, so nothing was sent.",
+      };
+    }
+    let loggedIn: boolean;
+    try {
+      loggedIn = await this.#cursorAgent.probeLogin(binaryPath);
+    } catch {
+      return {
+        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+        reason: "Cursor's agent CLI could not answer, so nothing was sent.",
+      };
+    }
+    if (!loggedIn) {
+      return {
+        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+        reason: "Cursor's agent CLI is signed out, so nothing was sent.",
+      };
+    }
+    let launch: CursorAgentLaunch;
+    try {
+      launch = await this.#cursorAgent.launch(binaryPath, [
+        CURSOR_AGENT_CLI.RESUME_FLAG,
+        message.providerSessionId,
+        CURSOR_AGENT_CLI.WORKSPACE_FLAG,
+        target.folderPath,
+        ...CURSOR_AGENT_CLI.SEND_ARGV,
+        CURSOR_AGENT_CLI.ARGUMENT_SEPARATOR,
+        text,
+      ]);
+    } catch {
+      return {
+        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+        reason: "Cursor's agent CLI could not be started, so nothing was sent.",
+      };
+    }
+    if (launch !== "running" && launch.exitCode !== 0) {
+      return {
+        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+        reason: "Cursor's agent CLI refused the message.",
+      };
+    }
+    return { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED };
   }
 }

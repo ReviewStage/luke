@@ -466,6 +466,203 @@ test("bounds the phrase a tool call is named by", async (t) => {
   assert.ok(activity?.endsWith("…"));
 });
 
+test("advertises a message only where the CLI's resume can honestly land one", async (t) => {
+  const state = await temporaryCursorState(t);
+  await writeWorkspaceRecord(state, "9f1c", "/Users/test/luke");
+  await registerAppChats(state, ["app-chat"]);
+  const settled = [
+    messageRecord(TEST_ROLE.ASSISTANT, TEST_CONTENT_TYPE.TEXT),
+    turnEndedRecord(TEST_TURN_STATUS.SUCCESS),
+  ];
+  const open = [messageRecord(TEST_ROLE.USER, TEST_CONTENT_TYPE.TEXT)];
+  await writeTranscript(state, "Users-test-luke", "cli-chat-settled", settled, TEST_TIME - 5_000);
+  await writeTranscript(state, "Users-test-luke", "cli-chat-working", open, TEST_TIME - 6_000);
+  await writeTranscript(state, "Users-test-luke", "app-chat", settled, TEST_TIME - 7_000);
+  // A folder no workspace record names offers nowhere to pin the resume.
+  await writeTranscript(
+    state,
+    "Users-test-mystery",
+    "cli-chat-unplaced",
+    settled,
+    TEST_TIME - 8_000,
+  );
+
+  const adapter = new CursorLocalSessionAdapter({
+    ...state,
+    now: () => TEST_TIME,
+    cursorAgent: {
+      locate: async () => "/opt/test/cursor-agent",
+      probeLogin: async () => true,
+      launch: async () => "running" as const,
+    },
+  });
+  const observations = await adapter.observe();
+
+  assert.deepEqual(
+    observations.map((observation) => [
+      observation.providerSessionId,
+      observation.canReceiveMessage,
+    ]),
+    [
+      ["cli-chat-settled", true],
+      ["cli-chat-working", undefined],
+      ["app-chat", undefined],
+      ["cli-chat-unplaced", undefined],
+    ],
+  );
+});
+
+test("a machine without the CLI advertises no message at all", async (t) => {
+  const state = await temporaryCursorState(t);
+  await writeWorkspaceRecord(state, "9f1c", "/Users/test/luke");
+  await writeTranscript(
+    state,
+    "Users-test-luke",
+    "cli-chat-settled",
+    [turnEndedRecord(TEST_TURN_STATUS.SUCCESS)],
+    TEST_TIME - 5_000,
+  );
+
+  const adapter = new CursorLocalSessionAdapter({
+    ...state,
+    now: () => TEST_TIME,
+    cursorAgent: {
+      locate: async () => undefined,
+      probeLogin: async () => true,
+      launch: async () => "running" as const,
+    },
+  });
+  const observations = await adapter.observe();
+
+  assert.equal(observations[0]?.canReceiveMessage, undefined);
+  const result = await adapter.sendMessage({
+    providerSessionId: "cli-chat-settled",
+    text: "carry on",
+  });
+  assert.equal(result.status, "unsupported");
+});
+
+test("a send runs the documented resume with the developer's words behind the separator", async (t) => {
+  const state = await temporaryCursorState(t);
+  await writeWorkspaceRecord(state, "9f1c", "/Users/test/luke");
+  await writeTranscript(
+    state,
+    "Users-test-luke",
+    "cli-chat-settled",
+    [turnEndedRecord(TEST_TURN_STATUS.SUCCESS)],
+    TEST_TIME - 5_000,
+  );
+  const launches: { binaryPath: string; argv: readonly string[] }[] = [];
+  const adapter = new CursorLocalSessionAdapter({
+    ...state,
+    now: () => TEST_TIME,
+    cursorAgent: {
+      locate: async () => "/opt/test/cursor-agent",
+      probeLogin: async () => true,
+      launch: async (binaryPath, argv) => {
+        launches.push({ binaryPath, argv });
+        return "running" as const;
+      },
+    },
+  });
+  await adapter.observe();
+
+  const result = await adapter.sendMessage({
+    providerSessionId: "cli-chat-settled",
+    text: "--continue where you left off",
+  });
+
+  assert.equal(result.status, "accepted");
+  assert.equal(launches[0]?.binaryPath, "/opt/test/cursor-agent");
+  // The message rides behind the end-of-options separator, so words that look
+  // like flags never read as flags, and the workspace pin is the folder
+  // Cursor's own record names for the chat's project.
+  assert.deepEqual(launches[0]?.argv, [
+    "--resume",
+    "cli-chat-settled",
+    "--workspace",
+    "/Users/test/luke",
+    "--print",
+    "--output-format",
+    "json",
+    "--",
+    "--continue where you left off",
+  ]);
+});
+
+test("a send refuses what the moment of the act no longer supports", async (t) => {
+  const state = await temporaryCursorState(t);
+  await writeWorkspaceRecord(state, "9f1c", "/Users/test/luke");
+  await writeTranscript(
+    state,
+    "Users-test-luke",
+    "cli-chat-settled",
+    [turnEndedRecord(TEST_TURN_STATUS.SUCCESS)],
+    TEST_TIME - 5_000,
+  );
+  const launches: string[] = [];
+  let loggedIn = false;
+  let earlyExitCode = 1;
+  const adapter = new CursorLocalSessionAdapter({
+    ...state,
+    now: () => TEST_TIME,
+    cursorAgent: {
+      locate: async () => "/opt/test/cursor-agent",
+      probeLogin: async () => loggedIn,
+      launch: async (_binaryPath, argv) => {
+        launches.push(argv.join(" "));
+        return { exitCode: earlyExitCode };
+      },
+    },
+  });
+  await adapter.observe();
+
+  // A chat that never advertised taking a message is refused before anything
+  // runs — the roster is the outer bound.
+  const unadvertised = await adapter.sendMessage({ providerSessionId: "ghost", text: "hello" });
+  assert.equal(unadvertised.status, "unsupported");
+  // A CLI signed out since the pass refuses before anything runs.
+  const signedOut = await adapter.sendMessage({
+    providerSessionId: "cli-chat-settled",
+    text: "hello",
+  });
+  assert.equal(signedOut.status, "rejected");
+  assert.equal(launches.length, 0);
+  // An early refusal — a folder the CLI does not trust — is an answer.
+  loggedIn = true;
+  const refused = await adapter.sendMessage({
+    providerSessionId: "cli-chat-settled",
+    text: "hello",
+  });
+  assert.equal(refused.status, "rejected");
+  assert.equal(launches.length, 1);
+  // A launch that outlives the refusal window is a delivered message: the
+  // transcript the adapter already observes is the report from here.
+  earlyExitCode = 0;
+  const delivered = await adapter.sendMessage({
+    providerSessionId: "cli-chat-settled",
+    text: "hello",
+  });
+  assert.equal(delivered.status, "accepted");
+  // A transcript gone since the pass refuses rather than letting the CLI
+  // silently start a fresh chat under the stale id.
+  await fs.rm(
+    path.join(
+      state.cursorHome,
+      CURSOR_PROJECTS_DIRECTORY,
+      "Users-test-luke",
+      CURSOR_TRANSCRIPTS_DIRECTORY,
+      "cli-chat-settled",
+    ),
+    { recursive: true, force: true },
+  );
+  const gone = await adapter.sendMessage({
+    providerSessionId: "cli-chat-settled",
+    text: "hello",
+  });
+  assert.equal(gone.status, "rejected");
+});
+
 test("the observation hook sharpens what the transcript alone cannot say", async (t) => {
   const state = await temporaryCursorState(t);
   await writeWorkspaceRecord(state, "9f1c", "/Users/test/luke");
