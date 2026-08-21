@@ -410,7 +410,9 @@ note stating whether a physical-notch check was performed. CI links generated
 evidence from the pull request description. Attach physical-device screenshots
 or recordings through GitHub's PR editor; do not commit generated evidence or
 one-off QA worksheets. Keep generated state and private planning files
-untracked.
+untracked. `docs/media/` is the one exception and is not evidence: it holds the
+README's own product screenshots, cut from a fixture capture and replaced
+whenever the surface they show has moved on.
 
 Biome is the executable style policy for TypeScript, JavaScript, JSON,
 Markdown, and CSS. Husky runs the same checks against staged files as a local
