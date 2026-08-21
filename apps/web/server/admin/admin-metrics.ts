@@ -1,5 +1,5 @@
 import { HOSTED_DAILY_LIMIT, HOSTED_METER, utcDayKey } from "../hosted/quota.js";
-import type { AdminViewer } from "./admin-access.js";
+import { type AdminViewer, isAdminRole } from "./admin-access.js";
 import { ADMIN_ERROR, ADMIN_HTTP_STATUS, errorResponse, jsonResponse } from "./http.js";
 
 /**
@@ -245,7 +245,7 @@ export interface AdminMetricsOptions {
   request: Request;
   /**
    * The signed-in browser viewer, or nothing when no valid session is present.
-   * `viewer.isAdmin` is the `admin_user` row read in the wrapper's seam.
+   * `viewer.role` is the account's own `role`, read from the session.
    */
   resolveViewer: (request: Request) => Promise<AdminViewer | undefined>;
   readMetrics: (now: number) => Promise<AdminMetrics>;
@@ -275,7 +275,7 @@ export async function handleAdminMetrics(options: AdminMetricsOptions): Promise<
   if (!viewer) {
     return errorResponse(ADMIN_HTTP_STATUS.UNAUTHORIZED, ADMIN_ERROR.NOT_SIGNED_IN);
   }
-  if (!viewer.isAdmin) {
+  if (!isAdminRole(viewer.role)) {
     return errorResponse(ADMIN_HTTP_STATUS.FORBIDDEN, ADMIN_ERROR.NOT_AUTHORIZED);
   }
 

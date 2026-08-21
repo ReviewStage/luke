@@ -124,7 +124,7 @@ function metricsRequest(method = "GET"): Request {
 const ADMIN_VIEWER: AdminViewer = {
   userId: "user-1",
   email: "dean@example.com",
-  isAdmin: true,
+  role: "admin",
 };
 
 function emptyMetrics(now: number): AdminMetrics {
@@ -150,7 +150,7 @@ test("the gate answers 405, 401, 403, and 200 as distinct outcomes", async () =>
 
   const forbidden = await handleAdminMetrics({
     request: metricsRequest(),
-    resolveViewer: async () => ({ ...ADMIN_VIEWER, isAdmin: false }),
+    resolveViewer: async () => ({ ...ADMIN_VIEWER, role: "user" }),
     readMetrics: async (now) => emptyMetrics(now),
   });
   assert.equal(forbidden.status, 403);

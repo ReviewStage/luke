@@ -1,45 +1,9 @@
 {
-  "id": "36fe2082-d63d-49af-af67-aaf0f9313eff",
+  "id": "768dba2c-68bf-451b-ae4c-aff7a32e6ef3",
   "prevId": "f3013dca-5b2a-4992-9d97-f51e2e6f562d",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
-    "public.admin_user": {
-      "name": "admin_user",
-      "schema": "",
-      "columns": {
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "granted_at": {
-          "name": "granted_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "admin_user_user_id_user_id_fk": {
-          "name": "admin_user_user_id_user_id_fk",
-          "tableFrom": "admin_user",
-          "tableTo": "user",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.account": {
       "name": "account",
       "schema": "",
@@ -1016,6 +980,13 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "role": {
+          "name": "role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'user'"
         }
       },
       "indexes": {},

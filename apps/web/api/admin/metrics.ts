@@ -1,5 +1,4 @@
 import type { AdminViewer } from "../../server/admin/admin-access.js";
-import { isAdminUser } from "../../server/admin/admin-grants.js";
 import {
   adminIntegrations,
   buildAdminMetrics,
@@ -19,10 +18,10 @@ function configured(name: string): boolean {
 /**
  * The admin dashboard's read. The logic lives behind seams in `server/admin/`;
  * this file hands it the deployment's real ones — the browser session the
- * maintainer signed in for, that account's own `admin_user` row, and which
- * integrations the environment has keys for. Admin status is read from the
- * database, never asserted by the request, and no secret value crosses into the
- * answer: only whether each key is present.
+ * maintainer signed in for, carrying that account's own `role`, and which
+ * integrations the environment has keys for. The role is read from the session,
+ * never asserted by the request, and no secret value crosses into the answer:
+ * only whether each key is present.
  */
 export default {
   fetch(request: Request): Promise<Response> {
@@ -35,7 +34,7 @@ export default {
       return {
         userId: account.id,
         email: account.email ?? undefined,
-        isAdmin: await isAdminUser(getDatabase(), account.id),
+        role: account.role,
       };
     };
 

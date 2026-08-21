@@ -533,9 +533,9 @@ export function AdminDashboard(): React.JSX.Element {
       case "forbidden":
         return (
           <Centered title="Not authorized">
-            You are signed in, but this account has no admin grant. Admin access is a row in the
-            database, granted to the accounts named in{" "}
-            <code className="font-mono">LUKE_ADMIN_EMAILS</code> when they sign in.
+            You are signed in, but this account does not have the admin role. Admin access is the{" "}
+            <code className="font-mono">admin</code> role on your account, granted to the accounts
+            named in <code className="font-mono">LUKE_ADMIN_EMAILS</code> when they sign in.
           </Centered>
         );
       case "error":

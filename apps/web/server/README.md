@@ -121,33 +121,38 @@ browser-only and the desktop never validates it.
 Authorization is two steps and fails closed. The gate is a first-party browser
 session — resolved through Better Auth's own `getSession`, the cookie a
 maintainer signs in for on this site, not the desktop's bearer token — and then
-the presence of that account's row in the Luke-owned `admin_user` table
-(`server/db/admin-schema.ts`). An anonymous request is `401 not-signed-in` (the
-page offers sign-in), a signed-in account with no admin row is `403
+that account's `role`. An anonymous request is `401 not-signed-in` (the page
+offers sign-in), a signed-in account whose role is not `admin` is `403
 not-authorized`, and the metrics are read only past both. A seam that throws —
 auth or the database not answering — is a `503 unavailable` JSON refusal rather
 than an unhandled crash, so the page says "try again" instead of failing to
 parse a platform error page.
 
-**Admin status lives in the database, not the codebase.** A row in `admin_user`
-is the whole grant; it cascades away with the account it names. Who holds one is
-managed by inserting and deleting rows, not by editing and redeploying. The
-bootstrap is `LUKE_ADMIN_EMAILS`, a comma-separated list read from the
-environment (never committed, blank/absent = empty set, never a wildcard):
+**Admin status is a plain-text `role` column on the `user` table, managed by
+Better Auth.** It is declared as a `user.additionalFields` entry in `auth.ts`
+(`type: "string"`, default `"user"`, `input: false` so a sign-up cannot assert
+its own role), generated into `server/db/auth-schema.ts` by `pnpm auth:generate`,
+and returned on the session — so the dashboard reads the role with no membership
+query of its own. Who holds `admin` is managed by updating rows, not by editing
+and redeploying. The bootstrap is `LUKE_ADMIN_EMAILS`, a comma-separated list
+read from the environment (never committed, blank/absent = empty set, never a
+wildcard):
 
 - On the sign-in that creates a session, an account whose address is on the list
-  is granted its admin row by the `databaseHooks.session.create` hook in
+  is promoted to `role = 'admin'` by the `databaseHooks.session.create` hook in
   `auth.ts` — the one place an admin grant is written. It is idempotent and a
   no-op when the list is empty, so ordinary sign-ins pay nothing and the
   dashboard read stays entirely read-only.
-- `pnpm admin:seed` (run in the Vercel build after `auth:seed`) grants the row to
-  accounts on the list that already had a user row before being added, so a
-  maintainer who signed in earlier is promoted without signing in again.
-- To grant or revoke by hand, insert or delete an `admin_user` row directly
-  (`insert into admin_user (user_id) select id from "user" where email = '…';`).
+- `pnpm admin:seed` (run in the Vercel build after `auth:seed`) promotes accounts
+  on the list that already had a user row before being added, so a maintainer who
+  signed in earlier is granted without signing in again.
+- To grant or revoke by hand, set the column directly
+  (`update "user" set role = 'admin' where email = '…';`, or back to `'user'`).
 
-To sign in: open `/admin`, use the sign-in card (GitHub or Google), and — with
-your address on `LUKE_ADMIN_EMAILS` or an `admin_user` row already present — the
+After changing the `additionalFields` (or any Better Auth config), regenerate the
+schema and migration: `pnpm auth:generate`, then `pnpm db:generate`, and commit
+both. To sign in: open `/admin`, use the sign-in card (GitHub or Google), and —
+with your address on `LUKE_ADMIN_EMAILS` or your role already `admin` — the
 dashboard loads. A Vercel **preview** deployment additionally sits behind
 Deployment Protection, which redirects the dashboard's own `/api/admin/metrics`
 fetch to Vercel's SSO; the page reports that redirect explicitly. Disable
@@ -186,5 +191,5 @@ rather than a page of zeros under a green light.
 
 The dashboard needs no secret of its own. It reuses the auth service's
 configuration (`BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, and at least one social
-provider) and reads `LUKE_ADMIN_EMAILS` for the bootstrap. With no `admin_user`
-row and no matching seed address, no one is admitted.
+provider) and reads `LUKE_ADMIN_EMAILS` for the bootstrap. With no account
+holding the `admin` role and no matching seed address, no one is admitted.

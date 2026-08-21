@@ -2,7 +2,11 @@ import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { betterAuth } from "better-auth";
 import { jwt, lastLoginMethod } from "better-auth/plugins";
-import { ADMIN_SEED_EMAILS_ENVIRONMENT, adminSeedEmailsFromEnv } from "./admin/admin-access.js";
+import {
+  ADMIN_SEED_EMAILS_ENVIRONMENT,
+  adminSeedEmailsFromEnv,
+  USER_ROLE,
+} from "./admin/admin-access.js";
 import { promoteSeededAdmin } from "./admin/admin-grants.js";
 import {
   ACCOUNT_TOKEN_STORAGE,
@@ -21,9 +25,18 @@ export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET,
   database: drizzleAdapter(getDatabase(), { provider: "pg", schema }),
   account: ACCOUNT_TOKEN_STORAGE,
+  // Admin access is a plain-text `role` on the user, managed by Better Auth:
+  // declared here, generated into the schema by `auth:generate`, and returned on
+  // the session so the dashboard reads it without a query of its own. `input:
+  // false` keeps a sign-up from asserting its own role — only the server sets it.
+  user: {
+    additionalFields: {
+      role: { type: "string", required: false, defaultValue: USER_ROLE.USER, input: false },
+    },
+  },
   // The one place an admin grant is written: on the sign-in that creates a
-  // session, an account whose address is on LUKE_ADMIN_EMAILS is seeded its
-  // admin row. Idempotent and a no-op when the seed list is empty, so ordinary
+  // session, an account whose address is on LUKE_ADMIN_EMAILS is promoted to the
+  // admin role. Idempotent and a no-op when the seed list is empty, so ordinary
   // sign-ins pay nothing and the dashboard read stays entirely read-only.
   databaseHooks: {
     session: {
