@@ -85,7 +85,10 @@
     color var(--duration-hover) ease;
 }
 
-.options-control[data-narrowed="true"]:hover,
+/* The pill lights for the toggle's own hover, not the wrapper's: the X is a
+   second press inside the same shape, and a hover there must name the segment
+   it will take rather than promising the whole pill. */
+.options-control[data-narrowed="true"]:has(.options-button:hover),
 .options-control[data-narrowed="true"]:has(.options-button[data-active="true"]) {
   background: var(--raised-strong);
 }
@@ -114,7 +117,6 @@
 }
 
 .options-control[data-narrowed="true"] .options-button {
-  padding-right: 4px;
   background: none;
   color: inherit;
 }
@@ -151,19 +153,19 @@
   color: var(--text-primary);
 }
 
-/* The way out of a held selection without opening the sheet. Colour is the
-   whole hover: the button must not grow or move inside a pill that names the
-   narrowing. Padding is zeroed by hand — the engine's own button padding is
-   asymmetric, and in a 20px disc it reads as the glyph leaning to one side. */
+/* The way out of a held selection without opening the sheet. Not a disc of its
+   own but the pill's right segment, split from the filter names by a hairline,
+   so the control reads as one joint button with two presses. It stretches to
+   the pill's full height and rounds only its outer corners, at the pill's own
+   radius, so its hover fill meets the hairline and the pill's edge with no
+   background of its own at rest. */
 .options-clear {
   display: grid;
-  width: 20px;
-  height: 20px;
+  align-self: stretch;
   flex: 0 0 auto;
-  margin-right: 4px;
-  padding: 0;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.14);
+  padding: 0 8px;
+  border-left: 1px solid var(--hairline);
+  border-radius: 0 10px 10px 0;
   color: var(--text-tertiary);
   place-items: center;
   transition:
@@ -172,7 +174,7 @@
 }
 
 .options-clear:hover {
-  background: rgba(255, 255, 255, 0.22);
+  background: var(--raised-strong);
   color: var(--text-primary);
 }
 

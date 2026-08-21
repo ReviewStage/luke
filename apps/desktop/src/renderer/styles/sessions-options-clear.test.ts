@@ -59,11 +59,11 @@ test("the narrowed pill is the wrapper, so the X can sit inside it", () => {
   assert.match(pill, /border-radius: 10px;/);
 });
 
-test("the X is a disc that must not grow inside the pill", () => {
+test("the X is the pill's own right segment, split off by a hairline", () => {
   const clear = rule(".options-clear");
-  assert.match(clear, /width: 20px;/);
-  assert.match(clear, /height: 20px;/);
-  assert.match(clear, /padding: 0;/);
+  assert.match(clear, /align-self: stretch;/);
+  assert.match(clear, /border-left: 1px solid var\(--hairline\);/);
+  assert.match(clear, /border-radius: 0 10px 10px 0;/);
   assert.match(clear, /flex: 0 0 auto;/);
-  assert.match(clear, /margin-right: 4px;/);
+  assert.doesNotMatch(clear, /margin/);
 });
