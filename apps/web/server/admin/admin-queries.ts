@@ -422,6 +422,7 @@ export async function readAdminUsersSource(
         id: user.id,
         name: user.name,
         email: user.email,
+        image: user.image,
         role: user.role,
         createdAt: user.createdAt,
         activeDays: sql<number | string | null>`count(${hostedUsage.day})`,
@@ -435,7 +436,7 @@ export async function readAdminUsersSource(
         and(eq(hostedUsage.userId, user.id), gte(hostedUsage.day, windowStartDay)),
       )
       .where(scopeCondition(input.scope))
-      .groupBy(user.id, user.name, user.email, user.role, user.createdAt)
+      .groupBy(user.id, user.name, user.email, user.image, user.role, user.createdAt)
       .orderBy(sql`max(${hostedUsage.day}) desc nulls last`, desc(user.createdAt))
       .limit(ADMIN_USERS_LIMIT),
   ]);
@@ -451,6 +452,7 @@ export async function readAdminUsersSource(
       id: row.id,
       name: row.name,
       email: row.email,
+      image: row.image,
       admin: isAdminRole(row.role),
       createdAt: row.createdAt.getTime(),
       activeDays: toNumber(row.activeDays),
