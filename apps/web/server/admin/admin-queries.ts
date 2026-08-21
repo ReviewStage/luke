@@ -238,6 +238,7 @@ async function readReliabilityMetrics(
 function emptySource(
   integrations: readonly AdminIntegration[],
   database: { reachable: boolean; latencyMs: number },
+  analyticsConsoleUrl: string | undefined,
 ): AdminMetricsSource {
   return {
     users: {
@@ -248,7 +249,11 @@ function emptySource(
       signupsByDay: new Map(),
     },
     usage: { byDay: new Map(), activeUsersToday: 0, activeUsersWindow: 0, topUsers: [] },
-    reliability: { quotaLimitedUserDaysToday: 0, quotaLimitedUserDaysWindow: 0 },
+    reliability: {
+      quotaLimitedUserDaysToday: 0,
+      quotaLimitedUserDaysWindow: 0,
+      analyticsConsoleUrl,
+    },
     systemHealth: { database, integrations },
   };
 }
@@ -257,19 +262,20 @@ function emptySource(
  * Reads every aggregate the dashboard shows, from the service's own tables. A
  * database that does not answer the probe short-circuits to an empty source
  * whose health card reports the outage rather than a page of misleading zeros
- * with a green light — the integrations, read from the environment, still fill
- * in.
+ * with a green light — the integrations and the analytics console address,
+ * read from the environment, still fill in.
  */
 export async function readAdminMetricsSource(
   database: Database,
   input: {
     now: number;
     integrations: readonly AdminIntegration[];
+    analyticsConsoleUrl?: string;
     scope: AdminMetricsScope;
   },
 ): Promise<AdminMetricsSource> {
   const health = await probeDatabase(database);
-  if (!health.reachable) return emptySource(input.integrations, health);
+  if (!health.reachable) return emptySource(input.integrations, health, input.analyticsConsoleUrl);
 
   const dayKeys = lastNDayKeys(input.now, ADMIN_METRICS_WINDOW_DAYS);
   const windowStartDay = dayKeys[0] ?? utcDayKey(input.now);
@@ -285,7 +291,7 @@ export async function readAdminMetricsSource(
   return {
     users,
     usage,
-    reliability,
+    reliability: { ...reliability, analyticsConsoleUrl: input.analyticsConsoleUrl },
     systemHealth: { database: health, integrations: input.integrations },
   };
 }

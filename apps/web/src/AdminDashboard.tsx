@@ -1095,7 +1095,19 @@ function Dashboard({
           A hosted request that reaches a daily ceiling is refused with{" "}
           <code className="font-mono text-xs">quota-exhausted</code>; the count above is the closest
           rejection signal the service's own tables hold. Per-request error rates and client-side
-          failures are recorded as product-analytics events, which live with the analytics processor
+          failures are recorded as product-analytics events, which live with{" "}
+          {metrics.reliability.analyticsConsoleUrl ? (
+            <a
+              href={metrics.reliability.analyticsConsoleUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="underline underline-offset-2 transition-colors duration-150 hover:text-foreground"
+            >
+              the analytics processor
+            </a>
+          ) : (
+            "the analytics processor"
+          )}{" "}
           rather than in this database.
         </p>
 

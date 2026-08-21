@@ -32,6 +32,17 @@ export const POSTHOG_DEFAULTS = {
   REQUEST_TIMEOUT_MS: 5_000,
 } as const;
 
+/**
+ * One project's console page, on the app host the private API lives on —
+ * never the ingestion host, which serves no pages. This is an address for a
+ * maintainer's browser, not an endpoint Luke calls, and it honors the same
+ * host override the erasure call does, so an EU project links to its own
+ * console.
+ */
+export function posthogProjectConsoleUrl(projectId: string, host?: string): string {
+  return `${resolvePosthogApiHost(host)}/project/${encodeURIComponent(projectId)}`;
+}
+
 export type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
 
 /**
@@ -70,6 +81,11 @@ export interface PosthogUpstreamOptions {
 
 function withoutTrailingSlash(value: string): string {
   return value.endsWith("/") ? value.slice(0, -1) : value;
+}
+
+/** The deployment's private-API host override when it holds one, the default otherwise. */
+function resolvePosthogApiHost(host: string | undefined): string {
+  return withoutTrailingSlash(host?.trim() || POSTHOG_DEFAULTS.API_HOST);
 }
 
 /**
@@ -111,7 +127,7 @@ export async function forgetPosthogPerson(
   options: PosthogForgetOptions,
 ): Promise<void> {
   const send = options.fetch ?? ((input: string, init: RequestInit) => fetch(input, init));
-  const host = withoutTrailingSlash(options.host?.trim() || POSTHOG_DEFAULTS.API_HOST);
+  const host = resolvePosthogApiHost(options.host);
   const url = `${host}/api/projects/${encodeURIComponent(options.projectId)}/persons/bulk_delete/?delete_events=true`;
   const response = await send(url, {
     method: "POST",

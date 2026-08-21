@@ -21,6 +21,7 @@ import {
   type AdminMetricsScope,
   adminMetricsScope,
 } from "../server/admin/http";
+import { posthogProjectConsoleUrl } from "../server/hosted/posthog";
 import { HOSTED_DAILY_LIMIT, HOSTED_METER } from "../server/hosted/quota";
 
 const NOON_UTC = Date.parse("2026-08-17T12:00:00.000Z");
@@ -216,6 +217,39 @@ test("the daily ceilings are reported from the hosted quota, not restated", () =
   assert.equal(metrics.generatedAt, NOON_UTC);
 });
 
+test("the analytics console address rides through when configured and stays absent when not", () => {
+  const configured = buildAdminMetrics(
+    source({
+      reliability: {
+        quotaLimitedUserDaysToday: 0,
+        quotaLimitedUserDaysWindow: 0,
+        analyticsConsoleUrl: posthogProjectConsoleUrl("12345"),
+      },
+    }),
+    NOON_UTC,
+  );
+  assert.equal(configured.reliability.analyticsConsoleUrl, "https://us.posthog.com/project/12345");
+
+  const overriddenHost = buildAdminMetrics(
+    source({
+      reliability: {
+        quotaLimitedUserDaysToday: 0,
+        quotaLimitedUserDaysWindow: 0,
+        // A deployment on another region's host must link to its own console.
+        analyticsConsoleUrl: posthogProjectConsoleUrl("12345", "https://eu.posthog.com/"),
+      },
+    }),
+    NOON_UTC,
+  );
+  assert.equal(
+    overriddenHost.reliability.analyticsConsoleUrl,
+    "https://eu.posthog.com/project/12345",
+  );
+
+  const absent = buildAdminMetrics(source(), NOON_UTC);
+  assert.equal(absent.reliability.analyticsConsoleUrl, undefined);
+});
+
 test("integration health reads presence, in a fixed order, never a value", () => {
   const rows = adminIntegrations({
     hostedTier: true,
@@ -288,6 +322,8 @@ test("the gate answers 405, 401, 403, and 200 as distinct outcomes", async () =>
   const body = (await ok.json()) as AdminMetrics;
   assert.equal(body.generatedAt, NOON_UTC);
   assert.equal(body.windowDays, ADMIN_METRICS_WINDOW_DAYS);
+  // An unconfigured analytics project travels as absence, never a placeholder.
+  assert.ok(!("analyticsConsoleUrl" in body.reliability));
 });
 
 test("the scope defaults to hiding admins; only the explicit `all` widens it", () => {
