@@ -4,5 +4,6 @@
  * rather than a blank cell.
  */
 export function accountLabel(account: { name: string; email: string }): string {
-  return account.name || account.email;
+  const name = account.name.trim();
+  return name || account.email;
 }
