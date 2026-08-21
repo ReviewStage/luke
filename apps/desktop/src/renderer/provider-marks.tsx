@@ -25,6 +25,8 @@ import {
   GEMINI_CLI_MARK_LAYERS,
   GEMINI_CLI_MARK_MASK_PATH,
   GOOGLE_CALENDAR_MARK_LAYERS,
+  GROK_BUILD_ORBIT_PATH,
+  GROK_BUILD_TAIL_PATH,
   JULES_PATH,
   LINEAR_PATH,
   OPENAI_PATH,
@@ -65,7 +67,9 @@ import { APPLE_CALENDAR_ID } from "#shared/apple-calendar";
  * Gemini web app inlines at gemini.google.com (trademark of Google LLC),
  * keeping the masked, blurred colour field it is published with,
  * Google Calendar via Simple Icons (CC0-1.0, sourced from
- * https://developers.google.com/calendar), Jules via Simple Icons (CC0-1.0, sourced from
+ * https://developers.google.com/calendar), Grok Build's comet mark verbatim
+ * from the favicon https://grok.com serves (a trademark of xAI),
+ * Jules via Simple Icons (CC0-1.0, sourced from
  * https://jules.google), OpenAI via Simple Icons (CC0-1.0), Linear via Simple Icons (CC0-1.0, sourced from
  * https://linear.app), OpenCode's two-tone terminal mark verbatim from
  * the favicon https://opencode.ai serves, Orca's whale mark verbatim from the
@@ -77,9 +81,9 @@ import { APPLE_CALENDAR_ID } from "#shared/apple-calendar";
  * favicon draws it with. Each keeps its own brand colour
  * (see the `--mark-*` custom properties), so a mark says which provider a
  * session belongs to while the chips and row tints say what state it is in.
- * Copilot, Cursor, and Devin each publish one silhouette rather than a
- * colour, so all three are drawn in the light form their brand uses on a dark
- * surface. They are trademarks of their respective owners. Do not restyle the
+ * Copilot, Cursor, Devin, and Grok Build each publish one silhouette rather
+ * than a colour, so all four are drawn in the light form their brand uses on
+ * a dark surface. They are trademarks of their respective owners. Do not restyle the
  * geometry or recolour them; swap the path in the generator if a provider
  * publishes an updated mark. Apple Calendar is the one exception to
  * "reproduced rather than redrawn": Apple distributes the Calendar icon only
@@ -281,6 +285,26 @@ function GeminiCliMark({ className }: MarkProps): React.JSX.Element {
           </g>
         ))}
       </g>
+    </svg>
+  );
+}
+
+function GrokBuildMark({ className }: MarkProps): React.JSX.Element {
+  // The box crops the favicon's 512 canvas to the square the glyph fills edge
+  // to edge, centred as published; the paths themselves are untouched.
+  // Verbatim from the favicon https://grok.com serves: the orbit arcing
+  // through the top-right streak, and the tail streaking away to the lower
+  // left.
+  return (
+    <svg
+      className={className}
+      data-mark={PROVIDER_ID.GROK_BUILD}
+      viewBox="56 56 400 400"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path fill="currentColor" d={GROK_BUILD_ORBIT_PATH} />
+      <path fill="currentColor" d={GROK_BUILD_TAIL_PATH} />
     </svg>
   );
 }
@@ -534,6 +558,7 @@ const PROVIDER_MARKS = {
   [PROVIDER_ID.DEVIN]: DevinMark,
   [PROVIDER_ID.GEMINI_CLI]: GeminiCliMark,
   [GOOGLE_CALENDAR_ID]: GoogleCalendarMark,
+  [PROVIDER_ID.GROK_BUILD]: GrokBuildMark,
   [PROVIDER_ID.JULES]: JulesMark,
   [ISSUE_TRACKER_ID.LINEAR]: LinearMark,
   [CREDENTIAL_PROVIDER_ID.OPENAI]: OpenAiMark,

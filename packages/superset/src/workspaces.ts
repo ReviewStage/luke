@@ -30,6 +30,7 @@ const SUPERSET_AGENT_PROVIDER = {
   // it uses for the app's agents; both are Cursor sessions to Luke.
   "cursor-agent": PROVIDER_ID.CURSOR,
   gemini: PROVIDER_ID.GEMINI_CLI,
+  grok: PROVIDER_ID.GROK_BUILD,
   opencode: PROVIDER_ID.OPENCODE,
 } as const satisfies Readonly<Record<string, string>>;
 

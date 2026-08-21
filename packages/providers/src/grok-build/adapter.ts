@@ -1,0 +1,428 @@
+import path from "node:path";
+import {
+  maximumSessionRecapLength,
+  maximumSessionTitleLength,
+  PROVIDER_ID,
+  type ProviderSessionObservation,
+  SESSION_STATUS,
+  type SessionDetail,
+  type SessionProvider,
+  type SessionStatus,
+} from "@sidecar/session";
+import { isRecord, oneLine, text, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
+import {
+  discoverSessionFiles,
+  fileStats,
+  LOCAL_ADAPTER_DEFAULTS,
+  LocalFileSessionAdapter,
+  localSessionStatus,
+  readDirectory,
+  readTail,
+  readTextFile,
+  type SessionFileCandidate,
+  statDirectoryEntry,
+  tailRecords,
+  workspaceLabel,
+} from "../shared/local-session-adapter.js";
+import {
+  defaultGrokBuildHome,
+  GROK_EVENT_TYPE,
+  GROK_PHASE,
+  GROK_SESSION_FILE,
+  GROK_SESSIONS_DIRECTORY,
+  GROK_SETTLED_TOOL_STATUSES,
+  GROK_STOP_REASON,
+  GROK_TURN_OUTCOME,
+  GROK_UPDATE_KIND,
+  grokContentText,
+  grokToolDetail,
+  grokToolName,
+  grokUpdateFrom,
+  grokUpdateKind,
+} from "./records.js";
+import { GROK_SESSION_ID_PATTERN, readGrokBuildSessionTranscript } from "./transcript.js";
+
+const GROK_BUILD_PROVIDER_ID = PROVIDER_ID.GROK_BUILD;
+const GROK_BUILD_PROVIDER_NAME = "Grok Build";
+
+const GROK_ADAPTER_DEFAULTS = {
+  MAXIMUM_PROJECT_DIRECTORIES: 200,
+  MAXIMUM_ACTIVITY_LENGTH: 80,
+} as const;
+
+export const GROK_BUILD_PROVIDER: SessionProvider = {
+  id: GROK_BUILD_PROVIDER_ID,
+  displayName: GROK_BUILD_PROVIDER_NAME,
+};
+
+export interface GrokBuildAdapterOptions {
+  grokHome?: string;
+  now?: () => number;
+  activeSessionFreshnessMs?: number;
+  transcriptMaximumRenderedLength?: number;
+}
+
+/**
+ * Whose move the lifecycle log says it is. `events.jsonl` is the CLI's own
+ * record of every turn boundary, so the newest event is the answer: a
+ * `turn_ended` is a settled turn or a recorded failure, a permission request
+ * with nothing after it is a prompt still on the developer's screen, and any
+ * other event is a turn still moving.
+ */
+const GROK_SESSION_TIP = {
+  WORKING: "working",
+  HOLDING: "holding",
+  SETTLED: "settled",
+  ERROR: "error",
+} as const;
+
+type GrokSessionTip = (typeof GROK_SESSION_TIP)[keyof typeof GROK_SESSION_TIP];
+
+interface ParsedGrokSession {
+  title?: string;
+  model?: string;
+  cwd?: string;
+  timestampMs?: number;
+  tip: GrokSessionTip;
+  turnCompleted?: boolean;
+  activity?: string;
+  failure?: string;
+  recap?: string;
+}
+
+function timestampMsFrom(record: WireRecord): number | undefined {
+  const stamp = text(record.ts);
+  if (stamp === undefined) return undefined;
+  const stampMs = Date.parse(stamp);
+  return Number.isFinite(stampMs) ? stampMs : undefined;
+}
+
+/**
+ * The lifecycle log's own clock: the newest stamp on any event in the slice,
+ * because each proved the session moved when it was written. The summary's
+ * own clock stands in for a session whose slice holds no stamped event.
+ */
+function eventsClockMs(events: readonly WireRecord[]): number | undefined {
+  let clock: number | undefined;
+  for (const event of events) {
+    const stamp = timestampMsFrom(event);
+    if (stamp !== undefined && (clock === undefined || stamp > clock)) clock = stamp;
+  }
+  return clock;
+}
+
+interface GrokTurnTip {
+  tip: GrokSessionTip;
+  turnCompleted?: boolean;
+}
+
+function tipFromEvents(events: readonly WireRecord[]): GrokTurnTip {
+  for (const event of [...events].reverse()) {
+    const type = text(event.type);
+    if (type === undefined) continue;
+    if (type === GROK_EVENT_TYPE.TURN_ENDED) {
+      const outcome = text(event.outcome);
+      if (outcome === GROK_TURN_OUTCOME.ERROR) return { tip: GROK_SESSION_TIP.ERROR };
+      return {
+        tip: GROK_SESSION_TIP.SETTLED,
+        turnCompleted: outcome === GROK_TURN_OUTCOME.COMPLETED,
+      };
+    }
+    if (type === GROK_EVENT_TYPE.PERMISSION_REQUESTED) return { tip: GROK_SESSION_TIP.HOLDING };
+    if (type === GROK_EVENT_TYPE.PHASE_CHANGED) {
+      return text(event.phase) === GROK_PHASE.PERMISSION_PROMPT
+        ? { tip: GROK_SESSION_TIP.HOLDING }
+        : { tip: GROK_SESSION_TIP.WORKING };
+    }
+    // A resolved permission, a tool boundary, a turn or loop start: the CLI
+    // recorded motion, so the turn is still moving.
+    return { tip: GROK_SESSION_TIP.WORKING };
+  }
+  return { tip: GROK_SESSION_TIP.WORKING };
+}
+
+/**
+ * A settled turn's parting words, read from the conversation log's tail: the
+ * agent message chunks standing immediately before the closing
+ * `turn_completed`, which are the stream deltas of the turn's final reply. A
+ * turn that ended any other way left no parting words worth a recap.
+ */
+function recapFromUpdates(updates: readonly WireRecord[]): string | undefined {
+  const chunks: string[] = [];
+  let sawTurnCompleted = false;
+  for (const record of [...updates].reverse()) {
+    const update = grokUpdateFrom(record);
+    if (!update) continue;
+    const kind = grokUpdateKind(update);
+    if (!sawTurnCompleted) {
+      if (kind !== GROK_UPDATE_KIND.TURN_COMPLETED) return undefined;
+      sawTurnCompleted = true;
+      continue;
+    }
+    if (kind !== GROK_UPDATE_KIND.AGENT_MESSAGE_CHUNK) break;
+    const words = grokContentText(update.content);
+    if (words !== undefined) chunks.unshift(words);
+  }
+  // Chunks are stream deltas of one message, so they join without separators.
+  return oneLine(chunks.join(""), maximumSessionRecapLength);
+}
+
+/** The words of the failure the CLI recorded on the turn's closing update. */
+function failureFromUpdates(updates: readonly WireRecord[]): string | undefined {
+  for (const record of [...updates].reverse()) {
+    const update = grokUpdateFrom(record);
+    if (!update) continue;
+    if (grokUpdateKind(update) !== GROK_UPDATE_KIND.TURN_COMPLETED) return undefined;
+    if (text(update.stop_reason) !== GROK_STOP_REASON.ERROR) return undefined;
+    return oneLine(text(update.agent_result), GROK_ADAPTER_DEFAULTS.MAXIMUM_ACTIVITY_LENGTH);
+  }
+  return undefined;
+}
+
+/**
+ * Names the tool the session is running now: the newest tool call in the
+ * conversation log that has not settled. A settled newest call means the turn
+ * has moved past its tools.
+ */
+function activityFromUpdates(updates: readonly WireRecord[]): string | undefined {
+  for (const record of [...updates].reverse()) {
+    const update = grokUpdateFrom(record);
+    if (!update) continue;
+    const kind = grokUpdateKind(update);
+    if (kind !== GROK_UPDATE_KIND.TOOL_CALL && kind !== GROK_UPDATE_KIND.TOOL_CALL_UPDATE) {
+      continue;
+    }
+    const status = text(update.status);
+    if (status !== undefined && GROK_SETTLED_TOOL_STATUSES.has(status)) return undefined;
+    const name = grokToolName(update);
+    if (!name) return undefined;
+    const detail = grokToolDetail(update, GROK_ADAPTER_DEFAULTS.MAXIMUM_ACTIVITY_LENGTH);
+    return detail ? `${name}: ${detail}` : name;
+  }
+  return undefined;
+}
+
+interface ParsedGrokSummary {
+  title?: string;
+  model?: string;
+  cwd?: string;
+  timestampMs?: number;
+}
+
+function parseGrokSummary(document: string | undefined): ParsedGrokSummary {
+  if (!document) return {};
+  let record: WireRecord | undefined;
+  try {
+    // SAFETY: JSON.parse returns a runtime value; isRecord validates the object contract.
+    const parsed = JSON.parse(document) as UnparsedWireValue;
+    record = isRecord(parsed) ? parsed : undefined;
+  } catch {
+    record = undefined;
+  }
+  if (!record) return {};
+  const info = isRecord(record.info) ? record.info : undefined;
+  const lastActiveAt = text(record.last_active_at) ?? text(record.updated_at);
+  const lastActiveAtMs = lastActiveAt === undefined ? undefined : Date.parse(lastActiveAt);
+  return {
+    title: text(record.generated_title) ?? text(record.session_summary),
+    model: text(record.current_model_id),
+    cwd: info ? text(info.cwd) : undefined,
+    timestampMs:
+      lastActiveAtMs !== undefined && Number.isFinite(lastActiveAtMs) ? lastActiveAtMs : undefined,
+  };
+}
+
+export function parseGrokSessionState(
+  summaryDocument: string | undefined,
+  eventsTail: string,
+  updatesTail: string,
+): ParsedGrokSession {
+  const summary = parseGrokSummary(summaryDocument);
+  const events = tailRecords(eventsTail);
+  const updates = tailRecords(updatesTail);
+  const { tip, turnCompleted } = tipFromEvents(events);
+  return {
+    ...summary,
+    timestampMs: eventsClockMs(events) ?? summary.timestampMs,
+    tip,
+    ...(turnCompleted !== undefined ? { turnCompleted } : undefined),
+    ...(tip === GROK_SESSION_TIP.ERROR ? { failure: failureFromUpdates(updates) } : undefined),
+    // A recap only for a turn that completed: a cancelled or denied turn was
+    // cut mid-thought, so its trailing words pose as an outcome they are not.
+    ...(tip === GROK_SESSION_TIP.SETTLED && turnCompleted === true
+      ? { recap: recapFromUpdates(updates) }
+      : undefined),
+    ...(tip === GROK_SESSION_TIP.WORKING || tip === GROK_SESSION_TIP.HOLDING
+      ? { activity: activityFromUpdates(updates) }
+      : undefined),
+  };
+}
+
+/**
+ * A turn that stopped on an error the CLI recorded is stuck until someone
+ * comes back to it. A permission prompt still open, or a turn that ended, is
+ * holding for the developer; anything else is working. A killed process
+ * leaves its last lifecycle event on disk forever, so an open turn gone quiet
+ * is unknown rather than still working. Nothing in the store marks a session
+ * closed, so a local Grok Build session is never complete.
+ */
+function statusFromTip(
+  tip: GrokSessionTip,
+  observedAt: number,
+  now: number,
+  freshnessMs: number,
+): SessionStatus {
+  if (tip === GROK_SESSION_TIP.ERROR) return SESSION_STATUS.ERROR;
+  const status =
+    tip === GROK_SESSION_TIP.HOLDING || tip === GROK_SESSION_TIP.SETTLED
+      ? SESSION_STATUS.WAITING
+      : SESSION_STATUS.WORKING;
+  return localSessionStatus(status, observedAt, now, freshnessMs);
+}
+
+interface GrokSessionCandidate extends SessionFileCandidate {
+  projectDirectory: string;
+}
+
+/**
+ * The sessions directly inside one percent-encoded working-directory
+ * directory. A session is a directory named by its UUID; the store's own
+ * bookkeeping beside them — the per-directory prompt history, the search
+ * index — is not a session and is not read. The candidate is placed in time
+ * by the newest of the three recordings this adapter reads, because the
+ * directory's own mtime stops moving once the files exist.
+ */
+async function sessionDirectoriesIn(
+  projectDirectory: string,
+  project: { directoryPath: string },
+): Promise<GrokSessionCandidate[]> {
+  const entries = await readDirectory(projectDirectory);
+  const candidates = await Promise.all(
+    entries.map(async (entry) => {
+      if (!GROK_SESSION_ID_PATTERN.test(entry.name)) return undefined;
+      const sessionDirectory = await statDirectoryEntry(projectDirectory, entry.name);
+      if (!sessionDirectory?.stats.isDirectory()) return undefined;
+      const recordings = await Promise.all(
+        Object.values(GROK_SESSION_FILE).map((name) =>
+          fileStats(path.join(sessionDirectory.directoryPath, name)),
+        ),
+      );
+      const mtimeMs = recordings.reduce<number | undefined>(
+        (newest, stats) =>
+          stats?.isFile() && (newest === undefined || stats.mtimeMs > newest)
+            ? stats.mtimeMs
+            : newest,
+        undefined,
+      );
+      if (mtimeMs === undefined) return undefined;
+      return {
+        filePath: sessionDirectory.directoryPath,
+        providerSessionId: entry.name,
+        mtimeMs,
+        projectDirectory: project.directoryPath,
+      };
+    }),
+  );
+  return candidates.filter(
+    (candidate): candidate is GrokSessionCandidate => candidate !== undefined,
+  );
+}
+
+/**
+ * The workspace a session observes: the working directory the session's own
+ * summary names, or the percent-encoded directory name decoded when the
+ * summary has not been written yet.
+ */
+function workspaceFrom(cwd: string | undefined, projectDirectory: string): string {
+  if (cwd?.trim()) return workspaceLabel(cwd);
+  try {
+    return workspaceLabel(decodeURIComponent(path.basename(projectDirectory)));
+  } catch {
+    return workspaceLabel(undefined);
+  }
+}
+
+function detailFrom(parsed: ParsedGrokSession, workspace: string): SessionDetail {
+  return {
+    ...(parsed.activity ? { activity: parsed.activity } : undefined),
+    repository: workspace,
+    ...(parsed.model ? { model: parsed.model } : undefined),
+    ...(parsed.failure ? { error: parsed.failure } : undefined),
+  };
+}
+
+/**
+ * Observes the Grok Build sessions on this machine from the recordings the
+ * CLI already writes for itself under its own sessions store. It runs no
+ * server, needs no credential, registers no hook — the CLI's own lifecycle
+ * log already tells a settled turn from a permission prompt — and opens
+ * everything read-only.
+ */
+export class GrokBuildSessionAdapter extends LocalFileSessionAdapter<
+  GrokSessionCandidate,
+  ParsedGrokSession
+> {
+  readonly provider = GROK_BUILD_PROVIDER;
+
+  readonly #grokHome: string;
+  readonly #transcriptMaximumRenderedLength: number | undefined;
+
+  constructor(options: GrokBuildAdapterOptions = {}) {
+    super(options);
+    this.#grokHome = options.grokHome ?? defaultGrokBuildHome();
+    this.#transcriptMaximumRenderedLength = options.transcriptMaximumRenderedLength;
+  }
+
+  protected discover(): Promise<GrokSessionCandidate[]> {
+    return discoverSessionFiles({
+      projectsDirectory: path.join(this.#grokHome, GROK_SESSIONS_DIRECTORY),
+      maximumProjectDirectories: GROK_ADAPTER_DEFAULTS.MAXIMUM_PROJECT_DIRECTORIES,
+      sessionFilesIn: sessionDirectoriesIn,
+    });
+  }
+
+  protected async parse(candidate: GrokSessionCandidate): Promise<ParsedGrokSession> {
+    const [summaryDocument, eventsTail, updatesTail] = await Promise.all([
+      readTextFile(path.join(candidate.filePath, GROK_SESSION_FILE.SUMMARY)),
+      readTail(
+        path.join(candidate.filePath, GROK_SESSION_FILE.EVENTS),
+        LOCAL_ADAPTER_DEFAULTS.READ_TAIL_BYTES,
+      ),
+      readTail(
+        path.join(candidate.filePath, GROK_SESSION_FILE.UPDATES),
+        LOCAL_ADAPTER_DEFAULTS.READ_TAIL_BYTES,
+      ),
+    ]);
+    return parseGrokSessionState(summaryDocument, eventsTail, updatesTail);
+  }
+
+  protected observation(
+    candidate: GrokSessionCandidate,
+    parsed: ParsedGrokSession,
+    now: number,
+    activeSessionFreshnessMs: number,
+  ): ProviderSessionObservation {
+    const workspace = workspaceFrom(parsed.cwd, candidate.projectDirectory);
+    const observedAt = parsed.timestampMs ?? candidate.mtimeMs;
+    const status = statusFromTip(parsed.tip, observedAt, now, activeSessionFreshnessMs);
+    return {
+      providerSessionId: candidate.providerSessionId,
+      title: oneLine(parsed.title, maximumSessionTitleLength) ?? workspace,
+      status,
+      observedAt,
+      ...(parsed.recap ? { recap: parsed.recap } : undefined),
+      detail: detailFrom(parsed, workspace),
+      ...(status === SESSION_STATUS.WAITING && parsed.tip === GROK_SESSION_TIP.HOLDING
+        ? { holdingForDeveloper: true }
+        : undefined),
+    };
+  }
+
+  override readTranscript(providerSessionId: string): Promise<string | undefined> {
+    return readGrokBuildSessionTranscript({
+      grokHome: this.#grokHome,
+      providerSessionId,
+      maximumRenderedLength: this.#transcriptMaximumRenderedLength,
+    });
+  }
+}

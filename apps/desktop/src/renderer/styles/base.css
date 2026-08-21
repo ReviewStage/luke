@@ -39,6 +39,7 @@
   --mark-cursor: #ffffff;
   --mark-deepseek: #5786fe;
   --mark-devin: #ffffff;
+  --mark-grok-build: #fcfcfc;
   --mark-pi: #ffffff;
   --mark-jules: #715cd7;
   --mark-linear: #5e6ad2;
@@ -928,6 +929,14 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
    colour is set here; it fills its box the way Codex and Cursor do and takes
    the same scale they do. */
 .provider-mark[data-mark="google-calendar"] {
+  transform: scale(0.94);
+}
+
+/* Grok's comet fills its box edge to edge the way the Codex and Cursor marks
+   do, so it takes the same scale they do; it carries the near-white xAI
+   publishes it in. */
+.provider-mark[data-mark="grok-build"] {
+  color: var(--mark-grok-build);
   transform: scale(0.94);
 }
 

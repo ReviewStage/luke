@@ -347,6 +347,25 @@ test("path matching claims only live worktrees, never the main checkout or an ar
   }
 });
 
+test("binds Superset's grok agents to Grok Build sessions", async (t) => {
+  const home = await temporarySupersetHome(t);
+  const database = await writeHostDatabase(home, "host-local");
+  createSchema(database);
+  database.exec(`
+    INSERT INTO workspaces (id, project_id, pull_request_id, name, branch, updated_at) VALUES (
+      'workspace-1', NULL, NULL, 'square-geometry', 'main', 200
+    );
+    INSERT INTO terminal_agent_bindings VALUES (
+      'terminal-1', 'workspace-1', 'grok', 'grok-session', 'Start'
+    );
+  `);
+  database.close();
+
+  const snapshot = await new SupersetWorkspaceReader({ homeDirectory: home }).read();
+  const context = snapshot.context(PROVIDER_ID.GROK_BUILD, "grok-session");
+  assert.equal(context?.workspaceId, "workspace-1");
+});
+
 test("keeps the newest duplicate binding across host databases", async (t) => {
   const home = await temporarySupersetHome(t);
   for (const [organizationId, updatedAt] of [
