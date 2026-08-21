@@ -8,10 +8,12 @@ import type {
   AdminTopUser,
   AdminTrend,
 } from "../server/admin/admin-metrics";
+import type { AdminUserAccount, AdminUserDetail } from "../server/admin/admin-user";
 import {
   ADMIN_HTTP_STATUS,
   ADMIN_METRICS_SCOPE,
   ADMIN_METRICS_SCOPE_PARAM,
+  ADMIN_USER_ID_PARAM,
 } from "../server/admin/http";
 import { accountInitials } from "./account-initials";
 import { GitHubMark, GoogleMark } from "./account-marks";
@@ -22,6 +24,37 @@ import { SOCIAL_PROVIDER, SOCIAL_PROVIDER_LABEL, type SocialProvider } from "./s
 const authClient = createAuthClient();
 
 const METRICS_PATH = "/api/admin/metrics";
+const USER_DETAIL_PATH = "/api/admin/user";
+
+/**
+ * The page's own address for one account, distinct from the API's `id` so a
+ * pasted dashboard link and an API call never read as each other. The id
+ * rides the query string because the page is served at `/admin` alone — a
+ * path segment would need its own route — and it goes back into the detail
+ * endpoint's gate, never into anything rendered.
+ */
+const ACCOUNT_VIEW_PARAM = "user";
+
+/** Which of the page's two views the address bar names. */
+type AdminView = { kind: "overview" } | { kind: "account"; id: string };
+
+function viewFromLocation(): AdminView {
+  const id = new URLSearchParams(window.location.search).get(ACCOUNT_VIEW_PARAM);
+  return id ? { kind: "account", id } : { kind: "overview" };
+}
+
+function accountHref(id: string): string {
+  return `${window.location.pathname}?${ACCOUNT_VIEW_PARAM}=${encodeURIComponent(id)}`;
+}
+
+/**
+ * Whether a click on a link is asking this page to navigate, or asking the
+ * browser for its own gesture — a new tab, a window, a download — which the
+ * real anchor underneath must keep answering.
+ */
+function plainLeftClick(event: React.MouseEvent): boolean {
+  return event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
+}
 
 /**
  * The site's session cookie is shared with the sign-in flow the desktop app
@@ -96,6 +129,14 @@ function formatTimestamp(epochMs: number): string {
   return new Date(epochMs).toLocaleString("en-US", {
     dateStyle: "medium",
     timeStyle: "short",
+    timeZone: "UTC",
+  });
+}
+
+/** An instant drawn as its UTC date alone, e.g. "Aug 3, 2026". */
+function formatDate(epochMs: number): string {
+  return new Date(epochMs).toLocaleDateString("en-US", {
+    dateStyle: "medium",
     timeZone: "UTC",
   });
 }
@@ -332,7 +373,22 @@ function ProviderBar({
   );
 }
 
-function TopUsersTable({ users }: { users: readonly AdminTopUser[] }): React.JSX.Element {
+/**
+ * The accounts that show up most, ordered by days present before volume
+ * spent, so the people living in Luke daily sit on top of the people who had
+ * one heavy afternoon. Every row opens the account's own page: the row for
+ * the pointer, and a real anchor on the name so a keyboard reaches it and a
+ * modified click still gets the browser's own gesture.
+ */
+function ActiveAccountsTable({
+  users,
+  windowDays,
+  onOpen,
+}: {
+  users: readonly AdminTopUser[];
+  windowDays: number;
+  onOpen: (id: string) => void;
+}): React.JSX.Element {
   if (users.length === 0) {
     return (
       <div className="rounded-lg border border-border bg-card px-5 py-8 text-center text-sm text-muted-foreground">
@@ -346,6 +402,8 @@ function TopUsersTable({ users }: { users: readonly AdminTopUser[] }): React.JSX
         <thead>
           <tr className="border-b border-border text-left font-mono text-xs text-muted-foreground uppercase">
             <th className="px-5 py-3 font-medium">Account</th>
+            <th className="px-5 py-3 text-right font-medium">Active days</th>
+            <th className="px-5 py-3 text-right font-medium">Last active</th>
             <th className="px-5 py-3 text-right font-medium">Voice</th>
             <th className="px-5 py-3 text-right font-medium">Attention</th>
             <th className="px-5 py-3 text-right font-medium">Total</th>
@@ -353,10 +411,32 @@ function TopUsersTable({ users }: { users: readonly AdminTopUser[] }): React.JSX
         </thead>
         <tbody>
           {users.map((entry) => (
-            <tr key={entry.email} className="border-b border-border last:border-0">
+            <tr
+              key={entry.id}
+              className="cursor-pointer border-b border-border transition-colors duration-150 last:border-0 hover:bg-muted"
+              onClick={() => onOpen(entry.id)}
+            >
               <td className="px-5 py-3">
-                <div className="font-medium">{entry.name}</div>
-                <div className="text-xs text-muted-foreground">{entry.email}</div>
+                <a
+                  href={accountHref(entry.id)}
+                  className="block outline-offset-2"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    if (!plainLeftClick(event)) return;
+                    event.preventDefault();
+                    onOpen(entry.id);
+                  }}
+                >
+                  <div className="font-medium">{entry.name}</div>
+                  <div className="text-xs text-muted-foreground">{entry.email}</div>
+                </a>
+              </td>
+              <td className="px-5 py-3 text-right tabular-nums">
+                {formatNumber(entry.activeDays)}
+                <span className="text-muted-foreground"> of {formatNumber(windowDays)}</span>
+              </td>
+              <td className="px-5 py-3 text-right tabular-nums">
+                {formatDayTick(entry.lastActiveDay)}
               </td>
               <td className="px-5 py-3 text-right tabular-nums">
                 {formatNumber(entry.voiceCalls)}
@@ -396,12 +476,29 @@ function IntegrationRow({ integration }: { integration: AdminIntegration }): Rea
   );
 }
 
+const AVATAR_FRAME = {
+  small: "size-8",
+  large: "size-14",
+} as const;
+
+const AVATAR_TEXT = {
+  small: "text-xs",
+  large: "text-lg",
+} as const;
+
 /**
- * The account's own avatar, falling back to its initials. A provider's avatar
+ * An account's own avatar, falling back to its initials. A provider's avatar
  * URL can outlive the image it named, so a failed fetch falls back to the
- * letters rather than leaving a broken frame in the header.
+ * letters rather than leaving a broken frame. Small is the header's, large is
+ * the detail page's masthead.
  */
-function AccountAvatar({ account }: { account: ViewerAccount }): React.JSX.Element {
+function AccountAvatar({
+  account,
+  size = "small",
+}: {
+  account: ViewerAccount;
+  size?: keyof typeof AVATAR_FRAME;
+}): React.JSX.Element {
   const [imageFailed, setImageFailed] = useState(false);
 
   if (account.image !== undefined && !imageFailed) {
@@ -409,7 +506,7 @@ function AccountAvatar({ account }: { account: ViewerAccount }): React.JSX.Eleme
       <img
         src={account.image}
         alt=""
-        className="size-8 rounded-full object-cover"
+        className={`${AVATAR_FRAME[size]} rounded-full object-cover`}
         // Google's avatar host answers 403 to a request carrying a Referer, so
         // without this a Google-signed-in admin falls to initials every time.
         referrerPolicy="no-referrer"
@@ -419,7 +516,7 @@ function AccountAvatar({ account }: { account: ViewerAccount }): React.JSX.Eleme
   }
   return (
     <span
-      className="grid size-8 place-items-center rounded-full bg-muted text-xs font-semibold"
+      className={`grid ${AVATAR_FRAME[size]} place-items-center rounded-full bg-muted ${AVATAR_TEXT[size]} font-semibold`}
       aria-hidden="true"
     >
       {accountInitials(account.name, account.email)}
@@ -505,6 +602,56 @@ function AccountMenu({
   );
 }
 
+/** The brand block and account menu both views wear; controls sit between them. */
+function PageHeader({
+  controls,
+  account,
+  onSignOut,
+}: {
+  controls: React.ReactNode;
+  account: ViewerAccount | undefined;
+  onSignOut: () => void;
+}): React.JSX.Element {
+  return (
+    <header className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+      <div className="inline-flex items-center gap-2">
+        <span className="inline-flex w-6 text-foreground" aria-hidden="true">
+          <LukeMark className="h-auto w-full" />
+        </span>
+        <span className="font-brand text-base font-bold tracking-[-0.01em]">Luke admin</span>
+      </div>
+      <div className="flex flex-wrap items-center gap-4">
+        {controls}
+        {account ? (
+          <>
+            <span className="h-8 w-px bg-border" aria-hidden="true" />
+            <AccountMenu account={account} onSignOut={onSignOut} />
+          </>
+        ) : null}
+      </div>
+    </header>
+  );
+}
+
+function GeneratedStamp({
+  generatedAt,
+  windowDays,
+  now,
+}: {
+  generatedAt: number;
+  windowDays: number;
+  now: number;
+}): React.JSX.Element {
+  return (
+    <span
+      className="font-mono text-xs text-muted-foreground"
+      title={`${formatTimestamp(generatedAt)} UTC`}
+    >
+      {windowDays}-day window · generated {formatAge(Math.max(0, now - generatedAt))}
+    </span>
+  );
+}
+
 function Dashboard({
   metrics,
   hideAdmins,
@@ -513,6 +660,7 @@ function Dashboard({
   onSignOut,
   refreshing,
   onRefresh,
+  onOpenAccount,
   now,
 }: {
   metrics: AdminMetrics;
@@ -522,6 +670,7 @@ function Dashboard({
   onSignOut: () => void;
   refreshing: boolean;
   onRefresh: () => void;
+  onOpenAccount: (id: string) => void;
   now: number;
 }): React.JSX.Element {
   const providerTotal =
@@ -532,41 +681,36 @@ function Dashboard({
 
   return (
     <div className="mx-auto max-w-[1040px] px-6 py-10">
-      <header className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
-        <div className="inline-flex items-center gap-2">
-          <span className="inline-flex w-6 text-foreground" aria-hidden="true">
-            <LukeMark className="h-auto w-full" />
-          </span>
-          <span className="font-brand text-base font-bold tracking-[-0.01em]">Luke admin</span>
-        </div>
-        <div className="flex flex-wrap items-center gap-4">
-          <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground select-none">
-            <input
-              type="checkbox"
-              className="size-3.5 cursor-pointer accent-primary"
-              checked={hideAdmins}
-              onChange={(event) => onHideAdminsChange(event.target.checked)}
+      <PageHeader
+        account={account}
+        onSignOut={onSignOut}
+        controls={
+          <>
+            <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground select-none">
+              <input
+                type="checkbox"
+                className="size-3.5 cursor-pointer accent-primary"
+                checked={hideAdmins}
+                onChange={(event) => onHideAdminsChange(event.target.checked)}
+              />
+              Hide admins
+            </label>
+            <GeneratedStamp
+              generatedAt={metrics.generatedAt}
+              windowDays={metrics.windowDays}
+              now={now}
             />
-            Hide admins
-          </label>
-          <span
-            className="font-mono text-xs text-muted-foreground"
-            title={`${formatTimestamp(metrics.generatedAt)} UTC`}
-          >
-            {metrics.windowDays}-day window · generated{" "}
-            {formatAge(Math.max(0, now - metrics.generatedAt))}
-          </span>
-          <button type="button" className={PLAIN_BUTTON} onClick={onRefresh} disabled={refreshing}>
-            {refreshing ? "Refreshing…" : "Refresh"}
-          </button>
-          {account ? (
-            <>
-              <span className="h-8 w-px bg-border" aria-hidden="true" />
-              <AccountMenu account={account} onSignOut={onSignOut} />
-            </>
-          ) : null}
-        </div>
-      </header>
+            <button
+              type="button"
+              className={PLAIN_BUTTON}
+              onClick={onRefresh}
+              disabled={refreshing}
+            >
+              {refreshing ? "Refreshing…" : "Refresh"}
+            </button>
+          </>
+        }
+      />
 
       {/* A refetch dims the answer already on screen rather than replacing it:
           the numbers below stay the last ones actually read, and the dimming
@@ -647,8 +791,17 @@ function Dashboard({
         <div className="mt-3">
           <UsageChart daily={metrics.featureUsage.daily} trend={metrics.featureUsage.usageTrend} />
         </div>
-        <SectionHeading>Heaviest hosted-tier accounts</SectionHeading>
-        <TopUsersTable users={metrics.featureUsage.topUsers} />
+        <SectionHeading>Most active hosted-tier accounts</SectionHeading>
+        <ActiveAccountsTable
+          users={metrics.featureUsage.topUsers}
+          windowDays={metrics.windowDays}
+          onOpen={onOpenAccount}
+        />
+        <p className="mt-3 text-sm text-muted-foreground">
+          An active day is a UTC day the account spent hosted voice or attention — the one
+          per-account daily signal the service's own tables hold. A row opens the account's own
+          page.
+        </p>
 
         <SectionHeading>Reliability</SectionHeading>
         <div className="grid grid-cols-2 gap-3">
@@ -789,6 +942,28 @@ function Centered({
   );
 }
 
+/** The gate's one non-admin refusal, worded the same on both views. */
+function ForbiddenCard({
+  email,
+  onSignOut,
+}: {
+  email: string | undefined;
+  onSignOut: () => void;
+}): React.JSX.Element {
+  return (
+    <Centered title="Not authorized">
+      You are signed in{email ? ` as ${email}` : ""}, but this account does not have the admin role.
+      Admin access is the <code className="font-mono">admin</code> role on your account, set
+      directly in the database.
+      <div className="mt-6">
+        <button type="button" className={PLAIN_BUTTON} onClick={onSignOut}>
+          Sign out
+        </button>
+      </div>
+    </Centered>
+  );
+}
+
 /** What one answer from the metrics endpoint means, with the gate's refusals kept distinct. */
 async function readDashboardState(response: Response): Promise<DashboardState> {
   // A followed cross-origin redirect means something sat in front of the API —
@@ -803,6 +978,305 @@ async function readDashboardState(response: Response): Promise<DashboardState> {
   if (!response.ok) return { status: "error", detail: ERROR_DETAIL.GENERIC };
   // SAFETY: a 200 from the admin metrics endpoint is an AdminMetrics body by its contract.
   return { status: "ready", metrics: (await response.json()) as AdminMetrics };
+}
+
+/** What the detail fetch resolved to: the overview's states plus a gone account. */
+type DetailState =
+  | { status: "loading" }
+  | { status: "signed-out" }
+  | { status: "forbidden" }
+  | { status: "missing" }
+  | { status: "error"; detail: string }
+  | { status: "ready"; detail: AdminUserDetail };
+
+async function readDetailState(response: Response): Promise<DetailState> {
+  if (response.redirected) return { status: "error", detail: ERROR_DETAIL.PROTECTED };
+  if (response.status === ADMIN_HTTP_STATUS.UNAUTHORIZED) return { status: "signed-out" };
+  if (response.status === ADMIN_HTTP_STATUS.FORBIDDEN) return { status: "forbidden" };
+  if (response.status === ADMIN_HTTP_STATUS.NOT_FOUND) return { status: "missing" };
+  if (response.status === ADMIN_HTTP_STATUS.SERVICE_UNAVAILABLE) {
+    return { status: "error", detail: ERROR_DETAIL.UNAVAILABLE };
+  }
+  if (!response.ok) return { status: "error", detail: ERROR_DETAIL.GENERIC };
+  // SAFETY: a 200 from the admin user endpoint is an AdminUserDetail body by its contract.
+  return { status: "ready", detail: (await response.json()) as AdminUserDetail };
+}
+
+/** A linked provider's row value drawn as its label where the page knows one. */
+function signInMethodLabel(providerId: string): string {
+  if (providerId === SOCIAL_PROVIDER.GITHUB) return SOCIAL_PROVIDER_LABEL[SOCIAL_PROVIDER.GITHUB];
+  if (providerId === SOCIAL_PROVIDER.GOOGLE) return SOCIAL_PROVIDER_LABEL[SOCIAL_PROVIDER.GOOGLE];
+  return providerId;
+}
+
+function UserDetailPage({
+  detail,
+  account,
+  onSignOut,
+  onBack,
+  refreshing,
+  onRefresh,
+  now,
+}: {
+  detail: AdminUserDetail;
+  account: ViewerAccount | undefined;
+  onSignOut: () => void;
+  onBack: () => void;
+  refreshing: boolean;
+  onRefresh: () => void;
+  now: number;
+}): React.JSX.Element {
+  const subject: AdminUserAccount = detail.account;
+  const activity = detail.activity;
+  // A streak as long as the window may run past it; the page says so rather
+  // than posing the truncation as the exact count.
+  const streak =
+    activity.currentStreakDays >= detail.windowDays
+      ? `${formatNumber(detail.windowDays)}+`
+      : formatNumber(activity.currentStreakDays);
+
+  return (
+    <div className="mx-auto max-w-[1040px] px-6 py-10">
+      <PageHeader
+        account={account}
+        onSignOut={onSignOut}
+        controls={
+          <>
+            <GeneratedStamp
+              generatedAt={detail.generatedAt}
+              windowDays={detail.windowDays}
+              now={now}
+            />
+            <button
+              type="button"
+              className={PLAIN_BUTTON}
+              onClick={onRefresh}
+              disabled={refreshing}
+            >
+              {refreshing ? "Refreshing…" : "Refresh"}
+            </button>
+          </>
+        }
+      />
+
+      <div
+        className="transition-opacity duration-150 data-[busy=true]:opacity-50"
+        data-busy={refreshing}
+        aria-busy={refreshing}
+      >
+        <a
+          href={window.location.pathname}
+          className="mt-8 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors duration-150 hover:text-foreground"
+          onClick={(event) => {
+            if (!plainLeftClick(event)) return;
+            event.preventDefault();
+            onBack();
+          }}
+        >
+          <span aria-hidden="true">←</span> All accounts
+        </a>
+
+        <div className="mt-6 flex flex-wrap items-center gap-4">
+          <AccountAvatar
+            account={{
+              name: subject.name,
+              email: subject.email,
+              image: subject.image ?? undefined,
+            }}
+            size="large"
+          />
+          <div>
+            <div className="flex flex-wrap items-center gap-2.5">
+              <h1 className="text-2xl font-semibold tracking-[-0.01em]">
+                {subject.name || subject.email}
+              </h1>
+              {subject.admin ? (
+                <span className="rounded-full border border-border px-2 py-0.5 font-mono text-[10px] tracking-[0.2px] text-muted-foreground uppercase">
+                  Admin
+                </span>
+              ) : null}
+            </div>
+            <div className="mt-1 text-sm text-muted-foreground">{subject.email}</div>
+            <div className="mt-1 text-xs text-muted-foreground">
+              Joined {formatDate(subject.createdAt)}
+              {subject.signInMethods.length > 0
+                ? ` · signs in with ${subject.signInMethods.map(signInMethodLabel).join(", ")}`
+                : ""}
+            </div>
+          </div>
+        </div>
+
+        <SectionHeading>Daily use · hosted tier</SectionHeading>
+        <div className="grid grid-cols-2 gap-3 min-[720px]:grid-cols-4">
+          <StatCard
+            label={`Active days · ${detail.windowDays} days`}
+            value={formatNumber(activity.activeDaysWindow)}
+            hint={`of ${formatNumber(detail.windowDays)} window days`}
+          />
+          <StatCard
+            label="Current streak"
+            value={`${streak} ${activity.currentStreakDays === 1 ? "day" : "days"}`}
+            hint="consecutive active days"
+          />
+          <StatCard
+            label={`Active days · ${activity.activeDaysTrend.days} days`}
+            value={formatNumber(activity.activeDaysTrend.recent)}
+            hint={`${formatNumber(activity.activeDaysTrend.prior)} the week before`}
+          />
+          <StatCard
+            label="Last active"
+            value={
+              activity.allTime.lastActiveDay ? formatDayTick(activity.allTime.lastActiveDay) : "—"
+            }
+            hint={
+              activity.allTime.firstActiveDay
+                ? `first active ${formatDayTick(activity.allTime.firstActiveDay)}`
+                : "no hosted usage yet"
+            }
+          />
+        </div>
+        <div className="mt-3">
+          <UsageChart daily={activity.daily} trend={activity.usageTrend} />
+        </div>
+
+        <SectionHeading>Volume</SectionHeading>
+        <div className="grid grid-cols-2 gap-3 min-[720px]:grid-cols-4">
+          <StatCard
+            label={`Voice · ${detail.windowDays} days`}
+            value={formatNumber(activity.voiceCallsWindow)}
+            hint={`${formatNumber(activity.allTime.voiceCalls)} all time`}
+          />
+          <StatCard
+            label={`Attention · ${detail.windowDays} days`}
+            value={formatNumber(activity.attentionReviewsWindow)}
+            hint={`${formatNumber(activity.allTime.attentionReviews)} all time`}
+          />
+          <StatCard
+            label="Active days · all time"
+            value={formatNumber(activity.allTime.activeDays)}
+          />
+          <StatCard
+            label={`Throttled days · ${detail.windowDays} days`}
+            value={formatNumber(activity.quotaLimitedDaysWindow)}
+            hint="days a daily ceiling was reached"
+          />
+        </div>
+        <p className="mt-3 text-sm text-muted-foreground">
+          An active day is a UTC day this account spent hosted voice or attention — the one
+          per-account daily signal the service's own tables hold. Purely local use of the desktop
+          app writes no row here; day-level launch activity is recorded as product-analytics events,
+          which live with the analytics processor rather than in this database.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function UserDetailScreen({
+  id,
+  account,
+  onSignOut,
+  onBack,
+  now,
+}: {
+  id: string;
+  account: ViewerAccount | undefined;
+  onSignOut: () => void;
+  onBack: () => void;
+  now: number;
+}): React.JSX.Element {
+  const [state, setState] = useState<DetailState>(() =>
+    signInChosenHere() ? { status: "loading" } : { status: "signed-out" },
+  );
+  const [refreshing, setRefreshing] = useState(false);
+  const inFlight = useRef<AbortController>(null);
+
+  const load = useCallback(() => {
+    // The same local consent the overview asks for: a deep link into an
+    // account page still opens on the sign-in card until a sign-in has been
+    // pressed on this page once.
+    if (!signInChosenHere()) {
+      setState({ status: "signed-out" });
+      return;
+    }
+    inFlight.current?.abort();
+    const controller = new AbortController();
+    inFlight.current = controller;
+    // A refresh keeps the page it is refreshing; a different account — the
+    // browser's own back and forward can swap ids without passing the
+    // overview — must not stand dimmed behind the other account's read.
+    setState((current) =>
+      current.status === "ready" && current.detail.account.id === id
+        ? current
+        : { status: "loading" },
+    );
+    setRefreshing(true);
+    void (async () => {
+      try {
+        const next = await readDetailState(
+          await fetch(`${USER_DETAIL_PATH}?${ADMIN_USER_ID_PARAM}=${encodeURIComponent(id)}`, {
+            headers: { accept: "application/json" },
+            signal: controller.signal,
+          }),
+        );
+        if (!controller.signal.aborted) setState(next);
+      } catch {
+        if (!controller.signal.aborted) {
+          setState({ status: "error", detail: ERROR_DETAIL.GENERIC });
+        }
+      } finally {
+        if (!controller.signal.aborted) setRefreshing(false);
+      }
+    })();
+  }, [id]);
+
+  useEffect(() => {
+    load();
+    return () => inFlight.current?.abort();
+  }, [load]);
+
+  switch (state.status) {
+    case "loading":
+      return <Centered title="Loading…">Reading the account's own rows.</Centered>;
+    case "signed-out":
+      return <SignInCard />;
+    case "forbidden":
+      return <ForbiddenCard email={account?.email} onSignOut={onSignOut} />;
+    case "missing":
+      return (
+        <Centered title="No such account">
+          No account carries this id — it may have been deleted since the overview was read.
+          <div className="mt-6">
+            <button type="button" className={PLAIN_BUTTON} onClick={onBack}>
+              Back to overview
+            </button>
+          </div>
+        </Centered>
+      );
+    case "error":
+      return (
+        <Centered title="Could not load">
+          {state.detail}
+          <div className="mt-6">
+            <button type="button" className={PLAIN_BUTTON} onClick={load} disabled={refreshing}>
+              {refreshing ? "Trying…" : "Try again"}
+            </button>
+          </div>
+        </Centered>
+      );
+    case "ready":
+      return (
+        <UserDetailPage
+          detail={state.detail}
+          account={account}
+          onSignOut={onSignOut}
+          onBack={onBack}
+          refreshing={refreshing}
+          onRefresh={load}
+          now={now}
+        />
+      );
+  }
 }
 
 /** A clock of its own, so the header's age stays true without refetching to learn it. */
@@ -831,6 +1305,23 @@ export function AdminDashboard(): React.JSX.Element {
   const now = useNow(AGE_TICK_MS);
   const session = authClient.useSession();
   const account = session.data?.user;
+
+  // The address bar owns which view is open, so an account page can be
+  // reloaded, shared, and left with the browser's own back button.
+  const [view, setView] = useState<AdminView>(viewFromLocation);
+  useEffect(() => {
+    const onPopState = () => setView(viewFromLocation());
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+  const openAccount = useCallback((id: string) => {
+    window.history.pushState(null, "", accountHref(id));
+    setView({ kind: "account", id });
+  }, []);
+  const closeAccount = useCallback(() => {
+    window.history.pushState(null, "", window.location.pathname);
+    setView({ kind: "overview" });
+  }, []);
 
   const load = useCallback(() => {
     // A session earned elsewhere on the site does not open the dashboard by
@@ -875,9 +1366,13 @@ export function AdminDashboard(): React.JSX.Element {
   }, [hideAdmins]);
 
   useEffect(() => {
+    // The overview's read waits while an account page is open; coming back
+    // re-runs it, which refreshes the numbers while the last answer stands
+    // dimmed the way any refetch does.
+    if (view.kind !== "overview") return;
     load();
     return () => inFlight.current?.abort();
-  }, [load]);
+  }, [load, view.kind]);
 
   const signOut = async () => {
     // The header stays live through a refetch, so this press can land on an open
@@ -891,24 +1386,29 @@ export function AdminDashboard(): React.JSX.Element {
     setState({ status: "signed-out" });
   };
 
+  if (view.kind === "account") {
+    return (
+      <UserDetailScreen
+        id={view.id}
+        account={
+          account
+            ? { name: account.name, email: account.email, image: account.image ?? undefined }
+            : undefined
+        }
+        onSignOut={() => void signOut()}
+        onBack={closeAccount}
+        now={now}
+      />
+    );
+  }
+
   switch (state.status) {
     case "loading":
       return <Centered title="Loading…">Reading the service's own tables.</Centered>;
     case "signed-out":
       return <SignInCard />;
     case "forbidden":
-      return (
-        <Centered title="Not authorized">
-          You are signed in{account ? ` as ${account.email}` : ""}, but this account does not have
-          the admin role. Admin access is the <code className="font-mono">admin</code> role on your
-          account, set directly in the database.
-          <div className="mt-6">
-            <button type="button" className={PLAIN_BUTTON} onClick={() => void signOut()}>
-              Sign out
-            </button>
-          </div>
-        </Centered>
-      );
+      return <ForbiddenCard email={account?.email} onSignOut={() => void signOut()} />;
     case "error":
       return (
         <Centered title="Could not load">
@@ -934,6 +1434,7 @@ export function AdminDashboard(): React.JSX.Element {
           onSignOut={() => void signOut()}
           refreshing={refreshing}
           onRefresh={load}
+          onOpenAccount={openAccount}
           now={now}
         />
       );

@@ -10,8 +10,10 @@
 
 export const ADMIN_HTTP_STATUS = {
   OK: 200,
+  BAD_REQUEST: 400,
   UNAUTHORIZED: 401,
   FORBIDDEN: 403,
+  NOT_FOUND: 404,
   METHOD_NOT_ALLOWED: 405,
   SERVICE_UNAVAILABLE: 503,
 } as const;
@@ -22,6 +24,10 @@ export const ADMIN_ERROR = {
   /** Signed in, but the account has no admin row. */
   NOT_AUTHORIZED: "not-authorized",
   METHOD_NOT_ALLOWED: "method-not-allowed",
+  /** A detail read that named no account, or named one past the id bound. */
+  MISSING_USER_ID: "missing-user-id",
+  /** The named account has no user row — deleted, or the id never existed. */
+  USER_NOT_FOUND: "user-not-found",
   /** A seam (auth or the database) did not answer; the answer is a JSON refusal, never a crash. */
   UNAVAILABLE: "unavailable",
 } as const;
@@ -55,6 +61,20 @@ export function adminMetricsScope(url: string): AdminMetricsScope {
   return value === ADMIN_METRICS_SCOPE.ALL
     ? ADMIN_METRICS_SCOPE.ALL
     : ADMIN_METRICS_SCOPE.NON_ADMINS;
+}
+
+export const ADMIN_USER_ID_PARAM = "id";
+
+/**
+ * The account a detail read named, or nothing when it named none worth asking
+ * the database about. The bound is generous against any id Better Auth mints —
+ * it exists so an arbitrarily long query string never reaches a query, not to
+ * validate the id's shape, which only the user table itself can answer.
+ */
+export function adminUserId(url: string): string | undefined {
+  const value = new URL(url).searchParams.get(ADMIN_USER_ID_PARAM)?.trim() ?? "";
+  if (value.length === 0 || value.length > 128) return undefined;
+  return value;
 }
 
 export function jsonResponse<Body extends object>(status: number, body: Body): Response {
