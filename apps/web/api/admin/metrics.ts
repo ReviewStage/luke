@@ -45,15 +45,17 @@ export default {
     return handleAdminMetrics({
       request,
       resolveViewer: resolveSessionViewer,
-      readMetrics: async (now, scope) =>
+      readMetrics: async (now, scope, windowDays) =>
         buildAdminMetrics(
           await readAdminMetricsSource(getDatabase(), {
             now,
             integrations,
             analyticsConsoleUrl,
             scope,
+            windowDays,
           }),
           now,
+          windowDays,
         ),
     });
   },

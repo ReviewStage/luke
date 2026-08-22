@@ -4,7 +4,9 @@ import {
   ADMIN_ERROR,
   ADMIN_HTTP_STATUS,
   type AdminMetricsScope,
+  type AdminMetricsWindow,
   adminMetricsScope,
+  adminMetricsWindow,
   errorResponse,
   jsonResponse,
 } from "./http.js";
@@ -19,15 +21,22 @@ import {
  * that already landed.
  */
 
-/** The trailing window every rate and series here covers, in whole UTC days. */
-export const ADMIN_METRICS_WINDOW_DAYS = 30;
-
 /**
  * The trailing run each trend compares against the run immediately before it.
- * The window must hold both runs, or `prior` would be the truncated head of one
- * and read as a fall that never happened.
+ * The trend keeps this length whatever window the read asked for — a 7-day
+ * view still asks "up from last week?" — so the fetch, not the window, must
+ * hold both runs.
  */
 export const ADMIN_TREND_DAYS = 7;
+
+/**
+ * The days a source read must cover: the window itself, and both of a trend's
+ * runs even when the window is shorter than they are, or `prior` would be the
+ * truncated head of one and read as a fall that never happened.
+ */
+export function windowFetchDays(windowDays: AdminMetricsWindow): number {
+  return Math.max(windowDays, ADMIN_TREND_DAYS * 2);
+}
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WEEK_MS = 7 * DAY_MS;
@@ -371,8 +380,16 @@ export function trailingTrend(counts: readonly number[], days: number): AdminTre
 }
 
 /** Shapes the queried source into the answer, zero-filling and totalling in one place. */
-export function buildAdminMetrics(source: AdminMetricsSource, now: number): AdminMetrics {
-  const dayKeys = lastNDayKeys(now, ADMIN_METRICS_WINDOW_DAYS);
+export function buildAdminMetrics(
+  source: AdminMetricsSource,
+  now: number,
+  windowDays: AdminMetricsWindow,
+): AdminMetrics {
+  const dayKeys = lastNDayKeys(now, windowDays);
+  // The trends read the same maps through their own trailing keys — the drawn
+  // series' own tail whenever the window holds both runs, and the wider fetch's
+  // when it does not — so a 7-day view still compares against the week before.
+  const trendKeys = lastNDayKeys(now, ADMIN_TREND_DAYS * 2);
   const todayKey = utcDayKey(now);
 
   const dailySignups = dayKeys.map((day) => ({
@@ -393,18 +410,20 @@ export function buildAdminMetrics(source: AdminMetricsSource, now: number): Admi
   // queried beside it: a rolling `now - 30 days` count and a series of whole
   // UTC days cover different spans, so two reads of "the last 30 days" would
   // disagree by the part-day between them and the page would contradict itself.
-  const signupCounts = dailySignups.map((day) => day.count);
   const voiceCallsWindow = sum(daily.map((day) => day.voiceCalls));
   const attentionReviewsWindow = sum(daily.map((day) => day.attentionReviews));
   const today = source.usage.byDay.get(todayKey);
 
   return {
     generatedAt: now,
-    windowDays: ADMIN_METRICS_WINDOW_DAYS,
+    windowDays,
     users: {
       total: source.users.total,
-      newInWindow: sum(signupCounts),
-      signupTrend: trailingTrend(signupCounts, ADMIN_TREND_DAYS),
+      newInWindow: sum(dailySignups.map((day) => day.count)),
+      signupTrend: trailingTrend(
+        trendKeys.map((day) => source.users.signupsByDay.get(day) ?? 0),
+        ADMIN_TREND_DAYS,
+      ),
       activeSessions: source.users.activeSessions,
       activeSessionUsers: source.users.activeSessionUsers,
       signInMethods: source.users.signInMethods,
@@ -418,7 +437,10 @@ export function buildAdminMetrics(source: AdminMetricsSource, now: number): Admi
       activeUsersToday: source.usage.activeUsersToday,
       activeUsersWindow: source.usage.activeUsersWindow,
       usageTrend: trailingTrend(
-        daily.map((day) => day.voiceCalls + day.attentionReviews),
+        trendKeys.map((day) => {
+          const row = source.usage.byDay.get(day);
+          return (row?.voiceCalls ?? 0) + (row?.attentionReviews ?? 0);
+        }),
         ADMIN_TREND_DAYS,
       ),
       daily,
@@ -449,17 +471,22 @@ export interface AdminMetricsOptions {
    * `viewer.role` is the account's own `role`, read from the session.
    */
   resolveViewer: (request: Request) => Promise<AdminViewer | undefined>;
-  readMetrics: (now: number, scope: AdminMetricsScope) => Promise<AdminMetrics>;
+  readMetrics: (
+    now: number,
+    scope: AdminMetricsScope,
+    windowDays: AdminMetricsWindow,
+  ) => Promise<AdminMetrics>;
   now?: () => number;
 }
 
 /**
  * Answers the dashboard's read, gated in steps that stay distinct: an anonymous
  * request is a 401 the page answers with a sign-in, a signed-in non-admin is a
- * 403 the page answers with a plain refusal, and metrics are read only past
- * both. A seam that throws — auth or the database not answering — is a 503 JSON
- * refusal rather than an unhandled crash, so the page can say "try again"
- * instead of failing to parse a platform error page.
+ * 403 the page answers with a plain refusal, a window outside the fixed set is
+ * a 400, and metrics are read only past all three. A seam that throws — auth or
+ * the database not answering — is a 503 JSON refusal rather than an unhandled
+ * crash, so the page can say "try again" instead of failing to parse a platform
+ * error page.
  */
 export async function handleAdminMetrics(options: AdminMetricsOptions): Promise<Response> {
   const { request } = options;
@@ -480,11 +507,16 @@ export async function handleAdminMetrics(options: AdminMetricsOptions): Promise<
     return errorResponse(ADMIN_HTTP_STATUS.FORBIDDEN, ADMIN_ERROR.NOT_AUTHORIZED);
   }
 
+  const windowDays = adminMetricsWindow(request.url);
+  if (windowDays === undefined) {
+    return errorResponse(ADMIN_HTTP_STATUS.BAD_REQUEST, ADMIN_ERROR.INVALID_WINDOW);
+  }
+
   const now = (options.now ?? Date.now)();
   try {
     return jsonResponse(
       ADMIN_HTTP_STATUS.OK,
-      await options.readMetrics(now, adminMetricsScope(request.url)),
+      await options.readMetrics(now, adminMetricsScope(request.url), windowDays),
     );
   } catch {
     return errorResponse(ADMIN_HTTP_STATUS.SERVICE_UNAVAILABLE, ADMIN_ERROR.UNAVAILABLE);

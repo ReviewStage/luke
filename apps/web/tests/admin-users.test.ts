@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { AdminViewer } from "../server/admin/admin-access";
-import { ADMIN_METRICS_WINDOW_DAYS } from "../server/admin/admin-metrics";
 import {
   ADMIN_USERS_LIMIT,
   type AdminUserList,
@@ -13,7 +12,11 @@ import {
   ADMIN_ERROR,
   ADMIN_METRICS_SCOPE,
   ADMIN_METRICS_SCOPE_PARAM,
+  ADMIN_METRICS_WINDOW,
+  ADMIN_METRICS_WINDOW_DEFAULT,
+  ADMIN_METRICS_WINDOW_PARAM,
   type AdminMetricsScope,
+  type AdminMetricsWindow,
 } from "../server/admin/http";
 
 const NOON_UTC = Date.parse("2026-08-17T12:00:00.000Z");
@@ -38,12 +41,15 @@ function listSource(overrides: Partial<AdminUserListSource> = {}): AdminUserList
 }
 
 test("the roster is stamped with the window its aggregates cover", () => {
-  const list = buildAdminUserList(listSource({ total: 340 }), NOON_UTC);
+  const list = buildAdminUserList(listSource({ total: 340 }), NOON_UTC, ADMIN_METRICS_WINDOW.MONTH);
   assert.equal(list.generatedAt, NOON_UTC);
-  assert.equal(list.windowDays, ADMIN_METRICS_WINDOW_DAYS);
+  assert.equal(list.windowDays, ADMIN_METRICS_WINDOW.MONTH);
   assert.equal(list.limit, ADMIN_USERS_LIMIT);
   assert.equal(list.total, 340);
   assert.deepEqual(list.rows, [ROW]);
+
+  const quarter = buildAdminUserList(listSource(), NOON_UTC, ADMIN_METRICS_WINDOW.QUARTER);
+  assert.equal(quarter.windowDays, ADMIN_METRICS_WINDOW.QUARTER);
 });
 
 function usersRequest(method = "GET", query = ""): Request {
@@ -53,7 +59,7 @@ function usersRequest(method = "GET", query = ""): Request {
 const ADMIN_VIEWER: AdminViewer = { userId: "user-1", role: "admin" };
 
 const readUsers = async (now: number): Promise<AdminUserList> =>
-  buildAdminUserList(listSource(), now);
+  buildAdminUserList(listSource(), now, ADMIN_METRICS_WINDOW_DEFAULT);
 
 test("the gate answers 405, 401, 403, and 200 as distinct outcomes", async () => {
   const wrongMethod = await handleAdminUsers({
@@ -94,17 +100,20 @@ test("the gate answers 405, 401, 403, and 200 as distinct outcomes", async () =>
   assert.equal(body.rows[0]?.id, "user-9");
 });
 
-test("the roster is read at the scope the request asked for, as the viewer, and not past a failed gate", async () => {
+test("the roster is read at the scope and window the request asked for, as the viewer, and not past a failed gate", async () => {
   const scopes: AdminMetricsScope[] = [];
   const viewerIds: string[] = [];
+  const windows: AdminMetricsWindow[] = [];
   const countingRead = async (
     now: number,
     scope: AdminMetricsScope,
     viewerId: string,
+    windowDays: AdminMetricsWindow,
   ): Promise<AdminUserList> => {
     scopes.push(scope);
     viewerIds.push(viewerId);
-    return readUsers(now);
+    windows.push(windowDays);
+    return buildAdminUserList(listSource(), now, windowDays);
   };
   const respond = (request: Request) =>
     handleAdminUsers({ request, resolveViewer: async () => ADMIN_VIEWER, readUsers: countingRead });
@@ -112,8 +121,22 @@ test("the roster is read at the scope the request asked for, as the viewer, and 
   assert.equal((await respond(usersRequest())).status, 200);
   const widened = usersRequest("GET", `?${ADMIN_METRICS_SCOPE_PARAM}=${ADMIN_METRICS_SCOPE.ALL}`);
   assert.equal((await respond(widened)).status, 200);
-  assert.deepEqual(scopes, [ADMIN_METRICS_SCOPE.NON_ADMINS, ADMIN_METRICS_SCOPE.ALL]);
-  assert.deepEqual(viewerIds, [ADMIN_VIEWER.userId, ADMIN_VIEWER.userId]);
+  const week = usersRequest("GET", `?${ADMIN_METRICS_WINDOW_PARAM}=${ADMIN_METRICS_WINDOW.WEEK}`);
+  const okWeek = await respond(week);
+  assert.equal(okWeek.status, 200);
+  // SAFETY: handleAdminUsers answered 200, whose body is an AdminUserList document.
+  assert.equal(((await okWeek.json()) as AdminUserList).windowDays, ADMIN_METRICS_WINDOW.WEEK);
+  assert.deepEqual(scopes, [
+    ADMIN_METRICS_SCOPE.NON_ADMINS,
+    ADMIN_METRICS_SCOPE.ALL,
+    ADMIN_METRICS_SCOPE.NON_ADMINS,
+  ]);
+  assert.deepEqual(viewerIds, [ADMIN_VIEWER.userId, ADMIN_VIEWER.userId, ADMIN_VIEWER.userId]);
+  assert.deepEqual(windows, [
+    ADMIN_METRICS_WINDOW_DEFAULT,
+    ADMIN_METRICS_WINDOW_DEFAULT,
+    ADMIN_METRICS_WINDOW.WEEK,
+  ]);
 
   const gated = await handleAdminUsers({
     request: usersRequest(),
@@ -121,7 +144,12 @@ test("the roster is read at the scope the request asked for, as the viewer, and 
     readUsers: countingRead,
   });
   assert.equal(gated.status, 401);
-  assert.equal(scopes.length, 2);
+  assert.equal(scopes.length, 3);
+
+  const invalid = await respond(usersRequest("GET", `?${ADMIN_METRICS_WINDOW_PARAM}=13`));
+  assert.equal(invalid.status, 400);
+  assert.equal((await invalid.json()).error, ADMIN_ERROR.INVALID_WINDOW);
+  assert.equal(scopes.length, 3);
 });
 
 test("a seam that throws is a 503 refusal rather than a crash", async () => {

@@ -26,6 +26,8 @@ export const ADMIN_ERROR = {
   METHOD_NOT_ALLOWED: "method-not-allowed",
   /** A detail read that named no account, or named one past the id bound. */
   MISSING_USER_ID: "missing-user-id",
+  /** A read that named a window outside the fixed set of lengths. */
+  INVALID_WINDOW: "invalid-window",
   /** The named account has no user row — deleted, or the id never existed. */
   USER_NOT_FOUND: "user-not-found",
   /** A seam (auth or the database) did not answer; the answer is a JSON refusal, never a crash. */
@@ -61,6 +63,37 @@ export function adminMetricsScope(url: string): AdminMetricsScope {
   return value === ADMIN_METRICS_SCOPE.ALL
     ? ADMIN_METRICS_SCOPE.ALL
     : ADMIN_METRICS_SCOPE.NON_ADMINS;
+}
+
+/**
+ * The trailing windows a read may cover, in whole UTC days. A fixed set rather
+ * than a free number because the window bounds every aggregate query the read
+ * fans out into; it lives here, like the scope, because both sides of the
+ * request speak it.
+ */
+export const ADMIN_METRICS_WINDOW = {
+  WEEK: 7,
+  MONTH: 30,
+  QUARTER: 90,
+} as const;
+
+export type AdminMetricsWindow = (typeof ADMIN_METRICS_WINDOW)[keyof typeof ADMIN_METRICS_WINDOW];
+
+export const ADMIN_METRICS_WINDOW_PARAM = "window";
+
+export const ADMIN_METRICS_WINDOW_DEFAULT = ADMIN_METRICS_WINDOW.MONTH;
+
+/**
+ * The window a request asked for: the default when it asked for none, and
+ * nothing when it named one outside the set. Unlike the scope, an unknown
+ * value does not fall to the default — a scope misread narrows the answer
+ * safely, where a window misread would reshape every number on the page while
+ * the response still names the window it substituted.
+ */
+export function adminMetricsWindow(url: string): AdminMetricsWindow | undefined {
+  const value = new URL(url).searchParams.get(ADMIN_METRICS_WINDOW_PARAM);
+  if (value === null) return ADMIN_METRICS_WINDOW_DEFAULT;
+  return Object.values(ADMIN_METRICS_WINDOW).find((candidate) => String(candidate) === value);
 }
 
 export const ADMIN_USER_ID_PARAM = "id";

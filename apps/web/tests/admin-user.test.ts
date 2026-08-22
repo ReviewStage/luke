@@ -1,19 +1,22 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { AdminViewer } from "../server/admin/admin-access";
-import {
-  ADMIN_METRICS_WINDOW_DAYS,
-  ADMIN_TREND_DAYS,
-  type AdminUsageDay,
-  lastNDayKeys,
-} from "../server/admin/admin-metrics";
+import { ADMIN_TREND_DAYS, type AdminUsageDay, lastNDayKeys } from "../server/admin/admin-metrics";
 import {
   type AdminUserDetail,
   type AdminUserSource,
   buildAdminUserDetail,
   handleAdminUser,
 } from "../server/admin/admin-user";
-import { ADMIN_ERROR, ADMIN_USER_ID_PARAM, adminUserId } from "../server/admin/http";
+import {
+  ADMIN_ERROR,
+  ADMIN_METRICS_WINDOW,
+  ADMIN_METRICS_WINDOW_DEFAULT,
+  ADMIN_METRICS_WINDOW_PARAM,
+  ADMIN_USER_ID_PARAM,
+  type AdminMetricsWindow,
+  adminUserId,
+} from "../server/admin/http";
 
 const NOON_UTC = Date.parse("2026-08-17T12:00:00.000Z");
 
@@ -43,8 +46,11 @@ function userSource(usage: Partial<AdminUserSource["usage"]> = {}): AdminUserSou
   };
 }
 
-function build(usage: Partial<AdminUserSource["usage"]> = {}): AdminUserDetail {
-  return buildAdminUserDetail(userSource(usage), NOON_UTC);
+function build(
+  usage: Partial<AdminUserSource["usage"]> = {},
+  windowDays: AdminMetricsWindow = ADMIN_METRICS_WINDOW_DEFAULT,
+): AdminUserDetail {
+  return buildAdminUserDetail(userSource(usage), NOON_UTC, windowDays);
 }
 
 test("the daily series is zero-filled and the window counts fold from it", () => {
@@ -56,8 +62,8 @@ test("the daily series is zero-filled and the window counts fold from it", () =>
     ]),
   });
 
-  assert.equal(detail.windowDays, ADMIN_METRICS_WINDOW_DAYS);
-  assert.equal(detail.activity.daily.length, ADMIN_METRICS_WINDOW_DAYS);
+  assert.equal(detail.windowDays, ADMIN_METRICS_WINDOW_DEFAULT);
+  assert.equal(detail.activity.daily.length, ADMIN_METRICS_WINDOW_DEFAULT);
   assert.equal(detail.activity.activeDaysWindow, 3);
   assert.equal(detail.activity.voiceCallsWindow, 7);
   assert.equal(detail.activity.attentionReviewsWindow, 8);
@@ -100,14 +106,41 @@ test("a streak broken before yesterday is over, whatever came earlier", () => {
 
 test("a streak covering the whole window reports the window's length", () => {
   const byDay = new Map<string, AdminUsageDay>(
-    lastNDayKeys(NOON_UTC, ADMIN_METRICS_WINDOW_DAYS).map((day) => [
+    lastNDayKeys(NOON_UTC, ADMIN_METRICS_WINDOW_DEFAULT).map((day) => [
       day,
       { voiceCalls: 1, attentionReviews: 0 },
     ]),
   );
   const detail = build({ byDay });
-  assert.equal(detail.activity.currentStreakDays, ADMIN_METRICS_WINDOW_DAYS);
-  assert.equal(detail.activity.activeDaysWindow, ADMIN_METRICS_WINDOW_DAYS);
+  assert.equal(detail.activity.currentStreakDays, ADMIN_METRICS_WINDOW_DEFAULT);
+  assert.equal(detail.activity.activeDaysWindow, ADMIN_METRICS_WINDOW_DEFAULT);
+});
+
+test("a 7-day window narrows the series while its trends still see the week before", () => {
+  const detail = build(
+    {
+      byDay: new Map([
+        // Inside the 7-day window (2026-08-11 through 2026-08-17).
+        ["2026-08-16", { voiceCalls: 3, attentionReviews: 1 }],
+        // Outside the window but inside the trend's prior run.
+        ["2026-08-05", { voiceCalls: 2, attentionReviews: 0 }],
+        ["2026-08-04", { voiceCalls: 1, attentionReviews: 0 }],
+      ]),
+    },
+    ADMIN_METRICS_WINDOW.WEEK,
+  );
+
+  assert.equal(detail.windowDays, ADMIN_METRICS_WINDOW.WEEK);
+  assert.equal(detail.activity.daily.length, ADMIN_METRICS_WINDOW.WEEK);
+  assert.equal(detail.activity.activeDaysWindow, 1);
+  assert.equal(detail.activity.voiceCallsWindow, 3);
+  assert.equal(detail.activity.attentionReviewsWindow, 1);
+  assert.deepEqual(detail.activity.usageTrend, { days: ADMIN_TREND_DAYS, recent: 4, prior: 3 });
+  assert.deepEqual(detail.activity.activeDaysTrend, {
+    days: ADMIN_TREND_DAYS,
+    recent: 1,
+    prior: 2,
+  });
 });
 
 test("the active-days trend counts days present, not volume spent", () => {
@@ -157,8 +190,12 @@ function userRequest(id: string | null = "user-9", method = "GET"): Request {
 
 const ADMIN_VIEWER: AdminViewer = { userId: "user-1", role: "admin" };
 
-const readUser = async (userId: string, now: number): Promise<AdminUserDetail | undefined> =>
-  userId === "user-9" ? buildAdminUserDetail(userSource(), now) : undefined;
+const readUser = async (
+  userId: string,
+  now: number,
+  windowDays: AdminMetricsWindow = ADMIN_METRICS_WINDOW_DEFAULT,
+): Promise<AdminUserDetail | undefined> =>
+  userId === "user-9" ? buildAdminUserDetail(userSource(), now, windowDays) : undefined;
 
 test("the gate answers 405, 401, 403, 400, 404, and 200 as distinct outcomes", async () => {
   const wrongMethod = await handleAdminUser({
@@ -213,6 +250,33 @@ test("the gate answers 405, 401, 403, 400, 404, and 200 as distinct outcomes", a
   const body = (await ok.json()) as AdminUserDetail;
   assert.equal(body.generatedAt, NOON_UTC);
   assert.equal(body.account.id, "user-9");
+});
+
+test("the account is read at the window the request asked for; outside the set is a 400", async () => {
+  const windows: AdminMetricsWindow[] = [];
+  const countingRead = async (userId: string, now: number, windowDays: AdminMetricsWindow) => {
+    windows.push(windowDays);
+    return readUser(userId, now, windowDays);
+  };
+  const respond = (query: string) =>
+    handleAdminUser({
+      request: new Request(
+        `https://luke.test/api/admin/user?${ADMIN_USER_ID_PARAM}=user-9${query}`,
+      ),
+      resolveViewer: async () => ADMIN_VIEWER,
+      readUser: countingRead,
+    });
+
+  const week = await respond(`&${ADMIN_METRICS_WINDOW_PARAM}=${ADMIN_METRICS_WINDOW.WEEK}`);
+  assert.equal(week.status, 200);
+  // SAFETY: handleAdminUser answered 200, whose body is an AdminUserDetail document.
+  assert.equal(((await week.json()) as AdminUserDetail).windowDays, ADMIN_METRICS_WINDOW.WEEK);
+  assert.deepEqual(windows, [ADMIN_METRICS_WINDOW.WEEK]);
+
+  const invalid = await respond(`&${ADMIN_METRICS_WINDOW_PARAM}=13`);
+  assert.equal(invalid.status, 400);
+  assert.equal((await invalid.json()).error, ADMIN_ERROR.INVALID_WINDOW);
+  assert.deepEqual(windows, [ADMIN_METRICS_WINDOW.WEEK]);
 });
 
 test("no account is read for a request that fails the gate or names none", async () => {

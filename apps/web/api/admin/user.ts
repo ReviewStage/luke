@@ -15,9 +15,9 @@ export default {
     return handleAdminUser({
       request,
       resolveViewer: resolveSessionViewer,
-      readUser: async (userId, now) => {
-        const source = await readAdminUserSource(getDatabase(), { userId, now });
-        return source && buildAdminUserDetail(source, now);
+      readUser: async (userId, now, windowDays) => {
+        const source = await readAdminUserSource(getDatabase(), { userId, now, windowDays });
+        return source && buildAdminUserDetail(source, now, windowDays);
       },
     });
   },
