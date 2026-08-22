@@ -1153,6 +1153,422 @@ function WindowSwitcher({
   );
 }
 
+function HideAdminsToggle({
+  checked,
+  onChange,
+}: {
+  checked: boolean;
+  onChange: (hide: boolean) => void;
+}): React.JSX.Element {
+  return (
+    <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground select-none">
+      <input
+        type="checkbox"
+        className="size-3.5 cursor-pointer accent-primary"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+      Hide admins
+    </label>
+  );
+}
+
+/**
+ * The first load's stand-in: the page's own layout with bones where the data
+ * will land, so the answer replaces the skeleton without moving what the
+ * reader is already looking at. Every fixed dimension in the components below
+ * mirrors a real component above and must move with it — a stat card's line
+ * boxes, each chart's fixed plot height, the retention grid's eight `min-h-9`
+ * cohort rows and the tables' ten (`ADMIN_RETENTION_WEEKS` and
+ * `ADMIN_TOP_USERS_LIMIT`, not imported because the modules exporting them
+ * carry query code the client bundle must not), and a table row's `py-3`
+ * around a `size-8` avatar. Static words — the headings, the
+ * notes under the sections, the working window and scope controls — render as
+ * themselves; only unknown data gets bones, each hidden from readers while
+ * `aria-busy` on the region and one visually hidden line say what the page is
+ * doing.
+ */
+function Skeleton({
+  className,
+  circle = false,
+}: {
+  className: string;
+  circle?: boolean;
+}): React.JSX.Element {
+  return (
+    <div
+      aria-hidden="true"
+      className={`${circle ? "rounded-full" : "rounded-md"} animate-pulse bg-muted motion-reduce:animate-none ${className}`}
+    />
+  );
+}
+
+/** A bone boxed to the height of the text line it stands for, so the swap to words moves nothing. */
+function SkeletonLine({ box, bone }: { box: string; bone: string }): React.JSX.Element {
+  return (
+    <div className={`flex items-center ${box}`}>
+      <Skeleton className={bone} />
+    </div>
+  );
+}
+
+function skeletonRows(count: number): readonly number[] {
+  return Array.from({ length: count }, (_, row) => row);
+}
+
+function SkeletonStatCard(): React.JSX.Element {
+  return (
+    <div className="rounded-lg border border-border bg-card px-5 py-4">
+      <SkeletonLine box="h-4" bone="h-3 w-24" />
+      <div className="mt-2">
+        <SkeletonLine box="h-9" bone="h-7 w-20" />
+      </div>
+      <div className="mt-1">
+        <SkeletonLine box="h-5" bone="h-3.5 w-32" />
+      </div>
+    </div>
+  );
+}
+
+/** Each plot height is its chart's own fixed height, so the bars land where the bone stood. */
+const SKELETON_PLOT = {
+  USAGE: "h-48",
+  SIGNUPS: "h-40",
+  SIGN_IN_METHODS: "h-[120px]",
+} as const;
+
+type SkeletonPlot = (typeof SKELETON_PLOT)[keyof typeof SKELETON_PLOT];
+
+function SkeletonChartCard({ plot }: { plot: SkeletonPlot }): React.JSX.Element {
+  return (
+    <div className="rounded-lg border border-border bg-card p-5">
+      <div className="mb-4 flex items-center justify-between gap-4">
+        <SkeletonLine box="h-4" bone="h-3 w-36" />
+        <SkeletonLine box="h-4" bone="h-3 w-56" />
+      </div>
+      <Skeleton className={`w-full ${plot}`} />
+    </div>
+  );
+}
+
+function SkeletonRetentionGrid(): React.JSX.Element {
+  return (
+    <div className="rounded-lg border border-border bg-card p-5">
+      <div className="grid gap-1">
+        <SkeletonLine box="h-4" bone="h-3 w-full" />
+        {skeletonRows(8).map((row) => (
+          <Skeleton key={row} className="h-9 w-full" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SkeletonAccountsTable({
+  rows,
+  numericColumns,
+  starGutter = false,
+}: {
+  rows: number;
+  numericColumns: number;
+  starGutter?: boolean;
+}): React.JSX.Element {
+  const columns = skeletonRows(numericColumns);
+  return (
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <div className="flex items-center gap-6 border-b border-border px-5 py-3">
+        {starGutter ? <div className="w-4 shrink-0" /> : null}
+        <div className="min-w-0 flex-1">
+          <SkeletonLine box="h-4" bone="h-3 w-16" />
+        </div>
+        {columns.map((column) => (
+          <div key={column} className="flex w-14 shrink-0 justify-end">
+            <SkeletonLine box="h-4" bone="h-3 w-10" />
+          </div>
+        ))}
+      </div>
+      {skeletonRows(rows).map((row) => (
+        <div
+          key={row}
+          className="flex items-center gap-6 border-b border-border px-5 py-3 last:border-0"
+        >
+          {starGutter ? <div className="w-4 shrink-0" /> : null}
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <Skeleton circle className="size-8 shrink-0" />
+            <div className="min-w-0">
+              <SkeletonLine box="h-5" bone="h-3.5 w-36" />
+              <SkeletonLine box="h-4" bone="h-3 w-44" />
+            </div>
+          </div>
+          {columns.map((column) => (
+            <div key={column} className="flex w-14 shrink-0 justify-end">
+              <SkeletonLine box="h-5" bone="h-3.5 w-10" />
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function RetentionNote(): React.JSX.Element {
+  return (
+    <p className="mt-3 text-sm text-muted-foreground">
+      Each cell is the share of one UTC week's signups that spent hosted voice or attention that
+      many weeks after signup — Wk 0 is activation in the signup week itself, and dashed cells are
+      still accruing. Purely local use of the desktop app writes no row here, so a cohort that never
+      touched the hosted tier reads the same as one that left.
+    </p>
+  );
+}
+
+function TopAccountsNote(): React.JSX.Element {
+  return (
+    <p className="mt-3 text-sm text-muted-foreground">
+      An active day is a UTC day the account spent hosted voice or attention — the one per-account
+      daily signal the service's own tables hold. A row opens the account's own page.
+    </p>
+  );
+}
+
+function AccountActivityNote(): React.JSX.Element {
+  return (
+    <p className="mt-3 text-sm text-muted-foreground">
+      An active day is a UTC day this account spent hosted voice or attention — the one per-account
+      daily signal the service's own tables hold. Purely local use of the desktop app writes no row
+      here; day-level launch activity is recorded as product-analytics events, which live with the
+      analytics processor rather than in this database.
+    </p>
+  );
+}
+
+function RosterNote({ truncatedTo }: { truncatedTo?: number }): React.JSX.Element {
+  return (
+    <p className="mt-3 text-sm text-muted-foreground">
+      Every account the service holds, most recently active first, whether or not it ever touched
+      the hosted tier — active days count the window's UTC days with hosted voice or attention,
+      while last seen is the account's freshest sign-in session, which a plain sign-in moves without
+      any hosted use. A heading sorts by its column, a row opens the account's own page, and a row's
+      star favorites the account for you alone, following your sign-in rather than this browser.
+      {truncatedTo !== undefined
+        ? ` Only the ${formatNumber(truncatedTo)} most recently active accounts are listed here, and the filter searches those alone.`
+        : ""}
+    </p>
+  );
+}
+
+function DashboardSkeleton({
+  hideAdmins,
+  onHideAdminsChange,
+  windowDays,
+  onWindowDaysChange,
+  account,
+  onSignOut,
+}: {
+  hideAdmins: boolean;
+  onHideAdminsChange: (hide: boolean) => void;
+  windowDays: AdminMetricsWindow;
+  onWindowDaysChange: (windowDays: AdminMetricsWindow) => void;
+  account: ViewerAccount | undefined;
+  onSignOut: () => void;
+}): React.JSX.Element {
+  return (
+    <main className="mx-auto max-w-[1040px] px-6 py-10" aria-busy="true">
+      <PageHeader
+        title="Dashboard"
+        account={account}
+        onSignOut={onSignOut}
+        controls={
+          <>
+            <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
+            <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
+            <SkeletonLine box="h-4" bone="h-3 w-48" />
+            <button type="button" className={PLAIN_BUTTON} disabled>
+              Loading…
+            </button>
+          </>
+        }
+      />
+      <p className="sr-only">Loading. Reading the service's own tables.</p>
+      <SectionHeading>User activity</SectionHeading>
+      <div className="grid gap-3 min-[720px]:grid-cols-3">
+        <SkeletonStatCard />
+        <SkeletonStatCard />
+        <SkeletonStatCard />
+      </div>
+      <div className="mt-3 grid gap-3 min-[720px]:grid-cols-[1.6fr_1fr]">
+        <SkeletonChartCard plot={SKELETON_PLOT.SIGNUPS} />
+        <SkeletonChartCard plot={SKELETON_PLOT.SIGN_IN_METHODS} />
+      </div>
+      <SectionHeading>Signup retention · weekly cohorts</SectionHeading>
+      <SkeletonRetentionGrid />
+      <RetentionNote />
+      <SectionHeading>Feature usage · hosted tier</SectionHeading>
+      <div className="grid grid-cols-2 gap-3">
+        <SkeletonStatCard />
+        <SkeletonStatCard />
+      </div>
+      <div className="mt-3">
+        <SkeletonChartCard plot={SKELETON_PLOT.USAGE} />
+      </div>
+      <SectionHeading>Most active hosted-tier accounts</SectionHeading>
+      <SkeletonAccountsTable rows={10} numericColumns={5} />
+      <TopAccountsNote />
+      <SectionHeading>Reliability</SectionHeading>
+      <div className="grid grid-cols-2 gap-3">
+        <SkeletonStatCard />
+        <SkeletonStatCard />
+      </div>
+      <div className="mt-3">
+        <SkeletonLine box="h-5" bone="h-3.5 w-full" />
+        <SkeletonLine box="h-5" bone="h-3.5 w-full" />
+        <SkeletonLine box="h-5" bone="h-3.5 w-2/5" />
+      </div>
+      <SectionHeading>System health</SectionHeading>
+      <div className="grid gap-3 min-[720px]:grid-cols-[1fr_1.4fr]">
+        <div className="rounded-lg border border-border bg-card px-5 py-4">
+          <SkeletonLine box="h-4" bone="h-3 w-20" />
+          <div className="mt-2">
+            <SkeletonLine box="h-7" bone="h-5 w-32" />
+          </div>
+          <div className="mt-1">
+            <SkeletonLine box="h-5" bone="h-3.5 w-40" />
+          </div>
+        </div>
+        <div className="rounded-lg border border-border bg-card px-5 py-4">
+          <div className="mb-1">
+            <SkeletonLine box="h-4" bone="h-3 w-24" />
+          </div>
+          {skeletonRows(5).map((row) => (
+            <div
+              key={row}
+              className="flex items-center justify-between gap-4 border-b border-border py-3 last:border-0"
+            >
+              <SkeletonLine box="h-5" bone="h-3.5 w-48" />
+              <SkeletonLine box="h-4" bone="h-3 w-24" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </main>
+  );
+}
+
+function UsersSkeleton({
+  hideAdmins,
+  onHideAdminsChange,
+  windowDays,
+  onWindowDaysChange,
+  account,
+  onSignOut,
+}: {
+  hideAdmins: boolean;
+  onHideAdminsChange: (hide: boolean) => void;
+  windowDays: AdminMetricsWindow;
+  onWindowDaysChange: (windowDays: AdminMetricsWindow) => void;
+  account: ViewerAccount | undefined;
+  onSignOut: () => void;
+}): React.JSX.Element {
+  return (
+    <main className="mx-auto max-w-[1040px] px-6 py-10" aria-busy="true">
+      <PageHeader
+        title="Users"
+        account={account}
+        onSignOut={onSignOut}
+        controls={
+          <>
+            <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
+            <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
+            <SkeletonLine box="h-4" bone="h-3 w-48" />
+            <button type="button" className={PLAIN_BUTTON} disabled>
+              Loading…
+            </button>
+          </>
+        }
+      />
+      <p className="sr-only">Loading. Reading the service's own tables.</p>
+      <div className="mt-8 flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+        <Skeleton className="h-[34px] w-full max-w-[320px]" />
+        <SkeletonLine box="h-4" bone="h-3 w-28" />
+      </div>
+      <div className="mt-4">
+        <SkeletonAccountsTable rows={10} numericColumns={6} starGutter />
+      </div>
+      <RosterNote />
+    </main>
+  );
+}
+
+function AccountSkeleton({
+  account,
+  onSignOut,
+  onBack,
+}: {
+  account: ViewerAccount | undefined;
+  onSignOut: () => void;
+  onBack: () => void;
+}): React.JSX.Element {
+  return (
+    <main className="mx-auto max-w-[1040px] px-6 py-10" aria-busy="true">
+      <PageHeader
+        title="Account"
+        account={account}
+        onSignOut={onSignOut}
+        controls={
+          <>
+            <SkeletonLine box="h-4" bone="h-3 w-48" />
+            <button type="button" className={PLAIN_BUTTON} disabled>
+              Loading…
+            </button>
+          </>
+        }
+      />
+      <p className="sr-only">Loading. Reading the account's own rows.</p>
+      <a
+        href={tabHref("users")}
+        className="mt-8 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors duration-150 hover:text-foreground"
+        onClick={(event) => {
+          if (!plainLeftClick(event)) return;
+          event.preventDefault();
+          onBack();
+        }}
+      >
+        <span aria-hidden="true">←</span> All users
+      </a>
+      <div className="mt-6 flex flex-wrap items-center gap-4">
+        <Skeleton circle className="size-14 shrink-0" />
+        <div>
+          <SkeletonLine box="h-8" bone="h-6 w-48" />
+          <div className="mt-1">
+            <SkeletonLine box="h-5" bone="h-3.5 w-56" />
+          </div>
+          <div className="mt-1">
+            <SkeletonLine box="h-4" bone="h-3 w-40" />
+          </div>
+        </div>
+      </div>
+      <SectionHeading>Daily use · hosted tier</SectionHeading>
+      <div className="grid grid-cols-2 gap-3 min-[720px]:grid-cols-4">
+        <SkeletonStatCard />
+        <SkeletonStatCard />
+        <SkeletonStatCard />
+        <SkeletonStatCard />
+      </div>
+      <div className="mt-3">
+        <SkeletonChartCard plot={SKELETON_PLOT.USAGE} />
+      </div>
+      <SectionHeading>Volume</SectionHeading>
+      <div className="grid grid-cols-2 gap-3 min-[720px]:grid-cols-4">
+        <SkeletonStatCard />
+        <SkeletonStatCard />
+        <SkeletonStatCard />
+        <SkeletonStatCard />
+      </div>
+      <AccountActivityNote />
+    </main>
+  );
+}
+
 /** A windowed read's address: the default scope and window ride as no params. */
 function windowedReadPath(
   base: string,
@@ -1206,15 +1622,7 @@ function Dashboard({
         controls={
           <>
             <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
-            <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground select-none">
-              <input
-                type="checkbox"
-                className="size-3.5 cursor-pointer accent-primary"
-                checked={hideAdmins}
-                onChange={(event) => onHideAdminsChange(event.target.checked)}
-              />
-              Hide admins
-            </label>
+            <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
             <GeneratedStamp
               generatedAt={metrics.generatedAt}
               windowDays={metrics.windowDays}
@@ -1273,12 +1681,7 @@ function Dashboard({
 
         <SectionHeading>Signup retention · weekly cohorts</SectionHeading>
         <RetentionGrid retention={metrics.retention} />
-        <p className="mt-3 text-sm text-muted-foreground">
-          Each cell is the share of one UTC week's signups that spent hosted voice or attention that
-          many weeks after signup — Wk 0 is activation in the signup week itself, and dashed cells
-          are still accruing. Purely local use of the desktop app writes no row here, so a cohort
-          that never touched the hosted tier reads the same as one that left.
-        </p>
+        <RetentionNote />
 
         <SectionHeading>Feature usage · hosted tier</SectionHeading>
         <div className="grid grid-cols-2 gap-3">
@@ -1310,11 +1713,7 @@ function Dashboard({
           onOpen={onOpenAccount}
           total={(row) => row.total}
         />
-        <p className="mt-3 text-sm text-muted-foreground">
-          An active day is a UTC day the account spent hosted voice or attention — the one
-          per-account daily signal the service's own tables hold. A row opens the account's own
-          page.
-        </p>
+        <TopAccountsNote />
 
         <SectionHeading>Reliability</SectionHeading>
         <div className="grid grid-cols-2 gap-3">
@@ -1712,12 +2111,7 @@ function UserDetailPage({
             hint="days a daily ceiling was reached"
           />
         </div>
-        <p className="mt-3 text-sm text-muted-foreground">
-          An active day is a UTC day this account spent hosted voice or attention — the one
-          per-account daily signal the service's own tables hold. Purely local use of the desktop
-          app writes no row here; day-level launch activity is recorded as product-analytics events,
-          which live with the analytics processor rather than in this database.
-        </p>
+        <AccountActivityNote />
       </div>
     </main>
   );
@@ -2240,15 +2634,7 @@ function UsersPage({
         controls={
           <>
             <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
-            <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground select-none">
-              <input
-                type="checkbox"
-                className="size-3.5 cursor-pointer accent-primary"
-                checked={hideAdmins}
-                onChange={(event) => onHideAdminsChange(event.target.checked)}
-              />
-              Hide admins
-            </label>
+            <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
             <GeneratedStamp generatedAt={list.generatedAt} windowDays={list.windowDays} now={now} />
             <button
               type="button"
@@ -2294,17 +2680,7 @@ function UsersPage({
             favorite={{ starred: (row) => row.favorite, onToggle: onToggleFavorite }}
           />
         </div>
-        <p className="mt-3 text-sm text-muted-foreground">
-          Every account the service holds, most recently active first, whether or not it ever
-          touched the hosted tier — active days count the window's UTC days with hosted voice or
-          attention, while last seen is the account's freshest sign-in session, which a plain
-          sign-in moves without any hosted use. A heading sorts by its column, a row opens the
-          account's own page, and a row's star favorites the account for you alone, following your
-          sign-in rather than this browser.
-          {list.total > list.rows.length
-            ? ` Only the ${formatNumber(list.rows.length)} most recently active accounts are listed here, and the filter searches those alone.`
-            : ""}
-        </p>
+        <RosterNote truncatedTo={list.total > list.rows.length ? list.rows.length : undefined} />
       </div>
     </main>
   );
@@ -2440,7 +2816,16 @@ function UsersScreen({
 
   switch (state.status) {
     case "loading":
-      return frame(<Centered title="Loading…">Reading the service's own tables.</Centered>);
+      return frame(
+        <UsersSkeleton
+          hideAdmins={hideAdmins}
+          onHideAdminsChange={onHideAdminsChange}
+          windowDays={windowDays}
+          onWindowDaysChange={onWindowDaysChange}
+          account={account}
+          onSignOut={() => void signOut()}
+        />,
+      );
     case "signed-out":
       return <SignInCard />;
     case "forbidden":
@@ -2561,7 +2946,9 @@ function UserDetailScreen({
 
   switch (state.status) {
     case "loading":
-      return frame(<Centered title="Loading…">Reading the account's own rows.</Centered>);
+      return frame(
+        <AccountSkeleton account={account} onSignOut={() => void signOut()} onBack={onBack} />,
+      );
     case "signed-out":
       return <SignInCard />;
     case "forbidden":
@@ -2792,7 +3179,14 @@ export function AdminDashboard(): React.JSX.Element {
     case "loading":
       return shell(
         "dashboard",
-        <Centered title="Loading…">Reading the service's own tables.</Centered>,
+        <DashboardSkeleton
+          hideAdmins={hideAdmins}
+          onHideAdminsChange={changeHideAdmins}
+          windowDays={windowDays}
+          onWindowDaysChange={changeWindow}
+          account={viewer}
+          onSignOut={() => void signOut()}
+        />,
       );
     case "signed-out":
       return <SignInCard />;
