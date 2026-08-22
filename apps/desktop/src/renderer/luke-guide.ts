@@ -751,7 +751,9 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "or it simply lands on the next quit. If a download or install fails, the row says so " +
         "and offers the fixed releases page in the browser instead. The button's press can also " +
         "be asked of Luke — check for updates, open the releases page, restart to update — and " +
-        "only the one act the row currently offers runs.",
+        "only the one act the row currently offers runs. The Changelog row under the version " +
+        "opens the changelog in the browser, at the fixed changelog page, where every release's " +
+        "notes live. Opening it is a press by hand; no spoken ask reaches it.",
     },
     {
       label: "Usage data",

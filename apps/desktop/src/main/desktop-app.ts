@@ -1094,6 +1094,14 @@ function registerIpc(): void {
     void shell.openExternal(UPDATE_ENDPOINT.LATEST_RELEASE_PAGE_URL);
   });
 
+  // The changelog, in the browser — the Changelog row's press. The address
+  // is fixed here on the releases page's terms.
+  ipcMain.on(channels.openChangelog, (event) => {
+    if (!trustedSender(event)) return;
+    recordProductEvent(PRODUCT_EVENT.UPDATE_ACT, { update_act: PRODUCT_UPDATE_ACT.CHANGELOG_OPEN });
+    void shell.openExternal(UPDATE_ENDPOINT.CHANGELOG_PAGE_URL);
+  });
+
   registerVoiceRuntimeIpc({
     ipcMain,
     trustedSender,

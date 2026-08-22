@@ -200,16 +200,18 @@ export const PRODUCT_SUPERSET_ACT = {
 export type ProductSupersetAct = (typeof PRODUCT_SUPERSET_ACT)[keyof typeof PRODUCT_SUPERSET_ACT];
 
 /**
- * The three things the Updates row's button ever does. It repeats the guide's
+ * The things the Updates section's buttons ever do. It repeats the guide's
  * own act set rather than importing it, because the guide names the act a
  * spoken ask may reach and this names the act that happened: the row offers a
  * browser trip where the guide says `download`, and a restart the count sees
- * as the install it schedules.
+ * as the install it schedules. `changelog_open` is the Changelog row's own
+ * browser trip, to the fixed changelog page rather than the releases one.
  */
 export const PRODUCT_UPDATE_ACT = {
   CHECK: "check",
   INSTALL: "install",
   RELEASE_OPEN: "release_open",
+  CHANGELOG_OPEN: "changelog_open",
 } as const;
 
 export type ProductUpdateAct = (typeof PRODUCT_UPDATE_ACT)[keyof typeof PRODUCT_UPDATE_ACT];

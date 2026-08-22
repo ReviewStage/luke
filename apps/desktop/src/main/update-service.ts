@@ -6,12 +6,13 @@ import {
 } from "#shared/contracts";
 
 /**
- * The two addresses updating ever touches, fixed here rather than passed in,
+ * The addresses updating ever touches, fixed here rather than passed in,
  * so the renderer names an intent and never an address — and nothing a check
  * read can steer where a press goes. The feed is where electron-updater reads
  * `latest-mac.yml` and the archive it names, both published by this
  * repository's release pipeline; `releases/latest` is what keeps the address
- * from ever moving.
+ * from ever moving. The changelog page is the site's rendering of the same
+ * repository's CHANGELOG.md, where the Updates section's Changelog row goes.
  */
 export const UPDATE_ENDPOINT = {
   // The trailing slash keeps the last segment a directory under every URL
@@ -19,6 +20,7 @@ export const UPDATE_ENDPOINT = {
   // literal should not need that reading.
   UPDATE_FEED_URL: "https://github.com/ReviewStage/luke/releases/latest/download/",
   LATEST_RELEASE_PAGE_URL: "https://github.com/ReviewStage/luke/releases/latest",
+  CHANGELOG_PAGE_URL: "https://tryluke.dev/changelog",
 } as const;
 
 const UPDATE_CHECK_DEFAULTS = {

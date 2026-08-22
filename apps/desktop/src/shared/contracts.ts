@@ -763,6 +763,12 @@ export interface AppBridge {
    * main process, so nothing an update check read can steer where this goes.
    */
   openLatestRelease(): void;
+  /**
+   * Opens the changelog page in the default browser — the Changelog row's
+   * press. Fixed in the main process on the releases page's terms: the
+   * renderer names an intent and never an address.
+   */
+  openChangelog(): void;
   /** Starts Superset's own OAuth login in one directly spawned CLI child. */
   beginSupersetSignIn(): Promise<SupersetSignInSnapshot>;
   /** Hands one explicit paste to that exact child; the code is never stored. */
@@ -1163,6 +1169,7 @@ export const channels = {
   checkForUpdates: "app:check-for-updates",
   installUpdate: "app:install-update",
   openLatestRelease: "app:open-latest-release",
+  openChangelog: "app:open-changelog",
   beginSupersetSignIn: "app:begin-superset-sign-in",
   submitSupersetSignInCode: "app:submit-superset-sign-in-code",
   reopenSupersetSignIn: "app:reopen-superset-sign-in",
