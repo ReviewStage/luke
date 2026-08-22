@@ -41,6 +41,7 @@ export {
   OPENCODE_FRAME_PATH,
   ORCA_PATH,
   PI_PATH,
+  RADIUS_PATH,
   REPLICAS_PATH,
   SUPERSET_PATH,
 } from "./generated/provider-mark-paths.js";

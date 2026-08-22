@@ -37,6 +37,7 @@ import {
   OPENCODE_FRAME_PATH,
   ORCA_PATH,
   PI_PATH,
+  RADIUS_PATH,
   REPLICAS_PATH,
   SUPERSET_PATH,
 } from "@sidecar/surface";
@@ -79,7 +80,10 @@ import { APPLE_CALENDAR_ID } from "#shared/apple-calendar";
  * https://jules.google), OpenAI via Simple Icons (CC0-1.0), Linear via Simple Icons (CC0-1.0, sourced from
  * https://linear.app), OpenCode's two-tone terminal mark verbatim from
  * the favicon https://opencode.ai serves, Orca's whale mark verbatim from the
- * logo the Orca repository publishes (stablyai/orca, MIT), Replicas' pixel R
+ * logo the Orca repository publishes (stablyai/orca, MIT), Radius Browser's
+ * banded sphere traced from the app artwork it ships, because the only vector
+ * it publishes is a reduced four-band favicon rather than the logomark,
+ * Replicas' pixel R
  * verbatim from the site mark https://tryreplicas.com serves
  * (R-logo-new.svg), and Superset's bracket mark traced
  * from the pixel grid of the favicon https://superset.sh serves — the one
@@ -87,15 +91,19 @@ import { APPLE_CALENDAR_ID } from "#shared/apple-calendar";
  * favicon draws it with. Each keeps its own brand colour
  * (see the `--mark-*` custom properties), so a mark says which provider a
  * session belongs to while the chips and row tints say what state it is in.
- * Copilot, Cursor, Devin, and Grok Build each publish one silhouette rather
- * than a colour, so all four are drawn in the light form their brand uses on
- * a dark surface. They are trademarks of their respective owners. Do not restyle the
+ * Copilot, Cursor, Devin, Grok Build, and Radius each publish one silhouette
+ * rather than a colour, so all five are drawn in the light form their brand
+ * uses on a dark surface. They are trademarks of their respective owners. Do not restyle the
  * geometry or recolour them; swap the path in the generator if a provider
  * publishes an updated mark. Apple Calendar is the one exception to
  * "reproduced rather than redrawn": Apple distributes the Calendar icon only
  * as raster app artwork, so its flat anatomy — tile, red weekday line, and
  * the marketing icon's 17 — is drawn in the generator instead (a trademark
- * of Apple Inc.).
+ * of Apple Inc.). Radius sits between the two and is worth naming as its own
+ * case: its logomark is published only as raster too, but the glyph is exact
+ * geometry rather than an anatomy to interpret, so it is traced from that
+ * artwork instead of redrawn — swap in the vector the moment Radius
+ * publishes one.
  */
 interface MarkProps {
   className?: string;
@@ -424,6 +432,24 @@ function PiMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
+function RadiusMark({ className }: MarkProps): React.JSX.Element {
+  // The box is the published glyph's own bounds. Radius vectors only a reduced
+  // four-band favicon for small sizes; this is the full eleven-band logomark
+  // its app artwork carries, which still reads as a banded sphere at the 14px
+  // a row draws, where four stacked discs read as something else.
+  return (
+    <svg
+      className={className}
+      data-mark={PROVIDER_ID.RADIUS}
+      viewBox="0 0 689 643"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path fill="currentColor" d={RADIUS_PATH} />
+    </svg>
+  );
+}
+
 function ReplicasMark({ className }: MarkProps): React.JSX.Element {
   return (
     <svg
@@ -638,6 +664,7 @@ const PROVIDER_MARKS = {
   [PROVIDER_ID.OPENCODE]: OpenCodeMark,
   [SESSION_APPLICATION_ID.ORCA]: OrcaMark,
   [HOSTED_AGENT_ID.PI]: PiMark,
+  [PROVIDER_ID.RADIUS]: RadiusMark,
   [PROVIDER_ID.REPLICAS]: ReplicasMark,
   [SUPERSET_WORKSPACE_PROVIDER_ID]: SupersetMark,
 } as const satisfies Readonly<Record<MarkId, (props: MarkProps) => React.JSX.Element>>;

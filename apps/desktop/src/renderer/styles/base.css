@@ -46,6 +46,7 @@
   --mark-opencode: #ffffff;
   --mark-opencode-block: #5a5858;
   --mark-orca: #ffffff;
+  --mark-radius: #ffffff;
   --mark-replicas: #3eeba3;
   --mark-superset-top: #b9b7b5;
   --mark-superset-bottom: #858483;
@@ -1005,6 +1006,15 @@ html[data-keyboard="true"] .wing-mark:focus-visible {
 .provider-mark[data-mark="orca"] {
   color: var(--mark-orca);
   transform: scale(1.18);
+}
+
+/* Radius' banded sphere fills its box top to bottom the way the Codex and
+   Cursor marks do, so it takes the same scale they do. Radius publishes the
+   glyph as a silhouette and draws it white on its own coloured tile, like
+   Copilot, Cursor, and Devin. */
+.provider-mark[data-mark="radius"] {
+  color: var(--mark-radius);
+  transform: scale(0.94);
 }
 
 /* Replicas' pixel R fills its box top to bottom the way the Codex and Cursor

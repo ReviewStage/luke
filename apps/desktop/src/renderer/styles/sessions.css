@@ -994,6 +994,15 @@ html[data-keyboard="true"] button.session-row:focus-visible {
   width: 19px;
 }
 
+/* Radius' sphere carries eleven latitude bands, and below 14px they alias
+   into a plain disc that reads as a status dot rather than as the mark. This
+   is the smallest size the bands survive at 2x, which is what the slot has to
+   cost to say Radius at all. */
+.row-application .provider-mark[data-mark="radius"] {
+  width: 14px;
+  height: 14px;
+}
+
 .row-application-button:has(.provider-mark[data-mark="superset"]) {
   width: 27px;
 }

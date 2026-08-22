@@ -42,6 +42,8 @@ test("declares credentials and observation hooks beside their adapters", () => {
   assert.equal("registerObservationHook" in registrations[PROVIDER_ID.GROK_BUILD], false);
   assert.equal("credential" in registrations[PROVIDER_ID.ANTIGRAVITY], false);
   assert.equal("registerObservationHook" in registrations[PROVIDER_ID.ANTIGRAVITY], false);
+  assert.equal("credential" in registrations[PROVIDER_ID.RADIUS], false);
+  assert.equal("registerObservationHook" in registrations[PROVIDER_ID.RADIUS], false);
 });
 
 test("every registration exposes the one total adapter interface", () => {
