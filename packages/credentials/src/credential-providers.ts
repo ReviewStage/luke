@@ -26,6 +26,7 @@ export const CREDENTIAL_PROVIDER_ID = {
   JULES: PROVIDER_ID.JULES,
   LINEAR: ISSUE_TRACKER_ID.LINEAR,
   OPENAI: "openai",
+  REPLICAS: PROVIDER_ID.REPLICAS,
 } as const;
 
 export type CredentialProviderId =
@@ -71,6 +72,10 @@ const DEVIN_ENVIRONMENT = {
 
 const JULES_ENVIRONMENT = {
   API_KEY: "JULES_API_KEY",
+} as const;
+
+const REPLICAS_ENVIRONMENT = {
+  API_KEY: "REPLICAS_API_KEY",
 } as const;
 
 /**
@@ -227,6 +232,18 @@ export const CREDENTIAL_PROVIDERS: CredentialProviderRegistry = {
     // No key format. Every kind OpenAI issues carries `sk-`, so a prefix would
     // refuse nothing, and which of them can reach Realtime is something only
     // OpenAI can answer — it answers it on the first mint.
+  },
+  [CREDENTIAL_PROVIDER_ID.REPLICAS]: {
+    id: CREDENTIAL_PROVIDER_ID.REPLICAS,
+    connection: CREDENTIAL_CONNECTION.KEY,
+    displayName: "Replicas",
+    // Replicas issues organization keys and personal keys, and its API takes
+    // either; the personal page is the one every member can reach.
+    hint: "Create a key in the Replicas dashboard under Personal · API keys.",
+    apiKeysUrl: "https://tryreplicas.com/dashboard/account/api-keys",
+    environmentVariables: [REPLICAS_ENVIRONMENT.API_KEY],
+    // No key format: Replicas publishes none, so a prefix could only refuse a
+    // working key.
   },
 };
 

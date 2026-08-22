@@ -1,4 +1,4 @@
-import { isProviderId, type ProviderId } from "./providers.js";
+import { type HostedAgentId, isHostedAgentId, isProviderId, type ProviderId } from "./providers.js";
 import {
   isSessionApplicationId,
   SESSION_APPLICATION_ID,
@@ -30,6 +30,7 @@ export const SESSION_FILTER = {
 export type SessionFilter =
   | (typeof SESSION_FILTER)[keyof typeof SESSION_FILTER]
   | ProviderId
+  | HostedAgentId
   | SessionApplicationId;
 
 export function isSessionFilter(value: string): value is SessionFilter {
@@ -38,6 +39,7 @@ export function isSessionFilter(value: string): value is SessionFilter {
     value === SESSION_FILTER.CLOUD ||
     value === SESSION_FILTER.VOICE ||
     isProviderId(value) ||
+    isHostedAgentId(value) ||
     isSessionApplicationId(value)
   );
 }

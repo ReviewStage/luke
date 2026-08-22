@@ -3,6 +3,8 @@ import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials";
 import { ISSUE_TRACKER_ID, type IssueTrackerId } from "@sidecar/issues";
 import {
   CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
+  HOSTED_AGENT_ID,
+  type HostedAgentId,
   PROVIDER_ID,
   type ProviderId,
   SESSION_APPLICATION_ID,
@@ -18,6 +20,7 @@ import {
   CONDUCTOR_MARK_PATHS,
   COPILOT_PATH,
   CURSOR_PATH,
+  DEEPSEEK_PATH,
   DEVIN_PATH,
   GEMINI_CLI_MARK_LAYERS,
   GEMINI_CLI_MARK_MASK_PATH,
@@ -28,6 +31,8 @@ import {
   OPENCODE_BLOCK_PATH,
   OPENCODE_FRAME_PATH,
   ORCA_PATH,
+  PI_PATH,
+  REPLICAS_PATH,
   SUPERSET_PATH,
 } from "@sidecar/surface";
 import { useId } from "react";
@@ -52,6 +57,9 @@ import { APPLE_CALENDAR_ID } from "#shared/apple-calendar";
  * brand kit at https://www.conductor.build/brandkit, Copilot via Simple Icons
  * (MIT, sourced from https://primer.style/foundations/icons/copilot-24),
  * Cursor via Simple Icons (CC0-1.0, sourced from https://cursor.com/brand),
+ * DeepSeek's whale via Simple Icons (CC0-1.0, sourced from
+ * https://www.deepseek.com), Pi's pixel glyph verbatim from the inline SVG
+ * https://pi.dev serves as its own site logo,
  * Devin's verbatim from the mark https://devin.ai serves as its own favicon
  * and site header, Gemini's aurora sparkle verbatim from the vector the
  * Gemini web app inlines at gemini.google.com (trademark of Google LLC),
@@ -61,7 +69,9 @@ import { APPLE_CALENDAR_ID } from "#shared/apple-calendar";
  * https://jules.google), OpenAI via Simple Icons (CC0-1.0), Linear via Simple Icons (CC0-1.0, sourced from
  * https://linear.app), OpenCode's two-tone terminal mark verbatim from
  * the favicon https://opencode.ai serves, Orca's whale mark verbatim from the
- * logo the Orca repository publishes (stablyai/orca, MIT), and Superset's bracket mark traced
+ * logo the Orca repository publishes (stablyai/orca, MIT), Replicas' pixel R
+ * verbatim from the site mark https://tryreplicas.com serves
+ * (R-logo-new.svg), and Superset's bracket mark traced
  * from the pixel grid of the favicon https://superset.sh serves — the one
  * square mark Superset publishes — keeping the vertical metallic gradient the
  * favicon draws it with. Each keeps its own brand colour
@@ -289,6 +299,49 @@ function JulesMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
+function DeepSeekMark({ className }: MarkProps): React.JSX.Element {
+  return (
+    <svg
+      className={className}
+      data-mark={HOSTED_AGENT_ID.DEEPSEEK}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path fill="currentColor" d={DEEPSEEK_PATH} />
+    </svg>
+  );
+}
+
+function PiMark({ className }: MarkProps): React.JSX.Element {
+  return (
+    <svg
+      className={className}
+      data-mark={HOSTED_AGENT_ID.PI}
+      viewBox="0 0 800 800"
+      aria-hidden="true"
+      focusable="false"
+    >
+      {/* Even-odd, as pi.dev publishes it: the glyph's counter is a hole. */}
+      <path fill="currentColor" fillRule="evenodd" d={PI_PATH} />
+    </svg>
+  );
+}
+
+function ReplicasMark({ className }: MarkProps): React.JSX.Element {
+  return (
+    <svg
+      className={className}
+      data-mark={PROVIDER_ID.REPLICAS}
+      viewBox="0 0 225 300"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path fill="currentColor" d={REPLICAS_PATH} />
+    </svg>
+  );
+}
+
 function AppleCalendarMark({ className }: MarkProps): React.JSX.Element {
   // Drawn after the macOS Calendar app icon — white tile, red weekday line,
   // and the 17 Apple's marketing icon shows — in its own colours, because
@@ -453,6 +506,7 @@ function UnknownProviderMark({ className }: MarkProps): React.JSX.Element {
 
 export type MarkId =
   | ProviderId
+  | HostedAgentId
   | SessionApplicationId
   | IssueTrackerId
   | typeof APPLE_CALENDAR_ID
@@ -476,6 +530,7 @@ const PROVIDER_MARKS = {
   // Cursor the app draws Cursor's own mark: the id differs from the agent's
   // only so the two filter chips can answer different questions.
   [SESSION_APPLICATION_ID.CURSOR]: CursorMark,
+  [HOSTED_AGENT_ID.DEEPSEEK]: DeepSeekMark,
   [PROVIDER_ID.DEVIN]: DevinMark,
   [PROVIDER_ID.GEMINI_CLI]: GeminiCliMark,
   [GOOGLE_CALENDAR_ID]: GoogleCalendarMark,
@@ -484,6 +539,8 @@ const PROVIDER_MARKS = {
   [CREDENTIAL_PROVIDER_ID.OPENAI]: OpenAiMark,
   [PROVIDER_ID.OPENCODE]: OpenCodeMark,
   [SESSION_APPLICATION_ID.ORCA]: OrcaMark,
+  [HOSTED_AGENT_ID.PI]: PiMark,
+  [PROVIDER_ID.REPLICAS]: ReplicasMark,
   [SUPERSET_WORKSPACE_PROVIDER_ID]: SupersetMark,
 } as const satisfies Readonly<Record<MarkId, (props: MarkProps) => React.JSX.Element>>;
 

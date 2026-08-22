@@ -29,6 +29,7 @@ import type { ObservationHookProviderId } from "./hook-registry.js";
 import { JulesSessionAdapter } from "./jules/adapter.js";
 import { OpenCodeSessionAdapter } from "./opencode/adapter.js";
 import { installOpenCodeObservationPlugin } from "./opencode/hooks.js";
+import { ReplicasSessionAdapter } from "./replicas/adapter.js";
 import {
   HOOK_SPOOL_MAXIMUM_AGE_MS,
   type ObservationHookInstallation,
@@ -196,6 +197,12 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
         opencodeInstallation,
         now,
       ),
+    },
+    [PROVIDER_ID.REPLICAS]: {
+      adapter: new ReplicasSessionAdapter({
+        readApiKey: () => options.readApiKey(CREDENTIAL_PROVIDER_ID.REPLICAS),
+      }),
+      credential: CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.REPLICAS],
     },
   } satisfies Readonly<Record<ProviderId, ProviderRegistration>>;
 }
