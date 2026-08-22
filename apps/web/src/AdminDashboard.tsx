@@ -1178,15 +1178,27 @@ function PageHeader({
   );
 }
 
+/** A clock of its own, so the header's age stays true without refetching to learn it. */
+function useNow(intervalMs: number): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), intervalMs);
+    return () => window.clearInterval(timer);
+  }, [intervalMs]);
+  return now;
+}
+
 function GeneratedStamp({
   generatedAt,
   windowDays,
-  now,
 }: {
   generatedAt: number;
   windowDays: number;
-  now: number;
 }): React.JSX.Element {
+  // The tick lives here, on the one component that draws relative time. At a
+  // screen root it would re-render every chart and table each 30 s to move
+  // this one string.
+  const now = useNow(AGE_TICK_MS);
   return (
     <span
       className="font-mono text-xs text-muted-foreground"
@@ -1728,7 +1740,6 @@ function Dashboard({
   refreshing,
   onRefresh,
   onOpenAccount,
-  now,
 }: {
   metrics: AdminMetrics;
   refreshFailure: string | undefined;
@@ -1741,7 +1752,6 @@ function Dashboard({
   refreshing: boolean;
   onRefresh: () => void;
   onOpenAccount: (id: string) => void;
-  now: number;
 }): React.JSX.Element {
   const db = metrics.systemHealth.database;
 
@@ -1755,11 +1765,7 @@ function Dashboard({
           <>
             <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
             <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
-            <GeneratedStamp
-              generatedAt={metrics.generatedAt}
-              windowDays={metrics.windowDays}
-              now={now}
-            />
+            <GeneratedStamp generatedAt={metrics.generatedAt} windowDays={metrics.windowDays} />
             <button
               type="button"
               className={PLAIN_BUTTON}
@@ -2091,7 +2097,6 @@ function UserDetailPage({
   onBack,
   refreshing,
   onRefresh,
-  now,
 }: {
   detail: AdminUserDetail;
   refreshFailure: string | undefined;
@@ -2100,7 +2105,6 @@ function UserDetailPage({
   onBack: () => void;
   refreshing: boolean;
   onRefresh: () => void;
-  now: number;
 }): React.JSX.Element {
   const subject: AdminUserAccount = detail.account;
   const activity = detail.activity;
@@ -2119,11 +2123,7 @@ function UserDetailPage({
         onSignOut={onSignOut}
         controls={
           <>
-            <GeneratedStamp
-              generatedAt={detail.generatedAt}
-              windowDays={detail.windowDays}
-              now={now}
-            />
+            <GeneratedStamp generatedAt={detail.generatedAt} windowDays={detail.windowDays} />
             <button
               type="button"
               className={PLAIN_BUTTON}
@@ -2737,7 +2737,6 @@ function UsersPage({
   onQueryChange,
   refreshing,
   onRefresh,
-  now,
 }: {
   list: AdminUserList;
   refreshFailure: string | undefined;
@@ -2753,7 +2752,6 @@ function UsersPage({
   onQueryChange: (query: string) => void;
   refreshing: boolean;
   onRefresh: () => void;
-  now: number;
 }): React.JSX.Element {
   // The service searches the whole roster once the debounce settles; until
   // that answer lands, the same needle filters the rows already loaded, so
@@ -2773,7 +2771,7 @@ function UsersPage({
           <>
             <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
             <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
-            <GeneratedStamp generatedAt={list.generatedAt} windowDays={list.windowDays} now={now} />
+            <GeneratedStamp generatedAt={list.generatedAt} windowDays={list.windowDays} />
             <button
               type="button"
               className={PLAIN_BUTTON}
@@ -2838,7 +2836,6 @@ function UsersScreen({
   onSignOut,
   onOpenAccount,
   frame,
-  now,
 }: {
   hideAdmins: boolean;
   onHideAdminsChange: (hide: boolean) => void;
@@ -2849,7 +2846,6 @@ function UsersScreen({
   onOpenAccount: (id: string) => void;
   /** Applied around every answer but the gate's own cards, which stand alone. */
   frame: (content: React.JSX.Element) => React.JSX.Element;
-  now: number;
 }): React.JSX.Element {
   const [state, setState] = useState<UsersState>(() =>
     signInChosenHere() ? { status: "loading" } : { status: "signed-out" },
@@ -3027,7 +3023,6 @@ function UsersScreen({
           onQueryChange={changeQuery}
           refreshing={refreshing}
           onRefresh={load}
-          now={now}
         />,
       );
   }
@@ -3039,7 +3034,6 @@ function UserDetailScreen({
   onSignOut,
   onBack,
   frame,
-  now,
 }: {
   id: string;
   account: ViewerAccount | undefined;
@@ -3047,7 +3041,6 @@ function UserDetailScreen({
   onBack: () => void;
   /** Applied around every answer but the gate's own cards, which stand alone. */
   frame: (content: React.JSX.Element) => React.JSX.Element;
-  now: number;
 }): React.JSX.Element {
   const [state, setState] = useState<DetailState>(() =>
     signInChosenHere() ? { status: "loading" } : { status: "signed-out" },
@@ -3156,20 +3149,9 @@ function UserDetailScreen({
           onBack={onBack}
           refreshing={refreshing}
           onRefresh={load}
-          now={now}
         />,
       );
   }
-}
-
-/** A clock of its own, so the header's age stays true without refetching to learn it. */
-function useNow(intervalMs: number): number {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), intervalMs);
-    return () => window.clearInterval(timer);
-  }, [intervalMs]);
-  return now;
 }
 
 export function AdminDashboard(): React.JSX.Element {
@@ -3189,7 +3171,6 @@ export function AdminDashboard(): React.JSX.Element {
   };
   const [refreshing, setRefreshing] = useState(false);
   const inFlight = useRef<AbortController>(null);
-  const now = useNow(AGE_TICK_MS);
   const session = authClient.useSession();
   const account = session.data?.user;
 
@@ -3325,7 +3306,6 @@ export function AdminDashboard(): React.JSX.Element {
         onSignOut={signOut}
         onBack={() => navigate("users")}
         frame={(content) => shell("users", content)}
-        now={now}
       />
     );
   }
@@ -3341,7 +3321,6 @@ export function AdminDashboard(): React.JSX.Element {
         onSignOut={signOut}
         onOpenAccount={openAccount}
         frame={(content) => shell("users", content)}
-        now={now}
       />
     );
   }
@@ -3390,7 +3369,6 @@ export function AdminDashboard(): React.JSX.Element {
           refreshing={refreshing}
           onRefresh={load}
           onOpenAccount={openAccount}
-          now={now}
         />,
       );
   }
