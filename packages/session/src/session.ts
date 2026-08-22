@@ -45,6 +45,14 @@ export type SessionCompletionCause =
  * is stale, Luke cannot tell a turn that just asked for the user from one
  * they walked away from hours ago, and reporting the stale state would speak
  * at the wrong moment.
+ *
+ * The decay is for asks that are inferences — a transcript's turn that ended,
+ * a chat a provider reports as merely idle. An adapter whose provider asserts
+ * that a session is holding for the user right now — a plan awaiting
+ * approval, a task waiting for input, a tool call holding for permission —
+ * keeps that status out of this helper: the ask stands until the provider
+ * stops reporting it, because it is a live fact rather than a guess about
+ * where a quiet session left off.
  */
 export function agedStatus(
   status: SessionStatus,
@@ -71,30 +79,45 @@ export const OBSERVATION_WINDOW = {
  * How long a status keeps its session on the roster, measured from the moment
  * the status was entered. This is the one bound on the roster — no adapter
  * ages out or caps its sessions: relevance follows what the status asks of the
- * user, never a blanket clock over every conversation. A failure does not heal
- * by going stale, but a rescue nobody made for days is a session the user has
- * left behind; a settled or unreadable session says only where work ended,
- * which is news while the user might still come back for it and history after.
+ * user, never a blanket clock over every conversation. A row lasts as long as
+ * what it asks: an ask nobody answered for days — a question, an approval, a
+ * failure wanting rescue — is a session the user has left behind; a finish is
+ * news for a day, long enough to come back to in the morning; a chat that
+ * merely went quiet holds its row for the morning it was walked away from,
+ * because past that it is history rather than unfinished business; and a
+ * session the user closed or filed away with their own hands was dismissed in
+ * that act, so its row only lingers long enough to see it settle.
  */
 export const SESSION_ROSTER_RETENTION_MS = {
-  RESCUE_MS: 3 * 24 * 60 * 60 * 1000,
-  SETTLED_MS: 2 * 24 * 60 * 60 * 1000,
+  ASKING_MS: 3 * 24 * 60 * 60 * 1000,
+  FINISHED_MS: 24 * 60 * 60 * 1000,
+  IDLE_MS: 2 * 60 * 60 * 1000,
+  DISMISSED_MS: 15 * 60 * 1000,
 } as const;
 
-/** The retention one status earns. */
-export function sessionRosterRetentionMs(status: SessionStatus): number {
-  if (status === SESSION_STATUS.ERROR) return SESSION_ROSTER_RETENTION_MS.RESCUE_MS;
-  if (status === SESSION_STATUS.COMPLETE || status === SESSION_STATUS.UNKNOWN) {
-    return SESSION_ROSTER_RETENTION_MS.SETTLED_MS;
+/** The retention one status earns, sharpened by how a completed session ended. */
+export function sessionRosterRetentionMs(
+  status: SessionStatus,
+  completionCause?: SessionCompletionCause,
+): number {
+  if (status === SESSION_STATUS.WAITING || status === SESSION_STATUS.ERROR) {
+    return SESSION_ROSTER_RETENTION_MS.ASKING_MS;
   }
-  // Working and waiting are live right now, so neither expires: the age of
-  // the ask is not the age of its relevance.
+  if (status === SESSION_STATUS.COMPLETE) {
+    return completionCause === SESSION_COMPLETION_CAUSE.SESSION_CLOSED
+      ? SESSION_ROSTER_RETENTION_MS.DISMISSED_MS
+      : SESSION_ROSTER_RETENTION_MS.FINISHED_MS;
+  }
+  if (status === SESSION_STATUS.UNKNOWN) return SESSION_ROSTER_RETENTION_MS.IDLE_MS;
+  // Working is live right now, so it never expires: local adapters already
+  // decay a transcript that stopped moving, and a cloud provider saying
+  // "working" is describing this moment.
   return Number.POSITIVE_INFINITY;
 }
 
 /** Whether a session's status still earns it a place on the roster. */
 export function isRosterRelevant(
-  session: Pick<NormalizedSession, "status" | "observedAt" | "standing">,
+  session: Pick<NormalizedSession, "status" | "completionCause" | "observedAt" | "standing">,
   now: number,
 ): boolean {
   // Retention ages out history — settled chats whose files linger after the
@@ -102,7 +125,9 @@ export function isRosterRelevant(
   // while the thing it names still exists and stops the moment it is gone, so
   // there is nothing here to age out, however old its own timestamp grows.
   if (session.standing) return true;
-  return now - session.observedAt <= sessionRosterRetentionMs(session.status);
+  return (
+    now - session.observedAt <= sessionRosterRetentionMs(session.status, session.completionCause)
+  );
 }
 
 /** The sessions still worth a row, in the order they arrived. */

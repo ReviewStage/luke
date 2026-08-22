@@ -1204,10 +1204,10 @@ function dominantUrgency(counts: {
  * The number the badge draws: the count of the state its colour names, so the
  * numeral and the tint state one fact. A "12" that meant "12 tracked" while
  * its colour meant "something needs you" made the reader hold two channels
- * apart; here an attention-coloured 2 is 2 sessions needing you. The total
- * only stands in when nothing is live enough to colour, because "how many
- * need me" and "how many are working" are the questions the badge exists to
- * answer, and the total answers neither.
+ * apart; here an attention-coloured 2 is 2 sessions needing you, and an
+ * idle-grey 3 is 3 chats gone quiet — never a claim that anything is active,
+ * because "how many need me" and "how many are working" are the questions
+ * the badge exists to answer.
  */
 export function tallyValue(tally: SessionTally): number {
   switch (tally.urgency) {
@@ -1218,7 +1218,7 @@ export function tallyValue(tally: SessionTally): number {
     case SESSION_URGENCY.COMPLETE:
       return tally.complete;
     default:
-      return tally.total;
+      return tally.idle;
   }
 }
 
@@ -1234,7 +1234,7 @@ export function tallySummary(tally: SessionTally): string {
   if (tally.complete > 0) {
     return `${tally.complete} ${tally.complete === 1 ? "session" : "sessions"} complete`;
   }
-  return `${tally.total} ${tally.total === 1 ? "session" : "sessions"} tracked`;
+  return `${tally.idle} ${tally.idle === 1 ? "session" : "sessions"} idle`;
 }
 
 /**
@@ -1268,5 +1268,5 @@ export function tallyCaption(tally: SessionTally): string {
   if (tally.attention > 0) return tally.attention === 1 ? "needs you" : "need you";
   if (tally.working > 0) return "working";
   if (tally.complete > 0) return "complete";
-  return "tracked";
+  return "idle";
 }

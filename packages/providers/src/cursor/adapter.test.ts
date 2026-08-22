@@ -339,17 +339,24 @@ test("maps every run state Cursor reports onto a state Luke can show", async () 
   const observations = await adapterFor(api.fetch).observe();
 
   assert.deepEqual(
-    observations.map((observation) => [observation.providerSessionId, observation.status]),
+    observations.map((observation) => [
+      observation.providerSessionId,
+      observation.status,
+      observation.completionCause,
+    ]),
     [
-      ["agent-running", SESSION_STATUS.WORKING],
-      ["agent-finished", SESSION_STATUS.WAITING],
-      ["agent-cancelled", SESSION_STATUS.COMPLETE],
-      ["agent-expired", SESSION_STATUS.COMPLETE],
-      ["agent-creating", SESSION_STATUS.UNKNOWN],
+      ["agent-running", SESSION_STATUS.WORKING, undefined],
+      ["agent-finished", SESSION_STATUS.WAITING, undefined],
+      // A cancelled run stopped one run of an agent that still exists, and an
+      // expired one timed out unseen: neither is the user dismissing the
+      // agent, so both are plain completions with no cause.
+      ["agent-cancelled", SESSION_STATUS.COMPLETE, undefined],
+      ["agent-expired", SESSION_STATUS.COMPLETE, undefined],
+      ["agent-creating", SESSION_STATUS.UNKNOWN, undefined],
       // A run Cursor failed stopped on something the developer has to deal
       // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
       // with, which is not the same as a state Luke could not read.
-      ["agent-errored", SESSION_STATUS.ERROR],
+      ["agent-errored", SESSION_STATUS.ERROR, undefined],
     ],
   );
 });

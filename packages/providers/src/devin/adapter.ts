@@ -479,10 +479,19 @@ export class DevinSessionAdapter extends CloudSessionAdapter {
     // The detail is what a live session is actually doing, and it is only
     // meaningful while one is running: for a suspended session Devin puts the
     // reason for the suspension there instead, which this build knows none of.
+    const detail = session.status === DEVIN_SESSION_STATUS.RUNNING ? session.detail : undefined;
+    // Devin asserting the session is waiting on the user or an approval is a
+    // live fact, not a turn boundary to be guessed stale, so the ask stands
+    // until it changes; a finished turn is a boundary and ages like one.
+    if (
+      detail === DEVIN_RUNNING_DETAIL.WAITING_FOR_USER ||
+      detail === DEVIN_RUNNING_DETAIL.WAITING_FOR_APPROVAL
+    ) {
+      return SESSION_STATUS.WAITING;
+    }
     const status =
-      (session.status === DEVIN_SESSION_STATUS.RUNNING && session.detail
-        ? SESSION_STATUS_BY_RUNNING_DETAIL[session.detail]
-        : undefined) ?? SESSION_STATUS_BY_DEVIN_STATUS[session.status];
+      (detail ? SESSION_STATUS_BY_RUNNING_DETAIL[detail] : undefined) ??
+      SESSION_STATUS_BY_DEVIN_STATUS[session.status];
     return agedStatus(
       status,
       session.observedAt,
