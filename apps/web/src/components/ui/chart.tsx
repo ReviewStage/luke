@@ -11,6 +11,7 @@
 import * as React from "react";
 import type { TooltipValueType } from "recharts";
 import * as RechartsPrimitive from "recharts";
+import { isSafeChartCssColor, isSafeChartCssKey } from "./chart-css";
 
 type ClassValue = string | false | null | undefined;
 
@@ -93,7 +94,20 @@ function ChartContainer({
 }
 
 const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
-  const colorConfig = Object.entries(config).filter(([, config]) => config.theme ?? config.color);
+  // SAFETY: the interpolation below is raw CSS, so the boundary must sit here
+  // in the primitive rather than at call sites: every config funnels through
+  // this component, and a future call site feeding it anything observed would
+  // otherwise turn a key or color string into an injection point. An entry
+  // that fails validation is skipped, not thrown on, because one bad series
+  // color should cost that series its variable, not the chart its render.
+  const colorConfig = Object.entries(config).filter(([key, itemConfig]) => {
+    const colors = itemConfig.theme
+      ? Object.values(itemConfig.theme)
+      : itemConfig.color
+        ? [itemConfig.color]
+        : [];
+    return colors.length > 0 && isSafeChartCssKey(key) && colors.every(isSafeChartCssColor);
+  });
 
   if (!colorConfig.length) {
     return null;
@@ -101,7 +115,7 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
 
   return (
     <style
-      // biome-ignore lint/security/noDangerouslySetInnerHtml: the generated rules interpolate only ChartConfig keys and colors, which are fixed at build time, never user input.
+      // biome-ignore lint/security/noDangerouslySetInnerHtml: the generated rules interpolate only keys and colors the filter above validated against identifier and color-format allowlists.
       dangerouslySetInnerHTML={{
         __html: Object.entries(THEMES)
           .map(
