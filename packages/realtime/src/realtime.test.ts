@@ -255,6 +255,7 @@ test("the standing instructions make Luke the coding agents' engineering manager
   assert.match(instructions, /start with the answer; do not repeat the user's request/i);
   assert.match(instructions, /call a tool without announcing it/i);
   assert.match(instructions, /when a tool call succeeds, say "done\."/i);
+  assert.match(instructions, /unless the result itself is what the user asked to hear/i);
   assert.match(instructions, /explicit latest or most-recent ask resolves by the recency labels/i);
   assert.match(instructions, /open_session once for every distinct provider/i);
   assert.match(instructions, /do not filter the panel first/i);
