@@ -322,10 +322,11 @@ function activityFromToolCallRows(rows: readonly DevinRow[]): string | undefined
  * What the refinement actually buys here is the states the session database
  * cannot show: a tool call holding for approval writes no node while it
  * holds, a settled turn and a session walked away from write the same rows,
- * and the database records no closure at all. The stale notification decays
- * to unknown for the same reason Codex's does — a hold nobody has answered in
- * a window is indistinguishable from a session left behind, and must never
- * read as anything livelier.
+ * and the database records no closure at all. The notification keeps waiting
+ * past freshness for the same reason Codex's does — a standing event is
+ * proof the approval dialog is still up, because any row at or past it would
+ * have discarded it, and a process killed mid-hold leaves that proof
+ * standing only until the spool prune retires it.
  */
 const DEVIN_HOOK_STATUS_REFINEMENT = {
   definitive: [{ event: DEVIN_HOOK_EVENT.SESSION_END, fresh: SESSION_STATUS.COMPLETE }],
@@ -333,7 +334,7 @@ const DEVIN_HOOK_STATUS_REFINEMENT = {
     {
       event: DEVIN_HOOK_EVENT.NOTIFICATION,
       fresh: SESSION_STATUS.WAITING,
-      stale: SESSION_STATUS.UNKNOWN,
+      stale: SESSION_STATUS.WAITING,
     },
     { event: DEVIN_HOOK_EVENT.PROMPT, fresh: SESSION_STATUS.WORKING },
     { event: DEVIN_HOOK_EVENT.STOP, fresh: SESSION_STATUS.WAITING },

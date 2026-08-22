@@ -283,11 +283,14 @@ test("keeps reporting a long turn as working", async () => {
   assert.equal(observations[0]?.observedAt, startedAt);
 });
 
-test("stops calling a session that asked for feedback waiting once it goes stale", async () => {
+test("a session awaiting feedback keeps asking however long it has stood", async () => {
+  // Jules asserting the session awaits feedback is a live fact about this
+  // moment, not a turn boundary to be guessed stale, so the ask never melts
+  // into an idle row.
   const askedAt = TEST_TIME - 2 * 60 * 60 * 1000;
   const api = fakeJulesApi([
     {
-      id: "session-abandoned",
+      id: "session-standing-ask",
       state: TEST_STATE.AWAITING_USER_FEEDBACK,
       createTime: askedAt,
       updateTime: askedAt,
@@ -296,7 +299,7 @@ test("stops calling a session that asked for feedback waiting once it goes stale
 
   const observations = await adapterFor(api.fetch).observe();
 
-  assert.equal(observations[0]?.status, SESSION_STATUS.UNKNOWN);
+  assert.equal(observations[0]?.status, SESSION_STATUS.WAITING);
 });
 
 test("keeps a completed session complete however long ago it finished", async () => {
