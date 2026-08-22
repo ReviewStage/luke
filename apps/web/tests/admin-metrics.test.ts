@@ -38,8 +38,6 @@ function source(overrides: Partial<AdminMetricsSource> = {}): AdminMetricsSource
   return {
     users: {
       total: 0,
-      activeSessions: 0,
-      activeSessionUsers: 0,
       signInMethods: { google: 0, github: 0, other: 0 },
       signupsByDay: new Map(),
     },
@@ -437,14 +435,13 @@ test("integration health reads presence, in a fixed order, never a value", () =>
     analyticsErasure: false,
     googleSignIn: true,
     githubSignIn: true,
-    authSecret: true,
   });
   assert.equal(rows[0]?.key, ADMIN_INTEGRATION.HOSTED_TIER.key);
   assert.equal(rows[0]?.configured, true);
   assert.equal(rows[1]?.key, ADMIN_INTEGRATION.ANALYTICS_RECORDING.key);
   assert.equal(rows[1]?.configured, false);
-  assert.equal(rows.length, 6);
-  assert.equal(rows.filter((row) => row.configured).length, 4);
+  assert.equal(rows.length, 5);
+  assert.equal(rows.filter((row) => row.configured).length, 3);
   for (const row of rows) {
     assert.ok(row.label.length > 0);
     assert.ok(row.key.length > 0);
