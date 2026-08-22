@@ -186,9 +186,12 @@ function ChartTooltipContent({
   const nestLabel = payload.length === 1 && indicator !== "dot";
 
   return (
+    // The tooltip floats above a chart that sits on a card, and the dark
+    // theme's card is lighter than its page, so the stock `bg-background`
+    // here would draw the one floating surface *below* the ground it covers.
     <div
       className={cn(
-        "grid min-w-[8rem] items-start gap-1.5 rounded-lg border border-border/50 bg-background px-2.5 py-1.5 text-xs shadow-xl",
+        "grid min-w-[8rem] items-start gap-1.5 rounded-lg border border-border/50 bg-card px-2.5 py-1.5 text-xs shadow-xl",
         className,
       )}
     >
