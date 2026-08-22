@@ -29,6 +29,25 @@ import {
  * itself, never anything read off the user's machine.
  */
 
+/** How many complete weeks the account calendar reaches back past the current one. */
+export const CALENDAR_COMPLETE_WEEKS = 52;
+
+const DAY_MS = 86_400_000;
+const DAYS_PER_WEEK = 7;
+
+/**
+ * The account calendar's UTC day keys, oldest first: the last 52 complete
+ * weeks plus the current partial one, ending on `now`'s own day — a trailing
+ * year that stands apart from the page's window. The calendar's weeks open
+ * on Sunday, its own requested convention, unlike the retention grid's
+ * Monday-keyed weeks, which follow Postgres's `date_trunc('week')`. The
+ * epoch, 1970-01-01, was a Thursday: four days past its week's Sunday.
+ */
+export function calendarDayKeys(now: number): string[] {
+  const daysIntoWeek = ((Math.floor(now / DAY_MS) + 4) % DAYS_PER_WEEK) + 1;
+  return lastNDayKeys(now, CALENDAR_COMPLETE_WEEKS * DAYS_PER_WEEK + daysIntoWeek);
+}
+
 /** The account the page names, from the service's own user row. */
 export interface AdminUserAccount {
   id: string;
@@ -61,6 +80,8 @@ export interface AdminUserSource {
   account: AdminUserAccount;
   usage: {
     byDay: ReadonlyMap<string, AdminUsageDay>;
+    /** The calendar's own rows, read at the trailing-year bound. */
+    calendarByDay: ReadonlyMap<string, AdminUsageDay>;
     allTime: AdminUserAllTime;
     /** Window days on which this account reached a hosted daily ceiling. */
     quotaLimitedDaysWindow: number;
@@ -73,6 +94,11 @@ export interface AdminUserDetail {
   account: AdminUserAccount;
   activity: {
     daily: AdminDailyUsage[];
+    /**
+     * The calendar's zero-filled trailing year, `calendarDayKeys`'s span,
+     * whatever window the rest of the page is read at.
+     */
+    calendarDaily: AdminDailyUsage[];
     usageTrend: AdminTrend;
     activeDaysWindow: number;
     /** Active days in the trailing run beside the run before it. */
@@ -115,6 +141,15 @@ export function buildAdminUserDetail(
     };
   });
 
+  const calendarDaily = calendarDayKeys(now).map((day) => {
+    const row = source.usage.calendarByDay.get(day);
+    return {
+      day,
+      voiceCalls: row?.voiceCalls ?? 0,
+      attentionReviews: row?.attentionReviews ?? 0,
+    };
+  });
+
   const activeFlags = daily.map((day) => day.voiceCalls + day.attentionReviews > 0);
   let streakEnd = activeFlags.length - 1;
   if (!activeFlags[streakEnd]) streakEnd -= 1;
@@ -129,6 +164,7 @@ export function buildAdminUserDetail(
     account: source.account,
     activity: {
       daily,
+      calendarDaily,
       usageTrend: trailingTrend(trendTotals, ADMIN_TREND_DAYS),
       activeDaysWindow: activeFlags.filter(Boolean).length,
       activeDaysTrend: trailingTrend(

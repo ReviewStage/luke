@@ -1,10 +1,12 @@
 /**
- * Folds the admin page's zero-filled daily series into calendar weeks so a
- * GitHub-style grid can draw them: columns are UTC weeks keyed by their
- * Monday — the same weeks the retention grid stands on — and each week holds
- * seven slots, Monday first. A slot outside the window stays empty rather
- * than borrowing a neighbor's day, which is what lets a window opening
- * mid-week, or a window ending on today, draw an honestly ragged edge.
+ * Folds the account page's zero-filled daily series into calendar weeks so a
+ * trailing-year intensity grid can draw them: columns are UTC weeks keyed by
+ * their Sunday, and each week holds seven slots, Sunday first. Sunday-first
+ * weeks are this calendar's own convention — the retention grid and every
+ * other weekly surface stay on Monday-keyed UTC weeks, where Postgres's
+ * `date_trunc('week')` lands. A slot outside the span stays empty rather
+ * than borrowing a neighbor's day, which is what lets a span opening
+ * mid-week, or a span ending on today, draw an honestly ragged edge.
  */
 
 export const DAYS_PER_WEEK = 7;
@@ -12,9 +14,9 @@ export const DAYS_PER_WEEK = 7;
 const DAY_MS = 86_400_000;
 
 export interface CalendarWeek<Day extends { day: string }> {
-  /** The week's UTC Monday, as YYYY-MM-DD. */
+  /** The week's UTC Sunday, as YYYY-MM-DD. */
   weekStart: string;
-  /** Seven slots, Monday first; a slot the window does not cover is undefined. */
+  /** Seven slots, Sunday first; a slot the span does not cover is undefined. */
   days: readonly (Day | undefined)[];
 }
 
@@ -22,12 +24,12 @@ function daysSinceEpoch(day: string): number {
   return Date.parse(`${day}T00:00:00.000Z`) / DAY_MS;
 }
 
-/** The epoch, 1970-01-01, was a Thursday: three days past its week's Monday. */
+/** The epoch, 1970-01-01, was a Thursday: four days past its week's Sunday. */
 function weekdaySlot(day: string): number {
-  return (daysSinceEpoch(day) + 3) % DAYS_PER_WEEK;
+  return (daysSinceEpoch(day) + 4) % DAYS_PER_WEEK;
 }
 
-function mondayKey(day: string): string {
+function sundayKey(day: string): string {
   return new Date((daysSinceEpoch(day) - weekdaySlot(day)) * DAY_MS).toISOString().slice(0, 10);
 }
 
@@ -37,7 +39,7 @@ export function calendarWeeks<Day extends { day: string }>(
 ): readonly CalendarWeek<Day>[] {
   const weeks: { weekStart: string; days: (Day | undefined)[] }[] = [];
   for (const entry of daily) {
-    const weekStart = mondayKey(entry.day);
+    const weekStart = sundayKey(entry.day);
     let week = weeks.at(-1);
     if (week === undefined || week.weekStart !== weekStart) {
       week = { weekStart, days: Array.from({ length: DAYS_PER_WEEK }, () => undefined) };
@@ -51,7 +53,7 @@ export function calendarWeeks<Day extends { day: string }>(
 /**
  * One label per week column, set where a month begins: the first column, and
  * any column whose earliest covered day opens a month its predecessor's did
- * not. The earliest covered day — not the Monday — names the month, so a
+ * not. The earliest covered day — not the Sunday — names the month, so a
  * first column that starts mid-week is labeled for the days it actually
  * shows.
  */

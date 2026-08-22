@@ -33,7 +33,7 @@ import {
   utcWeekStartKey,
   windowFetchDays,
 } from "./admin-metrics.js";
-import type { AdminUserSource } from "./admin-user.js";
+import { type AdminUserSource, calendarDayKeys } from "./admin-user.js";
 import { ADMIN_USERS_LIMIT, type AdminUserListSource, searchLikePattern } from "./admin-users.js";
 import { ADMIN_METRICS_SCOPE, type AdminMetricsScope, type AdminMetricsWindow } from "./http.js";
 
@@ -384,53 +384,65 @@ export async function readAdminUserSource(
   // both runs; the throttle count below stays on the window's own.
   const fetchStartDay =
     lastNDayKeys(input.now, windowFetchDays(input.windowDays))[0] ?? utcDayKey(input.now);
+  // The calendar keeps a trailing-year bound of its own, apart from the
+  // window, so switching windows never redraws the year.
+  const calendarStartDay = calendarDayKeys(input.now)[0] ?? utcDayKey(input.now);
 
-  const [userRows, accountRows, windowRows, [allTimeRow], [quotaRow]] = await Promise.all([
-    database
-      .select({
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        image: user.image,
-        role: user.role,
-        createdAt: user.createdAt,
-      })
-      .from(user)
-      .where(eq(user.id, input.userId))
-      .limit(1),
-    database
-      .select({ providerId: account.providerId })
-      .from(account)
-      .where(eq(account.userId, input.userId)),
-    database
-      .select({
-        day: hostedUsage.day,
-        voiceCalls: hostedUsage.voiceCalls,
-        attentionReviews: hostedUsage.attentionReviews,
-      })
-      .from(hostedUsage)
-      .where(and(eq(hostedUsage.userId, input.userId), gte(hostedUsage.day, fetchStartDay))),
-    database
-      .select({
-        activeDays: count(),
-        firstActiveDay: sql<string | null>`min(${hostedUsage.day})`,
-        lastActiveDay: sql<string | null>`max(${hostedUsage.day})`,
-        voiceCalls: sum(hostedUsage.voiceCalls),
-        attentionReviews: sum(hostedUsage.attentionReviews),
-      })
-      .from(hostedUsage)
-      .where(eq(hostedUsage.userId, input.userId)),
-    database
-      .select({ value: count() })
-      .from(hostedUsage)
-      .where(
-        and(
-          eq(hostedUsage.userId, input.userId),
-          gte(hostedUsage.day, windowStartDay),
-          ceilingReached(),
+  const [userRows, accountRows, windowRows, calendarRows, [allTimeRow], [quotaRow]] =
+    await Promise.all([
+      database
+        .select({
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          image: user.image,
+          role: user.role,
+          createdAt: user.createdAt,
+        })
+        .from(user)
+        .where(eq(user.id, input.userId))
+        .limit(1),
+      database
+        .select({ providerId: account.providerId })
+        .from(account)
+        .where(eq(account.userId, input.userId)),
+      database
+        .select({
+          day: hostedUsage.day,
+          voiceCalls: hostedUsage.voiceCalls,
+          attentionReviews: hostedUsage.attentionReviews,
+        })
+        .from(hostedUsage)
+        .where(and(eq(hostedUsage.userId, input.userId), gte(hostedUsage.day, fetchStartDay))),
+      database
+        .select({
+          day: hostedUsage.day,
+          voiceCalls: hostedUsage.voiceCalls,
+          attentionReviews: hostedUsage.attentionReviews,
+        })
+        .from(hostedUsage)
+        .where(and(eq(hostedUsage.userId, input.userId), gte(hostedUsage.day, calendarStartDay))),
+      database
+        .select({
+          activeDays: count(),
+          firstActiveDay: sql<string | null>`min(${hostedUsage.day})`,
+          lastActiveDay: sql<string | null>`max(${hostedUsage.day})`,
+          voiceCalls: sum(hostedUsage.voiceCalls),
+          attentionReviews: sum(hostedUsage.attentionReviews),
+        })
+        .from(hostedUsage)
+        .where(eq(hostedUsage.userId, input.userId)),
+      database
+        .select({ value: count() })
+        .from(hostedUsage)
+        .where(
+          and(
+            eq(hostedUsage.userId, input.userId),
+            gte(hostedUsage.day, windowStartDay),
+            ceilingReached(),
+          ),
         ),
-      ),
-  ]);
+    ]);
 
   const row = userRows[0];
   if (!row) return undefined;
@@ -438,6 +450,14 @@ export async function readAdminUserSource(
   const byDay = new Map<string, AdminUsageDay>();
   for (const usageRow of windowRows) {
     byDay.set(usageRow.day, {
+      voiceCalls: usageRow.voiceCalls,
+      attentionReviews: usageRow.attentionReviews,
+    });
+  }
+
+  const calendarByDay = new Map<string, AdminUsageDay>();
+  for (const usageRow of calendarRows) {
+    calendarByDay.set(usageRow.day, {
       voiceCalls: usageRow.voiceCalls,
       attentionReviews: usageRow.attentionReviews,
     });
@@ -455,6 +475,7 @@ export async function readAdminUserSource(
     },
     usage: {
       byDay,
+      calendarByDay,
       allTime: {
         activeDays: toNumber(allTimeRow?.activeDays),
         firstActiveDay: allTimeRow?.firstActiveDay ?? null,

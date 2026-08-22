@@ -574,7 +574,8 @@ function calendarCellStyle(total: number, maxTotal: number): React.CSSProperties
   return { backgroundColor: `color-mix(in oklab, var(--chart-1) ${fill}%, transparent)` };
 }
 
-const CALENDAR_WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
+/** Sunday first, the calendar's own week convention (`activity-calendar.ts`). */
+const CALENDAR_WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
 function CalendarDayCell({
   day,
@@ -599,7 +600,7 @@ function CalendarDayCell({
       tabIndex={0}
       aria-label={`${formatTooltipDay(day.day, partialDay)} — ${formatNumber(day.voiceCalls)} voice · ${formatNumber(day.attentionReviews)} attention`}
       data-calendar-day={day.day}
-      className={`size-4 rounded-[3px] outline-offset-2 ${total === 0 ? "bg-muted/60" : ""}${provisional}`}
+      className={`aspect-square w-full rounded-[3px] outline-offset-2 ${total === 0 ? "bg-muted/60" : ""}${provisional}`}
       style={total === 0 ? undefined : calendarCellStyle(total, maxTotal)}
       onPointerEnter={(event) => onShow(day, event.currentTarget)}
       onPointerLeave={(event) => {
@@ -622,6 +623,9 @@ function CalendarDayCell({
 /** The clearance between a day cell and the tooltip riding above or below it. */
 const CALENDAR_TOOLTIP_GAP_PX = 6;
 
+/** Below this cell width the year stops flexing and the wrapper scrolls instead. */
+const CALENDAR_MIN_CELL_PX = 10;
+
 interface CalendarTooltipAnchor {
   day: AdminDailyUsage;
   /** The cell's edges in the card's own coordinates, where the tooltip lives. */
@@ -631,18 +635,22 @@ interface CalendarTooltipAnchor {
 }
 
 /**
- * The same days the bars above draw, folded into a GitHub-style calendar:
- * columns are UTC weeks keyed by their Monday like the retention grid's,
- * rows the seven weekdays, and each cell's fill is that day's share of the
- * account's own busiest day in the window. The bars carry magnitude; this
+ * The account's trailing year — the server's own calendar series, apart from
+ * the window the bars above are read at — folded into an intensity calendar:
+ * columns are UTC weeks keyed by their Sunday (this calendar's own
+ * convention; the retention grid stays Monday-keyed), rows the seven
+ * weekdays Sunday to Saturday, and each cell's fill is that day's share of
+ * the account's own busiest day in the year. The bars carry magnitude; this
  * grid carries the pattern they hide — weekday rhythms, weekend gaps, a
- * streak breaking. A day the window does not cover draws nothing, a covered
- * day with no calls keeps the faintest neutral fill so absence still reads
- * as an observed day, and today wears the retention grid's dashed border
- * because a fade here would pose as a quiet day. A hovered or focused cell
- * answers at once with the charts' own tooltip — one element the whole grid
- * shares, anchored to the card rather than the week scroller so the
- * scroller's overflow cannot clip it, and clamped to the card's edges.
+ * streak breaking. The week columns flex to fill the card, and below the
+ * minimum readable cell the grid holds that minimum and the wrapper
+ * scrolls. A day the year does not cover draws nothing, a covered day with
+ * no calls keeps the faintest neutral fill so absence still reads as an
+ * observed day, and today wears the retention grid's dashed border because
+ * a fade here would pose as a quiet day. A hovered or focused cell answers
+ * at once with the charts' own tooltip — one element the whole grid shares,
+ * anchored to the card rather than the week scroller so the scroller's
+ * overflow cannot clip it, and clamped to the card's edges.
  */
 function ActivityCalendar({
   daily,
@@ -688,20 +696,23 @@ function ActivityCalendar({
   }, [anchor]);
   return (
     <div ref={cardRef} className="relative rounded-lg border border-border bg-card p-5">
-      <div className="mb-4 text-xs text-muted-foreground">This account's days, week by week</div>
+      <div className="mb-4 text-xs text-muted-foreground">
+        This account's trailing year, week by week
+      </div>
       <div className="overflow-x-auto" onScroll={hideTooltip}>
         <div
-          className="grid w-max gap-1 tabular-nums"
+          className="grid w-full gap-1 tabular-nums"
           style={{
             gridAutoFlow: "column",
-            gridTemplateRows: `auto repeat(${DAYS_PER_WEEK}, 1rem)`,
+            gridTemplateColumns: `auto repeat(${weeks.length}, minmax(${CALENDAR_MIN_CELL_PX}px, 1fr))`,
+            gridTemplateRows: `auto repeat(${DAYS_PER_WEEK}, auto)`,
           }}
         >
           <div aria-hidden="true" />
           {CALENDAR_WEEKDAY_LABELS.map((label) => (
             <div
               key={label}
-              className="pr-2 font-mono text-[10px] leading-4 text-muted-foreground uppercase"
+              className="self-center pr-2 font-mono text-[10px] leading-none text-muted-foreground uppercase"
             >
               {label}
             </div>
@@ -731,8 +742,9 @@ function ActivityCalendar({
         </div>
       </div>
       <p className="mt-4 mb-0 text-xs text-muted-foreground">
-        Each cell is one UTC day — a deeper fill is more hosted calls against this account's busiest
-        day in the window, and the dashed cell is today, still filling.
+        Each cell is one UTC day across the trailing year, whatever window is chosen above — a
+        deeper fill is more hosted calls against this account's busiest day in the year, and the
+        dashed cell is today, still filling.
       </p>
       {anchor !== undefined ? (
         <div
@@ -1635,8 +1647,9 @@ function SkeletonChartCard({ plot }: { plot: SkeletonPlot }): React.JSX.Element 
 }
 
 /**
- * The bone block is the calendar grid's own height: a month-label row and
- * seven 1rem day rows with 0.25rem gaps.
+ * The bone block approximates the calendar grid's height at the page's own
+ * max width, where a flexed day cell lands near 1rem: a month-label row and
+ * seven day rows with 0.25rem gaps.
  */
 function SkeletonCalendarCard(): React.JSX.Element {
   return (
@@ -1971,11 +1984,9 @@ function AccountSkeleton({
       <div className="mt-3">
         <SkeletonChartCard plot={SKELETON_PLOT.USAGE} />
       </div>
-      {windowDays > DAYS_PER_WEEK ? (
-        <div className="mt-3">
-          <SkeletonCalendarCard />
-        </div>
-      ) : null}
+      <div className="mt-3">
+        <SkeletonCalendarCard />
+      </div>
       <SectionHeading>Volume</SectionHeading>
       <div className="grid grid-cols-2 gap-3 min-[720px]:grid-cols-4">
         <SkeletonStatCard />
@@ -2567,16 +2578,14 @@ function UserDetailPage({
             generatedAt={detail.generatedAt}
           />
         </div>
-        {/* A 7-day window folds to a single column, which restates the bars
-            above with less resolution, so the calendar draws only for windows
-            past a week; a window with no calls already says so on the chart
-            card, and an all-neutral grid under it would restate the absence. */}
-        {detail.windowDays > DAYS_PER_WEEK &&
-        !seriesHasNoData(activity.daily.map((day) => day.voiceCalls + day.attentionReviews)) ? (
-          <div className="mt-3">
-            <ActivityCalendar daily={activity.daily} generatedAt={detail.generatedAt} />
-          </div>
-        ) : null}
+        {/* The calendar spans its own trailing year, so it draws whatever
+            window is chosen above — and an account with no calls at all
+            draws the all-neutral year, because at a year's span the quiet
+            grid is the answer rather than a restatement of the chart's
+            empty notice. */}
+        <div className="mt-3">
+          <ActivityCalendar daily={activity.calendarDaily} generatedAt={detail.generatedAt} />
+        </div>
 
         <SectionHeading>Volume</SectionHeading>
         <div className="grid grid-cols-2 gap-3 min-[720px]:grid-cols-4">
