@@ -25,6 +25,7 @@ import { installDevinObservationHooks } from "./devin/hooks.js";
 import { DevinLocalSessionAdapter } from "./devin/local-adapter.js";
 import { GeminiCliSessionAdapter } from "./gemini-cli/adapter.js";
 import { installGeminiObservationHooks } from "./gemini-cli/hooks.js";
+import { GrokBuildSessionAdapter } from "./grok-build/adapter.js";
 import type { ObservationHookProviderId } from "./hook-registry.js";
 import { JulesSessionAdapter } from "./jules/adapter.js";
 import { OpenCodeSessionAdapter } from "./opencode/adapter.js";
@@ -179,6 +180,10 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
         now,
       ),
     },
+    // Grok Build's own stores already say whose move it is — the database's
+    // newest message, or the 1.0.x lifecycle log with its permission prompts
+    // — so its adapter needs no observation hook.
+    [PROVIDER_ID.GROK_BUILD]: { adapter: new GrokBuildSessionAdapter() },
     [PROVIDER_ID.JULES]: {
       adapter: new JulesSessionAdapter({
         readApiKey: () => options.readApiKey(CREDENTIAL_PROVIDER_ID.JULES),

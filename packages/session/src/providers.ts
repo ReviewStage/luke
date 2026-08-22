@@ -14,6 +14,7 @@ export const PROVIDER_ID = {
   CURSOR: "cursor",
   DEVIN: "devin",
   GEMINI_CLI: "gemini-cli",
+  GROK_BUILD: "grok-build",
   JULES: "jules",
   OPENCODE: "opencode",
   REPLICAS: "replicas",
