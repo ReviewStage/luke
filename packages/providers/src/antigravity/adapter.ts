@@ -390,6 +390,7 @@ export class AntigravitySessionAdapter extends LocalSessionAdapter {
     const now = this.observationTime();
     const observations = new Map<string, ProviderSessionObservation>();
     const summariesFilesSeen = new Set<string>();
+    const storesSeen = new Set<string>();
     for (const profile of ANTIGRAVITY_PROFILE_DIRECTORIES) {
       const profileDirectory = path.join(this.#antigravityHome, profile);
       const summariesPath = path.join(profileDirectory, ANTIGRAVITY_SUMMARIES_FILE);
@@ -406,13 +407,11 @@ export class AntigravitySessionAdapter extends LocalSessionAdapter {
         // first profile's reading wins, matching the composite adapters.
         if (observations.has(summary.conversationId)) continue;
         const observedAt = summary.observedAtMs ?? stats.mtimeMs;
-        // Only a conversation fresh enough to draw as live earns the point
-        // read into its own store; a stale row's tip could not change what
-        // the surface shows.
-        const tip =
-          now - observedAt <= this.activeSessionFreshnessMs
-            ? await this.#conversationTip(profileDirectory, summary.conversationId)
-            : undefined;
+        // The store's own newest step rides along however old the row is — a
+        // failure lives only on that step, and a failure does not heal by
+        // going stale — at the price of one cached, mtime-keyed reading.
+        const tip = (await this.#storeReading(profileDirectory, summary.conversationId, storesSeen))
+          ?.tip;
         observations.set(
           summary.conversationId,
           this.#observation(profile, summary, tip, observedAt, now),
@@ -421,7 +420,6 @@ export class AntigravitySessionAdapter extends LocalSessionAdapter {
     }
     // The stores come second across every profile, so an index's reading of a
     // conversation always outranks a reading derived from its store alone.
-    const storesSeen = new Set<string>();
     for (const profile of ANTIGRAVITY_PROFILE_DIRECTORIES) {
       await this.#observeConversationStores(profile, observations, storesSeen, now);
     }
@@ -695,29 +693,26 @@ export class AntigravitySessionAdapter extends LocalSessionAdapter {
   }
 
   /**
-   * The newest step of one conversation's own store. Conversations from
-   * older builds have no readable store — their `.pb` files are not
-   * plaintext — and read as no tip, exactly like a store another process
-   * holds locked: the summary's own account stands.
+   * One conversation's own store, read through the mtime-keyed cache.
+   * Conversations from older builds have no readable store — their `.pb`
+   * files are not plaintext — and read as nothing, exactly like a store
+   * another process holds locked: the caller's own account stands.
    */
-  async #conversationTip(
+  async #storeReading(
     profileDirectory: string,
     conversationId: string,
-  ): Promise<AntigravityConversationTip | undefined> {
+    storesSeen: Set<string>,
+  ): Promise<AntigravityDerivedConversation | undefined> {
     if (!ANTIGRAVITY_SESSION_ID_PATTERN.test(conversationId)) return undefined;
     const storePath = path.join(
       profileDirectory,
       ANTIGRAVITY_CONVERSATIONS_DIRECTORY,
       `${conversationId}${ANTIGRAVITY_CONVERSATION_STORE_EXTENSION}`,
     );
-    const database = await openReadOnlyDatabase(this.#sqlite, storePath);
-    if (!database) return undefined;
-    try {
-      const row = this.#tipRow(database);
-      return row ? tipFromRow(row) : undefined;
-    } finally {
-      database.close();
-    }
+    const stats = await fileStats(storePath);
+    if (!stats?.isFile()) return undefined;
+    storesSeen.add(storePath);
+    return this.#derivedConversation(storePath, stats.mtimeMs);
   }
 
   /** A steps table this build cannot read costs the tip, not the pass. */

@@ -288,6 +288,30 @@ test("a failure on the newest step of a settled conversation reads as an error",
   assert.equal(observation.detail?.error, "model quota exhausted");
 });
 
+test("a failure does not heal by going stale", async (t) => {
+  const home = await makeHome(t);
+  const conversationId = "44444444-aaaa-bbbb-cccc-000000000005";
+  await writeSummaries(home, HUB_PROFILE, [
+    {
+      conversationId,
+      title: "Refactor",
+      runStatus: CASCADE_RUN_STATUS.IDLE,
+      observedAt: TEST_TIME - 60 * 60 * 1000,
+    },
+  ]);
+  await writeConversationStore(home, HUB_PROFILE, conversationId, [
+    {
+      idx: 0,
+      stepType: 132,
+      status: CORTEX_STEP_STATUS.ERROR,
+      errorDetails: textField(1, "model quota exhausted"),
+    },
+  ]);
+  const [observation] = await adapterFor(home).observe();
+  assert.equal(observation?.status, SESSION_STATUS.ERROR);
+  assert.equal(observation?.detail?.error, "model quota exhausted");
+});
+
 test("the agent's latest notification is the recap of a settled conversation", async (t) => {
   const home = await makeHome(t);
   await writeSummaries(home, HUB_PROFILE, [
