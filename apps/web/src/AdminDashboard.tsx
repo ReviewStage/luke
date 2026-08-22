@@ -1188,13 +1188,7 @@ function useNow(intervalMs: number): number {
   return now;
 }
 
-function GeneratedStamp({
-  generatedAt,
-  windowDays,
-}: {
-  generatedAt: number;
-  windowDays: number;
-}): React.JSX.Element {
+function GeneratedStamp({ generatedAt }: { generatedAt: number }): React.JSX.Element {
   // The tick lives here, on the one component that draws relative time. At a
   // screen root it would re-render every chart and table each 30 s to move
   // this one string.
@@ -1204,7 +1198,7 @@ function GeneratedStamp({
       className="font-mono text-xs text-muted-foreground"
       title={`${formatTimestamp(generatedAt)} UTC`}
     >
-      {windowDays}-day window · generated {formatAge(Math.max(0, now - generatedAt))}
+      generated {formatAge(Math.max(0, now - generatedAt))}
     </span>
   );
 }
@@ -1524,7 +1518,7 @@ function DashboardSkeleton({
           <>
             <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
             <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
-            <SkeletonLine box="h-4" bone="h-3 w-48" />
+            <SkeletonLine box="h-4" bone="h-3 w-28" />
             <button type="button" className={PLAIN_BUTTON} disabled>
               Loading…
             </button>
@@ -1621,7 +1615,7 @@ function UsersSkeleton({
           <>
             <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
             <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
-            <SkeletonLine box="h-4" bone="h-3 w-48" />
+            <SkeletonLine box="h-4" bone="h-3 w-28" />
             <button type="button" className={PLAIN_BUTTON} disabled>
               Loading…
             </button>
@@ -1663,7 +1657,7 @@ function AccountSkeleton({
         controls={
           <>
             <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
-            <SkeletonLine box="h-4" bone="h-3 w-48" />
+            <SkeletonLine box="h-4" bone="h-3 w-28" />
             <button type="button" className={PLAIN_BUTTON} disabled>
               Loading…
             </button>
@@ -1770,7 +1764,7 @@ function Dashboard({
           <>
             <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
             <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
-            <GeneratedStamp generatedAt={metrics.generatedAt} windowDays={metrics.windowDays} />
+            <GeneratedStamp generatedAt={metrics.generatedAt} />
             <button
               type="button"
               className={PLAIN_BUTTON}
@@ -2133,7 +2127,7 @@ function UserDetailPage({
         controls={
           <>
             <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
-            <GeneratedStamp generatedAt={detail.generatedAt} windowDays={detail.windowDays} />
+            <GeneratedStamp generatedAt={detail.generatedAt} />
             <button
               type="button"
               className={PLAIN_BUTTON}
@@ -2781,7 +2775,7 @@ function UsersPage({
           <>
             <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
             <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
-            <GeneratedStamp generatedAt={list.generatedAt} windowDays={list.windowDays} />
+            <GeneratedStamp generatedAt={list.generatedAt} />
             <button
               type="button"
               className={PLAIN_BUTTON}
