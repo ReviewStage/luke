@@ -18,6 +18,7 @@ export const PROVIDER_ID = {
   GROK_BUILD: "grok-build",
   JULES: "jules",
   OPENCODE: "opencode",
+  RADIUS: "radius",
   REPLICAS: "replicas",
 } as const;
 

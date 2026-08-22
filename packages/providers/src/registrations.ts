@@ -31,6 +31,7 @@ import type { ObservationHookProviderId } from "./hook-registry.js";
 import { JulesSessionAdapter } from "./jules/adapter.js";
 import { OpenCodeSessionAdapter } from "./opencode/adapter.js";
 import { installOpenCodeObservationPlugin } from "./opencode/hooks.js";
+import { RadiusSessionAdapter } from "./radius/adapter.js";
 import { ReplicasSessionAdapter } from "./replicas/adapter.js";
 import {
   HOOK_SPOOL_MAXIMUM_AGE_MS,
@@ -210,6 +211,10 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
         now,
       ),
     },
+    // The browser's own store already says whose move it is — a turn's row
+    // records when it ended and what ended it — so its adapter needs no
+    // observation hook, and Radius publishes no hook surface to join anyway.
+    [PROVIDER_ID.RADIUS]: { adapter: new RadiusSessionAdapter() },
     [PROVIDER_ID.REPLICAS]: {
       adapter: new ReplicasSessionAdapter({
         readApiKey: () => options.readApiKey(CREDENTIAL_PROVIDER_ID.REPLICAS),

@@ -224,13 +224,15 @@ Trust constraints:
   on this machine, and rendered into a bounded reply that is kept nowhere:
   the read performs nothing, reaches no provider, and is offered only for a
   local session whose provider's transcript this build documents reading
-  (Antigravity, Claude Code, Codex, Gemini CLI, Grok Build, OpenCode, and the
+  (Antigravity, Claude Code, Codex, Gemini CLI, Grok Build, OpenCode, the
+  Radius browser's own agent chats, and the
   Devin and Cursor agents running on this machine today); a cloud
   session's conversation lives with its provider and is never fetched. The
-  read renders only what the provider actually wrote down (Cursor keeps tool
-  outputs out of its transcripts, so a Cursor reading carries none, and
-  Antigravity keeps tool outputs in blobs this build does not render, so an
-  Antigravity reading carries the calls and never their answers) and a
+  read renders only what the provider actually wrote down (Cursor and Radius
+  both keep tool outputs out of their transcripts, so those readings carry
+  none, and Antigravity keeps tool outputs in blobs this build does not
+  render, so an Antigravity reading carries the calls and never their
+  answers) and a
   provider whose stored shape this build cannot render faithfully keeps the
   honest refusal instead.
 - Counting is three streams with three different guarantees, and the

@@ -34,10 +34,10 @@
 ### One panel for every agent
 
 One panel shows every coding agent working for you: Antigravity, Claude Code,
-Codex, Cursor, Gemini CLI, Grok Build, and OpenCode on your Mac, and Codex,
-Conductor, Cursor, Devin, GitHub Copilot, Jules, and Replicas in the cloud.
-Filter, sort, or search the list, and click a session to open it where it
-runs.
+Codex, Cursor, Gemini CLI, Grok Build, OpenCode, and Radius on your Mac, and
+Codex, Conductor, Cursor, Devin, GitHub Copilot, Jules, and Replicas in the
+cloud. Filter, sort, or search the list, and click a session to open it where
+it runs.
 
 ### Talk to Luke
 
@@ -93,6 +93,7 @@ leaves your machine.
 | Grok Build | ✅ | |
 | Jules | | ✅ |
 | OpenCode | ✅ | |
+| Radius | ✅ | |
 | Replicas | | ✅ |
 
 

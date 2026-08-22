@@ -206,6 +206,10 @@ export const SESSION_APPLICATION_ID = {
   // included, so the two ride separate axes under separate ids.
   CURSOR: "cursor-app",
   ORCA: "orca",
+  // The browser is its provider, the same sharing Conductor and Replicas
+  // keep: every Radius row is native to the Radius app, so separate ids
+  // would only draw two chips that count identical rows.
+  RADIUS: "radius",
   // Replicas the app deliberately is Replicas the provider, the same sharing
   // Conductor keeps: every Replicas row is native to the Replicas app, so
   // separate ids would only draw two chips that count identical rows.
