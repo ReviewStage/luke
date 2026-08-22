@@ -28,4 +28,5 @@ export {
   SupersetWorkspaceReader,
   type SupersetWorkspaceReaderOptions,
   SupersetWorkspaceSnapshot,
+  supersetPressedLink,
 } from "./workspaces.js";
