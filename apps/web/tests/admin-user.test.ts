@@ -33,6 +33,7 @@ function userSource(usage: Partial<AdminUserSource["usage"]> = {}): AdminUserSou
     },
     usage: {
       byDay: new Map(),
+      calendarByDay: new Map(),
       allTime: {
         activeDays: 0,
         firstActiveDay: null,
@@ -69,6 +70,37 @@ test("the daily series is zero-filled and the window counts fold from it", () =>
   assert.equal(detail.activity.attentionReviewsWindow, 8);
   const emptyDay = detail.activity.daily.find((day) => day.day === "2026-08-01");
   assert.deepEqual(emptyDay, { day: "2026-08-01", voiceCalls: 0, attentionReviews: 0 });
+});
+
+test("the calendar series spans the trailing year, opening on a Sunday", () => {
+  const detail = build({
+    calendarByDay: new Map([
+      ["2025-09-01", { voiceCalls: 4, attentionReviews: 2 }],
+      ["2026-08-17", { voiceCalls: 1, attentionReviews: 0 }],
+    ]),
+  });
+
+  // NOON_UTC's day, 2026-08-17, is a Monday: one day into a Sunday-opened
+  // week, so the year is 52 complete weeks plus two partial-week days.
+  assert.equal(detail.activity.calendarDaily.length, 366);
+  assert.equal(detail.activity.calendarDaily[0]?.day, "2025-08-17");
+  assert.equal(detail.activity.calendarDaily.at(-1)?.day, "2026-08-17");
+  const filled = detail.activity.calendarDaily.find((day) => day.day === "2025-09-01");
+  assert.deepEqual(filled, { day: "2025-09-01", voiceCalls: 4, attentionReviews: 2 });
+  const quiet = detail.activity.calendarDaily.find((day) => day.day === "2026-01-01");
+  assert.deepEqual(quiet, { day: "2026-01-01", voiceCalls: 0, attentionReviews: 0 });
+});
+
+test("the calendar series keeps its year whatever window the page is read at", () => {
+  const calendarByDay = new Map<string, AdminUsageDay>([
+    ["2025-12-25", { voiceCalls: 3, attentionReviews: 1 }],
+  ]);
+  const week = build({ calendarByDay }, ADMIN_METRICS_WINDOW.WEEK);
+  const quarter = build({ calendarByDay }, ADMIN_METRICS_WINDOW.QUARTER);
+
+  assert.equal(week.activity.daily.length, ADMIN_METRICS_WINDOW.WEEK);
+  assert.equal(quarter.activity.daily.length, ADMIN_METRICS_WINDOW.QUARTER);
+  assert.deepEqual(week.activity.calendarDaily, quarter.activity.calendarDaily);
 });
 
 test("a streak ending today counts back to its first gap", () => {
