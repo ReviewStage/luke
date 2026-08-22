@@ -1,6 +1,6 @@
 import { createAuthClient } from "better-auth/react";
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
-import { Bar, BarChart, CartesianGrid, LabelList, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, Cell, LabelList, XAxis, YAxis } from "recharts";
 import type {
   AdminDailySignups,
   AdminDailyUsage,
@@ -35,6 +35,7 @@ import {
   ChartTooltip,
   ChartTooltipContent,
 } from "./components/ui/chart";
+import { partialDayKey, seriesHasNoData } from "./daily-series";
 import { LukeMark } from "./SiteChrome";
 import { SOCIAL_PROVIDER, SOCIAL_PROVIDER_LABEL, type SocialProvider } from "./sign-in-provider";
 
@@ -280,6 +281,18 @@ function formatDayTick(day: string): string {
   });
 }
 
+/**
+ * How faded today's bar draws. The series' last day is still filling, so a
+ * bar rendered like a complete day's always reads as a dip; the fade and the
+ * tooltip's "(so far today)" say the day is partial instead.
+ */
+const PARTIAL_DAY_OPACITY = 0.45;
+
+/** A tooltip label for one bar's day, saying so when that day is still filling. */
+function formatTooltipDay(day: string, partialDay: string | undefined): string {
+  return day === partialDay ? `${formatDayTick(day)} (so far today)` : formatDayTick(day);
+}
+
 /** How often the header's age re-reads the clock, so a page left open says so. */
 const AGE_TICK_MS = 30_000;
 
@@ -374,17 +387,33 @@ const USAGE_CHART = {
  * A trailing-window stacked bar chart on shadcn/ui's chart primitives. Voice
  * and attention stack so one bar reads as a day's total while its split stays
  * visible; the tooltip carries each day's exact numbers, and the legend names
- * the two series.
+ * the two series. A window with no calls at all says so instead of drawing
+ * the server's zero-fill as a flat measurement, and today's bar wears the
+ * partial-day fade.
  */
 function UsageChart({
   daily,
   trend,
   label,
+  generatedAt,
 }: {
   daily: readonly AdminDailyUsage[];
   trend: AdminTrend;
   label: string;
+  generatedAt: number;
 }): React.JSX.Element {
+  if (seriesHasNoData(daily.map((point) => point.voiceCalls + point.attentionReviews))) {
+    return (
+      <div className="rounded-lg border border-border bg-card p-5">
+        <ChartHeading label={label} trend={trend} />
+        <p className="m-0 py-6 text-center text-sm text-muted-foreground">
+          No hosted-tier calls recorded in this window yet.
+        </p>
+      </div>
+    );
+  }
+
+  const partialDay = partialDayKey(daily, generatedAt);
   return (
     <div className="rounded-lg border border-border bg-card p-5">
       <ChartHeading label={label} trend={trend} />
@@ -402,17 +431,33 @@ function UsageChart({
           <YAxis width={36} tickLine={false} axisLine={false} allowDecimals={false} />
           <ChartTooltip
             content={
-              <ChartTooltipContent labelFormatter={(value) => formatDayTick(String(value))} />
+              <ChartTooltipContent
+                labelFormatter={(value) => formatTooltipDay(String(value), partialDay)}
+              />
             }
           />
           <ChartLegend content={<ChartLegendContent />} />
-          <Bar dataKey="voiceCalls" stackId="calls" fill="var(--color-voiceCalls)" />
+          <Bar dataKey="voiceCalls" stackId="calls" fill="var(--color-voiceCalls)">
+            {daily.map((point) => (
+              <Cell
+                key={point.day}
+                fillOpacity={point.day === partialDay ? PARTIAL_DAY_OPACITY : 1}
+              />
+            ))}
+          </Bar>
           <Bar
             dataKey="attentionReviews"
             stackId="calls"
             fill="var(--color-attentionReviews)"
             radius={[4, 4, 0, 0]}
-          />
+          >
+            {daily.map((point) => (
+              <Cell
+                key={point.day}
+                fillOpacity={point.day === partialDay ? PARTIAL_DAY_OPACITY : 1}
+              />
+            ))}
+          </Bar>
         </BarChart>
       </ChartContainer>
     </div>
@@ -423,14 +468,32 @@ const SIGNUPS_CHART = {
   count: { label: "New accounts", color: "var(--chart-1)" },
 } satisfies ChartConfig;
 
-/** One series, so the heading names it and no legend box restates the heading. */
+/**
+ * One series, so the heading names it and no legend box restates the heading.
+ * A window with no signups says so instead of drawing the server's zero-fill
+ * as a flat measurement, and today's bar wears the partial-day fade.
+ */
 function SignupsChart({
   daily,
   trend,
+  generatedAt,
 }: {
   daily: readonly AdminDailySignups[];
   trend: AdminTrend;
+  generatedAt: number;
 }): React.JSX.Element {
+  if (seriesHasNoData(daily.map((point) => point.count))) {
+    return (
+      <div className="rounded-lg border border-border bg-card p-5">
+        <ChartHeading label="New accounts per day" trend={trend} />
+        <p className="m-0 py-6 text-center text-sm text-muted-foreground">
+          No accounts created in this window yet.
+        </p>
+      </div>
+    );
+  }
+
+  const partialDay = partialDayKey(daily, generatedAt);
   return (
     <div className="rounded-lg border border-border bg-card p-5">
       <ChartHeading label="New accounts per day" trend={trend} />
@@ -448,10 +511,19 @@ function SignupsChart({
           <YAxis width={36} tickLine={false} axisLine={false} allowDecimals={false} />
           <ChartTooltip
             content={
-              <ChartTooltipContent labelFormatter={(value) => formatDayTick(String(value))} />
+              <ChartTooltipContent
+                labelFormatter={(value) => formatTooltipDay(String(value), partialDay)}
+              />
             }
           />
-          <Bar dataKey="count" fill="var(--color-count)" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="count" fill="var(--color-count)" radius={[4, 4, 0, 0]}>
+            {daily.map((point) => (
+              <Cell
+                key={point.day}
+                fillOpacity={point.day === partialDay ? PARTIAL_DAY_OPACITY : 1}
+              />
+            ))}
+          </Bar>
         </BarChart>
       </ChartContainer>
     </div>
@@ -1245,7 +1317,11 @@ function Dashboard({
           />
         </div>
         <div className="mt-3 grid gap-3 min-[720px]:grid-cols-[1.6fr_1fr]">
-          <SignupsChart daily={metrics.users.dailySignups} trend={metrics.users.signupTrend} />
+          <SignupsChart
+            daily={metrics.users.dailySignups}
+            trend={metrics.users.signupTrend}
+            generatedAt={metrics.generatedAt}
+          />
           <SignInMethodsChart
             methods={metrics.users.signInMethods}
             totalAccounts={metrics.users.total}
@@ -1291,6 +1367,7 @@ function Dashboard({
             daily={metrics.featureUsage.daily}
             trend={metrics.featureUsage.usageTrend}
             label="Hosted-tier calls per day"
+            generatedAt={metrics.generatedAt}
           />
         </div>
         <SectionHeading>Most active hosted-tier accounts</SectionHeading>
@@ -1672,6 +1749,7 @@ function UserDetailPage({
             daily={activity.daily}
             trend={activity.usageTrend}
             label="This account's calls per day"
+            generatedAt={detail.generatedAt}
           />
         </div>
 
