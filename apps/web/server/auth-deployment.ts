@@ -57,6 +57,13 @@ export interface AuthDeployment {
    * `BETTER_AUTH_SECRET`, which then has to be the same on both ends.
    */
   proxySecret: string | undefined;
+  /**
+   * Whether this deployment may turn a proxied profile into a local session.
+   * Only a positively identified Preview gets that endpoint; production is
+   * the OAuth relay and must never accept the shared proxy key as session
+   * authority for its own database.
+   */
+  acceptsProxyProfiles: boolean;
 }
 
 function present(value: string | undefined): string | undefined {
@@ -96,5 +103,10 @@ export function authDeployment(variables: Record<string, string | undefined>): A
     trustedOrigins: previewAliases,
     productionURL,
     proxySecret,
+    acceptsProxyProfiles:
+      previewBaseURL !== undefined &&
+      productionURL !== undefined &&
+      proxySecret !== undefined &&
+      previewBaseURL !== productionURL,
   };
 }
