@@ -756,6 +756,25 @@ export function App(): React.JSX.Element {
 
   const leavingPanel = useLeavingPanel(presentation);
 
+  // Clicking an icon in the top strip (notch wing) automatically sets the
+  // filter for that app or provider and reveals the sessions in the panel.
+  // Clicking an already-selected single filter toggles it back to all sessions.
+  const handleSelectWingFilter = useCallback(
+    (filter: SessionFilter) => {
+      cancelHover();
+      if (presentationOf() !== PANEL_PRESENTATION.PANEL) {
+        void changeMode(true);
+      }
+      setTab(PANEL_TAB.SESSIONS);
+      setSessionView((current) => ({
+        ...current,
+        filters: sameSessionFilters(current.filters, [filter]) ? [] : [filter],
+      }));
+      setOptionsOpen(false);
+    },
+    [cancelHover, changeMode, presentationOf, setTab],
+  );
+
   /**
    * The panel following its content down is the one move that can take the
    * shape out from under a resting pointer — a settings page opening shorter
@@ -3545,6 +3564,8 @@ export function App(): React.JSX.Element {
         presentation={presentation}
         housingWidth={display.notch.housingWidth}
         accountGated={accountGated}
+        onSelectFilter={handleSelectWingFilter}
+        activeFilters={sessionView.filters}
       />
 
       {/* The one signed-out Luke. Like the caption, he is a single element in
