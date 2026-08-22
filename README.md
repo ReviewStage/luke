@@ -107,7 +107,7 @@ until you connect them in Luke's Settings.
 ## Build from source
 
 Requires an Apple Silicon Mac on macOS 14 or newer, Node.js 24 or newer,
-pnpm 9.15.0, and the Xcode Command Line Tools.
+pnpm 10.34.5, and the Xcode Command Line Tools.
 
 ```sh
 ./scripts/bootstrap.sh   # install pinned workspace dependencies
