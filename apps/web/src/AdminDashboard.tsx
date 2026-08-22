@@ -25,6 +25,12 @@ import { accountInitials } from "./account-initials";
 import { accountLabel } from "./account-label";
 import { GitHubMark, GoogleMark } from "./account-marks";
 import { settleRead } from "./admin-refresh";
+import {
+  SIDEBAR_ICON_SLOT,
+  SIDEBAR_WIDTH,
+  sidebarRailWidth,
+  sidebarToggleLabel,
+} from "./admin-sidebar";
 import { AUTH_BUTTON } from "./auth-surface";
 import {
   type ChartConfig,
@@ -932,8 +938,19 @@ const SIDEBAR_ITEM = {
 /**
  * The page's one navigation, wearing the brand the headers used to carry.
  * Each tab is a real anchor to its own address, so a modified click still
- * gets the browser's own gesture; collapsed, the labels fold away and each
- * item keeps its name on a title and the toggle on its aria-label.
+ * gets the browser's own gesture.
+ *
+ * The fold is a single width transition on the outer rail over a fixed-width
+ * inner panel it clips: the panel is always laid out at the expanded width, so
+ * a label is revealed or hidden by the moving clip edge rather than inserted
+ * and removed. Nothing inside the panel re-flows as the rail moves, so the
+ * fold neither pops a label in nor wraps one nor shoves an icon. Each row
+ * leads with an icon slot exactly the collapsed rail's width, so the icon sits
+ * on the rail's centre and the label begins at the rail's edge — past the clip,
+ * never a fragment inside it — which is why the rows carry no horizontal
+ * padding of their own: any would start the label short of that edge. Collapsed,
+ * every item keeps its name on a `title` and the toggle on its `aria-label`;
+ * the labels themselves stay in the tree, clipped, so a reader still hears them.
  */
 function AdminSidebar({
   active,
@@ -946,54 +963,67 @@ function AdminSidebar({
   onToggle: () => void;
   onNavigate: (tab: AdminTab) => void;
 }): React.JSX.Element {
+  const iconSlot = (icon: React.ReactNode) => (
+    <span
+      className="flex shrink-0 items-center justify-center"
+      style={{ width: SIDEBAR_ICON_SLOT }}
+      aria-hidden="true"
+    >
+      {icon}
+    </span>
+  );
+
   const item = (tab: AdminTab, label: string, icon: React.ReactNode) => (
     <a
       href={tabHref(tab)}
       aria-current={active === tab ? "page" : undefined}
       title={collapsed ? label : undefined}
-      className={`flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium transition-colors duration-150 ${
+      className={`flex items-center rounded-md py-2 pr-3 text-sm font-medium transition-colors duration-150 ${
         active === tab ? SIDEBAR_ITEM.ACTIVE : SIDEBAR_ITEM.IDLE
-      } ${collapsed ? "justify-center" : ""}`}
+      }`}
       onClick={(event) => {
         if (!plainLeftClick(event)) return;
         event.preventDefault();
         onNavigate(tab);
       }}
     >
-      {icon}
-      {collapsed ? null : label}
+      {iconSlot(icon)}
+      <span className="min-w-0 whitespace-nowrap">{label}</span>
     </a>
   );
 
   return (
     <nav
       aria-label="Admin sections"
-      className={`sticky top-0 flex h-screen shrink-0 flex-col border-r border-border bg-card px-3 py-5 transition-[width] duration-150 ${
-        collapsed ? "w-[62px]" : "w-56"
-      }`}
+      style={{ width: sidebarRailWidth(collapsed) }}
+      className="sticky top-0 flex h-screen shrink-0 overflow-hidden border-r border-border bg-card transition-[width] duration-150 ease-out motion-reduce:transition-none"
     >
-      <div className={`flex items-center gap-2 px-1 ${collapsed ? "justify-center" : ""}`}>
-        <span className="inline-flex w-6 shrink-0 text-foreground" aria-hidden="true">
-          <LukeMark className="h-auto w-full" />
-        </span>
-        {collapsed ? null : (
-          <span className="font-brand text-base font-bold tracking-[-0.01em]">Luke admin</span>
-        )}
+      <div style={{ width: SIDEBAR_WIDTH.EXPANDED }} className="flex h-full shrink-0 flex-col py-5">
+        <div className="flex items-center pr-3">
+          {iconSlot(
+            <span className="inline-flex w-6 text-foreground">
+              <LukeMark className="h-auto w-full" />
+            </span>,
+          )}
+          <span className="whitespace-nowrap font-brand text-base font-bold tracking-[-0.01em]">
+            Luke admin
+          </span>
+        </div>
+        <div className="mt-8 grid gap-1">
+          {item("dashboard", "Dashboard", <DashboardIcon />)}
+          {item("users", "Users", <UsersIcon />)}
+        </div>
+        <div className="flex-1" />
+        <button
+          type="button"
+          aria-label={sidebarToggleLabel(collapsed)}
+          className={`flex cursor-pointer items-center rounded-md py-2 pr-3 text-sm font-medium transition-colors duration-150 ${SIDEBAR_ITEM.IDLE}`}
+          onClick={onToggle}
+        >
+          {iconSlot(<CollapseIcon collapsed={collapsed} />)}
+          <span className="whitespace-nowrap">Collapse</span>
+        </button>
       </div>
-      <div className="mt-8 grid gap-1">
-        {item("dashboard", "Dashboard", <DashboardIcon />)}
-        {item("users", "Users", <UsersIcon />)}
-      </div>
-      <div className="flex-1" />
-      <button
-        type="button"
-        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-        className={`flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium transition-colors duration-150 ${SIDEBAR_ITEM.IDLE} ${collapsed ? "justify-center" : ""}`}
-        onClick={onToggle}
-      >
-        <CollapseIcon collapsed={collapsed} />
-        {collapsed ? null : "Collapse"}
-      </button>
     </nav>
   );
 }
