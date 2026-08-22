@@ -13,7 +13,7 @@ import {
 } from "@sidecar/session";
 import { SUPERSET_WORKSPACE_PROVIDER_ID } from "../../../apps/desktop/src/shared/contracts.js";
 import { SUPERSET_CONTROL_ID } from "./cli.js";
-import { SupersetWorkspaceReader } from "./workspaces.js";
+import { SupersetWorkspaceReader, supersetPressedLink } from "./workspaces.js";
 
 async function temporarySupersetHome(t: TestContext): Promise<string> {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "luke-superset-"));
@@ -53,6 +53,17 @@ function createSchema(database: DatabaseSync): void {
       preset_id TEXT,
       display_order INTEGER NOT NULL
     );
+  `);
+}
+
+/**
+ * The columns Superset's own binding lifecycle writes; `createSchema` stays
+ * without them so the tests above it keep exercising the legacy fallback.
+ */
+function addBindingLifecycleColumns(database: DatabaseSync): void {
+  database.exec(`
+    ALTER TABLE terminal_agent_bindings ADD COLUMN last_event_at INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE terminal_agent_bindings ADD COLUMN ended_at INTEGER;
   `);
 }
 
@@ -637,4 +648,116 @@ test("attaches Superset's Gemini terminals to Gemini CLI rows", async (t) => {
 
   const snapshot = await new SupersetWorkspaceReader({ homeDirectory: home }).read();
   assert.equal(snapshot.context(PROVIDER_ID.GEMINI_CLI, "session-1")?.workspaceId, "workspace-1");
+});
+
+test("prefers the live binding a resumed chat's terminal moved to", async (t) => {
+  const home = await temporarySupersetHome(t);
+  const database = await writeHostDatabase(home, "host-local");
+  createSchema(database);
+  addBindingLifecycleColumns(database);
+  // Restarting Superset resumes the chat's terminal under a fresh id: the
+  // ended binding stays beside the live row, first in read order and with
+  // the richer event history, and must still lose to the live terminal.
+  database.exec(`
+    INSERT INTO workspaces (id, project_id, pull_request_id, name, branch, updated_at)
+      VALUES ('workspace-1', NULL, NULL, 'power-vacation', 'main', 200);
+    INSERT INTO terminal_agent_bindings
+      (terminal_id, workspace_id, agent_id, agent_session_id, last_event_type, last_event_at, ended_at)
+      VALUES
+      ('terminal-old', 'workspace-1', 'claude', 'session-1', 'Stop', 900, 950),
+      ('terminal-live', 'workspace-1', 'claude', 'session-1', 'Attached', 400, NULL);
+  `);
+  database.close();
+
+  const snapshot = await new SupersetWorkspaceReader({ homeDirectory: home }).read();
+  assert.equal(snapshot.context(PROVIDER_ID.CLAUDE_CODE, "session-1")?.terminalId, "terminal-live");
+  assert.equal(
+    snapshot.enrich(PROVIDER_ID.CLAUDE_CODE, [
+      {
+        providerSessionId: "session-1",
+        title: "Debug sign-in",
+        status: SESSION_STATUS.WAITING,
+        observedAt: 100,
+      },
+    ])[0]?.detail?.link,
+    "superset://v2-workspace/workspace-1?terminalId=terminal-live",
+  );
+});
+
+test("two live bindings for one chat resolve to the freshest event", async (t) => {
+  const home = await temporarySupersetHome(t);
+  const database = await writeHostDatabase(home, "host-local");
+  createSchema(database);
+  addBindingLifecycleColumns(database);
+  database.exec(`
+    INSERT INTO workspaces (id, project_id, pull_request_id, name, branch, updated_at)
+      VALUES ('workspace-1', NULL, NULL, 'power-vacation', 'main', 200);
+    INSERT INTO terminal_agent_bindings
+      (terminal_id, workspace_id, agent_id, agent_session_id, last_event_type, last_event_at, ended_at)
+      VALUES
+      ('terminal-a', 'workspace-1', 'claude', 'session-1', 'Stop', 100, NULL),
+      ('terminal-b', 'workspace-1', 'claude', 'session-1', 'Stop', 300, NULL);
+  `);
+  database.close();
+
+  const snapshot = await new SupersetWorkspaceReader({ homeDirectory: home }).read();
+  assert.equal(snapshot.context(PROVIDER_ID.CLAUDE_CODE, "session-1")?.terminalId, "terminal-b");
+});
+
+test("a chat whose every binding ended keeps its workspace and loses the terminal", async (t) => {
+  const home = await temporarySupersetHome(t);
+  const database = await writeHostDatabase(home, "host-local");
+  createSchema(database);
+  addBindingLifecycleColumns(database);
+  database.exec(`
+    INSERT INTO workspaces (id, project_id, pull_request_id, name, branch, updated_at)
+      VALUES ('workspace-1', NULL, NULL, 'power-vacation', 'main', 200);
+    INSERT INTO terminal_agent_bindings
+      (terminal_id, workspace_id, agent_id, agent_session_id, last_event_type, last_event_at, ended_at)
+      VALUES ('terminal-old', 'workspace-1', 'claude', 'session-1', 'Stop', 900, 950);
+  `);
+  database.close();
+
+  const snapshot = await new SupersetWorkspaceReader({ homeDirectory: home }).read();
+  assert.equal(snapshot.context(PROVIDER_ID.CLAUDE_CODE, "session-1")?.terminalId, undefined);
+  const [enriched] = snapshot.enrich(
+    PROVIDER_ID.CLAUDE_CODE,
+    [
+      {
+        providerSessionId: "session-1",
+        title: "Review AGENTS.md",
+        status: SESSION_STATUS.COMPLETE,
+        observedAt: 100,
+      },
+    ],
+    "host-local",
+  );
+  // The workspace identity and its acts stand; only the terminal is gone, so
+  // nothing offers to land a message or a focus in a terminal Superset ended.
+  assert.equal(enriched?.workspace?.providerWorkspaceId, "workspace-1");
+  assert.equal(enriched?.canReceiveMessage, undefined);
+  assert.equal(enriched?.detail?.link, "superset://v2-workspace/workspace-1");
+});
+
+test("a press mints a focus request only onto a bound terminal address", () => {
+  assert.equal(
+    supersetPressedLink("superset://v2-workspace/workspace-1?terminalId=terminal-1", "focus-1"),
+    "superset://v2-workspace/workspace-1?terminalId=terminal-1&focusRequestId=focus-1",
+  );
+  // A repeated press replaces the nonce rather than stacking a second one.
+  assert.equal(
+    supersetPressedLink(
+      "superset://v2-workspace/workspace-1?terminalId=terminal-1&focusRequestId=focus-1",
+      "focus-2",
+    ),
+    "superset://v2-workspace/workspace-1?terminalId=terminal-1&focusRequestId=focus-2",
+  );
+  assert.equal(
+    supersetPressedLink("superset://v2-workspace/workspace-1", "focus-1"),
+    "superset://v2-workspace/workspace-1",
+  );
+  assert.equal(
+    supersetPressedLink("https://github.com/example/luke/pull/42", "focus-1"),
+    "https://github.com/example/luke/pull/42",
+  );
 });

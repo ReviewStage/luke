@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   PRODUCT_EVENT,
   PRODUCT_ISSUE_ACT,
@@ -42,7 +43,7 @@ import {
 } from "@sidecar/session";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import type { SupersetSessionContext } from "@sidecar/superset";
-import { isSupersetControlId, type SupersetCli } from "@sidecar/superset";
+import { isSupersetControlId, type SupersetCli, supersetPressedLink } from "@sidecar/superset";
 import type { LinearIssueTracker } from "@sidecar/trackers";
 import {
   isRecord,
@@ -189,9 +190,15 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       },
       failure: () => ({ status: SESSION_OPEN_RESULT_STATUS.REJECTED, reason: failureReason }),
     });
+  // What a press fires is the address the roster reported, plus the one
+  // nonce Superset's own rows mint per press: the app consumes a terminal
+  // focus once per request id, so a nonce composed at observation time would
+  // be spent by the first press and dead for every later one.
+  const pressedLink = (link: string | undefined): string | undefined =>
+    link === undefined ? undefined : supersetPressedLink(link, randomUUID());
   registerOpenAction(
     channels.openSession,
-    (identity) => sessionRegistry.get(identity)?.detail.link,
+    (identity) => pressedLink(sessionRegistry.get(identity)?.detail.link),
     "The system could not open that session.",
   );
   registerAction<[SessionIdentity, string], SessionOpenResult>(channels.openSessionApplication, {
@@ -210,9 +217,11 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       return [identity, applicationId];
     },
     async act(identity, applicationId) {
-      const url = sessionRegistry
-        .get(identity)
-        ?.applications.find((application) => application.id === applicationId)?.link;
+      const url = pressedLink(
+        sessionRegistry
+          .get(identity)
+          ?.applications.find((application) => application.id === applicationId)?.link,
+      );
       if (!url) return { status: SESSION_OPEN_RESULT_STATUS.UNSUPPORTED };
       await openExternal(url);
       if (isProviderId(identity.providerId)) {

@@ -41,6 +41,8 @@ function supersetProviderId(agentId: string): string | undefined {
   return undefined;
 }
 
+const SUPERSET_WORKSPACE_LINK_PREFIX = "superset://v2-workspace/";
+
 /**
  * The address of one workspace in Superset's own app — the same deep link
  * Superset's CLI fires for `workspaces open`, composed here from the observed
@@ -49,7 +51,7 @@ function supersetProviderId(agentId: string): string | undefined {
  * provider and needing no login.
  */
 export function supersetWorkspaceLink(workspaceId: string): string {
-  return `superset://v2-workspace/${workspaceId}`;
+  return `${SUPERSET_WORKSPACE_LINK_PREFIX}${workspaceId}`;
 }
 
 /** Superset's documented route to one terminal inside an observed workspace. */
@@ -59,7 +61,58 @@ export function supersetTerminalLink(workspaceId: string, terminalId: string): s
   return link.toString();
 }
 
+/**
+ * The address a press actually fires for a session behind a bound terminal.
+ * Superset consumes a terminal focus once per request id — its own rows mint
+ * a fresh `focusRequestId` for every press — so the roster's static address
+ * focuses the terminal only while the workspace draws fresh, and a press on a
+ * workspace already on screen lands nowhere. The nonce is the caller's,
+ * minted at the moment of the press, and names nothing observed; every other
+ * address, a terminal-less workspace link included, is handed on untouched.
+ */
+export function supersetPressedLink(link: string, focusRequestId: string): string {
+  if (!link.startsWith(SUPERSET_WORKSPACE_LINK_PREFIX)) return link;
+  const url = new URL(link);
+  if (!url.searchParams.get("terminalId")) return link;
+  url.searchParams.set("focusRequestId", focusRequestId);
+  return url.toString();
+}
+
+/**
+ * Superset keeps every binding a chat ever had: restarting the app resumes
+ * each terminal under a fresh id, ending the old binding (`end_reason`
+ * "resumed") beside the live row it records for the new terminal. Both rows
+ * name the same agent session, so each binding's own lifecycle rides along
+ * and the snapshot chooses between them — a link or a message aimed at the
+ * ended terminal would be silently refused by Superset's own liveness check.
+ */
 const SUPERSET_WORKSPACE_QUERY = `
+  SELECT
+    bindings.agent_id,
+    bindings.agent_session_id,
+    bindings.terminal_id,
+    bindings.ended_at AS binding_ended_at,
+    bindings.last_event_at AS binding_last_event_at,
+    workspaces.id AS workspace_id,
+    workspaces.name AS workspace_name,
+    workspaces.branch,
+    workspaces.updated_at,
+    projects.name AS project_name,
+    pull_requests.url AS pull_request_url
+  FROM terminal_agent_bindings AS bindings
+  JOIN workspaces ON workspaces.id = bindings.workspace_id
+  LEFT JOIN projects ON projects.id = workspaces.project_id
+  LEFT JOIN pull_requests ON pull_requests.id = workspaces.pull_request_id
+  WHERE bindings.agent_session_id IS NOT NULL
+`;
+
+/**
+ * The same read for a host database from before bindings carried their
+ * lifecycle columns. Such a database still holds the chats, it just cannot
+ * say which bindings have ended, so its rows are read as the live ones they
+ * were under that schema.
+ */
+const SUPERSET_LEGACY_WORKSPACE_QUERY = `
   SELECT
     bindings.agent_id,
     bindings.agent_session_id,
@@ -163,10 +216,17 @@ export interface SupersetSessionContext {
   workspaceName: string;
   /**
    * The bound terminal a message lands in. A chatless workspace row has none
-   * — there is nothing there to message — so every act that needs one must
-   * check rather than assume.
+   * — there is nothing there to message — and neither does a chat whose every
+   * binding Superset has ended, so every act that needs one must check rather
+   * than assume.
    */
   terminalId?: string;
+  /**
+   * When Superset last recorded an event on the binding behind this context,
+   * carried so a chat with several bindings resolves to its freshest one.
+   * Absent on chatless rows and on databases from before bindings kept it.
+   */
+  bindingLastEventAt?: number;
   updatedAt: number;
   projectName?: string;
   branch?: string;
@@ -223,14 +283,36 @@ function contextFromRow(
     organizationId,
     workspaceId,
     workspaceName,
-    terminalId,
     updatedAt,
     spawnableAgents,
   };
+  // A binding Superset has ended no longer identifies a live terminal — the
+  // chat resumed into another terminal, or the terminal is gone — so the row
+  // keeps its workspace identity and offers no terminal to act through.
+  if (numberFromRow(row, "binding_ended_at") === undefined) context.terminalId = terminalId;
+  const bindingLastEventAt = numberFromRow(row, "binding_last_event_at");
+  if (bindingLastEventAt !== undefined) context.bindingLastEventAt = bindingLastEventAt;
   if (projectName) context.projectName = projectName;
   if (branch) context.branch = branch;
   if (pullRequestUrl) context.pullRequestUrl = pullRequestUrl;
   return context;
+}
+
+/**
+ * Whether a binding read later should displace the one already held for the
+ * same chat. A live terminal outranks an ended one regardless of the order
+ * the database returned the rows in, the freshest binding event breaks a tie
+ * between two of the same standing, and the workspace's own clock decides
+ * only between rows carrying no binding history — a chatless row, or a
+ * database from before the lifecycle columns.
+ */
+function bindingOutranks(candidate: SupersetSessionContext, held: SupersetSessionContext): boolean {
+  const candidateLive = candidate.terminalId !== undefined;
+  if (candidateLive !== (held.terminalId !== undefined)) return candidateLive;
+  const candidateEvent = candidate.bindingLastEventAt ?? 0;
+  const heldEvent = held.bindingLastEventAt ?? 0;
+  if (candidateEvent !== heldEvent) return candidateEvent > heldEvent;
+  return held.updatedAt < candidate.updatedAt;
 }
 
 /**
@@ -306,7 +388,7 @@ export class SupersetWorkspaceSnapshot {
     for (const context of contexts) {
       const provider = this.#sessions.get(context.providerId) ?? new Map();
       const existing = provider.get(context.providerSessionId);
-      if (!existing || existing.updatedAt < context.updatedAt) {
+      if (!existing || bindingOutranks(context, existing)) {
         provider.set(context.providerSessionId, context);
       }
       this.#sessions.set(context.providerId, provider);
@@ -611,15 +693,7 @@ export class SupersetWorkspaceReader {
           const presetId = textFromRow(row, "preset_id");
           return presetId ? [presetId] : [];
         });
-      const bound = database
-        .prepare(SUPERSET_WORKSPACE_QUERY)
-        .all()
-        .flatMap((value) => {
-          const row = wireRecord(value);
-          if (!row) return [];
-          const context = contextFromRow(organizationId, row, spawnableAgents);
-          return context ? [context] : [];
-        });
+      const bound = this.#boundChats(database, organizationId, spawnableAgents);
       return {
         contexts: [
           ...bound,
@@ -633,6 +707,35 @@ export class SupersetWorkspaceReader {
       throw error;
     } finally {
       database.close();
+    }
+  }
+
+  /**
+   * Read behind a fallback rather than a guard: a host database from a
+   * Superset before bindings carried their lifecycle columns still holds the
+   * chats, so losing the columns falls back to reading every binding as the
+   * live one it was under that schema, never to losing the chats.
+   */
+  #boundChats(
+    database: SqliteDatabase,
+    organizationId: string,
+    spawnableAgents: readonly string[],
+  ): readonly SupersetSessionContext[] {
+    const read = (query: string) =>
+      database
+        .prepare(query)
+        .all()
+        .flatMap((value) => {
+          const row = wireRecord(value);
+          if (!row) return [];
+          const context = contextFromRow(organizationId, row, spawnableAgents);
+          return context ? [context] : [];
+        });
+    try {
+      return read(SUPERSET_WORKSPACE_QUERY);
+    } catch (error) {
+      if (!(error instanceof Error && canIgnoreSqliteError(error))) throw error;
+      return read(SUPERSET_LEGACY_WORKSPACE_QUERY);
     }
   }
 

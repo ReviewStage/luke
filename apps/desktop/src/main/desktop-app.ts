@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -71,6 +72,7 @@ import {
   SupersetWorkspaceAdapter,
   SupersetWorkspaceReader,
   SupersetWorkspaceSnapshot,
+  supersetPressedLink,
 } from "@sidecar/superset";
 import { DEFAULT_PANEL_FORM_FACTOR } from "@sidecar/surface";
 import { LinearCredentials, LinearIssueTracker, LinearSignIn } from "@sidecar/trackers";
@@ -1489,13 +1491,16 @@ function countSpokenAnnouncements(notices: readonly SessionNotice[]): void {
  * registry holds for that session, read the way a row press reads it: an
  * address in a scheme outside `SESSION_LINK_SCHEME` never reached the
  * registry at all. A created session that never reports an address inside
- * its window is left unopened, like any other row without one.
+ * its window is left unopened, like any other row without one. The one thing
+ * added to the address is the same per-press focus nonce a row press adds,
+ * because Superset's own `workspaces open` follow-through usually has the
+ * workspace on screen already before this open fires.
  */
 function openCreatedWorkspaces(sessions: readonly NormalizedSession[]): void {
   for (const created of createdWorkspaceOpens.claim(sessions, Date.now())) {
     const link = created.detail.link;
     if (!link) continue;
-    shell.openExternal(link).catch((error: Error) => {
+    shell.openExternal(supersetPressedLink(link, randomUUID())).catch((error: Error) => {
       const message = error instanceof Error ? error.message : String(error);
       process.stderr.write(`Created workspace could not be opened: ${message}\n`);
     });
