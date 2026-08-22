@@ -92,6 +92,14 @@ flow and mint sessions on deployments that accept proxy profiles. Production
 deliberately does not. Treat the proxy secret as sensitive everywhere it is
 stored, especially in Preview.
 
+Production also needs `BETTER_AUTH_PROXY_TRUSTED_ORIGINS`, a comma-separated
+allowlist of this project's protected Preview origins. A single `*` may stand
+for characters within one hostname label; for this Vercel project that is
+`https://luke-web-*-stage-review.vercel.app`. Before production spends a
+provider code, it decrypts the proxy state and requires both the profile-return
+endpoint and its final page to match that allowlist. A Preview-held key therefore
+cannot turn production into a token relay to an origin outside the project.
+
 Vercel Deployment Protection sits in front of all of this. The redirect back
 from production lands on the protected preview like any other request, so the
 browser needs that deployment's access cookie already; without it the dashboard
