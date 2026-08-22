@@ -480,10 +480,12 @@ test("keeps reporting a long turn as working, and a session that ended as comple
   assert.equal(observations[0]?.observedAt, startedAt);
 });
 
-test("stops calling a session that is holding for the user waiting once it goes stale", async () => {
+test("a session holding for the user keeps asking however long it has stood", async () => {
+  // Devin asserting waiting-for-user is a live fact about this moment, not a
+  // turn boundary to be guessed stale, so the ask never melts into an idle row.
   const api = fakeDevinApi([
     {
-      id: "devin-abandoned",
+      id: "devin-standing-ask",
       status: TEST_STATUS.RUNNING,
       detail: TEST_DETAIL.WAITING_FOR_USER,
       updatedAt: TEST_TIME - 2 * 60 * 60 * 1000,
@@ -492,7 +494,7 @@ test("stops calling a session that is holding for the user waiting once it goes 
 
   const observations = await adapterFor(api.fetch).observe();
 
-  assert.equal(observations[0]?.status, SESSION_STATUS.UNKNOWN);
+  assert.equal(observations[0]?.status, SESSION_STATUS.WAITING);
 });
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.

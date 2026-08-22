@@ -422,7 +422,10 @@ function statusFromTail(
  * show: a tool call holding for permission writes no records while it holds,
  * and a turn's true end can sit past the tail's read. A failed turn is
  * definite alongside a closed session because the tail may hold nothing about
- * either.
+ * either. The notification keeps waiting past freshness — a standing event is
+ * proof the permission dialog is still up, because any record at or past it
+ * would have discarded it, and a crash mid-hold leaves that proof standing
+ * only until the spool prune retires it.
  */
 const CLAUDE_HOOK_STATUS_REFINEMENT = {
   definitive: [
@@ -432,7 +435,11 @@ const CLAUDE_HOOK_STATUS_REFINEMENT = {
   fresh: [
     { event: CLAUDE_HOOK_EVENT.PROMPT, fresh: SESSION_STATUS.WORKING },
     { event: CLAUDE_HOOK_EVENT.STOP, fresh: SESSION_STATUS.WAITING },
-    { event: CLAUDE_HOOK_EVENT.NOTIFICATION, fresh: SESSION_STATUS.WAITING },
+    {
+      event: CLAUDE_HOOK_EVENT.NOTIFICATION,
+      fresh: SESSION_STATUS.WAITING,
+      stale: SESSION_STATUS.WAITING,
+    },
   ],
   notificationEvent: CLAUDE_HOOK_EVENT.NOTIFICATION,
   sessionEndEvent: CLAUDE_HOOK_EVENT.SESSION_END,

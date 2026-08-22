@@ -347,10 +347,11 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
       label: "What Luke is",
       detail:
         "A macOS sidecar living beside the notch. The number beside the housing is the most " +
-        "pressing count among the sessions the panel lists: how many need the developer, else " +
-        "how many are working, else how many settled. It wears that state's colour, and the " +
-        "peek's caption names the state in words. Hovering peeks, pressing opens the panel, " +
-        "and Escape closes what is open.",
+        "pressing count among the sessions the panel lists — the ones still live or recently " +
+        "settled, not every conversation on disk: how many need the developer, else how many " +
+        "are working, else how many settled, else how many sit idle. It wears that state's " +
+        "colour, and the peek's caption names the state in words. Hovering peeks, pressing " +
+        "opens the panel, and Escape closes what is open.",
     },
     {
       label: "The panel",
@@ -362,8 +363,10 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
     {
       label: "The sessions list",
       detail:
-        "Lists every session that still matters: one working or waiting stays at any age, a " +
-        "failure for three days, a finished or quiet one for two. The options button opens " +
+        "Lists every session that still matters — a row lasts as long as what it asks: " +
+        "working stays at any age, a question or a failure waits three days, a finish is news " +
+        "for a day, a chat that went quiet keeps its row for two hours, and one the developer " +
+        "closed or archived themselves leaves within minutes. The options button opens " +
         "filter rows by axis — location (local, cloud), kind (voice chats), app (Conductor, " +
         "ChatGPT, Cursor, Orca, Superset, cmux), and agent — where several chips can be pressed at once: choices " +
         "on one row widen each other and choices across rows narrow, so Codex beside " +

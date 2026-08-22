@@ -265,11 +265,13 @@ test("keeps reporting a long turn as working", async () => {
   assert.equal(observations[0]?.observedAt, startedAt);
 });
 
-test("stops calling a task that asked for the user waiting once it goes stale", async () => {
+test("a task holding for the user keeps asking however long it has stood", async () => {
+  // GitHub asserting waiting_for_user is a live fact about this moment, not a
+  // turn boundary to be guessed stale, so the ask never melts into an idle row.
   const askedAt = TEST_TIME - 2 * 60 * 60 * 1000;
   const api = fakeAgentTasksApi([
     {
-      id: "task-abandoned",
+      id: "task-standing-ask",
       state: TEST_STATE.WAITING_FOR_USER,
       createdAt: askedAt,
       updatedAt: askedAt,
@@ -278,7 +280,7 @@ test("stops calling a task that asked for the user waiting once it goes stale", 
 
   const observations = await adapterFor(api.fetch).observe();
 
-  assert.equal(observations[0]?.status, SESSION_STATUS.UNKNOWN);
+  assert.equal(observations[0]?.status, SESSION_STATUS.WAITING);
 });
 
 test("keeps a completed task complete however long ago it finished", async () => {
@@ -295,6 +297,9 @@ test("keeps a completed task complete however long ago it finished", async () =>
   const observations = await adapterFor(api.fetch).observe();
 
   assert.equal(observations[0]?.status, SESSION_STATUS.COMPLETE);
+  // A finish the user did not dismiss carries no cause: it is news, not a
+  // filing away.
+  assert.equal(observations[0]?.completionCause, undefined);
 });
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.

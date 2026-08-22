@@ -5,7 +5,10 @@ import {
   type NormalizedSession,
   normalizeSession,
   rosterRelevantSessions,
+  SESSION_COMPLETION_CAUSE,
+  SESSION_ROSTER_RETENTION_MS,
   SESSION_STATUS,
+  type SessionCompletionCause,
   type SessionStatus,
   sessionChangeNumber,
   sessionRosterRetentionMs,
@@ -18,39 +21,82 @@ function session(
   providerSessionId: string,
   status: SessionStatus,
   observedAt: number,
+  completionCause?: SessionCompletionCause,
 ): NormalizedSession {
   return normalizeSession(
     { id: "codex", displayName: "Codex" },
-    { providerSessionId, title: "Implement the shared session core", status, observedAt },
+    {
+      providerSessionId,
+      title: "Implement the shared session core",
+      status,
+      ...(completionCause ? { completionCause } : undefined),
+      observedAt,
+    },
   );
 }
 
-test("a session that is live or asking stays on the roster at any age", () => {
-  for (const status of [SESSION_STATUS.WORKING, SESSION_STATUS.WAITING]) {
-    assert.equal(
-      isRosterRelevant(session("run:1", status, TEST_NOW - 100 * DAY_MS), TEST_NOW),
-      true,
-    );
-  }
+test("a working session stays on the roster at any age", () => {
+  assert.equal(
+    isRosterRelevant(session("run:1", SESSION_STATUS.WORKING, TEST_NOW - 100 * DAY_MS), TEST_NOW),
+    true,
+  );
 });
 
-test("a failure stays through its rescue window and then leaves", () => {
-  const retention = sessionRosterRetentionMs(SESSION_STATUS.ERROR);
-  const atHorizon = session("run:1", SESSION_STATUS.ERROR, TEST_NOW - retention);
-  const pastHorizon = session("run:2", SESSION_STATUS.ERROR, TEST_NOW - retention - 1);
-  assert.equal(isRosterRelevant(atHorizon, TEST_NOW), true);
-  assert.equal(isRosterRelevant(pastHorizon, TEST_NOW), false);
-});
-
-test("a settled or quiet session stays while its ending is news and then leaves", () => {
-  for (const status of [SESSION_STATUS.COMPLETE, SESSION_STATUS.UNKNOWN]) {
+test("an ask stays through its asking window and then leaves", () => {
+  for (const status of [SESSION_STATUS.WAITING, SESSION_STATUS.ERROR]) {
     const retention = sessionRosterRetentionMs(status);
+    assert.equal(retention, SESSION_ROSTER_RETENTION_MS.ASKING_MS);
     assert.equal(isRosterRelevant(session("run:1", status, TEST_NOW - retention), TEST_NOW), true);
     assert.equal(
       isRosterRelevant(session("run:2", status, TEST_NOW - retention - 1), TEST_NOW),
       false,
     );
   }
+});
+
+test("a finish is news for its day and a quiet session for its morning", () => {
+  const cases = [
+    { status: SESSION_STATUS.COMPLETE, retention: SESSION_ROSTER_RETENTION_MS.FINISHED_MS },
+    { status: SESSION_STATUS.UNKNOWN, retention: SESSION_ROSTER_RETENTION_MS.IDLE_MS },
+  ];
+  for (const { status, retention } of cases) {
+    assert.equal(sessionRosterRetentionMs(status), retention);
+    assert.equal(isRosterRelevant(session("run:1", status, TEST_NOW - retention), TEST_NOW), true);
+    assert.equal(
+      isRosterRelevant(session("run:2", status, TEST_NOW - retention - 1), TEST_NOW),
+      false,
+    );
+  }
+});
+
+test("a session the user closed themselves only lingers long enough to see it settle", () => {
+  const retention = sessionRosterRetentionMs(
+    SESSION_STATUS.COMPLETE,
+    SESSION_COMPLETION_CAUSE.SESSION_CLOSED,
+  );
+  assert.equal(retention, SESSION_ROSTER_RETENTION_MS.DISMISSED_MS);
+  const closed = (providerSessionId: string, observedAt: number) =>
+    session(
+      providerSessionId,
+      SESSION_STATUS.COMPLETE,
+      observedAt,
+      SESSION_COMPLETION_CAUSE.SESSION_CLOSED,
+    );
+  assert.equal(isRosterRelevant(closed("run:1", TEST_NOW - retention), TEST_NOW), true);
+  assert.equal(isRosterRelevant(closed("run:2", TEST_NOW - retention - 1), TEST_NOW), false);
+  // A finish the user did not dismiss keeps the whole day.
+  assert.equal(
+    isRosterRelevant(
+      session(
+        "run:3",
+        SESSION_STATUS.COMPLETE,
+        TEST_NOW - retention - 1,
+        SESSION_COMPLETION_CAUSE.WORK_FINISHED,
+      ),
+      TEST_NOW,
+    ),
+    true,
+  );
 });
 
 test("a standing row never ages out, however old its own timestamp", () => {

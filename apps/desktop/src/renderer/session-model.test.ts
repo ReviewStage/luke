@@ -378,11 +378,8 @@ test("the caption is the badge state's own words, never a second number", () => 
   assert.equal(tallySummary({ ...tally, attention: 0, working: 3 }), "3 sessions working");
   assert.equal(tallyCaption({ ...tally, attention: 0, working: 0 }), "complete");
   assert.equal(tallySummary({ ...tally, attention: 0, working: 0 }), "1 session complete");
-  assert.equal(tallyCaption({ ...tally, attention: 0, working: 0, complete: 0 }), "tracked");
-  assert.equal(
-    tallySummary({ ...tally, attention: 0, working: 0, complete: 0 }),
-    "6 sessions tracked",
-  );
+  assert.equal(tallyCaption({ ...tally, attention: 0, working: 0, complete: 0 }), "idle");
+  assert.equal(tallySummary({ ...tally, attention: 0, working: 0, complete: 0 }), "1 session idle");
   assert.equal(tallyCaption(sessionTally([])), "none tracked");
   assert.equal(tallySummary(sessionTally([])), "No sessions tracked");
 });
