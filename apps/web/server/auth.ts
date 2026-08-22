@@ -3,20 +3,25 @@ import { oauthProvider } from "@better-auth/oauth-provider";
 import { betterAuth } from "better-auth";
 import { jwt, lastLoginMethod } from "better-auth/plugins";
 import { USER_ROLE } from "./admin/admin-access.js";
+import { authDeployment } from "./auth-deployment.js";
 import {
   ACCOUNT_TOKEN_STORAGE,
   denyOAuthClientPrivileges,
   JWT_KEY_STORAGE,
 } from "./auth-policy.js";
+import { authProxy } from "./auth-proxy.js";
 import { getDatabase } from "./db/index.js";
 import * as schema from "./db/schema.js";
 import { DESKTOP_OAUTH_CLIENT } from "./desktop-oauth-client.js";
 
 export const DESKTOP_OAUTH_CLIENT_ID = DESKTOP_OAUTH_CLIENT.id;
 
+const deployment = authDeployment(process.env);
+
 export const auth = betterAuth({
   appName: "Luke",
-  baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:5173",
+  baseURL: deployment.baseURL,
+  trustedOrigins: deployment.trustedOrigins,
   secret: process.env.BETTER_AUTH_SECRET,
   database: drizzleAdapter(getDatabase(), { provider: "pg", schema }),
   account: ACCOUNT_TOKEN_STORAGE,
@@ -44,6 +49,9 @@ export const auth = betterAuth({
     },
   },
   plugins: [
+    // Ahead of the social sign-in it rewrites, and of the provider plugin whose
+    // desktop authorization resumes on the session it lands.
+    authProxy(deployment),
     jwt(JWT_KEY_STORAGE),
     lastLoginMethod({ storeInDatabase: true }),
     oauthProvider({

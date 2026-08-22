@@ -54,6 +54,57 @@ Google's callback is `${BETTER_AUTH_URL}/api/auth/callback/google`; GitHub's is
 `api/feedback.mjs` deliberately remains plain ESM so Vercel's builder has nothing
 to transpile.
 
+# Signing in on a Preview deployment
+
+A Preview deployment answers on hostnames minted for the branch, so
+`server/auth-deployment.ts` reads the deployment's own address rather than
+assuming one: on a Preview, `VERCEL_URL` is the base URL and `VERCEL_BRANCH_URL`
+joins it as a trusted origin, and `BETTER_AUTH_URL` stays what it has always
+been, the production address whose callback the two providers registered.
+Without this a preview refuses its own sign-in before it reaches a provider at
+all — Better Auth trusts the origin of its own base URL, and the browser on a
+preview sends the preview's, which is the 403 behind the admin dashboard's
+"Sign-in could not start. Try again."
+
+Better Auth's `oAuthProxy` plugin carries the rest: the preview hands the
+provider production's registered redirect URI, production exchanges the code and
+redirects the profile back to the preview encrypted, and the preview creates the
+session in its own Neon branch database. Production keeps the plugin's callback
+hooks because it is the relay that exchanges the provider code, but drops the
+plugin's `/oauth-proxy-callback` endpoint. That endpoint creates a session from
+any profile encrypted with the shared proxy key; leaving it on production would
+turn a Preview-held credential into authority over production sessions. A
+preview therefore signs in only against a production deployment that already
+carries the relay hooks, while only a positively identified Preview accepts the
+returned profile.
+
+The Preview environment needs `BETTER_AUTH_URL`, `BETTER_AUTH_SECRET`,
+`BETTER_AUTH_PROXY_SECRET`, `GOOGLE_CLIENT_ID`, and `GITHUB_CLIENT_ID`; the two
+client secrets are spent by production, which is the end that exchanges the
+code. `BETTER_AUTH_PROXY_SECRET` has to hold the same dedicated value on both
+ends, or the profile arrives undecryptable. A Preview without it does not expose
+the profile-accepting endpoint at all: falling back to `BETTER_AUTH_SECRET`
+would require putting production's session-signing and provider-token key into
+Preview. The dedicated key does not make the shared credential harmless. A
+profile encrypted with the proxy secret is what a Preview's
+`/api/auth/oauth-proxy-callback` trusts, so a leak can hijack a proxied OAuth
+flow and mint sessions on deployments that accept proxy profiles. Production
+deliberately does not. Treat the proxy secret as sensitive everywhere it is
+stored, especially in Preview.
+
+Production also needs `BETTER_AUTH_PROXY_TRUSTED_ORIGINS`, a comma-separated
+allowlist of this project's protected Preview origins. A single `*` may stand
+for characters within one hostname label; for this Vercel project that is
+`https://luke-web-*-stage-review.vercel.app`. Before production spends a
+provider code, it decrypts the proxy state and requires both the profile-return
+endpoint and its final page to match that allowlist. A Preview-held key therefore
+cannot turn production into a token relay to an origin outside the project.
+
+Vercel Deployment Protection sits in front of all of this. The redirect back
+from production lands on the protected preview like any other request, so the
+browser needs that deployment's access cookie already; without it the dashboard
+reports the intercepted API call rather than the metrics.
+
 # Hosted voice and attention
 
 `api/voice/mint.ts` and `api/attention/review.ts` run Luke's voice and
