@@ -164,4 +164,10 @@ test("the relay reads the callback only from state encrypted with the proxy key"
     await oauthProxyCallbackURL(state, "another-secret-at-least-thirty-two-characters"),
     undefined,
   );
+
+  const truthyStringState = await symmetricEncrypt({
+    key: secret,
+    data: JSON.stringify({ isOAuthProxy: "true", state: "nonce", stateCookie }),
+  });
+  assert.equal(await oauthProxyCallbackURL(truthyStringState, secret), callbackURL);
 });

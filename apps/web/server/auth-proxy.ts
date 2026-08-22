@@ -46,7 +46,10 @@ export async function oauthProxyCallbackURL(
   } catch {
     return undefined;
   }
-  if (statePackage?.isOAuthProxy !== true) return undefined;
+  // Better Auth's relay hook treats every truthy marker as proxy state. The
+  // guard must recognize exactly that set or a differently typed marker could
+  // reach the relay without its destination being checked.
+  if (!statePackage?.isOAuthProxy) return undefined;
   if (!isProxyWireString(statePackage.stateCookie)) throw new Error("Invalid OAuth proxy state");
 
   const stateData = parsedJSON(
