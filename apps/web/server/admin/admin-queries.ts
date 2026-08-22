@@ -5,6 +5,7 @@ import {
   eq,
   gt,
   gte,
+  ilike,
   isNull,
   max,
   ne,
@@ -32,7 +33,7 @@ import {
   windowFetchDays,
 } from "./admin-metrics.js";
 import type { AdminUserSource } from "./admin-user.js";
-import { ADMIN_USERS_LIMIT, type AdminUserListSource } from "./admin-users.js";
+import { ADMIN_USERS_LIMIT, type AdminUserListSource, searchLikePattern } from "./admin-users.js";
 import { ADMIN_METRICS_SCOPE, type AdminMetricsScope, type AdminMetricsWindow } from "./http.js";
 
 /** How many of the most active hosted-tier accounts the overview names. */
@@ -49,6 +50,18 @@ type Database = ReturnType<typeof createDatabase>;
 function scopeCondition(scope: AdminMetricsScope): SQL<unknown> | undefined {
   if (scope === ADMIN_METRICS_SCOPE.ALL) return undefined;
   return or(ne(user.role, USER_ROLE.ADMIN), isNull(user.role));
+}
+
+/**
+ * The accounts a search keeps: a case-insensitive substring of the name or
+ * the email, the two fields a roster row is found by. The term travels as a
+ * bound parameter — never interpolated into the SQL — with its own
+ * wildcards escaped, so it can only ever name characters to find.
+ */
+function searchCondition(search: string | undefined): SQL<unknown> | undefined {
+  if (search === undefined) return undefined;
+  const pattern = searchLikePattern(search);
+  return or(ilike(user.name, pattern), ilike(user.email, pattern));
 }
 
 /** Postgres returns a `count` as a number and a bigint `sum` as a string or null. */
@@ -460,7 +473,9 @@ export async function readAdminUserSource(
  * — with zero active days and no last-active day — instead of vanishing the
  * way it does from every inner-joined aggregate above. Most recently active
  * first, the never-active tail ordered by youngest account, and the roster
- * cut at the stated bound while `total` still counts everyone. Last-seen
+ * cut at the stated bound while `total` still counts everyone. A search
+ * narrows the rows and the total alike, so a truncated answer still states
+ * how many accounts match. Last-seen
  * instants ride a query of their own: a second one-to-many join would fan
  * the usage aggregates out across each account's session rows.
  */
@@ -469,19 +484,21 @@ export async function readAdminUsersSource(
   input: {
     now: number;
     scope: AdminMetricsScope;
+    search: string | undefined;
     viewerId: string;
     windowDays: AdminMetricsWindow;
   },
 ): Promise<AdminUserListSource> {
   const windowStartDay = lastNDayKeys(input.now, input.windowDays)[0] ?? utcDayKey(input.now);
+  const kept = and(scopeCondition(input.scope), searchCondition(input.search));
 
   const [[totalRow], lastSeenRows, rows] = await Promise.all([
-    database.select({ value: count() }).from(user).where(scopeCondition(input.scope)),
+    database.select({ value: count() }).from(user).where(kept),
     database
       .select({ userId: session.userId, lastSeenAt: max(session.updatedAt) })
       .from(session)
       .innerJoin(user, eq(session.userId, user.id))
-      .where(scopeCondition(input.scope))
+      .where(kept)
       .groupBy(session.userId),
     database
       .select({
@@ -508,7 +525,7 @@ export async function readAdminUsersSource(
         adminFavorite,
         and(eq(adminFavorite.userId, user.id), eq(adminFavorite.adminId, input.viewerId)),
       )
-      .where(scopeCondition(input.scope))
+      .where(kept)
       .groupBy(user.id, user.name, user.email, user.image, user.role, user.createdAt)
       .orderBy(sql`max(${hostedUsage.day}) desc nulls last`, desc(user.createdAt))
       .limit(ADMIN_USERS_LIMIT),

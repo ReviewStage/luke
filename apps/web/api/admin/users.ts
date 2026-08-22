@@ -14,11 +14,12 @@ export default {
     return handleAdminUsers({
       request,
       resolveViewer: resolveSessionViewer,
-      readUsers: async (now, scope, viewerId, windowDays) =>
+      readUsers: async (now, scope, viewerId, windowDays, search) =>
         buildAdminUserList(
-          await readAdminUsersSource(getDatabase(), { now, scope, viewerId, windowDays }),
+          await readAdminUsersSource(getDatabase(), { now, scope, search, viewerId, windowDays }),
           now,
           windowDays,
+          search,
         ),
     });
   },

@@ -7,6 +7,7 @@ import {
   type AdminUserListSource,
   buildAdminUserList,
   handleAdminUsers,
+  searchLikePattern,
 } from "../server/admin/admin-users";
 import {
   ADMIN_ERROR,
@@ -15,6 +16,8 @@ import {
   ADMIN_METRICS_WINDOW,
   ADMIN_METRICS_WINDOW_DEFAULT,
   ADMIN_METRICS_WINDOW_PARAM,
+  ADMIN_USERS_SEARCH_MAX_LENGTH,
+  ADMIN_USERS_SEARCH_PARAM,
   type AdminMetricsScope,
   type AdminMetricsWindow,
 } from "../server/admin/http";
@@ -41,15 +44,47 @@ function listSource(overrides: Partial<AdminUserListSource> = {}): AdminUserList
 }
 
 test("the roster is stamped with the window its aggregates cover", () => {
-  const list = buildAdminUserList(listSource({ total: 340 }), NOON_UTC, ADMIN_METRICS_WINDOW.MONTH);
+  const list = buildAdminUserList(
+    listSource({ total: 340 }),
+    NOON_UTC,
+    ADMIN_METRICS_WINDOW.MONTH,
+    undefined,
+  );
   assert.equal(list.generatedAt, NOON_UTC);
   assert.equal(list.windowDays, ADMIN_METRICS_WINDOW.MONTH);
   assert.equal(list.limit, ADMIN_USERS_LIMIT);
   assert.equal(list.total, 340);
+  assert.equal(list.search, undefined);
   assert.deepEqual(list.rows, [ROW]);
 
-  const quarter = buildAdminUserList(listSource(), NOON_UTC, ADMIN_METRICS_WINDOW.QUARTER);
+  const quarter = buildAdminUserList(
+    listSource(),
+    NOON_UTC,
+    ADMIN_METRICS_WINDOW.QUARTER,
+    undefined,
+  );
   assert.equal(quarter.windowDays, ADMIN_METRICS_WINDOW.QUARTER);
+});
+
+test("a searched roster echoes the term its rows and total were filtered by", () => {
+  const searched = buildAdminUserList(
+    listSource({ total: 3 }),
+    NOON_UTC,
+    ADMIN_METRICS_WINDOW.MONTH,
+    "ada",
+  );
+  assert.equal(searched.search, "ada");
+  assert.equal(searched.total, 3);
+  assert.equal(searched.limit, ADMIN_USERS_LIMIT);
+  assert.deepEqual(searched.rows, [ROW]);
+});
+
+test("a search pattern matches the term literally, wildcards escaped", () => {
+  assert.equal(searchLikePattern("ada"), "%ada%");
+  assert.equal(searchLikePattern("100%"), "%100\\%%");
+  assert.equal(searchLikePattern("a_b"), "%a\\_b%");
+  assert.equal(searchLikePattern("back\\slash"), "%back\\\\slash%");
+  assert.equal(searchLikePattern("%_\\"), "%\\%\\_\\\\%");
 });
 
 function usersRequest(method = "GET", query = ""): Request {
@@ -59,7 +94,7 @@ function usersRequest(method = "GET", query = ""): Request {
 const ADMIN_VIEWER: AdminViewer = { userId: "user-1", role: "admin" };
 
 const readUsers = async (now: number): Promise<AdminUserList> =>
-  buildAdminUserList(listSource(), now, ADMIN_METRICS_WINDOW_DEFAULT);
+  buildAdminUserList(listSource(), now, ADMIN_METRICS_WINDOW_DEFAULT, undefined);
 
 test("the gate answers 405, 401, 403, and 200 as distinct outcomes", async () => {
   const wrongMethod = await handleAdminUsers({
@@ -109,11 +144,12 @@ test("the roster is read at the scope and window the request asked for, as the v
     scope: AdminMetricsScope,
     viewerId: string,
     windowDays: AdminMetricsWindow,
+    search: string | undefined,
   ): Promise<AdminUserList> => {
     scopes.push(scope);
     viewerIds.push(viewerId);
     windows.push(windowDays);
-    return buildAdminUserList(listSource(), now, windowDays);
+    return buildAdminUserList(listSource(), now, windowDays, search);
   };
   const respond = (request: Request) =>
     handleAdminUsers({ request, resolveViewer: async () => ADMIN_VIEWER, readUsers: countingRead });
@@ -150,6 +186,64 @@ test("the roster is read at the scope and window the request asked for, as the v
   assert.equal(invalid.status, 400);
   assert.equal((await invalid.json()).error, ADMIN_ERROR.INVALID_WINDOW);
   assert.equal(scopes.length, 3);
+});
+
+test("the roster is searched by the term the request carried, trimmed, and only a real one", async () => {
+  const searches: (string | undefined)[] = [];
+  const countingRead = async (
+    now: number,
+    _scope: AdminMetricsScope,
+    _viewerId: string,
+    windowDays: AdminMetricsWindow,
+    search: string | undefined,
+  ): Promise<AdminUserList> => {
+    searches.push(search);
+    return buildAdminUserList(listSource({ total: 3 }), now, windowDays, search);
+  };
+  const respond = (query: string) =>
+    handleAdminUsers({
+      request: usersRequest("GET", query),
+      resolveViewer: async () => ADMIN_VIEWER,
+      readUsers: countingRead,
+    });
+
+  const searched = await respond(`?${ADMIN_USERS_SEARCH_PARAM}=${encodeURIComponent(" Ada ")}`);
+  assert.equal(searched.status, 200);
+  // SAFETY: handleAdminUsers answered 200, whose body is an AdminUserList document.
+  const body = (await searched.json()) as AdminUserList;
+  assert.equal(body.search, "Ada");
+  assert.equal(body.total, 3);
+
+  assert.equal((await respond("")).status, 200);
+  assert.equal((await respond(`?${ADMIN_USERS_SEARCH_PARAM}=`)).status, 200);
+  assert.equal(
+    (await respond(`?${ADMIN_USERS_SEARCH_PARAM}=${encodeURIComponent("   ")}`)).status,
+    200,
+  );
+  assert.deepEqual(searches, ["Ada", undefined, undefined, undefined]);
+});
+
+test("a term past the length bound is a 400 refusal that reaches no read", async () => {
+  let reads = 0;
+  const countingRead = async (now: number): Promise<AdminUserList> => {
+    reads += 1;
+    return buildAdminUserList(listSource(), now, ADMIN_METRICS_WINDOW_DEFAULT, undefined);
+  };
+  const respond = (term: string) =>
+    handleAdminUsers({
+      request: usersRequest("GET", `?${ADMIN_USERS_SEARCH_PARAM}=${encodeURIComponent(term)}`),
+      resolveViewer: async () => ADMIN_VIEWER,
+      readUsers: countingRead,
+    });
+
+  const atBound = await respond("a".repeat(ADMIN_USERS_SEARCH_MAX_LENGTH));
+  assert.equal(atBound.status, 200);
+  assert.equal(reads, 1);
+
+  const pastBound = await respond("a".repeat(ADMIN_USERS_SEARCH_MAX_LENGTH + 1));
+  assert.equal(pastBound.status, 400);
+  assert.equal((await pastBound.json()).error, ADMIN_ERROR.INVALID_SEARCH);
+  assert.equal(reads, 1);
 });
 
 test("a seam that throws is a 503 refusal rather than a crash", async () => {
