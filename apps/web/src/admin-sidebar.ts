@@ -41,18 +41,26 @@ export function sidebarToggleLabel(collapsed: boolean): string {
 }
 
 /**
- * The collapsed rail centers each icon by arithmetic rather than by
- * re-centering the row once its label is gone. The inner panel's left inset —
- * its own padding plus each item's — places a 16px icon so its centre sits
- * within a pixel of the collapsed rail's centre; while this holds the label
- * can stay in the flow, clipped by the rail, without the fold needing to
- * restructure the row and flicker.
+ * Each row leads with an icon slot exactly the collapsed rail's width. That one
+ * choice carries both halves of a clean fold: the icon centred in the slot sits
+ * on the rail's own centre, and the label that follows the slot begins at the
+ * rail's edge — so when the rail is collapsed the label starts past the clip
+ * and no fragment of it shows, without the label ever leaving the flow (which
+ * is what would re-flow the row and flicker). A slot narrower than the rail
+ * would leave a sliver of the next label inside it; a wider one would push the
+ * icon off centre. Tying it to the collapsed width keeps both true at once.
  */
-export const SIDEBAR_ICON_SIZE = 16;
-export const SIDEBAR_ITEM_INSET = 22;
+export const SIDEBAR_ICON_SLOT = SIDEBAR_WIDTH.COLLAPSED;
 
 export function collapsedIconCenterOffset(): number {
-  const iconCenter = SIDEBAR_ITEM_INSET + SIDEBAR_ICON_SIZE / 2;
-  const railCenter = SIDEBAR_WIDTH.COLLAPSED / 2;
-  return iconCenter - railCenter;
+  return SIDEBAR_ICON_SLOT / 2 - SIDEBAR_WIDTH.COLLAPSED / 2;
+}
+
+/**
+ * Where a label begins, measured from the rail's left edge: the slot's far
+ * edge. It must be at least the collapsed width so the collapsed rail clips the
+ * label entirely rather than revealing its first characters.
+ */
+export function labelStartOffset(): number {
+  return SIDEBAR_ICON_SLOT;
 }
