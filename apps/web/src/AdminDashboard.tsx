@@ -1243,7 +1243,7 @@ function Dashboard({
         aria-busy={refreshing}
       >
         <SectionHeading>User activity</SectionHeading>
-        <div className="grid grid-cols-2 gap-3 min-[720px]:grid-cols-4">
+        <div className="grid gap-3 min-[720px]:grid-cols-3">
           <StatCard label="Total accounts" value={formatNumber(metrics.users.total)} />
           {/* The hint already carries the window total, so the run this count
               is read against rides the title attribute instead. */}
@@ -1252,11 +1252,6 @@ function Dashboard({
             value={formatNumber(metrics.users.signupTrend.recent)}
             hint={`${formatNumber(metrics.users.newInWindow)} in ${metrics.windowDays} days`}
             title={`against ${formatNumber(metrics.users.signupTrend.prior)} in the ${metrics.users.signupTrend.days} days before`}
-          />
-          <StatCard
-            label="Active sessions"
-            value={formatNumber(metrics.users.activeSessions)}
-            hint={`${formatNumber(metrics.users.activeSessionUsers)} distinct accounts`}
           />
           <StatCard
             label="Active today"
@@ -1279,16 +1274,14 @@ function Dashboard({
         <SectionHeading>Signup retention · weekly cohorts</SectionHeading>
         <RetentionGrid retention={metrics.retention} />
         <p className="mt-3 text-sm text-muted-foreground">
-          Each row is the accounts created in one UTC week, named by its Monday; each cell is the
-          share of them that spent hosted voice or attention during the week that many weeks after
-          signup, so Wk 0 is activation in the signup week itself. A week the calendar has not
-          reached draws nothing, and dashed cells cover the week still in progress — those shares
-          can only rise. Purely local use of the desktop app writes no row here, so a cohort that
-          never touched the hosted tier reads the same as one that left.
+          Each cell is the share of one UTC week's signups that spent hosted voice or attention that
+          many weeks after signup — Wk 0 is activation in the signup week itself, and dashed cells
+          are still accruing. Purely local use of the desktop app writes no row here, so a cohort
+          that never touched the hosted tier reads the same as one that left.
         </p>
 
         <SectionHeading>Feature usage · hosted tier</SectionHeading>
-        <div className="grid grid-cols-2 gap-3 min-[720px]:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3">
           <StatCard
             label="Voice · today"
             value={formatNumber(metrics.featureUsage.voiceCallsToday)}
@@ -1298,16 +1291,6 @@ function Dashboard({
             label="Attention · today"
             value={formatNumber(metrics.featureUsage.attentionReviewsToday)}
             hint={`${formatNumber(metrics.featureUsage.attentionReviewsWindow)} in ${metrics.windowDays} days`}
-          />
-          <StatCard
-            label="Voice ceiling"
-            value={formatNumber(metrics.reliability.voiceDailyLimit)}
-            hint="calls per account per day"
-          />
-          <StatCard
-            label="Attention ceiling"
-            value={formatNumber(metrics.reliability.attentionDailyLimit)}
-            hint="reviews per account per day"
           />
         </div>
         <div className="mt-3">
@@ -1346,10 +1329,13 @@ function Dashboard({
           />
         </div>
         <p className="mt-3 text-sm text-muted-foreground">
-          A hosted request that reaches a daily ceiling is refused with{" "}
-          <code className="font-mono text-xs">quota-exhausted</code>; the count above is the closest
-          rejection signal the service's own tables hold. Per-request error rates and client-side
-          failures are recorded as product-analytics events, which live with{" "}
+          A hosted request that reaches a daily ceiling —{" "}
+          {formatNumber(metrics.reliability.voiceDailyLimit)} voice calls or{" "}
+          {formatNumber(metrics.reliability.attentionDailyLimit)} attention reviews per account per
+          day — is refused with <code className="font-mono text-xs">quota-exhausted</code>; the
+          count above is the closest rejection signal the service's own tables hold. Per-request
+          error rates and client-side failures are recorded as product-analytics events, which live
+          with{" "}
           {metrics.reliability.analyticsConsoleUrl ? (
             <a
               href={metrics.reliability.analyticsConsoleUrl}

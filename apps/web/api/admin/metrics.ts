@@ -32,7 +32,6 @@ export default {
         configured(POSTHOG_ENVIRONMENT.PROJECT_ID),
       googleSignIn: configured("GOOGLE_CLIENT_ID") && configured("GOOGLE_CLIENT_SECRET"),
       githubSignIn: configured("GITHUB_CLIENT_ID") && configured("GITHUB_CLIENT_SECRET"),
-      authSecret: configured("BETTER_AUTH_SECRET"),
     });
 
     // The project id names which console to open, never a secret; the key

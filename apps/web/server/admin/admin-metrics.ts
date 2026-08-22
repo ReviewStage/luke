@@ -14,8 +14,8 @@ import {
 /**
  * What the admin dashboard reads about the service, and only what the service's
  * own tables can answer. Every number here is an aggregate of rows Luke already
- * stores for its own operation — signups, active sessions, hosted-tier usage —
- * read by a maintainer on their own service. It is not the desktop observing
+ * stores for its own operation — signups and hosted-tier usage — read by a
+ * maintainer on their own service. It is not the desktop observing
  * sessions and it widens no analytics event: the product-event allowlist and
  * `PRIVACY.md` govern what leaves a user's machine, where this reads counts
  * that already landed.
@@ -193,7 +193,6 @@ export const ADMIN_INTEGRATION = {
   HOSTED_TIER: { key: "hosted-tier", label: "Hosted voice & attention (OpenAI)" },
   GOOGLE_SIGN_IN: { key: "google-sign-in", label: "Google sign-in" },
   GITHUB_SIGN_IN: { key: "github-sign-in", label: "GitHub sign-in" },
-  AUTH_SECRET: { key: "auth-secret", label: "Auth session secret" },
 } as const;
 
 /** Whether each integration's configuration is present — never its value. */
@@ -203,7 +202,6 @@ export interface AdminIntegrationPresence {
   hostedTier: boolean;
   googleSignIn: boolean;
   githubSignIn: boolean;
-  authSecret: boolean;
 }
 
 /** The integration health list, in the fixed order the dashboard draws it. */
@@ -214,7 +212,6 @@ export function adminIntegrations(present: AdminIntegrationPresence): AdminInteg
     { ...ADMIN_INTEGRATION.ANALYTICS_ERASURE, configured: present.analyticsErasure },
     { ...ADMIN_INTEGRATION.GOOGLE_SIGN_IN, configured: present.googleSignIn },
     { ...ADMIN_INTEGRATION.GITHUB_SIGN_IN, configured: present.githubSignIn },
-    { ...ADMIN_INTEGRATION.AUTH_SECRET, configured: present.authSecret },
   ];
 }
 
@@ -226,8 +223,6 @@ export interface AdminMetrics {
     /** Accounts created inside the window, the same rows the signup series draws. */
     newInWindow: number;
     signupTrend: AdminTrend;
-    activeSessions: number;
-    activeSessionUsers: number;
     signInMethods: AdminSignInMethods;
     dailySignups: AdminDailySignups[];
   };
@@ -275,8 +270,6 @@ export interface AdminMetrics {
 export interface AdminMetricsSource {
   users: {
     total: number;
-    activeSessions: number;
-    activeSessionUsers: number;
     signInMethods: AdminSignInMethods;
     signupsByDay: ReadonlyMap<string, number>;
   };
@@ -428,8 +421,6 @@ export function buildAdminMetrics(
         trendKeys.map((day) => source.users.signupsByDay.get(day) ?? 0),
         ADMIN_TREND_DAYS,
       ),
-      activeSessions: source.users.activeSessions,
-      activeSessionUsers: source.users.activeSessionUsers,
       signInMethods: source.users.signInMethods,
       dailySignups,
     },
