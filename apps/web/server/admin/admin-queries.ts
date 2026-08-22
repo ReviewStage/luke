@@ -20,6 +20,7 @@ import { account, session, user } from "../db/schema.js";
 import { hostedUsage } from "../db/usage-schema.js";
 import { HOSTED_DAILY_LIMIT, HOSTED_METER, utcDayKey } from "../hosted/quota.js";
 import { isAdminRole, USER_ROLE } from "./admin-access.js";
+import { ADMIN_DAY_ACCOUNTS_LIMIT, type AdminDaySource } from "./admin-day.js";
 import {
   ADMIN_RETENTION_WEEKS,
   type AdminIntegration,
@@ -462,6 +463,70 @@ export async function readAdminUserSource(
         attentionReviews: toNumber(allTimeRow?.attentionReviews),
       },
       quotaLimitedDaysWindow: toNumber(quotaRow?.value),
+    },
+  };
+}
+
+/**
+ * Reads one UTC day's active accounts with the day's totals. The usage table
+ * holds one row per account per day, so each bounded row is already the
+ * account's whole day and needs no aggregation; the totals ride their own
+ * aggregate read because the rows are cut at the bound. Busiest first, with
+ * voice breaking ties so equal days keep a stable order across refreshes.
+ * Like the account detail, this has no probe and no empty fallback: a
+ * database that does not answer throws into the handler's 503.
+ */
+export async function readAdminDaySource(
+  database: Database,
+  input: { day: string; scope: AdminMetricsScope },
+): Promise<AdminDaySource> {
+  const kept = and(eq(hostedUsage.day, input.day), scopeCondition(input.scope));
+
+  const [accountRows, [totalsRow]] = await Promise.all([
+    database
+      .select({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        image: user.image,
+        role: user.role,
+        voiceCalls: hostedUsage.voiceCalls,
+        attentionReviews: hostedUsage.attentionReviews,
+      })
+      .from(hostedUsage)
+      .innerJoin(user, eq(hostedUsage.userId, user.id))
+      .where(kept)
+      .orderBy(
+        desc(sql`${hostedUsage.voiceCalls} + ${hostedUsage.attentionReviews}`),
+        desc(hostedUsage.voiceCalls),
+      )
+      .limit(ADMIN_DAY_ACCOUNTS_LIMIT),
+    database
+      .select({
+        accounts: count(),
+        voiceCalls: sum(hostedUsage.voiceCalls),
+        attentionReviews: sum(hostedUsage.attentionReviews),
+      })
+      .from(hostedUsage)
+      .innerJoin(user, eq(hostedUsage.userId, user.id))
+      .where(kept),
+  ]);
+
+  return {
+    accounts: accountRows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      email: row.email,
+      image: row.image,
+      admin: isAdminRole(row.role),
+      voiceCalls: row.voiceCalls,
+      attentionReviews: row.attentionReviews,
+      total: row.voiceCalls + row.attentionReviews,
+    })),
+    totals: {
+      accounts: toNumber(totalsRow?.accounts),
+      voiceCalls: toNumber(totalsRow?.voiceCalls),
+      attentionReviews: toNumber(totalsRow?.attentionReviews),
     },
   };
 }

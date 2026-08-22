@@ -30,6 +30,8 @@ export const ADMIN_ERROR = {
   INVALID_WINDOW: "invalid-window",
   /** A roster read whose search term ran past the length bound. */
   INVALID_SEARCH: "invalid-search",
+  /** A day read that named no real UTC calendar day. */
+  INVALID_DAY: "invalid-day",
   /** The named account has no user row — deleted, or the id never existed. */
   USER_NOT_FOUND: "user-not-found",
   /** A seam (auth or the database) did not answer; the answer is a JSON refusal, never a crash. */
@@ -119,6 +121,29 @@ export function adminUsersSearch(url: string): { term: string | undefined } | un
   if (value.length > ADMIN_USERS_SEARCH_MAX_LENGTH) return undefined;
   const term = value.trim();
   return { term: term.length === 0 ? undefined : term };
+}
+
+export const ADMIN_DAY_PARAM = "date";
+
+const UTC_DAY_KEY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Whether a value names a real UTC calendar day. The shape check alone is not
+ * enough: V8 parses `2026-02-30` by rolling it into March, so a wearer of the
+ * shape must also survive the round trip back to the same key. Exported
+ * because the page validates a pasted day address with the same reading the
+ * endpoint refuses on.
+ */
+export function isUtcDayKey(value: string): boolean {
+  if (!UTC_DAY_KEY_PATTERN.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+/** The UTC day a detail read named, or nothing when it named no real one. */
+export function adminDayKey(url: string): string | undefined {
+  const value = new URL(url).searchParams.get(ADMIN_DAY_PARAM) ?? "";
+  return isUtcDayKey(value) ? value : undefined;
 }
 
 export const ADMIN_USER_ID_PARAM = "id";

@@ -1,6 +1,7 @@
 import { createAuthClient } from "better-auth/react";
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, XAxis, YAxis } from "recharts";
+import type { AdminDayAccount, AdminDayDetail } from "../server/admin/admin-day";
 import type {
   AdminDailySignups,
   AdminDailyUsage,
@@ -12,6 +13,7 @@ import type {
 import type { AdminUserAccount, AdminUserDetail } from "../server/admin/admin-user";
 import type { AdminUserList, AdminUserListRow } from "../server/admin/admin-users";
 import {
+  ADMIN_DAY_PARAM,
   ADMIN_HTTP_STATUS,
   ADMIN_METRICS_SCOPE,
   ADMIN_METRICS_SCOPE_PARAM,
@@ -22,6 +24,7 @@ import {
   ADMIN_USERS_SEARCH_MAX_LENGTH,
   ADMIN_USERS_SEARCH_PARAM,
   type AdminMetricsWindow,
+  isUtcDayKey,
 } from "../server/admin/http";
 import { accountInitials } from "./account-initials";
 import { accountLabel } from "./account-label";
@@ -54,6 +57,7 @@ const METRICS_PATH = "/api/admin/metrics";
 const USER_DETAIL_PATH = "/api/admin/user";
 const USERS_PATH = "/api/admin/users";
 const FAVORITE_PATH = "/api/admin/favorite";
+const DAY_DETAIL_PATH = "/api/admin/day";
 
 /**
  * The page's own addresses, distinct from the API's parameters so a pasted
@@ -63,6 +67,7 @@ const FAVORITE_PATH = "/api/admin/favorite";
  * endpoint's gate, never into anything rendered.
  */
 const ACCOUNT_VIEW_PARAM = "user";
+const DAY_VIEW_PARAM = "day";
 const TAB_PARAM = "view";
 const USERS_TAB_VALUE = "users";
 const WINDOW_VIEW_PARAM = "days";
@@ -78,12 +83,20 @@ const SEARCH_DEBOUNCE_MS = 250;
 type AdminTab = "dashboard" | "users";
 
 /** Which of the page's views the address bar names. */
-type AdminView = { kind: "dashboard" } | { kind: "users" } | { kind: "account"; id: string };
+type AdminView =
+  | { kind: "dashboard" }
+  | { kind: "users" }
+  | { kind: "account"; id: string }
+  | { kind: "day"; day: string };
 
 function viewFromLocation(): AdminView {
   const params = new URLSearchParams(window.location.search);
   const id = params.get(ACCOUNT_VIEW_PARAM);
   if (id) return { kind: "account", id };
+  // An address naming no real UTC day is the plain dashboard rather than a
+  // broken page, the same reading an out-of-set window gets.
+  const day = params.get(DAY_VIEW_PARAM);
+  if (day !== null && isUtcDayKey(day)) return { kind: "day", day };
   if (params.get(TAB_PARAM) === USERS_TAB_VALUE) return { kind: "users" };
   return { kind: "dashboard" };
 }
@@ -149,6 +162,12 @@ function hrefWithWindow(params: URLSearchParams): string {
 function accountHref(id: string): string {
   const params = new URLSearchParams();
   params.set(ACCOUNT_VIEW_PARAM, id);
+  return hrefWithWindow(params);
+}
+
+function dayHref(day: string): string {
+  const params = new URLSearchParams();
+  params.set(DAY_VIEW_PARAM, day);
   return hrefWithWindow(params);
 }
 
@@ -294,6 +313,7 @@ const ERROR_DETAIL = {
   METRICS: "The metrics endpoint did not answer. Try again shortly.",
   USERS: "The users endpoint did not answer. Try again shortly.",
   ACCOUNT: "The account endpoint did not answer. Try again shortly.",
+  DAY: "The day endpoint did not answer. Try again shortly.",
 } as const;
 
 const numberFormat = new Intl.NumberFormat("en-US");
@@ -323,6 +343,14 @@ function formatDayTick(day: string): string {
   return new Date(`${day}T00:00:00.000Z`).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+/** A day key drawn as the day page's own masthead, e.g. "August 21, 2026". */
+function formatDayHeading(day: string): string {
+  return new Date(`${day}T00:00:00.000Z`).toLocaleDateString("en-US", {
+    dateStyle: "long",
     timeZone: "UTC",
   });
 }
@@ -437,18 +465,24 @@ const USAGE_CHART = {
  * visible; the tooltip carries each day's exact numbers, and the legend names
  * the two series. A window with no calls at all says so instead of drawing
  * the server's zero-fill as a flat measurement, and today's bar wears the
- * partial-day fade.
+ * partial-day fade. Where a day has a roster to open, a click anywhere in a
+ * day's column opens it — read from the chart's own axis datum, so either
+ * stacked segment and the hover band between them land on the same day —
+ * and the pointer says so; one account's chart passes no opener, because
+ * its day needs no roster.
  */
 function UsageChart({
   daily,
   trend,
   label,
   generatedAt,
+  onOpenDay,
 }: {
   daily: readonly AdminDailyUsage[];
   trend: AdminTrend;
   label: string;
   generatedAt: number;
+  onOpenDay?: (day: string) => void;
 }): React.JSX.Element {
   if (seriesHasNoData(daily.map((point) => point.voiceCalls + point.attentionReviews))) {
     return (
@@ -465,8 +499,23 @@ function UsageChart({
   return (
     <div className="rounded-lg border border-border bg-card p-5">
       <ChartHeading label={label} trend={trend} />
-      <ChartContainer config={USAGE_CHART} className="aspect-auto h-48 w-full">
-        <BarChart data={[...daily]}>
+      <ChartContainer
+        config={USAGE_CHART}
+        className={`aspect-auto h-48 w-full ${onOpenDay ? "cursor-pointer" : ""}`}
+      >
+        <BarChart
+          data={[...daily]}
+          // The clicked label is resolved against the drawn series itself, so
+          // only a day these bars actually state can open.
+          onClick={
+            onOpenDay
+              ? ({ activeLabel }) => {
+                  const clicked = daily.find((point) => point.day === activeLabel);
+                  if (clicked) onOpenDay(clicked.day);
+                }
+              : undefined
+          }
+        >
           <CartesianGrid vertical={false} />
           <XAxis
             dataKey="day"
@@ -1710,6 +1759,68 @@ function AccountSkeleton({
   );
 }
 
+function DaySkeleton({
+  day,
+  hideAdmins,
+  onHideAdminsChange,
+  account,
+  onSignOut,
+  onBack,
+}: {
+  day: string;
+  hideAdmins: boolean;
+  onHideAdminsChange: (hide: boolean) => void;
+  account: ViewerAccount | undefined;
+  onSignOut: () => void;
+  onBack: () => void;
+}): React.JSX.Element {
+  return (
+    <main className="mx-auto max-w-[1040px] px-6 py-10" aria-busy="true">
+      <PageHeader
+        title="Day"
+        account={account}
+        onSignOut={onSignOut}
+        controls={
+          <>
+            <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
+            <SkeletonLine box="h-4" bone="h-3 w-48" />
+            <button type="button" className={PLAIN_BUTTON} disabled>
+              Loading…
+            </button>
+          </>
+        }
+      />
+      <p className="sr-only">Loading. Reading the day's own rows.</p>
+      <a
+        href={tabHref("dashboard")}
+        className="mt-8 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors duration-150 hover:text-foreground"
+        onClick={(event) => {
+          if (!plainLeftClick(event)) return;
+          event.preventDefault();
+          onBack();
+        }}
+      >
+        <span aria-hidden="true">←</span> Dashboard
+      </a>
+      <div className="mt-6">
+        <h1 className="text-2xl font-semibold tracking-[-0.01em]">{formatDayHeading(day)}</h1>
+        <div className="mt-1">
+          <SkeletonLine box="h-5" bone="h-3.5 w-56" />
+        </div>
+      </div>
+      <SectionHeading>Hosted tier · this day</SectionHeading>
+      <div className="grid grid-cols-2 gap-3 min-[720px]:grid-cols-4">
+        <SkeletonStatCard />
+        <SkeletonStatCard />
+        <SkeletonStatCard />
+        <SkeletonStatCard />
+      </div>
+      <SectionHeading>Accounts active this day</SectionHeading>
+      <SkeletonAccountsTable rows={5} numericColumns={3} />
+    </main>
+  );
+}
+
 /** A windowed read's address: the default scope, window, and no search ride as no params. */
 function windowedReadPath(
   base: string,
@@ -1739,6 +1850,7 @@ function Dashboard({
   refreshing,
   onRefresh,
   onOpenAccount,
+  onOpenDay,
 }: {
   metrics: AdminMetrics;
   refreshFailure: string | undefined;
@@ -1751,6 +1863,7 @@ function Dashboard({
   refreshing: boolean;
   onRefresh: () => void;
   onOpenAccount: (id: string) => void;
+  onOpenDay: (day: string) => void;
 }): React.JSX.Element {
   const db = metrics.systemHealth.database;
 
@@ -1839,6 +1952,7 @@ function Dashboard({
             trend={metrics.featureUsage.usageTrend}
             label="Hosted-tier calls per day"
             generatedAt={metrics.generatedAt}
+            onOpenDay={onOpenDay}
           />
         </div>
         <SectionHeading>Most active hosted-tier accounts</SectionHeading>
@@ -2248,6 +2362,252 @@ function UserDetailPage({
           />
         </div>
         <AccountActivityNote />
+      </div>
+    </main>
+  );
+}
+
+/** What the day fetch resolved to, in the overview's own vocabulary. */
+type DayState =
+  | { status: "loading" }
+  | { status: "signed-out" }
+  | { status: "forbidden" }
+  | { status: "error"; detail: string }
+  | {
+      status: "ready";
+      detail: AdminDayDetail;
+      question: string;
+      refreshFailure: string | undefined;
+    };
+
+async function readDayState(response: Response, question: string): Promise<DayState> {
+  if (response.redirected) return { status: "error", detail: ERROR_DETAIL.PROTECTED };
+  if (response.status === ADMIN_HTTP_STATUS.UNAUTHORIZED) return { status: "signed-out" };
+  if (response.status === ADMIN_HTTP_STATUS.FORBIDDEN) return { status: "forbidden" };
+  if (response.status === ADMIN_HTTP_STATUS.SERVICE_UNAVAILABLE) {
+    return { status: "error", detail: ERROR_DETAIL.UNAVAILABLE };
+  }
+  if (!response.ok) return { status: "error", detail: ERROR_DETAIL.DAY };
+  // SAFETY: a 200 from the admin day endpoint is an AdminDayDetail body by its contract.
+  return {
+    status: "ready",
+    detail: (await response.json()) as AdminDayDetail,
+    question,
+    refreshFailure: undefined,
+  };
+}
+
+/**
+ * The day's accounts, busiest first as the endpoint orders them. The shared
+ * `AccountsTable` draws windowed columns a single day does not have, so the
+ * day page keeps a table of its own with the same row anatomy: the row for
+ * the pointer, and a real anchor on the name so a keyboard reaches it and a
+ * modified click still gets the browser's own gesture.
+ */
+function DayAccountsTable({
+  accounts,
+  onOpen,
+}: {
+  accounts: readonly AdminDayAccount[];
+  onOpen: (id: string) => void;
+}): React.JSX.Element {
+  if (accounts.length === 0) {
+    return (
+      <div className="rounded-lg border border-border bg-card px-5 py-8 text-center text-sm text-muted-foreground">
+        No hosted-tier calls recorded on this day.
+      </div>
+    );
+  }
+  return (
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[520px] text-sm">
+          <thead>
+            <tr className="border-b border-border text-left font-mono text-xs text-muted-foreground uppercase">
+              <th className="px-5 py-3 font-medium">Account</th>
+              <th className="px-5 py-3 text-right font-medium">Voice</th>
+              <th className="px-5 py-3 text-right font-medium">Attention</th>
+              <th className="px-5 py-3 text-right font-medium">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {accounts.map((row) => (
+              <tr
+                key={row.id}
+                className="cursor-pointer border-b border-border transition-colors duration-150 last:border-0 hover:bg-muted"
+                onClick={() => onOpen(row.id)}
+              >
+                <td className="px-5 py-3">
+                  <a
+                    href={accountHref(row.id)}
+                    className="flex items-center gap-3 outline-offset-2"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      if (!plainLeftClick(event)) return;
+                      event.preventDefault();
+                      onOpen(row.id);
+                    }}
+                  >
+                    <AccountAvatar
+                      account={{ name: row.name, email: row.email, image: row.image ?? undefined }}
+                    />
+                    <div>
+                      <div className="flex items-center gap-2 font-medium">
+                        {accountLabel(row)}
+                        {row.admin ? (
+                          <span className="rounded-full border border-border px-1.5 py-px font-mono text-[10px] tracking-[0.2px] text-muted-foreground uppercase">
+                            Admin
+                          </span>
+                        ) : null}
+                      </div>
+                      {accountLabel(row) === row.email ? null : (
+                        <div className="text-xs text-muted-foreground">{row.email}</div>
+                      )}
+                    </div>
+                  </a>
+                </td>
+                <td className="px-5 py-3 text-right tabular-nums">
+                  {formatNumber(row.voiceCalls)}
+                </td>
+                <td className="px-5 py-3 text-right tabular-nums">
+                  {formatNumber(row.attentionReviews)}
+                </td>
+                <td className="px-5 py-3 text-right font-semibold tabular-nums">
+                  {formatNumber(row.total)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function DayNote({
+  truncatedTo,
+  totalAccounts,
+}: {
+  truncatedTo?: number;
+  totalAccounts: number;
+}): React.JSX.Element {
+  return (
+    <p className="mt-3 text-sm text-muted-foreground">
+      Voice and attention count the hosted-tier calls each account spent on this UTC day. A row
+      opens the account's own page.
+      {truncatedTo !== undefined
+        ? ` Only the ${formatNumber(truncatedTo)} busiest accounts are listed here — the totals above still count all ${formatNumber(totalAccounts)}.`
+        : ""}
+    </p>
+  );
+}
+
+function DayDetailPage({
+  detail,
+  refreshFailure,
+  hideAdmins,
+  onHideAdminsChange,
+  account,
+  onSignOut,
+  onBack,
+  onOpenAccount,
+  refreshing,
+  onRefresh,
+}: {
+  detail: AdminDayDetail;
+  refreshFailure: string | undefined;
+  hideAdmins: boolean;
+  onHideAdminsChange: (hide: boolean) => void;
+  account: ViewerAccount | undefined;
+  onSignOut: () => void;
+  onBack: () => void;
+  onOpenAccount: (id: string) => void;
+  refreshing: boolean;
+  onRefresh: () => void;
+}): React.JSX.Element {
+  const stillFilling = partialDayKey([{ day: detail.day }], detail.generatedAt) !== undefined;
+  const soFar = stillFilling ? "so far today" : undefined;
+
+  return (
+    <main className="mx-auto max-w-[1040px] px-6 py-10">
+      <PageHeader
+        title="Day"
+        account={account}
+        onSignOut={onSignOut}
+        controls={
+          <>
+            <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
+            <GeneratedStamp generatedAt={detail.generatedAt} />
+            <button
+              type="button"
+              className={PLAIN_BUTTON}
+              onClick={onRefresh}
+              disabled={refreshing}
+            >
+              {refreshing ? "Refreshing…" : "Refresh"}
+            </button>
+          </>
+        }
+      />
+
+      <RefreshFailureNotice failure={refreshFailure} refreshing={refreshing} onRetry={onRefresh} />
+
+      <div
+        className="transition-opacity duration-150 data-[busy=true]:opacity-50"
+        data-busy={refreshing}
+        aria-busy={refreshing}
+      >
+        <a
+          href={tabHref("dashboard")}
+          className="mt-8 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors duration-150 hover:text-foreground"
+          onClick={(event) => {
+            if (!plainLeftClick(event)) return;
+            event.preventDefault();
+            onBack();
+          }}
+        >
+          <span aria-hidden="true">←</span> Dashboard
+        </a>
+
+        <div className="mt-6">
+          <h1 className="text-2xl font-semibold tracking-[-0.01em]">
+            {formatDayHeading(detail.day)}
+          </h1>
+          <div className="mt-1 text-sm text-muted-foreground">
+            One UTC day of hosted-tier calls{stillFilling ? " — still filling" : ""}
+          </div>
+        </div>
+
+        <SectionHeading>Hosted tier · this day</SectionHeading>
+        <div className="grid grid-cols-2 gap-3 min-[720px]:grid-cols-4">
+          <StatCard
+            label="Active accounts"
+            value={formatNumber(detail.totals.accounts)}
+            hint={soFar}
+          />
+          <StatCard
+            label="Voice calls"
+            value={formatNumber(detail.totals.voiceCalls)}
+            hint={soFar}
+          />
+          <StatCard
+            label="Attention reviews"
+            value={formatNumber(detail.totals.attentionReviews)}
+            hint={soFar}
+          />
+          <StatCard label="Total calls" value={formatNumber(detail.totals.total)} hint={soFar} />
+        </div>
+
+        <SectionHeading>Accounts active this day</SectionHeading>
+        <DayAccountsTable accounts={detail.accounts} onOpen={onOpenAccount} />
+        {detail.accounts.length > 0 ? (
+          <DayNote
+            truncatedTo={
+              detail.totals.accounts > detail.accounts.length ? detail.accounts.length : undefined
+            }
+            totalAccounts={detail.totals.accounts}
+          />
+        ) : null}
       </div>
     </main>
   );
@@ -3175,6 +3535,142 @@ function UserDetailScreen({
   }
 }
 
+/** The day read's address: one day, with the default scope riding as no param. */
+function dayReadPath(day: string, hideAdmins: boolean): string {
+  const params = new URLSearchParams();
+  params.set(ADMIN_DAY_PARAM, day);
+  if (!hideAdmins) params.set(ADMIN_METRICS_SCOPE_PARAM, ADMIN_METRICS_SCOPE.ALL);
+  return `${DAY_DETAIL_PATH}?${params.toString()}`;
+}
+
+function DayDetailScreen({
+  day,
+  hideAdmins,
+  onHideAdminsChange,
+  account,
+  onSignOut,
+  onBack,
+  onOpenAccount,
+  frame,
+}: {
+  day: string;
+  hideAdmins: boolean;
+  onHideAdminsChange: (hide: boolean) => void;
+  account: ViewerAccount | undefined;
+  onSignOut: () => Promise<void>;
+  onBack: () => void;
+  onOpenAccount: (id: string) => void;
+  /** Applied around every answer but the gate's own cards, which stand alone. */
+  frame: (content: React.JSX.Element) => React.JSX.Element;
+}): React.JSX.Element {
+  const [state, setState] = useState<DayState>(() =>
+    signInChosenHere() ? { status: "loading" } : { status: "signed-out" },
+  );
+  const [refreshing, setRefreshing] = useState(false);
+  const inFlight = useRef<AbortController>(null);
+
+  // The same withdrawal the detail screen lands: this screen renders in the
+  // overview's place with a ready answer of its own, so the parent's sign-out
+  // alone would leave the day's roster on screen after the consent behind it
+  // left.
+  const signOut = async () => {
+    inFlight.current?.abort();
+    setRefreshing(false);
+    await onSignOut();
+    setState({ status: "signed-out" });
+  };
+
+  const load = useCallback(() => {
+    // The same local consent the overview asks for: a deep link into a day
+    // page still opens on the sign-in card until a sign-in has been pressed
+    // on this page once.
+    if (!signInChosenHere()) {
+      setState({ status: "signed-out" });
+      return;
+    }
+    inFlight.current?.abort();
+    const controller = new AbortController();
+    inFlight.current = controller;
+    // A refresh keeps the page it is refreshing; a different day — the
+    // browser's own back and forward can swap days without passing the
+    // overview — must not stand dimmed behind the other day's read.
+    setState((current) =>
+      current.status === "ready" && current.detail.day === day ? current : { status: "loading" },
+    );
+    setRefreshing(true);
+    const path = dayReadPath(day, hideAdmins);
+    void (async () => {
+      try {
+        const next = await readDayState(
+          await fetch(path, {
+            headers: { accept: "application/json" },
+            signal: controller.signal,
+          }),
+          path,
+        );
+        if (!controller.signal.aborted) setState((current) => settleRead(current, next, path));
+      } catch {
+        if (!controller.signal.aborted) {
+          setState((current) =>
+            settleRead(current, { status: "error", detail: ERROR_DETAIL.DAY }, path),
+          );
+        }
+      } finally {
+        if (!controller.signal.aborted) setRefreshing(false);
+      }
+    })();
+  }, [day, hideAdmins]);
+
+  useEffect(() => {
+    load();
+    return () => inFlight.current?.abort();
+  }, [load]);
+
+  switch (state.status) {
+    case "loading":
+      return frame(
+        <DaySkeleton
+          day={day}
+          hideAdmins={hideAdmins}
+          onHideAdminsChange={onHideAdminsChange}
+          account={account}
+          onSignOut={() => void signOut()}
+          onBack={onBack}
+        />,
+      );
+    case "signed-out":
+      return <SignInCard />;
+    case "forbidden":
+      return <ForbiddenCard email={account?.email} onSignOut={() => void signOut()} />;
+    case "error":
+      return frame(
+        <Centered title="Could not load">
+          {state.detail}
+          <div className="mt-6">
+            <button type="button" className={PLAIN_BUTTON} onClick={load} disabled={refreshing}>
+              {refreshing ? "Trying…" : "Try again"}
+            </button>
+          </div>
+        </Centered>,
+      );
+    case "ready":
+      return frame(
+        <DayDetailPage
+          detail={state.detail}
+          refreshFailure={state.refreshFailure}
+          hideAdmins={hideAdmins}
+          onHideAdminsChange={onHideAdminsChange}
+          account={account}
+          onSignOut={() => void signOut()}
+          onBack={onBack}
+          onOpenAccount={onOpenAccount}
+          refreshing={refreshing}
+          onRefresh={load}
+        />,
+      );
+  }
+}
+
 export function AdminDashboard(): React.JSX.Element {
   // A first visit is signed-out from the very first frame: it never fetches,
   // so a loading state would pose as a request that is not in flight.
@@ -3211,6 +3707,10 @@ export function AdminDashboard(): React.JSX.Element {
   const openAccount = useCallback((id: string) => {
     window.history.pushState(null, "", accountHref(id));
     setView({ kind: "account", id });
+  }, []);
+  const openDay = useCallback((day: string) => {
+    window.history.pushState(null, "", dayHref(day));
+    setView({ kind: "day", day });
   }, []);
   const navigate = useCallback((tab: AdminTab) => {
     window.history.pushState(null, "", tabHref(tab));
@@ -3333,6 +3833,21 @@ export function AdminDashboard(): React.JSX.Element {
     );
   }
 
+  if (view.kind === "day") {
+    return (
+      <DayDetailScreen
+        day={view.day}
+        hideAdmins={hideAdmins}
+        onHideAdminsChange={changeHideAdmins}
+        account={viewer}
+        onSignOut={signOut}
+        onBack={() => navigate("dashboard")}
+        onOpenAccount={openAccount}
+        frame={(content) => shell("dashboard", content)}
+      />
+    );
+  }
+
   if (view.kind === "users") {
     return (
       <UsersScreen
@@ -3392,6 +3907,7 @@ export function AdminDashboard(): React.JSX.Element {
           refreshing={refreshing}
           onRefresh={load}
           onOpenAccount={openAccount}
+          onOpenDay={openDay}
         />,
       );
   }
