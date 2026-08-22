@@ -1642,10 +1642,14 @@ function UsersSkeleton({
 }
 
 function AccountSkeleton({
+  windowDays,
+  onWindowDaysChange,
   account,
   onSignOut,
   onBack,
 }: {
+  windowDays: AdminMetricsWindow;
+  onWindowDaysChange: (windowDays: AdminMetricsWindow) => void;
   account: ViewerAccount | undefined;
   onSignOut: () => void;
   onBack: () => void;
@@ -1658,6 +1662,7 @@ function AccountSkeleton({
         onSignOut={onSignOut}
         controls={
           <>
+            <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
             <SkeletonLine box="h-4" bone="h-3 w-48" />
             <button type="button" className={PLAIN_BUTTON} disabled>
               Loading…
@@ -2092,6 +2097,8 @@ function signInMethodLabel(providerId: string): string {
 function UserDetailPage({
   detail,
   refreshFailure,
+  windowDays,
+  onWindowDaysChange,
   account,
   onSignOut,
   onBack,
@@ -2100,6 +2107,8 @@ function UserDetailPage({
 }: {
   detail: AdminUserDetail;
   refreshFailure: string | undefined;
+  windowDays: AdminMetricsWindow;
+  onWindowDaysChange: (windowDays: AdminMetricsWindow) => void;
   account: ViewerAccount | undefined;
   onSignOut: () => void;
   onBack: () => void;
@@ -2123,6 +2132,7 @@ function UserDetailPage({
         onSignOut={onSignOut}
         controls={
           <>
+            <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
             <GeneratedStamp generatedAt={detail.generatedAt} windowDays={detail.windowDays} />
             <button
               type="button"
@@ -3030,12 +3040,16 @@ function UsersScreen({
 
 function UserDetailScreen({
   id,
+  windowDays,
+  onWindowDaysChange,
   account,
   onSignOut,
   onBack,
   frame,
 }: {
   id: string;
+  windowDays: AdminMetricsWindow;
+  onWindowDaysChange: (windowDays: AdminMetricsWindow) => void;
   account: ViewerAccount | undefined;
   onSignOut: () => Promise<void>;
   onBack: () => void;
@@ -3080,7 +3094,12 @@ function UserDetailScreen({
         : { status: "loading" },
     );
     setRefreshing(true);
-    const path = `${USER_DETAIL_PATH}?${ADMIN_USER_ID_PARAM}=${encodeURIComponent(id)}`;
+    const params = new URLSearchParams();
+    params.set(ADMIN_USER_ID_PARAM, id);
+    if (windowDays !== ADMIN_METRICS_WINDOW_DEFAULT) {
+      params.set(ADMIN_METRICS_WINDOW_PARAM, String(windowDays));
+    }
+    const path = `${USER_DETAIL_PATH}?${params.toString()}`;
     void (async () => {
       try {
         const next = await readDetailState(
@@ -3101,7 +3120,7 @@ function UserDetailScreen({
         if (!controller.signal.aborted) setRefreshing(false);
       }
     })();
-  }, [id]);
+  }, [id, windowDays]);
 
   useEffect(() => {
     load();
@@ -3111,7 +3130,13 @@ function UserDetailScreen({
   switch (state.status) {
     case "loading":
       return frame(
-        <AccountSkeleton account={account} onSignOut={() => void signOut()} onBack={onBack} />,
+        <AccountSkeleton
+          windowDays={windowDays}
+          onWindowDaysChange={onWindowDaysChange}
+          account={account}
+          onSignOut={() => void signOut()}
+          onBack={onBack}
+        />,
       );
     case "signed-out":
       return <SignInCard />;
@@ -3144,6 +3169,8 @@ function UserDetailScreen({
         <UserDetailPage
           detail={state.detail}
           refreshFailure={state.refreshFailure}
+          windowDays={windowDays}
+          onWindowDaysChange={onWindowDaysChange}
           account={account}
           onSignOut={() => void signOut()}
           onBack={onBack}
@@ -3302,6 +3329,8 @@ export function AdminDashboard(): React.JSX.Element {
     return (
       <UserDetailScreen
         id={view.id}
+        windowDays={windowDays}
+        onWindowDaysChange={changeWindow}
         account={viewer}
         onSignOut={signOut}
         onBack={() => navigate("users")}
