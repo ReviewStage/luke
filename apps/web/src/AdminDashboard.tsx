@@ -26,6 +26,7 @@ import {
 import { accountInitials } from "./account-initials";
 import { accountLabel } from "./account-label";
 import { GitHubMark, GoogleMark } from "./account-marks";
+import { calendarWeeks, DAYS_PER_WEEK, monthLabels } from "./activity-calendar";
 import { settleRead } from "./admin-refresh";
 import {
   SIDEBAR_ICON_SLOT,
@@ -508,6 +509,113 @@ function UsageChart({
           </Bar>
         </BarChart>
       </ChartContainer>
+    </div>
+  );
+}
+
+/**
+ * The floor under a day cell's fill, the retention grid's own: a one-call day
+ * beside a busy account's peak would otherwise round to a fill too faint to
+ * read as a mark.
+ */
+const CALENDAR_FILL_FLOOR_PERCENT = 8;
+
+function calendarCellStyle(total: number, maxTotal: number): React.CSSProperties {
+  const fill = Math.max(CALENDAR_FILL_FLOOR_PERCENT, Math.round((total / maxTotal) * 100));
+  return { backgroundColor: `color-mix(in oklab, var(--chart-1) ${fill}%, transparent)` };
+}
+
+const CALENDAR_WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
+
+function CalendarDayCell({
+  day,
+  maxTotal,
+  partialDay,
+}: {
+  day: AdminDailyUsage;
+  maxTotal: number;
+  partialDay: string | undefined;
+}): React.JSX.Element {
+  const total = day.voiceCalls + day.attentionReviews;
+  const provisional =
+    day.day === partialDay ? " border border-dashed border-muted-foreground/60" : "";
+  return (
+    <div
+      className={`size-4 rounded-[3px] ${total === 0 ? "bg-muted/60" : ""}${provisional}`}
+      style={total === 0 ? undefined : calendarCellStyle(total, maxTotal)}
+      title={`${formatTooltipDay(day.day, partialDay)} — ${formatNumber(day.voiceCalls)} voice · ${formatNumber(day.attentionReviews)} attention`}
+    />
+  );
+}
+
+/**
+ * The same days the bars above draw, folded into a GitHub-style calendar:
+ * columns are UTC weeks keyed by their Monday like the retention grid's,
+ * rows the seven weekdays, and each cell's fill is that day's share of the
+ * account's own busiest day in the window. The bars carry magnitude; this
+ * grid carries the pattern they hide — weekday rhythms, weekend gaps, a
+ * streak breaking. A day the window does not cover draws nothing, a covered
+ * day with no calls keeps the faintest neutral fill so absence still reads
+ * as an observed day, and today wears the retention grid's dashed border
+ * because a fade here would pose as a quiet day.
+ */
+function ActivityCalendar({
+  daily,
+  generatedAt,
+}: {
+  daily: readonly AdminDailyUsage[];
+  generatedAt: number;
+}): React.JSX.Element {
+  const weeks = calendarWeeks(daily);
+  const months = monthLabels(weeks);
+  const partialDay = partialDayKey(daily, generatedAt);
+  const maxTotal = Math.max(...daily.map((day) => day.voiceCalls + day.attentionReviews));
+  return (
+    <div className="rounded-lg border border-border bg-card p-5">
+      <div className="mb-4 text-xs text-muted-foreground">This account's days, week by week</div>
+      <div className="overflow-x-auto">
+        <div
+          className="grid w-max gap-1 tabular-nums"
+          style={{
+            gridAutoFlow: "column",
+            gridTemplateRows: `auto repeat(${DAYS_PER_WEEK}, 1rem)`,
+          }}
+        >
+          <div aria-hidden="true" />
+          {CALENDAR_WEEKDAY_LABELS.map((label) => (
+            <div
+              key={label}
+              className="pr-2 font-mono text-[10px] leading-4 text-muted-foreground uppercase"
+            >
+              {label}
+            </div>
+          ))}
+          {weeks.map((week, weekIndex) => (
+            <Fragment key={week.weekStart}>
+              <div className="font-mono text-[10px] leading-4 whitespace-nowrap text-muted-foreground uppercase">
+                {months[weekIndex]}
+              </div>
+              {week.days.map((day, slot) =>
+                day === undefined ? (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: an empty slot has no identity beyond its weekday position.
+                  <div key={slot} aria-hidden="true" />
+                ) : (
+                  <CalendarDayCell
+                    key={day.day}
+                    day={day}
+                    maxTotal={maxTotal}
+                    partialDay={partialDay}
+                  />
+                ),
+              )}
+            </Fragment>
+          ))}
+        </div>
+      </div>
+      <p className="mt-4 mb-0 text-xs text-muted-foreground">
+        Each cell is one UTC day — a deeper fill is more hosted calls against this account's busiest
+        day in the window, and the dashed cell is today, still filling.
+      </p>
     </div>
   );
 }
@@ -1379,6 +1487,24 @@ function SkeletonChartCard({ plot }: { plot: SkeletonPlot }): React.JSX.Element 
   );
 }
 
+/**
+ * The bone block is the calendar grid's own height: a month-label row and
+ * seven 1rem day rows with 0.25rem gaps.
+ */
+function SkeletonCalendarCard(): React.JSX.Element {
+  return (
+    <div className="rounded-lg border border-border bg-card p-5">
+      <div className="mb-4">
+        <SkeletonLine box="h-4" bone="h-3 w-52" />
+      </div>
+      <Skeleton className="h-[156px] w-full" />
+      <div className="mt-4">
+        <SkeletonLine box="h-4" bone="h-3 w-96 max-w-full" />
+      </div>
+    </div>
+  );
+}
+
 function SkeletonRetentionGrid(): React.JSX.Element {
   return (
     <div className="rounded-lg border border-border bg-card p-5">
@@ -1698,6 +1824,11 @@ function AccountSkeleton({
       <div className="mt-3">
         <SkeletonChartCard plot={SKELETON_PLOT.USAGE} />
       </div>
+      {windowDays > DAYS_PER_WEEK ? (
+        <div className="mt-3">
+          <SkeletonCalendarCard />
+        </div>
+      ) : null}
       <SectionHeading>Volume</SectionHeading>
       <div className="grid grid-cols-2 gap-3 min-[720px]:grid-cols-4">
         <SkeletonStatCard />
@@ -2224,6 +2355,16 @@ function UserDetailPage({
             generatedAt={detail.generatedAt}
           />
         </div>
+        {/* A 7-day window folds to a single column, which restates the bars
+            above with less resolution, so the calendar draws only for windows
+            past a week; a window with no calls already says so on the chart
+            card, and an all-neutral grid under it would restate the absence. */}
+        {detail.windowDays > DAYS_PER_WEEK &&
+        !seriesHasNoData(activity.daily.map((day) => day.voiceCalls + day.attentionReviews)) ? (
+          <div className="mt-3">
+            <ActivityCalendar daily={activity.daily} generatedAt={detail.generatedAt} />
+          </div>
+        ) : null}
 
         <SectionHeading>Volume</SectionHeading>
         <div className="grid grid-cols-2 gap-3 min-[720px]:grid-cols-4">
