@@ -881,6 +881,13 @@ html[data-keyboard="true"] .wing-mark:focus-visible {
    short, the Codex and Cursor marks are full-bleed, and Conductor's letter mark
    is taller than it is wide — so each gets a uniform scale to sit at the same
    optical weight. Proportions are untouched. */
+/* Antigravity's double-arch mark carries Google's own published colours, so
+   none is set here; its box crops the site logo's canvas to the glyph, which
+   fills it edge to edge, so it takes the full-bleed marks' scale. */
+.provider-mark[data-mark="antigravity"] {
+  transform: scale(0.94);
+}
+
 .provider-mark[data-mark="claude-code"] {
   color: var(--mark-claude-code);
   transform: scale(1.12);

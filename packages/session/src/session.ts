@@ -263,6 +263,8 @@ export interface SessionIdentity {
  */
 export const SESSION_LINK_SCHEME = {
   HTTPS: "https:",
+  ANTIGRAVITY: "antigravity:",
+  ANTIGRAVITY_IDE: "antigravity-ide:",
   CMUX: "cmux:",
   CODEX: "codex:",
   CONDUCTOR: "conductor:",

@@ -10,6 +10,7 @@ import {
   type ProviderId,
   type SessionProviderAdapter,
 } from "@sidecar/session";
+import { AntigravitySessionAdapter } from "./antigravity/adapter.js";
 import { ClaudeCodeSessionAdapter } from "./claude-code/adapter.js";
 import { installClaudeCodeObservationHooks } from "./claude-code/hooks.js";
 import { CODEX_PROVIDER, CodexSessionAdapter } from "./codex/adapter.js";
@@ -124,6 +125,12 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
   });
 
   return {
+    // Antigravity registers no hook: the summaries index its apps keep
+    // already tells a settled turn from a permission hold, so nothing of
+    // Antigravity's needs writing to.
+    [PROVIDER_ID.ANTIGRAVITY]: {
+      adapter: new AntigravitySessionAdapter(),
+    },
     [PROVIDER_ID.CLAUDE_CODE]: {
       adapter: claude,
       registerObservationHook: observationHookRegistration(
