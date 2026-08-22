@@ -1,3 +1,4 @@
+import { isSessionFilter, type SessionFilter } from "@sidecar/session";
 import { CAPSULE_SIDE_WIDTH, PANEL_WIDTH, peekWidth } from "@sidecar/surface";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -10,7 +11,7 @@ import {
   useFaceMotion,
   usePrefersReducedMotion,
 } from "./luke-face-mood";
-import { PANEL_PRESENTATION, type PanelPresentation } from "./panel-state";
+import { HIT_REGION, PANEL_PRESENTATION, type PanelPresentation } from "./panel-state";
 import { ProviderMark } from "./provider-marks";
 import {
   type ProviderTally,
@@ -65,6 +66,9 @@ interface NotchWingsProps {
    * never poses as a zero that means "nothing happening".
    */
   accountGated: boolean;
+  /** Carries a filter to narrow the session list by when an icon in the wing is clicked. */
+  onSelectFilter?: (filter: SessionFilter) => void;
+  activeFilters?: readonly SessionFilter[];
 }
 
 /**
@@ -208,6 +212,8 @@ export function NotchWings({
   presentation,
   housingWidth,
   accountGated,
+  onSelectFilter,
+  activeFilters,
 }: NotchWingsProps): React.JSX.Element {
   const [voiceActive, setVoiceActive] = useState(false);
   const reportVoiceActivity = useCallback(
@@ -326,7 +332,7 @@ export function NotchWings({
               />
             </span>
           ) : (
-            <span className="wing-marks" aria-hidden="true" ref={marksRef}>
+            <span className="wing-marks" ref={marksRef}>
               {drawnSlots.map(({ item, leaving }) => {
                 // How the reorder measurement finds this slot again after a
                 // re-sort has moved it, and how a slot whose provider left
@@ -335,14 +341,39 @@ export function NotchWings({
                   [WING_SLOT_ID_ATTRIBUTE]: item.id,
                   [LEAVING_ATTRIBUTE]: String(leaving),
                 };
-                return "provider" in item ? (
-                  <span className="wing-mark" key={item.id} {...motion}>
+                if (!("provider" in item)) {
+                  return (
+                    <span className="wing-more" key={item.id} {...motion} aria-hidden="true">
+                      +{item.unshown}
+                    </span>
+                  );
+                }
+                const filter = isSessionFilter(item.provider.providerId)
+                  ? item.provider.providerId
+                  : undefined;
+                const active = filter !== undefined && (activeFilters?.includes(filter) ?? false);
+                const label = item.provider.provider;
+                return (
+                  <button
+                    type="button"
+                    className="wing-mark"
+                    key={item.id}
+                    {...motion}
+                    data-hit-region={HIT_REGION.CAPSULE}
+                    data-active={String(active)}
+                    aria-label={active ? `Clear ${label} filter` : `Filter by ${label}`}
+                    title={active ? `Clear ${label} filter` : `Filter by ${label}`}
+                    tabIndex={leaving ? -1 : 0}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      if (filter !== undefined) {
+                        onSelectFilter?.(filter);
+                      }
+                    }}
+                  >
                     <ProviderMark providerId={item.provider.providerId} />
-                  </span>
-                ) : (
-                  <span className="wing-more" key={item.id} {...motion}>
-                    +{item.unshown}
-                  </span>
+                  </button>
                 );
               })}
             </span>

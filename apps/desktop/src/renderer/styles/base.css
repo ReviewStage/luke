@@ -697,7 +697,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
    tightens the clip: what a motion throws past the black is cut off at it. */
 .wing {
   position: absolute;
-  z-index: 3;
+  z-index: 5;
   top: var(--shape-top, 0px);
   display: flex;
   height: calc(var(--capsule-height) - var(--shape-top, 0px) * 2);
@@ -754,7 +754,31 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 .wing-mark {
   display: flex;
   align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: none;
   color: var(--text-secondary);
+  cursor: pointer;
+  outline: none;
+  -webkit-app-region: no-drag;
+  -webkit-tap-highlight-color: transparent;
+  pointer-events: none;
+}
+
+.wing-mark:hover,
+.wing-mark[data-active="true"] {
+  color: var(--text-primary);
+}
+
+.wing-mark[data-leaving="true"] {
+  pointer-events: none;
+}
+
+html[data-keyboard="true"] .wing-mark:focus-visible {
+  outline: 2px solid var(--state-working);
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 
 /* The capsule keeps the face and nothing else; what Luke is watching belongs to
@@ -782,6 +806,11 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   transition-duration: var(--duration-quick), var(--duration-shape);
   transition-timing-function: var(--motion-exit), var(--spring);
   transition-delay: var(--peek-delay);
+}
+
+.app-stage[data-presentation="peek"] .wing-mark,
+.app-stage[data-presentation="panel"] .wing-mark {
+  pointer-events: auto;
 }
 
 /* The marks rest at the shape's far edge, not beside the face, so the peek's

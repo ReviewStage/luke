@@ -140,3 +140,12 @@ test("the slot keeps the capsule's quiet wing, so it keeps the capsule's fit", (
 test("text not yet measured is not scaled", () => {
   assert.equal(countBadgeFit(PANEL_PRESENTATION.CAPSULE, 210, 0, 0), 1);
 });
+
+test("wing mark provider slots map to valid session filters", () => {
+  const slots = wingSlots(providers("claude", "codex", "cursor"), 3);
+  for (const slot of slots) {
+    if ("provider" in slot) {
+      assert.ok(["claude", "codex", "cursor"].includes(slot.provider.providerId));
+    }
+  }
+});
