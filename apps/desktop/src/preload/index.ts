@@ -82,6 +82,7 @@ const bridge: AppBridge = {
   checkForUpdates: invokeMethod<"checkForUpdates">(channels.checkForUpdates),
   installUpdate: () => ipcRenderer.send(channels.installUpdate),
   openLatestRelease: () => ipcRenderer.send(channels.openLatestRelease),
+  openChangelog: () => ipcRenderer.send(channels.openChangelog),
   beginSupersetSignIn: invokeMethod<"beginSupersetSignIn">(channels.beginSupersetSignIn),
   submitSupersetSignInCode: invokeMethod<"submitSupersetSignInCode">(
     channels.submitSupersetSignInCode,

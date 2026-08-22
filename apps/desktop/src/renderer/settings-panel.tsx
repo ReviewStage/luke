@@ -3571,6 +3571,23 @@ function UpdatesSection({
         </span>
         {updateButton(row.action, control)}
       </div>
+      {/* What the versions the row talks about actually changed — beside the
+          version, as a trip to the fixed changelog page in the browser. */}
+      <div className="settings-row" {...searchAnchorProps(SETTINGS_SEARCH_ROW.CHANGELOG)}>
+        <span className="settings-copy">
+          <span className="settings-name">
+            <strong>Changelog</strong>
+          </span>
+        </span>
+        <button
+          type="button"
+          className="quiet-button"
+          onClick={() => window.sidecar.openChangelog()}
+        >
+          Open
+          <ExternalIcon />
+        </button>
+      </div>
     </section>
   );
 }

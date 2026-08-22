@@ -103,6 +103,7 @@ export function searchAnchorProps(id: string) {
  */
 export const SETTINGS_SEARCH_ROW = {
   UPDATES: "updates",
+  CHANGELOG: "changelog",
   FEEDBACK: "feedback",
   SIGN_OUT: "sign-out",
   DELETE_ACCOUNT: "delete-account",
@@ -277,6 +278,13 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
       page: SETTINGS_VIEW.ROOT,
       icon: <DownloadIcon />,
       haystack: ["Updates", "version release download check for updates"],
+    },
+    {
+      id: SETTINGS_SEARCH_ROW.CHANGELOG,
+      label: "Changelog",
+      page: SETTINGS_VIEW.ROOT,
+      icon: <DownloadIcon />,
+      haystack: ["Changelog", "release notes version history what's new what changed"],
     },
     {
       id: SETTINGS_SEARCH_ROW.FEEDBACK,
