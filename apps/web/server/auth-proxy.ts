@@ -65,7 +65,7 @@ function originMatchesPattern(origin: string, pattern: string): boolean {
   let configured: URL;
   try {
     candidate = new URL(origin);
-    configured = new URL(pattern.replace("*", wildcard));
+    configured = new URL(pattern.replaceAll("*", wildcard));
   } catch {
     return false;
   }
