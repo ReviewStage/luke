@@ -307,9 +307,14 @@ export class DevinSessionAdapter extends CloudSessionAdapter {
     // work. It reports nothing rather than a teammate's.
     if (!identity) return [];
 
-    return (await this.#listSessions(request, identity))
-      .sort((first, second) => second.observedAt - first.observedAt)
-      .map((session) => this.#observationFor(session, now));
+    return (
+      (await this.#listSessions(request, identity))
+        // An archived session is one the user filed away in Devin's own UI — no
+        // row at all rather than a completed one.
+        .filter((session) => !session.archived)
+        .sort((first, second) => second.observedAt - first.observedAt)
+        .map((session) => this.#observationFor(session, now))
+    );
   }
 
   /**
@@ -364,15 +369,13 @@ export class DevinSessionAdapter extends CloudSessionAdapter {
   /**
    * Devin's message endpoint takes a message for an active session and itself
    * resumes a suspended one, so both advertise it. A session that exited or
-   * failed is documented for no writer, and an archived one the user has
-   * already filed away — neither is offered a control Devin has not promised
-   * to honour.
+   * failed is documented for no writer — neither is offered a control Devin
+   * has not promised to honour.
    */
   #sessionTakesMessages(session: DevinSession): boolean {
     return (
-      !session.archived &&
-      (session.status === DEVIN_SESSION_STATUS.RUNNING ||
-        session.status === DEVIN_SESSION_STATUS.SUSPENDED)
+      session.status === DEVIN_SESSION_STATUS.RUNNING ||
+      session.status === DEVIN_SESSION_STATUS.SUSPENDED
     );
   }
 
@@ -383,10 +386,9 @@ export class DevinSessionAdapter extends CloudSessionAdapter {
    * detail says the turn is holding for the user. A state this build does not
    * know, or one still mid-turn or mid-transition, advertises nothing: filing
    * a session away must never be offered over work Luke has not actually seen
-   * stop. An archived session has nothing left to archive.
+   * stop.
    */
   #sessionTakesArchive(session: DevinSession): boolean {
-    if (session.archived) return false;
     if (
       session.status === DEVIN_SESSION_STATUS.EXIT ||
       session.status === DEVIN_SESSION_STATUS.ERROR ||
@@ -472,8 +474,6 @@ export class DevinSessionAdapter extends CloudSessionAdapter {
   }
 
   #statusFor(session: DevinSession, now: number): SessionStatus {
-    // A session the user filed away is settled whatever it was doing.
-    if (session.archived) return SESSION_STATUS.COMPLETE;
     // A state this build does not know is not guessed at.
     if (!session.status) return SESSION_STATUS.UNKNOWN;
     // The detail is what a live session is actually doing, and it is only
