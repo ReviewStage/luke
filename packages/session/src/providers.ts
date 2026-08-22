@@ -7,6 +7,7 @@ import type { ProviderSessionObservation, SessionControl, SessionProvider } from
  * having to import adapter code or match on a display name.
  */
 export const PROVIDER_ID = {
+  ANTIGRAVITY: "antigravity",
   CLAUDE_CODE: "claude-code",
   CODEX: "codex",
   CONDUCTOR: "conductor",

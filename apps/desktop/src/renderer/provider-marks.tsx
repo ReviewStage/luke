@@ -12,6 +12,9 @@ import {
 } from "@sidecar/session";
 import { SUPERSET_WORKSPACE_PROVIDER_ID } from "@sidecar/superset/vocabulary";
 import {
+  ANTIGRAVITY_MARK_BASE_FILL,
+  ANTIGRAVITY_MARK_LAYERS,
+  ANTIGRAVITY_MARK_MASK_PATH,
   APPLE_CALENDAR_MARK_LAYERS,
   CLAUDE_CODE_PATH,
   CLOUD_BADGE_PATH,
@@ -51,7 +54,10 @@ import { APPLE_CALENDAR_ID } from "#shared/apple-calendar";
  * Provider marks are inlined as path data rather than bundled image files, so
  * the renderer stays asset-free and the marks scale with the surface.
  *
- * Each is the provider's own mark, reproduced rather than redrawn — Claude Code
+ * Each is the provider's own mark, reproduced rather than redrawn —
+ * Antigravity's double-arch verbatim from the vector antigravity.google
+ * inlines as its own site logo (trademark of Google LLC), keeping the masked,
+ * blurred colour field over the flat blue base it is published with, Claude Code
  * via Simple Icons (CC0-1.0, sourced from code.claude.com), cmux's chevron
  * verbatim from the icon cmux.com serves as its own site mark, keeping the
  * horizontal gradient the icon draws it with, Codex via
@@ -93,6 +99,72 @@ import { APPLE_CALENDAR_ID } from "#shared/apple-calendar";
  */
 interface MarkProps {
   className?: string;
+}
+
+function AntigravityMark({ className }: MarkProps): React.JSX.Element {
+  // Like Gemini's sparkle, the double-arch mark is not one filled path: a
+  // flat blue base wears a field of gaussian-blurred colour shapes — the
+  // published ellipses under their own transforms, plus two blurred paths —
+  // under a mask of the same glyph, all in Google's published colours,
+  // reproduced exactly and never recoloured to a theme. `useId` keeps every
+  // reference unique when several rows render the mark at once.
+  const idPrefix = `antigravity-mark-${useId()}`;
+  const maskId = `${idPrefix}-mask`;
+
+  return (
+    <svg
+      className={className}
+      data-mark={PROVIDER_ID.ANTIGRAVITY}
+      viewBox="13.9 15.1 83.7 83.7"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <defs>
+        <mask id={maskId} maskUnits="userSpaceOnUse" x="13" y="18" width="85" height="78">
+          <path fill="#ffffff" d={ANTIGRAVITY_MARK_MASK_PATH} />
+        </mask>
+        {ANTIGRAVITY_MARK_LAYERS.map((layer, index) => (
+          <filter
+            // The published artwork stacks one ellipse twice, so the layer
+            // list holds duplicates and only the position names a layer.
+            // biome-ignore lint/suspicious/noArrayIndexKey: see above
+            key={index}
+            id={`${idPrefix}-blur-${index}`}
+            filterUnits="userSpaceOnUse"
+            colorInterpolationFilters="sRGB"
+            x={layer.region.x}
+            y={layer.region.y}
+            width={layer.region.width}
+            height={layer.region.height}
+          >
+            <feGaussianBlur stdDeviation={layer.blur} />
+          </filter>
+        ))}
+      </defs>
+      <path fill={ANTIGRAVITY_MARK_BASE_FILL} d={ANTIGRAVITY_MARK_MASK_PATH} />
+      <g mask={`url(#${maskId})`}>
+        {ANTIGRAVITY_MARK_LAYERS.map((layer, index) => (
+          <g
+            // biome-ignore lint/suspicious/noArrayIndexKey: same duplicate-layer list as above
+            key={index}
+            filter={`url(#${idPrefix}-blur-${index})`}
+          >
+            {layer.path !== undefined && <path fill={layer.fill} d={layer.path} />}
+            {layer.ellipse !== undefined && (
+              <ellipse
+                fill={layer.fill}
+                cx={layer.ellipse.cx}
+                cy={layer.ellipse.cy}
+                rx={layer.ellipse.rx}
+                ry={layer.ellipse.ry}
+                transform={layer.ellipse.transform}
+              />
+            )}
+          </g>
+        ))}
+      </g>
+    </svg>
+  );
 }
 
 function ClaudeCodeMark({ className }: MarkProps): React.JSX.Element {
@@ -540,6 +612,7 @@ export type MarkId =
   | typeof CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID;
 
 const PROVIDER_MARKS = {
+  [PROVIDER_ID.ANTIGRAVITY]: AntigravityMark,
   [APPLE_CALENDAR_ID]: AppleCalendarMark,
   [PROVIDER_ID.CLAUDE_CODE]: ClaudeCodeMark,
   [SESSION_APPLICATION_ID.CHATGPT]: ChatGptMark,
