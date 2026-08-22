@@ -64,3 +64,19 @@ export function collapsedIconCenterOffset(): number {
 export function labelStartOffset(): number {
   return SIDEBAR_ICON_SLOT;
 }
+
+/**
+ * The hover and active fill cannot be the row's own background: the row is
+ * laid out at the expanded width and clipped by the rail, so its background
+ * would be sliced mid-pill by the moving clip edge. Each row instead layers a
+ * pill of its own, inset by this margin from the rail's left edge and sized by
+ * `sidebarPillWidth`, whose width moves between the same two endpoints as the
+ * rail's under the same transition. The two width deltas are therefore equal,
+ * which is what keeps the pill's rounded right end exactly this margin inside
+ * the clip edge at every intermediate width, not only at rest.
+ */
+export const SIDEBAR_PILL_INSET = 8;
+
+export function sidebarPillWidth(collapsed: boolean): number {
+  return sidebarRailWidth(collapsed) - SIDEBAR_PILL_INSET * 2;
+}
