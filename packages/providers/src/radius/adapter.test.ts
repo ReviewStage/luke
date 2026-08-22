@@ -235,6 +235,53 @@ test("observes a settled chat with its title, agent, model, and parting words", 
   assert.deepEqual(observation?.applications, [
     { id: "radius", displayName: "Radius", scope: "workspace" },
   ]);
+  // A tray hides a workspace-scoped chip on its rows and names the manager
+  // once on its own header, which it only draws with both of these — without
+  // them two chats in one project lose every trace of Radius between them.
+  assert.equal(observation?.workspace?.scopeId, PROVIDER_ID.RADIUS);
+  assert.equal(observation?.workspace?.managerName, "Radius");
+});
+
+test("keeps a chat whose turn is still running however stale its own clock", async (t) => {
+  const turnStartedMs = TEST_TIME - 6 * 60 * MINUTE_MS;
+  const radiusHome = await radiusStore(t, (store) => {
+    // Radius stamps a conversation at turn boundaries, so a chat six hours
+    // into live work ranks below every chat touched since it began.
+    store.chat({
+      conversationId: CHAT_ID.WORKING,
+      label: "A very long turn",
+      updatedAt: turnStartedMs,
+    });
+    store.turn({
+      conversationId: CHAT_ID.WORKING,
+      status: "running",
+      model: "claude-code/opus-5",
+      createdAt: turnStartedMs,
+    });
+    for (let index = 0; index < 260; index += 1) {
+      const conversationId = `chat:idle-${index}`;
+      store.chat({
+        conversationId,
+        label: `Idle ${index}`,
+        updatedAt: TEST_TIME - MINUTE_MS,
+      });
+      store.turn({
+        conversationId,
+        status: "completed",
+        model: "claude-code/opus-5",
+        createdAt: TEST_TIME - 2 * MINUTE_MS,
+        completedAt: TEST_TIME - MINUTE_MS,
+      });
+    }
+  });
+
+  const observations = await adapterFor(radiusHome).observe();
+
+  const running = observations.find((one) => one.providerSessionId === CHAT_ID.WORKING);
+  assert.ok(running, "a chat with an unsettled turn is never cut by the cap");
+  assert.equal(running?.status, SESSION_STATUS.UNKNOWN);
+  // The settled chats past the cap are still dropped, so the bound holds.
+  assert.equal(observations.length, 201);
 });
 
 test("reports the tool a running turn is holding on as its activity", async (t) => {

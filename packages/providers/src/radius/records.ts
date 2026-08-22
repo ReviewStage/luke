@@ -43,6 +43,7 @@ export const RADIUS_CONVERSATION_COLUMN = {
 /** The columns this code reads off `turns` rows. */
 export const RADIUS_TURN_COLUMN = {
   ID: "id",
+  CONVERSATION_ID: "conversation_id",
   STATUS: "status",
   MODEL: "model",
   CREATED_AT: "created_at",

@@ -54,6 +54,15 @@ const RADIUS_ADAPTER_DEFAULTS = {
   /** How many chats one observation pass reports, newest first. */
   MAXIMUM_CONVERSATIONS: 200,
   /**
+   * How many chat rows one pass loads before ranking them. It stands well
+   * above the number reported because the conversation clock this read orders
+   * by is stamped at turn boundaries: a chat can be live and still rank below
+   * chats touched more recently, so the read has to reach past the reported
+   * count for the ranking to have anything to correct. The bound exists only
+   * so a store nobody has ever pruned cannot cost unbounded memory.
+   */
+  MAXIMUM_CONVERSATION_ROWS: 1_000,
+  /**
    * How far back into a turn's events one pass looks for the tool still
    * running, the agent's closing words, and the clock proving the turn is
    * still moving. All three stand at the turn's tip, so the newest events are
@@ -74,12 +83,25 @@ const RADIUS_CONVERSATIONS_QUERY = `
   LIMIT ?
 `;
 
-const RADIUS_NEWEST_TURN_QUERY = `
-  SELECT id, status, model, created_at, completed_at, error
+/**
+ * Every chat's newest turn, in one read. Radius indexes `turns` by its own id
+ * and by request id alone — nothing on `conversation_id` — so asking per chat
+ * is a full scan of the table each time, and a roster of two hundred chats
+ * would scan it two hundred times a pass. The grouped join pays for one.
+ */
+const RADIUS_NEWEST_TURNS_QUERY = `
+  SELECT turns.conversation_id AS conversation_id, turns.id AS id,
+         turns.status AS status, turns.model AS model,
+         turns.created_at AS created_at, turns.completed_at AS completed_at,
+         turns.error AS error
   FROM turns
-  WHERE conversation_id = ?
-  ORDER BY created_at DESC
-  LIMIT 1
+  JOIN (
+    SELECT conversation_id, MAX(created_at) AS newest_at
+    FROM turns
+    GROUP BY conversation_id
+  ) newest
+    ON newest.conversation_id = turns.conversation_id
+   AND newest.newest_at = turns.created_at
 `;
 
 const RADIUS_TURN_EVENTS_QUERY = `
@@ -97,7 +119,11 @@ const RADIUS_TURN_EVENTS_QUERY = `
  * one. It is workspace-scoped, on the reasoning Replicas states — the
  * association belongs to the project the chats sit in rather than to any one
  * of them — and carries no address, because Radius registers no deep link
- * that lands on a chat.
+ * that lands on a chat. Workspace scope is only half the arrangement: a tray
+ * hides a workspace-scoped chip on its rows and names the manager once on its
+ * own header instead, so the workspace has to carry `scopeId` and
+ * `managerName` too or two chats in one project lose every trace of Radius
+ * between them — the exact reading this mark exists to prevent.
  */
 const RADIUS_APPLICATIONS: readonly SessionApplication[] = [
   {
@@ -255,6 +281,8 @@ function chatFromRow(row: WireRecord): RadiusChat | undefined {
       ? {
           workspace: {
             providerWorkspaceId: projectId,
+            scopeId: PROVIDER_ID.RADIUS,
+            managerName: RADIUS_PROVIDER_NAME,
             ...(projectLabel ? { name: projectLabel } : undefined),
           },
         }
@@ -300,6 +328,35 @@ function observationFromChat(
       ...(chat.turn?.failure ? { error: chat.turn.failure } : undefined),
     },
   };
+}
+
+/**
+ * The chats one pass reports, newest first. The ranking runs here rather than
+ * in the read because the clock the read can order by — the conversation's
+ * own `updated_at` — is stamped at turn boundaries, so a chat can be an hour
+ * into live work and still sort below chats nobody has touched since. Ranking
+ * on the turn's clock as well corrects that, and a chat whose newest turn has
+ * not settled is kept whatever it ranks: an unsettled turn is the one state
+ * where dropping the row would hide work actually happening.
+ */
+function reportedChats(chats: readonly RadiusChat[]): RadiusChat[] {
+  const ranked = [...chats].sort(
+    (left, right) =>
+      chatClockMs(right) - chatClockMs(left) ||
+      left.providerSessionId.localeCompare(right.providerSessionId),
+  );
+  const reported = ranked.slice(0, RADIUS_ADAPTER_DEFAULTS.MAXIMUM_CONVERSATIONS);
+  const held = new Set(reported.map((chat) => chat.providerSessionId));
+  const live = ranked
+    .slice(RADIUS_ADAPTER_DEFAULTS.MAXIMUM_CONVERSATIONS)
+    .filter(
+      (chat) => chat.turn !== undefined && !chat.turn.settled && !held.has(chat.providerSessionId),
+    );
+  return [...reported, ...live];
+}
+
+function chatClockMs(chat: RadiusChat): number {
+  return Math.max(chat.observedAt, chat.turn?.atMs ?? 0);
 }
 
 export interface RadiusAdapterOptions extends LocalSessionAdapterOptions {
@@ -360,28 +417,36 @@ export class RadiusSessionAdapter extends LocalSessionAdapter {
   /** The chats the database holds, each with the state of its newest turn. */
   #chats(database: SqliteDatabase): RadiusChat[] {
     const chats = this.#rows(database, RADIUS_CONVERSATIONS_QUERY, [
-      RADIUS_ADAPTER_DEFAULTS.MAXIMUM_CONVERSATIONS,
+      RADIUS_ADAPTER_DEFAULTS.MAXIMUM_CONVERSATION_ROWS,
     ])
       .map(chatFromRow)
       .filter((chat): chat is RadiusChat => chat !== undefined);
-    // Every chat gets its newest turn read, because a chat without one would
-    // report as working on freshness alone — inventing live work for a row
-    // whose turn actually settled. Each read is an indexed point query
-    // against one conversation's id, not a scan.
+    // Every chat gets its newest turn, because a chat without one would report
+    // as working on freshness alone — inventing live work for a row whose turn
+    // actually settled.
+    const turns = new Map<string, RadiusTurn>();
+    for (const row of this.#rows(database, RADIUS_NEWEST_TURNS_QUERY, [])) {
+      const conversationId = textFromRow(row, RADIUS_TURN_COLUMN.CONVERSATION_ID);
+      const turn = turnFromRow(row);
+      // Two turns of one chat can share a created_at, and the grouped read
+      // answers with both; the first stands rather than a coin toss.
+      if (conversationId && turn && !turns.has(conversationId)) turns.set(conversationId, turn);
+    }
     for (const chat of chats) {
-      const turn = this.#rows(database, RADIUS_NEWEST_TURN_QUERY, [chat.providerSessionId])
-        .map(turnFromRow)
-        .find((candidate): candidate is RadiusTurn => candidate !== undefined);
-      if (!turn) continue;
-      chat.turn = turn;
+      chat.turn = turns.get(chat.providerSessionId);
+    }
+    // Only the chats that survive the cap pay for an events read.
+    const reported = reportedChats(chats);
+    for (const chat of reported) {
+      if (!chat.turn) continue;
       chat.tip = tipFromEvents(
         this.#rows(database, RADIUS_TURN_EVENTS_QUERY, [
-          turn.turnId,
+          chat.turn.turnId,
           RADIUS_ADAPTER_DEFAULTS.MAXIMUM_TURN_EVENTS,
         ]),
       );
     }
-    return chats;
+    return reported;
   }
 
   /**
