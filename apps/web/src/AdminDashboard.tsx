@@ -334,13 +334,15 @@ function StatCard({
   label,
   value,
   hint,
+  title,
 }: {
   label: string;
   value: string;
   hint?: string;
+  title?: string;
 }): React.JSX.Element {
   return (
-    <div className="rounded-lg border border-border bg-card px-5 py-4">
+    <div className="rounded-lg border border-border bg-card px-5 py-4" title={title}>
       <div className="font-mono text-xs tracking-[0.2px] text-muted-foreground uppercase">
         {label}
       </div>
@@ -1213,10 +1215,13 @@ function Dashboard({
         <SectionHeading>User activity</SectionHeading>
         <div className="grid grid-cols-2 gap-3 min-[720px]:grid-cols-4">
           <StatCard label="Total accounts" value={formatNumber(metrics.users.total)} />
+          {/* The hint already carries the window total, so the run this count
+              is read against rides the title attribute instead. */}
           <StatCard
             label={`New · ${metrics.users.signupTrend.days} days`}
             value={formatNumber(metrics.users.signupTrend.recent)}
             hint={`${formatNumber(metrics.users.newInWindow)} in ${metrics.windowDays} days`}
+            title={`against ${formatNumber(metrics.users.signupTrend.prior)} in the ${metrics.users.signupTrend.days} days before`}
           />
           <StatCard
             label="Active sessions"
