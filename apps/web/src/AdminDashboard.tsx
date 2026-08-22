@@ -1,5 +1,5 @@
 import { createAuthClient } from "better-auth/react";
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, XAxis, YAxis } from "recharts";
 import type { AdminDayAccount, AdminDayDetail } from "../server/admin/admin-day";
 import type {
@@ -580,21 +580,54 @@ function CalendarDayCell({
   day,
   maxTotal,
   partialDay,
+  onShow,
+  onHide,
 }: {
   day: AdminDailyUsage;
   maxTotal: number;
   partialDay: string | undefined;
+  onShow: (day: AdminDailyUsage, cell: HTMLElement) => void;
+  onHide: () => void;
 }): React.JSX.Element {
   const total = day.voiceCalls + day.attentionReviews;
   const provisional =
     day.day === partialDay ? " border border-dashed border-muted-foreground/60" : "";
   return (
     <div
-      className={`size-4 rounded-[3px] ${total === 0 ? "bg-muted/60" : ""}${provisional}`}
+      role="img"
+      // biome-ignore lint/a11y/noNoninteractiveTabindex: the cell is informational, but focusing it is how a keyboard reader raises the tooltip that replaced its title, and the aria-label keeps the same words for AT.
+      tabIndex={0}
+      aria-label={`${formatTooltipDay(day.day, partialDay)} — ${formatNumber(day.voiceCalls)} voice · ${formatNumber(day.attentionReviews)} attention`}
+      data-calendar-day={day.day}
+      className={`size-4 rounded-[3px] outline-offset-2 ${total === 0 ? "bg-muted/60" : ""}${provisional}`}
       style={total === 0 ? undefined : calendarCellStyle(total, maxTotal)}
-      title={`${formatTooltipDay(day.day, partialDay)} — ${formatNumber(day.voiceCalls)} voice · ${formatNumber(day.attentionReviews)} attention`}
+      onPointerEnter={(event) => onShow(day, event.currentTarget)}
+      onPointerLeave={(event) => {
+        // A move straight onto a sibling cell fires that cell's enter next,
+        // which slides the shared tooltip over; clearing first would blink it.
+        if (
+          event.relatedTarget instanceof HTMLElement &&
+          event.relatedTarget.dataset.calendarDay !== undefined
+        ) {
+          return;
+        }
+        onHide();
+      }}
+      onFocus={(event) => onShow(day, event.currentTarget)}
+      onBlur={onHide}
     />
   );
+}
+
+/** The clearance between a day cell and the tooltip riding above or below it. */
+const CALENDAR_TOOLTIP_GAP_PX = 6;
+
+interface CalendarTooltipAnchor {
+  day: AdminDailyUsage;
+  /** The cell's edges in the card's own coordinates, where the tooltip lives. */
+  centerX: number;
+  top: number;
+  bottom: number;
 }
 
 /**
@@ -606,7 +639,10 @@ function CalendarDayCell({
  * streak breaking. A day the window does not cover draws nothing, a covered
  * day with no calls keeps the faintest neutral fill so absence still reads
  * as an observed day, and today wears the retention grid's dashed border
- * because a fade here would pose as a quiet day.
+ * because a fade here would pose as a quiet day. A hovered or focused cell
+ * answers at once with the charts' own tooltip — one element the whole grid
+ * shares, anchored to the card rather than the week scroller so the
+ * scroller's overflow cannot clip it, and clamped to the card's edges.
  */
 function ActivityCalendar({
   daily,
@@ -619,10 +655,41 @@ function ActivityCalendar({
   const months = monthLabels(weeks);
   const partialDay = partialDayKey(daily, generatedAt);
   const maxTotal = Math.max(...daily.map((day) => day.voiceCalls + day.attentionReviews));
+  const cardRef = useRef<HTMLDivElement>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
+  const [anchor, setAnchor] = useState<CalendarTooltipAnchor | undefined>(undefined);
+  const showTooltip = useCallback((day: AdminDailyUsage, cell: HTMLElement) => {
+    const card = cardRef.current;
+    if (card === null) return;
+    const cellRect = cell.getBoundingClientRect();
+    const cardRect = card.getBoundingClientRect();
+    setAnchor({
+      day,
+      centerX: cellRect.left + cellRect.width / 2 - cardRect.left,
+      top: cellRect.top - cardRect.top,
+      bottom: cellRect.bottom - cardRect.top,
+    });
+  }, []);
+  const hideTooltip = useCallback(() => setAnchor(undefined), []);
+  // The tooltip's own size is what the clamp needs, so the placement waits
+  // for the render that gives it one, still before the frame paints.
+  useLayoutEffect(() => {
+    const card = cardRef.current;
+    const tooltip = tooltipRef.current;
+    if (anchor === undefined || card === null || tooltip === null) return;
+    const left = Math.min(
+      Math.max(anchor.centerX - tooltip.offsetWidth / 2, 0),
+      card.clientWidth - tooltip.offsetWidth,
+    );
+    const above = anchor.top - tooltip.offsetHeight - CALENDAR_TOOLTIP_GAP_PX;
+    const top = above >= 0 ? above : anchor.bottom + CALENDAR_TOOLTIP_GAP_PX;
+    tooltip.style.left = `${left}px`;
+    tooltip.style.top = `${top}px`;
+  }, [anchor]);
   return (
-    <div className="rounded-lg border border-border bg-card p-5">
+    <div ref={cardRef} className="relative rounded-lg border border-border bg-card p-5">
       <div className="mb-4 text-xs text-muted-foreground">This account's days, week by week</div>
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto" onScroll={hideTooltip}>
         <div
           className="grid w-max gap-1 tabular-nums"
           style={{
@@ -654,6 +721,8 @@ function ActivityCalendar({
                     day={day}
                     maxTotal={maxTotal}
                     partialDay={partialDay}
+                    onShow={showTooltip}
+                    onHide={hideTooltip}
                   />
                 ),
               )}
@@ -665,6 +734,35 @@ function ActivityCalendar({
         Each cell is one UTC day — a deeper fill is more hosted calls against this account's busiest
         day in the window, and the dashed cell is today, still filling.
       </p>
+      {anchor !== undefined ? (
+        <div
+          ref={tooltipRef}
+          className="pointer-events-none absolute z-10 grid min-w-[8rem] items-start gap-1.5 rounded-lg border border-border/50 bg-card px-2.5 py-1.5 text-xs shadow-xl"
+        >
+          <div className="font-medium">{formatTooltipDay(anchor.day.day, partialDay)}</div>
+          <div className="grid gap-1.5">
+            {(
+              [
+                ["voiceCalls", anchor.day.voiceCalls],
+                ["attentionReviews", anchor.day.attentionReviews],
+              ] as const
+            ).map(([series, value]) => (
+              <div key={series} className="flex w-full items-center gap-2">
+                <div
+                  className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
+                  style={{ backgroundColor: USAGE_CHART[series].color }}
+                />
+                <div className="flex flex-1 items-center justify-between gap-4 leading-none">
+                  <span className="text-muted-foreground">{USAGE_CHART[series].label}</span>
+                  <span className="font-mono font-medium text-foreground tabular-nums">
+                    {formatNumber(value)}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
