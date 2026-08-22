@@ -28,6 +28,8 @@ export const ADMIN_ERROR = {
   MISSING_USER_ID: "missing-user-id",
   /** A read that named a window outside the fixed set of lengths. */
   INVALID_WINDOW: "invalid-window",
+  /** A roster read whose search term ran past the length bound. */
+  INVALID_SEARCH: "invalid-search",
   /** The named account has no user row — deleted, or the id never existed. */
   USER_NOT_FOUND: "user-not-found",
   /** A seam (auth or the database) did not answer; the answer is a JSON refusal, never a crash. */
@@ -94,6 +96,29 @@ export function adminMetricsWindow(url: string): AdminMetricsWindow | undefined 
   const value = new URL(url).searchParams.get(ADMIN_METRICS_WINDOW_PARAM);
   if (value === null) return ADMIN_METRICS_WINDOW_DEFAULT;
   return Object.values(ADMIN_METRICS_WINDOW).find((candidate) => String(candidate) === value);
+}
+
+export const ADMIN_USERS_SEARCH_PARAM = "search";
+
+/**
+ * Generous against any name or address worth finding, and small against a
+ * query string used as a battering ram: the term is the one parameter typed
+ * rather than picked from a fixed set, so a length bound is the validation
+ * it can carry.
+ */
+export const ADMIN_USERS_SEARCH_MAX_LENGTH = 100;
+
+/**
+ * The search a roster read asked for: no term when the request carried none
+ * or only whitespace, and no answer at all past the length bound — refused
+ * rather than silently clipped to a search nobody asked for.
+ */
+export function adminUsersSearch(url: string): { term: string | undefined } | undefined {
+  const value = new URL(url).searchParams.get(ADMIN_USERS_SEARCH_PARAM);
+  if (value === null) return { term: undefined };
+  if (value.length > ADMIN_USERS_SEARCH_MAX_LENGTH) return undefined;
+  const term = value.trim();
+  return { term: term.length === 0 ? undefined : term };
 }
 
 export const ADMIN_USER_ID_PARAM = "id";

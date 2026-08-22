@@ -19,6 +19,8 @@ import {
   ADMIN_METRICS_WINDOW_DEFAULT,
   ADMIN_METRICS_WINDOW_PARAM,
   ADMIN_USER_ID_PARAM,
+  ADMIN_USERS_SEARCH_MAX_LENGTH,
+  ADMIN_USERS_SEARCH_PARAM,
   type AdminMetricsWindow,
 } from "../server/admin/http";
 import { accountInitials } from "./account-initials";
@@ -64,6 +66,13 @@ const ACCOUNT_VIEW_PARAM = "user";
 const TAB_PARAM = "view";
 const USERS_TAB_VALUE = "users";
 const WINDOW_VIEW_PARAM = "days";
+const SEARCH_VIEW_PARAM = "q";
+
+/**
+ * Long enough that a typed word coalesces into one roster read, short enough
+ * that the searched answer still feels like the box's own.
+ */
+const SEARCH_DEBOUNCE_MS = 250;
 
 /** The sidebar's two destinations; an open account highlights Users. */
 type AdminTab = "dashboard" | "users";
@@ -91,6 +100,36 @@ function windowFromLocation(): AdminMetricsWindow {
     Object.values(ADMIN_METRICS_WINDOW).find((candidate) => String(candidate) === value) ??
     ADMIN_METRICS_WINDOW_DEFAULT
   );
+}
+
+/**
+ * The search the address bar names, so a searched roster is shareable and
+ * survives a reload. An address naming a term past the API's length bound is
+ * clipped to it rather than refused — a link is the reader's — and matches
+ * the bound the input below enforces on typing.
+ */
+function searchFromLocation(): string {
+  const value = new URLSearchParams(window.location.search).get(SEARCH_VIEW_PARAM) ?? "";
+  return value.slice(0, ADMIN_USERS_SEARCH_MAX_LENGTH);
+}
+
+/**
+ * The current address with the search set or cleared. Typing rewrites the
+ * entry in place rather than pushing one, so the back button walks views,
+ * not keystrokes.
+ */
+function searchHref(query: string): string {
+  const params = new URLSearchParams(window.location.search);
+  if (query) params.set(SEARCH_VIEW_PARAM, query);
+  else params.delete(SEARCH_VIEW_PARAM);
+  const queryString = params.toString();
+  return queryString ? `${window.location.pathname}?${queryString}` : window.location.pathname;
+}
+
+/** The term a typed query asks the service to search for: none when blank. */
+function searchTerm(query: string): string | undefined {
+  const term = query.trim();
+  return term.length === 0 ? undefined : term;
 }
 
 /**
@@ -1425,7 +1464,13 @@ function AccountActivityNote(): React.JSX.Element {
   );
 }
 
-function RosterNote({ truncatedTo }: { truncatedTo?: number }): React.JSX.Element {
+function RosterNote({
+  truncatedTo,
+  searched,
+}: {
+  truncatedTo?: number;
+  searched?: boolean;
+}): React.JSX.Element {
   return (
     <p className="mt-3 text-sm text-muted-foreground">
       Every account the service holds, most recently active first, whether or not it ever touched
@@ -1434,7 +1479,9 @@ function RosterNote({ truncatedTo }: { truncatedTo?: number }): React.JSX.Elemen
       any hosted use. A heading sorts by its column, a row opens the account's own page, and a row's
       star favorites the account for you alone, following your sign-in rather than this browser.
       {truncatedTo !== undefined
-        ? ` Only the ${formatNumber(truncatedTo)} most recently active accounts are listed here, and the filter searches those alone.`
+        ? searched
+          ? ` Only the ${formatNumber(truncatedTo)} most recently active matching accounts are listed here — narrow the search to reach the rest.`
+          : ` Only the ${formatNumber(truncatedTo)} most recently active accounts are listed here — searching reads the whole roster, not just these.`
         : ""}
     </p>
   );
@@ -1652,17 +1699,19 @@ function AccountSkeleton({
   );
 }
 
-/** A windowed read's address: the default scope and window ride as no params. */
+/** A windowed read's address: the default scope, window, and no search ride as no params. */
 function windowedReadPath(
   base: string,
   hideAdmins: boolean,
   windowDays: AdminMetricsWindow,
+  search?: string,
 ): string {
   const params = new URLSearchParams();
   if (!hideAdmins) params.set(ADMIN_METRICS_SCOPE_PARAM, ADMIN_METRICS_SCOPE.ALL);
   if (windowDays !== ADMIN_METRICS_WINDOW_DEFAULT) {
     params.set(ADMIN_METRICS_WINDOW_PARAM, String(windowDays));
   }
+  if (search !== undefined) params.set(ADMIN_USERS_SEARCH_PARAM, search);
   const query = params.toString();
   return query ? `${base}?${query}` : base;
 }
@@ -2684,6 +2733,8 @@ function UsersPage({
   onSignOut,
   onOpenAccount,
   onToggleFavorite,
+  query,
+  onQueryChange,
   refreshing,
   onRefresh,
   now,
@@ -2698,11 +2749,15 @@ function UsersPage({
   onSignOut: () => void;
   onOpenAccount: (id: string) => void;
   onToggleFavorite: (id: string, favorite: boolean) => void;
+  query: string;
+  onQueryChange: (query: string) => void;
   refreshing: boolean;
   onRefresh: () => void;
   now: number;
 }): React.JSX.Element {
-  const [query, setQuery] = useState("");
+  // The service searches the whole roster once the debounce settles; until
+  // that answer lands, the same needle filters the rows already loaded, so
+  // the box stays instant between refetches.
   const needle = query.trim().toLowerCase();
   const rows = needle
     ? list.rows.filter((row) => `${row.name} ${row.email}`.toLowerCase().includes(needle))
@@ -2742,13 +2797,15 @@ function UsersPage({
           <input
             type="search"
             value={query}
-            placeholder="Filter by name or email…"
-            aria-label="Filter accounts by name or email"
+            maxLength={ADMIN_USERS_SEARCH_MAX_LENGTH}
+            placeholder="Search by name or email…"
+            aria-label="Search accounts by name or email"
             className="w-full max-w-[320px] rounded-md border border-border bg-card px-3 py-1.5 text-sm placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2"
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => onQueryChange(event.target.value)}
           />
           <span className="text-xs text-muted-foreground tabular-nums">
             {formatNumber(rows.length)} of {formatNumber(list.total)} accounts
+            {list.search === undefined ? "" : " matching"}
           </span>
         </div>
         <div className="mt-4">
@@ -2763,7 +2820,10 @@ function UsersPage({
             favorite={{ starred: (row) => row.favorite, onToggle: onToggleFavorite }}
           />
         </div>
-        <RosterNote truncatedTo={list.total > list.rows.length ? list.rows.length : undefined} />
+        <RosterNote
+          truncatedTo={list.total > list.rows.length ? list.rows.length : undefined}
+          searched={list.search !== undefined}
+        />
       </div>
     </main>
   );
@@ -2797,6 +2857,32 @@ function UsersScreen({
   const [refreshing, setRefreshing] = useState(false);
   const inFlight = useRef<AbortController>(null);
 
+  // What the box holds and what the service was asked to search for, apart:
+  // the query redraws on every keystroke and filters the loaded rows at once,
+  // while the debounce below commits it into the term the roster is refetched
+  // under, so the whole account table is not scanned per keystroke. Typing
+  // rides the address bar in place, so a searched roster is shareable without
+  // the back button walking keystrokes.
+  const [query, setQuery] = useState(searchFromLocation);
+  const [search, setSearch] = useState(() => searchTerm(searchFromLocation()));
+  const changeQuery = (next: string) => {
+    setQuery(next);
+    window.history.replaceState(null, "", searchHref(next.trim()));
+  };
+  useEffect(() => {
+    const timer = window.setTimeout(() => setSearch(searchTerm(query)), SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+  useEffect(() => {
+    const onPopState = () => {
+      const restored = searchFromLocation();
+      setQuery(restored);
+      setSearch(searchTerm(restored));
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
   // The same withdrawal the detail screen lands: this screen renders in the
   // overview's place with a ready answer of its own, so the parent's sign-out
   // alone would leave the roster on screen after the consent behind it left.
@@ -2817,7 +2903,7 @@ function UsersScreen({
     inFlight.current = controller;
     setState((current) => (current.status === "ready" ? current : { status: "loading" }));
     setRefreshing(true);
-    const path = windowedReadPath(USERS_PATH, hideAdmins, windowDays);
+    const path = windowedReadPath(USERS_PATH, hideAdmins, windowDays, search);
     void (async () => {
       try {
         const next = await readUsersState(
@@ -2838,7 +2924,7 @@ function UsersScreen({
         if (!controller.signal.aborted) setRefreshing(false);
       }
     })();
-  }, [hideAdmins, windowDays]);
+  }, [hideAdmins, search, windowDays]);
 
   useEffect(() => {
     load();
@@ -2937,6 +3023,8 @@ function UsersScreen({
           onSignOut={() => void signOut()}
           onOpenAccount={onOpenAccount}
           onToggleFavorite={toggleFavorite}
+          query={query}
+          onQueryChange={changeQuery}
           refreshing={refreshing}
           onRefresh={load}
           now={now}

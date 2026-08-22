@@ -7,6 +7,7 @@ import {
   type AdminMetricsWindow,
   adminMetricsScope,
   adminMetricsWindow,
+  adminUsersSearch,
   errorResponse,
   jsonResponse,
 } from "./http.js";
@@ -20,13 +21,23 @@ import {
  */
 
 /**
- * How many rows one read returns. The roster is drawn whole because search
- * and the reading both happen client-side; the bound exists so an account
- * table that has grown past what a page can usefully draw degrades to a
- * stated truncation — `total` still counts everyone — rather than an
- * unbounded response.
+ * How many rows one read returns. The bound exists so an account table that
+ * has grown past what a page can usefully draw degrades to a stated
+ * truncation — `total` still counts everyone the filter keeps — rather than
+ * an unbounded response, and the search narrows the read itself, so an
+ * account past the bound is still findable by name or email.
  */
 export const ADMIN_USERS_LIMIT = 200;
+
+/**
+ * An `ILIKE` pattern matching the term as a literal substring: Postgres's
+ * default escape character is the backslash, so the term's own `%`, `_`,
+ * and `\` are escaped before the wildcards wrap it — a searched "100%" must
+ * match those four characters, never widen into a prefix scan.
+ */
+export function searchLikePattern(term: string): string {
+  return `%${term.replace(/[\\%_]/g, "\\$&")}%`;
+}
 
 export interface AdminUserListRow {
   id: string;
@@ -57,10 +68,12 @@ export interface AdminUserListRow {
 export interface AdminUserList {
   generatedAt: number;
   windowDays: number;
-  /** Every account the scope covers, counted past the row bound. */
+  /** Every account the scope — and the search, when one rode the read — covers, counted past the row bound. */
   total: number;
   /** The bound `rows` was read under, so the page can word a truncation. */
   limit: number;
+  /** The term the rows and total were filtered by, echoed so the page words the answer it shows. */
+  search: string | undefined;
   rows: AdminUserListRow[];
 }
 
@@ -69,17 +82,19 @@ export interface AdminUserListSource {
   rows: readonly AdminUserListRow[];
 }
 
-/** Stamps the queried roster with the window the aggregates cover. */
+/** Stamps the queried roster with the window its aggregates cover and the search that scoped it. */
 export function buildAdminUserList(
   source: AdminUserListSource,
   now: number,
   windowDays: AdminMetricsWindow,
+  search: string | undefined,
 ): AdminUserList {
   return {
     generatedAt: now,
     windowDays,
     total: source.total,
     limit: ADMIN_USERS_LIMIT,
+    search,
     rows: [...source.rows],
   };
 }
@@ -93,6 +108,7 @@ export interface AdminUsersOptions {
     scope: AdminMetricsScope,
     viewerId: string,
     windowDays: AdminMetricsWindow,
+    search: string | undefined,
   ) => Promise<AdminUserList>;
   now?: () => number;
 }
@@ -126,11 +142,22 @@ export async function handleAdminUsers(options: AdminUsersOptions): Promise<Resp
     return errorResponse(ADMIN_HTTP_STATUS.BAD_REQUEST, ADMIN_ERROR.INVALID_WINDOW);
   }
 
+  const search = adminUsersSearch(request.url);
+  if (search === undefined) {
+    return errorResponse(ADMIN_HTTP_STATUS.BAD_REQUEST, ADMIN_ERROR.INVALID_SEARCH);
+  }
+
   const now = (options.now ?? Date.now)();
   try {
     return jsonResponse(
       ADMIN_HTTP_STATUS.OK,
-      await options.readUsers(now, adminMetricsScope(request.url), viewer.userId, windowDays),
+      await options.readUsers(
+        now,
+        adminMetricsScope(request.url),
+        viewer.userId,
+        windowDays,
+        search.term,
+      ),
     );
   } catch {
     return errorResponse(ADMIN_HTTP_STATUS.SERVICE_UNAVAILABLE, ADMIN_ERROR.UNAVAILABLE);
