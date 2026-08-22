@@ -157,6 +157,8 @@ async function readUsageMetrics(
         id: user.id,
         name: user.name,
         email: user.email,
+        image: user.image,
+        role: user.role,
         activeDays: count(),
         lastActiveDay: sql<string>`max(${hostedUsage.day})`,
         voiceCalls: sum(hostedUsage.voiceCalls),
@@ -165,7 +167,7 @@ async function readUsageMetrics(
       .from(hostedUsage)
       .innerJoin(user, eq(hostedUsage.userId, user.id))
       .where(and(gte(hostedUsage.day, windowStartDay), scopeCondition(scope)))
-      .groupBy(user.id, user.name, user.email)
+      .groupBy(user.id, user.name, user.email, user.image, user.role)
       .orderBy(
         desc(count()),
         desc(sql`sum(${hostedUsage.voiceCalls}) + sum(${hostedUsage.attentionReviews})`),
@@ -188,6 +190,8 @@ async function readUsageMetrics(
       id: row.id,
       name: row.name,
       email: row.email,
+      image: row.image,
+      admin: isAdminRole(row.role),
       activeDays: toNumber(row.activeDays),
       lastActiveDay: row.lastActiveDay,
       voiceCalls,

@@ -367,6 +367,8 @@ test("the most active accounts pass through the builder untouched", () => {
       id: "user-9",
       name: "Ada Lovelace",
       email: "ada@example.com",
+      image: null,
+      admin: false,
       activeDays: 12,
       lastActiveDay: "2026-08-17",
       voiceCalls: 3,
