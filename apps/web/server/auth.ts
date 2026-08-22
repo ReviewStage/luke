@@ -1,7 +1,7 @@
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { betterAuth } from "better-auth";
-import { jwt, lastLoginMethod, oAuthProxy } from "better-auth/plugins";
+import { jwt, lastLoginMethod } from "better-auth/plugins";
 import { USER_ROLE } from "./admin/admin-access.js";
 import { authDeployment } from "./auth-deployment.js";
 import {
@@ -9,6 +9,7 @@ import {
   denyOAuthClientPrivileges,
   JWT_KEY_STORAGE,
 } from "./auth-policy.js";
+import { authProxy } from "./auth-proxy.js";
 import { getDatabase } from "./db/index.js";
 import * as schema from "./db/schema.js";
 import { DESKTOP_OAUTH_CLIENT } from "./desktop-oauth-client.js";
@@ -50,7 +51,7 @@ export const auth = betterAuth({
   plugins: [
     // Ahead of the social sign-in it rewrites, and of the provider plugin whose
     // desktop authorization resumes on the session it lands.
-    oAuthProxy({ productionURL: deployment.productionURL, secret: deployment.proxySecret }),
+    authProxy(deployment),
     jwt(JWT_KEY_STORAGE),
     lastLoginMethod({ storeInDatabase: true }),
     oauthProvider({

@@ -69,26 +69,28 @@ preview sends the preview's, which is the 403 behind the admin dashboard's
 Better Auth's `oAuthProxy` plugin carries the rest: the preview hands the
 provider production's registered redirect URI, production exchanges the code and
 redirects the profile back to the preview encrypted, and the preview creates the
-session in its own Neon branch database. Production runs the same plugin,
-because it is the end that decrypts, and the proxy is inert there — a request
-that already arrived on the address it would proxy to is left alone. A preview
-therefore signs in only against a production deployment that already carries the
-plugin.
+session in its own Neon branch database. Production keeps the plugin's callback
+hooks because it is the relay that exchanges the provider code, but drops the
+plugin's `/oauth-proxy-callback` endpoint. That endpoint creates a session from
+any profile encrypted with the shared proxy key; leaving it on production would
+turn a Preview-held credential into authority over production sessions. A
+preview therefore signs in only against a production deployment that already
+carries the relay hooks, while only a positively identified Preview accepts the
+returned profile.
 
 The Preview environment needs `BETTER_AUTH_URL`, `BETTER_AUTH_SECRET`,
-`GOOGLE_CLIENT_ID`, and `GITHUB_CLIENT_ID`; the two client secrets are spent by
-production, which is the end that exchanges the code. The two ends encrypt with
-`BETTER_AUTH_SECRET` unless `BETTER_AUTH_PROXY_SECRET` is set, and whichever it
-is has to hold the same value in both environments, or the profile arrives
-undecryptable. Set `BETTER_AUTH_PROXY_SECRET` on both rather than sharing the
-main one: a preview then never holds the key that signs production's sessions
-and decrypts its stored provider tokens. It does not make the shared key
-harmless. A profile encrypted with the proxy secret is what
-`/api/auth/oauth-proxy-callback` trusts, and the state it is bound to can be
-had by starting a sign-in, so the proxy secret mints sessions on every
-deployment that carries the plugin, production included. It is a production
-credential wherever it is stored, and Preview is the least guarded place it is
-stored.
+`BETTER_AUTH_PROXY_SECRET`, `GOOGLE_CLIENT_ID`, and `GITHUB_CLIENT_ID`; the two
+client secrets are spent by production, which is the end that exchanges the
+code. `BETTER_AUTH_PROXY_SECRET` has to hold the same dedicated value on both
+ends, or the profile arrives undecryptable. A Preview without it does not expose
+the profile-accepting endpoint at all: falling back to `BETTER_AUTH_SECRET`
+would require putting production's session-signing and provider-token key into
+Preview. The dedicated key does not make the shared credential harmless. A
+profile encrypted with the proxy secret is what a Preview's
+`/api/auth/oauth-proxy-callback` trusts, so a leak can hijack a proxied OAuth
+flow and mint sessions on deployments that accept proxy profiles. Production
+deliberately does not. Treat the proxy secret as sensitive everywhere it is
+stored, especially in Preview.
 
 Vercel Deployment Protection sits in front of all of this. The redirect back
 from production lands on the protected preview like any other request, so the
