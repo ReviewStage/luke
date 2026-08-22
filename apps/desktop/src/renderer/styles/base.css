@@ -808,8 +808,8 @@ html[data-keyboard="true"] .wing-mark:focus-visible {
   transition-delay: var(--peek-delay);
 }
 
-.app-stage[data-presentation="peek"] .wing-mark,
-.app-stage[data-presentation="panel"] .wing-mark {
+.app-stage[data-presentation="peek"] .wing-mark:not([data-leaving="true"]),
+.app-stage[data-presentation="panel"] .wing-mark:not([data-leaving="true"]) {
   pointer-events: auto;
 }
 

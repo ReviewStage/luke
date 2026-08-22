@@ -16,6 +16,7 @@ import { ProviderMark } from "./provider-marks";
 import {
   type ProviderTally,
   type SessionTally,
+  sameSessionFilters,
   tallyCaption,
   tallySummary,
   tallyValue,
@@ -351,7 +352,8 @@ export function NotchWings({
                 const filter = isSessionFilter(item.provider.providerId)
                   ? item.provider.providerId
                   : undefined;
-                const active = filter !== undefined && (activeFilters?.includes(filter) ?? false);
+                const active =
+                  filter !== undefined && sameSessionFilters(activeFilters ?? [], [filter]);
                 const label = item.provider.provider;
                 return (
                   <button
@@ -363,6 +365,7 @@ export function NotchWings({
                     data-active={String(active)}
                     aria-label={active ? `Clear ${label} filter` : `Filter by ${label}`}
                     title={active ? `Clear ${label} filter` : `Filter by ${label}`}
+                    disabled={leaving}
                     tabIndex={leaving ? -1 : 0}
                     onMouseDown={(event) => event.preventDefault()}
                     onClick={(event) => {
