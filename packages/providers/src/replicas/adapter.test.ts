@@ -947,6 +947,92 @@ test("enriches each chat from its own tail: model, tool, failure, and recap", as
   assert.equal(JSON.stringify(observations).includes(SECRET_PROMPT_TEXT), false);
 });
 
+test("keeps a stale agent out of a workspace row the live detail names otherwise", async () => {
+  // The detail names kimi — a kind with no identity — while the retained
+  // events last showed a Claude turn: the live word wins whole, riding the
+  // model slot, and no mark from the past poses as the present.
+  const api = fakeReplicasApi([
+    {
+      ...activeWorkspace("workspace-switched", TEST_TIME - 1_000),
+      codingAgent: "kimi",
+      historyEvents: [claudeAssistant("An earlier Claude turn."), claudeResult()],
+    },
+  ]);
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  assert.equal(observations[0]?.agent, undefined);
+  assert.equal(observations[0]?.detail?.model, "kimi");
+});
+
+test("covers an errored workspace's cached chats with the lifecycle, not stale turns", async () => {
+  const workspaces: TestWorkspace[] = [
+    {
+      ...activeWorkspace("workspace-fated", TEST_TIME - 1_000),
+      chats: [
+        {
+          id: "chat-busy",
+          provider: "claude",
+          title: "Claude Code",
+          updatedAt: TEST_TIME - 1_000,
+          processing: true,
+        },
+        {
+          id: "chat-other",
+          provider: "codex",
+          title: "Codex",
+          updatedAt: TEST_TIME - 2_000,
+          processing: false,
+        },
+      ],
+    },
+  ];
+  const api = fakeReplicasApi(workspaces);
+  const adapter = adapterFor(api.fetch);
+
+  await adapter.observe();
+  const workspace = workspaces[0];
+  if (workspace) workspace.status = TEST_STATUS.ERROR;
+  const errored = await adapter.observe();
+
+  // The workspace can run no turn, so its newest chat carries the failure
+  // and its sibling reads settled — never the turn state cached from before.
+  assert.deepEqual(
+    errored.map((observation) => [observation.providerSessionId, observation.status]),
+    [
+      ["chat-busy", SESSION_STATUS.ERROR],
+      ["chat-other", SESSION_STATUS.COMPLETE],
+    ],
+  );
+  assert.equal(errored[0]?.detail?.error, "The workspace failed to start or wake");
+});
+
+test("keeps last turn's failure off a chat already running again", async () => {
+  const api = fakeReplicasApi([
+    {
+      ...activeWorkspace("workspace-retrying", TEST_TIME - 1_000),
+      chats: [
+        {
+          // The new turn started before its first events landed, so the tail
+          // still ends on the failed result; the working row stays quiet
+          // about it.
+          id: "chat-retrying",
+          provider: "claude",
+          title: "Claude Code",
+          updatedAt: TEST_TIME - 1_000,
+          processing: true,
+          historyEvents: [claudeFailedResult("The sandbox ran out of disk")],
+        },
+      ],
+    },
+  ]);
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
+  assert.equal(observations[0]?.detail?.error, undefined);
+});
+
 test("reports the parting words as the recap once the turn actually parted", async () => {
   const api = fakeReplicasApi([
     {

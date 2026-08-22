@@ -1194,9 +1194,16 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
     const status = this.#statusFor(workspace);
     const history = this.#historyBySubject.get(workspace.id);
     const detail = this.#detailByWorkspace.get(workspace.id);
-    const agentKind = detail?.agentKind ?? history?.agentKind;
-    const mappedKind = knownValue(REPLICAS_AGENT_KIND, agentKind);
-    const agent = mappedKind ? REPLICAS_AGENT_BY_KIND[mappedKind] : history?.agent;
+    // The live detail's word wins whole: a kind it names that this build has
+    // no identity for rides the model slot rather than falling through to
+    // whatever agent the retained events last named, which may be a
+    // different one. The events answer only when the detail said nothing.
+    const listedKind = detail?.agentKind;
+    const mappedListed = knownValue(REPLICAS_AGENT_KIND, listedKind);
+    const agent = listedKind
+      ? mappedListed && REPLICAS_AGENT_BY_KIND[mappedListed]
+      : history?.agent;
+    const agentKind = listedKind ? (mappedListed ? undefined : listedKind) : history?.agentKind;
     return {
       providerSessionId: workspace.id,
       // The workspace's own name titles the row — the identity the dashboard
@@ -1218,8 +1225,8 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
         // The model the token accounting names, with an unmapped agent kind
         // riding beside it in the provider's own word, the way Conductor's
         // unmapped kinds do, so neither is lost for lacking a mark.
-        ...(modelLabel(agent === undefined ? agentKind : undefined, history?.model)
-          ? { model: modelLabel(agent === undefined ? agentKind : undefined, history?.model) }
+        ...(modelLabel(agentKind, history?.model)
+          ? { model: modelLabel(agentKind, history?.model) }
           : undefined),
         ...(history?.error ? { error: history.error } : undefined),
         ...this.#sharedDetail(workspace, status),
@@ -1291,10 +1298,13 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
         ...(chat.processing === true && history?.activity
           ? { activity: history.activity }
           : undefined),
-        // The chat's own failed turn outranks everything its row could say;
-        // the workspace's wake failure stays on the newest chat alone, where
-        // the workspace's own state already speaks.
-        ...(history?.error
+        // The chat's own failed turn outranks everything its row could say —
+        // but only while the chat is not already running again: a new turn
+        // can start before its first events land, and last turn's failure
+        // must not pose as this one's. The workspace's wake failure stays on
+        // the newest chat alone, where the workspace's own state already
+        // speaks.
+        ...(history?.error && chat.processing !== true
           ? { error: history.error }
           : newest && status === SESSION_STATUS.ERROR
             ? { error: REPLICAS_WORKSPACE_ERROR_MESSAGE }
@@ -1316,6 +1326,13 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
     now: number,
   ): SessionStatus {
     if (workspace.status === REPLICAS_STATUS.SLEEPING) return SESSION_STATUS.COMPLETE;
+    // A chat's turn state is the awake engine's word. Any other lifecycle
+    // covers every chat at once — an errored or preparing workspace can run
+    // no turn — so the newest chat carries the lifecycle and its siblings
+    // read settled, never a turn state cached from before the change.
+    if (workspace.status !== REPLICAS_STATUS.ACTIVE) {
+      return newest ? this.#statusFor(workspace) : SESSION_STATUS.COMPLETE;
+    }
     if (chat.processing === true) return SESSION_STATUS.WORKING;
     if (chat.processing === false) {
       // An idle chat in an awake workspace has finished its turn and is
