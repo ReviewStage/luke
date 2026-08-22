@@ -27,7 +27,9 @@ import { GitHubMark, GoogleMark } from "./account-marks";
 import { settleRead } from "./admin-refresh";
 import {
   SIDEBAR_ICON_SLOT,
+  SIDEBAR_PILL_INSET,
   SIDEBAR_WIDTH,
+  sidebarPillWidth,
   sidebarRailWidth,
   sidebarToggleLabel,
 } from "./admin-sidebar";
@@ -930,9 +932,21 @@ function CollapseIcon({ collapsed }: { collapsed: boolean }): React.JSX.Element 
   );
 }
 
+/**
+ * The pill's fill is scoped here rather than taken from `--muted`: 5% white is
+ * a resting tint for flat surfaces, too faint to read as a state on the
+ * lifted card the rail sits on, and raising the shared token would brighten
+ * every muted surface on the page.
+ */
 const SIDEBAR_ITEM = {
-  ACTIVE: "bg-muted text-foreground",
-  IDLE: "text-muted-foreground hover:bg-muted hover:text-foreground",
+  ACTIVE: {
+    ROW: "text-foreground",
+    PILL: "bg-foreground/10",
+  },
+  IDLE: {
+    ROW: "text-muted-foreground hover:text-foreground focus-visible:text-foreground",
+    PILL: "group-hover:bg-foreground/10 group-focus-visible:bg-foreground/10",
+  },
 } as const;
 
 /**
@@ -951,6 +965,10 @@ const SIDEBAR_ITEM = {
  * padding of their own: any would start the label short of that edge. Collapsed,
  * every item keeps its name on a `title` and the toggle on its `aria-label`;
  * the labels themselves stay in the tree, clipped, so a reader still hears them.
+ * The same clip is why hover and the active state are drawn by a pill layer
+ * sized against the rail (`sidebarPillWidth`) instead of the row's background:
+ * the fixed-width row runs under the clip edge, so its background would be
+ * sliced there, expanded flush against the borders and collapsed cut mid-pill.
  */
 function AdminSidebar({
   active,
@@ -965,7 +983,7 @@ function AdminSidebar({
 }): React.JSX.Element {
   const iconSlot = (icon: React.ReactNode) => (
     <span
-      className="flex shrink-0 items-center justify-center"
+      className="relative flex shrink-0 items-center justify-center"
       style={{ width: SIDEBAR_ICON_SLOT }}
       aria-hidden="true"
     >
@@ -973,24 +991,34 @@ function AdminSidebar({
     </span>
   );
 
-  const item = (tab: AdminTab, label: string, icon: React.ReactNode) => (
-    <a
-      href={tabHref(tab)}
-      aria-current={active === tab ? "page" : undefined}
-      title={collapsed ? label : undefined}
-      className={`flex items-center rounded-md py-2 pr-3 text-sm font-medium transition-colors duration-150 ${
-        active === tab ? SIDEBAR_ITEM.ACTIVE : SIDEBAR_ITEM.IDLE
-      }`}
-      onClick={(event) => {
-        if (!plainLeftClick(event)) return;
-        event.preventDefault();
-        onNavigate(tab);
-      }}
-    >
-      {iconSlot(icon)}
-      <span className="min-w-0 whitespace-nowrap">{label}</span>
-    </a>
+  const pill = (styling: (typeof SIDEBAR_ITEM)[keyof typeof SIDEBAR_ITEM]) => (
+    <span
+      aria-hidden="true"
+      style={{ left: SIDEBAR_PILL_INSET, width: sidebarPillWidth(collapsed) }}
+      className={`absolute inset-y-0 rounded-full transition-[width,background-color] duration-150 ease-out motion-reduce:transition-none ${styling.PILL}`}
+    />
   );
+
+  const item = (tab: AdminTab, label: string, icon: React.ReactNode) => {
+    const styling = active === tab ? SIDEBAR_ITEM.ACTIVE : SIDEBAR_ITEM.IDLE;
+    return (
+      <a
+        href={tabHref(tab)}
+        aria-current={active === tab ? "page" : undefined}
+        title={collapsed ? label : undefined}
+        className={`group relative flex items-center py-2 pr-3 text-sm font-medium transition-colors duration-150 focus-visible:outline-none ${styling.ROW}`}
+        onClick={(event) => {
+          if (!plainLeftClick(event)) return;
+          event.preventDefault();
+          onNavigate(tab);
+        }}
+      >
+        {pill(styling)}
+        {iconSlot(icon)}
+        <span className="relative min-w-0 whitespace-nowrap">{label}</span>
+      </a>
+    );
+  };
 
   return (
     <nav
@@ -1017,11 +1045,12 @@ function AdminSidebar({
         <button
           type="button"
           aria-label={sidebarToggleLabel(collapsed)}
-          className={`flex cursor-pointer items-center rounded-md py-2 pr-3 text-sm font-medium transition-colors duration-150 ${SIDEBAR_ITEM.IDLE}`}
+          className={`group relative flex cursor-pointer items-center py-2 pr-3 text-sm font-medium transition-colors duration-150 focus-visible:outline-none ${SIDEBAR_ITEM.IDLE.ROW}`}
           onClick={onToggle}
         >
+          {pill(SIDEBAR_ITEM.IDLE)}
           {iconSlot(<CollapseIcon collapsed={collapsed} />)}
-          <span className="whitespace-nowrap">Collapse</span>
+          <span className="relative whitespace-nowrap">Collapse</span>
         </button>
       </div>
     </nav>
