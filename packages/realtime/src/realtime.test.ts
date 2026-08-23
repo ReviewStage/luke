@@ -1585,12 +1585,47 @@ test("a chosen default project survives the context cap", () => {
   const capless = workspaceProjectContextText(crowd);
   assert.doesNotMatch(capless, new RegExp(last.providerProjectId));
 
-  // The chosen default rides past the cut so it remains available to the
-  // validator even though the context no longer narrates defaulting behavior.
+  // The chosen default rides past the cut so the one project a nameless ask
+  // lands in stays listed, marked, and steerable.
   const kept = workspaceProjectContextText(crowd, undefined, {
     conductor: last.providerProjectId,
   });
   assert.match(kept, new RegExp(`project_id=${last.providerProjectId}`));
+});
+
+test("the projects context says where a nameless ask goes, by id", () => {
+  const localTwin: ObservedWorkspaceProject = {
+    ...OFFERED_PROJECT,
+    providerId: "conductor-local",
+    providerName: "Conductor (local)",
+    providerProjectId: "repo-7",
+  };
+
+  // Two providers wearing the same first word: the default is narrated by
+  // provider_id, so the conversation can bind it to one of them instead of
+  // asking which Conductor is meant.
+  const chosen = workspaceProjectContextText([OFFERED_PROJECT, localTwin], "conductor");
+  assert.match(
+    chosen,
+    /An ask that names no provider creates in Conductor \[provider_id=conductor\]/,
+  );
+
+  // A provider's chosen project is marked on its own line.
+  const marked = workspaceProjectContextText(
+    [OFFERED_PROJECT, { ...OFFERED_PROJECT, providerProjectId: "proj-2" }],
+    "conductor",
+    { conductor: "proj-2" },
+  );
+  assert.match(marked, /project_id=proj-2[^\n]*the provider's default project/);
+  assert.doesNotMatch(marked, /project_id=proj-1[^\n]*default project/);
+
+  // While no default is chosen the context says the first creation decides;
+  // a chosen default that stopped being offered steers nothing.
+  assert.match(workspaceProjectContextText([OFFERED_PROJECT]), /No default provider is chosen yet/);
+  assert.match(
+    workspaceProjectContextText([OFFERED_PROJECT], "superset"),
+    /default provider is not currently offering/,
+  );
 });
 
 /**
@@ -1782,6 +1817,64 @@ test("an implicit project resolves only when the latest roster has one match", (
   assert.equal(ambiguous.kind, "refused");
   // SAFETY: Refused session-tool actions carry a reason string this assertion inspects.
   assert.match((ambiguous as { reason?: string }).reason ?? "", /More than one listed project/);
+});
+
+test("the saved defaults settle what a creation ask leaves unnamed", () => {
+  const localTwin: ObservedWorkspaceProject = {
+    ...OFFERED_PROJECT,
+    providerId: "conductor-local",
+    providerName: "Conductor (local)",
+    providerProjectId: "repo-7",
+  };
+  const noModels = () => [];
+
+  // A nameless ask between the two Conductors goes to the default provider.
+  assert.deepEqual(
+    sessionToolAction(
+      messageCall("{}", REALTIME_TOOL.CREATE_WORKSPACE),
+      [],
+      [OFFERED_PROJECT, localTwin],
+      noModels,
+      "conductor",
+    ),
+    { kind: "create-workspace", providerId: "conductor", providerProjectId: "proj-1" },
+  );
+
+  // An ask that names its own provider is never overridden by the default.
+  assert.deepEqual(
+    sessionToolAction(
+      messageCall('{"provider_id":"conductor-local"}', REALTIME_TOOL.CREATE_WORKSPACE),
+      [],
+      [OFFERED_PROJECT, localTwin],
+      noModels,
+      "conductor",
+    ),
+    { kind: "create-workspace", providerId: "conductor-local", providerProjectId: "repo-7" },
+  );
+
+  // The provider's chosen project settles an ask that names no project.
+  assert.deepEqual(
+    sessionToolAction(
+      messageCall('{"provider_id":"conductor"}', REALTIME_TOOL.CREATE_WORKSPACE),
+      [],
+      [OFFERED_PROJECT, { ...OFFERED_PROJECT, providerProjectId: "proj-2" }],
+      noModels,
+      undefined,
+      { conductor: "proj-2" },
+    ),
+    { kind: "create-workspace", providerId: "conductor", providerProjectId: "proj-2" },
+  );
+
+  // A default provider offering nothing settles nothing: the ask stays
+  // ambiguous between the projects actually listed.
+  const unsettled = sessionToolAction(
+    messageCall("{}", REALTIME_TOOL.CREATE_WORKSPACE),
+    [],
+    [OFFERED_PROJECT, localTwin],
+    noModels,
+    "superset",
+  );
+  assert.equal(unsettled.kind, "refused");
 });
 
 test("another agent can only be added as a kind the session's own entry lists", () => {

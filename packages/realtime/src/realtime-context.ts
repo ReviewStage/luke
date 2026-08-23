@@ -480,17 +480,27 @@ export const maximumVoiceContextWorkspaceProjects = 10;
  */
 export function workspaceProjectContextText(
   projects: readonly ObservedWorkspaceProject[],
-  _defaultProviderId?: string,
+  defaultProviderId?: string,
   defaultProjectIds?: Readonly<Partial<Record<string, string>>>,
 ): string {
   if (projects.length === 0) return "No provider currently offers workspace creation.";
   const listed = listedWorkspaceProjects(projects, defaultProjectIds);
+  // The default is said by id, never by name alone: two providers may share a
+  // name's first word (Conductor and Conductor (local) today), and a default
+  // the conversation cannot bind to one provider_id is a question it will ask
+  // the developer instead.
+  const chosenDefault = listed.find((project) => project.providerId === defaultProviderId);
   return [
     "Projects a new workspace can be created in:",
     ...listed.map(
       (project) =>
-        `- ${project.providerName} — ${project.repository}${project.targetName ? ` on ${project.targetName}` : ""} [provider_id=${project.providerId} project_id=${project.providerProjectId}${project.providerTargetId ? ` target_id=${project.providerTargetId}` : ""}]; ${TASK_SUPPORT_TEXT[project.taskSupport]}${project.spawnableAgents?.length ? `; agents: ${project.spawnableAgents.join(", ")}${project.defaultAgent ? `; default agent: ${project.defaultAgent}` : ""}` : ""}`,
+        `- ${project.providerName} — ${project.repository}${project.targetName ? ` on ${project.targetName}` : ""} [provider_id=${project.providerId} project_id=${project.providerProjectId}${project.providerTargetId ? ` target_id=${project.providerTargetId}` : ""}]; ${TASK_SUPPORT_TEXT[project.taskSupport]}${defaultProjectIds?.[project.providerId] === workspaceProjectSelectionId(project) ? "; the provider's default project" : ""}${project.spawnableAgents?.length ? `; agents: ${project.spawnableAgents.join(", ")}${project.defaultAgent ? `; default agent: ${project.defaultAgent}` : ""}` : ""}`,
     ),
+    chosenDefault
+      ? `An ask that names no provider creates in ${chosenDefault.providerName} [provider_id=${chosenDefault.providerId}]; do not ask which provider unless the ask names a different one.`
+      : defaultProviderId
+        ? "The chosen default provider is not currently offering; ask which project when more than one could take the ask."
+        : "No default provider is chosen yet; ask which project when more than one could take the ask, and the first workspace created saves its provider as the default.",
   ].join("\n");
 }
 
