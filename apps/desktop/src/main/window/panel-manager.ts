@@ -468,6 +468,11 @@ export class PanelManager {
         webSecurity: true,
         devTools: this.#runMode.takesFocus,
         backgroundThrottling: false,
+        // An announcement is spoken into a window that may never have seen a
+        // user gesture: born non-focusable, pointer events ignored until the
+        // first hover. Playback must not answer to a gesture requirement, so
+        // the policy is asserted rather than left to Chromium's default.
+        autoplayPolicy: "no-user-gesture-required",
       },
     });
     this.#windows.set(displayId, window);

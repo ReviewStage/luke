@@ -108,6 +108,14 @@ export function voiceExchangeActive(status: RealtimeStatus): boolean {
 export const VOICE_ERROR_NOTICE_MS = 12_000;
 
 /**
+ * How long a refused remote-audio play waits before trying again. Chromium
+ * refuses transiently — an output route mid-arrival, a playback gate a later
+ * state satisfies — and the words keep arriving on the stream regardless, so
+ * a short clock loses less of the sentence than a longer one would.
+ */
+export const REMOTE_AUDIO_RETRY_MS = 1_000;
+
+/**
  * The failure drawn in the same strip the captions use. A fault is worth
  * reading where the words it interrupted would have landed — at the shape's
  * foot, under the field that asked — not on a settings page nobody is
@@ -1163,7 +1171,24 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     const element = remoteAudio.current;
     if (!element) return;
     element.srcObject = remoteStream ?? null;
-    if (remoteStream) void element.play().catch(() => undefined);
+    if (!remoteStream) return;
+    // A refused play is the one failure the call cannot see: the reply runs
+    // and the captions draw while nothing is heard. The launch's first
+    // speak-only call is exactly the call with no user gesture behind it to
+    // satisfy a playback gate, so the refusal is retried for as long as the
+    // stream stands rather than swallowed once.
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    let detached = false;
+    const play = () => {
+      element.play().catch(() => {
+        if (!detached) retryTimer = setTimeout(play, REMOTE_AUDIO_RETRY_MS);
+      });
+    };
+    play();
+    return () => {
+      detached = true;
+      if (retryTimer !== undefined) clearTimeout(retryTimer);
+    };
   }, [remoteStream]);
 
   useEffect(() => {
