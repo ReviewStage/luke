@@ -29,7 +29,7 @@ import {
 import { accountInitials } from "./account-initials";
 import { accountLabel } from "./account-label";
 import { GitHubMark, GoogleMark } from "./account-marks";
-import { calendarWeeks, DAYS_PER_WEEK, monthLabels } from "./activity-calendar";
+import { calendarWeeks, DAYS_PER_WEEK, monthLabels, thinMonthLabels } from "./activity-calendar";
 import { settleRead } from "./admin-refresh";
 import {
   SIDEBAR_ICON_SLOT,
@@ -591,8 +591,13 @@ function CalendarDayCell({
   onHide: () => void;
 }): React.JSX.Element {
   const total = day.voiceCalls + day.attentionReviews;
+  // Below the container width where a dash can draw on a cell at all, today
+  // wears a solid one-pixel ring instead: it costs no inner area a tiny cell
+  // cannot spare, and stays visible at any cell size.
   const provisional =
-    day.day === partialDay ? " border border-dashed border-muted-foreground/60" : "";
+    day.day === partialDay
+      ? " ring-1 ring-muted-foreground/70 @xl:border @xl:border-dashed @xl:border-muted-foreground/60 @xl:ring-0"
+      : "";
   return (
     <div
       role="img"
@@ -600,7 +605,7 @@ function CalendarDayCell({
       tabIndex={0}
       aria-label={`${formatTooltipDay(day.day, partialDay)} — ${formatNumber(day.voiceCalls)} voice · ${formatNumber(day.attentionReviews)} attention`}
       data-calendar-day={day.day}
-      className={`aspect-square w-full rounded-[3px] outline-offset-2 ${total === 0 ? "bg-muted/60" : ""}${provisional}`}
+      className={`aspect-square w-full rounded-[clamp(1px,0.3cqw,3px)] outline-offset-2 ${total === 0 ? "bg-muted/60" : ""}${provisional}`}
       style={total === 0 ? undefined : calendarCellStyle(total, maxTotal)}
       onPointerEnter={(event) => onShow(day, event.currentTarget)}
       onPointerLeave={(event) => {
@@ -623,9 +628,6 @@ function CalendarDayCell({
 /** The clearance between a day cell and the tooltip riding above or below it. */
 const CALENDAR_TOOLTIP_GAP_PX = 6;
 
-/** Below this cell width the year stops flexing and the wrapper scrolls instead. */
-const CALENDAR_MIN_CELL_PX = 10;
-
 interface CalendarTooltipAnchor {
   day: AdminDailyUsage;
   /** The cell's edges in the card's own coordinates, where the tooltip lives. */
@@ -642,15 +644,18 @@ interface CalendarTooltipAnchor {
  * weekdays Sunday to Saturday, and each cell's fill is that day's share of
  * the account's own busiest day in the year. The bars carry magnitude; this
  * grid carries the pattern they hide — weekday rhythms, weekend gaps, a
- * streak breaking. The week columns flex to fill the card, and below the
- * minimum readable cell the grid holds that minimum and the wrapper
- * scrolls. A day the year does not cover draws nothing, a covered day with
- * no calls keeps the faintest neutral fill so absence still reads as an
- * observed day, and today wears the retention grid's dashed border because
- * a fade here would pose as a quiet day. A hovered or focused cell answers
+ * streak breaking. The week columns always divide the card's width — a year
+ * that scrolls is a year whose shape cannot be seen — so the gaps and cell
+ * rounding scale with the container rather than eating cells a phone can
+ * barely afford, and on a narrow card the weekday column folds away and
+ * every second month label drops so the survivors never collide. A day the
+ * year does not cover draws nothing, a covered day with no calls keeps the
+ * faintest neutral fill so absence still reads as an observed day, and
+ * today wears the retention grid's dashed border — a fade here would pose
+ * as a quiet day — until the cells are too small for a dash to draw, where
+ * it becomes a solid ring. A hovered or focused cell answers
  * at once with the charts' own tooltip — one element the whole grid shares,
- * anchored to the card rather than the week scroller so the scroller's
- * overflow cannot clip it, and clamped to the card's edges.
+ * anchored to the card and clamped to its edges.
  */
 function ActivityCalendar({
   daily,
@@ -661,6 +666,7 @@ function ActivityCalendar({
 }): React.JSX.Element {
   const weeks = calendarWeeks(daily);
   const months = monthLabels(weeks);
+  const sparseMonths = thinMonthLabels(months, 2);
   const partialDay = partialDayKey(daily, generatedAt);
   const maxTotal = Math.max(...daily.map((day) => day.voiceCalls + day.attentionReviews));
   const cardRef = useRef<HTMLDivElement>(null);
@@ -699,12 +705,12 @@ function ActivityCalendar({
       <div className="mb-4 text-xs text-muted-foreground">
         This account's trailing year, week by week
       </div>
-      <div className="overflow-x-auto" onScroll={hideTooltip}>
+      <div className="@container">
         <div
-          className="grid w-full gap-1 tabular-nums"
+          className="grid w-full gap-[clamp(1px,0.35cqw,4px)] tabular-nums"
           style={{
             gridAutoFlow: "column",
-            gridTemplateColumns: `auto repeat(${weeks.length}, minmax(${CALENDAR_MIN_CELL_PX}px, 1fr))`,
+            gridTemplateColumns: `auto repeat(${weeks.length}, minmax(0, 1fr))`,
             gridTemplateRows: `auto repeat(${DAYS_PER_WEEK}, auto)`,
           }}
         >
@@ -712,15 +718,16 @@ function ActivityCalendar({
           {CALENDAR_WEEKDAY_LABELS.map((label) => (
             <div
               key={label}
-              className="self-center pr-2 font-mono text-[10px] leading-none text-muted-foreground uppercase"
+              className="self-center font-mono text-[min(10px,1.5cqw)] leading-none text-muted-foreground uppercase @xl:pr-2"
             >
-              {label}
+              <span className="hidden @xl:inline">{label}</span>
             </div>
           ))}
           {weeks.map((week, weekIndex) => (
             <Fragment key={week.weekStart}>
-              <div className="font-mono text-[10px] leading-4 whitespace-nowrap text-muted-foreground uppercase">
-                {months[weekIndex]}
+              <div className="font-mono text-[9px] leading-4 whitespace-nowrap text-muted-foreground uppercase @xl:text-[10px]">
+                <span className="@xl:hidden">{sparseMonths[weekIndex]}</span>
+                <span className="hidden @xl:inline">{months[weekIndex]}</span>
               </div>
               {week.days.map((day, slot) =>
                 day === undefined ? (
@@ -744,7 +751,7 @@ function ActivityCalendar({
       <p className="mt-4 mb-0 text-xs text-muted-foreground">
         Each cell is one UTC day across the trailing year, whatever window is chosen above — a
         deeper fill is more hosted calls against this account's busiest day in the year, and the
-        dashed cell is today, still filling.
+        outlined cell is today, still filling.
       </p>
       {anchor !== undefined ? (
         <div

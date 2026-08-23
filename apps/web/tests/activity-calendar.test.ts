@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { calendarWeeks, monthLabels } from "../src/activity-calendar";
+import { calendarWeeks, monthLabels, thinMonthLabels } from "../src/activity-calendar";
 
 function series(firstDay: string, days: number): { day: string }[] {
   const start = Date.parse(`${firstDay}T00:00:00.000Z`);
@@ -94,4 +94,29 @@ test("a first column starting mid-week is labeled for the days it shows", () => 
   // 2026-08-01 is a Saturday inside July's last calendar week.
   const labels = monthLabels(calendarWeeks(series("2026-08-01", 9)));
   assert.deepEqual(labels, ["Aug", undefined, undefined]);
+});
+
+test("thinning keeps every second label in place, first kept", () => {
+  const labels = thinMonthLabels(
+    ["Jul", undefined, "Aug", undefined, "Sep", "Oct", undefined, "Nov"],
+    2,
+  );
+  assert.deepEqual(labels, [
+    "Jul",
+    undefined,
+    undefined,
+    undefined,
+    "Sep",
+    undefined,
+    undefined,
+    "Nov",
+  ]);
+});
+
+test("a trailing year thins from thirteen labels to seven, both ends kept", () => {
+  const labels = thinMonthLabels(monthLabels(calendarWeeks(series("2025-08-17", 366))), 2);
+  const kept = labels.filter((label) => label !== undefined);
+  assert.equal(kept.length, 7);
+  assert.equal(labels[0], "Aug");
+  assert.equal(kept.at(-1), "Aug");
 });

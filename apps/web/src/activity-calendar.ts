@@ -73,3 +73,21 @@ export function monthLabels(
     });
   });
 }
+
+/**
+ * Every `keepEvery`th of the labels `monthLabels` set, first kept, in their
+ * columns. At widths where a year's thirteen labels would collide, dropping
+ * whole labels keeps the survivors readable; squeezing all thirteen would
+ * overlap them into none.
+ */
+export function thinMonthLabels(
+  labels: readonly (string | undefined)[],
+  keepEvery: number,
+): readonly (string | undefined)[] {
+  let ordinal = 0;
+  return labels.map((label) => {
+    if (label === undefined) return undefined;
+    ordinal += 1;
+    return (ordinal - 1) % keepEvery === 0 ? label : undefined;
+  });
+}
