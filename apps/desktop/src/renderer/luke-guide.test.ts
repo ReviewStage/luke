@@ -298,23 +298,16 @@ test("the facts say what is connected, never what connects it", () => {
   assert.doesNotMatch(rendered, /API key:/);
 });
 
-test("the guide distinguishes app identity from exact app opening", () => {
+test("the app-mark fact stays at the ask level: identity, and opening where addressed", () => {
   const rendered = JSON.stringify(buildLukeGuide(guideInput()).facts);
 
-  // Identity and opening are separate facts, so an ask about either draws a
-  // targeted answer; both must keep describing the whole capability between
-  // them.
+  // The taxonomy is deliberately one fact of two sentences: which apps a chat
+  // appears in, that an addressed mark opens there, and that an ask can pick
+  // the app. Finer per-app mechanics are the surface's to show, not the
+  // guide's to recite.
   assert.match(rendered, /"label":"Apps beside a session"/);
-  assert.match(rendered, /"label":"Opening a chat in its apps"/);
-  assert.match(rendered, /app mark with an exact address is a button/);
-  assert.match(rendered, /ChatGPT opens that Codex thread/);
-  assert.match(rendered, /Superset opens its bound terminal/);
-  assert.match(rendered, /Codex sub-agent spawned there keeps the Conductor association/);
-  // A Conductor cloud chat leads with its agent's own mark, its Conductor
-  // mark opens the exact chat, and a local one stays identification alone.
-  assert.match(rendered, /leads?[^.]*with the agent running it/);
-  assert.match(rendered, /Conductor cloud chat's Conductor mark opens that exact chat/);
-  assert.match(rendered, /adds no open or send control/);
+  assert.match(rendered, /mark with an exact address opens the chat in that app/);
+  assert.match(rendered, /ask can name which app/);
 });
 
 test("the guide names the signed-in identity and keeps sign-out manual", () => {
@@ -351,29 +344,20 @@ test("the facts describe creating a workspace, so Luke does not deny the capabil
   // Where a nameless ask goes rides with it too, so the remembered first
   // choice is something Luke explains rather than something that surprises.
   assert.match(rendered, /default workspace provider/);
-  assert.match(rendered, /first workspace created saves its provider/);
-  // The project a nameless ask lands in rides the same way, so the remembered
-  // first choice within a provider is explained rather than a surprise.
   assert.match(rendered, /default project/);
-  assert.match(rendered, /first workspace created there/);
+  assert.match(rendered, /first workspace created fills each in/);
   // And so is what the new agent runs, because a model the user never chose
   // is exactly the surprise this setting exists to end.
   assert.match(rendered, /its model, and its effort/);
   // Where a bare "new agent" ask lands rides with both facts, so the guide
   // explains the default the same way the conversation acts on it: a new
   // workspace, unless the ask itself names the existing one to join.
-  assert.match(rendered, /bare ask for a new agent lands here/);
-  // The join exception names both handles a developer might say — the
-  // workspace and a session in it — so a named session is not steered into
-  // a fresh workspace it did not ask for.
-  assert.match(rendered, /names the existing workspace or session/);
-  assert.match(rendered, /bare ask for a new agent creates a new workspace instead/);
+  assert.match(rendered, /bare ask for a new agent creates a new workspace/);
+  assert.match(rendered, /naming an existing workspace or session adds an agent beside it/);
   // Superset creates workspaces too, and asks for more than the others do —
   // a guide that named only Conductor and Cursor would have Luke deny a
   // capability he has, then be surprised by the refusal a task-less ask earns.
-  assert.match(rendered, /Superset/);
-  assert.match(rendered, /new Superset workspace needs that host, an agent/);
-  assert.match(rendered, /opening task/);
+  assert.match(rendered, /new Superset workspace needs a host, an agent, and an opening task/);
 
   // The one removal a Superset row takes is deleting its settled workspace,
   // and the guide says every half out loud: what the delete is — permanent,
@@ -382,11 +366,7 @@ test("the facts describe creating a workspace, so Luke does not deny the capabil
   // and that the developer's own word for tidying, archive, is taken as the
   // delete rather than refused over vocabulary.
   assert.match(rendered, /Delete workspace once its work settled/);
-  // The idle workspaces are the ones a cleanup ask is usually about, so the
-  // guide teaches that they stand as rows at all — and which never do.
-  assert.match(rendered, /no agent chat at all stands as its own idle row/);
-  assert.match(rendered, /agentless workspace row counts as settled/);
-  assert.match(rendered, /main checkout and workspaces Superset already archived draw no row/);
+  assert.match(rendered, /idle worktree workspace stands as its own row/);
   assert.match(rendered, /deleting is permanent/);
   assert.match(rendered, /single chat cannot be closed or removed on its own/);
   assert.match(rendered, /ask to archive one means exactly this delete/);
@@ -400,8 +380,7 @@ test("the facts describe renaming workspaces and chats, so Luke does not deny th
   assert.match(rendered, /Renaming workspaces and chats/);
   // The refusal shape rides with the offer: only a session whose roster entry
   // advertises a rename takes one.
-  assert.match(rendered, /roster entry says the workspace can be renamed/);
-  assert.match(rendered, /says neither takes no such ask/);
+  assert.match(rendered, /roster entry allows neither takes no such ask/);
   // Both surfaces that can rename are named, and the disambiguation the
   // conversation applies is the one the guide teaches.
   assert.match(rendered, /Superset-managed workspace, or a Conductor chat/);
@@ -807,40 +786,41 @@ test("the panel fact says the tabs answer an ask as well as a press", () => {
   assert.ok(guide.facts.some((candidate) => candidate.label === "The Settings tab"));
 });
 
-test("the sessions list fact says the options button wears an X that clears", () => {
+test("the sessions list fact offers the filter, order, and clear to a spoken ask", () => {
   const fact = buildLukeGuide(guideInput()).facts.find(
     (candidate) => candidate.label === "The sessions list",
   );
 
   assert.ok(fact);
-  // The X is a capability of the list itself, and a capability the guide does
-  // not describe is one Luke will deny having — or misdescribe as only
-  // un-pressing chips one at a time.
-  assert.match(fact.detail, /An X on the options button clears every chosen chip at once/);
+  // The list's acts are what a spoken ask is validated against; the chip
+  // choreography behind them is the surface's to show.
+  assert.match(fact.detail, /filters by location, kind, app, and agent/);
+  assert.match(fact.detail, /spoken ask can filter, sort, or clear/);
 });
 
-test("the guide describes the search, its three ways in, and their shared bound", () => {
+test("the guide describes the search's ways in and the spoken bound", () => {
   const fact = buildLukeGuide(guideInput()).facts.find(
     (candidate) => candidate.label === "Searching sessions",
   );
 
   assert.ok(fact);
-  // A capability the guide does not describe is one Luke will deny having —
-  // and the spoken way in must be described with its bound, because the
-  // refusal Luke voices beside a one-session list is itself the guidance.
+  // The spoken way in must be described with its bound: a spoken search does
+  // nothing the field cannot.
   assert.match(fact.detail, /magnifier/);
   assert.match(fact.detail, /Command-F/);
   assert.match(fact.detail, /asking Luke to search out loud/);
   assert.match(fact.detail, /reaches no further than the magnifier/);
-  assert.match(
-    fact.detail,
-    /title, status word or status line, branch, repository, workspace, agent, associated app, or model/,
-  );
-  // A held search now outlives the panel, and the guide must say so with its
-  // bound — clearing or closing the field is the one way a search is let go —
-  // or Luke will promise words he forgot, or forget words he promised to keep.
-  assert.match(fact.detail, /survives the panel closing and the app restarting/);
-  assert.match(fact.detail, /until its query is cleared or its field closed/);
+});
+
+test("the guide ends by redirecting what it leaves out rather than denying it", () => {
+  const fact = buildLukeGuide(guideInput()).facts.at(-1);
+
+  assert.ok(fact);
+  // The facts deliberately stop at what a developer would ask; this closing
+  // fact is what keeps an undescribed detail a redirection instead of a
+  // denial.
+  assert.equal(fact.label, "Beyond this guide");
+  assert.match(fact.detail, /rather than concluding the feature does not exist/);
 });
 
 test("the feedback fact says what a spoken open may do, and that sending stays by hand", () => {
