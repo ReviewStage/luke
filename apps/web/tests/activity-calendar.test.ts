@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { calendarWeeks, monthLabels, thinMonthLabels } from "../src/activity-calendar";
+import { calendarWeeks, lastWeeks, monthLabels } from "../src/activity-calendar";
 
 function series(firstDay: string, days: number): { day: string }[] {
   const start = Date.parse(`${firstDay}T00:00:00.000Z`);
@@ -96,27 +96,24 @@ test("a first column starting mid-week is labeled for the days it shows", () => 
   assert.deepEqual(labels, ["Aug", undefined, undefined]);
 });
 
-test("thinning keeps every second label in place, first kept", () => {
-  const labels = thinMonthLabels(
-    ["Jul", undefined, "Aug", undefined, "Sep", "Oct", undefined, "Nov"],
-    2,
-  );
-  assert.deepEqual(labels, [
-    "Jul",
-    undefined,
-    undefined,
-    undefined,
-    "Sep",
-    undefined,
-    undefined,
-    "Nov",
-  ]);
+test("slicing fewer weeks than exist keeps the newest, ending on the current week", () => {
+  // 366 days ending Monday 2026-08-17 fold to 53 weeks (asserted above).
+  const weeks = calendarWeeks(series("2025-08-17", 366));
+  const shown = lastWeeks(weeks, 16);
+  assert.equal(shown.length, 16);
+  assert.equal(shown[0]?.weekStart, "2026-05-03");
+  assert.equal(shown.at(-1)?.weekStart, "2026-08-16");
+  assert.equal(shown.at(-1)?.days[1]?.day, "2026-08-17");
 });
 
-test("a trailing year thins from thirteen labels to seven, both ends kept", () => {
-  const labels = thinMonthLabels(monthLabels(calendarWeeks(series("2025-08-17", 366))), 2);
-  const kept = labels.filter((label) => label !== undefined);
-  assert.equal(kept.length, 7);
-  assert.equal(labels[0], "Aug");
-  assert.equal(kept.at(-1), "Aug");
+test("slicing exactly the available weeks returns them all", () => {
+  const weeks = calendarWeeks(series("2025-08-17", 366));
+  assert.deepEqual(lastWeeks(weeks, 53), weeks);
+});
+
+test("slicing more weeks than exist returns what there is, unpadded", () => {
+  const weeks = calendarWeeks(series("2026-08-16", 7));
+  const shown = lastWeeks(weeks, 53);
+  assert.equal(shown.length, 1);
+  assert.equal(shown[0]?.weekStart, "2026-08-16");
 });
