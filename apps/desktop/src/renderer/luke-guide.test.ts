@@ -208,7 +208,10 @@ test("the facts say what is connected, never what connects it", () => {
   assert.match(rendered, /Conductor \(connected\)/);
   assert.match(rendered, /Copilot \(not connected\)/);
   assert.match(rendered, /Devin \(connected from the environment\)/);
-  assert.match(rendered, /Integrations/);
+  // Each integration is its own labeled fact, so an ask about one draws that
+  // one alone rather than a summary of every integration at once.
+  assert.match(rendered, /"label":"Superset"/);
+  assert.match(rendered, /"label":"Conductor"/);
   // A build carrying neither registration draws neither integration row, so
   // the guide says nothing about either — a capability the guide describes is
   // one Luke will claim to have.
@@ -221,6 +224,7 @@ test("the facts say what is connected, never what connects it", () => {
   const tracker = JSON.stringify(
     buildLukeGuide(guideInput({ settings: settings({ linearSignInAvailable: true }) })).facts,
   );
+  assert.match(tracker, /"label":"Linear"/);
   assert.match(tracker, /Linear \(not connected\)/);
   assert.match(tracker, /signing in with Linear/);
   assert.match(tracker, /move one to another state or comment on it/);
@@ -233,6 +237,7 @@ test("the facts say what is connected, never what connects it", () => {
   const offered = JSON.stringify(
     buildLukeGuide(guideInput({ settings: settings({ calendarSignInAvailable: true }) })).facts,
   );
+  assert.match(offered, /"label":"Google Calendar"/);
   assert.match(offered, /Google Calendar \(not connected\)/);
   assert.match(offered, /when meetings start and end/);
   assert.match(offered, /signing in with Google/);
@@ -258,6 +263,7 @@ test("the facts say what is connected, never what connects it", () => {
   const appleOffered = JSON.stringify(
     buildLukeGuide(guideInput({ settings: settings({ appleCalendarAvailable: true }) })).facts,
   );
+  assert.match(appleOffered, /"label":"Apple Calendar"/);
   assert.match(appleOffered, /Apple Calendar \(not connected\)/);
   assert.match(appleOffered, /macOS's own calendar-access ask/);
   assert.match(appleOffered, /never their titles/);
@@ -295,6 +301,11 @@ test("the facts say what is connected, never what connects it", () => {
 test("the guide distinguishes app identity from exact app opening", () => {
   const rendered = JSON.stringify(buildLukeGuide(guideInput()).facts);
 
+  // Identity and opening are separate facts, so an ask about either draws a
+  // targeted answer; both must keep describing the whole capability between
+  // them.
+  assert.match(rendered, /"label":"Apps beside a session"/);
+  assert.match(rendered, /"label":"Opening a chat in its apps"/);
   assert.match(rendered, /app mark with an exact address is a button/);
   assert.match(rendered, /ChatGPT opens that Codex thread/);
   assert.match(rendered, /Superset opens its bound terminal/);
@@ -332,6 +343,9 @@ test("the facts describe creating a workspace, so Luke does not deny the capabil
   const rendered = JSON.stringify(buildLukeGuide(guideInput()).facts);
 
   assert.match(rendered, /Creating workspaces/);
+  // The defaults a nameless ask falls back to are their own fact, beside the
+  // act they steer.
+  assert.match(rendered, /"label":"Workspace creation defaults"/);
   // The refusal shape rides with the offer: only reported projects exist.
   assert.match(rendered, /Only reported projects/);
   // Where a nameless ask goes rides with it too, so the remembered first
@@ -706,6 +720,32 @@ test("the facts describe stopping a reply, exactly where a reply can exist", () 
   // key that does nothing.
   const voiceless = JSON.stringify(buildLukeGuide(guideInput({ voiceAvailable: false })).facts);
   assert.doesNotMatch(voiceless, /Stopping a reply/);
+});
+
+test("the announcement facts split the chips band and the meeting quiet", () => {
+  const rendered = JSON.stringify(buildLukeGuide(guideInput()).facts);
+  assert.match(rendered, /"label":"Announcements"/);
+  assert.match(rendered, /"label":"Session and issue chips"/);
+  // A build with no calendar row to connect may not describe the quiet: a
+  // hold Luke claims without one is a capability he does not have.
+  assert.doesNotMatch(rendered, /Quiet during meetings/);
+
+  const withCalendar = JSON.stringify(
+    buildLukeGuide(guideInput({ settings: settings({ appleCalendarAvailable: true }) })).facts,
+  );
+  assert.match(withCalendar, /"label":"Quiet during meetings"/);
+  assert.match(withCalendar, /announcements decided during a meeting wait/);
+
+  // Announcements exist only with a voice to speak them, and the chips and
+  // the quiet ride the same availability.
+  const voiceless = JSON.stringify(
+    buildLukeGuide(
+      guideInput({ voiceAvailable: false, settings: settings({ appleCalendarAvailable: true }) }),
+    ).facts,
+  );
+  assert.doesNotMatch(voiceless, /"label":"Announcements"/);
+  assert.doesNotMatch(voiceless, /"label":"Session and issue chips"/);
+  assert.doesNotMatch(voiceless, /"label":"Quiet during meetings"/);
 });
 
 test("the facts follow the talk key, the microphone, and the storage the system offers", () => {
