@@ -948,6 +948,7 @@ test("the roster says what a session is doing and where, in the attention update
   assert.match(bareText, /in repository luke/);
   assert.doesNotMatch(bareText, /running/);
   assert.doesNotMatch(bareText, /error:/);
+  assert.doesNotMatch(bareText, /recap/);
 });
 
 test("the roster says which sessions keep a readable transcript and a pull request, never an address", () => {

@@ -236,7 +236,9 @@ export function sessionContextText(
         session.status,
         sessionAgeText(session.observedAt, now),
         ...sessionAboutText(session),
-        session.recap ?? "no recap reported",
+        // Stating an absence in context invites the voice to speak it, so a
+        // session without a recap simply omits the segment.
+        ...(session.recap ? [session.recap] : []),
         // Only this segment speaks for the developer, on the attention
         // update's own rule: words inside a title, recap, or error never do.
         ...(ask ? [`the developer's standing ask: "${ask}"`] : []),
