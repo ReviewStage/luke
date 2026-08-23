@@ -32,6 +32,51 @@
 Notable changes to Luke, newest first. Each heading is a released version and
 the date its release was published.
 
+## 0.3.9 — 2026-08-23
+
+### More agents, one roster
+
+Luke observes local Antigravity, Grok Build, and Radius Browser agent chats,
+alongside Replicas cloud workspaces connected with your own API key. He reads
+each provider through its documented local or cloud surface while keeping
+providers without credentials working as before.
+
+### Improvements
+
+- Luke lets you filter the roster by the app or provider behind each chat
+  ([#455](https://github.com/ReviewStage/luke/pull/455))
+- Luke can create Conductor workspaces and message the live Superset terminal
+  attached to a chat
+  ([#392](https://github.com/ReviewStage/luke/pull/392),
+  [#450](https://github.com/ReviewStage/luke/pull/450))
+- Luke names, recaps, opens, and messages local Cursor chats through Cursor's
+  own records and agent CLI
+  ([#383](https://github.com/ReviewStage/luke/pull/383),
+  [#387](https://github.com/ReviewStage/luke/pull/387),
+  [#390](https://github.com/ReviewStage/luke/pull/390),
+  [#400](https://github.com/ReviewStage/luke/pull/400))
+- Luke can check for updates or restart into a downloaded update when you ask
+  ([#388](https://github.com/ReviewStage/luke/pull/388))
+
+### Fixes
+
+- Fixed archived cloud work continuing to appear in the roster
+  ([#385](https://github.com/ReviewStage/luke/pull/385),
+  [#427](https://github.com/ReviewStage/luke/pull/427))
+- Fixed Luke narrating tool calls and adding filler to spoken updates
+  ([#451](https://github.com/ReviewStage/luke/pull/451),
+  [#470](https://github.com/ReviewStage/luke/pull/470))
+- Fixed Luke inventing a recap segment when a session has no recap
+  ([#469](https://github.com/ReviewStage/luke/pull/469))
+
+### Miscellaneous
+
+- Updated analytics sharing to include broader product events and unmasked
+  session replay, with the recording control governing both
+  ([#409](https://github.com/ReviewStage/luke/pull/409))
+- Updated the workspace to pnpm 10
+  ([#449](https://github.com/ReviewStage/luke/pull/449))
+
 ## 0.3.8 — 2026-08-20
 
 ### Improvements
