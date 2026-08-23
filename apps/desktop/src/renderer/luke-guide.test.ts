@@ -290,6 +290,9 @@ test("the facts say what is connected, never what connects it", () => {
   assert.match(rendered, /signed-in Luke account's daily allowance/);
   assert.match(rendered, /billed by OpenAI/);
   assert.match(rendered, /What Luke runs on section at the top/);
+  // The voice key's handling bound lives in its own fact, not only in Cloud
+  // providers, so an ask about this key retrieves it.
+  assert.match(rendered, /never read from the environment, never spoken, and never repeated back/);
   const voiceless = JSON.stringify(buildLukeGuide(guideInput({ voiceAvailable: false })).facts);
   assert.match(voiceless, /Signing in — or connecting a key — is what lets Luke speak/);
   assert.doesNotMatch(rendered, /OpenAI[^"]*under Integrations/);
@@ -366,6 +369,9 @@ test("the facts describe creating a workspace, so Luke does not deny the capabil
   // and that the developer's own word for tidying, archive, is taken as the
   // delete rather than refused over vocabulary.
   assert.match(rendered, /Delete workspace once its work settled/);
+  // An idle workspace is the one a cleanup ask is usually about, so the
+  // guide must say its row is settled, or Luke wrongly refuses the delete.
+  assert.match(rendered, /agentless idle row counts as settled/);
   assert.match(rendered, /idle worktree workspace stands as its own row/);
   assert.match(rendered, /deleting is permanent/);
   assert.match(rendered, /single chat cannot be closed or removed on its own/);
@@ -805,11 +811,21 @@ test("the guide describes the search's ways in and the spoken bound", () => {
 
   assert.ok(fact);
   // The spoken way in must be described with its bound: a spoken search does
-  // nothing the field cannot.
+  // nothing the field cannot, and neither exists beside a one-session list,
+  // where the carrier refuses the ask.
   assert.match(fact.detail, /magnifier/);
   assert.match(fact.detail, /Command-F/);
   assert.match(fact.detail, /asking Luke to search out loud/);
   assert.match(fact.detail, /reaches no further than the magnifier/);
+  assert.match(fact.detail, /only offered beside a list of more than one session/);
+
+  // The settings search keeps its hand-only bound on the Settings tab fact,
+  // so a spoken ask to search settings is refused honestly.
+  const settingsTab = buildLukeGuide(guideInput()).facts.find(
+    (candidate) => candidate.label === "The Settings tab",
+  );
+  assert.ok(settingsTab);
+  assert.match(settingsTab.detail, /by hand alone: no spoken ask can search it/);
 });
 
 test("the guide ends by redirecting what it leaves out rather than denying it", () => {

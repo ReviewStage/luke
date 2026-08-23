@@ -257,7 +257,8 @@ function integrationFacts(settings: AppSettings): AppGuideFact[] {
       "Luke — and an idle worktree workspace stands as its own row. When Superset's CLI is " +
       "logged in, chat rows can send the developer's own message, rename the workspace, " +
       "start another agent in it, or create a new Superset workspace by ask. Every Superset " +
-      "row offers Delete workspace once its work settled, and Superset keeps no archive: " +
+      "row offers Delete workspace once its work settled — an agentless idle row counts as " +
+      "settled — and Superset keeps no archive: " +
       "deleting is permanent and takes the whole workspace with every chat in it, a row " +
       "still working is never offered it, a single chat cannot be closed or removed on its " +
       "own, and an ask to archive one means exactly this delete. Superset connects and " +
@@ -299,8 +300,8 @@ function voiceKeyFact(settings: AppSettings, voiceAvailable: boolean): AppGuideF
           ? `Signing in — or connecting a key — is what lets Luke speak and review sessions. `
           : `Voice and session review run on this key: no daily limit, nothing through Luke's ` +
             `service, and OpenAI bills you for what you use. `) +
-      `The key is typed by hand into ${VOICE_SOURCE_SECTION} and never read from the ` +
-      `environment.`,
+      `The key is typed by hand into ${VOICE_SOURCE_SECTION} — never read from the ` +
+      `environment, never spoken, and never repeated back.`,
   };
 }
 
@@ -376,7 +377,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
       detail:
         "The list is searchable by the magnifier, Command-F, or asking Luke to search out " +
         "loud — a spoken search fills the same field and reaches no further than the " +
-        "magnifier.",
+        "magnifier, which is only offered beside a list of more than one session.",
     },
     {
       label: "Workspaces in the list",
@@ -391,7 +392,9 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "Where Luke is configured by hand. The front page leads with What Luke runs on — the " +
         "signed-in account's daily allowance against the developer's own OpenAI key — with " +
         "meters for the day's use, and opens the Voice, Appearance, Keyboard shortcuts, and " +
-        "Connections pages; Feedback, Account, and Quit stay on the front page.",
+        "Connections pages; Feedback, Account, and Quit stay on the front page. A settings " +
+        "search — the magnifier, or Command-F — finds any row, by hand alone: no spoken ask " +
+        "can search it.",
     },
     {
       label: "Account",
