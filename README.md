@@ -31,54 +31,29 @@
 
 ## Features
 
-### One panel for every agent
-
-One panel shows every coding agent working for you: Antigravity, Claude Code,
-Codex, Cursor, Gemini CLI, Grok Build, OpenCode, and Radius on your Mac, and
-Codex, Conductor, Cursor, Devin, GitHub Copilot, Jules, and Replicas in the
-cloud. Filter, sort, or search the list, and click a session to open it where
-it runs.
-
 ### Talk to Luke
 
 Hold <kbd>⌥</kbd><kbd>Space</kbd> to talk to Luke from any app, or press
-<kbd>⌥</kbd><kbd>L</kbd> to type to him instead. He answers about your
-sessions, opens them, messages agents, creates workspaces, changes his own
-settings, and reads and acts on Linear issues. <kbd>⌥</kbd><kbd>S</kbd> stops
-him talking. Voice runs on an included daily allowance, or your own OpenAI key.
+<kbd>⌥</kbd><kbd>L</kbd> to type to him instead. He can tell you about the
+status of your agents, kick fresh ones off for you, or message them on your
+behalf.
 
 ![Luke's capsule under the notch, speaking a summary of which sessions finished and which are waiting.](docs/media/luke-talking.png)
 
 ### Announcements
 
-Luke speaks up when a session starts waiting, hits an error, or finishes. He
-shows captions on screen, turns down Music and Spotify while he talks, and
-names the session in a chip you can press. Ask him to "tell me when this
-session finishes" and he will.
+Luke speaks up when an agent is waiting for you, hits an error, or finishes.
 
-### Quiet during meetings
+### Compatible with every agent and platform
 
-Connect Google Calendar or this Mac's own Calendar and Luke holds his
-announcements until your meeting is over.
+Luke works with any agent, both locally and in the cloud. See a full list
+of supported agents below.
 
-## How it works
+### Works around your schedule
 
-Luke reads the session files your agents already write, and the APIs they
-already expose. He does not run your agents, wrap them, or type for them.
+Connect your calendar and Luke stays quiet until your meeting is over.
 
-- Luke never writes a provider's transcripts or session-state files.
-- No Accessibility permission, no simulated keystrokes, no terminal wrapper.
-- Local sessions need no MCP server, plugin, or credential.
-- Cloud providers stay inactive until you connect one, each under a key you
-  supply.
-- Anything Luke sends to an agent follows something you did, checked against the
-  session list he last observed.
-- Voice is the only feature that sends audio off your Mac.
-
-[PRIVACY.md](PRIVACY.md) describes what Luke reads, what he may write, and what
-leaves your machine.
-
-## Supported agents and apps
+## Supported agents and platforms
 
 | Agent | Local | Cloud |
 | --- | :---: | :---: |
@@ -96,7 +71,6 @@ leaves your machine.
 | Radius | ✅ | |
 | Replicas | | ✅ |
 
-
 ## Install
 
 Luke runs on Apple Silicon Macs with macOS 14 or newer.
@@ -105,18 +79,20 @@ Luke runs on Apple Silicon Macs with macOS 14 or newer.
 2. Open the DMG and drag **Luke** into **Applications**.
 3. Launch Luke and sign in with Google or GitHub.
 
-Local sessions appear with no further setup. Cloud integrations stay inactive
-until you connect them in Luke's Settings.
+Optional: open **Settings** in Luke to:
 
-## Build from source
+- Connect supported cloud agents with their API keys.
+- Connect Apple or Google Calendar.
+- Connect Linear.
+- Add an OpenAI API key for usage billed directly to your OpenAI account.
+- Customize Luke's voice, keyboard shortcuts, appearance, workspace defaults,
+  and data-sharing preferences.
 
-Requires an Apple Silicon Mac on macOS 14 or newer, Node.js 24 or newer,
-pnpm 10.34.5, and the Xcode Command Line Tools.
+Local agents are detected automatically and do not require API keys.
 
-```sh
-./scripts/bootstrap.sh   # install pinned workspace dependencies
-./scripts/run.sh         # launch against live sessions
-```
+## Privacy
+
+See [PRIVACY.md](PRIVACY.md).
 
 ## Contributing
 
