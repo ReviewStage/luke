@@ -1626,6 +1626,21 @@ test("the projects context says where a nameless ask goes, by id", () => {
     workspaceProjectContextText([OFFERED_PROJECT], "superset"),
     /default provider is not currently offering/,
   );
+
+  // Offering is judged against everything offered, not the capped slice: a
+  // default provider whose projects all fell past the cut still takes a
+  // nameless ask, so the sentence must not disown it.
+  const crowdedOut = [
+    ...Array.from({ length: maximumVoiceContextWorkspaceProjects }, (_, index) => ({
+      ...OFFERED_PROJECT,
+      providerProjectId: `proj-${String(index).padStart(2, "0")}`,
+    })),
+    { ...OFFERED_PROJECT, providerId: "cursor", providerName: "Cursor" },
+  ];
+  assert.match(
+    workspaceProjectContextText(crowdedOut, "cursor"),
+    /An ask that names no provider creates in Cursor \[provider_id=cursor\]/,
+  );
 });
 
 /**
@@ -1875,6 +1890,20 @@ test("the saved defaults settle what a creation ask leaves unnamed", () => {
     "superset",
   );
   assert.equal(unsettled.kind, "refused");
+
+  // A saved project settles which project, never which provider: while no
+  // default provider is chosen, an ask still spanning providers stays a
+  // question even when exactly one candidate is some provider's chosen
+  // project.
+  const crossProvider = sessionToolAction(
+    messageCall("{}", REALTIME_TOOL.CREATE_WORKSPACE),
+    [],
+    [OFFERED_PROJECT, { ...OFFERED_PROJECT, providerProjectId: "proj-2" }, localTwin],
+    noModels,
+    undefined,
+    { conductor: "proj-2" },
+  );
+  assert.equal(crossProvider.kind, "refused");
 });
 
 test("another agent can only be added as a kind the session's own entry lists", () => {

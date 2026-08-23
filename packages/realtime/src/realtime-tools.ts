@@ -621,7 +621,14 @@ function validateCreateWorkspace(
     );
     if (offeredByDefault.length > 0) matchingProjects = offeredByDefault;
   }
-  if (!projectId && matchingProjects.length > 1) {
+  // A provider's chosen project settles which project, never which provider:
+  // while candidates still span providers, one provider's saved project must
+  // not quietly decide an ask the developer left open between them.
+  const [firstMatch] = matchingProjects;
+  const oneProviderMatches =
+    firstMatch !== undefined &&
+    matchingProjects.every((candidate) => candidate.providerId === firstMatch.providerId);
+  if (!projectId && oneProviderMatches && matchingProjects.length > 1) {
     const chosenProjects = matchingProjects.filter(
       (candidate) =>
         context.defaultProjectIds?.[candidate.providerId] ===

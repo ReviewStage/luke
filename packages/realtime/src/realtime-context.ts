@@ -488,8 +488,10 @@ export function workspaceProjectContextText(
   // The default is said by id, never by name alone: two providers may share a
   // name's first word (Conductor and Conductor (local) today), and a default
   // the conversation cannot bind to one provider_id is a question it will ask
-  // the developer instead.
-  const chosenDefault = listed.find((project) => project.providerId === defaultProviderId);
+  // the developer instead. Whether it is offering is judged against everything
+  // offered, not the capped slice below, or the sentence would disown a
+  // default the validator still honors.
+  const chosenDefault = projects.find((project) => project.providerId === defaultProviderId);
   return [
     "Projects a new workspace can be created in:",
     ...listed.map(
