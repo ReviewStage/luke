@@ -4,10 +4,12 @@
  * Everything the voice conversation may know about the app — what Luke is on
  * screen, every setting with its current value and its default, and where
  * each is changed by hand — is assembled here into the `AppGuideSnapshot` the
- * conversation is sent. A feature this file does not describe is one Luke
- * will deny having, and a setting it does not mark changeable is one no
- * spoken ask can touch, so adding either to the app means adding it here in
- * the same change.
+ * conversation is sent. A capability this file does not describe is one Luke
+ * will not offer, and a setting it does not mark changeable is one no spoken
+ * ask can touch, so adding either to the app means adding it here in the same
+ * change. The facts cover what a developer would ask and what a spoken ask
+ * may do — not exhaustive surface behavior, which the closing fact has Luke
+ * redirect to the surface rather than deny.
  *
  * The settings half is built from the exhaustive schema in
  * `shared/settings-schema.ts`, so a new stored setting does not build until its
@@ -158,7 +160,7 @@ const MICROPHONE_DETAIL = {
   "not-determined":
     "Not asked yet — typing to Luke needs no permission, and only the talk key's capture " +
     "does. The Permissions section on the Settings tab's Voice page can ask while voice is " +
-    "available — a signed-in account includes it, and an OpenAI key also provides it.",
+    "available.",
   unknown: "Unknown. The Permissions section on the Settings tab's Voice page shows its state.",
 };
 
@@ -188,96 +190,92 @@ function providersFact(settings: AppSettings): AppGuideFact {
     label: "Cloud providers",
     detail:
       `${roster.join(", ")}. Connecting one takes the key its row names, typed by hand into ` +
-      `${CONNECTIONS_PAGE}, under Providers — never spoken, and never repeated back. The row's ` +
-      "Connect press opens the provider's own key page in the browser and leaves the field " +
-      "waiting under the notch, so the key is fetched and pasted in one trip. " +
-      "Local providers such as Claude Code need no key and are observed on their own. " +
-      `Codex cloud tasks (${CODEX_CLOUD_CONNECTION_WORD[settings.codexCloudConnection]}) take ` +
-      "no key in Luke at all: they are observed through the Codex CLI's own login, and the " +
-      "Codex row on the same page reports that login's state. Running codex login once in a " +
-      "terminal connects them, and signing that CLI out stops them.",
+      `${CONNECTIONS_PAGE}, under Providers — like every key, never spoken, and never ` +
+      "repeated back. Local providers such as Claude Code need no key and are observed on " +
+      `their own. Codex cloud tasks (${CODEX_CLOUD_CONNECTION_WORD[settings.codexCloudConnection]}) ` +
+      "take no key in Luke at all: they follow the Codex CLI's own login — codex login " +
+      "connects them, and signing that CLI out stops them.",
   };
 }
 
-function integrationsFact(settings: AppSettings): AppGuideFact {
+/**
+ * One labeled fact per integration, so an ask about one draws that one alone.
+ * An integration a build does not carry contributes no fact at all: a
+ * capability the guide describes is one Luke will claim to have.
+ */
+function integrationFacts(settings: AppSettings): AppGuideFact[] {
+  const facts: AppGuideFact[] = [];
   const linearProvider = CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.LINEAR];
-  const linear = !settings.linearSignInAvailable
-    ? ""
-    : `${linearProvider.displayName} ` +
-      `(${connectionWord(settings.credentialSources[linearProvider.id])}) connects by signing ` +
-      `in with Linear from its row in ${CONNECTIONS_PAGE}, under Integrations — Linear's own ` +
-      `consent page opens in the browser, and no key is ever typed or spoken. Connecting it ` +
-      `lets Luke read the developer's assigned issues and, only when asked in a turn the ` +
-      `developer opened, move one to another state or comment on it. Disconnecting from the ` +
-      `same row ends the access at Linear as well as here.`;
+  if (settings.linearSignInAvailable) {
+    facts.push({
+      label: "Linear",
+      detail:
+        `${linearProvider.displayName} ` +
+        `(${connectionWord(settings.credentialSources[linearProvider.id])}) connects by signing ` +
+        `in with Linear from its row in ${CONNECTIONS_PAGE}, under Integrations — no key is ` +
+        `ever typed or spoken. Connected, Luke reads the developer's assigned issues and, ` +
+        `only when asked in a turn the developer opened, can move one to another state or ` +
+        `comment on it; disconnecting from the same row ends the access at Linear as well ` +
+        `as here.`,
+    });
+  }
+  if (settings.appleCalendarAvailable) {
+    facts.push({
+      label: "Apple Calendar",
+      detail:
+        settings.appleCalendar === undefined
+          ? "Apple Calendar (not connected) connects from its row through macOS's own " +
+            "calendar-access ask — no sign-in and no key. Connecting it lets Luke read only " +
+            "when the meetings in this Mac's Calendar start and end — never their titles or " +
+            "who attends."
+          : "Apple Calendar (connected) reads only when the meetings in this Mac's Calendar " +
+            "start and end — never their titles or who attends. Which calendars count is chosen " +
+            "with the checkboxes on its row, and the access itself stays the user's in System " +
+            "Settings under Privacy & Security, Calendars.",
+    });
+  }
   const accounts = settings.calendarAccounts.length;
-  const calendar = !settings.calendarSignInAvailable
-    ? ""
-    : accounts === 0
-      ? " Google Calendar (not connected) connects by signing in with Google from its row. " +
-        "Connecting it lets Luke read only when meetings start and end — never their titles " +
-        "or who attends — so announcements can wait out a meeting."
-      : ` Google Calendar (${accounts === 1 ? "1 account" : `${accounts} accounts`} connected) ` +
-        "reads only when meetings start and end — never their titles or who attends. Which " +
-        "calendars count is chosen with the checkboxes under each account, and more accounts " +
-        "can be added from the same row.";
-  const apple = !settings.appleCalendarAvailable
-    ? ""
-    : settings.appleCalendar === undefined
-      ? " Apple Calendar (not connected) connects from its row through macOS's own " +
-        "calendar-access ask — no sign-in and no key. Connecting it lets Luke read only when " +
-        "the meetings in this Mac's Calendar start and end — never their titles or who " +
-        "attends — so announcements can wait out a meeting."
-      : " Apple Calendar (connected) reads only when the meetings in this Mac's Calendar " +
-        "start and end — never their titles or who attends. Which calendars count is chosen " +
-        "with the checkboxes on its row, and the access itself stays the user's in System " +
-        "Settings under Privacy & Security, Calendars.";
-  const superset =
-    " Superset workspaces on this Mac are recognized automatically from Superset's local " +
-    "read-only host state, so agents from different providers group under the project and " +
-    "workspace that owns them. Every grouped chat carries its workspace's own Superset " +
-    "and terminal identifiers, so a chat with no native address opens at its exact terminal " +
-    "in Superset — pressed, or asked of Luke — with no login needed. A worktree workspace " +
-    "with no agent chat at all stands as its own idle row — titled by the workspace, opening " +
-    "in Superset on press, staying however long it has sat idle, which is how a stale " +
-    "workspace is found and cleaned up; the main checkout and workspaces Superset already " +
-    "archived draw no row. When Superset's CLI is " +
-    "logged in, chat rows can also send the " +
-    "developer's own message, every Superset row offers Delete workspace once its work " +
-    "settled — an agentless workspace row counts as settled by construction — Superset " +
-    "keeps no archive, so deleting is permanent and takes the whole workspace with every " +
-    "chat in it, and a row still working is never offered it; a single chat cannot be " +
-    "closed or removed on its own, so deleting the settled workspace is the one removal " +
-    "a Superset row takes, and an ask to archive one means exactly this delete. Those rows " +
-    "also rename the workspace and start another agent in it, and a conversation ask can " +
-    "create a new workspace " +
-    "with an agent in a project and host Superset currently lists; connect from Luke's " +
-    "Settings, finish Superset's own sign-in flow in the browser, and paste its one-time code " +
-    "into Luke. Superset's CLI exchanges that code, stores the login, and switches organizations; " +
-    "Luke never reads its token or clipboard. Superset's row sits under Providers on the " +
-    "Connections page; while connected it keeps a pencil that runs the same sign-in again — " +
-    "the CLI's way of switching organizations — and disconnecting from it runs the CLI's own " +
-    "sign-out, clearing the login the CLI stored. The default agent for a creation ask that names " +
-    "none is chosen under Superset in Settings; until one is chosen, Luke asks.";
-  const conductor =
-    " Conductor comes two ways, told apart by where the work lands. Conductor cloud connects " +
-    "with a key under Providers and creates workspaces in the cloud projects that key " +
-    "lists. Conductor on this Mac needs no key: it is recognized read-only from Conductor's own " +
-    "index, and a conversation ask can create a new workspace in any repository Conductor holds " +
-    "locally — shown as “Conductor (local)” in the create picker and its own block under " +
-    "Providers. A local creation opens the new workspace in Conductor itself and may carry an " +
-    "opening task, which Conductor pre-fills in the new workspace's composer but does not send — " +
-    "its link cannot, so Luke says the prompt is ready and the developer presses Return in " +
-    "Conductor to start it. It carries no agent, model, or name choice, so it runs the " +
-    "repository's own default agent and wears the name Conductor gives it; the default repository " +
-    "a nameless ask lands in " +
-    "is chosen under Conductor (local) in Settings, and until one is chosen Luke asks. Local " +
-    "Conductor chats stay read-only otherwise: Luke cannot message, archive, or add an agent to " +
-    "one, because Conductor documents no local way in for those.";
-  return {
-    label: "Integrations",
-    detail: `${linear}${apple}${calendar}${superset}${conductor}`.trim(),
-  };
+  if (settings.calendarSignInAvailable) {
+    facts.push({
+      label: "Google Calendar",
+      detail:
+        accounts === 0
+          ? "Google Calendar (not connected) connects by signing in with Google from its row. " +
+            "Connecting it lets Luke read only when meetings start and end — never their " +
+            "titles or who attends."
+          : `Google Calendar (${accounts === 1 ? "1 account" : `${accounts} accounts`} connected) ` +
+            "reads only when meetings start and end — never their titles or who attends. Which " +
+            "calendars count is chosen with the checkboxes under each account, and more accounts " +
+            "can be added from the same row.",
+    });
+  }
+  facts.push({
+    label: "Superset",
+    detail:
+      "Superset workspaces on this Mac are recognized read-only from Superset's own host " +
+      "state; their chats open at their exact terminal in Superset — pressed, or asked of " +
+      "Luke — and an idle worktree workspace stands as its own row. When Superset's CLI is " +
+      "logged in, chat rows can send the developer's own message, rename the workspace, " +
+      "start another agent in it, or create a new Superset workspace by ask. Every Superset " +
+      "row offers Delete workspace once its work settled — an agentless idle row counts as " +
+      "settled — and Superset keeps no archive: " +
+      "deleting is permanent and takes the whole workspace with every chat in it, a row " +
+      "still working is never offered it, a single chat cannot be closed or removed on its " +
+      "own, and an ask to archive one means exactly this delete. Superset connects and " +
+      "disconnects from its row under Providers on the Connections page, through Superset's " +
+      "own sign-in; Luke never reads its token or clipboard.",
+  });
+  facts.push({
+    label: "Conductor",
+    detail:
+      "Conductor cloud connects with a key under Providers and creates workspaces in the " +
+      "cloud projects that key lists. Conductor on this Mac needs no key — it is recognized " +
+      "read-only from Conductor's own index — and an ask can create a new workspace in any " +
+      "repository it holds locally; the opening task is pre-filled in Conductor but not " +
+      "sent, so the developer presses Return there to start it. Local Conductor chats stay " +
+      "read-only otherwise: Luke cannot message, archive, or add an agent to one.",
+  });
+  return facts;
 }
 
 /**
@@ -293,19 +291,17 @@ function voiceKeyFact(settings: AppSettings, voiceAvailable: boolean): AppGuideF
     detail:
       `${openai.displayName} (${connectionWord(source)}). ` +
       (hosted
-        ? `Voice and session review run on the signed-in Luke account's daily allowance. A ` +
+        ? `Voice and session review run on the signed-in Luke account's daily allowance; a ` +
           `key of the developer's own runs them unmetered instead, billed by OpenAI. When a ` +
-          `day's allowance is spent, watching continues unmetered and only voice pauses until ` +
-          `the reset: the face beside the housing stays awake but grays out to half ink, ` +
-          `and a caption where replies land says when voice ` +
-          `returns — once at the ` +
-          `run-out, again whenever the composer is reached for or an ask is refused. `
+          `day's allowance is spent, watching continues unmetered and only voice pauses ` +
+          `until the reset — the face beside the housing grays out, and a caption where ` +
+          `replies land says when voice returns. `
         : source === CREDENTIAL_SOURCE.NONE
           ? `Signing in — or connecting a key — is what lets Luke speak and review sessions. `
           : `Voice and session review run on this key: no daily limit, nothing through Luke's ` +
             `service, and OpenAI bills you for what you use. `) +
-      `The key is typed by hand into ${VOICE_SOURCE_SECTION} — never read from the environment, ` +
-      `never spoken, and never repeated back.`,
+      `The key is typed by hand into ${VOICE_SOURCE_SECTION} — never read from the ` +
+      `environment, never spoken, and never repeated back.`,
   };
 }
 
@@ -347,280 +343,162 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
       label: "What Luke is",
       detail:
         "A macOS sidecar living beside the notch. The number beside the housing is the most " +
-        "pressing count among the sessions the panel lists: how many need the developer, else " +
-        "how many are working, else how many settled. It wears that state's colour, and the " +
-        "peek's caption names the state in words. Hovering peeks, pressing opens the panel, " +
-        "and Escape closes what is open.",
+        "pressing count among the sessions the panel lists — how many need the developer, else " +
+        "how many are working, else how many settled — wearing that state's colour. Hovering " +
+        "peeks, pressing opens the panel, and Escape closes what is open.",
     },
     {
       label: "The panel",
       detail:
         "Two tabs, Sessions and Settings, switched by pressing one or by asking Luke to show " +
-        "it. Asked while the panel is closed, the panel opens on that tab. Command-comma " +
-        "switches to Settings while the panel has the keyboard.",
+        "it. Asked while the panel is closed, the panel opens on that tab.",
     },
     {
       label: "The sessions list",
       detail:
-        "Lists every session that still matters: one working or waiting stays at any age, a " +
-        "failure for three days, a finished or quiet one for two. The options button opens " +
-        "filter rows by axis — location (local, cloud), kind (voice chats), app (Conductor, " +
-        "ChatGPT, Cursor, Orca, Superset, cmux), and agent — where several chips can be pressed at once: choices " +
-        "on one row widen each other and choices across rows narrow, so Codex beside " +
-        "Conductor means Codex chats associated with Conductor. Cursor sits on both rows: " +
-        "its app chip narrows to the chats the Cursor app can open, its agent chip to every " +
-        "Cursor chat. The sheet stays open while " +
-        "chips toggle, and the options button wears the narrowing while the sheet is closed, " +
-        "with an X on its right that clears every chosen chip at once. " +
-        "Chosen chips are un-pressed the same way they were pressed, a spoken ask can narrow " +
-        "to one or several values combined the same way — local Codex voice chats is one ask " +
-        "— naming an agent or app by its everyday name, or back to all, the same clear the X " +
-        "makes, replacing what was picked by hand, and the list is " +
-        "orderable by urgency or recency by the same button or ask. " +
-        "A row can be opened, messaged, or controlled " +
-        "where its provider allows. A session whose provider reported a pull request grows a " +
-        "chip that opens it in the browser — said once on a workspace tray's header when its " +
-        "chats share the one change. A row the developer asked Luke to listen for wears " +
-        "a listening mark beside its age. Luke's own composer at the foot takes a typed ask.",
+        "Lists every observed session that still matters. The options button filters by " +
+        "location, kind, app, and agent and orders the list by urgency or recency; a spoken " +
+        "ask can filter, sort, or clear the same way. A row can be opened, messaged, or " +
+        "controlled where its provider allows, a session whose provider reported a pull " +
+        "request grows a chip that opens it in the browser, and Luke's own composer at the " +
+        "foot takes a typed ask.",
     },
     {
       label: "Apps beside a session",
       detail:
-        "The large mark leading a row names the coding agent — a Conductor cloud chat leads " +
-        "with the agent running it, Claude Code or Codex, with the small cloud badge saying " +
-        "where it runs; Conductor's own letter mark stands in only when the agent went " +
-        "unreported. The small bare marks after a row's title name apps where the same chat " +
-        "also appears. Luke recognizes Conductor locally from Conductor's read-only session " +
-        "index; when a Codex chat there spawns a sub-agent, Codex's exact parent-thread " +
-        "record carries that Conductor association to the sub-agent's separate row. Luke " +
-        "recognizes Superset from its read-only host state, Orca from its read-only " +
-        "hook-status cache, grouping chats under the Orca worktree that hosts them, and the " +
-        "cmux terminal from the read-only session stores cmux's own CLI writes — which exist " +
-        "only where cmux's own agent hooks are installed: Claude Code's automatically, Codex, " +
-        "Cursor, Gemini CLI, and OpenCode only after cmux's `cmux hooks setup`, so a session cmux never " +
-        "recorded carries no cmux mark. A local Codex chat also names " +
-        "ChatGPT because OpenAI's desktop app documents the exact Codex thread address Luke " +
-        "already opens. A Cursor chat the Cursor app can open names Cursor itself the same " +
-        "way — a local chat the app's own index holds, read as key presence alone, or any " +
-        "Cursor cloud agent, which the app opens by id like its own dashboard does — where " +
-        "a chat Cursor's agents CLI started in a plain terminal " +
-        "carries no Cursor app mark and opens nowhere unless cmux, Superset, or Conductor " +
-        "hosts its terminal. More than one app mark may appear on one row; none replaces the agent " +
-        "or changes local versus cloud. An app mark with an exact address is a button: " +
-        "ChatGPT opens that Codex thread, Cursor opens the exact chat in its own window, " +
-        "Superset opens its bound terminal, cmux opens the " +
-        "exact terminal pane the agent runs in — and stands in as the row's own destination " +
-        "when no other app gave it one — and a Conductor " +
-        "cloud chat's Conductor mark opens that exact chat. The row body still opens its " +
-        "preferred exact destination. A local Conductor chat or an Orca worktree exposes no " +
-        "documented exact address or message endpoint, so each of those marks identifies the " +
-        "association but adds no open or send control; a cmux chat takes no message or " +
-        "control through cmux either — its mark opens the pane, nothing more. An ask in " +
-        "conversation, spoken or typed, opens the same destinations the row offers: the row's " +
-        "own preferred address by default, or — when the chat appears in more than one app and " +
-        "the ask names one whose mark is a button — that app's exact address instead, so the " +
-        "developer picks where a chat held by several apps comes forward.",
+        "The large mark leading a row names the coding agent; the small marks after its " +
+        "title name the apps holding the same chat — Conductor, ChatGPT, Cursor, Orca, " +
+        "Superset, cmux — recognized read-only from each app's own records. A mark with an " +
+        "exact address opens the chat in that app, the row body opens its preferred one, and " +
+        "an ask can name which app a chat held by several comes forward in.",
     },
     {
       label: "Searching sessions",
       detail:
-        "The list is searchable three ways: the magnifier beside the options button, Command-F " +
-        "while the panel has the keyboard, or asking Luke to search out loud — a spoken search " +
-        "fills the same field and reaches no further than the magnifier, which is only offered " +
-        "beside a list of more than one session. It keeps rows saying every typed word in " +
-        "their title, status word or status line, branch, repository, workspace, agent, associated app, or model, and counts " +
-        "what it left. A search matching nothing offers the matches a filter is hiding rather " +
-        "than pretending there are none. Escape clears the query and then closes the field, " +
-        "and clearing or closing is what lets a search go; a search left standing is a way of " +
-        "viewing the list like the filter chips, so it survives the panel closing and the app " +
-        "restarting and comes back with its field open. Command-F answers " +
-        "for whichever tab is showing: the sessions list here, the settings search on Settings.",
+        "The list is searchable by the magnifier, Command-F, or asking Luke to search out " +
+        "loud — a spoken search fills the same field and reaches no further than the " +
+        "magnifier, which is only offered beside a list of more than one session.",
     },
     {
       label: "Workspaces in the list",
       detail:
-        "Where chats nest in a workspace — Conductor's, cloud and local alike, and " +
-        "Superset's and Orca's on this machine — each chat is its own row. A workspace holding several " +
-        "draws them inside one tray named by the workspace; one holding a single chat stays " +
-        "one row titled by the workspace. Every chat can be seen, opened, and messaged " +
-        "individually where its latest roster entry offers that act. A Superset, Conductor, " +
-        "or Orca " +
-        "tray carries the managing app's mark once in its header rather than repeating it on " +
-        "every child row, and the header also carries the workspace's acts and the one " +
-        "pull-request chip its chats share, where each row would have repeated them.",
+        "Chats nested in a workspace — Conductor's, Superset's, or Orca's — group under one " +
+        "tray named by the workspace, and each chat is still its own row, opened and " +
+        "messaged individually where its roster entry allows.",
     },
     {
       label: "The Settings tab",
       detail:
-        "A front page led by the What Luke runs on section: a two-way toggle naming the " +
-        "signed-in Luke account (free, a daily amount) against the developer's own OpenAI key " +
-        "(unmetered, billed by OpenAI), with the live one marked and the other pressable to " +
-        "switch. Choosing the key with none stored asks for one; choosing the account parks a " +
-        "stored key without deleting it. Under the toggle stands whichever half is live: on " +
-        "the account, meters for the day's talking and announcements and checks on your " +
-        "sessions, and when they reset; on the key, the OpenAI row itself. Below are rows " +
-        "opening the Voice, Appearance, Keyboard shortcuts, and Connections pages, each led " +
-        "back out by its back button or Escape. The Feedback section, the Account section, and " +
-        "Quit stay on the front page itself.",
-    },
-    {
-      label: "Searching settings",
-      detail:
-        "The magnifier beside the tab bar — or Command-F — while Settings is showing opens a " +
-        "search field pinned at the head of whichever settings page is showing, and the search " +
-        "always reads across every page. It finds any row — a page itself, a setting by its " +
-        "name or what it does, a provider, a shortcut, a way out. Typing swaps the page for " +
-        "the matches, grouped under the page that holds each; pressing a page opens it, and " +
-        "pressing a row opens its page and takes the view to the row itself. Escape clears " +
-        "the query, then closes the field, then leaves the page. The search is by hand alone: " +
-        "no spoken ask can search, and no search survives the panel closing.",
-    },
-    {
-      label: "What a settings page marks",
-      detail:
-        "A dot beside a row marks a value changed from its default, and a page holding one " +
-        "ends its head with a reset, pressed by hand and never spoken, returning that page's " +
-        "settings to their defaults. The Connections page carries no group reset: its defaults " +
-        "are changed row by row. No reset touches a key, an account, or the Conductor agent choice. An " +
-        "exclamation mark sits on whatever still needs a hand: the What Luke runs on heading " +
-        "while voice has nothing to run on, the Voice and microphone rows while the permission " +
-        "is ungranted, and the Keyboard shortcuts rows while voice is off, where each chord " +
-        "stays shown and changeable but answers nothing until voice is available.",
+        "Where Luke is configured by hand. The front page leads with What Luke runs on — the " +
+        "signed-in account's daily allowance against the developer's own OpenAI key — with " +
+        "meters for the day's use, and opens the Voice, Appearance, Keyboard shortcuts, and " +
+        "Connections pages; Feedback, Account, and Quit stay on the front page. A settings " +
+        "search — the magnifier, or Command-F — finds any row, by hand alone: no spoken ask " +
+        "can search it.",
     },
     {
       label: "Account",
       detail:
         account.status === ACCOUNT_STATUS.SIGNED_IN
           ? `Signed in as ${account.email} through ${account.provider === ACCOUNT_PROVIDER.GITHUB ? "GitHub" : "Google"}. Sign out by hand from ${ACCOUNT_SECTION} — it asks before acting. The same section's Delete account row erases the account and everything Luke's service holds for it, cannot be undone, and is only ever done by hand — its button asks before acting, and no spoken ask can reach it.`
-          : "Not signed in. The sign-in screen greets the launch once with Google and GitHub, then closes like any panel. While signed out the strip beside the housing keeps Luke's face and a small Sign in label in place of the session count, and hovering or pressing it brings the sign-in screen back. Live sessions and Luke's controls stay off until sign-in finishes. Choosing a provider stands the panel down to a small waiting popup with a Cancel button while the browser finishes, and the panel opens itself once the sign-in lands.",
+          : "Not signed in. The sign-in screen offers Google and GitHub, and hovering or pressing the strip beside the housing brings it back; live sessions and Luke's controls stay off until sign-in finishes.",
     },
     {
       label: "Feedback and prompts",
       detail:
-        "The Feedback section near the foot of the Settings tab, just above Quit, opens a " +
-        "composer under the notch. Send feedback is for bugs and ideas; Submit a prompt sends a " +
-        "prompt to a coding agent. Either goes by email to the founders with an optional name " +
-        "and email for credit, and up to three screenshots. A spoken ask can open the composer " +
-        "and start it with the developer's own words — Luke offers exactly that, once, after " +
-        "refusing something he cannot do — but a note already being written is never " +
-        "overwritten, and sending is always the Send button's own press: no spoken ask can " +
+        "The Feedback section on the Settings tab opens a composer: Send feedback for bugs " +
+        "and ideas, Submit a prompt for a prompt to a coding agent, either going by email to " +
+        "the founders with optional credit and up to three screenshots. A spoken ask can " +
+        "open the composer with the developer's own words — Luke offers exactly that after " +
+        "refusing something he cannot do, and a note already being written is never " +
+        "overwritten — but sending is always the Send button's own press: no spoken ask can " +
         "send one.",
     },
     {
       label: "Reading a session's transcript",
       detail:
-        "Asked what a local session did, said, or is stuck on, Luke can read that session's own " +
-        "recent transcript — Antigravity, Claude Code, Codex, Gemini CLI, Grok Build, " +
-        "OpenCode, Radius, and the Devin and Cursor agents running on this machine today — and " +
-        "answer from it. Cursor and Radius keep tool outputs out of their own transcripts, and " +
-        "Antigravity's are stored where Luke does not read them, so those readings carry the " +
-        "words and the calls but no results. " +
-        "The reading happens when asked and is kept nowhere; cloud sessions keep their " +
-        "conversations with their provider, so Luke answers about those from their roster " +
-        "fields alone.",
+        "Asked what a local session did, said, or is stuck on, Luke can read that session's " +
+        "own recent transcript — Antigravity, Claude Code, Codex, Gemini CLI, Grok Build, " +
+        "OpenCode, Radius, and the Devin and Cursor agents on this machine today — and answer " +
+        "from it; the reading is kept nowhere. Some of those transcripts store no tool " +
+        "results, so a reading may carry words and calls alone. A cloud session's " +
+        "conversation stays with its provider, answered from roster fields alone.",
     },
     {
       label: "Messaging local Cursor chats",
       detail:
         "A local Cursor chat whose turn has settled can take the developer's own message, " +
-        "typed on its row or asked of Luke in conversation: Luke runs Cursor's own agents " +
-        "CLI, resuming exactly that chat in its own folder with the message as its one " +
-        "prompt, and the reply lands in the same transcript the row already reads. It is " +
-        "offered only where that is honest — the CLI installed and signed in, the chat's " +
-        "folder named by Cursor's own records, the turn not still running — and not for " +
-        "chats the Cursor app's own windows hold, whose rows open the exact chat in the " +
-        "app instead, because Cursor does not document whether an app window would show a " +
-        "turn landed behind it. A Superset-managed Cursor chat still messages through " +
-        "Superset's own terminal, which shows the message where the agent actually runs.",
+        "typed on its row or asked of Luke, and the reply lands in the same transcript the " +
+        "row reads. It is offered only with Cursor's own CLI installed and signed in, and " +
+        "never for chats the Cursor app's own windows hold, whose rows open the chat in the " +
+        "app instead; a Superset-managed Cursor chat messages through Superset.",
     },
     {
       label: "Creating workspaces",
       detail:
         "Where a connected provider documents a creation endpoint — Conductor, Cursor, and " +
-        "Superset today — " +
-        "an ask in conversation, spoken or typed, can create a new workspace in one of the " +
-        "projects that provider reports, optionally under a name the developer chose, and can " +
-        "hand the new agent an opening task in the developer's own words where the project takes " +
-        "one. A bare ask for a new agent lands here: only an ask that itself names the existing " +
-        "workspace or session the agent should join adds one beside it instead. Only reported " +
-        "projects can be named, a project that needs a task cannot be created " +
-        "without one, and a provider that reports none takes no ask. Superset asks for more than " +
-        "the others: every Superset project carries the host that runs it — named for a remote " +
-        "host, unannotated on this Mac — and a new " +
-        "Superset workspace needs that host, an agent Superset currently lists for it, and an " +
-        "opening task — so a task-less ask for one is refused rather than created idle. An ask that names no " +
-        "provider goes to the default workspace provider; until one is chosen Luke asks when " +
-        "more than one provider could take it, and the first workspace created saves its " +
-        "provider as the default — changed or cleared by hand in the Settings tab. An ask that " +
-        "names no project goes the same way: each provider remembers a default project, filled " +
-        "in by the first workspace created there and changed or cleared by hand on the " +
-        "Connections page, on that provider's own row — under Providers for a " +
-        "provider connected by key, and under Superset for Superset; until one is chosen Luke " +
-        "asks when the provider lists more than one project. What a new " +
-        "Conductor agent runs — its model, and its effort where the model's agent takes one — " +
-        "follows the choice on the Conductor row under Providers, or Conductor's own " +
-        "defaults while none is made. A model named in a creation ask rides that creation alone " +
-        "and is saved as the default only while none is chosen; the settings themselves change " +
-        "only when the developer asks for that, and Luke never asks or suggests a model. A " +
-        "workspace that lands opens on the developer's screen by itself: the moment observation " +
-        "reports the new session with an address, that address is handed to the operating " +
-        "system, the same as pressing the session's row. One whose provider reports no address " +
-        "stays on its row, unopened.",
+        "Superset today — an ask in conversation, spoken or typed, can create a new " +
+        "workspace in a project that provider reports, optionally named, with an opening " +
+        "task in the developer's own words where the project takes one. Only reported " +
+        "projects can be named, a project that needs a task cannot be created without one, " +
+        "and a provider that reports none takes no ask; a new Superset workspace needs a " +
+        "host, an agent, and an opening task, so a task-less ask for one is refused. A bare " +
+        "ask for a new agent creates a new workspace — an ask naming an existing workspace " +
+        "or session adds an agent beside it instead — and a workspace that lands opens on " +
+        "screen by itself once it reports an address.",
+    },
+    {
+      label: "Workspace creation defaults",
+      detail:
+        "An ask that names no provider goes to the default workspace provider, and one that " +
+        "names no project to that provider's default project; the first workspace created " +
+        "fills each in, both are changed or cleared by hand in Settings, and until one is " +
+        "chosen, Luke asks. What a new Conductor agent runs — its model, and its effort " +
+        "where the model takes one — follows the choice on the Conductor row; a model named " +
+        "in the ask rides that creation alone, and Luke never asks or suggests a model.",
     },
     {
       label: "Adding agents to a workspace",
       detail:
-        "Where a session's provider documents it — Conductor today — the same kind of ask can " +
-        "start another agent in the workspace an observed session runs in, as one of the agent " +
-        "kinds that session's roster entry lists, optionally named and optionally with an " +
-        "opening task. The ask must name that workspace or session in its own words; a bare " +
-        "ask for a new agent creates a new workspace instead. A model named in the ask — with an effort where its agent takes one — " +
-        "rides that agent alone; unnamed, the Conductor row's choice rides along only when it " +
-        "names the same agent kind. A session whose entry lists no new agents takes no such ask.",
+        "Where a session's provider documents it — Conductor today — the same kind of ask " +
+        "can start another agent in an observed session's workspace, as one of the agent " +
+        "kinds its roster entry lists; a session whose entry lists none takes no such ask. " +
+        "The ask must name the workspace or session — a bare ask for a new agent creates a " +
+        "new workspace instead — and a model named in the ask rides that agent alone.",
     },
     {
       label: "Renaming workspaces and chats",
       detail:
-        "Where a provider documents it, an ask in conversation, spoken or typed, can rename " +
-        "what is observed, to a name in the developer's own words: a Conductor or " +
-        "Superset-managed workspace, or a Conductor chat on its own. An ask that names the " +
-        "workspace renames the workspace; one about the chat renames the chat. Only sessions " +
-        "whose roster entry says the workspace can be renamed — or the chat can — take one; " +
-        "the tray and the provider's own surface pick the new name up on the next observation. " +
-        "A session whose entry says neither takes no such ask.",
+        "Where a provider documents it — a Conductor or Superset-managed workspace, or a " +
+        "Conductor chat on its own — an ask can rename what is observed to a name in the " +
+        "developer's own words. An ask naming the workspace renames the workspace, one " +
+        "about the chat renames the chat, and a session whose roster entry allows neither " +
+        "takes no such ask.",
     },
     {
       label: "Archiving",
       detail:
         "Where a provider documents an archive endpoint — a Conductor workspace, a Cursor " +
-        "cloud agent, and a Devin cloud session today — Archive is offered as a control once the " +
-        "work there was positively seen to settle: pressed, or asked of Luke in " +
-        "conversation, it files the work away through the provider's own endpoint. Archiving a " +
-        "Conductor workspace files away every chat in it at once, so when several of its chats " +
-        "are drawn together the control sits once on the group's own header rather than on " +
-        "each row; a lone chat, or any other provider's session, carries it on the row. An " +
-        "archived Cursor agent " +
-        "stays readable but takes no new runs; an archived Devin session can be viewed but not " +
-        "resumed. A row mid-turn — or one whose state could not be read — offers no archive, a " +
-        "session whose roster entry lists no archive control takes no such ask, and local " +
-        "sessions — which Luke only reads — are never archived. A Superset-managed workspace " +
-        "keeps no archive, so an ask to archive one is taken as the one removal it does take " +
-        "— its Delete workspace control, offered only once its work settled — and Luke words " +
-        "the outcome as the delete it is: permanent, never filed away.",
+        "cloud agent, and a Devin cloud session today — Archive is offered once the work " +
+        "was positively seen to settle: pressed, or asked of Luke, it files the work away " +
+        "through the provider's own endpoint, and archiving a Conductor workspace files " +
+        "away every chat in it at once. A row mid-turn offers no archive, a session whose " +
+        "roster entry lists no archive control takes no such ask, and local sessions — " +
+        "which Luke only reads — are never archived. A Superset-managed workspace keeps no " +
+        "archive: an ask to archive one is taken as its Delete workspace control — " +
+        "permanent, never filed away.",
     },
     {
       label: "Standing asks about sessions",
       detail:
-        "An ask in conversation, spoken or typed, can be kept standing for one observed session " +
-        "— told when it finishes, warned if it fails, whatever the developer asked in their own " +
-        "words. Luke's background review weighs each of that session's updates against the ask " +
-        "and speaks when one satisfies it, opening a speak-only call if no conversation is up; " +
-        "the ask itself is the consent. One ask stands per session, a new one replaces it, asking Luke to drop " +
-        "it withdraws it, and an ask ends with the session it was about. A row with an ask standing wears a " +
-        "small listening mark beside its age, and the conversation roster carries each standing ask, so Luke " +
-        "can say what he is already listening for. It needs voice to be available — the " +
-        "signed-in account includes it, and a personal OpenAI key also provides it — " +
-        "changes nothing about the session itself, and is never sent to a provider.",
+        "An ask can be kept standing for one observed session — told when it finishes, " +
+        "warned if it fails, whatever the developer asked in their own words. Luke's " +
+        "background review weighs that session's updates against the ask and speaks when " +
+        "one satisfies it, opening a speak-only call if no conversation is up; the ask " +
+        "itself is the consent. One ask stands per session, a new one replaces it, asking " +
+        "Luke to drop it withdraws it, and an ask ends with its session — Luke can say what " +
+        "he is already listening for. It needs voice to be available, changes nothing about " +
+        "the session itself, and is never sent to a provider.",
     },
     talkKeyFact(input.hotkey),
     askKeyFact(input.askKey),
@@ -636,8 +514,8 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
                 : "Escape while Luke is speaking cuts the reply off and asks for nothing in " +
                   "its place. No system-wide stop key is registered right now — another app " +
                   "may own the shortcut.") +
-              " The talk key over a reply interrupts too, but takes the turn: the microphone " +
-              `opens with the same press. A different stop chord can be recorded, or the ` +
+              " The talk key over a reply interrupts too, but takes the turn with the same " +
+              `press. A different stop chord can be recorded, or the ` +
               `default restored, in ${SHORTCUTS_PAGE}.`,
           },
           {
@@ -645,76 +523,60 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
             // denies announcing nor offers to turn it off.
             label: "Announcements",
             detail:
-              "Luke says it out loud when an observed session is holding for you, stops on an " +
-              "error, or finishes — a hold is a question, a permission, or an approval, not a " +
-              "turn that merely ended — in his own words, naming the session and saying " +
-              "what it needs, from the agent's parting words or the provider's error line when " +
-              "one was reported. No conversation needs to be open, and the microphone stays " +
-              "off. While he says it, a pressable notice names the session he is talking " +
-              "about — under the housing, or at the open panel's foot: pressing it opens the " +
-              "session where its provider keeps it, or opens the panel for a local session " +
-              "with no page of its own. A session's chip wears the same marks its row " +
-              "does: the agent's own in front, and the apps holding the chat — Conductor, " +
-              "Orca, and kin — trailing the name. The same chips appear while a conversation reply " +
-              "names observed sessions by title, or a workspace of grouped chats by its " +
-              "name — asking what is being worked on draws one chip per thing named, up to " +
-              "a dozen, a workspace's opening its most recent chat. A reply naming tracked " +
-              "issues — by identifier like LUKE-123, or by whole title — draws their chips " +
-              "on the same band, each opening its issue where the tracker keeps it. Past " +
-              "three rows the chips scroll in place, and each presses the same way. The " +
-              "chips and the captioned words leave when the reply ends, but never out from " +
-              "under the pointer: resting on them holds them until it moves away. " +
-              "Always on while voice is available; the panel and the capsule count show the " +
-              "same states either way. A session the developer is speaking with through its " +
-              "provider's own realtime voice — a Codex thread in a live voice conversation, " +
-              "and any chat that conversation delegated — announces nothing while the " +
-              "conversation holds, because its turn boundaries are already being heard " +
-              "first-hand; the first change after the conversation closes is announced as " +
-              "usual, and nothing from inside it is replayed." +
-              // Only a build that offers a calendar may describe the quiet:
-              // a hold Luke claims without a calendar row to connect is a
-              // capability he does not have.
-              (input.settings.calendarSignInAvailable || input.settings.appleCalendarAvailable
-                ? " With a calendar connected — a Google Calendar account, or this Mac's own " +
-                  "Apple Calendar — and Quiet during meetings on, " +
-                  "announcements decided during a meeting wait and are read out together once " +
-                  "it ends. The quiet beginning — a meeting starting, or the setting switched " +
-                  "on mid-meeting — silences Luke at once, an announcement mid-sentence " +
-                  "included, and holds everything he would say unbidden, even on an open " +
-                  "conversation; questions asked of him still get their replies. Luke's face " +
-                  "sleeps beside the housing for as long as the quiet holds, which is how the " +
-                  "hold is seen."
-                : ""),
+              "Luke says it out loud when an observed session is holding for you, stops on " +
+              "an error, or finishes — a hold is a question, a permission, or an approval, " +
+              "not a turn that merely ended — in his own words, naming the session and what " +
+              "it needs. No conversation needs to be open, the microphone stays off, and it " +
+              "is always on while voice is available. A session already in a live voice " +
+              "conversation with its own provider announces nothing until that conversation " +
+              "closes, and nothing from inside it is replayed.",
           },
+          {
+            label: "Session and issue chips",
+            detail:
+              "While Luke speaks, pressable chips name the sessions and tracked issues the " +
+              "reply is about — under the housing, or at the open panel's foot. Pressing one " +
+              "opens it where its provider or tracker keeps it; a local session with no page " +
+              "of its own opens Luke's panel. They leave when the reply ends.",
+          },
+          // Only a build that offers a calendar may describe the quiet: a hold
+          // Luke claims without a calendar row to connect is a capability he
+          // does not have.
+          ...(input.settings.calendarSignInAvailable || input.settings.appleCalendarAvailable
+            ? [
+                {
+                  label: "Quiet during meetings",
+                  detail:
+                    "With a calendar connected and Quiet during meetings on, announcements " +
+                    "decided during a meeting wait and are read out together once it ends. " +
+                    "The quiet silences everything Luke would say unbidden — an announcement " +
+                    "mid-sentence included, even on an open conversation — while questions " +
+                    "asked of him still get their replies, and his face sleeps beside the " +
+                    "housing for as long as it holds.",
+                },
+              ]
+            : []),
           {
             label: "Muted output",
             detail:
-              "While the Mac is muted or its volume is at zero, Luke's replies are captioned on " +
-              "screen even with Captions off, and a hint under the words asks for volume. The " +
-              "whole reply stays on screen, the block growing to fit the words. " +
-              "The hint's Got it button rests it for that stretch of silence and any that " +
-              "begins within fifteen minutes; the captions stay.",
+              "While the Mac is muted or its volume is at zero, Luke's replies are captioned " +
+              "on screen even with Captions off, and a hint under the words asks for volume; " +
+              "its Got it button rests the hint, and the captions stay.",
           },
           {
             label: "How long a conversation lasts",
             detail:
-              "One conversation outlives the calls that carry it. A call opens on the first " +
-              "press of the talk key or the first typed ask, stays open across as many turns as " +
-              "the developer takes, and is put away after three minutes with nothing said on " +
-              "it — which releases the microphone rather than holding it all day, and costs " +
-              "only the next handshake. The voice service " +
-              "also ends any call at an hour. Either way the next press picks the conversation " +
-              "back up: a bounded history of the recent exchange — what was asked, answered, " +
-              "announced, and done — is kept in memory and re-fed to the new call, so Luke " +
-              "remembers what was just said without writing anything to disk. A call that ends " +
-              "underneath a conversation ends quietly, because nothing said is lost with it.",
+              "A call opens on the first press of the talk key or the first typed ask and is " +
+              "put away after three minutes with nothing said on it; the voice service also " +
+              "ends any call at an hour. The next press picks the conversation back up: a " +
+              "bounded history of the recent exchange is kept in memory, never written to " +
+              "disk, and re-fed to the new call, so Luke remembers what was just said.",
           },
           {
             label: "When a call fails",
             detail:
               "Why a call failed or ended is shown for a few seconds where the captions are " +
-              "drawn — under the housing, or at the open panel's foot — and then fades. " +
-              "Nothing about it lives in Settings; trying again is the only fix to reach for.",
+              "drawn; trying again is the only fix.",
           },
         ]
       : [
@@ -727,7 +589,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         ]),
     providersFact(input.settings),
     voiceKeyFact(input.settings, input.voiceAvailable),
-    integrationsFact(input.settings),
+    ...integrationFacts(input.settings),
     ...(input.settings.secretStorage === SECRET_STORAGE.UNAVAILABLE
       ? [
           {
@@ -743,17 +605,12 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
       // Luke neither denies checking nor offers a switch that does not exist.
       detail:
         `The Updates section on ${FRONT_PAGE} says which version this is and where the build ` +
-        "stands. Its button checks the release manifest on the spot, and Luke also checks on " +
-        "his own a few times a day — always on; the fetch is unauthenticated and nothing about " +
-        "the developer or their sessions is sent. A newer release downloads itself when a check " +
-        "finds one — while it does, the Settings tab wears a dot and the section stands at the " +
-        "top of that page — and installs when Luke next quits: the row offers Restart to update, " +
-        "or it simply lands on the next quit. If a download or install fails, the row says so " +
-        "and offers the fixed releases page in the browser instead. The button's press can also " +
-        "be asked of Luke — check for updates, open the releases page, restart to update — and " +
-        "only the one act the row currently offers runs. The Changelog row under the version " +
-        "opens the changelog in the browser, at the fixed changelog page, where every release's " +
-        "notes live. Opening it is a press by hand; no spoken ask reaches it.",
+        "stands. Luke checks on his own a few times a day — the fetch is unauthenticated, " +
+        "and nothing about the developer or their sessions is sent — and a newer release " +
+        "downloads itself and installs when Luke next quits. The row's press can be asked " +
+        "of Luke — check for updates, open the releases page, restart to update — and only " +
+        "the one act the row currently offers runs. The Changelog row opens the changelog " +
+        "in the browser, by hand alone.",
     },
     {
       label: "Usage data",
@@ -761,8 +618,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
       // switch, and a Luke who could describe only that would be one who could
       // not say what it governs.
       detail:
-        "Luke counts how his own features are used — a launch, a provider connected, sessions " +
-        "observed, a call opened, an announcement spoken — and sends those counts to Luke's own " +
+        "Luke counts how his own features are used and sends those counts to Luke's own " +
         "service, tied to the signed-in account by name and email. Every event and value is " +
         "fixed by this build, so nothing about a session — no title, branch, path, recap, or " +
         "transcript — and nothing typed or spoken can travel in one. Nothing is sent while " +
@@ -772,6 +628,16 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
     {
       label: "Quitting",
       detail: `The Quit button at the foot of ${SETTINGS_TAB} or on the sign-in screen when it is shown.`,
+    },
+    {
+      // The deliberate bound of this guide: minutiae are redirected, not
+      // denied, so leaving a surface detail out of the facts stays safe.
+      label: "Beyond this guide",
+      detail:
+        "This guide lists what Luke can do, promise, and refuse — not every detail of the " +
+        "surface or its providers. Asked about finer behavior it does not cover, Luke points " +
+        "to where it lives — the panel, a session's row, or the Settings tab — rather than " +
+        "concluding the feature does not exist.",
     },
   ];
 

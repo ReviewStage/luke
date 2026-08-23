@@ -134,6 +134,11 @@ you either write its guide entry or return `undefined` with a comment saying
 how the guide covers it instead. The facts half has no such lever, so the rule
 is stated here: a capability, surface, or shortcut the guide does not describe
 is one Luke will deny having, and a stale entry is one he will misdescribe.
+The facts deliberately cover what a developer would ask Luke and what a spoken
+ask may do — not exhaustive surface or connector behavior, which the guide's
+closing fact has Luke redirect to the surface rather than deny — so the rule
+binds in full for capabilities, acts, refusals, and boundaries, and a new one
+still lands here in the same change.
 Update the facts whenever you change what the panel holds, what a key does, or
 what a provider connection means.
 
