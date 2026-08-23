@@ -29,7 +29,7 @@ import {
 import { accountInitials } from "./account-initials";
 import { accountLabel } from "./account-label";
 import { GitHubMark, GoogleMark } from "./account-marks";
-import { calendarWeeks, DAYS_PER_WEEK, monthLabels, thinMonthLabels } from "./activity-calendar";
+import { calendarWeeks, DAYS_PER_WEEK, lastWeeks, monthLabels } from "./activity-calendar";
 import { settleRead } from "./admin-refresh";
 import {
   SIDEBAR_ICON_SLOT,
@@ -591,13 +591,8 @@ function CalendarDayCell({
   onHide: () => void;
 }): React.JSX.Element {
   const total = day.voiceCalls + day.attentionReviews;
-  // Below the container width where a dash can draw on a cell at all, today
-  // wears a solid one-pixel ring instead: it costs no inner area a tiny cell
-  // cannot spare, and stays visible at any cell size.
   const provisional =
-    day.day === partialDay
-      ? " ring-1 ring-muted-foreground/70 @xl:border @xl:border-dashed @xl:border-muted-foreground/60 @xl:ring-0"
-      : "";
+    day.day === partialDay ? " border border-dashed border-muted-foreground/60" : "";
   return (
     <div
       role="img"
@@ -605,7 +600,7 @@ function CalendarDayCell({
       tabIndex={0}
       aria-label={`${formatTooltipDay(day.day, partialDay)} — ${formatNumber(day.voiceCalls)} voice · ${formatNumber(day.attentionReviews)} attention`}
       data-calendar-day={day.day}
-      className={`aspect-square w-full rounded-[clamp(1px,0.3cqw,3px)] outline-offset-2 ${total === 0 ? "bg-muted/60" : ""}${provisional}`}
+      className={`rounded-[3px] outline-offset-2 ${total === 0 ? "bg-muted/60" : ""}${provisional}`}
       style={total === 0 ? undefined : calendarCellStyle(total, maxTotal)}
       onPointerEnter={(event) => onShow(day, event.currentTarget)}
       onPointerLeave={(event) => {
@@ -628,6 +623,28 @@ function CalendarDayCell({
 /** The clearance between a day cell and the tooltip riding above or below it. */
 const CALENDAR_TOOLTIP_GAP_PX = 6;
 
+/**
+ * The calendar's one cell size, at every viewport. 12px with a 3px gap keeps
+ * the original 1rem-cell, 4px-gap proportion while letting the full 53-week
+ * trailing year fit the desktop card beside the expanded sidebar; a narrower
+ * surface shows fewer weeks rather than smaller cells.
+ */
+const CALENDAR_CELL_PX = 12;
+const CALENDAR_GAP_PX = 3;
+
+/** The weekday-label column's fixed width, which is what makes the fit exact. */
+const CALENDAR_WEEKDAY_COLUMN_PX = 28;
+
+/** How many whole week columns fit beside the weekday labels, one at least. */
+function calendarWeeksThatFit(availableWidth: number): number {
+  return Math.max(
+    1,
+    Math.floor(
+      (availableWidth - CALENDAR_WEEKDAY_COLUMN_PX) / (CALENDAR_CELL_PX + CALENDAR_GAP_PX),
+    ),
+  );
+}
+
 interface CalendarTooltipAnchor {
   day: AdminDailyUsage;
   /** The cell's edges in the card's own coordinates, where the tooltip lives. */
@@ -642,20 +659,23 @@ interface CalendarTooltipAnchor {
  * columns are UTC weeks keyed by their Sunday (this calendar's own
  * convention; the retention grid stays Monday-keyed), rows the seven
  * weekdays Sunday to Saturday, and each cell's fill is that day's share of
- * the account's own busiest day in the year. The bars carry magnitude; this
+ * the busiest day shown. The bars carry magnitude; this
  * grid carries the pattern they hide — weekday rhythms, weekend gaps, a
- * streak breaking. The week columns always divide the card's width — a year
- * that scrolls is a year whose shape cannot be seen — so the gaps and cell
- * rounding scale with the container rather than eating cells a phone can
- * barely afford, and on a narrow card the weekday column folds away and
- * every second month label drops so the survivors never collide. A day the
- * year does not cover draws nothing, a covered day with no calls keeps the
- * faintest neutral fill so absence still reads as an observed day, and
- * today wears the retention grid's dashed border — a fade here would pose
- * as a quiet day — until the cells are too small for a dash to draw, where
- * it becomes a solid ring. A hovered or focused cell answers
- * at once with the charts' own tooltip — one element the whole grid shares,
- * anchored to the card and clamped to its edges.
+ * streak breaking. The cells keep one fixed, readable size at every
+ * viewport; what flexes is how many trailing weeks are shown — the last N
+ * whole columns the card's measured width can hold, the full year on a
+ * desktop and a few months on a phone, refit live as the window resizes, so
+ * nothing scrolls and no partial column is cut. The heading, the month
+ * labels, and the fill scale all describe the shown span alone: a deeper
+ * fill is that day's share of the busiest day visible, not of a busiest day
+ * a narrow surface may have cropped away. A day the span does not cover
+ * draws nothing, a covered day with no calls keeps the faintest neutral
+ * fill so absence still reads as an observed day, and today — always in the
+ * last column, since the slice keeps the newest weeks — wears the retention
+ * grid's dashed border, because a fade here would pose as a quiet day. A
+ * hovered or focused cell answers at once with the charts' own tooltip —
+ * one element the whole grid shares, anchored to the card and clamped to
+ * its edges.
  */
 function ActivityCalendar({
   daily,
@@ -664,11 +684,34 @@ function ActivityCalendar({
   daily: readonly AdminDailyUsage[];
   generatedAt: number;
 }): React.JSX.Element {
-  const weeks = calendarWeeks(daily);
-  const months = monthLabels(weeks);
-  const sparseMonths = thinMonthLabels(months, 2);
+  const allWeeks = calendarWeeks(daily);
+  // Undefined until the pre-paint measure below lands, so the first frame
+  // never paints a grid at a guessed width.
+  const [fitCount, setFitCount] = useState<number | undefined>(undefined);
+  const gridAreaRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const area = gridAreaRef.current;
+    if (area === null) return;
+    const refit = () => setFitCount(calendarWeeksThatFit(area.clientWidth));
+    refit();
+    const observer = new ResizeObserver(refit);
+    observer.observe(area);
+    return () => observer.disconnect();
+  }, []);
+  const weeks = fitCount === undefined ? [] : lastWeeks(allWeeks, fitCount);
+  // Labels are set on the whole year and sliced with the weeks, so a column
+  // is labeled only where a month opens inside the visible span: openings sit
+  // four or more columns apart, which is what keeps labels from ever
+  // colliding, where labeling a slice's mid-month first column would put two
+  // labels one column apart.
+  const months = monthLabels(allWeeks).slice(allWeeks.length - weeks.length);
   const partialDay = partialDayKey(daily, generatedAt);
-  const maxTotal = Math.max(...daily.map((day) => day.voiceCalls + day.attentionReviews));
+  const shownDays = weeks.flatMap((week) => week.days.filter((day) => day !== undefined));
+  const maxTotal = Math.max(...shownDays.map((day) => day.voiceCalls + day.attentionReviews), 0);
+  const spanLabel =
+    weeks.length === allWeeks.length
+      ? "trailing year"
+      : `last ${weeks.length} ${weeks.length === 1 ? "week" : "weeks"}`;
   const cardRef = useRef<HTMLDivElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [anchor, setAnchor] = useState<CalendarTooltipAnchor | undefined>(undefined);
@@ -703,55 +746,57 @@ function ActivityCalendar({
   return (
     <div ref={cardRef} className="relative rounded-lg border border-border bg-card p-5">
       <div className="mb-4 text-xs text-muted-foreground">
-        This account's trailing year, week by week
+        This account's {spanLabel}, week by week
       </div>
-      <div className="@container">
-        <div
-          className="grid w-full gap-[clamp(1px,0.35cqw,4px)] tabular-nums"
-          style={{
-            gridAutoFlow: "column",
-            gridTemplateColumns: `auto repeat(${weeks.length}, minmax(0, 1fr))`,
-            gridTemplateRows: `auto repeat(${DAYS_PER_WEEK}, auto)`,
-          }}
-        >
-          <div aria-hidden="true" />
-          {CALENDAR_WEEKDAY_LABELS.map((label) => (
-            <div
-              key={label}
-              className="self-center font-mono text-[min(10px,1.5cqw)] leading-none text-muted-foreground uppercase @xl:pr-2"
-            >
-              <span className="hidden @xl:inline">{label}</span>
-            </div>
-          ))}
-          {weeks.map((week, weekIndex) => (
-            <Fragment key={week.weekStart}>
-              <div className="font-mono text-[9px] leading-4 whitespace-nowrap text-muted-foreground uppercase @xl:text-[10px]">
-                <span className="@xl:hidden">{sparseMonths[weekIndex]}</span>
-                <span className="hidden @xl:inline">{months[weekIndex]}</span>
+      <div ref={gridAreaRef}>
+        {weeks.length === 0 ? null : (
+          <div
+            className="grid tabular-nums"
+            style={{
+              gap: CALENDAR_GAP_PX,
+              gridAutoFlow: "column",
+              gridTemplateColumns: `${CALENDAR_WEEKDAY_COLUMN_PX}px repeat(${weeks.length}, ${CALENDAR_CELL_PX}px)`,
+              gridTemplateRows: `auto repeat(${DAYS_PER_WEEK}, ${CALENDAR_CELL_PX}px)`,
+            }}
+          >
+            <div aria-hidden="true" />
+            {CALENDAR_WEEKDAY_LABELS.map((label) => (
+              <div
+                key={label}
+                className="self-center font-mono text-[10px] leading-none text-muted-foreground uppercase"
+              >
+                {label}
               </div>
-              {week.days.map((day, slot) =>
-                day === undefined ? (
-                  // biome-ignore lint/suspicious/noArrayIndexKey: an empty slot has no identity beyond its weekday position.
-                  <div key={slot} aria-hidden="true" />
-                ) : (
-                  <CalendarDayCell
-                    key={day.day}
-                    day={day}
-                    maxTotal={maxTotal}
-                    partialDay={partialDay}
-                    onShow={showTooltip}
-                    onHide={hideTooltip}
-                  />
-                ),
-              )}
-            </Fragment>
-          ))}
-        </div>
+            ))}
+            {weeks.map((week, weekIndex) => (
+              <Fragment key={week.weekStart}>
+                <div className="font-mono text-[10px] leading-4 whitespace-nowrap text-muted-foreground uppercase">
+                  {months[weekIndex]}
+                </div>
+                {week.days.map((day, slot) =>
+                  day === undefined ? (
+                    // biome-ignore lint/suspicious/noArrayIndexKey: an empty slot has no identity beyond its weekday position.
+                    <div key={slot} aria-hidden="true" />
+                  ) : (
+                    <CalendarDayCell
+                      key={day.day}
+                      day={day}
+                      maxTotal={maxTotal}
+                      partialDay={partialDay}
+                      onShow={showTooltip}
+                      onHide={hideTooltip}
+                    />
+                  ),
+                )}
+              </Fragment>
+            ))}
+          </div>
+        )}
       </div>
       <p className="mt-4 mb-0 text-xs text-muted-foreground">
-        Each cell is one UTC day across the trailing year, whatever window is chosen above — a
-        deeper fill is more hosted calls against this account's busiest day in the year, and the
-        outlined cell is today, still filling.
+        Each cell is one UTC day across the weeks shown, whatever window is chosen above — a deeper
+        fill is more hosted calls against the busiest day shown, and the dashed cell is today, still
+        filling.
       </p>
       {anchor !== undefined ? (
         <div

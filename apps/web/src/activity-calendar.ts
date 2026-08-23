@@ -75,19 +75,14 @@ export function monthLabels(
 }
 
 /**
- * Every `keepEvery`th of the labels `monthLabels` set, first kept, in their
- * columns. At widths where a year's thirteen labels would collide, dropping
- * whole labels keeps the survivors readable; squeezing all thirteen would
- * overlap them into none.
+ * The last `count` week columns — the visible slice of a calendar whose cells
+ * keep one fixed size, so a narrow surface shows fewer trailing weeks rather
+ * than smaller cells. The slice keeps the newest weeks, which is what keeps
+ * today's own column visible at any width.
  */
-export function thinMonthLabels(
-  labels: readonly (string | undefined)[],
-  keepEvery: number,
-): readonly (string | undefined)[] {
-  let ordinal = 0;
-  return labels.map((label) => {
-    if (label === undefined) return undefined;
-    ordinal += 1;
-    return (ordinal - 1) % keepEvery === 0 ? label : undefined;
-  });
+export function lastWeeks<Day extends { day: string }>(
+  weeks: readonly CalendarWeek<Day>[],
+  count: number,
+): readonly CalendarWeek<Day>[] {
+  return count >= weeks.length ? weeks : weeks.slice(weeks.length - count);
 }
