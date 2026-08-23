@@ -309,7 +309,7 @@ test("the guide distinguishes app identity from exact app opening", () => {
   assert.match(rendered, /app mark with an exact address is a button/);
   assert.match(rendered, /ChatGPT opens that Codex thread/);
   assert.match(rendered, /Superset opens its bound terminal/);
-  assert.match(rendered, /exact parent-thread record carries that Conductor association/);
+  assert.match(rendered, /Codex sub-agent spawned there keeps the Conductor association/);
   // A Conductor cloud chat leads with its agent's own mark, its Conductor
   // mark opens the exact chat, and a local one stays identification alone.
   assert.match(rendered, /leads?[^.]*with the agent running it/);
@@ -385,12 +385,12 @@ test("the facts describe creating a workspace, so Luke does not deny the capabil
   // The idle workspaces are the ones a cleanup ask is usually about, so the
   // guide teaches that they stand as rows at all — and which never do.
   assert.match(rendered, /no agent chat at all stands as its own idle row/);
-  assert.match(rendered, /settled by construction/);
+  assert.match(rendered, /agentless workspace row counts as settled/);
   assert.match(rendered, /main checkout and workspaces Superset already archived draw no row/);
   assert.match(rendered, /deleting is permanent/);
   assert.match(rendered, /single chat cannot be closed or removed on its own/);
   assert.match(rendered, /ask to archive one means exactly this delete/);
-  assert.match(rendered, /ask to archive one is taken as the one removal it does take/);
+  assert.match(rendered, /ask to archive one is taken as its Delete workspace control/);
   assert.match(rendered, /permanent, never filed away/);
 });
 
@@ -816,7 +816,7 @@ test("the sessions list fact says the options button wears an X that clears", ()
   // The X is a capability of the list itself, and a capability the guide does
   // not describe is one Luke will deny having — or misdescribe as only
   // un-pressing chips one at a time.
-  assert.match(fact.detail, /an X on its right that clears every chosen chip at once/);
+  assert.match(fact.detail, /An X on the options button clears every chosen chip at once/);
 });
 
 test("the guide describes the search, its three ways in, and their shared bound", () => {
@@ -839,9 +839,8 @@ test("the guide describes the search, its three ways in, and their shared bound"
   // A held search now outlives the panel, and the guide must say so with its
   // bound — clearing or closing the field is the one way a search is let go —
   // or Luke will promise words he forgot, or forget words he promised to keep.
-  assert.match(fact.detail, /clearing or closing is what lets a search go/);
   assert.match(fact.detail, /survives the panel closing and the app restarting/);
-  assert.match(fact.detail, /comes back with its field open/);
+  assert.match(fact.detail, /until its query is cleared or its field closed/);
 });
 
 test("the feedback fact says what a spoken open may do, and that sending stays by hand", () => {
