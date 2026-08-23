@@ -252,8 +252,9 @@ test("the standing instructions make Luke the coding agents' engineering manager
   const instructions = realtimeInstructions();
 
   assert.match(instructions, /engineering manager for the developer's coding agents/i);
-  assert.match(instructions, /start with the answer; do not repeat the user's request/i);
-  assert.match(instructions, /call a tool without announcing it/i);
+  assert.match(instructions, /answer in one or two sentences/i);
+  assert.match(instructions, /never end a reply with an offer of more help/i);
+  assert.match(instructions, /start with the answer or the tool call, announcing neither/i);
   assert.match(instructions, /when a tool call succeeds, say "done\."/i);
   assert.match(instructions, /unless the result itself is what the user asked to hear/i);
   assert.match(instructions, /explicit latest or most-recent ask resolves by the recency labels/i);
