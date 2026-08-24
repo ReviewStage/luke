@@ -27,44 +27,7 @@ export interface LoopbackPage {
   badge: string;
   title: string;
   body: string;
-  /**
-   * A success page the user needs nothing more from asks the browser to close
-   * its own tab once the outcome has had time to be read, saying so on the
-   * page while it counts down. Best-effort by design: a browser may refuse to
-   * close a tab the user navigated, so the countdown note removes itself on a
-   * refusal and the body keeps saying the tab can be closed by hand.
-   */
-  closesItself?: boolean;
 }
-
-/** Long enough to read the outcome; short enough to not overstay it. */
-const CLOSE_DELAY_SECONDS = 5;
-
-/**
- * Inline and fixed by the build like everything else on the page — the
- * self-contained rule above forbids fetching a script, not carrying one. The
- * script owns the countdown note's words outright: with scripting off nothing
- * would close, so nothing says it will, and a browser that refuses the close
- * is answered by taking the note away rather than leaving a promise standing.
- */
-const CLOSE_SCRIPT =
-  `<script>(function () {` +
-  `var left = ${CLOSE_DELAY_SECONDS};` +
-  `var note = document.getElementById("close-note");` +
-  `var say = function () {` +
-  ` note.textContent = "This tab will close itself in " + left + (left === 1 ? " second." : " seconds.");` +
-  `};` +
-  `say();` +
-  `var timer = setInterval(function () {` +
-  ` left -= 1;` +
-  ` if (left > 0) { say(); return; }` +
-  ` clearInterval(timer);` +
-  ` window.close();` +
-  ` setTimeout(function () { note.remove(); }, 400);` +
-  `}, 1000);` +
-  `})();</script>`;
-
-const CLOSE_NOTE = `<p class="close-note" id="close-note"></p>`;
 
 /**
  * The face, drawn from the same generated constants the renderer draws it
@@ -118,12 +81,6 @@ const PAGE_STYLE = `
   .pill[data-tone="attention"] { background: rgba(255, 160, 73, 0.14); color: #ffa049; }
   h1 { margin: 12px 0 8px; font-size: 1.375rem; line-height: 1.2; }
   p { margin: 0; color: rgba(255, 255, 255, 0.56); font-size: 0.9375rem; line-height: 1.6; }
-  .close-note {
-    margin-top: 18px;
-    font-size: 0.8125rem;
-    color: rgba(255, 255, 255, 0.38);
-    font-variant-numeric: tabular-nums;
-  }
 `;
 
 export function accountLoopbackPage(page: LoopbackPage): string {
@@ -141,7 +98,6 @@ export function accountLoopbackPage(page: LoopbackPage): string {
     markSvg() +
     `<div><span class="pill" data-tone="${page.tone}">${page.badge}</span></div>` +
     `<h1>${page.title}</h1><p>${page.body}</p>` +
-    (page.closesItself ? CLOSE_NOTE : "") +
-    `</section></main>${page.closesItself ? CLOSE_SCRIPT : ""}</body></html>`
+    `</section></main></body></html>`
   );
 }
