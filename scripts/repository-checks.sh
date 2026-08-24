@@ -154,6 +154,50 @@ if [[ -n "$extensionless_imports" ]]; then
     exit 1
 fi
 
+# Every package the web functions reach must have its own door in
+# server/core.ts. The Vercel builder compiles the TypeScript its *relative*
+# import graph reaches, but a bare `@sidecar/…` specifier it cannot follow: the
+# package's `exports` names `./src/index.js`, a file that exists only after
+# compilation, so the builder skips the package and ships functions whose
+# runtime import has nothing to resolve to. Nothing local reports the absence —
+# every toolchain in this repository substitutes the `.ts` back — so the first
+# report is FUNCTION_INVOCATION_FAILED on every deployed route, which is how
+# adding one `export * from "@sidecar/acts"` inside an already-doored package
+# took down sign-in. The closure is computed here from the doors' own bare
+# imports so the door list cannot fall behind the graph it exists to cover.
+core_doors_file="$SIDECAR_REPO_ROOT/apps/web/server/core.ts"
+doored_packages=$(grep -oE '"\.\./\.\./\.\./packages/[a-z-]+/src/index\.js"' "$core_doors_file" |
+    sed -E 's#.*/packages/([a-z-]+)/.*#\1#' | sort -u)
+reached_packages=$doored_packages
+frontier=$doored_packages
+while [[ -n "$frontier" ]]; do
+    next_frontier=""
+    for package_name in $frontier; do
+        imported=$(grep -rhoE '(from|import) "@sidecar/[a-z-]+"' \
+            "$SIDECAR_REPO_ROOT/packages/$package_name/src" --include='*.ts' \
+            --exclude='*.test.ts' 2>/dev/null |
+            sed -E 's#.*"@sidecar/([a-z-]+)"#\1#' | sort -u || true)
+        for imported_name in $imported; do
+            if ! grep -qx "$imported_name" <<<"$reached_packages"; then
+                reached_packages=$(printf '%s\n%s' "$reached_packages" "$imported_name")
+                next_frontier="$next_frontier $imported_name"
+            fi
+        done
+    done
+    frontier=$next_frontier
+done
+undoored_packages=""
+while IFS= read -r reached_name; do
+    if ! grep -qx "$reached_name" <<<"$doored_packages"; then
+        undoored_packages+="$reached_name"$'\n'
+    fi
+done <<<"$(sort -u <<<"$reached_packages")"
+if [[ -n "$undoored_packages" ]]; then
+    printf 'error: apps/web/server/core.ts is missing a door for packages its import graph reaches (the Vercel builder cannot follow bare @sidecar specifiers, so deployed functions crash at module load):\n%s\n' \
+        "$undoored_packages" >&2
+    exit 1
+fi
+
 # Packages must not reach into apps: the dependency points the other way, and
 # a relative path into apps/ evades the declared package graph, so typecheck
 # resolves it without seeing the package → app → package cycle it creates.
