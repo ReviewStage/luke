@@ -41,7 +41,13 @@ import {
   PANEL_FORM_FACTOR_LIST,
   type PanelFormFactor,
 } from "@sidecar/surface";
-import { isRecord, isWireString, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
+import {
+  isRecord,
+  isWireBoolean,
+  isWireString,
+  type UnparsedWireValue,
+  type WireRecord,
+} from "@sidecar/wire";
 import { parseVoiceHotkey } from "./voice-hotkey.js";
 
 // The ids themselves live in core, because the product-event vocabulary names
@@ -81,6 +87,7 @@ export type SettingsResetScope = (typeof SETTINGS_RESET_SCOPE)[keyof typeof SETT
 export const SETTING_SIDE_EFFECT = {
   NONE: "none",
   DOCK: "dock",
+  START_AT_LOGIN: "start-at-login",
   DISPLAYS: "displays",
   FORM_FACTOR: "form-factor",
   VOICE: "voice",
@@ -98,6 +105,12 @@ export type SettingSideEffect = (typeof SETTING_SIDE_EFFECT)[keyof typeof SETTIN
 
 export interface StoredAppSettings {
   showInDock: boolean;
+  /**
+   * Absent until something says otherwise, and that absence is the whole
+   * point: it is what tells a first launch, which registers Luke, from a
+   * removal the user made in System Settings, which stands.
+   */
+  startAtLogin?: boolean;
   voice?: RealtimeVoice;
   voiceSpeed?: RealtimeVoiceSpeed;
   voiceCaptions: boolean;
@@ -177,8 +190,9 @@ interface SettingDefinition<Field extends AppSettingField> {
 
 export type AppSettingGuideSettings = Omit<
   StoredAppSettings,
-  "voice" | "voiceSpeed" | "voiceSource" | "formFactor"
+  "voice" | "voiceSpeed" | "voiceSource" | "formFactor" | "startAtLogin"
 > & {
+  startAtLogin: boolean;
   voice: RealtimeVoice;
   voiceSpeed: RealtimeVoiceSpeed;
   voiceSource: VoiceSource;
@@ -388,6 +402,36 @@ export const APP_SETTING_SCHEMA = {
     mainProcessSideEffect: SETTING_SIDE_EFFECT.DOCK,
     spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
     analytics: { id: APP_SETTING_ID.SHOW_IN_DOCK, value: toggleAnalytics },
+  },
+  startAtLogin: {
+    field: "startAtLogin",
+    default: true,
+    // Optional on purpose: an unset value is "never said", which is what lets
+    // a first launch register Luke while a later removal made in System
+    // Settings stands. The default below is the value every consumer sees.
+    guard: (value: UnparsedWireValue) => optional(value, isWireBoolean),
+    settingsPage: SETTINGS_PAGE.APPEARANCE,
+    // No reset scope: re-running a system-level registration is a change
+    // nobody asked for, the reasoning that keeps `shareUsageData` out of one.
+    guideEntry: settingGuideEntry(
+      "startAtLogin",
+      [APP_SETTING_ID.START_AT_LOGIN],
+      (settings, defaultValue) => ({
+        id: APP_SETTING_ID.START_AT_LOGIN,
+        label: "Start Luke at login",
+        description: "Whether Luke starts himself when you log in to this Mac.",
+        kind: APP_SETTING_KIND.TOGGLE,
+        value: appToggleText(settings.startAtLogin),
+        // This field's stored shape is optional, but its declared default is
+        // concrete; the fallback only teaches the generic guide type that fact.
+        defaultValue: appToggleText(defaultValue ?? true),
+        adjustable: true,
+        manual: APPEARANCE_PAGE,
+      }),
+    ),
+    mainProcessSideEffect: SETTING_SIDE_EFFECT.START_AT_LOGIN,
+    spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
+    analytics: { id: APP_SETTING_ID.START_AT_LOGIN, value: toggleAnalytics },
   },
   voice: {
     field: "voice",

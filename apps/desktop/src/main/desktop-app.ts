@@ -116,6 +116,7 @@ import { registerSettingsRowsIpc } from "./ipc/settings-rows";
 import { registerTrackerConnectionIpc } from "./ipc/tracker-connection";
 import { registerVoiceRuntimeIpc } from "./ipc/voice-runtime";
 import { registerWindowSurfaceIpc } from "./ipc/window-surface";
+import { LoginItem, reconcileLoginItem } from "./login-item";
 import { MediaDuckController } from "./native/media-duck";
 import { MicrophoneRouteWatcher } from "./native/microphone-route";
 import { OutputVolumeWatcher } from "./native/output-volume";
@@ -562,6 +563,7 @@ const dock = new DockPresence({
   focusExpanded: (displayId) => panels.focusExpanded(displayId),
   iconDirectory: path.join(__dirname, "icon"),
 });
+const loginItem = new LoginItem({ enabled: !fixtureMode });
 
 /**
  * Starts watching whether the Mac's output would let Luke be heard. Not in a
@@ -1027,6 +1029,7 @@ function registerIpc(): void {
     applyVoiceCredential,
     hotkeys,
     dock,
+    loginItem,
     panels,
     realtimeCredentials: () => voiceCapabilities.realtimeCredentials,
     mediaDuck,
@@ -1983,6 +1986,22 @@ export function startDesktopApp(): void {
         },
         () => undefined,
       );
+      // A packaged Mac registers once when the optional stored value has never
+      // spoken. After that, macOS is authoritative: removing Luke in System
+      // Settings is mirrored into the preference instead of being re-imposed.
+      void settingsStore
+        .get(APP_SETTING_SCHEMA.startAtLogin.field)
+        .then(async (stored) => {
+          await reconcileLoginItem(
+            loginItem,
+            stored,
+            APP_SETTING_DEFAULTS.startAtLogin,
+            async (openAtLogin) => {
+              await settingsStore.set(APP_SETTING_SCHEMA.startAtLogin.field, openAtLogin);
+            },
+          );
+        })
+        .catch(() => undefined);
       // Armed from the settings file alone, like the status item, and for the
       // same reason. A file that cannot be read leaves the duck on, the same
       // answer a file that has never said gives.

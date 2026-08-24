@@ -300,6 +300,12 @@ export interface AppSettings {
    */
   showInDock: boolean;
   /**
+   * Whether Luke registers himself to start when this Mac logs in. Resolved to
+   * on by default here; the stored value remains optional so first launch can
+   * be distinguished from a later removal in System Settings.
+   */
+  startAtLogin: boolean;
+  /**
    * The voice Luke speaks with, as the settings resolve it: the one the user
    * chose, else the launch environment's, else the default — so the panel
    * marks the voice that would actually be heard, not just a stored value.

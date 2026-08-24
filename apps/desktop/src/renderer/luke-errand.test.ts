@@ -51,6 +51,7 @@ function settings(): AppSettings {
     secretStorage: SECRET_STORAGE.UNKNOWN,
     codexCloudConnection: CLI_CONNECTION.UNKNOWN,
     showInDock: false,
+    startAtLogin: true,
     voice: REALTIME_VOICE.CEDAR,
     voiceSpeed: REALTIME_VOICE_SPEED.NORMAL,
     voiceCaptions: false,

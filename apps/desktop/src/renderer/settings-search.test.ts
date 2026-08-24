@@ -32,6 +32,7 @@ function settings(overrides: Partial<AppSettings> = {}): AppSettings {
     voiceAvailable: true,
     voiceSource: VOICE_SOURCE.ACCOUNT,
     showInDock: false,
+    startAtLogin: true,
     voice: REALTIME_VOICE.CEDAR,
     voiceSpeed: REALTIME_VOICE_SPEED.NORMAL,
     voiceCaptions: false,

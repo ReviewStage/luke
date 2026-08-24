@@ -50,6 +50,7 @@ import type { StoredAccount } from "@sidecar/account";
 import type { CalendarAccountCredential } from "@sidecar/calendar";
 import { googleCalendarSignInConfig } from "@sidecar/calendar";
 import {
+  APP_SETTING_DEFAULTS,
   APP_SETTING_FIELDS,
   APP_SETTING_SCHEMA,
   type AppSettingField,
@@ -616,6 +617,9 @@ export class SettingsStore {
           }
         : undefined),
       showInDock: persisted.showInDock,
+      // Resolved for every renderer consumer; the optional stored value keeps
+      // "never said" distinct for the packaged launch-time registration.
+      startAtLogin: persisted.startAtLogin ?? APP_SETTING_DEFAULTS.startAtLogin,
       // Resolved the way the minter resolves it, so the panel marks the voice
       // that would actually be heard.
       voice:

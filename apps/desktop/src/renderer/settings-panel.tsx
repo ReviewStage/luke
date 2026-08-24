@@ -238,6 +238,8 @@ export interface PreferenceWrites {
    * and the row is where that answer belongs.
    */
   onShowInDockChange: (show: boolean) => Promise<string | undefined>;
+  /** Starts or removes Luke from this Mac's Login Items. */
+  onStartAtLoginChange: (start: boolean) => Promise<string | undefined>;
   /**
    * Stands Luke on every connected display, or brings him back to the main
    * one alone. The store answers with why when it refuses, and the row is
@@ -2580,6 +2582,13 @@ function AppearanceSection({
       className="settings-section settings-plain"
       style={cssCustomProperties({ "--row-index": 1 })}
     >
+      <SwitchRow
+        label="Start Luke at login"
+        errand={APP_SETTING_ID.START_AT_LOGIN}
+        changed={settings.startAtLogin !== APP_SETTING_DEFAULTS.startAtLogin}
+        checked={settings.startAtLogin}
+        onChange={preferences.onStartAtLoginChange}
+      />
       <SwitchRow
         label="Show Luke in the Dock"
         errand={APP_SETTING_ID.SHOW_IN_DOCK}
