@@ -1251,10 +1251,19 @@ export class SettingsStore {
     }
   }
 
-  /** Memoizes the in-flight read so concurrent first callers share one open. */
+  /** Shares one in-flight read, but lets a transient failure retry next time. */
   async #load(): Promise<PersistedSettings> {
-    this.#loading ??= this.#readPersisted().catch(() => defaultPersistedSettings());
-    return this.#loading;
+    const loading = this.#loading ?? this.#readPersisted();
+    this.#loading = loading;
+    try {
+      return await loading;
+    } catch (error) {
+      // Defaults belong to an absent or corrupt file, both handled by the
+      // reader. An unexpected I/O failure must not become writable defaults:
+      // forget only this failed attempt so the next read can try the file again.
+      if (this.#loading === loading) this.#loading = undefined;
+      throw error;
+    }
   }
 
   async #readPersisted(): Promise<PersistedSettings> {

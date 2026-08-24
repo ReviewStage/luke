@@ -202,18 +202,36 @@ function storeIn(
   return new SettingsStore(config);
 }
 
-test("a failed first load settles to defaults for every later read", async () => {
+test("a failed first load is retried before a later write", async (t) => {
+  const directory = await temporaryDirectory(t);
+  await fs.writeFile(
+    path.join(directory, SETTINGS_FILE_NAME),
+    JSON.stringify({
+      version: 2,
+      apiKeys: { [CONDUCTOR]: sealed(TEST_API_KEY) },
+      showInDock: true,
+    }),
+  );
+  let directoryReads = 0;
   const store = new SettingsStore({
     directory: () => {
-      throw Object.assign(new Error("permission denied"), { code: "EACCES" });
+      directoryReads += 1;
+      if (directoryReads === 1) {
+        throw Object.assign(new Error("permission denied"), { code: "EACCES" });
+      }
+      return directory;
     },
     cipher: testCipher(),
     environment: {},
   });
 
-  assert.equal(await store.get(APP_SETTING_SCHEMA.showInDock.field), false);
-  assert.equal(await store.get(APP_SETTING_SCHEMA.duckOtherMedia.field), true);
-  assert.equal(appSettingsView(await store.snapshot()).shareUsageData, true);
+  await assert.rejects(store.get(APP_SETTING_SCHEMA.showInDock.field), /permission denied/);
+  await store.set(APP_SETTING_SCHEMA.duckOtherMedia.field, false);
+
+  const reopened = storeIn(directory);
+  assert.equal(await reopened.readApiKey(CONDUCTOR), TEST_API_KEY);
+  assert.equal(await reopened.get(APP_SETTING_SCHEMA.showInDock.field), true);
+  assert.equal(await reopened.get(APP_SETTING_SCHEMA.duckOtherMedia.field), false);
 });
 
 async function readWorkspaceAgentDefault(store: SettingsStore, providerId: ProviderId) {
