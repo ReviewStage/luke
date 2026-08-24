@@ -1,3 +1,4 @@
+export { AGENT_IDENTITY, agentIdentityFor } from "./agent-identities.js";
 export { CompositeSessionProviderAdapter } from "./composite-provider-adapter.js";
 export {
   CLI_CONNECTION,
