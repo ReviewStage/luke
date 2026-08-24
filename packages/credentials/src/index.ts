@@ -16,7 +16,9 @@ export {
 } from "./credential-providers.js";
 export {
   accountLoopbackPage,
+  LOOPBACK_CONNECTION_SOURCE,
   LOOPBACK_PAGE_TONE,
+  type LoopbackConnectionSource,
   type LoopbackPage,
   type LoopbackPageTone,
 } from "./loopback-page.js";

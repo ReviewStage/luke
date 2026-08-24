@@ -135,26 +135,15 @@
   font-synthesis: none;
 }
 
-/* The sign-in and consent pages opt in with `class="dark"` on their root
-   element: they are the browser moments of the desktop sign-in, and the flow
-   ends on the loopback's dark card, so the theme holds from the first card to
-   the last instead of flashing light in the middle. The values are the
-   loopback page's own (`packages/credentials/src/loopback-page.ts`), restated
-   only for the tokens those two pages actually read — everything else stays
-   the light page's, unread here and drift waiting to happen if copied. */
+/* The admin dashboard and OAuth cards opt into this dark vocabulary. Ordinary
+   site pages use the light root tokens above. */
 .dark {
   color-scheme: dark;
 
   --background: #08090b;
   --foreground: rgba(255, 255, 255, 0.92);
 
-  /* The one value that deliberately leaves the loopback's own (#000 there):
-     the admin dashboard is a full page of card surfaces, and pure black on
-     this ground separated them by the 8%-white border alone, so an empty
-     region and a card read the same until the hairline resolved. A step
-     above the page (1.06:1) lets the grid read as raised surfaces before
-     borders do; the loopback keeps black because its single card is carried
-     by its own shadow. */
+  /* A step above the page (1.06:1) lets card surfaces read before borders do. */
   --card: #101114;
   --muted: rgba(255, 255, 255, 0.05);
   --muted-foreground: rgba(255, 255, 255, 0.56);

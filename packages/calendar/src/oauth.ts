@@ -9,6 +9,7 @@ import {
   accountLoopbackPage,
   codeChallenge,
   createCodeVerifier,
+  LOOPBACK_CONNECTION_SOURCE,
   LOOPBACK_PAGE_TONE,
 } from "@sidecar/credentials";
 import { isWireString, type UnparsedWireValue, unparsedWire, wireRecord } from "@sidecar/wire";
@@ -126,12 +127,14 @@ function signInPage(granted: boolean): string {
         badge: "Connected",
         title: "Connected to Google Calendar",
         body: "You can close this tab and return to Luke.",
+        source: LOOPBACK_CONNECTION_SOURCE.GOOGLE_CALENDAR,
       })
     : accountLoopbackPage({
         tone: LOOPBACK_PAGE_TONE.ATTENTION,
         badge: "Not connected",
         title: "Sign-in didn’t complete",
         body: "You can close this tab and try again from Luke.",
+        source: LOOPBACK_CONNECTION_SOURCE.GOOGLE_CALENDAR,
       });
 }
 

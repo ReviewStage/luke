@@ -1,6 +1,6 @@
 /**
- * The card the sign-in and consent windows are drawn as. Both pages are the
- * same object at two moments of one flow, so the surface is written once here
+ * The card the sign-in and consent windows are drawn as. Both pages sit in
+ * the same dark OAuth vocabulary, so the surface is written once here
  * rather than twice at two call sites that would drift.
  *
  * Deliberately not a component: the two pages differ in what the card holds,
@@ -11,14 +11,8 @@
 /** A single card, centered in the window, with nothing else on the page. */
 export const AUTH_SHELL = "grid min-h-screen place-items-center p-6";
 
-/**
- * The shadow is the loopback page's, not the landing page's: both pages here
- * run dark (`class="dark"` on their HTML roots), where a light-page shadow at
- * a few percent black disappears, and the flow should end on the same card it
- * ran on.
- */
 export const AUTH_CARD =
-  "w-full max-w-[390px] rounded-lg border border-border bg-card px-8 py-12 text-center shadow-[0_24px_80px_rgba(0,0,0,0.42)]";
+  "w-full max-w-[430px] rounded-lg border border-border bg-card px-8 py-10 text-center shadow-[0_24px_80px_rgba(0,0,0,0.42)]";
 
 export const AUTH_TITLE = "mt-4 mb-2 text-[1.75rem] leading-[1.15] font-semibold";
 
