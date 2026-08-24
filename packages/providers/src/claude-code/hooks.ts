@@ -1,5 +1,6 @@
 import os from "node:os";
 import path from "node:path";
+import { HOOK_EVENT } from "../shared/hook-events.js";
 import {
   HOOK_ENTRY_NESTING,
   type ObservationHookSpec,
@@ -37,12 +38,12 @@ const CLAUDE_HOOK_TIMEOUT_SECONDS = 10;
  * envelope Claude Code pipes in can choose what lands in the spool.
  */
 export const CLAUDE_HOOK_EVENT = {
-  SESSION_START: "session-start",
-  PROMPT: "prompt",
-  STOP: "stop",
-  STOP_FAILURE: "stop-failure",
-  NOTIFICATION: "notification",
-  SESSION_END: "session-end",
+  SESSION_START: HOOK_EVENT.SESSION_START,
+  PROMPT: HOOK_EVENT.PROMPT,
+  STOP: HOOK_EVENT.STOP,
+  STOP_FAILURE: HOOK_EVENT.STOP_FAILURE,
+  NOTIFICATION: HOOK_EVENT.NOTIFICATION,
+  SESSION_END: HOOK_EVENT.SESSION_END,
 } as const;
 
 export type ClaudeHookEvent = (typeof CLAUDE_HOOK_EVENT)[keyof typeof CLAUDE_HOOK_EVENT];

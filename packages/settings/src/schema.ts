@@ -24,6 +24,7 @@ import {
   isSessionFilter,
   isWorkspaceProviderId,
   PROVIDER_ID,
+  PROVIDER_IDENTITY_BY_ID,
   type ProviderId,
   parseWorkspaceAgentKindSelection,
   parseWorkspaceAgentSelection,
@@ -181,15 +182,13 @@ function voiceSpeedWord(speed: RealtimeVoiceSpeed | undefined): string {
 
 function workspaceProviderName(providerId: WorkspaceProviderId): string {
   if (providerId === SUPERSET_WORKSPACE_PROVIDER_ID) return "Superset";
-  // Local Conductor names itself apart from the cloud provider's plain
-  // "Conductor"; the string mirrors the adapter's own display name, which lives
-  // a layer up and must not be imported down here.
-  if (providerId === CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID) return "Conductor (local)";
+  if (providerId === CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID) {
+    return `${PROVIDER_IDENTITY_BY_ID[PROVIDER_ID.CONDUCTOR].displayName} (local)`;
+  }
   if (isCredentialProviderId(providerId)) return CREDENTIAL_PROVIDERS[providerId].displayName;
   // The one workspace-capable provider with no credential row to take a
   // display name from.
-  if (providerId === PROVIDER_ID.CODEX) return "Codex";
-  return providerId;
+  return isProviderId(providerId) ? PROVIDER_IDENTITY_BY_ID[providerId].displayName : providerId;
 }
 
 function settingGuideEntry<Field extends string>(

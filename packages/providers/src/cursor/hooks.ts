@@ -1,3 +1,4 @@
+import { HOOK_EVENT } from "../shared/hook-events.js";
 import {
   HOOK_ENTRY_NESTING,
   type ObservationHookSpec,
@@ -41,10 +42,10 @@ const CURSOR_HOOK_TIMEOUT_SECONDS = 10;
  * marker keeps that verdict.
  */
 export const CURSOR_HOOK_EVENT = {
-  SESSION_START: "session-start",
-  PROMPT: "prompt",
-  STOP: "stop",
-  SESSION_END: "session-end",
+  SESSION_START: HOOK_EVENT.SESSION_START,
+  PROMPT: HOOK_EVENT.PROMPT,
+  STOP: HOOK_EVENT.STOP,
+  SESSION_END: HOOK_EVENT.SESSION_END,
 } as const;
 
 export type CursorHookEvent = (typeof CURSOR_HOOK_EVENT)[keyof typeof CURSOR_HOOK_EVENT];
