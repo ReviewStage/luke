@@ -5,7 +5,7 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
-import type { AccountProvider } from "../../../apps/desktop/src/shared/contracts.js";
+import type { AccountProvider } from "./snapshot.js";
 
 export interface AccountTokens {
   accessToken: string;

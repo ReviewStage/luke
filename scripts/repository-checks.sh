@@ -154,6 +154,19 @@ if [[ -n "$extensionless_imports" ]]; then
     exit 1
 fi
 
+# Packages must not reach into apps: the dependency points the other way, and
+# a relative path into apps/ evades the declared package graph, so typecheck
+# resolves it without seeing the package → app → package cycle it creates.
+# Every name the app re-exports originates in a package; import it from the
+# defining package instead.
+package_app_imports=$(grep -rEn '(from|import) "[^"]*apps/[^"]*"' \
+    "$SIDECAR_REPO_ROOT"/packages/*/src || true)
+if [[ -n "$package_app_imports" ]]; then
+    printf 'error: packages must not import from apps/ (the path import hides a package → app → package cycle from the declared dependency graph):\n%s\n' \
+        "$package_app_imports" >&2
+    exit 1
+fi
+
 # The renderer is a sandboxed browser context: it reaches the main process
 # through the preload bridge alone, so `#shared/bridge` and `#shared/wire/*`
 # are its widest doors. A `#main/` import compiles and bundles happily and then fails in the

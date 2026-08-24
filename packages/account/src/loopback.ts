@@ -7,7 +7,7 @@ import {
   createCodeVerifier,
   LOOPBACK_PAGE_TONE,
 } from "@sidecar/oauth";
-import type { AccountProvider } from "../../../apps/desktop/src/shared/contracts.js";
+import type { AccountProvider } from "./snapshot.js";
 
 const CALLBACK_PATH = "/callback";
 const LOOPBACK_HOST = "127.0.0.1";
