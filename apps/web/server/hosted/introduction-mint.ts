@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import {
+  introductionSessionConfig,
   type RealtimeSessionOptions,
-  realtimeClientSecretRequest,
   text as trimmedText,
 } from "../core.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
@@ -37,10 +37,16 @@ export const INTRODUCTION_SECRET_EXPIRY = {
   SECONDS: 60,
 } as const;
 
-/** The ordinary mint's session document with the introduction's expiry cap. */
+/**
+ * The introduction's own session document with its expiry cap. Minted, not
+ * merely asked for after connect: this endpoint answers callers with no
+ * account, so the credential itself must declare no tools and the
+ * introduction's instructions — a bound the client re-asserts on connect but
+ * could never be trusted to add.
+ */
 export function introductionClientSecretRequest(options: RealtimeSessionOptions = {}) {
   return {
-    ...realtimeClientSecretRequest(options),
+    session: introductionSessionConfig(options),
     expires_after: {
       anchor: INTRODUCTION_SECRET_EXPIRY.ANCHOR,
       seconds: INTRODUCTION_SECRET_EXPIRY.SECONDS,
@@ -65,10 +71,14 @@ const SHARED_CALLER_BUCKET = "no-address";
  * rather than minting unmetered.
  */
 export function introductionCallerKey(request: Request): string {
+  // The platform's own single-valued header first: a forwarded chain's first
+  // hop is whatever the client told the first proxy, so on a deployment that
+  // writes both, the spoofable one must only ever be the fallback. A caller
+  // rotating addresses past the per-caller cap still lands on the global one.
   const forwarded = request.headers.get(CALLER_ADDRESS_HEADER.FORWARDED_FOR) ?? undefined;
   const address =
-    trimmedText(forwarded?.split(",")[0]) ??
-    trimmedText(request.headers.get(CALLER_ADDRESS_HEADER.REAL_IP) ?? undefined);
+    trimmedText(request.headers.get(CALLER_ADDRESS_HEADER.REAL_IP) ?? undefined) ??
+    trimmedText(forwarded?.split(",")[0]);
   if (!address) return SHARED_CALLER_BUCKET;
   return createHash("sha256").update(address).digest("hex");
 }

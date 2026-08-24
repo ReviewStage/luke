@@ -17,6 +17,12 @@ export {
   sessionActConversationEntry,
 } from "./conversation-history.js";
 export {
+  type IntroductionLine,
+  introductionSessionConfig,
+  introductionSessionSyncEvents,
+  introductionSpeechEvents,
+} from "./introduction.js";
+export {
   MAXIMUM_PRESS_AUDIO_MS,
   PRESS_AUDIO_SAMPLE_RATE,
   PressAudioBuffer,

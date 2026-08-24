@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { REALTIME_DEFAULTS, REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
+import {
+  REALTIME_DEFAULTS,
+  REALTIME_VOICE,
+  REALTIME_VOICE_SPEED,
+  realtimeInstructions,
+} from "@sidecar/realtime";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
 import {
   handleIntroductionMint,
@@ -88,6 +93,12 @@ test("a mint hands back a short-capped credential aimed at OpenAI's own calls en
     seconds: INTRODUCTION_SECRET_EXPIRY.SECONDS,
   });
   assert.equal(sent.session.model, REALTIME_DEFAULTS.MODEL);
+  // The bound lives in the minted document itself: an accountless credential
+  // must declare no tools and no way to choose one, whatever a client asks
+  // for after connecting.
+  assert.deepEqual(sent.session.tools, []);
+  assert.equal(sent.session.tool_choice, "none");
+  assert.notEqual(sent.session.instructions, realtimeInstructions());
   assert.equal(sent.session.audio.output.voice, REALTIME_VOICE.MARIN);
   assert.equal(sent.session.audio.output.speed, REALTIME_VOICE_SPEED.QUICK);
   assert.equal(sent.session.audio.input.turn_detection, null);
@@ -180,6 +191,17 @@ test("the caller key reads the proxy's first forwarded address, and shares one b
     }),
   );
   assert.equal(realIp, direct);
+
+  // With both present, the platform's single-valued header wins: the
+  // forwarded chain's first hop is client-controlled and must never out-vote
+  // it.
+  const spoofedChain = introductionCallerKey(
+    new Request("https://luke.test/api/voice/introduction-mint", {
+      method: "POST",
+      headers: { "x-forwarded-for": "203.0.113.99, 10.0.0.1", "x-real-ip": CALLER_IP },
+    }),
+  );
+  assert.equal(spoofedChain, direct);
 
   const anonymous = introductionCallerKey(
     new Request("https://luke.test/api/voice/introduction-mint", { method: "POST" }),
