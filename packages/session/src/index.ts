@@ -33,6 +33,8 @@ export {
   SUPERSET_WORKSPACE_PROVIDER_ID,
   staleWorkspaceProjectDefaults,
   WORKSPACE_TASK_SUPPORT,
+  type WorkspaceAgentDefaults,
+  type WorkspaceAgentKindSelection,
   type WorkspaceAgentModels,
   type WorkspaceAgentSelection,
   type WorkspaceProject,
@@ -122,6 +124,7 @@ export { InMemorySessionRegistry } from "./session-registry.js";
 export {
   isListedWorkspaceAgentModel,
   isWorkspaceAgentSelection,
+  parseWorkspaceAgentKindSelection,
   parseWorkspaceAgentSelection,
   WORKSPACE_AGENT_MODELS,
   workspaceAgentModelLabel,

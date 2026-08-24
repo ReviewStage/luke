@@ -1408,7 +1408,11 @@ export function App(): React.JSX.Element {
   const changeSupersetAgentDefault = useCallback(
     async (agent: string | undefined) =>
       applySettingsReply(
-        await window.sidecar.updateSetting(APP_SETTING_SCHEMA.supersetAgentDefault.field, agent),
+        await window.sidecar.updateSettingEntry(
+          APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
+          SUPERSET_WORKSPACE_PROVIDER_ID,
+          agent === undefined ? undefined : { agent },
+        ),
       ),
     [applySettingsReply],
   );
@@ -3444,7 +3448,8 @@ export function App(): React.JSX.Element {
                 onDisconnect: disconnectLinear,
               },
               superset: (() => {
-                const supersetAgentDefault = (settings ?? bootstrap.settings).supersetAgentDefault;
+                const supersetAgentDefault = (settings ?? bootstrap.settings)
+                  .workspaceAgentDefaults?.[SUPERSET_WORKSPACE_PROVIDER_ID]?.agent;
                 const superset: SupersetControl = {
                   installed: bootstrap.supersetInstalled,
                   connected: supersetConnected ?? bootstrap.supersetConnected,

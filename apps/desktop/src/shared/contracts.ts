@@ -25,12 +25,12 @@ import type {
   ObservedWorkspaceProject,
   ProviderActResult,
   ProviderControlResult,
-  ProviderId,
   ProviderMessageResult,
   ProviderWorkspaceResult,
   SessionApplicationId,
   SessionFilter,
   SessionIdentity,
+  WorkspaceAgentDefaults,
   WorkspaceAgentSelection,
   WorkspaceProviderId,
 } from "@sidecar/session";
@@ -420,13 +420,15 @@ export interface AppSettings {
    */
   defaultWorkspaceProvider?: WorkspaceProviderId;
   /**
-   * The agent kind and model new workspaces start with, per provider, each
-   * entry absent while that provider's own defaults stand. Keyed by provider
-   * id and held to the build's documented table for that provider — a pairing
-   * outside it is dropped rather than honoured, because it names nothing the
-   * provider's endpoints take.
+   * The agent new workspaces start with, per provider, each entry absent
+   * while that provider's own defaults stand. Keyed by workspace provider id:
+   * a provider with a build-fixed models table holds an agent-and-model
+   * pairing held to that table — a pairing outside it is dropped rather than
+   * honoured, because it names nothing the provider's endpoints take — and
+   * Superset, whose agents are observed presets with no model choice
+   * documented, holds the agent kind alone.
    */
-  workspaceAgentDefaults?: Readonly<Partial<Record<ProviderId, WorkspaceAgentSelection>>>;
+  workspaceAgentDefaults?: WorkspaceAgentDefaults;
   /**
    * The project a conversational ask creates a workspace in when the ask
    * names none, per provider, each entry absent until one has been chosen. It
@@ -438,8 +440,6 @@ export interface AppSettings {
    * still offers that exact project target.
    */
   workspaceProjectDefaults?: Readonly<Partial<Record<WorkspaceProviderId, string>>>;
-  /** The configured Superset agent used when a creation ask names none. */
-  supersetAgentDefault?: string;
 }
 
 /**

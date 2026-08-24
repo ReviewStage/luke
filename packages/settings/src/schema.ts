@@ -25,9 +25,12 @@ import {
   isWorkspaceProviderId,
   PROVIDER_ID,
   type ProviderId,
+  parseWorkspaceAgentKindSelection,
   parseWorkspaceAgentSelection,
   type SessionFilter,
   SUPERSET_WORKSPACE_PROVIDER_ID,
+  type WorkspaceAgentDefaults,
+  type WorkspaceAgentKindSelection,
   type WorkspaceAgentSelection,
   type WorkspaceProviderId,
   workspaceAgentModelLabel,
@@ -115,9 +118,8 @@ export interface StoredAppSettings {
   /** The session list's held search words, absent while nothing is searched. */
   sessionSearchQuery?: string;
   defaultWorkspaceProvider?: WorkspaceProviderId;
-  workspaceAgentDefaults?: Readonly<Partial<Record<ProviderId, WorkspaceAgentSelection>>>;
+  workspaceAgentDefaults?: WorkspaceAgentDefaults;
   workspaceProjectDefaults?: Readonly<Partial<Record<WorkspaceProviderId, string>>>;
-  supersetAgentDefault?: string;
 }
 
 export type AppSettingField = keyof StoredAppSettings;
@@ -291,8 +293,14 @@ function workspaceAgentDefaults(
   if (!isRecord(value)) {
     return invalid(undefined);
   }
-  const defaults: Partial<Record<ProviderId, WorkspaceAgentSelection>> = {};
+  const defaults: Partial<Record<ProviderId, WorkspaceAgentSelection>> &
+    Partial<Record<typeof SUPERSET_WORKSPACE_PROVIDER_ID, WorkspaceAgentKindSelection>> = {};
   for (const [providerId, selection] of Object.entries(value)) {
+    if (providerId === SUPERSET_WORKSPACE_PROVIDER_ID) {
+      const parsed = parseWorkspaceAgentKindSelection(selection);
+      if (parsed) defaults[SUPERSET_WORKSPACE_PROVIDER_ID] = parsed;
+      continue;
+    }
     const parsed = parseWorkspaceAgentSelection(providerId, selection);
     if (!isProviderId(providerId) || !parsed) continue;
     defaults[providerId] = parsed;
@@ -799,7 +807,10 @@ export const APP_SETTING_SCHEMA = {
     default: undefined,
     guard: workspaceAgentDefaults,
     entry: {
-      isKey: isProviderId,
+      // Local Conductor is deliberately not a key: its creation link
+      // documents no agent choice, so no entry could ever steer one.
+      isKey: (value): value is ProviderId | typeof SUPERSET_WORKSPACE_PROVIDER_ID =>
+        isWireString(value) && (value === SUPERSET_WORKSPACE_PROVIDER_ID || isProviderId(value)),
       same: (current, next) =>
         current?.agent === next?.agent &&
         current?.model === next?.model &&
@@ -808,9 +819,15 @@ export const APP_SETTING_SCHEMA = {
     settingsPage: SETTINGS_PAGE.CONNECTIONS,
     guideEntry: settingGuideEntry(
       "workspaceAgentDefaults",
-      [APP_SETTING_ID.WORKSPACE_AGENT_MODEL, APP_SETTING_ID.WORKSPACE_AGENT_EFFORT],
+      [
+        APP_SETTING_ID.WORKSPACE_AGENT_MODEL,
+        APP_SETTING_ID.WORKSPACE_AGENT_EFFORT,
+        APP_SETTING_ID.SUPERSET_AGENT,
+      ],
       (settings) => {
         const chosen = settings.workspaceAgentDefaults?.[PROVIDER_ID.CONDUCTOR];
+        const supersetAgent =
+          settings.workspaceAgentDefaults?.[SUPERSET_WORKSPACE_PROVIDER_ID]?.agent;
         const chosenAgent = chosen
           ? workspaceAgentModels(PROVIDER_ID.CONDUCTOR).find(
               (entry) => entry.agent === chosen.agent,
@@ -861,13 +878,26 @@ export const APP_SETTING_SCHEMA = {
                 },
               ]
             : []),
+          {
+            id: APP_SETTING_ID.SUPERSET_AGENT,
+            label: "New Superset sessions run",
+            description:
+              "Which configured Superset agent starts when a creation ask names none. Unset, Luke asks which agent to use.",
+            kind: APP_SETTING_KIND.CHOICE,
+            value: supersetAgent ?? ASK_EACH_TIME_CHOICE,
+            choices: [ASK_EACH_TIME_CHOICE, ...(supersetAgent ? [supersetAgent] : [])],
+            defaultValue: ASK_EACH_TIME_CHOICE,
+            adjustable: false,
+            manual: `${CONNECTIONS_PAGE}, under Superset`,
+          },
         ];
       },
     ),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.NONE,
-    // The model and the effort ride one stored write, so one id counts the
-    // pair: a separate effort count would say a second change happened where
-    // the developer made one.
+    // Every entry rides one stored write, so one id counts them all — the
+    // Conductor pairing with its effort, and the Superset kind alike: a
+    // separate count per facet would say a second change happened where the
+    // developer made one.
     analytics: { id: APP_SETTING_ID.WORKSPACE_AGENT_MODEL, value: choiceAnalytics },
   },
   workspaceProjectDefaults: {
@@ -884,41 +914,6 @@ export const APP_SETTING_SCHEMA = {
     // Observed project names and defaults travel in the workspace-project context.
     guideEntry: settingGuideEntry("workspaceProjectDefaults", [], () => undefined),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.NONE,
-  },
-  supersetAgentDefault: {
-    field: "supersetAgentDefault",
-    default: undefined,
-    guard: (value) =>
-      optional(
-        value,
-        (candidate): candidate is string =>
-          isWireString(candidate) && /^[a-z0-9][a-z0-9-]{0,79}$/u.test(candidate),
-      ),
-    settingsPage: SETTINGS_PAGE.CONNECTIONS,
-    resetScope: SETTINGS_RESET_SCOPE.WORKSPACES,
-    guideEntry: settingGuideEntry(
-      "supersetAgentDefault",
-      [APP_SETTING_ID.SUPERSET_AGENT],
-      (settings) => [
-        {
-          id: APP_SETTING_ID.SUPERSET_AGENT,
-          label: "New Superset sessions run",
-          description:
-            "Which configured Superset agent starts when a creation ask names none. Unset, Luke asks which agent to use.",
-          kind: APP_SETTING_KIND.CHOICE,
-          value: settings.supersetAgentDefault ?? ASK_EACH_TIME_CHOICE,
-          choices: [
-            ASK_EACH_TIME_CHOICE,
-            ...(settings.supersetAgentDefault ? [settings.supersetAgentDefault] : []),
-          ],
-          defaultValue: ASK_EACH_TIME_CHOICE,
-          adjustable: false,
-          manual: `${CONNECTIONS_PAGE}, under Superset`,
-        },
-      ],
-    ),
-    mainProcessSideEffect: SETTING_SIDE_EFFECT.NONE,
-    analytics: { id: APP_SETTING_ID.SUPERSET_AGENT, value: choiceAnalytics },
   },
 } as const satisfies {
   [Field in AppSettingField]: SettingDefinition<Field>;

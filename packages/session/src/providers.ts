@@ -441,6 +441,31 @@ export interface WorkspaceAgentSelection {
   effort?: string;
 }
 
+/**
+ * The agent kind a user chose for new workspaces on a provider whose agent
+ * kinds are observed presets rather than a build-fixed table, and which
+ * documents no model choice (Superset today). The `never` fields are the
+ * boundary stated as a type: no model or effort can ride beside a kind the
+ * provider's endpoints take alone.
+ */
+export interface WorkspaceAgentKindSelection {
+  agent: string;
+  model?: never;
+  effort?: never;
+}
+
+/**
+ * The chosen defaults for new workspaces, one entry per workspace provider
+ * that documents an agent choice at all: a provider with a build-fixed models
+ * table holds a full selection, and Superset holds the kind alone. Local
+ * Conductor's creation link documents no agent, model, or name, so it can
+ * hold no entry.
+ */
+export type WorkspaceAgentDefaults = Readonly<
+  Partial<Record<ProviderId, WorkspaceAgentSelection>> &
+    Partial<Record<typeof SUPERSET_WORKSPACE_PROVIDER_ID, WorkspaceAgentKindSelection>>
+>;
+
 /** A user-asked request for a new workspace in one reported project. */
 export interface ProviderWorkspaceRequest {
   providerProjectId: string;
