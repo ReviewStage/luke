@@ -15,7 +15,7 @@ import {
   type SessionProvider,
 } from "@sidecar/session";
 import { SESSION_URGENCY } from "@sidecar/surface";
-import type { AppBootstrap } from "#shared/contracts";
+import type { AppBootstrap } from "#shared/wire/session";
 import {
   actsOnWorkspace,
   arrangeSessions,

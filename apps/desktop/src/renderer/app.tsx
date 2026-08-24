@@ -55,32 +55,32 @@ import {
 } from "react";
 import { APPLE_CALENDAR_ACCESS, APPLE_CALENDAR_ID } from "#shared/apple-calendar";
 import { CONSENT_SERVICE_ID, type ConsentServiceId } from "#shared/consent-services";
+import type { AccountProvider, AccountSnapshot } from "#shared/wire/account";
+import { ACCOUNT_STATUS, CREDENTIAL_SOURCE } from "#shared/wire/account";
+import type { OutputAudioState } from "#shared/wire/audio";
+import type { ObservedAccountCalendars } from "#shared/wire/calendar";
 import type {
-  AccountProvider,
-  AccountSnapshot,
   AppBootstrap,
-  AppSettings,
   DisplayDiagnostic,
-  ObservedAccountCalendars,
-  OutputAudioState,
   SessionOpenResult,
   SessionReplayBootstrap,
-  SettingsResetScope,
-  SettingsUpdateResult,
   SupersetSignInSnapshot,
-  UpdateSnapshot,
-  VoiceSource,
   WorkspaceProviderId,
-} from "#shared/contracts";
+} from "#shared/wire/session";
 import {
-  ACCOUNT_STATUS,
-  CREDENTIAL_SOURCE,
   isWorkspaceProviderId,
   SESSION_OPEN_RESULT_STATUS,
   SUPERSET_SIGN_IN_STAGE,
   SUPERSET_WORKSPACE_PROVIDER_ID,
-  VOICE_SOURCE,
-} from "#shared/contracts";
+} from "#shared/wire/session";
+import type {
+  AppSettings,
+  SettingsResetScope,
+  SettingsUpdateResult,
+  VoiceSource,
+} from "#shared/wire/settings";
+import { VOICE_SOURCE } from "#shared/wire/settings";
+import type { UpdateSnapshot } from "#shared/wire/update";
 import { ASK_LUKE_INPUT_ID, focusAskField } from "./ask-luke";
 import { type ConsentConnectEntry, ConsentConnectSlot } from "./consent-connect-slot";
 import type { CredentialEntry, CredentialEntryControl } from "./credential-entry";

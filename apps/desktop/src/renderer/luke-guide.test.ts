@@ -17,15 +17,16 @@ import {
 import { PROVIDER_ID, type WorkspaceAgentSelection } from "@sidecar/session";
 import { VOICE_SOURCE } from "@sidecar/settings";
 import { PANEL_FORM_FACTOR } from "@sidecar/surface";
-import type { AppSettings, SettingsUpdateResult, UpdateSnapshot } from "#shared/contracts";
 import {
   ACCOUNT_PROVIDER,
   ACCOUNT_STATUS,
-  CLI_CONNECTION,
   CREDENTIAL_SOURCE,
   SECRET_STORAGE,
-  UPDATE_STATUS,
-} from "#shared/contracts";
+} from "#shared/wire/account";
+import type { AppSettings, SettingsUpdateResult } from "#shared/wire/settings";
+import { CLI_CONNECTION } from "#shared/wire/settings";
+import type { UpdateSnapshot } from "#shared/wire/update";
+import { UPDATE_STATUS } from "#shared/wire/update";
 import { spokenSettingBridge } from "#testing/spoken-setting-bridge";
 import {
   APP_SETTING_ID,

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { SUPERSET_SIGN_IN_STAGE, type SupersetSignInSnapshot } from "#shared/contracts";
+import { SUPERSET_SIGN_IN_STAGE, type SupersetSignInSnapshot } from "#shared/wire/session";
 import { SupersetSignInSlot } from "./superset-sign-in-slot";
 
 function render(state: SupersetSignInSnapshot): string {

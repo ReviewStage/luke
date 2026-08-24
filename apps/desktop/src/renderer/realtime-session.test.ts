@@ -5355,5 +5355,5 @@ test("a spoken tool call is still validated in both processes", () => {
   assert.doesNotMatch(main, /\bissueToolAction\b/);
   assert.doesNotMatch(main, /\bappToolAction\b/);
   assert.match(main, /sessionRegistry\.get/);
-  assert.match(main, /channels\.executeIssueAction/);
+  assert.match(main, /BRIDGE\.executeIssueAction/);
 });

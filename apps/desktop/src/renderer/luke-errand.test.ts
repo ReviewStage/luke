@@ -9,14 +9,10 @@ import {
 } from "@sidecar/guide";
 import { REALTIME_VOICE, REALTIME_VOICE_SPEED, SESSION_LIST_ALL } from "@sidecar/realtime";
 import { PANEL_FORM_FACTOR } from "@sidecar/surface";
-import type { AppSettings } from "#shared/contracts";
-import {
-  CLI_CONNECTION,
-  CREDENTIAL_SOURCE,
-  SECRET_STORAGE,
-  UPDATE_STATUS,
-  VOICE_SOURCE,
-} from "#shared/contracts";
+import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "#shared/wire/account";
+import type { AppSettings } from "#shared/wire/settings";
+import { CLI_CONNECTION, VOICE_SOURCE } from "#shared/wire/settings";
+import { UPDATE_STATUS } from "#shared/wire/update";
 import {
   captionRoom,
   ERRAND_TARGET,

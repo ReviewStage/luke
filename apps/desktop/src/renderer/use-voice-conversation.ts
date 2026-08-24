@@ -30,12 +30,8 @@ import {
 } from "@sidecar/session";
 import { TALK_KEY_RELEASE, talkKeyRelease } from "@sidecar/settings";
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type {
-  MicrophoneStatus,
-  SessionOpenResult,
-  VoiceHotkeyState,
-  WorkspaceProviderId,
-} from "#shared/contracts";
+import type { MicrophoneStatus, VoiceHotkeyState } from "#shared/wire/audio";
+import type { SessionOpenResult, WorkspaceProviderId } from "#shared/wire/session";
 import { askRefusal } from "./ask-luke";
 import { voiceQuotaSpentNote } from "./microphone-access";
 import { openPreferredMicrophone } from "./microphone-choice";

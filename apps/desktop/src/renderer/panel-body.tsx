@@ -11,13 +11,8 @@ import {
 import { SESSION_URGENCY } from "@sidecar/surface";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { useCallback, useRef, useState } from "react";
-import {
-  ACCOUNT_STATUS,
-  type AccountProvider,
-  type AccountSnapshot,
-  SESSION_OPEN_RESULT_STATUS,
-  type SessionOpenResult,
-} from "#shared/contracts";
+import { ACCOUNT_STATUS, type AccountProvider, type AccountSnapshot } from "#shared/wire/account";
+import { SESSION_OPEN_RESULT_STATUS, type SessionOpenResult } from "#shared/wire/session";
 import { type AskHandler, AskLuke } from "./ask-luke";
 import { PANEL_TAB, type PanelTab, TabBar } from "./panel-tabs";
 import { AudioBadge, CloudBadge, ProviderMark } from "./provider-marks";
