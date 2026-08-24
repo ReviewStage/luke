@@ -493,5 +493,8 @@ test("offers approving the plan only while Jules is holding one, and sends no bo
   // Jules documents an empty request for an approval.
   assert.equal(write?.contentType, undefined);
   assert.equal(write?.body, undefined);
-  assert.deepEqual(refused, { status: "unsupported" });
+  assert.deepEqual(refused, {
+    status: "unsupported",
+    reason: "That act is not supported by the latest observation.",
+  });
 });

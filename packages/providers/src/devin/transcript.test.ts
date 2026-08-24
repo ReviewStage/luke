@@ -8,15 +8,16 @@ import type { MutableWireRecord, ParsedJsonObject } from "@sidecar/wire/testing"
 import { OMISSION_MARKER } from "../shared/local-transcript.js";
 import { DevinLocalSessionAdapter } from "./local-adapter.js";
 
-function readDevinSessionTranscript(request: {
+async function readDevinSessionTranscript(request: {
   cliDirectory?: string;
   providerSessionId: string;
   maximumRenderedLength?: number;
 }): Promise<string | undefined> {
-  return new DevinLocalSessionAdapter({
+  const result = await new DevinLocalSessionAdapter({
     cliDirectory: request.cliDirectory,
     transcriptMaximumRenderedLength: request.maximumRenderedLength,
   }).readTranscript(request.providerSessionId);
+  return result.status === "accepted" ? result.transcript : undefined;
 }
 
 const TEST_TIME_S = Math.floor(Date.parse("2026-08-18T21:30:00.000Z") / 1000);

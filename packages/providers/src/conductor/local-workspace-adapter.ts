@@ -1,6 +1,6 @@
 import {
+  ACT_RESULT_STATUS,
   CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
-  PROVIDER_ACT_RESULT_STATUS,
   type ProviderSessionObservation,
   type ProviderWorkspaceRequest,
   type ProviderWorkspaceResult,
@@ -238,13 +238,17 @@ export class ConductorLocalWorkspaceAdapter extends SessionProviderAdapterBase {
     // The root path a create fires against is the offered project's own, never
     // the request's: a create can reach only a repository this pass reported.
     const rootPath = project?.providerTargetId;
-    if (!rootPath) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+    if (!rootPath)
+      return {
+        status: ACT_RESULT_STATUS.UNSUPPORTED,
+        reason: "That act is not supported by the latest observation.",
+      };
     const link = conductorCreateWorkspaceLink(rootPath, request.task);
     try {
       await this.#openExternal(link);
     } catch (error) {
       return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+        status: ACT_RESULT_STATUS.REJECTED,
         reason: `Couldn't ask Conductor to create the workspace: ${
           error instanceof Error ? error.message : String(error)
         }`,
@@ -262,10 +266,10 @@ export class ConductorLocalWorkspaceAdapter extends SessionProviderAdapterBase {
     // the prompt is only waiting for the developer's own send.
     return request.task
       ? {
-          status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED,
+          status: ACT_RESULT_STATUS.ACCEPTED,
           warning:
             "Conductor opened the new workspace with your prompt ready in its composer — press Return there to send it, since Conductor's create link can't send it for you.",
         }
-      : { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED };
+      : { status: ACT_RESULT_STATUS.ACCEPTED };
   }
 }

@@ -1,9 +1,9 @@
 import { execFile } from "node:child_process";
 import path from "node:path";
 import {
+  ACT_RESULT_STATUS,
   CLI_CONNECTION,
   type CliConnection,
-  PROVIDER_ACT_RESULT_STATUS,
   type ProviderActResult,
   type ProviderSessionObservation,
   SESSION_LOCATION,
@@ -279,7 +279,7 @@ export abstract class CliSessionAdapter extends SessionProviderAdapterBase {
     } catch {
       return {
         outcome: {
-          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          status: ACT_RESULT_STATUS.REJECTED,
           reason: `${name}'s CLI could not answer, so nothing was sent.`,
         },
       };
@@ -293,7 +293,7 @@ export abstract class CliSessionAdapter extends SessionProviderAdapterBase {
       this.#forgetLogin();
       return {
         outcome: {
-          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          status: ACT_RESULT_STATUS.REJECTED,
           reason:
             connection === CLI_CONNECTION.CLI_MISSING
               ? `${name}'s CLI is not installed, so nothing was sent.`
@@ -310,7 +310,7 @@ export abstract class CliSessionAdapter extends SessionProviderAdapterBase {
     } catch {
       return {
         outcome: {
-          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          status: ACT_RESULT_STATUS.REJECTED,
           reason: `${name}'s CLI could not answer, so the request may not have landed.`,
         },
       };
@@ -318,7 +318,7 @@ export abstract class CliSessionAdapter extends SessionProviderAdapterBase {
     if (result.exitCode !== 0) {
       return {
         outcome: {
-          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          status: ACT_RESULT_STATUS.REJECTED,
           reason: `${name}'s CLI refused the request.`,
         },
       };
@@ -326,7 +326,7 @@ export abstract class CliSessionAdapter extends SessionProviderAdapterBase {
     // A write that landed changes what the provider holds, so the refresh
     // that follows must actually ask rather than serve the cached snapshot.
     this.#lastAttemptAt = Number.NEGATIVE_INFINITY;
-    return { outcome: { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED }, stdout: result.stdout };
+    return { outcome: { status: ACT_RESULT_STATUS.ACCEPTED }, stdout: result.stdout };
   }
 
   async #probeLogin(): Promise<CliConnection> {

@@ -6,7 +6,7 @@
  * session are offered to the rest of the app under the same discipline.
  */
 
-import { text, type UnparsedWireValue } from "@sidecar/wire";
+import { type ActResult, text, type UnparsedWireValue } from "@sidecar/wire";
 
 /**
  * Stable tracker identifiers shared by the tracker client, the settings that
@@ -213,24 +213,12 @@ export function supportsIssueTransition(issue: TrackedIssue, transitionId: strin
   return issue.transitions.some((transition) => transition.id === transitionId);
 }
 
-export const TRACKER_ACTION_RESULT_STATUS = {
-  ACCEPTED: "accepted",
-  REJECTED: "rejected",
-  UNSUPPORTED: "unsupported",
-} as const;
-
-export type TrackerActionResultStatus =
-  (typeof TRACKER_ACTION_RESULT_STATUS)[keyof typeof TRACKER_ACTION_RESULT_STATUS];
-
 /**
  * What became of an act. A rejection carries a reason the developer can hear,
  * never the body itself; unsupported means the tracker has no documented way
  * to do this right now, which is an answer rather than a failure.
  */
-export type TrackerActionResult =
-  | { status: typeof TRACKER_ACTION_RESULT_STATUS.ACCEPTED }
-  | { status: typeof TRACKER_ACTION_RESULT_STATUS.REJECTED; reason: string }
-  | { status: typeof TRACKER_ACTION_RESULT_STATUS.UNSUPPORTED };
+export type TrackerActionResult = ActResult;
 
 export const ISSUE_ACTION_KIND = {
   SET_STATE: "set-state",

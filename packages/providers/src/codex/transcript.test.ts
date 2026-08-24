@@ -8,19 +8,20 @@ import type { ParsedJsonObject } from "@sidecar/wire/testing";
 import type { SqliteModuleLoader } from "../shared/local-sqlite.js";
 import { CodexSessionAdapter } from "./adapter.js";
 
-function readCodexSessionTranscript(request: {
+async function readCodexSessionTranscript(request: {
   codexHome?: string;
   sqliteHome?: string;
   providerSessionId: string;
   sqlite?: SqliteModuleLoader;
   maximumRenderedLength?: number;
 }): Promise<string | undefined> {
-  return new CodexSessionAdapter({
+  const result = await new CodexSessionAdapter({
     codexHome: request.codexHome,
     sqliteHome: request.sqliteHome,
     sqlite: request.sqlite,
     transcriptMaximumRenderedLength: request.maximumRenderedLength,
   }).readTranscript(request.providerSessionId);
+  return result.status === "accepted" ? result.transcript : undefined;
 }
 
 const TEST_SESSION_ID = "0198c1f2-4d5e-7789-abcd-ef0123456789";

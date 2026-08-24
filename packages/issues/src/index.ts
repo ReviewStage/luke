@@ -1,3 +1,4 @@
+export { ACT_RESULT_STATUS } from "@sidecar/wire";
 export {
   MAXIMUM_MENTIONED_ISSUES,
   mentionedIssues,
@@ -14,7 +15,6 @@ export {
   issueCommentText,
   maximumIssueTransitions,
   normalizeTrackedIssue,
-  TRACKER_ACTION_RESULT_STATUS,
   type TrackedIssue,
   type TrackerActionResult,
   type TrackerIssueAction,

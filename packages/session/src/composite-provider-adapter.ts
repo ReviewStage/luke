@@ -1,11 +1,12 @@
+import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import {
-  PROVIDER_ACT_RESULT_STATUS,
   type ProviderActResult,
   type ProviderControlRequest,
   type ProviderControlResult,
   type ProviderMessageResult,
   type ProviderSessionMessage,
   type ProviderSessionRenameRequest,
+  type ProviderTranscriptResult,
   type ProviderWorkspaceAgentRequest,
   type ProviderWorkspaceRenameRequest,
   type ProviderWorkspaceRequest,
@@ -118,12 +119,8 @@ export class CompositeSessionProviderAdapter extends SessionProviderAdapterBase 
     return this.#dispatchAct((adapter) => adapter.renameSession(request));
   }
 
-  override async readTranscript(providerSessionId: string): Promise<string | undefined> {
-    for (const adapter of this.#adapters) {
-      const transcript = await adapter.readTranscript(providerSessionId);
-      if (transcript !== undefined) return transcript;
-    }
-    return undefined;
+  override async readTranscript(providerSessionId: string): Promise<ProviderTranscriptResult> {
+    return this.#dispatchAct((adapter) => adapter.readTranscript(providerSessionId));
   }
 
   /**
@@ -133,11 +130,16 @@ export class CompositeSessionProviderAdapter extends SessionProviderAdapterBase 
    */
   async #dispatchAct<Result extends ProviderActResult>(
     act: (adapter: SessionProviderAdapter) => Promise<Result>,
-  ): Promise<Result | { status: typeof PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED }> {
+  ): Promise<Result> {
     for (const adapter of this.#adapters) {
       const result = await act(adapter);
-      if (result.status !== PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED) return result;
+      if (result.status !== ACT_RESULT_STATUS.UNSUPPORTED) return result;
     }
-    return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+    // SAFETY: every ProviderActResult specialization includes the canonical
+    // unsupported branch; only accepted branches add result-specific fields.
+    return {
+      status: ACT_RESULT_STATUS.UNSUPPORTED,
+      reason: "No provider adapter supports that act.",
+    } as Result;
   }
 }

@@ -4,6 +4,8 @@ import {
   maximumSessionTitleLength,
   PROVIDER_ID,
   type ProviderSessionObservation,
+  type ProviderTranscriptResult,
+  providerTranscriptResult,
   SESSION_STATUS,
   type SessionDetail,
   type SessionProvider,
@@ -611,13 +613,15 @@ export class GrokBuildSessionAdapter extends LocalSessionAdapter {
     return this.#legacyStore.observe();
   }
 
-  override readTranscript(providerSessionId: string): Promise<string | undefined> {
-    return readGrokBuildSessionTranscript({
-      grokHome: this.#grokHome,
-      providerSessionId,
-      sqlite: this.#sqlite,
-      maximumRenderedLength: this.#transcriptMaximumRenderedLength,
-    });
+  override readTranscript(providerSessionId: string): Promise<ProviderTranscriptResult> {
+    return providerTranscriptResult(
+      readGrokBuildSessionTranscript({
+        grokHome: this.#grokHome,
+        providerSessionId,
+        sqlite: this.#sqlite,
+        maximumRenderedLength: this.#transcriptMaximumRenderedLength,
+      }),
+    );
   }
 
   /** The session rows, or nothing when the query does not fit this database. */

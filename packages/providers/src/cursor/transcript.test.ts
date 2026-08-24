@@ -6,17 +6,18 @@ import test, { type TestContext } from "node:test";
 import type { ParsedJsonObject } from "@sidecar/wire/testing";
 import { CursorLocalSessionAdapter } from "./local-adapter.js";
 
-function readCursorSessionTranscript(request: {
+async function readCursorSessionTranscript(request: {
   cursorHome?: string;
   providerSessionId: string;
   readTailBytes?: number;
   maximumRenderedLength?: number;
 }): Promise<string | undefined> {
-  return new CursorLocalSessionAdapter({
+  const result = await new CursorLocalSessionAdapter({
     cursorHome: request.cursorHome,
     transcriptReadTailBytes: request.readTailBytes,
     transcriptMaximumRenderedLength: request.maximumRenderedLength,
   }).readTranscript(request.providerSessionId);
+  return result.status === "accepted" ? result.transcript : undefined;
 }
 
 const TEST_SESSION_ID = "8b21b0b2-98c1-4f52-a1c1-0f9a53b2f001";

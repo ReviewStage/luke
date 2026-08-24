@@ -1,5 +1,5 @@
 import {
-  PROVIDER_ACT_RESULT_STATUS,
+  ACT_RESULT_STATUS,
   type ProviderActResult,
   type ProviderControlRequest,
   type ProviderControlResult,
@@ -356,33 +356,40 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
       (candidate) => candidate.providerSessionId === message.providerSessionId,
     );
     if (!observation?.canReceiveMessage) {
-      return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+      return {
+        status: ACT_RESULT_STATUS.UNSUPPORTED,
+        reason: "That act is not supported by the latest observation.",
+      };
     }
 
     const text = sessionMessageText(message.text);
     if (!text) {
       return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+        status: ACT_RESULT_STATUS.REJECTED,
         reason: "That message is empty or too long.",
       };
     }
 
     // The credential is read at send time, not held from the observation pass,
     // so a key the user just replaced or removed is honoured immediately. Its
-    // absence is a rejection with the actual reason, not "unsupported": the
+    // absence is a rejection with the actual reason, not the unsupported answer: the
     // session advertised taking messages while a key stood behind it, and a
     // key that has since gone is a different fact than a session that moved on.
     const apiKey = await this.#readApiKey().catch(() => undefined);
     if (!apiKey) return this.#missingKeyRejection();
 
     const route = this.messageRoute(message.providerSessionId, text);
-    if (!route) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+    if (!route)
+      return {
+        status: ACT_RESULT_STATUS.UNSUPPORTED,
+        reason: "That act is not supported by the latest observation.",
+      };
     return this.#postWrite(apiKey, route);
   }
 
   #missingKeyRejection(): ProviderActResult {
     return {
-      status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+      status: ACT_RESULT_STATUS.REJECTED,
       reason: `${this.provider.displayName}'s API key is no longer configured.`,
     };
   }
@@ -402,13 +409,21 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     // is built from, so whatever it targets is the thing the last pass actually
     // saw, and nothing a caller sends can redirect it.
     const advertised = observation?.controls?.find((control) => control.id === request.control.id);
-    if (!advertised) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+    if (!advertised)
+      return {
+        status: ACT_RESULT_STATUS.UNSUPPORTED,
+        reason: "That act is not supported by the latest observation.",
+      };
 
     const apiKey = await this.#readApiKey().catch(() => undefined);
     if (!apiKey) return this.#missingKeyRejection();
 
     const route = this.controlRoute(request.providerSessionId, advertised);
-    if (!route) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+    if (!route)
+      return {
+        status: ACT_RESULT_STATUS.UNSUPPORTED,
+        reason: "That act is not supported by the latest observation.",
+      };
     return this.#postWrite(apiKey, route);
   }
 
@@ -425,23 +440,31 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     const observation = this.#observations.find(
       (candidate) => candidate.providerSessionId === request.providerSessionId,
     );
-    if (!observation) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+    if (!observation)
+      return {
+        status: ACT_RESULT_STATUS.UNSUPPORTED,
+        reason: "That act is not supported by the latest observation.",
+      };
     // The advertised list — not the caller's word — is what the route is
     // built from, so an agent kind is only ever one the last pass promised.
     const agent = observation.spawnableAgents?.find((candidate) => candidate === request.agent);
-    if (!agent) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+    if (!agent)
+      return {
+        status: ACT_RESULT_STATUS.UNSUPPORTED,
+        reason: "That act is not supported by the latest observation.",
+      };
 
     const name = request.name === undefined ? undefined : workspaceNameText(request.name);
     if (request.name !== undefined && !name) {
       return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+        status: ACT_RESULT_STATUS.REJECTED,
         reason: "That session name is empty or too long.",
       };
     }
     const task = request.task === undefined ? undefined : sessionMessageText(request.task);
     if (request.task !== undefined && !task) {
       return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+        status: ACT_RESULT_STATUS.REJECTED,
         reason: "That task is empty or too long.",
       };
     }
@@ -455,7 +478,11 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
       name,
       task,
     });
-    if (!route) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+    if (!route)
+      return {
+        status: ACT_RESULT_STATUS.UNSUPPORTED,
+        reason: "That act is not supported by the latest observation.",
+      };
 
     const apiKey = await this.#readApiKey().catch(() => undefined);
     if (!apiKey) return this.#missingKeyRejection();
@@ -493,12 +520,16 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     // The advertised target — not the caller's word — is what the route is
     // built from, so a rename only ever lands on the workspace the last pass
     // promised.
-    if (!observation?.renameTarget) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+    if (!observation?.renameTarget)
+      return {
+        status: ACT_RESULT_STATUS.UNSUPPORTED,
+        reason: "That act is not supported by the latest observation.",
+      };
 
     const name = workspaceNameText(request.name);
     if (!name) {
       return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+        status: ACT_RESULT_STATUS.REJECTED,
         reason: "That workspace name is empty or too long.",
       };
     }
@@ -508,7 +539,11 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     // read must not be able to swap the snapshot between the check and the
     // route.
     const route = this.workspaceRenameRoute(observation.renameTarget, name);
-    if (!route) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+    if (!route)
+      return {
+        status: ACT_RESULT_STATUS.UNSUPPORTED,
+        reason: "That act is not supported by the latest observation.",
+      };
 
     const apiKey = await this.#readApiKey().catch(() => undefined);
     if (!apiKey) return this.#missingKeyRejection();
@@ -541,18 +576,26 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     const observation = this.#observations.find(
       (candidate) => candidate.providerSessionId === request.providerSessionId,
     );
-    if (!observation?.canRename) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+    if (!observation?.canRename)
+      return {
+        status: ACT_RESULT_STATUS.UNSUPPORTED,
+        reason: "That act is not supported by the latest observation.",
+      };
 
     const name = workspaceNameText(request.name);
     if (!name) {
       return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+        status: ACT_RESULT_STATUS.REJECTED,
         reason: "That session name is empty or too long.",
       };
     }
 
     const route = this.sessionRenameRoute(request.providerSessionId, name);
-    if (!route) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+    if (!route)
+      return {
+        status: ACT_RESULT_STATUS.UNSUPPORTED,
+        reason: "That act is not supported by the latest observation.",
+      };
 
     const apiKey = await this.#readApiKey().catch(() => undefined);
     if (!apiKey) return this.#missingKeyRejection();
@@ -588,12 +631,16 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     const project = projects.find(
       (candidate) => candidate.providerProjectId === request.providerProjectId,
     );
-    if (!project) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+    if (!project)
+      return {
+        status: ACT_RESULT_STATUS.UNSUPPORTED,
+        reason: "That act is not supported by the latest observation.",
+      };
 
     const name = request.name === undefined ? undefined : workspaceNameText(request.name);
     if (request.name !== undefined && !name) {
       return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+        status: ACT_RESULT_STATUS.REJECTED,
         reason: "That workspace name is empty or too long.",
       };
     }
@@ -604,19 +651,19 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     const task = request.task === undefined ? undefined : sessionMessageText(request.task);
     if (request.task !== undefined && !task) {
       return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+        status: ACT_RESULT_STATUS.REJECTED,
         reason: "That task is empty or too long.",
       };
     }
     if (task && project.taskSupport === WORKSPACE_TASK_SUPPORT.NONE) {
       return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+        status: ACT_RESULT_STATUS.REJECTED,
         reason: "This project takes no opening task.",
       };
     }
     if (!task && project.taskSupport === WORKSPACE_TASK_SUPPORT.REQUIRED) {
       return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+        status: ACT_RESULT_STATUS.REJECTED,
         reason: "This project needs an opening task to create a workspace.",
       };
     }
@@ -625,9 +672,13 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     if (!apiKey) return this.#missingKeyRejection();
 
     const route = this.workspaceCreationRoute(project, name, task, request.agentSelection);
-    if (!route) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+    if (!route)
+      return {
+        status: ACT_RESULT_STATUS.UNSUPPORTED,
+        reason: "That act is not supported by the latest observation.",
+      };
     const created = await this.#postWriteDetailed(apiKey, route, WRITE_SUBJECT.PROJECT);
-    if (created.outcome.status !== PROVIDER_ACT_RESULT_STATUS.ACCEPTED) {
+    if (created.outcome.status !== ACT_RESULT_STATUS.ACCEPTED) {
       return created.outcome;
     }
     // The id the response named rides the acceptance — an identifier only,
@@ -636,7 +687,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     // from still never leaves the adapter.
     const createdSessionId = this.createdWorkspaceSessionId(created.body ?? {});
     const landed: ProviderWorkspaceResult = {
-      status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED,
+      status: ACT_RESULT_STATUS.ACCEPTED,
       ...(createdSessionId ? { providerSessionId: createdSessionId } : undefined),
     };
     if (!task) return landed;
@@ -649,18 +700,18 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     if (followUp === undefined) return landed;
     if ("undeliverable" in followUp) {
       return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+        status: ACT_RESULT_STATUS.REJECTED,
         reason: `The workspace was created, but its opening task was not delivered: ${followUp.undeliverable}`,
       };
     }
     const delivered = await this.#postWriteDetailed(apiKey, followUp, WRITE_SUBJECT.SESSION);
-    if (delivered.outcome.status === PROVIDER_ACT_RESULT_STATUS.ACCEPTED) {
+    if (delivered.outcome.status === ACT_RESULT_STATUS.ACCEPTED) {
       return landed;
     }
     return {
-      status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+      status: ACT_RESULT_STATUS.REJECTED,
       reason: `The workspace was created, but its opening task was not delivered: ${
-        delivered.outcome.status === PROVIDER_ACT_RESULT_STATUS.REJECTED
+        delivered.outcome.status === ACT_RESULT_STATUS.REJECTED
           ? delivered.outcome.reason
           : "the provider documents no way to hand it over."
       }`,
@@ -909,7 +960,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
       this.#lastAttemptAt = Number.NEGATIVE_INFINITY;
       return {
         outcome: {
-          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          status: ACT_RESULT_STATUS.REJECTED,
           reason: `${name} did not answer, so the request may not have landed.`,
         },
       };
@@ -925,14 +976,14 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
       // yes, so only a follow-up that needed the body has anything to miss.
       const body = await response.json().catch(() => undefined);
       return {
-        outcome: { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED },
+        outcome: { status: ACT_RESULT_STATUS.ACCEPTED },
         ...(isRecord(body) ? { body } : undefined),
       };
     }
     if (response.status === HTTP_STATUS.UNAUTHORIZED || response.status === HTTP_STATUS.FORBIDDEN) {
       return {
         outcome: {
-          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          status: ACT_RESULT_STATUS.REJECTED,
           reason: `${name} rejected the configured API key.`,
         },
       };
@@ -940,7 +991,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     if (response.status === HTTP_STATUS.NOT_FOUND) {
       return {
         outcome: {
-          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          status: ACT_RESULT_STATUS.REJECTED,
           reason: `${name} no longer has this ${subject}.`,
         },
       };
@@ -948,14 +999,14 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     if (response.status === HTTP_STATUS.CONFLICT) {
       return {
         outcome: {
-          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          status: ACT_RESULT_STATUS.REJECTED,
           reason: `${name} says this ${subject} has moved on since Luke last looked.`,
         },
       };
     }
     return {
       outcome: {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+        status: ACT_RESULT_STATUS.REJECTED,
         reason: `${name} answered with status ${response.status}, so the request may not have landed.`,
       },
     };
