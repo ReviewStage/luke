@@ -12,6 +12,7 @@ import {
   type ProviderWorkspaceRequest,
   type ProviderWorkspaceResult,
   SessionProviderAdapterBase,
+  SUPERSET_WORKSPACE_PROVIDER_ID,
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceProject,
 } from "@sidecar/session";
@@ -24,7 +25,6 @@ import {
   wireRecord,
 } from "@sidecar/wire";
 import type { SupersetOrganizationChoice } from "./sign-in-stage.js";
-import { SUPERSET_WORKSPACE_PROVIDER_ID } from "./vocabulary.js";
 import type { SupersetSessionContext } from "./workspaces.js";
 
 export const SUPERSET_CONTROL_ID = {

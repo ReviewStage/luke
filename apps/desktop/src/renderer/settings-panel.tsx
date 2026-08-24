@@ -3823,7 +3823,6 @@ export function SettingsPanel({
               APP_SETTING_SCHEMA.defaultWorkspaceProvider.field,
               APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
               APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
-              APP_SETTING_SCHEMA.supersetAgentDefault.field,
             ]}
           />
         </>

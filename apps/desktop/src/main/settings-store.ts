@@ -10,6 +10,7 @@ import {
   VOICE_CREDENTIAL_PROVIDER_ID,
 } from "@sidecar/credentials";
 import { REALTIME_DEFAULTS } from "@sidecar/realtime";
+import { parseWorkspaceAgentKindSelection, SUPERSET_WORKSPACE_PROVIDER_ID } from "@sidecar/session";
 import { DEFAULT_PANEL_FORM_FACTOR } from "@sidecar/surface";
 import {
   isRecord,
@@ -81,6 +82,7 @@ const SETTINGS_FIELD = {
   CALENDAR_ACCOUNTS: "calendarAccounts",
   GRANTS: "grants",
   LEGACY_CONDUCTOR_API_KEY: "conductorApiKey",
+  LEGACY_SUPERSET_AGENT_DEFAULT: "supersetAgentDefault",
   VERSION: "version",
 } as const;
 
@@ -400,6 +402,24 @@ function readStoredSettings(record: WireRecord): StoredAppSettings {
   ) as StoredAppSettings;
 }
 
+function withLegacySupersetAgentDefault(
+  settings: StoredAppSettings,
+  record: WireRecord,
+): StoredAppSettings {
+  if (settings.workspaceAgentDefaults?.[SUPERSET_WORKSPACE_PROVIDER_ID]) return settings;
+  const legacy = parseWorkspaceAgentKindSelection(
+    unparsedWire({ agent: record[SETTINGS_FIELD.LEGACY_SUPERSET_AGENT_DEFAULT] }),
+  );
+  if (!legacy) return settings;
+  return {
+    ...settings,
+    workspaceAgentDefaults: {
+      ...settings.workspaceAgentDefaults,
+      [SUPERSET_WORKSPACE_PROVIDER_ID]: legacy,
+    },
+  };
+}
+
 function storedSettingsFromPersisted(persisted: PersistedSettings): StoredAppSettings {
   const entries = Object.fromEntries(APP_SETTING_FIELDS.map((field) => [field, persisted[field]]));
   // SAFETY: APP_SETTING_FIELDS copies every StoredAppSettings member and no persistence metadata.
@@ -427,7 +447,7 @@ function parsePersistedSettings(
   const calendarAccounts = storedCalendarAccounts(record);
   const appleCalendar = storedAppleCalendar(record);
   const grants = storedGrants(record);
-  const settings = readStoredSettings(record);
+  const settings = withLegacySupersetAgentDefault(readStoredSettings(record), record);
   const persisted = {
     ...settings,
     version: isWireNumber(version) ? version : SETTINGS_FILE_VERSION,

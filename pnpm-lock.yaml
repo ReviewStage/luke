@@ -531,9 +531,6 @@ importers:
       '@sidecar/session':
         specifier: workspace:*
         version: link:../session
-      '@sidecar/superset':
-        specifier: workspace:*
-        version: link:../superset
       '@sidecar/surface':
         specifier: workspace:*
         version: link:../surface

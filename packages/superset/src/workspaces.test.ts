@@ -10,8 +10,8 @@ import {
   SESSION_APPLICATION_SCOPE,
   SESSION_LOCATION,
   SESSION_STATUS,
+  SUPERSET_WORKSPACE_PROVIDER_ID,
 } from "@sidecar/session";
-import { SUPERSET_WORKSPACE_PROVIDER_ID } from "../../../apps/desktop/src/shared/contracts.js";
 import { SUPERSET_CONTROL_ID } from "./cli.js";
 import { SupersetWorkspaceReader, supersetPressedLink } from "./workspaces.js";
 

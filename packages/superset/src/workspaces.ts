@@ -10,36 +10,30 @@ import {
   textFromRow,
 } from "@sidecar/providers";
 import {
-  PROVIDER_ID,
+  AGENT_IDENTITY,
+  agentIdentityFor,
   type ProviderSessionObservation,
   SESSION_APPLICATION_ID,
   SESSION_APPLICATION_SCOPE,
   SESSION_LOCATION,
   SESSION_STATUS,
+  SUPERSET_WORKSPACE_PROVIDER_ID,
 } from "@sidecar/session";
 import { type WireRecord, wireRecord } from "@sidecar/wire";
 import { SUPERSET_CONTROL_ID } from "./cli.js";
-import { SUPERSET_WORKSPACE_PROVIDER_ID } from "./vocabulary.js";
 
 const SUPERSET_AGENT_PROVIDER = {
-  claude: PROVIDER_ID.CLAUDE_CODE,
-  codex: PROVIDER_ID.CODEX,
-  copilot: PROVIDER_ID.COPILOT,
-  cursor: PROVIDER_ID.CURSOR,
+  claude: AGENT_IDENTITY.CLAUDE_CODE.id,
+  codex: AGENT_IDENTITY.CODEX.id,
+  copilot: AGENT_IDENTITY.COPILOT.id,
+  cursor: AGENT_IDENTITY.CURSOR.id,
   // Superset binds Cursor's `agents` CLI under its own name, beside the id
   // it uses for the app's agents; both are Cursor sessions to Luke.
-  "cursor-agent": PROVIDER_ID.CURSOR,
-  gemini: PROVIDER_ID.GEMINI_CLI,
-  grok: PROVIDER_ID.GROK_BUILD,
-  opencode: PROVIDER_ID.OPENCODE,
+  "cursor-agent": AGENT_IDENTITY.CURSOR.id,
+  gemini: AGENT_IDENTITY.GEMINI_CLI.id,
+  grok: AGENT_IDENTITY.GROK_BUILD.id,
+  opencode: AGENT_IDENTITY.OPENCODE.id,
 } as const satisfies Readonly<Record<string, string>>;
-
-function supersetProviderId(agentId: string): string | undefined {
-  for (const [key, providerId] of Object.entries(SUPERSET_AGENT_PROVIDER)) {
-    if (key === agentId) return providerId;
-  }
-  return undefined;
-}
 
 const SUPERSET_WORKSPACE_LINK_PREFIX = "superset://v2-workspace/";
 
@@ -257,7 +251,7 @@ function contextFromRow(
   spawnableAgents: readonly string[],
 ): SupersetSessionContext | undefined {
   const agentId = textFromRow(row, "agent_id");
-  const providerId = agentId ? supersetProviderId(agentId) : undefined;
+  const providerId = agentIdentityFor(SUPERSET_AGENT_PROVIDER, agentId);
   const providerSessionId = textFromRow(row, "agent_session_id");
   const workspaceId = textFromRow(row, "workspace_id");
   const workspaceName = textFromRow(row, "workspace_name");

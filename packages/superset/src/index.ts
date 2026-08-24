@@ -19,11 +19,6 @@ export {
   type SupersetSignInStage,
 } from "./sign-in-stage.js";
 export {
-  isWorkspaceProviderId,
-  SUPERSET_WORKSPACE_PROVIDER_ID,
-  type WorkspaceProviderId,
-} from "./vocabulary.js";
-export {
   type SupersetSessionContext,
   SupersetWorkspaceReader,
   type SupersetWorkspaceReaderOptions,

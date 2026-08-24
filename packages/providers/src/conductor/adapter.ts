@@ -1,6 +1,7 @@
 import { CREDENTIAL_PROVIDER_ID, CREDENTIAL_PROVIDERS } from "@sidecar/credentials";
 import {
   agedStatus,
+  agentIdentityFor,
   isListedWorkspaceAgentModel,
   maximumSessionRecapLength,
   maximumSessionTitleLength,
@@ -32,7 +33,7 @@ import {
   textFromRecord,
   timestampFromRecord,
 } from "../shared/cloud-session-adapter.js";
-import { conductorAgent } from "./session-applications.js";
+import { CONDUCTOR_AGENT_BY_TYPE } from "./session-applications.js";
 
 // Shared with the credential registry so the key the user saves and the
 // provider Luke observes with it can never name different things.
@@ -897,7 +898,7 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
     // mapped agent kind leads the row as the agent itself and the model rides
     // plain. Only a kind this build cannot map keeps riding the model label,
     // so the provider's own word is not lost.
-    const agent = conductorAgent(transcript?.agentKind);
+    const agent = agentIdentityFor(CONDUCTOR_AGENT_BY_TYPE, transcript?.agentKind);
     const model = agent ? session.model : agentAndModelLabel(transcript?.agentKind, session.model);
     // The workspace's own words for why its chats are quiet, and its own
     // failure message when standing it up went wrong. A session's reported

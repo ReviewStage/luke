@@ -52,7 +52,13 @@ export {
   type AccountSnapshot,
 } from "@sidecar/account/snapshot";
 export type { AccountCalendar, ObservedAccountCalendars } from "@sidecar/calendar/observation";
-export { CLI_CONNECTION, type CliConnection } from "@sidecar/session";
+export {
+  CLI_CONNECTION,
+  type CliConnection,
+  isWorkspaceProviderId,
+  SUPERSET_WORKSPACE_PROVIDER_ID,
+  type WorkspaceProviderId,
+} from "@sidecar/session";
 export type {
   AppSettingField,
   AppSettingValue,
@@ -73,11 +79,6 @@ export {
   type SupersetOrganizationChoice,
   type SupersetSignInSnapshot,
 } from "@sidecar/superset/sign-in-stage";
-export {
-  isWorkspaceProviderId,
-  SUPERSET_WORKSPACE_PROVIDER_ID,
-  type WorkspaceProviderId,
-} from "@sidecar/superset/vocabulary";
 export type { WindowMode } from "@sidecar/surface";
 
 export function isAccountProvider(value: UnparsedWireValue): value is AccountProvider {

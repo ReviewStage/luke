@@ -3,6 +3,7 @@ import {
   isProviderId,
   PROVIDER_ID,
   type ProviderId,
+  type WorkspaceAgentKindSelection,
   type WorkspaceAgentModels,
   type WorkspaceAgentSelection,
 } from "./providers.js";
@@ -132,4 +133,29 @@ export function parseWorkspaceAgentSelection(
   const selection: WorkspaceAgentSelection =
     effort !== undefined ? { agent, model, effort } : { agent, model };
   return isListedWorkspaceAgentModel(providerId, selection) ? selection : undefined;
+}
+
+/**
+ * The shape of an observed agent preset's name: agent kinds this build cannot
+ * list come from a provider's own configuration, so the bound is on form
+ * alone, and whether a kind is actually offered is answered where the
+ * observation lives.
+ */
+const WORKSPACE_AGENT_KIND_PATTERN = /^[a-z0-9][a-z0-9-]{0,79}$/u;
+
+/**
+ * Guards a kind-only selection arriving over IPC or read back from disk, for
+ * the one workspace provider whose agents carry no models table. A value
+ * carrying a model or an effort is refused rather than trimmed: the provider
+ * documents no model choice, so such a value is not a selection it takes.
+ */
+export function parseWorkspaceAgentKindSelection(
+  value: UnparsedWireValue,
+): WorkspaceAgentKindSelection | undefined {
+  const record = wireRecord(value);
+  if (!record) return undefined;
+  const { agent, model, effort } = record;
+  if (model !== undefined || effort !== undefined) return undefined;
+  if (!isWireString(agent) || !WORKSPACE_AGENT_KIND_PATTERN.test(agent)) return undefined;
+  return { agent };
 }

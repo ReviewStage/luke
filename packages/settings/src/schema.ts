@@ -22,19 +22,20 @@ import {
   CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
   isProviderId,
   isSessionFilter,
+  isWorkspaceProviderId,
   PROVIDER_ID,
   type ProviderId,
+  parseWorkspaceAgentKindSelection,
   parseWorkspaceAgentSelection,
   type SessionFilter,
+  SUPERSET_WORKSPACE_PROVIDER_ID,
+  type WorkspaceAgentDefaults,
+  type WorkspaceAgentKindSelection,
   type WorkspaceAgentSelection,
+  type WorkspaceProviderId,
   workspaceAgentModelLabel,
   workspaceAgentModels,
 } from "@sidecar/session";
-import {
-  isWorkspaceProviderId,
-  SUPERSET_WORKSPACE_PROVIDER_ID,
-  type WorkspaceProviderId,
-} from "@sidecar/superset/vocabulary";
 import {
   DEFAULT_PANEL_FORM_FACTOR,
   isPanelFormFactor,
@@ -102,7 +103,7 @@ type StoredSettingValue =
   | number
   | boolean
   | readonly SessionFilter[]
-  | Readonly<Partial<Record<ProviderId, WorkspaceAgentSelection>>>
+  | WorkspaceAgentDefaults
   | Readonly<Partial<Record<WorkspaceProviderId, string>>>
   | undefined;
 
@@ -241,13 +242,19 @@ function hotkey(value: UnparsedWireValue): SettingGuardResult<string | undefined
 
 function workspaceAgentDefaults(
   value: UnparsedWireValue,
-): SettingGuardResult<Readonly<Partial<Record<ProviderId, WorkspaceAgentSelection>>> | undefined> {
+): SettingGuardResult<WorkspaceAgentDefaults | undefined> {
   if (value === undefined) return valid(undefined);
   if (!isRecord(value)) {
     return invalid(undefined);
   }
-  const defaults: Partial<Record<ProviderId, WorkspaceAgentSelection>> = {};
+  const defaults: Partial<Record<ProviderId, WorkspaceAgentSelection>> &
+    Partial<Record<typeof SUPERSET_WORKSPACE_PROVIDER_ID, WorkspaceAgentKindSelection>> = {};
   for (const [providerId, selection] of Object.entries(value)) {
+    if (providerId === SUPERSET_WORKSPACE_PROVIDER_ID) {
+      const parsed = parseWorkspaceAgentKindSelection(selection);
+      if (parsed) defaults[SUPERSET_WORKSPACE_PROVIDER_ID] = parsed;
+      continue;
+    }
     const parsed = parseWorkspaceAgentSelection(providerId, selection);
     if (!isProviderId(providerId) || !parsed) continue;
     defaults[providerId] = parsed;
@@ -754,10 +761,15 @@ export const APP_SETTING_SCHEMA = {
     default: undefined,
     guard: workspaceAgentDefaults,
     entry: {
-      isKey: isProviderId,
+      // Local Conductor is deliberately not a key: its creation link
+      // documents no agent choice, so no entry could ever steer one.
+      isKey: (
+        value: UnparsedWireValue,
+      ): value is ProviderId | typeof SUPERSET_WORKSPACE_PROVIDER_ID =>
+        isWireString(value) && (value === SUPERSET_WORKSPACE_PROVIDER_ID || isProviderId(value)),
       same: (
-        current: WorkspaceAgentSelection | undefined,
-        next: WorkspaceAgentSelection | undefined,
+        current: WorkspaceAgentSelection | WorkspaceAgentKindSelection | undefined,
+        next: WorkspaceAgentSelection | WorkspaceAgentKindSelection | undefined,
       ) =>
         current?.agent === next?.agent &&
         current?.model === next?.model &&
@@ -766,11 +778,18 @@ export const APP_SETTING_SCHEMA = {
     settingsPage: SETTINGS_PAGE.CONNECTIONS,
     guideEntry: settingGuideEntry(
       "workspaceAgentDefaults",
-      [APP_SETTING_ID.WORKSPACE_AGENT_MODEL, APP_SETTING_ID.WORKSPACE_AGENT_EFFORT],
+      [
+        APP_SETTING_ID.WORKSPACE_AGENT_MODEL,
+        APP_SETTING_ID.WORKSPACE_AGENT_EFFORT,
+        APP_SETTING_ID.SUPERSET_AGENT,
+      ],
       (settings) => {
-        const chosen = guideValue<
-          Readonly<Partial<Record<ProviderId, WorkspaceAgentSelection>>> | undefined
-        >(settings, "workspaceAgentDefaults")?.[PROVIDER_ID.CONDUCTOR];
+        const defaults = guideValue<WorkspaceAgentDefaults | undefined>(
+          settings,
+          "workspaceAgentDefaults",
+        );
+        const chosen = defaults?.[PROVIDER_ID.CONDUCTOR];
+        const supersetAgent = defaults?.[SUPERSET_WORKSPACE_PROVIDER_ID]?.agent;
         const chosenAgent = chosen
           ? workspaceAgentModels(PROVIDER_ID.CONDUCTOR).find(
               (entry) => entry.agent === chosen.agent,
@@ -821,13 +840,23 @@ export const APP_SETTING_SCHEMA = {
                 },
               ]
             : []),
+          {
+            id: APP_SETTING_ID.SUPERSET_AGENT,
+            label: "New Superset sessions run",
+            description:
+              "Which configured Superset agent starts when a creation ask names none. Unset, Luke asks which agent to use.",
+            kind: APP_SETTING_KIND.CHOICE,
+            value: supersetAgent ?? ASK_EACH_TIME_CHOICE,
+            choices: [ASK_EACH_TIME_CHOICE, ...(supersetAgent ? [supersetAgent] : [])],
+            defaultValue: ASK_EACH_TIME_CHOICE,
+            adjustable: false,
+            manual: `${CONNECTIONS_PAGE}, under Superset`,
+          },
         ];
       },
     ),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.NONE,
-    // The model and the effort ride one stored write, so one id counts the
-    // pair: a separate effort count would say a second change happened where
-    // the developer made one.
+    // Every entry rides one stored write, so one id counts them all.
     analytics: { id: APP_SETTING_ID.WORKSPACE_AGENT_MODEL, value: choiceAnalytics },
   },
   workspaceProjectDefaults: {
@@ -844,45 +873,6 @@ export const APP_SETTING_SCHEMA = {
     // Observed project names and defaults travel in the workspace-project context.
     guideEntry: settingGuideEntry("workspaceProjectDefaults", [], () => undefined),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.NONE,
-  },
-  supersetAgentDefault: {
-    field: "supersetAgentDefault",
-    default: undefined,
-    guard: (value: UnparsedWireValue) =>
-      optional(
-        value,
-        (candidate): candidate is string =>
-          isWireString(candidate) && /^[a-z0-9][a-z0-9-]{0,79}$/u.test(candidate),
-      ),
-    settingsPage: SETTINGS_PAGE.CONNECTIONS,
-    resetScope: SETTINGS_RESET_SCOPE.WORKSPACES,
-    guideEntry: settingGuideEntry(
-      "supersetAgentDefault",
-      [APP_SETTING_ID.SUPERSET_AGENT],
-      (settings) => [
-        {
-          id: APP_SETTING_ID.SUPERSET_AGENT,
-          label: "New Superset sessions run",
-          description:
-            "Which configured Superset agent starts when a creation ask names none. Unset, Luke asks which agent to use.",
-          kind: APP_SETTING_KIND.CHOICE,
-          value:
-            guideValue<string | undefined>(settings, "supersetAgentDefault") ??
-            ASK_EACH_TIME_CHOICE,
-          choices: [
-            ASK_EACH_TIME_CHOICE,
-            ...(guideValue<string | undefined>(settings, "supersetAgentDefault")
-              ? [guideValue<string>(settings, "supersetAgentDefault")]
-              : []),
-          ],
-          defaultValue: ASK_EACH_TIME_CHOICE,
-          adjustable: false,
-          manual: `${CONNECTIONS_PAGE}, under Superset`,
-        },
-      ],
-    ),
-    mainProcessSideEffect: SETTING_SIDE_EFFECT.NONE,
-    analytics: { id: APP_SETTING_ID.SUPERSET_AGENT, value: choiceAnalytics },
   },
 } as const;
 
