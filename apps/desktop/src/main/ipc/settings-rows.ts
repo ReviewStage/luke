@@ -14,7 +14,7 @@ import {
   settingEntryGuard,
 } from "@sidecar/settings";
 import type { RealtimeCredentialMinter } from "@sidecar/voice";
-import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
+import { ACT_RESULT_STATUS, isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import { BRIDGE, type BridgeArgumentsFor } from "#shared/bridge";
 import type { AppSettings } from "#shared/contracts";
 import { CONNECTION_COUNTED_AS } from "#shared/product-vocabulary";
@@ -182,6 +182,7 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
       if (field === APP_SETTING_SCHEMA.askHotkey.field && isWireString(parsed.value)) {
         if (hotkeys.reserve(parsed.value, HOTKEY_RANK.ASK) === HOTKEY_RANK.TALK) {
           return new SettingsRefusal({
+            status: ACT_RESULT_STATUS.REJECTED,
             settings: await settingsStore.snapshot(),
             reason: "That chord is reserved for the talk key.",
           });
@@ -191,6 +192,7 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
         const owner = hotkeys.reserve(parsed.value, HOTKEY_RANK.STOP);
         if (owner === HOTKEY_RANK.TALK || owner === HOTKEY_RANK.ASK) {
           return new SettingsRefusal({
+            status: ACT_RESULT_STATUS.REJECTED,
             settings: await settingsStore.snapshot(),
             reason: `That chord is reserved for the ${owner === HOTKEY_RANK.TALK ? "talk" : "ask"} key.`,
           });

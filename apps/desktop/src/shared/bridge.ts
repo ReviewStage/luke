@@ -3,6 +3,7 @@ import {
   type AccountProvider,
   type AccountSnapshot,
 } from "@sidecar/account/snapshot";
+import { type ActEnvelope, isActEnvelope } from "@sidecar/acts";
 import {
   isProductSurfaceEventName,
   type ProductEventPropertiesFor,
@@ -62,6 +63,7 @@ import {
 import type { SupersetSignInSnapshot } from "@sidecar/superset/sign-in-stage";
 import type { WindowMode } from "@sidecar/surface";
 import {
+  type ActResult,
   isRecord,
   isWireBoolean,
   isWireNumber,
@@ -442,12 +444,18 @@ export const BRIDGE = {
     kind: "invoke",
     channel: "app:disconnect-superset",
     args: noArgs,
-    result: result<string | undefined>(),
+    result: result<ActResult>(),
   }),
   setVoiceExchangeActive: entry({
     kind: "send",
     channel: "app:set-voice-exchange",
     args: oneBoolean,
+  }),
+  authorizeAct: entry({
+    kind: "invoke",
+    channel: "app:authorize-act",
+    args: args<[ActEnvelope]>((v) => v.length === 1 && isActEnvelope(v[0])),
+    result: result<ActResult>(),
   }),
   openSession: entry({
     kind: "invoke",

@@ -489,7 +489,7 @@ test("a spoken model or effort change composes the one stored selection", async 
     updateSettingEntry: async (_field, key, value) => {
       assert.equal(key, PROVIDER_ID.CONDUCTOR);
       carried.push(value);
-      return { settings: appSettingsWire(settings()) };
+      return { status: "accepted", settings: appSettingsWire(settings()) };
     },
   });
   const stored = settings({
@@ -561,7 +561,7 @@ test("a model and its effort named in one change land as one stored pairing", as
     updateSettingEntry: async (_field, key, value) => {
       assert.equal(key, PROVIDER_ID.CONDUCTOR);
       carried.push(value);
-      return { settings: appSettingsWire(settings()) };
+      return { status: "accepted", settings: appSettingsWire(settings()) };
     },
   });
 
@@ -575,7 +575,7 @@ test("a model and its effort named in one change land as one stored pairing", as
     () => undefined,
     unset,
   );
-  assert.equal(outcome.status, "changed");
+  assert.equal(outcome.status, "accepted");
   assert.equal(outcome.effort, "high");
   assert.deepEqual(carried.at(-1), { agent: "claude", model: "fable-5", effort: "high" });
 
@@ -601,7 +601,7 @@ test("a model and its effort named in one change land as one stored pairing", as
     () => undefined,
     unset,
   );
-  assert.equal(refusedLevel.status, "refused");
+  assert.equal(refusedLevel.status, "rejected");
   assert.match(String(refusedLevel.reason), /takes no effort level/);
 
   // The default word names no model, so no effort has anywhere to ride.
@@ -611,7 +611,7 @@ test("a model and its effort named in one change land as one stored pairing", as
     () => undefined,
     unset,
   );
-  assert.equal(refusedDefault.status, "refused");
+  assert.equal(refusedDefault.status, "rejected");
   assert.match(String(refusedDefault.reason), /default takes no effort level/);
   assert.equal(carried.length, 2);
 });
@@ -623,6 +623,7 @@ test("a model and its effort asked in one breath compose through the held answer
       assert.equal(key, PROVIDER_ID.CONDUCTOR);
       carried.push(value);
       return {
+        status: "accepted",
         settings: appSettingsWire(
           settings(value ? { workspaceAgentDefaults: { [PROVIDER_ID.CONDUCTOR]: value } } : {}),
         ),
@@ -663,7 +664,7 @@ test("a model and its effort asked in one breath compose through the held answer
     () => undefined,
     held,
   );
-  assert.equal(outcome.status, "changed");
+  assert.equal(outcome.status, "accepted");
   assert.deepEqual(carried.at(-1), { agent: "claude", model: "fable-5", effort: "high" });
 });
 
@@ -891,7 +892,10 @@ test("the usage-data switch is described where it is turned, and is spoken", () 
 
 test("every adjustable setting is carried to the bridge call its row uses", async () => {
   const calls: string[] = [];
-  const answered: SettingsUpdateResult = { settings: appSettingsWire(settings()) };
+  const answered: SettingsUpdateResult = {
+    status: "accepted",
+    settings: appSettingsWire(settings()),
+  };
   const bridge = spokenSettingBridge({
     updateSetting: async (field, value) => {
       calls.push(`${field}:${String(value)}`);
@@ -912,7 +916,7 @@ test("every adjustable setting is carried to the bridge call its row uses", asyn
     );
     // An adjustable entry with no carrier would come back refused: the guide
     // may never advertise a change the wiring cannot make.
-    assert.equal(outcome.status, "changed", `${setting.id} is wired to the bridge`);
+    assert.equal(outcome.status, "accepted", `${setting.id} is wired to the bridge`);
   }
 
   assert.deepEqual(calls.sort(), [
@@ -942,7 +946,7 @@ test("a pace asked for by its multiple carries the same as its word", async () =
   const bridge = spokenSettingBridge({
     updateSetting: async (field, value) => {
       calls.push(`${field}:${value}`);
-      return { settings: appSettingsWire(settings()) };
+      return { status: "accepted", settings: appSettingsWire(settings()) };
     },
   });
 
@@ -952,7 +956,7 @@ test("a pace asked for by its multiple carries the same as its word", async () =
       { setting: guideSetting(APP_SETTING_ID.VOICE_SPEED), value },
       () => undefined,
     );
-    assert.equal(outcome.status, "changed");
+    assert.equal(outcome.status, "accepted");
   }
 
   assert.deepEqual(calls, ["voiceSpeed:1.25", "voiceSpeed:1.25"]);
@@ -962,6 +966,7 @@ test("a pace asked for by its multiple carries the same as its word", async () =
 test("the store's refusal comes back as the spoken outcome", async () => {
   const bridge = spokenSettingBridge({
     updateSetting: async () => ({
+      status: "rejected",
       settings: appSettingsWire(settings()),
       reason: "The settings file could not be written.",
     }),
@@ -974,7 +979,7 @@ test("the store's refusal comes back as the spoken outcome", async () => {
   );
 
   assert.deepEqual(outcome, {
-    status: "refused",
+    status: "rejected",
     reason: "The settings file could not be written.",
   });
 });

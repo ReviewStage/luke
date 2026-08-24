@@ -12,6 +12,8 @@ import {
   type ConversationEntry,
   inputAudioAppendEvents,
   inputAudioFormatUpdateEvents,
+  isCarriedAppAction,
+  isCarriedIssueAction,
   REALTIME_CLIENT_EVENT,
   REALTIME_SERVER_EVENT,
   REALTIME_STATUS,
@@ -352,14 +354,16 @@ function harness(
   if (options.idleTimeoutMs !== undefined) {
     sessionOptions.idleTimeoutMs = options.idleTimeoutMs;
   }
-  if (options.carryAction) {
-    sessionOptions.carryAction = options.carryAction;
-  }
-  if (options.carryAppAction) {
-    sessionOptions.carryAppAction = options.carryAppAction;
-  }
-  if (options.carryIssueAction) {
-    sessionOptions.carryIssueAction = options.carryIssueAction;
+  if (options.carryAction || options.carryAppAction || options.carryIssueAction) {
+    sessionOptions.carryAct = ({ act }) => {
+      if (isCarriedAppAction(act)) {
+        return options.carryAppAction?.(act) ?? Promise.resolve({ status: "rejected" });
+      }
+      if (isCarriedIssueAction(act)) {
+        return options.carryIssueAction?.(act) ?? Promise.resolve({ status: "rejected" });
+      }
+      return options.carryAction?.(act) ?? Promise.resolve({ status: "rejected" });
+    };
   }
   const session = new RealtimeVoiceSession(sessionOptions);
 
@@ -2724,7 +2728,7 @@ test("a stop that races the reply's confirmation still holds", async () => {
         status?: string;
       }
     ).status,
-    "refused",
+    "rejected",
   );
   assert.ok(!events.some((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE));
 
@@ -2954,7 +2958,7 @@ test("a cancelled reply's late finish cannot act in the turn that replaced it", 
         status?: string;
       }
     ).status,
-    "refused",
+    "rejected",
   );
   // No reply was opened to voice the refusal, and the new turn is still under way.
   assert.ok(!events.some((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE));
@@ -3119,7 +3123,7 @@ test("a session carrier that throws is refused with the error that caused it", a
     status?: string;
     reason?: string;
   };
-  assert.equal(parsed.status, "refused");
+  assert.equal(parsed.status, "rejected");
   assert.equal(parsed.reason, "Claude Code could not be reached.");
 });
 
@@ -3181,7 +3185,7 @@ test("a spoken ask to open a session is carried, and one with no address is refu
         }
       ).status,
   );
-  assert.deepEqual(statuses, ["opened", "refused"]);
+  assert.deepEqual(statuses, ["opened", "rejected"]);
 });
 
 test("a spoken ask for a new workspace is carried, and an unlisted project is refused", async () => {
@@ -3285,7 +3289,7 @@ test("a spoken ask for a new workspace is carried, and an unlisted project is re
         }
       ).status,
   );
-  assert.deepEqual(statuses, ["accepted", "refused", "accepted"]);
+  assert.deepEqual(statuses, ["accepted", "rejected", "accepted"]);
 });
 
 test("a Superset workspace requires an observed host and agent", async () => {
@@ -3503,7 +3507,7 @@ test("a spoken ask to add an agent is carried, and an unlisted kind is refused",
         }
       ).status,
   );
-  assert.deepEqual(statuses, ["accepted", "refused"]);
+  assert.deepEqual(statuses, ["accepted", "rejected"]);
 });
 
 test("a tool call outside the roster is refused before any carrier runs", async () => {
@@ -3555,7 +3559,7 @@ test("a tool call outside the roster is refused before any carrier runs", async 
     // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
     const raw = (event.item as { output?: string } | undefined)?.output ?? "{}";
     // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    assert.equal((JSON.parse(raw) as { status?: string }).status, "refused");
+    assert.equal((JSON.parse(raw) as { status?: string }).status, "rejected");
   }
 });
 
@@ -3604,7 +3608,7 @@ test("a tool call outside a turn the developer opened cannot act", async () => {
         status?: string;
       }
     ).status,
-    "refused",
+    "rejected",
   );
   // The call is answered so the model is not left waiting, but the turn opens
   // no reply: a turn Luke was not asked to act in must not talk on either.
@@ -3911,7 +3915,7 @@ test("a done that outlives the settle backstop cannot act with the spent turn's 
         status?: string;
       }
     ).status,
-    "refused",
+    "rejected",
   );
   assert.ok(!events.some((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE));
   assert.equal(context.session.status, REALTIME_STATUS.READY);
@@ -4307,7 +4311,7 @@ test("the second call of a turn is validated against the guide the first call's 
   const carried: { setting: string; value: string }[] = [];
   const context = harness({
     carryAppAction: async (action) => {
-      if (action.kind !== "setting") return { status: "refused" };
+      if (action.kind !== "setting") return { status: "rejected" };
       carried.push({ setting: String(action.setting.id), value: action.value });
       context.session.updateGuide(MODEL_AND_EFFORT_GUIDE);
       return { status: "changed" };
@@ -4379,7 +4383,7 @@ test("an app carrier that throws is refused with the error that caused it", asyn
     status?: string;
     reason?: string;
   };
-  assert.equal(parsed.status, "refused");
+  assert.equal(parsed.status, "rejected");
   assert.equal(parsed.reason, "Captions could not be saved.");
 });
 
@@ -4420,7 +4424,7 @@ test("a spoken ask about a setting the guide does not carry is refused before th
   const answered = (output?.item as { output?: string } | undefined)?.output;
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   const outcome = JSON.parse(answered ?? "{}") as { status?: string };
-  assert.equal(outcome.status, "refused");
+  assert.equal(outcome.status, "rejected");
 });
 
 test("a spoken panel ask is validated against the roster and carried", async () => {
@@ -4715,7 +4719,7 @@ test("a spoken composer open is validated against the fixed kinds and carried, n
     );
   assert.deepEqual(
     outputs.map((outcome) => outcome.status),
-    ["opened", "refused"],
+    ["opened", "rejected"],
   );
 });
 
@@ -4843,7 +4847,7 @@ test("an issue carrier that throws is refused with the error that caused it", as
     status?: string;
     reason?: string;
   };
-  assert.equal(parsed.status, "refused");
+  assert.equal(parsed.status, "rejected");
   assert.equal(parsed.reason, "Linear could not be reached.");
 });
 
@@ -4884,7 +4888,7 @@ test("an issue call with no tracker connected is refused before any carrier runs
   const raw = (output?.item as { output?: string } | undefined)?.output ?? "{}";
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   const parsed = JSON.parse(raw) as { status?: string; reason?: string };
-  assert.equal(parsed.status, "refused");
+  assert.equal(parsed.status, "rejected");
   assert.match(parsed.reason ?? "", /no issue tracker is connected/i);
 });
 
@@ -4934,7 +4938,7 @@ test("an issue call outside the roster is refused before any carrier runs", asyn
     // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
     const raw = (event.item as { output?: string } | undefined)?.output ?? "{}";
     // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    assert.equal((JSON.parse(raw) as { status?: string }).status, "refused");
+    assert.equal((JSON.parse(raw) as { status?: string }).status, "rejected");
   }
 });
 
@@ -4973,7 +4977,7 @@ test("an issue call outside a turn the developer opened cannot act", async () =>
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   const raw = (output?.item as { output?: string } | undefined)?.output ?? "{}";
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  assert.equal((JSON.parse(raw) as { status?: string }).status, "refused");
+  assert.equal((JSON.parse(raw) as { status?: string }).status, "rejected");
 });
 
 test("a tracker that disconnects withdraws the roster, and a reconnect resends it", async () => {
@@ -5356,4 +5360,7 @@ test("a spoken tool call is still validated in both processes", () => {
   assert.doesNotMatch(main, /\bappToolAction\b/);
   assert.match(main, /sessionRegistry\.get/);
   assert.match(main, /BRIDGE\.executeIssueAction/);
+  assert.match(renderer, /carryAct\(\{ id: call\.name, act: action, armed \}\)/);
+  assert.match(main, /if \(!envelope\.armed\)/);
+  assert.match(main, /actValidationTarget\(envelope\.id\)/);
 });
