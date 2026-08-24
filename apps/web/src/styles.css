@@ -178,10 +178,10 @@
      gutter is a horizontal scrollbar on every page anywhere scrollbars take
      space, which is everywhere the visitor is not on a Mac.
 
-     It has to be `clip` and not `hidden`, for the reason `.mock-pin` gives
-     below: `hidden` makes a scroll container, and a scroll container ancestor
-     is exactly what stops the pin from sticking. `overflow-y` is left alone,
-     which a `clip` on the other axis permits, so the page still scrolls down.
+     It has to be `clip` and not `hidden`: `hidden` makes a scroll container,
+     which script and keyboard can scroll even without bars, where `clip`
+     merely crops. `overflow-y` is left alone, which a `clip` on the other
+     axis permits, so the page still scrolls down.
 
      And it has to name both elements. The root's overflow propagates to the
      viewport and the root itself is then drawn as `visible`, so `html` alone
@@ -399,14 +399,10 @@
 
 /* Each step is the largest scale whose 660px art still clears the screen at
    the step's floor, so the mock fills a phone instead of floating in it and
-   the pin's clip never eats the frame's edges. */
+   the stage's clip never eats the frame's edges. */
 @media (width < 520px) {
   :root {
     --mock-scale: 0.58;
-  }
-
-  .mock-scroll {
-    margin-top: var(--space-7);
   }
 }
 
