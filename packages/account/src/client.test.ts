@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { JsonValue } from "@sidecar/wire/testing";
-import { ACCOUNT_PROVIDER } from "../../../apps/desktop/src/shared/contracts.js";
 import { AccountClient, AccountClientError, type FetchLike } from "./client.js";
+import { ACCOUNT_PROVIDER } from "./snapshot.js";
 
 function json(body: JsonValue, status = 200): Response {
   return new Response(JSON.stringify(body), {

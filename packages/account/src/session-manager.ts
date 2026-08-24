@@ -1,9 +1,4 @@
 import { singleFlight } from "@sidecar/oauth";
-import {
-  ACCOUNT_STATUS,
-  type AccountProvider,
-  type AccountSnapshot,
-} from "../../../apps/desktop/src/shared/contracts.js";
 import type { AccountClient, AccountIdentity, AccountTokens, StoredAccount } from "./client.js";
 import { deleteHostedAccount } from "./deletion.js";
 import { ACCOUNT_FAILURE_ACTION, accessTokenNeedsRefresh, accountFailureAction } from "./gate.js";
@@ -12,6 +7,7 @@ import {
   SIGN_IN_CANCELLED_MESSAGE,
   startAccountLoopback,
 } from "./loopback.js";
+import { ACCOUNT_STATUS, type AccountProvider, type AccountSnapshot } from "./snapshot.js";
 import { withIssuedAccountTokens } from "./token-lifecycle.js";
 
 export interface AccountSessionStore {
