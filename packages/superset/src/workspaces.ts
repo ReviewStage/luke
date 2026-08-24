@@ -17,10 +17,10 @@ import {
   SESSION_APPLICATION_SCOPE,
   SESSION_LOCATION,
   SESSION_STATUS,
+  SUPERSET_WORKSPACE_PROVIDER_ID,
 } from "@sidecar/session";
 import { type WireRecord, wireRecord } from "@sidecar/wire";
 import { SUPERSET_CONTROL_ID } from "./cli.js";
-import { SUPERSET_WORKSPACE_PROVIDER_ID } from "./vocabulary.js";
 
 const SUPERSET_AGENT_PROVIDER = {
   claude: AGENT_IDENTITY.CLAUDE_CODE.id,

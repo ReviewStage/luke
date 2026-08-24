@@ -22,7 +22,6 @@
     "@sidecar/guide": "workspace:*",
     "@sidecar/realtime": "workspace:*",
     "@sidecar/session": "workspace:*",
-    "@sidecar/superset": "workspace:*",
     "@sidecar/surface": "workspace:*",
     "@sidecar/wire": "workspace:*"
   }

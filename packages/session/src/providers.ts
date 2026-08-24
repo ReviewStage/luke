@@ -1,5 +1,10 @@
 import { text, type UnparsedWireValue } from "@sidecar/wire";
-import type { ProviderSessionObservation, SessionControl, SessionProvider } from "./session.js";
+import {
+  type ProviderSessionObservation,
+  SESSION_APPLICATION_ID,
+  type SessionControl,
+  type SessionProvider,
+} from "./session.js";
 
 /**
  * Stable provider identifiers shared by adapters, the registry, and the UI.
@@ -35,6 +40,19 @@ export type ProviderId = (typeof PROVIDER_ID)[keyof typeof PROVIDER_ID];
  * even as both wear Conductor's name and mark.
  */
 export const CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID = "conductor-local";
+
+export const SUPERSET_WORKSPACE_PROVIDER_ID = SESSION_APPLICATION_ID.SUPERSET;
+
+/**
+ * Every provider that can offer a workspace through the desktop app: the
+ * observed session providers, Superset's own workspace provider, and local
+ * Conductor's — the last two name no observed session provider, so they are
+ * added beside `ProviderId` rather than found within it.
+ */
+export type WorkspaceProviderId =
+  | ProviderId
+  | typeof SUPERSET_WORKSPACE_PROVIDER_ID
+  | typeof CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID;
 
 /**
  * The order any list of providers reads in. It is the registry's own order
@@ -72,6 +90,14 @@ const PROVIDER_IDS: ReadonlySet<string> = new Set(PROVIDER_ID_LIST);
 /** Whether this build knows the provider an observation names. */
 export function isProviderId(value: string): value is ProviderId {
   return PROVIDER_IDS.has(value);
+}
+
+export function isWorkspaceProviderId(value: string): value is WorkspaceProviderId {
+  return (
+    isProviderId(value) ||
+    value === SUPERSET_WORKSPACE_PROVIDER_ID ||
+    value === CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID
+  );
 }
 
 /**
