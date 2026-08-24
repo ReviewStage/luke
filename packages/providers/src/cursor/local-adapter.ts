@@ -1,8 +1,9 @@
-import { execFile, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { boundedInvocation, DEFAULT_CLI_PATH_DIRECTORIES } from "@sidecar/process";
 import {
   maximumSessionRecapLength,
   maximumSessionTitleLength,
@@ -20,7 +21,6 @@ import {
 } from "@sidecar/session";
 import {
   isRecord,
-  isWireNumber,
   isWireString,
   oneLine,
   recordFromJsonLine,
@@ -811,27 +811,16 @@ async function locateCursorAgent(): Promise<string | undefined> {
 
 const defaultCursorAgentRunner: CursorAgentRunner = {
   locate: locateCursorAgent,
-  probeLogin: (binaryPath) =>
-    new Promise((resolve, reject) => {
-      execFile(
-        binaryPath,
-        CURSOR_AGENT_CLI.LOGIN_PROBE_ARGV,
-        { timeout: CURSOR_SEND_DEFAULTS.LOGIN_PROBE_TIMEOUT_MS, windowsHide: true },
-        (error) => {
-          if (error === null) {
-            resolve(true);
-            return;
-          }
-          // SAFETY: Node's execFile callback reports command failures as ErrnoException objects.
-          const commandError = error as NodeJS.ErrnoException & { code?: unknown };
-          if (isWireNumber(commandError.code)) {
-            resolve(false);
-            return;
-          }
-          reject(new Error(`${CURSOR_AGENT_CLI.BINARY} could not be run`));
-        },
-      );
-    }),
+  probeLogin: async (binaryPath) => {
+    const result = await boundedInvocation({
+      binary: binaryPath,
+      arguments: CURSOR_AGENT_CLI.LOGIN_PROBE_ARGV,
+      timeoutMs: CURSOR_SEND_DEFAULTS.LOGIN_PROBE_TIMEOUT_MS,
+      maximumOutputBytes: 64 * 1024,
+      pathDirectories: [path.join(os.homedir(), ".local", "bin"), ...DEFAULT_CLI_PATH_DIRECTORIES],
+    });
+    return result.exitCode === 0;
+  },
   launch: (binaryPath, argv) =>
     new Promise((resolve) => {
       // Detached with no pipes: the turn's output lives in the transcript the

@@ -219,7 +219,7 @@ test("message and controls use fixed arguments without a shell", async (t) => {
   ]);
 });
 
-test("a refused rename answers with the CLI's own bounded error line", async (t) => {
+test("a refused rename never repeats the CLI's stderr", async (t) => {
   const home = await connectedHome(t);
   const cli = new SupersetCli({
     ...testCliOptions(home),
@@ -232,7 +232,7 @@ test("a refused rename answers with the CLI's own bounded error line", async (t)
 
   assert.deepEqual(await cli.renameWorkspace(CONTEXT, "Payments rollout"), {
     status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-    reason: "unknown option '--host'",
+    reason: "Superset could not rename that workspace.",
   });
 
   const silent = new SupersetCli({
@@ -522,7 +522,7 @@ test("creates on an observed remote host and preserves success when opening fail
   );
 });
 
-test("workspace creation reports Superset's bounded first error line", async (t) => {
+test("workspace creation never repeats the CLI's stderr", async (t) => {
   const home = await connectedHome(t);
   const cli = new SupersetCli({
     ...testCliOptions(home),
@@ -545,7 +545,7 @@ test("workspace creation reports Superset's bounded first error line", async (t)
     }),
     {
       status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-      reason: "Branch names cannot begin with that prefix.",
+      reason: "Superset could not create that workspace.",
     },
   );
 });

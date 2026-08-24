@@ -23,7 +23,6 @@ import { CREDENTIAL_PROVIDER_ID, type CredentialProviderId } from "@sidecar/cred
 import { type FeedbackSubmission, feedbackDeliveryFromEnvironment } from "@sidecar/feedback";
 import { fixtureSnapshot } from "@sidecar/fixtures";
 import { normalizeTrackedIssue, type TrackedIssue } from "@sidecar/issues";
-import { ObservationLoop, ObservationSupervisor } from "@sidecar/observation";
 import {
   CmuxSessionApplicationReader,
   CodexCloudSessionAdapter,
@@ -51,6 +50,8 @@ import {
   isWorkspaceProviderId,
   type NormalizedSession,
   normalizeObservedWorkspaceProjects,
+  ObservationLoop,
+  ObservationSupervisor,
   type ObservedWorkspaceProject,
   PROVIDER_ID_LIST,
   rosterRelevantSessions,
@@ -1938,12 +1939,16 @@ function configurePermissions(): void {
 }
 
 function handleDisplayChange(): void {
-  setTimeout(() => {
-    panels.refreshGeometry();
-    // The set of displays may have changed, not just their geometry: a chosen
-    // display arriving raises its window, one leaving takes its window down.
-    panels.reconcile();
-  }, 100);
+  setTimeout(
+    () =>
+      void (async () => {
+        await panels.refreshGeometry();
+        // The set of displays may have changed, not just their geometry: a chosen
+        // display arriving raises its window, one leaving takes its window down.
+        panels.reconcile();
+      })(),
+    100,
+  );
 }
 
 export function startDesktopApp(): void {
@@ -1964,7 +1969,7 @@ export function startDesktopApp(): void {
         ? await settingsStore.accountSnapshot()
         : { status: ACCOUNT_STATUS.SIGNED_OUT };
       accountSession.initialize(account);
-      panels.refreshGeometry();
+      await panels.refreshGeometry();
       registerIpc();
       // Resolving settings touches the filesystem, and the OS keychain only for a
       // provider that already has a stored key to decrypt. Starting it here keeps
@@ -2073,15 +2078,16 @@ export function startDesktopApp(): void {
       // windows before the bootstrap handler exists to answer them. A ping that
       // early is dropped, because startup is about to assert the panel anyway.
       app.on("second-instance", (_event, argv) => {
-        panels.refreshGeometry();
-        if (argv.includes("--expanded")) {
-          const host = panels.voiceHost();
-          const displayId = host ? panels.displayIdFor(host.webContents) : undefined;
-          if (displayId !== undefined) panels.setMode(displayId, "expanded", true);
-          return;
-        }
-        panels.reconcile();
-        panels.showInactiveAll();
+        void panels.refreshGeometry().then(() => {
+          if (argv.includes("--expanded")) {
+            const host = panels.voiceHost();
+            const displayId = host ? panels.displayIdFor(host.webContents) : undefined;
+            if (displayId !== undefined) panels.setMode(displayId, "expanded", true);
+            return;
+          }
+          panels.reconcile();
+          panels.showInactiveAll();
+        });
       });
 
       screen.on("display-added", handleDisplayChange);

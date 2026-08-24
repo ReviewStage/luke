@@ -14,7 +14,7 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
-    "@sidecar/oauth": "workspace:*",
+    "@sidecar/credentials": "workspace:*",
     "@sidecar/wire": "workspace:*"
   },
   "devDependencies": {

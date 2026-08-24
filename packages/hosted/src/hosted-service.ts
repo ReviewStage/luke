@@ -1,11 +1,10 @@
-import { attentionDecisionFromModel } from "@sidecar/attention";
+import { type AttentionDecision, attentionDecisionFromWire } from "@sidecar/session";
+import { isRecord, text, type UnparsedWireValue, wholeNumber } from "@sidecar/wire";
 import {
   REALTIME_CALLS_PATH,
   type RealtimeConnection,
   realtimeCredentialIsUsable,
-} from "@sidecar/realtime";
-import type { AttentionDecision } from "@sidecar/session";
-import { isRecord, text, type UnparsedWireValue, wholeNumber } from "@sidecar/wire";
+} from "./realtime-contract.js";
 
 /**
  * The wire contract between Luke's hosted service and the desktop. The web
@@ -132,7 +131,7 @@ export function hostedReviewAnswerFromWire(
   decidedAt: number,
 ): HostedReviewAnswer | undefined {
   if (!isRecord(value) || !isRecord(value.decision)) return undefined;
-  const decision = attentionDecisionFromModel(value.decision, decidedAt);
+  const decision = attentionDecisionFromWire(value.decision, decidedAt);
   if (!decision) return undefined;
   const quota = hostedQuotaFromWire(value.quota);
   const answer: HostedReviewAnswer = { decision };

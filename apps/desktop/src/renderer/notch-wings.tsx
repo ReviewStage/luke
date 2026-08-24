@@ -1,9 +1,9 @@
+import { ProviderMark, WingFace, wingMarkCapacity } from "@sidecar/panel";
 import { isSessionFilter, type SessionFilter } from "@sidecar/session";
 import { CAPSULE_SIDE_WIDTH, PANEL_WIDTH, peekWidth } from "@sidecar/surface";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { errandOriginProps } from "./luke-errand";
-import { LukeFace } from "./luke-face";
 import {
   faceYieldsToMeter,
   speechFaceInputs,
@@ -12,7 +12,6 @@ import {
   usePrefersReducedMotion,
 } from "./luke-face-mood";
 import { HIT_REGION, PANEL_PRESENTATION, type PanelPresentation } from "./panel-state";
-import { ProviderMark } from "./provider-marks";
 import {
   type ProviderTally,
   type SessionTally,
@@ -78,11 +77,6 @@ interface NotchWingsProps {
  * `--wing-inset` beside the housing, then the face and its gap, then a first
  * mark and a gap-and-mark for every mark after it.
  */
-const WING_INSETS = 29;
-const FACE_AND_GAP = 26;
-const MARK_WIDTH = 14;
-const MARK_AND_GAP = 21;
-
 /**
  * How many marks fit beside the face in a wing of this width. The peek's side
  * is 124px beside the housing it was measured against, which is where its
@@ -91,12 +85,7 @@ const MARK_AND_GAP = 21;
  * 55px that remain. The panel's side is what is left of `--panel-width` after
  * the housing, so it holds roughly twice as many.
  */
-export function wingMarkCapacity(sideWidth: number): number {
-  const beyondFirst = Math.floor(
-    (sideWidth - WING_INSETS - FACE_AND_GAP - MARK_WIDTH) / MARK_AND_GAP,
-  );
-  return Math.max(1, 1 + beyondFirst);
-}
+export { wingMarkCapacity } from "@sidecar/panel";
 
 /**
  * The peek's side beside this housing: what is left of the floored peek after
@@ -399,7 +388,7 @@ export function NotchWings({
                rendered at all while the meter has this place, which is how an
                errand knows there is no face to leave from. */
             <span className="wing-face" ref={faceElement} {...errandOriginProps()}>
-              <LukeFace key={face.play} motion={face.motion} repeat={face.repeat} />
+              <WingFace key={face.play} motion={face.motion} repeat={face.repeat} />
             </span>
           )}
         </div>

@@ -1,5 +1,5 @@
 import { PRODUCT_SETTING_VALUE, type ProductSettingValue } from "@sidecar/analytics";
-import { CREDENTIAL_PROVIDERS, isCredentialProviderId } from "@sidecar/credentials";
+import { CREDENTIAL_PROVIDERS, isCredentialProviderId } from "@sidecar/credentials/vocabulary";
 import {
   APP_SETTING_ID,
   APP_SETTING_KIND,

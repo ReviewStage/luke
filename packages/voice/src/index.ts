@@ -7,6 +7,10 @@ export {
   type VoiceSettings,
 } from "./capability-assembler.js";
 export {
+  HostedAttentionEvaluator,
+  type HostedAttentionEvaluatorOptions,
+} from "./hosted-attention-evaluator.js";
+export {
   HostedRealtimeCredentialMinter,
   type HostedRealtimeCredentialOptions,
 } from "./hosted-credentials.js";

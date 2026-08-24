@@ -1,8 +1,7 @@
-import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { promisify } from "node:util";
+import { boundedInvocation, INVOCATION_FAILURE, InvocationError } from "@sidecar/process";
 import { canIgnoreFilesystemError } from "@sidecar/providers";
 import {
   PROVIDER_ACT_RESULT_STATUS,
@@ -16,14 +15,7 @@ import {
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceProject,
 } from "@sidecar/session";
-import {
-  isRecord,
-  text,
-  type UnparsedWireValue,
-  unparsedWire,
-  type WireRecord,
-  wireRecord,
-} from "@sidecar/wire";
+import { isRecord, text, unparsedWire, type WireRecord, wireRecord } from "@sidecar/wire";
 import type { SupersetOrganizationChoice } from "./sign-in-stage.js";
 import type { SupersetSessionContext } from "./workspaces.js";
 
@@ -35,39 +27,12 @@ export function isSupersetControlId(controlId: string): boolean {
   return Object.values(SUPERSET_CONTROL_ID).some((candidate) => candidate === controlId);
 }
 
-const execFileAsync = promisify(execFile);
 const SUPERSET_QUERY_OUTPUT_LIMIT = 64 * 1024;
 const SUPERSET_ORGANIZATION_LIMIT = 20;
 const SUPERSET_TARGET_LIMIT = 20;
 const SUPERSET_PROJECT_LIMIT = 50;
-const SUPERSET_FAILURE_REASON_LIMIT = 300;
 const SUPERSET_PROJECT_REFRESH_INTERVAL_MS = 60_000;
 const LOCAL_TARGET_ID = "local";
-const ANSI_ESCAPE_PATTERN = new RegExp(`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`, "gu");
-
-function supersetFailureReason(error: UnparsedWireValue, fallback: string): string {
-  const record = wireRecord(error);
-  const stderr = record ? text(record.stderr) : undefined;
-  if (!stderr) {
-    return fallback;
-  }
-  const reason = stderr
-    .replace(ANSI_ESCAPE_PATTERN, "")
-    .split(/\r?\n/u)
-    .map((line) => line.trim())
-    .find(Boolean)
-    ?.replace(/^error:\s*/iu, "")
-    .split("")
-    .map((character) => {
-      const code = character.charCodeAt(0);
-      return code >= 32 && code !== 127 ? character : " ";
-    })
-    .join("")
-    .replace(/\s+/gu, " ")
-    .slice(0, SUPERSET_FAILURE_REASON_LIMIT)
-    .trim();
-  return reason || fallback;
-}
 
 export type SupersetCommandRunner = (
   executable: string,
@@ -84,10 +49,15 @@ async function defaultCommandRunner(
   executable: string,
   arguments_: readonly string[],
 ): Promise<void> {
-  await execFileAsync(executable, [...arguments_], {
-    timeout: 30_000,
-    windowsHide: true,
+  const result = await boundedInvocation({
+    binary: executable,
+    arguments: arguments_,
+    timeoutMs: 30_000,
+    maximumOutputBytes: SUPERSET_QUERY_OUTPUT_LIMIT,
   });
+  if (result.exitCode !== 0) {
+    throw new InvocationError(INVOCATION_FAILURE.FAILED, executable);
+  }
 }
 
 export interface SupersetCliOptions {
@@ -112,9 +82,9 @@ export class SupersetCli {
     this.#organizationId =
       options.organizationId ??
       (async () => {
-        const { stdout } = await execFileAsync(
-          "/usr/bin/plutil",
-          [
+        const result = await boundedInvocation({
+          binary: "/usr/bin/plutil",
+          arguments: [
             "-extract",
             "organizationId",
             "raw",
@@ -122,19 +92,25 @@ export class SupersetCli {
             "-",
             path.join(this.#homeDirectory, "config.json"),
           ],
-          { timeout: 2_000, windowsHide: true },
-        );
-        return stdout;
+          timeoutMs: 2_000,
+          maximumOutputBytes: SUPERSET_QUERY_OUTPUT_LIMIT,
+        });
+        if (result.exitCode !== 0) return undefined;
+        return result.stdout;
       });
     this.#query =
       options.query ??
       (async (executable, arguments_, timeoutMs) => {
-        const { stdout } = await execFileAsync(executable, [...arguments_], {
-          maxBuffer: SUPERSET_QUERY_OUTPUT_LIMIT,
-          timeout: timeoutMs,
-          windowsHide: true,
+        const result = await boundedInvocation({
+          binary: executable,
+          arguments: arguments_,
+          timeoutMs,
+          maximumOutputBytes: SUPERSET_QUERY_OUTPUT_LIMIT,
         });
-        return stdout;
+        if (result.exitCode !== 0) {
+          throw new InvocationError(INVOCATION_FAILURE.FAILED, executable);
+        }
+        return result.stdout;
       });
   }
 
@@ -351,18 +327,10 @@ export class SupersetCli {
           warning: "The workspace was created, but Superset could not open it.",
         };
       }
-    } catch (error) {
-      const stderr =
-        error instanceof Error && "stderr" in error
-          ? // SAFETY: execFile failures attach stderr to the thrown Error object.
-            (error as Error & { stderr?: UnparsedWireValue }).stderr
-          : undefined;
+    } catch {
       return {
         status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-        reason: supersetFailureReason(
-          unparsedWire({ stderr }),
-          "Superset could not create that workspace.",
-        ),
+        reason: "Superset could not create that workspace.",
       };
     }
   }
@@ -431,18 +399,10 @@ export class SupersetCli {
         name,
       ]);
       return { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED };
-    } catch (error) {
-      const stderr =
-        error instanceof Error && "stderr" in error
-          ? // SAFETY: execFile failures attach stderr to the thrown Error object.
-            (error as Error & { stderr?: UnparsedWireValue }).stderr
-          : undefined;
+    } catch {
       return {
         status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-        reason: supersetFailureReason(
-          unparsedWire({ stderr }),
-          "Superset could not rename that workspace.",
-        ),
+        reason: "Superset could not rename that workspace.",
       };
     }
   }

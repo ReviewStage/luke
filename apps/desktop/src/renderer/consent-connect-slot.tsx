@@ -1,3 +1,4 @@
+import { ProviderMark } from "@sidecar/panel";
 import { useRef } from "react";
 import {
   CONSENT_SERVICE_NAME,
@@ -5,7 +6,6 @@ import {
   type ConsentServiceId,
 } from "#shared/consent-services";
 import { HIT_REGION } from "./panel-state";
-import { ProviderMark } from "./provider-marks";
 import { ExternalIcon } from "./settings-icons";
 
 /**

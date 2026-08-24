@@ -1,11 +1,12 @@
 # Packages
 
 Everything that is application logic lives here; `apps/` holds only what is
-specific to a deployable: Electron process wiring, the React surfaces, and the
-Vite site. The test is mechanical rather than a judgment call: a module belongs
-in an app when it imports `electron`, or `react`, or a DOM API. Everything else
-is logic, and a logic module can be tested with `node --test` and no harness,
-which is the corroborating signal.
+specific to a deployable: Electron process wiring, app-specific React surfaces,
+and the Vite site. `packages/panel` is the one shared React package: it owns the
+panel's React anatomy so the desktop and marketing mock compose the same
+components. Each app owns the styling that presents those components. Other
+modules belong in an app when they import `electron`, `react`, or a DOM API.
+Everything else is logic and can be tested with `node --test` and no harness.
 
 ## The graph is acyclic, and stays that way
 
@@ -17,9 +18,9 @@ Adding a package means adding a `package.json` and a `tsconfig.json` copied
 from any sibling, a barrel at `src/index.ts`, and the dependencies its imports
 imply. Adding an *edge* is the part worth thinking about: a cycle usually means
 a module is in the wrong package rather than that the graph needs to allow one.
-Three of this repository's package boundaries were decided that way. The
-credential vocabulary, the hook merge, and the hosted attention evaluator each
-sit where they do because putting them anywhere else closed a loop.
+Package boundaries should put wire vocabulary below behavior and keep behavior
+out of transport packages. The credential vocabulary and hook merge sit where
+they do because putting them elsewhere would close a loop.
 
 Watch for cycles that exist only in tests. A test that reaches into a package
 above its own is still an edge pnpm records, and it usually means the test

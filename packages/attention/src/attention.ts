@@ -2,8 +2,9 @@ import {
   ATTENTION_DISPOSITION,
   type AttentionDecision,
   type AttentionDisposition,
+  attentionDecisionFromWire,
+  maximumAttentionSummaryLength,
   type NormalizedSession,
-  normalizeAttention,
   normalizeSessionIdentity,
   SESSION_COMPLETION_CAUSE,
   type SessionDetail,
@@ -11,14 +12,7 @@ import {
   type SessionStatus,
   silentAttention,
 } from "@sidecar/session";
-import {
-  isRecord,
-  isWireString,
-  nonNegativeNumber,
-  positiveInteger,
-  text,
-  type UnparsedWireValue,
-} from "@sidecar/wire";
+import { nonNegativeNumber, positiveInteger, text, type UnparsedWireValue } from "@sidecar/wire";
 
 export const ATTENTION_TRIGGER = {
   OBSERVED: "observed",
@@ -29,11 +23,9 @@ export const ATTENTION_TRIGGER = {
 
 export type AttentionTrigger = (typeof ATTENTION_TRIGGER)[keyof typeof ATTENTION_TRIGGER];
 
-/** A spoken sentence stays far shorter than the recap a provider may observe. */
-export const maximumAttentionSummaryLength = 180;
-
 /** A standing ask is one spoken sentence of the developer's, not a document. */
 export const maximumAttentionRequestLength = 300;
+export { maximumAttentionSummaryLength };
 
 /**
  * The text of a standing ask on its way into the registry, or nothing. Refused
@@ -251,11 +243,6 @@ interface AttentionCandidate {
   update: AttentionUpdate;
 }
 
-function isAttentionDisposition(value: UnparsedWireValue): value is AttentionDisposition {
-  if (!isWireString(value)) return false;
-  return ATTENTION_DISPOSITIONS.some((disposition) => disposition === value);
-}
-
 /**
  * Every field a development can be derived from. `attentionTrigger` and
  * `#isSuperseded` both walk this list, so adding a dimension is one edit: a
@@ -337,26 +324,7 @@ export function attentionDecisionFromModel(
   value: UnparsedWireValue,
   decidedAt: number,
 ): AttentionDecision | undefined {
-  if (!isRecord(value)) return undefined;
-
-  if (!isAttentionDisposition(value.disposition)) return undefined;
-
-  const summaryText = text(value.summary);
-  const summary = summaryText?.slice(0, maximumAttentionSummaryLength);
-  if (value.disposition !== ATTENTION_DISPOSITION.SILENT && !summary) return undefined;
-
-  // Anything but a literal true reads as not answering: an ask's privileges
-  // are earned by the model saying so, never by a field being malformed.
-  const answersAsk =
-    value.answers_ask === true && value.disposition !== ATTENTION_DISPOSITION.SILENT;
-
-  const decision: AttentionDecision = {
-    disposition: value.disposition,
-    decidedAt,
-  };
-  if (summary) decision.summary = summary;
-  if (answersAsk) decision.answersAsk = true;
-  return normalizeAttention(decision);
+  return attentionDecisionFromWire(value, decidedAt);
 }
 
 /**

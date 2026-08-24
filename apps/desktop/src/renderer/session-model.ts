@@ -1255,14 +1255,7 @@ export function tallySummary(tally: SessionTally): string {
  * fixture rows are measured against the fixture's own epoch so the evidence
  * stays reproducible, and live rows against whatever render tick asked.
  */
-export function observedAgoLabel(observedAt: number, now: number): string {
-  const elapsedMinutes = Math.floor((now - observedAt) / 60_000);
-  if (elapsedMinutes < 1) return "Now";
-  if (elapsedMinutes < 60) return `${elapsedMinutes}m`;
-  const elapsedHours = Math.floor(elapsedMinutes / 60);
-  if (elapsedHours < 24) return `${elapsedHours}h`;
-  return `${Math.floor(elapsedHours / 24)}d`;
-}
+export { observedAgoLabel } from "@sidecar/panel";
 
 /**
  * The caption beside the count once the panel has room for it. The badge's

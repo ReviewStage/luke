@@ -1,6 +1,6 @@
 import { PRODUCT_SURFACE_EVENT } from "@sidecar/analytics";
 import { GOOGLE_CALENDAR_ID, GOOGLE_CALENDAR_NAME } from "@sidecar/calendar/vocabulary";
-import type { CredentialProvider } from "@sidecar/credentials";
+import type { CredentialProvider } from "@sidecar/credentials/vocabulary";
 import {
   CLOUD_AGENT_PROVIDER_LIST,
   CREDENTIAL_CONNECTION,
@@ -8,9 +8,10 @@ import {
   CREDENTIAL_PROVIDERS,
   providerRunsSessionsInCloud,
   VOICE_CREDENTIAL_PROVIDER,
-} from "@sidecar/credentials";
+} from "@sidecar/credentials/vocabulary";
 import { APP_SETTING_KIND, APP_TOGGLE_VALUE } from "@sidecar/guide";
 import type { HostedQuota, HostedUsageAnswer } from "@sidecar/hosted";
+import { CloudBadge, ProviderMark } from "@sidecar/panel";
 import {
   isRealtimeVoice,
   isRealtimeVoiceSpeed,
@@ -119,7 +120,6 @@ import {
   voiceSourceLabel,
 } from "./microphone-access";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
-import { CloudBadge, ProviderMark } from "./provider-marks";
 import {
   BackIcon,
   CheckIcon,

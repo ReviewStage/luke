@@ -1,0 +1,828 @@
+/* Notch mock
+   Ported from apps/desktop/src/renderer/styles/base.css and styles/sessions.css.
+   The class names are the renderer's own so the two sheets stay diffable; the
+   `.mock` scope, the display frame, and the scroll pin are the only page-side
+   inventions. `data-mode` here is `data-presentation` there, with the slot —
+   a credential entry the page has no story for — left out.
+   ------------------------------------------------------------------------- */
+
+/* The runway the mock plays through. In the product the pointer drives the
+   presentations; here the scroll does: the art pins while its section scrolls
+   past, and progress through the section steps capsule → peek → panel. The
+   one gesture every visitor already makes is what plays the motion, on a
+   phone as well as under a pointer. */
+.mock-scroll {
+  /* Small-viewport units, so a collapsing mobile URL bar neither stretches
+     the runway nor bounces the thresholds while the visitor is mid-scroll. */
+  height: 165svh;
+  margin-top: var(--space-7);
+}
+
+.mock-pin {
+  position: sticky;
+  /* High enough that the open panel sits comfortably on screen, low enough
+     that the capsule clears a phone browser's own chrome. */
+  top: max(72px, 14svh);
+  display: flex;
+  justify-content: center;
+  /* The stage is wider than the shell's content box, whose padding belongs to
+     the prose. Give the display the viewport width at every breakpoint so the
+     clip keeps its rounded corners instead of shaving them to the measure. */
+  margin-inline: calc(50% - 50vw);
+  /* `transform: scale()` leaves the layout box at full size, so the pin
+     tracks the scale itself or a phone reserves 560px for a 300px visual.
+     `clip` keeps the untransformed art width from opening a horizontal
+     scrollbar — and it must be `clip`, not `hidden`: a scroll container
+     ancestor is exactly what stops `position: sticky` from sticking. */
+  height: calc(var(--mock-height) * var(--mock-scale));
+  overflow: clip;
+}
+
+.mock {
+  /* The real values a MacBook's notch reports, so the capsule and the panel
+     line up exactly as they do on hardware. */
+  --notch-housing-width: 210px;
+  --notch-top-inset: 38px;
+
+  /* The renderer's tokens, verbatim. The page's own palette stays out of the
+     mock: the art has to read as the product, not as the page. */
+  --state-working: #5cd5ff;
+  --state-attention: #ffa049;
+  --state-complete: #6fdca4;
+  --state-idle: rgba(255, 255, 255, 0.44);
+  --text-primary: rgba(255, 255, 255, 0.95);
+  --text-tertiary: rgba(255, 255, 255, 0.34);
+
+  /* Luke's surface is pure black and the page around it is not, so the mock is
+     the one dark object on a light page and every token it draws with has to
+     be declared here: inherited from the light page, white-on-white becomes
+     black-on-black and the interior disappears. The frame is the display the
+     capsule is cut into, which is why
+     it alone is allowed to end on the page's own ground. */
+  --text-secondary: rgba(255, 255, 255, 0.56);
+  --hairline: rgba(255, 255, 255, 0.08);
+  --hairline-strong: rgba(255, 255, 255, 0.09);
+  --raised: rgba(255, 255, 255, 0.05);
+  --raised-strong: rgba(255, 255, 255, 0.09);
+  --frame-top: #14171c;
+  --frame-bottom: #101318;
+
+  /* Provider brand colours, used only by the marks and ported with them:
+     Claude Code's published coral, the vertical gradient Codex draws its mark
+     with, the light half of Conductor's two-colour palette, and the light
+     silhouettes Cursor and Devin publish for dark surfaces. */
+  --mark-claude-code: #d97757;
+  --mark-codex-top: #b1a7ff;
+  --mark-codex-middle: #7a9dff;
+  --mark-codex-bottom: #3941ff;
+  --mark-conductor: #eae8e6;
+  --mark-cursor: #ffffff;
+  --mark-devin: #ffffff;
+
+  /* Springs, durations, and the row fan arrive from motion-tokens.css on
+     :root. --loop-motion stays here: the mock has no face to pause. */
+  --loop-motion: running;
+
+  --surface-fill: #000;
+  --surface-shadow: 0 10px 26px rgba(0, 0, 0, 0.46), 0 2px 7px rgba(0, 0, 0, 0.3);
+
+  --panel-radius: 30px;
+  --panel-inset: 20px;
+  --wing-inset: 9px;
+  --scroll-fade: 26px;
+
+  --capsule-width: calc(var(--notch-housing-width) + 72px);
+  --capsule-height: max(var(--notch-top-inset), 32px);
+  --peek-width: calc(var(--notch-housing-width) + 248px);
+  --notch-convex-radius: calc(var(--capsule-height) * 0.348);
+  --notch-concave-radius: calc(var(--capsule-height) * 0.17);
+  --wing-bound: var(--peek-width);
+
+  position: relative;
+  width: 700px;
+  height: var(--mock-height);
+  flex: none;
+  transform: scale(var(--mock-scale));
+  transform-origin: top center;
+  font-family: var(--font-product);
+  /* The page reads at 1.6; the product does not. Left to inherit, the looser
+     leading grows every row until the fifth one is pushed off the surface. */
+  line-height: normal;
+  /* An illustration, not page copy: dragging across a recreated interface
+     should not fill someone's clipboard with invented session titles. */
+  user-select: none;
+}
+
+/* A flare belongs to the corner it turns into: beside the housing it
+   disappears into the housing's own curve, and at the panel's size it keeps
+   the proportion the hardware holds between concave and convex. */
+.mock[data-mode="panel"] {
+  --notch-concave-radius: calc(var(--panel-radius) * 0.489);
+  --wing-bound: var(--panel-width);
+}
+
+/* Any element that carries a session state gets its accent from one place. */
+.mock [data-state="working"] {
+  --accent: var(--state-working);
+}
+.mock [data-state="attention"] {
+  --accent: var(--state-attention);
+}
+.mock [data-state="complete"] {
+  --accent: var(--state-complete);
+}
+.mock [data-state="unknown"] {
+  --accent: var(--state-idle);
+}
+
+/* The persistent display the capsule is cut into. It stays in place while the
+   surface grows, so the panel remains inside the same rounded stage instead
+   of exposing the square ends of a narrower strip. */
+.mock-frame {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 18px;
+  background: linear-gradient(180deg, var(--frame-top) 0%, var(--frame-bottom) 100%);
+}
+
+/* The black surface is the whole animation: one leaf element with no children
+   and no text, so growing it costs a rounded-rect fill rather than a relayout
+   of the panel. Capsule, peek and panel are all this one shape. */
+.mock .panel-surface {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  left: 50%;
+  width: var(--capsule-width);
+  height: var(--capsule-height);
+  /* The spring undershoots on the way back, and the capsule is the floor: a
+     shape that dips inside the housing's footprint opens a gap where there is
+     a physical camera, not a screen. */
+  min-width: var(--capsule-width);
+  min-height: var(--capsule-height);
+  border-radius: 0 0 var(--notch-convex-radius) var(--notch-convex-radius);
+  background: var(--surface-fill);
+  transform: translateX(-50%);
+  /* Held back by `--duration-exit` so the shape never shrinks out from under
+     content that is still on screen. The per-mode rules below override
+     duration, timing, and delay by position. */
+  transition:
+    width var(--duration-shape) var(--spring) var(--duration-exit),
+    height var(--duration-shape) var(--spring) var(--duration-exit),
+    border-radius var(--duration-shape) var(--spring) var(--duration-exit),
+    background-color var(--duration-shape) var(--motion-exit),
+    box-shadow var(--duration-quick) var(--motion-exit),
+    transform var(--duration-shape) var(--spring) var(--duration-exit);
+}
+
+/* Where the shape meets the top edge it flares outward on the same concave
+   curve the housing does, so a capsule beside the notch reads as one object
+   with it rather than as a black rectangle parked next to one. */
+.mock .panel-surface::before,
+.mock .panel-surface::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  width: var(--notch-concave-radius);
+  height: var(--notch-concave-radius);
+  transition:
+    width var(--duration-shape) var(--spring) var(--duration-exit),
+    height var(--duration-shape) var(--spring) var(--duration-exit);
+}
+
+/* Sized in percentages of the element rather than in the radius the element
+   is already sized by, so a growing flare is a box resizing under a fixed
+   gradient instead of a gradient interpolated on every frame. The last
+   half-pixel is a feather against stair-steps on the arc. */
+.mock .panel-surface::before {
+  right: 100%;
+  background: radial-gradient(
+    ellipse 100% 100% at 0 100%,
+    transparent calc(100% - 0.5px),
+    var(--surface-fill) 100%
+  );
+}
+
+.mock .panel-surface::after {
+  left: 100%;
+  background: radial-gradient(
+    ellipse 100% 100% at 100% 100%,
+    transparent calc(100% - 0.5px),
+    var(--surface-fill) 100%
+  );
+}
+
+/* Growing, the flare leads with the surface rather than waiting for content
+   to leave; shrinking, the base rule's delay applies and the two close
+   together. */
+.mock[data-mode="panel"] .panel-surface::before,
+.mock[data-mode="panel"] .panel-surface::after {
+  transition-delay: 0s, 0s;
+}
+
+.mock[data-mode="peek"] .panel-surface,
+.mock[data-mode="panel"] .panel-surface {
+  box-shadow: var(--surface-shadow);
+}
+
+/* Under the pointer: wide enough to say what the count means. The peek grows
+   at once — the delay is for leaving, not arriving. */
+.mock[data-mode="peek"] .panel-surface {
+  width: var(--peek-width);
+  transition-duration: var(--duration-shape);
+  transition-timing-function:
+    var(--spring), var(--spring), var(--spring), var(--motion-exit), var(--motion-exit),
+    var(--spring);
+  transition-delay: 0s;
+}
+
+.mock[data-mode="panel"] .panel-surface {
+  width: var(--panel-width);
+  height: var(--panel-height, 520px);
+  border-radius: 0 0 var(--panel-radius) var(--panel-radius);
+  transition-duration: var(--duration-shape);
+  transition-timing-function:
+    var(--spring), var(--spring), var(--spring), var(--motion-exit), var(--motion-exit),
+    var(--spring);
+  transition-delay: 0s, 0s, 0s, 0s, var(--duration-shape), 0s;
+}
+
+/* Notch wings. Bounded by the shape the wing's state draws, never by the
+   art's box, so nothing that unfolds can be drawn past the black. */
+.mock .wing {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  display: flex;
+  height: var(--capsule-height);
+  align-items: center;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.mock .wing-left {
+  right: calc(50% + var(--notch-housing-width) / 2);
+  left: calc(50% - var(--wing-bound) / 2);
+  justify-content: flex-end;
+  /* The marks rest against this edge, and this edge is the one a morph moves.
+     In the product session-motion glides them along it on the surface's own
+     spring; here the edge itself takes the surface's exact timing — both
+     travel 50% minus half a springing width — so the marks track the black
+     without a frame of being drawn past it. The handful of fixed-size glyphs
+     inside re-lay out for pennies, and no text is re-shaped. */
+  transition: left var(--duration-shape) var(--spring) var(--duration-exit);
+}
+
+/* Growing, the far edge leads with the surface; shrinking, the base rule's
+   delay holds both back together — the two edges never part. */
+.mock[data-mode="peek"] .wing-left,
+.mock[data-mode="panel"] .wing-left {
+  transition-delay: 0s;
+}
+
+.mock .wing-right {
+  right: calc(50% - var(--wing-bound) / 2);
+  left: calc(50% + var(--notch-housing-width) / 2);
+  justify-content: flex-start;
+}
+
+.mock .wing-inner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 var(--wing-inset);
+}
+
+/* The left wing's inner spans the whole strip rather than shrinking to its
+   contents: the face keeps the notch's edge it always had, and the marks' own
+   auto margin is what holds them against the shape's far edge instead of
+   beside the face. */
+.mock .wing-left .wing-inner {
+  flex: 1;
+  justify-content: flex-end;
+}
+
+/* Anchored to the shape's far edge — the auto margin holds it there — and
+   starting at `--panel-inset` from it, so the first mark lines up with the tab
+   bar and the rows below. The wing already pads `--wing-inset`; the margin
+   makes up the difference. Read the way a list is: the first provider — the
+   one that needs a person soonest — holds the leftmost slot, and the overflow
+   count trails the rest. */
+.mock .wing-marks {
+  display: flex;
+  height: 22px;
+  align-items: center;
+  gap: 7px;
+  margin-right: auto;
+  margin-left: calc(var(--panel-inset) - var(--wing-inset));
+}
+
+.mock .wing-mark {
+  display: flex;
+  align-items: center;
+  color: var(--text-secondary);
+}
+
+/* The capsule keeps the face and nothing else; what Luke is watching unfolds
+   outward from the notch on the same spring, at the same distance, as the
+   count's caption does on the other side. The two wings are one gesture. */
+.mock .wing-mark,
+.mock .wing-more {
+  opacity: 0;
+  transform: translateX(8px);
+  transition:
+    opacity var(--duration-exit) var(--motion-exit),
+    transform var(--duration-shape) var(--spring);
+}
+
+.mock[data-mode="peek"] .wing-mark,
+.mock[data-mode="peek"] .wing-more,
+.mock[data-mode="panel"] .wing-mark,
+.mock[data-mode="panel"] .wing-more {
+  opacity: 1;
+  transform: none;
+  transition-duration: var(--duration-quick), var(--duration-shape);
+  transition-timing-function: var(--motion-exit), var(--spring);
+  transition-delay: var(--peek-delay);
+}
+
+/* A mark can mount into a wing that is already unfolded — the panel's wing
+   holds more marks than the peek's — and a transition only runs from a style
+   the element has held, so a mark that arrives late unfolds on the same
+   gesture as the rest instead of appearing in place. */
+@starting-style {
+  .mock[data-mode="peek"] .wing-mark,
+  .mock[data-mode="peek"] .wing-more,
+  .mock[data-mode="panel"] .wing-mark,
+  .mock[data-mode="panel"] .wing-more {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+}
+
+/* More agents than the wing can hold: counted rather than dropped, at the far
+   end of the row, where it reads as the remainder of a list. */
+.mock .wing-more {
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+  font-size: 9.5px;
+  font-weight: 660;
+  letter-spacing: -0.2px;
+}
+
+.mock .provider-mark {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+/* The marks fill their box very differently — the Claude Code glyph is wide
+   and short, the Codex and Cursor marks are full-bleed, and Conductor's
+   letter mark is taller than it is wide — so each gets a uniform scale to sit
+   at the same optical weight. Proportions are untouched, as the renderer's
+   own sheet insists. */
+.mock .provider-mark[data-mark="claude-code"] {
+  color: var(--mark-claude-code);
+  transform: scale(1.12);
+}
+
+.mock .provider-mark[data-mark="codex"] {
+  transform: scale(0.94);
+}
+
+.mock .provider-mark[data-mark="chatgpt"] {
+  transform: scale(0.94);
+}
+
+.mock .provider-mark[data-mark="conductor"] {
+  color: var(--mark-conductor);
+  transform: scale(0.93);
+}
+
+.mock .provider-mark[data-mark="cursor"] {
+  color: var(--mark-cursor);
+  transform: scale(0.94);
+}
+
+/* Devin's published mark leaves roughly a fifth of its box empty on every
+   side, so it is scaled up to the height the full-bleed marks reach. */
+.mock .provider-mark[data-mark="devin"] {
+  color: var(--mark-devin);
+  transform: scale(1.22);
+}
+
+/* Luke holds the place nearest the housing in every state: the marks and the
+   captions unfold around a fixed point, and the strip at rest is him rather
+   than whichever agent happens to be first. */
+.mock .luke-face {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  overflow: visible;
+  color: var(--text-primary);
+}
+
+/* A number, not a badge: the rounded system face macOS uses for glanceable
+   numerals, in the tally's own state colour. */
+.mock .count-badge {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  font-family: ui-rounded, -apple-system, "SF Pro Rounded", blinkmacsystemfont, sans-serif;
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  transform: scale(0.88);
+  transform-origin: left center;
+  transition: transform var(--duration-shape) var(--spring);
+  will-change: transform;
+}
+
+.mock .count-badge[data-state="attention"] {
+  text-shadow: 0 0 14px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+/* The panel has room for it to sit at full size; the capsule and the peek do
+   not, and growing it there read as a second movement competing with the
+   widening. */
+.mock[data-mode="panel"] .count-badge {
+  transform: scale(1);
+}
+
+.mock .count-caption {
+  position: absolute;
+  top: 50%;
+  left: 100%;
+  margin-left: 9px;
+  color: var(--text-secondary);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  opacity: 0;
+  text-transform: uppercase;
+  transform: translate(-8px, -50%);
+  transition:
+    opacity var(--duration-exit) var(--motion-exit),
+    transform var(--duration-shape) var(--spring);
+  white-space: nowrap;
+}
+
+.mock[data-mode="peek"] .count-caption,
+.mock[data-mode="panel"] .count-caption {
+  opacity: 1;
+  transform: translate(0, -50%);
+  transition-duration: var(--duration-quick), var(--duration-shape);
+  transition-timing-function: var(--motion-exit), var(--spring);
+  transition-delay: var(--peek-delay);
+}
+
+/* Expanded panel. Content arrives behind the surface, never in front of it:
+   the stage waits out `--expand-delay` on the way in — measured against where
+   the spring has actually reached — and leaves over `--duration-exit` before
+   the surface moves on the way out. */
+.mock .expanded-stage {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  left: 50%;
+  width: var(--panel-width);
+  max-height: 520px;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(-10px);
+  transition:
+    opacity var(--duration-exit) var(--motion-exit),
+    transform var(--duration-shape) var(--spring),
+    visibility 0s linear var(--duration-exit);
+  will-change: opacity, transform;
+}
+
+.mock[data-mode="panel"] .expanded-stage {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+  transition:
+    opacity var(--duration-quick) var(--motion-exit) var(--expand-delay),
+    transform var(--duration-shape) var(--spring) var(--expand-delay),
+    visibility 0s linear var(--expand-delay);
+}
+
+/* Rounded like the surface it sits on: past the shape's own corner is the
+   page, and the pointer there means leaving. */
+.mock .expanded-panel {
+  display: flex;
+  max-height: 520px;
+  flex-direction: column;
+  padding: calc(max(var(--notch-top-inset), 32px) + 14px) var(--panel-inset) 18px;
+  border-radius: 0 0 var(--panel-radius) var(--panel-radius);
+  /* The hero centers its own copy; the panel is a recreation of a real
+     left-aligned product surface and must not inherit that. */
+  text-align: left;
+}
+
+.mock .body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* The tab bar says what you are looking at; the options button says how it is
+   being shown. One line, because the second is only ever a qualifier on the
+   first. */
+.mock .panel-header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mock .tab-bar {
+  position: relative;
+  display: flex;
+  width: calc(var(--tab-count) * 92px);
+  flex: 0 0 auto;
+  padding: 3px;
+  border-radius: 11px;
+  background: var(--raised);
+}
+
+.mock .tab-thumb {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc((100% - 6px) / var(--tab-count));
+  border-radius: 8px;
+  background: var(--raised-strong);
+  transform: translateX(calc(var(--tab-index) * 100%));
+  transition: transform var(--duration-fast) var(--spring-fast);
+}
+
+.mock .tab {
+  position: relative;
+  flex: 1;
+  padding: 6px 0;
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  font-weight: 620;
+  text-align: center;
+}
+
+.mock .tab[data-active="true"] {
+  color: var(--text-primary);
+}
+
+.mock .options-button {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px;
+  border-radius: 10px;
+  background: var(--raised);
+  color: var(--text-secondary);
+}
+
+.mock .options-glyph {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+/* Rows dissolve into the panel rather than being cut off at its edge — the
+   renderer's own treatment for a fixture taller than the shape. A scroll
+   timeline is exactly the right tool: with nothing to scroll it never becomes
+   active, so content that fits is left alone without asking JavaScript
+   whether it overflows. */
+@keyframes scroll-edge-fade {
+  from {
+    mask-image: linear-gradient(to bottom, #000 calc(100% - var(--scroll-fade)), transparent 100%);
+  }
+
+  to {
+    mask-image: linear-gradient(to bottom, #000 100%, transparent 100%);
+  }
+}
+
+/* `min-height: 0` is what actually permits the clip: a flex child defaults to
+   its content size, which would push the list past the panel instead of
+   containing it. The renderer shows a thin scrollbar here; the mock is an
+   illustration nobody can scroll, so it draws none. */
+.mock .session-list {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 9px;
+  overflow-x: clip;
+  overflow-y: auto;
+  animation: scroll-edge-fade linear both;
+  animation-timeline: scroll(self block);
+  scrollbar-width: none;
+}
+
+/* Content arrives behind the surface on the same spring the surface is
+   riding. Each row starts further up than the one above it, so the stack is
+   compressed and the gaps spring open — the space between sessions is the
+   thing that moves. `--row-delay` is what makes it directional: zero on the
+   way out, the stagger on the way in. */
+.mock .session-row,
+.mock .panel-header {
+  --row-delay: 0s;
+
+  opacity: 0;
+  transform: translateY(
+    calc((min(var(--row-index, 0), var(--row-fan-limit)) + 1) * var(--row-fan) * -1)
+  );
+  transition:
+    opacity var(--duration-exit) var(--motion-exit) var(--row-delay),
+    transform var(--duration-shape) var(--spring) var(--row-delay);
+}
+
+.mock[data-mode="panel"] .session-row,
+.mock[data-mode="panel"] .panel-header {
+  --row-delay: calc(
+    var(--expand-delay) +
+    min(var(--row-index, 0), var(--row-fan-limit)) *
+    var(--row-stagger)
+  );
+
+  opacity: 1;
+  transform: none;
+}
+
+.mock .session-row {
+  display: flex;
+  width: 100%;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  border: 1px solid var(--hairline);
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.028);
+  margin: 0;
+  text-align: left;
+}
+
+.mock .session-row[data-state="attention"] {
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+
+/* The mark stands bare: its silhouette is the identification, and the slot
+   keeps a fixed size so every title starts on the same column and the cloud
+   badge has a corner to hold. */
+.mock .row-mark {
+  position: relative;
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  place-items: center;
+}
+
+.mock .row-mark .provider-mark {
+  width: 20px;
+  height: 20px;
+}
+
+/* The work is happening somewhere the user cannot see. The badge overhangs
+   the mark's box rather than sitting inside it, so it reads as attached to
+   the mark instead of crowding it. */
+.mock .cloud-badge {
+  position: absolute;
+  right: -2px;
+  bottom: -1px;
+  display: grid;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--surface-fill);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+  color: var(--text-secondary);
+  place-items: center;
+}
+
+.mock .cloud-badge svg {
+  width: 8.5px;
+  height: auto;
+}
+
+.mock .row-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 3.5px;
+}
+
+.mock .row-copy strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-weight: 640;
+  letter-spacing: -0.1px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* What the session is doing, worded to carry the state. The glyph ahead of it
+   answers at a glance — a spinner turning, a check — and the attention colour
+   is spent here and nowhere else on the line. */
+.mock .row-doing {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 10.5px;
+}
+
+.mock .row-doing-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mock .session-row[data-state="attention"] .row-doing {
+  color: var(--accent);
+  font-weight: 560;
+}
+
+.mock .session-row[data-state="unknown"] .row-doing {
+  color: var(--text-tertiary);
+}
+
+/* Turns on its own clock — it means "still happening", not "arriving" — and
+   holds still under the same token the product stills it with. */
+.mock .row-spinner {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  border-radius: 50%;
+  border-top-color: rgba(255, 255, 255, 0.62);
+  animation: row-spin 900ms linear infinite;
+  animation-play-state: var(--loop-motion);
+}
+
+@keyframes row-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+.mock .row-check {
+  width: 11px;
+  height: 11px;
+  flex: 0 0 auto;
+  color: var(--state-complete);
+  opacity: 0.85;
+}
+
+/* Which checkout this is, for the rows that would otherwise read alike: an
+   identifier rather than prose, so it sits back a step in the system's mono
+   face. */
+.mock .row-place {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4.5px;
+  color: var(--text-tertiary);
+  font-family: ui-monospace, "SF Mono", sfmono-regular, Menlo, monospace;
+  font-size: 9.5px;
+}
+
+.mock .row-place span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mock .row-branch-glyph {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
+}
+
+/* When the session was last seen, where every Apple surface puts it: top-right
+   against the title's line rather than centred on the row. */
+.mock .row-when {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  padding-top: 2px;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}

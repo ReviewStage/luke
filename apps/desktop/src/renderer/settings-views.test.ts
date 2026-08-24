@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { CREDENTIAL_PROVIDER_LIST, VOICE_CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials";
+import {
+  CREDENTIAL_PROVIDER_LIST,
+  VOICE_CREDENTIAL_PROVIDER_ID,
+} from "@sidecar/credentials/vocabulary";
 import {
   credentialSettingsPage,
   PANEL_STAND_DOWN,

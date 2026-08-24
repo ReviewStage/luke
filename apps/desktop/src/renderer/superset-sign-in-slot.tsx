@@ -1,3 +1,4 @@
+import { ProviderMark } from "@sidecar/panel";
 import { SUPERSET_WORKSPACE_PROVIDER_ID } from "@sidecar/session";
 import { useEffect, useRef, useState } from "react";
 import { CREDENTIAL_SOURCE } from "#shared/wire/account";
@@ -5,7 +6,6 @@ import type { SupersetSignInSnapshot } from "#shared/wire/session";
 import { SUPERSET_SIGN_IN_STAGE } from "#shared/wire/session";
 import { CREDENTIAL_PLACEHOLDER, useStagedFocus } from "./credential-entry";
 import { HIT_REGION } from "./panel-state";
-import { ProviderMark } from "./provider-marks";
 import { ExternalIcon } from "./settings-icons";
 
 /**

@@ -10,7 +10,7 @@ import {
   codeChallenge,
   createCodeVerifier,
   LOOPBACK_PAGE_TONE,
-} from "@sidecar/oauth";
+} from "@sidecar/credentials";
 import { isWireString, type UnparsedWireValue, unparsedWire, wireRecord } from "@sidecar/wire";
 
 /**

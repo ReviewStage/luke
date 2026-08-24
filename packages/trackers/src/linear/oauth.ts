@@ -9,7 +9,7 @@ import {
   codeChallenge,
   createCodeVerifier,
   LOOPBACK_PAGE_TONE,
-} from "@sidecar/oauth";
+} from "@sidecar/credentials";
 import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
 
 /**

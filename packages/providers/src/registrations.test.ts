@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials";
+import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
 import { PROVIDER_ID, PROVIDER_ID_LIST } from "@sidecar/session";
 import { CodexCloudSessionAdapter } from "./codex/cloud-adapter.js";
 import { providerRegistrations } from "./registrations.js";

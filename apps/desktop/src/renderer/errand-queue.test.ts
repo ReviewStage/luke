@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials";
+import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
 import { REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
 import { PANEL_FORM_FACTOR } from "@sidecar/surface";
 import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "#shared/wire/account";

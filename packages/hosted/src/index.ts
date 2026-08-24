@@ -1,8 +1,4 @@
 export {
-  HostedAttentionEvaluator,
-  type HostedAttentionEvaluatorOptions,
-} from "./attention-evaluator.js";
-export {
   HOSTED_API_ERROR,
   HOSTED_CALLS_URL,
   HOSTED_SERVICE_PATH,
@@ -17,3 +13,9 @@ export {
   hostedReviewAnswerFromWire,
   hostedUsageAnswerFromWire,
 } from "./hosted-service.js";
+export {
+  REALTIME_CALLS_PATH,
+  type RealtimeConnection,
+  type RealtimeCredential,
+  realtimeCredentialIsUsable,
+} from "./realtime-contract.js";

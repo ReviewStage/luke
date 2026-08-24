@@ -3,7 +3,7 @@ import {
   CREDENTIAL_PROVIDERS,
   type CredentialProvider,
   type CredentialProviderId,
-} from "@sidecar/credentials";
+} from "@sidecar/credentials/vocabulary";
 import {
   CompositeSessionProviderAdapter,
   PROVIDER_ID,

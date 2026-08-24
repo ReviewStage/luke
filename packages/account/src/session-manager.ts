@@ -1,4 +1,4 @@
-import { singleFlight } from "@sidecar/oauth";
+import { singleFlight } from "@sidecar/credentials";
 import type { AccountClient, AccountIdentity, AccountTokens, StoredAccount } from "./client.js";
 import { deleteHostedAccount } from "./deletion.js";
 import { ACCOUNT_FAILURE_ACTION, accessTokenNeedsRefresh, accountFailureAction } from "./gate.js";

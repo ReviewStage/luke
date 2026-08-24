@@ -1,3 +1,8 @@
+/** The local calendar integration backed by macOS Calendar and EventKit. */
+export const APPLE_CALENDAR_ID = "apple-calendar";
+
+export const APPLE_CALENDAR_NAME = "Apple Calendar";
+
 /**
  * The one calendar integration's identity, named apart from the credential
  * registry: Google Calendar connects by signing in rather than by a pasted
