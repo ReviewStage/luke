@@ -1,10 +1,9 @@
 import { CREDENTIAL_PROVIDER_ID, CREDENTIAL_PROVIDERS } from "@sidecar/credentials";
 import {
+  AGENT_IDENTITY,
   agedStatus,
-  HOSTED_AGENT_ID,
   maximumSessionRecapLength,
   OBSERVATION_WINDOW,
-  PROVIDER_ID,
   type ProviderSessionObservation,
   type ProviderWorkspaceAgentRequest,
   SESSION_APPLICATION_ID,
@@ -209,17 +208,12 @@ const REPLICAS_AGENT_KIND = {
 type ReplicasAgentKind = (typeof REPLICAS_AGENT_KIND)[keyof typeof REPLICAS_AGENT_KIND];
 
 const REPLICAS_AGENT_BY_KIND = {
-  [REPLICAS_AGENT_KIND.CLAUDE]: { id: PROVIDER_ID.CLAUDE_CODE, displayName: "Claude Code" },
-  [REPLICAS_AGENT_KIND.CODEX]: { id: PROVIDER_ID.CODEX, displayName: "Codex" },
-  [REPLICAS_AGENT_KIND.CURSOR]: { id: PROVIDER_ID.CURSOR, displayName: "Cursor" },
-  [REPLICAS_AGENT_KIND.DEEPSEEK]: {
-    id: HOSTED_AGENT_ID.DEEPSEEK,
-    // Replicas' own name for its DeepSeek-backed harness, not DeepSeek the
-    // model vendor: the mark is the vendor's, the word is the agent's.
-    displayName: "DeepSeek Harness",
-  },
-  [REPLICAS_AGENT_KIND.OPENCODE]: { id: PROVIDER_ID.OPENCODE, displayName: "OpenCode" },
-  [REPLICAS_AGENT_KIND.PI]: { id: HOSTED_AGENT_ID.PI, displayName: "Pi" },
+  [REPLICAS_AGENT_KIND.CLAUDE]: AGENT_IDENTITY.CLAUDE_CODE,
+  [REPLICAS_AGENT_KIND.CODEX]: AGENT_IDENTITY.CODEX,
+  [REPLICAS_AGENT_KIND.CURSOR]: AGENT_IDENTITY.CURSOR,
+  [REPLICAS_AGENT_KIND.DEEPSEEK]: AGENT_IDENTITY.DEEPSEEK,
+  [REPLICAS_AGENT_KIND.OPENCODE]: AGENT_IDENTITY.OPENCODE,
+  [REPLICAS_AGENT_KIND.PI]: AGENT_IDENTITY.PI,
 } as const satisfies Readonly<Record<ReplicasAgentKind, SessionProvider>>;
 
 /**

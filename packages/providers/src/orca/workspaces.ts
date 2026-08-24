@@ -1,7 +1,8 @@
 import os from "node:os";
 import path from "node:path";
 import {
-  PROVIDER_ID,
+  AGENT_IDENTITY,
+  agentIdentityFor,
   type ProviderSessionObservation,
   SESSION_APPLICATION_ID,
   SESSION_APPLICATION_SCOPE,
@@ -52,12 +53,12 @@ type OrcaAgentType = (typeof ORCA_AGENT_TYPE)[keyof typeof ORCA_AGENT_TYPE];
  * bindings are simply never indexed.
  */
 export const ORCA_AGENT_BY_TYPE = {
-  [ORCA_AGENT_TYPE.CLAUDE]: { id: PROVIDER_ID.CLAUDE_CODE, displayName: "Claude Code" },
-  [ORCA_AGENT_TYPE.CODEX]: { id: PROVIDER_ID.CODEX, displayName: "Codex" },
-  [ORCA_AGENT_TYPE.CURSOR]: { id: PROVIDER_ID.CURSOR, displayName: "Cursor" },
-  [ORCA_AGENT_TYPE.DEVIN]: { id: PROVIDER_ID.DEVIN, displayName: "Devin" },
-  [ORCA_AGENT_TYPE.GEMINI]: { id: PROVIDER_ID.GEMINI_CLI, displayName: "Gemini CLI" },
-  [ORCA_AGENT_TYPE.OPENCODE]: { id: PROVIDER_ID.OPENCODE, displayName: "OpenCode" },
+  [ORCA_AGENT_TYPE.CLAUDE]: AGENT_IDENTITY.CLAUDE_CODE,
+  [ORCA_AGENT_TYPE.CODEX]: AGENT_IDENTITY.CODEX,
+  [ORCA_AGENT_TYPE.CURSOR]: AGENT_IDENTITY.CURSOR,
+  [ORCA_AGENT_TYPE.DEVIN]: AGENT_IDENTITY.DEVIN,
+  [ORCA_AGENT_TYPE.GEMINI]: AGENT_IDENTITY.GEMINI_CLI,
+  [ORCA_AGENT_TYPE.OPENCODE]: AGENT_IDENTITY.OPENCODE,
 } as const satisfies Readonly<Record<OrcaAgentType, SessionProvider>>;
 
 const ORCA_HOOK_STATUS_FIELD = {
@@ -96,9 +97,7 @@ export function defaultOrcaDataDirectory(): string {
 }
 
 function orcaAgent(value: UnparsedWireValue): SessionProvider | undefined {
-  const parsed = text(value);
-  const known = Object.values(ORCA_AGENT_TYPE).find((candidate) => candidate === parsed);
-  return known ? ORCA_AGENT_BY_TYPE[known] : undefined;
+  return agentIdentityFor(ORCA_AGENT_BY_TYPE, text(value));
 }
 
 /** The folder half of a worktree id, for naming a worktree Orca has not named. */

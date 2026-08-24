@@ -1,8 +1,8 @@
 import os from "node:os";
 import path from "node:path";
 import {
+  AGENT_IDENTITY,
   maximumSessionTitleLength,
-  PROVIDER_ID,
   type ProviderSessionObservation,
   SESSION_APPLICATION_ID,
   SESSION_APPLICATION_SCOPE,
@@ -40,17 +40,11 @@ type ConductorAgentType = (typeof CONDUCTOR_AGENT_TYPE)[keyof typeof CONDUCTOR_A
  * was observed.
  */
 export const CONDUCTOR_AGENT_BY_TYPE = {
-  [CONDUCTOR_AGENT_TYPE.CLAUDE]: { id: PROVIDER_ID.CLAUDE_CODE, displayName: "Claude Code" },
-  [CONDUCTOR_AGENT_TYPE.CODEX]: { id: PROVIDER_ID.CODEX, displayName: "Codex" },
-  [CONDUCTOR_AGENT_TYPE.CURSOR]: { id: PROVIDER_ID.CURSOR, displayName: "Cursor" },
-  [CONDUCTOR_AGENT_TYPE.OPENCODE]: { id: PROVIDER_ID.OPENCODE, displayName: "OpenCode" },
+  [CONDUCTOR_AGENT_TYPE.CLAUDE]: AGENT_IDENTITY.CLAUDE_CODE,
+  [CONDUCTOR_AGENT_TYPE.CODEX]: AGENT_IDENTITY.CODEX,
+  [CONDUCTOR_AGENT_TYPE.CURSOR]: AGENT_IDENTITY.CURSOR,
+  [CONDUCTOR_AGENT_TYPE.OPENCODE]: AGENT_IDENTITY.OPENCODE,
 } as const satisfies Readonly<Record<ConductorAgentType, SessionProvider>>;
-
-/** Reads Conductor's own agent word into the mapped agent, or nothing. */
-export function conductorAgent(value: string | undefined): SessionProvider | undefined {
-  const parsed = Object.values(CONDUCTOR_AGENT_TYPE).find((candidate) => candidate === value);
-  return parsed ? CONDUCTOR_AGENT_BY_TYPE[parsed] : undefined;
-}
 
 const CONDUCTOR_SESSION_FIELD = {
   AGENT_TYPE: "agent_type",
