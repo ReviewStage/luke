@@ -6,7 +6,7 @@ import type { AppSettings, SettingsUpdateResult } from "#shared/contracts";
 import { createSettingsHandler, SettingsRefusal } from "./settings-handler";
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-const SETTINGS = { showInDock: false } as AppSettings;
+const SETTINGS = { stored: { showInDock: false }, status: {} } as unknown as AppSettings;
 
 function event(sender: { id: number } = { id: 1 }): IpcMainInvokeEvent {
   // SAFETY: Fixture invoke event carries only sender.id for trust validation.

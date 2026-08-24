@@ -11,9 +11,10 @@ import {
 } from "@sidecar/session";
 import {
   APP_SETTING_ID,
+  APP_SETTING_SCHEMA,
   type AppSettingId,
   isAppSettingId,
-  SETTING_PAGE,
+  settingFieldForGuideId,
   settingGuideEntries,
 } from "@sidecar/settings";
 import {
@@ -22,7 +23,7 @@ import {
 } from "@sidecar/superset/vocabulary";
 import { Fragment, useRef } from "react";
 import { APPLE_CALENDAR_ID, APPLE_CALENDAR_NAME } from "#shared/apple-calendar";
-import type { AppSettings } from "#shared/contracts";
+import type { AppSettingsView } from "#shared/contracts";
 import { CREDENTIAL_SOURCE, VOICE_SOURCE } from "#shared/contracts";
 import { FOCUS_FRAME_LIMIT } from "./credential-entry";
 import { ERRAND_TARGET_ATTRIBUTE } from "./luke-errand";
@@ -158,7 +159,7 @@ export interface SettingsSearchEntry {
 
 /** What the pages must answer before the corpus can say what they hold. */
 export interface SettingsSearchInput {
-  settings: AppSettings;
+  settings: AppSettingsView;
   /**
    * Whether the voice controls stand on the Voice page: voice available and
    * the microphone granted. Until both, that page holds only the way in.
@@ -444,9 +445,9 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
  */
 export function settingsSearchEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[] {
   const guided = settingGuideEntries(input.settings).flatMap((setting): SettingsSearchEntry[] => {
-    // The guide's ids are the schema's own; one that is not names no page.
-    if (!isAppSettingId(setting.id)) return [];
-    if (!settingRowDrawn(setting.id, input)) return [];
+    const field = settingFieldForGuideId(setting.id);
+    if (!field) return [];
+    if (isAppSettingId(setting.id) && !settingRowDrawn(setting.id, input)) return [];
     const icon = Object.hasOwn(ROOT_SETTING_ICON, setting.id)
       ? // SAFETY: hasOwn narrows the id to the table's own keys.
         ROOT_SETTING_ICON[setting.id as keyof typeof ROOT_SETTING_ICON]
@@ -455,7 +456,7 @@ export function settingsSearchEntries(input: SettingsSearchInput): readonly Sett
       {
         id: setting.id,
         label: setting.label,
-        page: SETTING_PAGE[setting.id],
+        page: APP_SETTING_SCHEMA[field].settingsPage,
         ...(icon ? { icon } : undefined),
         haystack: [setting.label, setting.description],
       },
