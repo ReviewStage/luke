@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  ACT_RESULT_STATUS,
   CompositeSessionProviderAdapter,
   InMemorySessionRegistry,
-  PROVIDER_ACT_RESULT_STATUS,
   type ProviderMessageResult,
   type ProviderSessionMessage,
   type ProviderSessionObservation,
@@ -173,17 +173,20 @@ test("carries a message past observers that have never seen the session", async 
     adapters: [
       // The local observer can carry no message at all, and must not stop one.
       observerOf(cursor, [observation("local-session")]),
-      messenger(cursor, () => ({ status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED })),
+      messenger(cursor, () => ({
+        status: ACT_RESULT_STATUS.UNSUPPORTED,
+        reason: "not here",
+      })),
       messenger(cursor, (message) => {
         sent.push(message);
-        return { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED };
+        return { status: ACT_RESULT_STATUS.ACCEPTED };
       }),
     ],
   });
 
   const result = await adapter.sendMessage({ providerSessionId: "cloud-agent", text: "go on" });
 
-  assert.deepEqual(result, { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED });
+  assert.deepEqual(result, { status: ACT_RESULT_STATUS.ACCEPTED });
   assert.deepEqual(sent, [{ providerSessionId: "cloud-agent", text: "go on" }]);
 });
 
@@ -193,12 +196,12 @@ test("lets the observer that holds the session refuse for itself", async () => {
     provider: cursor,
     adapters: [
       messenger(cursor, () => ({
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+        status: ACT_RESULT_STATUS.REJECTED,
         reason: "Cursor is still busy with the current run",
       })),
       messenger(cursor, (message) => {
         unreachable.push(message);
-        return { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED };
+        return { status: ACT_RESULT_STATUS.ACCEPTED };
       }),
     ],
   });
@@ -207,7 +210,7 @@ test("lets the observer that holds the session refuse for itself", async () => {
 
   // A rejection is the session's own answer, so it must not be shopped past
   // the observer that gave it to one that would say yes to a different session.
-  assert.equal(result.status, PROVIDER_ACT_RESULT_STATUS.REJECTED);
+  assert.equal(result.status, ACT_RESULT_STATUS.REJECTED);
   assert.deepEqual(unreachable, []);
 });
 
@@ -219,7 +222,10 @@ test("answers unsupported when no observer can carry a message", async () => {
 
   const result = await adapter.sendMessage({ providerSessionId: "local-session", text: "go on" });
 
-  assert.deepEqual(result, { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED });
+  assert.deepEqual(result, {
+    status: ACT_RESULT_STATUS.UNSUPPORTED,
+    reason: "No provider adapter supports that act.",
+  });
 });
 
 function workspaceCreator(
@@ -250,7 +256,8 @@ test("offers every observer's projects and carries a creation ask to the one tha
           },
         ],
         () => ({
-          status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED,
+          status: ACT_RESULT_STATUS.UNSUPPORTED,
+          reason: "not here",
         }),
       ),
       workspaceCreator(
@@ -264,7 +271,7 @@ test("offers every observer's projects and carries a creation ask to the one tha
         ],
         (request) => {
           created.push(request);
-          return { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED };
+          return { status: ACT_RESULT_STATUS.ACCEPTED };
         },
       ),
     ],
@@ -285,7 +292,7 @@ test("offers every observer's projects and carries a creation ask to the one tha
 
   const result = await adapter.createWorkspace({ providerProjectId: "proj-2" });
 
-  assert.deepEqual(result, { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED });
+  assert.deepEqual(result, { status: ACT_RESULT_STATUS.ACCEPTED });
   assert.deepEqual(created, [{ providerProjectId: "proj-2" }]);
 });
 
@@ -297,7 +304,8 @@ test("answers unsupported when no observer offers workspace creation", async () 
 
   assert.deepEqual(adapter.workspaceProjects(), []);
   assert.deepEqual(await adapter.createWorkspace({ providerProjectId: "proj-1" }), {
-    status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED,
+    status: ACT_RESULT_STATUS.UNSUPPORTED,
+    reason: "No provider adapter supports that act.",
   });
 });
 
@@ -311,7 +319,7 @@ test("carries a rename past observers that have never seen the session", async (
       Object.assign(new TestProviderAdapter(cursor, async () => []), {
         renameWorkspace: async (request: ProviderWorkspaceRenameRequest) => {
           renamed.push(request);
-          return { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED };
+          return { status: ACT_RESULT_STATUS.ACCEPTED };
         },
       }),
     ],
@@ -322,7 +330,7 @@ test("carries a rename past observers that have never seen the session", async (
     name: "Payments rollout",
   });
 
-  assert.deepEqual(result, { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED });
+  assert.deepEqual(result, { status: ACT_RESULT_STATUS.ACCEPTED });
   assert.deepEqual(renamed, [{ providerSessionId: "cloud-agent", name: "Payments rollout" }]);
 });
 
@@ -334,6 +342,9 @@ test("answers unsupported when no observer can rename a workspace", async () => 
 
   assert.deepEqual(
     await adapter.renameWorkspace({ providerSessionId: "local-session", name: "Payments" }),
-    { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED },
+    {
+      status: ACT_RESULT_STATUS.UNSUPPORTED,
+      reason: "No provider adapter supports that act.",
+    },
   );
 });

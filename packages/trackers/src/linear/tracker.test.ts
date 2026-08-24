@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ISSUE_ACTION_KIND, TRACKER_ACTION_RESULT_STATUS } from "@sidecar/issues";
+import { ACT_RESULT_STATUS, ISSUE_ACTION_KIND } from "@sidecar/issues";
 import type { JsonValue, ParsedJsonObject } from "@sidecar/wire/testing";
 import {
   HTTP_STATUS,
@@ -85,7 +85,10 @@ test("no token means no request and a tracker that is not connected", async () =
       trackerIssueId: "issue-uuid-1",
       transition: { id: "state-done", name: "Done" },
     }),
-    { status: TRACKER_ACTION_RESULT_STATUS.UNSUPPORTED },
+    {
+      status: ACT_RESULT_STATUS.UNSUPPORTED,
+      reason: "That act is not supported by the latest observation.",
+    },
   );
   assert.equal(requests.length, 0);
 });
@@ -147,7 +150,7 @@ test("moving an issue posts the one documented write and reads its answer", asyn
     transition: { id: "state-done", name: "Done" },
   });
 
-  assert.deepEqual(result, { status: TRACKER_ACTION_RESULT_STATUS.ACCEPTED });
+  assert.deepEqual(result, { status: ACT_RESULT_STATUS.ACCEPTED });
   assert.equal(requests.length, 1);
   assert.match(graphqlDocument(requests[0]).query, /^mutation SetIssueState/);
   assert.deepEqual(graphqlDocument(requests[0]).variables, {
@@ -167,7 +170,7 @@ test("a comment posts the other documented write", async () => {
     body: "Deferred to next release.",
   });
 
-  assert.deepEqual(result, { status: TRACKER_ACTION_RESULT_STATUS.ACCEPTED });
+  assert.deepEqual(result, { status: ACT_RESULT_STATUS.ACCEPTED });
   assert.match(graphqlDocument(requests[0]).query, /^mutation CommentOnIssue/);
   assert.deepEqual(graphqlDocument(requests[0]).variables, {
     issueId: "issue-uuid-1",
@@ -189,11 +192,11 @@ test("a write Linear turns down is a rejection with a reason, never a throw", as
   ]) {
     const { tracker } = trackerWith([payload], { accessToken: "linear-access-token" });
     const result = await tracker.execute(setState);
-    assert.equal(result.status, TRACKER_ACTION_RESULT_STATUS.REJECTED);
+    assert.equal(result.status, ACT_RESULT_STATUS.REJECTED);
     assert.ok("reason" in result && result.reason.length > 0);
   }
 
   const failed = trackerWith([{}], { accessToken: "linear-access-token", status: 401 });
   const result = await failed.tracker.execute(setState);
-  assert.equal(result.status, TRACKER_ACTION_RESULT_STATUS.REJECTED);
+  assert.equal(result.status, ACT_RESULT_STATUS.REJECTED);
 });

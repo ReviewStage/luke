@@ -8,17 +8,18 @@ import type { ParsedJsonObject } from "@sidecar/wire/testing";
 import type { SqliteModuleLoader } from "../shared/local-sqlite.js";
 import { OpenCodeSessionAdapter } from "./adapter.js";
 
-function readOpenCodeSessionTranscript(request: {
+async function readOpenCodeSessionTranscript(request: {
   dataDirectory?: string;
   providerSessionId: string;
   sqlite?: SqliteModuleLoader;
   maximumRenderedLength?: number;
 }): Promise<string | undefined> {
-  return new OpenCodeSessionAdapter({
+  const result = await new OpenCodeSessionAdapter({
     dataDirectory: request.dataDirectory,
     sqlite: request.sqlite,
     transcriptMaximumRenderedLength: request.maximumRenderedLength,
   }).readTranscript(request.providerSessionId);
+  return result.status === "accepted" ? result.transcript : undefined;
 }
 
 const TEST_SESSION_ID = "ses_8f2f6a01aa";

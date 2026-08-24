@@ -175,5 +175,8 @@ test("the adapter reads the same rendering on ask", async (t) => {
   const adapter = new GeminiCliSessionAdapter({ geminiHome });
   const rendered = await adapter.readTranscript(SESSION_FILE_STEM);
 
-  assert.ok(rendered?.includes("Developer: Fix the flaky updater test"));
+  assert.equal(rendered.status, "accepted");
+  if (rendered.status === "accepted") {
+    assert.ok(rendered.transcript.includes("Developer: Fix the flaky updater test"));
+  }
 });

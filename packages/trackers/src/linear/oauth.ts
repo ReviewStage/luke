@@ -10,7 +10,13 @@ import {
   createCodeVerifier,
   LOOPBACK_PAGE_TONE,
 } from "@sidecar/oauth";
-import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
+import {
+  ACT_RESULT_STATUS,
+  isRecord,
+  isWireNumber,
+  isWireString,
+  type UnparsedWireValue,
+} from "@sidecar/wire";
 
 /**
  * The sign-in behind the Linear row: Linear's own OAuth flow for a public
@@ -418,7 +424,7 @@ export async function revokeLinearGrant(
  */
 export const LINEAR_REFRESH_STATUS = {
   RENEWED: "renewed",
-  REFUSED: "refused",
+  REFUSED: ACT_RESULT_STATUS.REJECTED,
   UNREACHABLE: "unreachable",
 } as const;
 

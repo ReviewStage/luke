@@ -44,7 +44,7 @@ import {
   settingGuideEntries,
   spokenSettingValue,
 } from "@sidecar/settings";
-import type { WireRecord } from "@sidecar/wire";
+import { ACT_RESULT_STATUS, type ActResult } from "@sidecar/wire";
 import type { AppBridge } from "#shared/bridge";
 import type { AccountSnapshot, CredentialSource } from "#shared/wire/account";
 import {
@@ -656,11 +656,11 @@ function spokenWorkspaceAgentSelection(
   value: string,
   namedEffort: string | undefined,
   current: WorkspaceAgentSelection | undefined,
-): { selection: WorkspaceAgentSelection | undefined } | { refused: string } {
+): { selection: WorkspaceAgentSelection | undefined } | { refusal: string } {
   if (settingId === APP_SETTING_ID.WORKSPACE_AGENT_MODEL) {
     if (value === CONDUCTOR_DEFAULT_CHOICE) {
       if (namedEffort !== undefined) {
-        return { refused: "Conductor's own default takes no effort level." };
+        return { refusal: "Conductor's own default takes no effort level." };
       }
       return { selection: undefined };
     }
@@ -674,13 +674,13 @@ function spokenWorkspaceAgentSelection(
         })),
       )
       .find((candidate) => candidate.label === value);
-    if (!named) return { refused: "No documented Conductor model goes by that name." };
+    if (!named) return { refusal: "No documented Conductor model goes by that name." };
     if (namedEffort !== undefined) {
       // Composed against the table itself, not the guide the call was
       // validated against: this half answers to what an endpoint takes.
       if (!named.efforts.includes(namedEffort)) {
         return {
-          refused:
+          refusal:
             named.efforts.length > 0
               ? `That model's effort is one of ${named.efforts.join(", ")}.`
               : "That model takes no effort level.",
@@ -698,7 +698,7 @@ function spokenWorkspaceAgentSelection(
   // without one is a guide ahead of the state; refuse honestly.
   if (!current) {
     return {
-      refused: "No model is chosen for new Conductor agents, so there is no effort to set.",
+      refusal: "No model is chosen for new Conductor agents, so there is no effort to set.",
     };
   }
   if (value === CONDUCTOR_DEFAULT_CHOICE) {
@@ -709,7 +709,8 @@ function spokenWorkspaceAgentSelection(
 
 /**
  * Carries one validated spoken settings change to the same bridge calls the
- * settings rows use, and reports what became of it in words Luke can say.
+ * settings rows use, and returns the canonical act result. Human-readable
+ * history belongs to the act's ACTS narration, not to a second result shape.
  * The store answers with the settings it actually holds either way, and
  * `onSettings` hands that snapshot back to the panel so the switch on screen
  * and the sentence out loud never disagree. The current settings ride along
@@ -720,7 +721,7 @@ export async function applySpokenSetting(
   action: { setting: AppGuideSetting; value: string; effort?: string },
   onSettings: (settings: AppSettings) => void,
   current?: AppSettingsView,
-): Promise<WireRecord> {
+): Promise<ActResult> {
   let result: SettingsUpdateResult;
   if (
     action.setting.id === APP_SETTING_ID.WORKSPACE_AGENT_MODEL ||
@@ -732,7 +733,9 @@ export async function applySpokenSetting(
       action.effort,
       current?.workspaceAgentDefaults?.[PROVIDER_ID.CONDUCTOR],
     );
-    if ("refused" in composed) return { status: "refused", reason: composed.refused };
+    if ("refusal" in composed) {
+      return { status: ACT_RESULT_STATUS.REJECTED, reason: composed.refusal };
+    }
     result = await bridge.updateSettingEntry(
       APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
       PROVIDER_ID.CONDUCTOR,
@@ -740,31 +743,30 @@ export async function applySpokenSetting(
     );
   } else {
     if (!isAppSettingId(action.setting.id)) {
-      return { status: "refused", reason: "That setting cannot be changed from here." };
+      return {
+        status: ACT_RESULT_STATUS.REJECTED,
+        reason: "That setting cannot be changed from here.",
+      };
     }
     const field = settingFieldForGuideId(action.setting.id);
     if (!field) {
-      return { status: "refused", reason: "That setting cannot be changed from here." };
+      return {
+        status: ACT_RESULT_STATUS.REJECTED,
+        reason: "That setting cannot be changed from here.",
+      };
     }
     const value = spokenSettingValue(field, action.value);
     if (value === undefined) {
-      return { status: "refused", reason: "That setting cannot be changed from here." };
+      return {
+        status: ACT_RESULT_STATUS.REJECTED,
+        reason: "That setting cannot be changed from here.",
+      };
     }
     result = await bridge.updateSetting(field, value);
   }
   onSettings(result.settings);
-  if (result.reason) return { status: "refused", reason: result.reason };
-  return {
-    status: "changed",
-    setting: action.setting.label,
-    value: action.value,
-    ...(action.effort !== undefined ? { effort: action.effort } : undefined),
-    ...(action.setting.id === APP_SETTING_ID.VOICE
-      ? {
-          note: "The new voice takes over as soon as this reply ends, and the conversation starts afresh in it.",
-        }
-      : action.setting.id === APP_SETTING_ID.VOICE_SPEED
-        ? { note: "The new pace is heard from the next reply on." }
-        : undefined),
-  };
+  if (result.status !== ACT_RESULT_STATUS.ACCEPTED) {
+    return { status: result.status, reason: result.reason };
+  }
+  return { status: ACT_RESULT_STATUS.ACCEPTED };
 }

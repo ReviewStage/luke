@@ -4,6 +4,8 @@ import {
   agedStatus,
   maximumSessionTitleLength,
   type ProviderSessionObservation,
+  type ProviderTranscriptResult,
+  providerTranscriptResult,
   SESSION_COMPLETION_CAUSE,
   SESSION_STATUS,
   type SessionDetail,
@@ -449,13 +451,15 @@ export class DevinLocalSessionAdapter extends LocalSessionAdapter {
     return [];
   }
 
-  override readTranscript(providerSessionId: string): Promise<string | undefined> {
-    return readDevinSessionTranscript({
-      cliDirectory: this.#cliDirectory,
-      providerSessionId,
-      sqlite: this.#sqlite,
-      maximumRenderedLength: this.#transcriptMaximumRenderedLength,
-    });
+  override readTranscript(providerSessionId: string): Promise<ProviderTranscriptResult> {
+    return providerTranscriptResult(
+      readDevinSessionTranscript({
+        cliDirectory: this.#cliDirectory,
+        providerSessionId,
+        sqlite: this.#sqlite,
+        maximumRenderedLength: this.#transcriptMaximumRenderedLength,
+      }),
+    );
   }
 
   /** The session rows, or nothing when neither query fits this database. */

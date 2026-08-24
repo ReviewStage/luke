@@ -5,6 +5,8 @@ import {
   maximumSessionTitleLength,
   PROVIDER_ID,
   type ProviderSessionObservation,
+  type ProviderTranscriptResult,
+  providerTranscriptResult,
   SESSION_APPLICATION_ID,
   SESSION_APPLICATION_SCOPE,
   SESSION_COMPLETION_CAUSE,
@@ -810,14 +812,16 @@ export class CodexSessionAdapter extends LocalSessionAdapter {
     return [];
   }
 
-  override readTranscript(providerSessionId: string): Promise<string | undefined> {
-    return readCodexSessionTranscript({
-      codexHome: this.#codexHome,
-      sqliteHome: this.#sqliteHome,
-      providerSessionId,
-      sqlite: this.#sqlite,
-      maximumRenderedLength: this.#transcriptMaximumRenderedLength,
-    });
+  override readTranscript(providerSessionId: string): Promise<ProviderTranscriptResult> {
+    return providerTranscriptResult(
+      readCodexSessionTranscript({
+        codexHome: this.#codexHome,
+        sqliteHome: this.#sqliteHome,
+        providerSessionId,
+        sqlite: this.#sqlite,
+        maximumRenderedLength: this.#transcriptMaximumRenderedLength,
+      }),
+    );
   }
 
   /**

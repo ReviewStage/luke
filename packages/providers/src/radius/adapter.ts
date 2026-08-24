@@ -3,6 +3,8 @@ import {
   maximumSessionTitleLength,
   PROVIDER_ID,
   type ProviderSessionObservation,
+  type ProviderTranscriptResult,
+  providerTranscriptResult,
   SESSION_APPLICATION_ID,
   SESSION_APPLICATION_SCOPE,
   SESSION_STATUS,
@@ -405,13 +407,15 @@ export class RadiusSessionAdapter extends LocalSessionAdapter {
     }
   }
 
-  override readTranscript(providerSessionId: string): Promise<string | undefined> {
-    return readRadiusChatTranscript({
-      radiusHome: this.#radiusHome,
-      providerSessionId,
-      sqlite: this.#sqlite,
-      maximumRenderedLength: this.#transcriptMaximumRenderedLength,
-    });
+  override readTranscript(providerSessionId: string): Promise<ProviderTranscriptResult> {
+    return providerTranscriptResult(
+      readRadiusChatTranscript({
+        radiusHome: this.#radiusHome,
+        providerSessionId,
+        sqlite: this.#sqlite,
+        maximumRenderedLength: this.#transcriptMaximumRenderedLength,
+      }),
+    );
   }
 
   /** The chats the database holds, each with the state of its newest turn. */

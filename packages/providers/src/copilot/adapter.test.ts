@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { PROVIDER_ACT_RESULT_STATUS, SESSION_STATUS } from "@sidecar/session";
+import { ACT_RESULT_STATUS, SESSION_STATUS } from "@sidecar/session";
 import type { JsonObject } from "@sidecar/wire/testing";
 import { HTTP_STATUS, jsonResponse, recordingFetch } from "@sidecar/wire/testing";
 import type { CloudFetch } from "../shared/cloud-session-adapter.js";
@@ -148,7 +148,8 @@ describeCloudAdapterContract("Copilot", (options) => {
 test("answers through the shared adapter interface while routing no writes", async () => {
   const adapter = adapterFor(fakeAgentTasksApi([]).fetch);
   assert.deepEqual(await adapter.sendMessage({ providerSessionId: "missing", text: "hello" }), {
-    status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED,
+    status: ACT_RESULT_STATUS.UNSUPPORTED,
+    reason: "That act is not supported by the latest observation.",
   });
   assert.deepEqual(adapter.workspaceProjects(), []);
 });
