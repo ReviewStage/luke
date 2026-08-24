@@ -53,11 +53,11 @@ import {
   matchesFilterSelection,
   maximumSessionMessageLength,
   maximumWorkspaceNameLength,
-  type NormalizedSession,
   type ObservedWorkspaceProject,
   PROVIDER_ID_LIST,
   SESSION_APPLICATION_ID,
   SESSION_LOCATION,
+  type Session,
   type SessionApplicationId,
   type SessionControl,
   type SessionIdentity,
@@ -312,7 +312,7 @@ export function isCarriedSessionAction(action: CarriedAct): action is CarriedSes
 }
 
 export interface SessionToolContext {
-  sessions: readonly NormalizedSession[];
+  sessions: readonly Session[];
   workspaceProjects: readonly ObservedWorkspaceProject[];
   agentModels: (providerId: string) => readonly WorkspaceAgentModels[];
   /**
@@ -332,7 +332,7 @@ export interface IssueToolContext {
 
 export interface AppToolContext {
   guide: AppGuideSnapshot;
-  sessions: readonly NormalizedSession[];
+  sessions: readonly Session[];
 }
 
 type JsonSchemaStringProperty = {
@@ -384,7 +384,7 @@ type IssueToolValidate = (parsed: WireRecord, context: IssueToolContext) => Issu
 type AppToolValidate = (parsed: WireRecord, context: AppToolContext) => AppToolAction;
 
 type ActActionKind = CarriedAct["kind"];
-type ActNarration = (action: CarriedAct, sessions: readonly NormalizedSession[]) => string;
+type ActNarration = (action: CarriedAct, sessions: readonly Session[]) => string;
 
 interface RealtimeToolSchema {
   description: string;
@@ -470,8 +470,8 @@ function parseToolArguments(
 
 function sessionFromArguments(
   parsed: WireRecord,
-  sessions: readonly NormalizedSession[],
-): { session: NormalizedSession; identity: SessionIdentity } | ActRejection {
+  sessions: readonly Session[],
+): { session: Session; identity: SessionIdentity } | ActRejection {
   const providerId = textArgument(parsed, "provider_id");
   const providerSessionId = textArgument(parsed, "provider_session_id");
   const session = sessions.find(
@@ -1010,7 +1010,7 @@ function appSettingValue(setting: AppGuideSetting, value: UnparsedWireValue): st
  * manager's scope id — so a spoken ask reaches exactly the rows the matching
  * chip would keep.
  */
-function sessionAnswersFilter(session: NormalizedSession, filter: string): boolean {
+function sessionAnswersFilter(session: Session, filter: string): boolean {
   if (filter === SESSION_LOCATION.LOCAL || filter === SESSION_LOCATION.CLOUD) {
     return session.location === filter;
   }
@@ -1035,7 +1035,7 @@ function sessionAnswersFilter(session: NormalizedSession, filter: string): boole
  */
 function panelFiltersAction(
   filters: readonly string[],
-  sessions: readonly NormalizedSession[],
+  sessions: readonly Session[],
 ): { filters: readonly string[] } | { reason: string } {
   // The enum on the tool's own schema already binds a compliant model to
   // these tokens; this is the backstop for a call composed past it.
@@ -1239,10 +1239,7 @@ function validateRunUpdateAction(parsed: WireRecord, context: AppToolContext): A
   return { kind: APP_TOOL_KIND.UPDATE, act };
 }
 
-function observedSessionName(
-  identity: SessionIdentity,
-  sessions: readonly NormalizedSession[],
-): string {
+function observedSessionName(identity: SessionIdentity, sessions: readonly Session[]): string {
   const session = sessions.find(
     (candidate) =>
       candidate.providerId === identity.providerId &&
@@ -1254,7 +1251,7 @@ function observedSessionName(
 function observedApplicationName(
   identity: SessionIdentity,
   applicationId: SessionApplicationId,
-  sessions: readonly NormalizedSession[],
+  sessions: readonly Session[],
 ): string {
   const session = sessions.find(
     (candidate) =>
@@ -1269,10 +1266,7 @@ function observedApplicationName(
 
 function narrate<K extends ActActionKind>(
   kind: K,
-  render: (
-    action: Extract<CarriedAct, { kind: K }>,
-    sessions: readonly NormalizedSession[],
-  ) => string,
+  render: (action: Extract<CarriedAct, { kind: K }>, sessions: readonly Session[]) => string,
 ): ActNarration {
   return (action, sessions) => {
     if (action.kind !== kind) return "carried an act";
@@ -1791,7 +1785,7 @@ export const ACTS = {
 } as const satisfies Record<string, RealtimeToolSpec>;
 
 /** The history sentence declared by the same row that declared the act. */
-export function actNarration(action: CarriedAct, sessions: readonly NormalizedSession[]): string {
+export function actNarration(action: CarriedAct, sessions: readonly Session[]): string {
   const row = Object.values(ACTS).find((candidate) => candidate.actionKind === action.kind);
   return row?.narration(action, sessions) ?? "carried an act";
 }
@@ -1922,7 +1916,7 @@ export function realtimeToolDefinitions(): readonly RealtimeToolWireDefinition[]
  */
 export function sessionToolAction(
   call: RealtimeFunctionCall,
-  sessions: readonly NormalizedSession[],
+  sessions: readonly Session[],
   workspaceProjects: readonly ObservedWorkspaceProject[] = [],
   // The models a creation ask may name, per provider — the app's own
   // build-documented tables, handed in so this stays brand-neutral. The
@@ -1982,7 +1976,7 @@ export function issueToolAction(
 export function appToolAction(
   call: RealtimeFunctionCall,
   guide: AppGuideSnapshot,
-  sessions: readonly NormalizedSession[],
+  sessions: readonly Session[],
 ): AppToolAction {
   const parsed = parseToolArguments(call);
   if (!parsed.ok) return { status: ACT_RESULT_STATUS.REJECTED, reason: parsed.reason };

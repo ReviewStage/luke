@@ -14,7 +14,7 @@
  * answered with — and the record lives in memory alone, dying with the app.
  */
 
-import type { NormalizedSession, SessionIdentity } from "@sidecar/session";
+import type { Session, SessionIdentity } from "@sidecar/session";
 import { type AttentionSpeech, announcementSummaryText } from "./realtime-protocol.js";
 import { actNarration, type CarriedSessionAction } from "./realtime-tools.js";
 
@@ -136,7 +136,7 @@ export function announcementConversationEntry(
  */
 export function sessionActConversationEntry(
   action: CarriedSessionAction,
-  sessions: readonly NormalizedSession[],
+  sessions: readonly Session[],
 ): ConversationEntry {
   const words = actNarration(action, sessions);
   const entry: ConversationEntry = { kind: CONVERSATION_ENTRY_KIND.ACT, words };
@@ -166,7 +166,7 @@ const CONVERSATION_ENTRY_LEAD = {
  */
 export function conversationHistoryText(
   entries: readonly ConversationEntry[],
-  sessions: readonly NormalizedSession[],
+  sessions: readonly Session[],
 ): string | undefined {
   if (entries.length === 0) return undefined;
   return [

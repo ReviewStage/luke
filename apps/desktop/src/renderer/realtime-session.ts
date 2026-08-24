@@ -53,11 +53,7 @@ import {
   workspaceProjectContextEvents,
   workspaceProjectContextText,
 } from "@sidecar/realtime";
-import type {
-  NormalizedSession,
-  ObservedWorkspaceProject,
-  SessionIdentity,
-} from "@sidecar/session";
+import type { ObservedWorkspaceProject, Session, SessionIdentity } from "@sidecar/session";
 import { workspaceAgentModels } from "@sidecar/session";
 import {
   ACT_RESULT_STATUS,
@@ -428,7 +424,7 @@ export class RealtimeVoiceSession {
    * it is what a tool call is validated against, and a call may only name a
    * session Luke was actually shown.
    */
-  #sessions: readonly NormalizedSession[] = [];
+  #sessions: readonly Session[] = [];
   /**
    * The conversation history as the caller last reported it: what was already
    * said and done across calls, kept whole rather than as rendered text
@@ -1947,10 +1943,7 @@ export class RealtimeVoiceSession {
    * provides and a question about live work could not be answered from real
    * data. Identical rosters are not resent.
    */
-  updateSessions(
-    sessions: readonly NormalizedSession[],
-    noticeAsks: readonly SessionNoticeAsk[] = [],
-  ): void {
+  updateSessions(sessions: readonly Session[], noticeAsks: readonly SessionNoticeAsk[] = []): void {
     this.#sessions = sessions;
     const now = Date.now();
     this.#rememberContext(

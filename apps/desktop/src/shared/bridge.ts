@@ -37,7 +37,6 @@ import {
   isProviderId,
   isSessionApplicationId,
   isWorkspaceAgentSelection,
-  type NormalizedSession,
   type ObservedWorkspaceProject,
   type ProviderActResult,
   type ProviderControlResult,
@@ -83,6 +82,7 @@ import type {
   DisplayDiagnostic,
   SessionOpenResult,
   SessionReplayBootstrap,
+  SessionRosterPayload,
   SessionTranscriptResult,
 } from "./wire/session";
 import type { AppSettings, SettingsUpdateResult } from "./wire/settings";
@@ -674,7 +674,7 @@ export const BRIDGE = {
     kind: "subscribe",
     channel: "app:sessions-changed",
     args: noArgs,
-    result: result<readonly NormalizedSession[]>(),
+    result: result<SessionRosterPayload>(),
   }),
   onNoticeAsksChanged: entry({
     kind: "subscribe",

@@ -2,7 +2,7 @@ import { openAiAttentionEvaluator, SessionAttentionReviewer } from "@sidecar/att
 import { VOICE_CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials";
 import { HOSTED_SERVICE_PATH, HostedAttentionEvaluator } from "@sidecar/hosted";
 import { type RealtimeDiagnostics, realtimeMintExplanation } from "@sidecar/realtime";
-import type { NormalizedSession, SessionIdentity } from "@sidecar/session";
+import type { Session, SessionIdentity } from "@sidecar/session";
 import {
   APP_SETTING_SCHEMA,
   type AppSettingField,
@@ -58,7 +58,7 @@ export interface VoiceCapabilityAssemblerOptions {
   accountSignedIn: () => boolean;
   hostedServiceBaseUrl: string;
   refreshAccount: () => Promise<void>;
-  currentSession: (identity: SessionIdentity) => NormalizedSession | undefined;
+  currentSession: (identity: SessionIdentity) => Session | undefined;
   noticeRequestFor: (identity: SessionIdentity) => string | undefined;
   fetch?: typeof fetch;
   report?: (message: string) => void;

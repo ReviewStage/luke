@@ -260,19 +260,62 @@ test("how long ago a session was seen is worded by the unit that has begun", () 
 });
 
 test("a speaking disposition needs a person even while the session works", () => {
-  const speaking = normalizeSession(
-    CLAUDE_PROVIDER,
-    {
-      providerSessionId: "claude-speaking",
-      title: "Speaking session",
-      status: SESSION_STATUS.WORKING,
-      observedAt: 1_000,
-    },
-    { disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END, decidedAt: 1_000 },
+  const speaking = normalizeSession(CLAUDE_PROVIDER, {
+    providerSessionId: "claude-speaking",
+    title: "Speaking session",
+    status: SESSION_STATUS.WORKING,
+    observedAt: 1_000,
+  });
+
+  const [session] = displaySessions(
+    bootstrap(false),
+    [speaking],
+    [],
+    [
+      {
+        providerId: speaking.providerId,
+        providerSessionId: speaking.providerSessionId,
+        decision: { disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END, decidedAt: 1_000 },
+      },
+    ],
+  );
+  assert.equal(session?.urgency, SESSION_URGENCY.ATTENTION);
+});
+
+test("attention joins on the whole provider identity and supplies the row detail", () => {
+  const codex = liveSession(CODEX_PROVIDER, "shared-id", SESSION_STATUS.WORKING);
+  const claude = liveSession(CLAUDE_PROVIDER, "shared-id", SESSION_STATUS.WORKING);
+  const sessions = displaySessions(
+    bootstrap(false),
+    [codex, claude],
+    [],
+    [
+      {
+        providerId: claude.providerId,
+        providerSessionId: claude.providerSessionId,
+        decision: {
+          disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
+          decidedAt: 1_000,
+          summary: "Claude needs a review decision.",
+        },
+      },
+      {
+        providerId: CODEX_PROVIDER.id,
+        providerSessionId: "missing",
+        decision: {
+          disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
+          decidedAt: 1_000,
+          summary: "This orphan must not attach to a row.",
+        },
+      },
+    ],
   );
 
-  const [session] = displaySessions(bootstrap(false), [speaking]);
-  assert.equal(session?.urgency, SESSION_URGENCY.ATTENTION);
+  const byProvider = new Map(sessions.map((session) => [session.providerId, session]));
+  assert.equal(byProvider.get(CLAUDE_PROVIDER.id)?.urgency, SESSION_URGENCY.ATTENTION);
+  assert.equal(byProvider.get(CLAUDE_PROVIDER.id)?.detail, "Claude needs a review decision.");
+  assert.equal(byProvider.get(CODEX_PROVIDER.id)?.urgency, SESSION_URGENCY.WORKING);
+  assert.equal(byProvider.get(CODEX_PROVIDER.id)?.detail, "Working");
 });
 
 test("the tally counts per state and per app", () => {

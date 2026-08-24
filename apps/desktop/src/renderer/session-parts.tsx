@@ -6,11 +6,11 @@ import {
   type ArrangedSessions,
   SESSION_FILTER,
   SESSION_SORT,
+  type SessionArrangement,
   type SessionFilter,
   type SessionFilterAxis,
   type SessionFilterOption,
   type SessionSort,
-  type SessionView,
   toggledSessionFilters,
 } from "./session-model";
 import { CloseIcon, CloudIcon, LaptopIcon, OptionsIcon, VoiceIcon } from "./settings-icons";
@@ -328,9 +328,9 @@ export function SessionOptions({
   measure,
 }: {
   list: ArrangedSessions;
-  view: SessionView;
+  view: SessionArrangement;
   /** Carries a sort choice, and puts the sheet away with it. */
-  onViewChange: (view: SessionView) => void;
+  onViewChange: (view: SessionArrangement) => void;
   /** Carries a toggled selection; the sheet stays open for the next chip. */
   onFiltersChange: (filters: readonly SessionFilter[]) => void;
   /**

@@ -58,7 +58,6 @@ export {
   maximumSessionMessageLength,
   maximumSessionRecapLength,
   maximumSessionTitleLength,
-  type NormalizedSession,
   normalizeAttention,
   normalizeSession,
   normalizeSessionIdentity,
@@ -73,6 +72,7 @@ export {
   SESSION_LOCATION,
   SESSION_ROSTER_RETENTION_MS,
   SESSION_STATUS,
+  type Session,
   type SessionApplication,
   type SessionApplicationId,
   type SessionApplicationScope,
@@ -122,7 +122,12 @@ export {
   type SessionNoticeStatus,
   SessionNoticeTracker,
 } from "./session-notices.js";
-export { InMemorySessionRegistry } from "./session-registry.js";
+export {
+  InMemorySessionRegistry,
+  type SessionAttentionEntry,
+  type SessionRegistryListener,
+  type SessionRegistrySnapshot,
+} from "./session-registry.js";
 export {
   isListedWorkspaceAgentModel,
   isWorkspaceAgentSelection,

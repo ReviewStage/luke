@@ -22,7 +22,6 @@ import {
   type RealtimeDiagnostics,
 } from "@sidecar/realtime";
 import {
-  type NormalizedSession,
   type ObservedWorkspaceProject,
   SESSION_MENTION_KIND,
   type SessionApplicationId,
@@ -59,6 +58,7 @@ import type {
   DisplayDiagnostic,
   SessionOpenResult,
   SessionReplayBootstrap,
+  SessionRosterPayload,
   SupersetSignInSnapshot,
   WorkspaceProviderId,
 } from "#shared/wire/session";
@@ -125,11 +125,11 @@ import type { AppActionCarrier } from "./realtime-session";
 import {
   arrangeSessions,
   DEFAULT_SESSION_VIEW,
-  type DisplaySession,
   displaySessions,
   fixtureMentionChips,
   MENTION_CHIP_KIND,
   type MentionChip,
+  type SessionArrangement,
   type SessionFilter,
   type SessionView,
   sameSessionFilters,
@@ -365,7 +365,11 @@ export function App(): React.JSX.Element {
   // composer signs a fresh note from the account without re-wiring the
   // lifecycle subscription to every sign-in change.
   const [account, setAccount, accountNow] = useStateWithRef<AccountSnapshot | undefined>(undefined);
-  const [sessions, setSessions] = useState<readonly NormalizedSession[]>([]);
+  const [sessionRoster, setSessionRoster] = useState<SessionRosterPayload>({
+    sessions: [],
+    attention: [],
+  });
+  const sessions = sessionRoster.sessions;
   // Whether the roster above has been read at all yet. It only ever settles —
   // the bootstrap can say a reading already happened, and any push is one —
   // so a bootstrap replying "not yet" after a push raced past it clobbers
@@ -380,7 +384,7 @@ export function App(): React.JSX.Element {
   const [settingsView, setSettingsView, settingsViewNow] = useStateWithRef<SettingsView>(
     SETTINGS_VIEW.ROOT,
   );
-  const [sessionView, setSessionView] = useState<SessionView>(DEFAULT_SESSION_VIEW);
+  const [sessionView, setSessionView] = useState<SessionArrangement>(DEFAULT_SESSION_VIEW);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   // The settings search's field, on the sessions search's own terms: the
@@ -671,7 +675,7 @@ export function App(): React.JSX.Element {
   // two, made once. The fallback the render performs when a selection empties
   // writes the view directly instead: that is the list correcting itself, not
   // somebody choosing.
-  const changeSessionView = useCallback((next: SessionView) => {
+  const changeSessionView = useCallback((next: SessionArrangement) => {
     setSessionView(next);
     setOptionsOpen(false);
   }, []);
@@ -1606,7 +1610,7 @@ export function App(): React.JSX.Element {
    * waited for.
    */
   const openSession = useCallback(
-    (session: DisplaySession) => {
+    (session: SessionView) => {
       void window.sidecar.openSession({
         providerId: session.providerId,
         providerSessionId: session.id,
@@ -1623,7 +1627,7 @@ export function App(): React.JSX.Element {
    * the latest roster before handing the normalized route to macOS.
    */
   const openSessionApplication = useCallback(
-    (session: DisplaySession, applicationId: SessionApplicationId) => {
+    (session: SessionView, applicationId: SessionApplicationId) => {
       void window.sidecar.openSessionApplication(
         {
           providerId: session.providerId,
@@ -1957,10 +1961,13 @@ export function App(): React.JSX.Element {
           // waits for the flight, never the report.
           const searched =
             action.query !== undefined && bootstrap !== undefined
-              ? spokenSearchOutcome(displaySessions(bootstrap, sessions, noticeAsks), {
-                  ...sessionView,
-                  ...view,
-                })
+              ? spokenSearchOutcome(
+                  displaySessions(bootstrap, sessions, noticeAsks, sessionRoster.attention),
+                  {
+                    ...sessionView,
+                    ...view,
+                  },
+                )
               : undefined;
           await changeMode(true);
           // The tab bar and the options button are drawn outside the settings
@@ -2045,6 +2052,7 @@ export function App(): React.JSX.Element {
       feedbackEntry.latest,
       presentationOf,
       sessions,
+      sessionRoster.attention,
       noticeAsks,
       sessionView,
       bootstrapSettings,
@@ -2393,7 +2401,7 @@ export function App(): React.JSX.Element {
         setSessionsSettled(true);
         onChange(pushed);
       }),
-    setSessions,
+    setSessionRoster,
   );
   // Straight to the conversation rather than through state: no panel
   // surface draws the issue roster, so a re-render would be work for nobody.
@@ -2513,7 +2521,7 @@ export function App(): React.JSX.Element {
     const bootstrapGeneration = modeGenerationOf();
     void window.sidecar.getBootstrap().then((value) => {
       setBootstrap(value);
-      acceptSessionsBootstrap(value.sessions);
+      acceptSessionsBootstrap(value.sessionRoster);
       if (value.sessionsSettled) setSessionsSettled(true);
       setNoticeAsks(value.noticeAsks);
       // Only fill in what no push has said yet: the bootstrap snapshot is
@@ -3010,7 +3018,7 @@ export function App(): React.JSX.Element {
 
   if (!bootstrap || !display) return <div />;
 
-  const visibleSessions = displaySessions(bootstrap, sessions, noticeAsks);
+  const visibleSessions = displaySessions(bootstrap, sessions, noticeAsks, sessionRoster.attention);
   // The tally is taken before the list is narrowed — the capsule reports what
   // Luke is watching, not what the panel is currently showing — but it reads
   // in the list's own sort, so the wing's marks sit in the order the rows do.

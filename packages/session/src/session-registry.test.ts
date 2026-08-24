@@ -58,10 +58,7 @@ test("normalizes provider observations without conflating provider-local identit
   assert.equal(session.parentProviderSessionId, "run:parent");
   assert.equal(session.recap?.length, maximumSessionRecapLength);
   assert.deepEqual(session.controls, [{ id: TEST_CONTROL.OPEN, label: "Open workspace" }]);
-  assert.deepEqual(session.attention, {
-    disposition: ATTENTION_DISPOSITION.SILENT,
-    decidedAt: 100,
-  });
+  assert.deepEqual(registry.snapshot().attention, []);
   assert.equal(supportsSessionControl(session, TEST_CONTROL.OPEN), true);
   assert.equal(supportsSessionControl(session, TEST_CONTROL.INTERRUPT), false);
   assert.equal(registry.list().length, 2);
@@ -317,10 +314,17 @@ test("refresh atomically replaces one adapter's sessions and preserves attention
       { providerId: claude.id, providerSessionId: "review" },
     ],
   );
-  assert.equal(
-    registry.get({ providerId: "codex", providerSessionId: "active" })?.attention.disposition,
-    ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
-  );
+  assert.deepEqual(registry.snapshot().attention, [
+    {
+      providerId: "codex",
+      providerSessionId: "active",
+      decision: {
+        disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
+        decidedAt: 40,
+        summary: "A review decision is ready.",
+      },
+    },
+  ]);
   assert.equal(
     registry.get({ providerId: "claude-code", providerSessionId: "review" })?.status,
     SESSION_STATUS.WAITING,
@@ -415,6 +419,8 @@ test("registry snapshots are isolated and listeners only receive effective updat
     revisions.push(snapshot.revision);
     const mutable = snapshot.sessions[0];
     if (mutable) mutable.title = "Changed outside the registry";
+    const decision = snapshot.attention[0]?.decision;
+    if (decision) decision.summary = "Changed outside the registry";
   });
 
   registry.upsert(codex, observation("active", 10));
@@ -423,12 +429,62 @@ test("registry snapshots are isolated and listeners only receive effective updat
     { providerId: "codex", providerSessionId: "active" },
     { disposition: ATTENTION_DISPOSITION.SPEAK_DURING_TURN, decidedAt: 11 },
   );
+
+  assert.equal(registry.list()[0]?.title, "Implement the shared session core");
+  assert.equal(registry.snapshot().attention[0]?.decision.summary, undefined);
   unsubscribe();
   registry.remove({ providerId: "codex", providerSessionId: "active" });
 
   assert.deepEqual(revisions, [1, 2]);
   assert.equal(registry.revision, 3);
   assert.equal(registry.list().length, 0);
+  assert.deepEqual(registry.snapshot().attention, []);
+});
+
+test("attention changes only for a standing session and one effective decision", () => {
+  const registry = new InMemorySessionRegistry();
+  const identity = { providerId: codex.id, providerSessionId: "active" };
+  const decision = {
+    disposition: ATTENTION_DISPOSITION.SPEAK_DURING_TURN,
+    decidedAt: 11,
+    summary: "A review decision is ready.",
+  };
+
+  assert.equal(registry.setAttention(identity, decision), undefined);
+  assert.equal(registry.revision, 0);
+
+  registry.upsert(codex, observation("active", 10));
+  registry.setAttention(identity, decision);
+  const revision = registry.revision;
+
+  assert.equal(registry.setAttention(identity, decision)?.providerSessionId, "active");
+  assert.equal(registry.revision, revision);
+  assert.deepEqual(registry.snapshot().attention, [
+    {
+      providerId: codex.id,
+      providerSessionId: "active",
+      decision,
+    },
+  ]);
+});
+
+test("each registry listener receives an isolated snapshot", () => {
+  const registry = new InMemorySessionRegistry();
+  const titles: string[] = [];
+
+  registry.subscribe((snapshot) => {
+    const session = snapshot.sessions[0];
+    if (session) session.title = "Changed by the first listener";
+  });
+  registry.subscribe((snapshot) => {
+    const session = snapshot.sessions[0];
+    if (session) titles.push(session.title);
+  });
+
+  registry.upsert(codex, observation("active", 10));
+
+  assert.deepEqual(titles, ["Implement the shared session core"]);
+  assert.equal(registry.list()[0]?.title, "Implement the shared session core");
 });
 
 test("a malformed provider snapshot leaves the previous registry state intact", () => {
