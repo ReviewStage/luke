@@ -1339,6 +1339,14 @@ export function App(): React.JSX.Element {
     [applySettingsReply],
   );
 
+  const changeStartAtLogin = useCallback(
+    async (start: boolean) =>
+      applySettingsReply(
+        await window.sidecar.updateSetting(APP_SETTING_SCHEMA.startAtLogin.field, start),
+      ),
+    [applySettingsReply],
+  );
+
   const changeShowOnAllDisplays = useCallback(
     async (show: boolean) =>
       applySettingsReply(
@@ -3280,6 +3288,7 @@ export function App(): React.JSX.Element {
     onVoiceChange: changeVoice,
     onVoiceSpeedChange: changeVoiceSpeed,
     onShowInDockChange: changeShowInDock,
+    onStartAtLoginChange: changeStartAtLogin,
     onShowOnAllDisplaysChange: changeShowOnAllDisplays,
     onFormFactorChange: changeFormFactor,
     onDefaultWorkspaceProviderChange: changeDefaultWorkspaceProvider,

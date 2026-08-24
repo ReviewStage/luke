@@ -52,6 +52,7 @@ function settings(overrides: Partial<AppSettings> = {}): AppSettings {
       secretStorage: SECRET_STORAGE.UNKNOWN,
       codexCloudConnection: CLI_CONNECTION.UNKNOWN,
       showInDock: false,
+      startAtLogin: true,
       voice: REALTIME_VOICE.CEDAR,
       voiceSpeed: REALTIME_VOICE_SPEED.NORMAL,
       voiceCaptions: false,
@@ -915,6 +916,7 @@ test("every adjustable setting is carried to the bridge call its row uses", asyn
     "shareUsageData:true",
     "showInDock:true",
     "showOnAllDisplays:true",
+    "startAtLogin:true",
     "voice:alloy",
     "voiceCaptions:true",
     // The first choice offered is "slow", which is the 0.75 multiple.

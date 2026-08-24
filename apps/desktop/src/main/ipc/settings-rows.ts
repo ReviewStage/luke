@@ -22,6 +22,7 @@ import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import type { IpcMainInvokeEvent } from "electron";
 import { type AppSettings, channels, isSettingsResetScope } from "#shared/contracts";
 import { CONNECTION_COUNTED_AS } from "#shared/product-vocabulary";
+import type { LoginItem } from "../login-item";
 import type { MediaDuckController } from "../native/media-duck";
 import { type createSettingsHandler, SettingsRefusal } from "../settings-handler";
 import type { SettingsStore } from "../settings-store";
@@ -38,6 +39,7 @@ export interface SettingsRowsIpcDependencies {
   applyVoiceCredential: () => Promise<void>;
   hotkeys: HotkeyRegistrar;
   dock: DockPresence;
+  loginItem: LoginItem;
   panels: PanelManager;
   realtimeCredentials: () => RealtimeCredentialMinter | undefined;
   mediaDuck: MediaDuckController;
@@ -59,6 +61,7 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
     applyVoiceCredential,
     hotkeys,
     dock,
+    loginItem,
     panels,
     realtimeCredentials,
     mediaDuck,
@@ -137,6 +140,9 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
     switch (APP_SETTING_SCHEMA[field].mainProcessSideEffect) {
       case SETTING_SIDE_EFFECT.DOCK:
         dock.apply(settings.showInDock, panels.displayIdFor(event.sender));
+        break;
+      case SETTING_SIDE_EFFECT.START_AT_LOGIN:
+        loginItem.apply(settings.startAtLogin);
         break;
       case SETTING_SIDE_EFFECT.DISPLAYS:
         panels.setShowOnAllDisplays(settings.showOnAllDisplays);

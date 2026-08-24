@@ -1094,6 +1094,21 @@ test("keeps Luke out of the Dock until asked, and remembers the answer", async (
   assert.equal((await storeIn(directory).snapshot()).showInDock, true);
 });
 
+test("resolves start at login on while preserving whether it was ever stored", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+
+  assert.equal(await store.get(APP_SETTING_SCHEMA.startAtLogin.field), undefined);
+  assert.equal((await store.snapshot()).startAtLogin, true);
+
+  const { settings, reason } = await store.set(APP_SETTING_SCHEMA.startAtLogin.field, false);
+
+  assert.equal(reason, undefined);
+  assert.equal(settings.startAtLogin, false);
+  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.startAtLogin.field), false);
+  assert.equal(JSON.parse(await readSettingsFile(directory)).startAtLogin, false);
+});
+
 test("changes the Dock preference without touching the cipher", async (t) => {
   // A preference is not a credential, so storing one must never be the reason
   // the Keychain dialog appears.
@@ -1925,6 +1940,7 @@ test("an appearance reset returns Luke's stances without touching the voice page
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
   await store.set(APP_SETTING_SCHEMA.showInDock.field, true);
+  await store.set(APP_SETTING_SCHEMA.startAtLogin.field, false);
   await store.set(APP_SETTING_SCHEMA.showOnAllDisplays.field, true);
   await store.set(APP_SETTING_SCHEMA.formFactor.field, PANEL_FORM_FACTOR.NOTCH);
   await store.set(APP_SETTING_SCHEMA.voice.field, REALTIME_VOICE.MARIN);
@@ -1933,6 +1949,9 @@ test("an appearance reset returns Luke's stances without touching the voice page
 
   assert.equal(reason, undefined);
   assert.equal(settings.showInDock, false);
+  // A reset never re-runs a system-level registration the user did not ask for.
+  assert.equal(settings.startAtLogin, false);
+  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.startAtLogin.field), false);
   assert.equal(settings.showOnAllDisplays, false);
   assert.equal(settings.formFactor, PANEL_FORM_FACTOR.BUBBLE);
   assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.formFactor.field), undefined);
