@@ -944,15 +944,20 @@ export function PanelBody({
           ) : null}
           <div className="session-list" ref={sessionListRef}>
             {rows.length === 0 ? (
-              list.search ? (
+              // Only a roster actually read may say the list is empty: before
+              // the first reading, "nothing to watch" and "no matches" alike
+              // would claim a fact nobody has checked — a search restored at
+              // launch arrives before the roster does — so the loading rows
+              // stand in for both.
+              !sessionsSettled ? (
+                <LoadingState />
+              ) : list.search ? (
                 <SearchEmptyState
                   beyondFilter={list.search.beyondFilter}
                   onWiden={() => onViewChange(widenedView(view))}
                 />
-              ) : sessionsSettled ? (
-                <EmptyState />
               ) : (
-                <LoadingState />
+                <EmptyState />
               )
             ) : (
               // Runs are read over the drawn order, leaving rows and all: a
