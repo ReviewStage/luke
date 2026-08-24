@@ -37,3 +37,12 @@ function exposedBridge(): AppBridge {
 }
 
 contextBridge.exposeInMainWorld("sidecar", exposedBridge());
+
+// TEMPORARY (launch-test harness, remove before merge): the window manager
+// passes `--luke-without-voice-fix` into this preload's arguments when the app
+// was launched with `--without-voice-fix`, and the renderer reads the flag to
+// revert the remote-audio retry to the old swallow-once behavior.
+contextBridge.exposeInMainWorld(
+  "lukeVoiceFixDisabled",
+  process.argv.includes("--luke-without-voice-fix"),
+);

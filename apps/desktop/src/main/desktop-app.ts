@@ -54,6 +54,8 @@ import {
   type ObservedWorkspaceProject,
   PROVIDER_ID_LIST,
   rosterRelevantSessions,
+  SESSION_NOTICE_STATUS,
+  SESSION_STATUS,
   type Session,
   type SessionNotice,
   SessionNoticeHold,
@@ -2090,6 +2092,38 @@ export function startDesktopApp(): void {
       // Reconcile in the background. Only an explicit invalid_grant removes the
       // stored account; network failures and service outages leave it active.
       void accountSession.refreshOnce();
+
+      // TEMPORARY (launch-test harness, remove before merge): `--test-announcement`
+      // speaks a synthetic session notice 15 seconds after launch and again every
+      // minute, through the exact channel a real status edge uses, so the
+      // first-launch fix can be heard with hands kept off the machine.
+      if (process.argv.includes("--test-announcement")) {
+        const speakLaunchTest = () => {
+          const now = Date.now();
+          const speech = sessionNoticeSpeech(
+            {
+              providerId: "claude-code",
+              providerSessionId: `launch-test-${now}`,
+              providerName: "Launch Test",
+              title: "First-launch announcement test",
+              status: SESSION_NOTICE_STATUS.COMPLETE,
+              previousStatus: SESSION_STATUS.WORKING,
+              recap:
+                "This is the launch-test announcement. If you can hear this, remote audio is playing without any interaction.",
+              canReceiveMessage: false,
+              observedAt: now,
+            },
+            now,
+          );
+          const host = panels.voiceHost();
+          process.stderr.write(
+            `Launch-test announcement ${host ? "sent" : "dropped: no voice host"}\n`,
+          );
+          host?.webContents.send(channels.attentionSpeech, [speech]);
+        };
+        setTimeout(speakLaunchTest, 15_000);
+        setInterval(speakLaunchTest, 60_000).unref();
+      }
 
       // A repeat launch is usually someone checking the notch capsule, so re-assert
       // the panel where it already is. Expanding hides the compact capsule, which is

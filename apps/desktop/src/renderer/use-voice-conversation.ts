@@ -1172,6 +1172,14 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     if (!element) return;
     element.srcObject = remoteStream ?? null;
     if (!remoteStream) return;
+    // TEMPORARY (launch-test harness, remove before merge): under
+    // `--without-voice-fix` the refusal is swallowed once, as it was before
+    // the fix, so one build can be heard both ways.
+    // SAFETY: The harness flag is a bare boolean the preload exposed beside the bridge.
+    if ((window as { lukeVoiceFixDisabled?: boolean }).lukeVoiceFixDisabled === true) {
+      void element.play().catch(() => undefined);
+      return;
+    }
     // A refused play is the one failure the call cannot see: the reply runs
     // and the captions draw while nothing is heard. The launch's first
     // speak-only call is exactly the call with no user gesture behind it to

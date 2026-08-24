@@ -89,6 +89,12 @@ export class PanelManager {
   #panelFormFactor: PanelFormFactor = DEFAULT_PANEL_FORM_FACTOR;
   #nativeScreens = new Map<number, NativeNotchGeometry>();
 
+  // TEMPORARY (launch-test harness, remove before merge): `--without-voice-fix`
+  // reverts the first-launch playback fix — no autoplay-policy assertion here,
+  // and the renderer told to swallow a refused play once — so one build can be
+  // heard with and without the fix.
+  readonly #withoutVoiceFix: boolean;
+
   constructor(options: PanelManagerOptions) {
     this.#runMode = options.runMode;
     this.#mediaDuck = options.mediaDuck;
@@ -96,6 +102,7 @@ export class PanelManager {
     this.#rendererHtmlPath = options.rendererHtmlPath;
     this.#rendererUrl = options.rendererUrl;
     this.initialMode = initialWindowMode(options.runMode, options.argv ?? process.argv);
+    this.#withoutVoiceFix = (options.argv ?? process.argv).includes("--without-voice-fix");
   }
 
   /**
@@ -472,7 +479,12 @@ export class PanelManager {
         // user gesture: born non-focusable, pointer events ignored until the
         // first hover. Playback must not answer to a gesture requirement, so
         // the policy is asserted rather than left to Chromium's default.
-        autoplayPolicy: "no-user-gesture-required",
+        // TEMPORARY (launch-test harness): the spread reverts the assertion —
+        // and tells the preload to revert the renderer's retry — under
+        // `--without-voice-fix`.
+        ...(this.#withoutVoiceFix
+          ? { additionalArguments: ["--luke-without-voice-fix"] }
+          : { autoplayPolicy: "no-user-gesture-required" as const }),
       },
     });
     this.#windows.set(displayId, window);
