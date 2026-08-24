@@ -45,9 +45,10 @@ export function createSettingsHandler(deps: SettingsHandlerDeps) {
   ): void {
     const method = bridgeEntries().find(([, candidate]) => candidate === definition)?.[0];
     if (!method) throw new Error("Unknown bridge method");
-    const handler = async (...received: unknown[]): Promise<SettingsUpdateResult> => {
-      // SAFETY: registerBridge appends exactly one BridgeContext after validated domain arguments.
-      const context = received.pop() as BridgeContext;
+    const handler = async (
+      context: BridgeContext,
+      ...received: unknown[]
+    ): Promise<SettingsUpdateResult> => {
       // SAFETY: registerBridge has applied this definition's argument guard before calling the handler.
       const argumentsForMethod = received as BridgeArgumentsFor<
         MethodForChannel<Definition["channel"]>

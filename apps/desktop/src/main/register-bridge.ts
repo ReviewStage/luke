@@ -7,7 +7,8 @@ export interface BridgeContext {
 }
 
 type BridgeHandler<Method extends BridgeMethod> = (
-  ...args: [...BridgeArgumentsFor<Method>, BridgeContext]
+  context: BridgeContext,
+  ...args: BridgeArgumentsFor<Method>
 ) => BridgeResultFor<Method> | Promise<BridgeResultFor<Method>>;
 
 export type BridgeHandlers<Method extends BridgeMethod = BridgeMethod> = {
@@ -20,7 +21,7 @@ interface BridgeRegistrationHost {
 }
 
 // oxlint-disable-next-line anti-slop/no-unknown-returns -- This is the erased callable shape at Electron's IPC boundary.
-type RuntimeHandler = (...args: never[]) => unknown;
+type RuntimeHandler = (context: BridgeContext, ...args: never[]) => unknown;
 
 export function registerBridge<const Method extends BridgeMethod>(
   bridge: Bridge,
@@ -36,8 +37,10 @@ export function registerBridge<const Method extends BridgeMethod>(
     const handler = handlers[method] as (...args: unknown[]) => unknown;
     if (definition.kind === "invoke") {
       host.ipcMain.handle(definition.channel, async (event, ...rawArgs) => {
-        if (!host.trustedSender(event) || !definition.args(rawArgs)) return undefined;
-        const value = await handler(...rawArgs, { sender: event.sender });
+        if (!host.trustedSender(event) || !definition.args(rawArgs)) {
+          throw new Error("Invalid bridge request");
+        }
+        const value = await handler({ sender: event.sender }, ...rawArgs);
         if (definition.result?.(value) === false) throw new Error("Invalid bridge response");
         return value;
       });
@@ -45,7 +48,7 @@ export function registerBridge<const Method extends BridgeMethod>(
     }
     host.ipcMain.on(definition.channel, (event, ...rawArgs) => {
       if (!host.trustedSender(event) || !definition.args(rawArgs)) return;
-      void handler(...rawArgs, { sender: event.sender });
+      void handler({ sender: event.sender }, ...rawArgs);
     });
   }
 }
@@ -60,6 +63,7 @@ export function registerBridgeEntry(
   if (!method) throw new Error("Unknown bridge method");
   const entryHandlers = { [method]: handler };
   // SAFETY: method was recovered by identity from this BRIDGE and definition; registerBridge performs its runtime guards.
-  const typedHandlers = entryHandlers as Pick<BridgeHandlers, typeof method>;
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- Object construction erases the recovered literal key before the guarded registrar consumes it.
+  const typedHandlers = entryHandlers as unknown as Pick<BridgeHandlers, typeof method>;
   registerBridge(bridge, typedHandlers, host);
 }

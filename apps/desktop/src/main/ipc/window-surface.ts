@@ -44,19 +44,19 @@ export function registerWindowSurfaceIpc(dependencies: WindowSurfaceIpcDependenc
   registerBridge(
     BRIDGE,
     {
-      setExpanded(expanded, focus, context) {
+      setExpanded(context, expanded, focus) {
         const displayId = panels.displayIdFor(context.sender);
         if (displayId === undefined) throw new Error("Invalid window mode request");
         return panels.setMode(displayId, expanded ? "expanded" : "compact", focus === true);
       },
-      summonFeedback(kind, context) {
+      summonFeedback(context, kind) {
         const displayId = panels.displayIdFor(context.sender);
         if (displayId === undefined) throw new Error("Invalid composer request");
         panels.setMode(displayId, "expanded", true);
         context.sender.send(channels.onLifecycle, FEEDBACK_LIFECYCLE_EVENT[kind]);
         dependencies.recordProductEvent(PRODUCT_EVENT.FEEDBACK_OPEN, {});
       },
-      setPointerInterception(interceptsPointer, context) {
+      setPointerInterception(context, interceptsPointer) {
         BrowserWindow.fromWebContents(context.sender)?.setIgnoreMouseEvents(!interceptsPointer, {
           forward: true,
         });
@@ -90,7 +90,7 @@ export function registerWindowSurfaceIpc(dependencies: WindowSurfaceIpcDependenc
        * miscounts is a bug to find in the counts rather than a reason to throw
        * into a `send` nothing is waiting on.
        */
-      recordSurfaceEvent(name, properties, _context) {
+      recordSurfaceEvent(_context, name, properties) {
         const read = productEventFromWire({ name, at: Date.now(), properties: properties ?? {} });
         if (!read) return;
         dependencies.recordProductEvent(

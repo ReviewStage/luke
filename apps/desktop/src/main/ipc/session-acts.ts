@@ -113,8 +113,13 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
   });
   const registerHandler = (
     definition: Parameters<typeof registerBridgeEntry>[1],
-    handler: Parameters<typeof registerBridgeEntry>[2],
-  ) => registerBridgeEntry(BRIDGE, definition, handler, { ipcMain, trustedSender });
+    // oxlint-disable-next-line anti-slop/no-unknown-returns -- The manifest parses this erased domain result before it crosses Electron.
+    handler: (...args: never[]) => unknown,
+  ) =>
+    registerBridgeEntry(BRIDGE, definition, (_context, ...args) => handler(...args), {
+      ipcMain,
+      trustedSender,
+    });
   /**
    * Counts an act that actually landed. It takes the result rather than
    * sitting inside `performSessionAct`, because a Superset-managed session

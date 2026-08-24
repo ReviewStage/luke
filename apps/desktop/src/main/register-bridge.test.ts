@@ -48,7 +48,11 @@ test("trust and argument guards refuse every transport before its handler", asyn
   );
   // SAFETY: registerBridge reads only the sender field supplied by this focused fixture.
   const event = { sender: {} } as IpcMainInvokeEvent & IpcMainEvent;
-  assert.equal(await trusted.invokes.get(BRIDGE.setExpanded.channel)?.(event, "yes"), undefined);
+  await assert.rejects(
+    // SAFETY: Electron invoke listeners always return promises; the fixture retains the erased host signature only.
+    () => trusted.invokes.get(BRIDGE.setExpanded.channel)?.(event, "yes") as Promise<unknown>,
+    /Invalid bridge request/,
+  );
   trusted.sends.get(BRIDGE.setPointerInterception.channel)?.(event, "yes");
   assert.equal(calls, 0);
 
@@ -63,7 +67,11 @@ test("trust and argument guards refuse every transport before its handler", asyn
     },
     untrusted.host,
   );
-  assert.equal(await untrusted.invokes.get(BRIDGE.setExpanded.channel)?.(event, true), undefined);
+  await assert.rejects(
+    // SAFETY: Electron invoke listeners always return promises; the fixture retains the erased host signature only.
+    () => untrusted.invokes.get(BRIDGE.setExpanded.channel)?.(event, true) as Promise<unknown>,
+    /Invalid bridge request/,
+  );
   assert.equal(calls, 0);
 });
 
@@ -71,10 +79,29 @@ test("a validated request reaches its domain handler", async () => {
   const fixture = fixtureHost(true);
   registerBridge(
     BRIDGE,
-    { setExpanded: (expanded) => (expanded ? "expanded" : "compact") },
+    { setExpanded: (_context, expanded) => (expanded ? "expanded" : "compact") },
     fixture.host,
   );
   // SAFETY: registerBridge reads only the sender field supplied by this focused fixture.
   const event = { sender: {} } as IpcMainInvokeEvent;
+  assert.equal(await fixture.invokes.get(BRIDGE.setExpanded.channel)?.(event, true), "expanded");
+});
+
+test("an omitted optional argument cannot steal the bridge context", async () => {
+  const fixture = fixtureHost(true);
+  const sender = {};
+  registerBridge(
+    BRIDGE,
+    {
+      setExpanded: (context, expanded, focus) => {
+        assert.equal(context.sender, sender);
+        assert.equal(focus, undefined);
+        return expanded ? "expanded" : "compact";
+      },
+    },
+    fixture.host,
+  );
+  // SAFETY: registerBridge reads only the sender field supplied by this focused fixture.
+  const event = { sender } as IpcMainInvokeEvent;
   assert.equal(await fixture.invokes.get(BRIDGE.setExpanded.channel)?.(event, true), "expanded");
 });

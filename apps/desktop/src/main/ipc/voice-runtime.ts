@@ -26,7 +26,7 @@ export function registerVoiceRuntimeIpc(dependencies: VoiceRuntimeIpcDependencie
   registerBridge(
     BRIDGE,
     {
-      setVoiceExchangeActive(active, context) {
+      setVoiceExchangeActive(context, active) {
         const displayId = panels.displayIdFor(context.sender);
         if (displayId !== undefined) panels.setVoiceExchange(displayId, active);
         if (active) dependencies.recordProductEvent(PRODUCT_EVENT.VOICE_EXCHANGE, {});
@@ -35,7 +35,7 @@ export function registerVoiceRuntimeIpc(dependencies: VoiceRuntimeIpcDependencie
         dependencies.openExternal(
           "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone",
         ),
-      openProviderApiKeys(providerId) {
+      openProviderApiKeys(_context, providerId) {
         const provider = CREDENTIAL_PROVIDERS[providerId];
         if (provider.connection !== CREDENTIAL_CONNECTION.KEY || !provider.apiKeysUrl) return;
         void dependencies.openExternal(provider.apiKeysUrl);

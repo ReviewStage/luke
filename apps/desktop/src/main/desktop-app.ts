@@ -893,6 +893,15 @@ async function rememberWorkspaceDefaults(
 function registerIpc(): void {
   const registerHandler = (
     definition: Parameters<typeof registerBridgeEntry>[1],
+    // oxlint-disable-next-line anti-slop/no-unknown-returns -- The manifest parses this erased domain result before it crosses Electron.
+    handler: (...args: never[]) => unknown,
+  ) =>
+    registerBridgeEntry(BRIDGE, definition, (_context, ...args) => handler(...args), {
+      ipcMain,
+      trustedSender,
+    });
+  const registerContextHandler = (
+    definition: Parameters<typeof registerBridgeEntry>[1],
     handler: Parameters<typeof registerBridgeEntry>[2],
   ) => registerBridgeEntry(BRIDGE, definition, handler, { ipcMain, trustedSender });
   const registerSettingHandler = createSettingsHandler({
@@ -901,79 +910,82 @@ function registerIpc(): void {
     snapshot: () => settingsStore.snapshot(),
     broadcast: (settings, except) => panels.broadcast(channels.onSettingsChanged, settings, except),
   });
-  registerHandler(BRIDGE.getBootstrap, async (context: BridgeContext): Promise<AppBootstrap> => {
-    // Each window bootstraps as itself: its own display, its own mode. The
-    // roster and the settings are the same everywhere.
-    const displayId = panels.displayIdFor(context.sender);
-    const display =
-      (displayId !== undefined ? panels.display(displayId) : undefined) ??
-      screen.getPrimaryDisplay();
-    const [supersetInstalled, supersetConnected] = await Promise.all([
-      supersetCli.installed(),
-      supersetCli.connected(),
-    ]);
-    return {
-      mode: displayId !== undefined ? panels.modeFor(displayId) : panels.initialMode,
-      startPeeked,
-      startInSlot,
-      profile,
-      fixture,
-      captureMode,
-      fixtureMode,
-      supersetInstalled,
-      supersetConnected,
-      accountRequired: runMode.requiresAccount,
-      account,
-      packaged: app.isPackaged,
-      platform: process.platform,
-      electronVersion: process.versions.electron,
-      chromiumVersion: process.versions.chrome,
-      nodeVersion: process.versions.node,
-      microphoneStatus: microphoneStatus(),
-      // Both keys travel as accelerators rather than labels: the renderer needs
-      // both spellings — the keycaps' ⌥ and L drawn apart, and aria's Alt+L —
-      // and only the accelerator can produce the pair.
-      ...(hotkeys.talk ? { voiceHotkey: hotkeys.talk } : undefined),
-      voiceHotkeyHeld: hotkeys.held,
-      ...(hotkeys.ask ? { askHotkey: hotkeys.ask } : undefined),
-      ...(hotkeys.stop ? { stopHotkey: hotkeys.stop } : undefined),
-      ...(outputAudio ? { outputAudio } : undefined),
-      display: panels.diagnostic(display),
-      update: updateService.snapshot(),
-      // Bootstrapped through the same relevance gate every broadcast passes:
-      // a panel that opens late must not learn of rows the roster has already
-      // let go and then hold them past the next broadcast's dedupe.
-      sessions:
-        runMode.observesProviders && accountCapabilitiesActive()
-          ? rosterRelevantSessions(sessionRegistry.snapshot().sessions, Date.now())
+  registerContextHandler(
+    BRIDGE.getBootstrap,
+    async (context: BridgeContext): Promise<AppBootstrap> => {
+      // Each window bootstraps as itself: its own display, its own mode. The
+      // roster and the settings are the same everywhere.
+      const displayId = panels.displayIdFor(context.sender);
+      const display =
+        (displayId !== undefined ? panels.display(displayId) : undefined) ??
+        screen.getPrimaryDisplay();
+      const [supersetInstalled, supersetConnected] = await Promise.all([
+        supersetCli.installed(),
+        supersetCli.connected(),
+      ]);
+      return {
+        mode: displayId !== undefined ? panels.modeFor(displayId) : panels.initialMode,
+        startPeeked,
+        startInSlot,
+        profile,
+        fixture,
+        captureMode,
+        fixtureMode,
+        supersetInstalled,
+        supersetConnected,
+        accountRequired: runMode.requiresAccount,
+        account,
+        packaged: app.isPackaged,
+        platform: process.platform,
+        electronVersion: process.versions.electron,
+        chromiumVersion: process.versions.chrome,
+        nodeVersion: process.versions.node,
+        microphoneStatus: microphoneStatus(),
+        // Both keys travel as accelerators rather than labels: the renderer needs
+        // both spellings — the keycaps' ⌥ and L drawn apart, and aria's Alt+L —
+        // and only the accelerator can produce the pair.
+        ...(hotkeys.talk ? { voiceHotkey: hotkeys.talk } : undefined),
+        voiceHotkeyHeld: hotkeys.held,
+        ...(hotkeys.ask ? { askHotkey: hotkeys.ask } : undefined),
+        ...(hotkeys.stop ? { stopHotkey: hotkeys.stop } : undefined),
+        ...(outputAudio ? { outputAudio } : undefined),
+        display: panels.diagnostic(display),
+        update: updateService.snapshot(),
+        // Bootstrapped through the same relevance gate every broadcast passes:
+        // a panel that opens late must not learn of rows the roster has already
+        // let go and then hold them past the next broadcast's dedupe.
+        sessions:
+          runMode.observesProviders && accountCapabilitiesActive()
+            ? rosterRelevantSessions(sessionRegistry.snapshot().sessions, Date.now())
+            : [],
+        // A live run's roster has settled once it has been broadcast at all —
+        // the first pass publishes even an empty reading — so before that, the
+        // empty list above means "not looked yet" and the face must not sleep
+        // on it. A fixture run never broadcasts and its sessions travel in the
+        // fixture itself, so it is settled from the start.
+        sessionsSettled: !runMode.observesProviders || lastRosterRevision !== -1,
+        // Asks are about observed sessions, so they ride the same gate the
+        // roster does: a panel shown no sessions is shown no asks about them.
+        noticeAsks:
+          runMode.observesProviders && accountCapabilitiesActive() ? attentionRequests.list() : [],
+        workspaceProjects: accountCapabilitiesActive()
+          ? normalizeObservedWorkspaceProjects(
+              offeredWorkspaceProjects(),
+              await settingsStore.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field),
+            )
           : [],
-      // A live run's roster has settled once it has been broadcast at all —
-      // the first pass publishes even an empty reading — so before that, the
-      // empty list above means "not looked yet" and the face must not sleep
-      // on it. A fixture run never broadcasts and its sessions travel in the
-      // fixture itself, so it is settled from the start.
-      sessionsSettled: !runMode.observesProviders || lastRosterRevision !== -1,
-      // Asks are about observed sessions, so they ride the same gate the
-      // roster does: a panel shown no sessions is shown no asks about them.
-      noticeAsks:
-        runMode.observesProviders && accountCapabilitiesActive() ? attentionRequests.list() : [],
-      workspaceProjects: accountCapabilitiesActive()
-        ? normalizeObservedWorkspaceProjects(
-            offeredWorkspaceProjects(),
-            await settingsStore.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field),
-          )
-        : [],
-      ...(trackedIssues && runMode.observesProviders && accountCapabilitiesActive()
-        ? { issues: trackedIssues }
-        : undefined),
-      // The calendar is a capability like the rosters: nothing of it is
-      // shown, or held quiet, before the account gate opens.
-      calendars: accountCapabilitiesActive() ? observedCalendars : [],
-      meetingQuiet: accountCapabilitiesActive() && meetingQuietActive,
-      sessionReplay: await sessionReplayBootstrap(),
-      settings: await settingsStore.snapshot(),
-    };
-  });
+        ...(trackedIssues && runMode.observesProviders && accountCapabilitiesActive()
+          ? { issues: trackedIssues }
+          : undefined),
+        // The calendar is a capability like the rosters: nothing of it is
+        // shown, or held quiet, before the account gate opens.
+        calendars: accountCapabilitiesActive() ? observedCalendars : [],
+        meetingQuiet: accountCapabilitiesActive() && meetingQuietActive,
+        sessionReplay: await sessionReplayBootstrap(),
+        settings: await settingsStore.snapshot(),
+      };
+    },
+  );
   registerHandler(BRIDGE.beginSupersetSignIn, async () => {
     recordProductEvent(PRODUCT_EVENT.SUPERSET_ACT, {
       superset_act: PRODUCT_SUPERSET_ACT.SIGN_IN_START,
@@ -1172,7 +1184,7 @@ function registerIpc(): void {
 
   registerHandler(BRIDGE.quit, app.quit.bind(app));
 
-  registerHandler(BRIDGE.notifyReady, async (context: BridgeContext) => {
+  registerContextHandler(BRIDGE.notifyReady, async (context: BridgeContext) => {
     if (!captureOutput) return;
     // A capture run holds a single window, and the ready message is its own.
     const window = BrowserWindow.fromWebContents(context.sender);

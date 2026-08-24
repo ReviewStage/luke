@@ -1,7 +1,7 @@
 import type { WireValue } from "@sidecar/wire";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from "electron";
 import { BRIDGE, type Bridge, type BridgeMethod, bridgeEntries } from "#shared/bridge";
-import { registerBridgeEntry } from "./register-bridge";
+import { type BridgeContext, registerBridgeEntry } from "./register-bridge";
 
 interface ActionHandlerHost {
   ipcMain: Pick<IpcMain, "handle" | "on">;
@@ -22,8 +22,7 @@ export function createActionHandler(host: ActionHandlerHost) {
   ): void => {
     const method = bridgeEntries().find(([, candidate]) => candidate === definition)?.[0];
     if (!method) throw new Error("Unknown bridge method");
-    const handler = async (...received: unknown[]): Promise<TResult> => {
-      received.pop();
+    const handler = async (_context: BridgeContext, ...received: unknown[]): Promise<TResult> => {
       try {
         // SAFETY: registerBridge has applied this definition's argument guard before calling the handler.
         return await action.act(...(received as TArguments));

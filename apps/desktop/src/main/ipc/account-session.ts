@@ -50,7 +50,7 @@ export function registerAccountSessionIpc(dependencies: AccountSessionIpcDepende
   registerBridge(
     BRIDGE,
     {
-      beginSignIn(provider) {
+      beginSignIn(_context, provider) {
         recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACT, {
           account_act: PRODUCT_ACCOUNT_ACT.SIGN_IN_START,
         });
