@@ -4,8 +4,8 @@ import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials";
 import { REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
 import { PANEL_FORM_FACTOR } from "@sidecar/surface";
 import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "#shared/wire/account";
-import type { AppSettings } from "#shared/wire/settings";
-import { CLI_CONNECTION, VOICE_SOURCE } from "#shared/wire/settings";
+import type { AppSettingsView } from "#shared/wire/settings";
+import { APP_SETTING_DEFAULTS, CLI_CONNECTION, VOICE_SOURCE } from "#shared/wire/settings";
 import {
   armErrand,
   EMPTY_ERRAND_RUN,
@@ -30,8 +30,9 @@ import { SESSION_FILTER, SESSION_SORT } from "./session-model";
 import { SETTINGS_VIEW } from "./settings-views";
 
 /** A settings snapshot, told apart from the next only by the switch that moved. */
-function settings(captions: boolean): AppSettings {
+function settings(captions: boolean): AppSettingsView {
   return {
+    ...APP_SETTING_DEFAULTS,
     credentialSources: {
       [CREDENTIAL_PROVIDER_ID.CONDUCTOR]: CREDENTIAL_SOURCE.NONE,
       [CREDENTIAL_PROVIDER_ID.COPILOT]: CREDENTIAL_SOURCE.NONE,

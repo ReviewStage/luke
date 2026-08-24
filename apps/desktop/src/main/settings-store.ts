@@ -393,24 +393,15 @@ function storedApiKeys(record: WireRecord, providers: readonly CredentialProvide
  * documented endpoint takes, so it is dropped the way an unknown voice is.
  */
 function readStoredSettings(record: WireRecord): StoredAppSettings {
-  return APP_SETTING_FIELDS.reduce(
-    (settings, field) => ({
-      ...settings,
-      [field]: APP_SETTING_SCHEMA[field].guard(record[field]).value,
-    }),
-    // SAFETY: The reducer fills every StoredAppSettings field from the schema guards.
-    {} as StoredAppSettings,
-  );
+  // SAFETY: Each field is paired with the value its own schema guard accepts.
+  return Object.fromEntries(
+    APP_SETTING_FIELDS.map((field) => [
+      field,
+      APP_SETTING_SCHEMA[field].guard(record[field]).value,
+    ]),
+  ) as StoredAppSettings;
 }
 
-/**
- * An installation that stored the Superset agent default apart — before it
- * joined `workspaceAgentDefaults` — keeps its choice: the legacy field is
- * folded in on read, under the same guard a folded entry answers to, and the
- * next write drops it from the file the way the legacy Conductor key is
- * dropped. A choice already held in the folded record wins, because it is the
- * newer one.
- */
 function withLegacySupersetAgentDefault(
   settings: StoredAppSettings,
   record: WireRecord,
@@ -426,6 +417,20 @@ function withLegacySupersetAgentDefault(
       ...settings.workspaceAgentDefaults,
       [SUPERSET_WORKSPACE_PROVIDER_ID]: legacy,
     },
+  };
+}
+
+function storedSettingsFromPersisted(persisted: PersistedSettings): StoredAppSettings {
+  const entries = Object.fromEntries(APP_SETTING_FIELDS.map((field) => [field, persisted[field]]));
+  // SAFETY: APP_SETTING_FIELDS copies every StoredAppSettings member and no persistence metadata.
+  return entries as StoredAppSettings;
+}
+
+function defaultPersistedSettings(): PersistedSettings {
+  return {
+    version: SETTINGS_FILE_VERSION,
+    apiKeys: {},
+    ...readStoredSettings({}),
   };
 }
 
@@ -478,7 +483,9 @@ export class SettingsStore {
   #mutations: Promise<void> = Promise.resolve();
 
   async get<Field extends AppSettingField>(field: Field): Promise<AppSettingValue<Field>> {
-    return (await this.#load())[field];
+    // SAFETY: PersistedSettings extends the schema-derived stored shape; the
+    // generic field selects the same schema member on both sides.
+    return (await this.#load())[field] as AppSettingValue<Field>;
   }
 
   async set<Field extends AppSettingField>(
@@ -590,92 +597,71 @@ export class SettingsStore {
       ),
     );
     return {
-      // SAFETY: #providers contains every credential provider exactly once.
-      credentialSources: Object.fromEntries(sources) as Record<
-        CredentialProviderId,
-        CredentialSource
-      >,
-      // The same question `credentialSources` answers, for the one provider
-      // whose connection is a CLI login rather than a key: asked of the
-      // observer that actually holds the answer, at snapshot time like the
-      // key sources beside it.
-      codexCloudConnection: this.#codexCloudConnection(),
-      // Reports what storing a key has already established, and asks nothing on
-      // its own: a snapshot is taken on every launch, and most of them are for
-      // a user with no key to protect.
-      secretStorage: this.#secretStorage,
-      // Whether a spoken turn could actually be minted: a key resolved, and this
-      // run will use it. Resolved here rather than left to the panel because it
-      // is the same question the voice and the pace are answered by — what would
-      // actually happen — and it travels with every settings reply, so storing a
-      // key is what turns voice on and deleting one is what turns it off.
-      voiceAvailable: voiceCapability.available,
-      // Resolved, not stored: the panel's toggle marks what a press of the
-      // talk key would actually spend, which is not always what was chosen.
-      voiceSource: voiceCapability.source,
-      // Whether this build can offer the Google Calendar sign-in at all: a
-      // registered OAuth client resolved, and this run would use what it
-      // grants. Without one the integration is not drawn at all.
-      calendarSignInAvailable:
-        this.#credentialsUsable && googleCalendarSignInConfig(this.#environment) !== undefined,
-      // The same question for Linear, answered the same way: without a
-      // registered OAuth client there is no consent page to open, so the row
-      // is not drawn rather than drawn refusing.
-      linearSignInAvailable:
-        this.#credentialsUsable && linearSignInConfig(this.#environment) !== undefined,
-      // Whether this build can offer the Apple Calendar connection: a Mac to
-      // read, and a run that would use what macOS grants. No client gates it
-      // the way the sign-ins are gated — the grant lives with the system.
-      appleCalendarAvailable: this.#credentialsUsable && this.#appleCalendarSupported,
-      // The accounts without their grants: which are connected and which
-      // calendars count is the renderer's to draw; the tokens never travel.
-      calendarAccounts: (persisted.calendarAccounts ?? []).map((account) => ({
-        id: account.id,
-        selectedCalendarIds: account.calendars,
-      })),
-      // The Apple Calendar connection on the same terms: the fact and the
-      // chosen calendars, with nothing behind them to keep from travelling.
-      ...(persisted.appleCalendar
-        ? {
-            appleCalendar: {
-              id: APPLE_CALENDAR_ID,
-              selectedCalendarIds: persisted.appleCalendar.calendars,
-            },
-          }
-        : undefined),
-      showInDock: persisted.showInDock,
-      // Resolved the way the minter resolves it, so the panel marks the voice
-      // that would actually be heard.
-      voice:
-        persisted.voice ?? environmentRealtimeVoice(this.#environment) ?? REALTIME_DEFAULTS.VOICE,
-      voiceSpeed:
-        persisted.voiceSpeed ??
-        environmentRealtimeSpeed(this.#environment) ??
-        REALTIME_DEFAULTS.SPEED,
-      voiceCaptions: persisted.voiceCaptions,
-      ...(persisted.voiceHotkey ? { voiceHotkey: persisted.voiceHotkey } : undefined),
-      ...(persisted.askHotkey ? { askHotkey: persisted.askHotkey } : undefined),
-      ...(persisted.stopHotkey ? { stopHotkey: persisted.stopHotkey } : undefined),
-      duckOtherMedia: persisted.duckOtherMedia,
-      preferBuiltInMicrophone: persisted.preferBuiltInMicrophone,
-      quietDuringMeetings: persisted.quietDuringMeetings,
-      showOnAllDisplays: persisted.showOnAllDisplays,
-      shareUsageData: persisted.shareUsageData,
-      sessionReplay: persisted.sessionReplay,
-      formFactor: persisted.formFactor ?? DEFAULT_PANEL_FORM_FACTOR,
-      ...(persisted.sessionFilters ? { sessionFilters: persisted.sessionFilters } : undefined),
-      ...(persisted.sessionSearchQuery
-        ? { sessionSearchQuery: persisted.sessionSearchQuery }
-        : undefined),
-      ...(persisted.defaultWorkspaceProvider
-        ? { defaultWorkspaceProvider: persisted.defaultWorkspaceProvider }
-        : undefined),
-      ...(persisted.workspaceAgentDefaults
-        ? { workspaceAgentDefaults: persisted.workspaceAgentDefaults }
-        : undefined),
-      ...(persisted.workspaceProjectDefaults
-        ? { workspaceProjectDefaults: persisted.workspaceProjectDefaults }
-        : undefined),
+      stored: {
+        ...storedSettingsFromPersisted(persisted),
+        // Resolved the way the minter resolves them, so the panel marks what
+        // would actually be heard while the persisted file remains optional.
+        voice:
+          persisted.voice ?? environmentRealtimeVoice(this.#environment) ?? REALTIME_DEFAULTS.VOICE,
+        voiceSpeed:
+          persisted.voiceSpeed ??
+          environmentRealtimeSpeed(this.#environment) ??
+          REALTIME_DEFAULTS.SPEED,
+        voiceSource: voiceCapability.source,
+        formFactor: persisted.formFactor ?? DEFAULT_PANEL_FORM_FACTOR,
+      },
+      status: {
+        // SAFETY: #providers contains every credential provider exactly once.
+        credentialSources: Object.fromEntries(sources) as Record<
+          CredentialProviderId,
+          CredentialSource
+        >,
+        // The same question `credentialSources` answers, for the one provider
+        // whose connection is a CLI login rather than a key: asked of the
+        // observer that actually holds the answer, at snapshot time like the
+        // key sources beside it.
+        codexCloudConnection: this.#codexCloudConnection(),
+        // Reports what storing a key has already established, and asks nothing on
+        // its own: a snapshot is taken on every launch, and most of them are for
+        // a user with no key to protect.
+        secretStorage: this.#secretStorage,
+        // Whether a spoken turn could actually be minted: a key resolved, and this
+        // run will use it. Resolved here rather than left to the panel because it
+        // is the same question the voice and the pace are answered by — what would
+        // actually happen — and it travels with every settings reply, so storing a
+        // key is what turns voice on and deleting one is what turns it off.
+        voiceAvailable: voiceCapability.available,
+        // Whether this build can offer the Google Calendar sign-in at all: a
+        // registered OAuth client resolved, and this run would use what it
+        // grants. Without one the integration is not drawn at all.
+        calendarSignInAvailable:
+          this.#credentialsUsable && googleCalendarSignInConfig(this.#environment) !== undefined,
+        // The same question for Linear, answered the same way: without a
+        // registered OAuth client there is no consent page to open, so the row
+        // is not drawn rather than drawn refusing.
+        linearSignInAvailable:
+          this.#credentialsUsable && linearSignInConfig(this.#environment) !== undefined,
+        // Whether this build can offer the Apple Calendar connection: a Mac to
+        // read, and a run that would use what macOS grants. No client gates it
+        // the way the sign-ins are gated — the grant lives with the system.
+        appleCalendarAvailable: this.#credentialsUsable && this.#appleCalendarSupported,
+        // The accounts without their grants: which are connected and which
+        // calendars count is the renderer's to draw; the tokens never travel.
+        calendarAccounts: (persisted.calendarAccounts ?? []).map((account) => ({
+          id: account.id,
+          selectedCalendarIds: account.calendars,
+        })),
+        // The Apple Calendar connection on the same terms: the fact and the
+        // chosen calendars, with nothing behind them to keep from travelling.
+        ...(persisted.appleCalendar
+          ? {
+              appleCalendar: {
+                id: APPLE_CALENDAR_ID,
+                selectedCalendarIds: persisted.appleCalendar.calendars,
+              },
+            }
+          : undefined),
+      },
     };
   }
 
@@ -1265,10 +1251,19 @@ export class SettingsStore {
     }
   }
 
-  /** Memoizes the in-flight read so concurrent first callers share one open. */
+  /** Shares one in-flight read, but lets a transient failure retry next time. */
   async #load(): Promise<PersistedSettings> {
-    this.#loading ??= this.#readPersisted();
-    return this.#loading;
+    const loading = this.#loading ?? this.#readPersisted();
+    this.#loading = loading;
+    try {
+      return await loading;
+    } catch (error) {
+      // Defaults belong to an absent or corrupt file, both handled by the
+      // reader. An unexpected I/O failure must not become writable defaults:
+      // forget only this failed attempt so the next read can try the file again.
+      if (this.#loading === loading) this.#loading = undefined;
+      throw error;
+    }
   }
 
   async #readPersisted(): Promise<PersistedSettings> {
@@ -1280,11 +1275,7 @@ export class SettingsStore {
       if (!(error instanceof Error) || !canIgnoreFilesystemError(error)) throw error;
     }
 
-    let persisted: PersistedSettings = {
-      version: SETTINGS_FILE_VERSION,
-      apiKeys: {},
-      ...readStoredSettings({}),
-    };
+    let persisted = defaultPersistedSettings();
     if (source) {
       try {
         persisted = parsePersistedSettings(source, this.#providers);

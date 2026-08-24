@@ -23,8 +23,13 @@ import {
   CREDENTIAL_SOURCE,
   SECRET_STORAGE,
 } from "#shared/wire/account";
-import type { AppSettings, SettingsUpdateResult } from "#shared/wire/settings";
-import { CLI_CONNECTION } from "#shared/wire/settings";
+import type { AppSettingsView, SettingsUpdateResult } from "#shared/wire/settings";
+import {
+  APP_SETTING_DEFAULTS,
+  appSettingsView,
+  appSettingsWire,
+  CLI_CONNECTION,
+} from "#shared/wire/settings";
 import type { UpdateSnapshot } from "#shared/wire/update";
 import { UPDATE_STATUS } from "#shared/wire/update";
 import { spokenSettingBridge } from "#testing/spoken-setting-bridge";
@@ -35,11 +40,12 @@ import {
   type LukeGuideInput,
 } from "./luke-guide";
 
-function settings(overrides: Partial<AppSettings> = {}): AppSettings {
+function settings(overrides: Partial<AppSettingsView> = {}): AppSettingsView {
   // Object.assign rather than a spread: spreading a Partial marks every key it
-  // could carry optional, and the result stops being an AppSettings.
-  return Object.assign<AppSettings, Partial<AppSettings>>(
+  // could carry optional, and the result stops being an AppSettingsView.
+  return Object.assign<AppSettingsView, Partial<AppSettingsView>>(
     {
+      ...APP_SETTING_DEFAULTS,
       credentialSources: {
         [CREDENTIAL_PROVIDER_ID.CONDUCTOR]: CREDENTIAL_SOURCE.ENCRYPTED_FILE,
         [CREDENTIAL_PROVIDER_ID.COPILOT]: CREDENTIAL_SOURCE.NONE,
@@ -483,7 +489,7 @@ test("a spoken model or effort change composes the one stored selection", async 
     updateSettingEntry: async (_field, key, value) => {
       assert.equal(key, PROVIDER_ID.CONDUCTOR);
       carried.push(value);
-      return { settings: settings() };
+      return { settings: appSettingsWire(settings()) };
     },
   });
   const stored = settings({
@@ -555,7 +561,7 @@ test("a model and its effort named in one change land as one stored pairing", as
     updateSettingEntry: async (_field, key, value) => {
       assert.equal(key, PROVIDER_ID.CONDUCTOR);
       carried.push(value);
-      return { settings: settings() };
+      return { settings: appSettingsWire(settings()) };
     },
   });
 
@@ -617,8 +623,8 @@ test("a model and its effort asked in one breath compose through the held answer
       assert.equal(key, PROVIDER_ID.CONDUCTOR);
       carried.push(value);
       return {
-        settings: settings(
-          value ? { workspaceAgentDefaults: { [PROVIDER_ID.CONDUCTOR]: value } } : {},
+        settings: appSettingsWire(
+          settings(value ? { workspaceAgentDefaults: { [PROVIDER_ID.CONDUCTOR]: value } } : {}),
         ),
       };
     },
@@ -629,7 +635,7 @@ test("a model and its effort asked in one breath compose through the held answer
   // paired ask arrives as two calls, and everything the second half needs
   // only becomes true when the first half's answer lands.
   const unset = settings();
-  let held: AppSettings | undefined;
+  let held: AppSettingsView | undefined;
   await applySpokenSetting(
     bridge,
     {
@@ -637,7 +643,7 @@ test("a model and its effort asked in one breath compose through the held answer
       value: "Fable 5",
     },
     (next) => {
-      held = next;
+      held = appSettingsView(next);
     },
     unset,
   );
@@ -885,7 +891,7 @@ test("the usage-data switch is described where it is turned, and is spoken", () 
 
 test("every adjustable setting is carried to the bridge call its row uses", async () => {
   const calls: string[] = [];
-  const answered: SettingsUpdateResult = { settings: settings() };
+  const answered: SettingsUpdateResult = { settings: appSettingsWire(settings()) };
   const bridge = spokenSettingBridge({
     updateSetting: async (field, value) => {
       calls.push(`${field}:${String(value)}`);
@@ -896,12 +902,14 @@ test("every adjustable setting is carried to the bridge call its row uses", asyn
       return answered;
     },
   });
-  const seen: AppSettings[] = [];
+  const seen: AppSettingsView[] = [];
 
   for (const setting of buildLukeGuide(guideInput()).settings) {
     if (!setting.adjustable) continue;
     const value = setting.kind === APP_SETTING_KIND.TOGGLE ? "on" : (setting.choices?.[0] ?? "");
-    const outcome = await applySpokenSetting(bridge, { setting, value }, (next) => seen.push(next));
+    const outcome = await applySpokenSetting(bridge, { setting, value }, (next) =>
+      seen.push(appSettingsView(next)),
+    );
     // An adjustable entry with no carrier would come back refused: the guide
     // may never advertise a change the wiring cannot make.
     assert.equal(outcome.status, "changed", `${setting.id} is wired to the bridge`);
@@ -934,7 +942,7 @@ test("a pace asked for by its multiple carries the same as its word", async () =
   const bridge = spokenSettingBridge({
     updateSetting: async (field, value) => {
       calls.push(`${field}:${value}`);
-      return { settings: settings() };
+      return { settings: appSettingsWire(settings()) };
     },
   });
 
@@ -954,7 +962,7 @@ test("a pace asked for by its multiple carries the same as its word", async () =
 test("the store's refusal comes back as the spoken outcome", async () => {
   const bridge = spokenSettingBridge({
     updateSetting: async () => ({
-      settings: settings(),
+      settings: appSettingsWire(settings()),
       reason: "The settings file could not be written.",
     }),
   });

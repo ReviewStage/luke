@@ -111,7 +111,7 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
    * developer typed.
    */
   function recordSettingUpdate(field: AppSettingField, settings: AppSettings): void {
-    const analytics = settingAnalytics(field, settings);
+    const analytics = settingAnalytics(field, settings.stored);
     if (!analytics) return;
     recordProductEvent(PRODUCT_EVENT.SETTING_UPDATE, {
       setting_id: analytics.id,
@@ -127,38 +127,38 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
   ): Promise<void> {
     switch (APP_SETTING_SCHEMA[field].mainProcessSideEffect) {
       case SETTING_SIDE_EFFECT.DOCK:
-        dock.apply(settings.showInDock, panels.displayIdFor(context.sender));
+        dock.apply(settings.stored.showInDock, panels.displayIdFor(context.sender));
         break;
       case SETTING_SIDE_EFFECT.DISPLAYS:
-        panels.setShowOnAllDisplays(settings.showOnAllDisplays);
+        panels.setShowOnAllDisplays(settings.stored.showOnAllDisplays);
         panels.reconcile();
         break;
       case SETTING_SIDE_EFFECT.FORM_FACTOR:
-        panels.setFormFactor(settings.formFactor);
+        panels.setFormFactor(settings.stored.formFactor ?? APP_SETTING_SCHEMA.formFactor.default);
         panels.positionAll();
         break;
       case SETTING_SIDE_EFFECT.VOICE:
-        realtimeCredentials()?.setVoice(settings.voice);
+        realtimeCredentials()?.setVoice(settings.stored.voice);
         break;
       case SETTING_SIDE_EFFECT.VOICE_SPEED:
-        realtimeCredentials()?.setSpeed(settings.voiceSpeed);
+        realtimeCredentials()?.setSpeed(settings.stored.voiceSpeed);
         break;
       case SETTING_SIDE_EFFECT.TALK_HOTKEY:
-        hotkeys.setChosen(HOTKEY_RANK.TALK, settings.voiceHotkey);
+        hotkeys.setChosen(HOTKEY_RANK.TALK, settings.stored.voiceHotkey);
         await hotkeys.reapply(HOTKEY_RANK.TALK);
         break;
       case SETTING_SIDE_EFFECT.ASK_HOTKEY:
-        hotkeys.setChosen(HOTKEY_RANK.ASK, settings.askHotkey);
+        hotkeys.setChosen(HOTKEY_RANK.ASK, settings.stored.askHotkey);
         if (waitForDeferredEffects) await hotkeys.reapply(HOTKEY_RANK.ASK);
         else void hotkeys.reapply(HOTKEY_RANK.ASK);
         break;
       case SETTING_SIDE_EFFECT.STOP_HOTKEY:
-        hotkeys.setChosen(HOTKEY_RANK.STOP, settings.stopHotkey);
+        hotkeys.setChosen(HOTKEY_RANK.STOP, settings.stored.stopHotkey);
         if (waitForDeferredEffects) await hotkeys.reapply(HOTKEY_RANK.STOP);
         else void hotkeys.reapply(HOTKEY_RANK.STOP);
         break;
       case SETTING_SIDE_EFFECT.MEDIA_DUCK:
-        mediaDuck.setEnabled(settings.duckOtherMedia);
+        mediaDuck.setEnabled(settings.stored.duckOtherMedia);
         break;
       case SETTING_SIDE_EFFECT.VOICE_SOURCE:
         void applyVoiceCredential();
@@ -168,7 +168,7 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
         releaseHeldNotices();
         break;
       case SETTING_SIDE_EFFECT.USAGE_SHARING:
-        setUsageSharing(settings.shareUsageData);
+        setUsageSharing(settings.stored.shareUsageData);
         break;
       case SETTING_SIDE_EFFECT.NONE:
         break;

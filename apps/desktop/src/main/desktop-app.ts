@@ -94,7 +94,6 @@ import { BRIDGE, channels } from "#shared/bridge";
 import {
   ACCOUNT_STATUS,
   type AccountSnapshot,
-  APP_SETTING_DEFAULTS,
   type AppBootstrap,
   type MicrophoneRoute,
   type MicrophoneStatus,
@@ -1980,34 +1979,27 @@ export function startDesktopApp(): void {
       // The Dock icon reads the same file under the opposite default: it is
       // opt-in, so a file that cannot be read leaves Luke out of the Dock — the
       // accessory app the launch just asserted. Nothing to do until it says so.
-      void settingsStore.get(APP_SETTING_SCHEMA.showInDock.field).then(
-        (show) => {
-          if (show) dock.apply(true);
-        },
-        () => undefined,
-      );
+      void settingsStore.get(APP_SETTING_SCHEMA.showInDock.field).then((show) => {
+        if (show) dock.apply(true);
+      });
       // Armed from the settings file alone, like the status item, and for the
       // same reason. A file that cannot be read leaves the duck on, the same
       // answer a file that has never said gives.
-      void settingsStore.get(APP_SETTING_SCHEMA.duckOtherMedia.field).then(
-        (enabled) => mediaDuck.setEnabled(enabled === true),
-        () => mediaDuck.setEnabled(APP_SETTING_DEFAULTS.duckOtherMedia),
-      );
+      void settingsStore
+        .get(APP_SETTING_SCHEMA.duckOtherMedia.field)
+        .then((enabled) => mediaDuck.setEnabled(enabled === true));
       // Armed from the settings file alone, like the duck above, and on the
       // same terms: a file that cannot be read leaves counting on, the answer
       // a file that has never said gives.
-      void settingsStore
-        .get(APP_SETTING_SCHEMA.shareUsageData.field)
-        .catch(() => APP_SETTING_DEFAULTS.shareUsageData)
-        .then((share) => {
-          productEvents.setSharing(share);
-          // Recorded behind the read, because nothing may be counted before
-          // the file has said whether counting is wanted at all.
-          productEvents.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: app.getVersion() });
-          // Luke can run for a week on one launch, so launches alone would
-          // undercount the days he was actually used.
-          productEvents.markDayActive();
-        });
+      void settingsStore.get(APP_SETTING_SCHEMA.shareUsageData.field).then((share) => {
+        productEvents.setSharing(share);
+        // Recorded behind the read, because nothing may be counted before
+        // the file has said whether counting is wanted at all.
+        productEvents.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: app.getVersion() });
+        // Luke can run for a week on one launch, so launches alone would
+        // undercount the days he was actually used.
+        productEvents.markDayActive();
+      });
       // Always on, like the announcements: the timed check answers to no
       // setting, only to the run — a fixture or capture run sends no network,
       // so it never asks GitHub anything.
@@ -2033,13 +2025,10 @@ export function startDesktopApp(): void {
       // file that cannot be read means no choice was kept — the main display,
       // the default form — and must not keep the panels from starting.
       panels.setShowOnAllDisplays(
-        (await settingsStore
-          .get(APP_SETTING_SCHEMA.showOnAllDisplays.field)
-          .catch(() => APP_SETTING_DEFAULTS.showOnAllDisplays)) === true,
+        (await settingsStore.get(APP_SETTING_SCHEMA.showOnAllDisplays.field)) === true,
       );
       panels.setFormFactor(
-        (await settingsStore.get(APP_SETTING_SCHEMA.formFactor.field).catch(() => undefined)) ??
-          DEFAULT_PANEL_FORM_FACTOR,
+        (await settingsStore.get(APP_SETTING_SCHEMA.formFactor.field)) ?? DEFAULT_PANEL_FORM_FACTOR,
       );
       // Awaited for the same reason the voice is: the chosen chord has to be in
       // hand before the key is registered, or the first registration would take
@@ -2047,15 +2036,15 @@ export function startDesktopApp(): void {
       // read means no choice was kept, and the defaults answer.
       hotkeys.setChosen(
         HOTKEY_RANK.TALK,
-        await settingsStore.get(APP_SETTING_SCHEMA.voiceHotkey.field).catch(() => undefined),
+        await settingsStore.get(APP_SETTING_SCHEMA.voiceHotkey.field),
       );
       hotkeys.setChosen(
         HOTKEY_RANK.ASK,
-        await settingsStore.get(APP_SETTING_SCHEMA.askHotkey.field).catch(() => undefined),
+        await settingsStore.get(APP_SETTING_SCHEMA.askHotkey.field),
       );
       hotkeys.setChosen(
         HOTKEY_RANK.STOP,
-        await settingsStore.get(APP_SETTING_SCHEMA.stopHotkey.field).catch(() => undefined),
+        await settingsStore.get(APP_SETTING_SCHEMA.stopHotkey.field),
       );
       // The report is not made here: the helper answers over its own stdout a
       // moment later, and a line printed now would state an absence that only
