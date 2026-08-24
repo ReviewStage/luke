@@ -1,7 +1,7 @@
 import type { CredentialProviderId } from "@sidecar/credentials";
 import { type RefObject, useEffect } from "react";
-import type { CredentialSource } from "#shared/contracts";
-import { CREDENTIAL_SOURCE } from "#shared/contracts";
+import type { CredentialSource } from "#shared/wire/account";
+import { CREDENTIAL_SOURCE } from "#shared/wire/account";
 
 /* One field, three jobs: what it is for depends on what is answering for the
    provider now, and a credential typed here always wins over one read

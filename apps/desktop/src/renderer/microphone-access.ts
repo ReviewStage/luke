@@ -1,6 +1,7 @@
 import type { HostedQuota } from "@sidecar/hosted";
 import { REALTIME_MINT_OUTCOME, type RealtimeDiagnostics } from "@sidecar/realtime";
-import { type MicrophoneStatus, VOICE_SOURCE, type VoiceSource } from "#shared/contracts";
+import type { MicrophoneStatus } from "#shared/wire/audio";
+import { VOICE_SOURCE, type VoiceSource } from "#shared/wire/settings";
 
 /**
  * Why voice as a whole is off: nothing it can run on stands — no signed-in

@@ -3,8 +3,9 @@ import test from "node:test";
 import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials";
 import { REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
 import { PANEL_FORM_FACTOR } from "@sidecar/surface";
-import type { AppSettings } from "#shared/contracts";
-import { CLI_CONNECTION, CREDENTIAL_SOURCE, SECRET_STORAGE, VOICE_SOURCE } from "#shared/contracts";
+import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "#shared/wire/account";
+import type { AppSettings } from "#shared/wire/settings";
+import { CLI_CONNECTION, VOICE_SOURCE } from "#shared/wire/settings";
 import {
   armErrand,
   EMPTY_ERRAND_RUN,

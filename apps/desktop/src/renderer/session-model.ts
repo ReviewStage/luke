@@ -39,7 +39,7 @@ import {
   type SessionUrgency,
   urgencyLabel,
 } from "@sidecar/surface";
-import type { AppBootstrap } from "#shared/contracts";
+import type { AppBootstrap } from "#shared/wire/session";
 
 /**
  * The narrowings and their vocabulary live in core so the stored selection is

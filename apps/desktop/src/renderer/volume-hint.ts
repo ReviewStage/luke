@@ -1,5 +1,5 @@
 import { VOICE_BAND_INSET } from "@sidecar/surface";
-import type { OutputAudioState } from "#shared/contracts";
+import type { OutputAudioState } from "#shared/wire/audio";
 
 /**
  * The decisions behind the volume hint, kept pure so they can be tested: when

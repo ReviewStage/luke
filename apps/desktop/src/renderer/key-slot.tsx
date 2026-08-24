@@ -4,7 +4,7 @@ import {
   providerRunsSessionsInCloud,
 } from "@sidecar/credentials";
 import { useEffect, useRef } from "react";
-import type { CredentialSource } from "#shared/contracts";
+import type { CredentialSource } from "#shared/wire/account";
 import {
   CREDENTIAL_PLACEHOLDER,
   type CredentialEntryControl,

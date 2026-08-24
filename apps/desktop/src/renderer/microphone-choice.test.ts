@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { LID_STATE, MICROPHONE_TRANSPORT, type MicrophoneRoute } from "#shared/contracts";
+import { LID_STATE, MICROPHONE_TRANSPORT, type MicrophoneRoute } from "#shared/wire/audio";
 import {
   type EnumeratedMicrophone,
   MICROPHONE_PROCESSING,
