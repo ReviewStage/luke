@@ -52,7 +52,9 @@ function noticeUpdateContext(notice: SessionNotice): string {
     notice.recap && notice.status !== SESSION_NOTICE_STATUS.ERROR
       ? ["work recap", quoted(recapExcerpt(notice.recap))]
       : undefined,
-    notice.canReceiveMessage ? ["can take a message now", "yes"] : undefined,
+    notice.holdingForDeveloper === true && notice.canReceiveMessage
+      ? ["can take a message now", "yes"]
+      : undefined,
   ];
   return fields
     .filter((field): field is readonly [string, string] => field !== undefined)

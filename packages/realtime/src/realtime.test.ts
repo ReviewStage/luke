@@ -608,7 +608,7 @@ test("a status update is summarized conversationally", () => {
   assert.match(instructionsOf(events[1]), /never say session, turn, context window, or tool call/i);
   assert.match(
     instructionsOf(events[1]),
-    /identifying them only from the parting words, event, or error/i,
+    /identifying them only from the work recap, event, or error/i,
   );
   assert.match(
     instructionsOf(events[1]),

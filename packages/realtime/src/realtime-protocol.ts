@@ -466,7 +466,7 @@ const STATUS_EDGE_INSTRUCTIONS = [
     '"can take a message now: yes", ask a brief, natural question about whether they want you ' +
     "to pass something along. Otherwise state only the update.",
   "Describe the agent naturally as the person doing the work, identifying them only from the " +
-    'parting words, event, or error. When a label is needed, use "your agent," not teammate. ' +
+    'work recap, event, or error. When a label is needed, use "your agent," not teammate. ' +
     "Never use a provider title, session name, workspace or worktree name, repository, or branch " +
     "to refer to them. If the work is not clear, say what happened without naming it. Never say " +
     "session, turn, context window, or tool call.",

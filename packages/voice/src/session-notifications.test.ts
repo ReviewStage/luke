@@ -22,7 +22,7 @@ function waitingNotice(holdingForDeveloper: boolean): SessionNotice {
 }
 
 test("finished work is described without agent mechanics or a false need", () => {
-  const speech = sessionNoticeSpeech({ ...waitingNotice(false), canReceiveMessage: false }, 2_000);
+  const speech = sessionNoticeSpeech(waitingNotice(false), 2_000);
 
   assert.match(speech.summary, /event: finished what it was working on/);
   assert.match(speech.summary, /work recap: "Updated the notification behavior\."/);
