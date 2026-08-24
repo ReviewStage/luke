@@ -15,7 +15,7 @@ export type ActResult =
 
 export function isActResult(value: UnparsedWireValue): value is ActResult {
   if (!isRecord(value) || !isWireString(value.status)) return false;
-  if (value.status === ACT_RESULT_STATUS.ACCEPTED) return true;
+  if (value.status === ACT_RESULT_STATUS.ACCEPTED) return value.reason === undefined;
   return (
     (value.status === ACT_RESULT_STATUS.REJECTED ||
       value.status === ACT_RESULT_STATUS.UNSUPPORTED) &&

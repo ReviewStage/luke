@@ -41,6 +41,7 @@ import {
   parseClientEvent,
 } from "#testing/realtime-fixtures";
 import {
+  type ActCarrier,
   type AppActionCarrier,
   type IssueActionCarrier,
   quietIsLukesOwn,
@@ -173,6 +174,7 @@ function harness(
     connectionDelayMs?: number;
     connectionError?: Error;
     now?: () => number;
+    carryAct?: ActCarrier;
     carryAction?: SessionActionCarrier;
     carryAppAction?: AppActionCarrier;
     carryIssueAction?: IssueActionCarrier;
@@ -354,7 +356,9 @@ function harness(
   if (options.idleTimeoutMs !== undefined) {
     sessionOptions.idleTimeoutMs = options.idleTimeoutMs;
   }
-  if (options.carryAction || options.carryAppAction || options.carryIssueAction) {
+  if (options.carryAct) {
+    sessionOptions.carryAct = options.carryAct;
+  } else if (options.carryAction || options.carryAppAction || options.carryIssueAction) {
     sessionOptions.carryAct = ({ act }) => {
       if (isCarriedAppAction(act)) {
         return options.carryAppAction?.(act) ?? Promise.resolve({ status: "rejected" });
@@ -4239,9 +4243,9 @@ test("the app guide reaches the conversation, and identical guides are not resen
 test("a spoken settings change is validated against the guide and carried", async () => {
   const carried: unknown[] = [];
   const context = harness({
-    carryAppAction: async (action) => {
-      carried.push(action);
-      return { status: "changed" };
+    carryAct: async (envelope) => {
+      carried.push(envelope);
+      return { status: "accepted" };
     },
   });
   await context.session.connect();
@@ -4264,7 +4268,11 @@ test("a spoken settings change is validated against the guide and carried", asyn
   await new Promise((resolve) => setTimeout(resolve, 0));
 
   assert.deepEqual(carried, [
-    { kind: "setting", setting: CAPTIONS_GUIDE.settings[0], value: "on" },
+    {
+      id: "change_app_setting",
+      armed: true,
+      act: { kind: "setting", setting: CAPTIONS_GUIDE.settings[0], value: "on" },
+    },
   ]);
 });
 

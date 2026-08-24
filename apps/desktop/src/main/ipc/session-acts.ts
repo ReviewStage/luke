@@ -86,6 +86,82 @@ export interface SessionActsIpcDependencies {
   recordProductEvent: RecordProductEvent;
 }
 
+type ActAuthorizationDependencies = Pick<
+  SessionActsIpcDependencies,
+  "sessionRegistry" | "adapterFor" | "trackedIssues"
+>;
+
+/** Revalidates the renderer's act envelope against the main process's latest observations. */
+export function authorizeActEnvelope(
+  envelope: ActEnvelope,
+  dependencies: ActAuthorizationDependencies,
+): ProviderActResult {
+  if (!envelope.armed) {
+    return {
+      status: ACT_RESULT_STATUS.REJECTED,
+      reason: "Only a turn the developer opened can carry an act.",
+    };
+  }
+  const target = actValidationTarget(envelope.id);
+  if (!target) {
+    return { status: ACT_RESULT_STATUS.REJECTED, reason: "No such act exists." };
+  }
+  const { act } = envelope;
+  if (target === ACT_VALIDATION_TARGET.SESSION_ROSTER) {
+    if (isCarriedIssueAction(act)) {
+      return { status: ACT_RESULT_STATUS.REJECTED, reason: "That act has the wrong target." };
+    }
+    if (
+      isCarriedSessionAction(act) &&
+      "identity" in act &&
+      !dependencies.sessionRegistry.get(act.identity)
+    ) {
+      return {
+        status: ACT_RESULT_STATUS.REJECTED,
+        reason: "No observed session matches that identity.",
+      };
+    }
+  }
+  if (target === ACT_VALIDATION_TARGET.ISSUE_ROSTER) {
+    if (
+      (act.kind !== ISSUE_TOOL_KIND.ISSUE_STATE && act.kind !== ISSUE_TOOL_KIND.ISSUE_COMMENT) ||
+      !dependencies
+        .trackedIssues()
+        ?.some(
+          (issue) =>
+            issue.trackerId === act.identity.trackerId &&
+            issue.identifier === act.identity.identifier,
+        )
+    ) {
+      return {
+        status: ACT_RESULT_STATUS.REJECTED,
+        reason: "No tracked issue matches that identity.",
+      };
+    }
+  }
+  if (target === ACT_VALIDATION_TARGET.WORKSPACE_PROJECT) {
+    if (
+      act.kind !== SESSION_TOOL_KIND.CREATE_WORKSPACE ||
+      !dependencies
+        .adapterFor(act.providerId)
+        ?.workspaceProjects()
+        .some((project) => project.providerProjectId === act.providerProjectId)
+    ) {
+      return {
+        status: ACT_RESULT_STATUS.REJECTED,
+        reason: "No listed project matches that identity.",
+      };
+    }
+  }
+  if (target === ACT_VALIDATION_TARGET.SETTING_ID && act.kind !== APP_TOOL_KIND.SETTING) {
+    return { status: ACT_RESULT_STATUS.REJECTED, reason: "No such setting act exists." };
+  }
+  if (target === ACT_VALIDATION_TARGET.UPDATE_ROW && act.kind !== APP_TOOL_KIND.UPDATE) {
+    return { status: ACT_RESULT_STATUS.REJECTED, reason: "No such update act exists." };
+  }
+  return { status: ACT_RESULT_STATUS.ACCEPTED };
+}
+
 export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies): void {
   const {
     ipcMain,
@@ -122,65 +198,9 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       trustedSender,
     });
 
-  registerHandler(BRIDGE.authorizeAct, (envelope: ActEnvelope): ProviderActResult => {
-    if (!envelope.armed) {
-      return {
-        status: ACT_RESULT_STATUS.REJECTED,
-        reason: "Only a turn the developer opened can carry an act.",
-      };
-    }
-    const target = actValidationTarget(envelope.id);
-    if (!target) {
-      return { status: ACT_RESULT_STATUS.REJECTED, reason: "No such act exists." };
-    }
-    const { act } = envelope;
-    if (target === ACT_VALIDATION_TARGET.SESSION_ROSTER) {
-      if (isCarriedIssueAction(act)) {
-        return { status: ACT_RESULT_STATUS.REJECTED, reason: "That act has the wrong target." };
-      }
-      if (isCarriedSessionAction(act) && "identity" in act && !sessionRegistry.get(act.identity)) {
-        return {
-          status: ACT_RESULT_STATUS.REJECTED,
-          reason: "No observed session matches that identity.",
-        };
-      }
-    }
-    if (target === ACT_VALIDATION_TARGET.ISSUE_ROSTER) {
-      if (
-        (act.kind !== ISSUE_TOOL_KIND.ISSUE_STATE && act.kind !== ISSUE_TOOL_KIND.ISSUE_COMMENT) ||
-        !trackedIssues()?.some(
-          (issue) =>
-            issue.trackerId === act.identity.trackerId &&
-            issue.identifier === act.identity.identifier,
-        )
-      ) {
-        return {
-          status: ACT_RESULT_STATUS.REJECTED,
-          reason: "No tracked issue matches that identity.",
-        };
-      }
-    }
-    if (target === ACT_VALIDATION_TARGET.WORKSPACE_PROJECT) {
-      if (
-        act.kind !== SESSION_TOOL_KIND.CREATE_WORKSPACE ||
-        !adapterFor(act.providerId)
-          ?.workspaceProjects()
-          .some((project) => project.providerProjectId === act.providerProjectId)
-      ) {
-        return {
-          status: ACT_RESULT_STATUS.REJECTED,
-          reason: "No listed project matches that identity.",
-        };
-      }
-    }
-    if (target === ACT_VALIDATION_TARGET.SETTING_ID && act.kind !== APP_TOOL_KIND.SETTING) {
-      return { status: ACT_RESULT_STATUS.REJECTED, reason: "No such setting act exists." };
-    }
-    if (target === ACT_VALIDATION_TARGET.UPDATE_ROW && act.kind !== APP_TOOL_KIND.UPDATE) {
-      return { status: ACT_RESULT_STATUS.REJECTED, reason: "No such update act exists." };
-    }
-    return { status: ACT_RESULT_STATUS.ACCEPTED };
-  });
+  registerHandler(BRIDGE.authorizeAct, (envelope: ActEnvelope) =>
+    authorizeActEnvelope(envelope, { sessionRegistry, adapterFor, trackedIssues }),
+  );
   /**
    * Counts an act that actually landed. It takes the result rather than
    * sitting inside `performSessionAct`, because a Superset-managed session

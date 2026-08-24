@@ -64,6 +64,7 @@ import type { SupersetSignInSnapshot } from "@sidecar/superset/sign-in-stage";
 import type { WindowMode } from "@sidecar/surface";
 import {
   type ActResult,
+  isActResult,
   isRecord,
   isWireBoolean,
   isWireNumber,
@@ -444,7 +445,7 @@ export const BRIDGE = {
     kind: "invoke",
     channel: "app:disconnect-superset",
     args: noArgs,
-    result: result<ActResult>(),
+    result: result<ActResult>(isActResult),
   }),
   setVoiceExchangeActive: entry({
     kind: "send",
@@ -455,7 +456,7 @@ export const BRIDGE = {
     kind: "invoke",
     channel: "app:authorize-act",
     args: args<[ActEnvelope]>((v) => v.length === 1 && isActEnvelope(v[0])),
-    result: result<ActResult>(),
+    result: result<ActResult>(isActResult),
   }),
   openSession: entry({
     kind: "invoke",
@@ -566,7 +567,7 @@ export const BRIDGE = {
     args: args<[SessionIdentity, string]>(
       (v) => v.length === 2 && isSessionIdentity(v[0]) && isWireString(v[1]),
     ),
-    result: result<ProviderActResult>(),
+    result: result<ProviderActResult>(isActResult),
   }),
   renameSession: entry({
     kind: "invoke",
@@ -574,13 +575,13 @@ export const BRIDGE = {
     args: args<[SessionIdentity, string]>(
       (v) => v.length === 2 && isSessionIdentity(v[0]) && isWireString(v[1]),
     ),
-    result: result<ProviderActResult>(),
+    result: result<ProviderActResult>(isActResult),
   }),
   executeIssueAction: entry({
     kind: "invoke",
     channel: "app:execute-issue-action",
     args: args<[IssueActionAsk]>((v) => v.length === 1 && isIssueActionAsk(v[0])),
-    result: result<TrackerActionResult>(),
+    result: result<TrackerActionResult>(isActResult),
   }),
   openIssue: entry({
     kind: "invoke",
