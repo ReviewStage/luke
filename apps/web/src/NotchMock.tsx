@@ -217,12 +217,15 @@ export function NotchMock(): React.JSX.Element {
 
   // Mounted imperatively because ShaderMount owns its canvas. Reduced motion
   // holds the gradient at its first frame rather than hiding it — a still
-  // image is not motion — and a machine without WebGL throws here, leaving
-  // the frame's own gradient as the display.
+  // image is not motion — and the query is watched live, so toggling the
+  // setting mid-visit answers like the rest of the mock does. A machine
+  // without WebGL throws here, leaving the frame's own gradient as the
+  // display.
   const backdrop = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const host = backdrop.current;
     if (!host) return;
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
     let mount: ShaderMount | undefined;
     try {
       mount = new ShaderMount(
@@ -246,12 +249,17 @@ export function NotchMock(): React.JSX.Element {
           u_grainOverlay: 0,
         },
         undefined,
-        window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : BACKDROP_SPEED,
+        reduceMotion.matches ? 0 : BACKDROP_SPEED,
       );
     } catch {
       // Nothing to do: the backdrop div stays empty over the frame.
     }
-    return () => mount?.dispose();
+    const applySpeed = () => mount?.setSpeed(reduceMotion.matches ? 0 : BACKDROP_SPEED);
+    reduceMotion.addEventListener("change", applySpeed);
+    return () => {
+      reduceMotion.removeEventListener("change", applySpeed);
+      mount?.dispose();
+    };
   }, []);
 
   // The wing is bounded by the shape its state draws, so its mark capacity is
