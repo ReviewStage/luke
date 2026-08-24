@@ -1,4 +1,7 @@
-import { type CredentialProviderId, VOICE_CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials";
+import {
+  type CredentialProviderId,
+  VOICE_CREDENTIAL_PROVIDER_ID,
+} from "@sidecar/credentials/vocabulary";
 import {
   SETTING_PAGE,
   SETTINGS_PAGE as SETTINGS_VIEW,

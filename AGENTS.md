@@ -6,7 +6,7 @@ packaging boundary; keep reusable implementation types brand-neutral.
 Deployable products belong in `apps/`, and reusable packages belong in
 `packages/`. Keep Electron main/preload code in `apps/desktop/` thin, keep the
 renderer sandboxed, and put platform-independent behavior in
-`packages/sidecar-core/`.
+`packages/`.
 
 Canonical commands:
 
@@ -532,7 +532,7 @@ works in that subtree:
 | `packages/surface/AGENTS.md` | The shared surface vocabulary and its generated outputs |
 | `packages/realtime/AGENTS.md` | Why `protocol` and `tools` ship together |
 | `packages/analytics/AGENTS.md` | The product-event allowlist and its `PRIVACY.md` obligation |
-| `packages/hosted/AGENTS.md` | Why this sits above `attention` and `realtime` |
+| `packages/hosted/AGENTS.md` | The hosted wire boundary and its dependency direction |
 
 ## Repository shape
 

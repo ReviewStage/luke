@@ -63,9 +63,9 @@ importers:
       '@sidecar/issues':
         specifier: workspace:*
         version: link:../../packages/issues
-      '@sidecar/observation':
+      '@sidecar/panel':
         specifier: workspace:*
-        version: link:../../packages/observation
+        version: link:../../packages/panel
       '@sidecar/providers':
         specifier: workspace:*
         version: link:../../packages/providers
@@ -150,6 +150,9 @@ importers:
       '@sidecar/fixtures':
         specifier: workspace:*
         version: link:../../packages/fixtures
+      '@sidecar/panel':
+        specifier: workspace:*
+        version: link:../../packages/panel
       '@sidecar/realtime':
         specifier: workspace:*
         version: link:../../packages/realtime
@@ -220,12 +223,12 @@ importers:
 
   packages/account:
     dependencies:
+      '@sidecar/credentials':
+        specifier: workspace:*
+        version: link:../credentials
       '@sidecar/hosted':
         specifier: workspace:*
         version: link:../hosted
-      '@sidecar/oauth':
-        specifier: workspace:*
-        version: link:../oauth
       '@sidecar/wire':
         specifier: workspace:*
         version: link:../wire
@@ -317,9 +320,9 @@ importers:
 
   packages/calendar:
     dependencies:
-      '@sidecar/oauth':
+      '@sidecar/credentials':
         specifier: workspace:*
-        version: link:../oauth
+        version: link:../credentials
       '@sidecar/wire':
         specifier: workspace:*
         version: link:../wire
@@ -342,6 +345,9 @@ importers:
       '@sidecar/session':
         specifier: workspace:*
         version: link:../session
+      '@sidecar/surface':
+        specifier: workspace:*
+        version: link:../surface
       '@sidecar/wire':
         specifier: workspace:*
         version: link:../wire
@@ -409,12 +415,6 @@ importers:
 
   packages/hosted:
     dependencies:
-      '@sidecar/attention':
-        specifier: workspace:*
-        version: link:../attention
-      '@sidecar/realtime':
-        specifier: workspace:*
-        version: link:../realtime
       '@sidecar/session':
         specifier: workspace:*
         version: link:../session
@@ -451,23 +451,38 @@ importers:
         specifier: 7.0.2
         version: 7.0.2
 
-  packages/oauth:
+  packages/panel:
     dependencies:
+      '@sidecar/calendar':
+        specifier: workspace:*
+        version: link:../calendar
+      '@sidecar/credentials':
+        specifier: workspace:*
+        version: link:../credentials
+      '@sidecar/issues':
+        specifier: workspace:*
+        version: link:../issues
+      '@sidecar/session':
+        specifier: workspace:*
+        version: link:../session
       '@sidecar/surface':
         specifier: workspace:*
         version: link:../surface
+      react:
+        specifier: 19.2.8
+        version: 19.2.8
     devDependencies:
       '@types/node':
         specifier: 26.2.0
         version: 26.2.0
-      tsx:
-        specifier: 4.23.12
-        version: 4.23.12
+      '@types/react':
+        specifier: 19.2.18
+        version: 19.2.18
       typescript:
         specifier: 7.0.2
         version: 7.0.2
 
-  packages/observation:
+  packages/process:
     devDependencies:
       '@types/node':
         specifier: 26.2.0
@@ -484,6 +499,9 @@ importers:
       '@sidecar/credentials':
         specifier: workspace:*
         version: link:../credentials
+      '@sidecar/process':
+        specifier: workspace:*
+        version: link:../process
       '@sidecar/session':
         specifier: workspace:*
         version: link:../session
@@ -512,6 +530,9 @@ importers:
       '@sidecar/guide':
         specifier: workspace:*
         version: link:../guide
+      '@sidecar/hosted':
+        specifier: workspace:*
+        version: link:../hosted
       '@sidecar/issues':
         specifier: workspace:*
         version: link:../issues
@@ -584,6 +605,9 @@ importers:
 
   packages/superset:
     dependencies:
+      '@sidecar/process':
+        specifier: workspace:*
+        version: link:../process
       '@sidecar/providers':
         specifier: workspace:*
         version: link:../providers
@@ -631,9 +655,6 @@ importers:
       '@sidecar/issues':
         specifier: workspace:*
         version: link:../issues
-      '@sidecar/oauth':
-        specifier: workspace:*
-        version: link:../oauth
       '@sidecar/wire':
         specifier: workspace:*
         version: link:../wire

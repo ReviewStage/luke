@@ -1,4 +1,4 @@
-import { CREDENTIAL_PROVIDER_ID, CREDENTIAL_PROVIDERS } from "@sidecar/credentials";
+import { CREDENTIAL_PROVIDER_ID, CREDENTIAL_PROVIDERS } from "@sidecar/credentials/vocabulary";
 import {
   ACT_RESULT_STATUS,
   ISSUE_ACTION_KIND,

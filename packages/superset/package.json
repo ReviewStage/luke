@@ -18,6 +18,7 @@
     "typescript": "7.0.2"
   },
   "dependencies": {
+    "@sidecar/process": "workspace:*",
     "@sidecar/providers": "workspace:*",
     "@sidecar/session": "workspace:*",
     "@sidecar/wire": "workspace:*"

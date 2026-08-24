@@ -1,4 +1,4 @@
-import { text, type UnparsedWireValue } from "@sidecar/wire";
+import { isRecord, isWireString, text, type UnparsedWireValue } from "@sidecar/wire";
 
 /**
  * Provider-observed condition. Distinct from `SESSION_URGENCY`, the surface's
@@ -161,6 +161,31 @@ export interface AttentionDecision {
    * reasons stays on the evaluator's terms.
    */
   answersAsk?: boolean;
+}
+
+/** A spoken sentence stays far shorter than a provider recap. */
+export const maximumAttentionSummaryLength = 180;
+
+/** Validates an untrusted attention decision without importing evaluator behavior. */
+export function attentionDecisionFromWire(
+  value: UnparsedWireValue,
+  decidedAt: number,
+): AttentionDecision | undefined {
+  if (!isRecord(value) || !isWireString(value.disposition)) return undefined;
+  const disposition = Object.values(ATTENTION_DISPOSITION).find(
+    (candidate) => candidate === value.disposition,
+  );
+  if (!disposition) return undefined;
+  const summary = text(value.summary)?.slice(0, maximumAttentionSummaryLength);
+  if (disposition !== ATTENTION_DISPOSITION.SILENT && !summary) return undefined;
+  return normalizeAttention({
+    disposition,
+    decidedAt,
+    ...(summary ? { summary } : undefined),
+    ...(value.answers_ask === true && disposition !== ATTENTION_DISPOSITION.SILENT
+      ? { answersAsk: true }
+      : undefined),
+  });
 }
 
 /**

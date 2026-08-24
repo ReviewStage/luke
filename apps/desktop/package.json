@@ -48,7 +48,7 @@
     "@sidecar/guide": "workspace:*",
     "@sidecar/hosted": "workspace:*",
     "@sidecar/issues": "workspace:*",
-    "@sidecar/observation": "workspace:*",
+    "@sidecar/panel": "workspace:*",
     "@sidecar/providers": "workspace:*",
     "@sidecar/realtime": "workspace:*",
     "@sidecar/session": "workspace:*",

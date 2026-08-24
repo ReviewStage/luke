@@ -1,4 +1,4 @@
-import type { CredentialProviderId } from "@sidecar/credentials";
+import type { CredentialProviderId } from "@sidecar/credentials/vocabulary";
 import type { ActResult } from "@sidecar/wire";
 import { type RefObject, useEffect } from "react";
 import type { CredentialSource } from "#shared/wire/account";

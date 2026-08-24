@@ -12,7 +12,7 @@ import {
 } from "@sidecar/analytics";
 import type { AttentionRequestResult, SessionNoticeAsk } from "@sidecar/attention";
 import type { ObservedAccountCalendars } from "@sidecar/calendar/observation";
-import { type CredentialProviderId, isCredentialProviderId } from "@sidecar/credentials";
+import { type CredentialProviderId, isCredentialProviderId } from "@sidecar/credentials/vocabulary";
 import {
   type FeedbackKind,
   type FeedbackResult,

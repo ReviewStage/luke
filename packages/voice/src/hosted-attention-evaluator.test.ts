@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { ATTENTION_TRIGGER, type AttentionUpdate } from "@sidecar/attention";
 import { ATTENTION_DISPOSITION, SESSION_STATUS } from "@sidecar/session";
-import { HostedAttentionEvaluator } from "./attention-evaluator.js";
+import { HostedAttentionEvaluator } from "./hosted-attention-evaluator.js";
 
 const NOW = 1_800_000_000_000;
 const SERVICE = "https://tryluke.dev";

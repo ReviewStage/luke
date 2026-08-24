@@ -4,17 +4,18 @@ import {
   PRODUCT_SURFACE_EVENT,
 } from "@sidecar/analytics";
 import type { SessionNoticeAsk } from "@sidecar/attention";
-import type { CredentialProviderId } from "@sidecar/credentials";
+import type { CredentialProviderId } from "@sidecar/credentials/vocabulary";
 import {
   CREDENTIAL_PROVIDER_LIST,
   CREDENTIAL_PROVIDERS,
   isCredentialProviderId,
-} from "@sidecar/credentials";
+} from "@sidecar/credentials/vocabulary";
 import type { FeedbackImage, FeedbackKind } from "@sidecar/feedback";
 import { FEEDBACK_KIND, FEEDBACK_LIMITS, feedbackKindForLifecycleEvent } from "@sidecar/feedback";
 import { FIXTURE_EPOCH_MS, FIXTURE_SPEAKING_CAPTION } from "@sidecar/fixtures";
 import { APP_UPDATE_ACT, FEEDBACK_COMPOSER_KIND } from "@sidecar/guide";
 import type { HostedUsageAnswer } from "@sidecar/hosted";
+import { WingFace as LukeFace, ProviderMark } from "@sidecar/panel";
 import {
   APP_TOOL_KIND,
   dispatchByKind,
@@ -107,7 +108,6 @@ import { encodeFeedbackImage } from "./feedback-images";
 import { FeedbackSlot } from "./feedback-slot";
 import { KeySlot } from "./key-slot";
 import { type Errand, errandTargets, LukeErrand } from "./luke-errand";
-import { LukeFace } from "./luke-face";
 import { usePrefersReducedMotion } from "./luke-face-mood";
 import { applySpokenSetting, buildLukeGuide, isAppSettingId } from "./luke-guide";
 import { hostedVoiceReading, hostedVoiceSpentNote, quotaResetsWhen } from "./microphone-access";
@@ -120,7 +120,6 @@ import {
   type PanelPresentation,
 } from "./panel-state";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
-import { ProviderMark } from "./provider-marks";
 import type { AppActionCarrier } from "./realtime-session";
 import {
   arrangeSessions,

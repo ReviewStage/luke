@@ -42,5 +42,6 @@ private struct ScreenGeometryCommand {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         FileHandle.standardOutput.write(try encoder.encode(screens))
+        FileHandle.standardOutput.write(Data("\n".utf8))
     }
 }

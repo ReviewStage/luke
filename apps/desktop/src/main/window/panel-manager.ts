@@ -293,8 +293,8 @@ export class PanelManager {
     return false;
   }
 
-  refreshGeometry(): void {
-    this.#nativeScreens = readMacScreenGeometry();
+  async refreshGeometry(): Promise<void> {
+    this.#nativeScreens = await readMacScreenGeometry();
     // A capture run pins a fixture housing on the main display, where the
     // evidence is taken; an interactive fixture still stands on the real
     // screen, because it is a person looking, not a camera.

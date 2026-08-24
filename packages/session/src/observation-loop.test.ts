@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ObservationLoop, ObservationSupervisor } from "./loop.js";
+import { ObservationLoop, ObservationSupervisor } from "./observation-loop.js";
 
 function deferred() {
   let resolve: () => void = () => undefined;

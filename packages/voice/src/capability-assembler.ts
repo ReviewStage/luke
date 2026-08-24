@@ -1,6 +1,6 @@
 import { openAiAttentionEvaluator, SessionAttentionReviewer } from "@sidecar/attention";
-import { VOICE_CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials";
-import { HOSTED_SERVICE_PATH, HostedAttentionEvaluator } from "@sidecar/hosted";
+import { VOICE_CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
+import { HOSTED_SERVICE_PATH } from "@sidecar/hosted";
 import { type RealtimeDiagnostics, realtimeMintExplanation } from "@sidecar/realtime";
 import type { Session, SessionIdentity } from "@sidecar/session";
 import {
@@ -10,6 +10,7 @@ import {
   VOICE_SOURCE,
   type VoiceSource,
 } from "@sidecar/settings";
+import { HostedAttentionEvaluator } from "./hosted-attention-evaluator.js";
 import { HostedRealtimeCredentialMinter } from "./hosted-credentials.js";
 import type { RealtimeCredentialMinter } from "./minter.js";
 import { openAiRealtimeCredentials, unavailableRealtimeDiagnostics } from "./openai-credentials.js";

@@ -6,7 +6,7 @@ import {
   codeChallenge,
   createCodeVerifier,
   LOOPBACK_PAGE_TONE,
-} from "@sidecar/oauth";
+} from "@sidecar/credentials";
 import type { AccountProvider } from "./snapshot.js";
 
 const CALLBACK_PATH = "/callback";

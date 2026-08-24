@@ -1,14 +1,6 @@
-/**
- * The local calendar integration's identity, named beside Google Calendar's
- * and apart from the credential registry for the same reasons: Apple Calendar
- * connects through macOS's own consent dialog rather than by a pasted key or
- * a browser sign-in, holds no credential at all, and exists only where there
- * is a Mac to read. The id is what the mark registry, the settings block, and
- * the observed-calendars roster share.
- */
-export const APPLE_CALENDAR_ID = "apple-calendar";
-
-export const APPLE_CALENDAR_NAME = "Apple Calendar";
+// Keep the desktop contract stable while the shared panel and calendar logic
+// consume the canonical identity directly from the renderer-safe vocabulary.
+export { APPLE_CALENDAR_ID, APPLE_CALENDAR_NAME } from "@sidecar/calendar/vocabulary";
 
 /**
  * The helper's answer to how far macOS lets the read go, shared because both

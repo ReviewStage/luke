@@ -3,7 +3,8 @@ import {
   CLOUD_AGENT_PROVIDER_LIST,
   CREDENTIAL_PROVIDER_ID,
   VOICE_CREDENTIAL_PROVIDER,
-} from "@sidecar/credentials";
+} from "@sidecar/credentials/vocabulary";
+import { ProviderMark } from "@sidecar/panel";
 import {
   CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
   PROVIDER_ID,
@@ -26,7 +27,6 @@ import type { AppSettingsView } from "#shared/wire/settings";
 import { VOICE_SOURCE } from "#shared/wire/settings";
 import { FOCUS_FRAME_LIMIT } from "./credential-entry";
 import { ERRAND_TARGET_ATTRIBUTE } from "./luke-errand";
-import { ProviderMark } from "./provider-marks";
 import { searchTokens } from "./session-model";
 import { Highlighted } from "./session-search";
 import {

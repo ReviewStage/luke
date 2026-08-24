@@ -1,5 +1,6 @@
 import type { FeedbackImage } from "@sidecar/feedback";
 import { FEEDBACK_LIMITS } from "@sidecar/feedback";
+import { WingFace as LukeFace } from "@sidecar/panel";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useStagedFocus } from "./credential-entry";
 import { CONFIRMATION_ENTRANCE_MS, type FeedbackConfirmation } from "./feedback-confirmation";
@@ -10,7 +11,6 @@ import {
   isSendable,
 } from "./feedback-entry";
 import { imageFiles } from "./feedback-images";
-import { LukeFace } from "./luke-face";
 import { HIT_REGION } from "./panel-state";
 import { parseMilliseconds, parsePixels, STILL_MS } from "./session-motion";
 import { ImageIcon, RemoveIcon } from "./settings-icons";

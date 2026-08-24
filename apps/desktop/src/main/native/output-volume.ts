@@ -1,7 +1,5 @@
-import { spawn } from "node:child_process";
-import path from "node:path";
-import { app } from "electron";
 import type { OutputAudioState } from "#shared/contracts";
+import { NativeHelper, type NativeHelperProcess } from "./native-helper";
 
 /**
  * The two things the helper says. Parsed rather than assumed, like the talk
@@ -26,32 +24,11 @@ export interface OutputVolumeEdges {
 }
 
 /** Only the parts of a child process this needs, so a test can supply them. */
-export interface OutputVolumeProcess {
-  stdout?: { setEncoding(encoding: string): void; on(event: "data", listener: LineListener): void };
-  on(event: "error" | "exit", listener: () => void): void;
-  removeAllListeners(): void;
-  kill(): void;
-}
-
-type LineListener = (chunk: string) => void;
+export type OutputVolumeProcess = NativeHelperProcess;
 
 export interface OutputVolumeWatcherOptions extends OutputVolumeEdges {
   /** Injectable so the reader can be exercised without a Mac or a binary. */
   spawnHelper?: () => OutputVolumeProcess | undefined;
-}
-
-function spawnOutputVolumeHelper(): OutputVolumeProcess | undefined {
-  // The helper asks CoreAudio, which only macOS has; elsewhere the output is
-  // simply never watched and the hint never drawn.
-  if (process.platform !== "darwin") return undefined;
-  const helperPath = app.isPackaged
-    ? path.join(process.resourcesPath, "mac-output-volume")
-    : path.join(app.getAppPath(), ".build", "native", "mac-output-volume");
-  const child = spawn(helperPath, [], {
-    stdio: ["ignore", "pipe", "ignore"],
-  });
-  // SAFETY: spawn returns ChildProcess; the helper's stdout protocol matches OutputVolumeProcess.
-  return child as OutputVolumeProcess;
 }
 
 /**
@@ -63,9 +40,8 @@ function spawnOutputVolumeHelper(): OutputVolumeProcess | undefined {
  */
 export class OutputVolumeWatcher {
   readonly #options: OutputVolumeWatcherOptions;
-  #child: OutputVolumeProcess | undefined;
+  #helper: NativeHelper | undefined;
   #done = false;
-  #buffer = "";
 
   constructor(options: OutputVolumeWatcherOptions) {
     this.#options = options;
@@ -76,23 +52,18 @@ export class OutputVolumeWatcher {
    * is not yet a readable output — that arrives on the helper's first line.
    */
   start(): boolean {
-    let child: OutputVolumeProcess | undefined;
-    try {
-      child = this.#options.spawnHelper ? this.#options.spawnHelper() : spawnOutputVolumeHelper();
-    } catch {
-      child = undefined;
-    }
-    if (!child) {
+    const helper = new NativeHelper({
+      binary: "mac-output-volume",
+      output: "lines",
+      ...(this.#options.spawnHelper ? { spawnProcess: this.#options.spawnHelper } : undefined),
+    });
+    helper.onLine((line) => this.#handle(line));
+    helper.onExit(() => this.#unavailable());
+    if (!helper.start()) {
       this.#unavailable();
       return false;
     }
-    this.#child = child;
-    child.stdout?.setEncoding("utf8");
-    child.stdout?.on("data", (chunk) => this.#read(chunk));
-    // A helper that dies takes its answer with it. Saying so is what lets the
-    // app stop claiming the output is silent on the strength of a stale line.
-    child.on("error", () => this.#unavailable());
-    child.on("exit", () => this.#unavailable());
+    this.#helper = helper;
     return true;
   }
 
@@ -101,23 +72,10 @@ export class OutputVolumeWatcher {
    * doing, and nothing succeeds a watcher during shutdown, so no one waits.
    */
   stop(): void {
-    const child = this.#child;
-    this.#child = undefined;
+    const helper = this.#helper;
+    this.#helper = undefined;
     this.#done = true;
-    if (!child) return;
-    child.removeAllListeners();
-    child.kill();
-  }
-
-  #read(chunk: string): void {
-    // A stopped reader drops everything, including lines the dying helper got
-    // out: acting on one would redraw a hint the app has already let go of.
-    if (this.#done) return;
-    this.#buffer += chunk;
-    const lines = this.#buffer.split("\n");
-    // Whatever follows the last newline is the start of a line still arriving.
-    this.#buffer = lines.pop() ?? "";
-    for (const line of lines) this.#handle(line.trim());
+    void helper?.stop();
   }
 
   #handle(line: string): void {
@@ -135,7 +93,7 @@ export class OutputVolumeWatcher {
   #unavailable(): void {
     if (this.#done) return;
     this.#done = true;
-    this.#child = undefined;
+    this.#helper = undefined;
     this.#options.onUnavailable();
   }
 }

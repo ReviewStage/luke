@@ -1,4 +1,4 @@
-import type { CredentialProviderId } from "@sidecar/credentials";
+import type { CredentialProviderId } from "@sidecar/credentials/vocabulary";
 import type { CliConnection } from "@sidecar/session";
 import {
   APP_SETTING_DEFAULTS,

@@ -1,5 +1,5 @@
 import { GOOGLE_CALENDAR_ID, GOOGLE_CALENDAR_NAME } from "@sidecar/calendar/vocabulary";
-import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials";
+import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
 import { APPLE_CALENDAR_ID } from "./apple-calendar";
 
 /**

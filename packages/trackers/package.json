@@ -19,7 +19,6 @@
   "dependencies": {
     "@sidecar/credentials": "workspace:*",
     "@sidecar/issues": "workspace:*",
-    "@sidecar/oauth": "workspace:*",
     "@sidecar/wire": "workspace:*"
   }
 }

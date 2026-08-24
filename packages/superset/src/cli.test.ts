@@ -217,7 +217,7 @@ test("message and controls use fixed arguments without a shell", async (t) => {
   ]);
 });
 
-test("a refused rename answers with the CLI's own bounded error line", async (t) => {
+test("a refused rename never repeats the CLI's stderr", async (t) => {
   const home = await connectedHome(t);
   const cli = new SupersetCli({
     ...testCliOptions(home),
@@ -521,7 +521,7 @@ test("creates on an observed remote host and preserves success when opening fail
   );
 });
 
-test("workspace creation reports Superset's bounded first error line", async (t) => {
+test("workspace creation never repeats the CLI's stderr", async (t) => {
   const home = await connectedHome(t);
   const cli = new SupersetCli({
     ...testCliOptions(home),

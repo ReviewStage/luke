@@ -1,3 +1,4 @@
+import { SessionRow as PanelSessionRow, ProviderMark } from "@sidecar/panel";
 import {
   isSessionApplicationId,
   type ProviderControlResult,
@@ -15,7 +16,6 @@ import { ACCOUNT_STATUS, type AccountProvider, type AccountSnapshot } from "#sha
 import type { SessionOpenResult } from "#shared/wire/session";
 import { type AskHandler, AskLuke } from "./ask-luke";
 import { PANEL_TAB, type PanelTab, TabBar } from "./panel-tabs";
-import { AudioBadge, CloudBadge, ProviderMark } from "./provider-marks";
 import {
   type ArrangedSessions,
   actsOnWorkspace,
@@ -41,8 +41,6 @@ import {
   WORKSPACE_TRAY_ID_ATTRIBUTE,
 } from "./session-motion";
 import {
-  BranchGlyph,
-  CheckGlyph,
   EmptyState,
   ListeningGlyph,
   SessionOptions,
@@ -520,106 +518,80 @@ function SessionRow({
   // The mark is the agent having the conversation; the provider only stands
   // in where a host did not say which agent runs the chat.
   const markName = session.agent ?? session.provider;
-  const content = (
-    <>
-      <span
-        className={
-          session.realtimeVoice && session.location === SESSION_LOCATION.CLOUD
-            ? "row-mark row-mark-audio"
-            : "row-mark"
-        }
-        title={session.model ? `${markName} · ${session.model}` : markName}
-      >
-        <span className="visually-hidden">{markName}</span>
-        <ProviderMark providerId={session.agentId ?? session.providerId} />
-        {session.location === SESSION_LOCATION.CLOUD ? <CloudBadge /> : null}
-        {session.realtimeVoice ? <AudioBadge /> : null}
-      </span>
-      <span className="row-copy">
-        <strong>
-          {session.openable && hasOpenableApplication ? (
+  const applicationMarks =
+    applications.length > 0 ? (
+      <span className="row-applications">
+        {applications.map((application) => {
+          const applicationId = application.id;
+          return application.openable && isSessionApplicationId(applicationId) ? (
             <button
               type="button"
-              className="row-title-open"
-              title={`Open in ${openLabel}`}
+              className="row-application row-application-button"
+              title={`Open in ${application.name}`}
+              aria-label={`Open in ${application.name}`}
+              key={applicationId}
               onClick={(event) => {
                 event.stopPropagation();
-                onOpen(session);
+                onOpenApplication(session, applicationId);
               }}
             >
-              <Highlighted text={title} tokens={highlight} />
+              <ProviderMark providerId={applicationId} />
             </button>
           ) : (
+            <span
+              className="row-application"
+              role="img"
+              aria-label={`Also in ${application.name}`}
+              title={application.name}
+              key={applicationId}
+            >
+              <ProviderMark providerId={applicationId} />
+            </span>
+          );
+        })}
+      </span>
+    ) : undefined;
+  const content = (
+    <PanelSessionRow
+      providerId={session.agentId ?? session.providerId}
+      cloud={session.location === SESSION_LOCATION.CLOUD}
+      realtimeVoice={session.realtimeVoice}
+      markName={markName}
+      model={session.model}
+      title={
+        session.openable && hasOpenableApplication ? (
+          <button
+            type="button"
+            className="row-title-open"
+            title={`Open in ${openLabel}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpen(session);
+            }}
+          >
             <Highlighted text={title} tokens={highlight} />
-          )}
-        </strong>
-        <small className="row-doing">
-          {session.urgency === SESSION_URGENCY.WORKING ? (
-            <span className="row-spinner" aria-hidden="true" />
-          ) : null}
-          {session.urgency === SESSION_URGENCY.COMPLETE ? <CheckGlyph /> : null}
-          {/* The line truncates without a disclosure, so the hover is the one
-              way the rest of a long sentence can be read at all. */}
-          <span className="row-doing-text" title={session.detail}>
-            {session.detail === session.label ? null : (
-              <span className="visually-hidden">{session.label}. </span>
-            )}
-            <Highlighted text={session.detail} tokens={highlight} />
-          </span>
-        </small>
-        {place || session.diff ? (
-          <small className="row-place" title={place ?? session.diff}>
-            {session.branch ? <BranchGlyph /> : null}
-            {place ? (
-              <span>
-                <Highlighted text={place} tokens={highlight} />
-              </span>
-            ) : null}
-            {/* The change's size rides the place line: both say what the work
-                touched, and a session with neither spends no line on it. */}
-            {session.diff ? <span className="row-diff">{session.diff}</span> : null}
-          </small>
-        ) : null}
-      </span>
-      <span className="row-side">
-        <small className="row-when">
-          {session.noticeAsk ? <ListeningGlyph ask={session.noticeAsk} /> : null}
-          {observedAgoLabel(session.observedAt, now)}
-        </small>
-        {applications.length > 0 ? (
-          <span className="row-applications">
-            {applications.map((application) => {
-              const applicationId = application.id;
-              return application.openable && isSessionApplicationId(applicationId) ? (
-                <button
-                  type="button"
-                  className="row-application row-application-button"
-                  title={`Open in ${application.name}`}
-                  aria-label={`Open in ${application.name}`}
-                  key={applicationId}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onOpenApplication(session, applicationId);
-                  }}
-                >
-                  <ProviderMark providerId={applicationId} />
-                </button>
-              ) : (
-                <span
-                  className="row-application"
-                  role="img"
-                  aria-label={`Also in ${application.name}`}
-                  title={application.name}
-                  key={applicationId}
-                >
-                  <ProviderMark providerId={applicationId} />
-                </span>
-              );
-            })}
-          </span>
-        ) : null}
-      </span>
-    </>
+          </button>
+        ) : (
+          <Highlighted text={title} tokens={highlight} />
+        )
+      }
+      detail={<Highlighted text={session.detail} tokens={highlight} />}
+      detailTitle={session.detail}
+      detailPrefix={
+        session.detail === session.label ? undefined : (
+          <span className="visually-hidden">{session.label}. </span>
+        )
+      }
+      working={session.urgency === SESSION_URGENCY.WORKING}
+      complete={session.urgency === SESSION_URGENCY.COMPLETE}
+      place={place ? <Highlighted text={place} tokens={highlight} /> : undefined}
+      placeTitle={place ?? session.diff}
+      branch={Boolean(session.branch)}
+      diff={session.diff}
+      when={observedAgoLabel(session.observedAt, now)}
+      notice={session.noticeAsk ? <ListeningGlyph ask={session.noticeAsk} /> : undefined}
+      applications={applicationMarks}
+    />
   );
 
   if (!withActions && !hasOpenableApplication) {

@@ -1,6 +1,6 @@
 import { createRequire } from "node:module";
-import path from "node:path";
-import { app, type BrowserWindow } from "electron";
+import type { BrowserWindow } from "electron";
+import { nativeHelperPath } from "./native-helper";
 
 interface StationaryWindowAddon {
   /** Returns the window's resulting collection-behavior mask. */
@@ -10,13 +10,6 @@ interface StationaryWindowAddon {
 // The bundle is CommonJS, but an explicit require keeps esbuild from trying to
 // bundle a path only known at runtime.
 const requireAddon = createRequire(__filename);
-
-function addonPath(): string {
-  if (app.isPackaged) {
-    return path.join(process.resourcesPath, "mac-stationary-window.node");
-  }
-  return path.join(app.getAppPath(), ".build", "native", "mac-stationary-window.node");
-}
 
 /**
  * Show Desktop scoops every app window aside, but the hardware notch the panel
@@ -29,7 +22,9 @@ export function keepWindowStationary(window: BrowserWindow): void {
   if (process.platform !== "darwin") return;
   try {
     // SAFETY: The native addon exports one method keyed by the built path; require resolves that contract.
-    const addon = requireAddon(addonPath()) as StationaryWindowAddon;
+    const addon = requireAddon(
+      nativeHelperPath("mac-stationary-window.node"),
+    ) as StationaryWindowAddon;
     addon.makeStationary(window.getNativeWindowHandle());
   } catch (error) {
     console.warn("Stationary behavior unavailable; Show Desktop will move the panel", error);

@@ -1,5 +1,5 @@
-import { GOOGLE_CALENDAR_ID } from "@sidecar/calendar/vocabulary";
-import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials";
+import { APPLE_CALENDAR_ID, GOOGLE_CALENDAR_ID } from "@sidecar/calendar/vocabulary";
+import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
 import { ISSUE_TRACKER_ID, type IssueTrackerId } from "@sidecar/issues";
 import {
   CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
@@ -41,8 +41,10 @@ import {
   REPLICAS_PATH,
   SUPERSET_PATH,
 } from "@sidecar/surface";
-import { useId } from "react";
-import { APPLE_CALENDAR_ID } from "#shared/apple-calendar";
+import React, { useId } from "react";
+
+// `tsx` executes imported workspace-package JSX with the classic runtime.
+void React;
 
 /**
  * The provider marks, and the one badge that rides them.

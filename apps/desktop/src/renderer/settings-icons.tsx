@@ -322,14 +322,6 @@ export function SearchIcon(): React.JSX.Element {
  * Two sliders rather than a funnel: the control it opens holds an order as well
  * as a filter, and a funnel would promise only the second.
  */
-export function OptionsIcon(): React.JSX.Element {
-  return (
-    <Glyph className="options-glyph">
-      <SliderMarks />
-    </Glyph>
-  );
-}
-
 /** The same two sliders at a heading's size: settings the user has chosen. */
 export function PreferencesIcon(): React.JSX.Element {
   return (

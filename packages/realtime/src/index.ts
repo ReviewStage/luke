@@ -1,4 +1,10 @@
 export {
+  REALTIME_CALLS_PATH,
+  type RealtimeConnection,
+  type RealtimeCredential,
+  realtimeCredentialIsUsable,
+} from "@sidecar/hosted";
+export {
   announcementConversationEntry,
   appendConversationEntry,
   CONVERSATION_ENTRY_KIND,
@@ -33,17 +39,14 @@ export {
   workspaceProjectContextText,
 } from "./realtime-context.js";
 export {
-  REALTIME_CALLS_PATH,
   REALTIME_CLIENT_SECRETS_PATH,
   REALTIME_MINT_OUTCOME,
   REALTIME_TRUNCATION,
-  type RealtimeConnection,
   type RealtimeDiagnostics,
   type RealtimeMintOutcome,
   type RealtimeSessionOptions,
   realtimeClientSecretRequest,
   realtimeCredentialFromResponse,
-  realtimeCredentialIsUsable,
   realtimeMintExplanation,
   realtimeSessionSyncEvents,
 } from "./realtime-credentials.js";

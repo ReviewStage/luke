@@ -1,5 +1,12 @@
 import { FIXTURE_EPOCH_MS, fixtureSnapshot } from "@sidecar/fixtures";
-import { SESSION_LOCATION } from "@sidecar/session";
+import {
+  OptionsIcon,
+  observedAgoLabel,
+  ProviderMark,
+  SessionRow,
+  WingFace,
+  wingMarkCapacity,
+} from "@sidecar/panel";
 import {
   CAPSULE_SIDE_WIDTH,
   compareSessionsByUrgency,
@@ -12,7 +19,6 @@ import {
 } from "@sidecar/surface";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
-import { CloudBadge, ProviderMark } from "./provider-marks";
 
 /**
  * The hero visual: a CSS recreation of Luke's real surface, ported from
@@ -89,18 +95,6 @@ const WING_PROVIDERS = MOCK_SESSIONS.map(
  * start level with the tab bar and the rows, plus `--wing-inset` beside the
  * housing.
  */
-const WING_INSETS = 29;
-const FACE_AND_GAP = 26;
-const MARK_WIDTH = 14;
-const MARK_AND_GAP = 21;
-
-function wingMarkCapacity(sideWidth: number): number {
-  const beyondFirst = Math.floor(
-    (sideWidth - WING_INSETS - FACE_AND_GAP - MARK_WIDTH) / MARK_AND_GAP,
-  );
-  return Math.max(1, 1 + beyondFirst);
-}
-
 const PEEK_CAPACITY = wingMarkCapacity(CAPSULE_SIDE_WIDTH + PEEK_SIDE_GROWTH);
 const PANEL_CAPACITY = wingMarkCapacity((PANEL_WIDTH - HOUSING_WIDTH) / 2);
 
@@ -111,15 +105,6 @@ const MARK_EXIT_MS = MOTION_DURATION_MS.EXIT;
  * `observedAgoLabel` in the renderer, read against the fixture's own epoch so
  * the page's labels match the product's evidence captures exactly.
  */
-function observedAgoLabel(observedAt: number): string {
-  const elapsedMinutes = Math.floor((FIXTURE_EPOCH_MS - observedAt) / 60_000);
-  if (elapsedMinutes < 1) return "Now";
-  if (elapsedMinutes < 60) return `${elapsedMinutes}m`;
-  const elapsedHours = Math.floor(elapsedMinutes / 60);
-  if (elapsedHours < 24) return `${elapsedHours}h`;
-  return `${Math.floor(elapsedHours / 24)}d`;
-}
-
 const MOCK_LABEL = `Luke's notch capsule expanding into its session panel, listing ${MOCK_SESSIONS.map(
   (session) =>
     `${session.title} on ${session.provider}, ${urgencyLabel(session.urgency).toLowerCase()}`,
@@ -131,118 +116,6 @@ const MOCK_LABEL = `Luke's notch capsule expanding into its session panel, listi
  * the same size and place the product keeps it. Still, because stillness is
  * the face's usual condition: it only moves when something happens to it.
  */
-function WingFace(): React.JSX.Element {
-  return (
-    <svg className="luke-face" viewBox="48 51 146 146" fill="none" aria-hidden="true">
-      <g transform="rotate(-8 120 124)">
-        <path
-          d="M 104 84 V 150 Q 104 164 118 164 Q 140 164 168 142"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="16"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <circle cx="78" cy="92" r="12" fill="currentColor" />
-        <circle cx="162" cy="92" r="12" fill="currentColor" />
-      </g>
-    </svg>
-  );
-}
-
-/** The renderer's options glyph, on the header line the product spends it on. */
-function OptionsIcon(): React.JSX.Element {
-  return (
-    <svg
-      className="options-glyph"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.9"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <path d="M3.6 8.4h5.2" />
-      <path d="M13.2 8.4h7.2" />
-      <circle cx="11" cy="8.4" r="2.2" />
-      <path d="M3.6 15.6h2.6" />
-      <path d="M10.6 15.6h9.8" />
-      <circle cx="8.4" cy="15.6" r="2.2" />
-    </svg>
-  );
-}
-
-function BranchGlyph(): React.JSX.Element {
-  return (
-    <svg className="row-branch-glyph" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-      <g fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
-        <circle cx="4.2" cy="3.4" r="1.55" />
-        <circle cx="4.2" cy="12.6" r="1.55" />
-        <circle cx="11.8" cy="5.2" r="1.55" />
-        <path d="M4.2 5v6M11.8 6.9c0 2.5-2.6 3-5.4 3.4" />
-      </g>
-    </svg>
-  );
-}
-
-function CheckGlyph(): React.JSX.Element {
-  return (
-    <svg className="row-check" viewBox="0 0 12 12" aria-hidden="true" focusable="false">
-      <path
-        d="M2.4 6.6l2.5 2.5 4.7-5.6"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-/** One session, drawn exactly as the renderer's `SessionRow` draws a fixture row. */
-function MockSessionRow({
-  session,
-  index,
-}: {
-  session: (typeof MOCK_SESSIONS)[number];
-  index: number;
-}): React.JSX.Element {
-  const place = session.branch ?? session.repository;
-  return (
-    <article
-      className="session-row"
-      data-state={session.urgency}
-      // SAFETY: React.CSSProperties omits custom properties; --row-index is a declared custom property.
-      style={{ "--row-index": index + 1 } as CSSProperties}
-    >
-      <span className="row-mark">
-        <ProviderMark providerId={session.providerId} />
-        {session.location === SESSION_LOCATION.CLOUD ? <CloudBadge /> : null}
-      </span>
-      <span className="row-copy">
-        <strong>{session.title}</strong>
-        <small className="row-doing">
-          {session.urgency === SESSION_URGENCY.WORKING ? (
-            <span className="row-spinner" aria-hidden="true" />
-          ) : null}
-          {session.urgency === SESSION_URGENCY.COMPLETE ? <CheckGlyph /> : null}
-          <span className="row-doing-text">{session.detail}</span>
-        </small>
-        {place ? (
-          <small className="row-place">
-            {session.branch ? <BranchGlyph /> : null}
-            <span>{place}</span>
-          </small>
-        ) : null}
-      </span>
-      <small className="row-when">{observedAgoLabel(session.observedAt)}</small>
-    </article>
-  );
-}
-
 export function NotchMock(): React.JSX.Element {
   const [mode, setMode] = useState<MockMode>(MOCK_MODE.CAPSULE);
   const [panelHeight, setPanelHeight] = useState<number>();
@@ -387,7 +260,25 @@ export function NotchMock(): React.JSX.Element {
                 </div>
                 <div className="session-list">
                   {MOCK_SESSIONS.map((session, index) => (
-                    <MockSessionRow key={session.id} session={session} index={index} />
+                    // SAFETY: React.CSSProperties omits the declared --row-index custom property.
+                    <article
+                      className="session-row"
+                      data-state={session.urgency}
+                      style={{ "--row-index": index + 1 } as CSSProperties}
+                      key={session.id}
+                    >
+                      <SessionRow
+                        providerId={session.providerId}
+                        cloud={session.location === "cloud"}
+                        title={session.title}
+                        detail={session.detail}
+                        working={session.urgency === SESSION_URGENCY.WORKING}
+                        complete={session.urgency === SESSION_URGENCY.COMPLETE}
+                        place={session.branch ?? session.repository}
+                        branch={Boolean(session.branch)}
+                        when={observedAgoLabel(session.observedAt, FIXTURE_EPOCH_MS)}
+                      />
+                    </article>
                   ))}
                 </div>
               </div>

@@ -25,7 +25,7 @@ import {
   CREDENTIAL_PROVIDER_ID,
   CREDENTIAL_PROVIDERS,
   VOICE_CREDENTIAL_PROVIDER_ID,
-} from "@sidecar/credentials";
+} from "@sidecar/credentials/vocabulary";
 import {
   APP_UPDATE_ACT,
   APP_UPDATE_WAIT,
