@@ -76,7 +76,7 @@ export function boundedInvocation(
           code?: unknown;
           killed?: boolean;
         };
-        const exitCode = Number(commandError.code);
+        const exitCode = commandError.code === null ? Number.NaN : Number(commandError.code);
         if (Number.isInteger(exitCode)) {
           resolve({ exitCode, stdout, stderr });
           return;

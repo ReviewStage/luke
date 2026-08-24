@@ -24,6 +24,18 @@ test("a non-zero exit is a bounded answer", async () => {
   assert.deepEqual(result, { exitCode: 7, stdout: "", stderr: "no" });
 });
 
+test("a process terminated by a signal is a failure, never a successful exit", async () => {
+  await assert.rejects(
+    boundedInvocation({
+      binary: process.execPath,
+      arguments: ["-e", "process.kill(process.pid, 'SIGTERM')"],
+      timeoutMs: 2_000,
+      maximumOutputBytes: 1024,
+    }),
+    { name: "InvocationError", failure: INVOCATION_FAILURE.FAILED },
+  );
+});
+
 test("an absent binary is a typed unavailable failure", async () => {
   await assert.rejects(
     boundedInvocation({
