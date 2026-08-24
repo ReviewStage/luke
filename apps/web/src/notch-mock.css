@@ -1,39 +1,27 @@
 /* Notch mock
    Ported from apps/desktop/src/renderer/styles/base.css and styles/sessions.css.
    The class names are the renderer's own so the two sheets stay diffable; the
-   `.mock` scope, the display frame, and the scroll pin are the only page-side
+   `.mock` scope, the display frame, and the stage are the only page-side
    inventions. `data-mode` here is `data-presentation` there, with the slot —
    a credential entry the page has no story for — left out.
    ------------------------------------------------------------------------- */
 
-/* The runway the mock plays through. In the product the pointer drives the
-   presentations; here the scroll does: the art pins while its section scrolls
-   past, and progress through the section steps capsule → peek → panel. The
-   one gesture every visitor already makes is what plays the motion, on a
-   phone as well as under a pointer. */
-.mock-scroll {
-  /* Small-viewport units, so a collapsing mobile URL bar neither stretches
-     the runway nor bounces the thresholds while the visitor is mid-scroll. */
-  height: 165svh;
-  margin-top: var(--space-7);
-}
-
-.mock-pin {
-  position: sticky;
-  /* High enough that the open panel sits comfortably on screen, low enough
-     that the capsule clears a phone browser's own chrome. */
-  top: max(72px, 14svh);
+/* The stage the mock plays on. In the product the pointer drives the
+   presentations; here the mock walks capsule → peek → panel by itself once on
+   arrival and rests open, so the hero is the product's most telling state and
+   no gesture has to be discovered to earn it. */
+.mock-stage {
   display: flex;
   justify-content: center;
+  margin-top: var(--space-7);
   /* The stage is wider than the shell's content box, whose padding belongs to
      the prose. Give the display the viewport width at every breakpoint so the
      clip keeps its rounded corners instead of shaving them to the measure. */
   margin-inline: calc(50% - 50vw);
-  /* `transform: scale()` leaves the layout box at full size, so the pin
+  /* `transform: scale()` leaves the layout box at full size, so the stage
      tracks the scale itself or a phone reserves 560px for a 300px visual.
      `clip` keeps the untransformed art width from opening a horizontal
-     scrollbar — and it must be `clip`, not `hidden`: a scroll container
-     ancestor is exactly what stops `position: sticky` from sticking. */
+     scrollbar without making a scroll container of the stage. */
   height: calc(var(--mock-height) * var(--mock-scale));
   overflow: clip;
 }
