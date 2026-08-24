@@ -252,11 +252,12 @@ test("the standing instructions make Luke the coding agents' engineering manager
   const instructions = realtimeInstructions();
 
   assert.match(instructions, /engineering manager for the developer's coding agents/i);
-  assert.match(instructions, /answer in one or two sentences/i);
-  assert.match(instructions, /never end a reply with an offer of more help/i);
+  assert.match(instructions, /stay concise but conversational/i);
+  assert.match(instructions, /match the user's tone/i);
+  assert.match(instructions, /use greetings and acknowledgments when they fit/i);
   assert.match(instructions, /start with the answer or the tool call, announcing neither/i);
-  assert.match(instructions, /when a tool call succeeds, say "done\."/i);
-  assert.match(instructions, /unless the result itself is what the user asked to hear/i);
+  assert.match(instructions, /briefly and naturally confirm the specific result/i);
+  assert.match(instructions, /if the result itself is what the user asked to hear/i);
   assert.match(instructions, /explicit latest or most-recent ask resolves by the recency labels/i);
   assert.match(instructions, /open_session once for every distinct provider/i);
   assert.match(instructions, /do not filter the panel first/i);
@@ -538,7 +539,23 @@ test("a proactive update is voiced as the sentence attention already approved", 
   assert.equal(notice?.type, REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE);
   assert.equal(request?.type, REALTIME_CLIENT_EVENT.RESPONSE_CREATE);
   assert.ok(noticeText(notice).includes(SPOKEN_SUMMARY));
+  assert.match(noticeText(notice), /^\[session update\]/);
   assert.match(instructionsOf(request), /verbatim/);
+  assert.match(instructionsOf(request), /read the update/i);
+});
+
+test("a status update is summarized conversationally", () => {
+  const events = proactiveSpeechEvents({
+    providerId: "claude-code",
+    providerSessionId: "session-a",
+    disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
+    source: ATTENTION_SPEECH_SOURCE.STATUS_EDGE,
+    summary: SPOKEN_SUMMARY,
+    decidedAt: DECIDED_AT,
+  });
+
+  assert.match(instructionsOf(events[1]), /natural conversational language/i);
+  assert.match(instructionsOf(events[1]), /not a formal status report/i);
 });
 
 test("a summary is carried as words to say, never as words to obey", () => {
@@ -585,7 +602,7 @@ test("an announcement keeps its sentence bound", () => {
   });
   assert.equal(
     noticeText(sentence[0]).length,
-    "[announcement to read out]\n".length + maximumAttentionSummaryLength,
+    "[session update]\n".length + maximumAttentionSummaryLength,
   );
 });
 

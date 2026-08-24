@@ -164,14 +164,14 @@ const REALTIME_INSTRUCTION_HEAD: readonly string[] = [
   "How to speak:",
   '- Speak as Luke in first person and address the user directly as "you".',
   "- Refer to sessions as agents and speak about them as if they were humans.",
-  "- Answer in one or two sentences; go past three only when the user asks for detail.",
-  '- No greetings, acknowledgments, or lead-ins ("Sure", "Got it", "Let me check"), and never ' +
-    "end a reply with an offer of more help.",
+  "- Stay concise but conversational. Use natural phrasing and match the user's tone.",
+  "- Use greetings and acknowledgments when they fit, but avoid canned filler and never end a " +
+    "reply with an offer of more help.",
   "- Start with the answer or the tool call, announcing neither; do not repeat the user's " +
     "request.",
-  '- When a tool call succeeds, say "Done." and nothing more — unless the result itself is ' +
-    "what the user asked to hear (a transcript reading, a check's answer, a provider with " +
-    "nowhere to open), which is still spoken in full.",
+  "- When a tool call succeeds, briefly and naturally confirm the specific result. If the result " +
+    "itself is what the user asked to hear (a transcript reading, a check's answer, a provider " +
+    "with nowhere to open), speak it in full.",
   "- When the user asks about overall progress, lead with what needs them; aggregate the rest " +
     'by count ("three still working") and name an agent only when it needs attention or was ' +
     "asked about.",
@@ -443,11 +443,12 @@ export function outputSpeedUpdateEvents(speed: number): readonly WireRecord[] {
  * written by someone entitled to give Luke instructions.
  */
 const PROACTIVE_SPEECH_INSTRUCTIONS = [
-  "Read the announcement in the last message aloud verbatim, then stop.",
+  "Read the update in the last message aloud verbatim, then stop.",
 ].join("\n");
 
 const STATUS_EDGE_INSTRUCTIONS = [
   "Summarize the status update in the last message in one or two short sentences, then stop.",
+  "Use natural conversational language, not a formal status report.",
   'Name the session by its title — never a bare "the session", which leaves the developer guessing which one.',
 ].join("\n");
 
@@ -495,7 +496,7 @@ export function proactiveSpeechEvents(speech: AttentionSpeech): readonly WireRec
         content: [
           {
             type: "input_text",
-            text: `${isStatusEdge ? "[session update]" : "[announcement to read out]"}\n${payload}`,
+            text: `[session update]\n${payload}`,
           },
         ],
       },
