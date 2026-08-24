@@ -1,3 +1,8 @@
+import {
+  getShaderColorFromString,
+  meshGradientFragmentShader,
+  ShaderMount,
+} from "@paper-design/shaders";
 import { FIXTURE_EPOCH_MS, fixtureSnapshot } from "@sidecar/fixtures";
 import {
   OptionsIcon,
@@ -102,6 +107,18 @@ const PANEL_CAPACITY = wingMarkCapacity((PANEL_WIDTH - HOUSING_WIDTH) / 2);
 const MARK_EXIT_MS = MOTION_DURATION_MS.EXIT;
 
 /**
+ * The display the mock sits in, painted by Paper's mesh gradient — bundled
+ * and pinned, so the page carries its own shader instead of fetching one at
+ * runtime. The palette runs indigo into the product's cyan with one violet
+ * spot: bright enough that the pure-black capsule and panel cut a hard
+ * silhouette, dark enough that the art stays a backdrop rather than a rival.
+ */
+const BACKDROP_COLORS = ["#0c1430", "#20308f", "#5cd5ff", "#123f6e", "#7a5cff"];
+const BACKDROP_DISTORTION = 0.85;
+const BACKDROP_SWIRL = 0.5;
+const BACKDROP_SPEED = 0.5;
+
+/**
  * `observedAgoLabel` in the renderer, read against the fixture's own epoch so
  * the page's labels match the product's evidence captures exactly.
  */
@@ -198,6 +215,53 @@ export function NotchMock(): React.JSX.Element {
   }, []);
   useEffect(() => () => observer.current?.disconnect(), []);
 
+  // Mounted imperatively because ShaderMount owns its canvas. Reduced motion
+  // holds the gradient at its first frame rather than hiding it — a still
+  // image is not motion — and the query is watched live, so toggling the
+  // setting mid-visit answers like the rest of the mock does. A machine
+  // without WebGL throws here, leaving the frame's own gradient as the
+  // display.
+  const backdrop = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const host = backdrop.current;
+    if (!host) return;
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let mount: ShaderMount | undefined;
+    try {
+      mount = new ShaderMount(
+        host,
+        meshGradientFragmentShader,
+        {
+          u_fit: 1,
+          u_scale: 1,
+          u_rotation: 0,
+          u_originX: 0.5,
+          u_originY: 0.5,
+          u_offsetX: 0,
+          u_offsetY: 0,
+          u_worldWidth: 0,
+          u_worldHeight: 0,
+          u_colors: BACKDROP_COLORS.map((color) => getShaderColorFromString(color)),
+          u_colorsCount: BACKDROP_COLORS.length,
+          u_distortion: BACKDROP_DISTORTION,
+          u_swirl: BACKDROP_SWIRL,
+          u_grainMixer: 0,
+          u_grainOverlay: 0,
+        },
+        undefined,
+        reduceMotion.matches ? 0 : BACKDROP_SPEED,
+      );
+    } catch {
+      // Nothing to do: the backdrop div stays empty over the frame.
+    }
+    const applySpeed = () => mount?.setSpeed(reduceMotion.matches ? 0 : BACKDROP_SPEED);
+    reduceMotion.addEventListener("change", applySpeed);
+    return () => {
+      reduceMotion.removeEventListener("change", applySpeed);
+      mount?.dispose();
+    };
+  }, []);
+
   // The wing is bounded by the shape its state draws, so its mark capacity is
   // too — and a shrinking capacity waits out the exit fade, as the renderer's
   // does, so no mark is unmounted mid-fade.
@@ -228,6 +292,7 @@ export function NotchMock(): React.JSX.Element {
             a drag cannot select text nobody can see. */}
         <div className="mock" data-mode={mode} role="img" aria-label={MOCK_LABEL} style={mockStyle}>
           <span className="mock-frame" />
+          <div className="mock-backdrop" ref={backdrop} />
 
           {/* Capsule, peek and panel are all this one shape at different sizes,
               so the surface is never cross-faded — it is only ever resized. */}

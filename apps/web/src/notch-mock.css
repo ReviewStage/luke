@@ -147,6 +147,19 @@
   background: linear-gradient(180deg, var(--frame-top) 0%, var(--frame-bottom) 100%);
 }
 
+/* The mesh gradient that paints the display, inset one pixel so the frame's
+   hairline stays visible and stacked under the surface so everything the mock
+   draws reads against it. The host's own rule wins over ShaderMount's
+   zero-specificity `:where` styles, and the canvas inherits this radius. The
+   frame's gradient stays underneath as the display for a machine whose WebGL
+   never mounts. */
+.mock-backdrop {
+  position: absolute;
+  z-index: 0;
+  inset: 1px;
+  border-radius: 17px;
+}
+
 /* The black surface is the whole animation: one leaf element with no children
    and no text, so growing it costs a rounded-rect fill rather than a relayout
    of the panel. Capsule, peek and panel are all this one shape. */
