@@ -43,6 +43,7 @@ import {
 import {
   EmptyState,
   ListeningGlyph,
+  LoadingState,
   SessionOptions,
   SessionOptionsButton,
   SessionsPanel,
@@ -765,6 +766,12 @@ export interface PanelBodyProps {
   /** Why the last sign-in ended without landing, for the gate to show. */
   signInFailure?: string;
   list: ArrangedSessions;
+  /**
+   * Whether the roster has been read at all yet. Until it has, an empty list
+   * draws loading rows rather than the empty state: an unread zero only means
+   * "not looked yet", never "nothing to watch".
+   */
+  sessionsSettled: boolean;
   view: SessionArrangement;
   onViewChange: (view: SessionArrangement) => void;
   /** Carries a toggled filter selection; unlike a view change it leaves the sheet open. */
@@ -821,6 +828,7 @@ export function PanelBody({
   onBeginSignIn,
   signInFailure,
   list,
+  sessionsSettled,
   view,
   onViewChange,
   onFiltersChange,
@@ -936,7 +944,14 @@ export function PanelBody({
           ) : null}
           <div className="session-list" ref={sessionListRef}>
             {rows.length === 0 ? (
-              list.search ? (
+              // Only a roster actually read may say the list is empty: before
+              // the first reading, "nothing to watch" and "no matches" alike
+              // would claim a fact nobody has checked — a search restored at
+              // launch arrives before the roster does — so the loading rows
+              // stand in for both.
+              !sessionsSettled ? (
+                <LoadingState />
+              ) : list.search ? (
                 <SearchEmptyState
                   beyondFilter={list.search.beyondFilter}
                   onWiden={() => onViewChange(widenedView(view))}
