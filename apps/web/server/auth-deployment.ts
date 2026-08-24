@@ -20,6 +20,8 @@
  * the proxy is inert there.
  */
 
+import { text } from "./core.js";
+
 /** The Vercel environment a deployment runs as, as its own `VERCEL_ENV` names it. */
 export const DEPLOYMENT_ENVIRONMENT = {
   PRODUCTION: "production",
@@ -69,14 +71,9 @@ export interface AuthDeployment {
   acceptsProxyProfiles: boolean;
 }
 
-function present(value: string | undefined): string | undefined {
-  const trimmed = value?.trim();
-  return trimmed === undefined || trimmed.length === 0 ? undefined : trimmed;
-}
-
 /** Vercel reports a bare hostname; a value that already names a scheme keeps it. */
 function deploymentOrigin(host: string | undefined): string | undefined {
-  const named = present(host);
+  const named = text(host);
   if (named === undefined) return undefined;
   try {
     return new URL(named.includes("://") ? named : `https://${named}`).origin;
@@ -86,10 +83,10 @@ function deploymentOrigin(host: string | undefined): string | undefined {
 }
 
 export function authDeployment(variables: Record<string, string | undefined>): AuthDeployment {
-  const productionURL = present(variables[AUTH_DEPLOYMENT_ENVIRONMENT.PRODUCTION_URL]);
-  const proxySecret = present(variables[AUTH_DEPLOYMENT_ENVIRONMENT.PROXY_SECRET]);
+  const productionURL = text(variables[AUTH_DEPLOYMENT_ENVIRONMENT.PRODUCTION_URL]);
+  const proxySecret = text(variables[AUTH_DEPLOYMENT_ENVIRONMENT.PROXY_SECRET]);
   const proxyTrustedOrigins =
-    present(variables[AUTH_DEPLOYMENT_ENVIRONMENT.PROXY_TRUSTED_ORIGINS])
+    text(variables[AUTH_DEPLOYMENT_ENVIRONMENT.PROXY_TRUSTED_ORIGINS])
       ?.split(",")
       .map((origin) => origin.trim())
       .filter((origin) => origin.length > 0) ?? [];

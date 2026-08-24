@@ -2,47 +2,25 @@ import { APIError, createAuthMiddleware } from "better-auth/api";
 import { symmetricDecrypt } from "better-auth/crypto";
 import { oAuthProxy } from "better-auth/plugins";
 import type { AuthDeployment } from "./auth-deployment.js";
+import {
+  isRecord,
+  isWireString,
+  recordFromJsonLine,
+  unparsedWire,
+  type WireBoundaryInput,
+  type WireRecord,
+} from "./core.js";
 
 const PROXY_CALLBACK_PATH = "/api/auth/oauth-proxy-callback";
-
-type ProxyWirePrimitive = string | number | boolean | null;
-type ProxyWireRecord = { readonly [key: string]: ProxyWireValue };
-type ProxyWireValue = ProxyWirePrimitive | ProxyWireRecord | readonly ProxyWireValue[];
-type UnparsedProxyWireValue = ProxyWireValue | undefined;
-
-function runtimeTag(value: UnparsedProxyWireValue): string {
-  return Object.prototype.toString.call(value);
-}
-
-function isProxyWireRecord(value: UnparsedProxyWireValue): value is ProxyWireRecord {
-  if (value === null || value === undefined || runtimeTag(value) !== "[object Object]")
-    return false;
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
-}
-
-function isProxyWireString(value: UnparsedProxyWireValue): value is string {
-  return runtimeTag(value) === "[object String]";
-}
-
-function parsedJSON(value: string): ProxyWireRecord | undefined {
-  try {
-    // SAFETY: JSON.parse returns a runtime value; isProxyWireRecord validates the object contract.
-    const parsed = JSON.parse(value) as UnparsedProxyWireValue;
-    return isProxyWireRecord(parsed) ? parsed : undefined;
-  } catch {
-    return undefined;
-  }
-}
 
 /** Read only proxy state; an ordinary provider state is not this guard's concern. */
 export async function oauthProxyCallbackURL(
   state: string,
   secret: string,
 ): Promise<string | undefined> {
-  let statePackage: ProxyWireRecord | undefined;
+  let statePackage: WireRecord | undefined;
   try {
-    statePackage = parsedJSON(await symmetricDecrypt({ key: secret, data: state }));
+    statePackage = recordFromJsonLine(await symmetricDecrypt({ key: secret, data: state }));
   } catch {
     return undefined;
   }
@@ -50,12 +28,12 @@ export async function oauthProxyCallbackURL(
   // guard must recognize exactly that set or a differently typed marker could
   // reach the relay without its destination being checked.
   if (!statePackage?.isOAuthProxy) return undefined;
-  if (!isProxyWireString(statePackage.stateCookie)) throw new Error("Invalid OAuth proxy state");
+  if (!isWireString(statePackage.stateCookie)) throw new Error("Invalid OAuth proxy state");
 
-  const stateData = parsedJSON(
+  const stateData = recordFromJsonLine(
     await symmetricDecrypt({ key: secret, data: statePackage.stateCookie }),
   );
-  if (!isProxyWireString(stateData?.callbackURL)) throw new Error("Invalid OAuth proxy callback");
+  if (!isWireString(stateData?.callbackURL)) throw new Error("Invalid OAuth proxy callback");
   return stateData.callbackURL;
 }
 
@@ -85,8 +63,6 @@ function originMatchesPattern(origin: string, pattern: string): boolean {
     return false;
   }
 
-  if (wildcardCount === 0) return candidate.origin === configured.origin;
-
   const hostnamePattern = configured.hostname
     .split(wildcard)
     .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
@@ -108,16 +84,15 @@ export function isTrustedProxyCallback(callbackURL: string, trustedOrigins: stri
     return false;
   }
 
+  const [finalCallback, ...surplusCallbacks] = callback.searchParams.getAll("callbackURL");
   if (
     callback.pathname !== PROXY_CALLBACK_PATH ||
-    callback.searchParams.getAll("callbackURL").length !== 1 ||
+    finalCallback === undefined ||
+    surplusCallbacks.length > 0 ||
     [...callback.searchParams.keys()].some((key) => key !== "callbackURL")
   ) {
     return false;
   }
-
-  const finalCallback = callback.searchParams.get("callbackURL");
-  if (finalCallback === null) return false;
 
   let finalOrigin: string;
   try {
@@ -164,14 +139,14 @@ export function authProxy(deployment: AuthDeployment) {
       return context.path === "/callback/:id";
     },
     handler: createAuthMiddleware(async (ctx) => {
-      // SAFETY: Better Auth owns these parsed request values; the wire readers below validate the selected field.
-      const query = ctx.query as UnparsedProxyWireValue;
-      // SAFETY: Better Auth owns these parsed request values; the wire readers below validate the selected field.
-      const body = ctx.body as UnparsedProxyWireValue;
-      const queryState = isProxyWireRecord(query) ? query.state : undefined;
-      const bodyState = isProxyWireRecord(body) ? body.state : undefined;
-      const state = isProxyWireString(queryState) ? queryState : bodyState;
-      if (!isProxyWireString(state)) return;
+      // SAFETY: Better Auth hands over its parsed query as structured-clone data; the wire guards below validate the selected field.
+      const query = unparsedWire(ctx.query as WireBoundaryInput);
+      // SAFETY: Better Auth hands over its parsed body as structured-clone data; the wire guards below validate the selected field.
+      const body = unparsedWire(ctx.body as WireBoundaryInput);
+      const queryState = isRecord(query) ? query.state : undefined;
+      const bodyState = isRecord(body) ? body.state : undefined;
+      const state = [queryState, bodyState].find(isWireString);
+      if (state === undefined) return;
 
       let callbackURL: string | undefined;
       try {
