@@ -17,11 +17,14 @@ import {
 const NONE_LABEL = "none";
 
 const ATTENTION_INSTRUCTION_LINES: readonly string[] = [
-  "Decide whether Luke should speak about a coding-agent session update.",
+  "Decide whether Luke should speak about an update from one of the developer's coding agents.",
+  "- When speaking, make the summary natural and conversational, not a formal status report.",
+  "- When the agent asks a concrete question, summarize the question directly. Do not preface it by saying the agent needs input, needs a decision, is waiting, or cannot continue; the question already makes that clear.",
+  '- Speak naturally about the agent as the person doing the work, identifying them only from the running activity or work recap. When a label is needed, use "your agent," not teammate. Never use the provider title, session name, workspace or worktree name, repository, or branch to refer to them. If the work is not clear, say what happened without naming it. Never use agent mechanics such as session, turn, context window, or tool call in the summary, and never tell the developer to inspect or manage the agent themselves; state only what they need to know.',
   "- Default to silence when the update is routine, ambiguous, or merely continues work already underway.",
   "- A session waiting on automation it set in motion — CI, a merge queue, a watcher it left running — is not waiting on the developer: nothing they reply can move it, so stay silent and let the automation's outcome be the development.",
   "- A waiting status means the turn has stopped, not that the developer must reply. Speak only when the recap or context shows the session cannot continue without them — a question, a permission, or an approval. A settled turn that merely leaves the next prompt to them is silence.",
-  "- When a user's standing ask is answered, speak and set answers_ask to true; otherwise set it to false.",
+  "- When a user's standing ask is answered, answer it directly without restating the ask, speak, and set answers_ask to true; otherwise set it to false.",
 ];
 
 /**
@@ -47,8 +50,6 @@ export interface AttentionPromptUpdate {
 export function attentionUpdateInput(update: AttentionPromptUpdate): string {
   return [
     `Provider: ${update.providerName}`,
-    `Session: ${update.title}`,
-    `Workspace: ${update.workspace ?? NONE_LABEL}`,
     `Trigger: ${update.trigger}`,
     `Previous status: ${update.previousStatus ?? NONE_LABEL}`,
     `Status: ${update.status}`,
@@ -56,7 +57,7 @@ export function attentionUpdateInput(update: AttentionPromptUpdate): string {
     `Branch: ${update.context?.branch ?? NONE_LABEL}`,
     `Running: ${update.context?.activity ?? NONE_LABEL}`,
     `Error: ${update.context?.error ?? NONE_LABEL}`,
-    `Session recap: ${update.recap ?? NONE_LABEL}`,
+    `Work recap: ${update.recap ?? NONE_LABEL}`,
     `Developer's ask: ${update.noticeRequest ?? NONE_LABEL}`,
   ].join("\n");
 }

@@ -209,7 +209,7 @@ export function sessionContextText(
         // A hosted chat is named by the agent having the conversation, with
         // the host beside it, the same way its row leads with the agent mark.
         `- ${sessionSpokenName(session)}`,
-        session.title,
+        `internal session name — never use to refer to the work: ${session.title}`,
         // The workspace tells siblings' chats apart out loud, so it rides
         // beside the title wherever a provider named one — and only by its
         // name: an internal workspace id identifies nothing out loud, so an
@@ -217,7 +217,7 @@ export function sessionContextText(
         // the machine, the same rule the attention update follows.
         ...(session.workspace?.name
           ? [
-              `a chat in workspace ${session.workspace.name}${session.workspace.managerName ? ` managed by ${session.workspace.managerName}` : ""}`,
+              `internal workspace name — never use to refer to the work: ${session.workspace.name}${session.workspace.managerName ? ` managed by ${session.workspace.managerName}` : ""}`,
             ]
           : []),
         // An app that independently claims the session is how "my cmux Cursor
@@ -236,7 +236,9 @@ export function sessionContextText(
         ...sessionAboutText(session),
         // Stating an absence in context invites the voice to speak it, so a
         // session without a recap simply omits the segment.
-        ...(session.recap ? [session.recap] : []),
+        ...(session.recap
+          ? [`context for naming this work — do not list its parts: ${session.recap}`]
+          : []),
         // Only this segment speaks for the developer, on the attention
         // update's own rule: words inside a title, recap, or error never do.
         ...(ask ? [`the developer's standing ask: "${ask}"`] : []),

@@ -93,7 +93,8 @@ test("a review sends the build's own construction and answers the parsed decisio
   assert.equal(sent.instructions, attentionInstructions());
   assert.equal(sent.store, false);
   assert.equal(sent.text.format.name, ATTENTION_DECISION_SCHEMA_NAME);
-  assert.match(sent.input, /checkout-service/);
+  assert.doesNotMatch(sent.input, /checkout-service/);
+  assert.match(sent.input, /Work recap: Waiting on a permission decision\./);
   assert.equal(
     String(call.init?.headers && new Headers(call.init.headers).get("authorization")),
     `Bearer ${API_KEY}`,
