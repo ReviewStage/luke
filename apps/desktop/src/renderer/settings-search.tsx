@@ -7,6 +7,8 @@ import {
 import {
   CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
   PROVIDER_ID,
+  SUPERSET_WORKSPACE_PROVIDER_ID,
+  type WorkspaceProviderId,
   workspaceAgentModels,
 } from "@sidecar/session";
 import {
@@ -16,10 +18,6 @@ import {
   SETTING_PAGE,
   settingGuideEntries,
 } from "@sidecar/settings";
-import {
-  SUPERSET_WORKSPACE_PROVIDER_ID,
-  type WorkspaceProviderId,
-} from "@sidecar/superset/vocabulary";
 import { Fragment, useRef } from "react";
 import { APPLE_CALENDAR_ID, APPLE_CALENDAR_NAME } from "#shared/apple-calendar";
 import type { AppSettings } from "#shared/contracts";

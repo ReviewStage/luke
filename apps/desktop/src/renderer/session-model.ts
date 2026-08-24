@@ -29,10 +29,10 @@ import {
   type SessionFilterAxis,
   type SessionIdentity,
   type SessionLocation,
+  SUPERSET_WORKSPACE_PROVIDER_ID,
   sessionChangeNumber,
   sessionFilterAxis,
 } from "@sidecar/session";
-import { SUPERSET_WORKSPACE_PROVIDER_ID } from "@sidecar/superset/vocabulary";
 import {
   compareSessionsByUrgency,
   SESSION_URGENCY,
