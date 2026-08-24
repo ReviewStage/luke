@@ -61,7 +61,6 @@
      it alone is allowed to end on the page's own ground. */
   --text-secondary: rgba(255, 255, 255, 0.56);
   --hairline: rgba(255, 255, 255, 0.08);
-  --hairline-strong: rgba(255, 255, 255, 0.09);
   --raised: rgba(255, 255, 255, 0.05);
   --raised-strong: rgba(255, 255, 255, 0.09);
   --frame-top: #14171c;
@@ -137,27 +136,27 @@
 
 /* The persistent display the capsule is cut into. It stays in place while the
    surface grows, so the panel remains inside the same rounded stage instead
-   of exposing the square ends of a narrower strip. */
+   of exposing the square ends of a narrower strip. Borderless: the mesh is
+   bright enough to end on the page's own ground, and a rim read as a black
+   outline around the art. */
 .mock-frame {
   position: absolute;
   z-index: 0;
   inset: 0;
-  border: 1px solid var(--hairline-strong);
   border-radius: 18px;
   background: linear-gradient(180deg, var(--frame-top) 0%, var(--frame-bottom) 100%);
 }
 
-/* The mesh gradient that paints the display, inset one pixel so the frame's
-   hairline stays visible and stacked under the surface so everything the mock
-   draws reads against it. The host's own rule wins over ShaderMount's
-   zero-specificity `:where` styles, and the canvas inherits this radius. The
-   frame's gradient stays underneath as the display for a machine whose WebGL
-   never mounts. */
+/* The mesh gradient that paints the display, edge to edge, stacked under the
+   surface so everything the mock draws reads against it. The host's own rule
+   wins over ShaderMount's zero-specificity `:where` styles, and the canvas
+   inherits this radius. The frame's gradient stays underneath as the display
+   for a machine whose WebGL never mounts. */
 .mock-backdrop {
   position: absolute;
   z-index: 0;
-  inset: 1px;
-  border-radius: 17px;
+  inset: 0;
+  border-radius: 18px;
 }
 
 /* The black surface is the whole animation: one leaf element with no children
