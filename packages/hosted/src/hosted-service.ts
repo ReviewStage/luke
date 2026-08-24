@@ -16,6 +16,13 @@ import {
 /** The hosted endpoints, rooted at the service origin. */
 export const HOSTED_SERVICE_PATH = {
   VOICE_MINT: "/api/voice/mint",
+  /**
+   * The one endpoint a fresh install may call before any account exists: it
+   * mints a single short-lived credential for the spoken onboarding
+   * introduction, takes no bearer, and answers with the same mint shape the
+   * ordinary endpoint does, so `hostedMintAnswerFromWire` validates both.
+   */
+  INTRODUCTION_MINT: "/api/voice/introduction-mint",
   ATTENTION_REVIEW: "/api/attention/review",
   ACCOUNT_DELETE: "/api/account/delete",
   USAGE: "/api/usage",

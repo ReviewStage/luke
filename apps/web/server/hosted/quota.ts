@@ -1,7 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import type { HostedQuota, HostedUsageAnswer } from "../core.js";
 import type { createDatabase } from "../db/index.js";
-import { hostedUsage } from "../db/usage-schema.js";
+import { hostedUsage, introductionUsage } from "../db/usage-schema.js";
 
 /** The two things the hosted tier spends, each metered on its own ceiling. */
 export const HOSTED_METER = {
@@ -86,6 +86,70 @@ export async function spendHostedMeter(
     allowed: used <= HOSTED_DAILY_LIMIT[input.meter],
     quota: meterStanding(used, input.meter, day),
   };
+}
+
+/**
+ * The introduction mint's daily ceilings. Product knobs like the metered
+ * tier's: PER_CALLER bounds one address to a handful of one-time
+ * introductions, and GLOBAL is the second ceiling behind it, because an
+ * endpoint that takes no bearer would otherwise let a rotating address pool
+ * spend the OpenAI budget the metered ceilings exist to keep distant.
+ */
+export const INTRODUCTION_DAILY_LIMIT = {
+  PER_CALLER: 5,
+  GLOBAL: 500,
+} as const;
+
+/** The one row every introduction request shares, holding the global count. */
+export const INTRODUCTION_GLOBAL_CALLER = "global";
+
+/** Increments one caller's row for the day and answers the new count. */
+async function spendIntroductionRow(
+  database: UsageDatabase,
+  caller: string,
+  day: string,
+): Promise<number> {
+  const [row] = await database
+    .insert(introductionUsage)
+    .values({ caller, day, mints: 1 })
+    .onConflictDoUpdate({
+      target: [introductionUsage.caller, introductionUsage.day],
+      set: { mints: sql`${introductionUsage.mints} + 1` },
+    })
+    .returning();
+  if (!row) throw new Error("The introduction usage upsert returned no row.");
+  return row.mints;
+}
+
+/**
+ * Whether an introduction mint fit inside the day. Unlike a metered spend it
+ * carries no quota: the introduction is not an allowance anyone tracks, and a
+ * refusal that reported the shared counter's standing would tell an anonymous
+ * caller how busy the endpoint is for no one's benefit.
+ */
+export interface IntroductionSpend {
+  allowed: boolean;
+}
+
+/**
+ * Spends one introduction mint and answers whether it fit inside both
+ * ceilings. Like the metered spend, each increment is a single atomic upsert
+ * taken before the upstream call, and a refused attempt still counts. The
+ * caller's own row is spent first, and the global row only moves for a caller
+ * still inside its own cap: otherwise one refused caller's retries would
+ * spend the shared allowance and shut the door on everyone else.
+ */
+export async function spendIntroductionMeter(
+  database: UsageDatabase,
+  input: { callerKey: string; now: number },
+): Promise<IntroductionSpend> {
+  const day = utcDayKey(input.now);
+  const callerUsed = await spendIntroductionRow(database, input.callerKey, day);
+  if (callerUsed > INTRODUCTION_DAILY_LIMIT.PER_CALLER) {
+    return { allowed: false };
+  }
+  const globalUsed = await spendIntroductionRow(database, INTRODUCTION_GLOBAL_CALLER, day);
+  return { allowed: globalUsed <= INTRODUCTION_DAILY_LIMIT.GLOBAL };
 }
 
 type UsageReadDatabase = Pick<ReturnType<typeof createDatabase>, "select">;
