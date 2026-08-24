@@ -52,6 +52,7 @@ import {
   CreatedWorkspaceOpenTracker,
   InMemorySessionRegistry,
   isProviderId,
+  isWorkspaceProviderId,
   type NormalizedSession,
   normalizeObservedWorkspaceProjects,
   type ObservedWorkspaceProject,
@@ -808,11 +809,7 @@ async function rememberWorkspaceDefaults(
   agent: string | undefined,
 ): Promise<void> {
   const providerId = adapter.provider.id;
-  if (
-    !isProviderId(providerId) &&
-    providerId !== SUPERSET_WORKSPACE_PROVIDER_ID &&
-    providerId !== CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID
-  ) {
+  if (!isWorkspaceProviderId(providerId)) {
     return;
   }
   try {
@@ -828,9 +825,15 @@ async function rememberWorkspaceDefaults(
     if (
       providerId === SUPERSET_WORKSPACE_PROVIDER_ID &&
       agent !== undefined &&
-      (await settingsStore.get(APP_SETTING_SCHEMA.supersetAgentDefault.field)) === undefined
+      (await settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[
+        SUPERSET_WORKSPACE_PROVIDER_ID
+      ] === undefined
     ) {
-      const saved = await settingsStore.set(APP_SETTING_SCHEMA.supersetAgentDefault.field, agent);
+      const saved = await settingsStore.setEntry(
+        APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
+        SUPERSET_WORKSPACE_PROVIDER_ID,
+        { agent },
+      );
       panels.broadcast(channels.settingsChanged, saved.settings);
     }
     // The project the workspace landed in becomes that provider's default on
@@ -1274,7 +1277,9 @@ async function refreshProviderSessions(generation: number): Promise<void> {
   let supersetOrganization: string | undefined;
   let supersetAgentDefault: string | undefined;
   try {
-    supersetAgentDefault = await settingsStore.get(APP_SETTING_SCHEMA.supersetAgentDefault.field);
+    supersetAgentDefault = (
+      await settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field)
+    )?.[SUPERSET_WORKSPACE_PROVIDER_ID]?.agent;
     [supersetSnapshot, supersetOrganization] = await Promise.all([
       supersetWorkspaces.read(),
       supersetCli.activeOrganization(),

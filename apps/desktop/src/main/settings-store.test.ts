@@ -1580,12 +1580,62 @@ test("stores Superset workspace and agent defaults without touching credentials"
 
   await store.set(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field, "superset");
   await store.setEntry(APP_SETTING_SCHEMA.workspaceProjectDefaults.field, "superset", "project-1");
-  const { settings } = await store.set(APP_SETTING_SCHEMA.supersetAgentDefault.field, "codex");
+  const { settings } = await store.setEntry(
+    APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
+    "superset",
+    { agent: "codex" },
+  );
 
   assert.equal(settings.defaultWorkspaceProvider, "superset");
   assert.equal(settings.workspaceProjectDefaults?.superset, "project-1");
-  assert.equal(settings.supersetAgentDefault, "codex");
-  assert.equal((await storeIn(directory).snapshot()).supersetAgentDefault, "codex");
+  assert.deepEqual(settings.workspaceAgentDefaults?.superset, { agent: "codex" });
+  assert.deepEqual((await storeIn(directory).snapshot()).workspaceAgentDefaults?.superset, {
+    agent: "codex",
+  });
+});
+
+test("folds a Superset agent default stored apart by an earlier build into the record", async (t) => {
+  const directory = await temporaryDirectory(t);
+  await fs.writeFile(
+    path.join(directory, SETTINGS_FILE_NAME),
+    JSON.stringify({ version: 2, apiKeys: {}, supersetAgentDefault: "codex" }),
+  );
+
+  const store = storeIn(directory);
+  assert.deepEqual((await store.snapshot()).workspaceAgentDefaults?.superset, { agent: "codex" });
+
+  // The next write carries the folded entry and drops the legacy field.
+  await store.set(APP_SETTING_SCHEMA.voiceCaptions.field, true);
+  const written = JSON.parse(await fs.readFile(path.join(directory, SETTINGS_FILE_NAME), "utf8"));
+  assert.equal(written.supersetAgentDefault, undefined);
+  assert.deepEqual(written.workspaceAgentDefaults, { superset: { agent: "codex" } });
+});
+
+test("a folded Superset entry outranks the legacy field it replaced", async (t) => {
+  const directory = await temporaryDirectory(t);
+  await fs.writeFile(
+    path.join(directory, SETTINGS_FILE_NAME),
+    JSON.stringify({
+      version: 2,
+      apiKeys: {},
+      supersetAgentDefault: "codex",
+      workspaceAgentDefaults: { superset: { agent: "claude-code" } },
+    }),
+  );
+
+  assert.deepEqual((await storeIn(directory).snapshot()).workspaceAgentDefaults?.superset, {
+    agent: "claude-code",
+  });
+});
+
+test("ignores a legacy Superset agent default that is not an agent kind", async (t) => {
+  const directory = await temporaryDirectory(t);
+  await fs.writeFile(
+    path.join(directory, SETTINGS_FILE_NAME),
+    JSON.stringify({ version: 2, apiKeys: {}, supersetAgentDefault: "Not An Agent!" }),
+  );
+
+  assert.equal((await storeIn(directory).snapshot()).workspaceAgentDefaults, undefined);
 });
 
 test("starts new workspaces on the provider's defaults until a pairing is chosen", async (t) => {
@@ -1764,6 +1814,22 @@ test("an entry the field cannot hold is refused rather than quietly dropped", ()
     }),
     { valid: true, value: { agent: "codex", model: "gpt-5.6-sol" } },
   );
+
+  // Superset's entry is the kind alone: a model beside it names a choice the
+  // provider does not document, so it is refused rather than trimmed.
+  assert.equal(
+    settingEntryGuard(APP_SETTING_SCHEMA.workspaceAgentDefaults.field, "superset", {
+      agent: "codex",
+      model: "gpt-5.6-sol",
+    }).valid,
+    false,
+  );
+  assert.deepEqual(
+    settingEntryGuard(APP_SETTING_SCHEMA.workspaceAgentDefaults.field, "superset", {
+      agent: "codex",
+    }),
+    { valid: true, value: { agent: "codex" } },
+  );
 });
 
 test("every map-valued setting is written one entry at a time", () => {
@@ -1847,11 +1913,13 @@ test("ignores a stored pairing this build's table does not list", async (t) => {
       apiKeys: {},
       workspaceAgentDefaults: {
         // A listed model under an effort its agent does not document, a
-        // provider the table documents nothing for, and a provider this build
-        // does not know: each names a request no endpoint takes.
+        // provider the table documents nothing for, a provider this build
+        // does not know, and a model beside a Superset kind, which documents
+        // no model choice: each names a request no endpoint takes.
         conductor: { agent: "claude", model: "sonnet", effort: "sideways" },
         cursor: { agent: "cursor", model: "composer-2.5" },
         "someone-else": { agent: "claude", model: "sonnet" },
+        superset: { agent: "codex", model: "gpt-5.5" },
       },
     }),
   );
@@ -1965,15 +2033,22 @@ test("a workspaces reset forgets the provider and project defaults but never the
   await store.set(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field, PROVIDER_ID.CONDUCTOR);
   await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "proj-1");
   await setWorkspaceAgentDefault(store, PROVIDER_ID.CONDUCTOR, pairing);
+  await store.setEntry(APP_SETTING_SCHEMA.workspaceAgentDefaults.field, "superset", {
+    agent: "codex",
+  });
 
   const { settings, reason } = await store.resetSettings(SETTINGS_RESET_SCOPE.WORKSPACES);
 
   assert.equal(reason, undefined);
   assert.equal(settings.defaultWorkspaceProvider, undefined);
   assert.equal(settings.workspaceProjectDefaults, undefined);
-  // The pairing lives on the Conductor row, whose own menu already offers the
-  // provider's default — no reset here may reach it.
-  assert.deepEqual(settings.workspaceAgentDefaults, { [PROVIDER_ID.CONDUCTOR]: pairing });
+  // The pairing lives on its provider's own row, whose menu already offers
+  // the provider's default — no reset here may reach it, and Superset's kind
+  // stands with the Conductor pairing.
+  assert.deepEqual(settings.workspaceAgentDefaults, {
+    [PROVIDER_ID.CONDUCTOR]: pairing,
+    superset: { agent: "codex" },
+  });
 });
 
 test("a reset of settings already at their defaults writes nothing", async (t) => {

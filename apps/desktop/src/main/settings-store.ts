@@ -10,6 +10,7 @@ import {
   VOICE_CREDENTIAL_PROVIDER_ID,
 } from "@sidecar/credentials";
 import { REALTIME_DEFAULTS } from "@sidecar/realtime";
+import { parseWorkspaceAgentKindSelection, SUPERSET_WORKSPACE_PROVIDER_ID } from "@sidecar/session";
 import { DEFAULT_PANEL_FORM_FACTOR } from "@sidecar/surface";
 import {
   isRecord,
@@ -81,6 +82,7 @@ const SETTINGS_FIELD = {
   CALENDAR_ACCOUNTS: "calendarAccounts",
   GRANTS: "grants",
   LEGACY_CONDUCTOR_API_KEY: "conductorApiKey",
+  LEGACY_SUPERSET_AGENT_DEFAULT: "supersetAgentDefault",
   VERSION: "version",
 } as const;
 
@@ -401,6 +403,32 @@ function readStoredSettings(record: WireRecord): StoredAppSettings {
   );
 }
 
+/**
+ * An installation that stored the Superset agent default apart — before it
+ * joined `workspaceAgentDefaults` — keeps its choice: the legacy field is
+ * folded in on read, under the same guard a folded entry answers to, and the
+ * next write drops it from the file the way the legacy Conductor key is
+ * dropped. A choice already held in the folded record wins, because it is the
+ * newer one.
+ */
+function withLegacySupersetAgentDefault(
+  settings: StoredAppSettings,
+  record: WireRecord,
+): StoredAppSettings {
+  if (settings.workspaceAgentDefaults?.[SUPERSET_WORKSPACE_PROVIDER_ID]) return settings;
+  const legacy = parseWorkspaceAgentKindSelection(
+    unparsedWire({ agent: record[SETTINGS_FIELD.LEGACY_SUPERSET_AGENT_DEFAULT] }),
+  );
+  if (!legacy) return settings;
+  return {
+    ...settings,
+    workspaceAgentDefaults: {
+      ...settings.workspaceAgentDefaults,
+      [SUPERSET_WORKSPACE_PROVIDER_ID]: legacy,
+    },
+  };
+}
+
 function parsePersistedSettings(
   source: string,
   providers: readonly CredentialProvider[],
@@ -414,7 +442,7 @@ function parsePersistedSettings(
   const calendarAccounts = storedCalendarAccounts(record);
   const appleCalendar = storedAppleCalendar(record);
   const grants = storedGrants(record);
-  const settings = readStoredSettings(record);
+  const settings = withLegacySupersetAgentDefault(readStoredSettings(record), record);
   const persisted = {
     ...settings,
     version: isWireNumber(version) ? version : SETTINGS_FILE_VERSION,
@@ -647,9 +675,6 @@ export class SettingsStore {
         : undefined),
       ...(persisted.workspaceProjectDefaults
         ? { workspaceProjectDefaults: persisted.workspaceProjectDefaults }
-        : undefined),
-      ...(persisted.supersetAgentDefault
-        ? { supersetAgentDefault: persisted.supersetAgentDefault }
         : undefined),
     };
   }
