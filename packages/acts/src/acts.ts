@@ -1660,7 +1660,10 @@ export const ACTS = {
     family: REALTIME_TOOL_FAMILY.APP,
     actionKind: APP_TOOL_KIND.SETTING,
     validatedAgainst: ACT_VALIDATION_TARGET.SETTING_ID,
-    narration: narrate(APP_TOOL_KIND.SETTING, (action) => `changed ${action.setting}`),
+    narration: narrate(
+      APP_TOOL_KIND.SETTING,
+      (action) => `changed ${action.setting.label} to ${action.value}`,
+    ),
     guide: "Change only an adjustable setting and value listed by the current guide.",
     schema: {
       description: "Change a Luke setting.",

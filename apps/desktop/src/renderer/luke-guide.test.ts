@@ -575,8 +575,7 @@ test("a model and its effort named in one change land as one stored pairing", as
     () => undefined,
     unset,
   );
-  assert.equal(outcome.status, "accepted");
-  assert.equal(outcome.effort, "high");
+  assert.deepEqual(outcome, { status: "accepted" });
   assert.deepEqual(carried.at(-1), { agent: "claude", model: "fable-5", effort: "high" });
 
   // A named effort is the developer's word over the stored one, not beside it.

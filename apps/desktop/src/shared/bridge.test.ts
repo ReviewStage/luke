@@ -16,6 +16,7 @@ test("act bridge entries reject legacy and malformed outcomes", () => {
     assert.equal(guard({ status: "rejected", reason: "Not now." }), true);
     assert.equal(guard({ status: "unsupported", reason: "Not here." }), true);
     assert.equal(guard({ status: "accepted", reason: "contradiction" }), false);
+    assert.equal(guard({ status: "accepted", setting: "Captions" }), false);
     assert.equal(guard({ status: "rejected" }), false);
     assert.equal(guard({ status: "refused" }), false);
     assert.equal(guard({ ok: false }), false);

@@ -8,7 +8,9 @@ test("the act result guard accepts exactly the canonical status shapes", () => {
   assert.equal(isActResult({ status: "unsupported", reason: "Not here." }), true);
 
   assert.equal(isActResult({ status: "accepted", reason: "contradiction" }), false);
+  assert.equal(isActResult({ status: "accepted", setting: "Captions" }), false);
   assert.equal(isActResult({ status: "rejected" }), false);
+  assert.equal(isActResult({ status: "rejected", reason: "Not now.", extra: true }), false);
   assert.equal(isActResult({ status: "unsupported" }), false);
   assert.equal(isActResult({ status: "sent" }), false);
   assert.equal(isActResult({ ok: false }), false);

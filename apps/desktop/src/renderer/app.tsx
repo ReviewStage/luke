@@ -1879,7 +1879,7 @@ export function App(): React.JSX.Element {
             // must be drawn whether or not anyone was shown it moving.
             drawErrandHold(hold);
           }
-          return { status: ACT_RESULT_STATUS.ACCEPTED };
+          return outcome;
         },
         [APP_TOOL_KIND.FEEDBACK]: async (action) => {
           // The main process expands the window and sends the composer's
