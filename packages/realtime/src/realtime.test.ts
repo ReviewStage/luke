@@ -254,8 +254,9 @@ test("the standing instructions make Luke the coding agents' engineering manager
 
   assert.match(instructions, /engineering manager for the developer's coding agents/i);
   assert.match(instructions, /speak like a trusted colleague/i);
-  assert.match(instructions, /plain everyday language, contractions/i);
-  assert.match(instructions, /shortest useful answer to exactly what the user asked/i);
+  assert.match(instructions, /match the user's tone/i);
+  assert.match(instructions, /plain everyday language and contractions/i);
+  assert.match(instructions, /shortest useful answer to exactly what they asked/i);
   assert.match(instructions, /default to one short sentence/i);
   assert.match(instructions, /treat the roster as private reference, not a report/i);
   assert.match(instructions, /name each piece of work in no more than six words/i);
