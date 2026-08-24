@@ -164,8 +164,16 @@ export class SessionNoticeTracker {
    * `now` anchors the repeat window; sessions absent from the pass are
    * forgotten, so a session that returns later is seeded again rather than
    * diffed against a stale reading.
+   *
+   * TEMPORARY (launch-test harness, remove before merge): `trace` is told the
+   * fate of every status edge — which gate dropped it, or that it produced —
+   * so a launch that announces nothing can say why each edge died.
    */
-  notices(sessions: readonly Session[], now: number): readonly SessionNotice[] {
+  notices(
+    sessions: readonly Session[],
+    now: number,
+    trace?: (line: string) => void,
+  ): readonly SessionNotice[] {
     const produced: SessionNotice[] = [];
     const next = new Map<string, Map<string, TrackedSessionState>>();
 
@@ -182,24 +190,44 @@ export class SessionNoticeTracker {
       }
       provider.set(session.providerSessionId, state);
 
+      const traceEdge = (fate: string) =>
+        trace?.(
+          `edge "${session.title}" (${session.providerId}) ${previous?.status ?? "unseen"}->${session.status} age=${Math.round((now - session.observedAt) / 1000)}s: ${fate}`,
+        );
+
       // A session the developer is speaking with announces nothing: its turn
       // boundaries are the rhythm of a conversation being heard first-hand,
       // and a voice reading them out would talk over the very exchange it is
       // reporting. The edge is still tracked, so the conversation ending never
       // replays what happened inside it — only a fresh edge after it speaks.
-      if (session.realtimeVoiceLive === true) continue;
+      if (session.realtimeVoiceLive === true) {
+        if (previous && previous.status !== session.status) traceEdge("voice-live");
+        continue;
+      }
       // First sight seeds silently; an unchanged status is not an edge.
-      if (!previous || previous.status === session.status) continue;
-      if (session.completionCause === SESSION_COMPLETION_CAUSE.SESSION_CLOSED) continue;
+      if (!previous) continue;
+      if (previous.status === session.status) continue;
+      if (session.completionCause === SESSION_COMPLETION_CAUSE.SESSION_CLOSED) {
+        traceEdge("session-closed cause");
+        continue;
+      }
       const status = noticeStatus(session.status);
-      if (!status) continue;
+      if (!status) {
+        traceEdge("not a notice status");
+        continue;
+      }
       // The edge is still tracked above — it just is not news any more.
-      if (now - session.observedAt > SESSION_NOTICE_FRESH_AGE_MS) continue;
+      if (now - session.observedAt > SESSION_NOTICE_FRESH_AGE_MS) {
+        traceEdge("stale");
+        continue;
+      }
       const lastNoticed = state.noticedAt.get(status);
       if (lastNoticed !== undefined && now - lastNoticed < SESSION_NOTICE_REPEAT_WINDOW_MS) {
+        traceEdge("repeat window");
         continue;
       }
       state.noticedAt.set(status, now);
+      traceEdge("produced");
       produced.push(sessionNotice(session, previous.status));
     }
 

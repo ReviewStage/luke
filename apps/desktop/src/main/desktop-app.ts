@@ -1485,6 +1485,7 @@ async function announceSessionNotices(sessions: readonly Session[]): Promise<voi
   const notices = sessionNoticeTracker.notices(
     sessions.filter((session) => session.realtimeVoice !== true),
     now,
+    announceTraceArmed ? traceAnnounce : undefined,
   );
   if (notices.length === 0) return;
   traceAnnounce(
@@ -1895,7 +1896,14 @@ function startSessionObservation(): void {
   }
   traceAnnounce("session observation started");
   unsubscribeSessions = sessionRegistry.subscribe((snapshot) => {
-    traceAnnounce(`registry commit: ${snapshot.sessions.length} sessions`);
+    if (announceTraceArmed) {
+      const byStatus = new Map<string, number>();
+      for (const session of snapshot.sessions) {
+        byStatus.set(session.status, (byStatus.get(session.status) ?? 0) + 1);
+      }
+      const breakdown = [...byStatus].map(([status, count]) => `${status}=${count}`).join(" ");
+      traceAnnounce(`registry commit: ${snapshot.sessions.length} sessions (${breakdown})`);
+    }
     broadcastRelevantSessions();
     // The registry only speaks on an effective change, which is exactly when
     // a status edge can exist to announce. The notices read the unfiltered
