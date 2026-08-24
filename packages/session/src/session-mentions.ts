@@ -36,7 +36,7 @@ export type SessionMentionKind = (typeof SESSION_MENTION_KIND)[keyof typeof SESS
  * What a row has to offer to be named by a reply: its identity, the two names
  * a mention may be made by, and when it was last seen — the tiebreak when one
  * workspace name fronts several chats. Stated as its own shape rather than as
- * `NormalizedSession`, which every observed row already satisfies, because a
+ * `Session`, which every observed row already satisfies, because a
  * row the surface draws without having observed it — the fixture roster an
  * evidence run photographs — has to earn its chips by the same matching, and
  * these are the only fields the matching reads.

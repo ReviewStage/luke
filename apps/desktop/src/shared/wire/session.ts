@@ -4,7 +4,7 @@ import type { ObservedAccountCalendars } from "@sidecar/calendar/observation";
 import type { FixtureSnapshot } from "@sidecar/fixtures";
 import type { TrackedIssue } from "@sidecar/issues";
 import type { IssueToolAction } from "@sidecar/realtime";
-import type { NormalizedSession, ObservedWorkspaceProject } from "@sidecar/session";
+import type { ObservedWorkspaceProject, Session, SessionAttentionEntry } from "@sidecar/session";
 import type { Rectangle, ResolvedNotchGeometry, WindowMode } from "@sidecar/surface";
 import type { MicrophoneStatus, OutputAudioState } from "./audio";
 import type { AppSettings } from "./settings";
@@ -164,7 +164,7 @@ export interface AppBootstrap {
   display: DisplayDiagnostic;
   /** Where the app stands against the latest release, as last learned. */
   update: UpdateSnapshot;
-  sessions: readonly NormalizedSession[];
+  sessionRoster: SessionRosterPayload;
   /**
    * Whether `sessions` reflects a roster Luke has actually read. False only
    * while a live run's first observation pass is still on its way, so an
@@ -190,6 +190,12 @@ export interface AppBootstrap {
   /** Whether, where, and for whom this run may record its own surface. */
   sessionReplay: SessionReplayBootstrap;
   settings: AppSettings;
+}
+
+/** The complete session state one observation revision publishes to a desktop surface. */
+export interface SessionRosterPayload {
+  sessions: readonly Session[];
+  attention: readonly SessionAttentionEntry[];
 }
 
 /** One validated issue act on its way to the main process. */

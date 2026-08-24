@@ -52,11 +52,11 @@ import {
   matchesFilterSelection,
   maximumSessionMessageLength,
   maximumWorkspaceNameLength,
-  type NormalizedSession,
   type ObservedWorkspaceProject,
   PROVIDER_ID_LIST,
   SESSION_APPLICATION_ID,
   SESSION_LOCATION,
+  type Session,
   type SessionApplicationId,
   type SessionControl,
   type SessionIdentity,
@@ -247,7 +247,7 @@ export type AppToolAction =
 export type CarriedAppAction = Exclude<AppToolAction, { kind: "refused" }>;
 
 export interface SessionToolContext {
-  sessions: readonly NormalizedSession[];
+  sessions: readonly Session[];
   workspaceProjects: readonly ObservedWorkspaceProject[];
   agentModels: (providerId: string) => readonly WorkspaceAgentModels[];
   /**
@@ -267,7 +267,7 @@ export interface IssueToolContext {
 
 export interface AppToolContext {
   guide: AppGuideSnapshot;
-  sessions: readonly NormalizedSession[];
+  sessions: readonly Session[];
 }
 
 type JsonSchemaStringProperty = {
@@ -390,8 +390,8 @@ function parseToolArguments(
 
 function sessionFromArguments(
   parsed: WireRecord,
-  sessions: readonly NormalizedSession[],
-): { session: NormalizedSession; identity: SessionIdentity } | { kind: "refused"; reason: string } {
+  sessions: readonly Session[],
+): { session: Session; identity: SessionIdentity } | { kind: "refused"; reason: string } {
   const providerId = textArgument(parsed, "provider_id");
   const providerSessionId = textArgument(parsed, "provider_session_id");
   const session = sessions.find(
@@ -898,7 +898,7 @@ function appSettingValue(setting: AppGuideSetting, value: UnparsedWireValue): st
  * manager's scope id — so a spoken ask reaches exactly the rows the matching
  * chip would keep.
  */
-function sessionAnswersFilter(session: NormalizedSession, filter: string): boolean {
+function sessionAnswersFilter(session: Session, filter: string): boolean {
   if (filter === SESSION_LOCATION.LOCAL || filter === SESSION_LOCATION.CLOUD) {
     return session.location === filter;
   }
@@ -923,7 +923,7 @@ function sessionAnswersFilter(session: NormalizedSession, filter: string): boole
  */
 function panelFiltersAction(
   filters: readonly string[],
-  sessions: readonly NormalizedSession[],
+  sessions: readonly Session[],
 ): { filters: readonly string[] } | { reason: string } {
   // The enum on the tool's own schema already binds a compliant model to
   // these tokens; this is the backstop for a call composed past it.
@@ -1602,7 +1602,7 @@ export function realtimeToolDefinitions(): readonly RealtimeToolWireDefinition[]
  */
 export function sessionToolAction(
   call: RealtimeFunctionCall,
-  sessions: readonly NormalizedSession[],
+  sessions: readonly Session[],
   workspaceProjects: readonly ObservedWorkspaceProject[] = [],
   // The models a creation ask may name, per provider — the app's own
   // build-documented tables, handed in so this stays brand-neutral. The
@@ -1662,7 +1662,7 @@ export function issueToolAction(
 export function appToolAction(
   call: RealtimeFunctionCall,
   guide: AppGuideSnapshot,
-  sessions: readonly NormalizedSession[],
+  sessions: readonly Session[],
 ): AppToolAction {
   const parsed = parseToolArguments(call);
   if (!parsed.ok) return { kind: "refused", reason: parsed.reason };

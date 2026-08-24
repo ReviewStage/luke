@@ -14,7 +14,7 @@
  * answered with — and the record lives in memory alone, dying with the app.
  */
 
-import type { NormalizedSession, SessionApplicationId, SessionIdentity } from "@sidecar/session";
+import type { Session, SessionApplicationId, SessionIdentity } from "@sidecar/session";
 import { type AttentionSpeech, announcementSummaryText } from "./realtime-protocol.js";
 import { type CarriedSessionAction, dispatchByKind, SESSION_TOOL_KIND } from "./realtime-tools.js";
 
@@ -132,7 +132,7 @@ export function announcementConversationEntry(
  * already travels on the roster. The identity beside the line is what a tool
  * call resolves; the title is only so the line reads as a sentence.
  */
-function sessionName(identity: SessionIdentity, sessions: readonly NormalizedSession[]): string {
+function sessionName(identity: SessionIdentity, sessions: readonly Session[]): string {
   const session = sessions.find(
     (candidate) =>
       candidate.providerId === identity.providerId &&
@@ -150,7 +150,7 @@ function sessionName(identity: SessionIdentity, sessions: readonly NormalizedSes
 function applicationName(
   identity: SessionIdentity,
   applicationId: SessionApplicationId,
-  sessions: readonly NormalizedSession[],
+  sessions: readonly Session[],
 ): string {
   const session = sessions.find(
     (candidate) =>
@@ -172,7 +172,7 @@ function applicationName(
  */
 export function sessionActConversationEntry(
   action: CarriedSessionAction,
-  sessions: readonly NormalizedSession[],
+  sessions: readonly Session[],
 ): ConversationEntry {
   const name = "identity" in action ? sessionName(action.identity, sessions) : "a session";
   const describe = {
@@ -224,7 +224,7 @@ const CONVERSATION_ENTRY_LEAD = {
  */
 export function conversationHistoryText(
   entries: readonly ConversationEntry[],
-  sessions: readonly NormalizedSession[],
+  sessions: readonly Session[],
 ): string | undefined {
   if (entries.length === 0) return undefined;
   return [

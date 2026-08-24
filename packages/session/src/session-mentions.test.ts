@@ -3,11 +3,11 @@ import test from "node:test";
 import {
   MAXIMUM_MENTIONED_SESSIONS,
   mentionedSessions,
-  type NormalizedSession,
   normalizeSession,
   type ProviderSessionObservation,
   SESSION_MENTION_KIND,
   SESSION_STATUS,
+  type Session,
   type SessionProvider,
 } from "@sidecar/session";
 
@@ -22,7 +22,7 @@ function session(
     observedAt?: number;
     workspace?: { providerWorkspaceId: string; name?: string };
   } = {},
-): NormalizedSession {
+): Session {
   const observation: ProviderSessionObservation = {
     providerSessionId,
     title,

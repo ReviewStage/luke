@@ -26,13 +26,13 @@ import {
   type InMemorySessionRegistry,
   isListedWorkspaceAgentModel,
   isProviderId,
-  type NormalizedSession,
   PROVIDER_ACT_RESULT_STATUS,
   type ProviderActResult,
   type ProviderControlResult,
   type ProviderMessageResult,
   type ProviderWorkspaceResult,
   SESSION_LOCATION,
+  type Session,
   type SessionIdentity,
   type SessionProviderAdapter,
   sessionMessageText,
@@ -146,7 +146,7 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
   async function performSessionAct<Result extends ProviderActResult>(
     identity: SessionIdentity,
     counted: ProductSessionAct,
-    act: (adapter: SessionProviderAdapter, session: NormalizedSession) => Promise<Result>,
+    act: (adapter: SessionProviderAdapter, session: Session) => Promise<Result>,
   ): Promise<Result | { status: typeof PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED }> {
     const session = sessionRegistry.get(identity);
     if (!session) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };

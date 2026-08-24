@@ -11,11 +11,11 @@ import {
 } from "@sidecar/realtime";
 import {
   ATTENTION_DISPOSITION,
-  type NormalizedSession,
   normalizeSession,
   type ProviderSessionObservation,
   SESSION_MENTION_KIND,
   SESSION_STATUS,
+  type Session,
 } from "@sidecar/session";
 import {
   activeVoiceStream,
@@ -330,7 +330,7 @@ function rosterSession(
   providerSessionId: string,
   title: string,
   workspace?: { providerWorkspaceId: string; name?: string },
-): NormalizedSession {
+): Session {
   const session: ProviderSessionObservation = {
     providerSessionId,
     title,

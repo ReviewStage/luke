@@ -2,9 +2,9 @@ import type { SessionNoticeAsk } from "@sidecar/attention";
 import { type AppGuideSnapshot, appGuideContextText } from "@sidecar/guide";
 import type { TrackedIssue } from "@sidecar/issues";
 import {
-  type NormalizedSession,
   type ObservedWorkspaceProject,
   SESSION_LOCATION,
+  type Session,
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceTaskSupport,
   workspaceProjectSelectionId,
@@ -39,14 +39,14 @@ interface SessionRecency {
   readonly mostRecentOpenableForProvider: boolean;
 }
 
-function sessionCanOpen(session: NormalizedSession): boolean {
+function sessionCanOpen(session: Session): boolean {
   return (
     session.detail.link !== undefined ||
     session.applications.some((application) => application.link !== undefined)
   );
 }
 
-function sessionCapabilityText(session: NormalizedSession, recency: SessionRecency): string {
+function sessionCapabilityText(session: Session, recency: SessionRecency): string {
   const openableApplications = session.applications.filter(
     (application) => application.link !== undefined,
   );
@@ -81,10 +81,10 @@ function sessionCapabilityText(session: NormalizedSession, recency: SessionRecen
 }
 
 function firstSessionByProvider(
-  sessions: readonly NormalizedSession[],
-  predicate: (session: NormalizedSession) => boolean = () => true,
-): ReadonlyMap<string, NormalizedSession> {
-  const newest = new Map<string, NormalizedSession>();
+  sessions: readonly Session[],
+  predicate: (session: Session) => boolean = () => true,
+): ReadonlyMap<string, Session> {
+  const newest = new Map<string, Session>();
   for (const session of sessions) {
     if (!predicate(session)) continue;
     const current = newest.get(session.providerId);
@@ -94,12 +94,10 @@ function firstSessionByProvider(
   return newest;
 }
 
-function prioritizedContextSessions(
-  sessions: readonly NormalizedSession[],
-): readonly NormalizedSession[] {
+function prioritizedContextSessions(sessions: readonly Session[]): readonly Session[] {
   const mostRecent = firstSessionByProvider(sessions);
   const mostRecentOpenable = firstSessionByProvider(sessions, sessionCanOpen);
-  const prioritized = new Set<NormalizedSession>([
+  const prioritized = new Set<Session>([
     ...mostRecentOpenable.values(),
     ...mostRecent.values(),
     ...sessions,
@@ -133,7 +131,7 @@ function sessionAgeText(observedAt: number, now: number): string {
  * short labelled phrases so Luke can say what a session is doing or stuck on
  * rather than only that it works or waits.
  */
-function sessionAboutText(session: NormalizedSession): readonly string[] {
+function sessionAboutText(session: Session): readonly string[] {
   return [
     ...(session.detail.branch
       ? [`on branch ${session.detail.branch}`]
@@ -166,7 +164,7 @@ function noticeAsksByIdentity(
  * the hosting provider beside it where the two differ — "Claude Code in
  * Conductor" — so the spoken answer matches the mark the row leads with.
  */
-function sessionSpokenName(session: NormalizedSession): string {
+function sessionSpokenName(session: Session): string {
   return session.agent
     ? `${session.agent.displayName} in ${session.provider.displayName}`
     : session.provider.displayName;
@@ -192,7 +190,7 @@ function sessionSpokenName(session: NormalizedSession): string {
  * test snapshots.
  */
 export function sessionContextText(
-  sessions: readonly NormalizedSession[],
+  sessions: readonly Session[],
   noticeAsks: readonly SessionNoticeAsk[] = [],
   now: number = Date.now(),
 ): string {
@@ -352,7 +350,7 @@ function labeledContextEvent(label: string, text: string, itemId: string): WireR
  * question about live work could not be answered from real data.
  */
 export function sessionContextEvents(
-  sessions: readonly NormalizedSession[],
+  sessions: readonly Session[],
   itemId: string,
   noticeAsks: readonly SessionNoticeAsk[] = [],
   now: number = Date.now(),

@@ -49,15 +49,16 @@ import {
   InMemorySessionRegistry,
   isProviderId,
   isWorkspaceProviderId,
-  type NormalizedSession,
   normalizeObservedWorkspaceProjects,
   type ObservedWorkspaceProject,
   PROVIDER_ID_LIST,
   rosterRelevantSessions,
+  type Session,
   type SessionNotice,
   SessionNoticeHold,
   SessionNoticeTracker,
   type SessionProviderAdapter,
+  type SessionRegistrySnapshot,
   staleWorkspaceProjectDefaults,
   type WorkspaceAgentSelection,
   workspaceProjectSelectionId,
@@ -100,6 +101,7 @@ import {
   type ObservedAccountCalendars,
   type OutputAudioState,
   type SessionReplayBootstrap,
+  type SessionRosterPayload,
   SUPERSET_SIGN_IN_STAGE,
   SUPERSET_WORKSPACE_PROVIDER_ID,
 } from "#shared/contracts";
@@ -953,10 +955,10 @@ function registerIpc(): void {
         // Bootstrapped through the same relevance gate every broadcast passes:
         // a panel that opens late must not learn of rows the roster has already
         // let go and then hold them past the next broadcast's dedupe.
-        sessions:
+        sessionRoster:
           runMode.observesProviders && accountCapabilitiesActive()
-            ? rosterRelevantSessions(sessionRegistry.snapshot().sessions, Date.now())
-            : [],
+            ? relevantSessionRoster(sessionRegistry.snapshot(), Date.now())
+            : { sessions: [], attention: [] },
         // A live run's roster has settled once it has been broadcast at all —
         // the first pass publishes even an empty reading — so before that, the
         // empty list above means "not looked yet" and the face must not sleep
@@ -1441,7 +1443,7 @@ async function reviewSessionAttention(generation: number): Promise<void> {
  * speak-only call when no conversation is up, so being heard needs no
  * talk-key press first.
  */
-async function announceSessionNotices(sessions: readonly NormalizedSession[]): Promise<void> {
+async function announceSessionNotices(sessions: readonly Session[]): Promise<void> {
   // Asks about sessions no longer reported have nothing left to be about, and
   // this commit is the earliest that can be known. The rows marking asks are
   // told only when one was actually let go.
@@ -1506,7 +1508,7 @@ function countSpokenAnnouncements(notices: readonly SessionNotice[]): void {
  * because Superset's own `workspaces open` follow-through usually has the
  * workspace on screen already before this open fires.
  */
-function openCreatedWorkspaces(sessions: readonly NormalizedSession[]): void {
+function openCreatedWorkspaces(sessions: readonly Session[]): void {
   for (const created of createdWorkspaceOpens.claim(sessions, Date.now())) {
     const link = created.detail.link;
     if (!link) continue;
@@ -1811,6 +1813,25 @@ function broadcastNoticeAsks(): void {
   panels.broadcast(channels.onNoticeAsksChanged, attentionRequests.list());
 }
 
+function relevantSessionRoster(
+  snapshot: SessionRegistrySnapshot,
+  now: number,
+): SessionRosterPayload {
+  const sessions = rosterRelevantSessions(snapshot.sessions, now);
+  const identities = new Map<string, Set<string>>();
+  for (const session of sessions) {
+    const providerSessions = identities.get(session.providerId) ?? new Set<string>();
+    providerSessions.add(session.providerSessionId);
+    identities.set(session.providerId, providerSessions);
+  }
+  return {
+    sessions,
+    attention: snapshot.attention.filter((entry) =>
+      identities.get(entry.providerId)?.has(entry.providerSessionId),
+    ),
+  } satisfies SessionRosterPayload;
+}
+
 /**
  * Hands the renderer the sessions still worth a row. The registry keeps every
  * observation — announcements and attention read it whole — but the panel and
@@ -1820,8 +1841,8 @@ function broadcastNoticeAsks(): void {
  */
 function broadcastRelevantSessions(): void {
   const snapshot = sessionRegistry.snapshot();
-  const roster = rosterRelevantSessions(snapshot.sessions, Date.now());
-  const rosterIds = roster
+  const roster = relevantSessionRoster(snapshot, Date.now());
+  const rosterIds = roster.sessions
     .map((session) => `${session.providerId}\0${session.providerSessionId}`)
     .join("\0\0");
   if (snapshot.revision === lastRosterRevision && rosterIds === lastRosterIds) return;
@@ -1856,7 +1877,7 @@ function startSessionObservation(): void {
  * the shared ladder rather than a number, because "137 sessions" identifies a
  * machine where "a crowd" does not.
  */
-function countObservedSessions(sessions: readonly NormalizedSession[]): void {
+function countObservedSessions(sessions: readonly Session[]): void {
   const counts = new Map<string, number>();
   for (const session of sessions) {
     counts.set(session.providerId, (counts.get(session.providerId) ?? 0) + 1);
@@ -1877,7 +1898,7 @@ function stopSessionObservation(): void {
   for (const { adapter } of orderedRegistrations) {
     sessionRegistry.replaceProvider(adapter.provider, []);
   }
-  panels.broadcast(channels.onSessionsChanged, []);
+  panels.broadcast(channels.onSessionsChanged, { sessions: [], attention: [] });
   panels.broadcast(channels.onWorkspaceProjectsChanged, []);
   lastWorkspaceProjects = undefined;
 }

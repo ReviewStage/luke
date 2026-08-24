@@ -1,4 +1,4 @@
-import type { NormalizedSession, SessionStatus } from "./session.js";
+import type { Session, SessionStatus } from "./session.js";
 import { SESSION_COMPLETION_CAUSE, SESSION_STATUS } from "./session.js";
 
 /**
@@ -93,7 +93,7 @@ export interface SessionNotice {
  * is: a query string has characters after the mark, and a trailing ask
  * does not.
  */
-function waitingHoldsForDeveloper(session: NormalizedSession): boolean {
+function waitingHoldsForDeveloper(session: Session): boolean {
   if (session.status !== SESSION_STATUS.WAITING) return false;
   if (session.holdingForDeveloper === true) return true;
   if (!session.recap) return false;
@@ -112,7 +112,7 @@ function noticeStatus(status: SessionStatus): SessionNoticeStatus | undefined {
   return Object.values(SESSION_NOTICE_STATUS).find((candidate) => candidate === status);
 }
 
-function sessionNotice(session: NormalizedSession, previousStatus: SessionStatus): SessionNotice {
+function sessionNotice(session: Session, previousStatus: SessionStatus): SessionNotice {
   const status = noticeStatus(session.status);
   if (!status) throw new Error(`Not a notice status: ${session.status}`);
   const notice: SessionNotice = {
@@ -161,7 +161,7 @@ export class SessionNoticeTracker {
    * forgotten, so a session that returns later is seeded again rather than
    * diffed against a stale reading.
    */
-  notices(sessions: readonly NormalizedSession[], now: number): readonly SessionNotice[] {
+  notices(sessions: readonly Session[], now: number): readonly SessionNotice[] {
     const produced: SessionNotice[] = [];
     const next = new Map<string, Map<string, TrackedSessionState>>();
 

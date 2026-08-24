@@ -20,10 +20,10 @@ import {
 } from "@sidecar/realtime";
 import {
   ATTENTION_DISPOSITION,
-  type NormalizedSession,
   normalizeSession,
   type ProviderSessionObservation,
   SESSION_STATUS,
+  type Session,
   WORKSPACE_TASK_SUPPORT,
 } from "@sidecar/session";
 import { isRecord } from "@sidecar/wire";
@@ -147,7 +147,7 @@ interface HeldTimer {
 function observedSession(
   providerSessionId: string,
   overrides: Partial<ProviderSessionObservation> = {},
-): NormalizedSession {
+): Session {
   return normalizeSession(
     { id: "claude-code", displayName: "Claude Code" },
     {

@@ -21,9 +21,9 @@ import {
 } from "@sidecar/realtime";
 import {
   mentionedSessions,
-  type NormalizedSession,
   type ObservedWorkspaceProject,
   SESSION_MENTION_KIND,
+  type Session,
   type SessionApplicationId,
   type SessionIdentity,
   type SessionMention,
@@ -308,7 +308,7 @@ export function replyMentions(input: {
   fixtureSpeaking: boolean;
   about: SessionIdentity | undefined;
   captions: readonly string[] | undefined;
-  sessions: readonly NormalizedSession[];
+  sessions: readonly Session[];
 }): readonly SessionMention[] {
   if (input.about) return [{ ...input.about, kind: SESSION_MENTION_KIND.SESSION }];
   const spoken = input.fixtureSpeaking ? FIXTURE_SPEAKING_CAPTION : input.captions?.join("\n");
@@ -352,7 +352,7 @@ export interface VoiceConversationOptions {
    * the user's exact choice.
    */
   preferBuiltInMicrophone: boolean;
-  sessions: readonly NormalizedSession[];
+  sessions: readonly Session[];
   /**
    * The standing asks riding the roster they annotate, so a conversation can
    * say — and withdraw — what Luke is already listening for.
