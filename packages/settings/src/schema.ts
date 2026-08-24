@@ -781,7 +781,10 @@ export const APP_SETTING_SCHEMA = {
         choices: [
           ASK_EACH_TIME_CHOICE,
           workspaceProviderName(PROVIDER_ID.CODEX),
+          // Both Conductors, or the guide would read the stored cloud
+          // default's plain "Conductor" as the only Conductor there is.
           workspaceProviderName(PROVIDER_ID.CONDUCTOR),
+          workspaceProviderName(CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID),
           workspaceProviderName(PROVIDER_ID.CURSOR),
           "Superset",
         ],

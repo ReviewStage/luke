@@ -66,6 +66,7 @@ import {
   type WorkspaceAgentModels,
   type WorkspaceAgentSelection,
   workspaceNameText,
+  workspaceProjectSelectionId,
 } from "@sidecar/session";
 import {
   isRecord,
@@ -249,6 +250,15 @@ export interface SessionToolContext {
   sessions: readonly NormalizedSession[];
   workspaceProjects: readonly ObservedWorkspaceProject[];
   agentModels: (providerId: string) => readonly WorkspaceAgentModels[];
+  /**
+   * The developer's saved tie-breaks for a creation ask, the same ones the
+   * projects context narrates: the provider a nameless ask goes to, and each
+   * provider's chosen project. Both only ever narrow within the listed
+   * projects — a default can settle an ambiguous ask, never widen where one
+   * can land or override a provider or project the ask actually named.
+   */
+  defaultProviderId?: string;
+  defaultProjectIds?: Readonly<Partial<Record<string, string>>>;
 }
 
 export interface IssueToolContext {
@@ -594,12 +604,38 @@ function validateCreateWorkspace(
   const providerId = textArgument(parsed, "provider_id");
   const projectId = textArgument(parsed, "project_id");
   const targetId = textArgument(parsed, "target_id");
-  const matchingProjects = context.workspaceProjects.filter(
+  let matchingProjects = context.workspaceProjects.filter(
     (candidate) =>
       (!providerId || candidate.providerId === providerId) &&
       (!projectId || candidate.providerProjectId === projectId) &&
       (!targetId || candidate.providerTargetId === targetId),
   );
+  // The saved defaults settle only what the ask left unnamed: no provider
+  // named sends a still-ambiguous ask to the default provider while it is
+  // offering, and no project named sends it on to that provider's chosen
+  // project. Neither step can leave the listed set, and an ask that named
+  // its own provider or project is never overridden.
+  if (!providerId && context.defaultProviderId && matchingProjects.length > 1) {
+    const offeredByDefault = matchingProjects.filter(
+      (candidate) => candidate.providerId === context.defaultProviderId,
+    );
+    if (offeredByDefault.length > 0) matchingProjects = offeredByDefault;
+  }
+  // A provider's chosen project settles which project, never which provider:
+  // while candidates still span providers, one provider's saved project must
+  // not quietly decide an ask the developer left open between them.
+  const [firstMatch] = matchingProjects;
+  const oneProviderMatches =
+    firstMatch !== undefined &&
+    matchingProjects.every((candidate) => candidate.providerId === firstMatch.providerId);
+  if (!projectId && oneProviderMatches && matchingProjects.length > 1) {
+    const chosenProjects = matchingProjects.filter(
+      (candidate) =>
+        context.defaultProjectIds?.[candidate.providerId] ===
+        workspaceProjectSelectionId(candidate),
+    );
+    if (chosenProjects.length === 1) matchingProjects = chosenProjects;
+  }
   if (matchingProjects.length !== 1) {
     return {
       kind: "refused",
@@ -1199,11 +1235,11 @@ export const REALTIME_TOOLS = {
         properties: {
           provider_id: {
             type: "string",
-            description: "The provider ID.",
+            description: "The provider ID; omit it to create in the default provider.",
           },
           project_id: {
             type: "string",
-            description: "The project ID.",
+            description: "The project ID; omit it to create in that provider's default project.",
           },
           target_id: {
             type: "string",
@@ -1573,6 +1609,10 @@ export function sessionToolAction(
   // default offers none, so an ask that names a model is refused rather than
   // forwarded unchecked.
   agentModels: (providerId: string) => readonly WorkspaceAgentModels[] = () => [],
+  // The developer's saved creation tie-breaks, riding in beside the projects
+  // they narrow — see {@link SessionToolContext}.
+  defaultProviderId?: string,
+  defaultProjectIds?: Readonly<Partial<Record<string, string>>>,
 ): SessionToolAction {
   const parsed = parseToolArguments(call);
   if (!parsed.ok) return { kind: "refused", reason: parsed.reason };
@@ -1580,7 +1620,13 @@ export function sessionToolAction(
   if (!tool || tool.family !== REALTIME_TOOL_FAMILY.SESSION) {
     return { kind: "refused", reason: "No such tool exists." };
   }
-  return tool.validate(parsed.value, { sessions, workspaceProjects, agentModels });
+  return tool.validate(parsed.value, {
+    sessions,
+    workspaceProjects,
+    agentModels,
+    defaultProviderId,
+    defaultProjectIds,
+  });
 }
 
 /**

@@ -447,6 +447,15 @@ export class RealtimeVoiceSession {
    */
   #workspaceProjects: readonly ObservedWorkspaceProject[] = [];
   /**
+   * The developer's saved creation tie-breaks, as last reported beside the
+   * projects — kept because the validator applies them to a creation ask that
+   * names less than a full identity, the same defaulting the context text
+   * narrates. Held here or the narrated default and the validated one could
+   * drift apart.
+   */
+  #defaultWorkspaceProviderId: string | undefined;
+  #workspaceProjectDefaultIds: Readonly<Partial<Record<string, string>>> | undefined;
+  /**
    * The issue roster, held to the same rule — and `undefined` while no
    * tracker is connected, so an issue call then has nothing to be validated
    * against and is refused as such.
@@ -1993,6 +2002,8 @@ export class RealtimeVoiceSession {
     defaultProjectIds?: Readonly<Partial<Record<string, string>>>,
   ): void {
     this.#workspaceProjects = projects;
+    this.#defaultWorkspaceProviderId = defaultProviderId;
+    this.#workspaceProjectDefaultIds = defaultProjectIds;
     this.#rememberContext(
       CONTEXT_ITEM_KIND.WORKSPACE_PROJECTS,
       workspaceProjectContextText(projects, defaultProviderId, defaultProjectIds),
@@ -2468,6 +2479,8 @@ export class RealtimeVoiceSession {
       this.#sessions,
       this.#workspaceProjects,
       workspaceAgentModels,
+      this.#defaultWorkspaceProviderId,
+      this.#workspaceProjectDefaultIds,
     );
     if (action.kind === "refused") return { status: "refused", reason: action.reason };
     if (!this.#options.carryAction) {
