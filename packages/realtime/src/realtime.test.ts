@@ -252,8 +252,12 @@ test("the standing instructions make Luke the coding agents' engineering manager
   const instructions = realtimeInstructions();
 
   assert.match(instructions, /engineering manager for the developer's coding agents/i);
-  assert.match(instructions, /stay concise but conversational/i);
+  assert.match(instructions, /be direct and conversational/i);
   assert.match(instructions, /match the user's tone/i);
+  assert.match(instructions, /answer their exact question, then stop/i);
+  assert.match(instructions, /never add unrelated agent statuses/i);
+  assert.match(instructions, /refer naturally to the work/i);
+  assert.match(instructions, /progress as a one-sentence bottom line/i);
   assert.match(instructions, /use greetings and acknowledgments when they fit/i);
   assert.match(instructions, /start with the answer or the tool call, announcing neither/i);
   assert.match(instructions, /briefly and naturally confirm the specific result/i);

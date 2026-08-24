@@ -17,9 +17,8 @@ export type SessionNoticeStatus =
   (typeof SESSION_NOTICE_STATUS)[keyof typeof SESSION_NOTICE_STATUS];
 
 /**
- * When a pass produces more notices than the cap, the ones most in need of a
- * hand survive the trim: a stopped session over one with a question, and a
- * question over a finish that will keep.
+ * When a pass produces more notices than the cap, stopped sessions survive
+ * first, then waiting turns, then final completions that will keep.
  */
 const NOTICE_PRIORITY: readonly SessionNoticeStatus[] = [
   SESSION_NOTICE_STATUS.ERROR,
@@ -69,10 +68,12 @@ export interface SessionNotice {
   workspace?: string;
   status: SessionNoticeStatus;
   previousStatus: SessionStatus;
+  /** Whether this waiting turn cannot continue without the developer. */
+  holdingForDeveloper?: boolean;
   /**
    * Where the settled turn left the work — provider-designated, or the agent's
-   * own parting words. For a session that started waiting this is usually the
-   * question it is waiting on, which is what makes the notice worth hearing.
+   * own parting words. For a waiting session this may be the question holding
+   * it, or simply the result of the turn that finished.
    */
   recap?: string;
   /** Why the session stopped, when its provider said. */
@@ -85,10 +86,10 @@ export interface SessionNotice {
 }
 
 /**
- * A waiting banner is only worth hearing when the session cannot continue
- * without the developer. A provider that saw a permission, an approval, or
- * an open question says so on the observation; a recap that itself asks is
- * the same evidence when the adapter could not tell. A query string inside
+ * Distinguishes a turn that needs the developer from one that merely finished.
+ * A provider that saw a permission, an approval, or an open question says so
+ * on the observation; a recap that itself asks is the same evidence when the
+ * adapter could not tell. A query string inside
  * a URL is not a question. A `?` that ends a sentence after a link still
  * is: a query string has characters after the mark, and a trailing ask
  * does not.
@@ -126,6 +127,9 @@ function sessionNotice(session: NormalizedSession, previousStatus: SessionStatus
     observedAt: session.observedAt,
   };
   if (session.workspace?.name) notice.workspace = session.workspace.name;
+  if (status === SESSION_NOTICE_STATUS.WAITING) {
+    notice.holdingForDeveloper = waitingHoldsForDeveloper(session);
+  }
   if (session.recap) notice.recap = session.recap;
   if (session.detail.error) notice.error = session.detail.error;
   if (session.detail.repository) notice.repository = session.detail.repository;
@@ -140,9 +144,9 @@ function sessionNotice(session: NormalizedSession, previousStatus: SessionStatus
  * A watched edge speaks only while its event is fresh — the status's own
  * timestamp within `SESSION_NOTICE_FRESH_AGE_MS` of now — so a wake from
  * sleep or a provider back from an outage never reads out the afternoon's
- * history as though it just happened. A waiting edge is quieter still: the
- * turn ending is not an ask, so it announces only when the session is
- * holding for the developer.
+ * history as though it just happened. A waiting edge says whether the turn
+ * merely finished or is holding for the developer, so the voice never turns
+ * an ordinary finish into a false ask.
  * Deterministic by construction — nothing a model wrote can reach it — and
  * purely derived from the roster, so it can never act on a session, only
  * describe one.
@@ -189,10 +193,6 @@ export class SessionNoticeTracker {
       if (session.completionCause === SESSION_COMPLETION_CAUSE.SESSION_CLOSED) continue;
       const status = noticeStatus(session.status);
       if (!status) continue;
-      // Idle-after-a-turn is waiting on the row and still not an ask.
-      if (status === SESSION_NOTICE_STATUS.WAITING && !waitingHoldsForDeveloper(session)) {
-        continue;
-      }
       // The edge is still tracked above — it just is not news any more.
       if (now - session.observedAt > SESSION_NOTICE_FRESH_AGE_MS) continue;
       const lastNoticed = state.noticedAt.get(status);

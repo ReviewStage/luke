@@ -1,10 +1,5 @@
 import { ATTENTION_SPEECH_SOURCE, type AttentionSpeech } from "@sidecar/realtime";
-import {
-  ATTENTION_DISPOSITION,
-  SESSION_NOTICE_STATUS,
-  type SessionNotice,
-  type SessionNoticeStatus,
-} from "@sidecar/session";
+import { ATTENTION_DISPOSITION, SESSION_NOTICE_STATUS, type SessionNotice } from "@sidecar/session";
 
 const RECAP_EXCERPT_LENGTH = 240;
 const MINIMUM_SENTENCE_CUT = RECAP_EXCERPT_LENGTH / 2;
@@ -28,10 +23,13 @@ function recapExcerpt(value: string): string {
   return `${(wordEnd > 0 ? cut.slice(0, wordEnd) : cut).trimEnd()}…`;
 }
 
-function noticeEvent(status: SessionNoticeStatus): string {
+function noticeEvent(notice: SessionNotice): string {
+  const { status } = notice;
   switch (status) {
     case SESSION_NOTICE_STATUS.WAITING:
-      return "started waiting on the developer";
+      return notice.holdingForDeveloper === true
+        ? "needs the developer to continue"
+        : "finished its turn";
     case SESSION_NOTICE_STATUS.ERROR:
       return "stopped on an error";
     case SESSION_NOTICE_STATUS.COMPLETE:
@@ -57,7 +55,7 @@ function noticeUpdateContext(notice: SessionNotice): string {
     workspace ? ["workspace", quoted(workspace)] : undefined,
     notice.repository ? ["repository", quoted(notice.repository)] : undefined,
     notice.branch ? ["branch", quoted(notice.branch)] : undefined,
-    ["event", noticeEvent(notice.status)],
+    ["event", noticeEvent(notice)],
     notice.error ? ["error", quoted(notice.error)] : undefined,
     notice.recap && notice.status !== SESSION_NOTICE_STATUS.ERROR
       ? ["parting words", quoted(recapExcerpt(notice.recap))]

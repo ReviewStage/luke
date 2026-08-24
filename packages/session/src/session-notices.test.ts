@@ -258,42 +258,39 @@ test("the recap, workspace, and reply-ability ride a waiting notice", () => {
   assert.equal(notices[0]?.canReceiveMessage, true);
 });
 
-test("a waiting turn that does not need the developer produces no notice", () => {
+test("a finished turn produces a notice without claiming it needs the developer", () => {
   const tracker = new SessionNoticeTracker();
   tracker.notices([session(conductor, "idle", SESSION_STATUS.WORKING)], 1_000);
 
-  // Conductor idle is waiting on the row — the turn ended — but the parting
-  // words do not ask anything, so reading them out as "waiting on you" would
-  // be a false ask.
-  assert.deepEqual(
-    tracker.notices(
-      [
-        session(conductor, "idle", SESSION_STATUS.WAITING, {
-          recap: "The notch panel now follows the menu bar depth.",
-          canReceiveMessage: true,
-        }),
-      ],
-      2_000,
-    ),
-    [],
+  const notices = tracker.notices(
+    [
+      session(conductor, "idle", SESSION_STATUS.WAITING, {
+        recap: "The notch panel now follows the menu bar depth.",
+        canReceiveMessage: true,
+      }),
+    ],
+    2_000,
   );
+
+  assert.equal(notices.length, 1);
+  assert.equal(notices[0]?.holdingForDeveloper, false);
 });
 
-test("a waiting recap that only has a URL query string is not an ask", () => {
+test("a waiting recap that only has a URL query string is a finish, not an ask", () => {
   const tracker = new SessionNoticeTracker();
   tracker.notices([session(conductor, "link", SESSION_STATUS.WORKING)], 1_000);
 
-  assert.deepEqual(
-    tracker.notices(
-      [
-        session(conductor, "link", SESSION_STATUS.WAITING, {
-          recap: "Opened https://github.com/review/luke/pull/12?w=1 for the panel follow.",
-        }),
-      ],
-      2_000,
-    ),
-    [],
+  const notices = tracker.notices(
+    [
+      session(conductor, "link", SESSION_STATUS.WAITING, {
+        recap: "Opened https://github.com/review/luke/pull/12?w=1 for the panel follow.",
+      }),
+    ],
+    2_000,
   );
+
+  assert.equal(notices.length, 1);
+  assert.equal(notices[0]?.holdingForDeveloper, false);
 });
 
 test("a question that ends on a URL is still an ask", () => {
@@ -311,6 +308,7 @@ test("a question that ends on a URL is still an ask", () => {
 
   assert.equal(notices.length, 1);
   assert.equal(notices[0]?.status, SESSION_NOTICE_STATUS.WAITING);
+  assert.equal(notices[0]?.holdingForDeveloper, true);
 });
 
 test("a permission hold is a waiting notice even without a question in the recap", () => {
