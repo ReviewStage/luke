@@ -26,11 +26,6 @@ export const ANIMATION_VARIANT = {
 
 export type AnimationVariant = (typeof ANIMATION_VARIANT)[keyof typeof ANIMATION_VARIANT];
 
-export const ANIMATION_VARIANT_LABEL = {
-  dark: "Dark mode",
-  light: "Light mode",
-} as const satisfies Record<AnimationVariant, string>;
-
 /**
  * The ground each variant is previewed on. The SVGs carry their stroke colors
  * baked in — #f5f5f7 for the dark cut, #1d1d1f for the light — so the swatch
