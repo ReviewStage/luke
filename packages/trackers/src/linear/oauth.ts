@@ -9,6 +9,7 @@ import {
   codeChallenge,
   createCodeVerifier,
   LOOPBACK_PAGE_TONE,
+  loopbackContinuePage,
 } from "@sidecar/oauth";
 import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
 
@@ -91,6 +92,17 @@ const LOOPBACK_PORTS = [47821, 47822, 47823] as const;
 const LOOPBACK_HOST = "127.0.0.1";
 const CALLBACK_PATH = "/linear/callback";
 
+/**
+ * Where the flow starts: the continue page whose link opens Linear's consent
+ * in a script-closable tab and closes its own — the only arrangement in which
+ * the landing page's `window.close()` is honored, because a tab the user
+ * navigated through a consent flow refuses it. The path carries a token of
+ * its own run so nothing else on this machine can read the page off a
+ * guessable address — which matters more here than on an ephemeral port,
+ * since these ports are registered and known.
+ */
+const START_PATH = "/linear/start";
+
 /** Every redirect URL this build can use, which is what the app must register. */
 export const LINEAR_REDIRECT_URIS: readonly string[] = LOOPBACK_PORTS.map(
   (port) => `http://${LOOPBACK_HOST}:${port}${CALLBACK_PATH}`,
@@ -140,7 +152,7 @@ export type LinearSignInOutcome = LinearGrant | { reason: string };
 
 export interface LinearSignInOptions {
   /**
-   * Opens the authorization page in the user's own browser. Injected so the
+   * Opens the flow's continue page in the user's own browser. Injected so the
    * one caller hands in the shell and tests hand in a recorder — this module
    * never reaches for Electron itself.
    */
@@ -216,10 +228,10 @@ export class LinearSignIn {
   }
 
   /**
-   * Opens the waiting flow's consent page again — the very URL, state and
-   * challenge included, the flow is already listening for — for a tab lost
-   * behind other windows or closed by mistake. With no flow waiting there is
-   * no page to reopen, and nothing happens.
+   * Opens the waiting flow's continue page again — carrying the very consent
+   * URL, state and challenge included, the flow is already listening for —
+   * for a tab lost behind other windows or closed by mistake. With no flow
+   * waiting there is no page to reopen, and nothing happens.
    */
   reopen(): void {
     this.#reopen?.();
@@ -235,13 +247,20 @@ export class LinearSignIn {
       finish = resolve;
     });
     // Assigned once a registered port has bound, before the browser is opened
-    // — no request can arrive ahead of it.
+    // — no request can arrive ahead of it, and the start page it carries is
+    // composed in the same breath.
     let redirectUri = "";
+    const startPath = `${START_PATH}/${randomUUID()}`;
+    let startPage = "";
     let callbackClaimed = false;
     let timeout: ReturnType<typeof setTimeout> | undefined;
 
     const server = http.createServer((request, response) => {
       const url = new URL(request.url ?? "/", `http://${LOOPBACK_HOST}`);
+      if (url.pathname === startPath && startPage) {
+        response.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(startPage);
+        return;
+      }
       // Anything that is not this flow's own redirect — another path, a stray
       // request, a state this run never issued — is refused without ending
       // the wait: the real redirect may still be on its way.
@@ -296,15 +315,23 @@ export class LinearSignIn {
     authorization.searchParams.set("prompt", "consent");
     authorization.searchParams.set("state", state);
 
+    startPage = loopbackContinuePage({
+      title: "Connect Linear",
+      body: "Linear asks for consent in a tab of its own.",
+      action: "Continue to Linear",
+      authorizationUrl: authorization.toString(),
+    });
+    const startUrl = `http://${LOOPBACK_HOST}:${port}${startPath}`;
+
     timeout = setTimeout(() => {
       finish({ reason: "Sign-in timed out. Try again from the Linear row." });
     }, this.#options.timeoutMs ?? SIGN_IN_TIMEOUT_MS);
     timeout.unref();
     this.#abandon = () => finish({ reason: "Sign-in was cancelled." });
-    this.#reopen = () => this.#options.openExternal(authorization.toString());
+    this.#reopen = () => this.#options.openExternal(startUrl);
 
     try {
-      this.#options.openExternal(authorization.toString());
+      this.#options.openExternal(startUrl);
       return await outcome;
     } finally {
       clearTimeout(timeout);

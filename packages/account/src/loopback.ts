@@ -6,10 +6,20 @@ import {
   codeChallenge,
   createCodeVerifier,
   LOOPBACK_PAGE_TONE,
+  loopbackContinuePage,
 } from "@sidecar/oauth";
 import type { AccountProvider } from "../../../apps/desktop/src/shared/contracts.js";
 
 const CALLBACK_PATH = "/callback";
+/**
+ * Where the sign-in starts: the continue page whose link opens the sign-in in
+ * a script-closable tab and closes its own — the only arrangement in which
+ * the landing page's `window.close()` is honored, because a tab the user
+ * navigated through a sign-in refuses it. The path carries a token of its own
+ * run so nothing else on this machine can read the page off a guessable
+ * address.
+ */
+const CONTINUE_PATH = "/continue";
 const LOOPBACK_HOST = "127.0.0.1";
 
 /**
@@ -82,6 +92,12 @@ export interface AccountLoopback {
   codeChallenge: string;
   waitForCode: Promise<string>;
   /**
+   * Serves this sign-in's continue page — the flow's own authorization URL
+   * behind the one link, and the caller's words on the button — and returns
+   * the address to hand the browser.
+   */
+  serveContinue(input: { authorizationUrl: string; action: string }): string;
+  /**
    * Withdraws the wait: `waitForCode` rejects as cancelled and the server
    * closes. A code that already arrived has settled the promise, so a late
    * cancel changes nothing.
@@ -110,8 +126,16 @@ export async function startAccountLoopback(
     reject = rejectPromise;
   });
 
+  const continuePath = `${CONTINUE_PATH}/${randomBytes(16).toString("base64url")}`;
+  let continuePage: string | undefined;
+
   const server = createServer((request, response) => {
     const url = new URL(request.url ?? "/", `http://${LOOPBACK_HOST}`);
+    if (url.pathname === continuePath && continuePage) {
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      response.end(continuePage);
+      return;
+    }
     const code = url.searchParams.get("code");
     const oauthError = url.searchParams.get("error");
     const returnedState = url.searchParams.get("state");
@@ -166,6 +190,15 @@ export async function startAccountLoopback(
     codeVerifier,
     codeChallenge: codeChallenge(codeVerifier),
     waitForCode,
+    serveContinue: (input) => {
+      continuePage = loopbackContinuePage({
+        title: "Sign in to Luke",
+        body: "The sign-in opens in a tab of its own.",
+        action: input.action,
+        authorizationUrl: input.authorizationUrl,
+      });
+      return `http://${LOOPBACK_HOST}:${port}${continuePath}`;
+    },
     cancel: () => {
       reject?.(new Error(SIGN_IN_CANCELLED_MESSAGE));
       reject = undefined;

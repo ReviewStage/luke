@@ -121,11 +121,19 @@ function signInWith(respond: (request: RecordedRequest) => Response) {
   return { signIn, opened, requests };
 }
 
-/** The browser is opened synchronously with the flow; wait for the loopback. */
+/**
+ * The browser is opened synchronously with the flow; wait for the loopback.
+ * The flow hands the browser its own continue page, and Linear's consent URL
+ * stands behind that page's one link — read it the way the browser would.
+ */
 async function openedUrl(opened: readonly string[]): Promise<URL> {
   while (opened.length === 0) await new Promise((resolve) => setImmediate(resolve));
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  return new URL(opened[0] as string);
+  // SAFETY: The wait above guarantees the first opened URL is recorded.
+  const start = await fetch(opened[0] as string);
+  assert.equal(start.status, 200);
+  const href = (await start.text()).match(/id="continue" href="([^"]*)"/)?.[1];
+  assert.ok(href, "the continue page carries the consent link");
+  return new URL(href.replaceAll("&amp;", "&"));
 }
 
 test("the sign-in carries its registration, and the environment may replace it", () => {
@@ -153,7 +161,6 @@ test("runs Linear's documented public-client flow end to end", async () => {
   const authorization = await openedUrl(opened);
 
   // The page is Linear's own, asking for the two scopes the two acts need,
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // with PKCE and as the developer rather than as an app of Luke's own.
   assert.equal(authorization.origin + authorization.pathname, LINEAR_AUTHORIZATION_URL);
   assert.equal(authorization.searchParams.get("client_id"), CLIENT_ID);
@@ -171,8 +178,8 @@ test("runs Linear's documented public-client flow end to end", async () => {
   );
 
   const state = authorization.searchParams.get("state") ?? "";
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  const answered = await answerCallback(opened[0] as string, { state, code: "auth-code" }).answered;
+  const answered = await answerCallback(authorization.toString(), { state, code: "auth-code" })
+    .answered;
   assert.equal(answered.status, 200);
   assert.match(answered.body, /connected/i);
 
@@ -208,13 +215,12 @@ test("a redirect with the wrong state is refused without ending the wait", async
   const state = authorization.searchParams.get("state") ?? "";
 
   // A stray or forged request is answered 404 and the flow keeps waiting.
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  const forged = await answerCallback(opened[0] as string, { state: "not-it", code: "stolen" })
+  const forged = await answerCallback(authorization.toString(), { state: "not-it", code: "stolen" })
     .answered;
   assert.equal(forged.status, 404);
 
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  const genuine = await answerCallback(opened[0] as string, { state, code: "auth-code" }).answered;
+  const genuine = await answerCallback(authorization.toString(), { state, code: "auth-code" })
+    .answered;
   assert.equal(genuine.status, 200);
   assert.equal("accessToken" in (await pending), true);
 });
@@ -245,11 +251,9 @@ test("the first valid callback exclusively claims the one-time code exchange", a
   const pending = signIn.signIn();
   const authorization = await openedUrl(opened);
   const state = authorization.searchParams.get("state") ?? "";
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  const first = answerCallback(opened[0] as string, { state, code: "auth-code" }).answered;
+  const first = answerCallback(authorization.toString(), { state, code: "auth-code" }).answered;
   while (requests.length === 0) await new Promise((resolve) => setImmediate(resolve));
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  const duplicate = await answerCallback(opened[0] as string, { state, code: "auth-code" })
+  const duplicate = await answerCallback(authorization.toString(), { state, code: "auth-code" })
     .answered;
   assert.equal(duplicate.status, 404);
   assert.equal(requests.length, 1);
@@ -266,8 +270,7 @@ test("a refusal from Linear is an answer, not an exchange", async () => {
   const authorization = await openedUrl(opened);
   const state = authorization.searchParams.get("state") ?? "";
 
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  const answered = await answerCallback(opened[0] as string, { state, error: "access_denied" })
+  const answered = await answerCallback(authorization.toString(), { state, error: "access_denied" })
     .answered;
   assert.equal(answered.status, 200);
   assert.match(answered.body, /didn’t complete/i);
@@ -308,8 +311,7 @@ test("a claimed callback is allowed to finish after the waiting timeout", async 
   const pending = signIn.signIn();
   const authorization = await openedUrl(opened);
   const state = authorization.searchParams.get("state") ?? "";
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  const callback = answerCallback(opened[0] as string, { state, code: "auth-code" });
+  const callback = answerCallback(authorization.toString(), { state, code: "auth-code" });
   // Claimed first, then past the wait, and only then cancelled: the point is
   // that cancelling does not abandon a callback already in hand.
   await callback.claimed;

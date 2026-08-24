@@ -1,5 +1,6 @@
 import { singleFlight } from "@sidecar/oauth";
 import {
+  ACCOUNT_PROVIDER,
   ACCOUNT_STATUS,
   type AccountProvider,
   type AccountSnapshot,
@@ -30,6 +31,12 @@ export interface AccountSessionManagerOptions {
   stopCapabilities: () => Promise<void>;
   onChange: (account: AccountSnapshot) => void;
 }
+
+/** The continue page's one button, worded for whose sign-in it opens. */
+const CONTINUE_ACTION = {
+  [ACCOUNT_PROVIDER.GOOGLE]: "Continue with Google",
+  [ACCOUNT_PROVIDER.GITHUB]: "Continue with GitHub",
+} satisfies Record<AccountProvider, string>;
 
 export class AccountSessionManager {
   readonly #options: AccountSessionManagerOptions;
@@ -146,10 +153,13 @@ export class AccountSessionManager {
         this.#cancelSignIn = () => activeLoopback.cancel();
         if (cancelled) activeLoopback.cancel();
         await this.#options.openExternal(
-          this.#options.client.authorizeUrl({
-            redirectUri: activeLoopback.redirectUri,
-            state: activeLoopback.state,
-            codeChallenge: activeLoopback.codeChallenge,
+          activeLoopback.serveContinue({
+            authorizationUrl: this.#options.client.authorizeUrl({
+              redirectUri: activeLoopback.redirectUri,
+              state: activeLoopback.state,
+              codeChallenge: activeLoopback.codeChallenge,
+            }),
+            action: CONTINUE_ACTION[provider],
           }),
         );
         const code = await activeLoopback.waitForCode;

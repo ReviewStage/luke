@@ -1,16 +1,19 @@
 import { FACE_ART } from "@sidecar/surface";
 
 /**
- * The page the browser is left on after the OAuth redirect lands on the
- * loopback. It is the last thing the sign-in shows, so it dresses like the
- * sign-in and consent pages before it — one dark card, the mark, a status
- * pill, and a line saying where things stand — rather than a line of bare
- * text. Self-contained on purpose: the ephemeral 127.0.0.1 server serves
- * exactly one document, so nothing here may fetch a font, a script, or an
- * image from anywhere.
+ * The two pages the ephemeral 127.0.0.1 server ever serves: the continue page
+ * a sign-in starts on, and the landing page the OAuth redirect leaves the
+ * browser on. They bracket the consent trip, so they dress like the sign-in
+ * and consent pages between them — one dark card, the mark, a line saying
+ * where things stand — rather than a line of bare text. Self-contained on
+ * purpose: the server serves exactly these documents, so nothing here may
+ * fetch a font, a script, or an image from anywhere.
  *
- * Every string on the page is fixed by the build. Nothing the redirect
- * carried — code, state, error — is ever interpolated into the document.
+ * Every string on either page is fixed by the build, with one exception the
+ * continue page exists to carry: the flow's own authorization URL, composed by
+ * the flow that serves the page and escaped where it lands. Nothing the
+ * redirect carried — code, state, error — is ever interpolated into either
+ * document.
  */
 export const LOOPBACK_PAGE_TONE = {
   /** The sign-in reached a resting state worth a green pill. */
@@ -35,6 +38,29 @@ export interface LoopbackPage {
    * refusal and the body keeps saying the tab can be closed by hand.
    */
   closesItself?: boolean;
+}
+
+/**
+ * The page a sign-in starts on, and the reason the landing page's close is
+ * honored at all: a browser lets a script close only a tab that web content
+ * created, and a tab the user then navigated through a consent flow refuses
+ * `window.close()` outright. So the flow's first stop is this page, served by
+ * the same loopback, whose one link opens the provider's consent in a tab of
+ * its own — a tab created by web content, which stays script-closable through
+ * every consent navigation and even a provider's COOP severing the opener —
+ * and then closes itself, a close its own single-entry history allows.
+ */
+export interface LoopbackContinuePage {
+  title: string;
+  body: string;
+  /** The link's own words: "Continue to Google". */
+  action: string;
+  /**
+   * The provider's authorization URL, composed by the flow serving this page.
+   * The one value on either page the build does not fix — and still never
+   * anything a redirect carried.
+   */
+  authorizationUrl: string;
 }
 
 /** Long enough to read the outcome; short enough to not overstay it. */
@@ -65,6 +91,26 @@ const CLOSE_SCRIPT =
   `})();</script>`;
 
 const CLOSE_NOTE = `<p class="close-note" id="close-note"></p>`;
+
+/**
+ * The continue page's script owns every promise about closing, so with
+ * scripting off the page makes none and its link still works. On the click
+ * that opens the consent tab this page's work is done, and it closes itself a
+ * beat later; where a browser refuses even that, the note stops promising and
+ * offers the by-hand close instead. The statements after `window.close()` run
+ * only on a refusal — a closed page runs nothing.
+ */
+const CONTINUE_SCRIPT =
+  `<script>(function () {` +
+  `var note = document.getElementById("close-note");` +
+  `note.textContent = "This stop is what lets the tabs close themselves when the sign-in is done.";` +
+  `document.getElementById("continue").addEventListener("click", function () {` +
+  ` setTimeout(function () {` +
+  `  window.close();` +
+  `  note.textContent = "The sign-in is open in a tab of its own. You can close this one.";` +
+  ` }, 250);` +
+  `});` +
+  `})();</script>`;
 
 /**
  * The face, drawn from the same generated constants the renderer draws it
@@ -118,6 +164,17 @@ const PAGE_STYLE = `
   .pill[data-tone="attention"] { background: rgba(255, 160, 73, 0.14); color: #ffa049; }
   h1 { margin: 12px 0 8px; font-size: 1.375rem; line-height: 1.2; }
   p { margin: 0; color: rgba(255, 255, 255, 0.56); font-size: 0.9375rem; line-height: 1.6; }
+  .continue {
+    display: inline-block;
+    margin-top: 22px;
+    padding: 10px 24px;
+    border-radius: 999px;
+    background: #f5f5f7;
+    color: #08090b;
+    font-size: 0.9375rem;
+    font-weight: 650;
+    text-decoration: none;
+  }
   .close-note {
     margin-top: 18px;
     font-size: 0.8125rem;
@@ -126,7 +183,16 @@ const PAGE_STYLE = `
   }
 `;
 
-export function accountLoopbackPage(page: LoopbackPage): string {
+/** The authorization URL is the flows' own, but an attribute takes no chances. */
+function escapeAttribute(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
+function cardDocument(title: string, card: string, script: string): string {
   // The same mark as the tab's icon, travelling inside the document like
   // everything else on it: a data URL fetches nothing from anywhere. Inked
   // outright, because `currentColor` resolves to black outside the page.
@@ -136,12 +202,36 @@ export function accountLoopbackPage(page: LoopbackPage): string {
     `<meta name="viewport" content="width=device-width, initial-scale=1">` +
     `<meta name="color-scheme" content="dark">` +
     `<link rel="icon" href="data:image/svg+xml;utf8,${favicon}">` +
-    `<title>${page.title}</title><style>${PAGE_STYLE}</style></head>` +
+    `<title>${title}</title><style>${PAGE_STYLE}</style></head>` +
     `<body><main class="shell"><section class="card">` +
+    card +
+    `</section></main>${script}</body></html>`
+  );
+}
+
+export function accountLoopbackPage(page: LoopbackPage): string {
+  return cardDocument(
+    page.title,
     markSvg() +
-    `<div><span class="pill" data-tone="${page.tone}">${page.badge}</span></div>` +
-    `<h1>${page.title}</h1><p>${page.body}</p>` +
-    (page.closesItself ? CLOSE_NOTE : "") +
-    `</section></main>${page.closesItself ? CLOSE_SCRIPT : ""}</body></html>`
+      `<div><span class="pill" data-tone="${page.tone}">${page.badge}</span></div>` +
+      `<h1>${page.title}</h1><p>${page.body}</p>` +
+      (page.closesItself ? CLOSE_NOTE : ""),
+    page.closesItself ? CLOSE_SCRIPT : "",
+  );
+}
+
+export function loopbackContinuePage(page: LoopbackContinuePage): string {
+  // `target="_blank"` is what makes the consent tab web-created and so
+  // script-closable; `rel="opener"` undoes the implicit `noopener` such a
+  // link now carries, which would otherwise hand the provider a tab no
+  // script may close. Nothing is ever done with the opener handle itself —
+  // this page is gone a beat after the click.
+  return cardDocument(
+    page.title,
+    markSvg() +
+      `<h1>${page.title}</h1><p>${page.body}</p>` +
+      `<a class="continue" id="continue" href="${escapeAttribute(page.authorizationUrl)}" target="_blank" rel="opener">${page.action}</a>` +
+      CLOSE_NOTE,
+    CONTINUE_SCRIPT,
   );
 }

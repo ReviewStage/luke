@@ -1,8 +1,10 @@
 export {
   accountLoopbackPage,
   LOOPBACK_PAGE_TONE,
+  type LoopbackContinuePage,
   type LoopbackPage,
   type LoopbackPageTone,
+  loopbackContinuePage,
 } from "./loopback-page.js";
 export {
   codeChallenge,

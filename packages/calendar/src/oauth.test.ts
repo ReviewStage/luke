@@ -35,6 +35,21 @@ async function answerCallback(
   return { status: response.status, body: await response.text() };
 }
 
+/**
+ * The flow hands the browser its own continue page, and the consent URL
+ * stands behind that page's one link. Waits for the loopback to be listening,
+ * then reads the link the way the browser would.
+ */
+async function openedAuthorization(opened: readonly string[]): Promise<string> {
+  while (opened.length === 0) await new Promise((resolve) => setImmediate(resolve));
+  // SAFETY: The wait above guarantees the first opened URL is recorded.
+  const start = await fetch(opened[0] as string);
+  assert.equal(start.status, 200);
+  const href = (await start.text()).match(/id="continue" href="([^"]*)"/)?.[1];
+  assert.ok(href, "the continue page carries the consent link");
+  return href.replaceAll("&amp;", "&");
+}
+
 function tokenResponse(): Response {
   return new Response(
     JSON.stringify({ access_token: "at-1", refresh_token: "1//refresh-token", expires_in: 3599 }),
@@ -72,11 +87,13 @@ test("runs the documented installed-app flow end to end", async () => {
   });
 
   const pending = signIn.signIn();
-  // The browser is opened synchronously with the flow's start; wait a tick
-  // for the loopback to be listening and the URL to be recorded.
-  while (opened.length === 0) await new Promise((resolve) => setImmediate(resolve));
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  const authorization = new URL(opened[0] as string);
+  const authorization = new URL(await openedAuthorization(opened));
+
+  // The tab the browser opens is the flow's own continue page, worded for the
+  // calendar; Google's consent stands behind its one link.
+  // SAFETY: openedAuthorization above waited for the first opened URL.
+  const start = await fetch(opened[0] as string);
+  assert.match(await start.text(), /Connect Google Calendar/);
 
   // The page is Google's own, asking for availability alone, with PKCE.
   assert.equal(authorization.origin + authorization.pathname, GOOGLE_AUTHORIZATION_URL);
@@ -88,8 +105,7 @@ test("runs the documented installed-app flow end to end", async () => {
   assert.match(authorization.searchParams.get("redirect_uri") ?? "", /^http:\/\/127\.0\.0\.1:\d+/);
 
   const state = authorization.searchParams.get("state") ?? "";
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  const answered = await answerCallback(opened[0] as string, { state, code: "auth-code" });
+  const answered = await answerCallback(authorization.toString(), { state, code: "auth-code" });
   assert.equal(answered.status, 200);
   assert.match(answered.body, /connected/i);
 
@@ -121,18 +137,17 @@ test("a redirect with the wrong state is refused without ending the wait", async
   });
 
   const pending = signIn.signIn();
-  while (opened.length === 0) await new Promise((resolve) => setImmediate(resolve));
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  const authorization = new URL(opened[0] as string);
+  const authorization = new URL(await openedAuthorization(opened));
   const state = authorization.searchParams.get("state") ?? "";
 
   // A stray or forged request is answered 404 and the flow keeps waiting.
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  const forged = await answerCallback(opened[0] as string, { state: "not-it", code: "stolen" });
+  const forged = await answerCallback(authorization.toString(), {
+    state: "not-it",
+    code: "stolen",
+  });
   assert.equal(forged.status, 404);
 
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  const genuine = await answerCallback(opened[0] as string, { state, code: "auth-code" });
+  const genuine = await answerCallback(authorization.toString(), { state, code: "auth-code" });
   assert.equal(genuine.status, 200);
   assert.deepEqual(await pending, { refreshToken: "1//refresh-token", accessToken: "at-1" });
 });
@@ -148,12 +163,10 @@ test("a refusal from Google is an answer, not an exchange", async () => {
   });
 
   const pending = signIn.signIn();
-  while (opened.length === 0) await new Promise((resolve) => setImmediate(resolve));
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  const state = new URL(opened[0] as string).searchParams.get("state") ?? "";
+  const authorization = await openedAuthorization(opened);
+  const state = new URL(authorization).searchParams.get("state") ?? "";
 
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  const answered = await answerCallback(opened[0] as string, {
+  const answered = await answerCallback(authorization, {
     state,
     error: "access_denied",
   });
@@ -185,12 +198,10 @@ test("one sign-in at a time", async () => {
   });
 
   const first = signIn.signIn();
-  while (opened.length === 0) await new Promise((resolve) => setImmediate(resolve));
+  const authorization = await openedAuthorization(opened);
   const second = await signIn.signIn();
   assert.ok("reason" in second && /already/i.test(second.reason));
 
-  const authorization = opened[0];
-  assert.ok(authorization);
   const state = new URL(authorization).searchParams.get("state") ?? "";
   await answerCallback(authorization, { state, code: "auth-code" });
   assert.deepEqual(await first, { refreshToken: "1//refresh-token", accessToken: "at-1" });
@@ -207,15 +218,13 @@ test("cancelling ends the wait; a grant given after lands nowhere", async () => 
   });
 
   const pending = signIn.signIn();
-  while (opened.length === 0) await new Promise((resolve) => setImmediate(resolve));
+  const authorization = await openedAuthorization(opened);
   signIn.cancel();
   assert.deepEqual(await pending, { reason: "Sign-in was cancelled." });
 
   // The loopback has stopped listening: the redirect has nowhere to land.
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  const state = new URL(opened[0] as string).searchParams.get("state") ?? "";
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  await assert.rejects(() => answerCallback(opened[0] as string, { state, code: "late" }));
+  const state = new URL(authorization).searchParams.get("state") ?? "";
+  await assert.rejects(() => answerCallback(authorization, { state, code: "late" }));
   assert.deepEqual(requests, []);
 });
 
@@ -234,14 +243,12 @@ test("a lost tab reopens the very page the flow is listening for", async () => {
   assert.deepEqual(opened, []);
 
   const pending = signIn.signIn();
-  while (opened.length === 0) await new Promise((resolve) => setImmediate(resolve));
+  const authorization = await openedAuthorization(opened);
   signIn.reopen();
   assert.equal(opened.length, 2);
-  // The same URL exactly: same state, same challenge, same loopback port.
+  // The same page exactly: same state, same challenge, same loopback port.
   assert.equal(opened[1], opened[0]);
 
-  const authorization = opened[0];
-  assert.ok(authorization);
   const state = new URL(authorization).searchParams.get("state") ?? "";
   await answerCallback(authorization, { state, code: "auth-code" });
   await pending;

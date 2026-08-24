@@ -10,6 +10,7 @@ import {
   codeChallenge,
   createCodeVerifier,
   LOOPBACK_PAGE_TONE,
+  loopbackContinuePage,
 } from "@sidecar/oauth";
 import { isWireString, type UnparsedWireValue, unparsedWire, wireRecord } from "@sidecar/wire";
 
@@ -107,6 +108,16 @@ export const GOOGLE_CALENDAR_SCOPES = [
 
 const CALLBACK_PATH = "/oauth/callback";
 
+/**
+ * Where the flow starts: the continue page whose link opens Google's consent
+ * in a script-closable tab and closes its own — the only arrangement in which
+ * the landing page's `window.close()` is honored, because a tab the user
+ * navigated through a consent flow refuses it. The path carries a token of
+ * its own run so nothing else on this machine can read the page off a
+ * guessable address.
+ */
+const START_PATH = "/oauth/start";
+
 /** Long enough to find the right account; not an open door all afternoon. */
 const SIGN_IN_TIMEOUT_MS = 180_000;
 
@@ -142,7 +153,7 @@ export type GoogleCalendarSignInOutcome =
 
 export interface GoogleCalendarSignInOptions {
   /**
-   * Opens the authorization page in the user's own browser. Injected so the
+   * Opens the flow's continue page in the user's own browser. Injected so the
    * one caller hands in the shell and tests hand in a recorder — this module
    * never reaches for Electron itself.
    */
@@ -207,10 +218,10 @@ export class GoogleCalendarSignIn {
   }
 
   /**
-   * Opens the waiting flow's consent page again — the very URL, state and
-   * challenge included, the flow is already listening for — for a tab lost
-   * behind other windows or closed by mistake. With no flow waiting there is
-   * no page to reopen, and nothing happens.
+   * Opens the waiting flow's continue page again — carrying the very consent
+   * URL, state and challenge included, the flow is already listening for —
+   * for a tab lost behind other windows or closed by mistake. With no flow
+   * waiting there is no page to reopen, and nothing happens.
    */
   reopen(): void {
     this.#reopen?.();
@@ -226,11 +237,18 @@ export class GoogleCalendarSignIn {
       finish = resolve;
     });
     // Assigned once the loopback has a port, before the browser is opened —
-    // no request can arrive ahead of it.
+    // no request can arrive ahead of it, and the start page it carries is
+    // composed in the same breath.
     let redirectUri = "";
+    const startPath = `${START_PATH}/${randomUUID()}`;
+    let startPage = "";
 
     const server = http.createServer((request, response) => {
       const url = new URL(request.url ?? "/", "http://127.0.0.1");
+      if (url.pathname === startPath && startPage) {
+        response.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(startPage);
+        return;
+      }
       // Anything that is not this flow's own redirect — another path, a
       // stray request, a state this run never issued — is refused without
       // ending the wait: the real redirect may still be on its way.
@@ -279,15 +297,23 @@ export class GoogleCalendarSignIn {
     authorization.searchParams.set("prompt", "consent");
     authorization.searchParams.set("state", state);
 
+    startPage = loopbackContinuePage({
+      title: "Connect Google Calendar",
+      body: "Google asks for consent in a tab of its own.",
+      action: "Continue to Google",
+      authorizationUrl: authorization.toString(),
+    });
+    const startUrl = `http://127.0.0.1:${port}${startPath}`;
+
     const timeout = setTimeout(() => {
       finish({ reason: "Sign-in timed out. Try again from the Google Calendar row." });
     }, this.#options.timeoutMs ?? SIGN_IN_TIMEOUT_MS);
     timeout.unref();
     this.#abandon = () => finish({ reason: "Sign-in was cancelled." });
-    this.#reopen = () => this.#options.openExternal(authorization.toString());
+    this.#reopen = () => this.#options.openExternal(startUrl);
 
     try {
-      this.#options.openExternal(authorization.toString());
+      this.#options.openExternal(startUrl);
       return await outcome;
     } finally {
       clearTimeout(timeout);

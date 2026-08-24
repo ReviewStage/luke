@@ -25,6 +25,30 @@ test("a mismatched state is refused without consuming the callback", async () =>
   }
 });
 
+test("the continue page carries the sign-in behind one script-closable link", async () => {
+  const loopback = await startAccountLoopback({ timeoutMs: 2_000 });
+  try {
+    const continueUrl = loopback.serveContinue({
+      authorizationUrl: "https://auth.example/authorize?client_id=abc&state=s-1",
+      action: "Continue with GitHub",
+    });
+    const served = await fetch(continueUrl);
+    assert.equal(served.status, 200);
+    assert.match(served.headers.get("content-type") ?? "", /text\/html/);
+    const body = await served.text();
+    assert.match(body, /Sign in to Luke/);
+    assert.match(body, /Continue with GitHub/);
+    // The link opens the sign-in in a tab web content created — the one kind
+    // the landing page's close is honored in — with the URL escaped in place.
+    assert.match(
+      body,
+      /href="https:\/\/auth\.example\/authorize\?client_id=abc&amp;state=s-1" target="_blank" rel="opener"/,
+    );
+  } finally {
+    await loopback.close();
+  }
+});
+
 test("a second callback is ignored after the first succeeds", async () => {
   const loopback = await startAccountLoopback({ timeoutMs: 2_000 });
   try {
