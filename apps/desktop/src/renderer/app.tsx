@@ -37,7 +37,7 @@ import {
   VOICE_CAPTION_MAX_HEIGHT,
 } from "@sidecar/surface";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
-import type { WireRecord } from "@sidecar/wire";
+import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import {
   type CSSProperties,
   useCallback,
@@ -64,7 +64,6 @@ import type {
 } from "#shared/wire/session";
 import {
   isWorkspaceProviderId,
-  SESSION_OPEN_RESULT_STATUS,
   SUPERSET_SIGN_IN_STAGE,
   SUPERSET_WORKSPACE_PROVIDER_ID,
 } from "#shared/wire/session";
@@ -885,7 +884,7 @@ export function App(): React.JSX.Element {
   const applySettingsReply = useCallback(
     (result: SettingsUpdateResult) => {
       applySettings(result.settings);
-      return result.reason;
+      return result;
     },
     [applySettings],
   );
@@ -1101,11 +1100,11 @@ export function App(): React.JSX.Element {
   }, [presentationOf, restorePanel]);
 
   const disconnectSuperset = useCallback(async () => {
-    const rejection = await window.sidecar.disconnectSuperset();
+    const result = await window.sidecar.disconnectSuperset();
     // The idle broadcast the sign-out fires says the same thing to every other
     // window; this window should not wait a round trip to agree with itself.
-    if (rejection === undefined) setSupersetConnected(false);
-    return rejection;
+    if (result.status === ACT_RESULT_STATUS.ACCEPTED) setSupersetConnected(false);
+    return result;
   }, []);
 
   /**
@@ -1198,7 +1197,7 @@ export function App(): React.JSX.Element {
       if (removalEndsEntry(credentialsEntry.latest(), providerId, result.reason)) {
         credentialsEntry.apply(undefined);
       }
-      return result.reason;
+      return result;
     },
     [applySettings, credentialsEntry.apply, credentialsEntry.latest],
   );
@@ -1652,7 +1651,7 @@ export function App(): React.JSX.Element {
     async (identity: SessionIdentity): Promise<SessionOpenResult> => {
       const result = await window.sidecar.openSession(identity);
       if (
-        result.status === SESSION_OPEN_RESULT_STATUS.OPENED &&
+        result.status === ACT_RESULT_STATUS.ACCEPTED &&
         presentationOf() === PANEL_PRESENTATION.PANEL
       ) {
         cancelHover();
@@ -1675,7 +1674,7 @@ export function App(): React.JSX.Element {
     ): Promise<SessionOpenResult> => {
       const result = await window.sidecar.openSessionApplication(identity, applicationId);
       if (
-        result.status === SESSION_OPEN_RESULT_STATUS.OPENED &&
+        result.status === ACT_RESULT_STATUS.ACCEPTED &&
         presentationOf() === PANEL_PRESENTATION.PANEL
       ) {
         cancelHover();
@@ -1818,7 +1817,7 @@ export function App(): React.JSX.Element {
   const carryAppAction = useCallback<AppActionCarrier>(
     async (action) =>
       dispatchByKind(action, {
-        [APP_TOOL_KIND.SETTING]: async (action) => {
+        [APP_TOOL_KIND.SETTING]: async (action): Promise<WireRecord> => {
           // The store's answer is caught rather than drawn: the switch is what
           // Luke is on his way to move, so it waits for him to reach it. It is
           // caught in a local and handed to this act alone, because one reply
@@ -1850,9 +1849,12 @@ export function App(): React.JSX.Element {
           const hold: ErrandHold = caught === undefined ? NOTHING_HELD : { settings: caught };
           // Nothing to show and nothing to sign: a refused change must not stand
           // the panel up in front of a switch that did not move.
-          if (outcome.status !== "changed") {
+          if (outcome.status !== ACT_RESULT_STATUS.ACCEPTED) {
             drawErrandHold(hold);
-            return outcome;
+            return {
+              status: ACT_RESULT_STATUS.REJECTED,
+              reason: outcome.reason ?? "That setting could not be changed.",
+            };
           }
           const opening = presentationOf() !== PANEL_PRESENTATION.PANEL;
           // The guide's ids travel as plain text, so one that names no setting
@@ -1914,7 +1916,7 @@ export function App(): React.JSX.Element {
             throw error;
           }
           return {
-            status: "opened",
+            status: ACT_RESULT_STATUS.ACCEPTED,
             kind: action.composer,
             ...(action.draft === undefined
               ? undefined
@@ -1990,7 +1992,7 @@ export function App(): React.JSX.Element {
             searched?.note,
           ].filter((line): line is string => line !== undefined);
           return {
-            status: "shown",
+            status: ACT_RESULT_STATUS.ACCEPTED,
             tab: action.tab,
             ...(spoken !== undefined ? { filters: action.filters } : undefined),
             ...(action.sort ? { sort: action.sort } : undefined),
@@ -2009,12 +2011,12 @@ export function App(): React.JSX.Element {
             // so the outcome voiced is the answer the check actually returned.
             const answered = await window.sidecar.checkForUpdates();
             setUpdate(answered);
-            return { status: "checked", outcome: updateRow(answered).detail };
+            return { status: ACT_RESULT_STATUS.ACCEPTED, outcome: updateRow(answered).detail };
           }
           if (action.act === APP_UPDATE_ACT.DOWNLOAD) {
             window.sidecar.openLatestRelease();
             return {
-              status: "opened",
+              status: ACT_RESULT_STATUS.ACCEPTED,
               note: "The latest release's page is open in the browser; the download itself is by hand from there.",
             };
           }
@@ -2028,13 +2030,13 @@ export function App(): React.JSX.Element {
           const row = standing ? updateRow(standing) : undefined;
           if (row?.action !== UPDATE_ROW_ACTION.RESTART) {
             return {
-              status: "refused",
+              status: ACT_RESULT_STATUS.REJECTED,
               reason: row?.detail ?? "This run does not report where updates stand.",
             };
           }
           window.sidecar.installUpdate();
           return {
-            status: "restarting",
+            status: ACT_RESULT_STATUS.ACCEPTED,
             note: "Luke is quitting to install the downloaded release; this conversation ends with it.",
           };
         },
@@ -3242,9 +3244,13 @@ export function App(): React.JSX.Element {
               onDeleteAccount: async () => {
                 try {
                   setAccount(await window.sidecar.deleteAccount());
-                  return undefined;
+                  return { status: ACT_RESULT_STATUS.ACCEPTED };
                 } catch {
-                  return "Luke's service could not delete the account, so it still stands. Try again in a moment.";
+                  return {
+                    status: ACT_RESULT_STATUS.REJECTED,
+                    reason:
+                      "Luke's service could not delete the account, so it still stands. Try again in a moment.",
+                  };
                 }
               },
               view: settingsView,

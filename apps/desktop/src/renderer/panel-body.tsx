@@ -1,6 +1,5 @@
 import {
   isSessionApplicationId,
-  PROVIDER_ACT_RESULT_STATUS,
   type ProviderControlResult,
   type ProviderMessageResult,
   SESSION_APPLICATION_SCOPE,
@@ -10,9 +9,10 @@ import {
 } from "@sidecar/session";
 import { SESSION_URGENCY } from "@sidecar/surface";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
+import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import { useCallback, useRef, useState } from "react";
 import { ACCOUNT_STATUS, type AccountProvider, type AccountSnapshot } from "#shared/wire/account";
-import { SESSION_OPEN_RESULT_STATUS, type SessionOpenResult } from "#shared/wire/session";
+import type { SessionOpenResult } from "#shared/wire/session";
 import { type AskHandler, AskLuke } from "./ask-luke";
 import { PANEL_TAB, type PanelTab, TabBar } from "./panel-tabs";
 import { AudioBadge, CloudBadge, ProviderMark } from "./provider-marks";
@@ -86,8 +86,8 @@ const COMPOSE_PLACEHOLDER = "Send a follow-up…";
 
 /** One outcome line under the actions, said once and replaced by the next. */
 function feedbackFor(result: ProviderMessageResult | ProviderControlResult): string | undefined {
-  if (result.status === PROVIDER_ACT_RESULT_STATUS.REJECTED) return result.reason;
-  if (result.status === PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED) {
+  if (result.status === ACT_RESULT_STATUS.REJECTED) return result.reason;
+  if (result.status === ACT_RESULT_STATUS.UNSUPPORTED) {
     return "The session has moved on and no longer takes this.";
   }
   return undefined;
@@ -190,7 +190,7 @@ function SessionRowActions({
     setFeedback(undefined);
     try {
       const result = await writes.sendMessage(session, text);
-      if (result.status === PROVIDER_ACT_RESULT_STATUS.ACCEPTED) {
+      if (result.status === ACT_RESULT_STATUS.ACCEPTED) {
         // The draft has become the session's; the field emptying for the next
         // message is the whole confirmation, so no line repeats it.
         setDraft("");
@@ -216,7 +216,7 @@ function SessionRowActions({
         // until its provider is observed again, and a control that seems to have
         // done nothing would be pressed a second time.
         setFeedback(
-          result.status === PROVIDER_ACT_RESULT_STATUS.ACCEPTED
+          result.status === ACT_RESULT_STATUS.ACCEPTED
             ? `${session.provider} accepted`
             : feedbackFor(result),
         );
@@ -231,9 +231,9 @@ function SessionRowActions({
   const openChange = useCallback(async () => {
     const result = await writes.openChange(session);
     // An opened page is its own answer; only a failure needs the line.
-    if (result.status === SESSION_OPEN_RESULT_STATUS.OPENED) return;
+    if (result.status === ACT_RESULT_STATUS.ACCEPTED) return;
     setFeedback(
-      result.status === SESSION_OPEN_RESULT_STATUS.REJECTED
+      result.status === ACT_RESULT_STATUS.REJECTED
         ? result.reason
         : "The session no longer reports a pull request.",
     );
@@ -362,7 +362,7 @@ function WorkspaceTrayActs({
         // its provider is observed again, and a control that seems to have
         // done nothing would be pressed a second time.
         setFeedback(
-          result.status === PROVIDER_ACT_RESULT_STATUS.ACCEPTED
+          result.status === ACT_RESULT_STATUS.ACCEPTED
             ? `${act.session.provider} accepted`
             : feedbackFor(result),
         );
@@ -378,9 +378,9 @@ function WorkspaceTrayActs({
     if (!change) return;
     const result = await writes.openChange(change.session);
     // An opened page is its own answer; only a failure needs the line.
-    if (result.status === SESSION_OPEN_RESULT_STATUS.OPENED) return;
+    if (result.status === ACT_RESULT_STATUS.ACCEPTED) return;
     setFeedback(
-      result.status === SESSION_OPEN_RESULT_STATUS.REJECTED
+      result.status === ACT_RESULT_STATUS.REJECTED
         ? result.reason
         : "The workspace no longer reports a pull request.",
     );

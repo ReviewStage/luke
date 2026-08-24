@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
-import { PROVIDER_ACT_RESULT_STATUS, WORKSPACE_TASK_SUPPORT } from "@sidecar/session";
+import { ACT_RESULT_STATUS, WORKSPACE_TASK_SUPPORT } from "@sidecar/session";
 import {
   ConductorLocalWorkspaceAdapter,
   ConductorRepositoryReader,
@@ -211,7 +211,7 @@ test("creating a workspace fires Conductor's create link for the offered reposit
     providerTargetId: "/Users/dev/repos/luke",
     task: "Start on the parser",
   });
-  assert.equal(result.status, PROVIDER_ACT_RESULT_STATUS.ACCEPTED);
+  assert.equal(result.status, ACT_RESULT_STATUS.ACCEPTED);
   assert.equal(opened.length, 1);
   const parsed = parseConductorCreateLink(opened[0] ?? "");
   assert.equal(parsed.path, "/Users/dev/repos/luke");
@@ -271,7 +271,7 @@ test("creating a workspace with no task lands clean, with no send warning", asyn
   });
   await adapter.refresh();
   const result = await adapter.createWorkspace({ providerProjectId: "repo-luke" });
-  assert.equal(result.status, PROVIDER_ACT_RESULT_STATUS.ACCEPTED);
+  assert.equal(result.status, ACT_RESULT_STATUS.ACCEPTED);
   // Nothing was pre-filled, so there is nothing to press Return on.
   assert.ok(!("warning" in result && result.warning));
 });
@@ -297,7 +297,7 @@ test("creating a workspace uses the offered root path, never the request's", asy
     providerTargetId: "/etc/passwd",
     task: "anything",
   });
-  assert.equal(result.status, PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED);
+  assert.equal(result.status, ACT_RESULT_STATUS.UNSUPPORTED);
   assert.equal(opened.length, 0);
 });
 
@@ -316,7 +316,7 @@ test("creating a workspace in an unoffered project is unsupported", async (t) =>
   });
   await adapter.refresh();
   const result = await adapter.createWorkspace({ providerProjectId: "repo-unknown" });
-  assert.equal(result.status, PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED);
+  assert.equal(result.status, ACT_RESULT_STATUS.UNSUPPORTED);
   assert.equal(opened.length, 0);
 });
 
@@ -334,7 +334,7 @@ test("a failed open is reported as a rejection the user can act on", async (t) =
   });
   await adapter.refresh();
   const result = await adapter.createWorkspace({ providerProjectId: "repo-luke" });
-  assert.equal(result.status, PROVIDER_ACT_RESULT_STATUS.REJECTED);
+  assert.equal(result.status, ACT_RESULT_STATUS.REJECTED);
   assert.match(
     "reason" in result ? result.reason : "",
     /Couldn't ask Conductor to create the workspace/,

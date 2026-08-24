@@ -317,19 +317,24 @@ test("answers unsupported for every act but the creation its provider documents"
 
   assert.deepEqual(await adapter.sendMessage({ providerSessionId: "task-1", text: "hello" }), {
     status: "unsupported",
+    reason: "This provider does not take messages.",
   });
   assert.deepEqual(
     await adapter.executeControl({
       providerSessionId: "task-1",
       control: { id: "stop", label: "Stop" },
     }),
-    { status: "unsupported" },
+    { status: "unsupported", reason: "This provider has no such control." },
   );
   assert.deepEqual(await adapter.spawnWorkspaceAgent({ providerSessionId: "task-1", agent: "x" }), {
     status: "unsupported",
+    reason: "This provider cannot add agents.",
   });
   // A cloud task's conversation lives with its provider and is never fetched.
-  assert.equal(await adapter.readTranscript("task-1"), undefined);
+  assert.deepEqual(await adapter.readTranscript("task-1"), {
+    status: "unsupported",
+    reason: "This provider keeps no transcript this build can read.",
+  });
 });
 
 test("offers one creation target per observed environment, and none signed out", async () => {
@@ -396,6 +401,7 @@ test("refuses a creation the latest pass did not offer or cannot honour", async 
   // An environment the pass never reported names nowhere a creation could go.
   assert.deepEqual(await adapter.createWorkspace({ providerProjectId: "env-9", task: "Fix it" }), {
     status: "unsupported",
+    reason: "That act is not supported by the latest observation.",
   });
   // Codex names tasks itself, so a chosen name is refused rather than dropped.
   const named = await adapter.createWorkspace({

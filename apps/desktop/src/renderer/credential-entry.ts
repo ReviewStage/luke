@@ -1,4 +1,5 @@
 import type { CredentialProviderId } from "@sidecar/credentials";
+import type { ActResult } from "@sidecar/wire";
 import { type RefObject, useEffect } from "react";
 import type { CredentialSource } from "#shared/wire/account";
 import { CREDENTIAL_SOURCE } from "#shared/wire/account";
@@ -68,7 +69,7 @@ export interface CredentialEntryControl {
   cancel(): void;
   commit(): void;
   /** Clears a stored key. Answers why if it could not. */
-  remove(providerId: CredentialProviderId): Promise<string | undefined>;
+  remove(providerId: CredentialProviderId): Promise<ActResult>;
 }
 
 /** The entry for one provider, or nothing if another provider holds it. */

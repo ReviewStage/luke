@@ -37,6 +37,7 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "devDependencies": {
+    "@sidecar/acts": "workspace:*",
     "@sidecar/account": "workspace:*",
     "@sidecar/analytics": "workspace:*",
     "@sidecar/attention": "workspace:*",

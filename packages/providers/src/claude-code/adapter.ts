@@ -5,6 +5,8 @@ import {
   maximumSessionTitleLength,
   PROVIDER_ID,
   type ProviderSessionObservation,
+  type ProviderTranscriptResult,
+  providerTranscriptResult,
   SESSION_COMPLETION_CAUSE,
   SESSION_STATUS,
   type SessionDetail,
@@ -600,12 +602,14 @@ export class ClaudeCodeSessionAdapter extends LocalFileSessionAdapter<
     return observationFromSessionFile(candidate, parsed, now, activeSessionFreshnessMs, hookEvent);
   }
 
-  override readTranscript(providerSessionId: string): Promise<string | undefined> {
-    return readClaudeSessionTranscript({
-      claudeHome: this.#claudeHome,
-      providerSessionId,
-      readTailBytes: this.#transcriptReadTailBytes,
-      maximumRenderedLength: this.#transcriptMaximumRenderedLength,
-    });
+  override readTranscript(providerSessionId: string): Promise<ProviderTranscriptResult> {
+    return providerTranscriptResult(
+      readClaudeSessionTranscript({
+        claudeHome: this.#claudeHome,
+        providerSessionId,
+        readTailBytes: this.#transcriptReadTailBytes,
+        maximumRenderedLength: this.#transcriptMaximumRenderedLength,
+      }),
+    );
   }
 }

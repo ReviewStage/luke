@@ -1,3 +1,4 @@
+import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from "electron";
 import {
   BRIDGE,
@@ -61,7 +62,11 @@ export function createSettingsHandler(deps: SettingsHandlerDeps) {
         deps.broadcast(saved.settings, context.sender);
         return saved;
       } catch {
-        return { settings: await deps.snapshot(), reason: spec.refusal };
+        return {
+          status: ACT_RESULT_STATUS.REJECTED,
+          settings: await deps.snapshot(),
+          reason: spec.refusal,
+        };
       }
     };
     registerBridgeEntry(BRIDGE, definition, handler, deps);

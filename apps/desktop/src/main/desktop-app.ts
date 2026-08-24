@@ -75,7 +75,7 @@ import {
 import { DEFAULT_PANEL_FORM_FACTOR } from "@sidecar/surface";
 import { LinearCredentials, LinearIssueTracker, LinearSignIn } from "@sidecar/trackers";
 import { sessionNoticeSpeech, VoiceCapabilityAssembler } from "@sidecar/voice";
-import { isRecord, text, type UnparsedWireValue } from "@sidecar/wire";
+import { ACT_RESULT_STATUS, isRecord, text, type UnparsedWireValue } from "@sidecar/wire";
 import {
   app,
   BrowserWindow,
@@ -1007,7 +1007,9 @@ function registerIpc(): void {
     });
   });
   registerHandler(BRIDGE.disconnectSuperset, async () => {
-    if (!(await supersetCli.signOut())) return "Superset could not sign out.";
+    if (!(await supersetCli.signOut())) {
+      return { status: ACT_RESULT_STATUS.REJECTED, reason: "Superset could not sign out." };
+    }
     // The sign-in machine returning to idle is what tells every renderer the
     // login is gone; the refreshed pass retires the rows the login was buying.
     supersetSignIn.cancel();
@@ -1015,7 +1017,7 @@ function registerIpc(): void {
     recordProductEvent(PRODUCT_EVENT.SUPERSET_ACT, {
       superset_act: PRODUCT_SUPERSET_ACT.DISCONNECT,
     });
-    return undefined;
+    return { status: ACT_RESULT_STATUS.ACCEPTED };
   });
 
   registerAccountSessionIpc({

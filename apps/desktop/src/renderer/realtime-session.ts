@@ -2,6 +2,7 @@ import type { SessionNoticeAsk } from "@sidecar/attention";
 import { type AppGuideSnapshot, appGuideContextText, EMPTY_APP_GUIDE } from "@sidecar/guide";
 import type { TrackedIssue } from "@sidecar/issues";
 import {
+  type ActEnvelope,
   type AttentionSpeech,
   appGuideContextEvents,
   appToolAction,
@@ -54,7 +55,12 @@ import {
 } from "@sidecar/realtime";
 import type { ObservedWorkspaceProject, Session, SessionIdentity } from "@sidecar/session";
 import { workspaceAgentModels } from "@sidecar/session";
-import { positiveInteger, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
+import {
+  ACT_RESULT_STATUS,
+  positiveInteger,
+  type UnparsedWireValue,
+  type WireRecord,
+} from "@sidecar/wire";
 import { MICROPHONE_PROCESSING } from "./microphone-choice";
 import {
   createPressCaptureSource,
@@ -203,6 +209,8 @@ export type AppActionCarrier = (action: CarriedAppAction) => Promise<WireRecord>
 /** The issue half of the same courier: validated here, validated again in main. */
 export type IssueActionCarrier = (action: CarriedIssueAction) => Promise<WireRecord>;
 
+export type ActCarrier = (envelope: ActEnvelope) => Promise<WireRecord>;
+
 export interface RealtimeVoiceSessionCallbacks {
   onStatus(status: RealtimeStatus): void;
   onLocalStream(stream: MediaStream | undefined): void;
@@ -280,12 +288,8 @@ export interface PeerConnection {
 
 export interface RealtimeVoiceSessionOptions extends RealtimeVoiceSessionCallbacks {
   requestConnection(): Promise<RealtimeConnection | undefined>;
-  /** Absent means Luke can only speak: every tool call is refused with a reason. */
-  carryAction?: SessionActionCarrier;
-  /** Absent means spoken asks about Luke himself are refused with a reason. */
-  carryAppAction?: AppActionCarrier;
-  /** Absent means issues can only be recited: every issue call is refused. */
-  carryIssueAction?: IssueActionCarrier;
+  /** Absent means Luke can only speak: every tool call is rejected with a reason. */
+  carryAct?: ActCarrier;
   /**
    * The browser pieces, injectable so the microphone state machine can be
    * exercised without a real device or peer connection. Push-to-talk decides
@@ -2429,42 +2433,47 @@ export class RealtimeVoiceSession {
   async #toolCallOutput(call: RealtimeFunctionCall, armed: boolean): Promise<WireRecord> {
     if (!armed) {
       return {
-        status: "refused",
+        status: ACT_RESULT_STATUS.REJECTED,
         reason: "Only a request you make yourself can act on a session or an issue.",
       };
     }
     const family = realtimeToolFamily(call.name);
     if (family === undefined) {
-      return { status: "refused", reason: "No such tool exists." };
+      return { status: ACT_RESULT_STATUS.REJECTED, reason: "No such tool exists." };
     }
     const outputForFamily = {
-      [REALTIME_TOOL_FAMILY.APP]: () => this.#appToolCallOutput(call),
-      [REALTIME_TOOL_FAMILY.ISSUE]: () => this.#issueToolCallOutput(call),
-      [REALTIME_TOOL_FAMILY.SESSION]: () => this.#sessionToolCallOutput(call),
+      [REALTIME_TOOL_FAMILY.APP]: () => this.#appToolCallOutput(call, armed),
+      [REALTIME_TOOL_FAMILY.ISSUE]: () => this.#issueToolCallOutput(call, armed),
+      [REALTIME_TOOL_FAMILY.SESSION]: () => this.#sessionToolCallOutput(call, armed),
     } as const satisfies Record<RealtimeToolFamily, () => Promise<WireRecord>>;
     return outputForFamily[family]();
   }
 
-  async #appToolCallOutput(call: RealtimeFunctionCall): Promise<WireRecord> {
+  async #appToolCallOutput(call: RealtimeFunctionCall, armed: boolean): Promise<WireRecord> {
     // An ask about Luke himself is validated against the guide the app
     // actually provided, then carried by the renderer the same way a session
     // act is: perform, and answer with what became of it.
     const appAction = appToolAction(call, this.#guide, this.#sessions);
-    if (appAction.kind === "refused") return { status: "refused", reason: appAction.reason };
-    if (!this.#options.carryAppAction) {
-      return { status: "refused", reason: "Acting on Luke's own settings is not available." };
+    if (appAction.status === ACT_RESULT_STATUS.REJECTED) {
+      return { status: appAction.status, reason: appAction.reason };
+    }
+    if (!this.#options.carryAct) {
+      return {
+        status: ACT_RESULT_STATUS.REJECTED,
+        reason: "Acting on Luke's own settings is not available.",
+      };
     }
     try {
-      return await this.#options.carryAppAction(appAction);
+      return await this.#options.carryAct({ id: call.name, act: appAction, armed });
     } catch (error) {
       return {
-        status: "refused",
+        status: ACT_RESULT_STATUS.REJECTED,
         reason: error instanceof Error ? error.message : "The change could not be made.",
       };
     }
   }
 
-  async #sessionToolCallOutput(call: RealtimeFunctionCall): Promise<WireRecord> {
+  async #sessionToolCallOutput(call: RealtimeFunctionCall, armed: boolean): Promise<WireRecord> {
     // The build's own model tables ride into validation, so a creation ask
     // that names a model is held to the same set the settings rows offer.
     const action = sessionToolAction(
@@ -2475,35 +2484,37 @@ export class RealtimeVoiceSession {
       this.#defaultWorkspaceProviderId,
       this.#workspaceProjectDefaultIds,
     );
-    if (action.kind === "refused") return { status: "refused", reason: action.reason };
-    if (!this.#options.carryAction) {
-      return { status: "refused", reason: "Acting on sessions is not available." };
+    if (action.status === ACT_RESULT_STATUS.REJECTED)
+      return { status: action.status, reason: action.reason };
+    if (!this.#options.carryAct) {
+      return { status: ACT_RESULT_STATUS.REJECTED, reason: "Acting on sessions is not available." };
     }
     try {
-      return await this.#options.carryAction(action);
+      return await this.#options.carryAct({ id: call.name, act: action, armed });
     } catch (error) {
       return {
-        status: "refused",
+        status: ACT_RESULT_STATUS.REJECTED,
         reason: error instanceof Error ? error.message : "The action could not be carried out.",
       };
     }
   }
 
-  async #issueToolCallOutput(call: RealtimeFunctionCall): Promise<WireRecord> {
+  async #issueToolCallOutput(call: RealtimeFunctionCall, armed: boolean): Promise<WireRecord> {
     // No roster was ever sent, so there is nothing a call could have named.
     if (!this.#issues) {
-      return { status: "refused", reason: "No issue tracker is connected." };
+      return { status: ACT_RESULT_STATUS.REJECTED, reason: "No issue tracker is connected." };
     }
     const action = issueToolAction(call, this.#issues);
-    if (action.kind === "refused") return { status: "refused", reason: action.reason };
-    if (!this.#options.carryIssueAction) {
-      return { status: "refused", reason: "Acting on issues is not available." };
+    if (action.status === ACT_RESULT_STATUS.REJECTED)
+      return { status: action.status, reason: action.reason };
+    if (!this.#options.carryAct) {
+      return { status: ACT_RESULT_STATUS.REJECTED, reason: "Acting on issues is not available." };
     }
     try {
-      return await this.#options.carryIssueAction(action);
+      return await this.#options.carryAct({ id: call.name, act: action, armed });
     } catch (error) {
       return {
-        status: "refused",
+        status: ACT_RESULT_STATUS.REJECTED,
         reason: error instanceof Error ? error.message : "The action could not be carried out.",
       };
     }

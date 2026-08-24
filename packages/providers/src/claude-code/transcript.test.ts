@@ -9,17 +9,18 @@ import { ClaudeCodeSessionAdapter } from "./adapter.js";
 const TEST_SESSION_ID = "3f9a1b2c-4d5e-6789-abcd-ef0123456789";
 const CLAUDE_PROJECTS_DIRECTORY = "projects";
 
-function readClaudeSessionTranscript(request: {
+async function readClaudeSessionTranscript(request: {
   claudeHome: string;
   providerSessionId: string;
   readTailBytes?: number;
   maximumRenderedLength?: number;
 }): Promise<string | undefined> {
-  return new ClaudeCodeSessionAdapter({
+  const result = await new ClaudeCodeSessionAdapter({
     claudeHome: request.claudeHome,
     transcriptReadTailBytes: request.readTailBytes,
     transcriptMaximumRenderedLength: request.maximumRenderedLength,
   }).readTranscript(request.providerSessionId);
+  return result.status === "accepted" ? result.transcript : undefined;
 }
 
 async function temporaryClaudeHome(t: TestContext): Promise<string> {

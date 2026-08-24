@@ -1853,7 +1853,10 @@ test("refuses to archive a workspace no row advertised, before any request exist
     },
   });
 
-  assert.deepEqual(result, { status: "unsupported" });
+  assert.deepEqual(result, {
+    status: "unsupported",
+    reason: "That act is not supported by the latest observation.",
+  });
   assert.equal(api.requests.length, requestsBefore);
 });
 
@@ -1949,7 +1952,10 @@ test("refuses a chat rename for a session no pass observed, before any request e
     name: "Payments audit",
   });
 
-  assert.deepEqual(result, { status: "unsupported" });
+  assert.deepEqual(result, {
+    status: "unsupported",
+    reason: "That act is not supported by the latest observation.",
+  });
   assert.equal(api.requests.length, requestsBefore);
 });
 
@@ -1977,7 +1983,10 @@ test("refuses a rename for a session no pass observed, before any request exists
     name: "Payments rollout",
   });
 
-  assert.deepEqual(result, { status: "unsupported" });
+  assert.deepEqual(result, {
+    status: "unsupported",
+    reason: "That act is not supported by the latest observation.",
+  });
   assert.equal(api.requests.length, requestsBefore);
 });
 
@@ -2162,7 +2171,10 @@ test("refuses a creation ask for a project the last pass did not list", async ()
   const unlisted = await adapter.createWorkspace({ providerProjectId: "project-unknown" });
 
   // No request exists for a project observation did not see.
-  assert.deepEqual(unlisted, { status: "unsupported" });
+  assert.deepEqual(unlisted, {
+    status: "unsupported",
+    reason: "That act is not supported by the latest observation.",
+  });
   assert.equal(api.requests.length, requestsBefore);
 
   // A name outside its bound is refused before a request exists too.
@@ -2367,7 +2379,13 @@ test("refuses to start an agent the row never listed, before any request exists"
     agent: "claude",
   });
 
-  assert.deepEqual(unlisted, { status: "unsupported" });
-  assert.deepEqual(unobserved, { status: "unsupported" });
+  assert.deepEqual(unlisted, {
+    status: "unsupported",
+    reason: "That act is not supported by the latest observation.",
+  });
+  assert.deepEqual(unobserved, {
+    status: "unsupported",
+    reason: "That act is not supported by the latest observation.",
+  });
   assert.equal(api.requests.length, requestsBefore);
 });

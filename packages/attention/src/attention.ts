@@ -1,4 +1,5 @@
 import {
+  type ACT_RESULT_STATUS,
   ATTENTION_DISPOSITION,
   type AttentionDecision,
   type AttentionDisposition,
@@ -430,14 +431,6 @@ export class AttentionSpeechLedger {
 }
 
 /** What became of a standing ask, worded so a spoken reply can carry it. */
-export const ATTENTION_REQUEST_RESULT_STATUS = {
-  ACCEPTED: "accepted",
-  REJECTED: "rejected",
-} as const;
-
-export type AttentionRequestResultStatus =
-  (typeof ATTENTION_REQUEST_RESULT_STATUS)[keyof typeof ATTENTION_REQUEST_RESULT_STATUS];
-
 /**
  * The answer to registering or withdrawing a standing ask. An acceptance
  * carries the session's status as observed at that moment, because the ask may
@@ -445,8 +438,9 @@ export type AttentionRequestResultStatus =
  * finish coming, and the reply should be able to say so.
  */
 export type AttentionRequestResult =
-  | { status: typeof ATTENTION_REQUEST_RESULT_STATUS.ACCEPTED; sessionStatus: SessionStatus }
-  | { status: typeof ATTENTION_REQUEST_RESULT_STATUS.REJECTED; reason: string };
+  | { status: typeof ACT_RESULT_STATUS.ACCEPTED; sessionStatus: SessionStatus }
+  | { status: typeof ACT_RESULT_STATUS.REJECTED; reason: string }
+  | { status: typeof ACT_RESULT_STATUS.UNSUPPORTED; reason: string };
 
 /**
  * The standing asks the developer has made about sessions, one per session,
