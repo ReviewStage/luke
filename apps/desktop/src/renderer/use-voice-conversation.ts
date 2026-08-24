@@ -115,6 +115,18 @@ export const VOICE_ERROR_NOTICE_MS = 12_000;
  */
 export const REMOTE_AUDIO_RETRY_MS = 1_000;
 
+// TEMPORARY (launch-test harness, remove before merge): under
+// `--trace-announcements` the preload exposes the flag, these lines go to the
+// console, and the window manager mirrors them into the main process's trace
+// log beside its own stages.
+function traceAnnounce(line: string): void {
+  if (typeof window === "undefined") return;
+  // SAFETY: The harness flag is a bare boolean the preload exposed beside the bridge.
+  if ((window as { lukeAnnounceTrace?: boolean }).lukeAnnounceTrace !== true) return;
+  // biome-ignore lint/suspicious/noConsole: the harness trace travels as a console line by design.
+  console.log(`[announce-trace] ${line}`);
+}
+
 /**
  * The failure drawn in the same strip the captions use. A fault is worth
  * reading where the words it interrupted would have landed — at the shape's
@@ -1140,6 +1152,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   // error re-arms the clock — it is a new thing to read.
   useEffect(() => {
     if (voiceError === undefined) return;
+    traceAnnounce(`voice error: ${voiceError}`);
     const timer = setTimeout(() => setVoiceError(undefined), VOICE_ERROR_NOTICE_MS);
     return () => clearTimeout(timer);
   }, [voiceError]);
@@ -1177,7 +1190,13 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     // the fix, so one build can be heard both ways.
     // SAFETY: The harness flag is a bare boolean the preload exposed beside the bridge.
     if ((window as { lukeVoiceFixDisabled?: boolean }).lukeVoiceFixDisabled === true) {
-      void element.play().catch(() => undefined);
+      void element.play().then(
+        () => traceAnnounce("remote audio playing (fix reverted)"),
+        (error: unknown) =>
+          traceAnnounce(
+            `remote audio play refused, swallowed (fix reverted): ${error instanceof Error ? error.name : String(error)}`,
+          ),
+      );
       return;
     }
     // A refused play is the one failure the call cannot see: the reply runs
@@ -1188,9 +1207,15 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     let retryTimer: ReturnType<typeof setTimeout> | undefined;
     let detached = false;
     const play = () => {
-      element.play().catch(() => {
-        if (!detached) retryTimer = setTimeout(play, REMOTE_AUDIO_RETRY_MS);
-      });
+      element.play().then(
+        () => traceAnnounce("remote audio playing"),
+        (error: unknown) => {
+          traceAnnounce(
+            `remote audio play refused: ${error instanceof Error ? error.name : String(error)}`,
+          );
+          if (!detached) retryTimer = setTimeout(play, REMOTE_AUDIO_RETRY_MS);
+        },
+      );
     };
     play();
     return () => {
@@ -1222,6 +1247,9 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
 
   useEffect(() => {
     return window.sidecar.onAttentionSpeech((speech) => {
+      traceAnnounce(
+        `speech received: ${speech.length}, announcer notices: ${announcerNotices(speech).length}`,
+      );
       // However a mention reaches the developer — spoken on this call, read
       // out on Luke's own, or only shown as a popup — it is something Luke
       // just told them, so it enters the history: the next turn may say just
@@ -1248,6 +1276,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   // history is already standing when the first notice arrives — the grace
   // window after a reply needs to know one just ended.
   useEffect(() => {
+    traceAnnounce(`voice status: ${voiceStatus}`);
     ensureAnnouncer().onStatus(voiceStatus);
   }, [ensureAnnouncer, voiceStatus]);
 

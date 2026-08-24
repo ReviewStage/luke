@@ -394,6 +394,25 @@ let meetingQuietActive = false;
 // Notices come from status edges the registry observed, never from anything a
 // model decided, so they work — and matter most — with no evaluator configured.
 const sessionNoticeTracker = new SessionNoticeTracker();
+
+// TEMPORARY (launch-test harness, remove before merge): `--trace-announcements`
+// writes every stage of the announcement path to stderr and to
+// `announce-trace.log` under the app's own data directory, so a launch that
+// stays silent can say exactly which stage went dark. The renderer's half of
+// the trace arrives through the window manager's console mirror.
+// `--test-announcement` implies it, so a harness run is always explained.
+const announceTraceArmed =
+  process.argv.includes("--trace-announcements") || process.argv.includes("--test-announcement");
+function traceAnnounce(line: string): void {
+  if (!announceTraceArmed) return;
+  const stamped = `${new Date().toISOString()} main: ${line}\n`;
+  process.stderr.write(stamped);
+  try {
+    fs.appendFileSync(path.join(app.getPath("userData"), "announce-trace.log"), stamped);
+  } catch {
+    // The trace must never take the app down with it.
+  }
+}
 // The workspaces Luke just created and has yet to open on screen. Entries come
 // only from the validated creation act — nothing a model decided can add one —
 // and each resolves against what observation itself reports.
@@ -1429,6 +1448,7 @@ async function reviewSessionAttention(generation: number): Promise<void> {
         // Spoken once, by the one window that holds the voice: every display
         // already shows the same session as needing attention, and the surface
         // that speaks is the one that draws the announcement's pressable notice.
+        traceAnnounce(`evaluator speech sent: ${sendable.length}`);
         panels.voiceHost()?.webContents.send(channels.onAttentionSpeech, sendable);
       }
     }
@@ -1467,21 +1487,30 @@ async function announceSessionNotices(sessions: readonly Session[]): Promise<voi
     now,
   );
   if (notices.length === 0) return;
+  traceAnnounce(
+    `edges: ${notices.map((notice) => `"${notice.title}"=${notice.status}`).join(", ")}`,
+  );
   // No voice, nothing to say it with: without a Realtime credential the
   // renderer cannot open a call, and the panel still shows every state. The
   // pressable notice is the spoken announcement's face, so it goes with the
   // speech rather than standing for news nobody is telling.
-  if (!voiceCapabilities.realtimeCredentials) return;
+  if (!voiceCapabilities.realtimeCredentials) {
+    traceAnnounce("edges dropped: no realtime credentials");
+    return;
+  }
   // A meeting on the connected calendar holds the sentence rather than
   // dropping it; the release tick reads the backlog out once the meeting
   // ends. The panel has shown every state the whole time either way.
   if (await announcementsQuietNow(now)) {
+    traceAnnounce("edges held: meeting quiet");
     heldNotices.hold(notices);
     return;
   }
   const speech = notices.map((notice) => sessionNoticeSpeech(notice, now));
   countSpokenAnnouncements(notices);
-  panels.voiceHost()?.webContents.send(channels.onAttentionSpeech, speech);
+  const host = panels.voiceHost();
+  traceAnnounce(`status-edge speech sent: ${speech.length} voiceHost=${host !== undefined}`);
+  host?.webContents.send(channels.onAttentionSpeech, speech);
 }
 
 /**
@@ -1629,6 +1658,7 @@ async function releaseHeldNotices(): Promise<void> {
   const speech = [...releasedAsks, ...released.map((notice) => sessionNoticeSpeech(notice, now))];
   if (speech.length === 0) return;
   countSpokenAnnouncements(released);
+  traceAnnounce(`held speech released: ${speech.length}`);
   panels.voiceHost()?.webContents.send(channels.onAttentionSpeech, speech);
 }
 
@@ -1857,8 +1887,15 @@ function broadcastRelevantSessions(): void {
 }
 
 function startSessionObservation(): void {
-  if (!runMode.observesProviders || !accountCapabilitiesActive() || unsubscribeSessions) return;
+  if (!runMode.observesProviders || !accountCapabilitiesActive() || unsubscribeSessions) {
+    traceAnnounce(
+      `session observation not (re)started: observes=${runMode.observesProviders} accountActive=${accountCapabilitiesActive()} alreadySubscribed=${unsubscribeSessions !== undefined}`,
+    );
+    return;
+  }
+  traceAnnounce("session observation started");
   unsubscribeSessions = sessionRegistry.subscribe((snapshot) => {
+    traceAnnounce(`registry commit: ${snapshot.sessions.length} sessions`);
     broadcastRelevantSessions();
     // The registry only speaks on an effective change, which is exactly when
     // a status edge can exist to announce. The notices read the unfiltered
@@ -2050,6 +2087,9 @@ export function startDesktopApp(): void {
       // already have them. It is also what decides whether the talk key below is
       // claimed at all.
       await applyVoiceCredential();
+      traceAnnounce(
+        `launch armed: credentials=${voiceCapabilities.realtimeCredentials !== undefined} reviewer=${voiceCapabilities.attentionReviewer !== undefined} accountActive=${accountCapabilitiesActive()} observes=${runMode.observesProviders}`,
+      );
       // Awaited so the panels are created on the chosen displays in their
       // chosen form, rather than appearing on the main display and jumping. A
       // file that cannot be read means no choice was kept — the main display,
@@ -2119,7 +2159,7 @@ export function startDesktopApp(): void {
           process.stderr.write(
             `Launch-test announcement ${host ? "sent" : "dropped: no voice host"}\n`,
           );
-          host?.webContents.send(channels.attentionSpeech, [speech]);
+          host?.webContents.send(channels.onAttentionSpeech, [speech]);
         };
         setTimeout(speakLaunchTest, 15_000);
         setInterval(speakLaunchTest, 60_000).unref();

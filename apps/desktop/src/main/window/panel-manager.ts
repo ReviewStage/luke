@@ -1,3 +1,5 @@
+import { appendFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   DEFAULT_PANEL_FORM_FACTOR,
   MOTION_DURATION_MS,
@@ -92,8 +94,11 @@ export class PanelManager {
   // TEMPORARY (launch-test harness, remove before merge): `--without-voice-fix`
   // reverts the first-launch playback fix — no autoplay-policy assertion here,
   // and the renderer told to swallow a refused play once — so one build can be
-  // heard with and without the fix.
+  // heard with and without the fix. `--trace-announcements` mirrors the
+  // renderer's `[announce-trace]` console lines into stderr and the trace log,
+  // beside the main process's own stages.
   readonly #withoutVoiceFix: boolean;
+  readonly #announceTrace: boolean;
 
   constructor(options: PanelManagerOptions) {
     this.#runMode = options.runMode;
@@ -102,7 +107,10 @@ export class PanelManager {
     this.#rendererHtmlPath = options.rendererHtmlPath;
     this.#rendererUrl = options.rendererUrl;
     this.initialMode = initialWindowMode(options.runMode, options.argv ?? process.argv);
-    this.#withoutVoiceFix = (options.argv ?? process.argv).includes("--without-voice-fix");
+    const argv = options.argv ?? process.argv;
+    this.#withoutVoiceFix = argv.includes("--without-voice-fix");
+    this.#announceTrace =
+      argv.includes("--trace-announcements") || argv.includes("--test-announcement");
   }
 
   /**
@@ -479,17 +487,35 @@ export class PanelManager {
         // user gesture: born non-focusable, pointer events ignored until the
         // first hover. Playback must not answer to a gesture requirement, so
         // the policy is asserted rather than left to Chromium's default.
-        // TEMPORARY (launch-test harness): the spread reverts the assertion —
-        // and tells the preload to revert the renderer's retry — under
-        // `--without-voice-fix`.
-        ...(this.#withoutVoiceFix
-          ? { additionalArguments: ["--luke-without-voice-fix"] }
-          : { autoplayPolicy: "no-user-gesture-required" as const }),
+        // TEMPORARY (launch-test harness): the spreads revert the assertion —
+        // and tell the preload to revert the renderer's retry — under
+        // `--without-voice-fix`, and hand the renderer the trace flag under
+        // `--trace-announcements`.
+        ...(this.#withoutVoiceFix ? {} : { autoplayPolicy: "no-user-gesture-required" as const }),
+        additionalArguments: [
+          ...(this.#withoutVoiceFix ? ["--luke-without-voice-fix"] : []),
+          ...(this.#announceTrace ? ["--luke-trace-announcements"] : []),
+        ],
       },
     });
     this.#windows.set(displayId, window);
 
     this.#configure(window);
+    // TEMPORARY (launch-test harness, remove before merge): mirrors the
+    // renderer's trace lines beside the main process's, so one log tells the
+    // whole story — including in a packaged app with no terminal behind it.
+    if (this.#announceTrace) {
+      window.webContents.on("console-message", (_event, details) => {
+        if (!details.message.includes("[announce-trace]")) return;
+        const stamped = `${new Date().toISOString()} renderer: ${details.message}\n`;
+        process.stderr.write(stamped);
+        try {
+          appendFileSync(join(app.getPath("userData"), "announce-trace.log"), stamped);
+        } catch {
+          // The trace must never take the window down with it.
+        }
+      });
+    }
     window.setIgnoreMouseEvents(true, { forward: true });
     window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
     window.webContents.on("will-navigate", (event, url) => {

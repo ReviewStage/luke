@@ -46,3 +46,7 @@ contextBridge.exposeInMainWorld(
   "lukeVoiceFixDisabled",
   process.argv.includes("--luke-without-voice-fix"),
 );
+contextBridge.exposeInMainWorld(
+  "lukeAnnounceTrace",
+  process.argv.includes("--luke-trace-announcements"),
+);
