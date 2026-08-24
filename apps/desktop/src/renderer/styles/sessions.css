@@ -588,6 +588,51 @@ html[data-keyboard="true"] button.session-row:focus-visible {
   outline-offset: -3px;
 }
 
+/* The loading rows: the row's own card with pulsing blocks where the mark and
+   the two lines of copy will be, so what waits is the shape of what is coming.
+   Only opacity moves, in step across every block so the wait reads as one
+   object, and the loop answers `--loop-motion` like every animation with no
+   end of its own, so reduced motion and a capture hold it on one frame. The
+   widths lean on `--row-index` so the rows read as different sessions rather
+   than a repeated tile. */
+.session-skeleton .skeleton-mark,
+.session-skeleton .skeleton-line {
+  background: var(--raised-strong);
+  animation: skeleton-pulse 1500ms ease-in-out infinite;
+  animation-play-state: var(--loop-motion);
+}
+
+.session-skeleton .skeleton-mark {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+}
+
+.session-skeleton .skeleton-line {
+  height: 10px;
+  border-radius: 5px;
+}
+
+.session-skeleton .skeleton-title {
+  width: calc(30% + var(--row-index) * 8%);
+  height: 12px;
+}
+
+.session-skeleton .skeleton-detail {
+  width: calc(66% - var(--row-index) * 7%);
+}
+
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
 /* The mark stands bare — no tile around it: a hairline square inside a
    hairline card would be the one box on the row carrying no information, and
    the mark's own colour and silhouette are the identification. The slot keeps a

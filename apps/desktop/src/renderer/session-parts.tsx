@@ -1,4 +1,5 @@
 import { OptionsIcon, ProviderMark } from "@sidecar/panel";
+import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { useRef } from "react";
 import { ERRAND_TARGET, errandTargetProps } from "./luke-errand";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
@@ -72,6 +73,47 @@ export function EmptyState(): React.JSX.Element {
     <div className="empty-state">
       <strong>Nothing to watch yet</strong>
     </div>
+  );
+}
+
+/**
+ * As many placeholder rows as the panel usually has real ones on screen, each
+ * named by the `--row-index` it is drawn at: the slot is the row's identity,
+ * because nothing else about a placeholder tells it from its neighbours.
+ */
+const LOADING_ROW_SLOTS = [1, 2, 3] as const;
+
+/**
+ * Stands where the rows will, before the first roster reading has landed.
+ * An unread zero only means "not looked yet", so the empty state's words
+ * would claim a fact nobody has checked — the same rule the wing's badge
+ * keeps by saying it is checking rather than counting nothing. The rows
+ * pulse on `--loop-motion`, so reduced motion and capture runs hold them
+ * still like every other endless loop.
+ */
+export function LoadingState(): React.JSX.Element {
+  return (
+    <>
+      <span className="visually-hidden" role="status">
+        Checking for sessions
+      </span>
+      {LOADING_ROW_SLOTS.map((slot) => (
+        <div
+          key={slot}
+          className="session-row session-skeleton"
+          aria-hidden="true"
+          style={cssCustomProperties({ "--row-index": slot })}
+        >
+          <span className="row-mark">
+            <span className="skeleton-mark" />
+          </span>
+          <span className="row-copy">
+            <span className="skeleton-line skeleton-title" />
+            <span className="skeleton-line skeleton-detail" />
+          </span>
+        </div>
+      ))}
+    </>
   );
 }
 

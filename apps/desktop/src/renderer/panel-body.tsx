@@ -43,6 +43,7 @@ import {
 import {
   EmptyState,
   ListeningGlyph,
+  LoadingState,
   SessionOptions,
   SessionOptionsButton,
   SessionsPanel,
@@ -765,6 +766,12 @@ export interface PanelBodyProps {
   /** Why the last sign-in ended without landing, for the gate to show. */
   signInFailure?: string;
   list: ArrangedSessions;
+  /**
+   * Whether the roster has been read at all yet. Until it has, an empty list
+   * draws loading rows rather than the empty state: an unread zero only means
+   * "not looked yet", never "nothing to watch".
+   */
+  sessionsSettled: boolean;
   view: SessionArrangement;
   onViewChange: (view: SessionArrangement) => void;
   /** Carries a toggled filter selection; unlike a view change it leaves the sheet open. */
@@ -821,6 +828,7 @@ export function PanelBody({
   onBeginSignIn,
   signInFailure,
   list,
+  sessionsSettled,
   view,
   onViewChange,
   onFiltersChange,
@@ -941,8 +949,10 @@ export function PanelBody({
                   beyondFilter={list.search.beyondFilter}
                   onWiden={() => onViewChange(widenedView(view))}
                 />
-              ) : (
+              ) : sessionsSettled ? (
                 <EmptyState />
+              ) : (
+                <LoadingState />
               )
             ) : (
               // Runs are read over the drawn order, leaving rows and all: a

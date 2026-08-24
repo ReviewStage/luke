@@ -3202,6 +3202,7 @@ export function App(): React.JSX.Element {
             onBeginSignIn={beginSignIn}
             {...(signInFailure ? { signInFailure } : undefined)}
             list={list}
+            sessionsSettled={sessionsSettled}
             view={sessionView}
             onViewChange={changeSessionView}
             onFiltersChange={changeSessionFilters}
