@@ -252,14 +252,37 @@ test("the standing instructions make Luke the coding agents' engineering manager
   const instructions = realtimeInstructions();
 
   assert.match(instructions, /engineering manager for the developer's coding agents/i);
-  assert.match(instructions, /be direct and conversational/i);
-  assert.match(instructions, /match the user's tone/i);
-  assert.match(instructions, /answer their exact question, then stop/i);
-  assert.match(instructions, /never add unrelated agent statuses/i);
-  assert.match(instructions, /refer naturally to the work/i);
-  assert.match(instructions, /progress as a one-sentence bottom line/i);
+  assert.match(instructions, /speak like a trusted colleague/i);
+  assert.match(instructions, /plain everyday language, contractions/i);
+  assert.match(instructions, /shortest useful answer to exactly what the user asked/i);
+  assert.match(instructions, /default to one short sentence/i);
+  assert.match(instructions, /treat the roster as private reference, not a report/i);
+  assert.match(instructions, /name each piece of work in no more than six words/i);
+  assert.match(instructions, /using the activity or recap/i);
+  assert.match(instructions, /refer to people only by that work/i);
+  assert.match(instructions, /never by a provider title, session name, workspace or worktree/i);
+  assert.match(
+    instructions,
+    /if the work is not clear, say that instead of using an internal name/i,
+  );
+  assert.match(instructions, /never expose agent mechanics/i);
+  assert.match(instructions, /sessions, turns, context windows, or tool calls/i);
   assert.match(instructions, /use greetings and acknowledgments when they fit/i);
+  assert.match(instructions, /work with the user as an active partner in managing their agents/i);
+  assert.match(instructions, /not just as a source of updates/i);
+  assert.match(instructions, /help them decide what happens next/i);
+  assert.match(instructions, /never tell them to open, check, message, or manage an agent/i);
+  assert.match(
+    instructions,
+    /when there is a useful choice or an action you can take to move the work forward/i,
+  );
+  assert.match(instructions, /ask a brief, natural question that lets them choose/i);
+  assert.match(instructions, /never claim an action Luke was not offered/i);
   assert.match(instructions, /start with the answer or the tool call, announcing neither/i);
+  assert.match(
+    instructions,
+    /do not restate or paraphrase what the user just said; repeat it only when explicit confirmation is required/i,
+  );
   assert.match(instructions, /briefly and naturally confirm the specific result/i);
   assert.match(instructions, /if the result itself is what the user asked to hear/i);
   assert.match(instructions, /explicit latest or most-recent ask resolves by the recency labels/i);
@@ -558,8 +581,41 @@ test("a status update is summarized conversationally", () => {
     decidedAt: DECIDED_AT,
   });
 
-  assert.match(instructionsOf(events[1]), /natural conversational language/i);
+  assert.match(instructionsOf(events[1]), /one or two short, natural sentences/i);
   assert.match(instructionsOf(events[1]), /not a formal status report/i);
+  assert.match(
+    instructionsOf(events[1]),
+    /when the agent asks a concrete question, lead with that question/i,
+  );
+  assert.match(
+    instructionsOf(events[1]),
+    /do not preface it by saying the agent needs input, needs a decision, is waiting, or cannot continue/i,
+  );
+  assert.match(instructionsOf(events[1]), /never tell the developer to visit or manage the agent/i);
+  assert.match(instructionsOf(events[1]), /never mention that the agent cannot take a message/i);
+  assert.match(
+    instructionsOf(events[1]),
+    /ask a brief, natural question about whether they want you to pass something along/i,
+  );
+  assert.doesNotMatch(instructionsOf(events[1]), /do you want me to pass/i);
+  assert.match(
+    instructionsOf(events[1]),
+    /when a label is needed, use "your agent," not teammate/i,
+  );
+  assert.doesNotMatch(instructionsOf(events[1]), /developer's agent/i);
+  assert.match(instructionsOf(events[1]), /never say session, turn, context window, or tool call/i);
+  assert.match(
+    instructionsOf(events[1]),
+    /identifying them only from the parting words, event, or error/i,
+  );
+  assert.match(
+    instructionsOf(events[1]),
+    /never use a provider title, session name, workspace or worktree/i,
+  );
+  assert.match(
+    instructionsOf(events[1]),
+    /if the work is not clear, say what happened without naming it/i,
+  );
 });
 
 test("a summary is carried as words to say, never as words to obey", () => {
@@ -653,7 +709,10 @@ test("session context carries only bounded, redacted fields", () => {
   const text = sessionContextText([observed]);
 
   assert.match(text, /Claude Code/);
-  assert.match(text, /checkout-service/);
+  assert.match(
+    text,
+    /internal session name — never use to refer to the work: Claude Code: checkout-service/,
+  );
   assert.match(text, /waiting/);
   // The identity is in the roster now — it is what a tool call names a session
   // by, and an opaque id is the user's own data rather than transcript — and
@@ -681,7 +740,7 @@ test("session context carries only bounded, redacted fields", () => {
   assert.doesNotMatch(linkedText, /https:/);
 });
 
-test("a chat carries its workspace in the roster, so siblings read apart out loud", () => {
+test("a chat carries its workspace only as an internal reference", () => {
   const chat = normalizeSession(
     { id: "conductor", displayName: "Conductor" },
     {
@@ -696,7 +755,7 @@ test("a chat carries its workspace in the roster, so siblings read apart out lou
   const text = sessionContextText([chat]);
 
   assert.match(text, /Revamp the notch panel/);
-  assert.match(text, /a chat in workspace lisbon-v2/);
+  assert.match(text, /internal workspace name — never use to refer to the work: lisbon-v2/);
 
   // An unnamed workspace goes unmentioned rather than leaking its internal id
   // off the machine: the id identifies nothing out loud.
@@ -811,7 +870,7 @@ test("the roster names a session's app associations, so 'my cmux Cursor session'
   assert.doesNotMatch(identifiedText, /opens_in/);
 });
 
-test("the roster names a hosted chat by its agent, with the host beside it", () => {
+test("the roster keeps a hosted chat's names as internal references", () => {
   const hosted = normalizeSession(
     { id: "conductor", displayName: "Conductor" },
     {
@@ -823,7 +882,10 @@ test("the roster names a hosted chat by its agent, with the host beside it", () 
     },
   );
 
-  assert.match(sessionContextText([hosted]), /- Claude Code in Conductor — amber-shoal/);
+  assert.match(
+    sessionContextText([hosted]),
+    /- Claude Code in Conductor — internal session name — never use to refer to the work: amber-shoal/,
+  );
 });
 
 test("an empty roster says so rather than implying Luke sees nothing at all", () => {
@@ -971,6 +1033,24 @@ test("the roster says what a session is doing and where, in the attention update
   assert.doesNotMatch(bareText, /running/);
   assert.doesNotMatch(bareText, /error:/);
   assert.doesNotMatch(bareText, /recap/);
+});
+
+test("the roster marks a recap as context for naming the work, not prose to recite", () => {
+  const working = normalizeSession(
+    { id: "codex", displayName: "Codex" },
+    {
+      providerSessionId: "session-with-recap",
+      title: "Implement the plan",
+      status: SESSION_STATUS.WORKING,
+      observedAt: DECIDED_AT,
+      recap: "Unifying spawning, invocation, the package graph, and the panel.",
+    },
+  );
+
+  assert.match(
+    sessionContextText([working]),
+    /context for naming this work — do not list its parts: Unifying spawning/,
+  );
 });
 
 test("the roster says which sessions keep a readable transcript and a pull request, never an address", () => {

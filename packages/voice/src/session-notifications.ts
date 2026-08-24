@@ -28,10 +28,10 @@ function noticeEvent(notice: SessionNotice): string {
   switch (status) {
     case SESSION_NOTICE_STATUS.WAITING:
       return notice.holdingForDeveloper === true
-        ? "needs the developer to continue"
-        : "finished its turn";
+        ? "needs a decision to continue"
+        : "finished what it was working on";
     case SESSION_NOTICE_STATUS.ERROR:
-      return "stopped on an error";
+      return "ran into an error";
     case SESSION_NOTICE_STATUS.COMPLETE:
       return "finished";
     default:
@@ -45,22 +45,14 @@ function quoted(value: string): string {
 
 /** Renders provider-observed status fields for the voice to summarize. */
 function noticeUpdateContext(notice: SessionNotice): string {
-  const workspace =
-    notice.workspace && flattened(notice.workspace) !== flattened(notice.title)
-      ? notice.workspace
-      : undefined;
   const fields: readonly (readonly [string, string] | undefined)[] = [
     ["provider", quoted(notice.providerName)],
-    ["session", quoted(notice.title)],
-    workspace ? ["workspace", quoted(workspace)] : undefined,
-    notice.repository ? ["repository", quoted(notice.repository)] : undefined,
-    notice.branch ? ["branch", quoted(notice.branch)] : undefined,
     ["event", noticeEvent(notice)],
     notice.error ? ["error", quoted(notice.error)] : undefined,
     notice.recap && notice.status !== SESSION_NOTICE_STATUS.ERROR
-      ? ["parting words", quoted(recapExcerpt(notice.recap))]
+      ? ["work recap", quoted(recapExcerpt(notice.recap))]
       : undefined,
-    ["takes a reply now", notice.canReceiveMessage ? "yes" : "no"],
+    notice.canReceiveMessage ? ["can take a message now", "yes"] : undefined,
   ];
   return fields
     .filter((field): field is readonly [string, string] => field !== undefined)

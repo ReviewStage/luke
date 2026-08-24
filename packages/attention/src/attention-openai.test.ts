@@ -39,6 +39,28 @@ test("the responses request is the shared construction with only the update vary
   assert.equal(request.instructions, attentionInstructions());
   assert.match(request.instructions, /natural and conversational/i);
   assert.match(request.instructions, /not a formal status report/i);
+  assert.match(
+    request.instructions,
+    /when the agent asks a concrete question, summarize the question directly/i,
+  );
+  assert.match(
+    request.instructions,
+    /do not preface it by saying the agent needs input, needs a decision, is waiting, or cannot continue/i,
+  );
+  assert.match(request.instructions, /answer it directly without restating the ask/i);
+  assert.match(request.instructions, /when a label is needed, use "your agent," not teammate/i);
+  assert.doesNotMatch(request.instructions, /developer's agent/i);
+  assert.match(request.instructions, /never use agent mechanics/i);
+  assert.match(request.instructions, /never tell the developer to inspect or manage the agent/i);
+  assert.match(
+    request.instructions,
+    /identifying them only from the running activity or work recap/i,
+  );
+  assert.match(
+    request.instructions,
+    /never use the provider title, session name, workspace or worktree/i,
+  );
+  assert.doesNotMatch(request.input, /Provider title:|Workspace:/);
   assert.equal(request.input, attentionUpdateInput(UPDATE));
   assert.equal(request.max_output_tokens, 64);
   assert.equal(request.store, false);
