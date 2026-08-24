@@ -480,7 +480,7 @@ export const maximumVoiceContextWorkspaceProjects = 10;
  */
 export function workspaceProjectContextText(
   projects: readonly ObservedWorkspaceProject[],
-  _defaultProviderId?: string,
+  defaultProviderId?: string,
   defaultProjectIds?: Readonly<Partial<Record<string, string>>>,
 ): string {
   if (projects.length === 0) return "No provider currently offers workspace creation.";
@@ -491,7 +491,72 @@ export function workspaceProjectContextText(
       (project) =>
         `- ${project.providerName} — ${project.repository}${project.targetName ? ` on ${project.targetName}` : ""} [provider_id=${project.providerId} project_id=${project.providerProjectId}${project.providerTargetId ? ` target_id=${project.providerTargetId}` : ""}]; ${TASK_SUPPORT_TEXT[project.taskSupport]}${project.spawnableAgents?.length ? `; agents: ${project.spawnableAgents.join(", ")}${project.defaultAgent ? `; default agent: ${project.defaultAgent}` : ""}` : ""}`,
     ),
+    ...workspaceDefaultProviderLines(listed, defaultProviderId),
+    ...workspaceDefaultProjectLines(listed, defaultProjectIds),
   ].join("\n");
+}
+
+/**
+ * How the default provider reads under the projects list. A default that is
+ * chosen but not currently offering earns no line at all: it is not a place
+ * an ask can go, and the choice already made must not be presented as still
+ * open — only a developer who has never chosen is told the first creation
+ * chooses for them.
+ */
+function workspaceDefaultProviderLines(
+  projects: readonly ObservedWorkspaceProject[],
+  defaultProviderId: string | undefined,
+): readonly string[] {
+  const chosen = defaultProviderId
+    ? projects.find((project) => project.providerId === defaultProviderId)
+    : undefined;
+  if (chosen) {
+    return [
+      `The developer's default provider for new workspaces is ${chosen.providerName}: an ask that names no provider creates there.`,
+    ];
+  }
+  if (defaultProviderId) return [];
+  const providers = new Set(projects.map((project) => project.providerId));
+  return [
+    providers.size > 1
+      ? "No default provider is chosen yet: when an ask names no provider, ask which listed provider it should be. The first workspace created saves its provider as the developer's default."
+      : "No default provider is chosen yet: the first workspace created saves its provider as the developer's default.",
+  ];
+}
+
+/**
+ * How each provider's default project reads under the projects list, on the
+ * provider default's own terms. A default that is chosen but no longer
+ * offered earns no line at all; a provider with exactly one project earns
+ * none either while nothing is chosen, because there is nothing to steer —
+ * only a provider actually offering a choice is said to be decided by the
+ * first creation there.
+ */
+function workspaceDefaultProjectLines(
+  projects: readonly ObservedWorkspaceProject[],
+  defaultProjectIds: Readonly<Partial<Record<string, string>>> | undefined,
+): readonly string[] {
+  const lines: string[] = [];
+  const said = new Set<string>();
+  for (const project of projects) {
+    if (said.has(project.providerId)) continue;
+    said.add(project.providerId);
+    const offered = projects.filter((candidate) => candidate.providerId === project.providerId);
+    const chosenId = defaultProjectIds?.[project.providerId];
+    const chosen = chosenId
+      ? offered.find((candidate) => workspaceProjectSelectionId(candidate) === chosenId)
+      : undefined;
+    if (chosen) {
+      lines.push(
+        `The developer's default ${chosen.providerName} project is ${chosen.repository}${chosen.targetName ? ` on ${chosen.targetName}` : ""}: an ask that names no project creates there.`,
+      );
+    } else if (chosenId === undefined && offered.length > 1) {
+      lines.push(
+        `No default ${project.providerName} project is chosen yet: when an ask names no project there, ask which listed project it should be. The first workspace created in ${project.providerName} saves its project as the default.`,
+      );
+    }
+  }
+  return lines;
 }
 
 /**

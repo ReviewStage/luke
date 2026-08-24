@@ -1569,6 +1569,107 @@ test("the projects context lists each project with the identity a call names", (
   );
 });
 
+test("the projects context says where a nameless creation ask goes", () => {
+  const cursorProject: ObservedWorkspaceProject = {
+    providerId: "cursor",
+    providerName: "Cursor",
+    providerProjectId: "https://github.com/acme/luke",
+    repository: "acme/luke",
+    taskSupport: WORKSPACE_TASK_SUPPORT.REQUIRED,
+  };
+
+  // A chosen default that is offering is named as where a nameless ask goes.
+  const chosen = workspaceProjectContextText([OFFERED_PROJECT, cursorProject], "conductor");
+  assert.match(chosen, /default provider for new workspaces is Conductor/);
+  assert.doesNotMatch(chosen, /No default provider is chosen/);
+
+  // Nothing chosen and more than one provider listed: ask first, and say that
+  // the first creation decides — that sentence is how the developer learns
+  // their answer will be remembered.
+  const open = workspaceProjectContextText([OFFERED_PROJECT, cursorProject]);
+  assert.match(open, /No default provider is chosen yet/);
+  assert.match(open, /ask which listed provider/);
+  assert.match(open, /first workspace created saves its provider/);
+
+  // One provider alone leaves nothing to ask about, but the save is still
+  // said, or the remembered choice would be a surprise.
+  const single = workspaceProjectContextText([OFFERED_PROJECT]);
+  assert.match(single, /No default provider is chosen yet/);
+  assert.doesNotMatch(single, /ask which/);
+  assert.match(single, /first workspace created saves its provider/);
+
+  // A default whose provider is not offering earns no line at all: it is not
+  // somewhere an ask can go, and a choice already made is not re-offered to
+  // the first creation.
+  const away = workspaceProjectContextText([cursorProject], "conductor");
+  assert.doesNotMatch(away, /default provider/);
+
+  // The default rides the same context event the list does.
+  const [event] = workspaceProjectContextEvents(
+    [OFFERED_PROJECT],
+    "luke_ctx_workspace-projects_2",
+    "conductor",
+  );
+  assert.match(conversationItemText(event), /default provider for new workspaces is Conductor/);
+});
+
+test("the projects context says which project a nameless ask lands in", () => {
+  const secondProject: ObservedWorkspaceProject = {
+    providerId: "conductor",
+    providerName: "Conductor",
+    providerProjectId: "proj-2",
+    repository: "acme/other",
+    taskSupport: WORKSPACE_TASK_SUPPORT.OPTIONAL,
+  };
+
+  // A chosen default that is still offered is named by its repository, as
+  // where a nameless ask goes.
+  const chosen = workspaceProjectContextText([OFFERED_PROJECT, secondProject], undefined, {
+    conductor: "proj-1",
+  });
+  assert.match(chosen, /default Conductor project is luke/);
+  assert.doesNotMatch(chosen, /No default Conductor project/);
+
+  // Nothing chosen and more than one project listed: ask first, and say that
+  // the first creation there decides — that sentence is how the developer
+  // learns their answer will be remembered.
+  const open = workspaceProjectContextText([OFFERED_PROJECT, secondProject]);
+  assert.match(open, /No default Conductor project is chosen yet/);
+  assert.match(open, /ask which listed project/);
+  assert.match(open, /first workspace created in Conductor saves its project/);
+
+  // One project alone leaves nothing to steer, so nothing is said of it.
+  const single = workspaceProjectContextText([OFFERED_PROJECT]);
+  assert.doesNotMatch(single, /default Conductor project/);
+
+  // A default the provider no longer offers earns no line at all: it is not
+  // somewhere an ask can go, and the choice already made is not re-offered to
+  // the first creation.
+  const away = workspaceProjectContextText([OFFERED_PROJECT, secondProject], undefined, {
+    conductor: "proj-gone",
+  });
+  assert.doesNotMatch(away, /default Conductor project/);
+  assert.doesNotMatch(away, /No default Conductor project/);
+
+  // The default rides the same context event the list does.
+  const [event] = workspaceProjectContextEvents(
+    [OFFERED_PROJECT, secondProject],
+    "luke_ctx_workspace-projects_3",
+    undefined,
+    { conductor: "proj-2" },
+  );
+  assert.match(conversationItemText(event), /default Conductor project is acme\/other/);
+});
+
+test("a host-scoped default names only its exact target", () => {
+  const local = { ...OFFERED_PROJECT, providerTargetId: "local", targetName: "This Mac" };
+  const remote = { ...OFFERED_PROJECT, providerTargetId: "studio", targetName: "Studio" };
+  const chosen = workspaceProjectContextText([local, remote], undefined, {
+    conductor: JSON.stringify(["proj-1", "studio"]),
+  });
+  assert.match(chosen, /default Conductor project is luke on Studio/);
+});
+
 test("a chosen default project survives the context cap", () => {
   // One more project than the context will list, alphabetical like the
   // normalizer hands them over, with the developer's chosen default sorted
@@ -1585,12 +1686,13 @@ test("a chosen default project survives the context cap", () => {
   const capless = workspaceProjectContextText(crowd);
   assert.doesNotMatch(capless, new RegExp(last.providerProjectId));
 
-  // The chosen default rides past the cut so it remains available to the
-  // validator even though the context no longer narrates defaulting behavior.
+  // The chosen default rides past the cut, listed and steered both — a
+  // default the sentence names but the list omits would be unaskable.
   const kept = workspaceProjectContextText(crowd, undefined, {
     conductor: last.providerProjectId,
   });
   assert.match(kept, new RegExp(`project_id=${last.providerProjectId}`));
+  assert.match(kept, new RegExp(`default Conductor project is ${last.repository}`));
 });
 
 /**

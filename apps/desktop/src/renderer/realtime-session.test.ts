@@ -3208,13 +3208,15 @@ test("a spoken ask for a new workspace is carried, and an unlisted project is re
   await armDeveloperTurn(context);
   assert.equal(contextItems(context, "[workspace projects").length, 1);
 
-  // Changing a default does not change the context payload.
+  // The default provider is part of the same answer, so choosing one is news
+  // even while the list itself has not moved.
   const sentBeforeDefault = context.sent.length;
   context.session.updateWorkspaceProjects([project], "conductor");
   context.session.stopSpeaking();
   await armDeveloperTurn(context);
   const chosen = contextItems(context, "[workspace projects", sentBeforeDefault);
-  assert.equal(chosen.length, 0);
+  assert.equal(chosen.length, 1);
+  assert.match(itemText(chosen[0]), /default provider for new workspaces is Conductor/);
 
   const sentBefore = context.sent.length;
 
