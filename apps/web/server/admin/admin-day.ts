@@ -108,7 +108,8 @@ export async function handleAdminDay(options: AdminDayOptions): Promise<Response
   let viewer: AdminViewer | undefined;
   try {
     viewer = await options.resolveViewer(request);
-  } catch {
+  } catch (error) {
+    console.error("admin day viewer resolution failed", error);
     return errorResponse(ADMIN_HTTP_STATUS.SERVICE_UNAVAILABLE, ADMIN_ERROR.UNAVAILABLE);
   }
   if (!viewer) {
@@ -129,7 +130,8 @@ export async function handleAdminDay(options: AdminDayOptions): Promise<Response
       ADMIN_HTTP_STATUS.OK,
       await options.readDay(day, now, adminMetricsScope(request.url)),
     );
-  } catch {
+  } catch (error) {
+    console.error("admin day read failed", error);
     return errorResponse(ADMIN_HTTP_STATUS.SERVICE_UNAVAILABLE, ADMIN_ERROR.UNAVAILABLE);
   }
 }
