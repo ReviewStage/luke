@@ -18,8 +18,8 @@ import {
   SESSION_STATUS,
 } from "@sidecar/session";
 import { type WireRecord, wireRecord } from "@sidecar/wire";
-import { SUPERSET_WORKSPACE_PROVIDER_ID } from "../../../apps/desktop/src/shared/contracts.js";
 import { SUPERSET_CONTROL_ID } from "./cli.js";
+import { SUPERSET_WORKSPACE_PROVIDER_ID } from "./vocabulary.js";
 
 const SUPERSET_AGENT_PROVIDER = {
   claude: PROVIDER_ID.CLAUDE_CODE,
