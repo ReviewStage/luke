@@ -1,7 +1,7 @@
 // The same collapsing the account's refresh uses, and for the same reason:
 // Linear consumes a refresh token when it is spent, so two refreshes racing
 // would have the loser spend one Linear has already rotated away.
-import { singleFlight } from "@sidecar/oauth";
+import { singleFlight } from "@sidecar/credentials";
 import {
   LINEAR_REFRESH_STATUS,
   type LinearGrant,

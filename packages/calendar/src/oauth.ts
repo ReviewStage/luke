@@ -10,7 +10,7 @@ import {
   codeChallenge,
   createCodeVerifier,
   LOOPBACK_PAGE_TONE,
-} from "@sidecar/oauth";
+} from "@sidecar/credentials";
 import { isWireString, type UnparsedWireValue, unparsedWire, wireRecord } from "@sidecar/wire";
 
 /**
@@ -126,7 +126,6 @@ function signInPage(granted: boolean): string {
         badge: "Connected",
         title: "Connected to Google Calendar",
         body: "You can close this tab and return to Luke.",
-        closesItself: true,
       })
     : accountLoopbackPage({
         tone: LOOPBACK_PAGE_TONE.ATTENTION,

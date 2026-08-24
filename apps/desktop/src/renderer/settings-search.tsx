@@ -3,7 +3,8 @@ import {
   CLOUD_AGENT_PROVIDER_LIST,
   CREDENTIAL_PROVIDER_ID,
   VOICE_CREDENTIAL_PROVIDER,
-} from "@sidecar/credentials";
+} from "@sidecar/credentials/vocabulary";
+import { ProviderMark } from "@sidecar/panel";
 import {
   CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
   PROVIDER_ID,
@@ -13,18 +14,19 @@ import {
 } from "@sidecar/session";
 import {
   APP_SETTING_ID,
+  APP_SETTING_SCHEMA,
   type AppSettingId,
   isAppSettingId,
-  SETTING_PAGE,
+  settingFieldForGuideId,
   settingGuideEntries,
 } from "@sidecar/settings";
 import { Fragment, useRef } from "react";
 import { APPLE_CALENDAR_ID, APPLE_CALENDAR_NAME } from "#shared/apple-calendar";
-import type { AppSettings } from "#shared/contracts";
-import { CREDENTIAL_SOURCE, VOICE_SOURCE } from "#shared/contracts";
+import { CREDENTIAL_SOURCE } from "#shared/wire/account";
+import type { AppSettingsView } from "#shared/wire/settings";
+import { VOICE_SOURCE } from "#shared/wire/settings";
 import { FOCUS_FRAME_LIMIT } from "./credential-entry";
 import { ERRAND_TARGET_ATTRIBUTE } from "./luke-errand";
-import { ProviderMark } from "./provider-marks";
 import { searchTokens } from "./session-model";
 import { Highlighted } from "./session-search";
 import {
@@ -121,13 +123,20 @@ export const SETTINGS_SEARCH_ROW = {
  * it does not name draws its row unfound rather than mislanding a press, and
  * widening it is one line beside the capability that widened.
  */
+type DefaultProjectProviderId =
+  | typeof PROVIDER_ID.CONDUCTOR
+  | typeof CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID
+  | typeof PROVIDER_ID.CODEX
+  | typeof PROVIDER_ID.CURSOR
+  | typeof SUPERSET_WORKSPACE_PROVIDER_ID;
+
 const DEFAULT_PROJECT_ROW_ID = {
   [PROVIDER_ID.CONDUCTOR]: "default-project-conductor",
   [CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID]: "default-project-conductor-local",
   [PROVIDER_ID.CODEX]: "default-project-codex",
   [PROVIDER_ID.CURSOR]: "default-project-cursor",
   [SUPERSET_WORKSPACE_PROVIDER_ID]: "default-project-superset",
-} as const satisfies Partial<Record<WorkspaceProviderId, string>>;
+} as const satisfies Readonly<Record<DefaultProjectProviderId, string>>;
 
 /** The anchor a provider's Default project row wears, if the table names it. */
 export function defaultProjectRowId(providerId: WorkspaceProviderId): string | undefined {
@@ -156,7 +165,7 @@ export interface SettingsSearchEntry {
 
 /** What the pages must answer before the corpus can say what they hold. */
 export interface SettingsSearchInput {
-  settings: AppSettings;
+  settings: AppSettingsView;
   /**
    * Whether the voice controls stand on the Voice page: voice available and
    * the microphone granted. Until both, that page holds only the way in.
@@ -442,9 +451,9 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
  */
 export function settingsSearchEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[] {
   const guided = settingGuideEntries(input.settings).flatMap((setting): SettingsSearchEntry[] => {
-    // The guide's ids are the schema's own; one that is not names no page.
-    if (!isAppSettingId(setting.id)) return [];
-    if (!settingRowDrawn(setting.id, input)) return [];
+    const field = settingFieldForGuideId(setting.id);
+    if (!field) return [];
+    if (isAppSettingId(setting.id) && !settingRowDrawn(setting.id, input)) return [];
     const icon = Object.hasOwn(ROOT_SETTING_ICON, setting.id)
       ? // SAFETY: hasOwn narrows the id to the table's own keys.
         ROOT_SETTING_ICON[setting.id as keyof typeof ROOT_SETTING_ICON]
@@ -453,7 +462,7 @@ export function settingsSearchEntries(input: SettingsSearchInput): readonly Sett
       {
         id: setting.id,
         label: setting.label,
-        page: SETTING_PAGE[setting.id],
+        page: APP_SETTING_SCHEMA[field].settingsPage,
         ...(icon ? { icon } : undefined),
         haystack: [setting.label, setting.description],
       },

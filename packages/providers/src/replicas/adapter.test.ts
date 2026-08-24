@@ -704,7 +704,10 @@ test("starts another agent through the documented chat and message endpoints", a
     providerSessionId: "chat-existing",
     agent: "not-an-agent",
   });
-  assert.deepEqual(refused, { status: "unsupported" });
+  assert.deepEqual(refused, {
+    status: "unsupported",
+    reason: "That act is not supported by the latest observation.",
+  });
 });
 
 test("offers the reported environments as projects and creates a workspace in one", async () => {

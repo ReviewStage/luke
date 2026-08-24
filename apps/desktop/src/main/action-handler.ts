@@ -1,38 +1,35 @@
-import type { UnparsedWireValue, WireValue } from "@sidecar/wire";
-import type { IpcMainInvokeEvent } from "electron";
+import type { WireValue } from "@sidecar/wire";
+import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from "electron";
+import { BRIDGE, type Bridge, type BridgeMethod, bridgeEntries } from "#shared/bridge";
+import { type BridgeContext, registerBridgeEntry } from "./register-bridge";
 
 interface ActionHandlerHost {
-  trustedSender: (event: IpcMainInvokeEvent) => boolean;
-  // The listener answers with a wire value rather than a result of its own,
-  // because the answer crosses the bridge: anything an action returns has to
-  // survive being structured-cloned to the renderer.
-  handle: (
-    channel: string,
-    listener: (event: IpcMainInvokeEvent, ...args: UnparsedWireValue[]) => Promise<WireValue>,
-  ) => void;
+  ipcMain: Pick<IpcMain, "handle" | "on">;
+  trustedSender: (event: IpcMainEvent | IpcMainInvokeEvent) => boolean;
 }
 
-interface ActionHandler<TArguments extends readonly unknown[], TResult> {
-  validate: (args: readonly unknown[]) => TArguments | undefined;
+interface ActionHandler<TArguments extends unknown[], TResult> {
   act: (...args: TArguments) => Promise<TResult>;
   failure: (error: Error) => TResult;
 }
 
+type InvokedBridgeEntry = Bridge[BridgeMethod] & { kind: "invoke" };
+
 export function createActionHandler(host: ActionHandlerHost) {
-  return <TArguments extends readonly unknown[], TResult extends WireValue>(
-    channel: string,
+  return <TArguments extends unknown[], TResult extends WireValue>(
+    definition: InvokedBridgeEntry,
     action: ActionHandler<TArguments, TResult>,
   ): void => {
-    host.handle(channel, async (event, ...args) => {
-      if (!host.trustedSender(event)) throw new Error("Untrusted renderer");
-      const validated = action.validate(args);
-      if (!validated) return action.failure(new Error("Invalid action request"));
+    const method = bridgeEntries().find(([, candidate]) => candidate === definition)?.[0];
+    if (!method) throw new Error("Unknown bridge method");
+    const handler = async (_context: BridgeContext, ...received: unknown[]): Promise<TResult> => {
       try {
-        return await action.act(...validated);
+        // SAFETY: registerBridge has applied this definition's argument guard before calling the handler.
+        return await action.act(...(received as TArguments));
       } catch (error) {
-        const failure = error instanceof Error ? error : new Error(String(error));
-        return action.failure(failure);
+        return action.failure(error instanceof Error ? error : new Error(String(error)));
       }
-    });
+    };
+    registerBridgeEntry(BRIDGE, definition, handler, host);
   };
 }

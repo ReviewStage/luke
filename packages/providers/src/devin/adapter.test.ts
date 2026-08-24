@@ -279,7 +279,10 @@ test("refuses to archive a session whose row never advertised it", async () => {
     control: { id: "archive-session", label: "Archive" },
   });
 
-  assert.deepEqual(result, { status: "unsupported" });
+  assert.deepEqual(result, {
+    status: "unsupported",
+    reason: "That act is not supported by the latest observation.",
+  });
   assert.equal(api.requests.length, requestsBefore);
 });
 
@@ -731,7 +734,13 @@ test("refuses a message for a session Devin never promised to take one for", asy
   const settled = await adapter.sendMessage({ providerSessionId: "devin-exited", text: "go on" });
   const unknown = await adapter.sendMessage({ providerSessionId: "devin-unknown", text: "go on" });
 
-  assert.deepEqual(settled, { status: "unsupported" });
-  assert.deepEqual(unknown, { status: "unsupported" });
+  assert.deepEqual(settled, {
+    status: "unsupported",
+    reason: "That act is not supported by the latest observation.",
+  });
+  assert.deepEqual(unknown, {
+    status: "unsupported",
+    reason: "That act is not supported by the latest observation.",
+  });
   assert.equal(api.requests.length, observationRequests);
 });

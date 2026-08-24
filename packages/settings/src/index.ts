@@ -4,7 +4,6 @@ export {
   APP_SETTING_ID,
   APP_SETTING_SCHEMA,
   type AppSettingField,
-  type AppSettingGuideSettings,
   type AppSettingId,
   type AppSettingValue,
   isAppSettingField,

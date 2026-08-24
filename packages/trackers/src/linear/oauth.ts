@@ -9,8 +9,14 @@ import {
   codeChallenge,
   createCodeVerifier,
   LOOPBACK_PAGE_TONE,
-} from "@sidecar/oauth";
-import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
+} from "@sidecar/credentials";
+import {
+  ACT_RESULT_STATUS,
+  isRecord,
+  isWireNumber,
+  isWireString,
+  type UnparsedWireValue,
+} from "@sidecar/wire";
 
 /**
  * The sign-in behind the Linear row: Linear's own OAuth flow for a public
@@ -113,7 +119,6 @@ function signInPage(granted: boolean): string {
         badge: "Connected",
         title: "Connected to Linear",
         body: "You can close this tab and return to Luke.",
-        closesItself: true,
       })
     : accountLoopbackPage({
         tone: LOOPBACK_PAGE_TONE.ATTENTION,
@@ -418,7 +423,7 @@ export async function revokeLinearGrant(
  */
 export const LINEAR_REFRESH_STATUS = {
   RENEWED: "renewed",
-  REFUSED: "refused",
+  REFUSED: ACT_RESULT_STATUS.REJECTED,
   UNREACHABLE: "unreachable",
 } as const;
 

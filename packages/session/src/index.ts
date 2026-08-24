@@ -1,5 +1,11 @@
+export { ACT_RESULT_STATUS } from "@sidecar/wire";
 export { AGENT_IDENTITY, agentIdentityFor } from "./agent-identities.js";
 export { CompositeSessionProviderAdapter } from "./composite-provider-adapter.js";
+export {
+  ObservationLoop,
+  type ObservationLoopOptions,
+  ObservationSupervisor,
+} from "./observation-loop.js";
 export {
   CLI_CONNECTION,
   type CliConnection,
@@ -14,20 +20,25 @@ export {
   maximumWorkspaceNameLength,
   normalizeObservedWorkspaceProjects,
   type ObservedWorkspaceProject,
-  PROVIDER_ACT_RESULT_STATUS,
   PROVIDER_ID,
   PROVIDER_ID_LIST,
+  PROVIDER_IDENTITY_BY_ID,
+  PROVIDER_LOCATION_KIND,
   type ProviderActResult,
   type ProviderControlRequest,
   type ProviderControlResult,
   type ProviderId,
+  type ProviderIdentity,
+  type ProviderLocationKind,
   type ProviderMessageResult,
   type ProviderSessionMessage,
   type ProviderSessionRenameRequest,
+  type ProviderTranscriptResult,
   type ProviderWorkspaceAgentRequest,
   type ProviderWorkspaceRenameRequest,
   type ProviderWorkspaceRequest,
   type ProviderWorkspaceResult,
+  providerTranscriptResult,
   type SessionProviderAdapter,
   SessionProviderAdapterBase,
   SUPERSET_WORKSPACE_PROVIDER_ID,
@@ -48,15 +59,16 @@ export {
   type AttentionDecision,
   type AttentionDisposition,
   agedStatus,
+  attentionDecisionFromWire,
   boundedText,
   isRosterRelevant,
   isSessionApplicationId,
+  maximumAttentionSummaryLength,
   maximumSessionApplications,
   maximumSessionDetailLength,
   maximumSessionMessageLength,
   maximumSessionRecapLength,
   maximumSessionTitleLength,
-  type NormalizedSession,
   normalizeAttention,
   normalizeSession,
   normalizeSessionIdentity,
@@ -71,6 +83,7 @@ export {
   SESSION_LOCATION,
   SESSION_ROSTER_RETENTION_MS,
   SESSION_STATUS,
+  type Session,
   type SessionApplication,
   type SessionApplicationId,
   type SessionApplicationScope,
@@ -120,7 +133,12 @@ export {
   type SessionNoticeStatus,
   SessionNoticeTracker,
 } from "./session-notices.js";
-export { InMemorySessionRegistry } from "./session-registry.js";
+export {
+  InMemorySessionRegistry,
+  type SessionAttentionEntry,
+  type SessionRegistryListener,
+  type SessionRegistrySnapshot,
+} from "./session-registry.js";
 export {
   isListedWorkspaceAgentModel,
   isWorkspaceAgentSelection,

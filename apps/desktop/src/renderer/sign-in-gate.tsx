@@ -1,7 +1,7 @@
 import { FACE_MOTION, FACE_MOTION_CYCLE_MS, type FaceMotion } from "@sidecar/surface";
 import { useEffect, useState } from "react";
-import type { AccountSnapshot } from "#shared/contracts";
-import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountProvider } from "#shared/contracts";
+import type { AccountSnapshot } from "#shared/wire/account";
+import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountProvider } from "#shared/wire/account";
 import { GitHubMark, GoogleMark } from "./account-marks";
 
 /**

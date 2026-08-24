@@ -1,5 +1,6 @@
 import os from "node:os";
 import path from "node:path";
+import { HOOK_EVENT } from "../shared/hook-events.js";
 import {
   HOOK_ENTRY_NESTING,
   type ObservationHookSpec,
@@ -49,11 +50,11 @@ const DEVIN_CONFIG_DIRECTORY = "devin";
  * refines a row only if a build ever sends it.
  */
 export const DEVIN_HOOK_EVENT = {
-  SESSION_START: "session-start",
-  PROMPT: "prompt",
-  STOP: "stop",
-  NOTIFICATION: "notification",
-  SESSION_END: "session-end",
+  SESSION_START: HOOK_EVENT.SESSION_START,
+  PROMPT: HOOK_EVENT.PROMPT,
+  STOP: HOOK_EVENT.STOP,
+  NOTIFICATION: HOOK_EVENT.NOTIFICATION,
+  SESSION_END: HOOK_EVENT.SESSION_END,
 } as const;
 
 export type DevinHookEvent = (typeof DEVIN_HOOK_EVENT)[keyof typeof DEVIN_HOOK_EVENT];

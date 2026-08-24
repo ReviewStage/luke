@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   isRosterRelevant,
-  type NormalizedSession,
   normalizeSession,
   rosterRelevantSessions,
   SESSION_STATUS,
+  type Session,
   type SessionStatus,
   sessionChangeNumber,
   sessionRosterRetentionMs,
@@ -14,11 +14,7 @@ import {
 const TEST_NOW = Date.parse("2026-08-16T12:00:00.000Z");
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-function session(
-  providerSessionId: string,
-  status: SessionStatus,
-  observedAt: number,
-): NormalizedSession {
+function session(providerSessionId: string, status: SessionStatus, observedAt: number): Session {
   return normalizeSession(
     { id: "codex", displayName: "Codex" },
     { providerSessionId, title: "Implement the shared session core", status, observedAt },

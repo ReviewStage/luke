@@ -6,8 +6,8 @@ import {
   codeChallenge,
   createCodeVerifier,
   LOOPBACK_PAGE_TONE,
-} from "@sidecar/oauth";
-import type { AccountProvider } from "../../../apps/desktop/src/shared/contracts.js";
+} from "@sidecar/credentials";
+import type { AccountProvider } from "./snapshot.js";
 
 const CALLBACK_PATH = "/callback";
 const LOOPBACK_HOST = "127.0.0.1";
@@ -25,7 +25,6 @@ const LOOPBACK_ANSWER = {
       badge: "Signed in",
       title: "Signed in to Luke",
       body: "You can close this tab and return to Luke.",
-      closesItself: true,
     },
   },
   NOT_VERIFIED: {

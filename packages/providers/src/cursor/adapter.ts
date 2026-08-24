@@ -1,4 +1,4 @@
-import { CREDENTIAL_PROVIDER_ID, CREDENTIAL_PROVIDERS } from "@sidecar/credentials";
+import { CREDENTIAL_PROVIDER_ID, CREDENTIAL_PROVIDERS } from "@sidecar/credentials/vocabulary";
 import {
   agedStatus,
   maximumObservedWorkspaceProjects,

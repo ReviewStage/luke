@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "../../../apps/desktop/src/shared/contracts.js";
 import type { AccountClient, StoredAccount } from "./client.js";
 import { AccountSessionManager } from "./session-manager.js";
+import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "./snapshot.js";
 
 const STORED: StoredAccount = {
   accessToken: "access",

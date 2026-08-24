@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { ACCOUNT_PROVIDER, type AccountProvider } from "#shared/contracts";
+import { ACCOUNT_PROVIDER, type AccountProvider } from "#shared/wire/account";
 import { AccountProviderMark } from "./account-marks";
 import { useStagedFocus } from "./credential-entry";
 import { HIT_REGION } from "./panel-state";

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  ACT_RESULT_STATUS,
   ATTENTION_REVIEW_OUTCOME,
   ATTENTION_TRIGGER,
   type AttentionReview,
@@ -1534,7 +1535,7 @@ test("a tool call can act only on a session Luke was shown, doing what it advert
     ),
     sessionToolAction(messageCall(`{${identity},"text":"hi"}`, "delete_everything"), roster),
   ];
-  for (const refusal of refusals) assert.equal(refusal.kind, "refused");
+  for (const refusal of refusals) assert.equal(refusal.status, ACT_RESULT_STATUS.REJECTED);
 
   // A session that advertised nothing is offered nothing, out loud too.
   const quiet = normalizeSession(
@@ -1550,7 +1551,7 @@ test("a tool call can act only on a session Luke was shown, doing what it advert
     messageCall('{"provider_id":"codex","provider_session_id":"thread-1","text":"hi"}'),
     [quiet],
   );
-  assert.equal(silentRefusal.kind, "refused");
+  assert.equal(silentRefusal.status, ACT_RESULT_STATUS.REJECTED);
   // No address means nowhere to open, however real the identity is.
   const nowhereToOpen = sessionToolAction(
     messageCall(
@@ -1559,7 +1560,7 @@ test("a tool call can act only on a session Luke was shown, doing what it advert
     ),
     [quiet],
   );
-  assert.equal(nowhereToOpen.kind, "refused");
+  assert.equal(nowhereToOpen.status, ACT_RESULT_STATUS.REJECTED);
 
   // A cloud session's conversation lives with its provider, not on this
   // machine, so a transcript read is refused rather than guessed at.
@@ -1580,7 +1581,7 @@ test("a tool call can act only on a session Luke was shown, doing what it advert
     ),
     [cloudSession],
   );
-  assert.equal(nothingToRead.kind, "refused");
+  assert.equal(nothingToRead.status, ACT_RESULT_STATUS.REJECTED);
 });
 
 test("an open ask can pick the app, held to the roster's own associations", () => {
@@ -1637,7 +1638,7 @@ test("an open ask can pick the app, held to the roster's own associations", () =
       messageCall(`{${identity},"application":"${application}"}`, REALTIME_TOOL.OPEN_SESSION),
       [held],
     );
-    assert.equal(refusal.kind, "refused");
+    assert.equal(refusal.status, ACT_RESULT_STATUS.REJECTED);
     assert.match("reason" in refusal ? refusal.reason : "", /opens in Superset/);
   }
 });
@@ -1809,7 +1810,7 @@ test("a creation ask may name a model, by the name the guide lists it under", ()
       projects,
     ),
   ];
-  for (const refusal of refusals) assert.equal(refusal.kind, "refused");
+  for (const refusal of refusals) assert.equal(refusal.status, ACT_RESULT_STATUS.REJECTED);
 });
 
 test("an added agent may carry a model, only of the asked-for kind", () => {
@@ -1855,8 +1856,8 @@ test("an added agent may carry a model, only of the asked-for kind", () => {
     [],
     conductorAgentModels,
   );
-  assert.equal(mismatched.kind, "refused");
-  if (mismatched.kind === "refused") {
+  assert.equal(mismatched.status, ACT_RESULT_STATUS.REJECTED);
+  if (mismatched.status === ACT_RESULT_STATUS.REJECTED) {
     assert.match(mismatched.reason ?? "", /cursor agent runs no model/);
   }
 });
@@ -1912,7 +1913,7 @@ test("a creation ask can only name a project Luke was shown", () => {
       actionableSession(),
     ]),
   ];
-  for (const refusal of refusals) assert.equal(refusal.kind, "refused");
+  for (const refusal of refusals) assert.equal(refusal.status, ACT_RESULT_STATUS.REJECTED);
 });
 
 test("an implicit project resolves only when the latest roster has one match", () => {
@@ -1930,7 +1931,7 @@ test("an implicit project resolves only when the latest roster has one match", (
     [],
     [OFFERED_PROJECT, { ...OFFERED_PROJECT, providerProjectId: "proj-2" }],
   );
-  assert.equal(ambiguous.kind, "refused");
+  assert.equal(ambiguous.status, ACT_RESULT_STATUS.REJECTED);
   // SAFETY: Refused session-tool actions carry a reason string this assertion inspects.
   assert.match((ambiguous as { reason?: string }).reason ?? "", /More than one listed project/);
 });
@@ -1990,7 +1991,7 @@ test("the saved defaults settle what a creation ask leaves unnamed", () => {
     noModels,
     "superset",
   );
-  assert.equal(unsettled.kind, "refused");
+  assert.equal(unsettled.status, ACT_RESULT_STATUS.REJECTED);
 
   // A saved project settles which project, never which provider: while no
   // default provider is chosen, an ask still spanning providers stays a
@@ -2004,7 +2005,7 @@ test("the saved defaults settle what a creation ask leaves unnamed", () => {
     undefined,
     { conductor: "proj-2" },
   );
-  assert.equal(crossProvider.kind, "refused");
+  assert.equal(crossProvider.status, ACT_RESULT_STATUS.REJECTED);
 });
 
 test("another agent can only be added as a kind the session's own entry lists", () => {
@@ -2083,7 +2084,7 @@ test("another agent can only be added as a kind the session's own entry lists", 
       roster,
     ),
   ];
-  for (const refusal of refusals) assert.equal(refusal.kind, "refused");
+  for (const refusal of refusals) assert.equal(refusal.status, ACT_RESULT_STATUS.REJECTED);
 });
 
 test("an opening task is held to the project's own word for it", () => {
@@ -2155,7 +2156,7 @@ test("an opening task is held to the project's own word for it", () => {
       projects,
     ),
   ];
-  for (const refusal of refusals) assert.equal(refusal.kind, "refused");
+  for (const refusal of refusals) assert.equal(refusal.status, ACT_RESULT_STATUS.REJECTED);
 });
 
 test("a tool call is answered with the outcome the provider gave", () => {
@@ -2292,7 +2293,7 @@ test("an issue tool call can act only on an issue Luke was shown, going where it
     ),
     issueToolAction(issueCall(`{${identity},"state":"Done"}`, "delete_everything"), roster),
   ];
-  for (const refusal of refusals) assert.equal(refusal.kind, "refused");
+  for (const refusal of refusals) assert.equal(refusal.status, ACT_RESULT_STATUS.REJECTED);
 
   // An issue that advertised nothing is offered nothing, out loud too.
   const still = normalizeTrackedIssue(
@@ -2308,14 +2309,14 @@ test("an issue tool call can act only on an issue Luke was shown, going where it
   assert.ok(still);
   const quietIdentity = '"tracker_id":"linear","issue_id":"LUKE-124"';
   assert.equal(
-    issueToolAction(issueCall(`{${quietIdentity},"state":"Done"}`), [still]).kind,
-    "refused",
+    issueToolAction(issueCall(`{${quietIdentity},"state":"Done"}`), [still]).status,
+    ACT_RESULT_STATUS.REJECTED,
   );
   assert.equal(
     issueToolAction(issueCall(`{${quietIdentity},"body":"hi"}`, REALTIME_TOOL.COMMENT_ON_ISSUE), [
       still,
-    ]).kind,
-    "refused",
+    ]).status,
+    ACT_RESULT_STATUS.REJECTED,
   );
 });
 
@@ -2395,7 +2396,7 @@ test("a standing ask is kept only for a session Luke was shown, in bounded words
       roster,
     ),
   ];
-  for (const refusal of refusals) assert.equal(refusal.kind, "refused");
+  for (const refusal of refusals) assert.equal(refusal.status, ACT_RESULT_STATUS.REJECTED);
 });
 
 test("only a review that answers a standing ask may be heard without a call open", () => {

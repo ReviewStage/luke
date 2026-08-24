@@ -1,4 +1,4 @@
-import { ACCOUNT_PROVIDER, type AccountProvider } from "#shared/contracts";
+import { ACCOUNT_PROVIDER, type AccountProvider } from "#shared/wire/account";
 
 /**
  * The two identity providers' own marks, traced for the sign-in surface. They

@@ -7,11 +7,13 @@ import {
   type AttentionSpeech,
   announcementConversationEntry,
   appendConversationEntry,
-  type CarriedSessionAction,
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
   dispatchByKind,
   insertSpokenAskEntry,
+  isCarriedAppAction,
+  isCarriedIssueAction,
+  isCarriedSessionAction,
   REALTIME_STATUS,
   type RealtimeStatus,
   type RealtimeVoice,
@@ -21,21 +23,18 @@ import {
 } from "@sidecar/realtime";
 import {
   mentionedSessions,
-  type NormalizedSession,
   type ObservedWorkspaceProject,
   SESSION_MENTION_KIND,
+  type Session,
   type SessionApplicationId,
   type SessionIdentity,
   type SessionMention,
 } from "@sidecar/session";
 import { TALK_KEY_RELEASE, talkKeyRelease } from "@sidecar/settings";
+import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type {
-  MicrophoneStatus,
-  SessionOpenResult,
-  VoiceHotkeyState,
-  WorkspaceProviderId,
-} from "#shared/contracts";
+import type { MicrophoneStatus, VoiceHotkeyState } from "#shared/wire/audio";
+import type { SessionOpenResult, WorkspaceProviderId } from "#shared/wire/session";
 import { askRefusal } from "./ask-luke";
 import { voiceQuotaSpentNote } from "./microphone-access";
 import { openPreferredMicrophone } from "./microphone-choice";
@@ -312,7 +311,7 @@ export function replyMentions(input: {
   fixtureSpeaking: boolean;
   about: SessionIdentity | undefined;
   captions: readonly string[] | undefined;
-  sessions: readonly NormalizedSession[];
+  sessions: readonly Session[];
 }): readonly SessionMention[] {
   if (input.about) return [{ ...input.about, kind: SESSION_MENTION_KIND.SESSION }];
   const spoken = input.fixtureSpeaking ? FIXTURE_SPEAKING_CAPTION : input.captions?.join("\n");
@@ -356,7 +355,7 @@ export interface VoiceConversationOptions {
    * the user's exact choice.
    */
   preferBuiltInMicrophone: boolean;
-  sessions: readonly NormalizedSession[];
+  sessions: readonly Session[];
   /**
    * The standing asks riding the roster they annotate, so a conversation can
    * say — and withdraw — what Luke is already listening for.
@@ -617,7 +616,28 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       // The same bridge calls the rows use — the composer, the chips, and the
       // press that opens a session: a spoken ask is a third way to ask for the
       // same act, behind the same gauntlet in the main process.
-      carryAction: (action: CarriedSessionAction) => {
+      carryAct: async (envelope) => {
+        const authorization = await window.sidecar.authorizeAct(envelope);
+        if (authorization.status !== ACT_RESULT_STATUS.ACCEPTED) return authorization;
+        const { act: action, armed } = envelope;
+        if (!armed) {
+          return {
+            status: ACT_RESULT_STATUS.REJECTED,
+            reason: "Only a request you make yourself can carry an act.",
+          };
+        }
+        if (isCarriedAppAction(action)) {
+          return optionsRef.current.carryAppAction(action);
+        }
+        if (isCarriedIssueAction(action)) {
+          return window.sidecar.executeIssueAction(action);
+        }
+        if (!isCarriedSessionAction(action)) {
+          return {
+            status: ACT_RESULT_STATUS.REJECTED,
+            reason: "No handler carries that act.",
+          };
+        }
         // The ask is recorded before the outcome is known: a refusal still
         // leaves the developer having asked it, and the next turn may point
         // back at the session it named. The outcome needs no line of its own —
@@ -668,14 +688,6 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
             window.sidecar.readSessionTranscript(act.identity),
         });
       },
-      // The asks about Luke himself — a settings change, the panel shown —
-      // behind the same gauntlet: validated against the guide before this is
-      // called, and performed by the same handlers the panel's controls use.
-      carryAppAction: (action) => optionsRef.current.carryAppAction(action),
-      // The issue acts have no rows to share a bridge call with, but the shape
-      // is the same: validated against the roster here, and again in the main
-      // process against what it observed.
-      carryIssueAction: (action) => window.sidecar.executeIssueAction(action),
       onStatus: setVoiceStatus,
       onLocalStream: setLocalStream,
       onRemoteStream: setRemoteStream,

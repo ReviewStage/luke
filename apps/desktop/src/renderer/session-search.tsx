@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import { FOCUS_FRAME_LIMIT } from "./credential-entry";
 import { ERRAND_TARGET, errandTargetProps } from "./luke-errand";
-import { type ArrangedSessions, matchRanges, type SessionView } from "./session-model";
+import { type ArrangedSessions, matchRanges, type SessionArrangement } from "./session-model";
 import { CloseIcon, SearchIcon } from "./settings-icons";
 
 /**
@@ -92,8 +92,8 @@ export function SessionSearch({
   onEngagedChange,
 }: {
   list: ArrangedSessions;
-  view: SessionView;
-  onViewChange: (view: SessionView) => void;
+  view: SessionArrangement;
+  onViewChange: (view: SessionArrangement) => void;
   onClose: () => void;
   /**
    * Reports someone being part-way through a search, which holds the panel
@@ -224,6 +224,6 @@ export function Highlighted({
 }
 
 /** The widened view an emptied search's button asks for: no filters at all. */
-export function widenedView(view: SessionView): SessionView {
+export function widenedView(view: SessionArrangement): SessionArrangement {
   return { ...view, filters: [] };
 }

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import type { UnparsedWireValue } from "@sidecar/wire";
-import type { SessionReplayBootstrap } from "#shared/contracts";
+import type { SessionReplayBootstrap } from "#shared/wire/session";
 import { POSTHOG_HOST, sessionReplayWanted, withoutLocalAddress } from "./session-replay";
 
 /**

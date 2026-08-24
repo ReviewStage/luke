@@ -1,6 +1,6 @@
 import { PRODUCT_SURFACE_EVENT } from "@sidecar/analytics";
 import { GOOGLE_CALENDAR_ID, GOOGLE_CALENDAR_NAME } from "@sidecar/calendar/vocabulary";
-import type { CredentialProvider } from "@sidecar/credentials";
+import type { CredentialProvider } from "@sidecar/credentials/vocabulary";
 import {
   CLOUD_AGENT_PROVIDER_LIST,
   CREDENTIAL_CONNECTION,
@@ -8,14 +8,14 @@ import {
   CREDENTIAL_PROVIDERS,
   providerRunsSessionsInCloud,
   VOICE_CREDENTIAL_PROVIDER,
-} from "@sidecar/credentials";
+} from "@sidecar/credentials/vocabulary";
+import { APP_SETTING_KIND, APP_TOGGLE_VALUE } from "@sidecar/guide";
 import type { HostedQuota, HostedUsageAnswer } from "@sidecar/hosted";
+import { CloudBadge, ProviderMark } from "@sidecar/panel";
 import {
   isRealtimeVoice,
   isRealtimeVoiceSpeed,
   REALTIME_DEFAULTS,
-  REALTIME_VOICE_LIST,
-  REALTIME_VOICE_SPEED_LIST,
   type RealtimeDiagnostics,
   type RealtimeVoice,
   type RealtimeVoiceSpeed,
@@ -29,49 +29,62 @@ import {
   workspaceAgentModels,
 } from "@sidecar/session";
 import {
+  APP_SETTING_SCHEMA,
   capturedVoiceHotkey,
   DEFAULT_ASK_HOTKEYS,
   DEFAULT_STOP_HOTKEYS,
   DEFAULT_VOICE_HOTKEYS,
+  isAppSettingId,
+  SETTINGS_PAGE as SCHEMA_SETTINGS_PAGE,
+  settingFieldForGuideId,
+  settingGuideEntries,
   settingsScopeChanged,
+  spokenSettingValue,
   VOICE_HOTKEY_CAPTURE,
   voiceHotkeyLabel,
 } from "@sidecar/settings";
 import {
   DEFAULT_PANEL_FORM_FACTOR,
   isPanelFormFactor,
-  PANEL_FORM_FACTOR_LIST,
   type PanelFormFactor,
 } from "@sidecar/surface";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
+import { ACT_RESULT_STATUS, type ActResult } from "@sidecar/wire";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { APPLE_CALENDAR_ID, APPLE_CALENDAR_NAME } from "#shared/apple-calendar";
-import type {
-  AccountCalendar,
-  AccountSnapshot,
-  AppSettings,
-  CalendarAccount,
-  CredentialSource,
-  MicrophoneStatus,
-  ObservedAccountCalendars,
-  SettingsResetScope,
-  UpdateSnapshot,
-  WorkspaceProviderId,
-} from "#shared/contracts";
+import { SETTINGS_VIEW_COUNTED_AS } from "#shared/product-vocabulary";
+import type { AccountSnapshot, CredentialSource } from "#shared/wire/account";
 import {
   ACCOUNT_PROVIDER,
   ACCOUNT_STATUS,
-  APP_SETTING_DEFAULTS,
-  CLI_CONNECTION,
-  type CliConnection,
   CREDENTIAL_SOURCE,
   SECRET_STORAGE,
+} from "#shared/wire/account";
+import type { MicrophoneStatus } from "#shared/wire/audio";
+import type {
+  AccountCalendar,
+  CalendarAccount,
+  ObservedAccountCalendars,
+} from "#shared/wire/calendar";
+import type { WorkspaceProviderId } from "#shared/wire/session";
+import { SUPERSET_WORKSPACE_PROVIDER_ID } from "#shared/wire/session";
+import type {
+  AppSettingField,
+  AppSettings,
+  AppSettingsView,
+  AppSettingValue,
+  KeyedAppSettingField,
+  SettingEntryValue,
+  SettingsResetScope,
+} from "#shared/wire/settings";
+import {
+  CLI_CONNECTION,
+  type CliConnection,
   SETTINGS_RESET_SCOPE,
-  SUPERSET_WORKSPACE_PROVIDER_ID,
   VOICE_SOURCE,
   type VoiceSource,
-} from "#shared/contracts";
-import { SETTINGS_VIEW_COUNTED_AS } from "#shared/product-vocabulary";
+} from "#shared/wire/settings";
+import type { UpdateSnapshot } from "#shared/wire/update";
 import {
   CREDENTIAL_PLACEHOLDER,
   type CredentialEntryControl,
@@ -108,7 +121,6 @@ import {
   voiceSourceLabel,
 } from "./microphone-access";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
-import { CloudBadge, ProviderMark } from "./provider-marks";
 import {
   BackIcon,
   CheckIcon,
@@ -198,90 +210,14 @@ export interface UpdateControl {
   onOpenLatest: () => void;
 }
 
-/**
- * The one way to write a stored preference. Every settings row that keeps a
- * choice travels through this, so the panel redraws from what was stored
- * rather than from the press — the same shape a credential's control is, for
- * the same reason: the writers live above the panel that draws them.
- */
-export interface PreferenceWrites {
-  /**
-   * Turns the on-screen caption of Luke's speech on or off. The store answers
-   * with why when it refuses, and the row is where that answer belongs.
-   */
-  onVoiceCaptionsChange: (enabled: boolean) => Promise<string | undefined>;
-  /** Turns the quieting of Music and Spotify during a spoken exchange on or off. */
-  onDuckOtherMediaChange: (enabled: boolean) => Promise<string | undefined>;
-  /** Turns the counting of Luke's own feature use on or off. */
-  onShareUsageDataChange: (enabled: boolean) => Promise<string | undefined>;
-  onSessionReplayChange: (enabled: boolean) => Promise<string | undefined>;
-  /**
-   * Chooses which credential Luke speaks and reviews sessions on. The store
-   * answers with why when it refuses, and the toggle is where that answer
-   * belongs.
-   */
-  onVoiceSourceChange: (source: VoiceSource) => Promise<string | undefined>;
-  /** Turns the Mac-microphone-over-Bluetooth-headset preference on or off. */
-  onPreferBuiltInMicrophoneChange: (enabled: boolean) => Promise<string | undefined>;
-  /**
-   * Turns the holding of announcements during calendar meetings on or off.
-   * The store answers with why when it refuses, and the row is where that
-   * answer belongs.
-   */
-  onQuietDuringMeetingsChange: (enabled: boolean) => Promise<string | undefined>;
-  /** Chooses the voice Luke speaks with, from the set fixed by this build. */
-  onVoiceChange: (voice: RealtimeVoice) => void;
-  /** Chooses the pace Luke speaks at, from the set fixed by this build. */
-  onVoiceSpeedChange: (speed: RealtimeVoiceSpeed) => void;
-  /**
-   * Shows or hides the Dock icon. The store answers with why when it refuses,
-   * and the row is where that answer belongs.
-   */
-  onShowInDockChange: (show: boolean) => Promise<string | undefined>;
-  /**
-   * Stands Luke on every connected display, or brings him back to the main
-   * one alone. The store answers with why when it refuses, and the row is
-   * where that answer belongs.
-   */
-  onShowOnAllDisplaysChange: (show: boolean) => Promise<string | undefined>;
-  /** Chooses how Luke stands on a display without a camera housing. */
-  onFormFactorChange: (formFactor: PanelFormFactor) => Promise<string | undefined>;
-  /**
-   * Chooses the provider a conversational ask creates a workspace in when the
-   * ask names none, or returns to asking each time when omitted. The store
-   * answers with why when it refuses, and the row is where that answer
-   * belongs.
-   */
-  onDefaultWorkspaceProviderChange: (
-    providerId: WorkspaceProviderId | undefined,
-  ) => Promise<string | undefined>;
-  /**
-   * Chooses the agent kind and model one provider starts new workspaces with,
-   * or returns to that provider's own defaults when omitted. The store
-   * answers with why when it refuses, and the row is where that answer
-   * belongs.
-   */
-  onWorkspaceAgentDefaultChange: (
-    providerId: ProviderId,
-    selection: WorkspaceAgentSelection | undefined,
-  ) => Promise<string | undefined>;
-  /**
-   * Chooses the project one provider creates nameless-ask workspaces in, or
-   * returns to letting the first creation there choose when omitted. The
-   * store answers with why when it refuses, and the row is where that answer
-   * belongs.
-   */
-  onWorkspaceProjectDefaultChange: (
-    providerId: WorkspaceProviderId,
-    providerProjectId: string | undefined,
-  ) => Promise<string | undefined>;
-  /**
-   * Returns one group of settings to its defaults, in one stored write: the
-   * scope names a page, or the Workspaces group, from the set fixed by this
-   * build, and no scope reaches a credential. The store answers with why when
-   * it refuses, and the control that asked is where that answer belongs.
-   */
-  onSettingsReset: (scope: SettingsResetScope) => Promise<string | undefined>;
+interface SettingsWrites {
+  setting(field: AppSettingField, value: AppSettingValue<AppSettingField>): Promise<ActResult>;
+  entry(
+    field: KeyedAppSettingField,
+    key: string,
+    value: SettingEntryValue<KeyedAppSettingField> | undefined,
+  ): Promise<ActResult>;
+  reset(scope: SettingsResetScope): Promise<ActResult>;
 }
 
 /**
@@ -305,7 +241,7 @@ export interface ShortcutControl {
    * omitted. The store answers with why when it refuses, and the row is where
    * that answer belongs.
    */
-  onVoiceHotkeyChange: (accelerator: string | undefined) => Promise<string | undefined>;
+  onVoiceHotkeyChange: (accelerator: string | undefined) => Promise<ActResult>;
   /** The ask key as registered, an accelerator on the talk key's terms. */
   askHotkey?: string;
   /** Whether a chosen ask chord is stored, on the talk key's terms. */
@@ -315,7 +251,7 @@ export interface ShortcutControl {
    * omitted, on the talk key's terms: the store answers with why when it
    * refuses, and the row is where that answer belongs.
    */
-  onAskHotkeyChange: (accelerator: string | undefined) => Promise<string | undefined>;
+  onAskHotkeyChange: (accelerator: string | undefined) => Promise<ActResult>;
   /** The stop key as registered, an accelerator on the talk key's terms. */
   stopHotkey?: string;
   /** Whether a chosen stop chord is stored, on the other rows' terms. */
@@ -325,7 +261,7 @@ export interface ShortcutControl {
    * omitted, on the other rows' terms: the store answers with why when it
    * refuses, and the row is where that answer belongs.
    */
-  onStopHotkeyChange: (accelerator: string | undefined) => Promise<string | undefined>;
+  onStopHotkeyChange: (accelerator: string | undefined) => Promise<ActResult>;
   /**
    * Whether a recording control has the keyboard. While one does, no Luke
    * key may act on its own press: the chord arriving is an entry, not an ask.
@@ -345,7 +281,7 @@ export interface SettingsPanelProps {
    * Asks the service to erase the account, resolving to why when it refuses —
    * the row keeps drawing the account it still has, with the answer under it.
    */
-  onDeleteAccount: () => Promise<string | undefined>;
+  onDeleteAccount: () => Promise<ActResult>;
   /**
    * Which settings page is showing: the front page, or one of the pages a
    * front-page row opens. Held by the app rather than here because Escape
@@ -356,7 +292,8 @@ export interface SettingsPanelProps {
   onViewChange: (view: SettingsView) => void;
   microphone: MicrophoneControl;
   updates: UpdateControl;
-  settings?: AppSettings;
+  settings?: AppSettingsView;
+  onSettingsChange: (settings: AppSettings) => void;
   /**
    * How voice stands right now, asked of the main process while the panel is
    * up: whose credential it runs on and what remains of a hosted day's
@@ -369,7 +306,6 @@ export interface SettingsPanelProps {
    * Absent on a keyed or signed-out run, and until the first answer lands.
    */
   hostedUsage?: HostedUsageAnswer;
-  preferences: PreferenceWrites;
   /** The one credential being entered anywhere, and everything that can be done to it. */
   credentials: CredentialEntryControl;
   /** The one note to the founders being written, and everything that can be done to it. */
@@ -594,7 +530,7 @@ function ProviderCredential({
 
   const removeKey = async () => {
     setHeldRemoval(REMOVAL_STAGE.CLEARING);
-    const reason = await control.remove(provider.id);
+    const reason = actRejection(await control.remove(provider.id));
     returnFocus.current = true;
     setRemovalRejection(reason);
     // Answered either way. A refusal is an answer too, and asking again is a
@@ -889,7 +825,7 @@ function ResetGroupButton({
   scope: SettingsResetScope;
   /** The group as the button names it aloud: "the Voice page's settings". */
   label: string;
-  onReset: (scope: SettingsResetScope) => Promise<string | undefined>;
+  onReset: (scope: SettingsResetScope) => Promise<ActResult>;
 }): React.JSX.Element {
   const { busy, rejection, run } = useSettingWrite(onReset);
   return (
@@ -925,7 +861,7 @@ function ResetGroupButton({
  */
 function useSettingWrite<Value>(
   // biome-ignore lint/suspicious/noConfusingVoidType: the voice and pace cannot be refused, so those writes answer void
-  onChange: (value: Value) => void | Promise<string | undefined>,
+  onChange: (value: Value) => void | Promise<ActResult>,
 ) {
   const [busy, setBusy] = useState(false);
   const [rejection, setRejection] = useState<string>();
@@ -933,8 +869,8 @@ function useSettingWrite<Value>(
     const reply = onChange(value);
     if (!(reply instanceof Promise)) return;
     setBusy(true);
-    void reply.then((reason) => {
-      setRejection(reason);
+    void reply.then((result) => {
+      setRejection(result.status === ACT_RESULT_STATUS.ACCEPTED ? undefined : result.reason);
       setBusy(false);
     });
   };
@@ -943,6 +879,10 @@ function useSettingWrite<Value>(
     rejection: string | undefined;
     run: (value: Value) => void;
   };
+}
+
+function actRejection(result: ActResult): string | undefined {
+  return result.status === ACT_RESULT_STATUS.ACCEPTED ? undefined : result.reason;
 }
 
 /**
@@ -975,7 +915,7 @@ function SwitchRow({
    * and where it stands.
    */
   disabled?: boolean;
-  onChange: (enabled: boolean) => Promise<string | undefined>;
+  onChange: (enabled: boolean) => Promise<ActResult>;
 }): React.JSX.Element {
   const { busy, rejection, run } = useSettingWrite(onChange);
   return (
@@ -1058,7 +998,7 @@ function SelectRow<Value extends string | number>({
    */
   busy?: boolean;
   // biome-ignore lint/suspicious/noConfusingVoidType: the voice and pace cannot be refused, so those writes answer void
-  onChange: (value: Value) => void | Promise<string | undefined>;
+  onChange: (value: Value) => void | Promise<ActResult>;
 }): React.JSX.Element {
   const { busy, rejection, run } = useSettingWrite(onChange);
   return (
@@ -1109,6 +1049,85 @@ function SelectRow<Value extends string | number>({
   );
 }
 
+function settingChoiceLabel(field: AppSettingField, choice: string): string {
+  if (field === APP_SETTING_SCHEMA.voice.field && isRealtimeVoice(choice)) {
+    return voiceOptionLabel(choice);
+  }
+  if (field === APP_SETTING_SCHEMA.voiceSpeed.field) {
+    const speed = spokenSettingValue(field, choice);
+    if (isRealtimeVoiceSpeed(speed)) return speedOptionLabel(speed);
+  }
+  if (field === APP_SETTING_SCHEMA.formFactor.field && isPanelFormFactor(choice)) {
+    return formFactorOptionLabel(choice);
+  }
+  return choice;
+}
+
+function SchemaSettingRows({
+  page,
+  settings,
+  writes,
+  fields,
+  exclude,
+  details,
+  disabled,
+}: {
+  page: (typeof SCHEMA_SETTINGS_PAGE)[keyof typeof SCHEMA_SETTINGS_PAGE];
+  settings: AppSettingsView;
+  writes: SettingsWrites;
+  fields?: readonly AppSettingField[];
+  exclude?: readonly AppSettingField[];
+  details?: Partial<Record<AppSettingField, string>>;
+  disabled?: Partial<Record<AppSettingField, boolean>>;
+}): React.JSX.Element {
+  const entries = settingGuideEntries(settings).flatMap((entry) => {
+    const field = settingFieldForGuideId(entry.id);
+    if (!field || APP_SETTING_SCHEMA[field].settingsPage !== page) return [];
+    if (fields && !fields.includes(field)) return [];
+    if (exclude?.includes(field)) return [];
+    const current = settings[field];
+    const changed = current !== APP_SETTING_SCHEMA[field].default;
+    if (entry.kind === APP_SETTING_KIND.TOGGLE) {
+      return [
+        <SwitchRow
+          key={entry.id}
+          label={entry.label}
+          ariaLabel={entry.description}
+          {...(isAppSettingId(entry.id) ? { errand: entry.id } : undefined)}
+          detail={details?.[field]}
+          changed={changed}
+          checked={entry.value === APP_TOGGLE_VALUE.ON}
+          disabled={disabled?.[field]}
+          onChange={(enabled) => writes.setting(field, enabled)}
+        />,
+      ];
+    }
+    if (entry.kind !== APP_SETTING_KIND.CHOICE || !entry.choices) return [];
+    return [
+      <SelectRow
+        key={entry.id}
+        label={entry.label}
+        ariaLabel={entry.description}
+        {...(isAppSettingId(entry.id) ? { errand: entry.id } : undefined)}
+        detail={details?.[field]}
+        changed={changed}
+        value={entry.value}
+        options={entry.choices
+          .filter(
+            (choice) => field !== APP_SETTING_SCHEMA.voiceSpeed.field || !choice.endsWith("×"),
+          )
+          .map((choice) => ({
+            value: choice,
+            label: settingChoiceLabel(field, choice),
+          }))}
+        parse={(raw) => (entry.choices?.includes(raw) ? raw : undefined)}
+        onChange={(choice) => writes.setting(field, spokenSettingValue(field, choice))}
+      />,
+    ];
+  });
+  return <>{entries}</>;
+}
+
 /* Why every Connect in a key-holding section is refusing, said once per
    section: a disabled control with no words beside it reads as broken. */
 const STORAGE_UNAVAILABLE_NOTE =
@@ -1136,7 +1155,7 @@ function WorkspaceAgentRow({
   onChange: (
     providerId: ProviderId,
     selection: WorkspaceAgentSelection | undefined,
-  ) => Promise<string | undefined>;
+  ) => Promise<ActResult>;
 }): React.JSX.Element {
   // The table's models flattened in its own order, each remembering its
   // agent's effort levels, so the select's indices are as stable as the build
@@ -1277,12 +1296,12 @@ const CODEX_CLOUD_STATUS = {
 function CodexCloudConnection({
   connection,
   settings,
-  preferences,
+  writes,
   workspaceProvider,
 }: {
   connection: CliConnection;
-  settings: AppSettings;
-  preferences: PreferenceWrites;
+  settings: AppSettingsView;
+  writes: SettingsWrites;
   /**
    * Codex's own projects, absent until an observation pass reports any. Codex
    * connects by CLI login rather than by key, so it has no credential row to
@@ -1307,11 +1326,7 @@ function CodexCloudConnection({
         <span className="credential-status">{CODEX_CLOUD_STATUS[connection]}</span>
       </div>
       {connection === CLI_CONNECTION.CONNECTED && workspaceProvider ? (
-        <WorkspaceProjectRow
-          provider={workspaceProvider}
-          settings={settings}
-          preferences={preferences}
-        />
+        <WorkspaceProjectRow provider={workspaceProvider} settings={settings} writes={writes} />
       ) : null}
     </div>
   );
@@ -1326,14 +1341,14 @@ function CredentialsSection({
   settings,
   control,
   panelOpen,
-  preferences,
+  writes,
   superset,
   workspaceProviders,
 }: {
-  settings: AppSettings;
+  settings: AppSettingsView;
   control: CredentialEntryControl;
   panelOpen: boolean;
-  preferences: PreferenceWrites;
+  writes: SettingsWrites;
   superset: SupersetControl;
   workspaceProviders: readonly WorkspaceProviderOption[];
 }): React.JSX.Element {
@@ -1358,7 +1373,7 @@ function CredentialsSection({
       <CodexCloudConnection
         connection={settings.codexCloudConnection}
         settings={settings}
-        preferences={preferences}
+        writes={writes}
         {...(codexWorkspace ? { workspaceProvider: codexWorkspace } : {})}
       />
       {CLOUD_AGENT_PROVIDER_LIST.map((provider) => {
@@ -1388,14 +1403,20 @@ function CredentialsSection({
                   {...(settings.workspaceAgentDefaults?.[agentRow]
                     ? { selection: settings.workspaceAgentDefaults[agentRow] }
                     : undefined)}
-                  onChange={preferences.onWorkspaceAgentDefaultChange}
+                  onChange={(providerId, selection) =>
+                    writes.entry(
+                      APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
+                      providerId,
+                      selection,
+                    )
+                  }
                 />
               ) : null}
               {workspaceProvider ? (
                 <WorkspaceProjectRow
                   provider={workspaceProvider}
                   settings={settings}
-                  preferences={preferences}
+                  writes={writes}
                 />
               ) : null}
             </ProviderCredential>
@@ -1407,7 +1428,7 @@ function CredentialsSection({
               <ConductorLocalIntegration
                 workspaceProvider={conductorLocalWorkspace}
                 settings={settings}
-                preferences={preferences}
+                writes={writes}
               />
             ) : null}
           </Fragment>
@@ -1419,7 +1440,7 @@ function CredentialsSection({
       <SupersetIntegration
         control={superset}
         settings={settings}
-        preferences={preferences}
+        writes={writes}
         {...(supersetWorkspace ? { workspaceProvider: supersetWorkspace } : {})}
       />
       {/* The same refusal the trackers' section explains: a Connect stilled by
@@ -1439,12 +1460,12 @@ export interface CalendarControl {
   connecting: boolean;
   /** Stands the panel down and opens Google's consent page. */
   onSignIn: () => void;
-  onRemoveAccount: (accountId: string) => Promise<string | undefined>;
+  onRemoveAccount: (accountId: string) => Promise<ActResult>;
   onToggleCalendar: (
     accountId: string,
     calendarId: string,
     selected: boolean,
-  ) => Promise<string | undefined>;
+  ) => Promise<ActResult>;
   /**
    * Runs one calendar observation pass now, over every source. Block-level
    * because the pass is, though only the Apple row draws the button today.
@@ -1590,8 +1611,8 @@ function CalendarAccountRow({
   calendars: readonly AccountCalendar[];
   /** Why the latest pass could not read the account, when it could not. */
   failure?: string;
-  onRemove: () => Promise<string | undefined>;
-  onToggle: (calendarId: string, selected: boolean) => Promise<string | undefined>;
+  onRemove: () => Promise<ActResult>;
+  onToggle: (calendarId: string, selected: boolean) => Promise<ActResult>;
 }): React.JSX.Element {
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -1599,14 +1620,14 @@ function CalendarAccountRow({
 
   const removeAccount = async () => {
     setBusy(true);
-    setRejection(await onRemove());
+    setRejection(actRejection(await onRemove()));
     setBusy(false);
     setAsking(false);
   };
 
   const toggleCalendar = async (calendarId: string, selected: boolean) => {
     setBusy(true);
-    setRejection(await onToggle(calendarId, selected));
+    setRejection(actRejection(await onToggle(calendarId, selected)));
     setBusy(false);
   };
 
@@ -1649,8 +1670,8 @@ export interface AppleCalendarControl {
   connecting: boolean;
   /** Stands the panel down so macOS's own dialog is not covered by it. */
   onSignIn: () => void;
-  onDisconnect: () => Promise<string | undefined>;
-  onToggleCalendar: (calendarId: string, selected: boolean) => Promise<string | undefined>;
+  onDisconnect: () => Promise<ActResult>;
+  onToggleCalendar: (calendarId: string, selected: boolean) => Promise<ActResult>;
   /**
    * True when the System Settings switch has been turned off: the stored
    * connection stands, but the row offers Connect again — reconnecting is
@@ -1687,14 +1708,14 @@ function AppleCalendarRow({
 
   const disconnect = async () => {
     setBusy(true);
-    setRejection(await appleCalendar.onDisconnect());
+    setRejection(actRejection(await appleCalendar.onDisconnect()));
     setBusy(false);
     setAsking(false);
   };
 
   const toggleCalendar = async (calendarId: string, selected: boolean) => {
     setBusy(true);
-    setRejection(await appleCalendar.onToggleCalendar(calendarId, selected));
+    setRejection(actRejection(await appleCalendar.onToggleCalendar(calendarId, selected)));
     setBusy(false);
   };
 
@@ -1790,12 +1811,12 @@ function CalendarIntegrations({
   settings,
   calendar,
   appleCalendar,
-  preferences,
+  writes,
 }: {
-  settings: AppSettings;
+  settings: AppSettingsView;
   calendar: CalendarControl;
   appleCalendar: AppleCalendarControl;
-  preferences: PreferenceWrites;
+  writes: SettingsWrites;
 }): React.JSX.Element | null {
   if (!settings.calendarSignInAvailable && !settings.appleCalendarAvailable) return null;
   const accounts = settings.calendarAccounts;
@@ -1869,12 +1890,11 @@ function CalendarIntegrations({
           the first connection and leaves with the last — a switch gating what
           a disconnected calendar cannot do would be a control over nothing. */}
       {connected ? (
-        <SwitchRow
-          label="Quiet during meetings"
-          ariaLabel="Hold announcements while a calendar meeting is on"
-          errand={APP_SETTING_ID.QUIET_DURING_MEETINGS}
-          checked={settings.quietDuringMeetings}
-          onChange={preferences.onQuietDuringMeetingsChange}
+        <SchemaSettingRows
+          page={SCHEMA_SETTINGS_PAGE.CONNECTIONS}
+          settings={settings}
+          writes={writes}
+          fields={[APP_SETTING_SCHEMA.quietDuringMeetings.field]}
         />
       ) : null}
     </div>
@@ -1889,7 +1909,7 @@ export interface LinearControl {
   connecting: boolean;
   /** Stands the panel down and opens Linear's consent page. */
   onSignIn: () => void;
-  onDisconnect: () => Promise<string | undefined>;
+  onDisconnect: () => Promise<ActResult>;
 }
 
 export interface SupersetControl {
@@ -1899,10 +1919,10 @@ export interface SupersetControl {
   connecting: boolean;
   onConnect: () => void;
   /** Runs the CLI's own documented sign-out, withdrawing the stored login. */
-  onDisconnect: () => Promise<string | undefined>;
+  onDisconnect: () => Promise<ActResult>;
   agents: readonly string[];
   defaultAgent?: string;
-  onDefaultAgentChange: (agent: string | undefined) => Promise<string | undefined>;
+  onDefaultAgentChange: (agent: string | undefined) => Promise<ActResult>;
 }
 
 /**
@@ -1916,12 +1936,12 @@ export interface SupersetControl {
 function ConductorLocalIntegration({
   workspaceProvider,
   settings,
-  preferences,
+  writes,
 }: {
   /** Local Conductor's repositories, present only once a read reported any. */
   workspaceProvider: WorkspaceProviderOption;
-  settings: AppSettings;
-  preferences: PreferenceWrites;
+  settings: AppSettingsView;
+  writes: SettingsWrites;
 }): React.JSX.Element {
   return (
     <div className="credential" {...searchAnchorProps(CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID)}>
@@ -1934,11 +1954,7 @@ function ConductorLocalIntegration({
           <CheckIcon />
         </span>
       </div>
-      <WorkspaceProjectRow
-        provider={workspaceProvider}
-        settings={settings}
-        preferences={preferences}
-      />
+      <WorkspaceProjectRow provider={workspaceProvider} settings={settings} writes={writes} />
     </div>
   );
 }
@@ -1946,12 +1962,12 @@ function ConductorLocalIntegration({
 function SupersetIntegration({
   control,
   settings,
-  preferences,
+  writes,
   workspaceProvider,
 }: {
   control: SupersetControl;
-  settings: AppSettings;
-  preferences: PreferenceWrites;
+  settings: AppSettingsView;
+  writes: SettingsWrites;
   /** Superset's own projects, absent until an observation pass reports any. */
   workspaceProvider?: WorkspaceProviderOption;
 }): React.JSX.Element | null {
@@ -1966,7 +1982,7 @@ function SupersetIntegration({
 
   const disconnect = async () => {
     setBusy(true);
-    setRejection(await control.onDisconnect());
+    setRejection(actRejection(await control.onDisconnect()));
     setBusy(false);
     setAsking(false);
   };
@@ -2094,11 +2110,7 @@ function SupersetIntegration({
         />
       ) : null}
       {control.connected && workspaceProvider ? (
-        <WorkspaceProjectRow
-          provider={workspaceProvider}
-          settings={settings}
-          preferences={preferences}
-        />
+        <WorkspaceProjectRow provider={workspaceProvider} settings={settings} writes={writes} />
       ) : null}
     </div>
   );
@@ -2113,7 +2125,7 @@ function LinearIntegration({
   settings,
   linear,
 }: {
-  settings: AppSettings;
+  settings: AppSettingsView;
   linear: LinearControl;
 }): React.JSX.Element | null {
   const provider = CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.LINEAR];
@@ -2129,7 +2141,7 @@ function LinearIntegration({
 
   const disconnect = async () => {
     setBusy(true);
-    setRejection(await linear.onDisconnect());
+    setRejection(actRejection(await linear.onDisconnect()));
     setBusy(false);
     setAsking(false);
   };
@@ -2236,13 +2248,13 @@ function LinearIntegration({
  */
 function IntegrationsSection({
   settings,
-  preferences,
+  writes,
   calendar,
   appleCalendar,
   linear,
 }: {
-  settings: AppSettings;
-  preferences: PreferenceWrites;
+  settings: AppSettingsView;
+  writes: SettingsWrites;
   calendar: CalendarControl;
   appleCalendar: AppleCalendarControl;
   linear: LinearControl;
@@ -2259,7 +2271,7 @@ function IntegrationsSection({
         settings={settings}
         calendar={calendar}
         appleCalendar={appleCalendar}
-        preferences={preferences}
+        writes={writes}
       />
       {/* The same refusal the agents' section explains: a Connect stilled by
           missing storage needs its why in this section too. */}
@@ -2397,11 +2409,11 @@ function SettingsPageHeader({
  */
 function VoiceSection({
   settings,
-  preferences,
+  writes,
   microphone,
 }: {
-  settings: AppSettings;
-  preferences: PreferenceWrites;
+  settings: AppSettingsView;
+  writes: SettingsWrites;
   microphone: MicrophoneControl;
 }): React.JSX.Element {
   const microphoneRow = microphoneAccessRow({
@@ -2481,9 +2493,7 @@ function VoiceSection({
       {/* `ready` already folds the key in — a microphone with no voice to
           reach never reports itself ready — so the controls stand exactly
           while both halves do. */}
-      {microphoneRow.ready ? (
-        <VoiceControlsSection settings={settings} preferences={preferences} />
-      ) : null}
+      {microphoneRow.ready ? <VoiceControlsSection settings={settings} writes={writes} /> : null}
     </>
   );
 }
@@ -2491,73 +2501,17 @@ function VoiceSection({
 /** The voice controls themselves, below the permission that lets Luke listen. */
 function VoiceControlsSection({
   settings,
-  preferences,
+  writes,
 }: {
-  settings: AppSettings;
-  preferences: PreferenceWrites;
+  settings: AppSettingsView;
+  writes: SettingsWrites;
 }): React.JSX.Element {
   return (
     <section
       className="settings-section settings-plain"
       style={cssCustomProperties({ "--row-index": 2 })}
     >
-      <SelectRow
-        label="Voice"
-        errand={APP_SETTING_ID.VOICE}
-        changed={settings.voice !== REALTIME_DEFAULTS.VOICE}
-        value={settings.voice}
-        options={REALTIME_VOICE_LIST.map((candidate) => ({
-          value: candidate,
-          label: voiceOptionLabel(candidate),
-        }))}
-        parse={(raw) => {
-          // The set is fixed by this build, so anything else arriving out
-          // of a select is a broken control rather than a choice.
-          return isRealtimeVoice(raw) ? raw : undefined;
-        }}
-        onChange={preferences.onVoiceChange}
-      />
-      <SelectRow
-        label="Speed"
-        errand={APP_SETTING_ID.VOICE_SPEED}
-        changed={settings.voiceSpeed !== REALTIME_DEFAULTS.SPEED}
-        value={settings.voiceSpeed}
-        options={REALTIME_VOICE_SPEED_LIST.map((candidate) => ({
-          value: candidate,
-          label: speedOptionLabel(candidate),
-        }))}
-        parse={(raw) => {
-          // A select serializes its value to a string, so the number is
-          // read back out and held to the set fixed by this build.
-          const next = Number(raw);
-          return isRealtimeVoiceSpeed(next) ? next : undefined;
-        }}
-        onChange={preferences.onVoiceSpeedChange}
-      />
-      <SwitchRow
-        label="Captions"
-        ariaLabel="Caption Luke's speech on screen"
-        errand={APP_SETTING_ID.VOICE_CAPTIONS}
-        changed={settings.voiceCaptions !== APP_SETTING_DEFAULTS.voiceCaptions}
-        checked={settings.voiceCaptions}
-        onChange={preferences.onVoiceCaptionsChange}
-      />
-      <SwitchRow
-        label="Quiet Music and Spotify"
-        ariaLabel="Quiet Music and Spotify while talking with Luke"
-        errand={APP_SETTING_ID.DUCK_OTHER_MEDIA}
-        changed={settings.duckOtherMedia !== APP_SETTING_DEFAULTS.duckOtherMedia}
-        checked={settings.duckOtherMedia}
-        onChange={preferences.onDuckOtherMediaChange}
-      />
-      <SwitchRow
-        label="Prefer the Mac's microphone"
-        ariaLabel="Listen through the Mac's own microphone instead of a Bluetooth headset's"
-        errand={APP_SETTING_ID.PREFER_BUILT_IN_MICROPHONE}
-        changed={settings.preferBuiltInMicrophone !== APP_SETTING_DEFAULTS.preferBuiltInMicrophone}
-        checked={settings.preferBuiltInMicrophone}
-        onChange={preferences.onPreferBuiltInMicrophoneChange}
-      />
+      <SchemaSettingRows page={SCHEMA_SETTINGS_PAGE.VOICE} settings={settings} writes={writes} />
     </section>
   );
 }
@@ -2570,45 +2524,20 @@ function VoiceControlsSection({
  */
 function AppearanceSection({
   settings,
-  preferences,
+  writes,
 }: {
-  settings: AppSettings;
-  preferences: PreferenceWrites;
+  settings: AppSettingsView;
+  writes: SettingsWrites;
 }): React.JSX.Element {
   return (
     <section
       className="settings-section settings-plain"
       style={cssCustomProperties({ "--row-index": 1 })}
     >
-      <SwitchRow
-        label="Show Luke in the Dock"
-        errand={APP_SETTING_ID.SHOW_IN_DOCK}
-        changed={settings.showInDock !== APP_SETTING_DEFAULTS.showInDock}
-        checked={settings.showInDock}
-        onChange={preferences.onShowInDockChange}
-      />
-      <SwitchRow
-        label="Show Luke on all displays"
-        errand={APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS}
-        changed={settings.showOnAllDisplays !== APP_SETTING_DEFAULTS.showOnAllDisplays}
-        checked={settings.showOnAllDisplays}
-        onChange={preferences.onShowOnAllDisplaysChange}
-      />
-      <SelectRow
-        label="Form factor"
-        errand={APP_SETTING_ID.FORM_FACTOR}
-        changed={settings.formFactor !== DEFAULT_PANEL_FORM_FACTOR}
-        value={settings.formFactor}
-        options={PANEL_FORM_FACTOR_LIST.map((candidate) => ({
-          value: candidate,
-          label: formFactorOptionLabel(candidate),
-        }))}
-        parse={(raw) => {
-          // The set is fixed by this build, so anything else arriving out
-          // of a select is a broken control rather than a choice.
-          return isPanelFormFactor(raw) ? raw : undefined;
-        }}
-        onChange={preferences.onFormFactorChange}
+      <SchemaSettingRows
+        page={SCHEMA_SETTINGS_PAGE.APPEARANCE}
+        settings={settings}
+        writes={writes}
       />
     </section>
   );
@@ -2622,11 +2551,11 @@ function AppearanceSection({
 function WorkspacesSection({
   settings,
   workspaceProviders,
-  preferences,
+  writes,
 }: {
-  settings: AppSettings;
+  settings: AppSettingsView;
   workspaceProviders: readonly WorkspaceProviderOption[];
-  preferences: PreferenceWrites;
+  writes: SettingsWrites;
 }): React.JSX.Element {
   return (
     <section className="settings-section" style={cssCustomProperties({ "--row-index": 1 })}>
@@ -2657,9 +2586,11 @@ function WorkspacesSection({
         }}
         onChange={(next) => {
           if (next === ASK_EACH_TIME)
-            return preferences.onDefaultWorkspaceProviderChange(undefined);
+            return writes.setting(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field, undefined);
           const provider = workspaceProviders.find((option) => option.id === next);
-          if (provider) return preferences.onDefaultWorkspaceProviderChange(provider.id);
+          if (provider) {
+            return writes.setting(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field, provider.id);
+          }
         }}
       />
     </section>
@@ -2678,11 +2609,11 @@ function WorkspacesSection({
 function WorkspaceProjectRow({
   provider,
   settings,
-  preferences,
+  writes,
 }: {
   provider: WorkspaceProviderOption;
-  settings: AppSettings;
-  preferences: PreferenceWrites;
+  settings: AppSettingsView;
+  writes: SettingsWrites;
 }): React.JSX.Element | null {
   const providerId = provider.id;
   // A provider this build cannot store a choice for, or one with no projects
@@ -2721,7 +2652,8 @@ function WorkspaceProjectRow({
         return provider.projects.some((project) => project.id === raw) ? raw : undefined;
       }}
       onChange={(next) =>
-        preferences.onWorkspaceProjectDefaultChange(
+        writes.entry(
+          APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
           providerId,
           next === PROJECT_ASK_EACH_TIME ? undefined : next,
         )
@@ -2776,7 +2708,7 @@ function ShortcutRow({
   defaultKey: string;
   /** Why the key answers nothing right now, absent while it answers. */
   attention?: string;
-  onChange: (accelerator: string | undefined) => Promise<string | undefined>;
+  onChange: (accelerator: string | undefined) => Promise<ActResult>;
   onCapture: (capturing: boolean) => void;
 }): React.JSX.Element {
   const [recording, setRecording] = useState(false);
@@ -2799,7 +2731,7 @@ function ShortcutRow({
 
   const apply = async (accelerator: string | undefined) => {
     setBusy(true);
-    setRejection(await onChange(accelerator));
+    setRejection(actRejection(await onChange(accelerator)));
     setBusy(false);
   };
 
@@ -2911,10 +2843,12 @@ function ShortcutRow({
 function ShortcutSection({
   shortcuts,
   settings,
+  writes,
   voiceAvailable,
 }: {
   shortcuts: ShortcutControl;
-  settings?: AppSettings;
+  settings?: AppSettingsView;
+  writes: SettingsWrites;
   voiceAvailable: boolean;
 }): React.JSX.Element {
   // While voice is off the system keys are deliberately not taken — a global
@@ -2954,6 +2888,13 @@ function ShortcutSection({
         onChange={shortcuts.onVoiceHotkeyChange}
         onCapture={shortcuts.onCapture}
       />
+      {settings ? (
+        <SchemaSettingRows
+          page={SCHEMA_SETTINGS_PAGE.SHORTCUTS}
+          settings={settings}
+          writes={writes}
+        />
+      ) : null}
       <ShortcutRow
         title="Ask Luke"
         anchor={SETTINGS_SEARCH_ROW.ASK_KEY}
@@ -3049,7 +2990,7 @@ function VoiceSourceToggle({
   keyStored: boolean;
   /** Whether this system can hold a key, which decides whether it can at all. */
   storageLocked: boolean;
-  onChoose: (source: VoiceSource) => Promise<string | undefined>;
+  onChoose: (source: VoiceSource) => Promise<ActResult>;
   /** Begins the entry, which stands the panel down to the slot. */
   onConnect: () => void;
 }): React.JSX.Element {
@@ -3135,7 +3076,7 @@ function WhatLukeRunsOnSection({
   storageLocked,
   settings,
   credentials,
-  preferences,
+  writes,
   voiceService,
   hostedUsage,
   rowIndex,
@@ -3148,10 +3089,10 @@ function WhatLukeRunsOnSection({
    * chosen or supplied then, and it says why rather than going quiet.
    */
   storageLocked: boolean;
-  settings: AppSettings;
+  settings: AppSettingsView;
   /** The one credential being entered anywhere; the key row here uses it. */
   credentials: CredentialEntryControl;
-  preferences: PreferenceWrites;
+  writes: SettingsWrites;
   voiceService?: RealtimeDiagnostics;
   hostedUsage?: HostedUsageAnswer;
 }): React.JSX.Element {
@@ -3194,7 +3135,7 @@ function WhatLukeRunsOnSection({
         source={settings.voiceSource}
         keyStored={keyStored}
         storageLocked={storageLocked}
-        onChoose={preferences.onVoiceSourceChange}
+        onChoose={(source) => writes.setting(APP_SETTING_SCHEMA.voiceSource.field, source)}
         onConnect={() => credentials.connect(VOICE_CREDENTIAL_PROVIDER.id)}
       />
       {/* Each half's own contents, drawn under the toggle for whichever is
@@ -3249,7 +3190,7 @@ function AccountSection({
 }: {
   account: Extract<AccountSnapshot, { status: typeof ACCOUNT_STATUS.SIGNED_IN }>;
   onSignOut: () => Promise<void>;
-  onDeleteAccount: () => Promise<string | undefined>;
+  onDeleteAccount: () => Promise<ActResult>;
   panelOpen: boolean;
 }): React.JSX.Element {
   // Signing out asks first, the way deleting a key does: getting back in costs
@@ -3294,8 +3235,8 @@ function AccountSection({
   const deleteAccount = () => {
     setBusy(true);
     setRejection(undefined);
-    void onDeleteAccount().then((reason) => {
-      setRejection(reason);
+    void onDeleteAccount().then((result) => {
+      setRejection(actRejection(result));
       setBusy(false);
       setAsking(ACCOUNT_ASK.NONE);
     });
@@ -3455,8 +3396,8 @@ function AccountSection({
  */
 function pageResetControl(
   view: SettingsView,
-  settings: AppSettings | undefined,
-  preferences: PreferenceWrites,
+  settings: AppSettingsView | undefined,
+  writes: SettingsWrites,
 ): React.JSX.Element | undefined {
   if (
     view === SETTINGS_VIEW.VOICE &&
@@ -3467,7 +3408,7 @@ function pageResetControl(
       <ResetGroupButton
         scope={SETTINGS_RESET_SCOPE.VOICE}
         label="the Voice settings"
-        onReset={preferences.onSettingsReset}
+        onReset={writes.reset}
       />
     );
   }
@@ -3480,7 +3421,7 @@ function pageResetControl(
       <ResetGroupButton
         scope={SETTINGS_RESET_SCOPE.APPEARANCE}
         label="the Appearance settings"
-        onReset={preferences.onSettingsReset}
+        onReset={writes.reset}
       />
     );
   }
@@ -3493,7 +3434,7 @@ function pageResetControl(
       <ResetGroupButton
         scope={SETTINGS_RESET_SCOPE.SHORTCUTS}
         label="the keyboard shortcuts"
-        onReset={preferences.onSettingsReset}
+        onReset={writes.reset}
       />
     );
   }
@@ -3601,10 +3542,10 @@ function UpdatesSection({
  */
 function UsageDataSection({
   settings,
-  preferences,
+  writes,
 }: {
-  settings: AppSettings;
-  preferences: PreferenceWrites;
+  settings: AppSettingsView;
+  writes: SettingsWrites;
 }): React.JSX.Element {
   return (
     <section className="settings-section" style={cssCustomProperties({ "--row-index": 4 })}>
@@ -3612,32 +3553,20 @@ function UsageDataSection({
         <ShieldIcon />
         Usage data
       </h2>
-      <SwitchRow
-        label="Share usage data"
-        ariaLabel="Share counts of how Luke's own features are used"
-        errand={APP_SETTING_ID.SHARE_USAGE_DATA}
-        // Tied to the account rather than anonymous, because that is the
-        // honest claim and the narrow one is what the allowlist buys.
-        detail="Counts of feature use, tied to your account. Never session contents."
-        changed={settings.shareUsageData !== APP_SETTING_DEFAULTS.shareUsageData}
-        checked={settings.shareUsageData}
-        onChange={preferences.onShareUsageDataChange}
-      />
-      <SwitchRow
-        label="Record my screen in Luke"
-        ariaLabel="Record what Luke's own panel draws, session material included"
-        errand={APP_SETTING_ID.SESSION_REPLAY}
-        // The recording shows the panel as drawn, so the row says what
-        // travels rather than what does not: a switch that named its one
-        // exception would read as though the rest were covered too.
-        detail="A video of the panel: session titles, summaries, and your name. Not what you type."
-        changed={settings.sessionReplay !== APP_SETTING_DEFAULTS.sessionReplay}
-        checked={settings.sessionReplay}
-        // Off is off: the recorder never starts while the counts are not being
-        // sent either, so a row that looked live under a stopped switch would
-        // be describing something that is not happening.
-        disabled={!settings.shareUsageData}
-        onChange={preferences.onSessionReplayChange}
+      <SchemaSettingRows
+        page={SCHEMA_SETTINGS_PAGE.ROOT}
+        settings={settings}
+        writes={writes}
+        exclude={[APP_SETTING_SCHEMA.voiceSource.field]}
+        details={{
+          [APP_SETTING_SCHEMA.shareUsageData.field]:
+            "Counts of feature use, tied to your account. Never session contents.",
+          [APP_SETTING_SCHEMA.sessionReplay.field]:
+            "A video of the panel: session titles, summaries, and your name. Not what you type.",
+        }}
+        disabled={{
+          [APP_SETTING_SCHEMA.sessionReplay.field]: !settings.shareUsageData,
+        }}
       />
     </section>
   );
@@ -3652,9 +3581,9 @@ export function SettingsPanel({
   microphone,
   updates,
   settings,
+  onSettingsChange,
   voiceService,
   hostedUsage,
-  preferences,
   credentials,
   feedback,
   panelOpen,
@@ -3669,6 +3598,23 @@ export function SettingsPanel({
   onSearchClose,
   onSearchEngaged,
 }: SettingsPanelProps): React.JSX.Element {
+  const writes: SettingsWrites = {
+    async setting(field, value) {
+      const result = await window.sidecar.updateSetting(field, value);
+      onSettingsChange(result.settings);
+      return result;
+    },
+    async entry(field, key, value) {
+      const result = await window.sidecar.updateSettingEntry(field, key, value);
+      onSettingsChange(result.settings);
+      return result;
+    },
+    async reset(scope) {
+      const result = await window.sidecar.resetSettings(scope);
+      onSettingsChange(result.settings);
+      return result;
+    },
+  };
   // Why the front page's Voice row wears its mark, or nothing while voice is
   // fully set up. Judged here rather than on the Voice page because the mark
   // has to stand while that page is not drawn: it is the front page saying a
@@ -3745,7 +3691,7 @@ export function SettingsPanel({
     backControl.current?.focus();
   }, [view, panelOpen]);
   // The drawn page's reset, absent while that page stands at its defaults.
-  const pageReset = pageResetControl(view, settings, preferences);
+  const pageReset = pageResetControl(view, settings, writes);
   // Whether the Updates section leads the front page instead of sitting below
   // the pages: a newer release waiting is the one piece of news this page can
   // hold, and news is not filed under maintenance.
@@ -3809,7 +3755,7 @@ export function SettingsPanel({
               storageLocked={settings.secretStorage === SECRET_STORAGE.UNAVAILABLE}
               settings={settings}
               credentials={credentials}
-              preferences={preferences}
+              writes={writes}
               {...(voiceService ? { voiceService } : undefined)}
               {...(hostedUsage ? { hostedUsage } : undefined)}
             />
@@ -3833,16 +3779,17 @@ export function SettingsPanel({
       ) : null}
 
       {view === SETTINGS_VIEW.VOICE && settings && !search ? (
-        <VoiceSection settings={settings} preferences={preferences} microphone={microphone} />
+        <VoiceSection settings={settings} writes={writes} microphone={microphone} />
       ) : null}
 
       {view === SETTINGS_VIEW.APPEARANCE && settings && !search ? (
-        <AppearanceSection settings={settings} preferences={preferences} />
+        <AppearanceSection settings={settings} writes={writes} />
       ) : null}
 
       {view === SETTINGS_VIEW.SHORTCUTS && !search ? (
         <ShortcutSection
           shortcuts={shortcuts}
+          writes={writes}
           {...(settings ? { settings } : undefined)}
           voiceAvailable={microphone.voiceAvailable}
         />
@@ -3855,22 +3802,33 @@ export function SettingsPanel({
           <WorkspacesSection
             settings={settings}
             workspaceProviders={workspaceProviders}
-            preferences={preferences}
+            writes={writes}
           />
           <CredentialsSection
             settings={settings}
             control={credentials}
             panelOpen={panelOpen}
-            preferences={preferences}
+            writes={writes}
             superset={superset}
             workspaceProviders={workspaceProviders}
           />
           <IntegrationsSection
             settings={settings}
-            preferences={preferences}
+            writes={writes}
             calendar={calendar}
             appleCalendar={appleCalendar}
             linear={linear}
+          />
+          <SchemaSettingRows
+            page={SCHEMA_SETTINGS_PAGE.CONNECTIONS}
+            settings={settings}
+            writes={writes}
+            exclude={[
+              APP_SETTING_SCHEMA.quietDuringMeetings.field,
+              APP_SETTING_SCHEMA.defaultWorkspaceProvider.field,
+              APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
+              APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
+            ]}
           />
         </>
       ) : null}
@@ -3879,7 +3837,7 @@ export function SettingsPanel({
         <>
           {updateLeads ? null : <UpdatesSection control={updates} rowIndex={3} />}
 
-          {settings ? <UsageDataSection settings={settings} preferences={preferences} /> : null}
+          {settings ? <UsageDataSection settings={settings} writes={writes} /> : null}
 
           <FeedbackSection control={feedback} />
 

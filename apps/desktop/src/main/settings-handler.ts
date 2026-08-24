@@ -1,81 +1,74 @@
-import type { UnparsedWireValue } from "@sidecar/wire";
-import { type IpcMainInvokeEvent, ipcMain } from "electron";
+import { ACT_RESULT_STATUS } from "@sidecar/wire";
+import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from "electron";
+import {
+  BRIDGE,
+  type Bridge,
+  type BridgeArgumentsFor,
+  type BridgeMethod,
+  bridgeEntries,
+} from "#shared/bridge";
 import type { AppSettings, SettingsUpdateResult } from "#shared/contracts";
+import { type BridgeContext, registerBridgeEntry } from "./register-bridge";
 
-/**
- * A validate step that answers with words instead of a value. The refusal is
- * its own type so the factory can tell it from anything a setting might one
- * day validate to — a shape sniffed for a `settings` key would turn such a
- * value into a silent no-op the day the two collide.
- */
 export class SettingsRefusal {
   constructor(readonly result: SettingsUpdateResult) {}
 }
 
-export interface SettingsHandlerSpec<Value> {
-  validate: (
-    ...args: UnparsedWireValue[]
-  ) => Value | SettingsRefusal | Promise<Value | SettingsRefusal>;
+export interface SettingsHandlerSpec<Arguments extends readonly unknown[], Value> {
+  validate: (...args: Arguments) => Value | SettingsRefusal | Promise<Value | SettingsRefusal>;
   save: (value: Value) => Promise<SettingsUpdateResult>;
   apply?: (
     result: SettingsUpdateResult,
     value: Value,
-    event: IpcMainInvokeEvent,
+    context: BridgeContext,
   ) => void | Promise<void>;
   refusal: string;
 }
 
 export interface SettingsHandlerDeps {
-  trustedSender: (event: IpcMainInvokeEvent) => boolean;
+  ipcMain: Pick<IpcMain, "handle" | "on">;
+  trustedSender: (event: IpcMainEvent | IpcMainInvokeEvent) => boolean;
   snapshot: () => Promise<AppSettings>;
   broadcast: (settings: AppSettings, except?: Electron.WebContents) => void;
-  /**
-   * Injectable so the factory can be exercised without standing up Electron's
-   * IPC bus. Production uses `ipcMain.handle`.
-   */
-  handle?: (
-    channel: string,
-    listener: (
-      event: IpcMainInvokeEvent,
-      ...args: UnparsedWireValue[]
-    ) => Promise<SettingsUpdateResult>,
-  ) => void;
 }
 
-/**
- * One write path for every settings change the renderer can ask for. Trust,
- * catch, snapshot, and broadcast are identical on every channel — only what
- * is valid, what is stored, and what the write sets in motion differ. A
- * malformed request still throws: that is a broken caller, not a choice the
- * user can correct.
- */
+type InvokeMethod = {
+  [Method in BridgeMethod]: Bridge[Method]["kind"] extends "invoke" ? Method : never;
+}[BridgeMethod];
+type MethodForChannel<Channel extends string> = {
+  [Method in InvokeMethod]: Bridge[Method]["channel"] extends Channel ? Method : never;
+}[InvokeMethod];
+
 export function createSettingsHandler(deps: SettingsHandlerDeps) {
-  const handle = deps.handle ?? ipcMain.handle.bind(ipcMain);
-  return function registerSettingHandler<Value>(
-    channel: string,
-    spec: SettingsHandlerSpec<Value>,
+  return function registerSettingHandler<Definition extends Bridge[InvokeMethod], Value>(
+    definition: Definition,
+    spec: SettingsHandlerSpec<BridgeArgumentsFor<MethodForChannel<Definition["channel"]>>, Value>,
   ): void {
-    handle(channel, async (event, ...args: UnparsedWireValue[]): Promise<SettingsUpdateResult> => {
-      if (!deps.trustedSender(event)) throw new Error("Untrusted renderer");
-      const value = await spec.validate(...args);
-      // A validate step that already answered — a chord spoken for, refused with
-      // words — leaves without a write, a side effect, or a broadcast.
-      if (value instanceof SettingsRefusal) {
-        return value.result;
-      }
+    const method = bridgeEntries().find(([, candidate]) => candidate === definition)?.[0];
+    if (!method) throw new Error("Unknown bridge method");
+    const handler = async (
+      context: BridgeContext,
+      ...received: unknown[]
+    ): Promise<SettingsUpdateResult> => {
+      // SAFETY: registerBridge has applied this definition's argument guard before calling the handler.
+      const argumentsForMethod = received as BridgeArgumentsFor<
+        MethodForChannel<Definition["channel"]>
+      >;
+      const value = await spec.validate(...argumentsForMethod);
+      if (value instanceof SettingsRefusal) return value.result;
       try {
-        const result = await spec.save(value);
-        await spec.apply?.(result, value, event);
-        deps.broadcast(result.settings, event.sender);
-        return result;
+        const saved = await spec.save(value);
+        await spec.apply?.(saved, value, context);
+        deps.broadcast(saved.settings, context.sender);
+        return saved;
       } catch {
-        // A filesystem failure is not something the user can act on, so it is
-        // reported as one line rather than as a raw system error.
         return {
+          status: ACT_RESULT_STATUS.REJECTED,
           settings: await deps.snapshot(),
           reason: spec.refusal,
         };
       }
-    });
+    };
+    registerBridgeEntry(BRIDGE, definition, handler, deps);
   };
 }

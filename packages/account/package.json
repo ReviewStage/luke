@@ -18,8 +18,8 @@
     "typescript": "7.0.2"
   },
   "dependencies": {
+    "@sidecar/credentials": "workspace:*",
     "@sidecar/hosted": "workspace:*",
-    "@sidecar/oauth": "workspace:*",
     "@sidecar/wire": "workspace:*"
   }
 }

@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  type NormalizedSession,
   normalizeSession,
   type ProviderSessionObservation,
   SESSION_COMPLETION_CAUSE,
   SESSION_NOTICE_STATUS,
   SESSION_STATUS,
+  type Session,
   SessionNoticeTracker,
   type SessionProvider,
   type SessionStatus,
@@ -36,7 +36,7 @@ function session(
     realtimeVoiceLive?: boolean;
     completionCause?: (typeof SESSION_COMPLETION_CAUSE)[keyof typeof SESSION_COMPLETION_CAUSE];
   } = {},
-): NormalizedSession {
+): Session {
   const observation: ProviderSessionObservation = {
     providerSessionId,
     title: `Session ${providerSessionId}`,

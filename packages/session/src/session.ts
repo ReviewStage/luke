@@ -1,4 +1,4 @@
-import { text, type UnparsedWireValue } from "@sidecar/wire";
+import { isRecord, isWireString, text, type UnparsedWireValue } from "@sidecar/wire";
 
 /**
  * Provider-observed condition. Distinct from `SESSION_URGENCY`, the surface's
@@ -102,7 +102,7 @@ export function sessionRosterRetentionMs(status: SessionStatus): number {
 
 /** Whether a session's status still earns it a place on the roster. */
 export function isRosterRelevant(
-  session: Pick<NormalizedSession, "status" | "observedAt" | "standing">,
+  session: Pick<Session, "status" | "observedAt" | "standing">,
   now: number,
 ): boolean {
   // Retention ages out history — settled chats whose files linger after the
@@ -115,9 +115,9 @@ export function isRosterRelevant(
 
 /** The sessions still worth a row, in the order they arrived. */
 export function rosterRelevantSessions(
-  sessions: readonly NormalizedSession[],
+  sessions: readonly Session[],
   now: number,
-): readonly NormalizedSession[] {
+): readonly Session[] {
   return sessions.filter((session) => isRosterRelevant(session, now));
 }
 
@@ -161,6 +161,31 @@ export interface AttentionDecision {
    * reasons stays on the evaluator's terms.
    */
   answersAsk?: boolean;
+}
+
+/** A spoken sentence stays far shorter than a provider recap. */
+export const maximumAttentionSummaryLength = 180;
+
+/** Validates an untrusted attention decision without importing evaluator behavior. */
+export function attentionDecisionFromWire(
+  value: UnparsedWireValue,
+  decidedAt: number,
+): AttentionDecision | undefined {
+  if (!isRecord(value) || !isWireString(value.disposition)) return undefined;
+  const disposition = Object.values(ATTENTION_DISPOSITION).find(
+    (candidate) => candidate === value.disposition,
+  );
+  if (!disposition) return undefined;
+  const summary = text(value.summary)?.slice(0, maximumAttentionSummaryLength);
+  if (disposition !== ATTENTION_DISPOSITION.SILENT && !summary) return undefined;
+  return normalizeAttention({
+    disposition,
+    decidedAt,
+    ...(summary ? { summary } : undefined),
+    ...(value.answers_ask === true && disposition !== ATTENTION_DISPOSITION.SILENT
+      ? { answersAsk: true }
+      : undefined),
+  });
 }
 
 /**
@@ -478,7 +503,7 @@ export interface ProviderSessionObservation {
  * The normalized model shared by observers, attention evaluation, the UI, and
  * any future capability-gated controls.
  */
-export interface NormalizedSession extends SessionIdentity {
+export interface Session extends SessionIdentity {
   provider: SessionProvider;
   /** The immediate provider-owned parent of this independently observed session. */
   parentProviderSessionId?: string;
@@ -517,7 +542,6 @@ export interface NormalizedSession extends SessionIdentity {
   renameTarget?: string;
   /** The workspace this session is one chat of, when its provider nests them. */
   workspace?: SessionWorkspace;
-  attention: AttentionDecision;
 }
 
 export const maximumSessionTitleLength = 160;
@@ -858,8 +882,7 @@ export function normalizeAttention(decision: AttentionDecision): AttentionDecisi
 export function normalizeSession(
   provider: SessionProvider,
   observation: ProviderSessionObservation,
-  attention = silentAttention(observation.observedAt),
-): NormalizedSession {
+): Session {
   const { providerId, providerSessionId } = normalizeSessionIdentity({
     providerId: provider.id,
     providerSessionId: observation.providerSessionId,
@@ -889,7 +912,7 @@ export function normalizeSession(
   const pressLink = applications.find((application) => application.link)?.link;
   if (pressLink) detail.link = pressLink;
 
-  const session: NormalizedSession = {
+  const session: Session = {
     providerId,
     providerSessionId,
     provider: {
@@ -908,8 +931,7 @@ export function normalizeSession(
     canReceiveMessage: observation.canReceiveMessage === true,
     canRename: observation.canRename === true,
     spawnableAgents: normalizeSpawnableAgents(observation.spawnableAgents),
-    attention: normalizeAttention(attention),
-  };
+  } satisfies Session;
   if (observation.realtimeVoice === true) session.realtimeVoice = true;
   if (observation.realtimeVoiceLive === true) session.realtimeVoiceLive = true;
   if (observation.standing === true) session.standing = true;
@@ -929,6 +951,6 @@ export function normalizeSession(
 }
 
 /** Returns whether a provider explicitly exposed a given control for a session. */
-export function supportsSessionControl(session: NormalizedSession, controlId: string): boolean {
+export function supportsSessionControl(session: Session, controlId: string): boolean {
   return session.controls.some((control) => control.id === controlId);
 }

@@ -2,13 +2,15 @@ import { PRODUCT_EVENT, type RecordProductEvent } from "@sidecar/analytics";
 import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials";
 import { ISSUE_TRACKER_ID } from "@sidecar/issues";
 import type { LinearCredentials, LinearSignIn } from "@sidecar/trackers";
+import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from "electron";
-import { channels } from "#shared/contracts";
+import { BRIDGE } from "#shared/bridge";
+import { registerBridge } from "../register-bridge";
 import type { createSettingsHandler } from "../settings-handler";
 import type { SettingsStore } from "../settings-store";
 
 export interface TrackerConnectionIpcDependencies {
-  ipcMain: Pick<IpcMain, "on">;
+  ipcMain: Pick<IpcMain, "handle" | "on">;
   trustedSender: (event: IpcMainEvent | IpcMainInvokeEvent) => boolean;
   registerSetting: ReturnType<typeof createSettingsHandler>;
   settingsStore: SettingsStore;
@@ -19,29 +21,25 @@ export interface TrackerConnectionIpcDependencies {
 }
 
 export function registerTrackerConnectionIpc(dependencies: TrackerConnectionIpcDependencies): void {
-  const {
-    ipcMain,
-    trustedSender,
-    registerSetting,
-    settingsStore,
-    credentials,
-    signIn,
-    refresh,
-    recordProductEvent,
-  } = dependencies;
+  const { registerSetting, settingsStore, credentials, signIn, refresh, recordProductEvent } =
+    dependencies;
   // The Linear sign-in runs whole inside `save`, exactly as the calendar's
   // does: the browser trip, the loopback redirect and the exchange all happen
   // in the main process, and the renderer's reply is the settings snapshot
   // alone. A refusal or a closed browser tab comes back as the reason the row
   // shows.
-  registerSetting(channels.connectLinear, {
+  registerSetting(BRIDGE.connectLinear, {
     validate() {
       return undefined;
     },
     async save() {
       const outcome = await signIn.signIn();
       if ("reason" in outcome) {
-        return { settings: await settingsStore.snapshot(), reason: outcome.reason };
+        return {
+          status: ACT_RESULT_STATUS.REJECTED,
+          settings: await settingsStore.snapshot(),
+          reason: outcome.reason,
+        };
       }
       return settingsStore.setGrant(CREDENTIAL_PROVIDER_ID.LINEAR, outcome);
     },
@@ -58,15 +56,16 @@ export function registerTrackerConnectionIpc(dependencies: TrackerConnectionIpcD
     refusal: "Could not connect Linear on this system.",
   });
 
-  ipcMain.on(channels.cancelLinearSignIn, (event) => {
-    if (trustedSender(event)) signIn.cancel();
-  });
+  registerBridge(
+    BRIDGE,
+    {
+      cancelLinearSignIn: signIn.cancel.bind(signIn),
+      reopenLinearSignIn: signIn.reopen.bind(signIn),
+    },
+    { ipcMain: dependencies.ipcMain, trustedSender: dependencies.trustedSender },
+  );
 
-  ipcMain.on(channels.reopenLinearSignIn, (event) => {
-    if (trustedSender(event)) signIn.reopen();
-  });
-
-  registerSetting(channels.disconnectLinear, {
+  registerSetting(BRIDGE.disconnectLinear, {
     validate() {
       return undefined;
     },
@@ -74,7 +73,7 @@ export function registerTrackerConnectionIpc(dependencies: TrackerConnectionIpcD
       // Revoked with Linear as well as forgotten here, so disconnecting ends
       // the access rather than only losing sight of it.
       await credentials.disconnect();
-      return { settings: await settingsStore.snapshot() };
+      return { status: ACT_RESULT_STATUS.ACCEPTED, settings: await settingsStore.snapshot() };
     },
     apply(result) {
       // The roster is about a board Luke can no longer read, so it goes with

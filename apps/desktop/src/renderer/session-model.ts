@@ -5,6 +5,7 @@ import type { IssueIdentity } from "@sidecar/issues";
 import { SESSION_LIST_ALL } from "@sidecar/realtime";
 import {
   ATTENTION_DISPOSITION,
+  type AttentionDecision,
   HOSTED_AGENT_ID_LIST,
   type HostedAgentId,
   isHostedAgentId,
@@ -12,7 +13,6 @@ import {
   isSessionApplicationId,
   matchesFilterSelection,
   mentionedSessions,
-  type NormalizedSession,
   PROVIDER_ID_LIST,
   type ProviderId,
   SESSION_APPLICATION_ID_LIST,
@@ -21,8 +21,10 @@ import {
   SESSION_LOCATION,
   SESSION_MENTION_KIND,
   SESSION_STATUS,
+  type Session,
   type SessionApplicationId,
   type SessionApplicationScope,
+  type SessionAttentionEntry,
   type SessionControlKind,
   type SessionDiffSummary,
   type SessionFilter,
@@ -32,6 +34,7 @@ import {
   SUPERSET_WORKSPACE_PROVIDER_ID,
   sessionChangeNumber,
   sessionFilterAxis,
+  silentAttention,
 } from "@sidecar/session";
 import {
   compareSessionsByUrgency,
@@ -39,7 +42,7 @@ import {
   type SessionUrgency,
   urgencyLabel,
 } from "@sidecar/surface";
-import type { AppBootstrap } from "#shared/contracts";
+import type { AppBootstrap } from "#shared/wire/session";
 
 /**
  * The narrowings and their vocabulary live in core so the stored selection is
@@ -64,7 +67,7 @@ export {
   sessionFilterAxis,
 };
 
-function matchesFilter(session: DisplaySession, filter: SessionFilter): boolean {
+function matchesFilter(session: SessionView, filter: SessionFilter): boolean {
   if (filter === SESSION_FILTER.LOCAL || filter === SESSION_FILTER.CLOUD) {
     return session.location === filter;
   }
@@ -79,7 +82,7 @@ function matchesFilter(session: DisplaySession, filter: SessionFilter): boolean 
 
 /** Whether a row answers the whole selection, on the axes' own combining rules. */
 export function matchesSessionFilters(
-  session: DisplaySession,
+  session: SessionView,
   filters: readonly SessionFilter[],
 ): boolean {
   return matchesFilterSelection(filters, (filter) => matchesFilter(session, filter));
@@ -161,8 +164,8 @@ export interface SpokenSearchOutcome {
  * will not draw.
  */
 export function spokenSearchOutcome(
-  sessions: readonly DisplaySession[],
-  view: SessionView,
+  sessions: readonly SessionView[],
+  view: SessionArrangement,
 ): SpokenSearchOutcome {
   const list = arrangeSessions(sessions, view);
   const matches = list.sessions.length;
@@ -186,7 +189,7 @@ export const SESSION_SORT = SESSION_LIST_SORT;
 
 export type SessionSort = SessionListSort;
 
-export interface SessionView {
+export interface SessionArrangement {
   /** The chosen narrowings, combined by axis; empty shows every session. */
   filters: readonly SessionFilter[];
   sort: SessionSort;
@@ -205,7 +208,7 @@ export interface SessionView {
  * order alone is not remembered, so the top row keeps matching the mark the
  * capsule kept.
  */
-export const DEFAULT_SESSION_VIEW: SessionView = {
+export const DEFAULT_SESSION_VIEW: SessionArrangement = {
   filters: [],
   sort: SESSION_SORT.URGENCY,
   query: "",
@@ -248,7 +251,7 @@ export interface DisplayApplication {
   openable: boolean;
 }
 
-export interface DisplaySession {
+export interface SessionView {
   id: string;
   title: string;
   providerId: string;
@@ -453,7 +456,7 @@ export interface SessionSearchOutcome {
 
 export interface ArrangedSessions {
   /** The rows the list draws, narrowed and ordered. */
-  sessions: readonly DisplaySession[];
+  sessions: readonly SessionView[];
   /** Everything tracked, which is what the controls are offered against. */
   total: number;
   /** The selection actually in force, which is empty whenever the chosen one emptied. */
@@ -490,7 +493,9 @@ export interface SessionTally {
   providers: readonly ProviderTally[];
 }
 
-function sessionNeedsAttention(session: NormalizedSession): boolean {
+type SessionWithAttention = Session & { attention: AttentionDecision };
+
+function sessionNeedsAttention(session: SessionWithAttention): boolean {
   return (
     session.status === SESSION_STATUS.WAITING ||
     // A session that stopped on a failure cannot get itself going again, so it
@@ -512,7 +517,7 @@ function sessionNeedsAttention(session: NormalizedSession): boolean {
  * provider said nothing still reads as Working or Complete rather than as a
  * row with a line missing.
  */
-function sessionDetail(session: NormalizedSession, urgency: SessionUrgency): string {
+function sessionDetail(session: SessionWithAttention, urgency: SessionUrgency): string {
   const flaggedSummary =
     session.attention.disposition === ATTENTION_DISPOSITION.SILENT
       ? undefined
@@ -552,7 +557,7 @@ function noticeAsksByIdentity(
   return byProvider;
 }
 
-function sessionUrgency(session: NormalizedSession): SessionUrgency {
+function sessionUrgency(session: SessionWithAttention): SessionUrgency {
   if (sessionNeedsAttention(session)) return SESSION_URGENCY.ATTENTION;
   if (session.status === SESSION_STATUS.COMPLETE) return SESSION_URGENCY.COMPLETE;
   if (session.status === SESSION_STATUS.UNKNOWN) return SESSION_URGENCY.UNKNOWN;
@@ -585,7 +590,7 @@ export function searchTokens(query: string): readonly string[] {
  * falls back to it: a row busy saying what it is doing must still answer for
  * the state it is in.
  */
-function searchableLines(session: DisplaySession): readonly string[] {
+function searchableLines(session: SessionView): readonly string[] {
   const lines = [
     session.title,
     session.detail,
@@ -602,7 +607,7 @@ function searchableLines(session: DisplaySession): readonly string[] {
 }
 
 /** Every word somewhere on the row: words narrow, they never widen. */
-function matchesQuery(session: DisplaySession, tokens: readonly string[]): boolean {
+function matchesQuery(session: SessionView, tokens: readonly string[]): boolean {
   const lines = searchableLines(session).map((line) => line.toLowerCase());
   return tokens.every((token) => lines.some((line) => line.includes(token)));
 }
@@ -641,22 +646,28 @@ export function matchRanges(text: string, tokens: readonly string[]): readonly M
 const byUrgency = compareSessionsByUrgency;
 
 /** What moved last, with urgency deciding sessions observed in the same tick. */
-function byRecency(first: DisplaySession, second: DisplaySession): number {
+function byRecency(first: SessionView, second: SessionView): number {
   return second.observedAt - first.observedAt || byUrgency(first, second);
 }
 
 /** The comparator a sort names — one answer for the list and the wing's marks. */
-function bySort(sort: SessionSort): (first: DisplaySession, second: DisplaySession) => number {
+function bySort(sort: SessionSort): (first: SessionView, second: SessionView) => number {
   return sort === SESSION_SORT.RECENCY ? byRecency : byUrgency;
 }
 
 export function displaySessions(
   bootstrap: AppBootstrap,
-  sessions: readonly NormalizedSession[],
+  sessions: readonly Session[],
   noticeAsks: readonly SessionNoticeAsk[] = [],
-): readonly DisplaySession[] {
+  attention: readonly SessionAttentionEntry[] = [],
+): readonly SessionView[] {
   const asks = noticeAsksByIdentity(noticeAsks);
-  const visible: readonly DisplaySession[] = bootstrap.fixtureMode
+  const decisions = new Map(
+    attention.map(
+      (entry) => [`${entry.providerId}\0${entry.providerSessionId}`, entry.decision] as const,
+    ),
+  );
+  const visible: readonly SessionView[] = bootstrap.fixtureMode
     ? bootstrap.fixture.sessions.map((session) => ({
         ...session,
         // The same wording rule the live path applies: a fixture row whose
@@ -679,7 +690,13 @@ export function displaySessions(
         actions: session.actions ?? [],
         hasChange: session.hasChange === true,
       }))
-    : sessions.map((session) => {
+    : sessions.map((observed) => {
+        const session = {
+          ...observed,
+          attention:
+            decisions.get(`${observed.providerId}\0${observed.providerSessionId}`) ??
+            silentAttention(observed.observedAt),
+        } satisfies SessionWithAttention;
         const urgency = sessionUrgency(session);
         const noticeAsk = asks.get(session.providerId)?.get(session.providerSessionId);
         const changeNumber = session.detail.change
@@ -688,7 +705,7 @@ export function displaySessions(
         const openApplication = session.applications.find(
           (application) => application.link === session.detail.link,
         );
-        const displaySession: DisplaySession = {
+        const displaySession: SessionView = {
           id: session.providerSessionId,
           title: session.title,
           providerId: session.providerId,
@@ -784,7 +801,7 @@ const FILTER_AXIS_LABEL = {
  * sessions they have, so a chip never moves out from under the pointer as
  * sessions come and go.
  */
-function filterGroups(sessions: readonly DisplaySession[]): readonly SessionFilterGroup[] {
+function filterGroups(sessions: readonly SessionView[]): readonly SessionFilterGroup[] {
   if (sessions.length === 0) return [];
 
   const locations = new Map<SessionLocation, number>();
@@ -900,7 +917,7 @@ function filterGroups(sessions: readonly DisplaySession[]): readonly SessionFilt
 }
 
 /** Whether two rows are chats of one workspace. */
-function sameWorkspace(first: DisplaySession, second: DisplaySession): boolean {
+function sameWorkspace(first: SessionView, second: SessionView): boolean {
   return (
     first.workspace !== undefined &&
     second.workspace !== undefined &&
@@ -918,8 +935,8 @@ function sameWorkspace(first: DisplaySession, second: DisplaySession): boolean {
  * their seats, and a group whose sibling would have sat between two strangers
  * simply closes the gap.
  */
-function seatWorkspacesTogether(sessions: readonly DisplaySession[]): readonly DisplaySession[] {
-  const seated: DisplaySession[] = [];
+function seatWorkspacesTogether(sessions: readonly SessionView[]): readonly SessionView[] {
+  const seated: SessionView[] = [];
   const taken = new Set<string>();
   for (const session of sessions) {
     if (taken.has(session.id)) continue;
@@ -989,14 +1006,14 @@ export function sessionRunKeys(
  * riding the advertisement. Only the target can say so: the label is the
  * provider's own words, and words are not a contract.
  */
-export function actsOnWorkspace(session: DisplaySession, action: SessionAction): boolean {
+export function actsOnWorkspace(session: SessionView, action: SessionAction): boolean {
   return session.workspace !== undefined && action.target === session.workspace.id;
 }
 
 /** One workspace-level act, and the chat whose advertisement carries it. */
 export interface WorkspaceTrayAction {
   action: SessionAction;
-  session: DisplaySession;
+  session: SessionView;
 }
 
 /**
@@ -1009,7 +1026,7 @@ export interface WorkspaceTrayAction {
  * keeps the write validated against the same roster row that advertised it.
  */
 export function workspaceTrayActions(
-  sessions: readonly DisplaySession[],
+  sessions: readonly SessionView[],
 ): readonly WorkspaceTrayAction[] {
   const acts = new Map<string, WorkspaceTrayAction>();
   for (const session of sessions) {
@@ -1023,7 +1040,7 @@ export function workspaceTrayActions(
 
 /** The tray header's pull request, and the chat whose report carries it. */
 export interface WorkspaceTrayChange {
-  session: DisplaySession;
+  session: SessionView;
   changeNumber?: number;
 }
 
@@ -1040,7 +1057,7 @@ export interface WorkspaceTrayChange {
  * against the same roster row that reported it.
  */
 export function workspaceTrayChange(
-  sessions: readonly DisplaySession[],
+  sessions: readonly SessionView[],
 ): WorkspaceTrayChange | undefined {
   const reporting = sessions.filter((session) => session.hasChange);
   const [first] = reporting;
@@ -1056,7 +1073,7 @@ export function workspaceTrayChange(
   };
 }
 
-export function sessionListRuns(sessions: readonly DisplaySession[]): readonly SessionListRun[] {
+export function sessionListRuns(sessions: readonly SessionView[]): readonly SessionListRun[] {
   const runs: SessionListRun[] = [];
   for (let index = 0; index < sessions.length; index += 1) {
     const session = sessions[index];
@@ -1107,8 +1124,8 @@ export function sessionListRuns(sessions: readonly DisplaySession[]): readonly S
  * offer the matches sitting behind the chips instead of denying they exist.
  */
 export function arrangeSessions(
-  sessions: readonly DisplaySession[],
-  view: SessionView,
+  sessions: readonly SessionView[],
+  view: SessionArrangement,
 ): ArrangedSessions {
   const groups = filterGroups(sessions);
   const chosen =
@@ -1153,7 +1170,7 @@ export function arrangeSessions(
  * sort the panel opens on.
  */
 export function sessionTally(
-  sessions: readonly DisplaySession[],
+  sessions: readonly SessionView[],
   sort: SessionSort = SESSION_SORT.URGENCY,
 ): SessionTally {
   const providers = new Map<string, ProviderTally>();
@@ -1255,14 +1272,7 @@ export function tallySummary(tally: SessionTally): string {
  * fixture rows are measured against the fixture's own epoch so the evidence
  * stays reproducible, and live rows against whatever render tick asked.
  */
-export function observedAgoLabel(observedAt: number, now: number): string {
-  const elapsedMinutes = Math.floor((now - observedAt) / 60_000);
-  if (elapsedMinutes < 1) return "Now";
-  if (elapsedMinutes < 60) return `${elapsedMinutes}m`;
-  const elapsedHours = Math.floor(elapsedMinutes / 60);
-  if (elapsedHours < 24) return `${elapsedHours}h`;
-  return `${Math.floor(elapsedHours / 24)}d`;
-}
+export { observedAgoLabel } from "@sidecar/panel";
 
 /**
  * The caption beside the count once the panel has room for it. The badge's

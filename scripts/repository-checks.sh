@@ -110,6 +110,11 @@ node "$SIDECAR_REPO_ROOT/design/generate-brand-assets.mjs" --check
 # source, four committed outputs in @sidecar/surface; --check fails if any drifted.
 node "$SIDECAR_REPO_ROOT/design/generate-surface-shared.mjs" --check
 
+# The public platform table is a direct projection of the session package's
+# narrow provider identity catalog. Privacy wording stays manually reviewed.
+pnpm --dir "$SIDECAR_REPO_ROOT/packages/session" exec tsx \
+    "$SIDECAR_REPO_ROOT/scripts/generate-provider-readme.ts" --check
+
 # Mount reveals, literal timings, loops, and layout-property animation obey the
 # renderer contract in DESIGN.md. The checker keeps the bounded face-artwork
 # exceptions explicit while rejecting new drift.
@@ -154,9 +159,66 @@ if [[ -n "$extensionless_imports" ]]; then
     exit 1
 fi
 
+# Every package the web functions reach must have its own door in
+# server/core.ts. The Vercel builder compiles the TypeScript its *relative*
+# import graph reaches, but a bare `@sidecar/…` specifier it cannot follow: the
+# package's `exports` names `./src/index.js`, a file that exists only after
+# compilation, so the builder skips the package and ships functions whose
+# runtime import has nothing to resolve to. Nothing local reports the absence —
+# every toolchain in this repository substitutes the `.ts` back — so the first
+# report is FUNCTION_INVOCATION_FAILED on every deployed route, which is how
+# adding one `export * from "@sidecar/acts"` inside an already-doored package
+# took down sign-in. The closure is computed here from the doors' own bare
+# imports so the door list cannot fall behind the graph it exists to cover.
+core_doors_file="$SIDECAR_REPO_ROOT/apps/web/server/core.ts"
+doored_packages=$(grep -oE '"\.\./\.\./\.\./packages/[a-z-]+/src/index\.js"' "$core_doors_file" |
+    sed -E 's#.*/packages/([a-z-]+)/.*#\1#' | sort -u)
+reached_packages=$doored_packages
+frontier=$doored_packages
+while [[ -n "$frontier" ]]; do
+    next_frontier=""
+    for package_name in $frontier; do
+        imported=$(grep -rhoE --include='*.ts' --exclude='*.test.ts' \
+            '(from|import) "@sidecar/[a-z-]+"' \
+            "$SIDECAR_REPO_ROOT/packages/$package_name/src" 2>/dev/null |
+            sed -E 's#.*"@sidecar/([a-z-]+)"#\1#' | sort -u || true)
+        for imported_name in $imported; do
+            if ! grep -qx "$imported_name" <<<"$reached_packages"; then
+                reached_packages=$(printf '%s\n%s' "$reached_packages" "$imported_name")
+                next_frontier="$next_frontier $imported_name"
+            fi
+        done
+    done
+    frontier=$next_frontier
+done
+undoored_packages=""
+while IFS= read -r reached_name; do
+    if ! grep -qx "$reached_name" <<<"$doored_packages"; then
+        undoored_packages+="$reached_name"$'\n'
+    fi
+done <<<"$(sort -u <<<"$reached_packages")"
+if [[ -n "$undoored_packages" ]]; then
+    printf 'error: apps/web/server/core.ts is missing a door for packages its import graph reaches (the Vercel builder cannot follow bare @sidecar specifiers, so deployed functions crash at module load):\n%s\n' \
+        "$undoored_packages" >&2
+    exit 1
+fi
+
+# Packages must not reach into apps: the dependency points the other way, and
+# a relative path into apps/ evades the declared package graph, so typecheck
+# resolves it without seeing the package → app → package cycle it creates.
+# Every name the app re-exports originates in a package; import it from the
+# defining package instead.
+package_app_imports=$(grep -rEn '(from|import) "[^"]*apps/[^"]*"' \
+    "$SIDECAR_REPO_ROOT"/packages/*/src || true)
+if [[ -n "$package_app_imports" ]]; then
+    printf 'error: packages must not import from apps/ (the path import hides a package → app → package cycle from the declared dependency graph):\n%s\n' \
+        "$package_app_imports" >&2
+    exit 1
+fi
+
 # The renderer is a sandboxed browser context: it reaches the main process
-# through the preload bridge alone, so `#shared/contracts` is the widest door
-# it has. A `#main/` import compiles and bundles happily and then fails in the
+# through the preload bridge alone, so `#shared/bridge` and `#shared/wire/*`
+# are its widest doors. A `#main/` import compiles and bundles happily and then fails in the
 # browser, and a `node:` import does the same — neither is a mistake the type
 # checker or esbuild can report, because both are real modules that simply are
 # not there at run time.
@@ -167,8 +229,20 @@ fi
 renderer_escapes=$(grep -ranE 'from "(#main/|node:)' "$SIDECAR_REPO_ROOT/apps/desktop/src/renderer" |
     grep -vE '\.test\.tsx?:[0-9]+:import .*"node:' || true)
 if [[ -n "$renderer_escapes" ]]; then
-    printf 'error: the renderer is sandboxed — it reaches the main process only through #shared/contracts and the preload bridge:\n%s\n' \
+    printf 'error: the renderer is sandboxed — it reaches the main process only through the shared bridge and wire modules:\n%s\n' \
         "$renderer_escapes" >&2
+    exit 1
+fi
+
+# BRIDGE is the one renderer-to-main declaration, and registerBridge is the
+# one place that may attach it to Electron. A handler registered beside its
+# domain logic would bypass the manifest's sender and wire guards.
+direct_ipc_registration=$(grep -RnaE --include='*.ts' 'ipcMain\.(handle|on)\(' \
+    "$SIDECAR_REPO_ROOT/apps/desktop/src" |
+    grep -v '/main/register-bridge.ts:' || true)
+if [[ -n "$direct_ipc_registration" ]]; then
+    printf 'error: Electron IPC handlers must be registered through registerBridge:\n%s\n' \
+        "$direct_ipc_registration" >&2
     exit 1
 fi
 

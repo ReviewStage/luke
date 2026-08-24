@@ -541,7 +541,10 @@ test("observes nothing where the browser has never run", async (t) => {
   const radiusHome = await temporaryRadiusHome(t);
 
   assert.deepEqual(await adapterFor(radiusHome).observe(), []);
-  assert.equal(await adapterFor(radiusHome).readTranscript(CHAT_ID.SETTLED), undefined);
+  assert.deepEqual(await adapterFor(radiusHome).readTranscript(CHAT_ID.SETTLED), {
+    status: "rejected",
+    reason: "That session's transcript could not be found.",
+  });
 });
 
 test("observes nothing from a store shaped differently than this build reads", async (t) => {

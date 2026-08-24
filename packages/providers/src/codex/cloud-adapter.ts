@@ -1,5 +1,5 @@
 import {
-  PROVIDER_ACT_RESULT_STATUS,
+  ACT_RESULT_STATUS,
   type ProviderSessionObservation,
   type ProviderWorkspaceRequest,
   type ProviderWorkspaceResult,
@@ -228,13 +228,17 @@ export class CodexCloudSessionAdapter extends CliSessionAdapter {
     const project = this.#projects.find(
       (candidate) => candidate.providerProjectId === request.providerProjectId,
     );
-    if (!project) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+    if (!project)
+      return {
+        status: ACT_RESULT_STATUS.UNSUPPORTED,
+        reason: "That act is not supported by the latest observation.",
+      };
 
     // Codex names tasks itself from the prompt; a name the user typed has
     // nowhere to go, and dropping it silently would honour half the ask.
     if (request.name !== undefined) {
       return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+        status: ACT_RESULT_STATUS.REJECTED,
         reason: "Codex names its own tasks.",
       };
     }
@@ -244,7 +248,7 @@ export class CodexCloudSessionAdapter extends CliSessionAdapter {
     const task = request.task === undefined ? undefined : sessionMessageText(request.task);
     if (!task) {
       return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+        status: ACT_RESULT_STATUS.REJECTED,
         reason: "A Codex cloud task needs an opening task shorter than a document.",
       };
     }
@@ -255,12 +259,12 @@ export class CodexCloudSessionAdapter extends CliSessionAdapter {
       CODEX_CLI.ARGUMENT_SEPARATOR,
       task,
     ]);
-    if (written.outcome.status !== PROVIDER_ACT_RESULT_STATUS.ACCEPTED) {
+    if (written.outcome.status !== ACT_RESULT_STATUS.ACCEPTED) {
       return written.outcome;
     }
     const providerSessionId = createdTaskId(written.stdout ?? "");
     return {
-      status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED,
+      status: ACT_RESULT_STATUS.ACCEPTED,
       ...(providerSessionId ? { providerSessionId } : undefined),
     };
   }

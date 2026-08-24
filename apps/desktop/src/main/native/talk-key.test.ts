@@ -102,10 +102,20 @@ test("a helper that dies after registering still gives the key up", () => {
   assert.deepEqual(context.edges, ["registered:Alt+Space", "unavailable"]);
 });
 
+test("a partial press from a dying helper is discarded", () => {
+  const context = harness();
+  context.watcher.start(["Alt+Space"]);
+  context.emit("registered Alt+Space\ndown");
+  context.die();
+
+  assert.deepEqual(context.edges, ["registered:Alt+Space", "unavailable"]);
+});
+
 test("a refusal is reported once, not once per way of hearing it", () => {
   const context = harness();
   context.watcher.start(["Alt+Space"]);
   context.emit("unavailable already-owned\n");
+  context.emit("registered Alt+Space\ndown\nup\n");
   context.die();
 
   assert.deepEqual(context.edges, ["unavailable"]);

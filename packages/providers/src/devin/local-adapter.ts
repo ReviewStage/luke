@@ -4,6 +4,8 @@ import {
   agedStatus,
   maximumSessionTitleLength,
   type ProviderSessionObservation,
+  type ProviderTranscriptResult,
+  providerTranscriptResult,
   SESSION_COMPLETION_CAUSE,
   SESSION_STATUS,
   type SessionDetail,
@@ -38,6 +40,7 @@ import {
   type ObservedDevinHookEvent,
   readDevinHookEvent,
 } from "./hooks.js";
+import { DEVIN_CHAIN_QUERY } from "./queries.js";
 import { readDevinSessionTranscript } from "./transcript.js";
 
 /**
@@ -140,20 +143,6 @@ const DEVIN_SESSION_QUERY_MINIMAL = `
  * of the table, because a rewound session leaves its abandoned branch as the
  * newest nodes while the tip points where the conversation actually stands.
  */
-const DEVIN_CHAIN_QUERY = `
-  WITH RECURSIVE chain (node_id, parent_node_id, chat_message, depth) AS (
-    SELECT node_id, parent_node_id, chat_message, 0
-    FROM message_nodes
-    WHERE session_id = ?1 AND node_id = ?2
-    UNION ALL
-    SELECT nodes.node_id, nodes.parent_node_id, nodes.chat_message, chain.depth + 1
-    FROM message_nodes AS nodes
-    JOIN chain ON nodes.node_id = chain.parent_node_id
-    WHERE nodes.session_id = ?1 AND chain.depth < ?3
-  )
-  SELECT chat_message FROM chain ORDER BY depth
-`;
-
 /** For a session row from before the tip pointer: newest nodes stand in. */
 const DEVIN_NEWEST_NODES_QUERY = `
   SELECT chat_message
@@ -449,13 +438,15 @@ export class DevinLocalSessionAdapter extends LocalSessionAdapter {
     return [];
   }
 
-  override readTranscript(providerSessionId: string): Promise<string | undefined> {
-    return readDevinSessionTranscript({
-      cliDirectory: this.#cliDirectory,
-      providerSessionId,
-      sqlite: this.#sqlite,
-      maximumRenderedLength: this.#transcriptMaximumRenderedLength,
-    });
+  override readTranscript(providerSessionId: string): Promise<ProviderTranscriptResult> {
+    return providerTranscriptResult(
+      readDevinSessionTranscript({
+        cliDirectory: this.#cliDirectory,
+        providerSessionId,
+        sqlite: this.#sqlite,
+        maximumRenderedLength: this.#transcriptMaximumRenderedLength,
+      }),
+    );
   }
 
   /** The session rows, or nothing when neither query fits this database. */

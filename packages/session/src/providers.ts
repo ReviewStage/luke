@@ -1,4 +1,4 @@
-import { text, type UnparsedWireValue } from "@sidecar/wire";
+import { ACT_RESULT_STATUS, type ActResult, text, type UnparsedWireValue } from "@sidecar/wire";
 import {
   type ProviderSessionObservation,
   SESSION_APPLICATION_ID,
@@ -6,10 +6,19 @@ import {
   type SessionProvider,
 } from "./session.js";
 
+export const PROVIDER_LOCATION_KIND = {
+  LOCAL: "local",
+  CLOUD: "cloud",
+  LOCAL_AND_CLOUD: "local-and-cloud",
+} as const;
+
+export type ProviderLocationKind =
+  (typeof PROVIDER_LOCATION_KIND)[keyof typeof PROVIDER_LOCATION_KIND];
+
 /**
  * Stable provider identifiers shared by adapters, the registry, and the UI.
- * They key provider-specific presentation (such as a mark) without a renderer
- * having to import adapter code or match on a display name.
+ * They key provider-specific facts without a renderer importing adapter code
+ * or matching on a display name.
  */
 export const PROVIDER_ID = {
   ANTIGRAVITY: "antigravity",
@@ -28,6 +37,84 @@ export const PROVIDER_ID = {
 } as const;
 
 export type ProviderId = (typeof PROVIDER_ID)[keyof typeof PROVIDER_ID];
+
+export interface ProviderIdentity {
+  readonly id: ProviderId;
+  readonly displayName: string;
+  readonly location: ProviderLocationKind;
+}
+
+/**
+ * Shared provider identity only. Capabilities, credentials, hooks, fixtures,
+ * and presentation stay in the packages that own those decisions.
+ */
+export const PROVIDER_IDENTITY_BY_ID = {
+  [PROVIDER_ID.ANTIGRAVITY]: {
+    id: PROVIDER_ID.ANTIGRAVITY,
+    displayName: "Antigravity",
+    location: PROVIDER_LOCATION_KIND.LOCAL,
+  },
+  [PROVIDER_ID.CLAUDE_CODE]: {
+    id: PROVIDER_ID.CLAUDE_CODE,
+    displayName: "Claude Code",
+    location: PROVIDER_LOCATION_KIND.LOCAL,
+  },
+  [PROVIDER_ID.CODEX]: {
+    id: PROVIDER_ID.CODEX,
+    displayName: "Codex",
+    location: PROVIDER_LOCATION_KIND.LOCAL_AND_CLOUD,
+  },
+  [PROVIDER_ID.CONDUCTOR]: {
+    id: PROVIDER_ID.CONDUCTOR,
+    displayName: "Conductor",
+    location: PROVIDER_LOCATION_KIND.CLOUD,
+  },
+  [PROVIDER_ID.COPILOT]: {
+    id: PROVIDER_ID.COPILOT,
+    displayName: "Copilot",
+    location: PROVIDER_LOCATION_KIND.CLOUD,
+  },
+  [PROVIDER_ID.CURSOR]: {
+    id: PROVIDER_ID.CURSOR,
+    displayName: "Cursor",
+    location: PROVIDER_LOCATION_KIND.LOCAL_AND_CLOUD,
+  },
+  [PROVIDER_ID.DEVIN]: {
+    id: PROVIDER_ID.DEVIN,
+    displayName: "Devin",
+    location: PROVIDER_LOCATION_KIND.LOCAL_AND_CLOUD,
+  },
+  [PROVIDER_ID.GEMINI_CLI]: {
+    id: PROVIDER_ID.GEMINI_CLI,
+    displayName: "Gemini CLI",
+    location: PROVIDER_LOCATION_KIND.LOCAL,
+  },
+  [PROVIDER_ID.GROK_BUILD]: {
+    id: PROVIDER_ID.GROK_BUILD,
+    displayName: "Grok Build",
+    location: PROVIDER_LOCATION_KIND.LOCAL,
+  },
+  [PROVIDER_ID.JULES]: {
+    id: PROVIDER_ID.JULES,
+    displayName: "Jules",
+    location: PROVIDER_LOCATION_KIND.CLOUD,
+  },
+  [PROVIDER_ID.OPENCODE]: {
+    id: PROVIDER_ID.OPENCODE,
+    displayName: "OpenCode",
+    location: PROVIDER_LOCATION_KIND.LOCAL,
+  },
+  [PROVIDER_ID.RADIUS]: {
+    id: PROVIDER_ID.RADIUS,
+    displayName: "Radius",
+    location: PROVIDER_LOCATION_KIND.LOCAL,
+  },
+  [PROVIDER_ID.REPLICAS]: {
+    id: PROVIDER_ID.REPLICAS,
+    displayName: "Replicas",
+    location: PROVIDER_LOCATION_KIND.CLOUD,
+  },
+} as const satisfies Readonly<Record<ProviderId, ProviderIdentity>>;
 
 /**
  * The provider id the local Conductor workspace creator answers to. It names
@@ -59,7 +146,9 @@ export type WorkspaceProviderId =
  * rather than one derived from live sessions, so a list of agents does not
  * reshuffle as their sessions come and go.
  */
-export const PROVIDER_ID_LIST: readonly ProviderId[] = Object.values(PROVIDER_ID);
+export const PROVIDER_ID_LIST: readonly ProviderId[] = Object.values(PROVIDER_IDENTITY_BY_ID).map(
+  (identity) => identity.id,
+);
 
 /**
  * Agents Luke draws only inside a hosting app's workspaces — today the
@@ -168,7 +257,7 @@ export interface SessionProviderAdapter {
    * performs nothing and reaches no provider; an adapter whose stored shape
    * this build cannot render faithfully reports nothing rather than guessing.
    */
-  readTranscript(providerSessionId: string): Promise<string | undefined>;
+  readTranscript(providerSessionId: string): Promise<ProviderTranscriptResult>;
 }
 
 /**
@@ -178,19 +267,7 @@ export interface SessionProviderAdapter {
  * answer rather than a failure. One status set, because two identical triples
  * would be an API break the moment they diverged.
  */
-export const PROVIDER_ACT_RESULT_STATUS = {
-  ACCEPTED: "accepted",
-  REJECTED: "rejected",
-  UNSUPPORTED: "unsupported",
-} as const;
-
-export type ProviderActResultStatus =
-  (typeof PROVIDER_ACT_RESULT_STATUS)[keyof typeof PROVIDER_ACT_RESULT_STATUS];
-
-export type ProviderActResult =
-  | { status: typeof PROVIDER_ACT_RESULT_STATUS.ACCEPTED }
-  | { status: typeof PROVIDER_ACT_RESULT_STATUS.REJECTED; reason: string }
-  | { status: typeof PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+export type ProviderActResult = ActResult;
 
 /** A provider-local request for a control that was previously exposed by observation. */
 export interface ProviderControlRequest {
@@ -217,6 +294,23 @@ export interface ProviderSessionMessage {
  * way to message this session, which is an answer rather than a failure.
  */
 export type ProviderMessageResult = ProviderActResult;
+
+export type ProviderTranscriptResult =
+  | { status: typeof ACT_RESULT_STATUS.ACCEPTED; transcript: string }
+  | { status: typeof ACT_RESULT_STATUS.REJECTED; reason: string }
+  | { status: typeof ACT_RESULT_STATUS.UNSUPPORTED; reason: string };
+
+export async function providerTranscriptResult(
+  rendering: Promise<string | undefined>,
+): Promise<ProviderTranscriptResult> {
+  const transcript = await rendering;
+  return transcript
+    ? { status: ACT_RESULT_STATUS.ACCEPTED, transcript }
+    : {
+        status: ACT_RESULT_STATUS.REJECTED,
+        reason: "That session's transcript could not be found.",
+      };
+}
 
 /**
  * Whether a new workspace in a project carries an opening task — the
@@ -501,14 +595,14 @@ export interface ProviderWorkspaceRequest {
  */
 export type ProviderWorkspaceResult =
   | {
-      status: typeof PROVIDER_ACT_RESULT_STATUS.ACCEPTED;
+      status: typeof ACT_RESULT_STATUS.ACCEPTED;
       /** The created session's id, exactly as the provider's response named it. */
       providerSessionId?: string;
       /** Creation landed, but a non-essential follow-up such as opening failed. */
       warning?: string;
     }
-  | { status: typeof PROVIDER_ACT_RESULT_STATUS.REJECTED; reason: string }
-  | { status: typeof PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+  | { status: typeof ACT_RESULT_STATUS.REJECTED; reason: string }
+  | { status: typeof ACT_RESULT_STATUS.UNSUPPORTED; reason: string };
 
 /**
  * A user-asked request for another agent in the workspace an observed session
@@ -568,11 +662,14 @@ export abstract class SessionProviderAdapterBase implements SessionProviderAdapt
   abstract observe(): Promise<readonly ProviderSessionObservation[]>;
 
   async executeControl(_request: ProviderControlRequest): Promise<ProviderControlResult> {
-    return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+    return { status: ACT_RESULT_STATUS.UNSUPPORTED, reason: "This provider has no such control." };
   }
 
   async sendMessage(_message: ProviderSessionMessage): Promise<ProviderMessageResult> {
-    return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+    return {
+      status: ACT_RESULT_STATUS.UNSUPPORTED,
+      reason: "This provider does not take messages.",
+    };
   }
 
   workspaceProjects(): readonly WorkspaceProject[] {
@@ -580,25 +677,37 @@ export abstract class SessionProviderAdapterBase implements SessionProviderAdapt
   }
 
   async createWorkspace(_request: ProviderWorkspaceRequest): Promise<ProviderWorkspaceResult> {
-    return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+    return {
+      status: ACT_RESULT_STATUS.UNSUPPORTED,
+      reason: "This provider cannot create workspaces.",
+    };
   }
 
   async spawnWorkspaceAgent(
     _request: ProviderWorkspaceAgentRequest,
   ): Promise<ProviderWorkspaceResult> {
-    return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+    return { status: ACT_RESULT_STATUS.UNSUPPORTED, reason: "This provider cannot add agents." };
   }
 
   async renameWorkspace(_request: ProviderWorkspaceRenameRequest): Promise<ProviderActResult> {
-    return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+    return {
+      status: ACT_RESULT_STATUS.UNSUPPORTED,
+      reason: "This provider cannot rename workspaces.",
+    };
   }
 
   async renameSession(_request: ProviderSessionRenameRequest): Promise<ProviderActResult> {
-    return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+    return {
+      status: ACT_RESULT_STATUS.UNSUPPORTED,
+      reason: "This provider cannot rename sessions.",
+    };
   }
 
-  async readTranscript(_providerSessionId: string): Promise<string | undefined> {
-    return undefined;
+  async readTranscript(_providerSessionId: string): Promise<ProviderTranscriptResult> {
+    return {
+      status: ACT_RESULT_STATUS.UNSUPPORTED,
+      reason: "This provider keeps no transcript this build can read.",
+    };
   }
 }
 

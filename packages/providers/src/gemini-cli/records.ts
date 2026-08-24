@@ -7,6 +7,7 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
+import { LOCAL_TOOL_ARGUMENT_KEYS } from "../shared/tool-arguments.js";
 
 /**
  * The vocabulary of Gemini CLI's session recordings, shared by the adapter
@@ -78,15 +79,7 @@ export const GEMINI_OPEN_TOOL_STATUSES: ReadonlySet<string> = new Set([
  * not in it, because a signed URL is a credential and no other adapter sends
  * one anywhere; a fetch is named by its tool alone.
  */
-export const GEMINI_TOOL_INPUT_KEY = [
-  "description",
-  "command",
-  "file_path",
-  "path",
-  "pattern",
-  "prompt",
-  "query",
-] as const;
+export const GEMINI_TOOL_INPUT_KEY = LOCAL_TOOL_ARGUMENT_KEYS;
 
 /** The words inside a Gemini content value: a string, a part, or a part list. */
 export function geminiContentText(content: UnparsedWireValue): string | undefined {

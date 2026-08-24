@@ -154,9 +154,9 @@ export class PanelManager {
     this.#clearCollapseTimer(displayId);
     if (expanded) {
       this.#position(displayId);
-      window.webContents.send(channels.lifecycle, `mode:${mode}`);
+      window.webContents.send(channels.onLifecycle, `mode:${mode}`);
     } else {
-      window.webContents.send(channels.lifecycle, `mode:${mode}`);
+      window.webContents.send(channels.onLifecycle, `mode:${mode}`);
       const delay = this.#collapseDelay();
       if (delay === 0) this.#position(displayId);
       else {
@@ -293,8 +293,8 @@ export class PanelManager {
     return false;
   }
 
-  refreshGeometry(): void {
-    this.#nativeScreens = readMacScreenGeometry();
+  async refreshGeometry(): Promise<void> {
+    this.#nativeScreens = await readMacScreenGeometry();
     // A capture run pins a fixture housing on the main display, where the
     // evidence is taken; an interactive fixture still stands on the real
     // screen, because it is a person looking, not a camera.
@@ -364,7 +364,7 @@ export class PanelManager {
       width: layout.width,
       height: layout.height,
     });
-    window.webContents.send(channels.displayChanged, this.diagnostic(display));
+    window.webContents.send(channels.onDisplayChanged, this.diagnostic(display));
   }
 
   /**

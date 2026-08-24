@@ -11,7 +11,10 @@ import test from "node:test";
  * column off the row.
  */
 const css = readFileSync(new URL("./sessions.css", import.meta.url), "utf8");
-const markup = readFileSync(new URL("../panel-body.tsx", import.meta.url), "utf8");
+const markup = readFileSync(
+  new URL("../../../../../packages/panel/src/session-row.tsx", import.meta.url),
+  "utf8",
+);
 
 const rule = (selector: string): string => {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -32,7 +35,9 @@ test("the age leads the trailing column and the app marks follow", () => {
   const side = markup.indexOf('className="row-side"');
   assert.notEqual(side, -1);
   const when = markup.indexOf('className="row-when"', side);
-  const applications = markup.indexOf('className="row-applications"', side);
+  // The shared row owns the ordering while each app owns the interactive
+  // application-mark contents it places in this slot.
+  const applications = markup.indexOf("{applications}", side);
   assert.notEqual(when, -1);
   assert.notEqual(applications, -1);
   assert.ok(when < applications, "the app marks belong under the age, not above it");

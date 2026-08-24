@@ -1,13 +1,4 @@
-import { spawn } from "node:child_process";
-import { createRequire } from "node:module";
-import path from "node:path";
-
-interface ElectronApp {
-  readonly isPackaged: boolean;
-  getAppPath(): string;
-}
-
-const requireElectron = createRequire(__filename);
+import { NativeHelper, type NativeHelperProcess } from "./native-helper";
 
 /**
  * The two words the helper takes. It holds the player-facing knowledge — which
@@ -30,40 +21,12 @@ type MediaDuckCommand = (typeof MEDIA_DUCK_COMMAND)[keyof typeof MEDIA_DUCK_COMM
 export const MEDIA_DUCK_RELEASE_DELAY_MS = 1_000;
 
 /** Only the parts of a child process this needs, so a test can supply them. */
-export interface MediaDuckProcess {
-  stdin?: { write(chunk: string): void; end(): void };
-  on(event: "error" | "exit", listener: () => void): void;
-  removeAllListeners(): void;
-}
+export type MediaDuckProcess = NativeHelperProcess;
 
 export interface MediaDuckControllerOptions {
   /** Injectable so the ordering can be exercised without a Mac or a binary. */
   spawnHelper?: () => MediaDuckProcess | undefined;
   releaseDelayMs?: number;
-}
-
-function spawnMediaDuckHelper(): MediaDuckProcess | undefined {
-  // The helper speaks to Music and Spotify through Apple Events, which only
-  // macOS has; elsewhere the setting can be held but never acts.
-  if (process.platform !== "darwin") return undefined;
-  // SAFETY: Electron's main-process module exports the app path APIs this helper needs.
-  const { app } = requireElectron("electron") as { app: ElectronApp };
-  const helperPath = app.isPackaged
-    ? path.join(process.resourcesPath, "mac-media-duck")
-    : path.join(app.getAppPath(), ".build", "native", "mac-media-duck");
-  const child = spawn(helperPath, [], {
-    // Stdin is the whole protocol — its closing is what tells the helper to
-    // restore and go. The helper speaks back only to say a player refused it,
-    // and that diagnostic rides through to the app's own stdout: visible in a
-    // terminal run, nowhere at all in a packaged one.
-    stdio: ["pipe", "inherit", "ignore"],
-  });
-  // A helper that died surfaces twice: as the exit event the controller
-  // handles, and as a broken pipe on this stream — which, with no listener,
-  // would take the whole app down for a volume that merely stayed put.
-  child.stdin?.on("error", () => undefined);
-  // SAFETY: spawn returns ChildProcess; the helper's stdin protocol matches MediaDuckProcess.
-  return child as MediaDuckProcess;
 }
 
 /**
@@ -75,16 +38,16 @@ function spawnMediaDuckHelper(): MediaDuckProcess | undefined {
  * that is the user's own hand asking for their volume back.
  */
 export class MediaDuckController {
-  readonly #spawnHelper: () => MediaDuckProcess | undefined;
+  readonly #spawnHelper: (() => MediaDuckProcess | undefined) | undefined;
   readonly #releaseDelayMs: number;
-  #child: MediaDuckProcess | undefined;
+  #helper: NativeHelper | undefined;
   #enabled = false;
   #exchangeActive = false;
   #ducked = false;
   #releaseTimer: NodeJS.Timeout | undefined;
 
   constructor(options: MediaDuckControllerOptions = {}) {
-    this.#spawnHelper = options.spawnHelper ?? spawnMediaDuckHelper;
+    this.#spawnHelper = options.spawnHelper;
     this.#releaseDelayMs = options.releaseDelayMs ?? MEDIA_DUCK_RELEASE_DELAY_MS;
   }
 
@@ -106,15 +69,10 @@ export class MediaDuckController {
    */
   stop(): void {
     this.#clearReleaseTimer();
-    const child = this.#child;
-    this.#child = undefined;
+    const helper = this.#helper;
+    this.#helper = undefined;
     this.#ducked = false;
-    child?.removeAllListeners();
-    try {
-      child?.stdin?.end();
-    } catch {
-      // A pipe already broken is already closed, and EOF was the whole message.
-    }
+    helper?.endInput();
   }
 
   #apply(): void {
@@ -123,10 +81,10 @@ export class MediaDuckController {
       // never started back up, so there is nothing to send.
       this.#clearReleaseTimer();
       if (this.#ducked) return;
-      const child = this.#ensureChild();
-      if (!child) return;
+      const helper = this.#ensureHelper();
+      if (!helper) return;
       this.#ducked = true;
-      this.#write(child, MEDIA_DUCK_COMMAND.DUCK);
+      this.#write(helper, MEDIA_DUCK_COMMAND.DUCK);
       return;
     }
     if (!this.#ducked) {
@@ -147,38 +105,32 @@ export class MediaDuckController {
 
   #restore(): void {
     this.#ducked = false;
-    const child = this.#child;
+    const helper = this.#helper;
     // A restore that cannot be written is owed by no one: the helper it was
     // meant for died, and its memory of the volumes died with it.
-    if (child) this.#write(child, MEDIA_DUCK_COMMAND.RESTORE);
+    if (helper) this.#write(helper, MEDIA_DUCK_COMMAND.RESTORE);
   }
 
   /**
    * Writes one command, treating a throw as the helper's death: the pipe is
    * gone, so the state resets exactly as the exit listener would reset it.
    */
-  #write(child: MediaDuckProcess, command: MediaDuckCommand): void {
-    try {
-      child.stdin?.write(`${command}\n`);
-    } catch {
-      this.#drop(child);
-    }
+  #write(helper: NativeHelper, command: MediaDuckCommand): void {
+    if (!helper.writeLine(command)) this.#drop(helper);
   }
 
-  #ensureChild(): MediaDuckProcess | undefined {
-    if (this.#child) return this.#child;
-    let child: MediaDuckProcess | undefined;
-    try {
-      child = this.#spawnHelper();
-    } catch {
-      child = undefined;
-    }
-    if (!child) return undefined;
-    const spawned = child;
-    this.#child = spawned;
-    spawned.on("error", () => this.#drop(spawned));
-    spawned.on("exit", () => this.#drop(spawned));
-    return spawned;
+  #ensureHelper(): NativeHelper | undefined {
+    if (this.#helper) return this.#helper;
+    const helper = new NativeHelper({
+      binary: "mac-media-duck",
+      input: "pipe",
+      output: "inherit",
+      ...(this.#spawnHelper ? { spawnProcess: this.#spawnHelper } : undefined),
+    });
+    helper.onExit(() => this.#drop(helper));
+    if (!helper.start()) return undefined;
+    this.#helper = helper;
+    return helper;
   }
 
   /**
@@ -186,9 +138,9 @@ export class MediaDuckController {
    * there is nothing to say and no one to say it to: the state resets and
    * the next exchange starts a fresh helper from the players' own levels.
    */
-  #drop(child: MediaDuckProcess): void {
-    if (this.#child !== child) return;
-    this.#child = undefined;
+  #drop(helper: NativeHelper): void {
+    if (this.#helper !== helper) return;
+    this.#helper = undefined;
     this.#ducked = false;
     this.#clearReleaseTimer();
   }

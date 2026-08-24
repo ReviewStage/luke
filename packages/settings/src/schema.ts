@@ -1,5 +1,5 @@
 import { PRODUCT_SETTING_VALUE, type ProductSettingValue } from "@sidecar/analytics";
-import { CREDENTIAL_PROVIDERS, isCredentialProviderId } from "@sidecar/credentials";
+import { CREDENTIAL_PROVIDERS, isCredentialProviderId } from "@sidecar/credentials/vocabulary";
 import {
   APP_SETTING_ID,
   APP_SETTING_KIND,
@@ -24,6 +24,7 @@ import {
   isSessionFilter,
   isWorkspaceProviderId,
   PROVIDER_ID,
+  PROVIDER_IDENTITY_BY_ID,
   type ProviderId,
   parseWorkspaceAgentKindSelection,
   parseWorkspaceAgentSelection,
@@ -97,33 +98,17 @@ export const SETTING_SIDE_EFFECT = {
 
 export type SettingSideEffect = (typeof SETTING_SIDE_EFFECT)[keyof typeof SETTING_SIDE_EFFECT];
 
-export interface StoredAppSettings {
-  showInDock: boolean;
-  voice?: RealtimeVoice;
-  voiceSpeed?: RealtimeVoiceSpeed;
-  voiceCaptions: boolean;
-  voiceHotkey?: string;
-  askHotkey?: string;
-  stopHotkey?: string;
-  duckOtherMedia: boolean;
-  voiceSource?: VoiceSource;
-  preferBuiltInMicrophone: boolean;
-  quietDuringMeetings: boolean;
-  showOnAllDisplays: boolean;
-  shareUsageData: boolean;
-  sessionReplay: boolean;
-  formFactor?: PanelFormFactor;
-  /** The session list's chosen filter chips, absent while nothing narrows it. */
-  sessionFilters?: readonly SessionFilter[];
-  /** The session list's held search words, absent while nothing is searched. */
-  sessionSearchQuery?: string;
-  defaultWorkspaceProvider?: WorkspaceProviderId;
-  workspaceAgentDefaults?: WorkspaceAgentDefaults;
-  workspaceProjectDefaults?: Readonly<Partial<Record<WorkspaceProviderId, string>>>;
-}
+/** The concrete runtime families a stored setting may use after its schema guard. */
+type StoredSettingValue =
+  | string
+  | number
+  | boolean
+  | readonly SessionFilter[]
+  | WorkspaceAgentDefaults
+  | Readonly<Partial<Record<WorkspaceProviderId, string>>>
+  | undefined;
 
-export type AppSettingField = keyof StoredAppSettings;
-export type AppSettingValue<Field extends AppSettingField> = StoredAppSettings[Field];
+type AppSettingGuideSettings = (field: string) => StoredSettingValue;
 
 export interface SettingGuardResult<Value> {
   valid: boolean;
@@ -146,44 +131,6 @@ interface SettingEntryDefinition<Value> {
   /** Whether the stored entry already says what a write would say. */
   same(current: Value | undefined, next: Value | undefined): boolean;
 }
-
-interface SettingDefinition<Field extends AppSettingField> {
-  field: Field;
-  default: AppSettingValue<Field>;
-  guard(value: UnparsedWireValue): SettingGuardResult<AppSettingValue<Field>>;
-  entry?: SettingEntryDefinition<SettingEntryValue<Field>>;
-  settingsPage: SettingsPage;
-  resetScope?: SettingsResetScope;
-  guideEntry: {
-    ids: readonly AppSettingId[];
-    build(
-      settings: AppSettingGuideSettings,
-      defaultValue: AppSettingValue<Field>,
-    ): AppGuideSetting | readonly AppGuideSetting[] | undefined;
-  };
-  mainProcessSideEffect: SettingSideEffect;
-  spokenValue?: (value: string) => AppSettingValue<Field> | undefined;
-  /**
-   * How a change to this setting is counted, for a setting worth counting.
-   * The id travels; the value never does — only whether a switch went on or
-   * off, or whether a choice was made or returned to nothing, because several
-   * choices here hold a project name or a chord the developer typed.
-   */
-  analytics?: {
-    id: AppSettingId;
-    value(value: AppSettingValue<Field>): ProductSettingValue;
-  };
-}
-
-export type AppSettingGuideSettings = Omit<
-  StoredAppSettings,
-  "voice" | "voiceSpeed" | "voiceSource" | "formFactor"
-> & {
-  voice: RealtimeVoice;
-  voiceSpeed: RealtimeVoiceSpeed;
-  voiceSource: VoiceSource;
-  formFactor: PanelFormFactor;
-};
 
 const SETTINGS_TAB = "the panel's Settings tab";
 const VOICE_PAGE = `${SETTINGS_TAB}, on its Voice page`;
@@ -235,23 +182,32 @@ function voiceSpeedWord(speed: RealtimeVoiceSpeed | undefined): string {
 
 function workspaceProviderName(providerId: WorkspaceProviderId): string {
   if (providerId === SUPERSET_WORKSPACE_PROVIDER_ID) return "Superset";
-  // Local Conductor names itself apart from the cloud provider's plain
-  // "Conductor"; the string mirrors the adapter's own display name, which lives
-  // a layer up and must not be imported down here.
-  if (providerId === CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID) return "Conductor (local)";
+  if (providerId === CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID) {
+    return `${PROVIDER_IDENTITY_BY_ID[PROVIDER_ID.CONDUCTOR].displayName} (local)`;
+  }
   if (isCredentialProviderId(providerId)) return CREDENTIAL_PROVIDERS[providerId].displayName;
   // The one workspace-capable provider with no credential row to take a
   // display name from.
-  if (providerId === PROVIDER_ID.CODEX) return "Codex";
-  return providerId;
+  return isProviderId(providerId) ? PROVIDER_IDENTITY_BY_ID[providerId].displayName : providerId;
 }
 
-function settingGuideEntry<Field extends AppSettingField>(
+function settingGuideEntry<Field extends string>(
   _field: Field,
-  ids: readonly AppSettingId[],
-  build: SettingDefinition<Field>["guideEntry"]["build"],
-): SettingDefinition<Field>["guideEntry"] {
+  ids: readonly string[],
+  build: (
+    settings: AppSettingGuideSettings,
+    defaultValue: never,
+  ) => AppGuideSetting | readonly AppGuideSetting[] | undefined,
+) {
   return { ids, build };
+}
+
+function guideValue<Value extends StoredSettingValue>(
+  settings: AppSettingGuideSettings,
+  field: string,
+): Value {
+  // SAFETY: Each guide builder asks for its own schema field in the value type that field's guard returns.
+  return settings(field) as Value;
 }
 
 const valid = <Value>(value: Value): SettingGuardResult<Value> => ({ valid: true, value });
@@ -264,9 +220,6 @@ function optional<Value extends UnparsedWireValue>(
   if (value === undefined) return valid(undefined);
   return guard(value) ? valid(value) : invalid(undefined);
 }
-
-/** Any stored setting's value, which is what a counter is handed. */
-type StoredSettingValue = AppSettingValue<AppSettingField>;
 
 const toggleAnalytics = (value: StoredSettingValue): ProductSettingValue =>
   value ? PRODUCT_SETTING_VALUE.ON : PRODUCT_SETTING_VALUE.OFF;
@@ -288,7 +241,7 @@ function hotkey(value: UnparsedWireValue): SettingGuardResult<string | undefined
 
 function workspaceAgentDefaults(
   value: UnparsedWireValue,
-): SettingGuardResult<StoredAppSettings["workspaceAgentDefaults"]> {
+): SettingGuardResult<WorkspaceAgentDefaults | undefined> {
   if (value === undefined) return valid(undefined);
   if (!isRecord(value)) {
     return invalid(undefined);
@@ -317,7 +270,7 @@ function workspaceAgentDefaults(
  */
 function sessionFilters(
   value: UnparsedWireValue,
-): SettingGuardResult<StoredAppSettings["sessionFilters"]> {
+): SettingGuardResult<readonly SessionFilter[] | undefined> {
   if (value === undefined) return valid(undefined);
   if (!Array.isArray(value)) return invalid(undefined);
   const filters: SessionFilter[] = [];
@@ -338,9 +291,7 @@ const MAXIMUM_SESSION_SEARCH_QUERY_LENGTH = 500;
  * value past any typeable length is a corrupted file rather than a question
  * someone is still asking.
  */
-function sessionSearchQuery(
-  value: UnparsedWireValue,
-): SettingGuardResult<StoredAppSettings["sessionSearchQuery"]> {
+function sessionSearchQuery(value: UnparsedWireValue): SettingGuardResult<string | undefined> {
   if (value === undefined) return valid(undefined);
   if (!isWireString(value)) return invalid(undefined);
   if (value.trim() === "" || value.length > MAXIMUM_SESSION_SEARCH_QUERY_LENGTH) {
@@ -353,7 +304,7 @@ const MAXIMUM_WORKSPACE_PROJECT_ID_LENGTH = 500;
 
 function workspaceProjectDefaults(
   value: UnparsedWireValue,
-): SettingGuardResult<StoredAppSettings["workspaceProjectDefaults"]> {
+): SettingGuardResult<Readonly<Partial<Record<WorkspaceProviderId, string>>> | undefined> {
   if (value === undefined) return valid(undefined);
   if (!isRecord(value)) {
     return invalid(undefined);
@@ -385,7 +336,7 @@ export const APP_SETTING_SCHEMA = {
         label: "Show Luke in the Dock",
         description: "Whether Luke also stands in the Dock as an app icon.",
         kind: APP_SETTING_KIND.TOGGLE,
-        value: appToggleText(settings.showInDock),
+        value: appToggleText(guideValue<boolean>(settings, "showInDock")),
         defaultValue: appToggleText(defaultValue),
         adjustable: true,
         manual: APPEARANCE_PAGE,
@@ -407,7 +358,7 @@ export const APP_SETTING_SCHEMA = {
       description:
         "Which voice Luke speaks with; a change is heard right away — a conversation under way starts afresh in the new voice.",
       kind: APP_SETTING_KIND.CHOICE,
-      value: settings.voice,
+      value: guideValue<RealtimeVoice>(settings, "voice"),
       defaultValue,
       choices: REALTIME_VOICE_LIST,
       adjustable: true,
@@ -432,7 +383,7 @@ export const APP_SETTING_SCHEMA = {
         description:
           "How fast Luke talks: slow 0.75×, normal 1×, quick 1.25×, fast 1.5× the voice's natural rate. An ask may use the word or the multiple. A change is heard from the next reply on.",
         kind: APP_SETTING_KIND.CHOICE,
-        value: voiceSpeedWord(settings.voiceSpeed),
+        value: voiceSpeedWord(guideValue<RealtimeVoiceSpeed>(settings, "voiceSpeed")),
         defaultValue: voiceSpeedWord(defaultValue),
         choices: VOICE_SPEED_WORDS.flatMap((candidate) => [
           candidate.word,
@@ -465,7 +416,7 @@ export const APP_SETTING_SCHEMA = {
           "whatever this says, for a reply answering a typed ask and while the Mac's output is " +
           "muted or at zero.",
         kind: APP_SETTING_KIND.TOGGLE,
-        value: appToggleText(settings.voiceCaptions),
+        value: appToggleText(guideValue<boolean>(settings, "voiceCaptions")),
         defaultValue: appToggleText(defaultValue),
         adjustable: true,
         manual: VOICE_PAGE,
@@ -529,7 +480,7 @@ export const APP_SETTING_SCHEMA = {
         description:
           "Whether Music and Spotify are turned down while a spoken exchange is live, and back up after.",
         kind: APP_SETTING_KIND.TOGGLE,
-        value: appToggleText(settings.duckOtherMedia),
+        value: appToggleText(guideValue<boolean>(settings, "duckOtherMedia")),
         defaultValue: appToggleText(defaultValue),
         adjustable: true,
         manual: VOICE_PAGE,
@@ -552,7 +503,7 @@ export const APP_SETTING_SCHEMA = {
         "metered daily, or the developer's own OpenAI key, unmetered and billed by OpenAI. A " +
         "key stays stored either way.",
       kind: APP_SETTING_KIND.CHOICE,
-      value: VOICE_SOURCE_CHOICE[settings.voiceSource],
+      value: VOICE_SOURCE_CHOICE[guideValue<VoiceSource>(settings, "voiceSource")],
       defaultValue: VOICE_SOURCE_CHOICE[VOICE_SOURCE.ACCOUNT],
       choices: Object.values(VOICE_SOURCE_CHOICE),
       adjustable: false,
@@ -578,7 +529,7 @@ export const APP_SETTING_SCHEMA = {
           "Bluetooth headset, so the headset keeps its full music quality. A shut lid keeps the " +
           "headset's microphone either way.",
         kind: APP_SETTING_KIND.TOGGLE,
-        value: appToggleText(settings.preferBuiltInMicrophone),
+        value: appToggleText(guideValue<boolean>(settings, "preferBuiltInMicrophone")),
         defaultValue: appToggleText(defaultValue),
         adjustable: true,
         manual: VOICE_PAGE,
@@ -602,7 +553,7 @@ export const APP_SETTING_SCHEMA = {
         description:
           "Whether spoken announcements wait while a connected calendar shows a meeting on, then read out together once it ends. Switched on mid-meeting it takes hold at once. It changes nothing until a calendar — a Google Calendar account, or this Mac's Apple Calendar — is connected.",
         kind: APP_SETTING_KIND.TOGGLE,
-        value: appToggleText(settings.quietDuringMeetings),
+        value: appToggleText(guideValue<boolean>(settings, "quietDuringMeetings")),
         defaultValue: appToggleText(defaultValue),
         adjustable: true,
         manual: `${CONNECTIONS_PAGE} — drawn once a calendar is connected`,
@@ -627,7 +578,7 @@ export const APP_SETTING_SCHEMA = {
         description:
           "Whether Luke stands on every connected display at once; off keeps him to the main display alone.",
         kind: APP_SETTING_KIND.TOGGLE,
-        value: appToggleText(settings.showOnAllDisplays),
+        value: appToggleText(guideValue<boolean>(settings, "showOnAllDisplays")),
         defaultValue: appToggleText(defaultValue),
         adjustable: true,
         manual: APPEARANCE_PAGE,
@@ -656,7 +607,7 @@ export const APP_SETTING_SCHEMA = {
           "account by name and email. Every event and value is fixed by this build, so nothing " +
           "about a session and nothing typed or spoken can travel in one. On to begin with.",
         kind: APP_SETTING_KIND.TOGGLE,
-        value: appToggleText(settings.shareUsageData),
+        value: appToggleText(guideValue<boolean>(settings, "shareUsageData")),
         defaultValue: appToggleText(defaultValue),
         adjustable: true,
         manual: USAGE_DATA_SECTION,
@@ -689,7 +640,7 @@ export const APP_SETTING_SCHEMA = {
           "field is hidden. It is the panel alone and never the rest of your screen. Off " +
           "whenever Share usage data is off. On to begin with.",
         kind: APP_SETTING_KIND.TOGGLE,
-        value: appToggleText(settings.sessionReplay),
+        value: appToggleText(guideValue<boolean>(settings, "sessionReplay")),
         defaultValue: appToggleText(defaultValue),
         adjustable: true,
         manual: USAGE_DATA_SECTION,
@@ -717,7 +668,7 @@ export const APP_SETTING_SCHEMA = {
         description:
           "How Luke stands on a display without a camera housing — notch draws him one pressed into the top edge, bubble floats him just under it. A display with a real notch ignores this.",
         kind: APP_SETTING_KIND.CHOICE,
-        value: settings.formFactor,
+        value: guideValue<PanelFormFactor>(settings, "formFactor"),
         defaultValue,
         choices: PANEL_FORM_FACTOR_LIST,
         adjustable: true,
@@ -781,8 +732,10 @@ export const APP_SETTING_SCHEMA = {
           "Until one is chosen Luke asks when more than one provider could take it, and the first " +
           "workspace created saves its provider as the default.",
         kind: APP_SETTING_KIND.CHOICE,
-        value: settings.defaultWorkspaceProvider
-          ? workspaceProviderName(settings.defaultWorkspaceProvider)
+        value: guideValue<WorkspaceProviderId | undefined>(settings, "defaultWorkspaceProvider")
+          ? workspaceProviderName(
+              guideValue<WorkspaceProviderId>(settings, "defaultWorkspaceProvider"),
+            )
           : ASK_EACH_TIME_CHOICE,
         choices: [
           ASK_EACH_TIME_CHOICE,
@@ -809,9 +762,14 @@ export const APP_SETTING_SCHEMA = {
     entry: {
       // Local Conductor is deliberately not a key: its creation link
       // documents no agent choice, so no entry could ever steer one.
-      isKey: (value): value is ProviderId | typeof SUPERSET_WORKSPACE_PROVIDER_ID =>
+      isKey: (
+        value: UnparsedWireValue,
+      ): value is ProviderId | typeof SUPERSET_WORKSPACE_PROVIDER_ID =>
         isWireString(value) && (value === SUPERSET_WORKSPACE_PROVIDER_ID || isProviderId(value)),
-      same: (current, next) =>
+      same: (
+        current: WorkspaceAgentSelection | WorkspaceAgentKindSelection | undefined,
+        next: WorkspaceAgentSelection | WorkspaceAgentKindSelection | undefined,
+      ) =>
         current?.agent === next?.agent &&
         current?.model === next?.model &&
         current?.effort === next?.effort,
@@ -825,9 +783,12 @@ export const APP_SETTING_SCHEMA = {
         APP_SETTING_ID.SUPERSET_AGENT,
       ],
       (settings) => {
-        const chosen = settings.workspaceAgentDefaults?.[PROVIDER_ID.CONDUCTOR];
-        const supersetAgent =
-          settings.workspaceAgentDefaults?.[SUPERSET_WORKSPACE_PROVIDER_ID]?.agent;
+        const defaults = guideValue<WorkspaceAgentDefaults | undefined>(
+          settings,
+          "workspaceAgentDefaults",
+        );
+        const chosen = defaults?.[PROVIDER_ID.CONDUCTOR];
+        const supersetAgent = defaults?.[SUPERSET_WORKSPACE_PROVIDER_ID]?.agent;
         const chosenAgent = chosen
           ? workspaceAgentModels(PROVIDER_ID.CONDUCTOR).find(
               (entry) => entry.agent === chosen.agent,
@@ -894,10 +855,7 @@ export const APP_SETTING_SCHEMA = {
       },
     ),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.NONE,
-    // Every entry rides one stored write, so one id counts them all — the
-    // Conductor pairing with its effort, and the Superset kind alike: a
-    // separate count per facet would say a second change happened where the
-    // developer made one.
+    // Every entry rides one stored write, so one id counts them all.
     analytics: { id: APP_SETTING_ID.WORKSPACE_AGENT_MODEL, value: choiceAnalytics },
   },
   workspaceProjectDefaults: {
@@ -905,9 +863,9 @@ export const APP_SETTING_SCHEMA = {
     default: undefined,
     guard: workspaceProjectDefaults,
     entry: {
-      isKey: (value): value is WorkspaceProviderId =>
+      isKey: (value: UnparsedWireValue): value is WorkspaceProviderId =>
         isWireString(value) && isWorkspaceProviderId(value),
-      same: (current, next) => current === next,
+      same: (current: string | undefined, next: string | undefined) => current === next,
     },
     settingsPage: SETTINGS_PAGE.CONNECTIONS,
     resetScope: SETTINGS_RESET_SCOPE.WORKSPACES,
@@ -915,8 +873,26 @@ export const APP_SETTING_SCHEMA = {
     guideEntry: settingGuideEntry("workspaceProjectDefaults", [], () => undefined),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.NONE,
   },
-} as const satisfies {
-  [Field in AppSettingField]: SettingDefinition<Field>;
+} as const;
+
+type GuardValue<Definition> = Definition extends {
+  guard(value: UnparsedWireValue): SettingGuardResult<infer Value>;
+}
+  ? Value
+  : never;
+
+export type AppSettingField = keyof typeof APP_SETTING_SCHEMA;
+export type AppSettingValue<Field extends AppSettingField> = GuardValue<
+  (typeof APP_SETTING_SCHEMA)[Field]
+>;
+export type StoredAppSettings = {
+  [Field in AppSettingField as undefined extends AppSettingValue<Field>
+    ? never
+    : Field]: AppSettingValue<Field>;
+} & {
+  [Field in AppSettingField as undefined extends AppSettingValue<Field>
+    ? Field
+    : never]?: AppSettingValue<Field>;
 };
 
 export const APP_SETTING_FIELDS = Object.keys(APP_SETTING_SCHEMA).filter(
@@ -981,7 +957,7 @@ export function isSettingsResetScope(value: UnparsedWireValue): value is Setting
   return Object.values(SETTINGS_RESET_SCOPE).some((scope) => scope === value);
 }
 
-export function settingFieldForGuideId(id: AppSettingId): AppSettingField | undefined {
+export function settingFieldForGuideId(id: string): AppSettingField | undefined {
   return APP_SETTING_FIELDS.find((field) => APP_SETTING_SCHEMA[field].guideEntry.ids.includes(id));
 }
 
@@ -991,24 +967,28 @@ function isGuideSettingList(
   return Array.isArray(value);
 }
 
-export function settingGuideEntries(settings: AppSettingGuideSettings): AppGuideSetting[] {
+export function settingGuideEntries(
+  settings: Pick<StoredAppSettings, AppSettingField>,
+): AppGuideSetting[] {
+  const guideSettings: AppSettingGuideSettings = (field) =>
+    isAppSettingField(field) ? settings[field] : undefined;
   return APP_SETTING_FIELDS.flatMap((field) => {
-    // SAFETY: field and definition come from the same exhaustive schema entry.
-    const definition = APP_SETTING_SCHEMA[field] as SettingDefinition<AppSettingField>;
-    const entry = definition.guideEntry.build(settings, definition.default);
+    const definition = APP_SETTING_SCHEMA[field];
+    // SAFETY: The default and builder belong to the same schema definition selected by `field`.
+    const entry = definition.guideEntry.build(guideSettings, definition.default as never);
     if (entry === undefined) return [];
     return isGuideSettingList(entry) ? entry : [entry];
   });
 }
 
-export function spokenSettingValue(
-  field: AppSettingField,
+export function spokenSettingValue<Field extends AppSettingField>(
+  field: Field,
   value: string,
-): StoredAppSettings[AppSettingField] {
+): AppSettingValue<Field> | undefined {
   const definition = APP_SETTING_SCHEMA[field];
   // SAFETY: spokenValue exists only on fields that declare it; the branch narrows the union.
   const convert = ("spokenValue" in definition ? definition.spokenValue : undefined) as
-    | ((candidate: string) => StoredAppSettings[AppSettingField])
+    | ((candidate: string) => AppSettingValue<Field>)
     | undefined;
   return convert?.(value);
 }
@@ -1038,13 +1018,19 @@ export function settingAnalytics(
   return { id: analytics.id, value: analytics.value(settings[field]) };
 }
 
-export const APP_SETTING_DEFAULTS = APP_SETTING_FIELDS.reduce(
-  (defaults, field) => ({ ...defaults, [field]: APP_SETTING_SCHEMA[field].default }),
-  // SAFETY: Each entry is the schema default for its field; APP_SETTING_FIELDS enumerates every field once.
-  {} as {
-    readonly [Field in AppSettingField]: (typeof APP_SETTING_SCHEMA)[Field]["default"];
-  },
+const appSettingDefaults = Object.fromEntries(
+  APP_SETTING_FIELDS.map((field) => [field, APP_SETTING_SCHEMA[field].default]),
 );
+type AppSettingDefaults = {
+  readonly [Field in AppSettingField]: (typeof APP_SETTING_SCHEMA)[Field]["default"];
+};
+
+function typedAppSettingDefaults(): AppSettingDefaults {
+  // SAFETY: Each field is paired with the default declared by its own schema entry.
+  return appSettingDefaults as AppSettingDefaults;
+}
+
+export const APP_SETTING_DEFAULTS = typedAppSettingDefaults();
 
 export const SETTING_PAGE = {
   // SAFETY: Each entry maps one settings id to the page its schema declares;

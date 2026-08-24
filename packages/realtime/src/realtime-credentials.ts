@@ -1,3 +1,4 @@
+import type { RealtimeCredential } from "@sidecar/hosted";
 import {
   isRecord,
   text,
@@ -22,24 +23,6 @@ import { REALTIME_DEFAULTS } from "./realtime-voice-settings.js";
 
 /** The endpoints that mint a client secret and open a call. */
 export const REALTIME_CLIENT_SECRETS_PATH = "/realtime/client_secrets";
-export const REALTIME_CALLS_PATH = "/realtime/calls";
-
-/** An ephemeral Realtime credential, safe to hand to a sandboxed renderer. */
-export interface RealtimeCredential {
-  value: string;
-  /** Milliseconds since the epoch, normalized from the API's seconds. */
-  expiresAt: number;
-  model: string;
-}
-
-/**
- * Everything a renderer needs to open a call, and nothing more. The endpoint
- * travels with the credential so the renderer never has to know how the main
- * process was configured.
- */
-export interface RealtimeConnection extends RealtimeCredential {
-  callsUrl: string;
-}
 
 export interface RealtimeSessionOptions {
   model?: string;
@@ -178,10 +161,6 @@ export function realtimeCredentialFromResponse(
 }
 
 /** Reports whether a credential is still usable at a given moment. */
-export function realtimeCredentialIsUsable(credential: RealtimeCredential, now: number): boolean {
-  return credential.expiresAt > now;
-}
-
 /**
  * Why the last attempt to mint a Realtime credential ended the way it did.
  *

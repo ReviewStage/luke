@@ -6,7 +6,7 @@ import {
   type ProductCredentialSource,
   type ProductSettingsView,
 } from "@sidecar/analytics";
-import { CREDENTIAL_PROVIDER_ID, type CredentialProviderId } from "@sidecar/credentials";
+import { CREDENTIAL_PROVIDER_ID, type CredentialProviderId } from "@sidecar/credentials/vocabulary";
 import {
   SETTINGS_PAGE,
   type SettingsPage,

@@ -1,7 +1,8 @@
-import type { CredentialProviderId } from "@sidecar/credentials";
+import type { CredentialProviderId } from "@sidecar/credentials/vocabulary";
+import type { ActResult } from "@sidecar/wire";
 import { type RefObject, useEffect } from "react";
-import type { CredentialSource } from "#shared/contracts";
-import { CREDENTIAL_SOURCE } from "#shared/contracts";
+import type { CredentialSource } from "#shared/wire/account";
+import { CREDENTIAL_SOURCE } from "#shared/wire/account";
 
 /* One field, three jobs: what it is for depends on what is answering for the
    provider now, and a credential typed here always wins over one read
@@ -68,7 +69,7 @@ export interface CredentialEntryControl {
   cancel(): void;
   commit(): void;
   /** Clears a stored key. Answers why if it could not. */
-  remove(providerId: CredentialProviderId): Promise<string | undefined>;
+  remove(providerId: CredentialProviderId): Promise<ActResult>;
 }
 
 /** The entry for one provider, or nothing if another provider holds it. */

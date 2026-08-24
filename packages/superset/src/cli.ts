@@ -1,11 +1,10 @@
-import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { promisify } from "node:util";
+import { boundedInvocation, INVOCATION_FAILURE, InvocationError } from "@sidecar/process";
 import { canIgnoreFilesystemError } from "@sidecar/providers";
 import {
-  PROVIDER_ACT_RESULT_STATUS,
+  ACT_RESULT_STATUS,
   type ProviderControlResult,
   type ProviderMessageResult,
   type ProviderSessionObservation,
@@ -35,7 +34,6 @@ export function isSupersetControlId(controlId: string): boolean {
   return Object.values(SUPERSET_CONTROL_ID).some((candidate) => candidate === controlId);
 }
 
-const execFileAsync = promisify(execFile);
 const SUPERSET_QUERY_OUTPUT_LIMIT = 64 * 1024;
 const SUPERSET_ORGANIZATION_LIMIT = 20;
 const SUPERSET_TARGET_LIMIT = 20;
@@ -48,9 +46,7 @@ const ANSI_ESCAPE_PATTERN = new RegExp(`${String.fromCharCode(27)}\\[[0-?]*[ -/]
 function supersetFailureReason(error: UnparsedWireValue, fallback: string): string {
   const record = wireRecord(error);
   const stderr = record ? text(record.stderr) : undefined;
-  if (!stderr) {
-    return fallback;
-  }
+  if (!stderr) return fallback;
   const reason = stderr
     .replace(ANSI_ESCAPE_PATTERN, "")
     .split(/\r?\n/u)
@@ -69,6 +65,10 @@ function supersetFailureReason(error: UnparsedWireValue, fallback: string): stri
   return reason || fallback;
 }
 
+function failedSupersetInvocation(binary: string, stderr: string): InvocationError {
+  return Object.assign(new InvocationError(INVOCATION_FAILURE.FAILED, binary), { stderr });
+}
+
 export type SupersetCommandRunner = (
   executable: string,
   arguments_: readonly string[],
@@ -84,10 +84,15 @@ async function defaultCommandRunner(
   executable: string,
   arguments_: readonly string[],
 ): Promise<void> {
-  await execFileAsync(executable, [...arguments_], {
-    timeout: 30_000,
-    windowsHide: true,
+  const result = await boundedInvocation({
+    binary: executable,
+    arguments: arguments_,
+    timeoutMs: 30_000,
+    maximumOutputBytes: SUPERSET_QUERY_OUTPUT_LIMIT,
   });
+  if (result.exitCode !== 0) {
+    throw failedSupersetInvocation(executable, result.stderr);
+  }
 }
 
 export interface SupersetCliOptions {
@@ -112,9 +117,9 @@ export class SupersetCli {
     this.#organizationId =
       options.organizationId ??
       (async () => {
-        const { stdout } = await execFileAsync(
-          "/usr/bin/plutil",
-          [
+        const result = await boundedInvocation({
+          binary: "/usr/bin/plutil",
+          arguments: [
             "-extract",
             "organizationId",
             "raw",
@@ -122,19 +127,25 @@ export class SupersetCli {
             "-",
             path.join(this.#homeDirectory, "config.json"),
           ],
-          { timeout: 2_000, windowsHide: true },
-        );
-        return stdout;
+          timeoutMs: 2_000,
+          maximumOutputBytes: SUPERSET_QUERY_OUTPUT_LIMIT,
+        });
+        if (result.exitCode !== 0) return undefined;
+        return result.stdout;
       });
     this.#query =
       options.query ??
       (async (executable, arguments_, timeoutMs) => {
-        const { stdout } = await execFileAsync(executable, [...arguments_], {
-          maxBuffer: SUPERSET_QUERY_OUTPUT_LIMIT,
-          timeout: timeoutMs,
-          windowsHide: true,
+        const result = await boundedInvocation({
+          binary: executable,
+          arguments: arguments_,
+          timeoutMs,
+          maximumOutputBytes: SUPERSET_QUERY_OUTPUT_LIMIT,
         });
-        return stdout;
+        if (result.exitCode !== 0) {
+          throw failedSupersetInvocation(executable, result.stderr);
+        }
+        return result.stdout;
       });
   }
 
@@ -290,7 +301,7 @@ export class SupersetCli {
   async createWorkspace(request: ProviderWorkspaceRequest): Promise<ProviderWorkspaceResult> {
     if (!request.providerTargetId || !request.agent || !request.task) {
       return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+        status: ACT_RESULT_STATUS.REJECTED,
         reason: "A Superset workspace needs a host, an agent, and an opening task.",
       };
     }
@@ -300,7 +311,11 @@ export class SupersetCli {
         project.providerTargetId === request.providerTargetId &&
         project.spawnableAgents?.includes(request.agent ?? ""),
     );
-    if (!offered) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+    if (!offered)
+      return {
+        status: ACT_RESULT_STATUS.UNSUPPORTED,
+        reason: "That act is not supported by the latest observation.",
+      };
     const branch = this.#branchName(request.name ?? request.task);
     const name = request.name ?? branch;
     const targetArguments =
@@ -323,7 +338,11 @@ export class SupersetCli {
       request.task,
       "--json",
     ];
-    if (!(await this.connected())) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+    if (!(await this.connected()))
+      return {
+        status: ACT_RESULT_STATUS.UNSUPPORTED,
+        reason: "That act is not supported by the latest observation.",
+      };
     try {
       const output = await this.#query(this.executable, arguments_, 30_000);
       const parsed = unparsedWire(JSON.parse(output));
@@ -333,7 +352,7 @@ export class SupersetCli {
       // a level down on the workspace itself.
       const workspaceRecord = envelope ? wireRecord(envelope.workspace) : undefined;
       const workspaceId = workspaceRecord ? text(workspaceRecord.id) : undefined;
-      if (!workspaceId) return { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED };
+      if (!workspaceId) return { status: ACT_RESULT_STATUS.ACCEPTED };
       try {
         await this.#run(this.executable, [
           "workspaces",
@@ -344,21 +363,21 @@ export class SupersetCli {
             : ["--host", request.providerTargetId]),
           "--json",
         ]);
-        return { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED };
+        return { status: ACT_RESULT_STATUS.ACCEPTED };
       } catch {
         return {
-          status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED,
+          status: ACT_RESULT_STATUS.ACCEPTED,
           warning: "The workspace was created, but Superset could not open it.",
         };
       }
     } catch (error) {
       const stderr =
         error instanceof Error && "stderr" in error
-          ? // SAFETY: execFile failures attach stderr to the thrown Error object.
+          ? // SAFETY: injected command-runner failures may attach stderr.
             (error as Error & { stderr?: UnparsedWireValue }).stderr
           : undefined;
       return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+        status: ACT_RESULT_STATUS.REJECTED,
         reason: supersetFailureReason(
           unparsedWire({ stderr }),
           "Superset could not create that workspace.",
@@ -375,7 +394,11 @@ export class SupersetCli {
     // A chatless workspace row carries no terminal for a message to land in,
     // and never advertises taking one; the adapter answers the same way
     // rather than improvising a way in.
-    if (!context.terminalId) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+    if (!context.terminalId)
+      return {
+        status: ACT_RESULT_STATUS.UNSUPPORTED,
+        reason: "That act is not supported by the latest observation.",
+      };
     return this.#act(
       [
         "terminals",
@@ -404,7 +427,10 @@ export class SupersetCli {
         "Superset could not delete that workspace.",
       );
     }
-    return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+    return {
+      status: ACT_RESULT_STATUS.UNSUPPORTED,
+      reason: "That act is not supported by the latest observation.",
+    };
   }
 
   /**
@@ -421,7 +447,11 @@ export class SupersetCli {
     context: SupersetSessionContext,
     name: string,
   ): Promise<ProviderControlResult> {
-    if (!(await this.connected())) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+    if (!(await this.connected()))
+      return {
+        status: ACT_RESULT_STATUS.UNSUPPORTED,
+        reason: "That act is not supported by the latest observation.",
+      };
     try {
       await this.#run(this.executable, [
         "workspaces",
@@ -430,7 +460,7 @@ export class SupersetCli {
         "--name",
         name,
       ]);
-      return { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED };
+      return { status: ACT_RESULT_STATUS.ACCEPTED };
     } catch (error) {
       const stderr =
         error instanceof Error && "stderr" in error
@@ -438,7 +468,7 @@ export class SupersetCli {
             (error as Error & { stderr?: UnparsedWireValue }).stderr
           : undefined;
       return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+        status: ACT_RESULT_STATUS.REJECTED,
         reason: supersetFailureReason(
           unparsedWire({ stderr }),
           "Superset could not rename that workspace.",
@@ -454,7 +484,7 @@ export class SupersetCli {
   ): Promise<ProviderWorkspaceResult> {
     if (!task) {
       return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+        status: ACT_RESULT_STATUS.REJECTED,
         reason: "A Superset agent needs an opening task.",
       };
     }
@@ -475,12 +505,16 @@ export class SupersetCli {
   }
 
   async #act(arguments_: readonly string[], reason: string): Promise<ProviderControlResult> {
-    if (!(await this.connected())) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+    if (!(await this.connected()))
+      return {
+        status: ACT_RESULT_STATUS.UNSUPPORTED,
+        reason: "That act is not supported by the latest observation.",
+      };
     try {
       await this.#run(this.executable, arguments_);
-      return { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED };
+      return { status: ACT_RESULT_STATUS.ACCEPTED };
     } catch {
-      return { status: PROVIDER_ACT_RESULT_STATUS.REJECTED, reason };
+      return { status: ACT_RESULT_STATUS.REJECTED, reason };
     }
   }
 

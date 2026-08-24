@@ -20,14 +20,9 @@ import {
   nextMeetingBoundary,
 } from "@sidecar/calendar";
 import { CREDENTIAL_PROVIDER_ID, type CredentialProviderId } from "@sidecar/credentials";
-import {
-  type FeedbackResult,
-  feedbackDeliveryFromEnvironment,
-  feedbackSubmission,
-} from "@sidecar/feedback";
+import { type FeedbackSubmission, feedbackDeliveryFromEnvironment } from "@sidecar/feedback";
 import { fixtureSnapshot } from "@sidecar/fixtures";
 import { normalizeTrackedIssue, type TrackedIssue } from "@sidecar/issues";
-import { ObservationLoop, ObservationSupervisor } from "@sidecar/observation";
 import {
   CmuxSessionApplicationReader,
   CodexCloudSessionAdapter,
@@ -53,15 +48,18 @@ import {
   InMemorySessionRegistry,
   isProviderId,
   isWorkspaceProviderId,
-  type NormalizedSession,
   normalizeObservedWorkspaceProjects,
+  ObservationLoop,
+  ObservationSupervisor,
   type ObservedWorkspaceProject,
   PROVIDER_ID_LIST,
   rosterRelevantSessions,
+  type Session,
   type SessionNotice,
   SessionNoticeHold,
   SessionNoticeTracker,
   type SessionProviderAdapter,
+  type SessionRegistrySnapshot,
   staleWorkspaceProjectDefaults,
   type WorkspaceAgentSelection,
   workspaceProjectSelectionId,
@@ -78,7 +76,7 @@ import {
 import { DEFAULT_PANEL_FORM_FACTOR } from "@sidecar/surface";
 import { LinearCredentials, LinearIssueTracker, LinearSignIn } from "@sidecar/trackers";
 import { sessionNoticeSpeech, VoiceCapabilityAssembler } from "@sidecar/voice";
-import { isRecord, isWireString, text, type UnparsedWireValue } from "@sidecar/wire";
+import { ACT_RESULT_STATUS, isRecord, text, type UnparsedWireValue } from "@sidecar/wire";
 import {
   app,
   BrowserWindow,
@@ -94,17 +92,17 @@ import {
   systemPreferences,
 } from "electron";
 import { APPLE_CALENDAR_ACCESS, APPLE_CALENDAR_ID } from "#shared/apple-calendar";
+import { BRIDGE, channels } from "#shared/bridge";
 import {
   ACCOUNT_STATUS,
   type AccountSnapshot,
-  APP_SETTING_DEFAULTS,
   type AppBootstrap,
-  channels,
   type MicrophoneRoute,
   type MicrophoneStatus,
   type ObservedAccountCalendars,
   type OutputAudioState,
   type SessionReplayBootstrap,
+  type SessionRosterPayload,
   SUPERSET_SIGN_IN_STAGE,
   SUPERSET_WORKSPACE_PROVIDER_ID,
 } from "#shared/contracts";
@@ -120,6 +118,7 @@ import { registerWindowSurfaceIpc } from "./ipc/window-surface";
 import { MediaDuckController } from "./native/media-duck";
 import { MicrophoneRouteWatcher } from "./native/microphone-route";
 import { OutputVolumeWatcher } from "./native/output-volume";
+import { type BridgeContext, registerBridgeEntry } from "./register-bridge";
 import { runModeFor } from "./run-mode";
 import { createSettingsHandler } from "./settings-handler";
 import { SettingsStore } from "./settings-store";
@@ -287,7 +286,7 @@ const linearCredentials = new LinearCredentials({
     // Nobody pressed anything to end this connection — Linear refused the
     // renewal — so no settings reply is on its way to say so. A row left
     // saying connected would be a row about a grant that no longer exists.
-    panels.broadcast(channels.settingsChanged, cleared.settings);
+    panels.broadcast(channels.onSettingsChanged, cleared.settings);
   },
 });
 const linearTracker = new LinearIssueTracker({
@@ -429,7 +428,7 @@ const feedbackDelivery = feedbackDeliveryFromEnvironment();
 const lastRunVersionPath = () => path.join(app.getPath("userData"), "last-run-version.json");
 const updateService = new UpdateService({
   currentVersion: app.getVersion(),
-  onChange: (update) => panels.broadcast(channels.updateChanged, update),
+  onChange: (update) => panels.broadcast(channels.onUpdateChanged, update),
   engine:
     app.isPackaged && runMode.sendsNetwork && process.platform === "darwin"
       ? createElectronUpdaterEngine()
@@ -510,7 +509,7 @@ async function sessionReplayBootstrap(): Promise<SessionReplayBootstrap> {
  */
 function haltSessionReplay(): void {
   sessionReplayBroadcastGeneration += 1;
-  panels.broadcast(channels.sessionReplayChanged, {
+  panels.broadcast(channels.onSessionReplayChanged, {
     permitted: false,
     appVersion: app.getVersion(),
   });
@@ -547,7 +546,7 @@ const supersetSignIn = new SupersetSignIn({
   cli: supersetCli,
   openExternal: (url) => shell.openExternal(url),
   onChange: (state) => {
-    panels.broadcast(channels.supersetSignInChanged, state);
+    panels.broadcast(channels.onSupersetSignInChanged, state);
     if (state.stage !== SUPERSET_SIGN_IN_STAGE.CONNECTED) return;
     void sessionObservationLoop.refresh();
     // The edge into connected, which is where a sign-in actually lands: the
@@ -589,7 +588,7 @@ function startOutputVolumeWatch(): void {
   const send = (state: OutputAudioState | undefined) => {
     outputAudio = state;
     // Every display's panel captions the same voice, so every one is told.
-    panels.broadcast(channels.outputAudioChanged, state);
+    panels.broadcast(channels.onOutputAudioChanged, state);
   };
   outputVolumeWatcher = new OutputVolumeWatcher({
     onState: send,
@@ -649,7 +648,7 @@ async function broadcastWorkspaceProjects(): Promise<void> {
   const serialized = JSON.stringify(projects);
   if (serialized === lastWorkspaceProjects) return;
   lastWorkspaceProjects = serialized;
-  panels.broadcast(channels.workspaceProjectsChanged, projects);
+  panels.broadcast(channels.onWorkspaceProjectsChanged, projects);
 }
 
 /**
@@ -676,7 +675,7 @@ async function pruneWorkspaceProjectDefaults(
       );
       if (!saved.cleared) continue;
       if (!isCurrent()) return;
-      panels.broadcast(channels.settingsChanged, saved.settings);
+      panels.broadcast(channels.onSettingsChanged, saved.settings);
     }
   } catch {
     return;
@@ -712,7 +711,7 @@ function accountCapabilitiesActive(): boolean {
 }
 
 function broadcastAccount(): void {
-  panels.broadcast(channels.accountChanged, account);
+  panels.broadcast(channels.onAccountChanged, account);
 }
 
 /**
@@ -723,7 +722,7 @@ function broadcastAccount(): void {
  * renderer keeps drawing the voice state of the account it no longer has.
  */
 async function broadcastVoiceAvailability(): Promise<void> {
-  panels.broadcast(channels.settingsChanged, await settingsStore.snapshot());
+  panels.broadcast(channels.onSettingsChanged, await settingsStore.snapshot());
 }
 
 /**
@@ -748,7 +747,7 @@ async function broadcastSessionReplay(): Promise<void> {
   const generation = ++sessionReplayBroadcastGeneration;
   const replay = await sessionReplayBootstrap();
   if (generation !== sessionReplayBroadcastGeneration) return;
-  panels.broadcast(channels.sessionReplayChanged, replay);
+  panels.broadcast(channels.onSessionReplayChanged, replay);
 }
 
 /**
@@ -764,7 +763,7 @@ async function broadcastCodexCloudConnection(): Promise<void> {
   const connection = codexCloudAdapter.connection();
   if (connection === announcedCodexCloudConnection) return;
   announcedCodexCloudConnection = connection;
-  panels.broadcast(channels.settingsChanged, await settingsStore.snapshot());
+  panels.broadcast(channels.onSettingsChanged, await settingsStore.snapshot());
 }
 
 async function startAccountCapabilities(): Promise<void> {
@@ -834,7 +833,7 @@ async function rememberWorkspaceDefaults(
         APP_SETTING_SCHEMA.defaultWorkspaceProvider.field,
         providerId,
       );
-      panels.broadcast(channels.settingsChanged, saved.settings);
+      panels.broadcast(channels.onSettingsChanged, saved.settings);
     }
     if (
       providerId === SUPERSET_WORKSPACE_PROVIDER_ID &&
@@ -848,7 +847,7 @@ async function rememberWorkspaceDefaults(
         SUPERSET_WORKSPACE_PROVIDER_ID,
         { agent },
       );
-      panels.broadcast(channels.settingsChanged, saved.settings);
+      panels.broadcast(channels.onSettingsChanged, saved.settings);
     }
     // The project the workspace landed in becomes that provider's default on
     // the same first-choice terms, read again for the same overlap reason as
@@ -866,7 +865,7 @@ async function rememberWorkspaceDefaults(
           providerTargetId ? { providerProjectId, providerTargetId } : { providerProjectId },
         ),
       );
-      panels.broadcast(channels.settingsChanged, saved.settings);
+      panels.broadcast(channels.onSettingsChanged, saved.settings);
     }
     // A model named for this creation becomes the default on the same
     // first-choice terms as the provider: only while nothing is chosen.
@@ -886,7 +885,7 @@ async function rememberWorkspaceDefaults(
         providerId,
         namedSelection,
       );
-      panels.broadcast(channels.settingsChanged, saved.settings);
+      panels.broadcast(channels.onSettingsChanged, saved.settings);
     }
   } catch {
     // The reply is the creation's; a failed remember has no line in it.
@@ -894,115 +893,124 @@ async function rememberWorkspaceDefaults(
 }
 
 function registerIpc(): void {
+  const registerHandler = (
+    definition: Parameters<typeof registerBridgeEntry>[1],
+    // oxlint-disable-next-line anti-slop/no-unknown-returns -- The manifest parses this erased domain result before it crosses Electron.
+    handler: (...args: never[]) => unknown,
+  ) =>
+    registerBridgeEntry(BRIDGE, definition, (_context, ...args) => handler(...args), {
+      ipcMain,
+      trustedSender,
+    });
+  const registerContextHandler = (
+    definition: Parameters<typeof registerBridgeEntry>[1],
+    handler: Parameters<typeof registerBridgeEntry>[2],
+  ) => registerBridgeEntry(BRIDGE, definition, handler, { ipcMain, trustedSender });
   const registerSettingHandler = createSettingsHandler({
+    ipcMain,
     trustedSender,
     snapshot: () => settingsStore.snapshot(),
-    broadcast: (settings, except) => panels.broadcast(channels.settingsChanged, settings, except),
+    broadcast: (settings, except) => panels.broadcast(channels.onSettingsChanged, settings, except),
   });
-  ipcMain.handle(channels.bootstrap, async (event): Promise<AppBootstrap> => {
-    if (!trustedSender(event)) throw new Error("Untrusted renderer");
-    // Each window bootstraps as itself: its own display, its own mode. The
-    // roster and the settings are the same everywhere.
-    const displayId = panels.displayIdFor(event.sender);
-    const display =
-      (displayId !== undefined ? panels.display(displayId) : undefined) ??
-      screen.getPrimaryDisplay();
-    const [supersetInstalled, supersetConnected] = await Promise.all([
-      supersetCli.installed(),
-      supersetCli.connected(),
-    ]);
-    return {
-      mode: displayId !== undefined ? panels.modeFor(displayId) : panels.initialMode,
-      startPeeked,
-      startInSlot,
-      profile,
-      fixture,
-      captureMode,
-      fixtureMode,
-      supersetInstalled,
-      supersetConnected,
-      accountRequired: runMode.requiresAccount,
-      account,
-      packaged: app.isPackaged,
-      platform: process.platform,
-      electronVersion: process.versions.electron,
-      chromiumVersion: process.versions.chrome,
-      nodeVersion: process.versions.node,
-      microphoneStatus: microphoneStatus(),
-      // Both keys travel as accelerators rather than labels: the renderer needs
-      // both spellings — the keycaps' ⌥ and L drawn apart, and aria's Alt+L —
-      // and only the accelerator can produce the pair.
-      ...(hotkeys.talk ? { voiceHotkey: hotkeys.talk } : undefined),
-      voiceHotkeyHeld: hotkeys.held,
-      ...(hotkeys.ask ? { askHotkey: hotkeys.ask } : undefined),
-      ...(hotkeys.stop ? { stopHotkey: hotkeys.stop } : undefined),
-      ...(outputAudio ? { outputAudio } : undefined),
-      display: panels.diagnostic(display),
-      update: updateService.snapshot(),
-      // Bootstrapped through the same relevance gate every broadcast passes:
-      // a panel that opens late must not learn of rows the roster has already
-      // let go and then hold them past the next broadcast's dedupe.
-      sessions:
-        runMode.observesProviders && accountCapabilitiesActive()
-          ? rosterRelevantSessions(sessionRegistry.snapshot().sessions, Date.now())
+  registerContextHandler(
+    BRIDGE.getBootstrap,
+    async (context: BridgeContext): Promise<AppBootstrap> => {
+      // Each window bootstraps as itself: its own display, its own mode. The
+      // roster and the settings are the same everywhere.
+      const displayId = panels.displayIdFor(context.sender);
+      const display =
+        (displayId !== undefined ? panels.display(displayId) : undefined) ??
+        screen.getPrimaryDisplay();
+      const [supersetInstalled, supersetConnected] = await Promise.all([
+        supersetCli.installed(),
+        supersetCli.connected(),
+      ]);
+      return {
+        mode: displayId !== undefined ? panels.modeFor(displayId) : panels.initialMode,
+        startPeeked,
+        startInSlot,
+        profile,
+        fixture,
+        captureMode,
+        fixtureMode,
+        supersetInstalled,
+        supersetConnected,
+        accountRequired: runMode.requiresAccount,
+        account,
+        packaged: app.isPackaged,
+        platform: process.platform,
+        electronVersion: process.versions.electron,
+        chromiumVersion: process.versions.chrome,
+        nodeVersion: process.versions.node,
+        microphoneStatus: microphoneStatus(),
+        // Both keys travel as accelerators rather than labels: the renderer needs
+        // both spellings — the keycaps' ⌥ and L drawn apart, and aria's Alt+L —
+        // and only the accelerator can produce the pair.
+        ...(hotkeys.talk ? { voiceHotkey: hotkeys.talk } : undefined),
+        voiceHotkeyHeld: hotkeys.held,
+        ...(hotkeys.ask ? { askHotkey: hotkeys.ask } : undefined),
+        ...(hotkeys.stop ? { stopHotkey: hotkeys.stop } : undefined),
+        ...(outputAudio ? { outputAudio } : undefined),
+        display: panels.diagnostic(display),
+        update: updateService.snapshot(),
+        // Bootstrapped through the same relevance gate every broadcast passes:
+        // a panel that opens late must not learn of rows the roster has already
+        // let go and then hold them past the next broadcast's dedupe.
+        sessionRoster:
+          runMode.observesProviders && accountCapabilitiesActive()
+            ? relevantSessionRoster(sessionRegistry.snapshot(), Date.now())
+            : { sessions: [], attention: [] },
+        // A live run's roster has settled once it has been broadcast at all —
+        // the first pass publishes even an empty reading — so before that, the
+        // empty list above means "not looked yet" and the face must not sleep
+        // on it. A fixture run never broadcasts and its sessions travel in the
+        // fixture itself, so it is settled from the start.
+        sessionsSettled: !runMode.observesProviders || lastRosterRevision !== -1,
+        // Asks are about observed sessions, so they ride the same gate the
+        // roster does: a panel shown no sessions is shown no asks about them.
+        noticeAsks:
+          runMode.observesProviders && accountCapabilitiesActive() ? attentionRequests.list() : [],
+        workspaceProjects: accountCapabilitiesActive()
+          ? normalizeObservedWorkspaceProjects(
+              offeredWorkspaceProjects(),
+              await settingsStore.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field),
+            )
           : [],
-      // A live run's roster has settled once it has been broadcast at all —
-      // the first pass publishes even an empty reading — so before that, the
-      // empty list above means "not looked yet" and the face must not sleep
-      // on it. A fixture run never broadcasts and its sessions travel in the
-      // fixture itself, so it is settled from the start.
-      sessionsSettled: !runMode.observesProviders || lastRosterRevision !== -1,
-      // Asks are about observed sessions, so they ride the same gate the
-      // roster does: a panel shown no sessions is shown no asks about them.
-      noticeAsks:
-        runMode.observesProviders && accountCapabilitiesActive() ? attentionRequests.list() : [],
-      workspaceProjects: accountCapabilitiesActive()
-        ? normalizeObservedWorkspaceProjects(
-            offeredWorkspaceProjects(),
-            await settingsStore.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field),
-          )
-        : [],
-      ...(trackedIssues && runMode.observesProviders && accountCapabilitiesActive()
-        ? { issues: trackedIssues }
-        : undefined),
-      // The calendar is a capability like the rosters: nothing of it is
-      // shown, or held quiet, before the account gate opens.
-      calendars: accountCapabilitiesActive() ? observedCalendars : [],
-      meetingQuiet: accountCapabilitiesActive() && meetingQuietActive,
-      sessionReplay: await sessionReplayBootstrap(),
-      settings: await settingsStore.snapshot(),
-    };
-  });
-  ipcMain.handle(channels.beginSupersetSignIn, async (event) => {
-    if (!trustedSender(event)) throw new Error("Untrusted renderer");
+        ...(trackedIssues && runMode.observesProviders && accountCapabilitiesActive()
+          ? { issues: trackedIssues }
+          : undefined),
+        // The calendar is a capability like the rosters: nothing of it is
+        // shown, or held quiet, before the account gate opens.
+        calendars: accountCapabilitiesActive() ? observedCalendars : [],
+        meetingQuiet: accountCapabilitiesActive() && meetingQuietActive,
+        sessionReplay: await sessionReplayBootstrap(),
+        settings: await settingsStore.snapshot(),
+      };
+    },
+  );
+  registerHandler(BRIDGE.beginSupersetSignIn, async () => {
     recordProductEvent(PRODUCT_EVENT.SUPERSET_ACT, {
       superset_act: PRODUCT_SUPERSET_ACT.SIGN_IN_START,
     });
     return supersetSignIn.begin();
   });
-  ipcMain.handle(channels.submitSupersetSignInCode, (event, code: UnparsedWireValue) => {
-    if (!trustedSender(event)) throw new Error("Untrusted renderer");
-    if (!isWireString(code)) throw new Error("Invalid Superset sign-in code");
+  registerHandler(BRIDGE.submitSupersetSignInCode, (code: string) => {
     return supersetSignIn.submitCode(code);
   });
-  ipcMain.handle(channels.chooseSupersetOrganization, async (event, slug: UnparsedWireValue) => {
-    if (!trustedSender(event)) throw new Error("Untrusted renderer");
-    if (!isWireString(slug)) throw new Error("Invalid Superset organization");
+  registerHandler(BRIDGE.chooseSupersetOrganization, async (slug: string) => {
     return supersetSignIn.chooseOrganization(slug);
   });
-  ipcMain.on(channels.reopenSupersetSignIn, (event) => {
-    if (trustedSender(event)) supersetSignIn.reopen();
-  });
-  ipcMain.on(channels.cancelSupersetSignIn, (event) => {
-    if (!trustedSender(event)) return;
+  registerHandler(BRIDGE.reopenSupersetSignIn, supersetSignIn.reopen.bind(supersetSignIn));
+  registerHandler(BRIDGE.cancelSupersetSignIn, () => {
     supersetSignIn.cancel();
     recordProductEvent(PRODUCT_EVENT.SUPERSET_ACT, {
       superset_act: PRODUCT_SUPERSET_ACT.SIGN_IN_CANCEL,
     });
   });
-  ipcMain.handle(channels.disconnectSuperset, async (event) => {
-    if (!trustedSender(event)) throw new Error("Untrusted renderer");
-    if (!(await supersetCli.signOut())) return "Superset could not sign out.";
+  registerHandler(BRIDGE.disconnectSuperset, async () => {
+    if (!(await supersetCli.signOut())) {
+      return { status: ACT_RESULT_STATUS.REJECTED, reason: "Superset could not sign out." };
+    }
     // The sign-in machine returning to idle is what tells every renderer the
     // login is gone; the refreshed pass retires the rows the login was buying.
     supersetSignIn.cancel();
@@ -1010,7 +1018,7 @@ function registerIpc(): void {
     recordProductEvent(PRODUCT_EVENT.SUPERSET_ACT, {
       superset_act: PRODUCT_SUPERSET_ACT.DISCONNECT,
     });
-    return undefined;
+    return { status: ACT_RESULT_STATUS.ACCEPTED };
   });
 
   registerAccountSessionIpc({
@@ -1082,8 +1090,7 @@ function registerIpc(): void {
   // The row's button. Answered rather than fire-and-forget so the row that
   // asked and the broadcast never disagree; a run without an engine answers
   // with the standing snapshot rather than make a request it must not.
-  ipcMain.handle(channels.checkForUpdates, (event) => {
-    if (!trustedSender(event)) throw new Error("Untrusted renderer");
+  registerHandler(BRIDGE.checkForUpdates, () => {
     recordProductEvent(PRODUCT_EVENT.UPDATE_ACT, { update_act: PRODUCT_UPDATE_ACT.CHECK });
     return updateService.check();
   });
@@ -1091,8 +1098,7 @@ function registerIpc(): void {
   // The restart into a downloaded build. The service ignores the ask unless
   // its own snapshot says one is ready — and ignores a repeat while Squirrel
   // stages the swap — so a stray send installs nothing.
-  ipcMain.on(channels.installUpdate, (event) => {
-    if (!trustedSender(event)) return;
+  registerHandler(BRIDGE.installUpdate, () => {
     // Counted before the install is asked for, and flushed with it: the act
     // schedules a restart, and a count queued behind that would be dropped by
     // the quit rather than sent.
@@ -1105,16 +1111,14 @@ function registerIpc(): void {
   // installing in place is impossible or has failed. The address is fixed
   // here like the microphone pane's, so nothing an update check read can
   // steer where a press goes.
-  ipcMain.on(channels.openLatestRelease, (event) => {
-    if (!trustedSender(event)) return;
+  registerHandler(BRIDGE.openLatestRelease, () => {
     recordProductEvent(PRODUCT_EVENT.UPDATE_ACT, { update_act: PRODUCT_UPDATE_ACT.RELEASE_OPEN });
     void shell.openExternal(UPDATE_ENDPOINT.LATEST_RELEASE_PAGE_URL);
   });
 
   // The changelog, in the browser — the Changelog row's press. The address
   // is fixed here on the releases page's terms.
-  ipcMain.on(channels.openChangelog, (event) => {
-    if (!trustedSender(event)) return;
+  registerHandler(BRIDGE.openChangelog, () => {
     recordProductEvent(PRODUCT_EVENT.UPDATE_ACT, { update_act: PRODUCT_UPDATE_ACT.CHANGELOG_OPEN });
     void shell.openExternal(UPDATE_ENDPOINT.CHANGELOG_PAGE_URL);
   });
@@ -1164,38 +1168,30 @@ function registerIpc(): void {
   // material, no identifiers, nothing observed — and a refusal comes back as an
   // answer for the composer rather than a throw, because sending is the user's
   // own act and its outcome belongs beside the field it left.
-  ipcMain.handle(
-    channels.sendFeedback,
-    async (event, submission: UnparsedWireValue): Promise<FeedbackResult> => {
-      if (!trustedSender(event)) throw new Error("Untrusted renderer");
-      const parsed = feedbackSubmission(submission);
-      if (!parsed) throw new Error("Invalid feedback submission");
-      // A fixture run must be reproducible without a network, so it refuses
-      // rather than sending — and says so, because the composer still draws.
-      if (!runMode.sendsNetwork) {
-        return { delivered: false, reason: "A fixture run sends nothing." };
-      }
-      const result = await feedbackDelivery.deliver(parsed);
-      // The count is of notes that actually reached the founders, and it says
-      // how many images rode along as a rung of the same ladder session counts
-      // travel on — never a filename, a caption, or a word of the note.
-      if (result.delivered) {
-        recordProductEvent(PRODUCT_EVENT.FEEDBACK_SEND, {
-          image_count: productSessionCountBucket(parsed.images.length),
-        });
-      }
-      return result;
-    },
-  );
-
-  ipcMain.on(channels.quit, (event) => {
-    if (trustedSender(event)) app.quit();
+  registerHandler(BRIDGE.sendFeedback, async (submission: FeedbackSubmission) => {
+    // A fixture run must be reproducible without a network, so it refuses
+    // rather than sending — and says so, because the composer still draws.
+    if (!runMode.sendsNetwork) {
+      return { delivered: false, reason: "A fixture run sends nothing." };
+    }
+    const result = await feedbackDelivery.deliver(submission);
+    // The count is of notes that actually reached the founders, and it says
+    // how many images rode along as a rung of the same ladder session counts
+    // travel on — never a filename, a caption, or a word of the note.
+    if (result.delivered) {
+      recordProductEvent(PRODUCT_EVENT.FEEDBACK_SEND, {
+        image_count: productSessionCountBucket(submission.images.length),
+      });
+    }
+    return result;
   });
 
-  ipcMain.on(channels.rendererReady, async (event) => {
-    if (!trustedSender(event) || !captureOutput) return;
+  registerHandler(BRIDGE.quit, app.quit.bind(app));
+
+  registerContextHandler(BRIDGE.notifyReady, async (context: BridgeContext) => {
+    if (!captureOutput) return;
     // A capture run holds a single window, and the ready message is its own.
-    const window = BrowserWindow.fromWebContents(event.sender);
+    const window = BrowserWindow.fromWebContents(context.sender);
     if (!window || window.isDestroyed()) return;
     await new Promise((resolve) => setTimeout(resolve, 350));
     const image = await window.webContents.capturePage(undefined, {
@@ -1330,7 +1326,7 @@ async function refreshProviderSessions(generation: number): Promise<void> {
   const supersetActionsEnabled = observedSupersetOrganization !== undefined;
   if (actionsWereEnabled !== supersetActionsEnabled) {
     if (supersetActionsEnabled) {
-      panels.broadcast(channels.supersetSignInChanged, {
+      panels.broadcast(channels.onSupersetSignInChanged, {
         stage: SUPERSET_SIGN_IN_STAGE.CONNECTED,
       });
     } else {
@@ -1431,7 +1427,7 @@ async function reviewSessionAttention(generation: number): Promise<void> {
         // Spoken once, by the one window that holds the voice: every display
         // already shows the same session as needing attention, and the surface
         // that speaks is the one that draws the announcement's pressable notice.
-        panels.voiceHost()?.webContents.send(channels.attentionSpeech, sendable);
+        panels.voiceHost()?.webContents.send(channels.onAttentionSpeech, sendable);
       }
     }
   } catch (error) {
@@ -1450,7 +1446,7 @@ async function reviewSessionAttention(generation: number): Promise<void> {
  * speak-only call when no conversation is up, so being heard needs no
  * talk-key press first.
  */
-async function announceSessionNotices(sessions: readonly NormalizedSession[]): Promise<void> {
+async function announceSessionNotices(sessions: readonly Session[]): Promise<void> {
   // Asks about sessions no longer reported have nothing left to be about, and
   // this commit is the earliest that can be known. The rows marking asks are
   // told only when one was actually let go.
@@ -1483,7 +1479,7 @@ async function announceSessionNotices(sessions: readonly NormalizedSession[]): P
   }
   const speech = notices.map((notice) => sessionNoticeSpeech(notice, now));
   countSpokenAnnouncements(notices);
-  panels.voiceHost()?.webContents.send(channels.attentionSpeech, speech);
+  panels.voiceHost()?.webContents.send(channels.onAttentionSpeech, speech);
 }
 
 /**
@@ -1515,7 +1511,7 @@ function countSpokenAnnouncements(notices: readonly SessionNotice[]): void {
  * because Superset's own `workspaces open` follow-through usually has the
  * workspace on screen already before this open fires.
  */
-function openCreatedWorkspaces(sessions: readonly NormalizedSession[]): void {
+function openCreatedWorkspaces(sessions: readonly Session[]): void {
   for (const created of createdWorkspaceOpens.claim(sessions, Date.now())) {
     const link = created.detail.link;
     if (!link) continue;
@@ -1546,7 +1542,7 @@ async function announcementsQuietNow(now: number): Promise<boolean> {
     inMeeting && (await settingsStore.get(APP_SETTING_SCHEMA.quietDuringMeetings.field));
   if (holding !== meetingQuietActive) {
     meetingQuietActive = holding;
-    panels.broadcast(channels.meetingQuietChanged, holding);
+    panels.broadcast(channels.onMeetingQuietChanged, holding);
   }
   return holding;
 }
@@ -1631,7 +1627,7 @@ async function releaseHeldNotices(): Promise<void> {
   const speech = [...releasedAsks, ...released.map((notice) => sessionNoticeSpeech(notice, now))];
   if (speech.length === 0) return;
   countSpokenAnnouncements(released);
-  panels.voiceHost()?.webContents.send(channels.attentionSpeech, speech);
+  panels.voiceHost()?.webContents.send(channels.onAttentionSpeech, speech);
 }
 
 /**
@@ -1668,7 +1664,7 @@ async function refreshCalendarMeetings(generation: number): Promise<void> {
       ...(failure ? { failure } : undefined),
       ...(revoked ? { revoked } : undefined),
     }));
-    panels.broadcast(channels.calendarsChanged, observedCalendars);
+    panels.broadcast(channels.onCalendarsChanged, observedCalendars);
     for (const account of accounts) {
       if (account.failure) {
         process.stderr.write(`Calendar observation failed: ${account.failure}\n`);
@@ -1795,10 +1791,10 @@ function stopCalendarObservation(): void {
   appleCalendar.forget();
   heldNotices.release();
   heldRequestSpeech.release();
-  panels.broadcast(channels.calendarsChanged, observedCalendars);
+  panels.broadcast(channels.onCalendarsChanged, observedCalendars);
   if (meetingQuietActive) {
     meetingQuietActive = false;
-    panels.broadcast(channels.meetingQuietChanged, false);
+    panels.broadcast(channels.onMeetingQuietChanged, false);
   }
 }
 
@@ -1817,7 +1813,26 @@ let lastRosterIds = "";
  * developer's own; nothing here reaches a provider or leaves the machine.
  */
 function broadcastNoticeAsks(): void {
-  panels.broadcast(channels.noticeAsksChanged, attentionRequests.list());
+  panels.broadcast(channels.onNoticeAsksChanged, attentionRequests.list());
+}
+
+function relevantSessionRoster(
+  snapshot: SessionRegistrySnapshot,
+  now: number,
+): SessionRosterPayload {
+  const sessions = rosterRelevantSessions(snapshot.sessions, now);
+  const identities = new Map<string, Set<string>>();
+  for (const session of sessions) {
+    const providerSessions = identities.get(session.providerId) ?? new Set<string>();
+    providerSessions.add(session.providerSessionId);
+    identities.set(session.providerId, providerSessions);
+  }
+  return {
+    sessions,
+    attention: snapshot.attention.filter((entry) =>
+      identities.get(entry.providerId)?.has(entry.providerSessionId),
+    ),
+  } satisfies SessionRosterPayload;
 }
 
 /**
@@ -1829,14 +1844,14 @@ function broadcastNoticeAsks(): void {
  */
 function broadcastRelevantSessions(): void {
   const snapshot = sessionRegistry.snapshot();
-  const roster = rosterRelevantSessions(snapshot.sessions, Date.now());
-  const rosterIds = roster
+  const roster = relevantSessionRoster(snapshot, Date.now());
+  const rosterIds = roster.sessions
     .map((session) => `${session.providerId}\0${session.providerSessionId}`)
     .join("\0\0");
   if (snapshot.revision === lastRosterRevision && rosterIds === lastRosterIds) return;
   lastRosterRevision = snapshot.revision;
   lastRosterIds = rosterIds;
-  panels.broadcast(channels.sessionsChanged, roster);
+  panels.broadcast(channels.onSessionsChanged, roster);
 }
 
 function startSessionObservation(): void {
@@ -1865,7 +1880,7 @@ function startSessionObservation(): void {
  * the shared ladder rather than a number, because "137 sessions" identifies a
  * machine where "a crowd" does not.
  */
-function countObservedSessions(sessions: readonly NormalizedSession[]): void {
+function countObservedSessions(sessions: readonly Session[]): void {
   const counts = new Map<string, number>();
   for (const session of sessions) {
     counts.set(session.providerId, (counts.get(session.providerId) ?? 0) + 1);
@@ -1886,8 +1901,8 @@ function stopSessionObservation(): void {
   for (const { adapter } of orderedRegistrations) {
     sessionRegistry.replaceProvider(adapter.provider, []);
   }
-  panels.broadcast(channels.sessionsChanged, []);
-  panels.broadcast(channels.workspaceProjectsChanged, []);
+  panels.broadcast(channels.onSessionsChanged, { sessions: [], attention: [] });
+  panels.broadcast(channels.onWorkspaceProjectsChanged, []);
   lastWorkspaceProjects = undefined;
 }
 
@@ -1912,7 +1927,7 @@ async function refreshTrackedIssues(generation: number): Promise<void> {
     }
     if (issueObservationLoop.isCurrent(generation)) {
       trackedIssues = connected ? collected : undefined;
-      panels.broadcast(channels.issuesChanged, trackedIssues);
+      panels.broadcast(channels.onIssuesChanged, trackedIssues);
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -1922,7 +1937,7 @@ async function refreshTrackedIssues(generation: number): Promise<void> {
 
 function stopIssueObservation(): void {
   trackedIssues = undefined;
-  panels.broadcast(channels.issuesChanged, undefined);
+  panels.broadcast(channels.onIssuesChanged, undefined);
 }
 
 function configurePermissions(): void {
@@ -1947,12 +1962,16 @@ function configurePermissions(): void {
 }
 
 function handleDisplayChange(): void {
-  setTimeout(() => {
-    panels.refreshGeometry();
-    // The set of displays may have changed, not just their geometry: a chosen
-    // display arriving raises its window, one leaving takes its window down.
-    panels.reconcile();
-  }, 100);
+  setTimeout(
+    () =>
+      void (async () => {
+        await panels.refreshGeometry();
+        // The set of displays may have changed, not just their geometry: a chosen
+        // display arriving raises its window, one leaving takes its window down.
+        panels.reconcile();
+      })(),
+    100,
+  );
 }
 
 export function startDesktopApp(): void {
@@ -1973,7 +1992,7 @@ export function startDesktopApp(): void {
         ? await settingsStore.accountSnapshot()
         : { status: ACCOUNT_STATUS.SIGNED_OUT };
       accountSession.initialize(account);
-      panels.refreshGeometry();
+      await panels.refreshGeometry();
       registerIpc();
       // Resolving settings touches the filesystem, and the OS keychain only for a
       // provider that already has a stored key to decrypt. Starting it here keeps
@@ -1988,34 +2007,27 @@ export function startDesktopApp(): void {
       // The Dock icon reads the same file under the opposite default: it is
       // opt-in, so a file that cannot be read leaves Luke out of the Dock — the
       // accessory app the launch just asserted. Nothing to do until it says so.
-      void settingsStore.get(APP_SETTING_SCHEMA.showInDock.field).then(
-        (show) => {
-          if (show) dock.apply(true);
-        },
-        () => undefined,
-      );
+      void settingsStore.get(APP_SETTING_SCHEMA.showInDock.field).then((show) => {
+        if (show) dock.apply(true);
+      });
       // Armed from the settings file alone, like the status item, and for the
       // same reason. A file that cannot be read leaves the duck on, the same
       // answer a file that has never said gives.
-      void settingsStore.get(APP_SETTING_SCHEMA.duckOtherMedia.field).then(
-        (enabled) => mediaDuck.setEnabled(enabled === true),
-        () => mediaDuck.setEnabled(APP_SETTING_DEFAULTS.duckOtherMedia),
-      );
+      void settingsStore
+        .get(APP_SETTING_SCHEMA.duckOtherMedia.field)
+        .then((enabled) => mediaDuck.setEnabled(enabled === true));
       // Armed from the settings file alone, like the duck above, and on the
       // same terms: a file that cannot be read leaves counting on, the answer
       // a file that has never said gives.
-      void settingsStore
-        .get(APP_SETTING_SCHEMA.shareUsageData.field)
-        .catch(() => APP_SETTING_DEFAULTS.shareUsageData)
-        .then((share) => {
-          productEvents.setSharing(share);
-          // Recorded behind the read, because nothing may be counted before
-          // the file has said whether counting is wanted at all.
-          productEvents.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: app.getVersion() });
-          // Luke can run for a week on one launch, so launches alone would
-          // undercount the days he was actually used.
-          productEvents.markDayActive();
-        });
+      void settingsStore.get(APP_SETTING_SCHEMA.shareUsageData.field).then((share) => {
+        productEvents.setSharing(share);
+        // Recorded behind the read, because nothing may be counted before
+        // the file has said whether counting is wanted at all.
+        productEvents.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: app.getVersion() });
+        // Luke can run for a week on one launch, so launches alone would
+        // undercount the days he was actually used.
+        productEvents.markDayActive();
+      });
       // Always on, like the announcements: the timed check answers to no
       // setting, only to the run — a fixture or capture run sends no network,
       // so it never asks GitHub anything.
@@ -2041,13 +2053,10 @@ export function startDesktopApp(): void {
       // file that cannot be read means no choice was kept — the main display,
       // the default form — and must not keep the panels from starting.
       panels.setShowOnAllDisplays(
-        (await settingsStore
-          .get(APP_SETTING_SCHEMA.showOnAllDisplays.field)
-          .catch(() => APP_SETTING_DEFAULTS.showOnAllDisplays)) === true,
+        (await settingsStore.get(APP_SETTING_SCHEMA.showOnAllDisplays.field)) === true,
       );
       panels.setFormFactor(
-        (await settingsStore.get(APP_SETTING_SCHEMA.formFactor.field).catch(() => undefined)) ??
-          DEFAULT_PANEL_FORM_FACTOR,
+        (await settingsStore.get(APP_SETTING_SCHEMA.formFactor.field)) ?? DEFAULT_PANEL_FORM_FACTOR,
       );
       // Awaited for the same reason the voice is: the chosen chord has to be in
       // hand before the key is registered, or the first registration would take
@@ -2055,15 +2064,15 @@ export function startDesktopApp(): void {
       // read means no choice was kept, and the defaults answer.
       hotkeys.setChosen(
         HOTKEY_RANK.TALK,
-        await settingsStore.get(APP_SETTING_SCHEMA.voiceHotkey.field).catch(() => undefined),
+        await settingsStore.get(APP_SETTING_SCHEMA.voiceHotkey.field),
       );
       hotkeys.setChosen(
         HOTKEY_RANK.ASK,
-        await settingsStore.get(APP_SETTING_SCHEMA.askHotkey.field).catch(() => undefined),
+        await settingsStore.get(APP_SETTING_SCHEMA.askHotkey.field),
       );
       hotkeys.setChosen(
         HOTKEY_RANK.STOP,
-        await settingsStore.get(APP_SETTING_SCHEMA.stopHotkey.field).catch(() => undefined),
+        await settingsStore.get(APP_SETTING_SCHEMA.stopHotkey.field),
       );
       // The report is not made here: the helper answers over its own stdout a
       // moment later, and a line printed now would state an absence that only
@@ -2092,15 +2101,16 @@ export function startDesktopApp(): void {
       // windows before the bootstrap handler exists to answer them. A ping that
       // early is dropped, because startup is about to assert the panel anyway.
       app.on("second-instance", (_event, argv) => {
-        panels.refreshGeometry();
-        if (argv.includes("--expanded")) {
-          const host = panels.voiceHost();
-          const displayId = host ? panels.displayIdFor(host.webContents) : undefined;
-          if (displayId !== undefined) panels.setMode(displayId, "expanded", true);
-          return;
-        }
-        panels.reconcile();
-        panels.showInactiveAll();
+        void panels.refreshGeometry().then(() => {
+          if (argv.includes("--expanded")) {
+            const host = panels.voiceHost();
+            const displayId = host ? panels.displayIdFor(host.webContents) : undefined;
+            if (displayId !== undefined) panels.setMode(displayId, "expanded", true);
+            return;
+          }
+          panels.reconcile();
+          panels.showInactiveAll();
+        });
       });
 
       screen.on("display-added", handleDisplayChange);
@@ -2109,7 +2119,7 @@ export function startDesktopApp(): void {
       for (const eventName of ["resume", "unlock-screen", "user-did-become-active"] as const) {
         const handlePowerEvent = () => {
           handleDisplayChange();
-          panels.broadcast(channels.lifecycle, eventName);
+          panels.broadcast(channels.onLifecycle, eventName);
         };
         if (eventName === "resume") powerMonitor.on("resume", handlePowerEvent);
         if (eventName === "unlock-screen") {

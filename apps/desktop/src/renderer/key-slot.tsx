@@ -2,9 +2,10 @@ import {
   CREDENTIAL_CONNECTION,
   CREDENTIAL_PROVIDERS,
   providerRunsSessionsInCloud,
-} from "@sidecar/credentials";
+} from "@sidecar/credentials/vocabulary";
+import { CloudBadge, ProviderMark } from "@sidecar/panel";
 import { useEffect, useRef } from "react";
-import type { CredentialSource } from "#shared/contracts";
+import type { CredentialSource } from "#shared/wire/account";
 import {
   CREDENTIAL_PLACEHOLDER,
   type CredentialEntryControl,
@@ -12,7 +13,6 @@ import {
   useStagedFocus,
 } from "./credential-entry";
 import { HIT_REGION } from "./panel-state";
-import { CloudBadge, ProviderMark } from "./provider-marks";
 import { ExternalIcon } from "./settings-icons";
 
 /**

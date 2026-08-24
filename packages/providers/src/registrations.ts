@@ -3,7 +3,7 @@ import {
   CREDENTIAL_PROVIDERS,
   type CredentialProvider,
   type CredentialProviderId,
-} from "@sidecar/credentials";
+} from "@sidecar/credentials/vocabulary";
 import {
   CompositeSessionProviderAdapter,
   PROVIDER_ID,
@@ -191,7 +191,9 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
     // Grok Build's own stores already say whose move it is — the database's
     // newest message, or the 1.0.x lifecycle log with its permission prompts
     // — so its adapter needs no observation hook.
-    [PROVIDER_ID.GROK_BUILD]: { adapter: new GrokBuildSessionAdapter() },
+    [PROVIDER_ID.GROK_BUILD]: {
+      adapter: new GrokBuildSessionAdapter(),
+    },
     [PROVIDER_ID.JULES]: {
       adapter: new JulesSessionAdapter({
         readApiKey: () => options.readApiKey(CREDENTIAL_PROVIDER_ID.JULES),
@@ -214,7 +216,9 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
     // The browser's own store already says whose move it is — a turn's row
     // records when it ended and what ended it — so its adapter needs no
     // observation hook, and Radius publishes no hook surface to join anyway.
-    [PROVIDER_ID.RADIUS]: { adapter: new RadiusSessionAdapter() },
+    [PROVIDER_ID.RADIUS]: {
+      adapter: new RadiusSessionAdapter(),
+    },
     [PROVIDER_ID.REPLICAS]: {
       adapter: new ReplicasSessionAdapter({
         readApiKey: () => options.readApiKey(CREDENTIAL_PROVIDER_ID.REPLICAS),

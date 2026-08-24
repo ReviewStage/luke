@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { singleFlight } from "@sidecar/oauth";
+import { singleFlight } from "@sidecar/credentials";
 import { withIssuedAccountTokens } from "./token-lifecycle.js";
 
 const TOKENS = { accessToken: "issued-access", refreshToken: "issued-refresh" };

@@ -4,46 +4,41 @@ import {
   PRODUCT_SURFACE_EVENT,
 } from "@sidecar/analytics";
 import type { SessionNoticeAsk } from "@sidecar/attention";
-import type { CredentialProviderId } from "@sidecar/credentials";
+import type { CredentialProviderId } from "@sidecar/credentials/vocabulary";
 import {
   CREDENTIAL_PROVIDER_LIST,
   CREDENTIAL_PROVIDERS,
   isCredentialProviderId,
-} from "@sidecar/credentials";
+} from "@sidecar/credentials/vocabulary";
 import type { FeedbackImage, FeedbackKind } from "@sidecar/feedback";
 import { FEEDBACK_KIND, FEEDBACK_LIMITS, feedbackKindForLifecycleEvent } from "@sidecar/feedback";
 import { FIXTURE_EPOCH_MS, FIXTURE_SPEAKING_CAPTION } from "@sidecar/fixtures";
 import { APP_UPDATE_ACT, FEEDBACK_COMPOSER_KIND } from "@sidecar/guide";
 import type { HostedUsageAnswer } from "@sidecar/hosted";
+import { WingFace as LukeFace, ProviderMark } from "@sidecar/panel";
 import {
   APP_TOOL_KIND,
   dispatchByKind,
   REALTIME_STATUS,
   type RealtimeDiagnostics,
-  type RealtimeVoice,
-  type RealtimeVoiceSpeed,
 } from "@sidecar/realtime";
 import {
-  type NormalizedSession,
   type ObservedWorkspaceProject,
-  type ProviderId,
   SESSION_MENTION_KIND,
   type SessionApplicationId,
   type SessionIdentity,
-  type WorkspaceAgentSelection,
   workspaceProjectSelectionId,
 } from "@sidecar/session";
 import { APP_SETTING_SCHEMA, voiceHotkeyLabel, voiceHotkeyToShow } from "@sidecar/settings";
 import {
   MOTION_DURATION_MS,
-  type PanelFormFactor,
   SESSION_NOTICE_HEIGHT,
   SESSION_NOTICE_MAX_ROWS,
   VOICE_BAND_INSET,
   VOICE_CAPTION_MAX_HEIGHT,
 } from "@sidecar/surface";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
-import type { WireRecord } from "@sidecar/wire";
+import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import {
   type CSSProperties,
   useCallback,
@@ -55,32 +50,27 @@ import {
 } from "react";
 import { APPLE_CALENDAR_ACCESS, APPLE_CALENDAR_ID } from "#shared/apple-calendar";
 import { CONSENT_SERVICE_ID, type ConsentServiceId } from "#shared/consent-services";
+import type { AccountProvider, AccountSnapshot } from "#shared/wire/account";
+import { ACCOUNT_STATUS, CREDENTIAL_SOURCE } from "#shared/wire/account";
+import type { OutputAudioState } from "#shared/wire/audio";
+import type { ObservedAccountCalendars } from "#shared/wire/calendar";
 import type {
-  AccountProvider,
-  AccountSnapshot,
   AppBootstrap,
-  AppSettings,
   DisplayDiagnostic,
-  ObservedAccountCalendars,
-  OutputAudioState,
   SessionOpenResult,
   SessionReplayBootstrap,
-  SettingsResetScope,
-  SettingsUpdateResult,
+  SessionRosterPayload,
   SupersetSignInSnapshot,
-  UpdateSnapshot,
-  VoiceSource,
   WorkspaceProviderId,
-} from "#shared/contracts";
+} from "#shared/wire/session";
 import {
-  ACCOUNT_STATUS,
-  CREDENTIAL_SOURCE,
   isWorkspaceProviderId,
-  SESSION_OPEN_RESULT_STATUS,
   SUPERSET_SIGN_IN_STAGE,
   SUPERSET_WORKSPACE_PROVIDER_ID,
-  VOICE_SOURCE,
-} from "#shared/contracts";
+} from "#shared/wire/session";
+import type { AppSettings, AppSettingsView, SettingsUpdateResult } from "#shared/wire/settings";
+import { appSettingsView, VOICE_SOURCE } from "#shared/wire/settings";
+import type { UpdateSnapshot } from "#shared/wire/update";
 import { ASK_LUKE_INPUT_ID, focusAskField } from "./ask-luke";
 import { type ConsentConnectEntry, ConsentConnectSlot } from "./consent-connect-slot";
 import type { CredentialEntry, CredentialEntryControl } from "./credential-entry";
@@ -118,7 +108,6 @@ import { encodeFeedbackImage } from "./feedback-images";
 import { FeedbackSlot } from "./feedback-slot";
 import { KeySlot } from "./key-slot";
 import { type Errand, errandTargets, LukeErrand } from "./luke-errand";
-import { LukeFace } from "./luke-face";
 import { usePrefersReducedMotion } from "./luke-face-mood";
 import { applySpokenSetting, buildLukeGuide, isAppSettingId } from "./luke-guide";
 import { hostedVoiceReading, hostedVoiceSpentNote, quotaResetsWhen } from "./microphone-access";
@@ -131,16 +120,15 @@ import {
   type PanelPresentation,
 } from "./panel-state";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
-import { ProviderMark } from "./provider-marks";
 import type { AppActionCarrier } from "./realtime-session";
 import {
   arrangeSessions,
   DEFAULT_SESSION_VIEW,
-  type DisplaySession,
   displaySessions,
   fixtureMentionChips,
   MENTION_CHIP_KIND,
   type MentionChip,
+  type SessionArrangement,
   type SessionFilter,
   type SessionView,
   sameSessionFilters,
@@ -155,7 +143,6 @@ import { applySessionReplay } from "./session-replay";
 import { focusSearchField, SESSION_SEARCH_INPUT_ID } from "./session-search";
 import type {
   MicrophoneControl,
-  PreferenceWrites,
   ShortcutControl,
   SupersetControl,
   UpdateControl,
@@ -364,6 +351,10 @@ function useLeavingPanel(presentation: PanelPresentation): boolean {
 
 export function App(): React.JSX.Element {
   const [bootstrap, setBootstrap] = useState<AppBootstrap>();
+  const bootstrapSettings = useMemo(
+    () => (bootstrap ? appSettingsView(bootstrap.settings) : undefined),
+    [bootstrap],
+  );
   const [supersetConnected, setSupersetConnected] = useState<boolean>();
   const [supersetSignIn, setSupersetSignIn] = useState<SupersetSignInSnapshot>({
     stage: SUPERSET_SIGN_IN_STAGE.IDLE,
@@ -373,7 +364,11 @@ export function App(): React.JSX.Element {
   // composer signs a fresh note from the account without re-wiring the
   // lifecycle subscription to every sign-in change.
   const [account, setAccount, accountNow] = useStateWithRef<AccountSnapshot | undefined>(undefined);
-  const [sessions, setSessions] = useState<readonly NormalizedSession[]>([]);
+  const [sessionRoster, setSessionRoster] = useState<SessionRosterPayload>({
+    sessions: [],
+    attention: [],
+  });
+  const sessions = sessionRoster.sessions;
   // Whether the roster above has been read at all yet. It only ever settles —
   // the bootstrap can say a reading already happened, and any push is one —
   // so a bootstrap replying "not yet" after a push raced past it clobbers
@@ -388,7 +383,7 @@ export function App(): React.JSX.Element {
   const [settingsView, setSettingsView, settingsViewNow] = useStateWithRef<SettingsView>(
     SETTINGS_VIEW.ROOT,
   );
-  const [sessionView, setSessionView] = useState<SessionView>(DEFAULT_SESSION_VIEW);
+  const [sessionView, setSessionView] = useState<SessionArrangement>(DEFAULT_SESSION_VIEW);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   // The settings search's field, on the sessions search's own terms: the
@@ -398,7 +393,9 @@ export function App(): React.JSX.Element {
   // The latest is needed from the spoken-settings carrier, which cannot wait
   // a render: two changes asked for in one breath arrive as two calls in one
   // turn, and the second composes against whatever the first just stored.
-  const [settings, setSettings, settingsNow] = useStateWithRef<AppSettings | undefined>(undefined);
+  const [settings, setSettings, settingsNow] = useStateWithRef<AppSettingsView | undefined>(
+    undefined,
+  );
   const [errand, setErrand] = useState<Errand>();
   const [feedbackNotice, setFeedbackNotice] = useState<string>();
   /**
@@ -526,7 +523,7 @@ export function App(): React.JSX.Element {
    * exists in the guide the model change just made true. A ref because the
    * carrier is created before the conversation hook that owns the publisher.
    */
-  const publishGuideRef = useRef<(next: AppSettings) => void>(() => {});
+  const publishGuideRef = useRef<(next: AppSettingsView) => void>(() => {});
   /**
    * The newest snapshot this window has seen, drawn or still held back.
    *
@@ -541,7 +538,7 @@ export function App(): React.JSX.Element {
    * So every write goes through {@link applySettings} and this is always at
    * least as new as the drawn state, whichever path wrote it.
    */
-  const answeredSettings = useRef<AppSettings | undefined>(undefined);
+  const answeredSettings = useRef<AppSettingsView | undefined>(undefined);
   /**
    * The one way settings are drawn. Every path travels it — a row's own press,
    * a key stored or removed, another window's push, and an errand's hold
@@ -577,8 +574,8 @@ export function App(): React.JSX.Element {
     },
   );
 
-  const applySettings = useCallback(
-    (next: AppSettings) => {
+  const applySettingsView = useCallback(
+    (next: AppSettingsView) => {
       answeredSettings.current = next;
       setSettings(next);
       // Every settings change lands here — the panel's own writes, a spoken
@@ -589,6 +586,10 @@ export function App(): React.JSX.Element {
       }
     },
     [setSettings],
+  );
+  const applySettings = useCallback(
+    (wire: AppSettings) => applySettingsView(appSettingsView(wire)),
+    [applySettingsView],
   );
   /**
    * Draws what the panel was not drawing yet, because Luke had not reached it.
@@ -611,7 +612,7 @@ export function App(): React.JSX.Element {
    */
   const drawErrandHold = useCallback(
     (hold: ErrandHold) => {
-      if (hold.settings !== undefined) applySettings(hold.settings);
+      if (hold.settings !== undefined) applySettingsView(hold.settings);
       // Folded into whatever the view is at the moment it lands rather than the
       // moment it was chosen: the list corrects its own filter during render
       // when one empties, and a snapshot taken at the ask would undo that.
@@ -622,7 +623,7 @@ export function App(): React.JSX.Element {
       // hide sessions with nothing on screen admitting it.
       if (view?.query) setSearchOpen(true);
     },
-    [applySettings],
+    [applySettingsView],
   );
 
   /**
@@ -673,7 +674,7 @@ export function App(): React.JSX.Element {
   // two, made once. The fallback the render performs when a selection empties
   // writes the view directly instead: that is the list correcting itself, not
   // somebody choosing.
-  const changeSessionView = useCallback((next: SessionView) => {
+  const changeSessionView = useCallback((next: SessionArrangement) => {
     setSessionView(next);
     setOptionsOpen(false);
   }, []);
@@ -882,7 +883,7 @@ export function App(): React.JSX.Element {
   const applySettingsReply = useCallback(
     (result: SettingsUpdateResult) => {
       applySettings(result.settings);
-      return result.reason;
+      return result;
     },
     [applySettings],
   );
@@ -902,7 +903,7 @@ export function App(): React.JSX.Element {
   // capture run, which must not write a developer's own settings file.
   useEffect(() => {
     if (!bootstrap || bootstrap.fixtureMode) return;
-    storedSessionFilters.current ??= bootstrap.settings.sessionFilters ?? [];
+    storedSessionFilters.current ??= bootstrapSettings?.sessionFilters ?? [];
     const filters = sessionView.filters;
     if (sameSessionFilters(storedSessionFilters.current, filters)) return;
     storedSessionFilters.current = filters;
@@ -912,7 +913,7 @@ export function App(): React.JSX.Element {
         filters.length > 0 ? filters : undefined,
       )
       .then(applySettingsReply);
-  }, [bootstrap, sessionView.filters, applySettingsReply]);
+  }, [bootstrap, sessionView.filters, applySettingsReply, bootstrapSettings?.sessionFilters]);
 
   /**
    * The search query as last stored, on the filter selection's own terms:
@@ -930,7 +931,7 @@ export function App(): React.JSX.Element {
   // developer deliberately let go.
   useEffect(() => {
     if (!bootstrap || bootstrap.fixtureMode) return;
-    storedSessionQuery.current ??= bootstrap.settings.sessionSearchQuery ?? "";
+    storedSessionQuery.current ??= bootstrapSettings?.sessionSearchQuery ?? "";
     const query = sessionView.query;
     if (storedSessionQuery.current === query) return;
     const store = () => {
@@ -948,66 +949,7 @@ export function App(): React.JSX.Element {
     }
     const settled = window.setTimeout(store, SEARCH_QUERY_STORE_DELAY_MS);
     return () => window.clearTimeout(settled);
-  }, [bootstrap, sessionView.query, applySettingsReply]);
-
-  const changeVoiceCaptions = useCallback(
-    async (enabled: boolean) =>
-      applySettingsReply(
-        await window.sidecar.updateSetting(APP_SETTING_SCHEMA.voiceCaptions.field, enabled),
-      ),
-    [applySettingsReply],
-  );
-
-  const changeDuckOtherMedia = useCallback(
-    async (enabled: boolean) =>
-      applySettingsReply(
-        await window.sidecar.updateSetting(APP_SETTING_SCHEMA.duckOtherMedia.field, enabled),
-      ),
-    [applySettingsReply],
-  );
-
-  const changeShareUsageData = useCallback(
-    async (enabled: boolean) =>
-      applySettingsReply(
-        await window.sidecar.updateSetting(APP_SETTING_SCHEMA.shareUsageData.field, enabled),
-      ),
-    [applySettingsReply],
-  );
-
-  const changeSessionReplay = useCallback(
-    async (enabled: boolean) =>
-      applySettingsReply(
-        await window.sidecar.updateSetting(APP_SETTING_SCHEMA.sessionReplay.field, enabled),
-      ),
-    [applySettingsReply],
-  );
-
-  const changeVoiceSource = useCallback(
-    async (source: VoiceSource) =>
-      applySettingsReply(
-        await window.sidecar.updateSetting(APP_SETTING_SCHEMA.voiceSource.field, source),
-      ),
-    [applySettingsReply],
-  );
-
-  const changePreferBuiltInMicrophone = useCallback(
-    async (enabled: boolean) =>
-      applySettingsReply(
-        await window.sidecar.updateSetting(
-          APP_SETTING_SCHEMA.preferBuiltInMicrophone.field,
-          enabled,
-        ),
-      ),
-    [applySettingsReply],
-  );
-
-  const changeQuietDuringMeetings = useCallback(
-    async (enabled: boolean) =>
-      applySettingsReply(
-        await window.sidecar.updateSetting(APP_SETTING_SCHEMA.quietDuringMeetings.field, enabled),
-      ),
-    [applySettingsReply],
-  );
+  }, [bootstrap, sessionView.query, applySettingsReply, bootstrapSettings?.sessionSearchQuery]);
 
   const removeCalendarAccount = useCallback(
     async (accountId: string) =>
@@ -1157,11 +1099,11 @@ export function App(): React.JSX.Element {
   }, [presentationOf, restorePanel]);
 
   const disconnectSuperset = useCallback(async () => {
-    const rejection = await window.sidecar.disconnectSuperset();
+    const result = await window.sidecar.disconnectSuperset();
     // The idle broadcast the sign-out fires says the same thing to every other
     // window; this window should not wait a round trip to agree with itself.
-    if (rejection === undefined) setSupersetConnected(false);
-    return rejection;
+    if (result.status === ACT_RESULT_STATUS.ACCEPTED) setSupersetConnected(false);
+    return result;
   }, []);
 
   /**
@@ -1254,7 +1196,7 @@ export function App(): React.JSX.Element {
       if (removalEndsEntry(credentialsEntry.latest(), providerId, result.reason)) {
         credentialsEntry.apply(undefined);
       }
-      return result.reason;
+      return result;
     },
     [applySettings, credentialsEntry.apply, credentialsEntry.latest],
   );
@@ -1330,80 +1272,6 @@ export function App(): React.JSX.Element {
     void window.sidecar.cancelSignIn();
     if (presentationOf() === PANEL_PRESENTATION.SLOT) expand();
   }, [expand, presentationOf, setSignInWait, signInWaitNow]);
-
-  const changeShowInDock = useCallback(
-    async (show: boolean) =>
-      applySettingsReply(
-        await window.sidecar.updateSetting(APP_SETTING_SCHEMA.showInDock.field, show),
-      ),
-    [applySettingsReply],
-  );
-
-  const changeShowOnAllDisplays = useCallback(
-    async (show: boolean) =>
-      applySettingsReply(
-        await window.sidecar.updateSetting(APP_SETTING_SCHEMA.showOnAllDisplays.field, show),
-      ),
-    [applySettingsReply],
-  );
-
-  const changeFormFactor = useCallback(
-    async (formFactor: PanelFormFactor) =>
-      applySettingsReply(
-        await window.sidecar.updateSetting(APP_SETTING_SCHEMA.formFactor.field, formFactor),
-      ),
-    [applySettingsReply],
-  );
-
-  // Where a nameless creation ask goes — the same store write the first
-  // creation makes on its own, offered by hand so the choice can be changed
-  // or returned to asking each time.
-  const changeDefaultWorkspaceProvider = useCallback(
-    async (providerId: WorkspaceProviderId | undefined) =>
-      applySettingsReply(
-        await window.sidecar.updateSetting(
-          APP_SETTING_SCHEMA.defaultWorkspaceProvider.field,
-          providerId,
-        ),
-      ),
-    [applySettingsReply],
-  );
-
-  const changeWorkspaceAgentDefault = useCallback(
-    async (providerId: ProviderId, selection: WorkspaceAgentSelection | undefined) =>
-      applySettingsReply(
-        await window.sidecar.updateSettingEntry(
-          APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
-          providerId,
-          selection,
-        ),
-      ),
-    [applySettingsReply],
-  );
-
-  // One group of settings back to its defaults — the same store forgetting
-  // each row's own clear performs, done as one write so a page's reset is one
-  // act rather than a race of four.
-  const changeSettingsReset = useCallback(
-    async (scope: SettingsResetScope) =>
-      applySettingsReply(await window.sidecar.resetSettings(scope)),
-    [applySettingsReply],
-  );
-
-  // Where a nameless creation ask lands within a provider — the same store
-  // write the first creation there makes on its own, offered by hand so the
-  // choice can be changed or returned to the first creation.
-  const changeWorkspaceProjectDefault = useCallback(
-    async (providerId: WorkspaceProviderId, providerProjectId: string | undefined) =>
-      applySettingsReply(
-        await window.sidecar.updateSettingEntry(
-          APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
-          providerId,
-          providerProjectId,
-        ),
-      ),
-    [applySettingsReply],
-  );
 
   const changeSupersetAgentDefault = useCallback(
     async (agent: string | undefined) =>
@@ -1689,27 +1557,6 @@ export function App(): React.JSX.Element {
     commit: feedbackEntry.commit,
   };
 
-  // The row marks the voice the main process reports rather than the one just
-  // pressed, so what is shown as chosen is always what was actually saved.
-  const changeVoice = useCallback(
-    (voice: RealtimeVoice) => {
-      void window.sidecar
-        .updateSetting(APP_SETTING_SCHEMA.voice.field, voice)
-        .then(applySettingsReply);
-    },
-    [applySettingsReply],
-  );
-
-  // The pace, under the same rule as the voice above.
-  const changeVoiceSpeed = useCallback(
-    (speed: RealtimeVoiceSpeed) => {
-      void window.sidecar
-        .updateSetting(APP_SETTING_SCHEMA.voiceSpeed.field, speed)
-        .then(applySettingsReply);
-    },
-    [applySettingsReply],
-  );
-
   /**
    * Moves the talk key, or resets it when no chord is named. The key the row
    * shows is not taken from this reply — the main process announces the one
@@ -1762,7 +1609,7 @@ export function App(): React.JSX.Element {
    * waited for.
    */
   const openSession = useCallback(
-    (session: DisplaySession) => {
+    (session: SessionView) => {
       void window.sidecar.openSession({
         providerId: session.providerId,
         providerSessionId: session.id,
@@ -1779,7 +1626,7 @@ export function App(): React.JSX.Element {
    * the latest roster before handing the normalized route to macOS.
    */
   const openSessionApplication = useCallback(
-    (session: DisplaySession, applicationId: SessionApplicationId) => {
+    (session: SessionView, applicationId: SessionApplicationId) => {
       void window.sidecar.openSessionApplication(
         {
           providerId: session.providerId,
@@ -1803,7 +1650,7 @@ export function App(): React.JSX.Element {
     async (identity: SessionIdentity): Promise<SessionOpenResult> => {
       const result = await window.sidecar.openSession(identity);
       if (
-        result.status === SESSION_OPEN_RESULT_STATUS.OPENED &&
+        result.status === ACT_RESULT_STATUS.ACCEPTED &&
         presentationOf() === PANEL_PRESENTATION.PANEL
       ) {
         cancelHover();
@@ -1826,7 +1673,7 @@ export function App(): React.JSX.Element {
     ): Promise<SessionOpenResult> => {
       const result = await window.sidecar.openSessionApplication(identity, applicationId);
       if (
-        result.status === SESSION_OPEN_RESULT_STATUS.OPENED &&
+        result.status === ACT_RESULT_STATUS.ACCEPTED &&
         presentationOf() === PANEL_PRESENTATION.PANEL
       ) {
         cancelHover();
@@ -1969,7 +1816,7 @@ export function App(): React.JSX.Element {
   const carryAppAction = useCallback<AppActionCarrier>(
     async (action) =>
       dispatchByKind(action, {
-        [APP_TOOL_KIND.SETTING]: async (action) => {
+        [APP_TOOL_KIND.SETTING]: async (action): Promise<WireRecord> => {
           // The store's answer is caught rather than drawn: the switch is what
           // Luke is on his way to move, so it waits for him to reach it. It is
           // caught in a local and handed to this act alone, because one reply
@@ -1986,23 +1833,27 @@ export function App(): React.JSX.Element {
           // is what that next call composes against, which is why it is
           // remembered outside the hold: the hold belongs to one act, and every
           // act after it has to read this.
-          let caught: AppSettings | undefined;
+          let caught: AppSettingsView | undefined;
           const outcome = await applySpokenSetting(
             window.sidecar,
             action,
-            (next) => {
+            (wire) => {
+              const next = appSettingsView(wire);
               caught = next;
               answeredSettings.current = next;
               publishGuideRef.current(next);
             },
-            answeredSettings.current ?? settingsNow() ?? bootstrap?.settings,
+            answeredSettings.current ?? settingsNow() ?? bootstrapSettings,
           );
           const hold: ErrandHold = caught === undefined ? NOTHING_HELD : { settings: caught };
           // Nothing to show and nothing to sign: a refused change must not stand
           // the panel up in front of a switch that did not move.
-          if (outcome.status !== "changed") {
+          if (outcome.status !== ACT_RESULT_STATUS.ACCEPTED) {
             drawErrandHold(hold);
-            return outcome;
+            return {
+              status: ACT_RESULT_STATUS.REJECTED,
+              reason: outcome.reason ?? "That setting could not be changed.",
+            };
           }
           const opening = presentationOf() !== PANEL_PRESENTATION.PANEL;
           // The guide's ids travel as plain text, so one that names no setting
@@ -2064,7 +1915,7 @@ export function App(): React.JSX.Element {
             throw error;
           }
           return {
-            status: "opened",
+            status: ACT_RESULT_STATUS.ACCEPTED,
             kind: action.composer,
             ...(action.draft === undefined
               ? undefined
@@ -2109,10 +1960,13 @@ export function App(): React.JSX.Element {
           // waits for the flight, never the report.
           const searched =
             action.query !== undefined && bootstrap !== undefined
-              ? spokenSearchOutcome(displaySessions(bootstrap, sessions, noticeAsks), {
-                  ...sessionView,
-                  ...view,
-                })
+              ? spokenSearchOutcome(
+                  displaySessions(bootstrap, sessions, noticeAsks, sessionRoster.attention),
+                  {
+                    ...sessionView,
+                    ...view,
+                  },
+                )
               : undefined;
           await changeMode(true);
           // The tab bar and the options button are drawn outside the settings
@@ -2137,7 +1991,7 @@ export function App(): React.JSX.Element {
             searched?.note,
           ].filter((line): line is string => line !== undefined);
           return {
-            status: "shown",
+            status: ACT_RESULT_STATUS.ACCEPTED,
             tab: action.tab,
             ...(spoken !== undefined ? { filters: action.filters } : undefined),
             ...(action.sort ? { sort: action.sort } : undefined),
@@ -2156,12 +2010,12 @@ export function App(): React.JSX.Element {
             // so the outcome voiced is the answer the check actually returned.
             const answered = await window.sidecar.checkForUpdates();
             setUpdate(answered);
-            return { status: "checked", outcome: updateRow(answered).detail };
+            return { status: ACT_RESULT_STATUS.ACCEPTED, outcome: updateRow(answered).detail };
           }
           if (action.act === APP_UPDATE_ACT.DOWNLOAD) {
             window.sidecar.openLatestRelease();
             return {
-              status: "opened",
+              status: ACT_RESULT_STATUS.ACCEPTED,
               note: "The latest release's page is open in the browser; the download itself is by hand from there.",
             };
           }
@@ -2175,13 +2029,13 @@ export function App(): React.JSX.Element {
           const row = standing ? updateRow(standing) : undefined;
           if (row?.action !== UPDATE_ROW_ACTION.RESTART) {
             return {
-              status: "refused",
+              status: ACT_RESULT_STATUS.REJECTED,
               reason: row?.detail ?? "This run does not report where updates stand.",
             };
           }
           window.sidecar.installUpdate();
           return {
-            status: "restarting",
+            status: ACT_RESULT_STATUS.ACCEPTED,
             note: "Luke is quitting to install the downloaded release; this conversation ends with it.",
           };
         },
@@ -2197,13 +2051,15 @@ export function App(): React.JSX.Element {
       feedbackEntry.latest,
       presentationOf,
       sessions,
+      sessionRoster.attention,
       noticeAsks,
       sessionView,
+      bootstrapSettings,
     ],
   );
 
-  const defaultWorkspaceProvider = (settings ?? bootstrap?.settings)?.defaultWorkspaceProvider;
-  const workspaceProjectDefaults = (settings ?? bootstrap?.settings)?.workspaceProjectDefaults;
+  const defaultWorkspaceProvider = (settings ?? bootstrapSettings)?.defaultWorkspaceProvider;
+  const workspaceProjectDefaults = (settings ?? bootstrapSettings)?.workspaceProjectDefaults;
   // The muted evidence run is the speaking run with the hint drawn over it: a
   // capture has no system output to read, so the state is asked for directly.
   const fixtureMuted = bootstrap?.profile === "muted";
@@ -2233,7 +2089,7 @@ export function App(): React.JSX.Element {
     syncGuide,
     syncIssues,
   } = useVoiceConversation({
-    preferBuiltInMicrophone: (settings ?? bootstrap?.settings)?.preferBuiltInMicrophone ?? true,
+    preferBuiltInMicrophone: (settings ?? bootstrapSettings)?.preferBuiltInMicrophone ?? true,
     sessions,
     noticeAsks,
     workspaceProjects,
@@ -2544,7 +2400,7 @@ export function App(): React.JSX.Element {
         setSessionsSettled(true);
         onChange(pushed);
       }),
-    setSessions,
+    setSessionRoster,
   );
   // Straight to the conversation rather than through state: no panel
   // surface draws the issue roster, so a re-render would be work for nobody.
@@ -2664,7 +2520,7 @@ export function App(): React.JSX.Element {
     const bootstrapGeneration = modeGenerationOf();
     void window.sidecar.getBootstrap().then((value) => {
       setBootstrap(value);
-      acceptSessionsBootstrap(value.sessions);
+      acceptSessionsBootstrap(value.sessionRoster);
       if (value.sessionsSettled) setSessionsSettled(true);
       setNoticeAsks(value.noticeAsks);
       // Only fill in what no push has said yet: the bootstrap snapshot is
@@ -2681,8 +2537,8 @@ export function App(): React.JSX.Element {
       // moment they are read from the store — from here on the view leads and
       // the store follows. Never in a fixture or capture run, whose evidence
       // must not vary with what a developer last chose.
-      const storedFilters = value.settings.sessionFilters;
-      const storedQuery = value.settings.sessionSearchQuery;
+      const storedFilters = value.settings.stored.sessionFilters;
+      const storedQuery = value.settings.stored.sessionSearchQuery;
       if (!value.fixtureMode && (storedFilters !== undefined || storedQuery !== undefined)) {
         setSessionView((current) => ({
           ...current,
@@ -2826,7 +2682,7 @@ export function App(): React.JSX.Element {
   // about a setting is answered from the value the store actually holds, and a
   // change made in the panel is known to the conversation the moment it lands.
   const publishGuide = useCallback(
-    (current: AppSettings) => {
+    (current: AppSettingsView) => {
       if (!bootstrap) return;
       const askAccelerator = askHotkeyChange ? askHotkeyChange.accelerator : bootstrap.askHotkey;
       const stopAccelerator = stopHotkeyChange
@@ -2864,8 +2720,8 @@ export function App(): React.JSX.Element {
   );
   useEffect(() => {
     if (!bootstrap) return;
-    publishGuide(settings ?? bootstrap.settings);
-  }, [bootstrap, settings, publishGuide]);
+    publishGuide(settings ?? bootstrapSettings ?? appSettingsView(bootstrap.settings));
+  }, [bootstrap, settings, publishGuide, bootstrapSettings]);
   // The spoken carrier publishes the store's answer through this ref the
   // moment the change is made, because the settings state above it is still
   // held for Luke's flight — and identical guides are not resent, so the
@@ -3058,7 +2914,7 @@ export function App(): React.JSX.Element {
     // and the meters keep the last read rather than collapsing to prose over
     // one dropped request. Hosted is the resolved source's answer, because a
     // stored key parked behind the account toggle is still a connected one.
-    const snapshot = settings ?? bootstrap.settings;
+    const snapshot = settings ?? bootstrapSettings ?? appSettingsView(bootstrap.settings);
     const hostedNow = snapshot.voiceAvailable && snapshot.voiceSource === VOICE_SOURCE.ACCOUNT;
     void window.sidecar
       .requestHostedUsage()
@@ -3102,7 +2958,7 @@ export function App(): React.JSX.Element {
   // never wears a meter they do not have. Read off the resolved source, not
   // the key's absence: a stored key parked behind the account toggle is still
   // a connected credential, and the allowance is still what a press spends.
-  const voiceSettings = settings ?? bootstrap?.settings;
+  const voiceSettings = settings ?? bootstrapSettings;
   const hostedVoiceNow =
     voiceSettings?.voiceAvailable === true && voiceSettings.voiceSource === VOICE_SOURCE.ACCOUNT;
   const voiceReading = hostedVoiceReading({
@@ -3161,7 +3017,7 @@ export function App(): React.JSX.Element {
 
   if (!bootstrap || !display) return <div />;
 
-  const visibleSessions = displaySessions(bootstrap, sessions, noticeAsks);
+  const visibleSessions = displaySessions(bootstrap, sessions, noticeAsks, sessionRoster.attention);
   // The tally is taken before the list is narrowed — the capsule reports what
   // Luke is watching, not what the panel is currently showing — but it reads
   // in the list's own sort, so the wing's marks sit in the order the rows do.
@@ -3259,7 +3115,8 @@ export function App(): React.JSX.Element {
       : CREDENTIAL_SOURCE.NONE;
   const microphone: MicrophoneControl = {
     status: microphoneStatus,
-    voiceAvailable: (settings ?? bootstrap.settings).voiceAvailable,
+    voiceAvailable: (settings ?? bootstrapSettings ?? appSettingsView(bootstrap.settings))
+      .voiceAvailable,
     onRequest: () => void requestMicrophoneAccess(),
     onOpenSettings: () => window.sidecar.openMicrophoneSettings(),
   };
@@ -3272,24 +3129,6 @@ export function App(): React.JSX.Element {
     },
     onInstall: () => window.sidecar.installUpdate(),
     onOpenLatest: () => window.sidecar.openLatestRelease(),
-  };
-  const preferences: PreferenceWrites = {
-    onVoiceCaptionsChange: changeVoiceCaptions,
-    onDuckOtherMediaChange: changeDuckOtherMedia,
-    onShareUsageDataChange: changeShareUsageData,
-    onSessionReplayChange: changeSessionReplay,
-    onVoiceSourceChange: changeVoiceSource,
-    onPreferBuiltInMicrophoneChange: changePreferBuiltInMicrophone,
-    onQuietDuringMeetingsChange: changeQuietDuringMeetings,
-    onVoiceChange: changeVoice,
-    onVoiceSpeedChange: changeVoiceSpeed,
-    onShowInDockChange: changeShowInDock,
-    onShowOnAllDisplaysChange: changeShowOnAllDisplays,
-    onFormFactorChange: changeFormFactor,
-    onDefaultWorkspaceProviderChange: changeDefaultWorkspaceProvider,
-    onWorkspaceAgentDefaultChange: changeWorkspaceAgentDefault,
-    onWorkspaceProjectDefaultChange: changeWorkspaceProjectDefault,
-    onSettingsReset: changeSettingsReset,
   };
   const shortcuts: ShortcutControl = {
     ...(shownHotkey.hotkey ? { voiceHotkey: shownHotkey.hotkey } : undefined),
@@ -3404,9 +3243,13 @@ export function App(): React.JSX.Element {
               onDeleteAccount: async () => {
                 try {
                   setAccount(await window.sidecar.deleteAccount());
-                  return undefined;
+                  return { status: ACT_RESULT_STATUS.ACCEPTED };
                 } catch {
-                  return "Luke's service could not delete the account, so it still stands. Try again in a moment.";
+                  return {
+                    status: ACT_RESULT_STATUS.REJECTED,
+                    reason:
+                      "Luke's service could not delete the account, so it still stands. Try again in a moment.",
+                  };
                 }
               },
               view: settingsView,
@@ -3416,7 +3259,7 @@ export function App(): React.JSX.Element {
               settings,
               ...(voiceService ? { voiceService } : undefined),
               ...(hostedUsage ? { hostedUsage } : undefined),
-              preferences,
+              onSettingsChange: applySettings,
               credentials,
               feedback: feedbackControl,
               panelOpen,
@@ -3448,8 +3291,11 @@ export function App(): React.JSX.Element {
                 onDisconnect: disconnectLinear,
               },
               superset: (() => {
-                const supersetAgentDefault = (settings ?? bootstrap.settings)
-                  .workspaceAgentDefaults?.[SUPERSET_WORKSPACE_PROVIDER_ID]?.agent;
+                const supersetAgentDefault = (
+                  settings ??
+                  bootstrapSettings ??
+                  appSettingsView(bootstrap.settings)
+                ).workspaceAgentDefaults?.[SUPERSET_WORKSPACE_PROVIDER_ID]?.agent;
                 const superset: SupersetControl = {
                   installed: bootstrap.supersetInstalled,
                   connected: supersetConnected ?? bootstrap.supersetConnected,

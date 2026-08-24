@@ -6,9 +6,9 @@ import path from "node:path";
 import { PassThrough } from "node:stream";
 import test, { type TestContext } from "node:test";
 import { isRecord, text, type UnparsedWireValue } from "@sidecar/wire";
-import { SUPERSET_SIGN_IN_STAGE } from "../../../apps/desktop/src/shared/contracts.js";
 import { SupersetCli } from "./cli.js";
 import { SupersetSignIn, validSupersetSignInCode } from "./sign-in.js";
+import { SUPERSET_SIGN_IN_STAGE } from "./sign-in-stage.js";
 
 class FakeChild extends EventEmitter {
   readonly stdin = new PassThrough();

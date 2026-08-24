@@ -188,7 +188,7 @@ export const VOICE_HOTKEY_CAPTURE = {
   /** Only modifiers so far — the chord is still being formed, not refused. */
   PENDING: "pending",
   /** A key the talk key cannot be, or one held by nothing heavier than Shift. */
-  REFUSED: "refused",
+  REFUSED: ACT_RESULT_STATUS.REJECTED,
 } as const;
 
 export type VoiceHotkeyCaptureOutcome =
@@ -340,3 +340,5 @@ export function voiceHotkeyKeycaps(accelerator: string): readonly string[] {
   const modifiers = parts.slice(0, -1).map((modifier) => modifierSymbol(modifier));
   return [...modifiers, key];
 }
+
+import { ACT_RESULT_STATUS } from "@sidecar/wire";

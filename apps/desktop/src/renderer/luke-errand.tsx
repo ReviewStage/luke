@@ -1,8 +1,8 @@
 import { APP_PANEL_TAB, type AppPanelTab } from "@sidecar/guide";
+import { WingFace as LukeFace } from "@sidecar/panel";
 import { type AppToolAction, SESSION_LIST_ALL } from "@sidecar/realtime";
 import { useEffect, useRef } from "react";
 import { flushSync } from "react-dom";
-import { LukeFace } from "./luke-face";
 import { type AppSettingId, isAppSettingId } from "./luke-guide";
 import { HIT_REGION, HIT_REGION_ATTRIBUTE, PANEL_PRESENTATION } from "./panel-state";
 import { parseMilliseconds, parsePixels, STILL_MS } from "./session-motion";

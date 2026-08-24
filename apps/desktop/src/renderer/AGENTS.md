@@ -3,7 +3,8 @@
 ## It is a sandboxed browser context
 
 The renderer reaches the main process through the preload bridge alone, so
-`#shared/contracts` is the widest door it has. A `#main/` import compiles and
+`#shared/bridge` and the domain modules under `#shared/wire/` are the widest
+doors it has. A `#main/` import compiles and
 bundles happily and then fails in the browser, and a `node:` import does the
 same. Neither is a mistake the type checker or esbuild can report, because
 both are real modules that simply are not there at run time.
@@ -128,12 +129,15 @@ snapshot, so the guide is simultaneously what Luke can say about himself and
 the outer bound of what a spoken ask can do to him.
 
 **When you add a feature or a setting, teach the guide about it in the same
-change.** The settings half is compile-enforced: `SETTING_GUIDE` is a `Record`
-over every key of `AppSettings`, so a new settings field does not build until
-you either write its guide entry or return `undefined` with a comment saying
-how the guide covers it instead. The facts half has no such lever, so the rule
-is stated here: a capability, surface, or shortcut the guide does not describe
-is one Luke will deny having, and a stale entry is one he will misdescribe.
+change.** Stored settings are declared once, in `APP_SETTING_SCHEMA`: its guard
+derives the stored and wire value type, its default feeds the store, and its
+guide entry feeds Luke's guide, settings search, and the ordinary switch or
+choice row on the page the entry names. There is no separate renderer record
+whose completeness the compiler checks. A guide entry that deliberately
+builds no row still needs a comment saying which fact or special control covers
+it. The facts half has no compile lever either, so the rule is stated here: a
+capability, surface, or shortcut the guide does not describe is one Luke will
+deny having, and a stale entry is one he will misdescribe.
 The facts deliberately cover what a developer would ask Luke and what a spoken
 ask may do — not exhaustive surface or connector behavior, which the guide's
 closing fact has Luke redirect to the surface rather than deny — so the rule

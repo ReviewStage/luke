@@ -1,5 +1,5 @@
 {
-  "name": "@sidecar/oauth",
+  "name": "@sidecar/acts",
   "version": "0.3.9",
   "private": true,
   "type": "module",
@@ -11,12 +11,16 @@
     "test": "tsx --test 'src/**/*.test.ts'",
     "typecheck": "tsc --project tsconfig.json"
   },
+  "dependencies": {
+    "@sidecar/attention": "workspace:*",
+    "@sidecar/guide": "workspace:*",
+    "@sidecar/issues": "workspace:*",
+    "@sidecar/session": "workspace:*",
+    "@sidecar/wire": "workspace:*"
+  },
   "devDependencies": {
     "@types/node": "26.2.0",
     "tsx": "4.23.12",
     "typescript": "7.0.2"
-  },
-  "dependencies": {
-    "@sidecar/surface": "workspace:*"
   }
 }

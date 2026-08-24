@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CLOUD_AGENT_PROVIDER_LIST, CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials";
+import { CLOUD_AGENT_PROVIDER_LIST, CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
 import { REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
-import { isAppSettingId, SETTING_PAGE, settingGuideEntries } from "@sidecar/settings";
+import { APP_SETTING_SCHEMA, settingFieldForGuideId, settingGuideEntries } from "@sidecar/settings";
 import { PANEL_FORM_FACTOR } from "@sidecar/surface";
-import type { AppSettings } from "#shared/contracts";
-import { CLI_CONNECTION, CREDENTIAL_SOURCE, SECRET_STORAGE, VOICE_SOURCE } from "#shared/contracts";
+import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "#shared/wire/account";
+import type { AppSettingsView } from "#shared/wire/settings";
+import { APP_SETTING_DEFAULTS, CLI_CONNECTION, VOICE_SOURCE } from "#shared/wire/settings";
 import {
   type SettingsSearchEntry,
   type SettingsSearchInput,
@@ -15,39 +16,42 @@ import {
 } from "./settings-search";
 import { SETTINGS_VIEW } from "./settings-views";
 
-function settings(overrides: Partial<AppSettings> = {}): AppSettings {
-  return {
-    credentialSources: {
-      [CREDENTIAL_PROVIDER_ID.CONDUCTOR]: CREDENTIAL_SOURCE.NONE,
-      [CREDENTIAL_PROVIDER_ID.COPILOT]: CREDENTIAL_SOURCE.NONE,
-      [CREDENTIAL_PROVIDER_ID.CURSOR]: CREDENTIAL_SOURCE.NONE,
-      [CREDENTIAL_PROVIDER_ID.DEVIN]: CREDENTIAL_SOURCE.NONE,
-      [CREDENTIAL_PROVIDER_ID.JULES]: CREDENTIAL_SOURCE.NONE,
-      [CREDENTIAL_PROVIDER_ID.LINEAR]: CREDENTIAL_SOURCE.NONE,
-      [CREDENTIAL_PROVIDER_ID.OPENAI]: CREDENTIAL_SOURCE.NONE,
-      [CREDENTIAL_PROVIDER_ID.REPLICAS]: CREDENTIAL_SOURCE.NONE,
+function settings(overrides: Partial<AppSettingsView> = {}): AppSettingsView {
+  return Object.assign<AppSettingsView, Partial<AppSettingsView>>(
+    {
+      ...APP_SETTING_DEFAULTS,
+      credentialSources: {
+        [CREDENTIAL_PROVIDER_ID.CONDUCTOR]: CREDENTIAL_SOURCE.NONE,
+        [CREDENTIAL_PROVIDER_ID.COPILOT]: CREDENTIAL_SOURCE.NONE,
+        [CREDENTIAL_PROVIDER_ID.CURSOR]: CREDENTIAL_SOURCE.NONE,
+        [CREDENTIAL_PROVIDER_ID.DEVIN]: CREDENTIAL_SOURCE.NONE,
+        [CREDENTIAL_PROVIDER_ID.JULES]: CREDENTIAL_SOURCE.NONE,
+        [CREDENTIAL_PROVIDER_ID.LINEAR]: CREDENTIAL_SOURCE.NONE,
+        [CREDENTIAL_PROVIDER_ID.OPENAI]: CREDENTIAL_SOURCE.NONE,
+        [CREDENTIAL_PROVIDER_ID.REPLICAS]: CREDENTIAL_SOURCE.NONE,
+      },
+      secretStorage: SECRET_STORAGE.UNKNOWN,
+      codexCloudConnection: CLI_CONNECTION.UNKNOWN,
+      voiceAvailable: true,
+      voiceSource: VOICE_SOURCE.ACCOUNT,
+      showInDock: false,
+      voice: REALTIME_VOICE.CEDAR,
+      voiceSpeed: REALTIME_VOICE_SPEED.NORMAL,
+      voiceCaptions: false,
+      duckOtherMedia: true,
+      preferBuiltInMicrophone: true,
+      quietDuringMeetings: true,
+      calendarSignInAvailable: false,
+      appleCalendarAvailable: false,
+      linearSignInAvailable: false,
+      calendarAccounts: [],
+      showOnAllDisplays: false,
+      shareUsageData: true,
+      sessionReplay: true,
+      formFactor: PANEL_FORM_FACTOR.BUBBLE,
     },
-    secretStorage: SECRET_STORAGE.UNKNOWN,
-    codexCloudConnection: CLI_CONNECTION.UNKNOWN,
-    voiceAvailable: true,
-    voiceSource: VOICE_SOURCE.ACCOUNT,
-    showInDock: false,
-    voice: REALTIME_VOICE.CEDAR,
-    voiceSpeed: REALTIME_VOICE_SPEED.NORMAL,
-    voiceCaptions: false,
-    duckOtherMedia: true,
-    preferBuiltInMicrophone: true,
-    quietDuringMeetings: true,
-    calendarSignInAvailable: false,
-    appleCalendarAvailable: false,
-    linearSignInAvailable: false,
-    calendarAccounts: [],
-    showOnAllDisplays: false,
-    shareUsageData: true,
-    sessionReplay: true,
-    formFactor: PANEL_FORM_FACTOR.BUBBLE,
-    ...overrides,
-  };
+    overrides,
+  );
 }
 
 function searchInput(overrides: Partial<SettingsSearchInput> = {}): SettingsSearchInput {
@@ -102,11 +106,12 @@ test("every setting the guide lists is findable on the page its schema names", (
   const input = everythingDrawn();
   const entries = settingsSearchEntries(input);
   for (const setting of settingGuideEntries(input.settings)) {
-    assert.ok(isAppSettingId(setting.id), `${setting.id} is a schema id`);
+    const field = settingFieldForGuideId(setting.id);
+    assert.ok(field, `${setting.id} belongs to a schema field`);
     const entry = entries.find((candidate) => candidate.id === setting.id);
     assert.ok(entry, `the corpus offers ${setting.label}`);
     assert.equal(entry.label, setting.label, setting.id);
-    assert.equal(entry.page, SETTING_PAGE[setting.id], setting.label);
+    assert.equal(entry.page, APP_SETTING_SCHEMA[field].settingsPage, setting.label);
   }
 });
 

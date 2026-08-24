@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { APP_SETTING_SCHEMA } from "@sidecar/settings";
-import { VOICE_SOURCE } from "../../../apps/desktop/src/shared/contracts.js";
+import { APP_SETTING_SCHEMA, VOICE_SOURCE } from "@sidecar/settings";
 import {
   resolveVoiceCapability,
   VoiceCapabilityAssembler,

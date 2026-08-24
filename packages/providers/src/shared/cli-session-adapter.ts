@@ -1,9 +1,13 @@
-import { execFile } from "node:child_process";
-import path from "node:path";
 import {
+  boundedInvocation,
+  DEFAULT_CLI_PATH_DIRECTORIES,
+  INVOCATION_FAILURE,
+  InvocationError,
+} from "@sidecar/process";
+import {
+  ACT_RESULT_STATUS,
   CLI_CONNECTION,
   type CliConnection,
-  PROVIDER_ACT_RESULT_STATUS,
   type ProviderActResult,
   type ProviderSessionObservation,
   SESSION_LOCATION,
@@ -11,7 +15,6 @@ import {
   SessionProviderAdapterBase,
 } from "@sidecar/session";
 import {
-  isWireNumber,
   resolveOptions,
   unparsedWire,
   type WireBoundaryInput,
@@ -62,8 +65,6 @@ export const CLI_ADAPTER_DEFAULTS = {
  * these are appended after the inherited PATH — never ahead of it, so a binary
  * the user's own shell would resolve still wins.
  */
-const WELL_KNOWN_BINARY_DIRECTORIES = ["/opt/homebrew/bin", "/usr/local/bin"] as const;
-
 export interface CliRunResult {
   exitCode: number;
   stdout: string;
@@ -81,43 +82,25 @@ export type CliRun = (
  * a probe's no is an answer, not a failure. Only a binary that cannot run at
  * all is unavailable; a command that ran out of time or output is transient.
  */
-const defaultRun: CliRun = (binary, argv, options) =>
-  new Promise((resolve, reject) => {
-    execFile(
+const defaultRun: CliRun = async (binary, argv, options) => {
+  try {
+    const result = await boundedInvocation({
       binary,
-      argv,
-      {
-        timeout: options.timeoutMs,
-        maxBuffer: options.maximumOutputBytes,
-        windowsHide: true,
-        env: {
-          ...process.env,
-          PATH: [process.env.PATH, ...WELL_KNOWN_BINARY_DIRECTORIES]
-            .filter(Boolean)
-            .join(path.delimiter),
-        },
-      },
-      (error, stdout) => {
-        if (error === null) {
-          resolve({ exitCode: 0, stdout });
-          return;
-        }
-        // SAFETY: Node's execFile callback reports command failures as ErrnoException objects.
-        const commandError = error as NodeJS.ErrnoException & { code?: unknown };
-        const exitCode = commandError.code;
-        if (isWireNumber(exitCode)) {
-          resolve({ exitCode, stdout });
-          return;
-        }
-        reject(
-          new CliCommandError(
-            commandError.code === "ENOENT" ? CLI_FAILURE.UNAVAILABLE : CLI_FAILURE.TRANSIENT,
-            `${binary} could not be run`,
-          ),
-        );
-      },
+      arguments: argv,
+      timeoutMs: options.timeoutMs,
+      maximumOutputBytes: options.maximumOutputBytes,
+      pathDirectories: DEFAULT_CLI_PATH_DIRECTORIES,
+    });
+    return { exitCode: result.exitCode, stdout: result.stdout };
+  } catch (error) {
+    throw new CliCommandError(
+      error instanceof InvocationError && error.failure === INVOCATION_FAILURE.UNAVAILABLE
+        ? CLI_FAILURE.UNAVAILABLE
+        : CLI_FAILURE.TRANSIENT,
+      `${binary} could not be run`,
     );
-  });
+  }
+};
 
 export interface CliAdapterOptions {
   run?: CliRun;
@@ -279,7 +262,7 @@ export abstract class CliSessionAdapter extends SessionProviderAdapterBase {
     } catch {
       return {
         outcome: {
-          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          status: ACT_RESULT_STATUS.REJECTED,
           reason: `${name}'s CLI could not answer, so nothing was sent.`,
         },
       };
@@ -293,7 +276,7 @@ export abstract class CliSessionAdapter extends SessionProviderAdapterBase {
       this.#forgetLogin();
       return {
         outcome: {
-          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          status: ACT_RESULT_STATUS.REJECTED,
           reason:
             connection === CLI_CONNECTION.CLI_MISSING
               ? `${name}'s CLI is not installed, so nothing was sent.`
@@ -310,7 +293,7 @@ export abstract class CliSessionAdapter extends SessionProviderAdapterBase {
     } catch {
       return {
         outcome: {
-          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          status: ACT_RESULT_STATUS.REJECTED,
           reason: `${name}'s CLI could not answer, so the request may not have landed.`,
         },
       };
@@ -318,7 +301,7 @@ export abstract class CliSessionAdapter extends SessionProviderAdapterBase {
     if (result.exitCode !== 0) {
       return {
         outcome: {
-          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          status: ACT_RESULT_STATUS.REJECTED,
           reason: `${name}'s CLI refused the request.`,
         },
       };
@@ -326,7 +309,7 @@ export abstract class CliSessionAdapter extends SessionProviderAdapterBase {
     // A write that landed changes what the provider holds, so the refresh
     // that follows must actually ask rather than serve the cached snapshot.
     this.#lastAttemptAt = Number.NEGATIVE_INFINITY;
-    return { outcome: { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED }, stdout: result.stdout };
+    return { outcome: { status: ACT_RESULT_STATUS.ACCEPTED }, stdout: result.stdout };
   }
 
   async #probeLogin(): Promise<CliConnection> {

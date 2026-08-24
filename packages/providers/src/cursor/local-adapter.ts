@@ -1,26 +1,26 @@
-import { execFile, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { boundedInvocation, DEFAULT_CLI_PATH_DIRECTORIES } from "@sidecar/process";
 import {
+  ACT_RESULT_STATUS,
   maximumSessionRecapLength,
   maximumSessionTitleLength,
-  PROVIDER_ACT_RESULT_STATUS,
   type ProviderMessageResult,
-  type ProviderSessionMessage,
   type ProviderSessionObservation,
+  type ProviderTranscriptResult,
+  providerTranscriptResult,
   SESSION_COMPLETION_CAUSE,
   SESSION_STATUS,
   type SessionDetail,
   type SessionDiffSummary,
   type SessionStatus,
-  sessionMessageText,
   UNKNOWN_WORKSPACE_LABEL,
 } from "@sidecar/session";
 import {
   isRecord,
-  isWireNumber,
   isWireString,
   oneLine,
   recordFromJsonLine,
@@ -811,27 +811,16 @@ async function locateCursorAgent(): Promise<string | undefined> {
 
 const defaultCursorAgentRunner: CursorAgentRunner = {
   locate: locateCursorAgent,
-  probeLogin: (binaryPath) =>
-    new Promise((resolve, reject) => {
-      execFile(
-        binaryPath,
-        CURSOR_AGENT_CLI.LOGIN_PROBE_ARGV,
-        { timeout: CURSOR_SEND_DEFAULTS.LOGIN_PROBE_TIMEOUT_MS, windowsHide: true },
-        (error) => {
-          if (error === null) {
-            resolve(true);
-            return;
-          }
-          // SAFETY: Node's execFile callback reports command failures as ErrnoException objects.
-          const commandError = error as NodeJS.ErrnoException & { code?: unknown };
-          if (isWireNumber(commandError.code)) {
-            resolve(false);
-            return;
-          }
-          reject(new Error(`${CURSOR_AGENT_CLI.BINARY} could not be run`));
-        },
-      );
-    }),
+  probeLogin: async (binaryPath) => {
+    const result = await boundedInvocation({
+      binary: binaryPath,
+      arguments: CURSOR_AGENT_CLI.LOGIN_PROBE_ARGV,
+      timeoutMs: CURSOR_SEND_DEFAULTS.LOGIN_PROBE_TIMEOUT_MS,
+      maximumOutputBytes: 64 * 1024,
+      pathDirectories: [path.join(os.homedir(), ".local", "bin"), ...DEFAULT_CLI_PATH_DIRECTORIES],
+    });
+    return result.exitCode === 0;
+  },
   launch: (binaryPath, argv) =>
     new Promise((resolve) => {
       // Detached with no pipes: the turn's output lives in the transcript the
@@ -1078,13 +1067,15 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
     return folders;
   }
 
-  override readTranscript(providerSessionId: string): Promise<string | undefined> {
-    return readCursorSessionTranscript({
-      cursorHome: this.#cursorHome,
-      providerSessionId,
-      readTailBytes: this.#transcriptReadTailBytes,
-      maximumRenderedLength: this.#transcriptMaximumRenderedLength,
-    });
+  override readTranscript(providerSessionId: string): Promise<ProviderTranscriptResult> {
+    return providerTranscriptResult(
+      readCursorSessionTranscript({
+        cursorHome: this.#cursorHome,
+        providerSessionId,
+        readTailBytes: this.#transcriptReadTailBytes,
+        maximumRenderedLength: this.#transcriptMaximumRenderedLength,
+      }),
+    );
   }
 
   protected async parse(candidate: CursorSessionCandidate): Promise<ParsedCursorTail> {
@@ -1278,20 +1269,22 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
    * the pass must refuse before anything runs. Nothing is read out of a
    * launched turn: the transcript the adapter already observes is the report.
    */
-  override async sendMessage(message: ProviderSessionMessage): Promise<ProviderMessageResult> {
-    const text = sessionMessageText(message.text);
-    if (!text) {
+  protected override async deliverMessage(
+    observation: ProviderSessionObservation,
+    text: string,
+  ): Promise<ProviderMessageResult> {
+    const providerSessionId = observation.providerSessionId;
+    const target = this.#sendTargets.get(providerSessionId);
+    if (!target) {
       return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-        reason: "That message is empty or too long.",
+        status: ACT_RESULT_STATUS.UNSUPPORTED,
+        reason: "That act is not supported by the latest observation.",
       };
     }
-    const target = this.#sendTargets.get(message.providerSessionId);
-    if (!target) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
     const stats = await fileStats(target.transcriptFilePath);
     if (!stats?.isFile()) {
       return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+        status: ACT_RESULT_STATUS.REJECTED,
         reason: "That chat's transcript is gone, so nothing was sent.",
       };
     }
@@ -1299,7 +1292,7 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
       this.#cursorAgentBinaryPath ?? (await this.#cursorAgent.locate().catch(() => undefined));
     if (!binaryPath) {
       return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+        status: ACT_RESULT_STATUS.REJECTED,
         reason: "Cursor's agent CLI is not installed, so nothing was sent.",
       };
     }
@@ -1308,13 +1301,13 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
       loggedIn = await this.#cursorAgent.probeLogin(binaryPath);
     } catch {
       return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+        status: ACT_RESULT_STATUS.REJECTED,
         reason: "Cursor's agent CLI could not answer, so nothing was sent.",
       };
     }
     if (!loggedIn) {
       return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+        status: ACT_RESULT_STATUS.REJECTED,
         reason: "Cursor's agent CLI is signed out, so nothing was sent.",
       };
     }
@@ -1322,7 +1315,7 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
     try {
       launch = await this.#cursorAgent.launch(binaryPath, [
         CURSOR_AGENT_CLI.RESUME_FLAG,
-        message.providerSessionId,
+        providerSessionId,
         CURSOR_AGENT_CLI.WORKSPACE_FLAG,
         target.folderPath,
         ...CURSOR_AGENT_CLI.SEND_ARGV,
@@ -1331,16 +1324,16 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
       ]);
     } catch {
       return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+        status: ACT_RESULT_STATUS.REJECTED,
         reason: "Cursor's agent CLI could not be started, so nothing was sent.",
       };
     }
     if (launch !== "running" && launch.exitCode !== 0) {
       return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+        status: ACT_RESULT_STATUS.REJECTED,
         reason: "Cursor's agent CLI refused the message.",
       };
     }
-    return { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED };
+    return { status: ACT_RESULT_STATUS.ACCEPTED };
   }
 }

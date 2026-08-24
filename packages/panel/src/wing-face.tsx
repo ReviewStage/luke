@@ -1,4 +1,8 @@
 import { FACE_ART, FACE_MOTION_PARTS, type FaceMotion } from "@sidecar/surface";
+import React from "react";
+
+// `tsx` executes imported workspace-package JSX with the classic runtime.
+void React;
 
 /**
  * What Luke is doing, if anything. No motion is the resting face itself: no
@@ -6,7 +10,7 @@ import { FACE_ART, FACE_MOTION_PARTS, type FaceMotion } from "@sidecar/surface";
  * simply sits there. Stillness is drawn by not asking for anything, which is
  * why it costs neither an entry in the artwork table nor a paused animation.
  */
-interface LukeFaceProps {
+interface WingFaceProps {
   motion?: FaceMotion;
   /** Set for the motions that say something for as long as it stays true. */
   repeat?: boolean;
@@ -40,7 +44,7 @@ const EYE_CLASS = { LEFT: "luke-face-eye-left", RIGHT: "luke-face-eye-right" } a
  * in what order they nest. `luke-face-part` marks everything the artwork moves,
  * which is what the wiring in base.css plays, pauses, and repeats as one set.
  */
-export function LukeFace({ motion, repeat = false }: LukeFaceProps): React.JSX.Element {
+export function WingFace({ motion, repeat = false }: WingFaceProps): React.JSX.Element {
   const parts = motion === undefined ? RESTING_PARTS : FACE_MOTION_PARTS[motion];
 
   return (

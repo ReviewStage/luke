@@ -23,8 +23,10 @@ import {
   settingEntryGuard,
 } from "@sidecar/settings";
 import { PANEL_FORM_FACTOR } from "@sidecar/surface";
+import { type UnparsedWireValue, unparsedWire, type WireRecord } from "@sidecar/wire";
 import {
   ACCOUNT_STATUS,
+  appSettingsView,
   CREDENTIAL_SOURCE,
   SECRET_STORAGE,
   SETTINGS_RESET_SCOPE,
@@ -151,6 +153,24 @@ function sealed(plainText: string): string {
   return Buffer.from(`${CIPHER_PREFIX}${plainText}`, "utf8").toString("base64");
 }
 
+function expectedPersistedSettings(overrides: WireRecord = {}): UnparsedWireValue {
+  return unparsedWire(
+    JSON.parse(
+      JSON.stringify({
+        version: 2,
+        apiKeys: {},
+        ...Object.fromEntries(
+          APP_SETTING_FIELDS.map((field) => [
+            field,
+            APP_SETTING_SCHEMA[field].guard(undefined).value,
+          ]),
+        ),
+        ...overrides,
+      }),
+    ),
+  );
+}
+
 async function temporaryDirectory(t: TestContext): Promise<string> {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "luke-settings-"));
   t.after(async () => {
@@ -181,6 +201,38 @@ function storeIn(
   }
   return new SettingsStore(config);
 }
+
+test("a failed first load is retried before a later write", async (t) => {
+  const directory = await temporaryDirectory(t);
+  await fs.writeFile(
+    path.join(directory, SETTINGS_FILE_NAME),
+    JSON.stringify({
+      version: 2,
+      apiKeys: { [CONDUCTOR]: sealed(TEST_API_KEY) },
+      showInDock: true,
+    }),
+  );
+  let directoryReads = 0;
+  const store = new SettingsStore({
+    directory: () => {
+      directoryReads += 1;
+      if (directoryReads === 1) {
+        throw Object.assign(new Error("permission denied"), { code: "EACCES" });
+      }
+      return directory;
+    },
+    cipher: testCipher(),
+    environment: {},
+  });
+
+  await assert.rejects(store.get(APP_SETTING_SCHEMA.showInDock.field), /permission denied/);
+  await store.set(APP_SETTING_SCHEMA.duckOtherMedia.field, false);
+
+  const reopened = storeIn(directory);
+  assert.equal(await reopened.readApiKey(CONDUCTOR), TEST_API_KEY);
+  assert.equal(await reopened.get(APP_SETTING_SCHEMA.showInDock.field), true);
+  assert.equal(await reopened.get(APP_SETTING_SCHEMA.duckOtherMedia.field), false);
+});
 
 async function readWorkspaceAgentDefault(store: SettingsStore, providerId: ProviderId) {
   return (await store.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[providerId];
@@ -223,8 +275,11 @@ test("stores an API key encrypted, private to the owner, and never in a snapshot
   const stats = await fs.stat(path.join(directory, SETTINGS_FILE_NAME));
 
   assert.equal(reason, undefined);
-  assert.equal(settings.credentialSources[CONDUCTOR], CREDENTIAL_SOURCE.ENCRYPTED_FILE);
-  assert.equal(settings.secretStorage, SECRET_STORAGE.AVAILABLE);
+  assert.equal(
+    appSettingsView(settings).credentialSources[CONDUCTOR],
+    CREDENTIAL_SOURCE.ENCRYPTED_FILE,
+  );
+  assert.equal(appSettingsView(settings).secretStorage, SECRET_STORAGE.AVAILABLE);
   assert.equal(contents.includes(TEST_API_KEY), false, "the key was written in plaintext");
   assert.equal(stats.mode & 0o777, 0o600);
   assert.equal(JSON.stringify(settings).includes(TEST_API_KEY), false);
@@ -256,7 +311,10 @@ test("round-trips an encrypted account without exposing either token in snapshot
   assert.equal(contents.includes(account.accessToken), false);
   assert.equal(contents.includes(account.refreshToken), false);
   assert.equal(JSON.stringify(await reopened.accountSnapshot()).includes("token-secret"), false);
-  assert.equal(JSON.stringify(await reopened.snapshot()).includes("token-secret"), false);
+  assert.equal(
+    JSON.stringify(appSettingsView(await reopened.snapshot())).includes("token-secret"),
+    false,
+  );
 });
 
 test("decrypts once and re-decrypts only after the key changes", async (t) => {
@@ -295,7 +353,7 @@ test("reads a stored key back from a new store instance", async (t) => {
 
   assert.equal(await reopened.readApiKey(CONDUCTOR), TEST_API_KEY);
   assert.equal(
-    (await reopened.snapshot()).credentialSources[CONDUCTOR],
+    appSettingsView(await reopened.snapshot()).credentialSources[CONDUCTOR],
     CREDENTIAL_SOURCE.ENCRYPTED_FILE,
   );
 });
@@ -307,7 +365,7 @@ test("clears a stored key", async (t) => {
 
   const { settings } = await store.setApiKey(CONDUCTOR, undefined);
 
-  assert.equal(settings.credentialSources[CONDUCTOR], CREDENTIAL_SOURCE.NONE);
+  assert.equal(appSettingsView(settings).credentialSources[CONDUCTOR], CREDENTIAL_SOURCE.NONE);
   assert.equal(await store.readApiKey(CONDUCTOR), undefined);
   assert.equal((await readSettingsFile(directory)).includes(CONDUCTOR), false);
 });
@@ -319,11 +377,11 @@ test("captions are off until switched on, and the choice survives a reopen", asy
   const cipher = countingCipher();
   const store = storeIn(directory, { cipher });
 
-  assert.equal((await store.snapshot()).voiceCaptions, false);
+  assert.equal(appSettingsView(await store.snapshot()).voiceCaptions, false);
   const enabled = await store.set(APP_SETTING_SCHEMA.voiceCaptions.field, true);
 
-  assert.equal(enabled.settings.voiceCaptions, true);
-  assert.equal((await storeIn(directory).snapshot()).voiceCaptions, true);
+  assert.equal(appSettingsView(enabled.settings).voiceCaptions, true);
+  assert.equal(appSettingsView(await storeIn(directory).snapshot()).voiceCaptions, true);
   assert.equal(cipher.calls.isAvailable, 0);
   assert.equal(cipher.calls.encrypt, 0);
 });
@@ -336,7 +394,7 @@ test("switching captions never disturbs a stored key", async (t) => {
   await store.set(APP_SETTING_SCHEMA.voiceCaptions.field, true);
   const off = await store.set(APP_SETTING_SCHEMA.voiceCaptions.field, false);
 
-  assert.equal(off.settings.voiceCaptions, false);
+  assert.equal(appSettingsView(off.settings).voiceCaptions, false);
   assert.equal(await storeIn(directory).readApiKey(CONDUCTOR), TEST_API_KEY);
 });
 
@@ -349,7 +407,7 @@ test("a corrupt captions value reads as off rather than switching them on", asyn
     "utf8",
   );
 
-  assert.equal((await storeIn(directory).snapshot()).voiceCaptions, false);
+  assert.equal(appSettingsView(await storeIn(directory).snapshot()).voiceCaptions, false);
 });
 
 test("other media is quieted until asked otherwise, and the choice survives a reopen", async (t) => {
@@ -359,11 +417,11 @@ test("other media is quieted until asked otherwise, and the choice survives a re
   const cipher = countingCipher();
   const store = storeIn(directory, { cipher });
 
-  assert.equal((await store.snapshot()).duckOtherMedia, true);
+  assert.equal(appSettingsView(await store.snapshot()).duckOtherMedia, true);
   const disabled = await store.set(APP_SETTING_SCHEMA.duckOtherMedia.field, false);
 
-  assert.equal(disabled.settings.duckOtherMedia, false);
-  assert.equal((await storeIn(directory).snapshot()).duckOtherMedia, false);
+  assert.equal(appSettingsView(disabled.settings).duckOtherMedia, false);
+  assert.equal(appSettingsView(await storeIn(directory).snapshot()).duckOtherMedia, false);
   assert.equal(cipher.calls.isAvailable, 0);
   assert.equal(cipher.calls.encrypt, 0);
 });
@@ -376,7 +434,7 @@ test("switching the media duck never disturbs a stored key", async (t) => {
   await store.set(APP_SETTING_SCHEMA.duckOtherMedia.field, false);
   const on = await store.set(APP_SETTING_SCHEMA.duckOtherMedia.field, true);
 
-  assert.equal(on.settings.duckOtherMedia, true);
+  assert.equal(appSettingsView(on.settings).duckOtherMedia, true);
   assert.equal(await storeIn(directory).readApiKey(CONDUCTOR), TEST_API_KEY);
 });
 
@@ -391,18 +449,18 @@ test("a corrupt media duck value reads as the default rather than as off", async
     "utf8",
   );
 
-  assert.equal((await storeIn(directory).snapshot()).duckOtherMedia, true);
+  assert.equal(appSettingsView(await storeIn(directory).snapshot()).duckOtherMedia, true);
 });
 
 test("the microphone preference persists, defaults on, and shrugs off corruption", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
 
-  assert.equal((await store.snapshot()).preferBuiltInMicrophone, true);
+  assert.equal(appSettingsView(await store.snapshot()).preferBuiltInMicrophone, true);
   const disabled = await store.set(APP_SETTING_SCHEMA.preferBuiltInMicrophone.field, false);
 
-  assert.equal(disabled.settings.preferBuiltInMicrophone, false);
-  assert.equal((await storeIn(directory).snapshot()).preferBuiltInMicrophone, false);
+  assert.equal(appSettingsView(disabled.settings).preferBuiltInMicrophone, false);
+  assert.equal(appSettingsView(await storeIn(directory).snapshot()).preferBuiltInMicrophone, false);
 });
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
@@ -414,7 +472,7 @@ test("a corrupt microphone preference reads as the default rather than as off", 
     "utf8",
   );
 
-  assert.equal((await storeIn(directory).snapshot()).preferBuiltInMicrophone, true);
+  assert.equal(appSettingsView(await storeIn(directory).snapshot()).preferBuiltInMicrophone, true);
 });
 
 test("the session filter selection starts unset and survives a reopen", async (t) => {
@@ -424,12 +482,12 @@ test("the session filter selection starts unset and survives a reopen", async (t
   const cipher = countingCipher();
   const store = storeIn(directory, { cipher });
 
-  assert.equal((await store.snapshot()).sessionFilters, undefined);
+  assert.equal(appSettingsView(await store.snapshot()).sessionFilters, undefined);
   const chosen = [SESSION_FILTER.LOCAL, PROVIDER_ID.CODEX];
   const narrowed = await store.set(APP_SETTING_SCHEMA.sessionFilters.field, chosen);
 
-  assert.deepEqual(narrowed.settings.sessionFilters, chosen);
-  assert.deepEqual((await storeIn(directory).snapshot()).sessionFilters, chosen);
+  assert.deepEqual(appSettingsView(narrowed.settings).sessionFilters, chosen);
+  assert.deepEqual(appSettingsView(await storeIn(directory).snapshot()).sessionFilters, chosen);
   assert.equal(cipher.calls.isAvailable, 0);
   assert.equal(cipher.calls.encrypt, 0);
 });
@@ -441,8 +499,8 @@ test("clearing the session filter selection reads as unset after a reopen", asyn
 
   const cleared = await store.set(APP_SETTING_SCHEMA.sessionFilters.field, undefined);
 
-  assert.equal(cleared.settings.sessionFilters, undefined);
-  assert.equal((await storeIn(directory).snapshot()).sessionFilters, undefined);
+  assert.equal(appSettingsView(cleared.settings).sessionFilters, undefined);
+  assert.equal(appSettingsView(await storeIn(directory).snapshot()).sessionFilters, undefined);
 });
 
 test("storing the session filter selection never disturbs a stored key", async (t) => {
@@ -468,7 +526,7 @@ test("a stored selection keeps only the filters this build recognizes", async (t
     "utf8",
   );
 
-  assert.deepEqual((await storeIn(directory).snapshot()).sessionFilters, [
+  assert.deepEqual(appSettingsView(await storeIn(directory).snapshot()).sessionFilters, [
     SESSION_FILTER.LOCAL,
     PROVIDER_ID.CODEX,
   ]);
@@ -483,7 +541,7 @@ test("a corrupt session filter value reads as unset rather than narrowing the li
     "utf8",
   );
 
-  assert.equal((await storeIn(directory).snapshot()).sessionFilters, undefined);
+  assert.equal(appSettingsView(await storeIn(directory).snapshot()).sessionFilters, undefined);
 });
 
 test("the session search query starts unset and survives a reopen as typed", async (t) => {
@@ -493,11 +551,14 @@ test("the session search query starts unset and survives a reopen as typed", asy
   const cipher = countingCipher();
   const store = storeIn(directory, { cipher });
 
-  assert.equal((await store.snapshot()).sessionSearchQuery, undefined);
+  assert.equal(appSettingsView(await store.snapshot()).sessionSearchQuery, undefined);
   const held = await store.set(APP_SETTING_SCHEMA.sessionSearchQuery.field, "Fix CI  on main");
 
-  assert.equal(held.settings.sessionSearchQuery, "Fix CI  on main");
-  assert.equal((await storeIn(directory).snapshot()).sessionSearchQuery, "Fix CI  on main");
+  assert.equal(appSettingsView(held.settings).sessionSearchQuery, "Fix CI  on main");
+  assert.equal(
+    appSettingsView(await storeIn(directory).snapshot()).sessionSearchQuery,
+    "Fix CI  on main",
+  );
   assert.equal(cipher.calls.isAvailable, 0);
   assert.equal(cipher.calls.encrypt, 0);
 });
@@ -509,8 +570,8 @@ test("clearing the session search query reads as unset after a reopen", async (t
 
   const cleared = await store.set(APP_SETTING_SCHEMA.sessionSearchQuery.field, undefined);
 
-  assert.equal(cleared.settings.sessionSearchQuery, undefined);
-  assert.equal((await storeIn(directory).snapshot()).sessionSearchQuery, undefined);
+  assert.equal(appSettingsView(cleared.settings).sessionSearchQuery, undefined);
+  assert.equal(appSettingsView(await storeIn(directory).snapshot()).sessionSearchQuery, undefined);
 });
 
 test("storing the session search query never disturbs a stored key", async (t) => {
@@ -532,7 +593,7 @@ test("a stored query of nothing but whitespace reads as unset rather than narrow
     "utf8",
   );
 
-  assert.equal((await storeIn(directory).snapshot()).sessionSearchQuery, undefined);
+  assert.equal(appSettingsView(await storeIn(directory).snapshot()).sessionSearchQuery, undefined);
 });
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
@@ -544,7 +605,7 @@ test("a corrupt session search query reads as unset rather than refilling the fi
     "utf8",
   );
 
-  assert.equal((await storeIn(directory).snapshot()).sessionSearchQuery, undefined);
+  assert.equal(appSettingsView(await storeIn(directory).snapshot()).sessionSearchQuery, undefined);
 });
 
 test("a calendar account stores its grant encrypted and survives a reopen", async (t) => {
@@ -557,7 +618,7 @@ test("a calendar account stores its grant encrypted and survives a reopen", asyn
   ]);
 
   assert.equal(stored.reason, undefined);
-  assert.deepEqual(stored.settings.calendarAccounts, [
+  assert.deepEqual(appSettingsView(stored.settings).calendarAccounts, [
     { id: "dev@example.com", selectedCalendarIds: ["dev@example.com"] },
   ]);
   // At rest the grant is ciphertext, never the plain token.
@@ -612,7 +673,7 @@ test("selection changes one calendar on one account, and removal takes the grant
   assert.deepEqual((await store.readCalendarAccounts())[0]?.selectedCalendarIds, ["team-calendar"]);
 
   const removed = await store.removeCalendarAccount("dev@example.com");
-  assert.deepEqual(removed.settings.calendarAccounts, []);
+  assert.deepEqual(appSettingsView(removed.settings).calendarAccounts, []);
   assert.deepEqual(await store.readCalendarAccounts(), []);
   // Nothing empty is written down: a file with no accounts carries no field.
   assert.equal(JSON.parse(await readSettingsFile(directory)).calendarAccounts, undefined);
@@ -623,12 +684,12 @@ test("the Apple Calendar connection stores only the choice and survives a reopen
   const store = storeIn(directory, { appleCalendarSupported: true });
 
   assert.equal(await store.readAppleCalendarConnection(), undefined);
-  assert.equal((await store.snapshot()).appleCalendar, undefined);
-  assert.equal((await store.snapshot()).appleCalendarAvailable, true);
+  assert.equal(appSettingsView(await store.snapshot()).appleCalendar, undefined);
+  assert.equal(appSettingsView(await store.snapshot()).appleCalendarAvailable, true);
 
   const connected = await store.connectAppleCalendar(["home", "work"]);
   assert.equal(connected.reason, undefined);
-  assert.deepEqual(connected.settings.appleCalendar, {
+  assert.deepEqual(appSettingsView(connected.settings).appleCalendar, {
     id: "apple-calendar",
     selectedCalendarIds: ["home", "work"],
   });
@@ -656,7 +717,7 @@ test("connecting Apple Calendar again keeps the held choices, and selection edit
   assert.deepEqual(await store.readAppleCalendarConnection(), { selectedCalendarIds: ["team"] });
 
   const disconnected = await store.disconnectAppleCalendar();
-  assert.equal(disconnected.settings.appleCalendar, undefined);
+  assert.equal(appSettingsView(disconnected.settings).appleCalendar, undefined);
   assert.equal(await store.readAppleCalendarConnection(), undefined);
   const idle = await store.setCalendarSelected("apple-calendar", "team", true);
   assert.equal(idle.reason, "Apple Calendar is not connected.");
@@ -667,7 +728,7 @@ test("connecting Apple Calendar again keeps the held choices, and selection edit
 test("Apple Calendar is not offered where there is no Mac calendar to read", async (t) => {
   const directory = await temporaryDirectory(t);
   const snapshot = await storeIn(directory, { appleCalendarSupported: false }).snapshot();
-  assert.equal(snapshot.appleCalendarAvailable, false);
+  assert.equal(appSettingsView(snapshot).appleCalendarAvailable, false);
 });
 
 test("a calendar account never disturbs a stored key, nor a key an account", async (t) => {
@@ -691,13 +752,13 @@ test("announcements wait out meetings until asked otherwise, and the choice surv
   const cipher = countingCipher();
   const store = storeIn(directory, { cipher });
 
-  assert.equal((await store.snapshot()).quietDuringMeetings, true);
+  assert.equal(appSettingsView(await store.snapshot()).quietDuringMeetings, true);
   assert.equal(await store.get(APP_SETTING_SCHEMA.quietDuringMeetings.field), true);
   const disabled = await store.set(APP_SETTING_SCHEMA.quietDuringMeetings.field, false);
 
-  assert.equal(disabled.settings.quietDuringMeetings, false);
+  assert.equal(appSettingsView(disabled.settings).quietDuringMeetings, false);
   assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.quietDuringMeetings.field), false);
-  assert.equal((await storeIn(directory).snapshot()).quietDuringMeetings, false);
+  assert.equal(appSettingsView(await storeIn(directory).snapshot()).quietDuringMeetings, false);
   assert.equal(cipher.calls.isAvailable, 0);
   assert.equal(cipher.calls.encrypt, 0);
 });
@@ -710,7 +771,7 @@ test("switching the meeting quiet never disturbs a stored key", async (t) => {
   await store.set(APP_SETTING_SCHEMA.quietDuringMeetings.field, false);
   const on = await store.set(APP_SETTING_SCHEMA.quietDuringMeetings.field, true);
 
-  assert.equal(on.settings.quietDuringMeetings, true);
+  assert.equal(appSettingsView(on.settings).quietDuringMeetings, true);
   assert.equal(await storeIn(directory).readApiKey(CONDUCTOR), TEST_API_KEY);
 });
 
@@ -724,7 +785,7 @@ test("a corrupt meeting quiet value reads as the default rather than as off", as
     "utf8",
   );
 
-  assert.equal((await storeIn(directory).snapshot()).quietDuringMeetings, true);
+  assert.equal(appSettingsView(await storeIn(directory).snapshot()).quietDuringMeetings, true);
 });
 
 test("usage sharing is on in a file that never mentions it, and survives a round trip", async (t) => {
@@ -738,11 +799,11 @@ test("usage sharing is on in a file that never mentions it, and survives a round
   );
 
   const store = storeIn(directory);
-  assert.equal((await store.snapshot()).shareUsageData, true);
+  assert.equal(appSettingsView(await store.snapshot()).shareUsageData, true);
   assert.equal(await store.get(APP_SETTING_SCHEMA.shareUsageData.field), true);
 
   const stopped = await store.set(APP_SETTING_SCHEMA.shareUsageData.field, false);
-  assert.equal(stopped.settings.shareUsageData, false);
+  assert.equal(appSettingsView(stopped.settings).shareUsageData, false);
   assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.shareUsageData.field), false);
 });
 
@@ -754,7 +815,7 @@ test("no reset scope reaches usage sharing", async (t) => {
   for (const scope of Object.values(SETTINGS_RESET_SCOPE)) {
     await store.resetSettings(scope);
     assert.equal(
-      (await store.snapshot()).shareUsageData,
+      appSettingsView(await store.snapshot()).shareUsageData,
       false,
       `${scope} must not restore data sharing`,
     );
@@ -769,7 +830,7 @@ test("keeps each provider's key, environment fallback, and reported source separ
   });
 
   await store.setApiKey(FIRST_CLOUD, "first-cloud-key");
-  const settings = await store.snapshot();
+  const settings = appSettingsView(await store.snapshot());
 
   assert.equal(settings.credentialSources[FIRST_CLOUD], CREDENTIAL_SOURCE.ENCRYPTED_FILE);
   assert.equal(settings.credentialSources[SECOND_CLOUD], CREDENTIAL_SOURCE.ENVIRONMENT);
@@ -784,7 +845,7 @@ test("keeps each provider's key, environment fallback, and reported source separ
   assert.equal(await store.readApiKey(SECOND_CLOUD), "second-cloud-key");
   assert.equal(await store.readApiKey(FIRST_CLOUD), undefined);
   assert.equal(
-    (await store.snapshot()).credentialSources[FIRST_CLOUD],
+    appSettingsView(await store.snapshot()).credentialSources[FIRST_CLOUD],
     CREDENTIAL_SOURCE.NONE,
     "a provider with no key must report nothing",
   );
@@ -803,23 +864,15 @@ test("keeps both keys when two providers are saved at once", async (t) => {
 
   assert.equal(await store.readApiKey(FIRST_CLOUD), "first-cloud-key");
   assert.equal(await store.readApiKey(SECOND_CLOUD), "second-cloud-key");
-  assert.deepEqual(JSON.parse(await readSettingsFile(directory)), {
-    version: 2,
-    apiKeys: {
-      [FIRST_CLOUD]: sealed("first-cloud-key"),
-      [SECOND_CLOUD]: sealed("second-cloud-key"),
-    },
-    // Written even at their defaults, so the file states what they are rather
-    // than leaving them to be inferred from an absence.
-    showInDock: false,
-    voiceCaptions: false,
-    duckOtherMedia: true,
-    preferBuiltInMicrophone: true,
-    quietDuringMeetings: true,
-    shareUsageData: true,
-    sessionReplay: true,
-    showOnAllDisplays: false,
-  });
+  assert.deepEqual(
+    JSON.parse(await readSettingsFile(directory)),
+    expectedPersistedSettings({
+      apiKeys: {
+        [FIRST_CLOUD]: sealed("first-cloud-key"),
+        [SECOND_CLOUD]: sealed("second-cloud-key"),
+      },
+    }),
+  );
   const reopened = storeIn(directory, { providers: TEST_PROVIDERS });
   assert.equal(await reopened.readApiKey(FIRST_CLOUD), "first-cloud-key");
   assert.equal(await reopened.readApiKey(SECOND_CLOUD), "second-cloud-key");
@@ -830,7 +883,7 @@ test("reports nothing for a provider this store does not know", async (t) => {
   const store = storeIn(directory, { providers: [FIRST_CLOUD_PROVIDER] });
 
   assert.equal(await store.readApiKey(SECOND_CLOUD), undefined);
-  assert.equal((await store.snapshot()).credentialSources[SECOND_CLOUD], undefined);
+  assert.equal(appSettingsView(await store.snapshot()).credentialSources[SECOND_CLOUD], undefined);
 });
 
 test("falls back to an API key from the environment", async (t) => {
@@ -839,7 +892,7 @@ test("falls back to an API key from the environment", async (t) => {
     environment: { [TEST_ENVIRONMENT_VARIABLE.API_TOKEN]: `  ${TEST_API_KEY}  ` },
   });
 
-  const settings = await store.snapshot();
+  const settings = appSettingsView(await store.snapshot());
 
   assert.equal(settings.credentialSources[CONDUCTOR], CREDENTIAL_SOURCE.ENVIRONMENT);
   assert.equal(await store.readApiKey(CONDUCTOR), TEST_API_KEY);
@@ -883,7 +936,10 @@ test("holds a key only in the form its provider says it issues", async (t) => {
   assert.equal(await store.readApiKey(THIRD_CLOUD), undefined);
   // The same rule holds a key read from the environment, so a shell profile is
   // not a way around it.
-  assert.equal(refused.settings.credentialSources[THIRD_CLOUD], CREDENTIAL_SOURCE.NONE);
+  assert.equal(
+    appSettingsView(refused.settings).credentialSources[THIRD_CLOUD],
+    CREDENTIAL_SOURCE.NONE,
+  );
 
   const accepted = await store.setApiKey(THIRD_CLOUD, "current_third-cloud-key");
   assert.equal(accepted.reason, undefined);
@@ -905,7 +961,7 @@ test("stops honouring a stored key the moment its provider names a form it is no
 
   assert.equal(await store.readApiKey(THIRD_CLOUD), undefined);
   assert.equal(
-    (await store.snapshot()).credentialSources[THIRD_CLOUD],
+    appSettingsView(await store.snapshot()).credentialSources[THIRD_CLOUD],
     CREDENTIAL_SOURCE.NONE,
     // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
     "a key the provider no longer accepts must not read as connected",
@@ -919,8 +975,8 @@ test("refuses to store a key when encrypted storage is unavailable", async (t) =
   const { settings, reason } = await store.setApiKey(CONDUCTOR, TEST_API_KEY);
 
   assert.match(reason ?? "", /unavailable/);
-  assert.equal(settings.secretStorage, SECRET_STORAGE.UNAVAILABLE);
-  assert.equal(settings.credentialSources[CONDUCTOR], CREDENTIAL_SOURCE.NONE);
+  assert.equal(appSettingsView(settings).secretStorage, SECRET_STORAGE.UNAVAILABLE);
+  assert.equal(appSettingsView(settings).credentialSources[CONDUCTOR], CREDENTIAL_SOURCE.NONE);
   await assert.rejects(() => readSettingsFile(directory), /ENOENT/);
 });
 
@@ -929,7 +985,7 @@ test("asks the cipher nothing on a launch with no key to protect", async (t) => 
   const cipher = countingCipher();
   const store = storeIn(directory, { cipher });
 
-  const settings = await store.snapshot();
+  const settings = appSettingsView(await store.snapshot());
 
   assert.equal(await store.readApiKey(CONDUCTOR), undefined);
   assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
@@ -946,7 +1002,7 @@ test("asks the cipher nothing to clear a key", async (t) => {
 
   assert.equal(reason, undefined);
   assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
-  assert.equal(settings.secretStorage, SECRET_STORAGE.UNKNOWN);
+  assert.equal(appSettingsView(settings).secretStorage, SECRET_STORAGE.UNKNOWN);
 });
 
 test("asks once when a key is stored and reports that answer from then on", async (t) => {
@@ -955,10 +1011,10 @@ test("asks once when a key is stored and reports that answer from then on", asyn
   const store = storeIn(directory, { cipher });
 
   const { settings } = await store.setApiKey(CONDUCTOR, TEST_API_KEY);
-  const afterwards = await store.snapshot();
+  const afterwards = appSettingsView(await store.snapshot());
   await store.setApiKey(CONDUCTOR, `${TEST_API_KEY}-rotated`);
 
-  assert.equal(settings.secretStorage, SECRET_STORAGE.AVAILABLE);
+  assert.equal(appSettingsView(settings).secretStorage, SECRET_STORAGE.AVAILABLE);
   assert.equal(afterwards.secretStorage, SECRET_STORAGE.AVAILABLE);
   // Once per run, however many keys pass through it.
   assert.equal(cipher.calls.isAvailable, 1);
@@ -991,7 +1047,10 @@ test("ignores a stored key that can no longer be decrypted", async (t) => {
   const store = storeIn(directory);
 
   assert.equal(await store.readApiKey(CONDUCTOR), undefined);
-  assert.equal((await store.snapshot()).credentialSources[CONDUCTOR], CREDENTIAL_SOURCE.NONE);
+  assert.equal(
+    appSettingsView(await store.snapshot()).credentialSources[CONDUCTOR],
+    CREDENTIAL_SOURCE.NONE,
+  );
 });
 
 test("keeps a Conductor key stored by an earlier version working", async (t) => {
@@ -1004,7 +1063,7 @@ test("keeps a Conductor key stored by an earlier version working", async (t) => 
 
   assert.equal(await store.readApiKey(CONDUCTOR), TEST_API_KEY);
   assert.equal(
-    (await store.snapshot()).credentialSources[CONDUCTOR],
+    appSettingsView(await store.snapshot()).credentialSources[CONDUCTOR],
     CREDENTIAL_SOURCE.ENCRYPTED_FILE,
   );
 
@@ -1013,18 +1072,12 @@ test("keeps a Conductor key stored by an earlier version working", async (t) => 
   await store.setApiKey(CONDUCTOR, "conductor-replacement-key");
   const persisted: unknown = JSON.parse(await readSettingsFile(directory));
 
-  assert.deepEqual(persisted, {
-    version: 2,
-    apiKeys: { [CONDUCTOR]: sealed("conductor-replacement-key") },
-    showInDock: false,
-    voiceCaptions: false,
-    duckOtherMedia: true,
-    preferBuiltInMicrophone: true,
-    quietDuringMeetings: true,
-    shareUsageData: true,
-    sessionReplay: true,
-    showOnAllDisplays: false,
-  });
+  assert.deepEqual(
+    persisted,
+    expectedPersistedSettings({
+      apiKeys: { [CONDUCTOR]: sealed("conductor-replacement-key") },
+    }),
+  );
   assert.equal(await storeIn(directory).readApiKey(CONDUCTOR), "conductor-replacement-key");
 });
 
@@ -1039,18 +1092,12 @@ test("carries a key belonging to a provider this build does not know", async (t)
   await storeIn(directory).setApiKey(CONDUCTOR, TEST_API_KEY);
   const persisted: unknown = JSON.parse(await readSettingsFile(directory));
 
-  assert.deepEqual(persisted, {
-    version: 2,
-    apiKeys: { "later-cloud": sealed("later-cloud-key"), [CONDUCTOR]: sealed(TEST_API_KEY) },
-    showInDock: false,
-    voiceCaptions: false,
-    duckOtherMedia: true,
-    preferBuiltInMicrophone: true,
-    quietDuringMeetings: true,
-    shareUsageData: true,
-    sessionReplay: true,
-    showOnAllDisplays: false,
-  });
+  assert.deepEqual(
+    persisted,
+    expectedPersistedSettings({
+      apiKeys: { "later-cloud": sealed("later-cloud-key"), [CONDUCTOR]: sealed(TEST_API_KEY) },
+    }),
+  );
 });
 
 test("drops the retired menu bar preference on the next settings write", async (t) => {
@@ -1072,26 +1119,20 @@ test("keeps Luke out of the Dock until asked, and remembers the answer", async (
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
 
-  assert.equal((await store.snapshot()).showInDock, false);
+  assert.equal(appSettingsView(await store.snapshot()).showInDock, false);
 
   const { settings, reason } = await store.set(APP_SETTING_SCHEMA.showInDock.field, true);
 
   assert.equal(reason, undefined);
-  assert.equal(settings.showInDock, true);
-  assert.deepEqual(JSON.parse(await readSettingsFile(directory)), {
-    version: 2,
-    apiKeys: {},
-    showInDock: true,
-    voiceCaptions: false,
-    duckOtherMedia: true,
-    preferBuiltInMicrophone: true,
-    quietDuringMeetings: true,
-    shareUsageData: true,
-    sessionReplay: true,
-    showOnAllDisplays: false,
-  });
+  assert.equal(appSettingsView(settings).showInDock, true);
+  assert.deepEqual(
+    JSON.parse(await readSettingsFile(directory)),
+    expectedPersistedSettings({
+      showInDock: true,
+    }),
+  );
   // The choice outlives the run that heard it.
-  assert.equal((await storeIn(directory).snapshot()).showInDock, true);
+  assert.equal(appSettingsView(await storeIn(directory).snapshot()).showInDock, true);
 });
 
 test("changes the Dock preference without touching the cipher", async (t) => {
@@ -1103,9 +1144,9 @@ test("changes the Dock preference without touching the cipher", async (t) => {
 
   const { settings } = await store.set(APP_SETTING_SCHEMA.showInDock.field, true);
 
-  assert.equal(settings.showInDock, true);
+  assert.equal(appSettingsView(settings).showInDock, true);
   assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
-  assert.equal(settings.secretStorage, SECRET_STORAGE.UNKNOWN);
+  assert.equal(appSettingsView(settings).secretStorage, SECRET_STORAGE.UNKNOWN);
 });
 
 test("decides the Dock icon from the file alone, never the keychain", async (t) => {
@@ -1135,14 +1176,14 @@ test("keeps Luke out of the Dock when the file says something a boolean is not",
     JSON.stringify({ version: 2, apiKeys: {}, showInDock: "always" }),
   );
 
-  assert.equal((await storeIn(directory).snapshot()).showInDock, false);
+  assert.equal(appSettingsView(await storeIn(directory).snapshot()).showInDock, false);
 });
 
 test("reports the default voice until one is chosen", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
 
-  assert.equal((await store.snapshot()).voice, REALTIME_DEFAULTS.VOICE);
+  assert.equal(appSettingsView(await store.snapshot()).voice, REALTIME_DEFAULTS.VOICE);
   assert.equal(await store.get(APP_SETTING_SCHEMA.voice.field), undefined);
 });
 
@@ -1157,7 +1198,7 @@ test("stores the chosen voice plainly and reads it back from a new store instanc
   );
 
   assert.equal(reason, undefined);
-  assert.equal(settings.voice, REALTIME_VOICE.MARIN);
+  assert.equal(appSettingsView(settings).voice, REALTIME_VOICE.MARIN);
   // A preference is not a credential, so choosing one never reaches the
   // Keychain — and never raises its permission dialog.
   assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
@@ -1170,17 +1211,17 @@ test("prefers the chosen voice over the environment, and the environment over th
     environment: { LUKE_REALTIME_VOICE: REALTIME_VOICE.SAGE },
   });
 
-  assert.equal((await store.snapshot()).voice, REALTIME_VOICE.SAGE);
+  assert.equal(appSettingsView(await store.snapshot()).voice, REALTIME_VOICE.SAGE);
   // The environment names the voice only until the user does, so it is
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // reported in the snapshot but never as something the user stored.
   assert.equal(await store.get(APP_SETTING_SCHEMA.voice.field), undefined);
 
   await store.set(APP_SETTING_SCHEMA.voice.field, REALTIME_VOICE.MARIN);
-  assert.equal((await store.snapshot()).voice, REALTIME_VOICE.MARIN);
+  assert.equal(appSettingsView(await store.snapshot()).voice, REALTIME_VOICE.MARIN);
 
   await store.set(APP_SETTING_SCHEMA.voice.field, undefined);
-  assert.equal((await store.snapshot()).voice, REALTIME_VOICE.SAGE);
+  assert.equal(appSettingsView(await store.snapshot()).voice, REALTIME_VOICE.SAGE);
 });
 
 test("ignores a stored or environment voice this build does not offer", async (t) => {
@@ -1192,14 +1233,14 @@ test("ignores a stored or environment voice this build does not offer", async (t
   const store = storeIn(directory, { environment: { LUKE_REALTIME_VOICE: "baritone" } });
 
   assert.equal(await store.get(APP_SETTING_SCHEMA.voice.field), undefined);
-  assert.equal((await store.snapshot()).voice, REALTIME_DEFAULTS.VOICE);
+  assert.equal(appSettingsView(await store.snapshot()).voice, REALTIME_DEFAULTS.VOICE);
 });
 
 test("reports the natural pace until one is chosen", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
 
-  assert.equal((await store.snapshot()).voiceSpeed, REALTIME_DEFAULTS.SPEED);
+  assert.equal(appSettingsView(await store.snapshot()).voiceSpeed, REALTIME_DEFAULTS.SPEED);
   assert.equal(await store.get(APP_SETTING_SCHEMA.voiceSpeed.field), undefined);
 });
 
@@ -1214,7 +1255,7 @@ test("stores the chosen pace plainly and reads it back from a new store instance
   );
 
   assert.equal(reason, undefined);
-  assert.equal(settings.voiceSpeed, REALTIME_VOICE_SPEED.QUICK);
+  assert.equal(appSettingsView(settings).voiceSpeed, REALTIME_VOICE_SPEED.QUICK);
   // A preference is not a credential, so choosing one never reaches the
   // Keychain — and never raises its permission dialog.
   assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
@@ -1230,14 +1271,14 @@ test("prefers the chosen pace over the environment, and the environment over the
     environment: { LUKE_REALTIME_SPEED: String(REALTIME_VOICE_SPEED.SLOW) },
   });
 
-  assert.equal((await store.snapshot()).voiceSpeed, REALTIME_VOICE_SPEED.SLOW);
+  assert.equal(appSettingsView(await store.snapshot()).voiceSpeed, REALTIME_VOICE_SPEED.SLOW);
   assert.equal(await store.get(APP_SETTING_SCHEMA.voiceSpeed.field), undefined);
 
   await store.set(APP_SETTING_SCHEMA.voiceSpeed.field, REALTIME_VOICE_SPEED.FAST);
-  assert.equal((await store.snapshot()).voiceSpeed, REALTIME_VOICE_SPEED.FAST);
+  assert.equal(appSettingsView(await store.snapshot()).voiceSpeed, REALTIME_VOICE_SPEED.FAST);
 
   await store.set(APP_SETTING_SCHEMA.voiceSpeed.field, undefined);
-  assert.equal((await store.snapshot()).voiceSpeed, REALTIME_VOICE_SPEED.SLOW);
+  assert.equal(appSettingsView(await store.snapshot()).voiceSpeed, REALTIME_VOICE_SPEED.SLOW);
 });
 
 test("ignores a stored or environment pace this build does not offer", async (t) => {
@@ -1249,7 +1290,7 @@ test("ignores a stored or environment pace this build does not offer", async (t)
   const store = storeIn(directory, { environment: { LUKE_REALTIME_SPEED: "0.1" } });
 
   assert.equal(await store.get(APP_SETTING_SCHEMA.voiceSpeed.field), undefined);
-  assert.equal((await store.snapshot()).voiceSpeed, REALTIME_DEFAULTS.SPEED);
+  assert.equal(appSettingsView(await store.snapshot()).voiceSpeed, REALTIME_DEFAULTS.SPEED);
 });
 
 test("reports no talk-key chord until one is chosen", async (t) => {
@@ -1257,7 +1298,7 @@ test("reports no talk-key chord until one is chosen", async (t) => {
   const store = storeIn(directory);
 
   assert.equal(await store.get(APP_SETTING_SCHEMA.voiceHotkey.field), undefined);
-  assert.equal((await store.snapshot()).voiceHotkey, undefined);
+  assert.equal(appSettingsView(await store.snapshot()).voiceHotkey, undefined);
 });
 
 test("stores the chosen talk-key chord plainly and reads it back from a new store instance", async (t) => {
@@ -1271,7 +1312,7 @@ test("stores the chosen talk-key chord plainly and reads it back from a new stor
   );
 
   assert.equal(reason, undefined);
-  assert.equal(settings.voiceHotkey, "Shift+Command+L");
+  assert.equal(appSettingsView(settings).voiceHotkey, "Shift+Command+L");
   // A preference is not a credential, so choosing one never reaches the
   // Keychain — and never raises its permission dialog.
   assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
@@ -1288,7 +1329,7 @@ test("clearing the talk-key chord returns to no choice at all", async (t) => {
   await store.set(APP_SETTING_SCHEMA.voiceHotkey.field, "Shift+Command+L");
   const { settings } = await store.set(APP_SETTING_SCHEMA.voiceHotkey.field, undefined);
 
-  assert.equal(settings.voiceHotkey, undefined);
+  assert.equal(appSettingsView(settings).voiceHotkey, undefined);
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // Absent from the file rather than stored as an empty value: reset is the
   // absence of a choice, and a reopened store must read it the same way.
@@ -1306,7 +1347,7 @@ test("ignores a stored talk-key chord this build cannot register", async (t) => 
   // A hand-edited chord the registrars would refuse is dropped rather than
   // carried: honouring it would claim a key nothing was ever told about.
   assert.equal(await store.get(APP_SETTING_SCHEMA.voiceHotkey.field), undefined);
-  assert.equal((await store.snapshot()).voiceHotkey, undefined);
+  assert.equal(appSettingsView(await store.snapshot()).voiceHotkey, undefined);
 });
 
 test("stores the chosen ask-key chord on the talk key's terms and reads it back", async (t) => {
@@ -1315,12 +1356,12 @@ test("stores the chosen ask-key chord on the talk key's terms and reads it back"
   const store = storeIn(directory, { cipher });
 
   assert.equal(await store.get(APP_SETTING_SCHEMA.askHotkey.field), undefined);
-  assert.equal((await store.snapshot()).askHotkey, undefined);
+  assert.equal(appSettingsView(await store.snapshot()).askHotkey, undefined);
 
   const { settings, reason } = await store.set(APP_SETTING_SCHEMA.askHotkey.field, "Control+Alt+K");
 
   assert.equal(reason, undefined);
-  assert.equal(settings.askHotkey, "Control+Alt+K");
+  assert.equal(appSettingsView(settings).askHotkey, "Control+Alt+K");
   // A preference is not a credential, so choosing one never reaches the
   // Keychain — and never raises its permission dialog.
   assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
@@ -1334,7 +1375,7 @@ test("clearing the ask-key chord returns to no choice at all", async (t) => {
   await store.set(APP_SETTING_SCHEMA.askHotkey.field, "Control+Alt+K");
   const { settings } = await store.set(APP_SETTING_SCHEMA.askHotkey.field, undefined);
 
-  assert.equal(settings.askHotkey, undefined);
+  assert.equal(appSettingsView(settings).askHotkey, undefined);
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // Absent from the file rather than stored as an empty value: reset is the
   // absence of a choice, and a reopened store must read it the same way.
@@ -1352,7 +1393,7 @@ test("ignores a stored ask-key chord this build cannot register", async (t) => {
   // A hand-edited chord the registrar would refuse is dropped rather than
   // carried: honouring it would claim a key nothing was ever told about.
   assert.equal(await store.get(APP_SETTING_SCHEMA.askHotkey.field), undefined);
-  assert.equal((await store.snapshot()).askHotkey, undefined);
+  assert.equal(appSettingsView(await store.snapshot()).askHotkey, undefined);
 });
 
 test("stores the chosen stop-key chord on the other keys' terms and reads it back", async (t) => {
@@ -1361,7 +1402,7 @@ test("stores the chosen stop-key chord on the other keys' terms and reads it bac
   const store = storeIn(directory, { cipher });
 
   assert.equal(await store.get(APP_SETTING_SCHEMA.stopHotkey.field), undefined);
-  assert.equal((await store.snapshot()).stopHotkey, undefined);
+  assert.equal(appSettingsView(await store.snapshot()).stopHotkey, undefined);
 
   const { settings, reason } = await store.set(
     APP_SETTING_SCHEMA.stopHotkey.field,
@@ -1369,7 +1410,7 @@ test("stores the chosen stop-key chord on the other keys' terms and reads it bac
   );
 
   assert.equal(reason, undefined);
-  assert.equal(settings.stopHotkey, "Control+Alt+X");
+  assert.equal(appSettingsView(settings).stopHotkey, "Control+Alt+X");
   // A preference is not a credential, so choosing one never reaches the
   // Keychain — and never raises its permission dialog.
   assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
@@ -1383,7 +1424,7 @@ test("clearing the stop-key chord returns to no choice at all", async (t) => {
   await store.set(APP_SETTING_SCHEMA.stopHotkey.field, "Control+Alt+X");
   const { settings } = await store.set(APP_SETTING_SCHEMA.stopHotkey.field, undefined);
 
-  assert.equal(settings.stopHotkey, undefined);
+  assert.equal(appSettingsView(settings).stopHotkey, undefined);
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // Absent from the file rather than stored as an empty value: reset is the
   // absence of a choice, and a reopened store must read it the same way.
@@ -1401,7 +1442,7 @@ test("ignores a stored stop-key chord this build cannot register", async (t) => 
   // A hand-edited chord the registrar would refuse is dropped rather than
   // carried: honouring it would claim a key nothing was ever told about.
   assert.equal(await store.get(APP_SETTING_SCHEMA.stopHotkey.field), undefined);
-  assert.equal((await store.snapshot()).stopHotkey, undefined);
+  assert.equal(appSettingsView(await store.snapshot()).stopHotkey, undefined);
 });
 
 test("the three Luke keys survive each other's writes", async (t) => {
@@ -1435,13 +1476,13 @@ test("keeps Luke to the main display until asked, and remembers the answer", asy
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
 
-  assert.equal((await store.snapshot()).showOnAllDisplays, false);
+  assert.equal(appSettingsView(await store.snapshot()).showOnAllDisplays, false);
   assert.equal(await store.get(APP_SETTING_SCHEMA.showOnAllDisplays.field), false);
 
   const { settings, reason } = await store.set(APP_SETTING_SCHEMA.showOnAllDisplays.field, true);
 
   assert.equal(reason, undefined);
-  assert.equal(settings.showOnAllDisplays, true);
+  assert.equal(appSettingsView(settings).showOnAllDisplays, true);
   // The choice outlives the run that heard it.
   assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.showOnAllDisplays.field), true);
 });
@@ -1455,7 +1496,7 @@ test("changes the displays preference without touching the cipher", async (t) =>
 
   const { settings } = await store.set(APP_SETTING_SCHEMA.showOnAllDisplays.field, true);
 
-  assert.equal(settings.showOnAllDisplays, true);
+  assert.equal(appSettingsView(settings).showOnAllDisplays, true);
   assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
 });
 
@@ -1473,7 +1514,7 @@ test("draws the bubble until a form is chosen, and remembers the choice", async 
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
 
-  assert.equal((await store.snapshot()).formFactor, PANEL_FORM_FACTOR.BUBBLE);
+  assert.equal(appSettingsView(await store.snapshot()).formFactor, PANEL_FORM_FACTOR.BUBBLE);
   assert.equal(await store.get(APP_SETTING_SCHEMA.formFactor.field), undefined);
 
   const { settings, reason } = await store.set(
@@ -1482,7 +1523,7 @@ test("draws the bubble until a form is chosen, and remembers the choice", async 
   );
 
   assert.equal(reason, undefined);
-  assert.equal(settings.formFactor, PANEL_FORM_FACTOR.NOTCH);
+  assert.equal(appSettingsView(settings).formFactor, PANEL_FORM_FACTOR.NOTCH);
   // The choice outlives the run that heard it.
   assert.equal(
     await storeIn(directory).get(APP_SETTING_SCHEMA.formFactor.field),
@@ -1500,7 +1541,7 @@ test("changes the form without touching the cipher", async (t) => {
     PANEL_FORM_FACTOR.NOTCH,
   );
 
-  assert.equal(settings.formFactor, PANEL_FORM_FACTOR.NOTCH);
+  assert.equal(appSettingsView(settings).formFactor, PANEL_FORM_FACTOR.NOTCH);
   assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
 });
 
@@ -1512,7 +1553,10 @@ test("ignores a stored form this build does not draw", async (t) => {
   );
 
   assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.formFactor.field), undefined);
-  assert.equal((await storeIn(directory).snapshot()).formFactor, PANEL_FORM_FACTOR.BUBBLE);
+  assert.equal(
+    appSettingsView(await storeIn(directory).snapshot()).formFactor,
+    PANEL_FORM_FACTOR.BUBBLE,
+  );
 });
 
 test("asks each time until a default workspace provider is chosen, and remembers the choice", async (t) => {
@@ -1521,7 +1565,7 @@ test("asks each time until a default workspace provider is chosen, and remembers
 
   // Unset on purpose: the default is always a choice the user made — by hand
   // or by their first creation — never one made for them.
-  assert.equal((await store.snapshot()).defaultWorkspaceProvider, undefined);
+  assert.equal(appSettingsView(await store.snapshot()).defaultWorkspaceProvider, undefined);
   assert.equal(await store.get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field), undefined);
 
   const { settings, reason } = await store.set(
@@ -1530,7 +1574,7 @@ test("asks each time until a default workspace provider is chosen, and remembers
   );
 
   assert.equal(reason, undefined);
-  assert.equal(settings.defaultWorkspaceProvider, PROVIDER_ID.CONDUCTOR);
+  assert.equal(appSettingsView(settings).defaultWorkspaceProvider, PROVIDER_ID.CONDUCTOR);
   // The choice outlives the run that heard it.
   assert.equal(
     await storeIn(directory).get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field),
@@ -1539,7 +1583,7 @@ test("asks each time until a default workspace provider is chosen, and remembers
 
   // Clearing is returning to asking each time, not storing an answer.
   const cleared = await store.set(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field, undefined);
-  assert.equal(cleared.settings.defaultWorkspaceProvider, undefined);
+  assert.equal(appSettingsView(cleared.settings).defaultWorkspaceProvider, undefined);
   assert.equal(
     await storeIn(directory).get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field),
     undefined,
@@ -1556,7 +1600,7 @@ test("changes the default workspace provider without touching the cipher", async
     PROVIDER_ID.CURSOR,
   );
 
-  assert.equal(settings.defaultWorkspaceProvider, PROVIDER_ID.CURSOR);
+  assert.equal(appSettingsView(settings).defaultWorkspaceProvider, PROVIDER_ID.CURSOR);
   assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
 });
 
@@ -1571,7 +1615,10 @@ test("ignores a stored default provider this build does not know", async (t) => 
     await storeIn(directory).get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field),
     undefined,
   );
-  assert.equal((await storeIn(directory).snapshot()).defaultWorkspaceProvider, undefined);
+  assert.equal(
+    appSettingsView(await storeIn(directory).snapshot()).defaultWorkspaceProvider,
+    undefined,
+  );
 });
 
 test("stores Superset workspace and agent defaults without touching credentials", async (t) => {
@@ -1586,12 +1633,13 @@ test("stores Superset workspace and agent defaults without touching credentials"
     { agent: "codex" },
   );
 
-  assert.equal(settings.defaultWorkspaceProvider, "superset");
-  assert.equal(settings.workspaceProjectDefaults?.superset, "project-1");
-  assert.deepEqual(settings.workspaceAgentDefaults?.superset, { agent: "codex" });
-  assert.deepEqual((await storeIn(directory).snapshot()).workspaceAgentDefaults?.superset, {
-    agent: "codex",
-  });
+  assert.equal(appSettingsView(settings).defaultWorkspaceProvider, "superset");
+  assert.equal(appSettingsView(settings).workspaceProjectDefaults?.superset, "project-1");
+  assert.deepEqual(appSettingsView(settings).workspaceAgentDefaults?.superset, { agent: "codex" });
+  assert.deepEqual(
+    appSettingsView(await storeIn(directory).snapshot()).workspaceAgentDefaults?.superset,
+    { agent: "codex" },
+  );
 });
 
 test("folds a Superset agent default stored apart by an earlier build into the record", async (t) => {
@@ -1602,9 +1650,10 @@ test("folds a Superset agent default stored apart by an earlier build into the r
   );
 
   const store = storeIn(directory);
-  assert.deepEqual((await store.snapshot()).workspaceAgentDefaults?.superset, { agent: "codex" });
+  assert.deepEqual(appSettingsView(await store.snapshot()).workspaceAgentDefaults?.superset, {
+    agent: "codex",
+  });
 
-  // The next write carries the folded entry and drops the legacy field.
   await store.set(APP_SETTING_SCHEMA.voiceCaptions.field, true);
   const written = JSON.parse(await fs.readFile(path.join(directory, SETTINGS_FILE_NAME), "utf8"));
   assert.equal(written.supersetAgentDefault, undefined);
@@ -1623,9 +1672,10 @@ test("a folded Superset entry outranks the legacy field it replaced", async (t) 
     }),
   );
 
-  assert.deepEqual((await storeIn(directory).snapshot()).workspaceAgentDefaults?.superset, {
-    agent: "claude-code",
-  });
+  assert.deepEqual(
+    appSettingsView(await storeIn(directory).snapshot()).workspaceAgentDefaults?.superset,
+    { agent: "claude-code" },
+  );
 });
 
 test("ignores a legacy Superset agent default that is not an agent kind", async (t) => {
@@ -1635,21 +1685,26 @@ test("ignores a legacy Superset agent default that is not an agent kind", async 
     JSON.stringify({ version: 2, apiKeys: {}, supersetAgentDefault: "Not An Agent!" }),
   );
 
-  assert.equal((await storeIn(directory).snapshot()).workspaceAgentDefaults, undefined);
+  assert.equal(
+    appSettingsView(await storeIn(directory).snapshot()).workspaceAgentDefaults,
+    undefined,
+  );
 });
 
 test("starts new workspaces on the provider's defaults until a pairing is chosen", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
 
-  assert.equal((await store.snapshot()).workspaceAgentDefaults, undefined);
+  assert.equal(appSettingsView(await store.snapshot()).workspaceAgentDefaults, undefined);
   assert.equal(await readWorkspaceAgentDefault(store, PROVIDER_ID.CONDUCTOR), undefined);
 
   const chosen = { agent: "claude", model: "sonnet", effort: "max" };
   const { settings, reason } = await setWorkspaceAgentDefault(store, PROVIDER_ID.CONDUCTOR, chosen);
 
   assert.equal(reason, undefined);
-  assert.deepEqual(settings.workspaceAgentDefaults, { [PROVIDER_ID.CONDUCTOR]: chosen });
+  assert.deepEqual(appSettingsView(settings).workspaceAgentDefaults, {
+    [PROVIDER_ID.CONDUCTOR]: chosen,
+  });
   // The choice outlives the run that heard it.
   assert.deepEqual(
     await readWorkspaceAgentDefault(storeIn(directory), PROVIDER_ID.CONDUCTOR),
@@ -1658,7 +1713,7 @@ test("starts new workspaces on the provider's defaults until a pairing is chosen
 
   // Clearing returns that one provider to its own defaults.
   const cleared = await setWorkspaceAgentDefault(store, PROVIDER_ID.CONDUCTOR, undefined);
-  assert.equal(cleared.settings.workspaceAgentDefaults, undefined);
+  assert.equal(appSettingsView(cleared.settings).workspaceAgentDefaults, undefined);
   assert.equal(
     await readWorkspaceAgentDefault(storeIn(directory), PROVIDER_ID.CONDUCTOR),
     undefined,
@@ -1675,7 +1730,7 @@ test("changes a workspace agent pairing without touching the cipher", async (t) 
     model: "gpt-5.6-sol",
   });
 
-  assert.deepEqual(settings.workspaceAgentDefaults?.[PROVIDER_ID.CONDUCTOR], {
+  assert.deepEqual(appSettingsView(settings).workspaceAgentDefaults?.[PROVIDER_ID.CONDUCTOR], {
     agent: "codex",
     model: "gpt-5.6-sol",
   });
@@ -1688,7 +1743,7 @@ test("lets the first creation choose each provider's project until one is chosen
 
   // Unset on purpose, the provider default's own terms: the default is always
   // a choice the user made — by hand or by their first creation there.
-  assert.equal((await store.snapshot()).workspaceProjectDefaults, undefined);
+  assert.equal(appSettingsView(await store.snapshot()).workspaceProjectDefaults, undefined);
   assert.equal(await readWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR), undefined);
 
   const { settings, reason } = await setWorkspaceProjectDefault(
@@ -1698,7 +1753,9 @@ test("lets the first creation choose each provider's project until one is chosen
   );
 
   assert.equal(reason, undefined);
-  assert.deepEqual(settings.workspaceProjectDefaults, { [PROVIDER_ID.CONDUCTOR]: "proj-1" });
+  assert.deepEqual(appSettingsView(settings).workspaceProjectDefaults, {
+    [PROVIDER_ID.CONDUCTOR]: "proj-1",
+  });
   // The choice outlives the run that heard it.
   assert.equal(
     await readWorkspaceProjectDefault(storeIn(directory), PROVIDER_ID.CONDUCTOR),
@@ -1707,7 +1764,7 @@ test("lets the first creation choose each provider's project until one is chosen
 
   // Clearing returns that one provider to its first creation choosing.
   const cleared = await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, undefined);
-  assert.equal(cleared.settings.workspaceProjectDefaults, undefined);
+  assert.equal(appSettingsView(cleared.settings).workspaceProjectDefaults, undefined);
   assert.equal(
     await readWorkspaceProjectDefault(storeIn(directory), PROVIDER_ID.CONDUCTOR),
     undefined,
@@ -1721,7 +1778,9 @@ test("changes a default project without touching the cipher", async (t) => {
 
   const { settings } = await setWorkspaceProjectDefault(store, PROVIDER_ID.CURSOR, "proj-2");
 
-  assert.deepEqual(settings.workspaceProjectDefaults, { [PROVIDER_ID.CURSOR]: "proj-2" });
+  assert.deepEqual(appSettingsView(settings).workspaceProjectDefaults, {
+    [PROVIDER_ID.CURSOR]: "proj-2",
+  });
   assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
 });
 
@@ -1732,13 +1791,13 @@ test("keeps one provider's default project apart from another's", async (t) => {
   await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "proj-1");
   const { settings } = await setWorkspaceProjectDefault(store, PROVIDER_ID.CURSOR, "proj-2");
 
-  assert.deepEqual(settings.workspaceProjectDefaults, {
+  assert.deepEqual(appSettingsView(settings).workspaceProjectDefaults, {
     [PROVIDER_ID.CONDUCTOR]: "proj-1",
     [PROVIDER_ID.CURSOR]: "proj-2",
   });
 
   const cleared = await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, undefined);
-  assert.deepEqual(cleared.settings.workspaceProjectDefaults, {
+  assert.deepEqual(appSettingsView(cleared.settings).workspaceProjectDefaults, {
     [PROVIDER_ID.CURSOR]: "proj-2",
   });
 });
@@ -1755,7 +1814,7 @@ test("forgetting a default no provider offers survives the reload it was written
   // the entry it forgets is one an earlier launch wrote.
   await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, undefined);
 
-  assert.deepEqual((await storeIn(directory).snapshot()).workspaceProjectDefaults, {
+  assert.deepEqual(appSettingsView(await storeIn(directory).snapshot()).workspaceProjectDefaults, {
     [PROVIDER_ID.CURSOR]: "proj-2",
   });
   assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
@@ -1773,7 +1832,10 @@ test("a stale cleanup cannot clear a newer project default", async (t) => {
   );
 
   assert.equal(stale.cleared, false);
-  assert.equal(stale.settings.workspaceProjectDefaults?.[PROVIDER_ID.CONDUCTOR], "proj-new");
+  assert.equal(
+    appSettingsView(stale.settings).workspaceProjectDefaults?.[PROVIDER_ID.CONDUCTOR],
+    "proj-new",
+  );
 });
 
 test("an entry the field cannot hold is refused rather than quietly dropped", () => {
@@ -1814,9 +1876,6 @@ test("an entry the field cannot hold is refused rather than quietly dropped", ()
     }),
     { valid: true, value: { agent: "codex", model: "gpt-5.6-sol" } },
   );
-
-  // Superset's entry is the kind alone: a model beside it names a choice the
-  // provider does not document, so it is refused rather than trimmed.
   assert.equal(
     settingEntryGuard(APP_SETTING_SCHEMA.workspaceAgentDefaults.field, "superset", {
       agent: "codex",
@@ -1857,7 +1916,7 @@ test("overlapping default projects each survive the other's write", async (t) =>
     setWorkspaceProjectDefault(store, PROVIDER_ID.CURSOR, "proj-2"),
   ]);
 
-  assert.deepEqual((await storeIn(directory).snapshot()).workspaceProjectDefaults, {
+  assert.deepEqual(appSettingsView(await storeIn(directory).snapshot()).workspaceProjectDefaults, {
     [PROVIDER_ID.CONDUCTOR]: "proj-1",
     [PROVIDER_ID.CURSOR]: "proj-2",
   });
@@ -1875,7 +1934,7 @@ test("an overlapping clear forgets its own entry and no other", async (t) => {
     setWorkspaceProjectDefault(store, PROVIDER_ID.CURSOR, "proj-2"),
   ]);
 
-  assert.deepEqual((await storeIn(directory).snapshot()).workspaceProjectDefaults, {
+  assert.deepEqual(appSettingsView(await storeIn(directory).snapshot()).workspaceProjectDefaults, {
     [PROVIDER_ID.CURSOR]: "proj-2",
   });
 });
@@ -1901,7 +1960,7 @@ test("ignores stored default projects this store cannot hold", async (t) => {
 
   const store = storeIn(directory);
   assert.equal(await readWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR), undefined);
-  assert.equal((await store.snapshot()).workspaceProjectDefaults, undefined);
+  assert.equal(appSettingsView(await store.snapshot()).workspaceProjectDefaults, undefined);
 });
 
 test("ignores a stored pairing this build's table does not list", async (t) => {
@@ -1913,20 +1972,18 @@ test("ignores a stored pairing this build's table does not list", async (t) => {
       apiKeys: {},
       workspaceAgentDefaults: {
         // A listed model under an effort its agent does not document, a
-        // provider the table documents nothing for, a provider this build
-        // does not know, and a model beside a Superset kind, which documents
-        // no model choice: each names a request no endpoint takes.
+        // provider the table documents nothing for, and a provider this build
+        // does not know: each names a request no endpoint takes.
         conductor: { agent: "claude", model: "sonnet", effort: "sideways" },
         cursor: { agent: "cursor", model: "composer-2.5" },
         "someone-else": { agent: "claude", model: "sonnet" },
-        superset: { agent: "codex", model: "gpt-5.5" },
       },
     }),
   );
 
   const store = storeIn(directory);
   assert.equal(await readWorkspaceAgentDefault(store, PROVIDER_ID.CONDUCTOR), undefined);
-  assert.equal((await store.snapshot()).workspaceAgentDefaults, undefined);
+  assert.equal(appSettingsView(await store.snapshot()).workspaceAgentDefaults, undefined);
 });
 
 test("the voice and a stored key survive each other's writes", async (t) => {
@@ -1949,7 +2006,10 @@ test("recovers from a corrupt settings file", async (t) => {
 
   const { settings } = await store.setApiKey(CONDUCTOR, TEST_API_KEY);
 
-  assert.equal(settings.credentialSources[CONDUCTOR], CREDENTIAL_SOURCE.ENCRYPTED_FILE);
+  assert.equal(
+    appSettingsView(settings).credentialSources[CONDUCTOR],
+    CREDENTIAL_SOURCE.ENCRYPTED_FILE,
+  );
   assert.equal(await store.readApiKey(CONDUCTOR), TEST_API_KEY);
 });
 
@@ -1964,10 +2024,10 @@ test("a voice reset forgets the voice, pace, captions, and duck in one act", asy
   const { settings, reason } = await store.resetSettings(SETTINGS_RESET_SCOPE.VOICE);
 
   assert.equal(reason, undefined);
-  assert.equal(settings.voice, REALTIME_DEFAULTS.VOICE);
-  assert.equal(settings.voiceSpeed, REALTIME_DEFAULTS.SPEED);
-  assert.equal(settings.voiceCaptions, false);
-  assert.equal(settings.duckOtherMedia, true);
+  assert.equal(appSettingsView(settings).voice, REALTIME_DEFAULTS.VOICE);
+  assert.equal(appSettingsView(settings).voiceSpeed, REALTIME_DEFAULTS.SPEED);
+  assert.equal(appSettingsView(settings).voiceCaptions, false);
+  assert.equal(appSettingsView(settings).duckOtherMedia, true);
   // The choices are forgotten rather than restated, so a default that moves
   // in a later build moves these settings with it.
   assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.voice.field), undefined);
@@ -1985,7 +2045,7 @@ test("a voice reset returns to the environment's voice where one stands behind t
 
   // Forgetting the choice is the reset's whole meaning: what stands afterwards
   // is whatever would have stood had none been made.
-  assert.equal(settings.voice, REALTIME_VOICE.SAGE);
+  assert.equal(appSettingsView(settings).voice, REALTIME_VOICE.SAGE);
   assert.equal(await store.get(APP_SETTING_SCHEMA.voice.field), undefined);
 });
 
@@ -2000,12 +2060,12 @@ test("an appearance reset returns Luke's stances without touching the voice page
   const { settings, reason } = await store.resetSettings(SETTINGS_RESET_SCOPE.APPEARANCE);
 
   assert.equal(reason, undefined);
-  assert.equal(settings.showInDock, false);
-  assert.equal(settings.showOnAllDisplays, false);
-  assert.equal(settings.formFactor, PANEL_FORM_FACTOR.BUBBLE);
+  assert.equal(appSettingsView(settings).showInDock, false);
+  assert.equal(appSettingsView(settings).showOnAllDisplays, false);
+  assert.equal(appSettingsView(settings).formFactor, PANEL_FORM_FACTOR.BUBBLE);
   assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.formFactor.field), undefined);
   // One scope's reset is that scope's alone.
-  assert.equal(settings.voice, REALTIME_VOICE.MARIN);
+  assert.equal(appSettingsView(settings).voice, REALTIME_VOICE.MARIN);
 });
 
 test("a shortcuts reset forgets all three chords at once", async (t) => {
@@ -2018,9 +2078,9 @@ test("a shortcuts reset forgets all three chords at once", async (t) => {
   const { settings, reason } = await store.resetSettings(SETTINGS_RESET_SCOPE.SHORTCUTS);
 
   assert.equal(reason, undefined);
-  assert.equal(settings.voiceHotkey, undefined);
-  assert.equal(settings.askHotkey, undefined);
-  assert.equal(settings.stopHotkey, undefined);
+  assert.equal(appSettingsView(settings).voiceHotkey, undefined);
+  assert.equal(appSettingsView(settings).askHotkey, undefined);
+  assert.equal(appSettingsView(settings).stopHotkey, undefined);
   assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.voiceHotkey.field), undefined);
   assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.askHotkey.field), undefined);
   assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.stopHotkey.field), undefined);
@@ -2040,12 +2100,11 @@ test("a workspaces reset forgets the provider and project defaults but never the
   const { settings, reason } = await store.resetSettings(SETTINGS_RESET_SCOPE.WORKSPACES);
 
   assert.equal(reason, undefined);
-  assert.equal(settings.defaultWorkspaceProvider, undefined);
-  assert.equal(settings.workspaceProjectDefaults, undefined);
-  // The pairing lives on its provider's own row, whose menu already offers
-  // the provider's default — no reset here may reach it, and Superset's kind
-  // stands with the Conductor pairing.
-  assert.deepEqual(settings.workspaceAgentDefaults, {
+  assert.equal(appSettingsView(settings).defaultWorkspaceProvider, undefined);
+  assert.equal(appSettingsView(settings).workspaceProjectDefaults, undefined);
+  // Agent choices live on their provider rows, whose own menus offer the
+  // defaults — no reset here may reach either one.
+  assert.deepEqual(appSettingsView(settings).workspaceAgentDefaults, {
     [PROVIDER_ID.CONDUCTOR]: pairing,
     superset: { agent: "codex" },
   });
@@ -2058,7 +2117,7 @@ test("a reset of settings already at their defaults writes nothing", async (t) =
   const { settings, reason } = await store.resetSettings(SETTINGS_RESET_SCOPE.VOICE);
 
   assert.equal(reason, undefined);
-  assert.equal(settings.voice, REALTIME_DEFAULTS.VOICE);
+  assert.equal(appSettingsView(settings).voice, REALTIME_DEFAULTS.VOICE);
   // Nothing changed, so no file was created — the same silence every setter
   // keeps when asked for the value it already holds.
   await assert.rejects(readSettingsFile(directory));
@@ -2120,7 +2179,7 @@ test("with no key stored there is only one source to run on", async (t) => {
   await store.setAccount(TEST_ACCOUNT);
 
   assert.equal(await store.readVoiceSource(), VOICE_SOURCE.ACCOUNT);
-  assert.equal((await store.snapshot()).voiceSource, VOICE_SOURCE.ACCOUNT);
+  assert.equal(appSettingsView(await store.snapshot()).voiceSource, VOICE_SOURCE.ACCOUNT);
 
   // Choosing the key with none stored changes nothing about what runs: there
   // is nothing there to spend, and a resolution that answered otherwise would
@@ -2143,13 +2202,13 @@ test("connecting the voice key chooses it, and the allowance can take it back", 
   await store.set(APP_SETTING_SCHEMA.voiceSource.field, VOICE_SOURCE.ACCOUNT);
   assert.equal(await store.readVoiceSource(), VOICE_SOURCE.ACCOUNT);
   assert.equal(
-    (await store.snapshot()).credentialSources[CREDENTIAL_PROVIDER_ID.OPENAI],
+    appSettingsView(await store.snapshot()).credentialSources[CREDENTIAL_PROVIDER_ID.OPENAI],
     CREDENTIAL_SOURCE.ENCRYPTED_FILE,
     "parking on the allowance keeps the key",
   );
   // Voice is still on: what changed is whose credential answers, not whether
   // one does.
-  assert.equal((await store.snapshot()).voiceAvailable, true);
+  assert.equal(appSettingsView(await store.snapshot()).voiceAvailable, true);
 });
 
 test("a choice that would start spending a key is never made by fallback", async (t) => {
@@ -2219,7 +2278,10 @@ test("a grant is stored encrypted, and read back only in the main process", asyn
   });
 
   // The row says connected the way every other credential's row does.
-  assert.equal(settings.credentialSources[CONSENT_SERVICE], CREDENTIAL_SOURCE.ENCRYPTED_FILE);
+  assert.equal(
+    appSettingsView(settings).credentialSources[CONSENT_SERVICE],
+    CREDENTIAL_SOURCE.ENCRYPTED_FILE,
+  );
   // Neither token is anywhere in what a renderer receives.
   const rendered = JSON.stringify(settings);
   assert.doesNotMatch(rendered, /granted-access/);
@@ -2249,7 +2311,10 @@ test("clearing a grant leaves nothing behind, and keys alone", async (t) => {
   await store.setGrant(CONSENT_SERVICE, { accessToken: "granted-access", expiresAt: 1 });
 
   const { settings } = await store.clearGrant(CONSENT_SERVICE);
-  assert.equal(settings.credentialSources[CONSENT_SERVICE], CREDENTIAL_SOURCE.NONE);
+  assert.equal(
+    appSettingsView(settings).credentialSources[CONSENT_SERVICE],
+    CREDENTIAL_SOURCE.NONE,
+  );
   assert.equal(await store.readGrant(CONSENT_SERVICE), undefined);
   // Disconnecting one service never disturbs another's credential.
   assert.equal(await store.readApiKey(FIRST_CLOUD), "first-cloud-key");
@@ -2273,7 +2338,7 @@ test("a key left by a build that asked for one is dropped, never carried", async
   );
   const store = storeIn(directory, { providers: TEST_PROVIDERS });
 
-  const settings = await store.snapshot();
+  const settings = appSettingsView(await store.snapshot());
   assert.equal(settings.credentialSources[CONSENT_SERVICE], CREDENTIAL_SOURCE.NONE);
   assert.equal(await store.readApiKey(CONSENT_SERVICE), undefined);
 

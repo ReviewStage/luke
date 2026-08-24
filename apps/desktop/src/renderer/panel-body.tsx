@@ -1,6 +1,6 @@
+import { SessionRow as PanelSessionRow, ProviderMark } from "@sidecar/panel";
 import {
   isSessionApplicationId,
-  PROVIDER_ACT_RESULT_STATUS,
   type ProviderControlResult,
   type ProviderMessageResult,
   SESSION_APPLICATION_SCOPE,
@@ -10,23 +10,18 @@ import {
 } from "@sidecar/session";
 import { SESSION_URGENCY } from "@sidecar/surface";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
+import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import { useCallback, useRef, useState } from "react";
-import {
-  ACCOUNT_STATUS,
-  type AccountProvider,
-  type AccountSnapshot,
-  SESSION_OPEN_RESULT_STATUS,
-  type SessionOpenResult,
-} from "#shared/contracts";
+import { ACCOUNT_STATUS, type AccountProvider, type AccountSnapshot } from "#shared/wire/account";
+import type { SessionOpenResult } from "#shared/wire/session";
 import { type AskHandler, AskLuke } from "./ask-luke";
 import { PANEL_TAB, type PanelTab, TabBar } from "./panel-tabs";
-import { AudioBadge, CloudBadge, ProviderMark } from "./provider-marks";
 import {
   type ArrangedSessions,
   actsOnWorkspace,
-  type DisplaySession,
   observedAgoLabel,
   type SessionAction,
+  type SessionArrangement,
   type SessionFilter,
   type SessionListRun,
   type SessionView,
@@ -46,8 +41,6 @@ import {
   WORKSPACE_TRAY_ID_ATTRIBUTE,
 } from "./session-motion";
 import {
-  BranchGlyph,
-  CheckGlyph,
   EmptyState,
   ListeningGlyph,
   SessionOptions,
@@ -71,14 +64,14 @@ import { useMeasuredHeight } from "./use-measured-height";
 
 /** Handed up rather than performed here: the row knows sessions, not IPC. */
 export interface SessionWriteHandlers {
-  sendMessage: (session: DisplaySession, text: string) => Promise<ProviderMessageResult>;
-  runAction: (session: DisplaySession, actionId: string) => Promise<ProviderControlResult>;
+  sendMessage: (session: SessionView, text: string) => Promise<ProviderMessageResult>;
+  runAction: (session: SessionView, actionId: string) => Promise<ProviderControlResult>;
   /**
    * Not a provider write — the address is handed to the operating system —
    * but it rides the same shape so the chip can report a refusal on the same
    * line the other acts answer on.
    */
-  openChange: (session: DisplaySession) => Promise<SessionOpenResult>;
+  openChange: (session: SessionView) => Promise<SessionOpenResult>;
 }
 
 /**
@@ -91,8 +84,8 @@ const COMPOSE_PLACEHOLDER = "Send a follow-up…";
 
 /** One outcome line under the actions, said once and replaced by the next. */
 function feedbackFor(result: ProviderMessageResult | ProviderControlResult): string | undefined {
-  if (result.status === PROVIDER_ACT_RESULT_STATUS.REJECTED) return result.reason;
-  if (result.status === PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED) {
+  if (result.status === ACT_RESULT_STATUS.REJECTED) return result.reason;
+  if (result.status === ACT_RESULT_STATUS.UNSUPPORTED) {
     return "The session has moved on and no longer takes this.";
   }
   return undefined;
@@ -160,7 +153,7 @@ function SessionRowActions({
   withChange,
   writes,
 }: {
-  session: DisplaySession;
+  session: SessionView;
   /** The actions this row draws itself: inside a tray, the workspace-level
    * ones live in the tray's own header. */
   actions: readonly SessionAction[];
@@ -195,7 +188,7 @@ function SessionRowActions({
     setFeedback(undefined);
     try {
       const result = await writes.sendMessage(session, text);
-      if (result.status === PROVIDER_ACT_RESULT_STATUS.ACCEPTED) {
+      if (result.status === ACT_RESULT_STATUS.ACCEPTED) {
         // The draft has become the session's; the field emptying for the next
         // message is the whole confirmation, so no line repeats it.
         setDraft("");
@@ -221,7 +214,7 @@ function SessionRowActions({
         // until its provider is observed again, and a control that seems to have
         // done nothing would be pressed a second time.
         setFeedback(
-          result.status === PROVIDER_ACT_RESULT_STATUS.ACCEPTED
+          result.status === ACT_RESULT_STATUS.ACCEPTED
             ? `${session.provider} accepted`
             : feedbackFor(result),
         );
@@ -236,9 +229,9 @@ function SessionRowActions({
   const openChange = useCallback(async () => {
     const result = await writes.openChange(session);
     // An opened page is its own answer; only a failure needs the line.
-    if (result.status === SESSION_OPEN_RESULT_STATUS.OPENED) return;
+    if (result.status === ACT_RESULT_STATUS.ACCEPTED) return;
     setFeedback(
-      result.status === SESSION_OPEN_RESULT_STATUS.REJECTED
+      result.status === ACT_RESULT_STATUS.REJECTED
         ? result.reason
         : "The session no longer reports a pull request.",
     );
@@ -367,7 +360,7 @@ function WorkspaceTrayActs({
         // its provider is observed again, and a control that seems to have
         // done nothing would be pressed a second time.
         setFeedback(
-          result.status === PROVIDER_ACT_RESULT_STATUS.ACCEPTED
+          result.status === ACT_RESULT_STATUS.ACCEPTED
             ? `${act.session.provider} accepted`
             : feedbackFor(result),
         );
@@ -383,9 +376,9 @@ function WorkspaceTrayActs({
     if (!change) return;
     const result = await writes.openChange(change.session);
     // An opened page is its own answer; only a failure needs the line.
-    if (result.status === SESSION_OPEN_RESULT_STATUS.OPENED) return;
+    if (result.status === ACT_RESULT_STATUS.ACCEPTED) return;
     setFeedback(
-      result.status === SESSION_OPEN_RESULT_STATUS.REJECTED
+      result.status === ACT_RESULT_STATUS.REJECTED
         ? result.reason
         : "The workspace no longer reports a pull request.",
     );
@@ -457,7 +450,7 @@ function SessionRow({
   onOpenApplication,
   writes,
 }: {
-  session: DisplaySession;
+  session: SessionView;
   index: number;
   now: number;
   leaving: boolean;
@@ -468,8 +461,8 @@ function SessionRow({
   changeInTrayHeader?: boolean;
   /** The search's words, marked on the row's lines so it says why it matched. */
   highlight?: readonly string[] | undefined;
-  onOpen: (session: DisplaySession) => void;
-  onOpenApplication: (session: DisplaySession, applicationId: SessionApplicationId) => void;
+  onOpen: (session: SessionView) => void;
+  onOpenApplication: (session: SessionView, applicationId: SessionApplicationId) => void;
   writes: SessionWriteHandlers;
 }): React.JSX.Element {
   // Inside a tray, an action aimed at the whole workspace is the tray
@@ -525,106 +518,80 @@ function SessionRow({
   // The mark is the agent having the conversation; the provider only stands
   // in where a host did not say which agent runs the chat.
   const markName = session.agent ?? session.provider;
-  const content = (
-    <>
-      <span
-        className={
-          session.realtimeVoice && session.location === SESSION_LOCATION.CLOUD
-            ? "row-mark row-mark-audio"
-            : "row-mark"
-        }
-        title={session.model ? `${markName} · ${session.model}` : markName}
-      >
-        <span className="visually-hidden">{markName}</span>
-        <ProviderMark providerId={session.agentId ?? session.providerId} />
-        {session.location === SESSION_LOCATION.CLOUD ? <CloudBadge /> : null}
-        {session.realtimeVoice ? <AudioBadge /> : null}
-      </span>
-      <span className="row-copy">
-        <strong>
-          {session.openable && hasOpenableApplication ? (
+  const applicationMarks =
+    applications.length > 0 ? (
+      <span className="row-applications">
+        {applications.map((application) => {
+          const applicationId = application.id;
+          return application.openable && isSessionApplicationId(applicationId) ? (
             <button
               type="button"
-              className="row-title-open"
-              title={`Open in ${openLabel}`}
+              className="row-application row-application-button"
+              title={`Open in ${application.name}`}
+              aria-label={`Open in ${application.name}`}
+              key={applicationId}
               onClick={(event) => {
                 event.stopPropagation();
-                onOpen(session);
+                onOpenApplication(session, applicationId);
               }}
             >
-              <Highlighted text={title} tokens={highlight} />
+              <ProviderMark providerId={applicationId} />
             </button>
           ) : (
+            <span
+              className="row-application"
+              role="img"
+              aria-label={`Also in ${application.name}`}
+              title={application.name}
+              key={applicationId}
+            >
+              <ProviderMark providerId={applicationId} />
+            </span>
+          );
+        })}
+      </span>
+    ) : undefined;
+  const content = (
+    <PanelSessionRow
+      providerId={session.agentId ?? session.providerId}
+      cloud={session.location === SESSION_LOCATION.CLOUD}
+      realtimeVoice={session.realtimeVoice}
+      markName={markName}
+      model={session.model}
+      title={
+        session.openable && hasOpenableApplication ? (
+          <button
+            type="button"
+            className="row-title-open"
+            title={`Open in ${openLabel}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpen(session);
+            }}
+          >
             <Highlighted text={title} tokens={highlight} />
-          )}
-        </strong>
-        <small className="row-doing">
-          {session.urgency === SESSION_URGENCY.WORKING ? (
-            <span className="row-spinner" aria-hidden="true" />
-          ) : null}
-          {session.urgency === SESSION_URGENCY.COMPLETE ? <CheckGlyph /> : null}
-          {/* The line truncates without a disclosure, so the hover is the one
-              way the rest of a long sentence can be read at all. */}
-          <span className="row-doing-text" title={session.detail}>
-            {session.detail === session.label ? null : (
-              <span className="visually-hidden">{session.label}. </span>
-            )}
-            <Highlighted text={session.detail} tokens={highlight} />
-          </span>
-        </small>
-        {place || session.diff ? (
-          <small className="row-place" title={place ?? session.diff}>
-            {session.branch ? <BranchGlyph /> : null}
-            {place ? (
-              <span>
-                <Highlighted text={place} tokens={highlight} />
-              </span>
-            ) : null}
-            {/* The change's size rides the place line: both say what the work
-                touched, and a session with neither spends no line on it. */}
-            {session.diff ? <span className="row-diff">{session.diff}</span> : null}
-          </small>
-        ) : null}
-      </span>
-      <span className="row-side">
-        <small className="row-when">
-          {session.noticeAsk ? <ListeningGlyph ask={session.noticeAsk} /> : null}
-          {observedAgoLabel(session.observedAt, now)}
-        </small>
-        {applications.length > 0 ? (
-          <span className="row-applications">
-            {applications.map((application) => {
-              const applicationId = application.id;
-              return application.openable && isSessionApplicationId(applicationId) ? (
-                <button
-                  type="button"
-                  className="row-application row-application-button"
-                  title={`Open in ${application.name}`}
-                  aria-label={`Open in ${application.name}`}
-                  key={applicationId}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onOpenApplication(session, applicationId);
-                  }}
-                >
-                  <ProviderMark providerId={applicationId} />
-                </button>
-              ) : (
-                <span
-                  className="row-application"
-                  role="img"
-                  aria-label={`Also in ${application.name}`}
-                  title={application.name}
-                  key={applicationId}
-                >
-                  <ProviderMark providerId={applicationId} />
-                </span>
-              );
-            })}
-          </span>
-        ) : null}
-      </span>
-    </>
+          </button>
+        ) : (
+          <Highlighted text={title} tokens={highlight} />
+        )
+      }
+      detail={<Highlighted text={session.detail} tokens={highlight} />}
+      detailTitle={session.detail}
+      detailPrefix={
+        session.detail === session.label ? undefined : (
+          <span className="visually-hidden">{session.label}. </span>
+        )
+      }
+      working={session.urgency === SESSION_URGENCY.WORKING}
+      complete={session.urgency === SESSION_URGENCY.COMPLETE}
+      place={place ? <Highlighted text={place} tokens={highlight} /> : undefined}
+      placeTitle={place ?? session.diff}
+      branch={Boolean(session.branch)}
+      diff={session.diff}
+      when={observedAgoLabel(session.observedAt, now)}
+      notice={session.noticeAsk ? <ListeningGlyph ask={session.noticeAsk} /> : undefined}
+      applications={applicationMarks}
+    />
   );
 
   if (!withActions && !hasOpenableApplication) {
@@ -730,7 +697,7 @@ function SessionRun({
   /** The tray's living chats, in drawn order — what the header's acts are
    * read from and carried through. A leaving row's session is already gone
    * from the model, so it can neither offer an act nor carry one. */
-  sessions: readonly DisplaySession[];
+  sessions: readonly SessionView[];
   /** The workspace's one pull request, when the header carries it. Handed in
    * rather than read here, because the rows suppressing their own chips must
    * answer to the same reading. */
@@ -798,8 +765,8 @@ export interface PanelBodyProps {
   /** Why the last sign-in ended without landing, for the gate to show. */
   signInFailure?: string;
   list: ArrangedSessions;
-  view: SessionView;
-  onViewChange: (view: SessionView) => void;
+  view: SessionArrangement;
+  onViewChange: (view: SessionArrangement) => void;
   /** Carries a toggled filter selection; unlike a view change it leaves the sheet open. */
   onFiltersChange: (filters: readonly SessionFilter[]) => void;
   /**
@@ -809,9 +776,9 @@ export interface PanelBodyProps {
    */
   now: number;
   /** Sends the pressed session to its provider, wherever the provider keeps it. */
-  onOpenSession: (session: DisplaySession) => void;
+  onOpenSession: (session: SessionView) => void;
   /** Opens one exact app association without exposing its address to the renderer. */
-  onOpenSessionApplication: (session: DisplaySession, applicationId: SessionApplicationId) => void;
+  onOpenSessionApplication: (session: SessionView, applicationId: SessionApplicationId) => void;
   /** Carries a typed reply or an advertised action to the session's provider. */
   writes: SessionWriteHandlers;
   /** Carries a typed ask to Luke's own conversation, answering why it could not go. */
@@ -987,9 +954,7 @@ export function PanelBody({
                 const tray = runDrawsTray(run);
                 const living = run.indexes
                   .map((index) => rows[index])
-                  .filter(
-                    (row): row is RosterRow<DisplaySession> => row !== undefined && !row.leaving,
-                  )
+                  .filter((row): row is RosterRow<SessionView> => row !== undefined && !row.leaving)
                   .map((row) => row.item);
                 const change = tray ? workspaceTrayChange(living) : undefined;
                 return (

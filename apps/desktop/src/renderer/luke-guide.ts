@@ -25,7 +25,7 @@ import {
   CREDENTIAL_PROVIDER_ID,
   CREDENTIAL_PROVIDERS,
   VOICE_CREDENTIAL_PROVIDER_ID,
-} from "@sidecar/credentials";
+} from "@sidecar/credentials/vocabulary";
 import {
   APP_UPDATE_ACT,
   APP_UPDATE_WAIT,
@@ -44,24 +44,20 @@ import {
   settingGuideEntries,
   spokenSettingValue,
 } from "@sidecar/settings";
-import type { WireRecord } from "@sidecar/wire";
-import type {
-  AccountSnapshot,
-  AppBridge,
-  AppSettings,
-  CredentialSource,
-  MicrophoneStatus,
-  SettingsUpdateResult,
-  UpdateSnapshot,
-} from "#shared/contracts";
+import { ACT_RESULT_STATUS, type ActResult } from "@sidecar/wire";
+import type { AppBridge } from "#shared/bridge";
+import type { AccountSnapshot, CredentialSource } from "#shared/wire/account";
 import {
   ACCOUNT_PROVIDER,
   ACCOUNT_STATUS,
-  CLI_CONNECTION,
   CREDENTIAL_SOURCE,
   SECRET_STORAGE,
-  UPDATE_STATUS,
-} from "#shared/contracts";
+} from "#shared/wire/account";
+import type { MicrophoneStatus } from "#shared/wire/audio";
+import type { AppSettings, AppSettingsView, SettingsUpdateResult } from "#shared/wire/settings";
+import { CLI_CONNECTION } from "#shared/wire/settings";
+import type { UpdateSnapshot } from "#shared/wire/update";
+import { UPDATE_STATUS } from "#shared/wire/update";
 import { UPDATE_ROW_ACTION, type UpdateRowAction, updateRow } from "./update-row";
 
 export type { AppSettingId } from "@sidecar/settings";
@@ -91,7 +87,7 @@ const CONDUCTOR_DEFAULT_CHOICE = "Conductor's default";
 export interface LukeGuideInput {
   /** Optional only for pure callers that predate accounts; the app always supplies it. */
   account?: AccountSnapshot;
-  settings: AppSettings;
+  settings: AppSettingsView;
   /** Where the build stands, for the guide's Updates entry. */
   update: UpdateSnapshot;
   /** Whether a Realtime credential can be minted at all. */
@@ -181,7 +177,7 @@ const CODEX_CLOUD_CONNECTION_WORD = {
   [CLI_CONNECTION.UNKNOWN]: "not checked yet",
 };
 
-function providersFact(settings: AppSettings): AppGuideFact {
+function providersFact(settings: AppSettingsView): AppGuideFact {
   const roster = CLOUD_AGENT_PROVIDER_LIST.map(
     (provider) =>
       `${provider.displayName} (${connectionWord(settings.credentialSources[provider.id])})`,
@@ -203,7 +199,7 @@ function providersFact(settings: AppSettings): AppGuideFact {
  * An integration a build does not carry contributes no fact at all: a
  * capability the guide describes is one Luke will claim to have.
  */
-function integrationFacts(settings: AppSettings): AppGuideFact[] {
+function integrationFacts(settings: AppSettingsView): AppGuideFact[] {
   const facts: AppGuideFact[] = [];
   const linearProvider = CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.LINEAR];
   if (settings.linearSignInAvailable) {
@@ -282,7 +278,7 @@ function integrationFacts(settings: AppSettings): AppGuideFact[] {
  * The one key that is neither an agent's nor an integration's, described where
  * its row lives: at the top of the Voice page, beside the feature it turns on.
  */
-function voiceKeyFact(settings: AppSettings, voiceAvailable: boolean): AppGuideFact {
+function voiceKeyFact(settings: AppSettingsView, voiceAvailable: boolean): AppGuideFact {
   const openai = CREDENTIAL_PROVIDERS[VOICE_CREDENTIAL_PROVIDER_ID];
   const source = settings.credentialSources[openai.id];
   const hosted = voiceAvailable && source === CREDENTIAL_SOURCE.NONE;
@@ -660,11 +656,11 @@ function spokenWorkspaceAgentSelection(
   value: string,
   namedEffort: string | undefined,
   current: WorkspaceAgentSelection | undefined,
-): { selection: WorkspaceAgentSelection | undefined } | { refused: string } {
+): { selection: WorkspaceAgentSelection | undefined } | { refusal: string } {
   if (settingId === APP_SETTING_ID.WORKSPACE_AGENT_MODEL) {
     if (value === CONDUCTOR_DEFAULT_CHOICE) {
       if (namedEffort !== undefined) {
-        return { refused: "Conductor's own default takes no effort level." };
+        return { refusal: "Conductor's own default takes no effort level." };
       }
       return { selection: undefined };
     }
@@ -678,13 +674,13 @@ function spokenWorkspaceAgentSelection(
         })),
       )
       .find((candidate) => candidate.label === value);
-    if (!named) return { refused: "No documented Conductor model goes by that name." };
+    if (!named) return { refusal: "No documented Conductor model goes by that name." };
     if (namedEffort !== undefined) {
       // Composed against the table itself, not the guide the call was
       // validated against: this half answers to what an endpoint takes.
       if (!named.efforts.includes(namedEffort)) {
         return {
-          refused:
+          refusal:
             named.efforts.length > 0
               ? `That model's effort is one of ${named.efforts.join(", ")}.`
               : "That model takes no effort level.",
@@ -702,7 +698,7 @@ function spokenWorkspaceAgentSelection(
   // without one is a guide ahead of the state; refuse honestly.
   if (!current) {
     return {
-      refused: "No model is chosen for new Conductor agents, so there is no effort to set.",
+      refusal: "No model is chosen for new Conductor agents, so there is no effort to set.",
     };
   }
   if (value === CONDUCTOR_DEFAULT_CHOICE) {
@@ -713,7 +709,8 @@ function spokenWorkspaceAgentSelection(
 
 /**
  * Carries one validated spoken settings change to the same bridge calls the
- * settings rows use, and reports what became of it in words Luke can say.
+ * settings rows use, and returns the canonical act result. Human-readable
+ * history belongs to the act's ACTS narration, not to a second result shape.
  * The store answers with the settings it actually holds either way, and
  * `onSettings` hands that snapshot back to the panel so the switch on screen
  * and the sentence out loud never disagree. The current settings ride along
@@ -723,8 +720,8 @@ export async function applySpokenSetting(
   bridge: Pick<AppBridge, "updateSetting" | "updateSettingEntry">,
   action: { setting: AppGuideSetting; value: string; effort?: string },
   onSettings: (settings: AppSettings) => void,
-  current?: AppSettings,
-): Promise<WireRecord> {
+  current?: AppSettingsView,
+): Promise<ActResult> {
   let result: SettingsUpdateResult;
   if (
     action.setting.id === APP_SETTING_ID.WORKSPACE_AGENT_MODEL ||
@@ -736,7 +733,9 @@ export async function applySpokenSetting(
       action.effort,
       current?.workspaceAgentDefaults?.[PROVIDER_ID.CONDUCTOR],
     );
-    if ("refused" in composed) return { status: "refused", reason: composed.refused };
+    if ("refusal" in composed) {
+      return { status: ACT_RESULT_STATUS.REJECTED, reason: composed.refusal };
+    }
     result = await bridge.updateSettingEntry(
       APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
       PROVIDER_ID.CONDUCTOR,
@@ -744,31 +743,30 @@ export async function applySpokenSetting(
     );
   } else {
     if (!isAppSettingId(action.setting.id)) {
-      return { status: "refused", reason: "That setting cannot be changed from here." };
+      return {
+        status: ACT_RESULT_STATUS.REJECTED,
+        reason: "That setting cannot be changed from here.",
+      };
     }
     const field = settingFieldForGuideId(action.setting.id);
     if (!field) {
-      return { status: "refused", reason: "That setting cannot be changed from here." };
+      return {
+        status: ACT_RESULT_STATUS.REJECTED,
+        reason: "That setting cannot be changed from here.",
+      };
     }
     const value = spokenSettingValue(field, action.value);
     if (value === undefined) {
-      return { status: "refused", reason: "That setting cannot be changed from here." };
+      return {
+        status: ACT_RESULT_STATUS.REJECTED,
+        reason: "That setting cannot be changed from here.",
+      };
     }
     result = await bridge.updateSetting(field, value);
   }
   onSettings(result.settings);
-  if (result.reason) return { status: "refused", reason: result.reason };
-  return {
-    status: "changed",
-    setting: action.setting.label,
-    value: action.value,
-    ...(action.effort !== undefined ? { effort: action.effort } : undefined),
-    ...(action.setting.id === APP_SETTING_ID.VOICE
-      ? {
-          note: "The new voice takes over as soon as this reply ends, and the conversation starts afresh in it.",
-        }
-      : action.setting.id === APP_SETTING_ID.VOICE_SPEED
-        ? { note: "The new pace is heard from the next reply on." }
-        : undefined),
-  };
+  if (result.status !== ACT_RESULT_STATUS.ACCEPTED) {
+    return { status: result.status, reason: result.reason };
+  }
+  return { status: ACT_RESULT_STATUS.ACCEPTED };
 }

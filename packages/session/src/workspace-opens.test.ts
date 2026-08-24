@@ -3,9 +3,9 @@ import test from "node:test";
 import {
   CREATED_WORKSPACE_OPEN_WINDOW_MS,
   CreatedWorkspaceOpenTracker,
-  type NormalizedSession,
   normalizeSession,
   SESSION_STATUS,
+  type Session,
   type SessionProvider,
 } from "@sidecar/session";
 
@@ -13,11 +13,7 @@ const conductor: SessionProvider = { id: "conductor", displayName: "Conductor" }
 const cursor: SessionProvider = { id: "cursor", displayName: "Cursor" };
 const CONDUCTOR_LINK = "conductor://workspaces/workspace-new";
 
-function session(
-  provider: SessionProvider,
-  providerSessionId: string,
-  link?: string,
-): NormalizedSession {
+function session(provider: SessionProvider, providerSessionId: string, link?: string): Session {
   return normalizeSession(provider, {
     providerSessionId,
     title: `Session ${providerSessionId}`,

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials";
+import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
 import {
   APP_PANEL_TAB,
   APP_SETTING_KIND,
@@ -9,14 +9,10 @@ import {
 } from "@sidecar/guide";
 import { REALTIME_VOICE, REALTIME_VOICE_SPEED, SESSION_LIST_ALL } from "@sidecar/realtime";
 import { PANEL_FORM_FACTOR } from "@sidecar/surface";
-import type { AppSettings } from "#shared/contracts";
-import {
-  CLI_CONNECTION,
-  CREDENTIAL_SOURCE,
-  SECRET_STORAGE,
-  UPDATE_STATUS,
-  VOICE_SOURCE,
-} from "#shared/contracts";
+import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "#shared/wire/account";
+import type { AppSettingsView } from "#shared/wire/settings";
+import { APP_SETTING_DEFAULTS, CLI_CONNECTION, VOICE_SOURCE } from "#shared/wire/settings";
+import { UPDATE_STATUS } from "#shared/wire/update";
 import {
   captionRoom,
   ERRAND_TARGET,
@@ -36,8 +32,9 @@ import {
 import { APP_SETTING_ID, buildLukeGuide, isAppSettingId, type LukeGuideInput } from "./luke-guide";
 import { SETTING_PAGE, SETTINGS_PAGE_LABEL } from "./settings-views";
 
-function settings(): AppSettings {
+function settings(): AppSettingsView {
   return {
+    ...APP_SETTING_DEFAULTS,
     credentialSources: {
       [CREDENTIAL_PROVIDER_ID.CONDUCTOR]: CREDENTIAL_SOURCE.NONE,
       [CREDENTIAL_PROVIDER_ID.COPILOT]: CREDENTIAL_SOURCE.NONE,
@@ -183,8 +180,8 @@ test("a search is signed on the magnifier, ahead of whatever else the ask change
   );
 });
 
-test("a refused act is signed nowhere", () => {
-  assert.deepEqual(errandTargets({ kind: "refused", reason: "No such tool exists." }), []);
+test("a rejected act is signed nowhere", () => {
+  assert.deepEqual(errandTargets({ status: "rejected", reason: "No such tool exists." }), []);
 });
 
 test("the flight starts on the face and lands centred on the control", () => {

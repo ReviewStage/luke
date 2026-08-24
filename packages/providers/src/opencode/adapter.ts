@@ -4,6 +4,8 @@ import {
   maximumSessionTitleLength,
   PROVIDER_ID,
   type ProviderSessionObservation,
+  type ProviderTranscriptResult,
+  providerTranscriptResult,
   SESSION_COMPLETION_CAUSE,
   SESSION_STATUS,
   type SessionDetail,
@@ -562,13 +564,15 @@ export class OpenCodeSessionAdapter extends LocalSessionAdapter {
     return this.#legacyObservations();
   }
 
-  override readTranscript(providerSessionId: string): Promise<string | undefined> {
-    return readOpenCodeSessionTranscript({
-      dataDirectory: this.#dataDirectory,
-      providerSessionId,
-      sqlite: this.#sqlite,
-      maximumRenderedLength: this.#transcriptMaximumRenderedLength,
-    });
+  override readTranscript(providerSessionId: string): Promise<ProviderTranscriptResult> {
+    return providerTranscriptResult(
+      readOpenCodeSessionTranscript({
+        dataDirectory: this.#dataDirectory,
+        providerSessionId,
+        sqlite: this.#sqlite,
+        maximumRenderedLength: this.#transcriptMaximumRenderedLength,
+      }),
+    );
   }
 
   /** The session rows, or nothing when neither query fits this database. */

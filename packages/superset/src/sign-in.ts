@@ -1,9 +1,6 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
-import {
-  SUPERSET_SIGN_IN_STAGE,
-  type SupersetSignInSnapshot,
-} from "../../../apps/desktop/src/shared/contracts.js";
 import type { SupersetCli } from "./cli.js";
+import { SUPERSET_SIGN_IN_STAGE, type SupersetSignInSnapshot } from "./sign-in-stage.js";
 
 const SIGN_IN_TIMEOUT_MS = 3 * 60_000;
 const OUTPUT_TAIL_LIMIT = 16_384;

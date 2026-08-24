@@ -1,10 +1,16 @@
 import { openAiAttentionEvaluator, SessionAttentionReviewer } from "@sidecar/attention";
-import { VOICE_CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials";
-import { HOSTED_SERVICE_PATH, HostedAttentionEvaluator } from "@sidecar/hosted";
+import { VOICE_CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
+import { HOSTED_SERVICE_PATH } from "@sidecar/hosted";
 import { type RealtimeDiagnostics, realtimeMintExplanation } from "@sidecar/realtime";
-import type { NormalizedSession, SessionIdentity } from "@sidecar/session";
-import { APP_SETTING_SCHEMA, type AppSettingField, type AppSettingValue } from "@sidecar/settings";
-import { VOICE_SOURCE, type VoiceSource } from "../../../apps/desktop/src/shared/contracts.js";
+import type { Session, SessionIdentity } from "@sidecar/session";
+import {
+  APP_SETTING_SCHEMA,
+  type AppSettingField,
+  type AppSettingValue,
+  VOICE_SOURCE,
+  type VoiceSource,
+} from "@sidecar/settings";
+import { HostedAttentionEvaluator } from "./hosted-attention-evaluator.js";
 import { HostedRealtimeCredentialMinter } from "./hosted-credentials.js";
 import type { RealtimeCredentialMinter } from "./minter.js";
 import { openAiRealtimeCredentials, unavailableRealtimeDiagnostics } from "./openai-credentials.js";
@@ -53,7 +59,7 @@ export interface VoiceCapabilityAssemblerOptions {
   accountSignedIn: () => boolean;
   hostedServiceBaseUrl: string;
   refreshAccount: () => Promise<void>;
-  currentSession: (identity: SessionIdentity) => NormalizedSession | undefined;
+  currentSession: (identity: SessionIdentity) => Session | undefined;
   noticeRequestFor: (identity: SessionIdentity) => string | undefined;
   fetch?: typeof fetch;
   report?: (message: string) => void;

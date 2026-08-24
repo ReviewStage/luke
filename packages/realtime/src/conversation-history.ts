@@ -14,9 +14,9 @@
  * answered with — and the record lives in memory alone, dying with the app.
  */
 
-import type { NormalizedSession, SessionApplicationId, SessionIdentity } from "@sidecar/session";
+import type { Session, SessionIdentity } from "@sidecar/session";
 import { type AttentionSpeech, announcementSummaryText } from "./realtime-protocol.js";
-import { type CarriedSessionAction, dispatchByKind, SESSION_TOOL_KIND } from "./realtime-tools.js";
+import { actNarration, type CarriedSessionAction } from "./realtime-tools.js";
 
 /** What one history line records, which also says who it speaks for. */
 export const CONVERSATION_ENTRY_KIND = {
@@ -128,42 +128,6 @@ export function announcementConversationEntry(
 }
 
 /**
- * How a session is named inside a history line: its observed title, which
- * already travels on the roster. The identity beside the line is what a tool
- * call resolves; the title is only so the line reads as a sentence.
- */
-function sessionName(identity: SessionIdentity, sessions: readonly NormalizedSession[]): string {
-  const session = sessions.find(
-    (candidate) =>
-      candidate.providerId === identity.providerId &&
-      candidate.providerSessionId === identity.providerSessionId,
-  );
-  return session ? `"${session.title}"` : "a session";
-}
-
-/**
- * How the app an open landed in is named inside a history line: the display
- * name the roster listed it under. The id stands in only for a session the
- * roster no longer reports — the line is written at the act, so that is a
- * session retired between the ask and the record.
- */
-function applicationName(
-  identity: SessionIdentity,
-  applicationId: SessionApplicationId,
-  sessions: readonly NormalizedSession[],
-): string {
-  const session = sessions.find(
-    (candidate) =>
-      candidate.providerId === identity.providerId &&
-      candidate.providerSessionId === identity.providerSessionId,
-  );
-  return (
-    session?.applications.find((application) => application.id === applicationId)?.displayName ??
-    applicationId
-  );
-}
-
-/**
  * The history line one carried act leaves behind: the ask, in the words of
  * what was asked — never the outcome, which the reply voicing it records as
  * its own line. A transcript reading is deliberately only the fact that one
@@ -172,31 +136,9 @@ function applicationName(
  */
 export function sessionActConversationEntry(
   action: CarriedSessionAction,
-  sessions: readonly NormalizedSession[],
+  sessions: readonly Session[],
 ): ConversationEntry {
-  const name = "identity" in action ? sessionName(action.identity, sessions) : "a session";
-  const describe = {
-    [SESSION_TOOL_KIND.MESSAGE]: (act) => `sent a message to ${name}: "${act.text}"`,
-    [SESSION_TOOL_KIND.CONTROL]: (act) => `ran "${act.control.label}" on ${name}`,
-    [SESSION_TOOL_KIND.OPEN]: (act) =>
-      act.applicationId
-        ? `opened ${name} in ${applicationName(act.identity, act.applicationId, sessions)}`
-        : `opened ${name}`,
-    [SESSION_TOOL_KIND.NOTICE_REQUEST]: (act) =>
-      `remembered a standing ask about ${name}: "${act.request}"`,
-    [SESSION_TOOL_KIND.NOTICE_WITHDRAW]: () => `withdrew the standing ask about ${name}`,
-    [SESSION_TOOL_KIND.READ_TRANSCRIPT]: () => `read ${name}'s transcript aloud`,
-    [SESSION_TOOL_KIND.CREATE_WORKSPACE]: (act) => `asked ${act.providerId} to create a workspace`,
-    [SESSION_TOOL_KIND.ADD_AGENT]: (act) => `added a ${act.agent} agent to ${name}`,
-    [SESSION_TOOL_KIND.RENAME_WORKSPACE]: (act) =>
-      `renamed the workspace of ${name} to "${act.name}"`,
-    [SESSION_TOOL_KIND.RENAME_SESSION]: (act) => `renamed ${name} to "${act.name}"`,
-  } satisfies {
-    [K in CarriedSessionAction["kind"]]: (
-      act: Extract<CarriedSessionAction, { kind: K }>,
-    ) => string;
-  };
-  const words = dispatchByKind<CarriedSessionAction, string, typeof describe>(action, describe);
+  const words = actNarration(action, sessions);
   const entry: ConversationEntry = { kind: CONVERSATION_ENTRY_KIND.ACT, words };
   if ("identity" in action) entry.identity = action.identity;
   return entry;
@@ -224,7 +166,7 @@ const CONVERSATION_ENTRY_LEAD = {
  */
 export function conversationHistoryText(
   entries: readonly ConversationEntry[],
-  sessions: readonly NormalizedSession[],
+  sessions: readonly Session[],
 ): string | undefined {
   if (entries.length === 0) return undefined;
   return [
