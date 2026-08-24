@@ -5,7 +5,6 @@ import {
   type ProviderSessionObservation,
   SESSION_APPLICATION_ID,
   SESSION_APPLICATION_SCOPE,
-  SESSION_LOCATION,
   type SessionApplication,
 } from "@sidecar/session";
 import {
@@ -16,6 +15,7 @@ import {
   wireRecord,
 } from "@sidecar/wire";
 import { readTextFile } from "../shared/local-session-adapter.js";
+import { WorkspaceHostSnapshot } from "../shared/workspace-host-snapshot.js";
 
 const CMUX_STATE_DIRECTORY_NAME = ".cmuxterm";
 
@@ -70,8 +70,6 @@ interface CmuxSessionContext {
   surfaceId: string;
 }
 
-type SessionContextsByProvider = ReadonlyMap<string, ReadonlyMap<string, CmuxSessionContext>>;
-
 export interface CmuxSessionApplicationReaderOptions {
   stateDirectory?: string;
 }
@@ -93,84 +91,41 @@ function contextFromRecord(value: UnparsedWireValue): CmuxSessionContext | undef
  * transcript. An absent app, an unreadable store, or an unfamiliar shape means
  * no annotation; it can never make the provider's own observation disappear.
  */
-export class CmuxSessionApplicationSnapshot {
-  readonly #sessionsByProvider: SessionContextsByProvider;
-
-  constructor(sessionsByProvider: SessionContextsByProvider = new Map()) {
-    this.#sessionsByProvider = sessionsByProvider;
-  }
-
-  has(providerId: string, providerSessionId: string): boolean {
-    return this.#sessionsByProvider.get(providerId)?.has(providerSessionId) === true;
-  }
+export class CmuxSessionApplicationSnapshot extends WorkspaceHostSnapshot<CmuxSessionContext> {
+  protected override readonly applicationId = SESSION_APPLICATION_ID.CMUX;
 
   /**
    * Adds cmux beside any app associations the provider already reported, with
    * the pane's own `cmux://` address, which also stands in as the row's link
-   * where no other manager gave it one. A sub-agent inherits its nearest
-   * cmux-known ancestor's association: the child runs in the same pane even
-   * though only the parent reached cmux's hooks. cmux names its workspaces
-   * only by identifier, so a matched row keeps whatever grouping another
-   * manager claimed and never groups under cmux.
+   * where no other manager gave it one. A sub-agent runs in the same pane as
+   * its nearest cmux-known ancestor even though only the parent reached
+   * cmux's hooks. cmux names its workspaces only by identifier, so a matched
+   * row keeps whatever grouping another manager claimed and never groups
+   * under cmux.
    */
-  enrich(
-    providerId: string,
-    observations: readonly ProviderSessionObservation[],
-  ): readonly ProviderSessionObservation[] {
-    const cmuxSessions = this.#sessionsByProvider.get(providerId);
-    if (!cmuxSessions) return observations;
-
-    const localObservationsById = new Map(
-      observations
-        .filter((observation) => observation.location !== SESSION_LOCATION.CLOUD)
-        .map((observation) => [observation.providerSessionId, observation] as const),
-    );
-
-    const cmuxContextFor = (
-      observation: ProviderSessionObservation,
-    ): CmuxSessionContext | undefined => {
-      if (observation.location === SESSION_LOCATION.CLOUD) return undefined;
-      let sessionId: string | undefined = observation.providerSessionId;
-      const visited = new Set<string>();
-      while (sessionId && !visited.has(sessionId)) {
-        const context = cmuxSessions.get(sessionId);
-        if (context) return context;
-        visited.add(sessionId);
-        sessionId = text(localObservationsById.get(sessionId)?.parentProviderSessionId);
-      }
-      return undefined;
+  protected override annotate(
+    observation: ProviderSessionObservation,
+    context: CmuxSessionContext,
+  ): ProviderSessionObservation {
+    const applicationLink = cmuxSurfaceLink(context.workspaceId, context.surfaceId);
+    const application: SessionApplication = {
+      id: SESSION_APPLICATION_ID.CMUX,
+      displayName: CMUX_APPLICATION_NAME,
+      scope: SESSION_APPLICATION_SCOPE.SESSION,
+      link: applicationLink,
     };
-
-    return observations.map((observation) => {
-      const context = cmuxContextFor(observation);
-      if (
-        !context ||
-        observation.applications?.some(
-          (application) => application.id === SESSION_APPLICATION_ID.CMUX,
-        )
-      ) {
-        return observation;
-      }
-      const applicationLink = cmuxSurfaceLink(context.workspaceId, context.surfaceId);
-      const application: SessionApplication = {
-        id: SESSION_APPLICATION_ID.CMUX,
-        displayName: CMUX_APPLICATION_NAME,
-        scope: SESSION_APPLICATION_SCOPE.SESSION,
-        link: applicationLink,
-      };
-      // The app that wrote the hook store is the scheme's registered handler,
-      // so the address stands on its own. A link another manager already gave
-      // the row wins as the row's primary press; the cmux association keeps
-      // its own exact pane address independently.
-      const detail = observation.detail?.link
-        ? observation.detail
-        : { ...observation.detail, link: applicationLink };
-      return {
-        ...observation,
-        detail,
-        applications: [...(observation.applications ?? []), application],
-      };
-    });
+    // The app that wrote the hook store is the scheme's registered handler,
+    // so the address stands on its own. A link another manager already gave
+    // the row wins as the row's primary press; the cmux association keeps
+    // its own exact pane address independently.
+    const detail = observation.detail?.link
+      ? observation.detail
+      : { ...observation.detail, link: applicationLink };
+    return {
+      ...observation,
+      detail,
+      applications: [...(observation.applications ?? []), application],
+    };
   }
 }
 
