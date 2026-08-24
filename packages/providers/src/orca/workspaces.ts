@@ -6,7 +6,6 @@ import {
   type ProviderSessionObservation,
   SESSION_APPLICATION_ID,
   SESSION_APPLICATION_SCOPE,
-  SESSION_LOCATION,
   type SessionApplication,
   type SessionProvider,
 } from "@sidecar/session";
@@ -20,6 +19,7 @@ import {
   wireRecord,
 } from "@sidecar/wire";
 import { fileStats, readTextFile, workspaceLabel } from "../shared/local-session-adapter.js";
+import { unclaimedWorkspace, WorkspaceHostSnapshot } from "../shared/workspace-host-snapshot.js";
 
 export const ORCA_APPLICATION_NAME = "Orca";
 
@@ -86,8 +86,6 @@ interface OrcaSessionContext {
   workspaceName?: string;
 }
 
-type SessionContextsByProvider = ReadonlyMap<string, ReadonlyMap<string, OrcaSessionContext>>;
-
 export interface OrcaWorkspaceReaderOptions {
   dataDirectory?: string;
 }
@@ -114,87 +112,40 @@ function worktreePathFromId(worktreeId: string): string | undefined {
  * know means no annotation; it can never make the provider's own observation
  * disappear.
  */
-export class OrcaWorkspaceSnapshot {
-  readonly #sessionsByProvider: SessionContextsByProvider;
-
-  constructor(sessionsByProvider: SessionContextsByProvider = new Map()) {
-    this.#sessionsByProvider = sessionsByProvider;
-  }
-
-  has(providerId: string, providerSessionId: string): boolean {
-    return this.#sessionsByProvider.get(providerId)?.has(providerSessionId) === true;
-  }
+export class OrcaWorkspaceSnapshot extends WorkspaceHostSnapshot<OrcaSessionContext> {
+  protected override readonly applicationId = SESSION_APPLICATION_ID.ORCA;
 
   /**
    * Adds Orca beside any app associations the provider already reported, and
    * groups the chat under the Orca worktree it belongs to, the way a
-   * Superset-managed chat groups under its Superset workspace. Only local
-   * observations can match a local Orca index; a cloud row with a
-   * coincidentally equal provider id is never annotated. A sub-agent inherits
-   * its nearest Orca-known ancestor's association and workspace: the child is
-   * Orca's work even though only the parent is in its index.
+   * Superset-managed chat groups under its Superset workspace. A sub-agent
+   * takes its nearest Orca-known ancestor's worktree: the child is Orca's
+   * work even though only the parent is in its index.
    */
-  enrich(
-    providerId: string,
-    observations: readonly ProviderSessionObservation[],
-  ): readonly ProviderSessionObservation[] {
-    const orcaSessions = this.#sessionsByProvider.get(providerId);
-    if (!orcaSessions) return observations;
-
-    const localObservationsById = new Map(
-      observations
-        .filter((observation) => observation.location !== SESSION_LOCATION.CLOUD)
-        .map((observation) => [observation.providerSessionId, observation] as const),
-    );
-
-    const orcaContextFor = (
-      observation: ProviderSessionObservation,
-    ): OrcaSessionContext | undefined => {
-      if (observation.location === SESSION_LOCATION.CLOUD) return undefined;
-      let sessionId: string | undefined = observation.providerSessionId;
-      const visited = new Set<string>();
-      while (sessionId && !visited.has(sessionId)) {
-        const context = orcaSessions.get(sessionId);
-        if (context) return context;
-        visited.add(sessionId);
-        sessionId = text(localObservationsById.get(sessionId)?.parentProviderSessionId);
-      }
-      return undefined;
-    };
-
-    return observations.map((observation) => {
-      const context = orcaContextFor(observation);
-      if (
-        !context ||
-        observation.applications?.some(
-          (application) => application.id === SESSION_APPLICATION_ID.ORCA,
-        )
-      ) {
-        return observation;
-      }
-      // The workspace is claimed only where no other manager already grouped
-      // the chat, and the association's scope follows it: carried by the
-      // workspace, the mark sits once on the tray header; carried by the
-      // session alone, it stays on the row.
-      const workspace = observation.workspace
-        ? undefined
-        : {
-            providerWorkspaceId: context.worktreeId,
-            ...(context.workspaceName ? { name: context.workspaceName } : undefined),
-            scopeId: SESSION_APPLICATION_ID.ORCA,
-            managerName: ORCA_APPLICATION_NAME,
-          };
-      const application: SessionApplication = {
-        id: SESSION_APPLICATION_ID.ORCA,
-        displayName: ORCA_APPLICATION_NAME,
-        scope: workspace ? SESSION_APPLICATION_SCOPE.WORKSPACE : SESSION_APPLICATION_SCOPE.SESSION,
-      };
-      return {
-        ...observation,
-        applications: [...(observation.applications ?? []), application],
-        ...(workspace ? { workspace } : undefined),
-      };
+  protected override annotate(
+    observation: ProviderSessionObservation,
+    context: OrcaSessionContext,
+  ): ProviderSessionObservation {
+    // The workspace is claimed only where no other manager already grouped
+    // the chat, and the association's scope follows it: carried by the
+    // workspace, the mark sits once on the tray header; carried by the
+    // session alone, it stays on the row.
+    const workspace = unclaimedWorkspace(observation, {
+      providerWorkspaceId: context.worktreeId,
+      ...(context.workspaceName ? { name: context.workspaceName } : undefined),
+      scopeId: SESSION_APPLICATION_ID.ORCA,
+      managerName: ORCA_APPLICATION_NAME,
     });
+    const application: SessionApplication = {
+      id: SESSION_APPLICATION_ID.ORCA,
+      displayName: ORCA_APPLICATION_NAME,
+      scope: workspace ? SESSION_APPLICATION_SCOPE.WORKSPACE : SESSION_APPLICATION_SCOPE.SESSION,
+    };
+    return {
+      ...observation,
+      applications: [...(observation.applications ?? []), application],
+      ...(workspace ? { workspace } : undefined),
+    };
   }
 }
 

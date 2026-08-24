@@ -6,7 +6,6 @@ import {
   type ProviderSessionObservation,
   SESSION_APPLICATION_ID,
   SESSION_APPLICATION_SCOPE,
-  SESSION_LOCATION,
   type SessionApplication,
   type SessionProvider,
 } from "@sidecar/session";
@@ -18,6 +17,7 @@ import {
   type SqliteDatabase,
   type SqliteModuleLoader,
 } from "../shared/local-sqlite.js";
+import { unclaimedWorkspace, WorkspaceHostSnapshot } from "../shared/workspace-host-snapshot.js";
 
 const CONDUCTOR_APPLICATION_SUPPORT_DIRECTORY = "com.conductor.app";
 const CONDUCTOR_DATABASE_FILE = "conductor.db";
@@ -199,8 +199,6 @@ interface ConductorSessionContext {
   filedAway?: boolean;
 }
 
-type SessionContextsByProvider = ReadonlyMap<string, ReadonlyMap<string, ConductorSessionContext>>;
-
 export interface ConductorSessionApplicationReaderOptions {
   databasePath?: string;
   sqlite?: SqliteModuleLoader;
@@ -235,125 +233,78 @@ function chatTitle(value: UnparsedWireValue): string | undefined {
  * away — the chat hidden, or its workspace archived — drops a row, and drops
  * it whole.
  */
-export class ConductorSessionApplicationSnapshot {
-  readonly #sessionsByProvider: SessionContextsByProvider;
+export class ConductorSessionApplicationSnapshot extends WorkspaceHostSnapshot<ConductorSessionContext> {
+  protected override readonly applicationId = SESSION_APPLICATION_ID.CONDUCTOR;
 
-  constructor(sessionsByProvider: SessionContextsByProvider = new Map()) {
-    this.#sessionsByProvider = sessionsByProvider;
-  }
-
-  has(providerId: string, providerSessionId: string): boolean {
-    return this.#sessionsByProvider.get(providerId)?.has(providerSessionId) === true;
+  // A filed-away chat is dropped rather than annotated: the user archived
+  // or hid it on Conductor's own surface, and a sub-agent inheriting that
+  // context was filed away with its parent — the agent's transcript outlives
+  // the chat the user already said goodbye to.
+  protected override retains(context: ConductorSessionContext): boolean {
+    return context.filedAway !== true;
   }
 
   /**
    * Adds Conductor beside any app associations the provider already reported,
    * titles the chat by the name Conductor gave it, and groups it under the
    * Conductor workspace it belongs to, the way a Superset-managed chat groups
-   * under its Superset workspace. Only local observations can match a local
-   * Conductor database; a cloud row with a coincidentally equal provider id
-   * is never annotated. A sub-agent inherits its nearest Conductor-known
-   * ancestor's association and workspace: the child is Conductor's work even
-   * though only the parent is in its index — and a chat the user filed away
-   * in Conductor is dropped from the roster with its sub-agents, because the
-   * agent's transcript outlives the chat the user already said goodbye to.
+   * under its Superset workspace.
    */
-  enrich(
-    providerId: string,
-    observations: readonly ProviderSessionObservation[],
-  ): readonly ProviderSessionObservation[] {
-    const conductorSessions = this.#sessionsByProvider.get(providerId);
-    if (!conductorSessions) return observations;
-
-    const localObservationsById = new Map(
-      observations
-        .filter((observation) => observation.location !== SESSION_LOCATION.CLOUD)
-        .map((observation) => [observation.providerSessionId, observation] as const),
-    );
-
-    const conductorContextFor = (
-      observation: ProviderSessionObservation,
-    ): ConductorSessionContext | undefined => {
-      if (observation.location === SESSION_LOCATION.CLOUD) return undefined;
-      let sessionId: string | undefined = observation.providerSessionId;
-      const visited = new Set<string>();
-      while (sessionId && !visited.has(sessionId)) {
-        const context = conductorSessions.get(sessionId);
-        if (context) return context;
-        visited.add(sessionId);
-        sessionId = text(localObservationsById.get(sessionId)?.parentProviderSessionId);
-      }
-      return undefined;
+  protected override annotate(
+    observation: ProviderSessionObservation,
+    context: ConductorSessionContext,
+    conductorSessions: ReadonlyMap<string, ConductorSessionContext>,
+  ): ProviderSessionObservation {
+    // The workspace is claimed only where no other manager already grouped
+    // the chat; the claim is what carries the manager's mark on the tray
+    // header, once, above the chats it holds.
+    const workspace = context.workspaceId
+      ? unclaimedWorkspace(observation, {
+          providerWorkspaceId: context.workspaceId,
+          ...(context.workspaceName ? { name: context.workspaceName } : undefined),
+          scopeId: SESSION_APPLICATION_ID.CONDUCTOR,
+          managerName: CONDUCTOR_APPLICATION_NAME,
+        })
+      : undefined;
+    // The address needs the workspace id — Conductor's handler drops a
+    // link without one — and a sub-agent's inherited context addresses the
+    // ancestor chat, which is where its conversation lives. The app that
+    // wrote the index is the scheme's handler, so the address stands with
+    // no credential at all.
+    const link = context.workspaceId
+      ? conductorWorkspaceLink(context.workspaceId, context.conductorSessionId)
+      : undefined;
+    // The association names the exact chat — its address does, when it has
+    // one — so it is the session's own and rides the row even inside the
+    // workspace's tray, where the tray header's manager mark comes from
+    // the workspace claim above rather than from this.
+    const application: SessionApplication = {
+      id: SESSION_APPLICATION_ID.CONDUCTOR,
+      displayName: CONDUCTOR_APPLICATION_NAME,
+      scope: SESSION_APPLICATION_SCOPE.SESSION,
+      ...(link ? { link } : undefined),
     };
-
-    return observations.flatMap((observation) => {
-      const context = conductorContextFor(observation);
-      // A filed-away chat is dropped rather than annotated: the user archived
-      // or hid it on Conductor's own surface, and a sub-agent inheriting that
-      // context was filed away with its parent.
-      if (context?.filedAway) return [];
-      if (
-        !context ||
-        observation.applications?.some(
-          (application) => application.id === SESSION_APPLICATION_ID.CONDUCTOR,
-        )
-      ) {
-        return [observation];
-      }
-      // The workspace is claimed only where no other manager already grouped
-      // the chat; the claim is what carries the manager's mark on the tray
-      // header, once, above the chats it holds.
-      const workspace =
-        context.workspaceId && !observation.workspace
-          ? {
-              providerWorkspaceId: context.workspaceId,
-              ...(context.workspaceName ? { name: context.workspaceName } : undefined),
-              scopeId: SESSION_APPLICATION_ID.CONDUCTOR,
-              managerName: CONDUCTOR_APPLICATION_NAME,
-            }
-          : undefined;
-      // The address needs the workspace id — Conductor's handler drops a
-      // link without one — and a sub-agent's inherited context addresses the
-      // ancestor chat, which is where its conversation lives. The app that
-      // wrote the index is the scheme's handler, so the address stands with
-      // no credential at all.
-      const link = context.workspaceId
-        ? conductorWorkspaceLink(context.workspaceId, context.conductorSessionId)
-        : undefined;
-      // The association names the exact chat — its address does, when it has
-      // one — so it is the session's own and rides the row even inside the
-      // workspace's tray, where the tray header's manager mark comes from
-      // the workspace claim above rather than from this.
-      const application: SessionApplication = {
-        id: SESSION_APPLICATION_ID.CONDUCTOR,
-        displayName: CONDUCTOR_APPLICATION_NAME,
-        scope: SESSION_APPLICATION_SCOPE.SESSION,
-        ...(link ? { link } : undefined),
-      };
-      // The address fills the row's link only where nothing else gave one.
-      // Which app a grouped row's press follows is not decided here: the
-      // session normalization orders every row's marks with its workspace's
-      // manager in the lead and points the press at the first linked mark,
-      // so Conductor's precedence over an agent's own app falls out of the
-      // grouping rather than out of any Conductor-specific write.
-      const detail =
-        link && !observation.detail?.link ? { ...observation.detail, link } : observation.detail;
-      // The name Conductor gave the chat is what the user reads in Conductor's
-      // own sidebar, so it titles the row here the way it titles a
-      // cloud-observed chat's — but only on the chat itself, never inherited:
-      // a sub-agent labelled with its parent's name would read as the same
-      // conversation twice while saying nothing about its own work.
-      const title = conductorSessions.get(observation.providerSessionId)?.chatTitle;
-      return [
-        {
-          ...observation,
-          ...(title ? { title } : undefined),
-          ...(detail ? { detail } : undefined),
-          applications: [...(observation.applications ?? []), application],
-          ...(workspace ? { workspace } : undefined),
-        },
-      ];
-    });
+    // The address fills the row's link only where nothing else gave one.
+    // Which app a grouped row's press follows is not decided here: the
+    // session normalization orders every row's marks with its workspace's
+    // manager in the lead and points the press at the first linked mark,
+    // so Conductor's precedence over an agent's own app falls out of the
+    // grouping rather than out of any Conductor-specific write.
+    const detail =
+      link && !observation.detail?.link ? { ...observation.detail, link } : observation.detail;
+    // The name Conductor gave the chat is what the user reads in Conductor's
+    // own sidebar, so it titles the row here the way it titles a
+    // cloud-observed chat's — but only on the chat itself, never inherited:
+    // a sub-agent labelled with its parent's name would read as the same
+    // conversation twice while saying nothing about its own work.
+    const title = conductorSessions.get(observation.providerSessionId)?.chatTitle;
+    return {
+      ...observation,
+      ...(title ? { title } : undefined),
+      ...(detail ? { detail } : undefined),
+      applications: [...(observation.applications ?? []), application],
+      ...(workspace ? { workspace } : undefined),
+    };
   }
 }
 

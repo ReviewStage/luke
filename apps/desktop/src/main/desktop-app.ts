@@ -30,17 +30,17 @@ import { normalizeTrackedIssue, type TrackedIssue } from "@sidecar/issues";
 import { ObservationLoop, ObservationSupervisor } from "@sidecar/observation";
 import {
   CmuxSessionApplicationReader,
-  CmuxSessionApplicationSnapshot,
   CodexCloudSessionAdapter,
   ConductorLocalWorkspaceAdapter,
   ConductorSessionApplicationReader,
-  ConductorSessionApplicationSnapshot,
   defaultOrcaDataDirectory,
   ObservationHookRegistry,
   OrcaWorkspaceReader,
-  OrcaWorkspaceSnapshot,
   type ProviderRegistration,
   providerRegistrations,
+  type WorkspaceHostEnrichment,
+  type WorkspaceHostRegistration,
+  workspaceHostRegistrations,
 } from "@sidecar/providers";
 import {
   ATTENTION_SPEECH_SOURCE,
@@ -208,6 +208,20 @@ const supersetCli = new SupersetCli({ homeDirectory: supersetHomeDirectory });
 const supersetWorkspaceAdapter = new SupersetWorkspaceAdapter(supersetCli);
 let observedSupersetWorkspaces = new SupersetWorkspaceSnapshot([]);
 let observedSupersetOrganization: string | undefined;
+const supersetWorkspaceHost: WorkspaceHostRegistration = {
+  observationFailureLabel: "Superset observation",
+  read: readSupersetWorkspaceHost,
+  // The read absorbs its own failures into an empty snapshot so the act
+  // contexts and the workspace rows move with it; a rejection would be a
+  // bug, and it costs only the enrichment rather than the pass.
+  emptyEnrichment: (_providerId, observations) => observations,
+};
+const workspaceHosts = workspaceHostRegistrations({
+  superset: supersetWorkspaceHost,
+  conductorApplications: conductorSessionApplications,
+  orcaWorkspaces,
+  cmuxApplications: cmuxSessionApplications,
+});
 // `directory` and the cipher are read lazily so the store can be declared before
 // the Electron app is ready.
 const settingsStore = new SettingsStore({
@@ -1249,30 +1263,13 @@ async function applyLocalSessionHooks(): Promise<void> {
   );
 }
 
-async function refreshProviderSessions(generation: number): Promise<void> {
-  const actionsWereEnabled = observedSupersetOrganization !== undefined;
-  const conductorSnapshotPromise = conductorSessionApplications.read().catch((error) => {
-    const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`Conductor application observation failed: ${message}\n`);
-    return new ConductorSessionApplicationSnapshot();
-  });
-  const orcaSnapshotPromise = orcaWorkspaces.read().catch((error) => {
-    const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`Orca application observation failed: ${message}\n`);
-    return new OrcaWorkspaceSnapshot();
-  });
-  const cmuxSnapshotPromise = cmuxSessionApplications.read().catch((error) => {
-    const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`cmux application observation failed: ${message}\n`);
-    return new CmuxSessionApplicationSnapshot();
-  });
-  // Re-reads the repositories Conductor holds so the local create offer tracks
-  // its index. A failed read empties the offer inside the adapter, so a create
-  // is never validated against repositories a later read could no longer see.
-  const conductorRepositoriesPromise = conductorLocalWorkspaceAdapter.refresh().catch((error) => {
-    const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`Conductor repository observation failed: ${message}\n`);
-  });
+/**
+ * The Superset entry of the workspace-host registry carries the whole
+ * Superset pass, not only the enrichment: the acts a drawn row still
+ * advertises resolve against this module's latest snapshot, and the chatless
+ * workspace rows ride the same read, so all of it moves together.
+ */
+async function readSupersetWorkspaceHost(): Promise<WorkspaceHostEnrichment> {
   let supersetSnapshot = new SupersetWorkspaceSnapshot([]);
   let supersetOrganization: string | undefined;
   let supersetAgentDefault: string | undefined;
@@ -1307,11 +1304,30 @@ async function refreshProviderSessions(generation: number): Promise<void> {
     const message = error instanceof Error ? error.message : String(error);
     process.stderr.write(`Superset observation failed: ${message}\n`);
   }
-  const conductorSnapshot = await conductorSnapshotPromise;
-  const orcaSnapshot = await orcaSnapshotPromise;
-  const cmuxSnapshot = await cmuxSnapshotPromise;
+  return (providerId, observations) =>
+    supersetSnapshot.enrich(providerId, observations, supersetOrganization);
+}
+
+async function refreshProviderSessions(generation: number): Promise<void> {
+  const actionsWereEnabled = observedSupersetOrganization !== undefined;
+  // Re-reads the repositories Conductor holds so the local create offer tracks
+  // its index. A failed read empties the offer inside the adapter, so a create
+  // is never validated against repositories a later read could no longer see.
+  const conductorRepositoriesPromise = conductorLocalWorkspaceAdapter.refresh().catch((error) => {
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`Conductor repository observation failed: ${message}\n`);
+  });
+  const hostEnrichments = await Promise.all(
+    workspaceHosts.map((host) =>
+      host.read().catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        process.stderr.write(`${host.observationFailureLabel} failed: ${message}\n`);
+        return host.emptyEnrichment;
+      }),
+    ),
+  );
   await conductorRepositoriesPromise;
-  const supersetActionsEnabled = supersetOrganization !== undefined;
+  const supersetActionsEnabled = observedSupersetOrganization !== undefined;
   if (actionsWereEnabled !== supersetActionsEnabled) {
     if (supersetActionsEnabled) {
       panels.broadcast(channels.supersetSignInChanged, {
@@ -1331,24 +1347,14 @@ async function refreshProviderSessions(generation: number): Promise<void> {
   await Promise.all([
     ...orderedRegistrations.map(async ({ adapter }) => {
       try {
-        // Superset claims its workspaces first and Conductor next — the
-        // precedence that stood before Orca joined, so no existing tray moves
-        // — and Orca defers to both: one chat is grouped by exactly one
-        // manager however many of them hold it, and a chat only Orca holds
-        // still groups under its worktree. cmux runs last and claims no
-        // workspace at all: it only adds its own association, and its pane
-        // address stands in as the row's link only where none of the
-        // managers before it gave one.
+        // The fold applies the managers in registry order, which is what
+        // makes the registry's declared claim order the enrichment
+        // precedence: the first registration annotates first, and each later
+        // one sees what the earlier ones already claimed.
         await sessionRegistry.refresh(adapter, (providerId, observations) =>
-          cmuxSnapshot.enrich(
-            providerId,
-            orcaSnapshot.enrich(
-              providerId,
-              conductorSnapshot.enrich(
-                providerId,
-                supersetSnapshot.enrich(providerId, observations, supersetOrganization),
-              ),
-            ),
+          hostEnrichments.reduce(
+            (enriched, enrichment) => enrichment(providerId, enriched),
+            observations,
           ),
         );
       } catch (error) {
