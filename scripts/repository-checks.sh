@@ -155,8 +155,8 @@ if [[ -n "$extensionless_imports" ]]; then
 fi
 
 # The renderer is a sandboxed browser context: it reaches the main process
-# through the preload bridge alone, so `#shared/contracts` is the widest door
-# it has. A `#main/` import compiles and bundles happily and then fails in the
+# through the preload bridge alone, so `#shared/bridge` and `#shared/wire/*`
+# are its widest doors. A `#main/` import compiles and bundles happily and then fails in the
 # browser, and a `node:` import does the same — neither is a mistake the type
 # checker or esbuild can report, because both are real modules that simply are
 # not there at run time.
@@ -167,8 +167,20 @@ fi
 renderer_escapes=$(grep -ranE 'from "(#main/|node:)' "$SIDECAR_REPO_ROOT/apps/desktop/src/renderer" |
     grep -vE '\.test\.tsx?:[0-9]+:import .*"node:' || true)
 if [[ -n "$renderer_escapes" ]]; then
-    printf 'error: the renderer is sandboxed — it reaches the main process only through #shared/contracts and the preload bridge:\n%s\n' \
+    printf 'error: the renderer is sandboxed — it reaches the main process only through the shared bridge and wire modules:\n%s\n' \
         "$renderer_escapes" >&2
+    exit 1
+fi
+
+# BRIDGE is the one renderer-to-main declaration, and registerBridge is the
+# one place that may attach it to Electron. A handler registered beside its
+# domain logic would bypass the manifest's sender and wire guards.
+direct_ipc_registration=$(grep -RnaE --include='*.ts' 'ipcMain\.(handle|on)\(' \
+    "$SIDECAR_REPO_ROOT/apps/desktop/src" |
+    grep -v '/main/register-bridge.ts:' || true)
+if [[ -n "$direct_ipc_registration" ]]; then
+    printf 'error: Electron IPC handlers must be registered through registerBridge:\n%s\n' \
+        "$direct_ipc_registration" >&2
     exit 1
 fi
 

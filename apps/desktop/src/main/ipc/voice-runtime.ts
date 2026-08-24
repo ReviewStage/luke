@@ -1,15 +1,11 @@
 import { PRODUCT_EVENT, type RecordProductEvent } from "@sidecar/analytics";
-import {
-  CREDENTIAL_CONNECTION,
-  CREDENTIAL_PROVIDERS,
-  isCredentialProviderId,
-} from "@sidecar/credentials";
+import { CREDENTIAL_CONNECTION, CREDENTIAL_PROVIDERS } from "@sidecar/credentials";
 import type { VoiceSource } from "@sidecar/settings";
 import type { HostedUsageReader, RealtimeCredentialMinter } from "@sidecar/voice";
-import type { UnparsedWireValue } from "@sidecar/wire";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from "electron";
-import { channels } from "#shared/contracts";
+import { BRIDGE } from "#shared/bridge";
 import { VOICE_SOURCE_COUNTED_AS } from "#shared/product-vocabulary";
+import { registerBridge } from "../register-bridge";
 import type { PanelManager } from "../window/panel-manager";
 
 export interface VoiceRuntimeIpcDependencies {
@@ -26,54 +22,41 @@ export interface VoiceRuntimeIpcDependencies {
 }
 
 export function registerVoiceRuntimeIpc(dependencies: VoiceRuntimeIpcDependencies): void {
-  const { ipcMain, trustedSender, panels } = dependencies;
-  ipcMain.on(channels.setVoiceExchange, (event, active: UnparsedWireValue) => {
-    if (!trustedSender(event) || (active !== true && active !== false)) return;
-    const displayId = panels.displayIdFor(event.sender);
-    if (displayId !== undefined) panels.setVoiceExchange(displayId, active);
-    // The opening edge alone. Counting both would make one exchange two, and
-    // the pair says nothing the start does not: how long it ran is the voice
-    // service's question, not this one's.
-    if (active) dependencies.recordProductEvent(PRODUCT_EVENT.VOICE_EXCHANGE, {});
-  });
-  ipcMain.on(channels.openMicrophoneSettings, (event) => {
-    if (!trustedSender(event)) return;
-    void dependencies.openExternal(
-      "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone",
-    );
-  });
-  ipcMain.on(channels.openProviderApiKeys, (event, providerId: UnparsedWireValue) => {
-    if (!trustedSender(event) || !isCredentialProviderId(providerId)) return;
-    // A provider connected by consent issues no key and publishes no page to
-    // fetch one from, so there is nowhere to send anyone.
-    const provider = CREDENTIAL_PROVIDERS[providerId];
-    if (provider.connection !== CREDENTIAL_CONNECTION.KEY || !provider.apiKeysUrl) return;
-    void dependencies.openExternal(provider.apiKeysUrl);
-  });
-  ipcMain.on(channels.focusPanel, (event) => {
-    if (!trustedSender(event)) return;
-    const displayId = panels.displayIdFor(event.sender);
-    if (displayId !== undefined) panels.focusIfExpanded(displayId);
-  });
-  ipcMain.handle(channels.requestRealtimeCredential, async (event) => {
-    if (!trustedSender(event)) throw new Error("Untrusted renderer");
-    const credential = await dependencies.realtimeCredentials()?.mint();
-    // A credential in hand is a call about to open; a refused mint is not one.
-    if (credential) {
-      dependencies.recordProductEvent(PRODUCT_EVENT.VOICE_CALL_START, {
-        credential_source: VOICE_SOURCE_COUNTED_AS[dependencies.voiceSource()],
-      });
-    }
-    return credential;
-  });
-  ipcMain.handle(channels.requestRealtimeDiagnostics, (event) => {
-    if (!trustedSender(event)) throw new Error("Untrusted renderer");
-    return (
-      dependencies.realtimeCredentials()?.diagnostics() ?? dependencies.unavailableDiagnostics()
-    );
-  });
-  ipcMain.handle(channels.requestHostedUsage, async (event) => {
-    if (!trustedSender(event)) throw new Error("Untrusted renderer");
-    return dependencies.hostedUsageReader()?.read();
-  });
+  const { panels } = dependencies;
+  registerBridge(
+    BRIDGE,
+    {
+      setVoiceExchangeActive(active, context) {
+        const displayId = panels.displayIdFor(context.sender);
+        if (displayId !== undefined) panels.setVoiceExchange(displayId, active);
+        if (active) dependencies.recordProductEvent(PRODUCT_EVENT.VOICE_EXCHANGE, {});
+      },
+      openMicrophoneSettings: () =>
+        dependencies.openExternal(
+          "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone",
+        ),
+      openProviderApiKeys(providerId) {
+        const provider = CREDENTIAL_PROVIDERS[providerId];
+        if (provider.connection !== CREDENTIAL_CONNECTION.KEY || !provider.apiKeysUrl) return;
+        void dependencies.openExternal(provider.apiKeysUrl);
+      },
+      focusPanel(context) {
+        const displayId = panels.displayIdFor(context.sender);
+        if (displayId !== undefined) panels.focusIfExpanded(displayId);
+      },
+      async requestRealtimeCredential() {
+        const credential = await dependencies.realtimeCredentials()?.mint();
+        if (credential) {
+          dependencies.recordProductEvent(PRODUCT_EVENT.VOICE_CALL_START, {
+            credential_source: VOICE_SOURCE_COUNTED_AS[dependencies.voiceSource()],
+          });
+        }
+        return credential;
+      },
+      requestRealtimeDiagnostics: () =>
+        dependencies.realtimeCredentials()?.diagnostics() ?? dependencies.unavailableDiagnostics(),
+      requestHostedUsage: () => dependencies.hostedUsageReader()?.read(),
+    },
+    { ipcMain: dependencies.ipcMain, trustedSender: dependencies.trustedSender },
+  );
 }

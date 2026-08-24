@@ -2,12 +2,11 @@ import type { CredentialProviderId } from "@sidecar/credentials";
 import type { RealtimeVoice, RealtimeVoiceSpeed } from "@sidecar/realtime";
 import type {
   CliConnection,
-  ProviderId,
   SessionFilter,
-  WorkspaceAgentSelection,
+  WorkspaceAgentDefaults,
+  WorkspaceProviderId,
 } from "@sidecar/session";
 import type { VoiceSource } from "@sidecar/settings";
-import type { WorkspaceProviderId } from "@sidecar/superset/vocabulary";
 import type { PanelFormFactor } from "@sidecar/surface";
 import type { CredentialSource, SecretStorage } from "./account";
 import type { CalendarAccount } from "./calendar";
@@ -224,7 +223,7 @@ export interface AppSettings {
    * outside it is dropped rather than honoured, because it names nothing the
    * provider's endpoints take.
    */
-  workspaceAgentDefaults?: Readonly<Partial<Record<ProviderId, WorkspaceAgentSelection>>>;
+  workspaceAgentDefaults?: WorkspaceAgentDefaults;
   /**
    * The project a conversational ask creates a workspace in when the ask
    * names none, per provider, each entry absent until one has been chosen. It

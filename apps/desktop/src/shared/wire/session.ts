@@ -11,15 +11,15 @@ import type { AppSettings } from "./settings";
 import type { UpdateSnapshot } from "./update";
 
 export {
+  isWorkspaceProviderId,
+  SUPERSET_WORKSPACE_PROVIDER_ID,
+  type WorkspaceProviderId,
+} from "@sidecar/session";
+export {
   SUPERSET_SIGN_IN_STAGE,
   type SupersetOrganizationChoice,
   type SupersetSignInSnapshot,
 } from "@sidecar/superset/sign-in-stage";
-export {
-  isWorkspaceProviderId,
-  SUPERSET_WORKSPACE_PROVIDER_ID,
-  type WorkspaceProviderId,
-} from "@sidecar/superset/vocabulary";
 export type { WindowMode } from "@sidecar/surface";
 
 /**

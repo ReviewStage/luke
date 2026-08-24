@@ -196,8 +196,8 @@ export class HotkeyRegistrar {
     // The helper first, because it is the only one of the two that reports the
     // key being let go of, and a key you hold is the whole point.
     this.#talkKeyWatcher = this.#createTalkKeyWatcher({
-      onPress: () => this.#send(this.#voiceHostContents(), channels.voiceHotkeyPress),
-      onRelease: () => this.#send(this.#voiceHostContents(), channels.voiceHotkeyRelease),
+      onPress: () => this.#send(this.#voiceHostContents(), channels.onVoiceHotkeyPress),
+      onRelease: () => this.#send(this.#voiceHostContents(), channels.onVoiceHotkeyRelease),
       onRegistered: (accelerator) => {
         this.#talk = accelerator;
         this.#sendTalk();
@@ -222,11 +222,11 @@ export class HotkeyRegistrar {
   #registerToggle(): void {
     for (const accelerator of voiceHotkeyCandidates(this.#chosenTalk)) {
       const registered = this.#shortcut.register(accelerator, () => {
-        this.#send(this.#voiceHostContents(), channels.voiceHotkeyPress);
+        this.#send(this.#voiceHostContents(), channels.onVoiceHotkeyPress);
         // A toggle has only the one edge, so it reports a release immediately and
         // one short enough to read as a tap. Every press then latches or ends a
         // turn.
-        this.#send(this.#voiceHostContents(), channels.voiceHotkeyRelease);
+        this.#send(this.#voiceHostContents(), channels.onVoiceHotkeyRelease);
       });
       if (!registered) continue;
       this.#talk = accelerator;
@@ -268,7 +268,7 @@ export class HotkeyRegistrar {
         if (displayId === undefined) return;
         const opening = this.#host.modeFor(displayId) !== "expanded";
         this.#host.setMode(displayId, "expanded", true);
-        this.#send(host?.webContents, channels.lifecycle, "ask:focus");
+        this.#send(host?.webContents, channels.onLifecycle, "ask:focus");
         // The key summons the field wherever the panel already stood, so only
         // the press that actually opened one is an opening.
         if (opening) {
@@ -309,7 +309,7 @@ export class HotkeyRegistrar {
       this.#ask,
     ])) {
       const registered = this.#shortcut.register(accelerator, () => {
-        this.#send(this.#voiceHostContents(), channels.stopHotkeyPress);
+        this.#send(this.#voiceHostContents(), channels.onStopHotkeyPress);
       });
       if (!registered) continue;
       this.#stop = accelerator;
@@ -324,7 +324,7 @@ export class HotkeyRegistrar {
    * keycap up for a chord that answers nothing.
    */
   #sendAsk(): void {
-    this.#host.broadcast(channels.askHotkeyChanged, this.#ask);
+    this.#host.broadcast(channels.onAskHotkeyChanged, this.#ask);
   }
 
   /**
@@ -333,7 +333,7 @@ export class HotkeyRegistrar {
    * nothing must not be one Luke claims to have.
    */
   #sendStop(): void {
-    this.#host.broadcast(channels.stopHotkeyChanged, this.#stop);
+    this.#host.broadcast(channels.onStopHotkeyChanged, this.#stop);
   }
 
   /**
@@ -343,7 +343,7 @@ export class HotkeyRegistrar {
    * accelerator produces both.
    */
   #sendTalk(): void {
-    this.#host.broadcast(channels.voiceHotkeyChanged, {
+    this.#host.broadcast(channels.onVoiceHotkeyChanged, {
       ...(this.#talk ? { hotkey: this.#talk } : undefined),
       held: this.#held,
     });

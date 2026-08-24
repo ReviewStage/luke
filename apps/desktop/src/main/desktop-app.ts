@@ -20,11 +20,7 @@ import {
   nextMeetingBoundary,
 } from "@sidecar/calendar";
 import { CREDENTIAL_PROVIDER_ID, type CredentialProviderId } from "@sidecar/credentials";
-import {
-  type FeedbackResult,
-  feedbackDeliveryFromEnvironment,
-  feedbackSubmission,
-} from "@sidecar/feedback";
+import { type FeedbackSubmission, feedbackDeliveryFromEnvironment } from "@sidecar/feedback";
 import { fixtureSnapshot } from "@sidecar/fixtures";
 import { normalizeTrackedIssue, type TrackedIssue } from "@sidecar/issues";
 import { ObservationLoop, ObservationSupervisor } from "@sidecar/observation";
@@ -78,7 +74,7 @@ import {
 import { DEFAULT_PANEL_FORM_FACTOR } from "@sidecar/surface";
 import { LinearCredentials, LinearIssueTracker, LinearSignIn } from "@sidecar/trackers";
 import { sessionNoticeSpeech, VoiceCapabilityAssembler } from "@sidecar/voice";
-import { isRecord, isWireString, text, type UnparsedWireValue } from "@sidecar/wire";
+import { isRecord, text, type UnparsedWireValue } from "@sidecar/wire";
 import {
   app,
   BrowserWindow,
@@ -94,12 +90,12 @@ import {
   systemPreferences,
 } from "electron";
 import { APPLE_CALENDAR_ACCESS, APPLE_CALENDAR_ID } from "#shared/apple-calendar";
+import { BRIDGE, channels } from "#shared/bridge";
 import {
   ACCOUNT_STATUS,
   type AccountSnapshot,
   APP_SETTING_DEFAULTS,
   type AppBootstrap,
-  channels,
   type MicrophoneRoute,
   type MicrophoneStatus,
   type ObservedAccountCalendars,
@@ -120,6 +116,7 @@ import { registerWindowSurfaceIpc } from "./ipc/window-surface";
 import { MediaDuckController } from "./native/media-duck";
 import { MicrophoneRouteWatcher } from "./native/microphone-route";
 import { OutputVolumeWatcher } from "./native/output-volume";
+import { type BridgeContext, registerBridgeEntry } from "./register-bridge";
 import { runModeFor } from "./run-mode";
 import { createSettingsHandler } from "./settings-handler";
 import { SettingsStore } from "./settings-store";
@@ -287,7 +284,7 @@ const linearCredentials = new LinearCredentials({
     // Nobody pressed anything to end this connection — Linear refused the
     // renewal — so no settings reply is on its way to say so. A row left
     // saying connected would be a row about a grant that no longer exists.
-    panels.broadcast(channels.settingsChanged, cleared.settings);
+    panels.broadcast(channels.onSettingsChanged, cleared.settings);
   },
 });
 const linearTracker = new LinearIssueTracker({
@@ -429,7 +426,7 @@ const feedbackDelivery = feedbackDeliveryFromEnvironment();
 const lastRunVersionPath = () => path.join(app.getPath("userData"), "last-run-version.json");
 const updateService = new UpdateService({
   currentVersion: app.getVersion(),
-  onChange: (update) => panels.broadcast(channels.updateChanged, update),
+  onChange: (update) => panels.broadcast(channels.onUpdateChanged, update),
   engine:
     app.isPackaged && runMode.sendsNetwork && process.platform === "darwin"
       ? createElectronUpdaterEngine()
@@ -510,7 +507,7 @@ async function sessionReplayBootstrap(): Promise<SessionReplayBootstrap> {
  */
 function haltSessionReplay(): void {
   sessionReplayBroadcastGeneration += 1;
-  panels.broadcast(channels.sessionReplayChanged, {
+  panels.broadcast(channels.onSessionReplayChanged, {
     permitted: false,
     appVersion: app.getVersion(),
   });
@@ -547,7 +544,7 @@ const supersetSignIn = new SupersetSignIn({
   cli: supersetCli,
   openExternal: (url) => shell.openExternal(url),
   onChange: (state) => {
-    panels.broadcast(channels.supersetSignInChanged, state);
+    panels.broadcast(channels.onSupersetSignInChanged, state);
     if (state.stage !== SUPERSET_SIGN_IN_STAGE.CONNECTED) return;
     void sessionObservationLoop.refresh();
     // The edge into connected, which is where a sign-in actually lands: the
@@ -589,7 +586,7 @@ function startOutputVolumeWatch(): void {
   const send = (state: OutputAudioState | undefined) => {
     outputAudio = state;
     // Every display's panel captions the same voice, so every one is told.
-    panels.broadcast(channels.outputAudioChanged, state);
+    panels.broadcast(channels.onOutputAudioChanged, state);
   };
   outputVolumeWatcher = new OutputVolumeWatcher({
     onState: send,
@@ -649,7 +646,7 @@ async function broadcastWorkspaceProjects(): Promise<void> {
   const serialized = JSON.stringify(projects);
   if (serialized === lastWorkspaceProjects) return;
   lastWorkspaceProjects = serialized;
-  panels.broadcast(channels.workspaceProjectsChanged, projects);
+  panels.broadcast(channels.onWorkspaceProjectsChanged, projects);
 }
 
 /**
@@ -676,7 +673,7 @@ async function pruneWorkspaceProjectDefaults(
       );
       if (!saved.cleared) continue;
       if (!isCurrent()) return;
-      panels.broadcast(channels.settingsChanged, saved.settings);
+      panels.broadcast(channels.onSettingsChanged, saved.settings);
     }
   } catch {
     return;
@@ -712,7 +709,7 @@ function accountCapabilitiesActive(): boolean {
 }
 
 function broadcastAccount(): void {
-  panels.broadcast(channels.accountChanged, account);
+  panels.broadcast(channels.onAccountChanged, account);
 }
 
 /**
@@ -723,7 +720,7 @@ function broadcastAccount(): void {
  * renderer keeps drawing the voice state of the account it no longer has.
  */
 async function broadcastVoiceAvailability(): Promise<void> {
-  panels.broadcast(channels.settingsChanged, await settingsStore.snapshot());
+  panels.broadcast(channels.onSettingsChanged, await settingsStore.snapshot());
 }
 
 /**
@@ -748,7 +745,7 @@ async function broadcastSessionReplay(): Promise<void> {
   const generation = ++sessionReplayBroadcastGeneration;
   const replay = await sessionReplayBootstrap();
   if (generation !== sessionReplayBroadcastGeneration) return;
-  panels.broadcast(channels.sessionReplayChanged, replay);
+  panels.broadcast(channels.onSessionReplayChanged, replay);
 }
 
 /**
@@ -764,7 +761,7 @@ async function broadcastCodexCloudConnection(): Promise<void> {
   const connection = codexCloudAdapter.connection();
   if (connection === announcedCodexCloudConnection) return;
   announcedCodexCloudConnection = connection;
-  panels.broadcast(channels.settingsChanged, await settingsStore.snapshot());
+  panels.broadcast(channels.onSettingsChanged, await settingsStore.snapshot());
 }
 
 async function startAccountCapabilities(): Promise<void> {
@@ -834,7 +831,7 @@ async function rememberWorkspaceDefaults(
         APP_SETTING_SCHEMA.defaultWorkspaceProvider.field,
         providerId,
       );
-      panels.broadcast(channels.settingsChanged, saved.settings);
+      panels.broadcast(channels.onSettingsChanged, saved.settings);
     }
     if (
       providerId === SUPERSET_WORKSPACE_PROVIDER_ID &&
@@ -848,7 +845,7 @@ async function rememberWorkspaceDefaults(
         SUPERSET_WORKSPACE_PROVIDER_ID,
         { agent },
       );
-      panels.broadcast(channels.settingsChanged, saved.settings);
+      panels.broadcast(channels.onSettingsChanged, saved.settings);
     }
     // The project the workspace landed in becomes that provider's default on
     // the same first-choice terms, read again for the same overlap reason as
@@ -866,7 +863,7 @@ async function rememberWorkspaceDefaults(
           providerTargetId ? { providerProjectId, providerTargetId } : { providerProjectId },
         ),
       );
-      panels.broadcast(channels.settingsChanged, saved.settings);
+      panels.broadcast(channels.onSettingsChanged, saved.settings);
     }
     // A model named for this creation becomes the default on the same
     // first-choice terms as the provider: only while nothing is chosen.
@@ -886,7 +883,7 @@ async function rememberWorkspaceDefaults(
         providerId,
         namedSelection,
       );
-      panels.broadcast(channels.settingsChanged, saved.settings);
+      panels.broadcast(channels.onSettingsChanged, saved.settings);
     }
   } catch {
     // The reply is the creation's; a failed remember has no line in it.
@@ -894,16 +891,20 @@ async function rememberWorkspaceDefaults(
 }
 
 function registerIpc(): void {
+  const registerHandler = (
+    definition: Parameters<typeof registerBridgeEntry>[1],
+    handler: Parameters<typeof registerBridgeEntry>[2],
+  ) => registerBridgeEntry(BRIDGE, definition, handler, { ipcMain, trustedSender });
   const registerSettingHandler = createSettingsHandler({
+    ipcMain,
     trustedSender,
     snapshot: () => settingsStore.snapshot(),
-    broadcast: (settings, except) => panels.broadcast(channels.settingsChanged, settings, except),
+    broadcast: (settings, except) => panels.broadcast(channels.onSettingsChanged, settings, except),
   });
-  ipcMain.handle(channels.bootstrap, async (event): Promise<AppBootstrap> => {
-    if (!trustedSender(event)) throw new Error("Untrusted renderer");
+  registerHandler(BRIDGE.getBootstrap, async (context: BridgeContext): Promise<AppBootstrap> => {
     // Each window bootstraps as itself: its own display, its own mode. The
     // roster and the settings are the same everywhere.
-    const displayId = panels.displayIdFor(event.sender);
+    const displayId = panels.displayIdFor(context.sender);
     const display =
       (displayId !== undefined ? panels.display(displayId) : undefined) ??
       screen.getPrimaryDisplay();
@@ -973,35 +974,26 @@ function registerIpc(): void {
       settings: await settingsStore.snapshot(),
     };
   });
-  ipcMain.handle(channels.beginSupersetSignIn, async (event) => {
-    if (!trustedSender(event)) throw new Error("Untrusted renderer");
+  registerHandler(BRIDGE.beginSupersetSignIn, async () => {
     recordProductEvent(PRODUCT_EVENT.SUPERSET_ACT, {
       superset_act: PRODUCT_SUPERSET_ACT.SIGN_IN_START,
     });
     return supersetSignIn.begin();
   });
-  ipcMain.handle(channels.submitSupersetSignInCode, (event, code: UnparsedWireValue) => {
-    if (!trustedSender(event)) throw new Error("Untrusted renderer");
-    if (!isWireString(code)) throw new Error("Invalid Superset sign-in code");
+  registerHandler(BRIDGE.submitSupersetSignInCode, (code: string) => {
     return supersetSignIn.submitCode(code);
   });
-  ipcMain.handle(channels.chooseSupersetOrganization, async (event, slug: UnparsedWireValue) => {
-    if (!trustedSender(event)) throw new Error("Untrusted renderer");
-    if (!isWireString(slug)) throw new Error("Invalid Superset organization");
+  registerHandler(BRIDGE.chooseSupersetOrganization, async (slug: string) => {
     return supersetSignIn.chooseOrganization(slug);
   });
-  ipcMain.on(channels.reopenSupersetSignIn, (event) => {
-    if (trustedSender(event)) supersetSignIn.reopen();
-  });
-  ipcMain.on(channels.cancelSupersetSignIn, (event) => {
-    if (!trustedSender(event)) return;
+  registerHandler(BRIDGE.reopenSupersetSignIn, supersetSignIn.reopen.bind(supersetSignIn));
+  registerHandler(BRIDGE.cancelSupersetSignIn, () => {
     supersetSignIn.cancel();
     recordProductEvent(PRODUCT_EVENT.SUPERSET_ACT, {
       superset_act: PRODUCT_SUPERSET_ACT.SIGN_IN_CANCEL,
     });
   });
-  ipcMain.handle(channels.disconnectSuperset, async (event) => {
-    if (!trustedSender(event)) throw new Error("Untrusted renderer");
+  registerHandler(BRIDGE.disconnectSuperset, async () => {
     if (!(await supersetCli.signOut())) return "Superset could not sign out.";
     // The sign-in machine returning to idle is what tells every renderer the
     // login is gone; the refreshed pass retires the rows the login was buying.
@@ -1082,8 +1074,7 @@ function registerIpc(): void {
   // The row's button. Answered rather than fire-and-forget so the row that
   // asked and the broadcast never disagree; a run without an engine answers
   // with the standing snapshot rather than make a request it must not.
-  ipcMain.handle(channels.checkForUpdates, (event) => {
-    if (!trustedSender(event)) throw new Error("Untrusted renderer");
+  registerHandler(BRIDGE.checkForUpdates, () => {
     recordProductEvent(PRODUCT_EVENT.UPDATE_ACT, { update_act: PRODUCT_UPDATE_ACT.CHECK });
     return updateService.check();
   });
@@ -1091,8 +1082,7 @@ function registerIpc(): void {
   // The restart into a downloaded build. The service ignores the ask unless
   // its own snapshot says one is ready — and ignores a repeat while Squirrel
   // stages the swap — so a stray send installs nothing.
-  ipcMain.on(channels.installUpdate, (event) => {
-    if (!trustedSender(event)) return;
+  registerHandler(BRIDGE.installUpdate, () => {
     // Counted before the install is asked for, and flushed with it: the act
     // schedules a restart, and a count queued behind that would be dropped by
     // the quit rather than sent.
@@ -1105,16 +1095,14 @@ function registerIpc(): void {
   // installing in place is impossible or has failed. The address is fixed
   // here like the microphone pane's, so nothing an update check read can
   // steer where a press goes.
-  ipcMain.on(channels.openLatestRelease, (event) => {
-    if (!trustedSender(event)) return;
+  registerHandler(BRIDGE.openLatestRelease, () => {
     recordProductEvent(PRODUCT_EVENT.UPDATE_ACT, { update_act: PRODUCT_UPDATE_ACT.RELEASE_OPEN });
     void shell.openExternal(UPDATE_ENDPOINT.LATEST_RELEASE_PAGE_URL);
   });
 
   // The changelog, in the browser — the Changelog row's press. The address
   // is fixed here on the releases page's terms.
-  ipcMain.on(channels.openChangelog, (event) => {
-    if (!trustedSender(event)) return;
+  registerHandler(BRIDGE.openChangelog, () => {
     recordProductEvent(PRODUCT_EVENT.UPDATE_ACT, { update_act: PRODUCT_UPDATE_ACT.CHANGELOG_OPEN });
     void shell.openExternal(UPDATE_ENDPOINT.CHANGELOG_PAGE_URL);
   });
@@ -1164,38 +1152,30 @@ function registerIpc(): void {
   // material, no identifiers, nothing observed — and a refusal comes back as an
   // answer for the composer rather than a throw, because sending is the user's
   // own act and its outcome belongs beside the field it left.
-  ipcMain.handle(
-    channels.sendFeedback,
-    async (event, submission: UnparsedWireValue): Promise<FeedbackResult> => {
-      if (!trustedSender(event)) throw new Error("Untrusted renderer");
-      const parsed = feedbackSubmission(submission);
-      if (!parsed) throw new Error("Invalid feedback submission");
-      // A fixture run must be reproducible without a network, so it refuses
-      // rather than sending — and says so, because the composer still draws.
-      if (!runMode.sendsNetwork) {
-        return { delivered: false, reason: "A fixture run sends nothing." };
-      }
-      const result = await feedbackDelivery.deliver(parsed);
-      // The count is of notes that actually reached the founders, and it says
-      // how many images rode along as a rung of the same ladder session counts
-      // travel on — never a filename, a caption, or a word of the note.
-      if (result.delivered) {
-        recordProductEvent(PRODUCT_EVENT.FEEDBACK_SEND, {
-          image_count: productSessionCountBucket(parsed.images.length),
-        });
-      }
-      return result;
-    },
-  );
-
-  ipcMain.on(channels.quit, (event) => {
-    if (trustedSender(event)) app.quit();
+  registerHandler(BRIDGE.sendFeedback, async (submission: FeedbackSubmission) => {
+    // A fixture run must be reproducible without a network, so it refuses
+    // rather than sending — and says so, because the composer still draws.
+    if (!runMode.sendsNetwork) {
+      return { delivered: false, reason: "A fixture run sends nothing." };
+    }
+    const result = await feedbackDelivery.deliver(submission);
+    // The count is of notes that actually reached the founders, and it says
+    // how many images rode along as a rung of the same ladder session counts
+    // travel on — never a filename, a caption, or a word of the note.
+    if (result.delivered) {
+      recordProductEvent(PRODUCT_EVENT.FEEDBACK_SEND, {
+        image_count: productSessionCountBucket(submission.images.length),
+      });
+    }
+    return result;
   });
 
-  ipcMain.on(channels.rendererReady, async (event) => {
-    if (!trustedSender(event) || !captureOutput) return;
+  registerHandler(BRIDGE.quit, app.quit.bind(app));
+
+  registerHandler(BRIDGE.notifyReady, async (context: BridgeContext) => {
+    if (!captureOutput) return;
     // A capture run holds a single window, and the ready message is its own.
-    const window = BrowserWindow.fromWebContents(event.sender);
+    const window = BrowserWindow.fromWebContents(context.sender);
     if (!window || window.isDestroyed()) return;
     await new Promise((resolve) => setTimeout(resolve, 350));
     const image = await window.webContents.capturePage(undefined, {
@@ -1330,7 +1310,7 @@ async function refreshProviderSessions(generation: number): Promise<void> {
   const supersetActionsEnabled = observedSupersetOrganization !== undefined;
   if (actionsWereEnabled !== supersetActionsEnabled) {
     if (supersetActionsEnabled) {
-      panels.broadcast(channels.supersetSignInChanged, {
+      panels.broadcast(channels.onSupersetSignInChanged, {
         stage: SUPERSET_SIGN_IN_STAGE.CONNECTED,
       });
     } else {
@@ -1431,7 +1411,7 @@ async function reviewSessionAttention(generation: number): Promise<void> {
         // Spoken once, by the one window that holds the voice: every display
         // already shows the same session as needing attention, and the surface
         // that speaks is the one that draws the announcement's pressable notice.
-        panels.voiceHost()?.webContents.send(channels.attentionSpeech, sendable);
+        panels.voiceHost()?.webContents.send(channels.onAttentionSpeech, sendable);
       }
     }
   } catch (error) {
@@ -1483,7 +1463,7 @@ async function announceSessionNotices(sessions: readonly NormalizedSession[]): P
   }
   const speech = notices.map((notice) => sessionNoticeSpeech(notice, now));
   countSpokenAnnouncements(notices);
-  panels.voiceHost()?.webContents.send(channels.attentionSpeech, speech);
+  panels.voiceHost()?.webContents.send(channels.onAttentionSpeech, speech);
 }
 
 /**
@@ -1546,7 +1526,7 @@ async function announcementsQuietNow(now: number): Promise<boolean> {
     inMeeting && (await settingsStore.get(APP_SETTING_SCHEMA.quietDuringMeetings.field));
   if (holding !== meetingQuietActive) {
     meetingQuietActive = holding;
-    panels.broadcast(channels.meetingQuietChanged, holding);
+    panels.broadcast(channels.onMeetingQuietChanged, holding);
   }
   return holding;
 }
@@ -1631,7 +1611,7 @@ async function releaseHeldNotices(): Promise<void> {
   const speech = [...releasedAsks, ...released.map((notice) => sessionNoticeSpeech(notice, now))];
   if (speech.length === 0) return;
   countSpokenAnnouncements(released);
-  panels.voiceHost()?.webContents.send(channels.attentionSpeech, speech);
+  panels.voiceHost()?.webContents.send(channels.onAttentionSpeech, speech);
 }
 
 /**
@@ -1668,7 +1648,7 @@ async function refreshCalendarMeetings(generation: number): Promise<void> {
       ...(failure ? { failure } : undefined),
       ...(revoked ? { revoked } : undefined),
     }));
-    panels.broadcast(channels.calendarsChanged, observedCalendars);
+    panels.broadcast(channels.onCalendarsChanged, observedCalendars);
     for (const account of accounts) {
       if (account.failure) {
         process.stderr.write(`Calendar observation failed: ${account.failure}\n`);
@@ -1795,10 +1775,10 @@ function stopCalendarObservation(): void {
   appleCalendar.forget();
   heldNotices.release();
   heldRequestSpeech.release();
-  panels.broadcast(channels.calendarsChanged, observedCalendars);
+  panels.broadcast(channels.onCalendarsChanged, observedCalendars);
   if (meetingQuietActive) {
     meetingQuietActive = false;
-    panels.broadcast(channels.meetingQuietChanged, false);
+    panels.broadcast(channels.onMeetingQuietChanged, false);
   }
 }
 
@@ -1817,7 +1797,7 @@ let lastRosterIds = "";
  * developer's own; nothing here reaches a provider or leaves the machine.
  */
 function broadcastNoticeAsks(): void {
-  panels.broadcast(channels.noticeAsksChanged, attentionRequests.list());
+  panels.broadcast(channels.onNoticeAsksChanged, attentionRequests.list());
 }
 
 /**
@@ -1836,7 +1816,7 @@ function broadcastRelevantSessions(): void {
   if (snapshot.revision === lastRosterRevision && rosterIds === lastRosterIds) return;
   lastRosterRevision = snapshot.revision;
   lastRosterIds = rosterIds;
-  panels.broadcast(channels.sessionsChanged, roster);
+  panels.broadcast(channels.onSessionsChanged, roster);
 }
 
 function startSessionObservation(): void {
@@ -1886,8 +1866,8 @@ function stopSessionObservation(): void {
   for (const { adapter } of orderedRegistrations) {
     sessionRegistry.replaceProvider(adapter.provider, []);
   }
-  panels.broadcast(channels.sessionsChanged, []);
-  panels.broadcast(channels.workspaceProjectsChanged, []);
+  panels.broadcast(channels.onSessionsChanged, []);
+  panels.broadcast(channels.onWorkspaceProjectsChanged, []);
   lastWorkspaceProjects = undefined;
 }
 
@@ -1912,7 +1892,7 @@ async function refreshTrackedIssues(generation: number): Promise<void> {
     }
     if (issueObservationLoop.isCurrent(generation)) {
       trackedIssues = connected ? collected : undefined;
-      panels.broadcast(channels.issuesChanged, trackedIssues);
+      panels.broadcast(channels.onIssuesChanged, trackedIssues);
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -1922,7 +1902,7 @@ async function refreshTrackedIssues(generation: number): Promise<void> {
 
 function stopIssueObservation(): void {
   trackedIssues = undefined;
-  panels.broadcast(channels.issuesChanged, undefined);
+  panels.broadcast(channels.onIssuesChanged, undefined);
 }
 
 function configurePermissions(): void {
@@ -2109,7 +2089,7 @@ export function startDesktopApp(): void {
       for (const eventName of ["resume", "unlock-screen", "user-did-become-active"] as const) {
         const handlePowerEvent = () => {
           handleDisplayChange();
-          panels.broadcast(channels.lifecycle, eventName);
+          panels.broadcast(channels.onLifecycle, eventName);
         };
         if (eventName === "resume") powerMonitor.on("resume", handlePowerEvent);
         if (eventName === "unlock-screen") {
