@@ -453,6 +453,27 @@ export class PanelManager {
     this.#modes.set(displayId, this.initialMode);
     const layout = this.#layoutFor(display, this.initialMode);
 
+    // An announcement is spoken into a window that may never have seen a
+    // user gesture: born non-focusable, pointer events ignored until the
+    // first hover. Playback must not answer to a gesture requirement, so
+    // the policy is asserted rather than left to Chromium's default.
+    // TEMPORARY (launch-test harness, remove before merge): the assertion is
+    // withheld under `--without-voice-fix`, and the arguments hand the
+    // renderer the revert and trace flags.
+    const webPreferences: Electron.WebPreferences = {
+      preload: this.#preloadPath,
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true,
+      devTools: this.#runMode.takesFocus,
+      backgroundThrottling: false,
+      additionalArguments: [
+        ...(this.#withoutVoiceFix ? ["--luke-without-voice-fix"] : []),
+        ...(this.#announceTrace ? ["--luke-trace-announcements"] : []),
+      ],
+    };
+    if (!this.#withoutVoiceFix) webPreferences.autoplayPolicy = "no-user-gesture-required";
     const window = new BrowserWindow({
       x: layout.x,
       y: layout.y,
@@ -475,28 +496,7 @@ export class PanelManager {
       focusable: this.initialMode === "expanded" && this.#runMode.takesFocus,
       acceptFirstMouse: true,
       type: process.platform === "darwin" ? "panel" : undefined,
-      webPreferences: {
-        preload: this.#preloadPath,
-        contextIsolation: true,
-        nodeIntegration: false,
-        sandbox: true,
-        webSecurity: true,
-        devTools: this.#runMode.takesFocus,
-        backgroundThrottling: false,
-        // An announcement is spoken into a window that may never have seen a
-        // user gesture: born non-focusable, pointer events ignored until the
-        // first hover. Playback must not answer to a gesture requirement, so
-        // the policy is asserted rather than left to Chromium's default.
-        // TEMPORARY (launch-test harness): the spreads revert the assertion —
-        // and tell the preload to revert the renderer's retry — under
-        // `--without-voice-fix`, and hand the renderer the trace flag under
-        // `--trace-announcements`.
-        ...(this.#withoutVoiceFix ? {} : { autoplayPolicy: "no-user-gesture-required" as const }),
-        additionalArguments: [
-          ...(this.#withoutVoiceFix ? ["--luke-without-voice-fix"] : []),
-          ...(this.#announceTrace ? ["--luke-trace-announcements"] : []),
-        ],
-      },
+      webPreferences,
     });
     this.#windows.set(displayId, window);
 
@@ -505,7 +505,7 @@ export class PanelManager {
     // renderer's trace lines beside the main process's, so one log tells the
     // whole story — including in a packaged app with no terminal behind it.
     if (this.#announceTrace) {
-      window.webContents.on("console-message", (_event, details) => {
+      window.webContents.on("console-message", (details) => {
         if (!details.message.includes("[announce-trace]")) return;
         const stamped = `${new Date().toISOString()} renderer: ${details.message}\n`;
         process.stderr.write(stamped);

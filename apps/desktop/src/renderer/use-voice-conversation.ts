@@ -120,7 +120,6 @@ export const REMOTE_AUDIO_RETRY_MS = 1_000;
 // console, and the window manager mirrors them into the main process's trace
 // log beside its own stages.
 function traceAnnounce(line: string): void {
-  if (typeof window === "undefined") return;
   // SAFETY: The harness flag is a bare boolean the preload exposed beside the bridge.
   if ((window as { lukeAnnounceTrace?: boolean }).lukeAnnounceTrace !== true) return;
   // biome-ignore lint/suspicious/noConsole: the harness trace travels as a console line by design.
@@ -1192,10 +1191,8 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     if ((window as { lukeVoiceFixDisabled?: boolean }).lukeVoiceFixDisabled === true) {
       void element.play().then(
         () => traceAnnounce("remote audio playing (fix reverted)"),
-        (error: unknown) =>
-          traceAnnounce(
-            `remote audio play refused, swallowed (fix reverted): ${error instanceof Error ? error.name : String(error)}`,
-          ),
+        (error: DOMException) =>
+          traceAnnounce(`remote audio play refused, swallowed (fix reverted): ${error.name}`),
       );
       return;
     }
@@ -1209,10 +1206,8 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     const play = () => {
       element.play().then(
         () => traceAnnounce("remote audio playing"),
-        (error: unknown) => {
-          traceAnnounce(
-            `remote audio play refused: ${error instanceof Error ? error.name : String(error)}`,
-          );
+        (error: DOMException) => {
+          traceAnnounce(`remote audio play refused: ${error.name}`);
           if (!detached) retryTimer = setTimeout(play, REMOTE_AUDIO_RETRY_MS);
         },
       );
