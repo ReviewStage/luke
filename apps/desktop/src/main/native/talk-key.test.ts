@@ -115,6 +115,7 @@ test("a refusal is reported once, not once per way of hearing it", () => {
   const context = harness();
   context.watcher.start(["Alt+Space"]);
   context.emit("unavailable already-owned\n");
+  context.emit("registered Alt+Space\ndown\nup\n");
   context.die();
 
   assert.deepEqual(context.edges, ["unavailable"]);

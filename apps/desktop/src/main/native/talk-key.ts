@@ -100,6 +100,7 @@ export class TalkKeyWatcher {
   }
 
   #handle(line: string): void {
+    if (this.#done) return;
     if (line === TALK_KEY_EVENT.DOWN) {
       this.#options.onPress();
       return;
