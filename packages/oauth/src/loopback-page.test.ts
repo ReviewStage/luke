@@ -34,12 +34,13 @@ test("the continue page opens the consent in a tab a script may close", () => {
     authorizationUrl: "https://accounts.example/authorize?client_id=abc&state=s-1",
   });
   // `target="_blank"` makes the consent tab web-created — the one kind whose
-  // landing page may close it — and `rel="opener"` undoes the implicit
-  // `noopener` that would take that back.
+  // landing page may close it — while its implicit `noopener` keeps the
+  // provider from receiving a handle to the continue page.
   assert.match(
     page,
-    /<a class="continue" id="continue" href="https:\/\/accounts\.example\/authorize\?client_id=abc&amp;state=s-1" target="_blank" rel="opener">Continue to Google<\/a>/,
+    /<a class="continue" id="continue" href="https:\/\/accounts\.example\/authorize\?client_id=abc&amp;state=s-1" target="_blank">Continue to Google<\/a>/,
   );
+  assert.doesNotMatch(page, /rel="opener"/);
   // This page closes itself once the click has done its work.
   assert.match(page, /window\.close\(\)/);
 });

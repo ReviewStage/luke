@@ -47,7 +47,7 @@ export interface LoopbackPage {
  * `window.close()` outright. So the flow's first stop is this page, served by
  * the same loopback, whose one link opens the provider's consent in a tab of
  * its own — a tab created by web content, which stays script-closable through
- * every consent navigation and even a provider's COOP severing the opener —
+ * every consent navigation and even a provider's COOP isolation —
  * and then closes itself, a close its own single-entry history allows.
  */
 export interface LoopbackContinuePage {
@@ -222,15 +222,14 @@ export function accountLoopbackPage(page: LoopbackPage): string {
 
 export function loopbackContinuePage(page: LoopbackContinuePage): string {
   // `target="_blank"` is what makes the consent tab web-created and so
-  // script-closable; `rel="opener"` undoes the implicit `noopener` such a
-  // link now carries, which would otherwise hand the provider a tab no
-  // script may close. Nothing is ever done with the opener handle itself —
-  // this page is gone a beat after the click.
+  // script-closable. Its implicit `noopener` stays intact: the provider needs
+  // no handle to the continue page, and closing depends on how the tab was
+  // created rather than on an opener relationship.
   return cardDocument(
     page.title,
     markSvg() +
       `<h1>${page.title}</h1><p>${page.body}</p>` +
-      `<a class="continue" id="continue" href="${escapeAttribute(page.authorizationUrl)}" target="_blank" rel="opener">${page.action}</a>` +
+      `<a class="continue" id="continue" href="${escapeAttribute(page.authorizationUrl)}" target="_blank">${page.action}</a>` +
       CLOSE_NOTE,
     CONTINUE_SCRIPT,
   );

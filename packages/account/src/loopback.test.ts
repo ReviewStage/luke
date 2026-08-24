@@ -42,8 +42,9 @@ test("the continue page carries the sign-in behind one script-closable link", as
     // the landing page's close is honored in — with the URL escaped in place.
     assert.match(
       body,
-      /href="https:\/\/auth\.example\/authorize\?client_id=abc&amp;state=s-1" target="_blank" rel="opener"/,
+      /href="https:\/\/auth\.example\/authorize\?client_id=abc&amp;state=s-1" target="_blank"/,
     );
+    assert.doesNotMatch(body, /rel="opener"/);
   } finally {
     await loopback.close();
   }
