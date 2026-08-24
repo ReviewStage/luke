@@ -107,6 +107,17 @@ test("a value outside its own set discards the event", () => {
   assert.equal(productEventFromWire({ name: PRODUCT_EVENT.APP_LAUNCH, at: AT }), undefined);
 });
 
+test("a provider without a connection cannot pass as connection_id", () => {
+  assert.equal(
+    productEventFromWire({
+      name: PRODUCT_EVENT.PROVIDER_CONNECT,
+      at: AT,
+      properties: { [PRODUCT_EVENT_PROPERTY.CONNECTION_ID]: "codex" },
+    }),
+    undefined,
+  );
+});
+
 test("prose cannot pass as a property value", () => {
   const prose = "codex — /Users/me/luke on feature/x";
   assert.equal(

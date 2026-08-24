@@ -2,6 +2,7 @@ import os from "node:os";
 import path from "node:path";
 import { AGENT_IDENTITY, agentIdentityFor, type SessionProvider } from "@sidecar/session";
 import { isRecord, oneLine, text, type WireRecord } from "@sidecar/wire";
+import { LOCAL_TOOL_ARGUMENT_KEYS } from "../shared/tool-arguments.js";
 
 /**
  * The vocabulary of the store the Radius browser keeps its agent chats in:
@@ -137,16 +138,6 @@ export function radiusEventPayload(event: WireRecord): WireRecord | undefined {
  * not in it, because a signed URL is a credential and no other adapter sends
  * one anywhere; a fetch is named by its tool alone.
  */
-const RADIUS_TOOL_ARGUMENT_KEY = [
-  "description",
-  "command",
-  "file_path",
-  "path",
-  "pattern",
-  "prompt",
-  "query",
-] as const;
-
 /** What Radius calls the tool an event describes. */
 export function radiusToolName(payload: WireRecord): string | undefined {
   return text(payload.toolName);
@@ -165,7 +156,7 @@ export function radiusToolId(payload: WireRecord): string | undefined {
 export function radiusToolDetail(payload: WireRecord, maximumLength: number): string | undefined {
   const args = payload.args;
   if (!isRecord(args)) return undefined;
-  return RADIUS_TOOL_ARGUMENT_KEY.map((key) => oneLine(text(args[key]), maximumLength)).find(
+  return LOCAL_TOOL_ARGUMENT_KEYS.map((key) => oneLine(text(args[key]), maximumLength)).find(
     (candidate) => candidate !== undefined,
   );
 }

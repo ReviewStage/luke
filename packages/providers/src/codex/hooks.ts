@@ -1,3 +1,4 @@
+import { HOOK_EVENT } from "../shared/hook-events.js";
 import {
   HOOK_ENTRY_NESTING,
   type ObservationHookSpec,
@@ -38,11 +39,11 @@ const CODEX_HOOK_TIMEOUT_SECONDS = 10;
  * fires no hook for a turn that failed, so the rollout keeps that verdict.
  */
 export const CODEX_HOOK_EVENT = {
-  SESSION_START: "session-start",
-  PROMPT: "prompt",
-  STOP: "stop",
-  NOTIFICATION: "notification",
-  SESSION_END: "session-end",
+  SESSION_START: HOOK_EVENT.SESSION_START,
+  PROMPT: HOOK_EVENT.PROMPT,
+  STOP: HOOK_EVENT.STOP,
+  NOTIFICATION: HOOK_EVENT.NOTIFICATION,
+  SESSION_END: HOOK_EVENT.SESSION_END,
 } as const;
 
 export type CodexHookEvent = (typeof CODEX_HOOK_EVENT)[keyof typeof CODEX_HOOK_EVENT];

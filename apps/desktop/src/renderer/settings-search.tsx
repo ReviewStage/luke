@@ -123,13 +123,20 @@ export const SETTINGS_SEARCH_ROW = {
  * it does not name draws its row unfound rather than mislanding a press, and
  * widening it is one line beside the capability that widened.
  */
+type DefaultProjectProviderId =
+  | typeof PROVIDER_ID.CONDUCTOR
+  | typeof CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID
+  | typeof PROVIDER_ID.CODEX
+  | typeof PROVIDER_ID.CURSOR
+  | typeof SUPERSET_WORKSPACE_PROVIDER_ID;
+
 const DEFAULT_PROJECT_ROW_ID = {
   [PROVIDER_ID.CONDUCTOR]: "default-project-conductor",
   [CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID]: "default-project-conductor-local",
   [PROVIDER_ID.CODEX]: "default-project-codex",
   [PROVIDER_ID.CURSOR]: "default-project-cursor",
   [SUPERSET_WORKSPACE_PROVIDER_ID]: "default-project-superset",
-} as const satisfies Partial<Record<WorkspaceProviderId, string>>;
+} as const satisfies Readonly<Record<DefaultProjectProviderId, string>>;
 
 /** The anchor a provider's Default project row wears, if the table names it. */
 export function defaultProjectRowId(providerId: WorkspaceProviderId): string | undefined {

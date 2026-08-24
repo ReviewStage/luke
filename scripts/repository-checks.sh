@@ -110,6 +110,11 @@ node "$SIDECAR_REPO_ROOT/design/generate-brand-assets.mjs" --check
 # source, four committed outputs in @sidecar/surface; --check fails if any drifted.
 node "$SIDECAR_REPO_ROOT/design/generate-surface-shared.mjs" --check
 
+# The public platform table is a direct projection of the session package's
+# narrow provider identity catalog. Privacy wording stays manually reviewed.
+pnpm --dir "$SIDECAR_REPO_ROOT/packages/session" exec tsx \
+    "$SIDECAR_REPO_ROOT/scripts/generate-provider-readme.ts" --check
+
 # Mount reveals, literal timings, loops, and layout-property animation obey the
 # renderer contract in DESIGN.md. The checker keeps the bounded face-artwork
 # exceptions explicit while rejecting new drift.

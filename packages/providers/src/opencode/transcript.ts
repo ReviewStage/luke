@@ -2,7 +2,6 @@ import { isRecord, oneLine, recordFromJsonLine, text, type WireRecord } from "@s
 import {
   canIgnoreSqliteError,
   defaultSqliteModule,
-  openReadOnlyDatabase,
   type SqliteDatabase,
   type SqliteModuleLoader,
 } from "../shared/local-sqlite.js";
@@ -11,6 +10,7 @@ import {
   TRANSCRIPT_BOUNDS,
   transcriptLine,
 } from "../shared/local-transcript.js";
+import { withSqliteTranscript } from "../shared/sqlite-transcript.js";
 import {
   defaultOpenCodeDataDirectory,
   OPENCODE_TOOL_INPUT_KEY,
@@ -222,19 +222,11 @@ export async function readOpenCodeSessionTranscript(
 ): Promise<string | undefined> {
   const dataDirectory = request.dataDirectory ?? defaultOpenCodeDataDirectory();
   const sqlite = request.sqlite ?? defaultSqliteModule;
-  for (const databasePath of openCodeDatabasePaths(dataDirectory)) {
-    const database = await openReadOnlyDatabase(sqlite, databasePath);
-    if (!database) continue;
-    try {
-      const rendered = renderedFromDatabase(
-        database,
-        request.providerSessionId,
-        request.maximumRenderedLength ?? TRANSCRIPT_BOUNDS.MAXIMUM_RENDERED_LENGTH,
-      );
-      if (rendered) return rendered;
-    } finally {
-      database.close();
-    }
-  }
-  return undefined;
+  return withSqliteTranscript(sqlite, openCodeDatabasePaths(dataDirectory), (database) =>
+    renderedFromDatabase(
+      database,
+      request.providerSessionId,
+      request.maximumRenderedLength ?? TRANSCRIPT_BOUNDS.MAXIMUM_RENDERED_LENGTH,
+    ),
+  );
 }

@@ -1,5 +1,6 @@
 import {
   PROVIDER_ID,
+  PROVIDER_IDENTITY_BY_ID,
   type ProviderId,
   SESSION_APPLICATION_ID,
   SESSION_APPLICATION_SCOPE,
@@ -109,6 +110,26 @@ function minutesBeforeEpoch(minutes: number): number {
   return FIXTURE_EPOCH_MS - minutes * 60_000;
 }
 
+const providerName = (providerId: ProviderId): string =>
+  PROVIDER_IDENTITY_BY_ID[providerId].displayName;
+
+/** Smoke rows owned by each provider, including explicit empty coverage. */
+export const FIXTURE_SESSION_IDS_BY_PROVIDER = {
+  [PROVIDER_ID.ANTIGRAVITY]: [],
+  [PROVIDER_ID.CLAUDE_CODE]: ["claude-review"],
+  [PROVIDER_ID.CODEX]: ["codex-bootstrap"],
+  [PROVIDER_ID.CONDUCTOR]: ["conductor-chat-package", "conductor-chat-tidy"],
+  [PROVIDER_ID.COPILOT]: [],
+  [PROVIDER_ID.CURSOR]: ["cursor-agent"],
+  [PROVIDER_ID.DEVIN]: ["devin-session"],
+  [PROVIDER_ID.GEMINI_CLI]: [],
+  [PROVIDER_ID.GROK_BUILD]: [],
+  [PROVIDER_ID.JULES]: [],
+  [PROVIDER_ID.OPENCODE]: [],
+  [PROVIDER_ID.RADIUS]: [],
+  [PROVIDER_ID.REPLICAS]: [],
+} as const satisfies Readonly<Record<ProviderId, readonly string[]>>;
+
 const smokeFixture: FixtureSnapshot = {
   scenario: "smoke",
   sessions: [
@@ -117,7 +138,7 @@ const smokeFixture: FixtureSnapshot = {
       title:
         "Bootstrap the desktop shell while keeping every destination visible across a very long Codex conversation title",
       providerId: PROVIDER_ID.CODEX,
-      provider: "Codex",
+      provider: providerName(PROVIDER_ID.CODEX),
       applications: [
         {
           id: SESSION_APPLICATION_ID.CHATGPT,
@@ -145,7 +166,7 @@ const smokeFixture: FixtureSnapshot = {
       id: "claude-review",
       title: "Review trust constraints",
       providerId: PROVIDER_ID.CLAUDE_CODE,
-      provider: "Claude Code",
+      provider: providerName(PROVIDER_ID.CLAUDE_CODE),
       detail: "Both adapters observe read-only; next, say whether to ship it.",
       repository: "luke",
       branch: "dean/trust-constraints",
@@ -167,9 +188,9 @@ const smokeFixture: FixtureSnapshot = {
       id: "conductor-chat-package",
       title: "amber-shoal",
       providerId: PROVIDER_ID.CONDUCTOR,
-      provider: "Conductor",
+      provider: providerName(PROVIDER_ID.CONDUCTOR),
       agentId: PROVIDER_ID.CLAUDE_CODE,
-      agent: "Claude Code",
+      agent: providerName(PROVIDER_ID.CLAUDE_CODE),
       applications: [
         {
           id: SESSION_APPLICATION_ID.CONDUCTOR,
@@ -189,7 +210,7 @@ const smokeFixture: FixtureSnapshot = {
         id: "conductor-lisbon",
         name: "lisbon-v2",
         scopeId: PROVIDER_ID.CONDUCTOR,
-        managerName: "Conductor",
+        managerName: providerName(PROVIDER_ID.CONDUCTOR),
       },
     },
     // The complete chat is also the most recently observed session while being
@@ -203,7 +224,7 @@ const smokeFixture: FixtureSnapshot = {
       id: "conductor-chat-tidy",
       title: "gentle-cove",
       providerId: PROVIDER_ID.CONDUCTOR,
-      provider: "Conductor",
+      provider: providerName(PROVIDER_ID.CONDUCTOR),
       applications: [
         {
           id: SESSION_APPLICATION_ID.CONDUCTOR,
@@ -223,14 +244,14 @@ const smokeFixture: FixtureSnapshot = {
         id: "conductor-lisbon",
         name: "lisbon-v2",
         scopeId: PROVIDER_ID.CONDUCTOR,
-        managerName: "Conductor",
+        managerName: providerName(PROVIDER_ID.CONDUCTOR),
       },
     },
     {
       id: "cursor-agent",
       title: "Follow a cloud agent",
       providerId: PROVIDER_ID.CURSOR,
-      provider: "Cursor",
+      provider: providerName(PROVIDER_ID.CURSOR),
       // The Cursor app opens any cloud agent by id, so the row wears the app
       // mark beside the agent identity — which also keeps both Cursor filter
       // chips, app and agent, in the one screenshot the evidence is reviewed
@@ -268,7 +289,7 @@ const smokeFixture: FixtureSnapshot = {
       id: "devin-session",
       title: "Watch a cloud session",
       providerId: PROVIDER_ID.DEVIN,
-      provider: "Devin",
+      provider: providerName(PROVIDER_ID.DEVIN),
       detail: "Suspended before it opened a pull request.",
       repository: "sidecar-native",
       urgency: SESSION_URGENCY.UNKNOWN,

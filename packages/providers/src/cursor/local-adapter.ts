@@ -8,7 +8,6 @@ import {
   maximumSessionRecapLength,
   maximumSessionTitleLength,
   type ProviderMessageResult,
-  type ProviderSessionMessage,
   type ProviderSessionObservation,
   type ProviderTranscriptResult,
   providerTranscriptResult,
@@ -17,7 +16,6 @@ import {
   type SessionDetail,
   type SessionDiffSummary,
   type SessionStatus,
-  sessionMessageText,
   UNKNOWN_WORKSPACE_LABEL,
 } from "@sidecar/session";
 import {
@@ -1282,20 +1280,18 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
    * the pass must refuse before anything runs. Nothing is read out of a
    * launched turn: the transcript the adapter already observes is the report.
    */
-  override async sendMessage(message: ProviderSessionMessage): Promise<ProviderMessageResult> {
-    const text = sessionMessageText(message.text);
-    if (!text) {
-      return {
-        status: ACT_RESULT_STATUS.REJECTED,
-        reason: "That message is empty or too long.",
-      };
-    }
-    const target = this.#sendTargets.get(message.providerSessionId);
-    if (!target)
+  protected override async deliverMessage(
+    observation: ProviderSessionObservation,
+    text: string,
+  ): Promise<ProviderMessageResult> {
+    const providerSessionId = observation.providerSessionId;
+    const target = this.#sendTargets.get(providerSessionId);
+    if (!target) {
       return {
         status: ACT_RESULT_STATUS.UNSUPPORTED,
         reason: "That act is not supported by the latest observation.",
       };
+    }
     const stats = await fileStats(target.transcriptFilePath);
     if (!stats?.isFile()) {
       return {
@@ -1330,7 +1326,7 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
     try {
       launch = await this.#cursorAgent.launch(binaryPath, [
         CURSOR_AGENT_CLI.RESUME_FLAG,
-        message.providerSessionId,
+        providerSessionId,
         CURSOR_AGENT_CLI.WORKSPACE_FLAG,
         target.folderPath,
         ...CURSOR_AGENT_CLI.SEND_ARGV,

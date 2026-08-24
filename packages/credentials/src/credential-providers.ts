@@ -1,5 +1,5 @@
 import { ISSUE_TRACKER_ID } from "@sidecar/issues";
-import { PROVIDER_ID } from "@sidecar/session";
+import { PROVIDER_ID, PROVIDER_IDENTITY_BY_ID } from "@sidecar/session";
 import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
 
 /**
@@ -133,7 +133,7 @@ export const CREDENTIAL_PROVIDERS: CredentialProviderRegistry = {
   [CREDENTIAL_PROVIDER_ID.CONDUCTOR]: {
     id: CREDENTIAL_PROVIDER_ID.CONDUCTOR,
     connection: CREDENTIAL_CONNECTION.KEY,
-    displayName: "Conductor",
+    displayName: PROVIDER_IDENTITY_BY_ID[PROVIDER_ID.CONDUCTOR].displayName,
     hint: "Create a key in Conductor under Settings · API keys.",
     apiKeysUrl: "https://app.conductor.build/users/api-keys",
     environmentVariables: [CONDUCTOR_ENVIRONMENT.API_KEY, CONDUCTOR_ENVIRONMENT.API_TOKEN],
@@ -141,7 +141,7 @@ export const CREDENTIAL_PROVIDERS: CredentialProviderRegistry = {
   [CREDENTIAL_PROVIDER_ID.COPILOT]: {
     id: CREDENTIAL_PROVIDER_ID.COPILOT,
     connection: CREDENTIAL_CONNECTION.KEY,
-    displayName: "Copilot",
+    displayName: PROVIDER_IDENTITY_BY_ID[PROVIDER_ID.COPILOT].displayName,
     // GitHub's agent-tasks endpoints answer only user tokens. The copy names
     // the kind to create because the wrong kinds also come from GitHub: a
     // classic PAT cannot carry the Agent tasks permission, and an installation
@@ -156,7 +156,7 @@ export const CREDENTIAL_PROVIDERS: CredentialProviderRegistry = {
   [CREDENTIAL_PROVIDER_ID.CURSOR]: {
     id: CREDENTIAL_PROVIDER_ID.CURSOR,
     connection: CREDENTIAL_CONNECTION.KEY,
-    displayName: "Cursor",
+    displayName: PROVIDER_IDENTITY_BY_ID[PROVIDER_ID.CURSOR].displayName,
     hint: "Create a key in the Cursor dashboard under Integrations · API keys.",
     apiKeysUrl: "https://cursor.com/dashboard/api",
     environmentVariables: [CURSOR_ENVIRONMENT.API_KEY],
@@ -164,7 +164,7 @@ export const CREDENTIAL_PROVIDERS: CredentialProviderRegistry = {
   [CREDENTIAL_PROVIDER_ID.DEVIN]: {
     id: CREDENTIAL_PROVIDER_ID.DEVIN,
     connection: CREDENTIAL_CONNECTION.KEY,
-    displayName: "Devin",
+    displayName: PROVIDER_IDENTITY_BY_ID[PROVIDER_ID.DEVIN].displayName,
     hint: "Create one on the Devin API settings page, under PATs.",
     // Not the Settings · API keys page, which issues the deprecated `apk_`
     // keys Luke refuses. Personal access tokens live on their own tab.
@@ -188,7 +188,7 @@ export const CREDENTIAL_PROVIDERS: CredentialProviderRegistry = {
   [CREDENTIAL_PROVIDER_ID.JULES]: {
     id: CREDENTIAL_PROVIDER_ID.JULES,
     connection: CREDENTIAL_CONNECTION.KEY,
-    displayName: "Jules",
+    displayName: PROVIDER_IDENTITY_BY_ID[PROVIDER_ID.JULES].displayName,
     // Jules shows a key once, on creation, and allows at most three at a time.
     hint: "Create a key in Jules under Settings · API key. It is shown only once.",
     apiKeysUrl: "https://jules.google.com/settings",
@@ -236,7 +236,7 @@ export const CREDENTIAL_PROVIDERS: CredentialProviderRegistry = {
   [CREDENTIAL_PROVIDER_ID.REPLICAS]: {
     id: CREDENTIAL_PROVIDER_ID.REPLICAS,
     connection: CREDENTIAL_CONNECTION.KEY,
-    displayName: "Replicas",
+    displayName: PROVIDER_IDENTITY_BY_ID[PROVIDER_ID.REPLICAS].displayName,
     // Replicas issues organization keys and personal keys, and its API takes
     // either; the personal page is the one every member can reach.
     hint: "Create a key in the Replicas dashboard under Personal · API keys.",

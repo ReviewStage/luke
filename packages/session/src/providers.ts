@@ -6,10 +6,19 @@ import {
   type SessionProvider,
 } from "./session.js";
 
+export const PROVIDER_LOCATION_KIND = {
+  LOCAL: "local",
+  CLOUD: "cloud",
+  LOCAL_AND_CLOUD: "local-and-cloud",
+} as const;
+
+export type ProviderLocationKind =
+  (typeof PROVIDER_LOCATION_KIND)[keyof typeof PROVIDER_LOCATION_KIND];
+
 /**
  * Stable provider identifiers shared by adapters, the registry, and the UI.
- * They key provider-specific presentation (such as a mark) without a renderer
- * having to import adapter code or match on a display name.
+ * They key provider-specific facts without a renderer importing adapter code
+ * or matching on a display name.
  */
 export const PROVIDER_ID = {
   ANTIGRAVITY: "antigravity",
@@ -28,6 +37,84 @@ export const PROVIDER_ID = {
 } as const;
 
 export type ProviderId = (typeof PROVIDER_ID)[keyof typeof PROVIDER_ID];
+
+export interface ProviderIdentity {
+  readonly id: ProviderId;
+  readonly displayName: string;
+  readonly location: ProviderLocationKind;
+}
+
+/**
+ * Shared provider identity only. Capabilities, credentials, hooks, fixtures,
+ * and presentation stay in the packages that own those decisions.
+ */
+export const PROVIDER_IDENTITY_BY_ID = {
+  [PROVIDER_ID.ANTIGRAVITY]: {
+    id: PROVIDER_ID.ANTIGRAVITY,
+    displayName: "Antigravity",
+    location: PROVIDER_LOCATION_KIND.LOCAL,
+  },
+  [PROVIDER_ID.CLAUDE_CODE]: {
+    id: PROVIDER_ID.CLAUDE_CODE,
+    displayName: "Claude Code",
+    location: PROVIDER_LOCATION_KIND.LOCAL,
+  },
+  [PROVIDER_ID.CODEX]: {
+    id: PROVIDER_ID.CODEX,
+    displayName: "Codex",
+    location: PROVIDER_LOCATION_KIND.LOCAL_AND_CLOUD,
+  },
+  [PROVIDER_ID.CONDUCTOR]: {
+    id: PROVIDER_ID.CONDUCTOR,
+    displayName: "Conductor",
+    location: PROVIDER_LOCATION_KIND.CLOUD,
+  },
+  [PROVIDER_ID.COPILOT]: {
+    id: PROVIDER_ID.COPILOT,
+    displayName: "Copilot",
+    location: PROVIDER_LOCATION_KIND.CLOUD,
+  },
+  [PROVIDER_ID.CURSOR]: {
+    id: PROVIDER_ID.CURSOR,
+    displayName: "Cursor",
+    location: PROVIDER_LOCATION_KIND.LOCAL_AND_CLOUD,
+  },
+  [PROVIDER_ID.DEVIN]: {
+    id: PROVIDER_ID.DEVIN,
+    displayName: "Devin",
+    location: PROVIDER_LOCATION_KIND.LOCAL_AND_CLOUD,
+  },
+  [PROVIDER_ID.GEMINI_CLI]: {
+    id: PROVIDER_ID.GEMINI_CLI,
+    displayName: "Gemini CLI",
+    location: PROVIDER_LOCATION_KIND.LOCAL,
+  },
+  [PROVIDER_ID.GROK_BUILD]: {
+    id: PROVIDER_ID.GROK_BUILD,
+    displayName: "Grok Build",
+    location: PROVIDER_LOCATION_KIND.LOCAL,
+  },
+  [PROVIDER_ID.JULES]: {
+    id: PROVIDER_ID.JULES,
+    displayName: "Jules",
+    location: PROVIDER_LOCATION_KIND.CLOUD,
+  },
+  [PROVIDER_ID.OPENCODE]: {
+    id: PROVIDER_ID.OPENCODE,
+    displayName: "OpenCode",
+    location: PROVIDER_LOCATION_KIND.LOCAL,
+  },
+  [PROVIDER_ID.RADIUS]: {
+    id: PROVIDER_ID.RADIUS,
+    displayName: "Radius",
+    location: PROVIDER_LOCATION_KIND.LOCAL,
+  },
+  [PROVIDER_ID.REPLICAS]: {
+    id: PROVIDER_ID.REPLICAS,
+    displayName: "Replicas",
+    location: PROVIDER_LOCATION_KIND.CLOUD,
+  },
+} as const satisfies Readonly<Record<ProviderId, ProviderIdentity>>;
 
 /**
  * The provider id the local Conductor workspace creator answers to. It names
@@ -59,7 +146,9 @@ export type WorkspaceProviderId =
  * rather than one derived from live sessions, so a list of agents does not
  * reshuffle as their sessions come and go.
  */
-export const PROVIDER_ID_LIST: readonly ProviderId[] = Object.values(PROVIDER_ID);
+export const PROVIDER_ID_LIST: readonly ProviderId[] = Object.values(PROVIDER_IDENTITY_BY_ID).map(
+  (identity) => identity.id,
+);
 
 /**
  * Agents Luke draws only inside a hosting app's workspaces — today the

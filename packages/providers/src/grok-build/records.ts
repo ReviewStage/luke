@@ -8,6 +8,7 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
+import { LOCAL_TOOL_ARGUMENT_KEYS } from "../shared/tool-arguments.js";
 
 /**
  * The vocabulary of Grok Build's session stores, shared by the adapter that
@@ -84,15 +85,7 @@ export const GROK_SETTLED_TOOL_STATUSES: ReadonlySet<string> = new Set(["complet
  * not in it, because a signed URL is a credential and no other adapter sends
  * one anywhere; a fetch is named by its tool alone.
  */
-export const GROK_TOOL_INPUT_KEY = [
-  "description",
-  "command",
-  "file_path",
-  "path",
-  "pattern",
-  "prompt",
-  "query",
-] as const;
+export const GROK_TOOL_INPUT_KEY = LOCAL_TOOL_ARGUMENT_KEYS;
 
 /** The tool metadata key the CLI namespaces its own bookkeeping under. */
 const GROK_TOOL_META_KEY = "x.ai/tool";

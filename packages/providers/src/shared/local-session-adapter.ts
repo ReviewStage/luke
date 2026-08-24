@@ -2,13 +2,17 @@ import type { Dirent, Stats } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import {
+  ACT_RESULT_STATUS,
   agedStatus,
   OBSERVATION_WINDOW,
+  type ProviderMessageResult,
+  type ProviderSessionMessage,
   type ProviderSessionObservation,
   SESSION_STATUS,
   type SessionProvider,
   SessionProviderAdapterBase,
   type SessionStatus,
+  sessionMessageText,
   UNKNOWN_WORKSPACE_LABEL,
 } from "@sidecar/session";
 import { recordFromJsonLine, resolveOptions, type WireRecord } from "@sidecar/wire";
@@ -183,6 +187,7 @@ export interface LocalSessionAdapterOptions {
  */
 export abstract class LocalSessionAdapter extends SessionProviderAdapterBase {
   readonly #now: () => number;
+  #observations: readonly ProviderSessionObservation[] = [];
   protected readonly activeSessionFreshnessMs: number;
 
   protected constructor(options: LocalSessionAdapterOptions = {}) {
@@ -198,6 +203,50 @@ export abstract class LocalSessionAdapter extends SessionProviderAdapterBase {
 
   protected observationTime(): number {
     return this.#now();
+  }
+
+  /** Publishes exactly the roster a local write must re-check against. */
+  protected observed(
+    observations: readonly ProviderSessionObservation[],
+  ): readonly ProviderSessionObservation[] {
+    this.#observations = observations;
+    return observations;
+  }
+
+  /**
+   * Shared local-message guard. A local adapter gains no write by inheriting
+   * this: the default delivery remains unsupported. An adapter that overrides
+   * `deliverMessage` receives only a session the latest roster advertised and
+   * already-bounded developer text.
+   */
+  override async sendMessage(message: ProviderSessionMessage): Promise<ProviderMessageResult> {
+    const observation = this.#observations.find(
+      (candidate) => candidate.providerSessionId === message.providerSessionId,
+    );
+    if (!observation?.canReceiveMessage) {
+      return {
+        status: ACT_RESULT_STATUS.UNSUPPORTED,
+        reason: "That act is not supported by the latest observation.",
+      };
+    }
+    const text = sessionMessageText(message.text);
+    if (!text) {
+      return {
+        status: ACT_RESULT_STATUS.REJECTED,
+        reason: "That message is empty or too long.",
+      };
+    }
+    return this.deliverMessage(observation, text);
+  }
+
+  protected async deliverMessage(
+    _observation: ProviderSessionObservation,
+    _text: string,
+  ): Promise<ProviderMessageResult> {
+    return {
+      status: ACT_RESULT_STATUS.UNSUPPORTED,
+      reason: "This provider has no such control.",
+    };
   }
 }
 
@@ -243,7 +292,7 @@ export abstract class LocalFileSessionAdapter<
     for (const filePath of this.#parsed.keys()) {
       if (!discovered.has(filePath)) this.#parsed.delete(filePath);
     }
-    return [...observations.values()];
+    return this.observed([...observations.values()]);
   }
 
   private async parseAndCache(candidate: Candidate): Promise<Parsed> {

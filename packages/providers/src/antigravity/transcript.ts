@@ -4,7 +4,6 @@ import {
   canIgnoreSqliteError,
   defaultSqliteModule,
   numberFromRow,
-  openReadOnlyDatabase,
   type SqliteDatabase,
   type SqliteModuleLoader,
 } from "../shared/local-sqlite.js";
@@ -13,6 +12,7 @@ import {
   TRANSCRIPT_BOUNDS,
   transcriptLine,
 } from "../shared/local-transcript.js";
+import { withSqliteTranscript } from "../shared/sqlite-transcript.js";
 import {
   ANTIGRAVITY_CONVERSATION_STORE_EXTENSION,
   ANTIGRAVITY_CONVERSATIONS_DIRECTORY,
@@ -154,24 +154,20 @@ export async function readAntigravitySessionTranscript(
   if (!ANTIGRAVITY_SESSION_ID_PATTERN.test(request.providerSessionId)) return undefined;
   const antigravityHome = request.antigravityHome ?? defaultAntigravityHome();
   const sqlite = request.sqlite ?? defaultSqliteModule;
-  for (const profile of ANTIGRAVITY_PROFILE_DIRECTORIES) {
-    const storePath = path.join(
-      antigravityHome,
-      profile,
-      ANTIGRAVITY_CONVERSATIONS_DIRECTORY,
-      `${request.providerSessionId}${ANTIGRAVITY_CONVERSATION_STORE_EXTENSION}`,
-    );
-    const database = await openReadOnlyDatabase(sqlite, storePath);
-    if (!database) continue;
-    try {
-      const rendered = renderedFromDatabase(
+  return withSqliteTranscript(
+    sqlite,
+    ANTIGRAVITY_PROFILE_DIRECTORIES.map((profile) =>
+      path.join(
+        antigravityHome,
+        profile,
+        ANTIGRAVITY_CONVERSATIONS_DIRECTORY,
+        `${request.providerSessionId}${ANTIGRAVITY_CONVERSATION_STORE_EXTENSION}`,
+      ),
+    ),
+    (database) =>
+      renderedFromDatabase(
         database,
         request.maximumRenderedLength ?? TRANSCRIPT_BOUNDS.MAXIMUM_RENDERED_LENGTH,
-      );
-      if (rendered) return rendered;
-    } finally {
-      database.close();
-    }
-  }
-  return undefined;
+      ),
+  );
 }

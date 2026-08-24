@@ -55,21 +55,23 @@ Connect your calendar and Luke stays quiet until your meeting is over.
 
 ## Supported agents and platforms
 
+<!-- provider-agents:start -->
 | Agent | Local | Cloud |
 | --- | :---: | :---: |
-| Antigravity | ✅ | |
-| Claude Code | ✅ | |
+| Antigravity | ✅ |  |
+| Claude Code | ✅ |  |
 | Codex | ✅ | ✅ |
-| Conductor | | ✅ |
+| Conductor |  | ✅ |
+| Copilot |  | ✅ |
 | Cursor | ✅ | ✅ |
 | Devin | ✅ | ✅ |
-| Gemini CLI | ✅ | |
-| GitHub Copilot | | ✅ |
-| Grok Build | ✅ | |
-| Jules | | ✅ |
-| OpenCode | ✅ | |
-| Radius | ✅ | |
-| Replicas | | ✅ |
+| Gemini CLI | ✅ |  |
+| Grok Build | ✅ |  |
+| Jules |  | ✅ |
+| OpenCode | ✅ |  |
+| Radius | ✅ |  |
+| Replicas |  | ✅ |
+<!-- provider-agents:end -->
 
 ## Install
 
