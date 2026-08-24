@@ -1,3 +1,4 @@
+import type { FaceMotion } from "@sidecar/surface";
 import { createAuthClient } from "better-auth/react";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, XAxis, YAxis } from "recharts";
@@ -30,6 +31,16 @@ import { accountInitials } from "./account-initials";
 import { accountLabel } from "./account-label";
 import { GitHubMark, GoogleMark } from "./account-marks";
 import { calendarWeeks, DAYS_PER_WEEK, lastWeeks, monthLabels } from "./activity-calendar";
+import {
+  ANIMATION_ROSTER,
+  ANIMATION_SWATCH,
+  ANIMATION_VARIANT,
+  ANIMATION_VARIANT_LABEL,
+  type AnimationEntry,
+  type AnimationVariant,
+  formatCycleSeconds,
+  indexAnimationAssets,
+} from "./admin-animations";
 import { settleRead } from "./admin-refresh";
 import {
   SIDEBAR_ICON_SLOT,
@@ -71,6 +82,7 @@ const ACCOUNT_VIEW_PARAM = "user";
 const DAY_VIEW_PARAM = "day";
 const TAB_PARAM = "view";
 const USERS_TAB_VALUE = "users";
+const ANIMATIONS_TAB_VALUE = "animations";
 const WINDOW_VIEW_PARAM = "days";
 const SEARCH_VIEW_PARAM = "q";
 
@@ -80,13 +92,14 @@ const SEARCH_VIEW_PARAM = "q";
  */
 const SEARCH_DEBOUNCE_MS = 250;
 
-/** The sidebar's two destinations; an open account highlights Users. */
-type AdminTab = "dashboard" | "users";
+/** The sidebar's three destinations; an open account highlights Users. */
+type AdminTab = "dashboard" | "users" | "animations";
 
 /** Which of the page's views the address bar names. */
 type AdminView =
   | { kind: "dashboard" }
   | { kind: "users" }
+  | { kind: "animations" }
   | { kind: "account"; id: string }
   | { kind: "day"; day: string };
 
@@ -99,6 +112,7 @@ function viewFromLocation(): AdminView {
   const day = params.get(DAY_VIEW_PARAM);
   if (day !== null && isUtcDayKey(day)) return { kind: "day", day };
   if (params.get(TAB_PARAM) === USERS_TAB_VALUE) return { kind: "users" };
+  if (params.get(TAB_PARAM) === ANIMATIONS_TAB_VALUE) return { kind: "animations" };
   return { kind: "dashboard" };
 }
 
@@ -175,6 +189,7 @@ function dayHref(day: string): string {
 function tabHref(tab: AdminTab): string {
   const params = new URLSearchParams();
   if (tab === "users") params.set(TAB_PARAM, USERS_TAB_VALUE);
+  if (tab === "animations") params.set(TAB_PARAM, ANIMATIONS_TAB_VALUE);
   return hrefWithWindow(params);
 }
 
@@ -1272,6 +1287,25 @@ function UsersIcon(): React.JSX.Element {
   );
 }
 
+/** Luke's own face, traced from `FACE_ART` onto the sidebar's 16-unit grid. */
+function AnimationsIcon(): React.JSX.Element {
+  return (
+    <svg className="size-4 shrink-0" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <g transform="rotate(-8 8 8)">
+        <path
+          d="M 6.5 4.6 V 10.2 Q 6.5 11.4 7.7 11.4 Q 9.6 11.4 12 9.5"
+          stroke="currentColor"
+          strokeWidth="1.4"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <circle cx="4.3" cy="5.25" r="1.05" fill="currentColor" />
+        <circle cx="11.5" cy="5.25" r="1.05" fill="currentColor" />
+      </g>
+    </svg>
+  );
+}
+
 /** Points at the sidebar's own edge: left to fold it away, right to bring it back. */
 function CollapseIcon({ collapsed }: { collapsed: boolean }): React.JSX.Element {
   return (
@@ -1420,6 +1454,7 @@ function AdminSidebar({
         </span>
         {barItem("dashboard", "Dashboard", <DashboardIcon />)}
         {barItem("users", "Users", <UsersIcon />)}
+        {barItem("animations", "Animations", <AnimationsIcon />)}
       </nav>
       <nav
         aria-label="Admin sections"
@@ -1443,6 +1478,7 @@ function AdminSidebar({
           <div className="mt-8 grid gap-1">
             {item("dashboard", "Dashboard", <DashboardIcon />)}
             {item("users", "Users", <UsersIcon />)}
+            {item("animations", "Animations", <AnimationsIcon />)}
           </div>
           <div className="flex-1" />
           <button
@@ -3971,6 +4007,194 @@ function DayDetailScreen({
   }
 }
 
+/**
+ * The committed motion SVGs, inlined into the bundle at build time. The glob
+ * reaches outside the app the way the changelog's `CHANGELOG.md?raw` does:
+ * `design/brand/motion/` is the artwork's one committed home, and a copy kept
+ * here would drift from what `generate-brand-assets.mjs --check` guards.
+ */
+const MOTION_ASSET_SOURCES = import.meta.glob<string>("../../../design/brand/motion/*.svg", {
+  eager: true,
+  query: "?raw",
+  import: "default",
+});
+
+const MOTION_ASSETS = indexAnimationAssets(MOTION_ASSET_SOURCES);
+
+/**
+ * Each variant's markup as one `{__html}` object per asset, built once. React
+ * re-sets `dangerouslySetInnerHTML` whenever that object's identity changes,
+ * which replaces the SVG elements and restarts their timelines unpaused — so
+ * an object built in render would undo the pause below on any ancestor
+ * re-render, the session resolving included.
+ */
+const MOTION_MARKUP: ReadonlyMap<
+  FaceMotion,
+  ReadonlyMap<AnimationVariant, { __html: string }>
+> = new Map(
+  [...MOTION_ASSETS].map(([motion, byVariant]) => [
+    motion,
+    new Map([...byVariant].map(([variant, svg]) => [variant, { __html: svg }])),
+  ]),
+);
+
+/** Dark first: the variant matching the page's own surface previews first. */
+const PREVIEW_VARIANTS: readonly AnimationVariant[] = [
+  ANIMATION_VARIANT.DARK,
+  ANIMATION_VARIANT.LIGHT,
+];
+
+function AnimationCard({ entry }: { entry: AnimationEntry }): React.JSX.Element {
+  const variants = MOTION_MARKUP.get(entry.motion);
+  return (
+    <div className="rounded-lg border border-border bg-card p-5">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <h3 className="m-0 font-mono text-sm font-semibold">{entry.motion}</h3>
+        <span className="font-mono text-xs text-muted-foreground tabular-nums">
+          {formatCycleSeconds(entry.cycleMs)} cycle
+        </span>
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        {PREVIEW_VARIANTS.map((variant) => {
+          const markup = variants?.get(variant);
+          return (
+            <figure key={variant} className="m-0">
+              {markup === undefined ? (
+                <div className="grid aspect-square place-items-center rounded-md border border-dashed border-border px-2 text-center text-xs text-muted-foreground">
+                  No committed asset
+                </div>
+              ) : (
+                <div
+                  className="aspect-square overflow-hidden rounded-md [&>svg]:block [&>svg]:size-full"
+                  style={{ backgroundColor: ANIMATION_SWATCH[variant] }}
+                  aria-hidden="true"
+                  // biome-ignore lint/security/noDangerouslySetInnerHtml: the markup is a committed design/brand/motion SVG inlined at build time, not user input.
+                  dangerouslySetInnerHTML={markup}
+                />
+              )}
+              <figcaption className="mt-1.5 text-xs text-muted-foreground">
+                {ANIMATION_VARIANT_LABEL[variant]}
+              </figcaption>
+            </figure>
+          );
+        })}
+      </div>
+      {entry.extraParts.length > 0 ? (
+        <p className="mt-3 mb-0 text-xs text-muted-foreground">
+          Also draws: {entry.extraParts.join(", ")}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/** Where each generated piece of the motion system lives, for the footer list. */
+const ANIMATION_SOURCES = [
+  {
+    path: "design/generate-brand-assets.mjs",
+    role: "The one description of the artwork. Change its parameters or motion table and re-run it; every file below is generated from it and never hand-edited.",
+  },
+  {
+    path: "design/brand/motion/luke-<motion>-{light,dark}.svg",
+    role: "These previews: self-contained SMIL loops on the artwork's 240×240 canvas, with each variant's color baked in.",
+  },
+  {
+    path: "packages/surface/src/generated/face-art.ts",
+    role: "The geometry, motion names, cycle lengths, and extra parts — the metadata on this page.",
+  },
+  {
+    path: "apps/desktop/src/renderer/styles/generated/face-motion.css",
+    role: "The same motions as CSS keyframes, which is what the desktop face actually plays.",
+  },
+  {
+    path: "apps/desktop/src/renderer/luke-face-mood.ts",
+    role: "When the app shows each motion: a gesture plays once, a rest repeats for as long as it stays true.",
+  },
+] as const;
+
+/**
+ * Every motion the face artwork defines, previewed from the committed brand
+ * SVGs beside the metadata the generated table states. The page reads nothing
+ * from the service — the artwork is the repository's own, inlined at build
+ * time — so the local sign-in press is the only gate standing before it, the
+ * same first-visit consent every other view starts behind.
+ */
+function AnimationsPage({
+  account,
+  onSignOut,
+}: {
+  account: ViewerAccount | undefined;
+  onSignOut: () => void;
+}): React.JSX.Element {
+  // SMIL loops answer to neither `--face-motion` nor `prefers-reduced-motion`,
+  // so the page holds them still itself: paused from the first paint wherever
+  // the reader asked the system for less motion, and one control either way.
+  const [paused, setPaused] = useState(
+    () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+  );
+  const previewsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const previews = previewsRef.current;
+    if (previews === null) return;
+    for (const svg of previews.querySelectorAll("svg")) {
+      if (paused) svg.pauseAnimations();
+      else svg.unpauseAnimations();
+    }
+  }, [paused]);
+
+  return (
+    <main className="mx-auto max-w-[1040px] px-6 py-10">
+      <PageHeader
+        title="Animations"
+        account={account}
+        onSignOut={onSignOut}
+        controls={
+          <button
+            type="button"
+            className={PLAIN_BUTTON}
+            aria-pressed={paused}
+            onClick={() => setPaused(!paused)}
+          >
+            {paused ? "Play motion" : "Pause motion"}
+          </button>
+        }
+      />
+      <p className="mt-4 mb-0 max-w-[640px] text-sm text-muted-foreground">
+        Every motion the face artwork defines — {ANIMATION_ROSTER.length} of them, in the artwork
+        table's own order, each cut for dark and light mode. Every motion begins and ends at the
+        resting pose, and every layer of a gesture shares its period, so the app can play one out
+        and hand the face back.
+      </p>
+      <div
+        ref={previewsRef}
+        className="mt-8 grid gap-4 min-[560px]:grid-cols-2 min-[880px]:grid-cols-3"
+      >
+        {ANIMATION_ROSTER.map((entry) => (
+          <AnimationCard key={entry.motion} entry={entry} />
+        ))}
+      </div>
+      <SectionHeading>Where the animations live</SectionHeading>
+      <div className="rounded-lg border border-border bg-card px-5 py-2">
+        <dl className="m-0">
+          {ANIMATION_SOURCES.map((source) => (
+            <div
+              key={source.path}
+              className="border-b border-border py-3 last:border-0 min-[720px]:flex min-[720px]:gap-6"
+            >
+              <dt className="shrink-0 font-mono text-xs leading-5 min-[720px]:w-[26rem]">
+                {source.path}
+              </dt>
+              <dd className="m-0 mt-1 text-xs leading-5 text-muted-foreground min-[720px]:mt-0">
+                {source.role}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+    </main>
+  );
+}
+
 export function AdminDashboard(): React.JSX.Element {
   // A first visit is signed-out from the very first frame: it never fetches,
   // so a loading state would pose as a request that is not in flight.
@@ -4014,7 +4238,9 @@ export function AdminDashboard(): React.JSX.Element {
   }, []);
   const navigate = useCallback((tab: AdminTab) => {
     window.history.pushState(null, "", tabHref(tab));
-    setView(tab === "users" ? { kind: "users" } : { kind: "dashboard" });
+    if (tab === "users") setView({ kind: "users" });
+    else if (tab === "animations") setView({ kind: "animations" });
+    else setView({ kind: "dashboard" });
   }, []);
   const changeWindow = useCallback((next: AdminMetricsWindow) => {
     setWindowDays((current) => {
@@ -4145,6 +4371,22 @@ export function AdminDashboard(): React.JSX.Element {
         onOpenAccount={openAccount}
         frame={(content) => shell("dashboard", content)}
       />
+    );
+  }
+
+  if (view.kind === "animations") {
+    // The reference page fetches nothing, so it cannot learn the gate's
+    // answers the way the data views do; it honors the refusals the parent
+    // already holds and otherwise stands on the local sign-in press alone,
+    // which the artwork — committed in the repository, observed from nobody —
+    // is content with.
+    if (state.status === "signed-out") return <SignInCard />;
+    if (state.status === "forbidden") {
+      return <ForbiddenCard email={account?.email} onSignOut={() => void signOut()} />;
+    }
+    return shell(
+      "animations",
+      <AnimationsPage account={viewer} onSignOut={() => void signOut()} />,
     );
   }
 
