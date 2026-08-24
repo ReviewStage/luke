@@ -26,6 +26,7 @@
     "@fontsource-variable/geist": "5.3.0",
     "@fontsource-variable/jetbrains-mono": "5.3.0",
     "@sidecar/attention": "workspace:*",
+    "@sidecar/credentials": "workspace:*",
     "@sidecar/fixtures": "workspace:*",
     "@sidecar/panel": "workspace:*",
     "@sidecar/realtime": "workspace:*",

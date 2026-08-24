@@ -5,7 +5,9 @@ import {
   accountLoopbackPage,
   codeChallenge,
   createCodeVerifier,
+  LOOPBACK_CONNECTION_SOURCE,
   LOOPBACK_PAGE_TONE,
+  type LoopbackConnectionSource,
 } from "@sidecar/credentials";
 import type { AccountProvider } from "./snapshot.js";
 
@@ -56,12 +58,21 @@ const LOOPBACK_ANSWER = {
   },
 } as const;
 
+function connectionSource(
+  provider: AccountProvider | undefined,
+): LoopbackConnectionSource | undefined {
+  if (provider === LOOPBACK_CONNECTION_SOURCE.GOOGLE) return LOOPBACK_CONNECTION_SOURCE.GOOGLE;
+  if (provider === LOOPBACK_CONNECTION_SOURCE.GITHUB) return LOOPBACK_CONNECTION_SOURCE.GITHUB;
+  return undefined;
+}
+
 function answer(
   response: ServerResponse,
   { status, page }: (typeof LOOPBACK_ANSWER)[keyof typeof LOOPBACK_ANSWER],
+  source: LoopbackConnectionSource | undefined,
 ): void {
   response.writeHead(status, { "content-type": "text/html; charset=utf-8" });
-  response.end(accountLoopbackPage(page));
+  response.end(accountLoopbackPage({ ...page, source }));
 }
 
 /**
@@ -99,6 +110,7 @@ export async function startAccountLoopback(
 ): Promise<AccountLoopback> {
   const randomState = randomBytes(32).toString("base64url");
   const state = options.providerHint ? `${options.providerHint}.${randomState}` : randomState;
+  const source = connectionSource(options.providerHint);
   const timeoutMs = options.timeoutMs ?? 5 * 60_000;
   const codeVerifier = createCodeVerifier();
   let settle: ((code: string) => void) | undefined;
@@ -115,26 +127,26 @@ export async function startAccountLoopback(
     const oauthError = url.searchParams.get("error");
     const returnedState = url.searchParams.get("state");
     if (url.pathname !== CALLBACK_PATH || returnedState !== state) {
-      answer(response, LOOPBACK_ANSWER.NOT_VERIFIED);
+      answer(response, LOOPBACK_ANSWER.NOT_VERIFIED, source);
       return;
     }
     if (accepted) {
-      answer(response, LOOPBACK_ANSWER.ALREADY_USED);
+      answer(response, LOOPBACK_ANSWER.ALREADY_USED, source);
       return;
     }
     if (oauthError) {
       accepted = true;
-      answer(response, LOOPBACK_ANSWER.NOT_COMPLETED);
+      answer(response, LOOPBACK_ANSWER.NOT_COMPLETED, source);
       reject?.(new Error(`Sign-in was not completed (${oauthError})`));
       reject = undefined;
       return;
     }
     if (!code) {
-      answer(response, LOOPBACK_ANSWER.NOT_VERIFIED);
+      answer(response, LOOPBACK_ANSWER.NOT_VERIFIED, source);
       return;
     }
     accepted = true;
-    answer(response, LOOPBACK_ANSWER.SIGNED_IN);
+    answer(response, LOOPBACK_ANSWER.SIGNED_IN, source);
     settle?.(code);
     settle = undefined;
   });

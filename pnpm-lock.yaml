@@ -147,6 +147,9 @@ importers:
       '@sidecar/attention':
         specifier: workspace:*
         version: link:../../packages/attention
+      '@sidecar/credentials':
+        specifier: workspace:*
+        version: link:../../packages/credentials
       '@sidecar/fixtures':
         specifier: workspace:*
         version: link:../../packages/fixtures

@@ -1,3 +1,5 @@
+import { FACE_ART } from "@sidecar/surface";
+
 export const REPOSITORY_URL = "https://github.com/ReviewStage/luke";
 export const DMG_URL = `${REPOSITORY_URL}/releases/latest/download/Luke.dmg`;
 
@@ -29,28 +31,29 @@ export function GitHubMark({ className = "block size-4" }: MarkProps): React.JSX
 }
 
 /**
- * Luke's face, traced from `design/brand/luke-mark-{dark,light}.svg`. Those two
- * files differ only in a hard-coded stroke color, so drawing in `currentColor`
- * collapses them into one inline mark and keeps the page free of fetched
- * assets. Decorative: the wordmark beside it already says "Luke".
+ * Luke's face, drawn from the generated `FACE_ART` constants so the web mark
+ * stays tied to the product artwork. Drawing in `currentColor` keeps the page
+ * free of fetched assets. Decorative: the wordmark beside it already says
+ * "Luke".
  *
  * Wider than tall, so a caller sizes both axes and lets the default
  * `xMidYMid meet` letterbox the face inside that box rather than stretch it.
  */
 export function LukeMark({ className = "block h-[18px] w-5" }: MarkProps): React.JSX.Element {
+  const { MARK_VIEW_BOX, TILT, SMILE, STROKE_WIDTH, EYE_X, EYE_Y, EYE_RADIUS } = FACE_ART;
   return (
-    <svg className={className} viewBox="53.85 62.67 134.29 122.37" fill="none" aria-hidden="true">
-      <g transform="rotate(-8 120 124)">
+    <svg className={className} viewBox={MARK_VIEW_BOX} fill="none" aria-hidden="true">
+      <g transform={TILT}>
         <path
-          d="M 104 84 V 150 Q 104 164 118 164 Q 140 164 168 142"
+          d={SMILE}
           fill="none"
           stroke="currentColor"
-          strokeWidth="16"
+          strokeWidth={STROKE_WIDTH}
           strokeLinecap="round"
           strokeLinejoin="round"
         />
-        <circle cx="78" cy="92" r="12" fill="currentColor" />
-        <circle cx="162" cy="92" r="12" fill="currentColor" />
+        <circle cx={EYE_X.LEFT} cy={EYE_Y} r={EYE_RADIUS} fill="currentColor" />
+        <circle cx={EYE_X.RIGHT} cy={EYE_Y} r={EYE_RADIUS} fill="currentColor" />
       </g>
     </svg>
   );
