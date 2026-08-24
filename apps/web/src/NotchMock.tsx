@@ -56,6 +56,8 @@ type MockMode = (typeof MOCK_MODE)[keyof typeof MOCK_MODE];
 const WALK_PEEK_AT_MS = 1000;
 const WALK_PANEL_AT_MS = 2200;
 
+const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
+
 /** The values a MacBook's notch reports, matching the renderer's fixture. */
 const HOUSING_WIDTH = 210;
 
@@ -130,16 +132,16 @@ const MOCK_LABEL = `Luke's notch capsule expanding into its session panel, listi
  * the face's usual condition: it only moves when something happens to it.
  */
 export function NotchMock(): React.JSX.Element {
-  const [mode, setMode] = useState<MockMode>(MOCK_MODE.CAPSULE);
+  // The walk never plays under reduced motion, where a timed tour is exactly
+  // the motion the visitor asked not to see: the panel is there from the
+  // first paint, not popped in by a mount effect.
+  const [mode, setMode] = useState<MockMode>(() =>
+    window.matchMedia(REDUCED_MOTION_QUERY).matches ? MOCK_MODE.PANEL : MOCK_MODE.CAPSULE,
+  );
   const [panelHeight, setPanelHeight] = useState<number>();
 
-  // The walk never plays under reduced motion, where a timed tour is exactly
-  // the motion the visitor asked not to see: the panel is simply there.
   useEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      setMode(MOCK_MODE.PANEL);
-      return;
-    }
+    if (window.matchMedia(REDUCED_MOTION_QUERY).matches) return;
     const timers = [
       window.setTimeout(() => setMode(MOCK_MODE.PEEK), WALK_PEEK_AT_MS),
       window.setTimeout(() => setMode(MOCK_MODE.PANEL), WALK_PANEL_AT_MS),
@@ -178,7 +180,7 @@ export function NotchMock(): React.JSX.Element {
   useEffect(() => {
     const host = backdrop.current;
     if (!host) return;
-    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const reduceMotion = window.matchMedia(REDUCED_MOTION_QUERY);
     let mount: ShaderMount | undefined;
     try {
       mount = new ShaderMount(
