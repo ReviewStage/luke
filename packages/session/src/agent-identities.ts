@@ -1,5 +1,10 @@
-import { HOSTED_AGENT_ID, PROVIDER_ID } from "./providers.js";
+import { HOSTED_AGENT_ID, PROVIDER_ID, PROVIDER_IDENTITY_BY_ID } from "./providers.js";
 import type { SessionProvider } from "./session.js";
+
+function providerIdentity(providerId: keyof typeof PROVIDER_IDENTITY_BY_ID): SessionProvider {
+  const { id, displayName } = PROVIDER_IDENTITY_BY_ID[providerId];
+  return { id, displayName };
+}
 
 /**
  * The identity Luke draws each agent's sessions under, declared once for
@@ -9,14 +14,14 @@ import type { SessionProvider } from "./session.js";
  * cannot drift from the one the agent's own adapter answers with.
  */
 export const AGENT_IDENTITY = {
-  CLAUDE_CODE: { id: PROVIDER_ID.CLAUDE_CODE, displayName: "Claude Code" },
-  CODEX: { id: PROVIDER_ID.CODEX, displayName: "Codex" },
-  COPILOT: { id: PROVIDER_ID.COPILOT, displayName: "Copilot" },
-  CURSOR: { id: PROVIDER_ID.CURSOR, displayName: "Cursor" },
-  DEVIN: { id: PROVIDER_ID.DEVIN, displayName: "Devin" },
-  GEMINI_CLI: { id: PROVIDER_ID.GEMINI_CLI, displayName: "Gemini CLI" },
-  GROK_BUILD: { id: PROVIDER_ID.GROK_BUILD, displayName: "Grok Build" },
-  OPENCODE: { id: PROVIDER_ID.OPENCODE, displayName: "OpenCode" },
+  CLAUDE_CODE: providerIdentity(PROVIDER_ID.CLAUDE_CODE),
+  CODEX: providerIdentity(PROVIDER_ID.CODEX),
+  COPILOT: providerIdentity(PROVIDER_ID.COPILOT),
+  CURSOR: providerIdentity(PROVIDER_ID.CURSOR),
+  DEVIN: providerIdentity(PROVIDER_ID.DEVIN),
+  GEMINI_CLI: providerIdentity(PROVIDER_ID.GEMINI_CLI),
+  GROK_BUILD: providerIdentity(PROVIDER_ID.GROK_BUILD),
+  OPENCODE: providerIdentity(PROVIDER_ID.OPENCODE),
   DEEPSEEK: {
     id: HOSTED_AGENT_ID.DEEPSEEK,
     // The hosting app's own name for its DeepSeek-backed harness, not

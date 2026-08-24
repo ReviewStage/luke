@@ -9,7 +9,6 @@ import {
 import {
   canIgnoreSqliteError,
   defaultSqliteModule,
-  openReadOnlyDatabase,
   type SqliteDatabase,
   type SqliteModuleLoader,
 } from "../shared/local-sqlite.js";
@@ -18,7 +17,9 @@ import {
   TRANSCRIPT_BOUNDS,
   transcriptLine,
 } from "../shared/local-transcript.js";
+import { withSqliteTranscript } from "../shared/sqlite-transcript.js";
 import { DEVIN_ROLE, defaultDevinCliDirectory, devinDatabasePaths } from "./local-adapter.js";
+import { DEVIN_CHAIN_QUERY } from "./queries.js";
 
 /**
  * On-demand reading of one local Devin session's transcript, for a question
@@ -42,20 +43,6 @@ const DEVIN_SESSION_QUERY = `
 // exactly as the adapter walks it: a rewound session leaves its abandoned
 // branch as the newest nodes, and compaction re-inserts older messages, so
 // the tip pointer is the one true reading of where the conversation stands.
-const DEVIN_CHAIN_QUERY = `
-  WITH RECURSIVE chain (node_id, parent_node_id, chat_message, depth) AS (
-    SELECT node_id, parent_node_id, chat_message, 0
-    FROM message_nodes
-    WHERE session_id = ?1 AND node_id = ?2
-    UNION ALL
-    SELECT nodes.node_id, nodes.parent_node_id, nodes.chat_message, chain.depth + 1
-    FROM message_nodes AS nodes
-    JOIN chain ON nodes.node_id = chain.parent_node_id
-    WHERE nodes.session_id = ?1 AND chain.depth < ?3
-  )
-  SELECT chat_message FROM chain ORDER BY depth
-`;
-
 /** For a session row from before the tip pointer: newest nodes stand in. */
 const DEVIN_NEWEST_NODES_QUERY = `
   SELECT chat_message
@@ -228,19 +215,11 @@ export async function readDevinSessionTranscript(
 ): Promise<string | undefined> {
   const cliDirectory = request.cliDirectory ?? defaultDevinCliDirectory();
   const sqlite = request.sqlite ?? defaultSqliteModule;
-  for (const databasePath of devinDatabasePaths(cliDirectory)) {
-    const database = await openReadOnlyDatabase(sqlite, databasePath);
-    if (!database) continue;
-    try {
-      const rendered = renderedFromDatabase(
-        database,
-        request.providerSessionId,
-        request.maximumRenderedLength ?? TRANSCRIPT_BOUNDS.MAXIMUM_RENDERED_LENGTH,
-      );
-      if (rendered) return rendered;
-    } finally {
-      database.close();
-    }
-  }
-  return undefined;
+  return withSqliteTranscript(sqlite, devinDatabasePaths(cliDirectory), (database) =>
+    renderedFromDatabase(
+      database,
+      request.providerSessionId,
+      request.maximumRenderedLength ?? TRANSCRIPT_BOUNDS.MAXIMUM_RENDERED_LENGTH,
+    ),
+  );
 }

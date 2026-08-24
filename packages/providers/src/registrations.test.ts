@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials";
-import { PROVIDER_ID, PROVIDER_ID_LIST } from "@sidecar/session";
+import { PROVIDER_ID, PROVIDER_ID_LIST, PROVIDER_IDENTITY_BY_ID } from "@sidecar/session";
 import { CodexCloudSessionAdapter } from "./codex/cloud-adapter.js";
 import { providerRegistrations } from "./registrations.js";
 
@@ -20,30 +20,41 @@ const registrations = providerRegistrations({
 
 test("registers every provider exactly once", () => {
   for (const providerId of PROVIDER_ID_LIST) {
-    assert.equal(registrations[providerId].adapter.provider.id, providerId);
+    assert.deepEqual(registrations[providerId].adapter.provider, {
+      id: providerId,
+      displayName: PROVIDER_IDENTITY_BY_ID[providerId].displayName,
+    });
   }
 });
 
 test("declares credentials and observation hooks beside their adapters", () => {
-  assert.equal(
-    registrations[PROVIDER_ID.CONDUCTOR].credential?.id,
-    CREDENTIAL_PROVIDER_ID.CONDUCTOR,
+  assert.deepEqual(
+    Object.values(registrations)
+      .flatMap((registration) => ("credential" in registration ? registration.credential.id : []))
+      .sort(),
+    [
+      CREDENTIAL_PROVIDER_ID.CONDUCTOR,
+      CREDENTIAL_PROVIDER_ID.COPILOT,
+      CREDENTIAL_PROVIDER_ID.CURSOR,
+      CREDENTIAL_PROVIDER_ID.DEVIN,
+      CREDENTIAL_PROVIDER_ID.JULES,
+      CREDENTIAL_PROVIDER_ID.REPLICAS,
+    ].sort(),
   );
-  assert.equal(registrations[PROVIDER_ID.CURSOR].credential?.id, CREDENTIAL_PROVIDER_ID.CURSOR);
-  assert.ok(registrations[PROVIDER_ID.CLAUDE_CODE].registerObservationHook instanceof Function);
-  assert.ok(registrations[PROVIDER_ID.CODEX].registerObservationHook instanceof Function);
-  assert.ok(registrations[PROVIDER_ID.CURSOR].registerObservationHook instanceof Function);
-  assert.ok(registrations[PROVIDER_ID.DEVIN].registerObservationHook instanceof Function);
-  assert.ok(registrations[PROVIDER_ID.GEMINI_CLI].registerObservationHook instanceof Function);
-  assert.ok(registrations[PROVIDER_ID.OPENCODE].registerObservationHook instanceof Function);
-  assert.equal("credential" in registrations[PROVIDER_ID.OPENCODE], false);
-  assert.equal("credential" in registrations[PROVIDER_ID.GEMINI_CLI], false);
-  assert.equal("credential" in registrations[PROVIDER_ID.GROK_BUILD], false);
-  assert.equal("registerObservationHook" in registrations[PROVIDER_ID.GROK_BUILD], false);
-  assert.equal("credential" in registrations[PROVIDER_ID.ANTIGRAVITY], false);
-  assert.equal("registerObservationHook" in registrations[PROVIDER_ID.ANTIGRAVITY], false);
-  assert.equal("credential" in registrations[PROVIDER_ID.RADIUS], false);
-  assert.equal("registerObservationHook" in registrations[PROVIDER_ID.RADIUS], false);
+  assert.deepEqual(
+    Object.entries(registrations)
+      .filter(([, registration]) => "registerObservationHook" in registration)
+      .map(([providerId]) => providerId)
+      .sort(),
+    [
+      PROVIDER_ID.CLAUDE_CODE,
+      PROVIDER_ID.CODEX,
+      PROVIDER_ID.CURSOR,
+      PROVIDER_ID.DEVIN,
+      PROVIDER_ID.GEMINI_CLI,
+      PROVIDER_ID.OPENCODE,
+    ].sort(),
+  );
 });
 
 test("every registration exposes the one total adapter interface", () => {
