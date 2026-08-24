@@ -22,19 +22,17 @@ import {
   CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
   isProviderId,
   isSessionFilter,
+  isWorkspaceProviderId,
   PROVIDER_ID,
   type ProviderId,
   parseWorkspaceAgentSelection,
   type SessionFilter,
+  SUPERSET_WORKSPACE_PROVIDER_ID,
   type WorkspaceAgentSelection,
+  type WorkspaceProviderId,
   workspaceAgentModelLabel,
   workspaceAgentModels,
 } from "@sidecar/session";
-import {
-  isWorkspaceProviderId,
-  SUPERSET_WORKSPACE_PROVIDER_ID,
-  type WorkspaceProviderId,
-} from "@sidecar/superset/vocabulary";
 import {
   DEFAULT_PANEL_FORM_FACTOR,
   isPanelFormFactor,

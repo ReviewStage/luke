@@ -1526,12 +1526,14 @@ test("a spool that cannot be read costs only the refinement", async (t) => {
 });
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-test("a permission hold that outlives the freshness window never reads as work", async (t) => {
+test("a permission hold that outlives the freshness window is still an ask", async (t) => {
   const codexHome = await temporaryCodexHome(t);
   const spool = await temporaryHookSpool(t);
   const rolloutPath = path.join(codexHome, "rollout-long-hold.jsonl");
-  // Codex deliberately holds a long open turn at working, so without this
-  // rule a hold past the window would flip from waiting back to active work.
+  // A standing notification is proof the approval dialog is still up — the
+  // hold writes no records, so any record at or past it would have discarded
+  // it — and an ask still asking must neither flip back to active work nor
+  // melt into an idle row however long it has stood.
   await writeCodexState(codexHome, [
     {
       id: "codex-long-hold",
@@ -1551,5 +1553,5 @@ test("a permission hold that outlives the freshness window never reads as work",
   });
   const [observation] = await adapter.observe();
 
-  assert.equal(observation?.status, SESSION_STATUS.UNKNOWN);
+  assert.equal(observation?.status, SESSION_STATUS.WAITING);
 });

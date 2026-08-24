@@ -1,6 +1,6 @@
 import os from "node:os";
 import path from "node:path";
-import { PROVIDER_ID, type SessionProvider } from "@sidecar/session";
+import { AGENT_IDENTITY, agentIdentityFor, type SessionProvider } from "@sidecar/session";
 import { isRecord, oneLine, text, type WireRecord } from "@sidecar/wire";
 
 /**
@@ -97,17 +97,10 @@ export const RADIUS_AGENT = {
 type RadiusAgent = (typeof RADIUS_AGENT)[keyof typeof RADIUS_AGENT];
 
 const RADIUS_AGENT_PROVIDER = {
-  [RADIUS_AGENT.CLAUDE_CODE]: { id: PROVIDER_ID.CLAUDE_CODE, displayName: "Claude Code" },
-  [RADIUS_AGENT.CODEX]: { id: PROVIDER_ID.CODEX, displayName: "Codex" },
-  [RADIUS_AGENT.CURSOR]: { id: PROVIDER_ID.CURSOR, displayName: "Cursor" },
+  [RADIUS_AGENT.CLAUDE_CODE]: AGENT_IDENTITY.CLAUDE_CODE,
+  [RADIUS_AGENT.CODEX]: AGENT_IDENTITY.CODEX,
+  [RADIUS_AGENT.CURSOR]: AGENT_IDENTITY.CURSOR,
 } as const satisfies Readonly<Record<RadiusAgent, SessionProvider>>;
-
-function radiusAgentProvider(agent: string): SessionProvider | undefined {
-  for (const [key, provider] of Object.entries(RADIUS_AGENT_PROVIDER)) {
-    if (key === agent) return provider;
-  }
-  return undefined;
-}
 
 /** The model id split into the agent that ran the turn and the model it ran. */
 export interface RadiusTurnModel {
@@ -126,7 +119,7 @@ export function radiusTurnModel(value: string | undefined): RadiusTurnModel {
   if (!model) return {};
   const separator = model.indexOf("/");
   if (separator <= 0) return { model };
-  const agent = radiusAgentProvider(model.slice(0, separator));
+  const agent = agentIdentityFor(RADIUS_AGENT_PROVIDER, model.slice(0, separator));
   if (!agent) return { model };
   const named = model.slice(separator + 1).trim();
   return { agent, ...(named ? { model: named } : undefined) };

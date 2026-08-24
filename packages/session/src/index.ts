@@ -1,3 +1,4 @@
+export { AGENT_IDENTITY, agentIdentityFor } from "./agent-identities.js";
 export { CompositeSessionProviderAdapter } from "./composite-provider-adapter.js";
 export {
   CLI_CONNECTION,
@@ -8,6 +9,7 @@ export {
   type HostedAgentId,
   isHostedAgentId,
   isProviderId,
+  isWorkspaceProviderId,
   maximumObservedWorkspaceProjects,
   maximumWorkspaceNameLength,
   normalizeObservedWorkspaceProjects,
@@ -28,11 +30,13 @@ export {
   type ProviderWorkspaceResult,
   type SessionProviderAdapter,
   SessionProviderAdapterBase,
+  SUPERSET_WORKSPACE_PROVIDER_ID,
   staleWorkspaceProjectDefaults,
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceAgentModels,
   type WorkspaceAgentSelection,
   type WorkspaceProject,
+  type WorkspaceProviderId,
   type WorkspaceTaskSupport,
   workspaceNameText,
   workspaceProjectSelectionId,

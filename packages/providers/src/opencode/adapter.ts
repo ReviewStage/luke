@@ -354,7 +354,15 @@ const OPENCODE_HOOK_STATUS_REFINEMENT = {
   fresh: [
     { event: OPENCODE_HOOK_EVENT.PROMPT, fresh: SESSION_STATUS.WORKING },
     { event: OPENCODE_HOOK_EVENT.STOP, fresh: SESSION_STATUS.WAITING },
-    { event: OPENCODE_HOOK_EVENT.NOTIFICATION, fresh: SESSION_STATUS.WAITING },
+    // The notification keeps waiting past freshness: a standing event is
+    // proof the hold still stands, because any record at or past it would
+    // have discarded it, and a crash mid-hold leaves that proof standing
+    // only until the spool prune retires it.
+    {
+      event: OPENCODE_HOOK_EVENT.NOTIFICATION,
+      fresh: SESSION_STATUS.WAITING,
+      stale: SESSION_STATUS.WAITING,
+    },
   ],
   notificationEvent: OPENCODE_HOOK_EVENT.NOTIFICATION,
   sessionEndEvent: OPENCODE_HOOK_EVENT.SESSION_END,

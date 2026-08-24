@@ -581,6 +581,33 @@ test("a permission prompt the tail has not written yet turns the row to waiting"
   assert.equal(observation?.observedAt, TEST_TIME - 60_000);
 });
 
+test("a permission hold that outlives the freshness window is still an ask", async (t) => {
+  const geminiHome = await temporaryGeminiHome(t);
+  const spool = await temporaryHookSpool(t);
+  // A standing notification is proof the confirmation is still up — the hold
+  // writes no records, so any record at or past it would have discarded it —
+  // and an ask still asking must not melt into an idle row however long it
+  // has stood.
+  await writeSessionFile(
+    geminiHome,
+    "luke",
+    "session-2026-08-20T11-00-abcd1234",
+    midTurnRecords("2026-08-20T11:40:00.000Z"),
+    TEST_TIME - 20 * 60 * 1000,
+  );
+  await writeHookEvent(spool, FULL_SESSION_ID, "notification", TEST_TIME - 18 * 60_000);
+
+  const adapter = new GeminiCliSessionAdapter({
+    geminiHome,
+    hookEventsDirectory: () => spool,
+    now: () => TEST_TIME,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.WAITING);
+  assert.equal(observation?.holdingForDeveloper, true);
+});
+
 test("a stop event keeps a finished turn waiting past the freshness decay", async (t) => {
   const geminiHome = await temporaryGeminiHome(t);
   const spool = await temporaryHookSpool(t);

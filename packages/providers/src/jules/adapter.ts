@@ -122,6 +122,19 @@ const SESSION_STATUS_BY_JULES_STATE = {
   [JULES_STATE.STATE_UNSPECIFIED]: SESSION_STATUS.UNKNOWN,
 };
 
+/**
+ * The states in which Jules is asserting, right now, that the session is
+ * holding for the user — a plan awaiting approval or a question awaiting an
+ * answer. These stay waiting however long they have stood, because the
+ * provider is describing this moment rather than a turn boundary Luke would
+ * otherwise have to guess had been walked away from; a pause is the user's
+ * own act, so it ages like any other quiet session instead.
+ */
+const JULES_STANDING_ASK_STATES: ReadonlySet<JulesState> = new Set([
+  JULES_STATE.AWAITING_PLAN_APPROVAL,
+  JULES_STATE.AWAITING_USER_FEEDBACK,
+]);
+
 const JULES_ADAPTER_DEFAULTS = {
   /** The documented maximum, so one call reaches as deep into the history as it can. */
   SESSION_PAGE_SIZE: 100,
@@ -282,6 +295,9 @@ export class JulesSessionAdapter extends CloudSessionAdapter {
   #statusFor(session: JulesSession, now: number): SessionStatus {
     // A state this build does not know is not guessed at.
     if (!session.state) return SESSION_STATUS.UNKNOWN;
+    if (JULES_STANDING_ASK_STATES.has(session.state)) {
+      return SESSION_STATUS_BY_JULES_STATE[session.state];
+    }
     return agedStatus(
       SESSION_STATUS_BY_JULES_STATE[session.state],
       session.observedAt,

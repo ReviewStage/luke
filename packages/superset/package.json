@@ -5,8 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.js",
-    "./sign-in-stage": "./src/sign-in-stage.js",
-    "./vocabulary": "./src/vocabulary.js"
+    "./sign-in-stage": "./src/sign-in-stage.js"
   },
   "types": "./src/index.ts",
   "scripts": {

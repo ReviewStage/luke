@@ -284,6 +284,9 @@ export class CopilotSessionAdapter extends CloudSessionAdapter {
   #statusFor(task: CopilotTask, now: number): SessionStatus {
     // A state this build does not know is not guessed at.
     if (!task.state) return SESSION_STATUS.UNKNOWN;
+    // GitHub asserting the task is holding for the user is a live fact, not a
+    // turn boundary to be guessed stale, so the ask stands until it changes.
+    if (task.state === COPILOT_TASK_STATE.WAITING_FOR_USER) return SESSION_STATUS.WAITING;
     return agedStatus(
       SESSION_STATUS_BY_COPILOT_STATE[task.state],
       task.observedAt,

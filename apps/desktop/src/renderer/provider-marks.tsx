@@ -9,8 +9,8 @@ import {
   type ProviderId,
   SESSION_APPLICATION_ID,
   type SessionApplicationId,
+  SUPERSET_WORKSPACE_PROVIDER_ID,
 } from "@sidecar/session";
-import { SUPERSET_WORKSPACE_PROVIDER_ID } from "@sidecar/superset/vocabulary";
 import {
   ANTIGRAVITY_MARK_BASE_FILL,
   ANTIGRAVITY_MARK_LAYERS,
