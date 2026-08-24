@@ -2,7 +2,6 @@ import { PRODUCT_EVENT, type RecordProductEvent } from "@sidecar/analytics";
 import {
   CREDENTIAL_PROVIDER_ID,
   type CredentialProviderId,
-  isCredentialProviderId,
   VOICE_CREDENTIAL_PROVIDER_ID,
 } from "@sidecar/credentials";
 import type { SessionProviderAdapter } from "@sidecar/session";
@@ -10,19 +9,17 @@ import {
   APP_SETTING_FIELDS,
   APP_SETTING_SCHEMA,
   type AppSettingField,
-  isAppSettingField,
-  isKeyedAppSettingField,
-  isSettingEntryKey,
   SETTING_SIDE_EFFECT,
   settingAnalytics,
   settingEntryGuard,
 } from "@sidecar/settings";
 import type { RealtimeCredentialMinter } from "@sidecar/voice";
 import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
-import type { IpcMainInvokeEvent } from "electron";
-import { type AppSettings, channels, isSettingsResetScope } from "#shared/contracts";
+import { BRIDGE, type BridgeArgumentsFor } from "#shared/bridge";
+import type { AppSettings } from "#shared/contracts";
 import { CONNECTION_COUNTED_AS } from "#shared/product-vocabulary";
 import type { MediaDuckController } from "../native/media-duck";
+import type { BridgeContext } from "../register-bridge";
 import { type createSettingsHandler, SettingsRefusal } from "../settings-handler";
 import type { SettingsStore } from "../settings-store";
 import type { DockPresence } from "../window/dock-presence";
@@ -70,14 +67,8 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
   } = dependencies;
   // The renderer can replace or clear a provider's credential but never reads
   // it back; the reply reports only where each key now comes from.
-  registerSettingHandler(channels.setProviderApiKey, {
-    validate(providerId: UnparsedWireValue, apiKey: UnparsedWireValue) {
-      // The provider list is fixed by this build, so an id outside it is a
-      // malformed request rather than something the user can correct.
-      if (!isCredentialProviderId(providerId)) throw new Error("Unknown credential provider");
-      if (apiKey !== undefined && !isWireString(apiKey)) {
-        throw new Error("Invalid API key request");
-      }
+  registerSettingHandler(BRIDGE.setProviderApiKey, {
+    validate(providerId, apiKey) {
       return { providerId, apiKey };
     },
     save: ({ providerId, apiKey }) => settingsStore.setApiKey(providerId, apiKey),
@@ -131,12 +122,12 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
   async function applySettingSideEffect(
     field: AppSettingField,
     settings: AppSettings,
-    event: IpcMainInvokeEvent,
+    context: BridgeContext,
     waitForDeferredEffects = false,
   ): Promise<void> {
     switch (APP_SETTING_SCHEMA[field].mainProcessSideEffect) {
       case SETTING_SIDE_EFFECT.DOCK:
-        dock.apply(settings.stored.showInDock, panels.displayIdFor(event.sender));
+        dock.apply(settings.stored.showInDock, panels.displayIdFor(context.sender));
         break;
       case SETTING_SIDE_EFFECT.DISPLAYS:
         panels.setShowOnAllDisplays(settings.stored.showOnAllDisplays);
@@ -184,16 +175,10 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
     }
   }
 
-  registerSettingHandler(channels.updateSetting, {
-    async validate(field: UnparsedWireValue, value: UnparsedWireValue) {
-      if (!isAppSettingField(field)) throw new Error("Unknown setting");
-      // A map-valued setting is written one entry at a time. Its own guard drops
-      // entries it cannot hold rather than refusing them — right for reading a
-      // stored file, wrong for a write, where a whole map of unholdable entries
-      // would read as valid and silently clear what is stored.
-      if (isKeyedAppSettingField(field)) throw new Error("Setting takes one entry at a time");
+  registerSettingHandler(BRIDGE.updateSetting, {
+    async validate(...[field, value]: BridgeArgumentsFor<"updateSetting">) {
       const parsed = APP_SETTING_SCHEMA[field].guard(value);
-      if (!parsed.valid) throw new Error("Invalid setting value");
+      if (!parsed.valid) throw new Error("Bridge setting guard drift");
       if (field === APP_SETTING_SCHEMA.askHotkey.field && isWireString(parsed.value)) {
         if (hotkeys.reserve(parsed.value, HOTKEY_RANK.ASK) === HOTKEY_RANK.TALK) {
           return new SettingsRefusal({
@@ -225,12 +210,11 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
   // One key of a map-valued preference. The merge belongs to the store, so what
   // arrives here is the single entry and the renderer never sends back a map it
   // read before an overlapping write landed.
-  registerSettingHandler(channels.updateSettingEntry, {
-    async validate(field: UnparsedWireValue, key: UnparsedWireValue, value: UnparsedWireValue) {
-      if (!isKeyedAppSettingField(field)) throw new Error("Unknown setting");
-      if (!isSettingEntryKey(field, key)) throw new Error("Unknown setting entry");
-      const parsed = settingEntryGuard(field, key, value);
-      if (!parsed.valid) throw new Error("Invalid setting value");
+  registerSettingHandler(BRIDGE.updateSettingEntry, {
+    async validate(...[field, key, value]: BridgeArgumentsFor<"updateSettingEntry">) {
+      // SAFETY: BRIDGE.updateSettingEntry parsed the field-specific structured-clone value.
+      const parsed = settingEntryGuard(field, key, value as UnparsedWireValue);
+      if (!parsed.valid) throw new Error("Bridge setting-entry guard drift");
       const projectValue = parsed.value;
       // SAFETY: settingEntryGuard validated workspace project defaults as a wire string.
       const projectWire = projectValue as UnparsedWireValue;
@@ -266,9 +250,8 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
   // No scope reaches a credential or an account. The side effects each row's
   // own save runs are re-run here from the stored answer, so a reset takes
   // effect at once the way every other settings change does.
-  registerSettingHandler(channels.resetSettings, {
-    validate(scope: UnparsedWireValue) {
-      if (!isSettingsResetScope(scope)) throw new Error("Invalid settings reset request");
+  registerSettingHandler(BRIDGE.resetSettings, {
+    validate(scope) {
       return scope;
     },
     save: (scope) => settingsStore.resetSettings(scope),

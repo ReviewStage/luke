@@ -3,7 +3,8 @@
 ## It is a sandboxed browser context
 
 The renderer reaches the main process through the preload bridge alone, so
-`#shared/contracts` is the widest door it has. A `#main/` import compiles and
+`#shared/bridge` and the domain modules under `#shared/wire/` are the widest
+doors it has. A `#main/` import compiles and
 bundles happily and then fails in the browser, and a `node:` import does the
 same. Neither is a mistake the type checker or esbuild can report, because
 both are real modules that simply are not there at run time.

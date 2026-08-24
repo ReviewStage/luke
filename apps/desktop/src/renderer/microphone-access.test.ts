@@ -5,7 +5,7 @@ import {
   REALTIME_MINT_OUTCOME,
   type RealtimeDiagnostics,
 } from "@sidecar/realtime";
-import { VOICE_SOURCE } from "#shared/contracts";
+import { VOICE_SOURCE } from "#shared/wire/settings";
 import {
   currentQuota,
   fresherQuota,

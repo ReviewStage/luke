@@ -6,11 +6,12 @@ import {
 } from "@sidecar/analytics";
 import type { GoogleCalendarReader, GoogleCalendarSignIn } from "@sidecar/calendar";
 import { APP_SETTING_ID } from "@sidecar/guide";
-import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from "electron";
 import { APPLE_CALENDAR_ACCESS } from "#shared/apple-calendar";
-import { channels, type ObservedAccountCalendars } from "#shared/contracts";
+import { BRIDGE } from "#shared/bridge";
+import type { ObservedAccountCalendars } from "#shared/contracts";
 import { APPLE_CALENDAR_ACCESS_REFUSAL, type AppleCalendarReader } from "../apple-calendar";
+import { registerBridge } from "../register-bridge";
 import { type createSettingsHandler, SettingsRefusal } from "../settings-handler";
 import type { SettingsStore } from "../settings-store";
 
@@ -37,8 +38,6 @@ export function registerCalendarConnectionIpc(
   dependencies: CalendarConnectionIpcDependencies,
 ): void {
   const {
-    ipcMain,
-    trustedSender,
     registerSetting,
     settingsStore,
     calendar,
@@ -48,7 +47,7 @@ export function registerCalendarConnectionIpc(
     openExternal,
     recordProductEvent,
   } = dependencies;
-  registerSetting(channels.connectGoogleCalendar, {
+  registerSetting(BRIDGE.connectGoogleCalendar, {
     validate: () => undefined,
     async save() {
       const outcome = await signIn.signIn();
@@ -80,17 +79,8 @@ export function registerCalendarConnectionIpc(
     },
     refusal: "Could not connect Google Calendar on this system.",
   });
-  ipcMain.on(channels.cancelGoogleCalendarSignIn, (event) => {
-    if (trustedSender(event)) signIn.cancel();
-  });
-  ipcMain.on(channels.reopenGoogleCalendarSignIn, (event) => {
-    if (trustedSender(event)) signIn.reopen();
-  });
-  registerSetting(channels.removeCalendarAccount, {
-    validate(accountId: UnparsedWireValue) {
-      if (!isWireString(accountId) || !accountId) {
-        throw new Error("Invalid calendar account request");
-      }
+  registerSetting(BRIDGE.removeCalendarAccount, {
+    validate(accountId) {
       return accountId;
     },
     save: (accountId) => settingsStore.removeCalendarAccount(accountId),
@@ -113,7 +103,7 @@ export function registerCalendarConnectionIpc(
   // reason at all, and a snapshot already carrying a connection cannot say
   // whether this attempt is what put it there.
   let appleConnectStored = false;
-  registerSetting(channels.connectAppleCalendar, {
+  registerSetting(BRIDGE.connectAppleCalendar, {
     validate: () => undefined,
     async save() {
       const generation = ++appleConnectGeneration;
@@ -155,13 +145,7 @@ export function registerCalendarConnectionIpc(
     },
     refusal: "Could not connect Apple Calendar on this system.",
   });
-  ipcMain.on(channels.cancelAppleCalendarConnect, (event) => {
-    if (!trustedSender(event)) return;
-    // The wait ends where it stands; a switch flipped after this lands
-    // nothing until the next Connect.
-    appleConnectGeneration += 1;
-  });
-  registerSetting(channels.disconnectAppleCalendar, {
+  registerSetting(BRIDGE.disconnectAppleCalendar, {
     validate: () => undefined,
     save: () => settingsStore.disconnectAppleCalendar(),
     apply(result) {
@@ -178,42 +162,28 @@ export function registerCalendarConnectionIpc(
   // read go, so the panel stands down only for a dialog that will appear. A
   // probe that cannot answer reads as not yet asked — the connect then runs
   // the full consent flow, whose own answer is the honest one.
-  ipcMain.handle(channels.appleCalendarAccessStatus, async (event) => {
-    if (!trustedSender(event)) return APPLE_CALENDAR_ACCESS.NOT_DETERMINED;
-    try {
-      return await appleCalendar.status();
-    } catch {
-      return APPLE_CALENDAR_ACCESS.NOT_DETERMINED;
-    }
-  });
-  // The user's own "look again": one observation pass, run now, so a
-  // calendar created a moment ago appears without waiting out the interval.
-  // The same read-only pass the timer runs, and nothing more.
-  ipcMain.handle(channels.refreshCalendars, async (event) => {
-    if (!trustedSender(event)) return;
-    await refresh();
-  });
-  // The pane where the system's own calendar grant lives: a denied ask can
-  // only be undone there. The address is fixed by this build, on the
-  // microphone opener's exact terms.
-  ipcMain.on(channels.openCalendarSettings, (event) => {
-    if (!trustedSender(event)) return;
-    openExternal(CALENDAR_PRIVACY_PANE_URL);
-  });
-  registerSetting(channels.setCalendarSelected, {
-    async validate(
-      accountId: UnparsedWireValue,
-      calendarId: UnparsedWireValue,
-      selected: UnparsedWireValue,
-    ) {
-      if (!isWireString(accountId) || !accountId) {
-        throw new Error("Invalid calendar selection request");
-      }
-      if (!isWireString(calendarId) || !calendarId) {
-        throw new Error("Invalid calendar selection request");
-      }
-      if (selected !== true && selected !== false)
-        throw new Error("Invalid calendar selection request");
+  registerBridge(
+    BRIDGE,
+    {
+      cancelGoogleCalendarSignIn: signIn.cancel.bind(signIn),
+      reopenGoogleCalendarSignIn: signIn.reopen.bind(signIn),
+      cancelAppleCalendarConnect() {
+        appleConnectGeneration += 1;
+      },
+      async appleCalendarAccessStatus() {
+        try {
+          return await appleCalendar.status();
+        } catch {
+          return APPLE_CALENDAR_ACCESS.NOT_DETERMINED;
+        }
+      },
+      refreshCalendars: refresh,
+      openCalendarSettings: () => openExternal(CALENDAR_PRIVACY_PANE_URL),
+    },
+    { ipcMain: dependencies.ipcMain, trustedSender: dependencies.trustedSender },
+  );
+  registerSetting(BRIDGE.setCalendarSelected, {
+    async validate(accountId, calendarId, selected) {
       if (
         selected &&
         !dependencies

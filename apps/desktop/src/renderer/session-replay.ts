@@ -1,7 +1,7 @@
 import { isRecord, text, type UnparsedWireValue, type WireValue } from "@sidecar/wire";
 import type { Properties } from "posthog-js";
 import posthog from "posthog-js/dist/module.full.no-external";
-import type { SessionReplayBootstrap } from "#shared/contracts";
+import type { SessionReplayBootstrap } from "#shared/wire/session";
 
 /**
  * Recording what Luke's own panel draws, on the library's own defaults.

@@ -21,8 +21,9 @@ import {
 } from "@sidecar/settings";
 import { Fragment, useRef } from "react";
 import { APPLE_CALENDAR_ID, APPLE_CALENDAR_NAME } from "#shared/apple-calendar";
-import type { AppSettingsView } from "#shared/contracts";
-import { CREDENTIAL_SOURCE, VOICE_SOURCE } from "#shared/contracts";
+import { CREDENTIAL_SOURCE } from "#shared/wire/account";
+import type { AppSettingsView } from "#shared/wire/settings";
+import { VOICE_SOURCE } from "#shared/wire/settings";
 import { FOCUS_FRAME_LIMIT } from "./credential-entry";
 import { ERRAND_TARGET_ATTRIBUTE } from "./luke-errand";
 import { ProviderMark } from "./provider-marks";

@@ -1,4 +1,4 @@
-import type { AppSettingsView } from "#shared/contracts";
+import type { AppSettingsView } from "#shared/wire/settings";
 import { ERRAND_WAIT, type ErrandTarget, type ErrandWait } from "./luke-errand";
 import type { PanelTab } from "./panel-tabs";
 import type { SessionView } from "./session-model";

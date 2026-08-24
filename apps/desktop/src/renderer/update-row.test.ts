@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { UPDATE_STATUS, type UpdateSnapshot } from "#shared/contracts";
+import { UPDATE_STATUS, type UpdateSnapshot } from "#shared/wire/update";
 import { UPDATE_ROW_ACTION, updateAvailable, updateRow } from "./update-row";
 
 function supported(update: Partial<UpdateSnapshot> & Pick<UpdateSnapshot, "status">) {

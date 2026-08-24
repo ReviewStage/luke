@@ -26,14 +26,12 @@ import {
   type InMemorySessionRegistry,
   isListedWorkspaceAgentModel,
   isProviderId,
-  isSessionApplicationId,
   type NormalizedSession,
   PROVIDER_ACT_RESULT_STATUS,
   type ProviderActResult,
   type ProviderControlResult,
   type ProviderMessageResult,
   type ProviderWorkspaceResult,
-  parseWorkspaceAgentSelection,
   SESSION_LOCATION,
   type SessionIdentity,
   type SessionProviderAdapter,
@@ -45,27 +43,22 @@ import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import type { SupersetSessionContext } from "@sidecar/superset";
 import { isSupersetControlId, type SupersetCli, supersetPressedLink } from "@sidecar/superset";
 import type { LinearIssueTracker } from "@sidecar/trackers";
-import {
-  isRecord,
-  isWireString,
-  type UnparsedWireValue,
-  unparsedWire,
-  type WireBoundaryInput,
-  wireRecord,
-} from "@sidecar/wire";
+import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from "electron";
+import { BRIDGE } from "#shared/bridge";
 import {
-  channels,
+  type IssueActionAsk,
   SESSION_OPEN_RESULT_STATUS,
   SESSION_TRANSCRIPT_RESULT_STATUS,
   type SessionOpenResult,
   type SessionTranscriptResult,
 } from "#shared/contracts";
 import { createActionHandler } from "../action-handler";
+import { registerBridgeEntry } from "../register-bridge";
 import type { SettingsStore } from "../settings-store";
 
 export interface SessionActsIpcDependencies {
-  ipcMain: Pick<IpcMain, "handle">;
+  ipcMain: Pick<IpcMain, "handle" | "on">;
   trustedSender: (event: IpcMainEvent | IpcMainInvokeEvent) => boolean;
   sessionRegistry: InMemorySessionRegistry;
   openExternal: (url: string) => Promise<void>;
@@ -115,9 +108,18 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
     recordProductEvent,
   } = dependencies;
   const registerAction = createActionHandler({
+    ipcMain,
     trustedSender,
-    handle: (channel, handler) => ipcMain.handle(channel, handler),
   });
+  const registerHandler = (
+    definition: Parameters<typeof registerBridgeEntry>[1],
+    // oxlint-disable-next-line anti-slop/no-unknown-returns -- The manifest parses this erased domain result before it crosses Electron.
+    handler: (...args: never[]) => unknown,
+  ) =>
+    registerBridgeEntry(BRIDGE, definition, (_context, ...args) => handler(...args), {
+      ipcMain,
+      trustedSender,
+    });
   /**
    * Counts an act that actually landed. It takes the result rather than
    * sitting inside `performSessionAct`, because a Superset-managed session
@@ -162,20 +164,11 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
     return countSessionAct(adapter.provider.id, counted, result);
   }
   const registerOpenAction = (
-    channel: string,
+    definition: Parameters<typeof registerAction>[0],
     address: (identity: SessionIdentity) => string | undefined,
     failureReason: string,
   ) =>
-    registerAction<[SessionIdentity], SessionOpenResult>(channel, {
-      validate: (args) => {
-        const [rawIdentity] = args;
-        // SAFETY: IPC validate receives structured-clone args; this channel's first arg is a session identity object.
-        const identity = requireSessionIdentity(
-          unparsedWire(rawIdentity as WireBoundaryInput),
-          "Invalid session open request",
-        );
-        return [identity];
-      },
+    registerAction<[SessionIdentity], SessionOpenResult>(definition, {
       async act(identity) {
         const url = address(identity);
         if (!url) return { status: SESSION_OPEN_RESULT_STATUS.UNSUPPORTED };
@@ -197,25 +190,11 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
   const pressedLink = (link: string | undefined): string | undefined =>
     link === undefined ? undefined : supersetPressedLink(link, randomUUID());
   registerOpenAction(
-    channels.openSession,
+    BRIDGE.openSession,
     (identity) => pressedLink(sessionRegistry.get(identity)?.detail.link),
     "The system could not open that session.",
   );
-  registerAction<[SessionIdentity, string], SessionOpenResult>(channels.openSessionApplication, {
-    validate: (args) => {
-      const [rawIdentity, rawApplicationId] = args;
-      // SAFETY: IPC validate receives structured-clone args; these positions are a session identity and app id.
-      const identity = requireSessionIdentity(
-        unparsedWire(rawIdentity as WireBoundaryInput),
-        "Invalid session application open request",
-      );
-      // SAFETY: IPC validate receives structured-clone args; this position is the requested app id.
-      const applicationId = unparsedWire(rawApplicationId as WireBoundaryInput);
-      if (!isWireString(applicationId) || !isSessionApplicationId(applicationId)) {
-        throw new Error("Invalid session application open request");
-      }
-      return [identity, applicationId];
-    },
+  registerAction<[SessionIdentity, string], SessionOpenResult>(BRIDGE.openSessionApplication, {
     async act(identity, applicationId) {
       const url = pressedLink(
         sessionRegistry
@@ -238,7 +217,7 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
     }),
   });
   registerOpenAction(
-    channels.openSessionChange,
+    BRIDGE.openSessionChange,
     (identity) => sessionRegistry.get(identity)?.detail.change,
     "The system could not open that pull request.",
   );
@@ -250,16 +229,7 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
   // URL is read back out of the roster, where normalization admitted nothing
   // but a bounded https address, and nothing reaches the tracker. A fixture
   // run observes no tracker and so opens nothing.
-  registerAction<[IssueIdentity], SessionOpenResult>(channels.openIssue, {
-    validate: (args) => {
-      const [rawIdentity] = args;
-      // SAFETY: IPC validate receives structured-clone args; this channel's first arg is an issue identity object.
-      const identity = requireIssueIdentity(
-        unparsedWire(rawIdentity as WireBoundaryInput),
-        "Invalid issue open request",
-      );
-      return [identity];
-    },
+  registerAction<[IssueIdentity], SessionOpenResult>(BRIDGE.openIssue, {
     async act(identity) {
       const url = trackedIssues()?.find(
         (candidate) =>
@@ -296,11 +266,9 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
   // everything else — above all a cloud session, whose conversation lives
   // with its provider — answers honestly rather than guessing at files never
   // documented.
-  ipcMain.handle(
-    channels.readSessionTranscript,
-    async (event, identityRaw: UnparsedWireValue): Promise<SessionTranscriptResult> => {
-      if (!trustedSender(event)) throw new Error("Untrusted renderer");
-      const identity = requireSessionIdentity(identityRaw, "Invalid transcript request");
+  registerHandler(
+    BRIDGE.readSessionTranscript,
+    async (identity: SessionIdentity): Promise<SessionTranscriptResult> => {
       const session = sessionRegistry.get(identity);
       if (!session) {
         return {
@@ -356,15 +324,9 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
   // observation advertised taking messages gets one. Refusals are answers for
   // the row, never thrown: a send is the user's own act, and what became of it
   // belongs beside the field it left.
-  ipcMain.handle(
-    channels.sendSessionMessage,
-    async (
-      event,
-      identityRaw: UnparsedWireValue,
-      text: UnparsedWireValue,
-    ): Promise<ProviderMessageResult> => {
-      if (!trustedSender(event)) throw new Error("Untrusted renderer");
-      const identity = requireSessionIdentity(identityRaw, "Invalid session message request");
+  registerHandler(
+    BRIDGE.sendSessionMessage,
+    async (identity: SessionIdentity, text: string): Promise<ProviderMessageResult> => {
       const message = boundedField(text, sessionMessageText);
       if (!message.ok || message.value === undefined) {
         return {
@@ -398,18 +360,9 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
   // renderer names must be a control the session's latest observation actually
   // advertised. The registry is what advertised it, so the registry is what
   // answers whether it stands.
-  ipcMain.handle(
-    channels.executeSessionControl,
-    async (
-      event,
-      identityRaw: UnparsedWireValue,
-      controlId: UnparsedWireValue,
-    ): Promise<ProviderControlResult> => {
-      if (!trustedSender(event)) throw new Error("Untrusted renderer");
-      const identity = requireSessionIdentity(identityRaw, "Invalid session control request");
-      if (!isWireString(controlId) || !controlId.trim()) {
-        throw new Error("Invalid session control request");
-      }
+  registerHandler(
+    BRIDGE.executeSessionControl,
+    async (identity: SessionIdentity, controlId: string): Promise<ProviderControlResult> => {
       const session = sessionRegistry.get(identity);
       const control = session?.controls.find((candidate) => candidate.id === controlId);
       if (!control) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
@@ -436,11 +389,9 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
   // weigh updates against, and no adapter or provider ever sees it. It is
   // refused while no evaluator is configured, because keeping an ask nothing
   // will ever read is a promise Luke cannot keep.
-  ipcMain.handle(
-    channels.requestSessionNotice,
-    (event, identityRaw: UnparsedWireValue, request: UnparsedWireValue): AttentionRequestResult => {
-      if (!trustedSender(event)) throw new Error("Untrusted renderer");
-      const identity = requireSessionIdentity(identityRaw, "Invalid session notice request");
+  registerHandler(
+    BRIDGE.requestSessionNotice,
+    (identity: SessionIdentity, request: string): AttentionRequestResult => {
       const ask = attentionRequestText(request);
       if (!ask) {
         return {
@@ -473,11 +424,9 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
     },
   );
 
-  ipcMain.handle(
-    channels.withdrawSessionNotice,
-    (event, identityRaw: UnparsedWireValue): AttentionRequestResult => {
-      if (!trustedSender(event)) throw new Error("Untrusted renderer");
-      const identity = requireSessionIdentity(identityRaw, "Invalid session notice request");
+  registerHandler(
+    BRIDGE.withdrawSessionNotice,
+    (identity: SessionIdentity): AttentionRequestResult => {
       const session = sessionRegistry.get(identity);
       if (!session) {
         return {
@@ -505,40 +454,18 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
   // the adapter itself, never from the request — reaches the provider's
   // documented creation endpoint. A fixture run offers no projects at all, so
   // it refuses every ask without touching a network.
-  ipcMain.handle(
-    channels.createSessionWorkspace,
+  registerHandler(
+    BRIDGE.createSessionWorkspace,
     async (
-      event,
-      providerId: UnparsedWireValue,
-      providerProjectId: UnparsedWireValue,
-      providerTargetId: UnparsedWireValue,
-      agent: UnparsedWireValue,
-      name: UnparsedWireValue,
-      task: UnparsedWireValue,
-      namedSelection: UnparsedWireValue,
+      providerId: string,
+      providerProjectId: string,
+      providerTargetId: string | undefined,
+      agent: string | undefined,
+      name: string | undefined,
+      task: string | undefined,
+      namedSelection: WorkspaceAgentSelection | undefined,
     ): Promise<ProviderWorkspaceResult> => {
-      if (!trustedSender(event)) throw new Error("Untrusted renderer");
-      if (
-        !isWireString(providerId) ||
-        !providerId.trim() ||
-        !isWireString(providerProjectId) ||
-        !providerProjectId.trim() ||
-        (providerTargetId !== undefined && !isWireString(providerTargetId)) ||
-        (agent !== undefined && !isWireString(agent)) ||
-        (name !== undefined && !isWireString(name)) ||
-        (task !== undefined && !isWireString(task))
-      ) {
-        throw new Error("Invalid workspace creation request");
-      }
-      // Its own statement so the guard's narrowing survives: past here the
-      // named selection is a documented pairing or nothing at all.
-      const parsedSelection =
-        namedSelection !== undefined
-          ? parseWorkspaceAgentSelection(providerId, namedSelection)
-          : undefined;
-      if (namedSelection !== undefined && !parsedSelection) {
-        throw new Error("Invalid workspace creation request");
-      }
+      const parsedSelection = namedSelection;
       if (!sendsNetwork) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
       const adapter = adapterFor(providerId);
       if (!adapter) {
@@ -649,11 +576,9 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
   // the issue by its identity, the transition by the id the tracker itself
   // listed — so what reaches a tracker client is built from observed state,
   // never from what a model composed.
-  ipcMain.handle(
-    channels.executeIssueAction,
-    async (event, action: UnparsedWireValue): Promise<TrackerActionResult> => {
-      if (!trustedSender(event)) throw new Error("Untrusted renderer");
-      if (!isIssueActionAsk(action)) throw new Error("Invalid issue action request");
+  registerHandler(
+    BRIDGE.executeIssueAction,
+    async (action: IssueActionAsk): Promise<TrackerActionResult> => {
       // A fixture run observes no tracker, so it refuses every act — a
       // deterministic capture must not reach Linear.
       const issue = trackedIssues()?.find(
@@ -714,29 +639,16 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
   // latest observation actually listed. The registry is what advertised it, so
   // the registry is what answers whether it stands; the adapter then reads the
   // workspace back from its own last pass.
-  ipcMain.handle(
-    channels.addWorkspaceAgent,
+  registerHandler(
+    BRIDGE.addWorkspaceAgent,
     async (
-      event,
-      identityRaw: UnparsedWireValue,
-      agent: UnparsedWireValue,
-      name: UnparsedWireValue,
-      task: UnparsedWireValue,
-      namedModel: UnparsedWireValue,
-      namedEffort: UnparsedWireValue,
+      identity: SessionIdentity,
+      agent: string,
+      name: string | undefined,
+      task: string | undefined,
+      namedModel: string | undefined,
+      namedEffort: string | undefined,
     ): Promise<ProviderWorkspaceResult> => {
-      if (!trustedSender(event)) throw new Error("Untrusted renderer");
-      const identity = requireSessionIdentity(identityRaw, "Invalid workspace agent request");
-      if (
-        !isWireString(agent) ||
-        !agent.trim() ||
-        (name !== undefined && !isWireString(name)) ||
-        (task !== undefined && !isWireString(task)) ||
-        (namedModel !== undefined && !isWireString(namedModel)) ||
-        (namedEffort !== undefined && (!isWireString(namedEffort) || namedModel === undefined))
-      ) {
-        throw new Error("Invalid workspace agent request");
-      }
       const session = sessionRegistry.get(identity);
       if (!session) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
       const advertised = session.spawnableAgents.find((candidate) => candidate === agent.trim());
@@ -799,15 +711,9 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
   // observation. The registry is what advertised it, so the registry is what
   // answers whether it stands; the adapter then resolves the workspace from
   // its own last pass, never from the request.
-  ipcMain.handle(
-    channels.renameSessionWorkspace,
-    async (
-      event,
-      identityRaw: UnparsedWireValue,
-      name: UnparsedWireValue,
-    ): Promise<ProviderActResult> => {
-      if (!trustedSender(event)) throw new Error("Untrusted renderer");
-      const identity = requireSessionIdentity(identityRaw, "Invalid workspace rename request");
+  registerHandler(
+    BRIDGE.renameSessionWorkspace,
+    async (identity: SessionIdentity, name: string): Promise<ProviderActResult> => {
       // Unlike a creation's optional name, a rename with nothing to rename to
       // is no ask at all, so an absent name is refused with the same words an
       // oversized one earns.
@@ -840,15 +746,9 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
   // Renaming a chat itself runs the same gauntlet one notch narrower: only a
   // session whose latest observation advertised `canRename` takes one, and
   // the registry that advertised it is what answers whether it stands.
-  ipcMain.handle(
-    channels.renameSession,
-    async (
-      event,
-      identityRaw: UnparsedWireValue,
-      name: UnparsedWireValue,
-    ): Promise<ProviderActResult> => {
-      if (!trustedSender(event)) throw new Error("Untrusted renderer");
-      const identity = requireSessionIdentity(identityRaw, "Invalid session rename request");
+  registerHandler(
+    BRIDGE.renameSession,
+    async (identity: SessionIdentity, name: string): Promise<ProviderActResult> => {
       const sessionName = workspaceNameText(name);
       if (!sessionName) {
         return {
@@ -865,71 +765,6 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
         }),
       );
     },
-  );
-}
-
-/**
- * Whether a renderer message names an issue, on the session identity's own
- * terms: both halves present, and everything it names re-resolved against the
- * latest observation before anything is done with it.
- */
-function requireIssueIdentity(value: UnparsedWireValue, message: string): IssueIdentity {
-  const identity = parseIssueIdentity(value);
-  if (!identity) throw new Error(message);
-  return identity;
-}
-
-function requireSessionIdentity(value: UnparsedWireValue, message: string): SessionIdentity {
-  const identity = parseSessionIdentity(value);
-  if (!identity) throw new Error(message);
-  return identity;
-}
-
-function parseIssueIdentity(value: UnparsedWireValue): IssueIdentity | undefined {
-  const record = wireRecord(value);
-  if (!record) return undefined;
-  const { trackerId, identifier } = record;
-  if (
-    !isWireString(trackerId) ||
-    trackerId.trim().length === 0 ||
-    !isWireString(identifier) ||
-    identifier.trim().length === 0
-  ) {
-    return undefined;
-  }
-  return { trackerId, identifier };
-}
-
-function parseSessionIdentity(value: UnparsedWireValue): SessionIdentity | undefined {
-  const record = wireRecord(value);
-  if (!record) return undefined;
-  const { providerId, providerSessionId } = record;
-  if (
-    !isWireString(providerId) ||
-    providerId.trim().length === 0 ||
-    !isWireString(providerSessionId) ||
-    providerSessionId.trim().length === 0
-  ) {
-    return undefined;
-  }
-  return { providerId, providerSessionId };
-}
-
-function isIssueActionAsk(value: UnparsedWireValue): value is {
-  kind: "issue-state" | "issue-comment";
-  identity: { trackerId: string; identifier: string };
-  transition?: { id: string; name: string };
-  body?: string;
-} {
-  if (!isRecord(value)) return false;
-  const { kind, identity } = value;
-  if (kind !== "issue-state" && kind !== "issue-comment") return false;
-  if (!isRecord(identity)) return false;
-  return (
-    isWireString(identity.trackerId) &&
-    identity.trackerId.trim().length > 0 &&
-    isWireString(identity.identifier) &&
-    identity.identifier.trim().length > 0
   );
 }
 

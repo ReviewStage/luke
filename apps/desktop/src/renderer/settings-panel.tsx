@@ -50,36 +50,39 @@ import {
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { APPLE_CALENDAR_ID, APPLE_CALENDAR_NAME } from "#shared/apple-calendar";
+import { SETTINGS_VIEW_COUNTED_AS } from "#shared/product-vocabulary";
+import type { AccountSnapshot, CredentialSource } from "#shared/wire/account";
+import {
+  ACCOUNT_PROVIDER,
+  ACCOUNT_STATUS,
+  CREDENTIAL_SOURCE,
+  SECRET_STORAGE,
+} from "#shared/wire/account";
+import type { MicrophoneStatus } from "#shared/wire/audio";
 import type {
   AccountCalendar,
-  AccountSnapshot,
+  CalendarAccount,
+  ObservedAccountCalendars,
+} from "#shared/wire/calendar";
+import type { WorkspaceProviderId } from "#shared/wire/session";
+import { SUPERSET_WORKSPACE_PROVIDER_ID } from "#shared/wire/session";
+import type {
   AppSettingField,
   AppSettings,
   AppSettingsView,
   AppSettingValue,
-  CalendarAccount,
-  CredentialSource,
   KeyedAppSettingField,
-  MicrophoneStatus,
-  ObservedAccountCalendars,
   SettingEntryValue,
   SettingsResetScope,
-  UpdateSnapshot,
-  WorkspaceProviderId,
-} from "#shared/contracts";
+} from "#shared/wire/settings";
 import {
-  ACCOUNT_PROVIDER,
-  ACCOUNT_STATUS,
   CLI_CONNECTION,
   type CliConnection,
-  CREDENTIAL_SOURCE,
-  SECRET_STORAGE,
   SETTINGS_RESET_SCOPE,
-  SUPERSET_WORKSPACE_PROVIDER_ID,
   VOICE_SOURCE,
   type VoiceSource,
-} from "#shared/contracts";
-import { SETTINGS_VIEW_COUNTED_AS } from "#shared/product-vocabulary";
+} from "#shared/wire/settings";
+import type { UpdateSnapshot } from "#shared/wire/update";
 import {
   CREDENTIAL_PLACEHOLDER,
   type CredentialEntryControl,

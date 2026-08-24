@@ -45,24 +45,19 @@ import {
   spokenSettingValue,
 } from "@sidecar/settings";
 import type { WireRecord } from "@sidecar/wire";
-import type {
-  AccountSnapshot,
-  AppBridge,
-  AppSettings,
-  AppSettingsView,
-  CredentialSource,
-  MicrophoneStatus,
-  SettingsUpdateResult,
-  UpdateSnapshot,
-} from "#shared/contracts";
+import type { AppBridge } from "#shared/bridge";
+import type { AccountSnapshot, CredentialSource } from "#shared/wire/account";
 import {
   ACCOUNT_PROVIDER,
   ACCOUNT_STATUS,
-  CLI_CONNECTION,
   CREDENTIAL_SOURCE,
   SECRET_STORAGE,
-  UPDATE_STATUS,
-} from "#shared/contracts";
+} from "#shared/wire/account";
+import type { MicrophoneStatus } from "#shared/wire/audio";
+import type { AppSettings, AppSettingsView, SettingsUpdateResult } from "#shared/wire/settings";
+import { CLI_CONNECTION } from "#shared/wire/settings";
+import type { UpdateSnapshot } from "#shared/wire/update";
+import { UPDATE_STATUS } from "#shared/wire/update";
 import { UPDATE_ROW_ACTION, type UpdateRowAction, updateRow } from "./update-row";
 
 export type { AppSettingId } from "@sidecar/settings";

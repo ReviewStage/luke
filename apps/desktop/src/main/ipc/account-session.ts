@@ -1,11 +1,11 @@
 import type { AccountSessionManager } from "@sidecar/account";
 import { PRODUCT_ACCOUNT_ACT, PRODUCT_EVENT, type RecordProductEvent } from "@sidecar/analytics";
-import type { UnparsedWireValue } from "@sidecar/wire";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from "electron";
-import { channels, isAccountProvider } from "#shared/contracts";
+import { BRIDGE } from "#shared/bridge";
+import { registerBridge } from "../register-bridge";
 
 export interface AccountSessionIpcDependencies {
-  ipcMain: Pick<IpcMain, "handle">;
+  ipcMain: Pick<IpcMain, "handle" | "on">;
   trustedSender: (event: IpcMainEvent | IpcMainInvokeEvent) => boolean;
   accountSession: AccountSessionManager;
   recordProductEvent: RecordProductEvent;
@@ -37,8 +37,6 @@ export interface AccountSessionIpcDependencies {
 
 export function registerAccountSessionIpc(dependencies: AccountSessionIpcDependencies): void {
   const {
-    ipcMain,
-    trustedSender,
     accountSession,
     recordProductEvent,
     flushProductEvents,
@@ -49,47 +47,46 @@ export function registerAccountSessionIpc(dependencies: AccountSessionIpcDepende
   // funnel wants how many begin against how many land, and `account:sign_in`
   // already marks the landing; naming the provider narrows the crowd an act
   // belongs to without answering a further question.
-  ipcMain.handle(channels.beginSignIn, (event, provider: UnparsedWireValue) => {
-    if (!trustedSender(event) || !isAccountProvider(provider)) {
-      throw new Error("Invalid sign-in request");
-    }
-    recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACT, {
-      account_act: PRODUCT_ACCOUNT_ACT.SIGN_IN_START,
-    });
-    return accountSession.beginSignIn(provider);
-  });
-  ipcMain.handle(channels.cancelSignIn, (event) => {
-    if (!trustedSender(event)) throw new Error("Untrusted renderer");
-    recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACT, {
-      account_act: PRODUCT_ACCOUNT_ACT.SIGN_IN_CANCEL,
-    });
-    accountSession.cancelSignIn();
-  });
-  ipcMain.handle(channels.signOut, async (event) => {
-    if (!trustedSender(event)) throw new Error("Untrusted renderer");
-    recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACT, { account_act: PRODUCT_ACCOUNT_ACT.SIGN_OUT });
-    haltSessionReplay();
-    await flushProductEvents();
-    try {
-      return await accountSession.signOut({ revokeRemote: true });
-    } catch (error) {
-      resumeSessionReplay();
-      throw error;
-    }
-  });
-  ipcMain.handle(channels.deleteAccount, async (event) => {
-    if (!trustedSender(event)) throw new Error("Untrusted renderer");
-    recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACT, { account_act: PRODUCT_ACCOUNT_ACT.DELETE });
-    haltSessionReplay();
-    await flushProductEvents();
-    try {
-      return await accountSession.deleteEverywhere();
-    } catch (error) {
-      // The account still stands — deletion is documented to reject with it
-      // intact — so recording has to be allowed back rather than left off
-      // until the next launch.
-      resumeSessionReplay();
-      throw error;
-    }
-  });
+  registerBridge(
+    BRIDGE,
+    {
+      beginSignIn(_context, provider) {
+        recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACT, {
+          account_act: PRODUCT_ACCOUNT_ACT.SIGN_IN_START,
+        });
+        return accountSession.beginSignIn(provider);
+      },
+      cancelSignIn() {
+        recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACT, {
+          account_act: PRODUCT_ACCOUNT_ACT.SIGN_IN_CANCEL,
+        });
+        accountSession.cancelSignIn();
+      },
+      async signOut() {
+        recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACT, {
+          account_act: PRODUCT_ACCOUNT_ACT.SIGN_OUT,
+        });
+        haltSessionReplay();
+        await flushProductEvents();
+        try {
+          return await accountSession.signOut({ revokeRemote: true });
+        } catch (error) {
+          resumeSessionReplay();
+          throw error;
+        }
+      },
+      async deleteAccount() {
+        recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACT, { account_act: PRODUCT_ACCOUNT_ACT.DELETE });
+        haltSessionReplay();
+        await flushProductEvents();
+        try {
+          return await accountSession.deleteEverywhere();
+        } catch (error) {
+          resumeSessionReplay();
+          throw error;
+        }
+      },
+    },
+    { ipcMain: dependencies.ipcMain, trustedSender: dependencies.trustedSender },
+  );
 }
