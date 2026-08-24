@@ -815,6 +815,16 @@
   flex: 0 0 auto;
 }
 
+/* The shared row seats its trailing details in one wrapper. Keep that wrapper
+   top-right however many lines the mock copy takes. */
+.mock .row-side {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-self: flex-start;
+  align-items: flex-end;
+}
+
 /* When the session was last seen, where every Apple surface puts it: top-right
    against the title's line rather than centred on the row. */
 .mock .row-when {
