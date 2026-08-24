@@ -173,9 +173,9 @@ frontier=$doored_packages
 while [[ -n "$frontier" ]]; do
     next_frontier=""
     for package_name in $frontier; do
-        imported=$(grep -rhoE '(from|import) "@sidecar/[a-z-]+"' \
-            "$SIDECAR_REPO_ROOT/packages/$package_name/src" --include='*.ts' \
-            --exclude='*.test.ts' 2>/dev/null |
+        imported=$(grep -rhoE --include='*.ts' --exclude='*.test.ts' \
+            '(from|import) "@sidecar/[a-z-]+"' \
+            "$SIDECAR_REPO_ROOT/packages/$package_name/src" 2>/dev/null |
             sed -E 's#.*"@sidecar/([a-z-]+)"#\1#' | sort -u || true)
         for imported_name in $imported; do
             if ! grep -qx "$imported_name" <<<"$reached_packages"; then
