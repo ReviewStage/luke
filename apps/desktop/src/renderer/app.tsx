@@ -23,7 +23,6 @@ import {
   type RealtimeDiagnostics,
 } from "@sidecar/realtime";
 import {
-  type NormalizedSession,
   type ObservedWorkspaceProject,
   SESSION_MENTION_KIND,
   type SessionApplicationId,
@@ -39,7 +38,7 @@ import {
   VOICE_CAPTION_MAX_HEIGHT,
 } from "@sidecar/surface";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
-import type { WireRecord } from "@sidecar/wire";
+import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import {
   type CSSProperties,
   useCallback,
@@ -60,12 +59,12 @@ import type {
   DisplayDiagnostic,
   SessionOpenResult,
   SessionReplayBootstrap,
+  SessionRosterPayload,
   SupersetSignInSnapshot,
   WorkspaceProviderId,
 } from "#shared/wire/session";
 import {
   isWorkspaceProviderId,
-  SESSION_OPEN_RESULT_STATUS,
   SUPERSET_SIGN_IN_STAGE,
   SUPERSET_WORKSPACE_PROVIDER_ID,
 } from "#shared/wire/session";
@@ -125,11 +124,11 @@ import type { AppActionCarrier } from "./realtime-session";
 import {
   arrangeSessions,
   DEFAULT_SESSION_VIEW,
-  type DisplaySession,
   displaySessions,
   fixtureMentionChips,
   MENTION_CHIP_KIND,
   type MentionChip,
+  type SessionArrangement,
   type SessionFilter,
   type SessionView,
   sameSessionFilters,
@@ -365,7 +364,11 @@ export function App(): React.JSX.Element {
   // composer signs a fresh note from the account without re-wiring the
   // lifecycle subscription to every sign-in change.
   const [account, setAccount, accountNow] = useStateWithRef<AccountSnapshot | undefined>(undefined);
-  const [sessions, setSessions] = useState<readonly NormalizedSession[]>([]);
+  const [sessionRoster, setSessionRoster] = useState<SessionRosterPayload>({
+    sessions: [],
+    attention: [],
+  });
+  const sessions = sessionRoster.sessions;
   // Whether the roster above has been read at all yet. It only ever settles —
   // the bootstrap can say a reading already happened, and any push is one —
   // so a bootstrap replying "not yet" after a push raced past it clobbers
@@ -380,7 +383,7 @@ export function App(): React.JSX.Element {
   const [settingsView, setSettingsView, settingsViewNow] = useStateWithRef<SettingsView>(
     SETTINGS_VIEW.ROOT,
   );
-  const [sessionView, setSessionView] = useState<SessionView>(DEFAULT_SESSION_VIEW);
+  const [sessionView, setSessionView] = useState<SessionArrangement>(DEFAULT_SESSION_VIEW);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   // The settings search's field, on the sessions search's own terms: the
@@ -671,7 +674,7 @@ export function App(): React.JSX.Element {
   // two, made once. The fallback the render performs when a selection empties
   // writes the view directly instead: that is the list correcting itself, not
   // somebody choosing.
-  const changeSessionView = useCallback((next: SessionView) => {
+  const changeSessionView = useCallback((next: SessionArrangement) => {
     setSessionView(next);
     setOptionsOpen(false);
   }, []);
@@ -880,7 +883,7 @@ export function App(): React.JSX.Element {
   const applySettingsReply = useCallback(
     (result: SettingsUpdateResult) => {
       applySettings(result.settings);
-      return result.reason;
+      return result;
     },
     [applySettings],
   );
@@ -1096,11 +1099,11 @@ export function App(): React.JSX.Element {
   }, [presentationOf, restorePanel]);
 
   const disconnectSuperset = useCallback(async () => {
-    const rejection = await window.sidecar.disconnectSuperset();
+    const result = await window.sidecar.disconnectSuperset();
     // The idle broadcast the sign-out fires says the same thing to every other
     // window; this window should not wait a round trip to agree with itself.
-    if (rejection === undefined) setSupersetConnected(false);
-    return rejection;
+    if (result.status === ACT_RESULT_STATUS.ACCEPTED) setSupersetConnected(false);
+    return result;
   }, []);
 
   /**
@@ -1193,7 +1196,7 @@ export function App(): React.JSX.Element {
       if (removalEndsEntry(credentialsEntry.latest(), providerId, result.reason)) {
         credentialsEntry.apply(undefined);
       }
-      return result.reason;
+      return result;
     },
     [applySettings, credentialsEntry.apply, credentialsEntry.latest],
   );
@@ -1606,7 +1609,7 @@ export function App(): React.JSX.Element {
    * waited for.
    */
   const openSession = useCallback(
-    (session: DisplaySession) => {
+    (session: SessionView) => {
       void window.sidecar.openSession({
         providerId: session.providerId,
         providerSessionId: session.id,
@@ -1623,7 +1626,7 @@ export function App(): React.JSX.Element {
    * the latest roster before handing the normalized route to macOS.
    */
   const openSessionApplication = useCallback(
-    (session: DisplaySession, applicationId: SessionApplicationId) => {
+    (session: SessionView, applicationId: SessionApplicationId) => {
       void window.sidecar.openSessionApplication(
         {
           providerId: session.providerId,
@@ -1647,7 +1650,7 @@ export function App(): React.JSX.Element {
     async (identity: SessionIdentity): Promise<SessionOpenResult> => {
       const result = await window.sidecar.openSession(identity);
       if (
-        result.status === SESSION_OPEN_RESULT_STATUS.OPENED &&
+        result.status === ACT_RESULT_STATUS.ACCEPTED &&
         presentationOf() === PANEL_PRESENTATION.PANEL
       ) {
         cancelHover();
@@ -1670,7 +1673,7 @@ export function App(): React.JSX.Element {
     ): Promise<SessionOpenResult> => {
       const result = await window.sidecar.openSessionApplication(identity, applicationId);
       if (
-        result.status === SESSION_OPEN_RESULT_STATUS.OPENED &&
+        result.status === ACT_RESULT_STATUS.ACCEPTED &&
         presentationOf() === PANEL_PRESENTATION.PANEL
       ) {
         cancelHover();
@@ -1813,7 +1816,7 @@ export function App(): React.JSX.Element {
   const carryAppAction = useCallback<AppActionCarrier>(
     async (action) =>
       dispatchByKind(action, {
-        [APP_TOOL_KIND.SETTING]: async (action) => {
+        [APP_TOOL_KIND.SETTING]: async (action): Promise<WireRecord> => {
           // The store's answer is caught rather than drawn: the switch is what
           // Luke is on his way to move, so it waits for him to reach it. It is
           // caught in a local and handed to this act alone, because one reply
@@ -1845,9 +1848,12 @@ export function App(): React.JSX.Element {
           const hold: ErrandHold = caught === undefined ? NOTHING_HELD : { settings: caught };
           // Nothing to show and nothing to sign: a refused change must not stand
           // the panel up in front of a switch that did not move.
-          if (outcome.status !== "changed") {
+          if (outcome.status !== ACT_RESULT_STATUS.ACCEPTED) {
             drawErrandHold(hold);
-            return outcome;
+            return {
+              status: ACT_RESULT_STATUS.REJECTED,
+              reason: outcome.reason ?? "That setting could not be changed.",
+            };
           }
           const opening = presentationOf() !== PANEL_PRESENTATION.PANEL;
           // The guide's ids travel as plain text, so one that names no setting
@@ -1909,7 +1915,7 @@ export function App(): React.JSX.Element {
             throw error;
           }
           return {
-            status: "opened",
+            status: ACT_RESULT_STATUS.ACCEPTED,
             kind: action.composer,
             ...(action.draft === undefined
               ? undefined
@@ -1954,10 +1960,13 @@ export function App(): React.JSX.Element {
           // waits for the flight, never the report.
           const searched =
             action.query !== undefined && bootstrap !== undefined
-              ? spokenSearchOutcome(displaySessions(bootstrap, sessions, noticeAsks), {
-                  ...sessionView,
-                  ...view,
-                })
+              ? spokenSearchOutcome(
+                  displaySessions(bootstrap, sessions, noticeAsks, sessionRoster.attention),
+                  {
+                    ...sessionView,
+                    ...view,
+                  },
+                )
               : undefined;
           await changeMode(true);
           // The tab bar and the options button are drawn outside the settings
@@ -1982,7 +1991,7 @@ export function App(): React.JSX.Element {
             searched?.note,
           ].filter((line): line is string => line !== undefined);
           return {
-            status: "shown",
+            status: ACT_RESULT_STATUS.ACCEPTED,
             tab: action.tab,
             ...(spoken !== undefined ? { filters: action.filters } : undefined),
             ...(action.sort ? { sort: action.sort } : undefined),
@@ -2001,12 +2010,12 @@ export function App(): React.JSX.Element {
             // so the outcome voiced is the answer the check actually returned.
             const answered = await window.sidecar.checkForUpdates();
             setUpdate(answered);
-            return { status: "checked", outcome: updateRow(answered).detail };
+            return { status: ACT_RESULT_STATUS.ACCEPTED, outcome: updateRow(answered).detail };
           }
           if (action.act === APP_UPDATE_ACT.DOWNLOAD) {
             window.sidecar.openLatestRelease();
             return {
-              status: "opened",
+              status: ACT_RESULT_STATUS.ACCEPTED,
               note: "The latest release's page is open in the browser; the download itself is by hand from there.",
             };
           }
@@ -2020,13 +2029,13 @@ export function App(): React.JSX.Element {
           const row = standing ? updateRow(standing) : undefined;
           if (row?.action !== UPDATE_ROW_ACTION.RESTART) {
             return {
-              status: "refused",
+              status: ACT_RESULT_STATUS.REJECTED,
               reason: row?.detail ?? "This run does not report where updates stand.",
             };
           }
           window.sidecar.installUpdate();
           return {
-            status: "restarting",
+            status: ACT_RESULT_STATUS.ACCEPTED,
             note: "Luke is quitting to install the downloaded release; this conversation ends with it.",
           };
         },
@@ -2042,6 +2051,7 @@ export function App(): React.JSX.Element {
       feedbackEntry.latest,
       presentationOf,
       sessions,
+      sessionRoster.attention,
       noticeAsks,
       sessionView,
       bootstrapSettings,
@@ -2390,7 +2400,7 @@ export function App(): React.JSX.Element {
         setSessionsSettled(true);
         onChange(pushed);
       }),
-    setSessions,
+    setSessionRoster,
   );
   // Straight to the conversation rather than through state: no panel
   // surface draws the issue roster, so a re-render would be work for nobody.
@@ -2510,7 +2520,7 @@ export function App(): React.JSX.Element {
     const bootstrapGeneration = modeGenerationOf();
     void window.sidecar.getBootstrap().then((value) => {
       setBootstrap(value);
-      acceptSessionsBootstrap(value.sessions);
+      acceptSessionsBootstrap(value.sessionRoster);
       if (value.sessionsSettled) setSessionsSettled(true);
       setNoticeAsks(value.noticeAsks);
       // Only fill in what no push has said yet: the bootstrap snapshot is
@@ -3007,7 +3017,7 @@ export function App(): React.JSX.Element {
 
   if (!bootstrap || !display) return <div />;
 
-  const visibleSessions = displaySessions(bootstrap, sessions, noticeAsks);
+  const visibleSessions = displaySessions(bootstrap, sessions, noticeAsks, sessionRoster.attention);
   // The tally is taken before the list is narrowed — the capsule reports what
   // Luke is watching, not what the panel is currently showing — but it reads
   // in the list's own sort, so the wing's marks sit in the order the rows do.
@@ -3233,9 +3243,13 @@ export function App(): React.JSX.Element {
               onDeleteAccount: async () => {
                 try {
                   setAccount(await window.sidecar.deleteAccount());
-                  return undefined;
+                  return { status: ACT_RESULT_STATUS.ACCEPTED };
                 } catch {
-                  return "Luke's service could not delete the account, so it still stands. Try again in a moment.";
+                  return {
+                    status: ACT_RESULT_STATUS.REJECTED,
+                    reason:
+                      "Luke's service could not delete the account, so it still stands. Try again in a moment.",
+                  };
                 }
               },
               view: settingsView,

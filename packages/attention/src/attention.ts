@@ -1,12 +1,13 @@
 import {
+  type ACT_RESULT_STATUS,
   ATTENTION_DISPOSITION,
   type AttentionDecision,
   type AttentionDisposition,
   attentionDecisionFromWire,
   maximumAttentionSummaryLength,
-  type NormalizedSession,
   normalizeSessionIdentity,
   SESSION_COMPLETION_CAUSE,
+  type Session,
   type SessionDetail,
   type SessionIdentity,
   type SessionStatus,
@@ -215,7 +216,7 @@ export interface SessionAttentionReviewerOptions {
    * a provider to move a session on, so without this the reviewer cannot tell
    * that the state it reasoned about is gone.
    */
-  currentSession?: (identity: SessionIdentity) => NormalizedSession | undefined;
+  currentSession?: (identity: SessionIdentity) => Session | undefined;
   /**
    * Reads the developer's standing ask about a session, when one stands. It
    * rides the update so the evaluator can weigh the development against what
@@ -239,7 +240,7 @@ interface SpokenRecord {
 }
 
 interface AttentionCandidate {
-  session: NormalizedSession;
+  session: Session;
   update: AttentionUpdate;
 }
 
@@ -252,17 +253,17 @@ interface AttentionCandidate {
 const ATTENTION_DEVELOPMENT = [
   {
     trigger: ATTENTION_TRIGGER.STATUS_CHANGED,
-    ofSession: (session: NormalizedSession) => session.status,
+    ofSession: (session: Session) => session.status,
     ofUpdate: (update: AttentionUpdate) => update.status,
   },
   {
     trigger: ATTENTION_TRIGGER.ERROR_REPORTED,
-    ofSession: (session: NormalizedSession) => session.detail.error,
+    ofSession: (session: Session) => session.detail.error,
     ofUpdate: (update: AttentionUpdate) => update.context?.error,
   },
   {
     trigger: ATTENTION_TRIGGER.RECAP_CHANGED,
-    ofSession: (session: NormalizedSession) => session.recap,
+    ofSession: (session: Session) => session.recap,
     ofUpdate: (update: AttentionUpdate) => update.recap,
   },
 ] as const;
@@ -273,8 +274,8 @@ const ATTENTION_DEVELOPMENT = [
  * the state, a new failure, or a new recap is worth a decision.
  */
 function attentionTrigger(
-  session: NormalizedSession,
-  previous: NormalizedSession | undefined,
+  session: Session,
+  previous: Session | undefined,
 ): AttentionTrigger | undefined {
   if (!previous) return ATTENTION_TRIGGER.OBSERVED;
   for (const dimension of ATTENTION_DEVELOPMENT) {
@@ -289,8 +290,8 @@ function attentionTrigger(
  * a development, so it never reaches an evaluator.
  */
 export function attentionUpdate(
-  session: NormalizedSession,
-  previous?: NormalizedSession,
+  session: Session,
+  previous?: Session,
   noticeRequest?: string,
 ): AttentionUpdate | undefined {
   const trigger = attentionTrigger(session, previous);
@@ -398,14 +399,6 @@ export class AttentionSpeechLedger {
 }
 
 /** What became of a standing ask, worded so a spoken reply can carry it. */
-export const ATTENTION_REQUEST_RESULT_STATUS = {
-  ACCEPTED: "accepted",
-  REJECTED: "rejected",
-} as const;
-
-export type AttentionRequestResultStatus =
-  (typeof ATTENTION_REQUEST_RESULT_STATUS)[keyof typeof ATTENTION_REQUEST_RESULT_STATUS];
-
 /**
  * The answer to registering or withdrawing a standing ask. An acceptance
  * carries the session's status as observed at that moment, because the ask may
@@ -413,8 +406,9 @@ export type AttentionRequestResultStatus =
  * finish coming, and the reply should be able to say so.
  */
 export type AttentionRequestResult =
-  | { status: typeof ATTENTION_REQUEST_RESULT_STATUS.ACCEPTED; sessionStatus: SessionStatus }
-  | { status: typeof ATTENTION_REQUEST_RESULT_STATUS.REJECTED; reason: string };
+  | { status: typeof ACT_RESULT_STATUS.ACCEPTED; sessionStatus: SessionStatus }
+  | { status: typeof ACT_RESULT_STATUS.REJECTED; reason: string }
+  | { status: typeof ACT_RESULT_STATUS.UNSUPPORTED; reason: string };
 
 /**
  * The standing asks the developer has made about sessions, one per session,
@@ -517,16 +511,14 @@ export interface SessionNoticeAsk extends SessionIdentity {
  */
 export class SessionAttentionReviewer {
   readonly #evaluator: AttentionEvaluator;
-  readonly #currentSession:
-    | ((identity: SessionIdentity) => NormalizedSession | undefined)
-    | undefined;
+  readonly #currentSession: ((identity: SessionIdentity) => Session | undefined) | undefined;
   readonly #noticeRequestFor: ((identity: SessionIdentity) => string | undefined) | undefined;
   readonly #now: () => number;
   readonly #maximumUpdatesPerReview: number;
   readonly #ledger: AttentionSpeechLedger;
   readonly #maximumUnavailableRetries: number;
   readonly #freshEventAgeMs: number;
-  #observed = new Map<string, Map<string, NormalizedSession>>();
+  #observed = new Map<string, Map<string, Session>>();
   readonly #pending = new Map<string, Set<string>>();
   readonly #unavailableRetries = new Map<string, Map<string, number>>();
 
@@ -553,7 +545,7 @@ export class SessionAttentionReviewer {
     this.#ledger = new AttentionSpeechLedger(ledgerOptions);
   }
 
-  async review(sessions: readonly NormalizedSession[]): Promise<readonly AttentionReview[]> {
+  async review(sessions: readonly Session[]): Promise<readonly AttentionReview[]> {
     // An evaluator in its own quiet would answer every update with nothing,
     // and each nothing costs a per-session retry budgeted for real failures.
     // Skipping the pass before any baseline advances spends none of them:
@@ -566,7 +558,7 @@ export class SessionAttentionReviewer {
     // Developments whose events are already old: consumed without a model
     // call, but their baselines still advance, so history never resurfaces.
     const staleConsumed: AttentionCandidate[] = [];
-    const closedConsumed: NormalizedSession[] = [];
+    const closedConsumed: Session[] = [];
     const now = this.#now();
     for (const session of sessions) {
       if (this.#isPending(session)) continue;
@@ -641,7 +633,7 @@ export class SessionAttentionReviewer {
    * standing misconfiguration, where retrying forever would hammer a paid API
    * every poll. Retries are per session and reset as soon as one succeeds.
    */
-  #keepsDevelopmentPending(review: AttentionReview, session: NormalizedSession): boolean {
+  #keepsDevelopmentPending(review: AttentionReview, session: Session): boolean {
     if (review.outcome !== ATTENTION_REVIEW_OUTCOME.UNAVAILABLE) {
       // Every other outcome means the evaluator answered, so the failure streak
       // is over even when the answer itself could not be used. Counting a
@@ -666,7 +658,7 @@ export class SessionAttentionReviewer {
     return true;
   }
 
-  #clearUnavailableRetries(session: NormalizedSession): void {
+  #clearUnavailableRetries(session: Session): void {
     const providerAttempts = this.#unavailableRetries.get(session.providerId);
     if (!providerAttempts) return;
     providerAttempts.delete(session.providerSessionId);
@@ -684,7 +676,7 @@ export class SessionAttentionReviewer {
    * fresh review at the cost of a `previousStatus` the reviewer can no longer
    * honestly report.
    */
-  #reopen(session: NormalizedSession): void {
+  #reopen(session: Session): void {
     const providerSessions = this.#observed.get(session.providerId);
     if (!providerSessions) return;
     providerSessions.delete(session.providerSessionId);
@@ -761,14 +753,14 @@ export class SessionAttentionReviewer {
     }
   }
 
-  #observedSession(session: NormalizedSession): NormalizedSession | undefined {
+  #observedSession(session: Session): Session | undefined {
     return this.#observed.get(session.providerId)?.get(session.providerSessionId);
   }
 
   #nextObserved(
-    sessions: readonly NormalizedSession[],
-    consumed: readonly NormalizedSession[],
-  ): Map<string, Map<string, NormalizedSession>> {
+    sessions: readonly Session[],
+    consumed: readonly Session[],
+  ): Map<string, Map<string, Session>> {
     const reviewed = new Map<string, Set<string>>();
     for (const session of consumed) {
       const providerSessionIds = reviewed.get(session.providerId) ?? new Set<string>([]);
@@ -776,30 +768,30 @@ export class SessionAttentionReviewer {
       reviewed.set(session.providerId, providerSessionIds);
     }
 
-    const next = new Map<string, Map<string, NormalizedSession>>();
+    const next = new Map<string, Map<string, Session>>();
     for (const session of sessions) {
       const baseline = reviewed.get(session.providerId)?.has(session.providerSessionId)
         ? session
         : this.#observedSession(session);
       if (!baseline) continue;
-      const providerSessions = next.get(session.providerId) ?? new Map<string, NormalizedSession>();
+      const providerSessions = next.get(session.providerId) ?? new Map<string, Session>();
       providerSessions.set(session.providerSessionId, baseline);
       next.set(session.providerId, providerSessions);
     }
     return next;
   }
 
-  #isPending(session: NormalizedSession): boolean {
+  #isPending(session: Session): boolean {
     return this.#pending.get(session.providerId)?.has(session.providerSessionId) === true;
   }
 
-  #markPending(session: NormalizedSession): void {
+  #markPending(session: Session): void {
     const providerSessionIds = this.#pending.get(session.providerId) ?? new Set<string>();
     providerSessionIds.add(session.providerSessionId);
     this.#pending.set(session.providerId, providerSessionIds);
   }
 
-  #clearPending(session: NormalizedSession): void {
+  #clearPending(session: Session): void {
     const providerSessionIds = this.#pending.get(session.providerId);
     if (!providerSessionIds) return;
     providerSessionIds.delete(session.providerSessionId);

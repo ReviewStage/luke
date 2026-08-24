@@ -752,7 +752,10 @@ test("refuses to archive an agent whose row never advertised it", async () => {
     control: { id: "archive-agent", label: "Archive" },
   });
 
-  assert.deepEqual(result, { status: "unsupported" });
+  assert.deepEqual(result, {
+    status: "unsupported",
+    reason: "That act is not supported by the latest observation.",
+  });
   assert.equal(api.requests.length, requestsBefore);
 });
 
@@ -825,7 +828,10 @@ test("refuses a creation ask Cursor cannot take before any request exists", asyn
     providerProjectId: "https://github.com/reviewstage/unlisted",
     task: "Add a README",
   });
-  assert.deepEqual(unlisted, { status: "unsupported" });
+  assert.deepEqual(unlisted, {
+    status: "unsupported",
+    reason: "That act is not supported by the latest observation.",
+  });
   assert.equal(api.requests.length, requestsBefore);
 });
 

@@ -11,11 +11,11 @@ import {
 import {
   ATTENTION_DISPOSITION,
   type AttentionDecision,
-  type NormalizedSession,
   normalizeSession,
   type ProviderSessionObservation,
   SESSION_COMPLETION_CAUSE,
   SESSION_STATUS,
+  type Session,
   type SessionProvider,
 } from "@sidecar/session";
 import {
@@ -48,7 +48,7 @@ function session(
   provider: SessionProvider,
   providerSessionId: string,
   overrides: Partial<ProviderSessionObservation> = {},
-): NormalizedSession {
+): Session {
   const observation: ProviderSessionObservation = {
     providerSessionId,
     title: `${provider.displayName}: checkout-service`,
@@ -412,7 +412,7 @@ test("drops a decision about a failure the session has already replaced", async 
     status: SESSION_STATUS.ERROR,
     detail: { error: "Unable to connect to API (ConnectionRefused)" },
   });
-  let current: NormalizedSession = rateLimited;
+  let current: Session = rateLimited;
 
   const reviewer = new SessionAttentionReviewer({
     evaluator: {
@@ -436,7 +436,7 @@ test("drops a decision about a failure the session has already replaced", async 
 test("drops a decision the session already moved past", async () => {
   const waiting = session(claude, "review", { status: SESSION_STATUS.WAITING });
   const working = session(claude, "review");
-  let current: NormalizedSession = waiting;
+  let current: Session = waiting;
   let answeredWhileEvaluating = true;
 
   const reviewer = new SessionAttentionReviewer({
@@ -472,7 +472,7 @@ test("drops a decision the session already moved past", async () => {
 test("reviews the development again after the session returns to a superseded state", async () => {
   const working = session(claude, "review");
   const waiting = session(claude, "review", { status: SESSION_STATUS.WAITING });
-  let current: NormalizedSession = working;
+  let current: Session = working;
   let answeredWhileEvaluating = false;
 
   const reviewer = new SessionAttentionReviewer({
@@ -514,7 +514,7 @@ test("re-checks every decision after the slowest evaluation in the pass lands", 
   });
   const workingSession = session(claude, "answered", { observedAt: DECIDED_AT });
   const slowSession = session(claude, "slow", { observedAt: DECIDED_AT - 1_000 });
-  const current = new Map<string, NormalizedSession>([
+  const current = new Map<string, Session>([
     ["answered", waitingSession],
     ["slow", slowSession],
   ]);
@@ -625,7 +625,7 @@ test("stops retrying an evaluator that keeps failing", async () => {
 test("a superseded answer ends the failure streak", async () => {
   const waiting = session(claude, "review", { status: SESSION_STATUS.WAITING });
   const working = session(claude, "review");
-  let current: NormalizedSession = waiting;
+  let current: Session = waiting;
   let pass = 0;
 
   const reviewer = new SessionAttentionReviewer({

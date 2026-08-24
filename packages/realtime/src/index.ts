@@ -79,6 +79,7 @@ export {
   typedAskEvents,
 } from "./realtime-protocol.js";
 export {
+  type ActEnvelope,
   APP_TOOL_KIND,
   type AppToolAction,
   appToolAction,
@@ -88,6 +89,9 @@ export {
   dispatchByKind,
   type IssueToolAction,
   isAppToolCall,
+  isCarriedAppAction,
+  isCarriedIssueAction,
+  isCarriedSessionAction,
   isIssueToolName,
   isSessionToolName,
   issueToolAction,

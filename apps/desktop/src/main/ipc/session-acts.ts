@@ -1,5 +1,15 @@
 import { randomUUID } from "node:crypto";
 import {
+  ACT_VALIDATION_TARGET,
+  type ActEnvelope,
+  APP_TOOL_KIND,
+  actValidationTarget,
+  ISSUE_TOOL_KIND,
+  isCarriedIssueAction,
+  isCarriedSessionAction,
+  SESSION_TOOL_KIND,
+} from "@sidecar/acts";
+import {
   PRODUCT_EVENT,
   PRODUCT_ISSUE_ACT,
   PRODUCT_SESSION_ACT,
@@ -7,7 +17,6 @@ import {
   type RecordProductEvent,
 } from "@sidecar/analytics";
 import {
-  ATTENTION_REQUEST_RESULT_STATUS,
   type AttentionRequestRegistry,
   type AttentionRequestResult,
   attentionRequestText,
@@ -18,7 +27,6 @@ import {
   type IssueIdentity,
   isIssueTrackerId,
   issueCommentText,
-  TRACKER_ACTION_RESULT_STATUS,
   type TrackedIssue,
   type TrackerActionResult,
 } from "@sidecar/issues";
@@ -26,13 +34,12 @@ import {
   type InMemorySessionRegistry,
   isListedWorkspaceAgentModel,
   isProviderId,
-  type NormalizedSession,
-  PROVIDER_ACT_RESULT_STATUS,
   type ProviderActResult,
   type ProviderControlResult,
   type ProviderMessageResult,
   type ProviderWorkspaceResult,
   SESSION_LOCATION,
+  type Session,
   type SessionIdentity,
   type SessionProviderAdapter,
   sessionMessageText,
@@ -43,16 +50,10 @@ import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import type { SupersetSessionContext } from "@sidecar/superset";
 import { isSupersetControlId, type SupersetCli, supersetPressedLink } from "@sidecar/superset";
 import type { LinearIssueTracker } from "@sidecar/trackers";
-import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
+import { ACT_RESULT_STATUS, isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from "electron";
 import { BRIDGE } from "#shared/bridge";
-import {
-  type IssueActionAsk,
-  SESSION_OPEN_RESULT_STATUS,
-  SESSION_TRANSCRIPT_RESULT_STATUS,
-  type SessionOpenResult,
-  type SessionTranscriptResult,
-} from "#shared/contracts";
+import type { IssueActionAsk, SessionOpenResult, SessionTranscriptResult } from "#shared/contracts";
 import { createActionHandler } from "../action-handler";
 import { registerBridgeEntry } from "../register-bridge";
 import type { SettingsStore } from "../settings-store";
@@ -83,6 +84,82 @@ export interface SessionActsIpcDependencies {
   supersetContext: (identity: SessionIdentity) => SupersetSessionContext | undefined;
   supersetCli: SupersetCli;
   recordProductEvent: RecordProductEvent;
+}
+
+type ActAuthorizationDependencies = Pick<
+  SessionActsIpcDependencies,
+  "sessionRegistry" | "adapterFor" | "trackedIssues"
+>;
+
+/** Revalidates the renderer's act envelope against the main process's latest observations. */
+export function authorizeActEnvelope(
+  envelope: ActEnvelope,
+  dependencies: ActAuthorizationDependencies,
+): ProviderActResult {
+  if (!envelope.armed) {
+    return {
+      status: ACT_RESULT_STATUS.REJECTED,
+      reason: "Only a turn the developer opened can carry an act.",
+    };
+  }
+  const target = actValidationTarget(envelope.id);
+  if (!target) {
+    return { status: ACT_RESULT_STATUS.REJECTED, reason: "No such act exists." };
+  }
+  const { act } = envelope;
+  if (target === ACT_VALIDATION_TARGET.SESSION_ROSTER) {
+    if (isCarriedIssueAction(act)) {
+      return { status: ACT_RESULT_STATUS.REJECTED, reason: "That act has the wrong target." };
+    }
+    if (
+      isCarriedSessionAction(act) &&
+      "identity" in act &&
+      !dependencies.sessionRegistry.get(act.identity)
+    ) {
+      return {
+        status: ACT_RESULT_STATUS.REJECTED,
+        reason: "No observed session matches that identity.",
+      };
+    }
+  }
+  if (target === ACT_VALIDATION_TARGET.ISSUE_ROSTER) {
+    if (
+      (act.kind !== ISSUE_TOOL_KIND.ISSUE_STATE && act.kind !== ISSUE_TOOL_KIND.ISSUE_COMMENT) ||
+      !dependencies
+        .trackedIssues()
+        ?.some(
+          (issue) =>
+            issue.trackerId === act.identity.trackerId &&
+            issue.identifier === act.identity.identifier,
+        )
+    ) {
+      return {
+        status: ACT_RESULT_STATUS.REJECTED,
+        reason: "No tracked issue matches that identity.",
+      };
+    }
+  }
+  if (target === ACT_VALIDATION_TARGET.WORKSPACE_PROJECT) {
+    if (
+      act.kind !== SESSION_TOOL_KIND.CREATE_WORKSPACE ||
+      !dependencies
+        .adapterFor(act.providerId)
+        ?.workspaceProjects()
+        .some((project) => project.providerProjectId === act.providerProjectId)
+    ) {
+      return {
+        status: ACT_RESULT_STATUS.REJECTED,
+        reason: "No listed project matches that identity.",
+      };
+    }
+  }
+  if (target === ACT_VALIDATION_TARGET.SETTING_ID && act.kind !== APP_TOOL_KIND.SETTING) {
+    return { status: ACT_RESULT_STATUS.REJECTED, reason: "No such setting act exists." };
+  }
+  if (target === ACT_VALIDATION_TARGET.UPDATE_ROW && act.kind !== APP_TOOL_KIND.UPDATE) {
+    return { status: ACT_RESULT_STATUS.REJECTED, reason: "No such update act exists." };
+  }
+  return { status: ACT_RESULT_STATUS.ACCEPTED };
 }
 
 export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies): void {
@@ -120,6 +197,10 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       ipcMain,
       trustedSender,
     });
+
+  registerHandler(BRIDGE.authorizeAct, (envelope: ActEnvelope) =>
+    authorizeActEnvelope(envelope, { sessionRegistry, adapterFor, trackedIssues }),
+  );
   /**
    * Counts an act that actually landed. It takes the result rather than
    * sitting inside `performSessionAct`, because a Superset-managed session
@@ -134,7 +215,7 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
   ): Result {
     // An adapter reports its provider id as a string; only one this build's
     // own vocabulary names has anything to be counted under.
-    if (result.status === PROVIDER_ACT_RESULT_STATUS.ACCEPTED && isProviderId(providerId)) {
+    if (result.status === ACT_RESULT_STATUS.ACCEPTED && isProviderId(providerId)) {
       recordProductEvent(PRODUCT_EVENT.SESSION_ACT_SEND, {
         provider_id: providerId,
         session_act: counted,
@@ -146,19 +227,27 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
   async function performSessionAct<Result extends ProviderActResult>(
     identity: SessionIdentity,
     counted: ProductSessionAct,
-    act: (adapter: SessionProviderAdapter, session: NormalizedSession) => Promise<Result>,
-  ): Promise<Result | { status: typeof PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED }> {
+    act: (adapter: SessionProviderAdapter, session: Session) => Promise<Result>,
+  ): Promise<Result | { status: typeof ACT_RESULT_STATUS.UNSUPPORTED; reason: string }> {
     const session = sessionRegistry.get(identity);
-    if (!session) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+    if (!session)
+      return {
+        status: ACT_RESULT_STATUS.UNSUPPORTED,
+        reason: "That act is not supported by the latest observation.",
+      };
     const adapter = adapterFor(identity.providerId);
-    if (!adapter) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+    if (!adapter)
+      return {
+        status: ACT_RESULT_STATUS.UNSUPPORTED,
+        reason: "That act is not supported by the latest observation.",
+      };
     const result = await act(adapter, session);
     // A rejection refreshes like an acceptance: a write whose answer never
     // arrived may still have landed, so the roster must catch up with the
     // provider rather than keep advertising what it may have already taken. A
     // rejection that never reached the network is answered from the adapter's
     // cache anyway.
-    if (result.status !== PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED) {
+    if (result.status !== ACT_RESULT_STATUS.UNSUPPORTED) {
       void sessionRegistry.refresh(adapter);
     }
     return countSessionAct(adapter.provider.id, counted, result);
@@ -171,7 +260,11 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
     registerAction<[SessionIdentity], SessionOpenResult>(definition, {
       async act(identity) {
         const url = address(identity);
-        if (!url) return { status: SESSION_OPEN_RESULT_STATUS.UNSUPPORTED };
+        if (!url)
+          return {
+            status: ACT_RESULT_STATUS.UNSUPPORTED,
+            reason: "That act is not supported by the latest observation.",
+          };
         await openExternal(url);
         if (isProviderId(identity.providerId)) {
           recordProductEvent(PRODUCT_EVENT.SESSION_ACT_SEND, {
@@ -179,9 +272,9 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
             session_act: PRODUCT_SESSION_ACT.SESSION_OPEN,
           });
         }
-        return { status: SESSION_OPEN_RESULT_STATUS.OPENED };
+        return { status: ACT_RESULT_STATUS.ACCEPTED };
       },
-      failure: () => ({ status: SESSION_OPEN_RESULT_STATUS.REJECTED, reason: failureReason }),
+      failure: () => ({ status: ACT_RESULT_STATUS.REJECTED, reason: failureReason }),
     });
   // What a press fires is the address the roster reported, plus the one
   // nonce Superset's own rows mint per press: the app consumes a terminal
@@ -201,7 +294,11 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
           .get(identity)
           ?.applications.find((application) => application.id === applicationId)?.link,
       );
-      if (!url) return { status: SESSION_OPEN_RESULT_STATUS.UNSUPPORTED };
+      if (!url)
+        return {
+          status: ACT_RESULT_STATUS.UNSUPPORTED,
+          reason: "That act is not supported by the latest observation.",
+        };
       await openExternal(url);
       if (isProviderId(identity.providerId)) {
         recordProductEvent(PRODUCT_EVENT.SESSION_ACT_SEND, {
@@ -209,10 +306,10 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
           session_act: PRODUCT_SESSION_ACT.SESSION_OPEN,
         });
       }
-      return { status: SESSION_OPEN_RESULT_STATUS.OPENED };
+      return { status: ACT_RESULT_STATUS.ACCEPTED };
     },
     failure: () => ({
-      status: SESSION_OPEN_RESULT_STATUS.REJECTED,
+      status: ACT_RESULT_STATUS.REJECTED,
       reason: "The system could not open that session in the selected app.",
     }),
   });
@@ -236,7 +333,11 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
           candidate.trackerId === identity.trackerId &&
           candidate.identifier === identity.identifier,
       )?.url;
-      if (!url) return { status: SESSION_OPEN_RESULT_STATUS.UNSUPPORTED };
+      if (!url)
+        return {
+          status: ACT_RESULT_STATUS.UNSUPPORTED,
+          reason: "That act is not supported by the latest observation.",
+        };
       await openExternal(url);
       // A roster reports its tracker id as a string; only one this build's own
       // vocabulary names has anything to be counted under, exactly as the
@@ -247,10 +348,10 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
           issue_act: PRODUCT_ISSUE_ACT.ISSUE_OPEN,
         });
       }
-      return { status: SESSION_OPEN_RESULT_STATUS.OPENED };
+      return { status: ACT_RESULT_STATUS.ACCEPTED };
     },
     failure: () => ({
-      status: SESSION_OPEN_RESULT_STATUS.REJECTED,
+      status: ACT_RESULT_STATUS.REJECTED,
       reason: "The system could not open that issue.",
     }),
   });
@@ -272,7 +373,7 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       const session = sessionRegistry.get(identity);
       if (!session) {
         return {
-          status: SESSION_TRANSCRIPT_RESULT_STATUS.REJECTED,
+          status: ACT_RESULT_STATUS.REJECTED,
           reason: "No observed session matches that identity.",
         };
       }
@@ -282,35 +383,29 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       // half has a file here to read.
       if (session.location !== SESSION_LOCATION.LOCAL) {
         return {
-          status: SESSION_TRANSCRIPT_RESULT_STATUS.UNSUPPORTED,
+          status: ACT_RESULT_STATUS.UNSUPPORTED,
           reason: "A cloud session's conversation lives with its provider, not on this machine.",
         };
       }
       const adapter = adapterFor(identity.providerId);
       if (!adapter) {
         return {
-          status: SESSION_TRANSCRIPT_RESULT_STATUS.UNSUPPORTED,
+          status: ACT_RESULT_STATUS.UNSUPPORTED,
           reason: "That session's provider keeps no transcript this build can read.",
         };
       }
       try {
-        const transcript = await adapter.readTranscript(identity.providerSessionId);
-        if (!transcript) {
-          return {
-            status: SESSION_TRANSCRIPT_RESULT_STATUS.REJECTED,
-            reason: "That session's transcript could not be found.",
-          };
-        }
-        if (isProviderId(identity.providerId)) {
+        const result = await adapter.readTranscript(identity.providerSessionId);
+        if (result.status === ACT_RESULT_STATUS.ACCEPTED && isProviderId(identity.providerId)) {
           recordProductEvent(PRODUCT_EVENT.SESSION_ACT_SEND, {
             provider_id: identity.providerId,
             session_act: PRODUCT_SESSION_ACT.TRANSCRIPT_READ,
           });
         }
-        return { status: SESSION_TRANSCRIPT_RESULT_STATUS.READ, transcript };
+        return result;
       } catch {
         return {
-          status: SESSION_TRANSCRIPT_RESULT_STATUS.REJECTED,
+          status: ACT_RESULT_STATUS.REJECTED,
           reason: "That session's transcript could not be read.",
         };
       }
@@ -330,14 +425,17 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       const message = boundedField(text, sessionMessageText);
       if (!message.ok || message.value === undefined) {
         return {
-          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          status: ACT_RESULT_STATUS.REJECTED,
           reason: "That message is empty or too long.",
         };
       }
       const messageText = message.value;
       const session = sessionRegistry.get(identity);
       if (!session?.canReceiveMessage) {
-        return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+        return {
+          status: ACT_RESULT_STATUS.UNSUPPORTED,
+          reason: "That act is not supported by the latest observation.",
+        };
       }
       const managed = supersetContext(identity);
       if (managed) {
@@ -365,7 +463,11 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
     async (identity: SessionIdentity, controlId: string): Promise<ProviderControlResult> => {
       const session = sessionRegistry.get(identity);
       const control = session?.controls.find((candidate) => candidate.id === controlId);
-      if (!control) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+      if (!control)
+        return {
+          status: ACT_RESULT_STATUS.UNSUPPORTED,
+          reason: "That act is not supported by the latest observation.",
+        };
       const managed = supersetContext(identity);
       if (managed && isSupersetControlId(control.id)) {
         return countSessionAct(
@@ -395,32 +497,32 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       const ask = attentionRequestText(request);
       if (!ask) {
         return {
-          status: ATTENTION_REQUEST_RESULT_STATUS.REJECTED,
+          status: ACT_RESULT_STATUS.REJECTED,
           reason: "An ask has to be one short request and longer than nothing.",
         };
       }
       const session = sessionRegistry.get(identity);
       if (!session) {
         return {
-          status: ATTENTION_REQUEST_RESULT_STATUS.REJECTED,
+          status: ACT_RESULT_STATUS.REJECTED,
           reason: "No observed session matches that identity.",
         };
       }
       if (!attentionReviewer()) {
         return {
-          status: ATTENTION_REQUEST_RESULT_STATUS.REJECTED,
+          status: ACT_RESULT_STATUS.REJECTED,
           reason: "No OpenAI key is connected, so nothing would ever read the ask.",
         };
       }
       attentionRequests.set(identity, ask);
       broadcastNoticeAsks();
       countSessionAct(identity.providerId, PRODUCT_SESSION_ACT.NOTICE_REQUEST, {
-        status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED,
+        status: ACT_RESULT_STATUS.ACCEPTED,
       });
       // The status rides the acceptance because the ask may already be
       // answered: a session asked about after it finished has no later finish
       // coming, and the reply should say so rather than promise one.
-      return { status: ATTENTION_REQUEST_RESULT_STATUS.ACCEPTED, sessionStatus: session.status };
+      return { status: ACT_RESULT_STATUS.ACCEPTED, sessionStatus: session.status };
     },
   );
 
@@ -430,21 +532,21 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       const session = sessionRegistry.get(identity);
       if (!session) {
         return {
-          status: ATTENTION_REQUEST_RESULT_STATUS.REJECTED,
+          status: ACT_RESULT_STATUS.REJECTED,
           reason: "No observed session matches that identity.",
         };
       }
       if (!attentionRequests.withdraw(identity)) {
         return {
-          status: ATTENTION_REQUEST_RESULT_STATUS.REJECTED,
+          status: ACT_RESULT_STATUS.REJECTED,
           reason: "No ask was standing for that session.",
         };
       }
       broadcastNoticeAsks();
       countSessionAct(identity.providerId, PRODUCT_SESSION_ACT.NOTICE_WITHDRAW, {
-        status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED,
+        status: ACT_RESULT_STATUS.ACCEPTED,
       });
-      return { status: ATTENTION_REQUEST_RESULT_STATUS.ACCEPTED, sessionStatus: session.status };
+      return { status: ACT_RESULT_STATUS.ACCEPTED, sessionStatus: session.status };
     },
   );
 
@@ -466,10 +568,17 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       namedSelection: WorkspaceAgentSelection | undefined,
     ): Promise<ProviderWorkspaceResult> => {
       const parsedSelection = namedSelection;
-      if (!sendsNetwork) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+      if (!sendsNetwork)
+        return {
+          status: ACT_RESULT_STATUS.UNSUPPORTED,
+          reason: "That act is not supported by the latest observation.",
+        };
       const adapter = adapterFor(providerId);
       if (!adapter) {
-        return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+        return {
+          status: ACT_RESULT_STATUS.UNSUPPORTED,
+          reason: "That act is not supported by the latest observation.",
+        };
       }
       const offered = adapter
         .workspaceProjects()
@@ -480,11 +589,15 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
             (!project.spawnableAgents ||
               (!!agent && project.spawnableAgents.includes(agent.trim()))),
         );
-      if (!offered) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+      if (!offered)
+        return {
+          status: ACT_RESULT_STATUS.UNSUPPORTED,
+          reason: "That act is not supported by the latest observation.",
+        };
       const workspaceName = boundedField(name, workspaceNameText);
       if (!workspaceName.ok) {
         return {
-          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          status: ACT_RESULT_STATUS.REJECTED,
           reason: "That workspace name is empty or too long.",
         };
       }
@@ -493,7 +606,7 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       const openingTask = boundedField(task, sessionMessageText);
       if (!openingTask.ok) {
         return {
-          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          status: ACT_RESULT_STATUS.REJECTED,
           reason: "That task is empty or too long.",
         };
       }
@@ -524,13 +637,13 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       // rejection refreshes too: a workspace can stand with its opening task
       // undelivered, and the adapter answers a rejection that never reached
       // the network from its cache anyway.
-      if (result.status !== PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED) {
+      if (result.status !== ACT_RESULT_STATUS.UNSUPPORTED) {
         // A workspace that landed is also one the developer just asked to be
         // taken to, so the session the creation response named — an id the
         // adapter reported, never an address — waits here for observation to
         // report it, and is opened then like a pressed row. Noted before the
         // refresh, so the very pass that first sees the session resolves it.
-        if (result.status === PROVIDER_ACT_RESULT_STATUS.ACCEPTED && result.providerSessionId) {
+        if (result.status === ACT_RESULT_STATUS.ACCEPTED && result.providerSessionId) {
           expectCreatedWorkspace(
             { providerId: adapter.provider.id, providerSessionId: result.providerSessionId },
             Date.now(),
@@ -550,7 +663,7 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       // never a creation's. Deterministic on the validated act — nothing a
       // model composed decides this — and losing the save loses only the
       // remembered default, never the workspace that just landed.
-      if (result.status === PROVIDER_ACT_RESULT_STATUS.ACCEPTED) {
+      if (result.status === ACT_RESULT_STATUS.ACCEPTED) {
         await rememberWorkspaceDefaults(
           adapter,
           providerProjectId,
@@ -563,8 +676,8 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
         // what became of the ask, so nothing rides this boundary that the
         // roster will not report on its own.
         return result.warning
-          ? { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED, warning: result.warning }
-          : { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED };
+          ? { status: ACT_RESULT_STATUS.ACCEPTED, warning: result.warning }
+          : { status: ACT_RESULT_STATUS.ACCEPTED };
       }
       return result;
     },
@@ -586,27 +699,43 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
           candidate.trackerId === action.identity.trackerId &&
           candidate.identifier === action.identity.identifier,
       );
-      if (!issue) return { status: TRACKER_ACTION_RESULT_STATUS.UNSUPPORTED };
+      if (!issue)
+        return {
+          status: ACT_RESULT_STATUS.UNSUPPORTED,
+          reason: "That act is not supported by the latest observation.",
+        };
       const tracker = issueTrackers.find((candidate) => candidate.tracker.id === issue.trackerId);
-      if (!tracker) return { status: TRACKER_ACTION_RESULT_STATUS.UNSUPPORTED };
+      if (!tracker)
+        return {
+          status: ACT_RESULT_STATUS.UNSUPPORTED,
+          reason: "That act is not supported by the latest observation.",
+        };
 
       let result: TrackerActionResult;
       if (action.kind === "issue-state") {
         const transition = issue.transitions.find(
           (candidate) => candidate.id === action.transition?.id,
         );
-        if (!transition) return { status: TRACKER_ACTION_RESULT_STATUS.UNSUPPORTED };
+        if (!transition)
+          return {
+            status: ACT_RESULT_STATUS.UNSUPPORTED,
+            reason: "That act is not supported by the latest observation.",
+          };
         result = await tracker.execute({
           kind: ISSUE_ACTION_KIND.SET_STATE,
           trackerIssueId: issue.trackerIssueId,
           transition,
         });
       } else {
-        if (!issue.canComment) return { status: TRACKER_ACTION_RESULT_STATUS.UNSUPPORTED };
+        if (!issue.canComment)
+          return {
+            status: ACT_RESULT_STATUS.UNSUPPORTED,
+            reason: "That act is not supported by the latest observation.",
+          };
         const body = boundedField(action.body, issueCommentText);
         if (!body.ok || body.value === undefined) {
           return {
-            status: TRACKER_ACTION_RESULT_STATUS.REJECTED,
+            status: ACT_RESULT_STATUS.REJECTED,
             reason: "That comment is empty or too long.",
           };
         }
@@ -618,7 +747,7 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       }
       // An act that landed changes the board, so the roster should catch up
       // as soon as Linear will say.
-      if (result.status === TRACKER_ACTION_RESULT_STATUS.ACCEPTED) {
+      if (result.status === ACT_RESULT_STATUS.ACCEPTED) {
         refreshIssues();
         if (isIssueTrackerId(issue.trackerId)) {
           recordProductEvent(PRODUCT_EVENT.ISSUE_ACT_SEND, {
@@ -650,9 +779,17 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       namedEffort: string | undefined,
     ): Promise<ProviderWorkspaceResult> => {
       const session = sessionRegistry.get(identity);
-      if (!session) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+      if (!session)
+        return {
+          status: ACT_RESULT_STATUS.UNSUPPORTED,
+          reason: "That act is not supported by the latest observation.",
+        };
       const advertised = session.spawnableAgents.find((candidate) => candidate === agent.trim());
-      if (!advertised) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+      if (!advertised)
+        return {
+          status: ACT_RESULT_STATUS.UNSUPPORTED,
+          reason: "That act is not supported by the latest observation.",
+        };
       // A model named for this one agent must be a documented pairing of
       // exactly the asked-for kind: the user's chosen agent is never
       // re-decided by the model named beside it.
@@ -666,14 +803,14 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       const sessionName = boundedField(name, workspaceNameText);
       if (!sessionName.ok) {
         return {
-          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          status: ACT_RESULT_STATUS.REJECTED,
           reason: "That session name is empty or too long.",
         };
       }
       const openingTask = boundedField(task, sessionMessageText);
       if (!openingTask.ok) {
         return {
-          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          status: ACT_RESULT_STATUS.REJECTED,
           reason: "That task is empty or too long.",
         };
       }
@@ -720,12 +857,16 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       const workspaceName = workspaceNameText(name);
       if (!workspaceName) {
         return {
-          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          status: ACT_RESULT_STATUS.REJECTED,
           reason: "That workspace name is empty or too long.",
         };
       }
       const session = sessionRegistry.get(identity);
-      if (!session?.renameTarget) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+      if (!session?.renameTarget)
+        return {
+          status: ACT_RESULT_STATUS.UNSUPPORTED,
+          reason: "That act is not supported by the latest observation.",
+        };
       const managed = supersetContext(identity);
       if (managed) {
         return countSessionAct(
@@ -752,12 +893,16 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       const sessionName = workspaceNameText(name);
       if (!sessionName) {
         return {
-          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          status: ACT_RESULT_STATUS.REJECTED,
           reason: "That session name is empty or too long.",
         };
       }
       const session = sessionRegistry.get(identity);
-      if (!session?.canRename) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+      if (!session?.canRename)
+        return {
+          status: ACT_RESULT_STATUS.UNSUPPORTED,
+          reason: "That act is not supported by the latest observation.",
+        };
       return performSessionAct(identity, PRODUCT_SESSION_ACT.SESSION_RENAME, (adapter) =>
         adapter.renameSession({
           providerSessionId: identity.providerSessionId,

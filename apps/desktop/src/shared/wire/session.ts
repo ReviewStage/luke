@@ -4,8 +4,9 @@ import type { ObservedAccountCalendars } from "@sidecar/calendar/observation";
 import type { FixtureSnapshot } from "@sidecar/fixtures";
 import type { TrackedIssue } from "@sidecar/issues";
 import type { IssueToolAction } from "@sidecar/realtime";
-import type { NormalizedSession, ObservedWorkspaceProject } from "@sidecar/session";
+import type { ObservedWorkspaceProject, Session, SessionAttentionEntry } from "@sidecar/session";
 import type { Rectangle, ResolvedNotchGeometry, WindowMode } from "@sidecar/surface";
+import type { ACT_RESULT_STATUS, ActResult } from "@sidecar/wire";
 import type { MicrophoneStatus, OutputAudioState } from "./audio";
 import type { AppSettings } from "./settings";
 import type { UpdateSnapshot } from "./update";
@@ -30,19 +31,7 @@ export type { WindowMode } from "@sidecar/surface";
  * ignores the answer; a spoken ask says it aloud, and grounding that sentence
  * is why this is answered at all.
  */
-export const SESSION_OPEN_RESULT_STATUS = {
-  OPENED: "opened",
-  REJECTED: "rejected",
-  UNSUPPORTED: "unsupported",
-} as const;
-
-export type SessionOpenResultStatus =
-  (typeof SESSION_OPEN_RESULT_STATUS)[keyof typeof SESSION_OPEN_RESULT_STATUS];
-
-export type SessionOpenResult =
-  | { status: typeof SESSION_OPEN_RESULT_STATUS.OPENED }
-  | { status: typeof SESSION_OPEN_RESULT_STATUS.REJECTED; reason: string }
-  | { status: typeof SESSION_OPEN_RESULT_STATUS.UNSUPPORTED };
+export type SessionOpenResult = ActResult;
 
 /**
  * What became of a request to read a session's transcript. Reading is a local
@@ -50,16 +39,10 @@ export type SessionOpenResult =
  * answer so the conversation that asked can ground its reply in the session's
  * own words. Every refusal carries words Luke can say aloud.
  */
-export const SESSION_TRANSCRIPT_RESULT_STATUS = {
-  READ: "read",
-  REJECTED: "rejected",
-  UNSUPPORTED: "unsupported",
-} as const;
-
 export type SessionTranscriptResult =
-  | { status: typeof SESSION_TRANSCRIPT_RESULT_STATUS.READ; transcript: string }
-  | { status: typeof SESSION_TRANSCRIPT_RESULT_STATUS.REJECTED; reason: string }
-  | { status: typeof SESSION_TRANSCRIPT_RESULT_STATUS.UNSUPPORTED; reason: string };
+  | { status: typeof ACT_RESULT_STATUS.ACCEPTED; transcript: string }
+  | { status: typeof ACT_RESULT_STATUS.REJECTED; reason: string }
+  | { status: typeof ACT_RESULT_STATUS.UNSUPPORTED; reason: string };
 
 export interface DisplayDiagnostic {
   id: number;
@@ -164,7 +147,7 @@ export interface AppBootstrap {
   display: DisplayDiagnostic;
   /** Where the app stands against the latest release, as last learned. */
   update: UpdateSnapshot;
-  sessions: readonly NormalizedSession[];
+  sessionRoster: SessionRosterPayload;
   /**
    * Whether `sessions` reflects a roster Luke has actually read. False only
    * while a live run's first observation pass is still on its way, so an
@@ -190,6 +173,12 @@ export interface AppBootstrap {
   /** Whether, where, and for whom this run may record its own surface. */
   sessionReplay: SessionReplayBootstrap;
   settings: AppSettings;
+}
+
+/** The complete session state one observation revision publishes to a desktop surface. */
+export interface SessionRosterPayload {
+  sessions: readonly Session[];
+  attention: readonly SessionAttentionEntry[];
 }
 
 /** One validated issue act on its way to the main process. */

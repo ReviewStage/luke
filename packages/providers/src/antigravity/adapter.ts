@@ -5,6 +5,8 @@ import {
   maximumSessionTitleLength,
   PROVIDER_ID,
   type ProviderSessionObservation,
+  type ProviderTranscriptResult,
+  providerTranscriptResult,
   SESSION_STATUS,
   type SessionDetail,
   type SessionProvider,
@@ -432,13 +434,15 @@ export class AntigravitySessionAdapter extends LocalSessionAdapter {
     return [...observations.values()];
   }
 
-  override readTranscript(providerSessionId: string): Promise<string | undefined> {
-    return readAntigravitySessionTranscript({
-      antigravityHome: this.#antigravityHome,
-      providerSessionId,
-      sqlite: this.#sqlite,
-      maximumRenderedLength: this.#transcriptMaximumRenderedLength,
-    });
+  override readTranscript(providerSessionId: string): Promise<ProviderTranscriptResult> {
+    return providerTranscriptResult(
+      readAntigravitySessionTranscript({
+        antigravityHome: this.#antigravityHome,
+        providerSessionId,
+        sqlite: this.#sqlite,
+        maximumRenderedLength: this.#transcriptMaximumRenderedLength,
+      }),
+    );
   }
 
   #observation(

@@ -13,6 +13,7 @@ import { REALTIME_DEFAULTS } from "@sidecar/realtime";
 import { parseWorkspaceAgentKindSelection, SUPERSET_WORKSPACE_PROVIDER_ID } from "@sidecar/session";
 import { DEFAULT_PANEL_FORM_FACTOR } from "@sidecar/surface";
 import {
+  ACT_RESULT_STATUS,
   isRecord,
   isWireNumber,
   isWireString,
@@ -567,7 +568,7 @@ export class SettingsStore {
       this.#loading = Promise.resolve(next);
       cleared = true;
     });
-    return { settings: await this.snapshot(), cleared };
+    return { status: ACT_RESULT_STATUS.ACCEPTED, settings: await this.snapshot(), cleared };
   }
   #secretStorage: SecretStorage = SECRET_STORAGE.UNKNOWN;
 
@@ -788,7 +789,12 @@ export class SettingsStore {
         ? "Encrypted credential storage is unavailable on this system."
         : apiKeyRejection(normalized, keyFormat)
       : undefined;
-    if (rejection) return { settings: await this.snapshot(), reason: rejection };
+    if (rejection)
+      return {
+        status: ACT_RESULT_STATUS.REJECTED,
+        settings: await this.snapshot(),
+        reason: rejection,
+      };
 
     await this.#serialize(async () => {
       const persisted = await this.#load();
@@ -823,7 +829,7 @@ export class SettingsStore {
       this.#loading = Promise.resolve(next);
       this.#resolved.delete(providerId);
     });
-    return { settings: await this.snapshot() };
+    return { status: ACT_RESULT_STATUS.ACCEPTED, settings: await this.snapshot() };
   }
 
   /**
@@ -856,7 +862,12 @@ export class SettingsStore {
       : // The shape rules a pasted key answers to. What is inside is the
         // provider's to shape, so only sendability is checked.
         apiKeyRejection(accessToken);
-    if (rejection) return { settings: await this.snapshot(), reason: rejection };
+    if (rejection)
+      return {
+        status: ACT_RESULT_STATUS.REJECTED,
+        settings: await this.snapshot(),
+        reason: rejection,
+      };
 
     await this.#serialize(async () => {
       const persisted = await this.#load();
@@ -874,7 +885,7 @@ export class SettingsStore {
       grants[providerId] = { tokenCipher, expiresAt: grant.expiresAt };
       await this.#writeGrants(persisted, grants, providerId);
     });
-    return { settings: await this.snapshot() };
+    return { status: ACT_RESULT_STATUS.ACCEPTED, settings: await this.snapshot() };
   }
 
   /** Disconnects one provider, deleting its stored grant with it. */
@@ -886,7 +897,7 @@ export class SettingsStore {
       delete grants[providerId];
       await this.#writeGrants(persisted, grants, providerId);
     });
-    return { settings: await this.snapshot() };
+    return { status: ACT_RESULT_STATUS.ACCEPTED, settings: await this.snapshot() };
   }
 
   /** One place writes the grants, so neither cache can outlive the file. */
@@ -948,7 +959,13 @@ export class SettingsStore {
         : // The shape rules a pasted key answers to: a grant is Google's to
           // shape, and only sendability is checked.
           apiKeyRejection(normalized);
-    if (rejection || !id) return { settings: await this.snapshot(), reason: rejection };
+    if (rejection || !id) {
+      return {
+        status: ACT_RESULT_STATUS.REJECTED,
+        settings: await this.snapshot(),
+        reason: rejection ?? "Google answered the sign-in without naming an account.",
+      };
+    }
 
     await this.#serialize(async () => {
       const persisted = await this.#load();
@@ -968,7 +985,7 @@ export class SettingsStore {
         : [...existing, account];
       await this.#writeCalendarAccounts(persisted, calendarAccounts);
     });
-    return { settings: await this.snapshot() };
+    return { status: ACT_RESULT_STATUS.ACCEPTED, settings: await this.snapshot() };
   }
 
   /** Disconnects one account, deleting its stored grant with it. */
@@ -980,7 +997,7 @@ export class SettingsStore {
       if (calendarAccounts.length === existing.length) return;
       await this.#writeCalendarAccounts(persisted, calendarAccounts);
     });
-    return { settings: await this.snapshot() };
+    return { status: ACT_RESULT_STATUS.ACCEPTED, settings: await this.snapshot() };
   }
 
   /**
@@ -997,7 +1014,12 @@ export class SettingsStore {
     selected: boolean,
   ): Promise<SettingsUpdateResult> {
     const id = calendarIdentifierText(calendarId);
-    if (!id) return { settings: await this.snapshot(), reason: "That is not a calendar id." };
+    if (!id)
+      return {
+        status: ACT_RESULT_STATUS.REJECTED,
+        settings: await this.snapshot(),
+        reason: "That is not a calendar id.",
+      };
     let missing: string | undefined;
     await this.#serialize(async () => {
       const persisted = await this.#load();
@@ -1024,10 +1046,10 @@ export class SettingsStore {
       );
       await this.#writeCalendarAccounts(persisted, calendarAccounts);
     });
-    return {
-      settings: await this.snapshot(),
-      ...(missing ? { reason: missing } : undefined),
-    };
+    const settings = await this.snapshot();
+    return missing
+      ? { status: ACT_RESULT_STATUS.REJECTED, settings, reason: missing }
+      : { status: ACT_RESULT_STATUS.ACCEPTED, settings };
   }
 
   /**
@@ -1070,7 +1092,7 @@ export class SettingsStore {
         calendars: sanitizedCalendarIds(unparsedWire(selectedCalendarIds)),
       });
     });
-    return { settings: await this.snapshot() };
+    return { status: ACT_RESULT_STATUS.ACCEPTED, settings: await this.snapshot() };
   }
 
   /**
@@ -1083,7 +1105,7 @@ export class SettingsStore {
       if (!persisted.appleCalendar) return;
       await this.#writeAppleCalendar(persisted, undefined);
     });
-    return { settings: await this.snapshot() };
+    return { status: ACT_RESULT_STATUS.ACCEPTED, settings: await this.snapshot() };
   }
 
   /** The connection as the reader is fed it; absent means never run the helper. */
@@ -1165,7 +1187,7 @@ export class SettingsStore {
       await this.#write(next);
       this.#loading = Promise.resolve(next);
     });
-    return { settings: await this.snapshot() };
+    return { status: ACT_RESULT_STATUS.ACCEPTED, settings: await this.snapshot() };
   }
 
   /**

@@ -180,8 +180,8 @@ test("a search is signed on the magnifier, ahead of whatever else the ask change
   );
 });
 
-test("a refused act is signed nowhere", () => {
-  assert.deepEqual(errandTargets({ kind: "refused", reason: "No such tool exists." }), []);
+test("a rejected act is signed nowhere", () => {
+  assert.deepEqual(errandTargets({ status: "rejected", reason: "No such tool exists." }), []);
 });
 
 test("the flight starts on the face and lands centred on the control", () => {

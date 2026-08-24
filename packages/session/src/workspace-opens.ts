@@ -1,4 +1,4 @@
-import type { NormalizedSession, SessionIdentity } from "./session.js";
+import type { Session, SessionIdentity } from "./session.js";
 
 /**
  * How long a created workspace stays worth opening. The identity arrives the
@@ -48,9 +48,9 @@ export class CreatedWorkspaceOpenTracker {
    * claimed at most once, and entries past their deadline are dropped whether
    * or not their session ever appeared.
    */
-  claim(sessions: readonly NormalizedSession[], now: number): readonly NormalizedSession[] {
+  claim(sessions: readonly Session[], now: number): readonly Session[] {
     if (this.#pending.size === 0) return [];
-    const claimed: NormalizedSession[] = [];
+    const claimed: Session[] = [];
     for (const session of sessions) {
       const provider = this.#pending.get(session.providerId);
       const deadline = provider?.get(session.providerSessionId);

@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  ACT_RESULT_STATUS,
   agedStatus,
   OBSERVATION_WINDOW,
-  PROVIDER_ACT_RESULT_STATUS,
   type ProviderSessionObservation,
   SESSION_LOCATION,
   SESSION_STATUS,
@@ -135,7 +135,8 @@ test("answers unsupported explicitly when no observed route exists", async () =>
   });
   for (const adapter of [stub, observer]) {
     assert.deepEqual(await adapter.sendMessage({ providerSessionId: "missing", text: "hello" }), {
-      status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED,
+      status: ACT_RESULT_STATUS.UNSUPPORTED,
+      reason: "That act is not supported by the latest observation.",
     });
     assert.deepEqual(adapter.workspaceProjects(), []);
   }
@@ -500,8 +501,14 @@ test("refuses a message for any session that did not advertise taking one", asyn
 
   // Neither refusal may spend a request: a session that advertised nothing has
   // been promised nothing, and no request should exist to find that out.
-  assert.deepEqual(unadvertised, { status: "unsupported" });
-  assert.deepEqual(unobserved, { status: "unsupported" });
+  assert.deepEqual(unadvertised, {
+    status: "unsupported",
+    reason: "That act is not supported by the latest observation.",
+  });
+  assert.deepEqual(unobserved, {
+    status: "unsupported",
+    reason: "That act is not supported by the latest observation.",
+  });
   assert.equal(stub.requests.length, observationRequests);
 });
 
@@ -624,7 +631,13 @@ test("runs an advertised control through its documented route, sending no body",
   // An endpoint that documents an empty request gets exactly that.
   assert.equal(write?.contentType, undefined);
   assert.equal(write?.body, undefined);
-  assert.deepEqual(unadvertised, { status: "unsupported" });
-  assert.deepEqual(unknown, { status: "unsupported" });
+  assert.deepEqual(unadvertised, {
+    status: "unsupported",
+    reason: "That act is not supported by the latest observation.",
+  });
+  assert.deepEqual(unknown, {
+    status: "unsupported",
+    reason: "That act is not supported by the latest observation.",
+  });
   assert.equal(stub.requests.length, observationRequests + 1);
 });

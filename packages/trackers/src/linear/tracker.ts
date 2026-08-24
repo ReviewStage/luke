@@ -1,11 +1,11 @@
 import { CREDENTIAL_PROVIDER_ID, CREDENTIAL_PROVIDERS } from "@sidecar/credentials/vocabulary";
 import {
+  ACT_RESULT_STATUS,
   ISSUE_ACTION_KIND,
   type IssueTracker,
   type IssueTrackerAdapter,
   type IssueTransition,
   maximumIssueTransitions,
-  TRACKER_ACTION_RESULT_STATUS,
   type TrackerActionResult,
   type TrackerIssueAction,
   type TrackerIssueObservation,
@@ -188,7 +188,11 @@ export class LinearIssueTracker implements IssueTrackerAdapter {
 
   async execute(action: TrackerIssueAction): Promise<TrackerActionResult> {
     const accessToken = await this.#readAccessToken();
-    if (!accessToken) return { status: TRACKER_ACTION_RESULT_STATUS.UNSUPPORTED };
+    if (!accessToken)
+      return {
+        status: ACT_RESULT_STATUS.UNSUPPORTED,
+        reason: "That act is not supported by the latest observation.",
+      };
 
     const [document, variables, resultField] =
       action.kind === ISSUE_ACTION_KIND.SET_STATE
@@ -210,24 +214,24 @@ export class LinearIssueTracker implements IssueTrackerAdapter {
       payload = await this.#post(accessToken, document, variables);
     } catch {
       return {
-        status: TRACKER_ACTION_RESULT_STATUS.REJECTED,
+        status: ACT_RESULT_STATUS.REJECTED,
         reason: "The request to Linear did not complete.",
       };
     }
     if (payload.errors) {
       return {
-        status: TRACKER_ACTION_RESULT_STATUS.REJECTED,
+        status: ACT_RESULT_STATUS.REJECTED,
         reason: "Linear rejected that change.",
       };
     }
     const result = isRecord(payload.data) ? payload.data[resultField] : undefined;
     if (!isRecord(result) || result.success !== true) {
       return {
-        status: TRACKER_ACTION_RESULT_STATUS.REJECTED,
+        status: ACT_RESULT_STATUS.REJECTED,
         reason: "Linear did not confirm that change.",
       };
     }
-    return { status: TRACKER_ACTION_RESULT_STATUS.ACCEPTED };
+    return { status: ACT_RESULT_STATUS.ACCEPTED };
   }
 
   async #post(

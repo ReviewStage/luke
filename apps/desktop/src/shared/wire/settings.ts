@@ -6,6 +6,7 @@ import {
   type StoredAppSettings,
   VOICE_SOURCE,
 } from "@sidecar/settings";
+import type { ActResult } from "@sidecar/wire";
 import type { CredentialSource, SecretStorage } from "./account";
 import type { CalendarAccount } from "./calendar";
 
@@ -82,8 +83,9 @@ export function appSettingsWire(settings: AppSettingsView): AppSettings {
   return { stored, status };
 }
 
-/** A rejected update reports why without echoing the submitted value. */
-export interface SettingsUpdateResult {
+/** Every settings write returns the canonical act result and the latest stored snapshot. */
+export type SettingsUpdateResult = ActResult & {
   settings: AppSettings;
+  /** Present only when the canonical act result is rejected or unsupported. */
   reason?: string;
-}
+};

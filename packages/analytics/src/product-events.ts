@@ -1,6 +1,7 @@
 import { APP_PANEL_TAB, APP_SETTING_ID, type AppPanelTab, type AppSettingId } from "@sidecar/guide";
 import { ISSUE_TRACKER_ID, type IssueTrackerId } from "@sidecar/issues";
 import {
+  ACT_RESULT_STATUS,
   PROVIDER_ID,
   PROVIDER_ID_LIST,
   type ProviderId,
@@ -268,7 +269,7 @@ export type ProductSearchSurface =
 /** Whether an ask reached a conversation, never the words it carried. */
 export const PRODUCT_ASK_OUTCOME = {
   SENT: "sent",
-  REFUSED: "refused",
+  REFUSED: ACT_RESULT_STATUS.REJECTED,
 } as const;
 
 export type ProductAskOutcome = (typeof PRODUCT_ASK_OUTCOME)[keyof typeof PRODUCT_ASK_OUTCOME];

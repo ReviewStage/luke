@@ -4,6 +4,8 @@ import {
   maximumSessionTitleLength,
   PROVIDER_ID,
   type ProviderSessionObservation,
+  type ProviderTranscriptResult,
+  providerTranscriptResult,
   SESSION_COMPLETION_CAUSE,
   SESSION_STATUS,
   type SessionDetail,
@@ -465,11 +467,13 @@ export class GeminiCliSessionAdapter extends LocalFileSessionAdapter<
     };
   }
 
-  override readTranscript(providerSessionId: string): Promise<string | undefined> {
-    return readGeminiSessionTranscript({
-      geminiHome: this.#geminiHome,
-      providerSessionId,
-      maximumRenderedLength: this.#transcriptMaximumRenderedLength,
-    });
+  override readTranscript(providerSessionId: string): Promise<ProviderTranscriptResult> {
+    return providerTranscriptResult(
+      readGeminiSessionTranscript({
+        geminiHome: this.#geminiHome,
+        providerSessionId,
+        maximumRenderedLength: this.#transcriptMaximumRenderedLength,
+      }),
+    );
   }
 }

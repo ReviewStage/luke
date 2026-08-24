@@ -2,6 +2,7 @@ import { PRODUCT_EVENT, type RecordProductEvent } from "@sidecar/analytics";
 import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials";
 import { ISSUE_TRACKER_ID } from "@sidecar/issues";
 import type { LinearCredentials, LinearSignIn } from "@sidecar/trackers";
+import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from "electron";
 import { BRIDGE } from "#shared/bridge";
 import { registerBridge } from "../register-bridge";
@@ -34,7 +35,11 @@ export function registerTrackerConnectionIpc(dependencies: TrackerConnectionIpcD
     async save() {
       const outcome = await signIn.signIn();
       if ("reason" in outcome) {
-        return { settings: await settingsStore.snapshot(), reason: outcome.reason };
+        return {
+          status: ACT_RESULT_STATUS.REJECTED,
+          settings: await settingsStore.snapshot(),
+          reason: outcome.reason,
+        };
       }
       return settingsStore.setGrant(CREDENTIAL_PROVIDER_ID.LINEAR, outcome);
     },
@@ -68,7 +73,7 @@ export function registerTrackerConnectionIpc(dependencies: TrackerConnectionIpcD
       // Revoked with Linear as well as forgotten here, so disconnecting ends
       // the access rather than only losing sight of it.
       await credentials.disconnect();
-      return { settings: await settingsStore.snapshot() };
+      return { status: ACT_RESULT_STATUS.ACCEPTED, settings: await settingsStore.snapshot() };
     },
     apply(result) {
       // The roster is about a board Luke can no longer read, so it goes with

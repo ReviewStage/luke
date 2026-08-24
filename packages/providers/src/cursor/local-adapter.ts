@@ -5,12 +5,14 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { boundedInvocation, DEFAULT_CLI_PATH_DIRECTORIES } from "@sidecar/process";
 import {
+  ACT_RESULT_STATUS,
   maximumSessionRecapLength,
   maximumSessionTitleLength,
-  PROVIDER_ACT_RESULT_STATUS,
   type ProviderMessageResult,
   type ProviderSessionMessage,
   type ProviderSessionObservation,
+  type ProviderTranscriptResult,
+  providerTranscriptResult,
   SESSION_COMPLETION_CAUSE,
   SESSION_STATUS,
   type SessionDetail,
@@ -1067,13 +1069,15 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
     return folders;
   }
 
-  override readTranscript(providerSessionId: string): Promise<string | undefined> {
-    return readCursorSessionTranscript({
-      cursorHome: this.#cursorHome,
-      providerSessionId,
-      readTailBytes: this.#transcriptReadTailBytes,
-      maximumRenderedLength: this.#transcriptMaximumRenderedLength,
-    });
+  override readTranscript(providerSessionId: string): Promise<ProviderTranscriptResult> {
+    return providerTranscriptResult(
+      readCursorSessionTranscript({
+        cursorHome: this.#cursorHome,
+        providerSessionId,
+        readTailBytes: this.#transcriptReadTailBytes,
+        maximumRenderedLength: this.#transcriptMaximumRenderedLength,
+      }),
+    );
   }
 
   protected async parse(candidate: CursorSessionCandidate): Promise<ParsedCursorTail> {
@@ -1271,16 +1275,20 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
     const text = sessionMessageText(message.text);
     if (!text) {
       return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+        status: ACT_RESULT_STATUS.REJECTED,
         reason: "That message is empty or too long.",
       };
     }
     const target = this.#sendTargets.get(message.providerSessionId);
-    if (!target) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+    if (!target)
+      return {
+        status: ACT_RESULT_STATUS.UNSUPPORTED,
+        reason: "That act is not supported by the latest observation.",
+      };
     const stats = await fileStats(target.transcriptFilePath);
     if (!stats?.isFile()) {
       return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+        status: ACT_RESULT_STATUS.REJECTED,
         reason: "That chat's transcript is gone, so nothing was sent.",
       };
     }
@@ -1288,7 +1296,7 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
       this.#cursorAgentBinaryPath ?? (await this.#cursorAgent.locate().catch(() => undefined));
     if (!binaryPath) {
       return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+        status: ACT_RESULT_STATUS.REJECTED,
         reason: "Cursor's agent CLI is not installed, so nothing was sent.",
       };
     }
@@ -1297,13 +1305,13 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
       loggedIn = await this.#cursorAgent.probeLogin(binaryPath);
     } catch {
       return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+        status: ACT_RESULT_STATUS.REJECTED,
         reason: "Cursor's agent CLI could not answer, so nothing was sent.",
       };
     }
     if (!loggedIn) {
       return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+        status: ACT_RESULT_STATUS.REJECTED,
         reason: "Cursor's agent CLI is signed out, so nothing was sent.",
       };
     }
@@ -1320,16 +1328,16 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
       ]);
     } catch {
       return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+        status: ACT_RESULT_STATUS.REJECTED,
         reason: "Cursor's agent CLI could not be started, so nothing was sent.",
       };
     }
     if (launch !== "running" && launch.exitCode !== 0) {
       return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+        status: ACT_RESULT_STATUS.REJECTED,
         reason: "Cursor's agent CLI refused the message.",
       };
     }
-    return { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED };
+    return { status: ACT_RESULT_STATUS.ACCEPTED };
   }
 }

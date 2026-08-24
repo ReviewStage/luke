@@ -155,10 +155,9 @@ export class NativeHelper {
 
   #finish(): void {
     if (this.#ended) return;
-    const finalLine = this.#buffer.trim();
-    if (finalLine) {
-      for (const listener of this.#lineListeners) listener(finalLine);
-    }
+    // A process exit cannot complete a partially written event. In particular,
+    // treating `down` without its newline as a press can leave hold-to-talk
+    // without the matching release the dying helper owed.
     this.#buffer = "";
     this.#ended = true;
     this.#child = undefined;

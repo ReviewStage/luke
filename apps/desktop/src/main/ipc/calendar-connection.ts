@@ -6,6 +6,7 @@ import {
 } from "@sidecar/analytics";
 import type { GoogleCalendarReader, GoogleCalendarSignIn } from "@sidecar/calendar";
 import { APP_SETTING_ID } from "@sidecar/guide";
+import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from "electron";
 import { APPLE_CALENDAR_ACCESS } from "#shared/apple-calendar";
 import { BRIDGE } from "#shared/bridge";
@@ -52,7 +53,11 @@ export function registerCalendarConnectionIpc(
     async save() {
       const outcome = await signIn.signIn();
       if ("reason" in outcome) {
-        return { settings: await settingsStore.snapshot(), reason: outcome.reason };
+        return {
+          status: ACT_RESULT_STATUS.REJECTED,
+          settings: await settingsStore.snapshot(),
+          reason: outcome.reason,
+        };
       }
       let primaryId: string | undefined;
       try {
@@ -63,6 +68,7 @@ export function registerCalendarConnectionIpc(
       }
       if (!primaryId) {
         return {
+          status: ACT_RESULT_STATUS.REJECTED,
           settings: await settingsStore.snapshot(),
           reason: "Google did not answer with the account's calendars.",
         };
@@ -120,10 +126,11 @@ export function registerCalendarConnectionIpc(
       // macOS's own to keep, but the connection waits for the next Connect.
       // A cancel is the user's own act, so it carries no refusal to show.
       if (appleConnectGeneration !== generation) {
-        return { settings: await settingsStore.snapshot() };
+        return { status: ACT_RESULT_STATUS.ACCEPTED, settings: await settingsStore.snapshot() };
       }
       if (outcome.access !== APPLE_CALENDAR_ACCESS.FULL) {
         return {
+          status: ACT_RESULT_STATUS.REJECTED,
           settings: await settingsStore.snapshot(),
           // An ask that failed on its own says why; a no left standing gets
           // the sentence that says where the grant lives.
@@ -192,6 +199,7 @@ export function registerCalendarConnectionIpc(
           ?.calendars.some((candidate) => candidate.id === calendarId)
       ) {
         return new SettingsRefusal({
+          status: ACT_RESULT_STATUS.REJECTED,
           settings: await settingsStore.snapshot(),
           reason: "That calendar is not one the account's latest list offered.",
         });

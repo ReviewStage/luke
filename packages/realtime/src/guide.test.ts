@@ -23,7 +23,7 @@ import {
   SESSION_LIST_VOICE,
 } from "@sidecar/realtime";
 import { normalizeSession, SESSION_LOCATION, SESSION_STATUS } from "@sidecar/session";
-import { isRecord, text, type WireRecord } from "@sidecar/wire";
+import { ACT_RESULT_STATUS, isRecord, text, type WireRecord } from "@sidecar/wire";
 import { maximumFeedbackDraftLength } from "./realtime-protocol.js";
 import { REALTIME_TOOL } from "./realtime-tools.js";
 
@@ -186,20 +186,20 @@ test("a spoken change can name only a setting the guide lists, to a value it acc
   });
 
   const unknown = change('{"setting_id":"telemetry","value":"on"}');
-  assert.equal(unknown.kind, "refused");
+  assert.equal(unknown.status, ACT_RESULT_STATUS.REJECTED);
 
   const unreadable = appToolAction(call(REALTIME_TOOL.CHANGE_APP_SETTING, "not json"), GUIDE, []);
-  assert.equal(unreadable.kind, "refused");
+  assert.equal(unreadable.status, ACT_RESULT_STATUS.REJECTED);
 
   const badToggle = change('{"setting_id":"voice_captions","value":"sideways"}');
-  assert.equal(badToggle.kind, "refused");
-  if (badToggle.kind === "refused") {
+  assert.equal(badToggle.status, ACT_RESULT_STATUS.REJECTED);
+  if (badToggle.status === ACT_RESULT_STATUS.REJECTED) {
     assert.match(badToggle.reason, /on or off/);
   }
 
   const badChoice = change('{"setting_id":"voice","value":"basso"}');
-  assert.equal(badChoice.kind, "refused");
-  if (badChoice.kind === "refused") {
+  assert.equal(badChoice.status, ACT_RESULT_STATUS.REJECTED);
+  if (badChoice.status === ACT_RESULT_STATUS.REJECTED) {
     assert.match(badChoice.reason, /cedar, marin/);
   }
 });
@@ -226,22 +226,22 @@ test("a value and its effort named in one change are validated as the pair they 
 
   // A level the choice's own list does not carry is refused with that list.
   const wrongLevel = change('{"setting_id":"agent_model","value":"Fable 5","effort":"ultra"}');
-  assert.equal(wrongLevel.kind, "refused");
-  if (wrongLevel.kind === "refused") {
+  assert.equal(wrongLevel.status, ACT_RESULT_STATUS.REJECTED);
+  if (wrongLevel.status === ACT_RESULT_STATUS.REJECTED) {
     assert.match(wrongLevel.reason, /low, high, max/);
   }
 
   // A choice the guide lists no levels for takes none.
   const levelless = change('{"setting_id":"agent_model","value":"Cursor Auto","effort":"high"}');
-  assert.equal(levelless.kind, "refused");
-  if (levelless.kind === "refused") {
+  assert.equal(levelless.status, ACT_RESULT_STATUS.REJECTED);
+  if (levelless.status === ACT_RESULT_STATUS.REJECTED) {
     assert.match(levelless.reason, /Cursor Auto takes no effort level/);
   }
 
   // And a setting with no levels anywhere refuses by its own name.
   const toggled = change('{"setting_id":"voice_captions","value":"on","effort":"high"}');
-  assert.equal(toggled.kind, "refused");
-  if (toggled.kind === "refused") {
+  assert.equal(toggled.status, ACT_RESULT_STATUS.REJECTED);
+  if (toggled.status === ACT_RESULT_STATUS.REJECTED) {
     assert.match(toggled.reason, /Captions takes no effort level/);
   }
 });
@@ -253,8 +253,8 @@ test("a by-hand-only setting is refused with the path to it, so the refusal is t
     [],
   );
 
-  assert.equal(action.kind, "refused");
-  if (action.kind === "refused") {
+  assert.equal(action.status, ACT_RESULT_STATUS.REJECTED);
+  if (action.status === ACT_RESULT_STATUS.REJECTED) {
     assert.match(action.reason, /System Settings, under Privacy & Security/);
   }
 });
@@ -284,15 +284,15 @@ test("a spoken panel ask opens a real tab and narrows only to what is observed",
   });
 
   assert.deepEqual(show('{"filters":["voice"]}'), {
-    kind: "refused",
+    status: ACT_RESULT_STATUS.REJECTED,
     reason: "No voice sessions are observed right now.",
   });
 
-  assert.equal(show('{"tab":"about"}').kind, "refused");
+  assert.equal(show('{"tab":"about"}').status, ACT_RESULT_STATUS.REJECTED);
   // A narrowing that would show nothing is refused rather than applied: the
   // panel would fall back to everything, and the sentence would be wrong.
-  assert.equal(show('{"filters":["local"]}').kind, "refused");
-  assert.equal(show('{"filters":["codex"]}').kind, "refused");
+  assert.equal(show('{"filters":["local"]}').status, ACT_RESULT_STATUS.REJECTED);
+  assert.equal(show('{"filters":["codex"]}').status, ACT_RESULT_STATUS.REJECTED);
 
   const voiceShow = (argumentsJson: string) =>
     appToolAction(call(REALTIME_TOOL.SHOW_PANEL, argumentsJson), GUIDE, [
@@ -328,7 +328,7 @@ test("a spoken panel ask can combine filters, on the axes the chips combine on",
   // nothing — and with a local session beside them, local Conductor exists
   // but no local voice chat does.
   assert.deepEqual(show('{"filters":["local","conductor"]}'), {
-    kind: "refused",
+    status: ACT_RESULT_STATUS.REJECTED,
     reason: "No local sessions are observed right now.",
   });
   const mixed = (argumentsJson: string) =>
@@ -351,25 +351,25 @@ test("a spoken panel ask can combine filters, on the axes the chips combine on",
     filters: ["local", "conductor"],
   });
   assert.deepEqual(mixed('{"filters":["local","voice"]}'), {
-    kind: "refused",
+    status: ACT_RESULT_STATUS.REJECTED,
     reason: "No observed session matches that combination of filters.",
   });
 
   // The whole list is not a value to narrow by.
   assert.deepEqual(show('{"filters":["all","cloud"]}'), {
-    kind: "refused",
+    status: ACT_RESULT_STATUS.REJECTED,
     reason: "all is the whole list, so it combines with nothing.",
   });
   // A narrowing has to be a list of words; anything else is unreadable.
-  assert.equal(show('{"filters":[3]}').kind, "refused");
-  assert.equal(show('{"filters":{"value":"cloud"}}').kind, "refused");
+  assert.equal(show('{"filters":[3]}').status, ACT_RESULT_STATUS.REJECTED);
+  assert.equal(show('{"filters":{"value":"cloud"}}').status, ACT_RESULT_STATUS.REJECTED);
   // A list of nothing is no narrowing at all.
   assert.deepEqual(show('{"filters":[]}'), { kind: "panel", tab: APP_PANEL_TAB.SESSIONS });
 
   // The enum on the schema binds the model to real tokens — a developer's
   // phrase arriving untranslated is refused by the backstop, never guessed at.
   assert.deepEqual(show('{"filters":["Claude Code"]}'), {
-    kind: "refused",
+    status: ACT_RESULT_STATUS.REJECTED,
     reason: '"Claude Code" is not one of the filter values the tool lists.',
   });
 });
@@ -411,10 +411,10 @@ test("a spoken panel ask can search, only where the list offers a search at all"
   // The magnifier is only offered beside a list with more than one session,
   // and a spoken search reaches no further than the hand's own control.
   assert.deepEqual(show('{"query":"parser"}', [observedConductorSession()]), {
-    kind: "refused",
+    status: ACT_RESULT_STATUS.REJECTED,
     reason: "The list offers a search only when more than one session is observed.",
   });
-  assert.equal(show('{"query":"parser"}', []).kind, "refused");
+  assert.equal(show('{"query":"parser"}', []).status, ACT_RESULT_STATUS.REJECTED);
 });
 
 test("a spoken panel ask can reorder the list in the panel's own two words", () => {
@@ -433,7 +433,7 @@ test("a spoken panel ask can reorder the list in the panel's own two words", () 
     filters: ["conductor"],
     sort: SESSION_LIST_SORT.URGENCY,
   });
-  assert.equal(show('{"sort":"alphabetical"}').kind, "refused");
+  assert.equal(show('{"sort":"alphabetical"}').status, ACT_RESULT_STATUS.REJECTED);
 });
 
 test("a spoken composer open takes only the two kinds, drafting only the developer's words", () => {
@@ -457,10 +457,10 @@ test("a spoken composer open takes only the two kinds, drafting only the develop
   });
 
   // The vocabulary is fixed: a kind outside it names no composer the app has.
-  assert.equal(open('{"kind":"complaint"}').kind, "refused");
-  assert.equal(open('{"kind":""}').kind, "refused");
-  assert.equal(open("{}").kind, "refused");
-  assert.equal(open("not json").kind, "refused");
+  assert.equal(open('{"kind":"complaint"}').status, ACT_RESULT_STATUS.REJECTED);
+  assert.equal(open('{"kind":""}').status, ACT_RESULT_STATUS.REJECTED);
+  assert.equal(open("{}").status, ACT_RESULT_STATUS.REJECTED);
+  assert.equal(open("not json").status, ACT_RESULT_STATUS.REJECTED);
 });
 
 test("a spoken draft is bounded like a typed ask", () => {
@@ -482,7 +482,7 @@ test("a spoken draft is bounded like a typed ask", () => {
 
 test("an app tool call the build does not know is refused", () => {
   const action = appToolAction(call("rename_the_app", "{}"), GUIDE, []);
-  assert.equal(action.kind, "refused");
+  assert.equal(action.status, ACT_RESULT_STATUS.REJECTED);
 });
 
 function guideWithUpdate(button: AppUpdateButton, detail: string): AppGuideSnapshot {
@@ -503,8 +503,8 @@ test("a spoken update ask runs only the act the row's button offers", () => {
   });
   // One button, one act: what the row is not drawing, no ask can press.
   const restartWhileCheckable = ask('{"action":"restart"}', offersCheck);
-  assert.equal(restartWhileCheckable.kind, "refused");
-  if (restartWhileCheckable.kind === "refused") {
+  assert.equal(restartWhileCheckable.status, ACT_RESULT_STATUS.REJECTED);
+  if (restartWhileCheckable.status === ACT_RESULT_STATUS.REJECTED) {
     assert.match(restartWhileCheckable.reason, /not been checked for yet/);
     assert.match(restartWhileCheckable.reason, /offers a check/);
   }
@@ -523,7 +523,7 @@ test("a spoken update ask runs only the act the row's button offers", () => {
     kind: "update",
     act: APP_UPDATE_ACT.DOWNLOAD,
   });
-  assert.equal(ask('{"action":"check"}', offersBrowser).kind, "refused");
+  assert.equal(ask('{"action":"check"}', offersBrowser).status, ACT_RESULT_STATUS.REJECTED);
 });
 
 test("a spoken update ask waits out a check or download already running", () => {
@@ -534,15 +534,17 @@ test("a spoken update ask waits out a check or download already running", () => 
     '{"action":"check"}',
     guideWithUpdate(APP_UPDATE_WAIT.CHECKING, "Checking the latest release…"),
   );
-  assert.equal(checking.kind, "refused");
-  if (checking.kind === "refused") assert.match(checking.reason, /while the check is out/);
+  assert.equal(checking.status, ACT_RESULT_STATUS.REJECTED);
+  if (checking.status === ACT_RESULT_STATUS.REJECTED)
+    assert.match(checking.reason, /while the check is out/);
 
   const downloading = ask(
     '{"action":"restart"}',
     guideWithUpdate(APP_UPDATE_WAIT.DOWNLOADING, "Downloading version 0.3.9…"),
   );
-  assert.equal(downloading.kind, "refused");
-  if (downloading.kind === "refused") assert.match(downloading.reason, /while the download runs/);
+  assert.equal(downloading.status, ACT_RESULT_STATUS.REJECTED);
+  if (downloading.status === ACT_RESULT_STATUS.REJECTED)
+    assert.match(downloading.reason, /while the download runs/);
 });
 
 test("a spoken update ask outside the vocabulary, or with no row to press, is refused", () => {
@@ -550,12 +552,12 @@ test("a spoken update ask outside the vocabulary, or with no row to press, is re
 
   assert.equal(
     appToolAction(call(REALTIME_TOOL.RUN_UPDATE_ACTION, '{"action":"install"}'), offersCheck, [])
-      .kind,
-    "refused",
+      .status,
+    ACT_RESULT_STATUS.REJECTED,
   );
   assert.equal(
-    appToolAction(call(REALTIME_TOOL.RUN_UPDATE_ACTION, "{}"), offersCheck, []).kind,
-    "refused",
+    appToolAction(call(REALTIME_TOOL.RUN_UPDATE_ACTION, "{}"), offersCheck, []).status,
+    ACT_RESULT_STATUS.REJECTED,
   );
   // A guide with no update entry — a run that reports nothing about updates —
   // advertises no act at all.
@@ -564,7 +566,7 @@ test("a spoken update ask outside the vocabulary, or with no row to press, is re
     GUIDE,
     [],
   );
-  assert.equal(unreported.kind, "refused");
+  assert.equal(unreported.status, ACT_RESULT_STATUS.REJECTED);
 });
 
 test("the guide's text names the update button beside the state it stands in", () => {

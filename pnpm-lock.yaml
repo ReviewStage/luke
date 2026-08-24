@@ -33,6 +33,9 @@ importers:
       '@sidecar/account':
         specifier: workspace:*
         version: link:../../packages/account
+      '@sidecar/acts':
+        specifier: workspace:*
+        version: link:../../packages/acts
       '@sidecar/analytics':
         specifier: workspace:*
         version: link:../../packages/analytics
@@ -226,6 +229,34 @@ importers:
       '@sidecar/hosted':
         specifier: workspace:*
         version: link:../hosted
+      '@sidecar/wire':
+        specifier: workspace:*
+        version: link:../wire
+    devDependencies:
+      '@types/node':
+        specifier: 26.2.0
+        version: 26.2.0
+      tsx:
+        specifier: 4.23.12
+        version: 4.23.12
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+
+  packages/acts:
+    dependencies:
+      '@sidecar/attention':
+        specifier: workspace:*
+        version: link:../attention
+      '@sidecar/guide':
+        specifier: workspace:*
+        version: link:../guide
+      '@sidecar/issues':
+        specifier: workspace:*
+        version: link:../issues
+      '@sidecar/session':
+        specifier: workspace:*
+        version: link:../session
       '@sidecar/wire':
         specifier: workspace:*
         version: link:../wire
@@ -490,6 +521,9 @@ importers:
 
   packages/realtime:
     dependencies:
+      '@sidecar/acts':
+        specifier: workspace:*
+        version: link:../acts
       '@sidecar/attention':
         specifier: workspace:*
         version: link:../attention
