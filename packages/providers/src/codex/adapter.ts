@@ -650,7 +650,11 @@ function statusFromRow(
 /**
  * What the refinement actually buys here is the states the state database
  * cannot show: a tool call holding for approval writes no records while it
- * holds, and a turn's true end can sit past the rollout's read.
+ * holds, and a turn's true end can sit past the rollout's read. The
+ * notification keeps waiting past freshness — a standing event is proof the
+ * approval dialog is still up, because any record at or past it would have
+ * discarded it, and a process killed mid-hold leaves that proof standing
+ * only until the spool prune retires it.
  */
 const CODEX_HOOK_STATUS_REFINEMENT = {
   definitive: [{ event: CODEX_HOOK_EVENT.SESSION_END, fresh: SESSION_STATUS.COMPLETE }],
@@ -658,7 +662,7 @@ const CODEX_HOOK_STATUS_REFINEMENT = {
     {
       event: CODEX_HOOK_EVENT.NOTIFICATION,
       fresh: SESSION_STATUS.WAITING,
-      stale: SESSION_STATUS.UNKNOWN,
+      stale: SESSION_STATUS.WAITING,
     },
     { event: CODEX_HOOK_EVENT.PROMPT, fresh: SESSION_STATUS.WORKING },
     { event: CODEX_HOOK_EVENT.STOP, fresh: SESSION_STATUS.WAITING },

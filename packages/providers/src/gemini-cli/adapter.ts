@@ -246,14 +246,21 @@ function statusFromTail(
  * `session-end` token is the one thing that can ever report a local Gemini
  * session complete, a notification marks a hold the moment it starts rather
  * than when the awaiting call reaches the tail, and a stop keeps a settled
- * turn waiting past the freshness decay.
+ * turn waiting past the freshness decay. The notification keeps waiting past
+ * freshness too — a standing event is proof the hold still stands, because
+ * any record at or past it would have discarded it, and a crash mid-hold
+ * leaves that proof standing only until the spool prune retires it.
  */
 const GEMINI_HOOK_STATUS_REFINEMENT = {
   definitive: [{ event: GEMINI_HOOK_EVENT.SESSION_END, fresh: SESSION_STATUS.COMPLETE }],
   fresh: [
     { event: GEMINI_HOOK_EVENT.PROMPT, fresh: SESSION_STATUS.WORKING },
     { event: GEMINI_HOOK_EVENT.STOP, fresh: SESSION_STATUS.WAITING },
-    { event: GEMINI_HOOK_EVENT.NOTIFICATION, fresh: SESSION_STATUS.WAITING },
+    {
+      event: GEMINI_HOOK_EVENT.NOTIFICATION,
+      fresh: SESSION_STATUS.WAITING,
+      stale: SESSION_STATUS.WAITING,
+    },
   ],
   notificationEvent: GEMINI_HOOK_EVENT.NOTIFICATION,
   sessionEndEvent: GEMINI_HOOK_EVENT.SESSION_END,

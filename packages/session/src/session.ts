@@ -45,6 +45,14 @@ export type SessionCompletionCause =
  * is stale, Luke cannot tell a turn that just asked for the user from one
  * they walked away from hours ago, and reporting the stale state would speak
  * at the wrong moment.
+ *
+ * The decay is for asks that are inferences — a transcript's turn that ended,
+ * a chat a provider reports as merely idle. An adapter whose provider asserts
+ * that a session is holding for the user right now — a plan awaiting
+ * approval, a task waiting for input, a tool call holding for permission —
+ * keeps that status out of this helper: the ask stands until the provider
+ * stops reporting it, because it is a live fact rather than a guess about
+ * where a quiet session left off.
  */
 export function agedStatus(
   status: SessionStatus,

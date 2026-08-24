@@ -893,6 +893,26 @@ test("a fresh permission ask reads as holding for the developer", async (t) => {
   assert.equal(observation?.observedAt, TEST_TIME);
 });
 
+test("a permission hold that outlives the freshness window is still an ask", async (t) => {
+  const dataDirectory = await temporaryDataDirectory(t);
+  const spoolDirectory = path.join(dataDirectory, "events");
+  await writeWorkingSession(dataDirectory, "ses_long_hold");
+  await writeHookEvent(spoolDirectory, "ses_long_hold", "notification", TEST_TIME);
+
+  // A standing notification is proof the ask is still up — the hold writes
+  // no record, so any record at or past it would have discarded it — and an
+  // ask still asking must not melt into an idle row however long it stands.
+  const adapter = new OpenCodeSessionAdapter({
+    dataDirectory,
+    now: () => TEST_TIME + 20 * 60_000,
+    hookEventsDirectory: () => spoolDirectory,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.WAITING);
+  assert.equal(observation?.holdingForDeveloper, true);
+});
+
 test("a session-end event reads as complete with the closure as its cause", async (t) => {
   const dataDirectory = await temporaryDataDirectory(t);
   const spoolDirectory = path.join(dataDirectory, "events");
