@@ -13,15 +13,12 @@ import {
   unparsedWire,
   type WireValue,
 } from "@sidecar/wire";
-import type {
-  AccountCalendar,
-  ObservedAccountCalendars,
-} from "../../../apps/desktop/src/shared/contracts.js";
 import {
   GOOGLE_TOKEN_URL,
   type GoogleCalendarSignInConfig,
   googleCalendarSignInConfig,
 } from "./oauth.js";
+import type { AccountCalendar, ObservedAccountCalendars } from "./observation.js";
 
 /**
  * The two reads a signed-in calendar account answers, both fixed by this

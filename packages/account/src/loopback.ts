@@ -8,7 +8,7 @@ import {
   LOOPBACK_PAGE_TONE,
   loopbackContinuePage,
 } from "@sidecar/oauth";
-import type { AccountProvider } from "../../../apps/desktop/src/shared/contracts.js";
+import type { AccountProvider } from "./snapshot.js";
 
 const CALLBACK_PATH = "/callback";
 /**

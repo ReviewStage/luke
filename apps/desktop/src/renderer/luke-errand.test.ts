@@ -10,8 +10,8 @@ import {
 import { REALTIME_VOICE, REALTIME_VOICE_SPEED, SESSION_LIST_ALL } from "@sidecar/realtime";
 import { PANEL_FORM_FACTOR } from "@sidecar/surface";
 import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "#shared/wire/account";
-import type { AppSettings } from "#shared/wire/settings";
-import { CLI_CONNECTION, VOICE_SOURCE } from "#shared/wire/settings";
+import type { AppSettingsView } from "#shared/wire/settings";
+import { APP_SETTING_DEFAULTS, CLI_CONNECTION, VOICE_SOURCE } from "#shared/wire/settings";
 import { UPDATE_STATUS } from "#shared/wire/update";
 import {
   captionRoom,
@@ -32,8 +32,9 @@ import {
 import { APP_SETTING_ID, buildLukeGuide, isAppSettingId, type LukeGuideInput } from "./luke-guide";
 import { SETTING_PAGE, SETTINGS_PAGE_LABEL } from "./settings-views";
 
-function settings(): AppSettings {
+function settings(): AppSettingsView {
   return {
+    ...APP_SETTING_DEFAULTS,
     credentialSources: {
       [CREDENTIAL_PROVIDER_ID.CONDUCTOR]: CREDENTIAL_SOURCE.NONE,
       [CREDENTIAL_PROVIDER_ID.COPILOT]: CREDENTIAL_SOURCE.NONE,

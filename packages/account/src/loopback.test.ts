@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ACCOUNT_PROVIDER } from "../../../apps/desktop/src/shared/contracts.js";
 import { startAccountLoopback } from "./loopback.js";
+import { ACCOUNT_PROVIDER } from "./snapshot.js";
 
 test("a mismatched state is refused without consuming the callback", async () => {
   const loopback = await startAccountLoopback({ timeoutMs: 2_000 });

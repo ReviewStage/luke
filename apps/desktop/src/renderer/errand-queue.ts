@@ -1,4 +1,4 @@
-import type { AppSettings } from "#shared/wire/settings";
+import type { AppSettingsView } from "#shared/wire/settings";
 import { ERRAND_WAIT, type ErrandTarget, type ErrandWait } from "./luke-errand";
 import type { PanelTab } from "./panel-tabs";
 import type { SessionView } from "./session-model";
@@ -49,7 +49,7 @@ import type { SettingsView } from "./settings-views";
 /** What an act is holding back until Luke's tap lands on the control. */
 export interface ErrandHold {
   /** The snapshot the settings store answered the write with. */
-  settings?: AppSettings;
+  settings?: AppSettingsView;
   /** The narrowing or re-ordering a spoken ask chose for the list. */
   view?: Partial<SessionView>;
 }
@@ -120,7 +120,7 @@ export function nextErrand(run: ErrandRun) {
  * only the part of the view it changed.
  */
 export function foldErrandHolds(holds: readonly ErrandHold[]): ErrandHold {
-  let settings: AppSettings | undefined;
+  let settings: AppSettingsView | undefined;
   let view: Partial<SessionView> | undefined;
   for (const hold of holds) {
     if (hold.settings !== undefined) settings = hold.settings;

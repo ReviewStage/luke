@@ -3,8 +3,13 @@ import { VOICE_CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials";
 import { HOSTED_SERVICE_PATH, HostedAttentionEvaluator } from "@sidecar/hosted";
 import { type RealtimeDiagnostics, realtimeMintExplanation } from "@sidecar/realtime";
 import type { NormalizedSession, SessionIdentity } from "@sidecar/session";
-import { APP_SETTING_SCHEMA, type AppSettingField, type AppSettingValue } from "@sidecar/settings";
-import { VOICE_SOURCE, type VoiceSource } from "../../../apps/desktop/src/shared/contracts.js";
+import {
+  APP_SETTING_SCHEMA,
+  type AppSettingField,
+  type AppSettingValue,
+  VOICE_SOURCE,
+  type VoiceSource,
+} from "@sidecar/settings";
 import { HostedRealtimeCredentialMinter } from "./hosted-credentials.js";
 import type { RealtimeCredentialMinter } from "./minter.js";
 import { openAiRealtimeCredentials, unavailableRealtimeDiagnostics } from "./openai-credentials.js";

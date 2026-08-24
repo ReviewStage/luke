@@ -54,7 +54,7 @@ import {
   SECRET_STORAGE,
 } from "#shared/wire/account";
 import type { MicrophoneStatus } from "#shared/wire/audio";
-import type { AppSettings, SettingsUpdateResult } from "#shared/wire/settings";
+import type { AppSettings, AppSettingsView, SettingsUpdateResult } from "#shared/wire/settings";
 import { CLI_CONNECTION } from "#shared/wire/settings";
 import type { UpdateSnapshot } from "#shared/wire/update";
 import { UPDATE_STATUS } from "#shared/wire/update";
@@ -87,7 +87,7 @@ const CONDUCTOR_DEFAULT_CHOICE = "Conductor's default";
 export interface LukeGuideInput {
   /** Optional only for pure callers that predate accounts; the app always supplies it. */
   account?: AccountSnapshot;
-  settings: AppSettings;
+  settings: AppSettingsView;
   /** Where the build stands, for the guide's Updates entry. */
   update: UpdateSnapshot;
   /** Whether a Realtime credential can be minted at all. */
@@ -177,7 +177,7 @@ const CODEX_CLOUD_CONNECTION_WORD = {
   [CLI_CONNECTION.UNKNOWN]: "not checked yet",
 };
 
-function providersFact(settings: AppSettings): AppGuideFact {
+function providersFact(settings: AppSettingsView): AppGuideFact {
   const roster = CLOUD_AGENT_PROVIDER_LIST.map(
     (provider) =>
       `${provider.displayName} (${connectionWord(settings.credentialSources[provider.id])})`,
@@ -199,7 +199,7 @@ function providersFact(settings: AppSettings): AppGuideFact {
  * An integration a build does not carry contributes no fact at all: a
  * capability the guide describes is one Luke will claim to have.
  */
-function integrationFacts(settings: AppSettings): AppGuideFact[] {
+function integrationFacts(settings: AppSettingsView): AppGuideFact[] {
   const facts: AppGuideFact[] = [];
   const linearProvider = CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.LINEAR];
   if (settings.linearSignInAvailable) {
@@ -278,7 +278,7 @@ function integrationFacts(settings: AppSettings): AppGuideFact[] {
  * The one key that is neither an agent's nor an integration's, described where
  * its row lives: at the top of the Voice page, beside the feature it turns on.
  */
-function voiceKeyFact(settings: AppSettings, voiceAvailable: boolean): AppGuideFact {
+function voiceKeyFact(settings: AppSettingsView, voiceAvailable: boolean): AppGuideFact {
   const openai = CREDENTIAL_PROVIDERS[VOICE_CREDENTIAL_PROVIDER_ID];
   const source = settings.credentialSources[openai.id];
   const hosted = voiceAvailable && source === CREDENTIAL_SOURCE.NONE;
@@ -719,7 +719,7 @@ export async function applySpokenSetting(
   bridge: Pick<AppBridge, "updateSetting" | "updateSettingEntry">,
   action: { setting: AppGuideSetting; value: string; effort?: string },
   onSettings: (settings: AppSettings) => void,
-  current?: AppSettings,
+  current?: AppSettingsView,
 ): Promise<WireRecord> {
   let result: SettingsUpdateResult;
   if (
