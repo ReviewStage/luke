@@ -4,6 +4,7 @@ import {
   isRecord,
   REALTIME_CALLS_PATH,
   REALTIME_CLIENT_SECRETS_PATH,
+  type RealtimeConnection,
   type RealtimeSessionOptions,
   type RealtimeVoice,
   type RealtimeVoiceSpeed,
@@ -14,7 +15,12 @@ import {
   type UnparsedWireValue,
 } from "../core.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
-import { type FetchLike, HOSTED_OPENAI_DEFAULTS, postOpenAi } from "./openai.js";
+import {
+  type FetchLike,
+  HOSTED_OPENAI_DEFAULTS,
+  type OpenAiPostBody,
+  postOpenAi,
+} from "./openai.js";
 import type { HostedSpend } from "./quota.js";
 
 /**
@@ -35,10 +41,13 @@ export interface VoiceMintPreferences {
  * Reads the caller's voice and pace, tolerating an empty body — the defaults
  * are a complete request. A value outside the build's own sets refuses the
  * request rather than being repaired: the desktop only sends values it
- * validated, so anything else is a bug or an impostor, and both should hear no.
+ * validated, so anything else is a bug or an impostor, and both should hear
+ * no. A strict-fields allowlist additionally refuses any field beyond it, for
+ * an endpoint whose callers earn no tolerance for extras.
  */
 export async function voiceMintPreferences(
   request: Request,
+  strictFields?: readonly string[],
 ): Promise<VoiceMintPreferences | undefined> {
   const raw = await request.text().catch(() => undefined);
   if (raw === undefined) return undefined;
@@ -53,6 +62,9 @@ export async function voiceMintPreferences(
   // SAFETY: JSON.parse returns a runtime value; isRecord validates the object contract.
   const wire = payload as UnparsedWireValue;
   if (!isRecord(wire)) return undefined;
+  if (strictFields && Object.keys(wire).some((key) => !strictFields.includes(key))) {
+    return undefined;
+  }
 
   if (wire.voice !== undefined && !isRealtimeVoice(wire.voice)) return undefined;
   if (wire.speed !== undefined && !isRealtimeVoiceSpeed(wire.speed)) return undefined;
@@ -61,6 +73,80 @@ export async function voiceMintPreferences(
   if (wire.voice !== undefined) preferences.voice = wire.voice;
   if (wire.speed !== undefined) preferences.speed = wire.speed;
   return preferences;
+}
+
+export interface RealtimeConnectionMintOptions {
+  apiKey: string;
+  /** The resolved model override; the shared default labels the credential otherwise. */
+  model: string | undefined;
+  preferences: VoiceMintPreferences;
+  /** Builds the session document this endpoint mints with. */
+  clientSecretRequest: (options: RealtimeSessionOptions) => OpenAiPostBody;
+  fetch?: FetchLike;
+  now?: () => number;
+  timeoutMs?: number;
+}
+
+export type RealtimeConnectionMint = { failure: Response } | { connection: RealtimeConnection };
+
+/**
+ * The upstream tail both mint handlers share: builds the session document
+ * from the caller's validated preferences, posts it on Luke's own key, and
+ * hands back either a usable connection aimed at OpenAI's canonical calls
+ * endpoint or the refusal the handler answers with.
+ */
+export async function mintRealtimeConnection(
+  options: RealtimeConnectionMintOptions,
+): Promise<RealtimeConnectionMint> {
+  const sessionOptions: RealtimeSessionOptions = {};
+  if (options.model) sessionOptions.model = options.model;
+  if (options.preferences.voice) sessionOptions.voice = options.preferences.voice;
+  if (options.preferences.speed) sessionOptions.speed = options.preferences.speed;
+
+  const response = await postOpenAi(
+    REALTIME_CLIENT_SECRETS_PATH,
+    options.clientSecretRequest(sessionOptions),
+    { apiKey: options.apiKey, fetch: options.fetch, timeoutMs: options.timeoutMs },
+  );
+  if (!response) {
+    return {
+      failure: errorResponse(HOSTED_HTTP_STATUS.BAD_GATEWAY, HOSTED_API_ERROR.UPSTREAM_ERROR),
+    };
+  }
+  if (!response.ok) {
+    // Status alone diagnoses the upstream without carrying its body onward.
+    return {
+      failure: errorResponse(HOSTED_HTTP_STATUS.BAD_GATEWAY, HOSTED_API_ERROR.UPSTREAM_ERROR, {
+        upstreamStatus: response.status,
+      }),
+    };
+  }
+
+  const payload: unknown = await response.json().catch(() => undefined);
+  // The resolved model rides along as the fallback, like the desktop's own
+  // minter: a payload that omits its model still labels the credential with
+  // the model it was actually minted for.
+  const credential =
+    payload === undefined
+      ? undefined
+      : realtimeCredentialFromResponse(
+          // SAFETY: response.json returns a runtime value; realtimeCredentialFromResponse validates the wire contract.
+          payload as UnparsedWireValue,
+          options.model,
+        );
+  const now = options.now ?? Date.now;
+  if (!credential || !realtimeCredentialIsUsable(credential, now())) {
+    return {
+      failure: errorResponse(HOSTED_HTTP_STATUS.BAD_GATEWAY, HOSTED_API_ERROR.UPSTREAM_ERROR),
+    };
+  }
+
+  return {
+    connection: {
+      ...credential,
+      callsUrl: `${HOSTED_OPENAI_DEFAULTS.BASE_URL}${REALTIME_CALLS_PATH}`,
+    },
+  };
 }
 
 export interface VoiceMintOptions {
@@ -109,48 +195,19 @@ export async function handleVoiceMint(options: VoiceMintOptions): Promise<Respon
     });
   }
 
-  const sessionOptions: RealtimeSessionOptions = {};
-  if (model) sessionOptions.model = model;
-  if (preferences.voice) sessionOptions.voice = preferences.voice;
-  if (preferences.speed) sessionOptions.speed = preferences.speed;
-
-  const response = await postOpenAi(
-    REALTIME_CLIENT_SECRETS_PATH,
-    realtimeClientSecretRequest(sessionOptions),
-    { apiKey, fetch: options.fetch, timeoutMs: options.timeoutMs },
-  );
-  if (!response) {
-    return errorResponse(HOSTED_HTTP_STATUS.BAD_GATEWAY, HOSTED_API_ERROR.UPSTREAM_ERROR);
-  }
-  if (!response.ok) {
-    // Status alone diagnoses the upstream without carrying its body onward.
-    return errorResponse(HOSTED_HTTP_STATUS.BAD_GATEWAY, HOSTED_API_ERROR.UPSTREAM_ERROR, {
-      upstreamStatus: response.status,
-    });
-  }
-
-  const payload: unknown = await response.json().catch(() => undefined);
-  // The resolved model rides along as the fallback, like the desktop's own
-  // minter: a payload that omits its model still labels the credential with
-  // the model it was actually minted for.
-  const credential =
-    payload === undefined
-      ? undefined
-      : realtimeCredentialFromResponse(
-          // SAFETY: response.json returns a runtime value; realtimeCredentialFromResponse validates the wire contract.
-          payload as UnparsedWireValue,
-          model,
-        );
-  const now = options.now ?? Date.now;
-  if (!credential || !realtimeCredentialIsUsable(credential, now())) {
-    return errorResponse(HOSTED_HTTP_STATUS.BAD_GATEWAY, HOSTED_API_ERROR.UPSTREAM_ERROR);
-  }
+  const minted = await mintRealtimeConnection({
+    apiKey,
+    model,
+    preferences,
+    clientSecretRequest: realtimeClientSecretRequest,
+    fetch: options.fetch,
+    now: options.now,
+    timeoutMs: options.timeoutMs,
+  });
+  if ("failure" in minted) return minted.failure;
 
   return jsonResponse(HOSTED_HTTP_STATUS.OK, {
-    connection: {
-      ...credential,
-      callsUrl: `${HOSTED_OPENAI_DEFAULTS.BASE_URL}${REALTIME_CALLS_PATH}`,
-    },
+    connection: minted.connection,
     quota: spend.quota,
   });
 }

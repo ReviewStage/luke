@@ -6,6 +6,9 @@
  */
 
 import type { attentionResponsesRequest, realtimeClientSecretRequest } from "../core.js";
+// Type-only, so the value-level import the introduction handler takes from
+// this module never becomes a runtime cycle.
+import type { introductionClientSecretRequest } from "./introduction-mint.js";
 
 export const HOSTED_OPENAI_ENVIRONMENT = {
   API_KEY: "OPENAI_API_KEY",
@@ -24,6 +27,7 @@ export type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
 /** Build-fixed documents the hosted tier POSTs to OpenAI. */
 export type OpenAiPostBody =
   | ReturnType<typeof realtimeClientSecretRequest>
+  | ReturnType<typeof introductionClientSecretRequest>
   | ReturnType<typeof attentionResponsesRequest>;
 
 export interface OpenAiUpstreamOptions {

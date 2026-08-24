@@ -71,7 +71,17 @@ workflow artifact. It does not create a GitHub Release.
 First land the version bump and packaging changes. The same change must add the
 release's entry to `CHANGELOG.md` at the repository root. The landing page renders that
 file at `/changelog`, and `scripts/repository-checks.sh` refuses a desktop version the
-changelog does not name, so a bump cannot land without its notes. The tag must exactly
+changelog does not name, so a bump cannot land without its notes.
+
+The hosted service must already serve every endpoint the desktop build calls, because
+the service deploys from `main` on merge while the desktop ships on the tag: a build
+released ahead of its service answers 404 where a feature expected an endpoint. The
+one endpoint with no fallback at all is `/api/voice/introduction-mint` — the spoken
+introduction runs before any account or key exists, so that endpoint is its only
+possible voice, and a desktop carrying the introduction must not be tagged until the
+service serving it is live.
+
+The tag must exactly
 match `apps/desktop/package.json`; for version `0.1.0`:
 
 ```sh

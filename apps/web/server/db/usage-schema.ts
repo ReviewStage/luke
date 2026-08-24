@@ -23,3 +23,23 @@ export const hostedUsage = pgTable(
   },
   (table) => [primaryKey({ columns: [table.userId, table.day] })],
 );
+
+/**
+ * What the unauthenticated introduction mint spent on one UTC day. The
+ * endpoint answers before any account exists, so the caller column is not a
+ * user: it is the SHA-256 of the requester's address — hashed because this
+ * table is durable and the address is only ever a rate-limit key — or the
+ * global sentinel row every request shares, the second ceiling that keeps a
+ * keyless endpoint from becoming a free relay. Nothing else about a request
+ * is kept.
+ */
+export const introductionUsage = pgTable(
+  "introduction_usage",
+  {
+    caller: text("caller").notNull(),
+    /** The UTC day the counter covers, as YYYY-MM-DD. */
+    day: text("day").notNull(),
+    mints: integer("mints").default(0).notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.caller, table.day] })],
+);

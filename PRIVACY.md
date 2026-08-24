@@ -1,6 +1,6 @@
 # Privacy
 
-Last updated: 23 August 2026
+Last updated: 24 August 2026
 
 Luke is a macOS app that watches your coding agent sessions. This policy
 explains what we collect, who we send it to, and how to turn it off.
@@ -46,6 +46,12 @@ and email you signed it with, and any screenshots you attached.
   We do not send message history, file contents, or command output, and we ask
   OpenAI not to store the request. Your conversation is kept in memory so it
   carries across calls, and is discarded when you quit Luke.
+  The one voice call that happens before you sign in is the spoken
+  introduction on first launch: it sends its own fixed script, the titles of
+  the coding agent sessions found on your Mac, and anything you say during its
+  practice moment. It plays once, can act on nothing, and our service issues
+  its credential without an account — keeping only a hash of your network
+  address for that day's rate limit, tied to nobody.
 - Coding agent providers you connect (Conductor, Cursor, Devin, GitHub Copilot,
   Jules, Replicas) and Linear, using the key or account access you supply. For
   Codex cloud tasks and for messaging local Cursor chats, that access is the

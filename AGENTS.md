@@ -411,6 +411,30 @@ Trust constraints:
   that serves a build which cannot install in place at all. Widening what
   the updater sends, reads, or does is a product decision, not an
   implementation detail.
+- The spoken introduction is the one moment Luke runs before the account gate,
+  and it is bounded on every side. It plays on the first interactive launch,
+  before any account exists, at most once to the end: a completion on file
+  never replays, and it never runs in a fixture or capture run. Its voice is
+  the introduction mint, an accountless endpoint on Luke's own service that
+  issues one short-lived credential per call, keeps nothing about the caller
+  but a hashed network address for its own daily caps (per caller and global
+  both), and answers the same pinned OpenAI calls endpoint every minted call
+  uses. The call itself is tool-free at the API — no tools declared, every
+  scripted turn opened with none — and no carrier is wired behind it, so
+  nothing said, heard, or shown during the introduction can become an act.
+  What travels on it is the build's own script and one observed thing: the
+  detected sessions' titles, as data behind a marker, never as instructions.
+  Detection is the keyless local peek — the same read-only observe every pass
+  runs, once, with no hook registration and no credential, answered only to
+  the takeover window and capped at the panel's own depth. The microphone is
+  asked for at its own beat through the system's real dialog, the talk key is
+  routed to the takeover for the introduction's duration, and the account
+  landing is what completes the flow: the takeover closes, the panels stand
+  up, and observation, announcements, and every other capability release
+  through the ordinary account gate rather than around it. An introduction
+  that cannot speak stands down to the ordinary signed-out launch and writes
+  nothing. Widening what the introduction reads, sends, or can do is a
+  product decision, not an implementation detail.
 - Keep unsupported capabilities explicit; do not invent fallback controls.
 - Keep Electron renderers sandboxed with context isolation and narrow IPC.
 - Commit only synthetic fixtures and repository-relative paths. This binds
