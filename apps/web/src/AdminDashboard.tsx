@@ -49,6 +49,7 @@ import {
   sidebarRailWidth,
   sidebarToggleLabel,
 } from "./admin-sidebar";
+import { activeUsageDays, defaultUsageDay } from "./admin-usage";
 import { AUTH_BUTTON } from "./auth-surface";
 import {
   type ChartConfig,
@@ -475,6 +476,55 @@ const USAGE_CHART = {
 } satisfies ChartConfig;
 
 /**
+ * One keyboard-sized way into the chart. The chart remains a direct pointer
+ * target, while a select keeps ninety daily bars from becoming ninety tab
+ * stops and still lets a keyboard user name the exact day to open.
+ */
+function UsageDayDrilldown({
+  daily,
+  onOpenDay,
+}: {
+  daily: readonly AdminDailyUsage[];
+  onOpenDay: (day: string) => void;
+}): React.JSX.Element | null {
+  const choices = activeUsageDays(daily);
+  const [selectedDay, setSelectedDay] = useState(() => defaultUsageDay(daily));
+  useEffect(() => {
+    if (choices.some((point) => point.day === selectedDay)) return;
+    setSelectedDay(defaultUsageDay(daily));
+  }, [choices, daily, selectedDay]);
+  if (choices.length === 0) return null;
+
+  return (
+    <div className="mt-4 flex flex-wrap items-end justify-between gap-3 border-t border-border pt-4">
+      <label className="grid min-w-0 flex-1 gap-1.5 text-xs text-muted-foreground">
+        Open daily accounts
+        <select
+          value={selectedDay}
+          className="min-h-10 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-offset-2 min-[520px]:max-w-[280px]"
+          onChange={(event) => setSelectedDay(event.target.value)}
+        >
+          {choices.map((point) => (
+            <option key={point.day} value={point.day}>
+              {formatDayTick(point.day)} · {formatNumber(point.voiceCalls + point.attentionReviews)}
+              {" calls"}
+            </option>
+          ))}
+        </select>
+      </label>
+      <button
+        type="button"
+        className={PLAIN_BUTTON}
+        disabled={selectedDay === ""}
+        onClick={() => onOpenDay(selectedDay)}
+      >
+        View accounts
+      </button>
+    </div>
+  );
+}
+
+/**
  * A trailing-window stacked bar chart on shadcn/ui's chart primitives. Voice
  * and attention stack so one bar reads as a day's total while its split stays
  * visible; the tooltip carries each day's exact numbers, and the legend names
@@ -572,6 +622,7 @@ function UsageChart({
           </Bar>
         </BarChart>
       </ChartContainer>
+      {onOpenDay ? <UsageDayDrilldown daily={daily} onOpenDay={onOpenDay} /> : null}
     </div>
   );
 }
@@ -610,8 +661,6 @@ function CalendarDayCell({
   return (
     <div
       role="img"
-      // biome-ignore lint/a11y/noNoninteractiveTabindex: the cell is informational, but focusing it is how a keyboard reader raises the tooltip that replaced its title, and the aria-label keeps the same words for AT.
-      tabIndex={0}
       aria-label={`${formatTooltipDay(day.day, partialDay)} — ${formatNumber(day.voiceCalls)} voice · ${formatNumber(day.attentionReviews)} attention`}
       data-calendar-day={day.day}
       className={`rounded-[3px] outline-offset-2 ${total === 0 ? "bg-muted/60" : ""}${provisional}`}
@@ -628,8 +677,6 @@ function CalendarDayCell({
         }
         onHide();
       }}
-      onFocus={(event) => onShow(day, event.currentTarget)}
-      onBlur={onHide}
     />
   );
 }
