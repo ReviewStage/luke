@@ -305,12 +305,12 @@ function speech(source: AttentionSpeech["source"], id: string): AttentionSpeech 
   };
 }
 
-test("answered asks go to the announcer; unbidden summaries keep to an open call", () => {
+test("every approved attention update can open the announcer", () => {
   const answered = speech(ATTENTION_SPEECH_SOURCE.NOTICE_REQUEST, "schema");
   const summary = speech(ATTENTION_SPEECH_SOURCE.EVALUATOR, "payments");
   const mixed = [answered, summary];
-  assert.deepEqual(announcerNotices(mixed), [answered]);
-  assert.deepEqual(evaluatorSummaries(mixed), [summary]);
+  assert.deepEqual(announcerNotices(mixed), mixed);
+  assert.deepEqual(evaluatorSummaries(mixed), []);
 });
 
 test("a batch enters the history in the order it was decided", () => {

@@ -394,14 +394,17 @@ let appleAccessProbeFailing = false;
 // deterministic, like the edges that produced them.
 const heldNotices = new SessionNoticeHold();
 /**
- * The other kind of announcement, held on the same terms: speech an answered
- * standing ask produced, already worded. It waits out a meeting exactly as a
- * status edge does — both break silence, and the quiet holds everything that
- * does. Unbidden evaluator summaries are never held: during the quiet they
- * are dropped outright, because the evaluator supersedes its own decisions
- * and speaks from a fresh review once the meeting ends.
+ * Speech an answered standing ask produced, already worded. It waits out a
+ * meeting exactly as a status edge does because the developer explicitly
+ * asked for this answer.
  */
 const heldRequestSpeech = new SessionNoticeHold<AttentionSpeech>();
+/**
+ * Evaluator approvals deferred by meeting quiet. Their words are not replayed
+ * after the meeting because the session may have moved on; release instead
+ * reopens a fresh evaluator pass against the current roster.
+ */
+const heldEvaluatorSpeech = new SessionNoticeHold<AttentionSpeech>();
 /**
  * Whether the quiet is holding right now, as last computed — what the
  * renderer draws Luke's sleeping face from. Kept and broadcast on change so
@@ -1630,19 +1633,17 @@ async function reviewSessionAttention(generation: number): Promise<void> {
     const speech = attentionSpeechFromReviews(reviews);
     if (speech.length > 0) {
       // The quiet holds everything Luke would say unbidden. An answered
-      // standing ask waits out the meeting the way a status edge does; an
-      // unbidden evaluator summary is dropped rather than held — the
-      // evaluator supersedes its own decisions, so after the meeting it
-      // speaks from a fresh review, not a backlog. Neither rides even an
-      // open conversation: a call lingering idle after a question is not a
-      // conversation to interject into, and a reply to a turn the developer
-      // opened is not an announcement and passes untouched elsewhere. The
-      // pressable notice anchors to the spoken announcement, so it waits out
-      // the quiet with it.
+      // standing ask keeps its already-approved words. An evaluator summary
+      // keeps only its identity: once the meeting ends it is reviewed against
+      // the current roster instead of replaying words that may have gone stale.
       let sendable: readonly AttentionSpeech[] = speech;
       if (await announcementsQuietNow(Date.now())) {
-        const held = speech.filter((item) => item.source !== ATTENTION_SPEECH_SOURCE.EVALUATOR);
-        heldRequestSpeech.hold(held);
+        heldRequestSpeech.hold(
+          speech.filter((item) => item.source !== ATTENTION_SPEECH_SOURCE.EVALUATOR),
+        );
+        heldEvaluatorSpeech.hold(
+          speech.filter((item) => item.source === ATTENTION_SPEECH_SOURCE.EVALUATOR),
+        );
         sendable = [];
       }
       if (sendable.length > 0) {
@@ -1821,7 +1822,9 @@ function armQuietBoundaryTimer(): void {
  * announcing its old state would be worse than silence.
  */
 async function releaseHeldNotices(): Promise<void> {
-  if (heldNotices.count === 0 && heldRequestSpeech.count === 0) return;
+  if (heldNotices.count === 0 && heldRequestSpeech.count === 0 && heldEvaluatorSpeech.count === 0) {
+    return;
+  }
   const now = Date.now();
   if (await announcementsQuietNow(now)) return;
   // Voice went away while the backlog waited; there is nothing to say it
@@ -1829,6 +1832,7 @@ async function releaseHeldNotices(): Promise<void> {
   if (!voiceCapabilities.realtimeCredentials) {
     heldNotices.release();
     heldRequestSpeech.release();
+    heldEvaluatorSpeech.release();
     return;
   }
   const current = new Map<string, Map<string, string>>();
@@ -1850,6 +1854,11 @@ async function releaseHeldNotices(): Promise<void> {
   // like the notices it is re-stamped at release, because the decision to
   // speak is what is fresh — held any older it would be dropped unread.
   const releasedAsks = heldRequestSpeech.release().map((item) => ({ ...item, decidedAt: now }));
+  const deferredEvaluatorSpeech = heldEvaluatorSpeech.release();
+  if (deferredEvaluatorSpeech.length > 0) {
+    voiceCapabilities.attentionReviewer?.reconsider(deferredEvaluatorSpeech);
+    void attentionObservationLoop.refresh();
+  }
   const speech = [
     ...releasedAsks,
     ...released.flatMap((notice) => {
@@ -2023,6 +2032,7 @@ function stopCalendarObservation(): void {
   appleCalendar.forget();
   heldNotices.release();
   heldRequestSpeech.release();
+  heldEvaluatorSpeech.release();
   panels.broadcast(channels.onCalendarsChanged, observedCalendars);
   if (meetingQuietActive) {
     meetingQuietActive = false;
