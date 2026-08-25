@@ -49,7 +49,6 @@ import {
   sidebarRailWidth,
   sidebarToggleLabel,
 } from "./admin-sidebar";
-import { activeUsageDays, defaultUsageDay } from "./admin-usage";
 import { AUTH_BUTTON } from "./auth-surface";
 import {
   type ChartConfig,
@@ -504,55 +503,6 @@ const USAGE_CHART = {
 } satisfies ChartConfig;
 
 /**
- * One keyboard-sized way into the chart. The chart remains a direct pointer
- * target, while a select keeps ninety daily bars from becoming ninety tab
- * stops and still lets a keyboard user name the exact day to open.
- */
-function UsageDayDrilldown({
-  daily,
-  onOpenDay,
-}: {
-  daily: readonly AdminDailyUsage[];
-  onOpenDay: (day: string) => void;
-}): React.JSX.Element | null {
-  const choices = activeUsageDays(daily);
-  const [selectedDay, setSelectedDay] = useState(() => defaultUsageDay(daily));
-  useEffect(() => {
-    if (choices.some((point) => point.day === selectedDay)) return;
-    setSelectedDay(defaultUsageDay(daily));
-  }, [choices, daily, selectedDay]);
-  if (choices.length === 0) return null;
-
-  return (
-    <div className="mt-4 flex flex-wrap items-end justify-between gap-3 border-t border-border pt-4">
-      <label className="grid min-w-0 flex-1 gap-1.5 text-xs text-muted-foreground">
-        Open daily accounts
-        <select
-          value={selectedDay}
-          className="min-h-10 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-offset-2 min-[520px]:max-w-[280px]"
-          onChange={(event) => setSelectedDay(event.target.value)}
-        >
-          {choices.map((point) => (
-            <option key={point.day} value={point.day}>
-              {formatDayTick(point.day)} · {formatNumber(point.voiceCalls + point.attentionReviews)}
-              {" calls"}
-            </option>
-          ))}
-        </select>
-      </label>
-      <button
-        type="button"
-        className={PLAIN_BUTTON}
-        disabled={selectedDay === ""}
-        onClick={() => onOpenDay(selectedDay)}
-      >
-        View accounts
-      </button>
-    </div>
-  );
-}
-
-/**
  * A trailing-window stacked bar chart on shadcn/ui's chart primitives. Voice
  * and attention stack so one bar reads as a day's total while its split stays
  * visible; the tooltip carries each day's exact numbers, and the legend names
@@ -650,7 +600,6 @@ function UsageChart({
           </Bar>
         </BarChart>
       </ChartContainer>
-      {onOpenDay ? <UsageDayDrilldown daily={daily} onOpenDay={onOpenDay} /> : null}
     </div>
   );
 }
@@ -1694,7 +1643,7 @@ function WindowSwitcher({
   onChange: (windowDays: AdminMetricsWindow) => void;
 }): React.JSX.Element {
   return (
-    <div className="inline-flex rounded-md border border-border bg-card p-0.5">
+    <div className="inline-flex h-8 rounded-md border border-border bg-card p-0.5">
       {Object.values(ADMIN_METRICS_WINDOW).map((windowDays) => (
         <button
           key={windowDays}
@@ -1702,7 +1651,7 @@ function WindowSwitcher({
           aria-label={`${windowDays}-day window`}
           aria-pressed={value === windowDays}
           data-active={value === windowDays}
-          className="min-h-10 cursor-pointer rounded px-2 py-0.5 text-xs font-medium text-muted-foreground transition-colors duration-150 outline-offset-2 hover:text-foreground data-[active=true]:bg-muted data-[active=true]:text-foreground"
+          className="cursor-pointer rounded px-2.5 text-xs font-medium text-muted-foreground transition-colors duration-150 outline-offset-2 hover:text-foreground data-[active=true]:bg-muted data-[active=true]:text-foreground"
           onClick={() => onChange(windowDays)}
         >
           {windowDays}d
@@ -1802,13 +1751,7 @@ const SKELETON_PLOT = {
 
 type SkeletonPlot = (typeof SKELETON_PLOT)[keyof typeof SKELETON_PLOT];
 
-function SkeletonChartCard({
-  plot,
-  drilldown = false,
-}: {
-  plot: SkeletonPlot;
-  drilldown?: boolean;
-}): React.JSX.Element {
+function SkeletonChartCard({ plot }: { plot: SkeletonPlot }): React.JSX.Element {
   return (
     <div className="rounded-lg border border-border bg-card p-5">
       <div className="mb-4 flex items-center justify-between gap-4">
@@ -1816,15 +1759,6 @@ function SkeletonChartCard({
         <SkeletonLine box="h-4" bone="h-3 w-56" />
       </div>
       <Skeleton className={`w-full ${plot}`} />
-      {drilldown ? (
-        <div className="mt-4 flex items-end justify-between gap-3 border-t border-border pt-4">
-          <div className="grid min-w-0 flex-1 gap-1.5">
-            <SkeletonLine box="h-4" bone="h-3 w-28" />
-            <Skeleton className="h-10 w-full min-[520px]:max-w-[280px]" />
-          </div>
-          <Skeleton className="h-11 w-28" />
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -2017,7 +1951,7 @@ function DashboardSkeleton({
         <SkeletonStatCard grouped />
       </StatGroup>
       <div className="mt-3">
-        <SkeletonChartCard plot={SKELETON_PLOT.USAGE} drilldown />
+        <SkeletonChartCard plot={SKELETON_PLOT.USAGE} />
       </div>
       <SectionHeading>Most active hosted-tier accounts</SectionHeading>
       <SkeletonAccountsTable rows={10} numericColumns={5} />
@@ -2869,9 +2803,6 @@ function DayAccountsTable({
   }
   return (
     <div className="overflow-hidden rounded-lg border border-border bg-card">
-      <div className="border-b border-border px-4 py-2 font-mono text-[10px] tracking-[0.2px] text-muted-foreground uppercase min-[720px]:hidden">
-        Swipe table for more columns
-      </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[520px] text-sm">
           <thead>
@@ -3377,9 +3308,6 @@ function AccountsTable<Row extends AccountsTableRow>({
   const sorted = sortAccountsRows(rows, sort, detailColumns, favorite?.starred);
   return (
     <div className="overflow-hidden rounded-lg border border-border bg-card">
-      <div className="border-b border-border px-4 py-2 font-mono text-[10px] tracking-[0.2px] text-muted-foreground uppercase min-[720px]:hidden">
-        Swipe table for more columns
-      </div>
       <div className="overflow-x-auto">
         <table className={`w-full ${minWidth} text-sm`}>
           <thead>
