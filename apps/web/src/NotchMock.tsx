@@ -15,6 +15,7 @@ import {
 import {
   CAPSULE_SIDE_WIDTH,
   compareSessionsByUrgency,
+  MOTION_DURATION_MS,
   PANEL_WIDTH,
   PEEK_SIDE_GROWTH,
   SESSION_URGENCY,
@@ -32,12 +33,12 @@ import { type CSSProperties, useCallback, useEffect, useRef, useState } from "re
  * piece of software.
  *
  * In the product the pointer drives those presentations. On the page the mock
- * drives itself: it arrives at rest and walks capsule → peek → panel once,
- * then stays open. The open panel is the page's real hero — the state that
- * shows what Luke is for — so no gesture has to be discovered to earn it, on
- * a phone as well as under a pointer, and the walk on the way there is seen
- * by everyone rather than staged behind a scroll or a hover. Under reduced
- * motion the walk is skipped and the panel is simply there.
+ * drives itself, on a loop: capsule → peek → panel, a long pause open, then
+ * folded back down to walk again. The open panel is the page's real hero —
+ * the state that shows what Luke is for — so it holds most of every lap, and
+ * the motion around it is seen by everyone rather than staged behind a scroll
+ * or a hover. Under reduced motion the loop never runs and the panel is
+ * simply there.
  */
 const MOCK_MODE = {
   CAPSULE: "capsule",
@@ -48,13 +49,17 @@ const MOCK_MODE = {
 type MockMode = (typeof MOCK_MODE)[keyof typeof MOCK_MODE];
 
 /**
- * The walk's cue points. The capsule keeps a beat so the product is seen at
- * rest before it answers; the peek holds long enough for its count caption to
- * be read after the surface settles; the panel then takes the stage and keeps
- * it.
+ * How long each presentation holds before the loop moves on. The capsule
+ * keeps a beat so the product is seen at rest before it answers; the peek
+ * holds long enough for its count caption to be read after the surface
+ * settles; the panel holds far longest, because the pause on the open state
+ * is the point and the walk exists to frame it.
  */
-const WALK_PEEK_AT_MS = 1000;
-const WALK_PANEL_AT_MS = 2200;
+const CYCLE = {
+  [MOCK_MODE.CAPSULE]: { holdMs: 1000, next: MOCK_MODE.PEEK },
+  [MOCK_MODE.PEEK]: { holdMs: 1200, next: MOCK_MODE.PANEL },
+  [MOCK_MODE.PANEL]: { holdMs: 6000, next: MOCK_MODE.CAPSULE },
+} as const satisfies Record<MockMode, { holdMs: number; next: MockMode }>;
 
 const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
 
@@ -132,7 +137,7 @@ const MOCK_LABEL = `Luke's notch capsule expanding into its session panel, listi
  * the face's usual condition: it only moves when something happens to it.
  */
 export function NotchMock(): React.JSX.Element {
-  // The walk never plays under reduced motion, where a timed tour is exactly
+  // The loop never runs under reduced motion, where a timed tour is exactly
   // the motion the visitor asked not to see: the panel is there from the
   // first paint, not popped in by a mount effect.
   const [mode, setMode] = useState<MockMode>(() =>
@@ -142,13 +147,16 @@ export function NotchMock(): React.JSX.Element {
 
   useEffect(() => {
     if (window.matchMedia(REDUCED_MOTION_QUERY).matches) return;
-    const timers = [
-      window.setTimeout(() => setMode(MOCK_MODE.PEEK), WALK_PEEK_AT_MS),
-      window.setTimeout(() => setMode(MOCK_MODE.PANEL), WALK_PANEL_AT_MS),
-    ];
-    return () => {
-      for (const timer of timers) window.clearTimeout(timer);
+    let timer: number;
+    const hold = (current: MockMode) => {
+      const { holdMs, next } = CYCLE[current];
+      timer = window.setTimeout(() => {
+        setMode(next);
+        hold(next);
+      }, holdMs);
     };
+    hold(MOCK_MODE.CAPSULE);
+    return () => window.clearTimeout(timer);
   }, []);
 
   // `useShapeHeight` in the renderer: the black surface ends where the content
@@ -218,11 +226,20 @@ export function NotchMock(): React.JSX.Element {
   }, []);
 
   // The wing is bounded by the shape its state draws, so its mark capacity is
-  // too. The walk only ever widens, so a grown capacity never has to wait out
-  // an exit fade the way the renderer's shrinking wing does.
+  // too — and the loop's fold from panel back to capsule shrinks it, so a
+  // shrinking capacity waits out the exit fade, as the renderer's does, and
+  // no mark is unmounted mid-fade.
   const capacity = mode === MOCK_MODE.PANEL ? PANEL_CAPACITY : PEEK_CAPACITY;
-  const overflowing = WING_PROVIDERS.length > capacity;
-  const providers = WING_PROVIDERS.slice(0, overflowing ? capacity - 1 : capacity);
+  const [drawnCapacity, setDrawnCapacity] = useState(capacity);
+  if (capacity > drawnCapacity) setDrawnCapacity(capacity);
+  useEffect(() => {
+    if (capacity >= drawnCapacity) return;
+    const timer = window.setTimeout(() => setDrawnCapacity(capacity), MOTION_DURATION_MS.EXIT);
+    return () => window.clearTimeout(timer);
+  }, [capacity, drawnCapacity]);
+
+  const overflowing = WING_PROVIDERS.length > drawnCapacity;
+  const providers = WING_PROVIDERS.slice(0, overflowing ? drawnCapacity - 1 : drawnCapacity);
   const unshown = WING_PROVIDERS.length - providers.length;
 
   const mockStyle =

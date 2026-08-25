@@ -7,9 +7,9 @@
    ------------------------------------------------------------------------- */
 
 /* The stage the mock plays on. In the product the pointer drives the
-   presentations; here the mock walks capsule → peek → panel by itself once on
-   arrival and rests open, so the hero is the product's most telling state and
-   no gesture has to be discovered to earn it. */
+   presentations; here the mock loops capsule → peek → panel by itself,
+   pausing longest open, so the hero spends most of every lap on the product's
+   most telling state and no gesture has to be discovered to earn any of it. */
 .mock-stage {
   display: flex;
   justify-content: center;
