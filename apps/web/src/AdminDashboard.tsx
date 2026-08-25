@@ -1879,10 +1879,6 @@ function DashboardSkeleton({
           <>
             <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
             <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
-            <SkeletonLine box="h-4" bone="h-3 w-28" />
-            <button type="button" className={PLAIN_BUTTON} disabled>
-              Loading…
-            </button>
           </>
         }
       />
@@ -1979,10 +1975,6 @@ function UsersSkeleton({
           <>
             <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
             <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
-            <SkeletonLine box="h-4" bone="h-3 w-28" />
-            <button type="button" className={PLAIN_BUTTON} disabled>
-              Loading…
-            </button>
           </>
         }
       />
@@ -2021,15 +2013,7 @@ function AccountSkeleton({
         title="Account"
         account={account}
         onSignOut={onSignOut}
-        controls={
-          <>
-            <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
-            <SkeletonLine box="h-4" bone="h-3 w-28" />
-            <button type="button" className={PLAIN_BUTTON} disabled>
-              Loading…
-            </button>
-          </>
-        }
+        controls={<WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />}
       />
       <p className="sr-only">Loading. Reading the account's own rows.</p>
       <a
@@ -2104,15 +2088,7 @@ function DaySkeleton({
         title="Day"
         account={account}
         onSignOut={onSignOut}
-        controls={
-          <>
-            <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
-            <SkeletonLine box="h-4" bone="h-3 w-48" />
-            <button type="button" className={PLAIN_BUTTON} disabled>
-              Loading…
-            </button>
-          </>
-        }
+        controls={<HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />}
       />
       <p className="sr-only">Loading. Reading the day's own rows.</p>
       <a
