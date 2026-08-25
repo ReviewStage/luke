@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   introductionCompleted,
   introductionRecord,
+  shouldBackfillIntroductionCompletion,
   shouldRunIntroduction,
 } from "./introduction-flow";
 
@@ -30,6 +31,44 @@ test("a deterministic run never gives the introduction", () => {
 test("a completed introduction never replays", () => {
   assert.equal(
     shouldRunIntroduction({ requiresAccount: true, signedIn: false, completed: true }),
+    false,
+  );
+});
+
+test("a signed-in launch with no record backfills one, so a sign-out cannot replay", () => {
+  assert.equal(
+    shouldBackfillIntroductionCompletion({
+      requiresAccount: true,
+      signedIn: true,
+      completed: false,
+    }),
+    true,
+  );
+});
+
+test("a launch with the record on file, or none to prove a meeting, backfills nothing", () => {
+  assert.equal(
+    shouldBackfillIntroductionCompletion({
+      requiresAccount: true,
+      signedIn: true,
+      completed: true,
+    }),
+    false,
+  );
+  assert.equal(
+    shouldBackfillIntroductionCompletion({
+      requiresAccount: true,
+      signedIn: false,
+      completed: false,
+    }),
+    false,
+  );
+  assert.equal(
+    shouldBackfillIntroductionCompletion({
+      requiresAccount: false,
+      signedIn: true,
+      completed: false,
+    }),
     false,
   );
 });

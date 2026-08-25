@@ -124,6 +124,7 @@ import {
   INTRODUCTION_STATE_FILE,
   introductionCompleted,
   introductionRecord,
+  shouldBackfillIntroductionCompletion,
   shouldRunIntroduction,
 } from "./introduction-flow";
 import { registerAccountSessionIpc } from "./ipc/account-session";
@@ -2230,11 +2231,16 @@ export function startDesktopApp(): void {
       // spoken introduction plays on. Everything below reads the takeover's
       // liveness rather than this flag, because the introduction can end —
       // completed or abandoned — while the launch is still settling.
-      const giveIntroduction = shouldRunIntroduction({
+      const introductionInput = {
         requiresAccount: runMode.requiresAccount,
         signedIn: account.status === ACCOUNT_STATUS.SIGNED_IN,
         completed: introductionCompletedOnDisk(),
-      });
+      };
+      const giveIntroduction = shouldRunIntroduction(introductionInput);
+      // A signed-in launch that never wrote the record — an install upgrading
+      // from before the introduction existed — writes it now, so a later
+      // sign-out lands on the ordinary gate instead of a first meeting.
+      if (shouldBackfillIntroductionCompletion(introductionInput)) markIntroductionComplete();
       await panels.refreshGeometry();
       registerIpc();
       // Resolving settings touches the filesystem, and the OS keychain only for a
