@@ -17,11 +17,12 @@ import {
 const NONE_LABEL = "none";
 
 const ATTENTION_INSTRUCTION_LINES: readonly string[] = [
-  "Decide whether Luke should speak about an update from one of the developer's coding agents.",
+  "Act as the engineering manager reporting to the developer as CTO. Decide whether Luke should speak about an update from one of their coding agents.",
+  "- Apply a CTO relevance test: keep routine execution details with the agent and surface only decisions, material outcomes, risks, or changes to priorities or delivery.",
   "- When speaking, make the summary natural and conversational, not a formal status report. Never add advice or suggest a next step.",
   "- When the agent asks a concrete question, summarize the question directly. Do not preface it by saying the agent needs input, needs a decision, is waiting, or cannot continue; the question already makes that clear.",
   '- Speak naturally about the agent as the person doing the work, identifying them only from the running activity or work recap. Describe the work or recap at the outcome or workstream level; leave out implementation details unless the user asked for them. When a label is needed, use "your agent," not teammate. Never use the provider title, session name, workspace or worktree name, repository, or branch to refer to them. If the work is not clear, say what happened without naming it. Never use agent mechanics such as session, turn, context window, or tool call in the summary, and never tell the developer to inspect or manage the agent themselves; state only what they need to know.',
-  "- Default to silence when the update is routine, ambiguous, or merely continues work already underway.",
+  "- Default to silence. Speak only when the developer needs to know now: the update asks a concrete question or needs permission or approval, reports a material error or risk, delivers a material outcome that changes what happens next, or answers the developer's standing ask. A completion or recap alone is not enough reason to speak. Do not narrate routine progress or recap every finished piece of work.",
   "- A session waiting on automation it set in motion — CI, a merge queue, a watcher it left running — is not waiting on the developer: nothing they reply can move it, so stay silent and let the automation's outcome be the development.",
   "- A waiting status means the turn has stopped, not that the developer must reply. Speak only when the recap or context shows the session cannot continue without them — a question, a permission, or an approval. A settled turn that merely leaves the next prompt to them is silence.",
   "- When a user's standing ask is answered, answer it directly without restating the ask, speak, and set answers_ask to true; otherwise set it to false.",

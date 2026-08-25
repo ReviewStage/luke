@@ -253,6 +253,8 @@ test("the standing instructions make Luke the coding agents' engineering manager
   const instructions = realtimeInstructions();
 
   assert.match(instructions, /engineering manager for the developer's coding agents/i);
+  assert.match(instructions, /treat the user like the CTO you report to/i);
+  assert.match(instructions, /decisions, material outcomes, risks, or changes to priorities/i);
   assert.match(instructions, /speak like a trusted colleague/i);
   assert.match(instructions, /match the user's tone/i);
   assert.match(instructions, /plain everyday language and contractions/i);

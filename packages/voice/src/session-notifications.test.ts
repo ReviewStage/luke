@@ -21,21 +21,28 @@ function waitingNotice(holdingForDeveloper: boolean): SessionNotice {
   };
 }
 
-test("finished work is described without agent mechanics or a false need", () => {
+function completionNotice(): SessionNotice {
+  const notice = waitingNotice(false);
+  return {
+    ...notice,
+    status: SESSION_NOTICE_STATUS.COMPLETE,
+  };
+}
+
+test("a routine finish does not bypass the attention evaluator", () => {
   const speech = sessionNoticeSpeech(waitingNotice(false), 2_000);
 
-  assert.match(speech.summary, /event: finished what it was working on/);
-  assert.match(speech.summary, /work recap: "Updated the notification behavior\."/);
-  assert.doesNotMatch(speech.summary, /Notification fix|dubai|luke|jarvis-like-voice/);
-  assert.doesNotMatch(
-    speech.summary,
-    /session|turn|needs (?:the developer|a decision)|message|pass along/,
-  );
+  assert.equal(speech, undefined);
+});
+
+test("a completed status does not bypass the attention evaluator", () => {
+  assert.equal(sessionNoticeSpeech(completionNotice(), 2_000), undefined);
 });
 
 test("a genuine hold asks for a decision without exposing agent mechanics", () => {
   const speech = sessionNoticeSpeech(waitingNotice(true), 2_000);
 
+  assert.ok(speech);
   assert.match(speech.summary, /event: needs a decision to continue/);
   assert.match(speech.summary, /can take a message now: yes/);
   assert.doesNotMatch(speech.summary, /session|turn|developer/);

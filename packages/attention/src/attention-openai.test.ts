@@ -37,6 +37,12 @@ test("the responses request is the shared construction with only the update vary
 
   assert.equal(request.model, "gpt-test");
   assert.equal(request.instructions, attentionInstructions());
+  assert.match(request.instructions, /engineering manager reporting to the developer as CTO/i);
+  assert.match(request.instructions, /apply a CTO relevance test/i);
+  assert.match(
+    request.instructions,
+    /decisions, material outcomes, risks, or changes to priorities/i,
+  );
   assert.match(request.instructions, /natural and conversational/i);
   assert.match(request.instructions, /not a formal status report/i);
   assert.match(
@@ -44,6 +50,8 @@ test("the responses request is the shared construction with only the update vary
     /when the agent asks a concrete question, summarize the question directly/i,
   );
   assert.match(request.instructions, /never add advice or suggest a next step/i);
+  assert.match(request.instructions, /a completion or recap alone is not enough reason to speak/i);
+  assert.match(request.instructions, /do not narrate routine progress or recap every finished/i);
   assert.match(
     request.instructions,
     /do not preface it by saying the agent needs input, needs a decision, is waiting, or cannot continue/i,
