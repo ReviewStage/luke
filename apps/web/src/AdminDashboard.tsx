@@ -1528,9 +1528,8 @@ function PageHeader({
       ) : null}
       {account ? (
         <div
-          className={`col-start-2 row-start-1 flex items-center min-[720px]:gap-4 ${hasControls ? "" : "min-[720px]:ml-auto"}`}
+          className={`col-start-2 row-start-1 flex items-center ${hasControls ? "" : "min-[720px]:ml-auto"}`}
         >
-          <span className="hidden h-8 w-px bg-border min-[720px]:inline-block" aria-hidden="true" />
           <AccountMenu account={account} onSignOut={onSignOut} />
         </div>
       ) : null}
