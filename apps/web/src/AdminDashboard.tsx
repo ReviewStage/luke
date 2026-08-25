@@ -301,7 +301,7 @@ interface ViewerAccount {
   image: string | undefined;
 }
 
-/** The page's one button treatment: sign out, refresh, and try again all wear it. */
+/** The page's one button treatment: sign out and try again both wear it. */
 const PLAIN_BUTTON =
   "inline-flex min-h-11 cursor-pointer items-center justify-center rounded-md border border-border bg-card px-3 py-1.5 text-sm font-medium transition-colors duration-150 hover:bg-muted disabled:cursor-default disabled:opacity-60 disabled:hover:bg-card";
 
@@ -335,14 +335,6 @@ const numberFormat = new Intl.NumberFormat("en-US");
 
 function formatNumber(value: number): string {
   return numberFormat.format(value);
-}
-
-function formatTimestamp(epochMs: number): string {
-  return new Date(epochMs).toLocaleString("en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "UTC",
-  });
 }
 
 /** An instant drawn as its UTC date alone, e.g. "Aug 3, 2026". */
@@ -380,18 +372,6 @@ const PARTIAL_DAY_OPACITY = 0.45;
 /** A tooltip label for one bar's day, saying so when that day is still filling. */
 function formatTooltipDay(day: string, partialDay: string | undefined): string {
   return day === partialDay ? `${formatDayTick(day)} (so far today)` : formatDayTick(day);
-}
-
-/** How often the header's age re-reads the clock, so a page left open says so. */
-const AGE_TICK_MS = 30_000;
-
-function formatAge(ageMs: number): string {
-  const minutes = Math.floor(ageMs / 60_000);
-  if (minutes < 1) return "moments ago";
-  if (minutes < 60) return `${minutes} min ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} h ago`;
-  return `${Math.floor(hours / 24)} d ago`;
 }
 
 const TREND_TONE = {
@@ -1558,35 +1538,10 @@ function PageHeader({
   );
 }
 
-/** A clock of its own, so the header's age stays true without refetching to learn it. */
-function useNow(intervalMs: number): number {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), intervalMs);
-    return () => window.clearInterval(timer);
-  }, [intervalMs]);
-  return now;
-}
-
-function GeneratedStamp({ generatedAt }: { generatedAt: number }): React.JSX.Element {
-  // The tick lives here, on the one component that draws relative time. At a
-  // screen root it would re-render every chart and table each 30 s to move
-  // this one string.
-  const now = useNow(AGE_TICK_MS);
-  return (
-    <span
-      className="font-mono text-xs text-muted-foreground"
-      title={`${formatTimestamp(generatedAt)} UTC`}
-    >
-      generated {formatAge(Math.max(0, now - generatedAt))}
-    </span>
-  );
-}
-
 /**
  * The failure a refresh landed on an answer that stays shown: the numbers on
- * screen are still the last ones actually read — the header's stamp keeps
- * describing them — and this band says the newer read did not arrive. The
+ * screen are still the last ones actually read, and this band says the newer
+ * read did not arrive. The
  * status region stands in the page whether or not it has anything to say,
  * because a live region inserted together with its news is announced by
  * nothing; it holds the announcement alone, with the button beside it, so a
@@ -2246,15 +2201,6 @@ function Dashboard({
           <>
             <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
             <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
-            <GeneratedStamp generatedAt={metrics.generatedAt} />
-            <button
-              type="button"
-              className={PLAIN_BUTTON}
-              onClick={onRefresh}
-              disabled={refreshing}
-            >
-              {refreshing ? "Refreshing…" : "Refresh"}
-            </button>
           </>
         }
       />
@@ -2613,20 +2559,7 @@ function UserDetailPage({
         title="Account"
         account={account}
         onSignOut={onSignOut}
-        controls={
-          <>
-            <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
-            <GeneratedStamp generatedAt={detail.generatedAt} />
-            <button
-              type="button"
-              className={PLAIN_BUTTON}
-              onClick={onRefresh}
-              disabled={refreshing}
-            >
-              {refreshing ? "Refreshing…" : "Refresh"}
-            </button>
-          </>
-        }
+        controls={<WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />}
       />
 
       <RefreshFailureNotice failure={refreshFailure} refreshing={refreshing} onRetry={onRefresh} />
@@ -2917,20 +2850,7 @@ function DayDetailPage({
         title="Day"
         account={account}
         onSignOut={onSignOut}
-        controls={
-          <>
-            <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
-            <GeneratedStamp generatedAt={detail.generatedAt} />
-            <button
-              type="button"
-              className={PLAIN_BUTTON}
-              onClick={onRefresh}
-              disabled={refreshing}
-            >
-              {refreshing ? "Refreshing…" : "Refresh"}
-            </button>
-          </>
-        }
+        controls={<HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />}
       />
 
       <RefreshFailureNotice failure={refreshFailure} refreshing={refreshing} onRetry={onRefresh} />
@@ -3518,15 +3438,6 @@ function UsersPage({
           <>
             <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
             <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
-            <GeneratedStamp generatedAt={list.generatedAt} />
-            <button
-              type="button"
-              className={PLAIN_BUTTON}
-              onClick={onRefresh}
-              disabled={refreshing}
-            >
-              {refreshing ? "Refreshing…" : "Refresh"}
-            </button>
           </>
         }
       />
