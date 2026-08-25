@@ -198,7 +198,9 @@ jobs:
       # resolving the previous release's self-consistent manifest instead of
       # a new manifest whose archive is incomplete. gh resolves a draft by
       # its pending tag, so a re-run's view and upload find it the same way
-      # they find a published release, and re-publishing one is a no-op.
+      # they find a published release, and the flip runs only while the
+      # release is still a draft, so re-running an old tag's workflow can
+      # never re-mark a superseded release Latest.
       - name: Publish GitHub Release
         if: ${{ github.event_name == 'push' && github.ref_type == 'tag' }}
         env:
@@ -220,7 +222,9 @@ jobs:
             "$DIST_DIR/$LATEST_DMG_ASSET_NAME" \
             "$DIST_DIR/$UPDATE_FEED_ASSET_NAME" \
             --clobber
-          gh release edit "$TAG" --draft=false --latest
+          if [[ "$(gh release view "$TAG" --json isDraft --jq .isDraft)" == "true" ]]; then
+            gh release edit "$TAG" --draft=false --latest
+          fi
 
       - name: Preserve rehearsal artifacts
         if: ${{ github.event_name == 'workflow_dispatch' }}

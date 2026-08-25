@@ -80,7 +80,9 @@ gh release upload "$TAG" \
     "$staging_directory/$ZIP_ASSET_NAME.sha256" \
     "$staging_directory/$UPDATE_FEED_ASSET_NAME" \
     --clobber
-gh release edit "$TAG" --draft=false --latest
+if [[ "$(gh release view "$TAG" --json isDraft --jq .isDraft)" == "true" ]]; then
+    gh release edit "$TAG" --draft=false --latest
+fi
 
 printf 'Published %s. The website reaches this build at:\n' "$TAG"
 printf '  https://github.com/ReviewStage/luke/releases/latest/download/%s\n' "$LATEST_DMG_ASSET_NAME"
