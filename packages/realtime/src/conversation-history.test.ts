@@ -34,13 +34,14 @@ function rosterSession(providerSessionId: string, title: string) {
   );
 }
 
-function announcement(summary: string): AttentionSpeech {
+function announcement(summary: string, historyText?: string): AttentionSpeech {
   return {
     providerId: "claude-code",
     providerSessionId: "session-a",
     disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
     source: ATTENTION_SPEECH_SOURCE.NOTICE_REQUEST,
     summary,
+    ...(historyText ? { historyText } : undefined),
     decidedAt: OBSERVED_AT,
   };
 }
@@ -92,12 +93,19 @@ test("the current-launch thread keeps every entry while model context stays rece
 
 test("an announcement's line carries its bounded words and validated identity", () => {
   const entry = announcementConversationEntry(
-    announcement("Claude Code finished checkout-service."),
+    announcement(
+      'provider: "Claude Code"; event: finished; work recap: "Checkout is ready."',
+      "Checkout is ready.",
+    ),
   );
 
   assert.ok(entry);
   assert.equal(entry.kind, CONVERSATION_ENTRY_KIND.ANNOUNCEMENT);
-  assert.equal(entry.words, "Claude Code finished checkout-service.");
+  assert.equal(
+    entry.words,
+    'provider: "Claude Code"; event: finished; work recap: "Checkout is ready."',
+  );
+  assert.equal(entry.displayWords, "Checkout is ready.");
   assert.deepEqual(entry.identity, {
     providerId: "claude-code",
     providerSessionId: "session-a",

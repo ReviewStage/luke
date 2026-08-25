@@ -158,6 +158,8 @@ export interface AttentionSpeech extends SessionIdentity {
   disposition: AttentionDisposition;
   source: AttentionSpeechSource;
   summary: string;
+  /** User-facing words for History when `summary` is structured model context. */
+  historyText?: string;
   decidedAt: number;
 }
 

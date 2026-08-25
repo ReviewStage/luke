@@ -53,6 +53,8 @@ export interface ConversationEntry {
    * about, not every word of it.
    */
   words: string;
+  /** Cleaner visible copy when the model context in `words` is structured. */
+  displayWords?: string;
   /**
    * The roster-validated session the line was about, when it was about one.
    * Only ever an identity the roster reported at the moment of the entry —
@@ -75,6 +77,8 @@ export function appendConversationThreadEntry(
   const words = boundedEntryWords(entry.words);
   if (!words) return entries;
   const appended: ConversationEntry = { kind: entry.kind, words };
+  const displayWords = entry.displayWords ? boundedEntryWords(entry.displayWords) : undefined;
+  if (displayWords) appended.displayWords = displayWords;
   if (entry.identity) appended.identity = entry.identity;
   return [...entries, appended];
 }
@@ -148,6 +152,7 @@ export function announcementConversationEntry(
   return {
     kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
     words,
+    ...(speech.historyText ? { displayWords: speech.historyText } : undefined),
     identity: { providerId: speech.providerId, providerSessionId: speech.providerSessionId },
   };
 }

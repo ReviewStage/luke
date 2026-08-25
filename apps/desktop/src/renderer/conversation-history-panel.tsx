@@ -26,9 +26,8 @@ export function historyEntryPresentation(kind: ConversationEntryKind): HistoryEn
     case CONVERSATION_ENTRY_KIND.SPOKEN_ASK:
       return { speaker: HISTORY_ENTRY_SPEAKER.YOU, label: "You" };
     case CONVERSATION_ENTRY_KIND.REPLY:
-      return { speaker: HISTORY_ENTRY_SPEAKER.LUKE, label: "Luke" };
     case CONVERSATION_ENTRY_KIND.ANNOUNCEMENT:
-      return { speaker: HISTORY_ENTRY_SPEAKER.EVENT, label: "Luke updated you" };
+      return { speaker: HISTORY_ENTRY_SPEAKER.LUKE, label: "Luke" };
     case CONVERSATION_ENTRY_KIND.ACT:
       return { speaker: HISTORY_ENTRY_SPEAKER.EVENT, label: "At your request" };
   }
@@ -39,7 +38,7 @@ function HistoryEntryRow({ entry }: { entry: ConversationEntry }): React.JSX.Ele
   return (
     <li className="history-entry" data-speaker={presentation.speaker}>
       <small className="visually-hidden">{presentation.label}</small>
-      <p>{entry.words}</p>
+      <p>{entry.displayWords ?? entry.words}</p>
     </li>
   );
 }
@@ -49,7 +48,7 @@ function keyedHistoryEntries(entries: readonly ConversationEntry[]) {
   const occurrences = new Map<string, number>();
   return entries.map((entry) => {
     const identity = entry.identity;
-    const base = `${entry.kind}:${entry.words}:${identity?.providerId ?? ""}:${identity?.providerSessionId ?? ""}`;
+    const base = `${entry.kind}:${entry.words}:${entry.displayWords ?? ""}:${identity?.providerId ?? ""}:${identity?.providerSessionId ?? ""}`;
     const occurrence = (occurrences.get(base) ?? 0) + 1;
     occurrences.set(base, occurrence);
     return { entry, key: `${base}:${occurrence}` };

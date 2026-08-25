@@ -55,6 +55,7 @@ test("a concrete question is announced with the decision itself", () => {
   assert.match(speech.summary, /work: "Notification fix"/);
   assert.match(speech.summary, /event: needs a decision to continue/);
   assert.match(speech.summary, /decision: "Should session replay capture screenshots\?"/);
+  assert.equal(speech.historyText, "Should session replay capture screenshots?");
   assert.match(speech.summary, /can take a message now: yes/);
   assert.doesNotMatch(speech.summary, /\bturn\b|\bdeveloper\b/);
 });
@@ -71,5 +72,6 @@ test("a permission hold is announced with the action awaiting approval", () => {
 
   assert.ok(speech);
   assert.match(speech.summary, /permission context: "Bash: pnpm test"/);
+  assert.equal(speech.historyText, "Should the test plan cover live audio?");
   assert.doesNotMatch(speech.summary, /test plan cover live audio/);
 });

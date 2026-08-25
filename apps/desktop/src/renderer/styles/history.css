@@ -1,5 +1,5 @@
 /* A compact chat thread: sent and received messages use the familiar two-sided
-   bubble grammar, while actions and announcements sit centered between them. */
+   bubble grammar, while the developer's requested actions sit between them. */
 .history-view {
   display: flex;
   min-height: 0;

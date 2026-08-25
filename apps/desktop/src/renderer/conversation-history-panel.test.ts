@@ -20,19 +20,41 @@ test("conversation asks are shown as the developer's own words", () => {
   });
 });
 
-test("Luke replies and non-dialogue events stay distinct", () => {
+test("Luke replies and announcements use the received-message side", () => {
   assert.deepEqual(historyEntryPresentation(CONVERSATION_ENTRY_KIND.REPLY), {
     speaker: HISTORY_ENTRY_SPEAKER.LUKE,
     label: "Luke",
   });
-  assert.equal(
-    historyEntryPresentation(CONVERSATION_ENTRY_KIND.ANNOUNCEMENT).speaker,
-    HISTORY_ENTRY_SPEAKER.EVENT,
-  );
+  assert.deepEqual(historyEntryPresentation(CONVERSATION_ENTRY_KIND.ANNOUNCEMENT), {
+    speaker: HISTORY_ENTRY_SPEAKER.LUKE,
+    label: "Luke",
+  });
+});
+
+test("session acts remain quiet events between messages", () => {
   assert.equal(
     historyEntryPresentation(CONVERSATION_ENTRY_KIND.ACT).speaker,
     HISTORY_ENTRY_SPEAKER.EVENT,
   );
+});
+
+test("an announcement shows its readable copy instead of model context", () => {
+  const markup = renderToStaticMarkup(
+    createElement(ConversationHistoryPanel, {
+      entries: [
+        {
+          kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
+          words: 'provider: "Codex"; event: finished; work recap: "Checkout is ready."',
+          displayWords: "Checkout is ready.",
+        },
+      ],
+      onClear: () => undefined,
+    }),
+  );
+
+  assert.match(markup, /data-speaker="luke"/);
+  assert.match(markup, />Checkout is ready\.<\/p>/);
+  assert.doesNotMatch(markup, /provider:|work recap:/);
 });
 
 test("conversation history is blocked from optional panel recordings", () => {
