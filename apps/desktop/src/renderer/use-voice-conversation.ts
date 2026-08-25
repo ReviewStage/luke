@@ -273,11 +273,14 @@ export function voiceRestartAction(input: {
 }
 
 /**
- * The evaluator answer to a standing ask the developer made themselves may
- * open a speak-only call of Luke's own to say it.
+ * Every attention sentence already passed the evaluator's CTO-relevance gate,
+ * so each may open a speak-only call of Luke's own to be heard. The call stays
+ * tool-free; this permission changes only whether the approved words wait for
+ * an existing conversation.
  */
 const ANNOUNCER_SPEECH_SOURCES: ReadonlySet<string> = new Set([
   ATTENTION_SPEECH_SOURCE.STATUS_EDGE,
+  ATTENTION_SPEECH_SOURCE.EVALUATOR,
   ATTENTION_SPEECH_SOURCE.NOTICE_REQUEST,
 ]);
 
@@ -348,9 +351,8 @@ export function replyIssueMentions(input: {
 }
 
 /**
- * The other half of {@link announcerNotices}: an unbidden evaluator summary is
- * a model's words on a session nobody asked about, so it keeps its original
- * bound — spoken only on a call the developer opened themselves.
+ * The other half of {@link announcerNotices}. Kept as a separate selector for
+ * wire compatibility with an older source that may not earn the announcer.
  */
 export function evaluatorSummaries(speech: readonly AttentionSpeech[]): AttentionSpeech[] {
   return speech.filter((item) => !ANNOUNCER_SPEECH_SOURCES.has(item.source));
@@ -1224,10 +1226,9 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       }
       const notices = announcerNotices(speech);
       if (notices.length > 0) ensureAnnouncer().enqueue(notices);
-      // Evaluator summaries may only ride the developer's own call. The
-      // announcer paces them by the READY edge like everything else it says,
-      // so a batch of several — or one arriving while Luke is mid-reply — is
-      // spoken as the turns free up instead of being refused and lost.
+      // Any source not entitled to open Luke's call may still ride the
+      // developer's own. The announcer paces it by the READY edge like every
+      // other sentence, so a batch is not refused or lost.
       if (!voiceSession.current?.microphoneCall) return;
       const summaries = evaluatorSummaries(speech);
       if (summaries.length > 0) ensureAnnouncer().enqueueRide(summaries);

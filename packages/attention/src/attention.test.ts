@@ -229,6 +229,26 @@ test("reviews only changed sessions and suppresses a repeated decision", async (
   assert.equal(evaluator.updates.length, 2);
 });
 
+test("a speaking decision deferred by the caller can be reviewed again", async () => {
+  const evaluator = evaluatorReturning(speakDecision());
+  const reviewer = new SessionAttentionReviewer({
+    evaluator,
+    now: () => DECIDED_AT,
+  });
+  const working = session(claude, "meeting-held");
+
+  const [held] = await reviewer.review([working]);
+  assert.ok(held);
+  assert.equal(held.outcome, ATTENTION_REVIEW_OUTCOME.DECIDED);
+  assert.deepEqual(await reviewer.review([working]), []);
+
+  reviewer.reconsider([held]);
+
+  const [released] = await reviewer.review([working]);
+  assert.equal(released?.outcome, ATTENTION_REVIEW_OUTCOME.DECIDED);
+  assert.equal(evaluator.updates.length, 2);
+});
+
 test("history arriving late is consumed silently and never resurfaces", async () => {
   const evaluator = evaluatorReturning(speakDecision());
   const reviewer = new SessionAttentionReviewer({ evaluator, now: () => DECIDED_AT });

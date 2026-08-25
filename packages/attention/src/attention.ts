@@ -373,6 +373,15 @@ export class AttentionSpeechLedger {
     this.#spoken.set(normalizedIdentity.providerId, providerRecords);
   }
 
+  /** Forgets a decision the caller could not deliver after all. */
+  forget(identity: SessionIdentity): void {
+    const normalizedIdentity = normalizeSessionIdentity(identity);
+    const providerRecords = this.#spoken.get(normalizedIdentity.providerId);
+    if (!providerRecords) return;
+    providerRecords.delete(normalizedIdentity.providerSessionId);
+    if (providerRecords.size === 0) this.#spoken.delete(normalizedIdentity.providerId);
+  }
+
   /** Drops records for sessions a provider no longer reports. */
   retain(identities: readonly SessionIdentity[]): void {
     const live = new Map<string, Set<string>>();
@@ -624,6 +633,19 @@ export class SessionAttentionReviewer {
   }
 
   /**
+   * Makes an approved update eligible for a fresh review when its caller had
+   * to defer delivery. Forgetting both the speaking record and observation
+   * baseline means the next pass reasons about the session as it stands then,
+   * rather than replaying words that may have gone stale while held.
+   */
+  reconsider(identities: readonly SessionIdentity[]): void {
+    for (const identity of identities) {
+      this.#ledger.forget(identity);
+      this.#reopen(identity);
+    }
+  }
+
+  /**
    * Decides whether an update stays derivable for a later pass.
    *
    * A superseded decision always does: the state changed, so the update cannot
@@ -676,11 +698,11 @@ export class SessionAttentionReviewer {
    * fresh review at the cost of a `previousStatus` the reviewer can no longer
    * honestly report.
    */
-  #reopen(session: Session): void {
-    const providerSessions = this.#observed.get(session.providerId);
+  #reopen(identity: SessionIdentity): void {
+    const providerSessions = this.#observed.get(identity.providerId);
     if (!providerSessions) return;
-    providerSessions.delete(session.providerSessionId);
-    if (providerSessions.size === 0) this.#observed.delete(session.providerId);
+    providerSessions.delete(identity.providerSessionId);
+    if (providerSessions.size === 0) this.#observed.delete(identity.providerId);
   }
 
   async #reviewUpdate(update: AttentionUpdate): Promise<AttentionReview> {
