@@ -58,6 +58,11 @@ test("the responses request is the shared construction with only the update vary
   );
   assert.match(
     request.instructions,
+    /describe the work or recap at the outcome or workstream level/i,
+  );
+  assert.match(request.instructions, /leave out implementation details unless the user asked/i);
+  assert.match(
+    request.instructions,
     /never use the provider title, session name, workspace or worktree/i,
   );
   assert.doesNotMatch(request.input, /Provider title:|Workspace:/);

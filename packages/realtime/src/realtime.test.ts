@@ -261,6 +261,11 @@ test("the standing instructions make Luke the coding agents' engineering manager
   assert.match(instructions, /treat the roster as private reference, not a report/i);
   assert.match(instructions, /name each piece of work in no more than six words/i);
   assert.match(instructions, /using the activity or recap/i);
+  assert.match(
+    instructions,
+    /describe what an agent is working on or recapping at the outcome or workstream level/i,
+  );
+  assert.match(instructions, /leave out implementation details unless the user asks/i);
   assert.match(instructions, /refer to people only by that work/i);
   assert.match(instructions, /never by a provider title, session name, workspace or worktree/i);
   assert.match(
@@ -573,7 +578,7 @@ test("a proactive update is voiced as the sentence attention already approved", 
   assert.match(instructionsOf(request), /read the update/i);
 });
 
-test("a status update is summarized conversationally", () => {
+test("a status update is summarized conversationally without narrating the update", () => {
   const events = proactiveSpeechEvents({
     providerId: "claude-code",
     providerSessionId: "session-a",
@@ -583,7 +588,7 @@ test("a status update is summarized conversationally", () => {
     decidedAt: DECIDED_AT,
   });
 
-  assert.match(instructionsOf(events[1]), /one or two short, natural sentences/i);
+  assert.match(instructionsOf(events[1]), /one short, natural sentence/i);
   assert.match(instructionsOf(events[1]), /not a formal status report/i);
   assert.match(
     instructionsOf(events[1]),
@@ -595,6 +600,10 @@ test("a status update is summarized conversationally", () => {
   );
   assert.match(instructionsOf(events[1]), /never tell the developer to visit or manage the agent/i);
   assert.match(instructionsOf(events[1]), /never mention that the agent cannot take a message/i);
+  assert.match(
+    instructionsOf(events[1]),
+    /never comment on the update itself, missing details, or that there is nothing else to say/i,
+  );
   assert.match(
     instructionsOf(events[1]),
     /ask a brief, natural question about whether they want you to pass something along/i,
@@ -610,6 +619,11 @@ test("a status update is summarized conversationally", () => {
     instructionsOf(events[1]),
     /identifying them only from the work recap, event, or error/i,
   );
+  assert.match(
+    instructionsOf(events[1]),
+    /describe the work or recap at the outcome or workstream level/i,
+  );
+  assert.match(instructionsOf(events[1]), /leave out implementation details unless asked/i);
   assert.match(
     instructionsOf(events[1]),
     /never use a provider title, session name, workspace or worktree/i,

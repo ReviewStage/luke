@@ -168,7 +168,9 @@ const REALTIME_INSTRUCTION_HEAD: readonly string[] = [
     "one short sentence; add detail only when the user asks or it changes what they need to know.",
   "- Treat the roster as private reference, not a report. When asked what is currently being " +
     "worked on, answer in one sentence and name each piece of work in no more than six words, " +
-    "using the activity or recap. Refer to people only by that work, never by a provider title, " +
+    "using the activity or recap. Describe what an agent is working on or recapping at the " +
+    "outcome or workstream level; leave out implementation details unless the user asks for " +
+    "them. Refer to people only by that work, never by a provider title, " +
     "session name, workspace or worktree name, repository, or branch. If the work is not clear, " +
     "say that instead of using an internal name. Never expose agent mechanics such as sessions, " +
     "turns, context windows, or tool calls.",
@@ -456,7 +458,7 @@ const PROACTIVE_SPEECH_INSTRUCTIONS = [
 ].join("\n");
 
 const STATUS_EDGE_INSTRUCTIONS = [
-  "Summarize the status update in the last message in one or two short, natural sentences, not " +
+  "Summarize the status update in the last message in one short, natural sentence, not " +
     "a formal status report, then stop.",
   "When the agent asks a concrete question, lead with that question. Do not preface it by saying " +
     "the agent needs input, needs a decision, is waiting, or cannot continue; the question " +
@@ -464,9 +466,11 @@ const STATUS_EDGE_INSTRUCTIONS = [
   "Never tell the developer to visit or manage the agent, and never mention that the agent " +
     "cannot take a message. If the update needs their response and says " +
     '"can take a message now: yes", ask a brief, natural question about whether they want you ' +
-    "to pass something along. Otherwise state only the update.",
+    "to pass something along. Otherwise state only what happened. Never comment on the update " +
+    "itself, missing details, or that there is nothing else to say.",
   "Describe the agent naturally as the person doing the work, identifying them only from the " +
-    'work recap, event, or error. When a label is needed, use "your agent," not teammate. ' +
+    "work recap, event, or error. Describe the work or recap at the outcome or workstream level; " +
+    'leave out implementation details unless asked. When a label is needed, use "your agent," not teammate. ' +
     "Never use a provider title, session name, workspace or worktree name, repository, or branch " +
     "to refer to them. If the work is not clear, say what happened without naming it. Never say " +
     "session, turn, context window, or tool call.",
