@@ -88,9 +88,8 @@ export function ConversationHistoryPanel({
       id={panelPanelId(PANEL_TAB.HISTORY)}
       aria-labelledby={panelTabId(PANEL_TAB.HISTORY)}
     >
-      <header className="history-header">
-        <p>This launch's conversation stays in memory until you clear it or quit.</p>
-        {entries.length > 0 ? (
+      {entries.length > 0 ? (
+        <header className="history-header">
           <span className="history-clear-controls">
             {confirmingClear ? (
               <button
@@ -115,12 +114,11 @@ export function ConversationHistoryPanel({
               {confirmingClear ? "Clear history" : "Clear"}
             </button>
           </span>
-        ) : null}
-      </header>
+        </header>
+      ) : null}
       {entries.length === 0 ? (
         <div className="history-empty">
           <strong>No conversation yet</strong>
-          <span>Your next typed or spoken exchange with Luke will appear here.</span>
         </div>
       ) : (
         <ol className="history-list" ref={list}>

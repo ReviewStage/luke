@@ -13,17 +13,8 @@
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  justify-content: space-between;
-  gap: 14px;
+  justify-content: flex-end;
   padding: 0 2px;
-}
-
-.history-header p {
-  max-width: 58ch;
-  margin: 0;
-  color: var(--text-tertiary);
-  font-size: 10.5px;
-  line-height: 1.45;
 }
 
 .history-clear-controls {
@@ -143,11 +134,4 @@
 .history-empty strong {
   color: var(--text-primary);
   font-size: 12px;
-}
-
-.history-empty span {
-  max-width: 42ch;
-  color: var(--text-tertiary);
-  font-size: 10.5px;
-  line-height: 1.45;
 }

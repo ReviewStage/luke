@@ -44,4 +44,17 @@ test("conversation history is blocked from optional panel recordings", () => {
   );
 
   assert.match(markup, /class="history-view ph-no-capture"/);
+  assert.doesNotMatch(markup, /stays in memory|typed or spoken exchange/);
+});
+
+test("the empty history reports only its state", () => {
+  const markup = renderToStaticMarkup(
+    createElement(ConversationHistoryPanel, {
+      entries: [],
+      onClear: () => undefined,
+    }),
+  );
+
+  assert.match(markup, />No conversation yet</);
+  assert.doesNotMatch(markup, /history-header|next typed|stays in memory/);
 });
