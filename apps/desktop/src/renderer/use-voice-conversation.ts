@@ -307,6 +307,14 @@ export function speechByDecision(speech: readonly AttentionSpeech[]): readonly A
   return [...speech].sort((a, b) => a.decidedAt - b.decidedAt);
 }
 
+/** A transcription belongs only to the same visible history generation as its turn. */
+export function spokenAskBelongsToConversation(
+  markGeneration: number | undefined,
+  conversationGeneration: number,
+): boolean {
+  return markGeneration === undefined || markGeneration === conversationGeneration;
+}
+
 /**
  * The sessions the replies being spoken are about, for the surface to draw
  * pressable previews of. An announcement already carries its one
@@ -584,6 +592,8 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
    * goes with its teardown.
    */
   const conversationRef = useRef<readonly ConversationEntry[]>([]);
+  /** Rises when Clear retires every event that began before that press. */
+  const conversationGenerationRef = useRef(0);
   // State is the ref's identical drawn copy, so History retains the whole
   // current launch even though a call receives only the recent context slice.
   const [conversationHistory, setConversationHistory] = useState<readonly ConversationEntry[]>([]);
@@ -608,6 +618,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   }, []);
 
   const clearConversationHistory = useCallback(() => {
+    conversationGenerationRef.current += 1;
     conversationRef.current = [];
     setConversationHistory([]);
     voiceSession.current?.updateConversation([]);
@@ -621,7 +632,9 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
    * next commit, so a transcription that never arrives leaves nothing stale
    * standing.
    */
-  const spokenTurnMarkRef = useRef<{ after: ConversationEntry | undefined } | undefined>(undefined);
+  const spokenTurnMarkRef = useRef<
+    { after: ConversationEntry | undefined; generation: number } | undefined
+  >(undefined);
   /** The status an edge is read against, for the commit mark above. */
   const previousVoiceStatus = useRef<RealtimeStatus>(REALTIME_STATUS.IDLE);
 
@@ -637,6 +650,9 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   const rememberSpokenAsk = useCallback((transcript: string) => {
     const mark = spokenTurnMarkRef.current;
     spokenTurnMarkRef.current = undefined;
+    if (!spokenAskBelongsToConversation(mark?.generation, conversationGenerationRef.current)) {
+      return;
+    }
     conversationRef.current = mark
       ? insertSpokenAskThreadEntry(conversationRef.current, transcript, mark.after)
       : appendConversationThreadEntry(conversationRef.current, {
@@ -1224,7 +1240,10 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       previousVoiceStatus.current === REALTIME_STATUS.LISTENING &&
       voiceStatus === REALTIME_STATUS.RESPONDING
     ) {
-      spokenTurnMarkRef.current = { after: conversationRef.current.at(-1) };
+      spokenTurnMarkRef.current = {
+        after: conversationRef.current.at(-1),
+        generation: conversationGenerationRef.current,
+      };
     }
     previousVoiceStatus.current = voiceStatus;
     // Any settled status ends the wait the press started, however it ended:

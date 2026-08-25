@@ -2031,6 +2031,34 @@ test("a new call after teardown re-seeds the accumulated history", async () => {
   assert.match(itemText(items[0]), /failed in payments/);
 });
 
+test("clearing history deletes its live model-context item", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.session.updateConversation(
+    conversationEntries({ kind: CONVERSATION_ENTRY_KIND.REPLY, words: "Earlier words." }),
+  );
+  await armDeveloperTurn(context);
+  const historyItem = context.session.liveContextItemIds.get(CONTEXT_ITEM_KIND.CONVERSATION);
+  assert.ok(historyItem);
+
+  context.session.stopSpeaking();
+  context.session.updateConversation([]);
+  const sentBefore = context.sent.length;
+  await armDeveloperTurn(context);
+
+  assert.equal(
+    context.sent.slice(sentBefore).some(
+      (event) =>
+        event.type === CONVERSATION_ITEM_DELETE &&
+        // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+        (event as { item_id?: string }).item_id === historyItem,
+    ),
+    true,
+  );
+  assert.equal(context.session.liveContextItemIds.has(CONTEXT_ITEM_KIND.CONVERSATION), false);
+  assert.deepEqual(contextItems(context, "[recent conversation", sentBefore), []);
+});
+
 test("a reply ending at teardown writes nothing back into the retired call", async () => {
   const context = harness({ writeBackOnReplyEnded: true });
   await context.session.connect();

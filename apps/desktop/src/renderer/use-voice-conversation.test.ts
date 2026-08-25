@@ -26,6 +26,7 @@ import {
   replyIssueMentions,
   replyMentions,
   speechByDecision,
+  spokenAskBelongsToConversation,
   talkKeyPress,
   talkOpeningHolds,
   typedAskHolds,
@@ -37,6 +38,12 @@ import {
   waveformVoice,
 } from "./use-voice-conversation";
 import { WAVEFORM_VOICE } from "./waveform";
+
+test("a delayed transcription cannot repopulate history after Clear", () => {
+  assert.equal(spokenAskBelongsToConversation(3, 4), false);
+  assert.equal(spokenAskBelongsToConversation(4, 4), true);
+  assert.equal(spokenAskBelongsToConversation(undefined, 4), true);
+});
 
 test("the meter follows whoever is actually talking", () => {
   assert.equal(waveformVoice(REALTIME_STATUS.RESPONDING), WAVEFORM_VOICE.LUKE);

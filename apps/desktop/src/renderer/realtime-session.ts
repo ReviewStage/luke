@@ -148,10 +148,15 @@ const TRUNCATION_PAST_AUDIO_END = /^Audio content of \d+ms is already shorter th
  * unchanged answer from a fresh one, and how to build the item once it has a
  * name to occupy.
  */
-interface PendingContext {
-  text: string;
-  build: (itemId: string) => readonly WireRecord[];
-}
+type PendingContext =
+  | {
+      text: string;
+      build: (itemId: string) => readonly WireRecord[];
+    }
+  | {
+      /** This kind should occupy no item once the next turn flushes context. */
+      text: undefined;
+    };
 
 /** A context item this call put in the conversation, and what it says. */
 interface LiveContext {
@@ -2050,7 +2055,10 @@ export class RealtimeVoiceSession {
    */
   #rememberConversation(): void {
     const text = conversationHistoryText(this.#conversationEntries, this.#sessions);
-    if (text === undefined) return;
+    if (text === undefined) {
+      this.#forgetContext(CONTEXT_ITEM_KIND.CONVERSATION);
+      return;
+    }
     this.#rememberContext(CONTEXT_ITEM_KIND.CONVERSATION, text, (itemId) =>
       conversationContextEvents(text, itemId),
     );
@@ -2115,6 +2123,11 @@ export class RealtimeVoiceSession {
     this.#contextPending.set(kind, { text, build });
   }
 
+  /** Holds the absence of one context kind until the next developer turn. */
+  #forgetContext(kind: ContextItemKind): void {
+    this.#contextPending.set(kind, { text: undefined });
+  }
+
   /**
    * Puts the context a turn is about to be answered from into the conversation,
    * each kind replacing whatever it said before.
@@ -2140,6 +2153,13 @@ export class RealtimeVoiceSession {
       const pending = this.#contextPending.get(kind);
       if (!pending) continue;
       const live = this.#contextLive.get(kind);
+      if (pending.text === undefined) {
+        if (!live) continue;
+        this.#contextSequence += 1;
+        this.#supersede(live.itemId);
+        this.#contextLive.delete(kind);
+        continue;
+      }
       // The history is seeded once per call. It exists to bridge the calls
       // that came before this one, and every turn taken since it went in is
       // already held by this call as real conversation items — so superseding

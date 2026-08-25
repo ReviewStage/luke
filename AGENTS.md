@@ -302,7 +302,7 @@ Trust constraints:
   posture Luke keeps. The one explicit blocked subtree is History: its root
   carries the recording library's fixed blocking class, so the conversation's
   words do not leave the machine in a recording. That view retains every
-  bounded line from the current renderer lifetime until the developer clears
+  bounded line from the current renderer lifetime, including session acts, until the developer clears
   it or quits, while only the 20 most recent lines enter model context. There
   is no general masking module to consult and nothing that makes any other new
   component silent by construction, so what a recording may see is decided by
