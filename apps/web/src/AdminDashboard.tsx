@@ -463,7 +463,9 @@ function StatGroup({
       ? "divide-y min-[720px]:grid-cols-3 min-[720px]:divide-x min-[720px]:divide-y-0"
       : "divide-y min-[520px]:grid-cols-2 min-[520px]:divide-x min-[520px]:divide-y-0";
   return (
-    <div className={`grid overflow-hidden rounded-lg border border-border bg-card ${layout}`}>
+    <div
+      className={`grid divide-border overflow-hidden rounded-lg border border-border bg-card ${layout}`}
+    >
       {children}
     </div>
   );
@@ -1588,9 +1590,11 @@ function PageHeader({
           second row. This keeps the account trigger from becoming a stray
           button after whichever control happened to wrap first. */}
       <h1 className="col-start-1 row-start-1 text-lg font-semibold tracking-[-0.01em]">{title}</h1>
-      <div className="col-span-2 row-start-2 flex flex-wrap items-center gap-3 min-[720px]:ml-auto min-[720px]:gap-4">
-        {controls}
-      </div>
+      {controls !== null && controls !== undefined ? (
+        <div className="col-span-2 row-start-2 flex flex-wrap items-center gap-3 min-[720px]:ml-auto min-[720px]:gap-4">
+          {controls}
+        </div>
+      ) : null}
       {account ? (
         <div className="col-start-2 row-start-1 flex items-center min-[720px]:gap-4">
           <span className="hidden h-8 w-px bg-border min-[720px]:inline-block" aria-hidden="true" />
