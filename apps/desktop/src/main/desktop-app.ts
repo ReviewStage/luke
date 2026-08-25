@@ -285,6 +285,11 @@ const providerRegistry = providerRegistrations({
   readApiKey: (providerId) => settingsStore.readApiKey(providerId),
   observationHookInstallation: (providerId) => observationHooks.installation(providerId),
   codexCloudAdapter,
+  // A Replicas workspace opens in the Replicas desktop app when the OS has a
+  // handler for its scheme, and on the web dashboard otherwise. This asks
+  // LaunchServices the very question the open will ask it, so the address a
+  // row carries and the app that answers its press can never disagree.
+  replicasDesktopAppPresent: () => app.getApplicationNameForProtocol("replicas://open") !== "",
 });
 // The record enforces completeness; the shared list preserves provider order.
 const orderedRegistrations: readonly ProviderRegistration[] = PROVIDER_ID_LIST.map(

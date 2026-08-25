@@ -348,6 +348,7 @@ function adapterFor(
     readApiKey?: () => Promise<string | undefined>;
     now?: () => number;
     minimumRefreshIntervalMs?: number;
+    desktopAppPresent?: () => boolean;
   } = {},
 ): ReplicasSessionAdapter {
   const apiKey = "apiKey" in overrides ? overrides.apiKey : TEST_API_KEY;
@@ -357,6 +358,9 @@ function adapterFor(
     fetch,
     now: overrides.now ?? (() => TEST_TIME),
     minimumRefreshIntervalMs: overrides.minimumRefreshIntervalMs ?? 0,
+    ...(overrides.desktopAppPresent
+      ? { desktopAppPresent: overrides.desktopAppPresent }
+      : undefined),
   });
 }
 
@@ -424,7 +428,7 @@ test("observes an active workspace titled by the name Replicas gave it", async (
   // Replicas mark rides as the app association carrying the same address.
   assert.deepEqual(observations[0]?.detail, {
     repository: "luke",
-    link: "https://tryreplicas.com/home/workspace/workspace-active",
+    link: "https://replicas.dev/home/workspace/workspace-active",
   });
   // Workspace-scoped, like Superset's: inside a tray the manager is named
   // once on the header, and only a lone chat's row keeps the chip.
@@ -433,9 +437,36 @@ test("observes an active workspace titled by the name Replicas gave it", async (
       id: "replicas",
       displayName: "Replicas",
       scope: "workspace",
-      link: "https://tryreplicas.com/home/workspace/workspace-active",
+      link: "https://replicas.dev/home/workspace/workspace-active",
     },
   ]);
+});
+
+test("addresses the desktop app while the OS has a handler for its scheme", async () => {
+  const api = fakeReplicasApi([
+    {
+      id: "workspace-active",
+      name: "fix-login-timeout",
+      status: TEST_STATUS.ACTIVE,
+      createdAt: TEST_TIME - 60_000,
+      lastActivityAt: TEST_TIME - 30_000,
+    },
+  ]);
+  // The deep link carries the dashboard path as the one query parameter the
+  // app's handler reads, so it opens exactly the page the web address does.
+  const desktopLink = "replicas://open?path=%2Fhome%2Fworkspace%2Fworkspace-active";
+  let handlerRegistered = false;
+  const adapter = adapterFor(api.fetch, { desktopAppPresent: () => handlerRegistered });
+
+  const webPass = await adapter.observe();
+  handlerRegistered = true;
+  const desktopPass = await adapter.observe();
+
+  // The probe answers per pass, so installing the app applies on the next
+  // one, and the row and its mark always carry the same address.
+  assert.equal(webPass[0]?.detail?.link, "https://replicas.dev/home/workspace/workspace-active");
+  assert.equal(desktopPass[0]?.detail?.link, desktopLink);
+  assert.equal(desktopPass[0]?.applications?.[0]?.link, desktopLink);
 });
 
 test("falls back to the repository for a workspace the list did not name", async () => {
@@ -1205,7 +1236,7 @@ test("reports the newest pull request as the workspace's published change", asyn
   // on the row lands on the workspace itself.
   assert.equal(
     observations[0]?.detail?.link,
-    "https://tryreplicas.com/home/workspace/workspace-published",
+    "https://replicas.dev/home/workspace/workspace-published",
   );
   assert.equal(observations[1]?.detail?.change, undefined);
 });

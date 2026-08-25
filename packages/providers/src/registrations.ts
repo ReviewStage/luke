@@ -50,6 +50,14 @@ export interface ProviderRegistrationOptions {
    * settings read is the reference the composite observes with.
    */
   codexCloudAdapter: CodexCloudSessionAdapter;
+  /**
+   * Whether this machine currently registers a handler for the Replicas
+   * desktop app's URL scheme, answered by the caller because only the
+   * operating system knows — it is the same question the OS answers when a
+   * row's address is handed to it. Absent, Replicas addresses stay the web
+   * dashboard's.
+   */
+  replicasDesktopAppPresent?: () => boolean;
   now?: () => number;
 }
 
@@ -201,6 +209,9 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
     [PROVIDER_ID.REPLICAS]: {
       adapter: new ReplicasSessionAdapter({
         readApiKey: () => options.readApiKey(CREDENTIAL_PROVIDER_ID.REPLICAS),
+        ...(options.replicasDesktopAppPresent
+          ? { desktopAppPresent: options.replicasDesktopAppPresent }
+          : undefined),
       }),
       credential: CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.REPLICAS],
     },
