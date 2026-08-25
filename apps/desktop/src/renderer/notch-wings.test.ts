@@ -37,6 +37,23 @@ test("a wing too narrow for the arithmetic still shows one mark", () => {
   assert.equal(wingMarkCapacity(0), 1);
 });
 
+test("while Luke speaks the meter reserves its own room beside the face", () => {
+  // Both reservations spend the same 29 + 26 + 14 the plain arithmetic does,
+  // plus a second 26 for the meter now standing beside the face too.
+  assert.equal(wingMarkCapacity(peekSideWidth(210), true), 2);
+  assert.equal(wingMarkCapacity(panelSideWidth(210), true), 6);
+});
+
+test("the meter's reservation never grows the capacity, only shrinks it", () => {
+  for (const sideWidth of [0, 40, peekSideWidth(210), panelSideWidth(210), panelSideWidth(0)]) {
+    assert.ok(wingMarkCapacity(sideWidth, true) <= wingMarkCapacity(sideWidth));
+  }
+});
+
+test("a wing too narrow for the meter's own room still shows one mark", () => {
+  assert.equal(wingMarkCapacity(0, true), 1);
+});
+
 const providers = (...ids: string[]): ProviderTally[] =>
   ids.map((providerId) => ({ providerId, provider: providerId, total: 1, attention: 0 }));
 

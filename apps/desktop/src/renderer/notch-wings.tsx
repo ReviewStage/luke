@@ -83,7 +83,9 @@ interface NotchWingsProps {
  * limit of three comes from: the face and its gap cost 26px of the 95px
  * between the wing's insets, and each mark past the first costs 21px of the
  * 55px that remain. The panel's side is what is left of `--panel-width` after
- * the housing, so it holds roughly twice as many.
+ * the housing, so it holds roughly twice as many. While Luke is speaking the
+ * second argument reserves the same 26px again for the meter standing beside
+ * the face, so the marks give up a slot rather than the meter drawing over one.
  */
 export { wingMarkCapacity } from "@sidecar/panel";
 
@@ -228,6 +230,11 @@ export function NotchWings({
     ...(meterVoice ? { turn: meterVoice } : undefined),
     hasAudioSignal: meterShown,
   });
+  // Luke's own turn is the one stretch that does not cost the marks their
+  // place: the developer's turn already reads as "you are being heard" from
+  // the meter alone, but Luke talking over a strip that just went blank reads
+  // as the sessions vanishing rather than as Luke speaking.
+  const lukeSpeaking = meterShown && meterVoice === WAVEFORM_VOICE.LUKE;
   // The box the hover is read against, not the face itself: the drawing is
   // remounted for every play, and the hover has to survive the trick it fires.
   const faceElement = useRef<HTMLSpanElement>(null);
@@ -254,10 +261,12 @@ export function NotchWings({
   // The wing is bounded by the shape its state draws, so its capacity is too:
   // the panel's side holds more marks than the peek's, and every other state
   // keeps the peek's capacity because that is the set the next peek unfolds.
+  // While Luke is speaking the meter stands beside the face too, so the marks
+  // give up whatever room it costs rather than letting it draw across them.
   const capacity =
     presentation === PANEL_PRESENTATION.PANEL
-      ? wingMarkCapacity((PANEL_WIDTH - housingWidth) / 2)
-      : wingMarkCapacity(peekSideWidth(housingWidth));
+      ? wingMarkCapacity((PANEL_WIDTH - housingWidth) / 2, lukeSpeaking)
+      : wingMarkCapacity(peekSideWidth(housingWidth), lukeSpeaking);
   // Memoized because the roster below notices a new list by identity: the
   // slots may only change when what they summarize does, not on every render
   // a spoken word or a face gesture asks for.
@@ -304,25 +313,12 @@ export function NotchWings({
         {/* Ordered so the element nearest the notch is the one the capsule
             keeps: the rest unfold outward and never displace it. */}
         <div className="wing-inner">
-          {meterShown ? (
-            /* Keyed on whose turn it is, so each voice's meter is a fresh
-               mount: the arrival choreography lives in a starting style, and
-               only a mount reads one. Luke's turn is what grows the capsule,
-               and a meter the developer's turn already had on screen would
-               otherwise relocate beside the returning face on the frame the
-               turn flips — drawn on the desktop, ahead of an edge still most
-               of its travel away. */
-            <span className="wing-meter" data-turn={meterVoice} key={meterVoice}>
-              <Waveform
-                analyser={analyser}
-                speaking={fixtureSpeaking}
-                voice={meterVoice}
-                voiceActive={voiceActive}
-                connecting={voiceOpening && !analyser}
-                onVoiceActivity={reportVoiceActivity}
-              />
-            </span>
-          ) : (
+          {/* Hidden only while the meter has taken this place outright — the
+              developer's own turn, or an audio signal with no turn to read.
+              Luke's turn keeps the marks: the meter stands beside him rather
+              than in their place, so what he is watching stays on screen
+              while he answers it. */}
+          {meterShown && !lukeSpeaking ? null : (
             <span className="wing-marks" ref={marksRef}>
               {drawnSlots.map(({ item, leaving }) => {
                 // How the reorder measurement finds this slot again after a
@@ -369,6 +365,25 @@ export function NotchWings({
                   </button>
                 );
               })}
+            </span>
+          )}
+          {meterShown && (
+            /* Keyed on whose turn it is, so each voice's meter is a fresh
+               mount: the arrival choreography lives in a starting style, and
+               only a mount reads one. Luke's turn is what grows the capsule,
+               and a meter the developer's turn already had on screen would
+               otherwise relocate beside the returning face on the frame the
+               turn flips — drawn on the desktop, ahead of an edge still most
+               of its travel away. */
+            <span className="wing-meter" data-turn={meterVoice} key={meterVoice}>
+              <Waveform
+                analyser={analyser}
+                speaking={fixtureSpeaking}
+                voice={meterVoice}
+                voiceActive={voiceActive}
+                connecting={voiceOpening && !analyser}
+                onVoiceActivity={reportVoiceActivity}
+              />
             </span>
           )}
           {/* Luke himself. He is drawn in every state but one: he steps out of
