@@ -78,9 +78,9 @@ function notaryCredentialArguments(credentials) {
   return ["--keychain-profile", NOTARY_KEYCHAIN_PROFILE];
 }
 
-// notarytool's own --wait crashes with SIGBUS on most runs, and the upload has
-// already reached Apple by the time it does, so resubmitting would only
-// duplicate a submission that is already queued: submit once, then poll.
+// notarytool's own --wait crashes with SIGBUS on most runs, and its accelerated
+// upload path has left incomplete submissions reported as In Progress. Use the
+// alternate endpoint, submit once, then poll the returned submission id.
 export function notarySubmitArguments(artifactPath, credentials) {
   return [
     "notarytool",
@@ -89,6 +89,7 @@ export function notarySubmitArguments(artifactPath, credentials) {
     ...notaryCredentialArguments(credentials),
     "--output-format",
     "json",
+    "--no-s3-acceleration",
   ];
 }
 
