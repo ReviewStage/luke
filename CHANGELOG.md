@@ -32,6 +32,35 @@
 Notable changes to Luke, newest first. Each heading is a released version and
 the date its release was published.
 
+## 0.3.11 — 2026-08-25
+
+### Improvements
+
+- Luke opens Replicas sessions directly in the Replicas desktop app
+  ([#516](https://github.com/ReviewStage/luke/pull/516))
+- Luke keeps agent updates concise, specific to the work, and available after
+  meeting quiet ends
+  ([#514](https://github.com/ReviewStage/luke/pull/514),
+  [#515](https://github.com/ReviewStage/luke/pull/515))
+- The admin dashboard makes account status, usage, and controls easier to scan
+  ([#511](https://github.com/ReviewStage/luke/pull/511))
+
+### Fixes
+
+- Fixed first-launch announcements waiting for an interaction before they
+  could be heard ([#477](https://github.com/ReviewStage/luke/pull/477))
+- Fixed signed-in users who finished onboarding being offered the introduction
+  again ([#512](https://github.com/ReviewStage/luke/pull/512))
+- Fixed swallowed admin API failures omitting the upstream 503 cause from logs
+  ([#492](https://github.com/ReviewStage/luke/pull/492))
+- Fixed hosted macOS releases omitting the PostHog project key and silently
+  disabling recording
+
+### Miscellaneous
+
+- Updated the 0.3.10 onboarding notes with its release screenshot
+  ([#510](https://github.com/ReviewStage/luke/pull/510))
+
 ## 0.3.10 — 2026-08-24
 
 ### Onboarding

@@ -59,6 +59,7 @@ jobs:
           MACOS_CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
           MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
           GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET }}
+          POSTHOG_PROJECT_API_KEY: ${{ secrets.POSTHOG_PROJECT_API_KEY }}
         run: |
           for secret_name in \
             MACOS_CERTIFICATE_P12_BASE64 \
@@ -66,7 +67,8 @@ jobs:
             APPLE_API_KEY_P8_BASE64 \
             APPLE_API_KEY_ID \
             APPLE_API_ISSUER_ID \
-            GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET; do
+            GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET \
+            POSTHOG_PROJECT_API_KEY; do
             if [[ -z "${!secret_name:-}" ]]; then
               echo "error: required GitHub Actions secret is missing: $secret_name" >&2
               exit 1
@@ -117,6 +119,7 @@ jobs:
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_KEY_P8_BASE64: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
           GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET }}
+          POSTHOG_PROJECT_API_KEY: ${{ secrets.POSTHOG_PROJECT_API_KEY }}
         run: |
           key_directory=$(mktemp -d "$RUNNER_TEMP/luke-notary.XXXXXX")
           trap 'rm -rf "$key_directory"' EXIT
