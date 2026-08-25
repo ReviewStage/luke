@@ -58,7 +58,7 @@ export function isRealtimeVoiceSpeed(value: UnparsedWireValue): value is Realtim
 
 export const REALTIME_DEFAULTS = {
   MODEL: "gpt-realtime-2.1",
-  VOICE: REALTIME_VOICE.ASH,
+  VOICE: REALTIME_VOICE.ECHO,
   SPEED: REALTIME_VOICE_SPEED.NORMAL,
   /**
    * What transcribes the developer's spoken turns, so their own words can
