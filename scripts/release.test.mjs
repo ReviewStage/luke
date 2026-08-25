@@ -116,6 +116,31 @@ test("the update manifest asset name stays fixed while electron-builder writes i
   assert.ok(workflow.includes("if (!/size: \\d+/.test(manifest))"));
 });
 
+test("hosted releases require and package every desktop integration credential", () => {
+  const workflow = fs.readFileSync(
+    path.join(repoRoot, ".github", "workflows", "release.yml"),
+    "utf8",
+  );
+  const credentialCheck = workflow.slice(
+    workflow.indexOf("- name: Check release secrets"),
+    workflow.indexOf("- name: Resolve release version"),
+  );
+  const releaseBuild = workflow.slice(
+    workflow.indexOf("- name: Build signed, notarized release artifacts"),
+    workflow.indexOf("- name: Verify signed application"),
+  );
+
+  for (const credential of ["GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET", "POSTHOG_PROJECT_API_KEY"]) {
+    const secretMapping = new RegExp(`${credential}: \\\${{ secrets\\.${credential} }}`);
+    assert.match(credentialCheck, secretMapping);
+    assert.match(releaseBuild, secretMapping);
+    const trimmedLines = credentialCheck.split("\n").map((line) => line.trim());
+    assert.ok(
+      trimmedLines.includes(`${credential}; do`) || trimmedLines.includes(`${credential} \\`),
+    );
+  }
+});
+
 test("notary credentials come from the keychain profile unless a key file is provided whole", () => {
   assert.deepEqual(resolveNotaryCredentials({}), {
     source: NOTARY_CREDENTIAL_SOURCE.KEYCHAIN_PROFILE,
