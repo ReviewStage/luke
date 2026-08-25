@@ -1,12 +1,11 @@
-/* The developer's current-launch conversation with Luke. The tab reads like a
-   transcript, not another roster: dialogue aligns by speaker, while actions
-   and announcements stay quiet lines in the flow between them. */
+/* A compact chat thread: sent and received messages use the familiar two-sided
+   bubble grammar, while actions and announcements sit centered between them. */
 .history-view {
   display: flex;
   min-height: 0;
   flex: 1;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
 .history-header {
@@ -29,6 +28,7 @@
   min-height: 28px;
   padding: 0 9px;
   border-radius: 9px;
+  background: transparent;
   color: var(--text-secondary);
   font-size: 10px;
   font-weight: 620;
@@ -52,9 +52,9 @@
   min-height: 0;
   flex: 1;
   flex-direction: column;
-  gap: 12px;
+  gap: 4px;
   margin: 0;
-  padding: 0 2px 2px;
+  padding: 4px 4px 8px;
   overflow-x: clip;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -67,23 +67,17 @@
 
 .history-entry {
   display: flex;
-  max-width: min(78%, 62ch);
+  max-width: min(82%, 58ch);
   flex: 0 0 auto;
   flex-direction: column;
-  gap: 4px;
-}
-
-.history-entry small {
-  color: var(--text-tertiary);
-  font-size: 9.5px;
-  font-weight: 650;
 }
 
 .history-entry p {
   margin: 0;
+  padding: 7px 10px 8px;
   color: var(--text-primary);
-  font-size: 12px;
-  line-height: 1.48;
+  font-size: 12.5px;
+  line-height: 1.38;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
@@ -94,9 +88,9 @@
 }
 
 .history-entry[data-speaker="you"] p {
-  padding: 9px 11px;
-  border-radius: 13px 13px 4px 13px;
-  background: var(--raised-strong);
+  border-radius: 15px 15px 5px 15px;
+  background: var(--message-sent);
+  color: rgba(255, 255, 255, 0.98);
 }
 
 .history-entry[data-speaker="luke"] {
@@ -104,20 +98,30 @@
 }
 
 .history-entry[data-speaker="luke"] p {
-  padding: 2px 1px;
+  border-radius: 15px 15px 15px 5px;
+  background: var(--raised-strong);
 }
 
 .history-entry[data-speaker="event"] {
-  max-width: 90%;
+  max-width: 84%;
   align-self: center;
   align-items: center;
-  padding: 2px 12px;
+  padding: 8px 12px;
   text-align: center;
 }
 
 .history-entry[data-speaker="event"] p {
+  padding: 0;
   color: var(--text-secondary);
   font-size: 10.5px;
+  line-height: 1.4;
+}
+
+/* Consecutive bubbles stay conversationally tight. A speaker change gets the
+   small pause chat apps use instead of repeating names above every message. */
+.history-entry[data-speaker="you"] + .history-entry[data-speaker="luke"],
+.history-entry[data-speaker="luke"] + .history-entry[data-speaker="you"] {
+  margin-top: 6px;
 }
 
 .history-empty {

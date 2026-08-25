@@ -38,7 +38,7 @@ function HistoryEntryRow({ entry }: { entry: ConversationEntry }): React.JSX.Ele
   const presentation = historyEntryPresentation(entry.kind);
   return (
     <li className="history-entry" data-speaker={presentation.speaker}>
-      <small>{presentation.label}</small>
+      <small className="visually-hidden">{presentation.label}</small>
       <p>{entry.words}</p>
     </li>
   );
@@ -118,7 +118,7 @@ export function ConversationHistoryPanel({
       ) : null}
       {entries.length === 0 ? (
         <div className="history-empty">
-          <strong>No conversation yet</strong>
+          <strong>No messages yet</strong>
         </div>
       ) : (
         <ol className="history-list" ref={list}>

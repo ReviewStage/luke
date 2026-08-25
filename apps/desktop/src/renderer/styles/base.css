@@ -5,6 +5,9 @@
   background: transparent;
 
   --state-working: #5cd5ff;
+  /* A sent message is an action the developer already took, not a session
+     state. Keep its familiar chat blue separate from the roster palette. */
+  --message-sent: #0071e3;
   /* Whose voice is live, so a glance says who is talking. Your turn is green,
      which is nowhere else on the surface and so belongs to you alone; Luke
      answers in the blue the rest of the surface already uses for something
