@@ -486,11 +486,6 @@ export type ProductEventBatch = readonly ProductEvent[];
  */
 export const PRODUCT_EVENT_BATCH_LIMIT = 50;
 
-/** The one shape a recording request has: events and nothing else. */
-export interface ProductEventBatchRequest {
-  events: readonly unknown[];
-}
-
 type PropertyReader = {
   [Property in ProductEventProperty]: (
     value: UnparsedWireValue,

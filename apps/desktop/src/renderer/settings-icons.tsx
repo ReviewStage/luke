@@ -243,16 +243,6 @@ export function ShieldIcon(): React.JSX.Element {
   );
 }
 
-export function MicrophoneIcon(): React.JSX.Element {
-  return (
-    <Glyph>
-      <rect x="9" y="2.6" width="6" height="11" rx="3" />
-      <path d="M5.4 11.4a6.6 6.6 0 0 0 13.2 0" />
-      <path d="M12 18v3.4" />
-    </Glyph>
-  );
-}
-
 /** Heads the Updates section: the arrival a newer release waits as. */
 export function DownloadIcon(): React.JSX.Element {
   return (
@@ -294,39 +284,12 @@ export function PowerIcon(): React.JSX.Element {
   );
 }
 
-/** Two sliders, drawn once for both controls that mean "choices". */
-function SliderMarks(): React.JSX.Element {
-  return (
-    <>
-      <path d="M3.6 8.4h5.2" />
-      <path d="M13.2 8.4h7.2" />
-      <circle cx="11" cy="8.4" r="2.2" />
-      <path d="M3.6 15.6h2.6" />
-      <path d="M10.6 15.6h9.8" />
-      <circle cx="8.4" cy="15.6" r="2.2" />
-    </>
-  );
-}
-
 /** A magnifier: the list read for the rows that say the typed words. */
 export function SearchIcon(): React.JSX.Element {
   return (
     <Glyph className="search-glyph">
       <circle cx="10.6" cy="10.6" r="6.1" />
       <path d="M15.2 15.2L20.2 20.2" />
-    </Glyph>
-  );
-}
-
-/**
- * Two sliders rather than a funnel: the control it opens holds an order as well
- * as a filter, and a funnel would promise only the second.
- */
-/** The same two sliders at a heading's size: settings the user has chosen. */
-export function PreferencesIcon(): React.JSX.Element {
-  return (
-    <Glyph>
-      <SliderMarks />
     </Glyph>
   );
 }

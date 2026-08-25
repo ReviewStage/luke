@@ -38,12 +38,6 @@ const BOOP_CONFIRMATION: FeedbackConfirmation = {
   scene: CONFIRMATION_SCENE.BOOP,
 };
 
-/** The two landings a send may draw. Each motion is one the artwork defines. */
-export const CONFIRMATIONS: readonly FeedbackConfirmation[] = [
-  SHOCKWAVE_CONFIRMATION,
-  BOOP_CONFIRMATION,
-];
-
 /**
  * The confirmation a landed send plays: a coin flip between the two
  * landings. The flip is injectable so a test can watch both faces of the

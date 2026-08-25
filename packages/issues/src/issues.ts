@@ -208,11 +208,6 @@ export function normalizeTrackedIssue(
   return issue;
 }
 
-/** Returns whether a tracker explicitly advertised a transition for an issue. */
-export function supportsIssueTransition(issue: TrackedIssue, transitionId: string): boolean {
-  return issue.transitions.some((transition) => transition.id === transitionId);
-}
-
 /**
  * What became of an act. A rejection carries a reason the developer can hear,
  * never the body itself; unsupported means the tracker has no documented way
@@ -224,8 +219,6 @@ export const ISSUE_ACTION_KIND = {
   SET_STATE: "set-state",
   COMMENT: "comment",
 } as const;
-
-export type IssueActionKind = (typeof ISSUE_ACTION_KIND)[keyof typeof ISSUE_ACTION_KIND];
 
 /**
  * A tracker-local request whose every field the main process resolved from its

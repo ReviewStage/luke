@@ -11,7 +11,6 @@ import {
   maximumIssueIdentifierLength,
   maximumIssueStateNameLength,
   maximumIssueTitleLength,
-  supportsIssueTransition,
 } from "./issues.js";
 
 const OBSERVED_AT = 1_800_000_000_000;
@@ -40,8 +39,14 @@ test("a tracked issue is bounded wherever a tracker could run long", () => {
   assert.equal(issue.transitions.length, maximumIssueTransitions);
   assert.equal(issue.url, "https://linear.app/luke/issue/LUKE-123");
   assert.equal(issue.canComment, true);
-  assert.equal(supportsIssueTransition(issue, "state-0"), true);
-  assert.equal(supportsIssueTransition(issue, "state-999"), false);
+  assert.equal(
+    issue.transitions.some((transition) => transition.id === "state-0"),
+    true,
+  );
+  assert.equal(
+    issue.transitions.some((transition) => transition.id === "state-999"),
+    false,
+  );
 });
 
 test("what a tracker left unsaid stays a refusal rather than a guess", () => {

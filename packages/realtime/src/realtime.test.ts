@@ -88,9 +88,9 @@ import {
   realtimeInstructions,
 } from "./realtime-protocol.js";
 import {
+  ACTS,
   REALTIME_TOOL,
   REALTIME_TOOL_FAMILY,
-  REALTIME_TOOLS,
   SESSION_LIST_ALL,
   SESSION_LIST_VOICE,
 } from "./realtime-tools.js";
@@ -1244,7 +1244,7 @@ test("the session is minted with the sixteen acts and nothing wider", () => {
 });
 
 test("show_panel's filter enum carries the whole vocabulary its validator accepts", () => {
-  const filters = REALTIME_TOOLS.SHOW_PANEL.schema.parameters.properties.filters;
+  const filters = ACTS.SHOW_PANEL.schema.parameters.properties.filters;
   const values = filters.items.enum;
 
   // The enum is what binds the model to real tokens instead of the
@@ -2327,9 +2327,9 @@ test("the session and issue tools answer to their own validators", () => {
   assert.equal(isIssueToolName(REALTIME_TOOL.UPDATE_ISSUE_STATE), true);
   assert.equal(isIssueToolName(REALTIME_TOOL.COMMENT_ON_ISSUE), true);
   assert.equal(isIssueToolName("delete_everything"), false);
-  assert.equal(REALTIME_TOOLS.CHANGE_APP_SETTING.family, REALTIME_TOOL_FAMILY.APP);
-  assert.equal(REALTIME_TOOLS.SEND_SESSION_MESSAGE.family, REALTIME_TOOL_FAMILY.SESSION);
-  assert.equal(REALTIME_TOOLS.UPDATE_ISSUE_STATE.family, REALTIME_TOOL_FAMILY.ISSUE);
+  assert.equal(ACTS.CHANGE_APP_SETTING.family, REALTIME_TOOL_FAMILY.APP);
+  assert.equal(ACTS.SEND_SESSION_MESSAGE.family, REALTIME_TOOL_FAMILY.SESSION);
+  assert.equal(ACTS.UPDATE_ISSUE_STATE.family, REALTIME_TOOL_FAMILY.ISSUE);
 });
 
 test("a disconnected tracker withdraws the roster without starting a reply", () => {

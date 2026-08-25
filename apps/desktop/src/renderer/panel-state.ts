@@ -32,8 +32,6 @@ export const HIT_REGION = {
   FEEDBACK: "feedback",
 } as const;
 
-export type HitRegion = (typeof HIT_REGION)[keyof typeof HIT_REGION];
-
 /** Long enough that sweeping the pointer past the notch does not wake it. */
 export const PEEK_ENTER_DELAY_MS = 60;
 /**

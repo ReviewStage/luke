@@ -309,8 +309,6 @@ export const SESSION_LINK_SCHEME = {
   SUPERSET: "superset:",
 } as const;
 
-export type SessionLinkScheme = (typeof SESSION_LINK_SCHEME)[keyof typeof SESSION_LINK_SCHEME];
-
 const SESSION_LINK_SCHEMES: ReadonlySet<string> = new Set(Object.values(SESSION_LINK_SCHEME));
 
 /** Whether an address is one Luke may ask the system to open. */

@@ -4,9 +4,8 @@
 
 `realtime-tools.ts` imports `type RealtimeFunctionCall` from
 `realtime-protocol.ts`, and the protocol imports nothing back. The cycle these
-six modules were kept together for is gone: `spokenRealtimeToolCount` was the
-protocol's one reach into the tools, and it stopped being called when the
-spoken surfaces were simplified.
+six modules were kept together for is gone: the spoken surfaces no longer
+count tools, so the protocol has no reach into the tools.
 
 So splitting a protocol package from a tools package is now possible where it
 once was not. It is still a product decision rather than a tidying: the two
