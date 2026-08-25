@@ -426,19 +426,45 @@ function StatCard({
   value,
   hint,
   title,
+  grouped = false,
 }: {
   label: string;
   value: string;
   hint?: string;
   title?: string;
+  grouped?: boolean;
 }): React.JSX.Element {
   return (
-    <div className="rounded-lg border border-border bg-card px-5 py-4" title={title}>
+    <div
+      className={
+        grouped ? "min-w-0 bg-card px-5 py-4" : "rounded-lg border border-border bg-card px-5 py-4"
+      }
+      title={title}
+    >
       <div className="font-mono text-xs tracking-[0.2px] text-muted-foreground uppercase">
         {label}
       </div>
       <div className="mt-2 text-3xl font-semibold tabular-nums">{value}</div>
       {hint ? <div className="mt-1 text-sm text-muted-foreground">{hint}</div> : null}
+    </div>
+  );
+}
+
+/** Related headline metrics share one surface, leaving charts as the dominant objects. */
+function StatGroup({
+  columns,
+  children,
+}: {
+  columns: 2 | 3;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  const layout =
+    columns === 3
+      ? "divide-y min-[720px]:grid-cols-3 min-[720px]:divide-x min-[720px]:divide-y-0"
+      : "divide-y min-[520px]:grid-cols-2 min-[520px]:divide-x min-[520px]:divide-y-0";
+  return (
+    <div className={`grid overflow-hidden rounded-lg border border-border bg-card ${layout}`}>
+      {children}
     </div>
   );
 }
@@ -2283,8 +2309,8 @@ function Dashboard({
         aria-busy={refreshing}
       >
         <SectionHeading>User activity</SectionHeading>
-        <div className="grid gap-3 min-[720px]:grid-cols-3">
-          <StatCard label="Total accounts" value={formatNumber(metrics.users.total)} />
+        <StatGroup columns={3}>
+          <StatCard label="Total accounts" value={formatNumber(metrics.users.total)} grouped />
           {/* The hint already carries the window total, so the run this count
               is read against rides the title attribute instead. */}
           <StatCard
@@ -2292,13 +2318,15 @@ function Dashboard({
             value={formatNumber(metrics.users.signupTrend.recent)}
             hint={`${formatNumber(metrics.users.newInWindow)} in ${metrics.windowDays} days`}
             title={`against ${formatNumber(metrics.users.signupTrend.prior)} in the ${metrics.users.signupTrend.days} days before`}
+            grouped
           />
           <StatCard
             label="Active today"
             value={formatNumber(metrics.featureUsage.activeUsersToday)}
             hint={`${formatNumber(metrics.featureUsage.activeUsersWindow)} accounts in ${metrics.windowDays} days`}
+            grouped
           />
-        </div>
+        </StatGroup>
         <div className="mt-3 grid gap-3 min-[720px]:grid-cols-[1.6fr_1fr]">
           <SignupsChart
             daily={metrics.users.dailySignups}
@@ -2316,18 +2344,20 @@ function Dashboard({
         <RetentionNote />
 
         <SectionHeading>Feature usage · hosted tier</SectionHeading>
-        <div className="grid grid-cols-2 gap-3">
+        <StatGroup columns={2}>
           <StatCard
             label="Voice · today"
             value={formatNumber(metrics.featureUsage.voiceCallsToday)}
             hint={`${formatNumber(metrics.featureUsage.voiceCallsWindow)} in ${metrics.windowDays} days`}
+            grouped
           />
           <StatCard
             label="Attention · today"
             value={formatNumber(metrics.featureUsage.attentionReviewsToday)}
             hint={`${formatNumber(metrics.featureUsage.attentionReviewsWindow)} in ${metrics.windowDays} days`}
+            grouped
           />
-        </div>
+        </StatGroup>
         <div className="mt-3">
           <UsageChart
             daily={metrics.featureUsage.daily}
@@ -2349,17 +2379,19 @@ function Dashboard({
         <TopAccountsNote />
 
         <SectionHeading>Reliability</SectionHeading>
-        <div className="grid grid-cols-2 gap-3">
+        <StatGroup columns={2}>
           <StatCard
             label="Throttled account-days · today"
             value={formatNumber(metrics.reliability.quotaLimitedUserDaysToday)}
             hint="an account that reached a daily ceiling"
+            grouped
           />
           <StatCard
             label={`Throttled account-days · ${metrics.windowDays} days`}
             value={formatNumber(metrics.reliability.quotaLimitedUserDaysWindow)}
+            grouped
           />
-        </div>
+        </StatGroup>
         <p className="mt-3 text-sm text-muted-foreground">
           A hosted request that reaches a daily ceiling —{" "}
           {formatNumber(metrics.reliability.voiceDailyLimit)} voice calls or{" "}
