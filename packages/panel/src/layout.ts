@@ -7,10 +7,12 @@ const METER_AND_GAP = 26;
 
 /**
  * How many marks fit beside the face, in a wing where the meter is also
- * standing beside it — Luke's own turn, which is the one stretch the meter
- * does not take the marks' place. Reserving its width here rather than
- * hiding marks to make room is what keeps the strip from ever drawing the
- * meter across a mark it already committed to.
+ * standing beside it rather than taking its place — Luke's own turn, or an
+ * audio signal with no turn to read at all. The developer's own live turn
+ * hands the meter the face's own slot instead, at the face's own width, so
+ * it costs the marks nothing extra. Reserving the meter's width here rather
+ * than hiding marks to make room is what keeps the strip from ever drawing
+ * the meter across a mark it already committed to.
  */
 export function wingMarkCapacity(sideWidth: number, meterBesideFace = false): number {
   const beyondFirst = Math.floor(
