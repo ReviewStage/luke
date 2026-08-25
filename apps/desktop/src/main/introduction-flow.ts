@@ -63,6 +63,22 @@ export function shouldRunIntroduction(input: {
   return input.requiresAccount && !input.signedIn && !input.completed;
 }
 
+/**
+ * Whether this launch should write the completion record without playing
+ * anything. A signed-in launch proves the user has already met Luke — an
+ * install that predates the introduction upgrades into exactly this state —
+ * and without the record on file, a later sign-out would replay a first
+ * meeting to someone months in. Only an interactive launch may write it: a
+ * fixture or capture run says nothing about who has met whom.
+ */
+export function shouldBackfillIntroductionCompletion(input: {
+  requiresAccount: boolean;
+  signedIn: boolean;
+  completed: boolean;
+}): boolean {
+  return input.requiresAccount && input.signedIn && !input.completed;
+}
+
 /** Whether a stored record says the introduction finished. */
 export function introductionCompleted(stored: string | undefined): boolean {
   if (stored === undefined) return false;
