@@ -2079,6 +2079,8 @@ export function App(): React.JSX.Element {
     startMicrophone,
     stopMicrophone,
     askLuke,
+    conversationHistory,
+    clearConversationHistory,
     voiceTurn,
     lukeCaptions,
     mentionedSessions,
@@ -2753,7 +2755,7 @@ export function App(): React.JSX.Element {
         if (presentation !== PANEL_PRESENTATION.PANEL) return;
         event.preventDefault();
         if (tab === PANEL_TAB.SETTINGS) openSettingsSearch();
-        else openSearch();
+        else if (tab === PANEL_TAB.SESSIONS) openSearch();
         return;
       }
       if (event.key !== "Escape") return;
@@ -2805,6 +2807,7 @@ export function App(): React.JSX.Element {
       else if (tab === PANEL_TAB.SETTINGS && settingsView !== SETTINGS_VIEW.ROOT) {
         setSettingsView(SETTINGS_VIEW.ROOT);
       } else if (tab === PANEL_TAB.SETTINGS) changeTab(PANEL_TAB.SESSIONS);
+      else if (tab === PANEL_TAB.HISTORY) changeTab(PANEL_TAB.SESSIONS);
       else void changeMode(false);
     };
     window.addEventListener("keydown", handleKey);
@@ -3212,6 +3215,8 @@ export function App(): React.JSX.Element {
             onOpenSession={openSession}
             onOpenSessionApplication={openSessionApplication}
             writes={sessionWrites}
+            conversationHistory={conversationHistory}
+            onClearConversationHistory={clearConversationHistory}
             ask={askLuke}
             // Reaching for the composer during a spent day is answered before
             // a keystroke: the caret arriving re-announces the spent caption

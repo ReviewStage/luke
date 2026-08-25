@@ -16,12 +16,13 @@ import type { SessionReplayBootstrap } from "#shared/wire/session";
  * recap, error line, and the account's own name and address all travel
  * because they are drawn; autocapture puts the text of whatever was clicked
  * on an event; and an unhandled error travels with its message and stack.
- * Only what is typed into a field stays masked, which is the library's own
- * default rather than anything asked for here.
+ * What is typed into a field stays masked by the library's default, and the
+ * conversation History tab explicitly blocks its whole subtree with the
+ * library's fixed `ph-no-capture` class.
  *
  * `PRIVACY.md` says all of that plainly, and it has to keep saying it: this
- * file is the whole of what decides it, and there is nothing else standing
- * between what the panel draws and what leaves the machine.
+ * file and that one blocked subtree are the whole of what decides it. Nothing
+ * else stands between what the panel draws and what leaves the machine.
  *
  * What this file decides on its own is only whether to record at all: the
  * main process says whether this run may, and the developer's two switches

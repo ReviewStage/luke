@@ -14,7 +14,10 @@ contents, or command output, and it writes none of this to disk. If you run
 agents inside the Herdr terminal manager, Luke also asks Herdr's own
 command-line tool which of those sessions it holds, so their rows can say so;
 that read never starts Herdr, reads no terminal output, and sends nothing
-anywhere. It stays on your Mac unless a feature below sends it.
+anywhere. It stays on your Mac unless a feature below sends it. Luke also keeps
+your conversation with him in memory for the current app launch so you can
+review it; it is never written to disk, and only the 20 most recent entries are
+carried into a call.
 
 **Your account.** Signing in with Google or GitHub gives us your name, email
 address, and which of the two you used. We also keep the records that keep you
@@ -29,11 +32,12 @@ branches, file paths, summaries, prompts, or error text.
 screen, your editor, your terminal, or any other app. A recording shows whatever
 the panel showed you, including session titles, branches, summaries and error
 text, your name and email address, and any screenshot you attached to the
-feedback form. Text you type into a field is replaced with blocks before the
-recording leaves your Mac, so an API key or a sign-in code you enter is not in
-it. While recording is on, Luke also reports what you clicked, including the
-text on it, and any error his panel runs into, with its message and code path;
-the fixed list above does not cover those two.
+feedback form. The History tab is blocked from recordings, so the words in your
+conversation with Luke are not included. Text you type into a field is replaced
+with blocks before the recording leaves your Mac, so an API key or a sign-in
+code you enter is not in it. While recording is on, Luke also reports what you
+clicked, including the text on it, and any error his panel runs into, with its
+message and code path; the fixed list above does not cover those two.
 
 Recording starts when Luke opens, before you sign in, so it covers the spoken
 introduction on first launch and the signed-out panel. A recording that begins

@@ -1,0 +1,153 @@
+/* The developer's current-launch conversation with Luke. The tab reads like a
+   transcript, not another roster: dialogue aligns by speaker, while actions
+   and announcements stay quiet lines in the flow between them. */
+.history-view {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.history-header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 0 2px;
+}
+
+.history-header p {
+  max-width: 58ch;
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
+.history-clear-controls {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+}
+
+.history-clear,
+.history-clear-cancel {
+  min-height: 28px;
+  padding: 0 9px;
+  border-radius: 9px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 620;
+  transition:
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+}
+
+.history-clear:hover,
+.history-clear-cancel:hover {
+  background: var(--raised);
+  color: var(--text-primary);
+}
+
+.history-clear-controls:has(.history-clear-cancel) .history-clear {
+  color: var(--danger);
+}
+
+.history-list {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0 2px 2px;
+  overflow-x: clip;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  scrollbar-width: thin;
+  list-style: none;
+  animation: scroll-edge-fade linear both;
+  animation-timeline: scroll(self block);
+}
+
+.history-entry {
+  display: flex;
+  max-width: min(78%, 62ch);
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.history-entry small {
+  color: var(--text-tertiary);
+  font-size: 9.5px;
+  font-weight: 650;
+}
+
+.history-entry p {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 12px;
+  line-height: 1.48;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.history-entry[data-speaker="you"] {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.history-entry[data-speaker="you"] p {
+  padding: 9px 11px;
+  border-radius: 13px 13px 4px 13px;
+  background: var(--raised-strong);
+}
+
+.history-entry[data-speaker="luke"] {
+  align-self: flex-start;
+}
+
+.history-entry[data-speaker="luke"] p {
+  padding: 2px 1px;
+}
+
+.history-entry[data-speaker="event"] {
+  max-width: 90%;
+  align-self: center;
+  align-items: center;
+  padding: 2px 12px;
+  text-align: center;
+}
+
+.history-entry[data-speaker="event"] p {
+  color: var(--text-secondary);
+  font-size: 10.5px;
+}
+
+.history-empty {
+  display: grid;
+  min-height: 126px;
+  flex: 1;
+  align-content: center;
+  justify-items: center;
+  gap: 5px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.history-empty strong {
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.history-empty span {
+  max-width: 42ch;
+  color: var(--text-tertiary);
+  font-size: 10.5px;
+  line-height: 1.45;
+}

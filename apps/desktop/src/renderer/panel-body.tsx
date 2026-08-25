@@ -1,4 +1,5 @@
 import { SessionRow as PanelSessionRow, ProviderMark } from "@sidecar/panel";
+import type { ConversationEntry } from "@sidecar/realtime";
 import {
   isSessionApplicationId,
   type ProviderControlResult,
@@ -15,6 +16,7 @@ import { useCallback, useRef, useState } from "react";
 import { ACCOUNT_STATUS, type AccountProvider, type AccountSnapshot } from "#shared/wire/account";
 import type { SessionOpenResult } from "#shared/wire/session";
 import { type AskHandler, AskLuke } from "./ask-luke";
+import { ConversationHistoryPanel } from "./conversation-history-panel";
 import { PANEL_TAB, type PanelTab, TabBar } from "./panel-tabs";
 import {
   type ArrangedSessions,
@@ -788,6 +790,10 @@ export interface PanelBodyProps {
   onOpenSessionApplication: (session: SessionView, applicationId: SessionApplicationId) => void;
   /** Carries a typed reply or an advertised action to the session's provider. */
   writes: SessionWriteHandlers;
+  /** The current-launch, renderer-memory conversation between the developer and Luke. */
+  conversationHistory: readonly ConversationEntry[];
+  /** Clears that same thread from the view and Luke's next conversational context. */
+  onClearConversationHistory: () => void;
   /** Carries a typed ask to Luke's own conversation, answering why it could not go. */
   ask: AskHandler;
   /** Reports someone being part-way through an ask, so the panel holds for them. */
@@ -836,6 +842,8 @@ export function PanelBody({
   onOpenSession,
   onOpenSessionApplication,
   writes,
+  conversationHistory,
+  onClearConversationHistory,
   ask,
   onAskEngaged,
   askShortcut,
@@ -919,6 +927,11 @@ export function PanelBody({
       </div>
       {tab === PANEL_TAB.SETTINGS ? (
         <SettingsPanel {...settings} />
+      ) : tab === PANEL_TAB.HISTORY ? (
+        <ConversationHistoryPanel
+          entries={conversationHistory}
+          onClear={onClearConversationHistory}
+        />
       ) : (
         <SessionsPanel
           className="session-view"

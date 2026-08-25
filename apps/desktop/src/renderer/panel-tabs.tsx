@@ -3,7 +3,7 @@ import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { errandTargetProps, tabErrandTarget } from "./luke-errand";
 
 /**
- * The panel's two tabs, aliased from the core's set rather than declared here
+ * The panel's tabs, aliased from the core's set rather than declared here
  * — the same rule the sort follows: a spoken ask names a tab in the same words
  * this bar does, and the two must not drift into separate vocabularies.
  */
@@ -18,15 +18,16 @@ interface PanelTabDescriptor {
 
 export const PANEL_TABS: readonly PanelTabDescriptor[] = [
   { id: PANEL_TAB.SESSIONS, label: "Sessions" },
+  { id: PANEL_TAB.HISTORY, label: "History" },
   { id: PANEL_TAB.SETTINGS, label: "Settings" },
 ];
 
 export function panelTabId(tab: PanelTab): string {
-  return tab === PANEL_TAB.SETTINGS ? "panel-tab-settings" : "panel-tab-sessions";
+  return `panel-tab-${tab}`;
 }
 
 export function panelPanelId(tab: PanelTab): string {
-  return tab === PANEL_TAB.SETTINGS ? "panel-view-settings" : "panel-view-sessions";
+  return `panel-view-${tab}`;
 }
 
 /** The horizontal tablist's roving-focus destination for one keyboard key. */
