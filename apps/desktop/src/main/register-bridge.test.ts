@@ -1,6 +1,11 @@
 /* oxlint-disable anti-slop/no-unknown-returns -- Fake Electron listeners deliberately retain the IPC boundary shape. */
 import assert from "node:assert/strict";
 import test from "node:test";
+import {
+  CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
+  SUPERSET_WORKSPACE_PROVIDER_ID,
+} from "@sidecar/session";
+import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import type { IpcMainEvent, IpcMainInvokeEvent } from "electron";
 import { BRIDGE } from "#shared/bridge";
 import { registerBridge } from "./register-bridge";
@@ -85,6 +90,33 @@ test("a validated request reaches its domain handler", async () => {
   // SAFETY: registerBridge reads only the sender field supplied by this focused fixture.
   const event = { sender: {} } as IpcMainInvokeEvent;
   assert.equal(await fixture.invokes.get(BRIDGE.setExpanded.channel)?.(event, true), "expanded");
+});
+
+test("workspace-only providers reach workspace creation", async () => {
+  const fixture = fixtureHost(true);
+  registerBridge(
+    BRIDGE,
+    {
+      createSessionWorkspace: (_context, providerId) => ({
+        status: ACT_RESULT_STATUS.ACCEPTED,
+        providerSessionId: providerId,
+      }),
+    },
+    fixture.host,
+  );
+  // SAFETY: registerBridge reads only the sender field supplied by this focused fixture.
+  const event = { sender: {} } as IpcMainInvokeEvent;
+  const invoke = fixture.invokes.get(BRIDGE.createSessionWorkspace.channel);
+
+  for (const providerId of [
+    SUPERSET_WORKSPACE_PROVIDER_ID,
+    CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
+  ]) {
+    assert.deepEqual(await invoke?.(event, providerId, "project-1"), {
+      status: ACT_RESULT_STATUS.ACCEPTED,
+      providerSessionId: providerId,
+    });
+  }
 });
 
 test("an omitted optional argument cannot steal the bridge context", async () => {

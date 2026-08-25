@@ -37,6 +37,7 @@ import {
   isProviderId,
   isSessionApplicationId,
   isWorkspaceAgentSelection,
+  isWorkspaceProviderId,
   type ObservedWorkspaceProject,
   type ProviderActResult,
   type ProviderControlResult,
@@ -528,7 +529,7 @@ export const BRIDGE = {
           v.length < 2 ||
           v.length > 7 ||
           !isWireString(v[0]) ||
-          !isProviderId(v[0]) ||
+          !isWorkspaceProviderId(v[0]) ||
           !isWireString(v[1])
         )
           return false;
