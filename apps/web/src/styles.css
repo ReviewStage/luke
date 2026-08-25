@@ -135,13 +135,19 @@
   font-synthesis: none;
 }
 
-/* The admin dashboard and OAuth cards opt into this dark vocabulary. Ordinary
-   site pages use the light root tokens above. */
+/* The landing page, the admin dashboard, and the OAuth cards opt into this
+   dark vocabulary. The document pages — privacy and the changelog — keep the
+   light root tokens above: they are read start to finish, and the landing
+   page is the one surface that has to read as the product, which is black. */
 .dark {
   color-scheme: dark;
 
   --background: #08090b;
   --foreground: rgba(255, 255, 255, 0.92);
+
+  /* The accent is ink again on this ground: #5cd5ff is 11.8:1 on #08090b,
+     where the darkened member the light page needs would be 1.9:1. */
+  --accent-ink: #5cd5ff;
 
   /* A step above the page (1.06:1) lets card surfaces read before borders do. */
   --card: #101114;
@@ -219,6 +225,21 @@
   }
 }
 
+/* The landing page's column. The document pages stay at a reading measure;
+   the landing page is a poster with a 700px display in the middle of it, and
+   at the measure the mock would be the only thing on screen wide enough to
+   look deliberate. */
+@utility shell-wide {
+  width: 100%;
+  max-width: 1080px;
+  margin-inline: auto;
+  padding-inline: var(--space-5);
+
+  @media (width < 520px) {
+    padding-inline: var(--space-4);
+  }
+}
+
 /* A full-bleed rule that escapes the column it is written in, so a section
    break reads across the whole page rather than stopping at the measure. */
 @utility hairline {
@@ -234,6 +255,37 @@
     content: "";
     transform: translateX(-50%);
   }
+}
+
+/* Landing
+   The two grounds the hero stands on. Both are decoration painted on a
+   section's own background rather than markup, so nothing in the tree has to
+   be positioned around them, and neither can take a pointer.
+   ------------------------------------------------------------------------- */
+
+/* Graph paper. The mask is what keeps it scenery: a repeating gradient has no
+   end of its own, and a rule that ran on into the type would compete with it.
+   Sized on the same 8px family as the space scale, so the lines land on the
+   grid the layout is already using. */
+@utility grid-field {
+  --grid-line: rgba(255, 255, 255, 0.045);
+  --grid-step: 56px;
+
+  background-image:
+    linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+  background-size: var(--grid-step) var(--grid-step);
+  mask-image: radial-gradient(120% 80% at 50% 0%, #000 0%, transparent 72%);
+}
+
+/* The accent thrown behind the display the mock is cut into, so its pure
+   black surface has something to be black against. */
+@utility accent-aura {
+  background: radial-gradient(
+    58% 44% at 50% 40%,
+    color-mix(in srgb, var(--primary) 20%, transparent) 0%,
+    transparent 100%
+  );
 }
 
 /* Documents

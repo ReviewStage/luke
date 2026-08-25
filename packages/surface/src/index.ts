@@ -49,6 +49,7 @@ export {
   compareSessionsByUrgency,
   SESSION_URGENCY,
   type SessionUrgency,
+  URGENCY_PRIORITY,
   urgencyLabel,
 } from "./generated/session-display.js";
 export {

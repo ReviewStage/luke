@@ -54,18 +54,6 @@
   --frame-top: #14171c;
   --frame-bottom: #101318;
 
-  /* Provider brand colours, used only by the marks and ported with them:
-     Claude Code's published coral, the vertical gradient Codex draws its mark
-     with, the light half of Conductor's two-colour palette, and the light
-     silhouettes Cursor and Devin publish for dark surfaces. */
-  --mark-claude-code: #d97757;
-  --mark-codex-top: #b1a7ff;
-  --mark-codex-middle: #7a9dff;
-  --mark-codex-bottom: #3941ff;
-  --mark-conductor: #eae8e6;
-  --mark-cursor: #ffffff;
-  --mark-devin: #ffffff;
-
   /* Springs, durations, and the row fan arrive from motion-tokens.css on
      :root. --loop-motion stays here: the mock has no face to pause. */
   --loop-motion: running;
@@ -378,37 +366,57 @@
   flex: 0 0 auto;
 }
 
+/* How a provider's mark is painted, wherever the page draws one. The scope is
+   a class rather than `.mock` because the agent wall further down the page
+   draws the same marks from the same component, and a second copy of these
+   values is a second thing that has to stay true to the artwork. Each caller
+   still sizes its own box; only colour and optical weight are decided here.
+   ------------------------------------------------------------------------- */
+.provider-brand {
+  /* Provider brand colours, used only by the marks and ported with them:
+     Claude Code's published coral, the vertical gradient Codex draws its mark
+     with, the light half of Conductor's two-colour palette, and the light
+     silhouettes Cursor and Devin publish for dark surfaces. */
+  --mark-claude-code: #d97757;
+  --mark-codex-top: #b1a7ff;
+  --mark-codex-middle: #7a9dff;
+  --mark-codex-bottom: #3941ff;
+  --mark-conductor: #eae8e6;
+  --mark-cursor: #ffffff;
+  --mark-devin: #ffffff;
+}
+
 /* The marks fill their box very differently — the Claude Code glyph is wide
    and short, the Codex and Cursor marks are full-bleed, and Conductor's
    letter mark is taller than it is wide — so each gets a uniform scale to sit
    at the same optical weight. Proportions are untouched, as the renderer's
    own sheet insists. */
-.mock .provider-mark[data-mark="claude-code"] {
+.provider-brand .provider-mark[data-mark="claude-code"] {
   color: var(--mark-claude-code);
   transform: scale(1.12);
 }
 
-.mock .provider-mark[data-mark="codex"] {
+.provider-brand .provider-mark[data-mark="codex"] {
   transform: scale(0.94);
 }
 
-.mock .provider-mark[data-mark="chatgpt"] {
+.provider-brand .provider-mark[data-mark="chatgpt"] {
   transform: scale(0.94);
 }
 
-.mock .provider-mark[data-mark="conductor"] {
+.provider-brand .provider-mark[data-mark="conductor"] {
   color: var(--mark-conductor);
   transform: scale(0.93);
 }
 
-.mock .provider-mark[data-mark="cursor"] {
+.provider-brand .provider-mark[data-mark="cursor"] {
   color: var(--mark-cursor);
   transform: scale(0.94);
 }
 
 /* Devin's published mark leaves roughly a fifth of its box empty on every
    side, so it is scaled up to the height the full-bleed marks reach. */
-.mock .provider-mark[data-mark="devin"] {
+.provider-brand .provider-mark[data-mark="devin"] {
   color: var(--mark-devin);
   transform: scale(1.22);
 }

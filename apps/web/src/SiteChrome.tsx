@@ -59,15 +59,24 @@ export function LukeMark({ className = "block h-[18px] w-5" }: MarkProps): React
   );
 }
 
+/**
+ * The landing page is a poster and the document pages are prose, so the chrome
+ * takes the column its page uses rather than deciding for both. Everything
+ * else about the header and footer stays shared.
+ */
+type ChromeProps = { readonly wide?: boolean };
+
+const columnClass = (wide: boolean): string => (wide ? "shell-wide" : "shell");
+
 /** Shared between every page so navigation and branding never drift apart. */
-export function SiteHeader(): React.JSX.Element {
+export function SiteHeader({ wide = false }: ChromeProps): React.JSX.Element {
   return (
     /* Sticky, so the changelog's long scroll keeps its way back. The bar owns
        its ground — a translucent wash over blur with a hairline underneath —
        because content sliding beneath an unbounded header reads as a glitch,
        and the shell column moves inside so the wash runs the full bleed. */
     <header className="sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur-md">
-      <nav className="shell flex h-16 items-center justify-between">
+      <nav className={`${columnClass(wide)} flex h-16 items-center justify-between`}>
         <a
           className="inline-flex items-center gap-2 font-brand text-base font-bold tracking-[-0.01em] no-underline"
           href="/"
@@ -100,9 +109,11 @@ export function SiteHeader(): React.JSX.Element {
 }
 
 /** Shared between every page so the legal and license links never drift apart. */
-export function SiteFooter(): React.JSX.Element {
+export function SiteFooter({ wide = false }: ChromeProps): React.JSX.Element {
   return (
-    <footer className="shell hairline pt-12 pb-16 font-mono text-xs text-muted-foreground">
+    <footer
+      className={`${columnClass(wide)} hairline pt-12 pb-16 font-mono text-xs text-muted-foreground`}
+    >
       {/* The separator belongs to the gap between items rather than to any
           item, so adding or reordering a link never leaves a stray dot. */}
       <div className="flex flex-wrap gap-2 [&>*+*]:before:mr-2 [&>*+*]:before:content-['·']">

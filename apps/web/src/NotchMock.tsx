@@ -253,7 +253,13 @@ export function NotchMock(): React.JSX.Element {
           so the whole recreation reads as a single illustration. The hidden
           stage stays inert so find-in-page cannot match invisible titles and
           a drag cannot select text nobody can see. */}
-      <div className="mock" data-mode={mode} role="img" aria-label={MOCK_LABEL} style={mockStyle}>
+      <div
+        className="mock provider-brand"
+        data-mode={mode}
+        role="img"
+        aria-label={MOCK_LABEL}
+        style={mockStyle}
+      >
         <span className="mock-frame" />
         <div className="mock-backdrop" ref={backdrop} />
 
