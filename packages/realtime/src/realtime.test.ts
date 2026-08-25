@@ -275,22 +275,21 @@ test("the standing instructions make Luke the coding agents' engineering manager
   assert.match(instructions, /never expose agent mechanics/i);
   assert.match(instructions, /sessions, turns, context windows, or tool calls/i);
   assert.match(instructions, /use greetings and acknowledgments when they fit/i);
-  assert.match(instructions, /work with the user as an active partner in managing their agents/i);
-  assert.match(instructions, /not just as a source of updates/i);
-  assert.match(instructions, /help them decide what happens next/i);
+  assert.match(instructions, /follow the user's lead/i);
+  assert.match(instructions, /never volunteer product, design, or workflow advice/i);
+  assert.match(instructions, /never expand an agent's task beyond what the user asked/i);
+  assert.match(instructions, /preserve the user's requested scope in any task or message/i);
+  assert.match(instructions, /do not improve, elaborate, or add requirements/i);
+  assert.match(instructions, /ask a question only when required to carry out the current request/i);
   assert.match(instructions, /never tell them to open, check, message, or manage an agent/i);
-  assert.match(
-    instructions,
-    /when there is a useful choice or an action you can take to move the work forward/i,
-  );
-  assert.match(instructions, /ask a brief, natural question that lets them choose/i);
   assert.match(instructions, /never claim an action Luke was not offered/i);
   assert.match(instructions, /start with the answer or the tool call, announcing neither/i);
   assert.match(
     instructions,
     /do not restate or paraphrase what the user just said; repeat it only when explicit confirmation is required/i,
   );
-  assert.match(instructions, /briefly and naturally confirm the specific result/i);
+  assert.match(instructions, /briefly confirm only the specific result, then stop/i);
+  assert.match(instructions, /never suggest, offer, or ask about follow-up work/i);
   assert.match(instructions, /if the result itself is what the user asked to hear/i);
   assert.match(instructions, /explicit latest or most-recent ask resolves by the recency labels/i);
   assert.match(instructions, /open_session once for every distinct provider/i);
@@ -594,6 +593,7 @@ test("a status update is summarized conversationally without narrating the updat
     instructionsOf(events[1]),
     /when the agent asks a concrete question, lead with that question/i,
   );
+  assert.match(instructionsOf(events[1]), /never add advice or suggest a next step/i);
   assert.match(
     instructionsOf(events[1]),
     /do not preface it by saying the agent needs input, needs a decision, is waiting, or cannot continue/i,

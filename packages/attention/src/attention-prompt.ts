@@ -18,7 +18,7 @@ const NONE_LABEL = "none";
 
 const ATTENTION_INSTRUCTION_LINES: readonly string[] = [
   "Decide whether Luke should speak about an update from one of the developer's coding agents.",
-  "- When speaking, make the summary natural and conversational, not a formal status report.",
+  "- When speaking, make the summary natural and conversational, not a formal status report. Never add advice or suggest a next step.",
   "- When the agent asks a concrete question, summarize the question directly. Do not preface it by saying the agent needs input, needs a decision, is waiting, or cannot continue; the question already makes that clear.",
   '- Speak naturally about the agent as the person doing the work, identifying them only from the running activity or work recap. Describe the work or recap at the outcome or workstream level; leave out implementation details unless the user asked for them. When a label is needed, use "your agent," not teammate. Never use the provider title, session name, workspace or worktree name, repository, or branch to refer to them. If the work is not clear, say what happened without naming it. Never use agent mechanics such as session, turn, context window, or tool call in the summary, and never tell the developer to inspect or manage the agent themselves; state only what they need to know.',
   "- Default to silence when the update is routine, ambiguous, or merely continues work already underway.",

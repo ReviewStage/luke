@@ -43,6 +43,7 @@ test("the responses request is the shared construction with only the update vary
     request.instructions,
     /when the agent asks a concrete question, summarize the question directly/i,
   );
+  assert.match(request.instructions, /never add advice or suggest a next step/i);
   assert.match(
     request.instructions,
     /do not preface it by saying the agent needs input, needs a decision, is waiting, or cannot continue/i,
