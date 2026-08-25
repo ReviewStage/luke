@@ -240,7 +240,7 @@ export const CREDENTIAL_PROVIDERS: CredentialProviderRegistry = {
     // Replicas issues organization keys and personal keys, and its API takes
     // either; the personal page is the one every member can reach.
     hint: "Create a key in the Replicas dashboard under Personal · API keys.",
-    apiKeysUrl: "https://tryreplicas.com/dashboard/account/api-keys",
+    apiKeysUrl: "https://replicas.dev/dashboard/account/api-keys",
     environmentVariables: [REPLICAS_ENVIRONMENT.API_KEY],
     // No key format: Replicas publishes none, so a prefix could only refuse a
     // working key.
