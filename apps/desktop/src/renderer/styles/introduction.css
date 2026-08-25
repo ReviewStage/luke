@@ -271,6 +271,19 @@
   transition: opacity var(--duration-exit) var(--motion-exit);
 }
 
+/* With its rows away the group is a footprint, not a surface: it keeps its
+   full layout box while only opacity has left, and the takeover's pointer
+   island is read off elementFromPoint — so an invisible group that still
+   hit-tests holds the window's interception across the whole box the panel
+   no longer draws, and swallows the clicks meant for what stands behind it:
+   the desktop, and macOS's own microphone dialog above all. */
+.introduction-stage[data-beat="glide"] .introduction-panel,
+.introduction-stage[data-beat="microphone-dialog"] .introduction-panel,
+.introduction-stage[data-beat="stand-down"] .introduction-panel,
+.introduction-stage[data-beat="done"] .introduction-panel {
+  pointer-events: none;
+}
+
 /* Away from the panel each row is its own solid card — no panel box around
    the list, and nothing of the desktop reading through a row. They hold that
    solidity through the whole flight *and* through the surface's own spring
