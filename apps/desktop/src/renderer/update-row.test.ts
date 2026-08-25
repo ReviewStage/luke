@@ -60,6 +60,14 @@ test("the first launch after an install confirms what happened", () => {
   assert.equal(row.current, true);
 });
 
+test("a release still publishing says the wait is Luke's, not the developer's", () => {
+  const row = updateRow(supported({ status: UPDATE_STATUS.PUBLISHING, latestVersion: "0.2.0" }));
+  assert.equal(row.action, UPDATE_ROW_ACTION.CHECK);
+  assert.ok(row.detail.includes("0.2.0"), "the version found is named");
+  assert.ok(row.detail.includes("retry"), "the row says the retry happens on its own");
+  assert.equal(row.current, false);
+});
+
 test("a failed update says so and falls back to the releases page", () => {
   const failed = updateRow(supported({ status: UPDATE_STATUS.ERROR, latestVersion: "0.2.0" }));
   assert.equal(failed.action, UPDATE_ROW_ACTION.GET);
@@ -92,6 +100,10 @@ test("only a positively known newer release counts as news", () => {
   );
   assert.equal(
     updateAvailable(supported({ status: UPDATE_STATUS.READY, latestVersion: "0.2.0" })),
+    true,
+  );
+  assert.equal(
+    updateAvailable(supported({ status: UPDATE_STATUS.PUBLISHING, latestVersion: "0.2.0" })),
     true,
   );
   assert.equal(

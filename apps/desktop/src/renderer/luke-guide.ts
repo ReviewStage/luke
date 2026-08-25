@@ -613,7 +613,8 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         `The Updates section on ${FRONT_PAGE} says which version this is and where the build ` +
         "stands. Luke checks on his own a few times a day — the fetch is unauthenticated, " +
         "and nothing about the developer or their sessions is sent — and a newer release " +
-        "downloads itself and installs when Luke next quits. The row's press can be asked " +
+        "downloads itself and installs when Luke next quits. A release found before its " +
+        "download is ready is retried on its own within minutes. The row's press can be asked " +
         "of Luke — check for updates, open the releases page, restart to update — and only " +
         "the one act the row currently offers runs. The Changelog row opens the changelog " +
         "in the browser, by hand alone.",

@@ -406,7 +406,12 @@ Trust constraints:
   lands on the same main-process guards the button's own press does, so it
   reaches nothing the button does not — the check, the restart, or the fixed
   releases page in the browser. A transient network failure is silence for
-  the next timed check; any other failure is an answer on the row whose way forward
+  the next timed check; a download refused just after its check found the
+  version is a release still publishing, and the same check is retried at a
+  few fixed delays against the same fixed feed — nothing new sent or read,
+  only the cadence — with the row saying the wait honestly, before the
+  schedule ends in the same error row a corrupt release deserves; any other
+  failure is an answer on the row whose way forward
   is the browser, at the releases page fixed by the build, the same page
   that serves a build which cannot install in place at all. Widening what
   the updater sends, reads, or does is a product decision, not an
