@@ -24,10 +24,12 @@ export {
   attentionResponsesRequest,
 } from "./attention-openai.js";
 export {
+  AGENT_WORK_LANGUAGE_INSTRUCTION,
   type AttentionPromptUpdate,
   attentionInstructions,
   attentionPromptUpdateFromWire,
   attentionUpdateInput,
+  CTO_RELEVANCE_INSTRUCTION,
 } from "./attention-prompt.js";
 export {
   ATTENTION_RATE_LIMIT_COOLDOWN_MS,

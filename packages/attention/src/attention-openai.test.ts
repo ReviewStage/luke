@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  AGENT_WORK_LANGUAGE_INSTRUCTION,
   ATTENTION_DECISION_SCHEMA,
   ATTENTION_DECISION_SCHEMA_NAME,
   ATTENTION_TRIGGER,
@@ -11,6 +12,7 @@ import {
   attentionResponsesOutputText,
   attentionResponsesRequest,
   attentionUpdateInput,
+  CTO_RELEVANCE_INSTRUCTION,
 } from "@sidecar/attention";
 import {
   maximumSessionRecapLength,
@@ -32,34 +34,48 @@ const UPDATE: AttentionPromptUpdate = {
   noticeRequest: "tell me when this finishes",
 };
 
+test("shared CTO and agent-language rules retain every speaking boundary", () => {
+  assert.match(CTO_RELEVANCE_INSTRUCTION, /keep routine execution details with the agents/i);
+  assert.match(
+    CTO_RELEVANCE_INSTRUCTION,
+    /decisions, material outcomes, risks, and changes to priorities or delivery/i,
+  );
+
+  assert.match(AGENT_WORK_LANGUAGE_INSTRUCTION, /outcome or workstream level/i);
+  assert.match(AGENT_WORK_LANGUAGE_INSTRUCTION, /implementation details only when asked/i);
+  assert.match(AGENT_WORK_LANGUAGE_INSTRUCTION, /agent as the person doing that work/i);
+  assert.match(AGENT_WORK_LANGUAGE_INSTRUCTION, /identify them only by the work/i);
+  assert.match(
+    AGENT_WORK_LANGUAGE_INSTRUCTION,
+    /never by a provider, session, workspace, worktree, repository, or branch name/i,
+  );
+  assert.match(AGENT_WORK_LANGUAGE_INSTRUCTION, /work is unclear/i);
+  assert.match(
+    AGENT_WORK_LANGUAGE_INSTRUCTION,
+    /say "your agent working on \[work\]" and name the work/i,
+  );
+  assert.match(AGENT_WORK_LANGUAGE_INSTRUCTION, /never use "your agent" alone/i);
+  assert.match(AGENT_WORK_LANGUAGE_INSTRUCTION, /sessions, turns, context windows, or tool calls/i);
+});
+
 test("the responses request is the shared construction with only the update varying", () => {
   const request = attentionResponsesRequest(UPDATE, { model: "gpt-test", maximumOutputTokens: 64 });
 
   assert.equal(request.model, "gpt-test");
   assert.equal(request.instructions, attentionInstructions());
-  assert.match(request.instructions, /natural and conversational/i);
-  assert.match(request.instructions, /not a formal status report/i);
-  assert.match(
-    request.instructions,
-    /when the agent asks a concrete question, summarize the question directly/i,
-  );
-  assert.match(
-    request.instructions,
-    /do not preface it by saying the agent needs input, needs a decision, is waiting, or cannot continue/i,
-  );
+  assert.match(request.instructions, /engineering manager for the user's coding agents/i);
+  assert.ok(request.instructions.includes(CTO_RELEVANCE_INSTRUCTION));
+  assert.ok(request.instructions.includes(AGENT_WORK_LANGUAGE_INSTRUCTION));
+  assert.match(request.instructions, /default to silence/i);
+  assert.match(request.instructions, /status change, completion, or recap alone is not enough/i);
+  assert.match(request.instructions, /one short, natural sentence/i);
+  assert.match(request.instructions, /state only what the CTO needs to know/i);
+  assert.match(request.instructions, /add no advice or next step/i);
+  assert.match(request.instructions, /treat waiting as actionable only/i);
+  assert.match(request.instructions, /state a concrete question directly/i);
+  assert.match(request.instructions, /without first saying the agent needs input/i);
+  assert.match(request.instructions, /waiting on automation it set in motion/i);
   assert.match(request.instructions, /answer it directly without restating the ask/i);
-  assert.match(request.instructions, /when a label is needed, use "your agent," not teammate/i);
-  assert.doesNotMatch(request.instructions, /developer's agent/i);
-  assert.match(request.instructions, /never use agent mechanics/i);
-  assert.match(request.instructions, /never tell the developer to inspect or manage the agent/i);
-  assert.match(
-    request.instructions,
-    /identifying them only from the running activity or work recap/i,
-  );
-  assert.match(
-    request.instructions,
-    /never use the provider title, session name, workspace or worktree/i,
-  );
   assert.doesNotMatch(request.input, /Provider title:|Workspace:/);
   assert.equal(request.input, attentionUpdateInput(UPDATE));
   assert.equal(request.max_output_tokens, 64);

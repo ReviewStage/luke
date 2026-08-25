@@ -62,7 +62,20 @@ function noticeUpdateContext(notice: SessionNotice): string {
     .join("; ");
 }
 
-export function sessionNoticeSpeech(notice: SessionNotice, decidedAt: number): AttentionSpeech {
+/**
+ * Keeps the deterministic path for facts that cannot wait on model judgment.
+ * Routine finishes still reach the attention evaluator, which can speak when
+ * their outcome is actually useful; the status edge alone does not earn an
+ * interruption.
+ */
+export function sessionNoticeSpeech(
+  notice: SessionNotice,
+  decidedAt: number,
+): AttentionSpeech | undefined {
+  if (notice.status === SESSION_NOTICE_STATUS.COMPLETE) return undefined;
+  if (notice.status === SESSION_NOTICE_STATUS.WAITING && notice.holdingForDeveloper !== true) {
+    return undefined;
+  }
   return {
     providerId: notice.providerId,
     providerSessionId: notice.providerSessionId,

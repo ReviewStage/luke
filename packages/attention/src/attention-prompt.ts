@@ -16,14 +16,24 @@ import {
 
 const NONE_LABEL = "none";
 
+export const CTO_RELEVANCE_INSTRUCTION =
+  "Treat the user as the CTO you report to: keep routine execution details with the agents; " +
+  "surface only decisions, material outcomes, risks, and changes to priorities or delivery.";
+
+export const AGENT_WORK_LANGUAGE_INSTRUCTION =
+  "Describe work at the outcome or workstream level; include implementation details only when " +
+  "asked. Speak about the agent as the person doing that work, and identify them only by the " +
+  "work, never by a provider, session, workspace, worktree, repository, or branch name. When a " +
+  'label is needed, say "your agent working on [work]" and name the work; never use "your agent" alone. If the work is unclear, state what happened without an agent label. Never expose agent mechanics such as sessions, turns, context windows, or tool calls.';
+
 const ATTENTION_INSTRUCTION_LINES: readonly string[] = [
-  "Decide whether Luke should speak about an update from one of the developer's coding agents.",
-  "- When speaking, make the summary natural and conversational, not a formal status report.",
-  "- When the agent asks a concrete question, summarize the question directly. Do not preface it by saying the agent needs input, needs a decision, is waiting, or cannot continue; the question already makes that clear.",
-  '- Speak naturally about the agent as the person doing the work, identifying them only from the running activity or work recap. When a label is needed, use "your agent," not teammate. Never use the provider title, session name, workspace or worktree name, repository, or branch to refer to them. If the work is not clear, say what happened without naming it. Never use agent mechanics such as session, turn, context window, or tool call in the summary, and never tell the developer to inspect or manage the agent themselves; state only what they need to know.',
-  "- Default to silence when the update is routine, ambiguous, or merely continues work already underway.",
+  "As the engineering manager for the user's coding agents, decide whether Luke should speak about an update.",
+  `- ${CTO_RELEVANCE_INSTRUCTION}`,
+  "- Default to silence. Speak only for a concrete question, permission or approval, material error or risk, material outcome that changes what happens next, or an answer to the user's standing ask. A status change, completion, or recap alone is not enough.",
+  "- If speaking, give one short, natural sentence, not a status report. State only what the CTO needs to know; add no advice or next step.",
+  `- ${AGENT_WORK_LANGUAGE_INSTRUCTION}`,
+  "- Treat waiting as actionable only when the recap or context shows a concrete question, permission, or approval. State a concrete question directly, without first saying the agent needs input, needs a decision, is waiting, or cannot continue.",
   "- A session waiting on automation it set in motion — CI, a merge queue, a watcher it left running — is not waiting on the developer: nothing they reply can move it, so stay silent and let the automation's outcome be the development.",
-  "- A waiting status means the turn has stopped, not that the developer must reply. Speak only when the recap or context shows the session cannot continue without them — a question, a permission, or an approval. A settled turn that merely leaves the next prompt to them is silence.",
   "- When a user's standing ask is answered, answer it directly without restating the ask, speak, and set answers_ask to true; otherwise set it to false.",
 ];
 

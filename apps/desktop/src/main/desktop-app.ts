@@ -1674,12 +1674,9 @@ async function announceSessionNotices(sessions: readonly Session[]): Promise<voi
   // told only when one was actually let go.
   if (attentionRequests.retain(sessions)) broadcastNoticeAsks();
   const now = Date.now();
-  // A standing ask never quiets an edge. The ask licenses more speech about
-  // its session, not less: an edge the ask did not name — an error under a
-  // finish-only ask — would otherwise go unspoken, because the evaluator only
-  // answers what was asked. When the evaluator answers the same edge the ask
-  // named, the finish is said twice in a row — a cost worth the guarantee
-  // that a deterministic alert is never traded away on a model's judgment.
+  // The deterministic path is reserved for an error or a concrete hold for
+  // the developer. Routine finishes still reach the attention evaluator,
+  // which can speak when the outcome is useful or answers a standing ask.
   // Fed before anything is awaited, so passes reach the tracker in order —
   // the retain above included.
   const notices = sessionNoticeTracker.notices(
@@ -1687,6 +1684,10 @@ async function announceSessionNotices(sessions: readonly Session[]): Promise<voi
     now,
   );
   if (notices.length === 0) return;
+  const immediateNotices = notices.filter(
+    (notice) => sessionNoticeSpeech(notice, now) !== undefined,
+  );
+  if (immediateNotices.length === 0) return;
   // No voice, nothing to say it with: without a Realtime credential the
   // renderer cannot open a call, and the panel still shows every state. The
   // pressable notice is the spoken announcement's face, so it goes with the
@@ -1696,11 +1697,14 @@ async function announceSessionNotices(sessions: readonly Session[]): Promise<voi
   // dropping it; the release tick reads the backlog out once the meeting
   // ends. The panel has shown every state the whole time either way.
   if (await announcementsQuietNow(now)) {
-    heldNotices.hold(notices);
+    heldNotices.hold(immediateNotices);
     return;
   }
-  const speech = notices.map((notice) => sessionNoticeSpeech(notice, now));
-  countSpokenAnnouncements(notices);
+  const speech = immediateNotices.flatMap((notice) => {
+    const item = sessionNoticeSpeech(notice, now);
+    return item ? [item] : [];
+  });
+  countSpokenAnnouncements(immediateNotices);
   panels.voiceHost()?.webContents.send(channels.onAttentionSpeech, speech);
 }
 
@@ -1846,7 +1850,13 @@ async function releaseHeldNotices(): Promise<void> {
   // like the notices it is re-stamped at release, because the decision to
   // speak is what is fresh — held any older it would be dropped unread.
   const releasedAsks = heldRequestSpeech.release().map((item) => ({ ...item, decidedAt: now }));
-  const speech = [...releasedAsks, ...released.map((notice) => sessionNoticeSpeech(notice, now))];
+  const speech = [
+    ...releasedAsks,
+    ...released.flatMap((notice) => {
+      const item = sessionNoticeSpeech(notice, now);
+      return item ? [item] : [];
+    }),
+  ];
   if (speech.length === 0) return;
   countSpokenAnnouncements(released);
   panels.voiceHost()?.webContents.send(channels.onAttentionSpeech, speech);
