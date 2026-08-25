@@ -374,6 +374,11 @@ export class UpdateService {
   #resumePublishingWait(message: string): boolean {
     const version = this.#publishingWait;
     if (version === undefined) return false;
+    // A failed check arrives twice, as the `error` event and the rejected
+    // promise. The second delivery finds the wait already drawn and its
+    // timer already armed — entering `publishing` always arms one — and must
+    // not spend a second slot on the same failure.
+    if (this.#snapshot.status === UPDATE_STATUS.PUBLISHING) return true;
     if (!this.#armPublishingRetry(version)) {
       this.#publishingWait = undefined;
       return false;

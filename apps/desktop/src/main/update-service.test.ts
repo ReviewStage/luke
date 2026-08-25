@@ -244,15 +244,38 @@ test("a network blip mid-wait resumes the bounded schedule instead of orphaning 
   updates.stop();
 });
 
+test("electron-updater's doubled failure delivery spends one slot, not two", async () => {
+  const { fire, engine, rejectNextCheckWith } = fakeEngine();
+  const updates = service({ engine, publishingRetryDelaysMs: [10, 60_000] });
+
+  fire().onAvailable("0.2.0");
+  fire().onError('Cannot download "https://github.com/x", status 404: Not Found');
+  rejectNextCheckWith("net::ERR_CONNECTION_RESET");
+  await sleep(30);
+  assert.equal(updates.snapshot().status, UPDATE_STATUS.PUBLISHING);
+
+  // A failed check arrives as the `error` event and the rejected promise
+  // both. The budget above has exactly one slot left, so a second delivery
+  // that spent it would fall out of the wait — it must find the wait drawn
+  // and leave the budget alone.
+  fire().onError("net::ERR_CONNECTION_RESET");
+  assert.equal(updates.snapshot().status, UPDATE_STATUS.PUBLISHING);
+  updates.stop();
+});
+
 test("a wait that outlives the budget offline falls silent like any network failure", async () => {
-  const { fire, engine } = fakeEngine();
-  const updates = service({ engine, publishingRetryDelaysMs: [60_000] });
+  const { fire, engine, rejectNextCheckWith } = fakeEngine();
+  const updates = service({ engine, publishingRetryDelaysMs: [10] });
 
   fire().onAvailable("0.2.0");
   fire().onError("sha512 checksum mismatch, expected aaa, got bbb");
   assert.equal(updates.snapshot().status, UPDATE_STATUS.PUBLISHING);
 
-  fire().onError("net::ERR_INTERNET_DISCONNECTED");
+  // The one slot is spent, so the retry dying on the network has no budget
+  // left to resume with and the wait ends in the network failure's own
+  // answer: unmarked idle, never the error row.
+  rejectNextCheckWith("net::ERR_INTERNET_DISCONNECTED");
+  await sleep(30);
   assert.deepEqual(updates.snapshot(), {
     status: UPDATE_STATUS.IDLE,
     currentVersion: "0.1.0",
