@@ -56,6 +56,12 @@ export interface VoiceSettings {
 export interface VoiceCapabilityAssemblerOptions {
   settings: VoiceSettings;
   credentialsUsable: () => boolean;
+  /**
+   * Whether this is a fixture or evidence run. `credentialsUsable` cannot say:
+   * it is also false on a live run whose account gate is closed, and that state
+   * must be diagnosed as the missing credential it is, not as a fixture run.
+   */
+  fixtureRun: () => boolean;
   accountSignedIn: () => boolean;
   hostedServiceBaseUrl: string;
   refreshAccount: () => Promise<void>;
@@ -76,7 +82,7 @@ export class VoiceCapabilityAssembler {
   constructor(options: VoiceCapabilityAssemblerOptions) {
     this.#options = options;
     this.#unavailableDiagnostics = unavailableRealtimeDiagnostics({
-      fixtureMode: !options.credentialsUsable(),
+      fixtureMode: options.fixtureRun(),
       apiKeyConfigured: false,
     });
   }
@@ -147,7 +153,7 @@ export class VoiceCapabilityAssembler {
         ? new HostedRealtimeCredentialMinter({ ...seams, ...preferences })
         : undefined;
     this.#unavailableDiagnostics = unavailableRealtimeDiagnostics({
-      fixtureMode: !credentialsUsable,
+      fixtureMode: this.#options.fixtureRun(),
       apiKeyConfigured: apiKey !== undefined,
     });
     this.#hostedUsageReader = policy.useHosted ? new HostedUsageReader(seams) : undefined;

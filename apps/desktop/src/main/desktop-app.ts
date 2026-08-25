@@ -405,6 +405,7 @@ const attentionRequests = new AttentionRequestRegistry();
 const voiceCapabilities = new VoiceCapabilityAssembler({
   settings: settingsStore,
   credentialsUsable: () => runMode.sendsNetwork && accountCapabilitiesActive(),
+  fixtureRun: () => !runMode.sendsNetwork,
   accountSignedIn: () => account.status === ACCOUNT_STATUS.SIGNED_IN,
   hostedServiceBaseUrl: HOSTED_SERVICE_BASE_URL,
   refreshAccount: accountSession.refreshOnce,

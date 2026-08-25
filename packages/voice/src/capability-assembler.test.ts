@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { REALTIME_MINT_OUTCOME } from "@sidecar/realtime";
 import { APP_SETTING_SCHEMA, VOICE_SOURCE } from "@sidecar/settings";
 import {
   resolveVoiceCapability,
@@ -76,6 +77,7 @@ test("the assembler builds and clears the keyed voice capabilities as one unit",
       readApiKey: async () => key,
     },
     credentialsUsable: () => true,
+    fixtureRun: () => false,
     accountSignedIn: () => false,
     hostedServiceBaseUrl: "https://example.test",
     refreshAccount: async () => undefined,
@@ -107,6 +109,7 @@ test("the assembler keeps fixture runs credential-free without reading a key", a
       },
     },
     credentialsUsable: () => false,
+    fixtureRun: () => true,
     accountSignedIn: () => true,
     hostedServiceBaseUrl: "https://example.test",
     refreshAccount: async () => undefined,
@@ -119,4 +122,30 @@ test("the assembler keeps fixture runs credential-free without reading a key", a
   assert.equal(keyReads, 0);
   assert.equal(assembler.realtimeCredentials, undefined);
   assert.equal(assembler.hostedUsageReader, undefined);
+  assert.equal(
+    assembler.unavailableDiagnostics.lastOutcome,
+    REALTIME_MINT_OUTCOME.DISABLED_BY_FIXTURE,
+  );
+});
+
+test("a signed-out live run is diagnosed as missing credentials, not as a fixture run", async () => {
+  const reports: string[] = [];
+  const assembler = new VoiceCapabilityAssembler({
+    settings: settingsFor({ source: VOICE_SOURCE.ACCOUNT }),
+    credentialsUsable: () => false,
+    fixtureRun: () => false,
+    accountSignedIn: () => false,
+    hostedServiceBaseUrl: "https://example.test",
+    refreshAccount: async () => undefined,
+    currentSession: () => undefined,
+    noticeRequestFor: () => undefined,
+    report: (message) => reports.push(message),
+  });
+
+  await assembler.apply();
+  assert.equal(assembler.realtimeCredentials, undefined);
+  assert.equal(assembler.unavailableDiagnostics.fixtureMode, false);
+  assert.equal(assembler.unavailableDiagnostics.lastOutcome, REALTIME_MINT_OUTCOME.NO_API_KEY);
+  assert.doesNotMatch(reports.at(-1) ?? "", /fixture/);
+  assert.match(reports.at(-1) ?? "", /Signing in/);
 });
