@@ -453,6 +453,36 @@ const MOTIONS = {
       },
     ],
   },
+  // Drawn into being and waking: the nose-and-smile stroke draws itself first
+  // over an eyeless face (the introduction's companion rule draws the stroke;
+  // the eyes hold at nothing until it lands), then the eyes blink open while
+  // the head rises out of its droop, with a touch of overshoot on the way up.
+  // Like `appear` it begins away from rest, because it is made for the moment
+  // the face is first drawn (the onboarding introduction), where there is no
+  // earlier pose to snap from; it ends at the resting pose and stays there.
+  wake: {
+    moment: "first waking (introduction: eyes blink open)",
+    layers: [
+      {
+        type: "translate",
+        values: [
+          [0, 5],
+          [0, 5],
+          [0, -1.2],
+          [0, 0],
+          [0, 0],
+        ],
+        keyTimes: [0, 0.28, 0.62, 0.78, 1],
+        dur: 2.8,
+      },
+    ],
+    eyes: {
+      kind: "blink",
+      factors: [0, 0, 1, 0.1, 1, 1],
+      keyTimes: [0, 0.35, 0.45, 0.55, 0.68, 1],
+      dur: 2.8,
+    },
+  },
   // Settles into a slouch, bolts upright with a touch of overshoot, and comes
   // back to rest. The slouch is inside the gesture rather than at either end of
   // it: a motion that begins away from rest starts by snapping there.
@@ -863,7 +893,7 @@ function faceMotionCss() {
   const zRules = [
     `.luke-face-z {\n  animation-duration: ${SLEEP_Z_DURATION}s;\n}`,
     ...SLEEP_Z.map(
-      (z, index) => `.luke-face-z-${index + 1} {\n  animation-name: luke-sleep-z-${index + 1};\n}`,
+      (_z, index) => `.luke-face-z-${index + 1} {\n  animation-name: luke-sleep-z-${index + 1};\n}`,
     ),
   ];
   return [

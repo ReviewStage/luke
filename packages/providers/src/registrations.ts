@@ -10,28 +10,21 @@ import {
   type ProviderId,
   type SessionProviderAdapter,
 } from "@sidecar/session";
-import { AntigravitySessionAdapter } from "./antigravity/adapter.js";
-import { ClaudeCodeSessionAdapter } from "./claude-code/adapter.js";
 import { installClaudeCodeObservationHooks } from "./claude-code/hooks.js";
-import { CODEX_PROVIDER, CodexSessionAdapter } from "./codex/adapter.js";
+import { CODEX_PROVIDER } from "./codex/adapter.js";
 import type { CodexCloudSessionAdapter } from "./codex/cloud-adapter.js";
 import { installCodexObservationHooks } from "./codex/hooks.js";
 import { ConductorSessionAdapter } from "./conductor/adapter.js";
 import { CopilotSessionAdapter } from "./copilot/adapter.js";
 import { CURSOR_PROVIDER, CursorSessionAdapter } from "./cursor/adapter.js";
 import { installCursorObservationHooks } from "./cursor/hooks.js";
-import { CursorLocalSessionAdapter } from "./cursor/local-adapter.js";
 import { DEVIN_PROVIDER, DevinSessionAdapter } from "./devin/adapter.js";
 import { installDevinObservationHooks } from "./devin/hooks.js";
-import { DevinLocalSessionAdapter } from "./devin/local-adapter.js";
-import { GeminiCliSessionAdapter } from "./gemini-cli/adapter.js";
 import { installGeminiObservationHooks } from "./gemini-cli/hooks.js";
-import { GrokBuildSessionAdapter } from "./grok-build/adapter.js";
 import type { ObservationHookProviderId } from "./hook-registry.js";
 import { JulesSessionAdapter } from "./jules/adapter.js";
-import { OpenCodeSessionAdapter } from "./opencode/adapter.js";
+import { localSessionAdapters } from "./local-adapters.js";
 import { installOpenCodeObservationPlugin } from "./opencode/hooks.js";
-import { RadiusSessionAdapter } from "./radius/adapter.js";
 import { ReplicasSessionAdapter } from "./replicas/adapter.js";
 import {
   HOOK_SPOOL_MAXIMUM_AGE_MS,
@@ -87,27 +80,23 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
   const devinInstallation = hookInstallation(PROVIDER_ID.DEVIN);
   const geminiInstallation = hookInstallation(PROVIDER_ID.GEMINI_CLI);
   const opencodeInstallation = hookInstallation(PROVIDER_ID.OPENCODE);
-  const claude = new ClaudeCodeSessionAdapter({
-    hookEventsDirectory: () => claudeInstallation().spoolDirectory,
+  // The on-disk adapters come from the shared table the keyless peek also
+  // builds from, here with each hooked provider's spool to sharpen its read.
+  const locals = localSessionAdapters({
+    hookEventsDirectory: (providerId) => () =>
+      options.observationHookInstallation(providerId).spoolDirectory,
   });
   // Codex runs sessions in two places: on this machine, observed from its own
   // transcripts, and in Codex cloud, observed through the Codex CLI's
   // documented read under the ChatGPT login the user already gave that CLI.
   const codex = new CompositeSessionProviderAdapter({
     provider: CODEX_PROVIDER,
-    adapters: [
-      new CodexSessionAdapter({
-        hookEventsDirectory: () => codexInstallation().spoolDirectory,
-      }),
-      options.codexCloudAdapter,
-    ],
+    adapters: [locals.codexLocal, options.codexCloudAdapter],
   });
   const cursor = new CompositeSessionProviderAdapter({
     provider: CURSOR_PROVIDER,
     adapters: [
-      new CursorLocalSessionAdapter({
-        hookEventsDirectory: () => cursorInstallation().spoolDirectory,
-      }),
+      locals.cursorLocal,
       new CursorSessionAdapter({
         readApiKey: () => options.readApiKey(CREDENTIAL_PROVIDER_ID.CURSOR),
       }),
@@ -116,9 +105,7 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
   const devin = new CompositeSessionProviderAdapter({
     provider: DEVIN_PROVIDER,
     adapters: [
-      new DevinLocalSessionAdapter({
-        hookEventsDirectory: () => devinInstallation().spoolDirectory,
-      }),
+      locals.devinLocal,
       new DevinSessionAdapter({
         readApiKey: () => options.readApiKey(CREDENTIAL_PROVIDER_ID.DEVIN),
       }),
@@ -130,10 +117,10 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
     // already tells a settled turn from a permission hold, so nothing of
     // Antigravity's needs writing to.
     [PROVIDER_ID.ANTIGRAVITY]: {
-      adapter: new AntigravitySessionAdapter(),
+      adapter: locals.antigravity,
     },
     [PROVIDER_ID.CLAUDE_CODE]: {
-      adapter: claude,
+      adapter: locals.claudeCode,
       registerObservationHook: observationHookRegistration(
         installClaudeCodeObservationHooks,
         claudeInstallation,
@@ -179,9 +166,7 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
       ),
     },
     [PROVIDER_ID.GEMINI_CLI]: {
-      adapter: new GeminiCliSessionAdapter({
-        hookEventsDirectory: () => geminiInstallation().spoolDirectory,
-      }),
+      adapter: locals.geminiCli,
       registerObservationHook: observationHookRegistration(
         installGeminiObservationHooks,
         geminiInstallation,
@@ -191,9 +176,7 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
     // Grok Build's own stores already say whose move it is — the database's
     // newest message, or the 1.0.x lifecycle log with its permission prompts
     // — so its adapter needs no observation hook.
-    [PROVIDER_ID.GROK_BUILD]: {
-      adapter: new GrokBuildSessionAdapter(),
-    },
+    [PROVIDER_ID.GROK_BUILD]: { adapter: locals.grokBuild },
     [PROVIDER_ID.JULES]: {
       adapter: new JulesSessionAdapter({
         readApiKey: () => options.readApiKey(CREDENTIAL_PROVIDER_ID.JULES),
@@ -201,9 +184,7 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
       credential: CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.JULES],
     },
     [PROVIDER_ID.OPENCODE]: {
-      adapter: new OpenCodeSessionAdapter({
-        hookEventsDirectory: () => opencodeInstallation().spoolDirectory,
-      }),
+      adapter: locals.openCode,
       // The registration is a managed plugin file in OpenCode's own plugin
       // directory rather than a merged entry, but it converges and prunes on
       // the same launch cadence as every other provider's.
@@ -216,9 +197,7 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
     // The browser's own store already says whose move it is — a turn's row
     // records when it ended and what ended it — so its adapter needs no
     // observation hook, and Radius publishes no hook surface to join anyway.
-    [PROVIDER_ID.RADIUS]: {
-      adapter: new RadiusSessionAdapter(),
-    },
+    [PROVIDER_ID.RADIUS]: { adapter: locals.radius },
     [PROVIDER_ID.REPLICAS]: {
       adapter: new ReplicasSessionAdapter({
         readApiKey: () => options.readApiKey(CREDENTIAL_PROVIDER_ID.REPLICAS),

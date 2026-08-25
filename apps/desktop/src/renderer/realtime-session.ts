@@ -22,9 +22,11 @@ import {
   conversationHistoryText,
   functionCallFollowUpEvents,
   functionCallOutputEvents,
+  type IntroductionLine,
   ISSUE_TRACKER_DISCONNECTED_TEXT,
   inputAudioAppendEvents,
   inputAudioFormatUpdateEvents,
+  introductionSpeechEvents,
   issueContextEvents,
   issueContextText,
   issueToolAction,
@@ -247,6 +249,15 @@ export interface RealtimeVoiceSessionCallbacks {
    * records the words so the thread holds both halves of the exchange.
    */
   onSpokenAsk?(transcript: string): void;
+  /**
+   * A reply concluding, words or none. `onReplyEnded` hands over only words
+   * that exist, so a reply the server failed or answered without a transcript
+   * ends without it — and a caller sequencing on endings alone (the
+   * introduction's scripted beats) would wait forever on one. This fires once
+   * per concluded reply, from the same funnel every ending passes, the settle
+   * backstop included.
+   */
+  onReplySettled?(): void;
 }
 
 /**
@@ -304,6 +315,13 @@ export interface RealtimeVoiceSessionOptions extends RealtimeVoiceSessionCallbac
    */
   createPressCapture?: PressCaptureFactory;
   exchangeDescription?: (url: string, init: RequestInit) => Promise<Response>;
+  /**
+   * The session events reasserted once the call opens, defaulting to the
+   * conversation's own instructions and tools. The introduction is the one
+   * caller that narrows this — to its own instructions and an empty tool
+   * list — so its pre-account call is tool-free at the API itself.
+   */
+  sessionSyncEvents?: () => readonly WireRecord[];
   connectTimeoutMs?: number;
   /**
    * How long a call may sit idle before it is put away. Injectable so the
@@ -830,7 +848,7 @@ export class RealtimeVoiceSession {
 
       await this.#waitForChannel(channel, deadline.signal);
       if (this.#closed) return this.#abandonConnect();
-      this.#send(realtimeSessionSyncEvents());
+      this.#send((this.#options.sessionSyncEvents ?? realtimeSessionSyncEvents)());
       this.#setStatus(REALTIME_STATUS.READY);
       // A pace changed during the handshake could not be sent then, and the
       // credential this call answered may have been minted before the change.
@@ -1550,6 +1568,20 @@ export class RealtimeVoiceSession {
     return true;
   }
 
+  /**
+   * Voices one scripted beat of the introduction, reporting whether it could.
+   * The beat's direction is fixed by the build and its data already bounded;
+   * the turn opens with `tool_choice: "none"` on a session that declared no
+   * tools, so nothing about it can arm an act. No caption subject is set —
+   * the introduction speaks about no observed session.
+   */
+  speakIntroduction(line: IntroductionLine): boolean {
+    const events = introductionSpeechEvents(line);
+    if (events.length === 0 || !this.isConnected || this.#turnBusy) return false;
+    this.#startResponse(events);
+    return true;
+  }
+
   async close(): Promise<void> {
     this.#closed = true;
     this.#teardown();
@@ -1900,6 +1932,7 @@ export class RealtimeVoiceSession {
     // accepts a pace change that arrived while Luke was speaking.
     this.#flushPendingSpeed();
     if (this.#status === REALTIME_STATUS.RESPONDING) this.#setStatus(REALTIME_STATUS.READY);
+    this.#options.onReplySettled?.();
   }
 
   /**

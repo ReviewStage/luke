@@ -43,6 +43,7 @@ import {
   type ProviderControlResult,
   type ProviderMessageResult,
   type ProviderWorkspaceResult,
+  type Session,
   type SessionApplicationId,
   type SessionIdentity,
   type WorkspaceAgentSelection,
@@ -78,13 +79,15 @@ import type {
   OutputAudioState,
   VoiceHotkeyState,
 } from "./wire/audio";
-import type {
-  AppBootstrap,
-  DisplayDiagnostic,
-  SessionOpenResult,
-  SessionReplayBootstrap,
-  SessionRosterPayload,
-  SessionTranscriptResult,
+import {
+  type AppBootstrap,
+  type DisplayDiagnostic,
+  type SessionOpenResult,
+  type SessionReplayBootstrap,
+  type SessionRosterPayload,
+  type SessionTranscriptResult,
+  WINDOW_ROLE,
+  type WindowRole,
 } from "./wire/session";
 import type { AppSettings, SettingsUpdateResult } from "./wire/settings";
 import type { UpdateSnapshot } from "./wire/update";
@@ -157,6 +160,10 @@ const oneBoolean = args<[boolean]>((values) => values.length === 1 && isWireBool
 
 function isAccountProvider(value: UnparsedWireValue): value is AccountProvider {
   return value === ACCOUNT_PROVIDER.GOOGLE || value === ACCOUNT_PROVIDER.GITHUB;
+}
+
+function isWindowRole(value: UnparsedWireValue): value is WindowRole {
+  return value === WINDOW_ROLE.PANEL || value === WINDOW_ROLE.INTRODUCTION;
 }
 
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This function parses an IPC field into a domain identity.
@@ -624,6 +631,56 @@ export const BRIDGE = {
     result: result<HostedUsageAnswer | undefined>(),
   }),
   notifyReady: entry({ kind: "send", channel: "app:renderer-ready", args: noArgs }),
+  /**
+   * The introduction's one-shot keyless read of this machine's local sessions.
+   * Answered only for the takeover window while the introduction is running;
+   * every other caller gets an empty roster.
+   */
+  peekIntroductionSessions: entry({
+    kind: "invoke",
+    channel: "app:introduction-peek",
+    args: noArgs,
+    result: result<readonly Session[]>(),
+  }),
+  /**
+   * The takeover reporting its ending: `given` says the sign-off was spoken
+   * to its end, so completion is recorded; a quiet glide past a voice that
+   * never stood up hands off the same way and records nothing, so the
+   * introduction plays for real on a later launch.
+   */
+  completeIntroduction: entry({
+    kind: "invoke",
+    channel: "app:introduction-complete",
+    args: oneBoolean,
+    result: result<void>(),
+  }),
+  /**
+   * The takeover reporting the introduction cannot be given — the voice never
+   * connected — so the ordinary signed-out launch should stand in its place.
+   * Nothing is marked completed: an introduction never given replays.
+   */
+  abandonIntroduction: entry({
+    kind: "send",
+    channel: "app:introduction-abandon",
+    args: oneString,
+  }),
+  /** The takeover surface reporting it mounted, which its abandon deadline measures. */
+  introductionMounted: entry({
+    kind: "send",
+    channel: "app:introduction-mounted",
+    args: noArgs,
+  }),
+  /**
+   * Which surface this window draws, asked before anything mounts. Its own
+   * tiny invoke rather than a bootstrap field, so the ordinary panel renders
+   * without waiting on the full bootstrap twice.
+   */
+  getWindowRole: entry({
+    kind: "invoke",
+    channel: "app:window-role",
+    args: noArgs,
+    result: result<WindowRole>(isWindowRole),
+  }),
   quit: entry({ kind: "send", channel: "app:quit", args: noArgs }),
   recordSurfaceEvent: entry({
     kind: "send",

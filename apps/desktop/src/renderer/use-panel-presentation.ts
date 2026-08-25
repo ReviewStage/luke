@@ -19,17 +19,25 @@ import {
  * has just receded out from under the pointer stays too: entering a settings
  * page shorter than the one it replaces shrinks the shape past a resting
  * hand, and that is the shape leaving the pointer, not the pointer leaving
- * the shape.
+ * the shape. An untravelled leave is the same physics from the other side: a
+ * pointer that has not moved since the shape took it cannot have left it, so
+ * the leave is the shape's own doing — a greeting expanding under a resting
+ * cursor, a window standing up beneath one — and closing on it would collapse
+ * a panel nobody dismissed.
  */
 export function pointerLeaveSchedules(input: {
   presentation: PanelPresentation;
   hold: boolean;
   receded: boolean;
+  travelled: boolean;
 }): boolean {
   if (input.presentation === PANEL_PRESENTATION.CAPSULE) return false;
   if (input.presentation === PANEL_PRESENTATION.SLOT) return false;
   if (input.presentation === PANEL_PRESENTATION.FEEDBACK) return false;
-  if (input.presentation === PANEL_PRESENTATION.PANEL && (input.hold || input.receded)) {
+  if (
+    input.presentation === PANEL_PRESENTATION.PANEL &&
+    (input.hold || input.receded || !input.travelled)
+  ) {
     return false;
   }
   return true;
@@ -116,20 +124,35 @@ export function askDisengageLeaves(input: {
 
 function usePointerPassthrough(
   onHitRegionEnter: () => void,
-  onHitRegionLeave: () => void,
+  onHitRegionLeave: (travelled: boolean) => void,
   onPointerOverPanel: () => void,
   presentation: PanelPresentation,
 ): void {
   const lastValue = useRef<boolean | undefined>(undefined);
   const lastPoint = useRef<{ x: number; y: number } | undefined>(undefined);
+  /** Where the pointer stood when the shape last took it, for the leave to
+   * measure against: macOS synthesizes moves when a window appears, grows, or
+   * closes under a resting cursor, and an enter-then-leave at one unmoved
+   * point is the shape's journey, not the pointer's. */
+  const enterPoint = useRef<{ x: number; y: number } | undefined>(undefined);
 
   const update = useCallback(
     (interceptsPointer: boolean) => {
       if (lastValue.current === interceptsPointer) return;
       lastValue.current = interceptsPointer;
       window.sidecar.setPointerInterception(interceptsPointer);
-      if (interceptsPointer) onHitRegionEnter();
-      else onHitRegionLeave();
+      if (interceptsPointer) {
+        enterPoint.current = lastPoint.current;
+        onHitRegionEnter();
+      } else {
+        const from = enterPoint.current;
+        const at = lastPoint.current;
+        // A pointer gone from the window entirely has travelled by
+        // definition; only one still standing where the enter read it has not.
+        onHitRegionLeave(
+          from === undefined || at === undefined || from.x !== at.x || from.y !== at.y,
+        );
+      }
     },
     [onHitRegionEnter, onHitRegionLeave],
   );
@@ -221,7 +244,7 @@ export interface PanelPresentationApi {
   applyAuthoritativeMode: (mode: WindowMode) => void;
   changeMode: (expanded: boolean) => Promise<void>;
   cancelHover: () => void;
-  onHitRegionLeave: () => void;
+  onHitRegionLeave: (travelled?: boolean) => void;
   /** The drawn panel followed its content down and may have left the pointer. */
   panelReceded: () => void;
   changeAskEngagement: (engaged: boolean) => void;
@@ -349,32 +372,36 @@ export function usePanelPresentation(options: PanelPresentationOptions): PanelPr
     }, PEEK_ENTER_DELAY_MS);
   }, [applyPresentation, cancelHover]);
 
-  const onHitRegionLeave = useCallback(() => {
-    cancelHover();
-    pointerInside.current = false;
-    // Read and spent in the same breath: the mark explains exactly one leave,
-    // and the next one is the pointer's own act again.
-    const receded = recededAt.current !== undefined;
-    recededAt.current = undefined;
-    if (
-      !pointerLeaveSchedules({
-        presentation: presentationRef.current,
-        hold: heldAgainstPointer(),
-        receded,
-      })
-    ) {
-      return;
-    }
-    hoverTimer.current = window.setTimeout(() => {
-      hoverTimer.current = undefined;
-      const fire = pointerLeaveFires({
-        presentation: presentationRef.current,
-        hold: heldAgainstPointer(),
-      });
-      if (fire === POINTER_LEAVE_FIRE.CAPSULE) applyPresentation(PANEL_PRESENTATION.CAPSULE);
-      else if (fire === POINTER_LEAVE_FIRE.COLLAPSE) void changeMode(false);
-    }, LEAVE_DELAY_MS);
-  }, [applyPresentation, cancelHover, changeMode, heldAgainstPointer]);
+  const onHitRegionLeave = useCallback(
+    (travelled = true) => {
+      cancelHover();
+      pointerInside.current = false;
+      // Read and spent in the same breath: the mark explains exactly one leave,
+      // and the next one is the pointer's own act again.
+      const receded = recededAt.current !== undefined;
+      recededAt.current = undefined;
+      if (
+        !pointerLeaveSchedules({
+          presentation: presentationRef.current,
+          hold: heldAgainstPointer(),
+          receded,
+          travelled,
+        })
+      ) {
+        return;
+      }
+      hoverTimer.current = window.setTimeout(() => {
+        hoverTimer.current = undefined;
+        const fire = pointerLeaveFires({
+          presentation: presentationRef.current,
+          hold: heldAgainstPointer(),
+        });
+        if (fire === POINTER_LEAVE_FIRE.CAPSULE) applyPresentation(PANEL_PRESENTATION.CAPSULE);
+        else if (fire === POINTER_LEAVE_FIRE.COLLAPSE) void changeMode(false);
+      }, LEAVE_DELAY_MS);
+    },
+    [applyPresentation, cancelHover, changeMode, heldAgainstPointer],
+  );
 
   const changeAskEngagement = useCallback(
     (engaged: boolean) => {
