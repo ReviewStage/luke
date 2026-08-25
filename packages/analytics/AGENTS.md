@@ -38,11 +38,12 @@ the app runs, on the library's own configuration, and nothing in this package
 governs a byte of it. Do not let this file's promise be read as covering it.
 Three things leave that way and none is validated here:
 
-- The recording itself, which is the rendered panel — a session's title,
-  branch, recap, and error line, the account's name and address, and a
-  screenshot attached to the feedback composer all travel because they are
-  drawn. Only what is typed into a field is masked, and that is the library's
-  default rather than a posture the app keeps.
+- The recording itself, which is the rendered panel except for the History
+  tab's explicitly blocked `ph-no-capture` subtree — a session's title, branch,
+  recap, and error line, the account's name and address, and a screenshot
+  attached to the feedback composer all travel because they are drawn. Only
+  what is typed into a field is masked, and that is the library's default
+  rather than a posture the app keeps.
 - Autocaptured events, which name the text of whatever was clicked. Pressing a
   session row sends that row's words.
 - Unhandled exceptions, with their message and stack.
