@@ -230,10 +230,11 @@ test("reviews only changed sessions and suppresses a repeated decision", async (
 });
 
 test("a speaking decision deferred by the caller can be reviewed again", async () => {
+  let now = DECIDED_AT;
   const evaluator = evaluatorReturning(speakDecision());
   const reviewer = new SessionAttentionReviewer({
     evaluator,
-    now: () => DECIDED_AT,
+    now: () => now,
   });
   const working = session(claude, "meeting-held");
 
@@ -242,6 +243,7 @@ test("a speaking decision deferred by the caller can be reviewed again", async (
   assert.equal(held.outcome, ATTENTION_REVIEW_OUTCOME.DECIDED);
   assert.deepEqual(await reviewer.review([working]), []);
 
+  now += 6 * 60_000;
   reviewer.reconsider([held]);
 
   const [released] = await reviewer.review([working]);

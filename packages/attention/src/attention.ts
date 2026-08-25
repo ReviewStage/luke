@@ -529,6 +529,7 @@ export class SessionAttentionReviewer {
   readonly #freshEventAgeMs: number;
   #observed = new Map<string, Map<string, Session>>();
   readonly #pending = new Map<string, Set<string>>();
+  readonly #reconsidered = new Map<string, Set<string>>();
   readonly #unavailableRetries = new Map<string, Map<string, number>>();
 
   constructor(options: SessionAttentionReviewerOptions) {
@@ -562,6 +563,7 @@ export class SessionAttentionReviewer {
     const quietUntil = this.#evaluator.quietUntil?.();
     if (quietUntil !== undefined && quietUntil > this.#now()) return [];
     this.#ledger.retain(sessions);
+    this.#retainReconsidered(sessions);
 
     const candidates: AttentionCandidate[] = [];
     // Developments whose events are already old: consumed without a model
@@ -572,6 +574,7 @@ export class SessionAttentionReviewer {
     for (const session of sessions) {
       if (this.#isPending(session)) continue;
       if (session.completionCause === SESSION_COMPLETION_CAUSE.SESSION_CLOSED) {
+        this.#clearReconsidered(session);
         closedConsumed.push(session);
         continue;
       }
@@ -586,7 +589,11 @@ export class SessionAttentionReviewer {
       // and is never news, unless the developer's own standing ask is waiting
       // on exactly this session: an ask answered late still beats one answered
       // never.
-      if (!update.noticeRequest && now - update.observedAt > this.#freshEventAgeMs) {
+      if (
+        !update.noticeRequest &&
+        !this.#isReconsidered(session) &&
+        now - update.observedAt > this.#freshEventAgeMs
+      ) {
         staleConsumed.push({ session, update });
         continue;
       }
@@ -622,8 +629,12 @@ export class SessionAttentionReviewer {
         const candidate = selected[index];
         // A development is only consumed once a decision was actually reached
         // about it. Anything else must stay derivable, or the update is lost.
-        if (candidate && this.#keepsDevelopmentPending(settled, candidate.session)) {
-          this.#reopen(candidate.session);
+        if (candidate) {
+          if (this.#keepsDevelopmentPending(settled, candidate.session)) {
+            this.#reopen(candidate.session);
+          } else {
+            this.#clearReconsidered(candidate.session);
+          }
         }
         return settled;
       });
@@ -642,6 +653,41 @@ export class SessionAttentionReviewer {
     for (const identity of identities) {
       this.#ledger.forget(identity);
       this.#reopen(identity);
+      this.#markReconsidered(identity);
+    }
+  }
+
+  #isReconsidered(identity: SessionIdentity): boolean {
+    return this.#reconsidered.get(identity.providerId)?.has(identity.providerSessionId) === true;
+  }
+
+  #markReconsidered(identity: SessionIdentity): void {
+    const providerSessionIds = this.#reconsidered.get(identity.providerId) ?? new Set<string>();
+    providerSessionIds.add(identity.providerSessionId);
+    this.#reconsidered.set(identity.providerId, providerSessionIds);
+  }
+
+  #clearReconsidered(identity: SessionIdentity): void {
+    const providerSessionIds = this.#reconsidered.get(identity.providerId);
+    if (!providerSessionIds) return;
+    providerSessionIds.delete(identity.providerSessionId);
+    if (providerSessionIds.size === 0) this.#reconsidered.delete(identity.providerId);
+  }
+
+  #retainReconsidered(identities: readonly SessionIdentity[]): void {
+    const live = new Map<string, Set<string>>();
+    for (const identity of identities) {
+      const providerSessionIds = live.get(identity.providerId) ?? new Set<string>();
+      providerSessionIds.add(identity.providerSessionId);
+      live.set(identity.providerId, providerSessionIds);
+    }
+    for (const [providerId, providerSessionIds] of this.#reconsidered) {
+      const liveProviderSessionIds = live.get(providerId);
+      for (const providerSessionId of providerSessionIds) {
+        if (!liveProviderSessionIds?.has(providerSessionId))
+          providerSessionIds.delete(providerSessionId);
+      }
+      if (providerSessionIds.size === 0) this.#reconsidered.delete(providerId);
     }
   }
 
