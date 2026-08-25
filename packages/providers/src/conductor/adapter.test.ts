@@ -34,7 +34,8 @@ interface TestWorkspace {
   name: string;
   creatorId?: string;
   lastActivityAt: number;
-  archivedAt?: string;
+  /** What the listing marks the workspace as; the real page always carries one. */
+  state?: string;
   lifecycleStatus?: string;
   lifecycleErrorMessage?: string;
   lifecycleHttpStatus?: number;
@@ -77,15 +78,13 @@ function workspacePayload(workspace: TestWorkspace) {
   const payload: JsonObject = {
     id: workspace.id,
     name: workspace.name,
+    state: workspace.state ?? "ready",
     createdAt: isoTimestamp(workspace.lastActivityAt),
     deepLink: `conductor://workspace?id=${workspace.id}`,
     lastActivityAt: isoTimestamp(workspace.lastActivityAt),
   };
   if (workspace.creatorId) {
     payload.creatorId = workspace.creatorId;
-  }
-  if (workspace.archivedAt) {
-    payload.archivedAt = workspace.archivedAt;
   }
   return payload;
 }
@@ -1639,10 +1638,19 @@ test("leaves a filed-away workspace and its chats off the roster entirely", asyn
       // Filing a workspace away is how a user says its chats are done being
       // watched, so nothing of it survives to the roster — this is also what
       // makes a press of the archive control actually clear the rows it
-      // acted on, come the next pass.
+      // acted on, come the next pass. The listing marks it, and a page can
+      // hold hundreds of these, so it must cost nothing further: judged by a
+      // per-workspace read instead, one failed read on one long-archived
+      // workspace resurrected rows the user had already filed away.
       {
         ...ownedWorkspace("workspace-filed", TEST_TIME - 30_000),
-        archivedAt: isoTimestamp(TEST_TIME - 20_000),
+        state: "archived",
+        // Misbehave behind the mark: the pass must never ask.
+        lifecycleHttpStatus: HTTP_STATUS.SERVER_ERROR,
+      },
+      {
+        ...ownedWorkspace("workspace-erased", TEST_TIME - 40_000),
+        state: "deleted",
       },
       ownedWorkspace("workspace-open", TEST_TIME - 5_000),
     ],
@@ -1669,26 +1677,34 @@ test("leaves a filed-away workspace and its chats off the roster entirely", asyn
     observations.map((candidate) => candidate.providerSessionId),
     ["session-open"],
   );
-  // Dropped before its sessions are ever asked for: the filed-away workspace
-  // costs no requests, not just no rows.
+  // Dropped before its lifecycle or sessions are ever asked for: the
+  // filed-away workspaces cost no requests, not just no rows.
   assert.equal(
     api.requests.some((request) => request.pathname.includes("workspace-filed")),
+    false,
+  );
+  assert.equal(
+    api.requests.some((request) => request.pathname.includes("workspace-erased")),
     false,
   );
 });
 
 test("leaves a workspace whose lifecycle stands archived off the roster", async () => {
-  // Conductor's listing keeps a filed-away workspace in the page with no
-  // mark of it — no archive timestamp, nothing — and only the lifecycle
-  // endpoint says it was archived. Without that read deciding the roster,
-  // every chat of every workspace ever archived kept its row, standing gray
-  // forever.
+  // A filing-away the listing has not caught up with still shows at the
+  // lifecycle endpoint, and a listing state this build does not know says
+  // nothing either way — in both cases the lifecycle read decides, so
+  // every chat of a workspace actually archived is dropped rather than
+  // standing gray forever.
   const api = fakeConductorApi({
     userId: TEST_USER_ID,
     projects: [LUKE_PROJECT],
     workspaces: [
       { ...ownedWorkspace("workspace-archived", TEST_TIME - 30_000), lifecycleStatus: "archived" },
-      { ...ownedWorkspace("workspace-deleted", TEST_TIME - 40_000), lifecycleStatus: "deleted" },
+      {
+        ...ownedWorkspace("workspace-deleted", TEST_TIME - 40_000),
+        state: "some-future-state",
+        lifecycleStatus: "deleted",
+      },
       ownedWorkspace("workspace-open", TEST_TIME - 5_000),
     ],
     sessions: [
