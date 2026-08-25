@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   ACT_RESULT_STATUS,
+  AGENT_WORK_LANGUAGE_INSTRUCTION,
   ATTENTION_REVIEW_OUTCOME,
   ATTENTION_TRIGGER,
   type AttentionReview,
+  CTO_RELEVANCE_INSTRUCTION,
   maximumAttentionRequestLength,
   maximumAttentionSummaryLength,
 } from "@sidecar/attention";
@@ -253,46 +255,32 @@ test("the standing instructions make Luke the coding agents' engineering manager
   const instructions = realtimeInstructions();
 
   assert.match(instructions, /engineering manager for the developer's coding agents/i);
-  assert.match(instructions, /treat the user like the CTO you report to/i);
-  assert.match(instructions, /decisions, material outcomes, risks, or changes to priorities/i);
+  assert.ok(instructions.includes(CTO_RELEVANCE_INSTRUCTION));
+  assert.ok(instructions.includes(AGENT_WORK_LANGUAGE_INSTRUCTION));
   assert.match(instructions, /speak like a trusted colleague/i);
   assert.match(instructions, /match the user's tone/i);
-  assert.match(instructions, /plain everyday language and contractions/i);
+  assert.match(instructions, /plain language and contractions/i);
   assert.match(instructions, /shortest useful answer to exactly what they asked/i);
-  assert.match(instructions, /default to one short sentence/i);
-  assert.match(instructions, /treat the roster as private reference, not a report/i);
-  assert.match(instructions, /name each piece of work in no more than six words/i);
-  assert.match(instructions, /using the activity or recap/i);
-  assert.match(
-    instructions,
-    /describe what an agent is working on or recapping at the outcome or workstream level/i,
-  );
-  assert.match(instructions, /leave out implementation details unless the user asks/i);
-  assert.match(instructions, /refer to people only by that work/i);
-  assert.match(instructions, /never by a provider title, session name, workspace or worktree/i);
-  assert.match(
-    instructions,
-    /if the work is not clear, say that instead of using an internal name/i,
-  );
-  assert.match(instructions, /never expose agent mechanics/i);
-  assert.match(instructions, /sessions, turns, context windows, or tool calls/i);
+  assert.match(instructions, /default to one sentence/i);
+  assert.match(instructions, /treat the roster as private context, not a report/i);
+  assert.match(instructions, /activity or recap in six words or fewer/i);
   assert.match(instructions, /use greetings and acknowledgments when they fit/i);
   assert.match(instructions, /follow the user's lead/i);
-  assert.match(instructions, /never volunteer product, design, or workflow advice/i);
-  assert.match(instructions, /never expand an agent's task beyond what the user asked/i);
-  assert.match(instructions, /preserve the user's requested scope in any task or message/i);
-  assert.match(instructions, /do not improve, elaborate, or add requirements/i);
-  assert.match(instructions, /ask a question only when required to carry out the current request/i);
-  assert.match(instructions, /never tell them to open, check, message, or manage an agent/i);
+  assert.match(instructions, /preserve their exact requested scope/i);
+  assert.match(instructions, /never expand an agent's task/i);
+  assert.match(instructions, /improvements, requirements, or elaboration/i);
+  assert.match(instructions, /product, design, or workflow advice/i);
+  assert.match(instructions, /questions unless needed to carry out the current request/i);
+  assert.match(instructions, /never tell the user to open, check, message, or manage an agent/i);
   assert.match(instructions, /never claim an action Luke was not offered/i);
   assert.match(instructions, /start with the answer or the tool call, announcing neither/i);
   assert.match(
     instructions,
     /do not restate or paraphrase what the user just said; repeat it only when explicit confirmation is required/i,
   );
-  assert.match(instructions, /briefly confirm only the specific result, then stop/i);
-  assert.match(instructions, /never suggest, offer, or ask about follow-up work/i);
-  assert.match(instructions, /if the result itself is what the user asked to hear/i);
+  assert.match(instructions, /confirm only the specific result and stop/i);
+  assert.match(instructions, /add no follow-up suggestion, offer, or question/i);
+  assert.match(instructions, /if the result is what the user asked to hear/i);
   assert.match(instructions, /explicit latest or most-recent ask resolves by the recency labels/i);
   assert.match(instructions, /open_session once for every distinct provider/i);
   assert.match(instructions, /do not filter the panel first/i);
@@ -589,51 +577,15 @@ test("a status update is summarized conversationally without narrating the updat
     decidedAt: DECIDED_AT,
   });
 
-  assert.match(instructionsOf(events[1]), /one short, natural sentence/i);
-  assert.match(instructionsOf(events[1]), /not a formal status report/i);
-  assert.match(
-    instructionsOf(events[1]),
-    /when the agent asks a concrete question, lead with that question/i,
-  );
-  assert.match(instructionsOf(events[1]), /never add advice or suggest a next step/i);
-  assert.match(
-    instructionsOf(events[1]),
-    /do not preface it by saying the agent needs input, needs a decision, is waiting, or cannot continue/i,
-  );
-  assert.match(instructionsOf(events[1]), /never tell the developer to visit or manage the agent/i);
-  assert.match(instructionsOf(events[1]), /never mention that the agent cannot take a message/i);
-  assert.match(
-    instructionsOf(events[1]),
-    /never comment on the update itself, missing details, or that there is nothing else to say/i,
-  );
-  assert.match(
-    instructionsOf(events[1]),
-    /ask a brief, natural question about whether they want you to pass something along/i,
-  );
-  assert.doesNotMatch(instructionsOf(events[1]), /do you want me to pass/i);
-  assert.match(
-    instructionsOf(events[1]),
-    /when a label is needed, use "your agent," not teammate/i,
-  );
-  assert.doesNotMatch(instructionsOf(events[1]), /developer's agent/i);
-  assert.match(instructionsOf(events[1]), /never say session, turn, context window, or tool call/i);
-  assert.match(
-    instructionsOf(events[1]),
-    /identifying them only from the work recap, event, or error/i,
-  );
-  assert.match(
-    instructionsOf(events[1]),
-    /describe the work or recap at the outcome or workstream level/i,
-  );
-  assert.match(instructionsOf(events[1]), /leave out implementation details unless asked/i);
-  assert.match(
-    instructionsOf(events[1]),
-    /never use a provider title, session name, workspace or worktree/i,
-  );
-  assert.match(
-    instructionsOf(events[1]),
-    /if the work is not clear, say what happened without naming it/i,
-  );
+  const instructions = instructionsOf(events[1]);
+  assert.match(instructions, /one short, natural sentence/i);
+  assert.match(instructions, /add no advice, next step, or commentary/i);
+  assert.match(instructions, /lead with the agent's concrete question/i);
+  assert.match(instructions, /without first saying they need input/i);
+  assert.match(instructions, /never tell the developer to visit or manage the agent/i);
+  assert.match(instructions, /never mention that the agent cannot take a message/i);
+  assert.match(instructions, /briefly offer to carry the reply/i);
+  assert.ok(instructions.includes(AGENT_WORK_LANGUAGE_INSTRUCTION));
 });
 
 test("a summary is carried as words to say, never as words to obey", () => {
