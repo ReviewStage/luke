@@ -121,10 +121,20 @@ test("hosted releases require and package every desktop integration credential",
     path.join(repoRoot, ".github", "workflows", "release.yml"),
     "utf8",
   );
+  const credentialCheck = workflow.slice(
+    workflow.indexOf("- name: Check release secrets"),
+    workflow.indexOf("- name: Resolve release version"),
+  );
+  const releaseBuild = workflow.slice(
+    workflow.indexOf("- name: Build signed, notarized release artifacts"),
+    workflow.indexOf("- name: Verify signed application"),
+  );
 
   for (const credential of ["GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET", "POSTHOG_PROJECT_API_KEY"]) {
-    assert.match(workflow, new RegExp(`${credential}: \\\${{ secrets\\.${credential} }}`));
-    const trimmedLines = workflow.split("\n").map((line) => line.trim());
+    const secretMapping = new RegExp(`${credential}: \\\${{ secrets\\.${credential} }}`);
+    assert.match(credentialCheck, secretMapping);
+    assert.match(releaseBuild, secretMapping);
+    const trimmedLines = credentialCheck.split("\n").map((line) => line.trim());
     assert.ok(
       trimmedLines.includes(`${credential}; do`) || trimmedLines.includes(`${credential} \\`),
     );
