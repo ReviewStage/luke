@@ -301,9 +301,9 @@ interface ViewerAccount {
   image: string | undefined;
 }
 
-/** The page's one button treatment: sign out, refresh, and try again all wear it. */
+/** The page's one button treatment: sign out and try again both wear it. */
 const PLAIN_BUTTON =
-  "cursor-pointer rounded-md border border-border bg-card px-3 py-1.5 text-sm font-medium transition-colors duration-150 hover:bg-muted disabled:cursor-default disabled:opacity-60 disabled:hover:bg-card";
+  "inline-flex min-h-11 cursor-pointer items-center justify-center rounded-md border border-border bg-card px-3 py-1.5 text-sm font-medium transition-colors duration-150 hover:bg-muted disabled:cursor-default disabled:opacity-60 disabled:hover:bg-card";
 
 /**
  * What the fetch resolved to: the gate's refusals stay distinct here, and a
@@ -335,14 +335,6 @@ const numberFormat = new Intl.NumberFormat("en-US");
 
 function formatNumber(value: number): string {
   return numberFormat.format(value);
-}
-
-function formatTimestamp(epochMs: number): string {
-  return new Date(epochMs).toLocaleString("en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "UTC",
-  });
 }
 
 /** An instant drawn as its UTC date alone, e.g. "Aug 3, 2026". */
@@ -382,18 +374,6 @@ function formatTooltipDay(day: string, partialDay: string | undefined): string {
   return day === partialDay ? `${formatDayTick(day)} (so far today)` : formatDayTick(day);
 }
 
-/** How often the header's age re-reads the clock, so a page left open says so. */
-const AGE_TICK_MS = 30_000;
-
-function formatAge(ageMs: number): string {
-  const minutes = Math.floor(ageMs / 60_000);
-  if (minutes < 1) return "moments ago";
-  if (minutes < 60) return `${minutes} min ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} h ago`;
-  return `${Math.floor(hours / 24)} d ago`;
-}
-
 const TREND_TONE = {
   UP: "text-complete",
   DOWN: "text-attention",
@@ -425,19 +405,47 @@ function StatCard({
   value,
   hint,
   title,
+  grouped = false,
 }: {
   label: string;
   value: string;
   hint?: string;
   title?: string;
+  grouped?: boolean;
 }): React.JSX.Element {
   return (
-    <div className="rounded-lg border border-border bg-card px-5 py-4" title={title}>
+    <div
+      className={
+        grouped ? "min-w-0 bg-card px-5 py-4" : "rounded-lg border border-border bg-card px-5 py-4"
+      }
+      title={title}
+    >
       <div className="font-mono text-xs tracking-[0.2px] text-muted-foreground uppercase">
         {label}
       </div>
       <div className="mt-2 text-3xl font-semibold tabular-nums">{value}</div>
       {hint ? <div className="mt-1 text-sm text-muted-foreground">{hint}</div> : null}
+    </div>
+  );
+}
+
+/** Related headline metrics share one surface, leaving charts as the dominant objects. */
+function StatGroup({
+  columns,
+  children,
+}: {
+  columns: 2 | 3;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  const layout =
+    columns === 3
+      ? "divide-y min-[720px]:grid-cols-3 min-[720px]:divide-x min-[720px]:divide-y-0"
+      : "divide-y min-[520px]:grid-cols-2 min-[520px]:divide-x min-[520px]:divide-y-0";
+  return (
+    <div
+      className={`grid divide-border overflow-hidden rounded-lg border border-border bg-card ${layout}`}
+    >
+      {children}
     </div>
   );
 }
@@ -610,8 +618,6 @@ function CalendarDayCell({
   return (
     <div
       role="img"
-      // biome-ignore lint/a11y/noNoninteractiveTabindex: the cell is informational, but focusing it is how a keyboard reader raises the tooltip that replaced its title, and the aria-label keeps the same words for AT.
-      tabIndex={0}
       aria-label={`${formatTooltipDay(day.day, partialDay)} — ${formatNumber(day.voiceCalls)} voice · ${formatNumber(day.attentionReviews)} attention`}
       data-calendar-day={day.day}
       className={`rounded-[3px] outline-offset-2 ${total === 0 ? "bg-muted/60" : ""}${provisional}`}
@@ -628,8 +634,6 @@ function CalendarDayCell({
         }
         onHide();
       }}
-      onFocus={(event) => onShow(day, event.currentTarget)}
-      onBlur={onHide}
     />
   );
 }
@@ -1177,13 +1181,15 @@ function AccountAvatar({
  * seam rather than as focus.
  */
 const ACCOUNT_MENU_ITEM =
-  "block w-full cursor-pointer px-3 py-2 text-left text-sm font-medium transition-colors duration-150 outline-offset-[-2px] hover:bg-muted focus-visible:bg-muted";
+  "flex min-h-11 w-full cursor-pointer items-center px-3 py-2 text-left text-sm font-medium transition-colors duration-150 outline-offset-[-2px] hover:bg-muted focus-visible:bg-muted";
 
 function AccountMenu({
   account,
+  avatarSkeleton = false,
   onSignOut,
 }: {
   account: ViewerAccount;
+  avatarSkeleton?: boolean;
   onSignOut: () => void;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
@@ -1217,13 +1223,17 @@ function AccountMenu({
       <button
         type="button"
         ref={triggerRef}
-        className="flex cursor-pointer items-center rounded-full transition-opacity duration-150 hover:opacity-80"
+        className="flex size-11 cursor-pointer items-center justify-center rounded-full transition-opacity duration-150 hover:opacity-80"
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={`Account menu for ${accountLabel(account)}`}
         onClick={() => setOpen(!open)}
       >
-        <AccountAvatar account={account} />
+        {avatarSkeleton ? (
+          <Skeleton circle className={AVATAR_FRAME.small} />
+        ) : (
+          <AccountAvatar account={account} />
+        )}
       </button>
       {open ? (
         <div
@@ -1401,7 +1411,7 @@ function AdminSidebar({
         href={tabHref(tab)}
         aria-current={active === tab ? "page" : undefined}
         title={collapsed ? label : undefined}
-        className={`group relative flex items-center py-2 pr-3 text-sm font-medium transition-colors duration-150 focus-visible:outline-none ${styling.ROW}`}
+        className={`group relative flex min-h-11 items-center py-2 pr-3 text-sm font-medium transition-colors duration-150 focus-visible:outline-none ${styling.ROW}`}
         onClick={(event) => {
           if (!plainLeftClick(event)) return;
           event.preventDefault();
@@ -1420,8 +1430,9 @@ function AdminSidebar({
     return (
       <a
         href={tabHref(tab)}
+        aria-label={label}
         aria-current={active === tab ? "page" : undefined}
-        className={`group relative flex items-center px-2.5 py-2 text-sm font-medium transition-colors duration-150 focus-visible:outline-none ${styling.ROW}`}
+        className={`group relative flex min-h-11 min-w-0 items-center justify-center px-2 py-2 text-sm font-medium transition-colors duration-150 focus-visible:outline-none min-[520px]:px-2.5 ${styling.ROW}`}
         onClick={(event) => {
           if (!plainLeftClick(event)) return;
           event.preventDefault();
@@ -1434,9 +1445,9 @@ function AdminSidebar({
           aria-hidden="true"
           className={`absolute inset-0 rounded-full transition-[background-color] duration-150 ${styling.PILL}`}
         />
-        <span className="relative flex items-center gap-2.5">
+        <span className="relative flex min-w-0 items-center gap-2.5">
           {icon}
-          {label}
+          <span className="hidden truncate min-[520px]:inline">{label}</span>
         </span>
       </a>
     );
@@ -1446,9 +1457,9 @@ function AdminSidebar({
     <>
       <nav
         aria-label="Admin sections"
-        className="flex items-center gap-1 border-b border-border bg-card px-4 py-2 min-[720px]:hidden"
+        className="grid grid-cols-[auto_repeat(3,minmax(0,1fr))] items-center gap-1 border-b border-border bg-card px-3 py-2 min-[720px]:hidden"
       >
-        <span className="mr-2 inline-flex w-6 shrink-0 text-foreground" aria-hidden="true">
+        <span className="mr-1 inline-flex w-6 shrink-0 text-foreground" aria-hidden="true">
           <LukeMark className="h-auto w-full" />
         </span>
         {barItem("dashboard", "Dashboard", <DashboardIcon />)}
@@ -1483,7 +1494,7 @@ function AdminSidebar({
           <button
             type="button"
             aria-label={sidebarToggleLabel(collapsed)}
-            className={`group relative flex cursor-pointer items-center py-2 pr-3 text-sm font-medium transition-colors duration-150 focus-visible:outline-none ${SIDEBAR_ITEM.IDLE.ROW}`}
+            className={`group relative flex min-h-11 cursor-pointer items-center py-2 pr-3 text-sm font-medium transition-colors duration-150 focus-visible:outline-none ${SIDEBAR_ITEM.IDLE.ROW}`}
             onClick={onToggle}
           >
             {pill(SIDEBAR_ITEM.IDLE)}
@@ -1501,66 +1512,49 @@ function PageHeader({
   title,
   controls,
   account,
+  accountSkeleton = false,
   onSignOut,
 }: {
   title: string;
   controls: React.ReactNode;
   account: ViewerAccount | undefined;
+  accountSkeleton?: boolean;
   onSignOut: () => void;
 }): React.JSX.Element {
+  const hasControls = controls !== null && controls !== undefined;
+
   return (
-    <header className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
-      {/* The title holds a whole line on a phone, so the controls wrap into
-          rows of their own instead of raggedly around it; the divider stands
-          only beside the rail, where the row is wide enough to need a seam. */}
-      <h1 className="w-full text-lg font-semibold tracking-[-0.01em] min-[720px]:w-auto">
-        {title}
-      </h1>
-      <div className="flex flex-wrap items-center gap-3 min-[720px]:gap-4">
-        {controls}
-        {account ? (
-          <>
-            <span
-              className="hidden h-8 w-px bg-border min-[720px]:inline-block"
-              aria-hidden="true"
-            />
-            <AccountMenu account={account} onSignOut={onSignOut} />
-          </>
-        ) : null}
-      </div>
+    <header className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-4 min-[720px]:flex min-[720px]:gap-x-6 min-[720px]:gap-y-3">
+      {/* On a phone the identity is one row and the controls are a deliberate
+          second row. This keeps the account trigger from becoming a stray
+          button after whichever control happened to wrap first. */}
+      <h1 className="col-start-1 row-start-1 text-lg font-semibold tracking-[-0.01em]">{title}</h1>
+      {hasControls ? (
+        <div className="col-span-2 row-start-2 flex flex-wrap items-center gap-3 min-[720px]:ml-auto min-[720px]:gap-4">
+          {controls}
+        </div>
+      ) : null}
+      {accountSkeleton || account ? (
+        <div
+          className={`col-start-2 row-start-1 flex items-center ${hasControls ? "" : "min-[720px]:ml-auto"}`}
+        >
+          {account ? (
+            <AccountMenu account={account} avatarSkeleton={accountSkeleton} onSignOut={onSignOut} />
+          ) : accountSkeleton ? (
+            <div className="flex size-11 items-center justify-center">
+              <Skeleton circle className={AVATAR_FRAME.small} />
+            </div>
+          ) : null}
+        </div>
+      ) : null}
     </header>
-  );
-}
-
-/** A clock of its own, so the header's age stays true without refetching to learn it. */
-function useNow(intervalMs: number): number {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), intervalMs);
-    return () => window.clearInterval(timer);
-  }, [intervalMs]);
-  return now;
-}
-
-function GeneratedStamp({ generatedAt }: { generatedAt: number }): React.JSX.Element {
-  // The tick lives here, on the one component that draws relative time. At a
-  // screen root it would re-render every chart and table each 30 s to move
-  // this one string.
-  const now = useNow(AGE_TICK_MS);
-  return (
-    <span
-      className="font-mono text-xs text-muted-foreground"
-      title={`${formatTimestamp(generatedAt)} UTC`}
-    >
-      generated {formatAge(Math.max(0, now - generatedAt))}
-    </span>
   );
 }
 
 /**
  * The failure a refresh landed on an answer that stays shown: the numbers on
- * screen are still the last ones actually read — the header's stamp keeps
- * describing them — and this band says the newer read did not arrive. The
+ * screen are still the last ones actually read, and this band says the newer
+ * read did not arrive. The
  * status region stands in the page whether or not it has anything to say,
  * because a live region inserted together with its news is announced by
  * nothing; it holds the announcement alone, with the button beside it, so a
@@ -1617,7 +1611,7 @@ function WindowSwitcher({
   onChange: (windowDays: AdminMetricsWindow) => void;
 }): React.JSX.Element {
   return (
-    <div className="inline-flex rounded-md border border-border bg-card p-0.5">
+    <div className="inline-flex h-8 rounded-md border border-border bg-card p-0.5">
       {Object.values(ADMIN_METRICS_WINDOW).map((windowDays) => (
         <button
           key={windowDays}
@@ -1625,7 +1619,7 @@ function WindowSwitcher({
           aria-label={`${windowDays}-day window`}
           aria-pressed={value === windowDays}
           data-active={value === windowDays}
-          className="cursor-pointer rounded px-2 py-0.5 text-xs font-medium text-muted-foreground transition-colors duration-150 outline-offset-2 hover:text-foreground data-[active=true]:bg-muted data-[active=true]:text-foreground"
+          className="cursor-pointer rounded px-2.5 text-xs font-medium text-muted-foreground transition-colors duration-150 outline-offset-2 hover:text-foreground data-[active=true]:bg-muted data-[active=true]:text-foreground"
           onClick={() => onChange(windowDays)}
         >
           {windowDays}d
@@ -1643,10 +1637,10 @@ function HideAdminsToggle({
   onChange: (hide: boolean) => void;
 }): React.JSX.Element {
   return (
-    <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground select-none">
+    <label className="inline-flex min-h-11 cursor-pointer items-center gap-1.5 text-xs text-muted-foreground select-none">
       <input
         type="checkbox"
-        className="size-3.5 cursor-pointer accent-primary"
+        className="size-4 cursor-pointer accent-primary"
         checked={checked}
         onChange={(event) => onChange(event.target.checked)}
       />
@@ -1698,9 +1692,13 @@ function skeletonRows(count: number): readonly number[] {
   return Array.from({ length: count }, (_, row) => row);
 }
 
-function SkeletonStatCard(): React.JSX.Element {
+function SkeletonStatCard({ grouped = false }: { grouped?: boolean }): React.JSX.Element {
   return (
-    <div className="rounded-lg border border-border bg-card px-5 py-4">
+    <div
+      className={
+        grouped ? "min-w-0 bg-card px-5 py-4" : "rounded-lg border border-border bg-card px-5 py-4"
+      }
+    >
       <SkeletonLine box="h-4" bone="h-3 w-24" />
       <div className="mt-2">
         <SkeletonLine box="h-9" bone="h-7 w-20" />
@@ -1882,29 +1880,29 @@ function DashboardSkeleton({
   onSignOut: () => void;
 }): React.JSX.Element {
   return (
-    <main className="mx-auto max-w-[1040px] px-6 py-10" aria-busy="true">
+    <main
+      className="mx-auto max-w-[1040px] px-4 py-8 min-[520px]:px-6 min-[720px]:py-10"
+      aria-busy="true"
+    >
       <PageHeader
         title="Dashboard"
         account={account}
+        accountSkeleton
         onSignOut={onSignOut}
         controls={
           <>
             <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
             <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
-            <SkeletonLine box="h-4" bone="h-3 w-28" />
-            <button type="button" className={PLAIN_BUTTON} disabled>
-              Loading…
-            </button>
           </>
         }
       />
       <p className="sr-only">Loading. Reading the service's own tables.</p>
       <SectionHeading>User activity</SectionHeading>
-      <div className="grid gap-3 min-[720px]:grid-cols-3">
-        <SkeletonStatCard />
-        <SkeletonStatCard />
-        <SkeletonStatCard />
-      </div>
+      <StatGroup columns={3}>
+        <SkeletonStatCard grouped />
+        <SkeletonStatCard grouped />
+        <SkeletonStatCard grouped />
+      </StatGroup>
       <div className="mt-3 grid gap-3 min-[720px]:grid-cols-[1.6fr_1fr]">
         <SkeletonChartCard plot={SKELETON_PLOT.SIGNUPS} />
         <SkeletonChartCard plot={SKELETON_PLOT.SIGN_IN_METHODS} />
@@ -1913,10 +1911,10 @@ function DashboardSkeleton({
       <SkeletonRetentionGrid />
       <RetentionNote />
       <SectionHeading>Feature usage · hosted tier</SectionHeading>
-      <div className="grid grid-cols-2 gap-3">
-        <SkeletonStatCard />
-        <SkeletonStatCard />
-      </div>
+      <StatGroup columns={2}>
+        <SkeletonStatCard grouped />
+        <SkeletonStatCard grouped />
+      </StatGroup>
       <div className="mt-3">
         <SkeletonChartCard plot={SKELETON_PLOT.USAGE} />
       </div>
@@ -1924,10 +1922,10 @@ function DashboardSkeleton({
       <SkeletonAccountsTable rows={10} numericColumns={5} />
       <TopAccountsNote />
       <SectionHeading>Reliability</SectionHeading>
-      <div className="grid grid-cols-2 gap-3">
-        <SkeletonStatCard />
-        <SkeletonStatCard />
-      </div>
+      <StatGroup columns={2}>
+        <SkeletonStatCard grouped />
+        <SkeletonStatCard grouped />
+      </StatGroup>
       <div className="mt-3">
         <SkeletonLine box="h-5" bone="h-3.5 w-full" />
         <SkeletonLine box="h-5" bone="h-3.5 w-full" />
@@ -1979,19 +1977,19 @@ function UsersSkeleton({
   onSignOut: () => void;
 }): React.JSX.Element {
   return (
-    <main className="mx-auto max-w-[1040px] px-6 py-10" aria-busy="true">
+    <main
+      className="mx-auto max-w-[1040px] px-4 py-8 min-[520px]:px-6 min-[720px]:py-10"
+      aria-busy="true"
+    >
       <PageHeader
         title="Users"
         account={account}
+        accountSkeleton
         onSignOut={onSignOut}
         controls={
           <>
             <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
             <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
-            <SkeletonLine box="h-4" bone="h-3 w-28" />
-            <button type="button" className={PLAIN_BUTTON} disabled>
-              Loading…
-            </button>
           </>
         }
       />
@@ -2022,20 +2020,16 @@ function AccountSkeleton({
   onBack: () => void;
 }): React.JSX.Element {
   return (
-    <main className="mx-auto max-w-[1040px] px-6 py-10" aria-busy="true">
+    <main
+      className="mx-auto max-w-[1040px] px-4 py-8 min-[520px]:px-6 min-[720px]:py-10"
+      aria-busy="true"
+    >
       <PageHeader
         title="Account"
         account={account}
+        accountSkeleton
         onSignOut={onSignOut}
-        controls={
-          <>
-            <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
-            <SkeletonLine box="h-4" bone="h-3 w-28" />
-            <button type="button" className={PLAIN_BUTTON} disabled>
-              Loading…
-            </button>
-          </>
-        }
+        controls={<WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />}
       />
       <p className="sr-only">Loading. Reading the account's own rows.</p>
       <a
@@ -2102,20 +2096,16 @@ function DaySkeleton({
   onBack: () => void;
 }): React.JSX.Element {
   return (
-    <main className="mx-auto max-w-[1040px] px-6 py-10" aria-busy="true">
+    <main
+      className="mx-auto max-w-[1040px] px-4 py-8 min-[520px]:px-6 min-[720px]:py-10"
+      aria-busy="true"
+    >
       <PageHeader
         title="Day"
         account={account}
+        accountSkeleton
         onSignOut={onSignOut}
-        controls={
-          <>
-            <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
-            <SkeletonLine box="h-4" bone="h-3 w-48" />
-            <button type="button" className={PLAIN_BUTTON} disabled>
-              Loading…
-            </button>
-          </>
-        }
+        controls={<HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />}
       />
       <p className="sr-only">Loading. Reading the day's own rows.</p>
       <a
@@ -2195,7 +2185,7 @@ function Dashboard({
   const db = metrics.systemHealth.database;
 
   return (
-    <main className="mx-auto max-w-[1040px] px-6 py-10">
+    <main className="mx-auto max-w-[1040px] px-4 py-8 min-[520px]:px-6 min-[720px]:py-10">
       <PageHeader
         title="Dashboard"
         account={account}
@@ -2204,15 +2194,6 @@ function Dashboard({
           <>
             <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
             <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
-            <GeneratedStamp generatedAt={metrics.generatedAt} />
-            <button
-              type="button"
-              className={PLAIN_BUTTON}
-              onClick={onRefresh}
-              disabled={refreshing}
-            >
-              {refreshing ? "Refreshing…" : "Refresh"}
-            </button>
           </>
         }
       />
@@ -2228,8 +2209,8 @@ function Dashboard({
         aria-busy={refreshing}
       >
         <SectionHeading>User activity</SectionHeading>
-        <div className="grid gap-3 min-[720px]:grid-cols-3">
-          <StatCard label="Total accounts" value={formatNumber(metrics.users.total)} />
+        <StatGroup columns={3}>
+          <StatCard label="Total accounts" value={formatNumber(metrics.users.total)} grouped />
           {/* The hint already carries the window total, so the run this count
               is read against rides the title attribute instead. */}
           <StatCard
@@ -2237,13 +2218,15 @@ function Dashboard({
             value={formatNumber(metrics.users.signupTrend.recent)}
             hint={`${formatNumber(metrics.users.newInWindow)} in ${metrics.windowDays} days`}
             title={`against ${formatNumber(metrics.users.signupTrend.prior)} in the ${metrics.users.signupTrend.days} days before`}
+            grouped
           />
           <StatCard
             label="Active today"
             value={formatNumber(metrics.featureUsage.activeUsersToday)}
             hint={`${formatNumber(metrics.featureUsage.activeUsersWindow)} accounts in ${metrics.windowDays} days`}
+            grouped
           />
-        </div>
+        </StatGroup>
         <div className="mt-3 grid gap-3 min-[720px]:grid-cols-[1.6fr_1fr]">
           <SignupsChart
             daily={metrics.users.dailySignups}
@@ -2261,18 +2244,20 @@ function Dashboard({
         <RetentionNote />
 
         <SectionHeading>Feature usage · hosted tier</SectionHeading>
-        <div className="grid grid-cols-2 gap-3">
+        <StatGroup columns={2}>
           <StatCard
             label="Voice · today"
             value={formatNumber(metrics.featureUsage.voiceCallsToday)}
             hint={`${formatNumber(metrics.featureUsage.voiceCallsWindow)} in ${metrics.windowDays} days`}
+            grouped
           />
           <StatCard
             label="Attention · today"
             value={formatNumber(metrics.featureUsage.attentionReviewsToday)}
             hint={`${formatNumber(metrics.featureUsage.attentionReviewsWindow)} in ${metrics.windowDays} days`}
+            grouped
           />
-        </div>
+        </StatGroup>
         <div className="mt-3">
           <UsageChart
             daily={metrics.featureUsage.daily}
@@ -2294,17 +2279,19 @@ function Dashboard({
         <TopAccountsNote />
 
         <SectionHeading>Reliability</SectionHeading>
-        <div className="grid grid-cols-2 gap-3">
+        <StatGroup columns={2}>
           <StatCard
             label="Throttled account-days · today"
             value={formatNumber(metrics.reliability.quotaLimitedUserDaysToday)}
             hint="an account that reached a daily ceiling"
+            grouped
           />
           <StatCard
             label={`Throttled account-days · ${metrics.windowDays} days`}
             value={formatNumber(metrics.reliability.quotaLimitedUserDaysWindow)}
+            grouped
           />
-        </div>
+        </StatGroup>
         <p className="mt-3 text-sm text-muted-foreground">
           A hosted request that reaches a daily ceiling —{" "}
           {formatNumber(metrics.reliability.voiceDailyLimit)} voice calls or{" "}
@@ -2560,25 +2547,12 @@ function UserDetailPage({
       : formatNumber(activity.currentStreakDays);
 
   return (
-    <main className="mx-auto max-w-[1040px] px-6 py-10">
+    <main className="mx-auto max-w-[1040px] px-4 py-8 min-[520px]:px-6 min-[720px]:py-10">
       <PageHeader
         title="Account"
         account={account}
         onSignOut={onSignOut}
-        controls={
-          <>
-            <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
-            <GeneratedStamp generatedAt={detail.generatedAt} />
-            <button
-              type="button"
-              className={PLAIN_BUTTON}
-              onClick={onRefresh}
-              disabled={refreshing}
-            >
-              {refreshing ? "Refreshing…" : "Refresh"}
-            </button>
-          </>
-        }
+        controls={<WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />}
       />
 
       <RefreshFailureNotice failure={refreshFailure} refreshing={refreshing} onRetry={onRefresh} />
@@ -2864,25 +2838,12 @@ function DayDetailPage({
   const soFar = stillFilling ? "so far today" : undefined;
 
   return (
-    <main className="mx-auto max-w-[1040px] px-6 py-10">
+    <main className="mx-auto max-w-[1040px] px-4 py-8 min-[520px]:px-6 min-[720px]:py-10">
       <PageHeader
         title="Day"
         account={account}
         onSignOut={onSignOut}
-        controls={
-          <>
-            <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
-            <GeneratedStamp generatedAt={detail.generatedAt} />
-            <button
-              type="button"
-              className={PLAIN_BUTTON}
-              onClick={onRefresh}
-              disabled={refreshing}
-            >
-              {refreshing ? "Refreshing…" : "Refresh"}
-            </button>
-          </>
-        }
+        controls={<HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />}
       />
 
       <RefreshFailureNotice failure={refreshFailure} refreshing={refreshing} onRetry={onRefresh} />
@@ -3327,7 +3288,7 @@ function AccountsTable<Row extends AccountsTableRow>({
                   <td className="w-0 py-3 pr-0 pl-5">
                     <button
                       type="button"
-                      className="flex cursor-pointer text-muted-foreground opacity-0 transition-opacity duration-150 outline-offset-2 group-hover:opacity-100 hover:text-foreground focus-visible:opacity-100 data-[favorite=true]:text-attention data-[favorite=true]:opacity-100"
+                      className="-my-2 -ml-3 flex size-11 cursor-pointer items-center justify-center text-muted-foreground opacity-60 transition-opacity duration-150 outline-offset-2 hover:text-foreground hover:opacity-100 focus-visible:opacity-100 data-[favorite=true]:text-attention data-[favorite=true]:opacity-100"
                       data-favorite={favorite.starred(row)}
                       aria-pressed={favorite.starred(row)}
                       aria-label={`${favorite.starred(row) ? "Unfavorite" : "Favorite"} ${row.name || row.email}`}
@@ -3461,7 +3422,7 @@ function UsersPage({
     : list.rows;
 
   return (
-    <main className="mx-auto max-w-[1040px] px-6 py-10">
+    <main className="mx-auto max-w-[1040px] px-4 py-8 min-[520px]:px-6 min-[720px]:py-10">
       <PageHeader
         title="Users"
         account={account}
@@ -3470,15 +3431,6 @@ function UsersPage({
           <>
             <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
             <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
-            <GeneratedStamp generatedAt={list.generatedAt} />
-            <button
-              type="button"
-              className={PLAIN_BUTTON}
-              onClick={onRefresh}
-              disabled={refreshing}
-            >
-              {refreshing ? "Refreshing…" : "Refresh"}
-            </button>
           </>
         }
       />
@@ -3497,7 +3449,7 @@ function UsersPage({
             maxLength={ADMIN_USERS_SEARCH_MAX_LENGTH}
             placeholder="Search by name or email…"
             aria-label="Search accounts by name or email"
-            className="w-full max-w-[320px] rounded-md border border-border bg-card px-3 py-1.5 text-sm placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2"
+            className="min-h-11 w-full max-w-[320px] rounded-md border border-border bg-card px-3 py-1.5 text-sm placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2"
             onChange={(event) => onQueryChange(event.target.value)}
           />
           <span className="text-xs text-muted-foreground tabular-nums">
@@ -4118,7 +4070,7 @@ function AnimationsPage({
   }, []);
 
   return (
-    <main className="mx-auto max-w-[1040px] px-6 py-10">
+    <main className="mx-auto max-w-[1040px] px-4 py-8 min-[520px]:px-6 min-[720px]:py-10">
       <PageHeader title="Animations" account={account} onSignOut={onSignOut} controls={null} />
       <div
         ref={previewsRef}
