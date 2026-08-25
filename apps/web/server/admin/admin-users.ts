@@ -127,7 +127,8 @@ export async function handleAdminUsers(options: AdminUsersOptions): Promise<Resp
   let viewer: AdminViewer | undefined;
   try {
     viewer = await options.resolveViewer(request);
-  } catch {
+  } catch (error) {
+    console.error("admin users viewer resolution failed", error);
     return errorResponse(ADMIN_HTTP_STATUS.SERVICE_UNAVAILABLE, ADMIN_ERROR.UNAVAILABLE);
   }
   if (!viewer) {
@@ -159,7 +160,8 @@ export async function handleAdminUsers(options: AdminUsersOptions): Promise<Resp
         search.term,
       ),
     );
-  } catch {
+  } catch (error) {
+    console.error("admin users read failed", error);
     return errorResponse(ADMIN_HTTP_STATUS.SERVICE_UNAVAILABLE, ADMIN_ERROR.UNAVAILABLE);
   }
 }

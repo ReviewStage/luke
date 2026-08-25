@@ -44,7 +44,8 @@ export async function handleAdminFavorite(options: AdminFavoriteOptions): Promis
   let viewer: AdminViewer | undefined;
   try {
     viewer = await options.resolveViewer(request);
-  } catch {
+  } catch (error) {
+    console.error("admin favorite viewer resolution failed", error);
     return errorResponse(ADMIN_HTTP_STATUS.SERVICE_UNAVAILABLE, ADMIN_ERROR.UNAVAILABLE);
   }
   if (!viewer) {
@@ -65,7 +66,8 @@ export async function handleAdminFavorite(options: AdminFavoriteOptions): Promis
       return errorResponse(ADMIN_HTTP_STATUS.NOT_FOUND, ADMIN_ERROR.USER_NOT_FOUND);
     }
     return jsonResponse(ADMIN_HTTP_STATUS.OK, { favorite });
-  } catch {
+  } catch (error) {
+    console.error("admin favorite write failed", error);
     return errorResponse(ADMIN_HTTP_STATUS.SERVICE_UNAVAILABLE, ADMIN_ERROR.UNAVAILABLE);
   }
 }
