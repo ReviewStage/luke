@@ -1767,9 +1767,13 @@ function skeletonRows(count: number): readonly number[] {
   return Array.from({ length: count }, (_, row) => row);
 }
 
-function SkeletonStatCard(): React.JSX.Element {
+function SkeletonStatCard({ grouped = false }: { grouped?: boolean }): React.JSX.Element {
   return (
-    <div className="rounded-lg border border-border bg-card px-5 py-4">
+    <div
+      className={
+        grouped ? "min-w-0 bg-card px-5 py-4" : "rounded-lg border border-border bg-card px-5 py-4"
+      }
+    >
       <SkeletonLine box="h-4" bone="h-3 w-24" />
       <div className="mt-2">
         <SkeletonLine box="h-9" bone="h-7 w-20" />
@@ -1790,7 +1794,13 @@ const SKELETON_PLOT = {
 
 type SkeletonPlot = (typeof SKELETON_PLOT)[keyof typeof SKELETON_PLOT];
 
-function SkeletonChartCard({ plot }: { plot: SkeletonPlot }): React.JSX.Element {
+function SkeletonChartCard({
+  plot,
+  drilldown = false,
+}: {
+  plot: SkeletonPlot;
+  drilldown?: boolean;
+}): React.JSX.Element {
   return (
     <div className="rounded-lg border border-border bg-card p-5">
       <div className="mb-4 flex items-center justify-between gap-4">
@@ -1798,6 +1808,15 @@ function SkeletonChartCard({ plot }: { plot: SkeletonPlot }): React.JSX.Element 
         <SkeletonLine box="h-4" bone="h-3 w-56" />
       </div>
       <Skeleton className={`w-full ${plot}`} />
+      {drilldown ? (
+        <div className="mt-4 flex items-end justify-between gap-3 border-t border-border pt-4">
+          <div className="grid min-w-0 flex-1 gap-1.5">
+            <SkeletonLine box="h-4" bone="h-3 w-28" />
+            <Skeleton className="h-10 w-full min-[520px]:max-w-[280px]" />
+          </div>
+          <Skeleton className="h-11 w-28" />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1972,11 +1991,11 @@ function DashboardSkeleton({
       />
       <p className="sr-only">Loading. Reading the service's own tables.</p>
       <SectionHeading>User activity</SectionHeading>
-      <div className="grid gap-3 min-[720px]:grid-cols-3">
-        <SkeletonStatCard />
-        <SkeletonStatCard />
-        <SkeletonStatCard />
-      </div>
+      <StatGroup columns={3}>
+        <SkeletonStatCard grouped />
+        <SkeletonStatCard grouped />
+        <SkeletonStatCard grouped />
+      </StatGroup>
       <div className="mt-3 grid gap-3 min-[720px]:grid-cols-[1.6fr_1fr]">
         <SkeletonChartCard plot={SKELETON_PLOT.SIGNUPS} />
         <SkeletonChartCard plot={SKELETON_PLOT.SIGN_IN_METHODS} />
@@ -1985,21 +2004,21 @@ function DashboardSkeleton({
       <SkeletonRetentionGrid />
       <RetentionNote />
       <SectionHeading>Feature usage · hosted tier</SectionHeading>
-      <div className="grid grid-cols-2 gap-3">
-        <SkeletonStatCard />
-        <SkeletonStatCard />
-      </div>
+      <StatGroup columns={2}>
+        <SkeletonStatCard grouped />
+        <SkeletonStatCard grouped />
+      </StatGroup>
       <div className="mt-3">
-        <SkeletonChartCard plot={SKELETON_PLOT.USAGE} />
+        <SkeletonChartCard plot={SKELETON_PLOT.USAGE} drilldown />
       </div>
       <SectionHeading>Most active hosted-tier accounts</SectionHeading>
       <SkeletonAccountsTable rows={10} numericColumns={5} />
       <TopAccountsNote />
       <SectionHeading>Reliability</SectionHeading>
-      <div className="grid grid-cols-2 gap-3">
-        <SkeletonStatCard />
-        <SkeletonStatCard />
-      </div>
+      <StatGroup columns={2}>
+        <SkeletonStatCard grouped />
+        <SkeletonStatCard grouped />
+      </StatGroup>
       <div className="mt-3">
         <SkeletonLine box="h-5" bone="h-3.5 w-full" />
         <SkeletonLine box="h-5" bone="h-3.5 w-full" />
