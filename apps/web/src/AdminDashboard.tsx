@@ -1185,9 +1185,11 @@ const ACCOUNT_MENU_ITEM =
 
 function AccountMenu({
   account,
+  avatarSkeleton = false,
   onSignOut,
 }: {
   account: ViewerAccount;
+  avatarSkeleton?: boolean;
   onSignOut: () => void;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
@@ -1227,7 +1229,11 @@ function AccountMenu({
         aria-label={`Account menu for ${accountLabel(account)}`}
         onClick={() => setOpen(!open)}
       >
-        <AccountAvatar account={account} />
+        {avatarSkeleton ? (
+          <Skeleton circle className={AVATAR_FRAME.small} />
+        ) : (
+          <AccountAvatar account={account} />
+        )}
       </button>
       {open ? (
         <div
@@ -1532,12 +1538,12 @@ function PageHeader({
         <div
           className={`col-start-2 row-start-1 flex items-center ${hasControls ? "" : "min-[720px]:ml-auto"}`}
         >
-          {accountSkeleton ? (
+          {account ? (
+            <AccountMenu account={account} avatarSkeleton={accountSkeleton} onSignOut={onSignOut} />
+          ) : accountSkeleton ? (
             <div className="flex size-11 items-center justify-center">
               <Skeleton circle className={AVATAR_FRAME.small} />
             </div>
-          ) : account ? (
-            <AccountMenu account={account} onSignOut={onSignOut} />
           ) : null}
         </div>
       ) : null}
