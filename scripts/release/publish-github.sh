@@ -6,8 +6,10 @@ set -euo pipefail
 # release cannot break either: the version-free Luke.dmg is what the website's
 # download link reaches through releases/latest, and the version-free
 # latest-mac.yml is the electron-updater manifest the app updates from — so
-# the release must be a published, non-draft, non-prerelease one whose tag
-# matches the desktop version exactly.
+# the release must end up a published, non-draft, non-prerelease one whose
+# tag matches the desktop version exactly, and it stays a draft until every
+# asset has finished uploading, because a release published mid-upload points
+# releases/latest at a manifest whose archive is still incomplete.
 
 SCRIPT_DIRECTORY=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIRECTORY/../.." && pwd)
@@ -65,6 +67,7 @@ cp "$ZIP_PATH.sha256" "$staging_directory/$ZIP_ASSET_NAME.sha256"
 
 if ! gh release view "$TAG" > /dev/null 2>&1; then
     gh release create "$TAG" \
+        --draft \
         --verify-tag \
         --title "Luke $VERSION" \
         --generate-notes
@@ -77,6 +80,7 @@ gh release upload "$TAG" \
     "$staging_directory/$ZIP_ASSET_NAME.sha256" \
     "$staging_directory/$UPDATE_FEED_ASSET_NAME" \
     --clobber
+gh release edit "$TAG" --draft=false --latest
 
 printf 'Published %s. The website reaches this build at:\n' "$TAG"
 printf '  https://github.com/ReviewStage/luke/releases/latest/download/%s\n' "$LATEST_DMG_ASSET_NAME"
