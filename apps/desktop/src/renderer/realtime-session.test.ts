@@ -107,7 +107,7 @@ interface Harness {
   emit: (event: JsonValue) => void;
   emitRaw: (data: JsonValue) => void;
   lukeAudible: () => boolean;
-  deliverRemoteTrack: () => void;
+  deliverRemoteTrack: (streams?: readonly object[]) => void;
   provideConnection: () => void;
   setConnectionState: (state: RTCPeerConnectionState) => void;
   closeChannel: () => void;
@@ -182,6 +182,8 @@ function harness(
     captureSessionSync?: boolean;
     /** Lets a test ride the status edges, the way the announcer does. */
     onStatus?: (status: RealtimeStatus) => void;
+    /** Lets a test see what the element would be handed to play. */
+    onRemoteStream?: (stream: MediaStream | undefined) => void;
     /**
      * Mimics the caller's history: an ended reply's words are written back
      * into the session as a conversation update, the way the hook records
@@ -326,7 +328,7 @@ function harness(
     },
     onStatus: (status) => options.onStatus?.(status),
     onLocalStream: () => undefined,
-    onRemoteStream: () => undefined,
+    onRemoteStream: (stream) => options.onRemoteStream?.(stream),
     onError: (message) => errors.push(message),
     onCaption: (texts, about) => {
       captions.push(texts);
@@ -385,10 +387,10 @@ function harness(
     provideConnection: () => {
       connection = CONNECTION;
     },
-    deliverRemoteTrack: () => {
+    deliverRemoteTrack: (streams = [{}]) => {
       const trackEvent: MockTrackEvent = {
         track: remoteTrack,
-        streams: [{}],
+        streams,
       };
       peer.ontrack?.(trackEvent);
     },
@@ -677,6 +679,31 @@ test("holding the key through a reply takes the turn back", async () => {
 
   assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
   assert.equal(context.lukeAudible(), false);
+});
+
+test("a remote track arriving with no stream is wrapped rather than dropped", async () => {
+  const received: (MediaStream | undefined)[] = [];
+  const context = harness({ onRemoteStream: (stream) => received.push(stream) });
+  // Node has no MediaStream; the fallback under test is the one constructor.
+  // SAFETY: The global is widened only to hold the stub for this test's scope.
+  const globals = globalThis as { MediaStream?: unknown };
+  const previous = globals.MediaStream;
+  class StubMediaStream {
+    readonly tracks: readonly object[];
+    constructor(tracks: readonly object[]) {
+      this.tracks = tracks;
+    }
+  }
+  globals.MediaStream = StubMediaStream;
+  try {
+    await context.session.connect({ microphone: false });
+    context.deliverRemoteTrack([]);
+  } finally {
+    globals.MediaStream = previous;
+  }
+
+  const [stream] = received;
+  assert.ok(stream instanceof StubMediaStream);
 });
 
 test("a press during the handshake opens the turn it was asking for", async () => {

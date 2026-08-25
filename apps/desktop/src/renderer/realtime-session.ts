@@ -792,7 +792,11 @@ export class RealtimeVoiceSession {
       }
       peer.ontrack = (event) => {
         this.#remoteTrack = event.track;
-        this.#options.onRemoteStream(event.streams[0]);
+        // An answer that names no stream for the track (`a=msid` absent, which
+        // a recvonly line permits) still delivers the audio on the track
+        // itself, so one is built for the element rather than handing it
+        // nothing and playing the reply into a healthy-looking silence.
+        this.#options.onRemoteStream(event.streams[0] ?? new MediaStream([event.track]));
       };
       peer.onconnectionstatechange = () => {
         if (this.#closed) return;

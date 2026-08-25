@@ -22,6 +22,13 @@ export function hardenedWebPreferences(input: {
     webSecurity: true,
     devTools: input.runMode.takesFocus,
     backgroundThrottling: false,
+    // Both window classes speak into a window that may never have seen a
+    // user gesture: the panel is born non-focusable with pointer events
+    // ignored until the first hover, and the takeover talks before the user
+    // has touched anything at all. Playback must not answer to a gesture
+    // requirement, so the policy is asserted rather than left to Chromium's
+    // default.
+    autoplayPolicy: "no-user-gesture-required",
   };
 }
 
