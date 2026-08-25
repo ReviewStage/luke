@@ -1,5 +1,4 @@
 import { ProviderMark } from "@sidecar/panel";
-import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { useState } from "react";
 import { AGENTS, APPS, type RosterEntry } from "./connections-roster";
 
@@ -9,28 +8,45 @@ import { AGENTS, APPS, type RosterEntry } from "./connections-roster";
  * comparison rig, not a shipped surface — once one variant is chosen,
  * `WorksWith.tsx` should absorb it and this file (and the switcher's App.tsx
  * wiring) should come back out.
+ *
+ * Round two, after feedback on round one: individual black tiles scattered
+ * across the light page read as noisy, several rosters felt overstuffed, and
+ * Cursor, Radius, Replicas, and Conductor each drew their icon twice — once
+ * as an agent, once as the same-named app. `packages/panel/src/provider-marks.tsx`
+ * really does render those four agent ids with the exact same mark component
+ * as their app counterpart, so `FEATURED_AGENTS` below drops them: apps win
+ * the icon, agents keep the name. Every variant here also either puts marks on
+ * one deliberate shared dark surface (the thing that read right about the
+ * first round's Status Log) rather than many isolated boxes, or shrinks the
+ * per-mark tile into a small soft chip instead of a hard black square.
  */
 
+const DUPLICATED_BY_AN_APP_MARK = new Set(["cursor", "radius", "replicas", "conductor"]);
+
+const FEATURED_AGENTS: readonly RosterEntry[] = AGENTS.filter(
+  (agent) => !DUPLICATED_BY_AN_APP_MARK.has(agent.id),
+);
+
 const VARIANT = {
-  GRID: "grid",
-  BELT: "belt",
-  ORBIT: "orbit",
-  LOG: "log",
-  INDEX: "index",
+  PANEL: "panel",
+  CONSOLE: "console",
+  RAIL: "rail",
+  LIST: "list",
+  MINIMAL: "minimal",
 } as const;
 
 type Variant = (typeof VARIANT)[keyof typeof VARIANT];
 
 const VARIANTS: readonly { readonly id: Variant; readonly label: string }[] = [
-  { id: VARIANT.GRID, label: "Signal Grid" },
-  { id: VARIANT.BELT, label: "Rolling Belt" },
-  { id: VARIANT.ORBIT, label: "Orbit" },
-  { id: VARIANT.LOG, label: "Status Log" },
-  { id: VARIANT.INDEX, label: "The Roster" },
+  { id: VARIANT.PANEL, label: "Device Panel" },
+  { id: VARIANT.CONSOLE, label: "Console" },
+  { id: VARIANT.RAIL, label: "Rail Marquee" },
+  { id: VARIANT.LIST, label: "Compact List" },
+  { id: VARIANT.MINIMAL, label: "Minimal Row" },
 ];
 
 export function WorksWithSwitcher(): React.JSX.Element {
-  const [variant, setVariant] = useState<Variant>(VARIANT.GRID);
+  const [variant, setVariant] = useState<Variant>(VARIANT.PANEL);
 
   return (
     <section className="hairline pt-12 pb-16">
@@ -71,92 +87,42 @@ export function WorksWithSwitcher(): React.JSX.Element {
       </div>
 
       <div className="mt-10">
-        {variant === VARIANT.GRID && <SignalGrid />}
-        {variant === VARIANT.BELT && <RollingBelt />}
-        {variant === VARIANT.ORBIT && <Orbit />}
-        {variant === VARIANT.LOG && <StatusLog />}
-        {variant === VARIANT.INDEX && <TheRoster />}
+        {variant === VARIANT.PANEL && <DevicePanel />}
+        {variant === VARIANT.CONSOLE && <Console />}
+        {variant === VARIANT.RAIL && <RailMarquee />}
+        {variant === VARIANT.LIST && <CompactList />}
+        {variant === VARIANT.MINIMAL && <MinimalRow />}
       </div>
     </section>
   );
 }
 
-/* 1. Signal Grid — a bordered card per provider, mark over name, agents and
-   apps each their own responsive grid. The most literal "roster" reading: a
-   spec sheet of everything Luke plugs into. */
-function SignalGrid(): React.JSX.Element {
+/* 1. Device Panel — one shared dark card, the way the hero mock above is
+   already a dark surface on this light page. Apps get the icon treatment,
+   full-size and bare (no per-icon box needed — the whole card is already
+   dark); the rest of the roster is named, not iconified, as quiet pills. */
+function DevicePanel(): React.JSX.Element {
   return (
-    <div className="flex flex-col gap-8">
-      <GridGroup label="Agents" entries={AGENTS} />
-      <GridGroup label="Apps" entries={APPS} />
-    </div>
-  );
-}
-
-function GridGroup({
-  label,
-  entries,
-}: {
-  label: string;
-  entries: readonly RosterEntry[];
-}): React.JSX.Element {
-  return (
-    <div>
-      <h3 className="m-0 font-mono text-xs font-medium tracking-[0.08em] text-muted-foreground uppercase">
-        {label}
-      </h3>
-      <ul className="m-0 mt-3 grid grid-cols-2 gap-2 p-0 sm:grid-cols-3 md:grid-cols-4">
-        {entries.map((entry) => (
-          <li
-            key={entry.id}
-            className="flex list-none flex-col items-start gap-3 rounded-lg border border-border bg-card px-4 py-3.5 transition-colors hover:border-muted-foreground"
-          >
-            <span className="mark-tile">
-              <ProviderMark providerId={entry.id} />
+    <div className="panel-card">
+      <p className="panel-eyebrow">Apps</p>
+      <div className="panel-app-row">
+        {APPS.map((app) => (
+          <div className="panel-app" key={app.id}>
+            <span className="mark-tile mark-tile--bare panel-app-mark">
+              <ProviderMark providerId={app.id} />
             </span>
-            <span className="text-sm font-medium">{entry.name}</span>
-          </li>
+            <span className="panel-app-name">{app.name}</span>
+          </div>
         ))}
-      </ul>
-    </div>
-  );
-}
+      </div>
 
-/* 2. Rolling Belt — oversized display type in two counter-scrolling
-   marquees, one per roster. Reads as a ticker of everything Luke plugs into
-   rather than a reference list. */
-function RollingBelt(): React.JSX.Element {
-  return (
-    <div className="-mx-5 flex flex-col gap-3">
-      <BeltRow entries={AGENTS} direction="left" />
-      <BeltRow entries={APPS} direction="right" />
-    </div>
-  );
-}
+      <div className="panel-divider" />
 
-function BeltRow({
-  entries,
-  direction,
-}: {
-  entries: readonly RosterEntry[];
-  direction: "left" | "right";
-}): React.JSX.Element {
-  // Doubled so the belt can loop at -50% with no seam.
-  const doubled = [...entries, ...entries];
-  return (
-    <div className="belt-row">
-      <div
-        className={
-          direction === "left" ? "belt-track belt-track-left" : "belt-track belt-track-right"
-        }
-      >
-        {doubled.map((entry, index) => (
-          // biome-ignore lint/suspicious/noArrayIndexKey: the roster is doubled for the seamless loop, so entry.id repeats.
-          <span className="belt-item" key={`${entry.id}-${index}`}>
-            <span className="mark-tile belt-mark">
-              <ProviderMark providerId={entry.id} />
-            </span>
-            <span className="belt-name">{entry.name}</span>
+      <p className="panel-eyebrow">Also works with</p>
+      <div className="panel-agent-row">
+        {FEATURED_AGENTS.map((agent) => (
+          <span className="panel-agent-pill" key={agent.id}>
+            {agent.name}
           </span>
         ))}
       </div>
@@ -164,65 +130,11 @@ function BeltRow({
   );
 }
 
-/* 3. Orbit — Luke's own mark at the center, agents in the inner ring, apps
-   in the outer ring, each mark upright and evenly spaced around its circle. */
-function Orbit(): React.JSX.Element {
-  return (
-    <div className="orbit-stage">
-      <OrbitRing
-        entries={AGENTS}
-        radius="clamp(72px, 24vw, 108px)"
-        ringClassName="orbit-ring-inner"
-      />
-      <OrbitRing
-        entries={APPS}
-        radius="clamp(126px, 40vw, 188px)"
-        ringClassName="orbit-ring-outer"
-      />
-      <div className="orbit-center">
-        <span className="orbit-center-dot" aria-hidden="true" />
-        <span className="orbit-center-label">Luke</span>
-      </div>
-    </div>
-  );
-}
-
-function OrbitRing({
-  entries,
-  radius,
-  ringClassName,
-}: {
-  entries: readonly RosterEntry[];
-  radius: string;
-  ringClassName: string;
-}): React.JSX.Element {
-  return (
-    <div
-      className={`orbit-ring ${ringClassName}`}
-      style={cssCustomProperties({ "--orbit-radius": radius })}
-    >
-      {entries.map((entry, index) => {
-        const angle = (360 / entries.length) * index;
-        return (
-          <div
-            key={entry.id}
-            className="orbit-node"
-            style={cssCustomProperties({ "--orbit-angle": `${angle}deg` })}
-            title={entry.name}
-          >
-            <span className="mark-tile orbit-mark">
-              <ProviderMark providerId={entry.id} />
-            </span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-/* 4. Status Log — a terminal window reading out `luke observe --all`,
-   listing the roster as command output. */
-function StatusLog(): React.JSX.Element {
+/* 2. Console — the one thing round one got right, kept and tightened: real
+   command output rather than a decorated list. Marks sit bare on the
+   terminal's own dark ground instead of inside a second, smaller box, and
+   the roster is deduped so nothing prints twice. */
+function Console(): React.JSX.Element {
   return (
     <div className="term-window">
       <div className="term-titlebar">
@@ -235,8 +147,8 @@ function StatusLog(): React.JSX.Element {
         <p className="term-line">
           <span className="term-prompt">$</span> luke observe --all
         </p>
-        <TermSection label="agents" entries={AGENTS} />
-        <TermSection label="apps" entries={APPS} />
+        <ConsoleSection label="apps" entries={APPS} />
+        <ConsoleSection label="agents" entries={FEATURED_AGENTS} />
         <p className="term-line term-cursor-line">
           <span className="term-prompt">$</span>
           <span className="term-cursor" aria-hidden="true" />
@@ -246,7 +158,7 @@ function StatusLog(): React.JSX.Element {
   );
 }
 
-function TermSection({
+function ConsoleSection({
   label,
   entries,
 }: {
@@ -259,7 +171,7 @@ function TermSection({
       {entries.map((entry) => (
         <p className="term-line term-row" key={entry.id}>
           <span className="term-ok">✓</span>
-          <span className="mark-tile term-mark">
+          <span className="mark-tile mark-tile--bare term-mark">
             <ProviderMark providerId={entry.id} />
           </span>
           {entry.name}
@@ -269,18 +181,46 @@ function TermSection({
   );
 }
 
-/* 5. The Roster — a print-style typographic directory. No colour, no marks:
-   hierarchy carries the whole thing, the way a masthead or an index does. */
-function TheRoster(): React.JSX.Element {
+/* 3. Rail Marquee — a single dark rail (not two competing belts) scrolling
+   only the apps, since those are what a visitor actually recognizes on
+   sight; the rest of the roster is named underneath in plain prose rather
+   than drawn twice. */
+function RailMarquee(): React.JSX.Element {
+  const doubled = [...APPS, ...APPS];
   return (
-    <div className="index-sheet">
-      <IndexColumn label="Agents" entries={AGENTS} />
-      <IndexColumn label="Apps" entries={APPS} />
+    <div>
+      <div className="rail">
+        <div className="rail-track">
+          {doubled.map((app, index) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: the roster is doubled for the seamless loop, so app.id repeats.
+            <span className="rail-item" key={`${app.id}-${index}`}>
+              <span className="mark-tile mark-tile--bare rail-mark">
+                <ProviderMark providerId={app.id} />
+              </span>
+              <span className="rail-name">{app.name}</span>
+            </span>
+          ))}
+        </div>
+      </div>
+      <p className="rail-footnote">
+        Also works with {FEATURED_AGENTS.map((agent) => agent.name).join(", ")}, wherever they run.
+      </p>
     </div>
   );
 }
 
-function IndexColumn({
+/* 4. Compact List — the plainest reading: no card, no border, a small soft
+   chip (not a hard black square) beside each name in a wrapped row. */
+function CompactList(): React.JSX.Element {
+  return (
+    <div className="compact-list">
+      <CompactGroup label="Apps" entries={APPS} />
+      <CompactGroup label="Agents" entries={FEATURED_AGENTS} />
+    </div>
+  );
+}
+
+function CompactGroup({
   label,
   entries,
 }: {
@@ -288,16 +228,39 @@ function IndexColumn({
   entries: readonly RosterEntry[];
 }): React.JSX.Element {
   return (
-    <div className="index-column">
-      <h3 className="index-heading">{label}</h3>
-      <ol className="index-list">
-        {entries.map((entry, position) => (
-          <li className="index-row" key={entry.id}>
-            <span className="index-number">{String(position + 1).padStart(2, "0")}</span>
-            <span className="index-name">{entry.name}</span>
+    <div>
+      <h3 className="compact-label">{label}</h3>
+      <ul className="compact-items">
+        {entries.map((entry) => (
+          <li className="compact-item" key={entry.id}>
+            <span className="mark-tile mark-tile--soft compact-mark">
+              <ProviderMark providerId={entry.id} />
+            </span>
+            <span className="compact-name">{entry.name}</span>
           </li>
         ))}
-      </ol>
+      </ul>
+    </div>
+  );
+}
+
+/* 5. Minimal Row — the calmest option: a single row of small soft app
+   marks, everything else carried as a sentence rather than a chip. */
+function MinimalRow(): React.JSX.Element {
+  return (
+    <div className="minimal-row">
+      <div className="minimal-marks">
+        {APPS.map((app) => (
+          <span className="mark-tile mark-tile--soft minimal-mark" key={app.id} title={app.name}>
+            <ProviderMark providerId={app.id} />
+          </span>
+        ))}
+      </div>
+      <p className="minimal-copy">
+        Shows up wherever you already work — {APPS.map((app) => app.name).join(", ")} — and reads
+        what {FEATURED_AGENTS.map((agent) => agent.name).join(", ")}, and more, write about their
+        own sessions.
+      </p>
     </div>
   );
 }

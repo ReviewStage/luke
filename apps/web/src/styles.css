@@ -385,142 +385,227 @@
 }
 
 /* Works-with variants — comparison rig
-   Four of the five "works with" presentations in WorksWithVariants.tsx need
-   hand-written CSS Tailwind utilities cannot express: a looping marquee, a
-   trigonometric ring layout, and a terminal window's own vocabulary. The
-   fifth (Signal Grid) is plain utilities at its call site. This whole block
-   is scaffolding for that comparison and leaves with it once one variant is
-   chosen. --------------------------------------------------------------- */
+   Round two, after feedback that round one's per-mark black tiles read as
+   noisy scattered across the light page, that several rosters felt
+   overstuffed, and that four ids (Cursor, Radius, Replicas, Conductor) drew
+   their icon twice — once as an agent, once as the same-named app.
+   WorksWithVariants.tsx now dedupes those four out of the agent list, and
+   every variant below either puts marks on one deliberate shared dark
+   surface (`mark-tile--bare`, sized per variant) instead of many isolated
+   boxes, or shrinks the tile into a small soft chip (`mark-tile--soft`)
+   rather than a hard black square. This whole block is scaffolding for the
+   comparison and leaves with it once one variant is chosen.
+   --------------------------------------------------------------------- */
 
-/* Rolling Belt */
-.belt-row {
+.mark-tile.mark-tile--bare {
+  background: transparent;
+}
+
+.mark-tile.mark-tile--soft {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: #1c1e22;
+}
+
+.mark-tile.mark-tile--soft .provider-mark {
+  width: 17px;
+  height: 17px;
+}
+
+/* Device Panel */
+.panel-card {
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  background: #0b0d10;
+}
+
+.panel-eyebrow {
+  margin: 0 0 var(--space-4);
+  color: rgba(255, 255, 255, 0.4);
+  font-family: var(--font-code);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.panel-app-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+}
+
+.panel-app {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 76px;
+  gap: var(--space-2);
+}
+
+.mark-tile.mark-tile--bare.panel-app-mark {
+  width: 36px;
+  height: 36px;
+}
+
+.mark-tile.mark-tile--bare.panel-app-mark .provider-mark {
+  width: 22px;
+  height: 22px;
+}
+
+.panel-app-name {
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 0.78rem;
+  font-weight: 500;
+  text-align: center;
+}
+
+.panel-divider {
+  height: 1px;
+  margin: var(--space-6) 0;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.panel-agent-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.panel-agent-pill {
+  padding: 0.3em 0.75em;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.6);
+  font-family: var(--font-code);
+  font-size: 0.72rem;
+}
+
+/* Rail Marquee */
+.rail {
   overflow: hidden;
-  padding-block: var(--space-2);
+  border-radius: var(--radius-lg);
+  background: #0b0d10;
+  padding-block: var(--space-5);
   mask-image: linear-gradient(
     to right,
     transparent,
-    black var(--space-7),
-    black calc(100% - var(--space-7)),
+    black var(--space-6),
+    black calc(100% - var(--space-6)),
     transparent
   );
 }
 
-.belt-track {
+.rail-track {
   display: flex;
   width: max-content;
   align-items: center;
   gap: var(--space-7);
-  padding-inline: var(--space-5);
-  animation: belt-scroll-left 36s linear infinite;
+  padding-inline: var(--space-6);
+  animation: rail-scroll 30s linear infinite;
 }
 
-.belt-track-right {
-  animation-name: belt-scroll-right;
-  animation-duration: 32s;
-}
-
-@keyframes belt-scroll-left {
+@keyframes rail-scroll {
   to {
     transform: translateX(-50%);
   }
 }
 
-@keyframes belt-scroll-right {
-  from {
-    transform: translateX(-50%);
-  }
-}
-
-.belt-item {
+.rail-item {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
   gap: var(--space-3);
 }
 
-.mark-tile.belt-mark {
-  width: 56px;
-  height: 56px;
-  border-radius: 14px;
+.mark-tile.mark-tile--bare.rail-mark {
+  width: 34px;
+  height: 34px;
 }
 
-.mark-tile.belt-mark .provider-mark {
-  width: 30px;
-  height: 30px;
+.mark-tile.mark-tile--bare.rail-mark .provider-mark {
+  width: 20px;
+  height: 20px;
 }
 
-.belt-name {
+.rail-name {
+  color: rgba(255, 255, 255, 0.88);
   font-family: var(--font-brand);
-  font-size: 2rem;
+  font-size: 1.15rem;
   font-weight: 500;
   white-space: nowrap;
-  letter-spacing: -0.01em;
 }
 
-/* Orbit */
-.orbit-stage {
-  position: relative;
-  width: min(92vw, 460px);
-  aspect-ratio: 1;
-  margin: 0 auto;
+.rail-footnote {
+  margin: var(--space-4) 0 0;
+  color: var(--muted-foreground);
+  font-size: 0.85rem;
 }
 
-.orbit-ring {
-  position: absolute;
-  inset: 0;
-}
-
-.orbit-ring::before {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: calc(var(--orbit-radius) * 2);
-  height: calc(var(--orbit-radius) * 2);
-  border: 1px dashed var(--border);
-  border-radius: 50%;
-  content: "";
-  transform: translate(-50%, -50%);
-}
-
-.orbit-node {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%) rotate(var(--orbit-angle))
-    translateY(calc(var(--orbit-radius) * -1)) rotate(calc(var(--orbit-angle) * -1));
-}
-
-.mark-tile.orbit-mark {
-  width: 40px;
-  height: 40px;
-}
-
-.orbit-center {
-  position: absolute;
-  top: 50%;
-  left: 50%;
+/* Compact List */
+.compact-list {
   display: flex;
   flex-direction: column;
+  gap: var(--space-6);
+}
+
+.compact-label {
+  margin: 0 0 var(--space-3);
+  color: var(--muted-foreground);
+  font-family: var(--font-code);
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.compact-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.compact-item {
+  display: flex;
   align-items: center;
   gap: var(--space-2);
-  transform: translate(-50%, -50%);
 }
 
-.orbit-center-dot {
-  width: 14px;
-  height: 14px;
+.compact-name {
+  font-size: 0.88rem;
+  font-weight: 500;
+}
+
+/* Minimal Row */
+.minimal-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.minimal-marks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.mark-tile.mark-tile--soft.minimal-mark {
   border-radius: 50%;
-  background: var(--primary);
-  box-shadow: 0 0 0 7px color-mix(in oklab, var(--primary) 16%, transparent);
 }
 
-.orbit-center-label {
-  font-family: var(--font-brand);
-  font-size: 0.8rem;
+.minimal-copy {
+  max-width: 38rem;
+  margin: 0;
   color: var(--muted-foreground);
+  font-size: 0.95rem;
+  line-height: 1.7;
 }
 
-/* Status Log */
+/* Console (formerly Status Log) */
 .term-window {
   overflow: hidden;
   border: 1px solid var(--border);
@@ -601,15 +686,14 @@
   color: #6fdca4;
 }
 
-.mark-tile.term-mark {
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
+.mark-tile.mark-tile--bare.term-mark {
+  width: 18px;
+  height: 18px;
 }
 
-.mark-tile.term-mark .provider-mark {
-  width: 13px;
-  height: 13px;
+.mark-tile.mark-tile--bare.term-mark .provider-mark {
+  width: 12px;
+  height: 12px;
 }
 
 .term-cursor-line {
@@ -632,61 +716,8 @@
   }
 }
 
-/* The Roster */
-.index-sheet {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: var(--space-7);
-}
-
-@media (width >= 640px) {
-  .index-sheet {
-    grid-template-columns: 1fr 1fr;
-  }
-}
-
-.index-heading {
-  margin: 0 0 var(--space-3);
-  padding-bottom: var(--space-2);
-  border-bottom: 1px solid var(--foreground);
-  font-family: var(--font-brand);
-  font-size: 1.1rem;
-  font-weight: 500;
-  letter-spacing: 0.01em;
-}
-
-.index-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.index-row {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-3);
-  padding: var(--space-2) 0;
-  border-bottom: 1px solid var(--border);
-}
-
-.index-row:last-child {
-  border-bottom: none;
-}
-
-.index-number {
-  min-width: 1.5em;
-  color: var(--muted-foreground);
-  font-family: var(--font-code);
-  font-size: 0.7rem;
-}
-
-.index-name {
-  font-size: 0.95rem;
-  letter-spacing: -0.005em;
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .belt-track {
+  .rail-track {
     animation: none;
   }
 
