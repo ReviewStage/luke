@@ -83,7 +83,10 @@ interface NotchWingsProps {
  * limit of three comes from: the face and its gap cost 26px of the 95px
  * between the wing's insets, and each mark past the first costs 21px of the
  * 55px that remain. The panel's side is what is left of `--panel-width` after
- * the housing, so it holds roughly twice as many.
+ * the housing, so it holds roughly twice as many. Whenever the meter stands
+ * beside the face rather than in its place, the second argument reserves the
+ * same 26px again for it, so the marks give up a slot rather than the meter
+ * drawing over one.
  */
 export { wingMarkCapacity } from "@sidecar/panel";
 
@@ -228,6 +231,12 @@ export function NotchWings({
     ...(meterVoice ? { turn: meterVoice } : undefined),
     hasAudioSignal: meterShown,
   });
+  // Whether the meter is standing beside the face rather than in its place —
+  // Luke's own turn, and an audio signal with no turn to read at all. Only
+  // then does the wing draw two things nearest the housing instead of one;
+  // the developer's real turn hands the meter the face's own slot, at the
+  // face's own width, so it costs the marks nothing extra.
+  const meterBesideFace = meterShown && !yieldToMeter;
   // The box the hover is read against, not the face itself: the drawing is
   // remounted for every play, and the hover has to survive the trick it fires.
   const faceElement = useRef<HTMLSpanElement>(null);
@@ -254,10 +263,13 @@ export function NotchWings({
   // The wing is bounded by the shape its state draws, so its capacity is too:
   // the panel's side holds more marks than the peek's, and every other state
   // keeps the peek's capacity because that is the set the next peek unfolds.
+  // Whenever the meter stands beside the face rather than in its place, the
+  // marks give up whatever room it costs rather than letting it draw across
+  // them.
   const capacity =
     presentation === PANEL_PRESENTATION.PANEL
-      ? wingMarkCapacity((PANEL_WIDTH - housingWidth) / 2)
-      : wingMarkCapacity(peekSideWidth(housingWidth));
+      ? wingMarkCapacity((PANEL_WIDTH - housingWidth) / 2, meterBesideFace)
+      : wingMarkCapacity(peekSideWidth(housingWidth), meterBesideFace);
   // Memoized because the roster below notices a new list by identity: the
   // slots may only change when what they summarize does, not on every render
   // a spoken word or a face gesture asks for.
@@ -304,7 +316,58 @@ export function NotchWings({
         {/* Ordered so the element nearest the notch is the one the capsule
             keeps: the rest unfold outward and never displace it. */}
         <div className="wing-inner">
-          {meterShown ? (
+          {/* What Luke is watching stays on screen through every turn: whoever
+              is speaking, the marks hold their own place at the shape's far
+              edge rather than giving it up to the meter — the capacity above
+              is what keeps the meter from ever drawing across one. */}
+          <span className="wing-marks" ref={marksRef}>
+            {drawnSlots.map(({ item, leaving }) => {
+              // How the reorder measurement finds this slot again after a
+              // re-sort has moved it, and how a slot whose provider left
+              // says so while it fades where the reader last saw it.
+              const motion = {
+                [WING_SLOT_ID_ATTRIBUTE]: item.id,
+                [LEAVING_ATTRIBUTE]: String(leaving),
+              };
+              if (!("provider" in item)) {
+                return (
+                  <span className="wing-more" key={item.id} {...motion} aria-hidden="true">
+                    +{item.unshown}
+                  </span>
+                );
+              }
+              const filter = isSessionFilter(item.provider.providerId)
+                ? item.provider.providerId
+                : undefined;
+              const active =
+                filter !== undefined && sameSessionFilters(activeFilters ?? [], [filter]);
+              const label = item.provider.provider;
+              return (
+                <button
+                  type="button"
+                  className="wing-mark"
+                  key={item.id}
+                  {...motion}
+                  data-hit-region={HIT_REGION.CAPSULE}
+                  data-active={String(active)}
+                  aria-label={active ? `Clear ${label} filter` : `Filter by ${label}`}
+                  title={active ? `Clear ${label} filter` : `Filter by ${label}`}
+                  disabled={leaving}
+                  tabIndex={leaving ? -1 : 0}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    if (filter !== undefined) {
+                      onSelectFilter?.(filter);
+                    }
+                  }}
+                >
+                  <ProviderMark providerId={item.provider.providerId} />
+                </button>
+              );
+            })}
+          </span>
+          {meterShown && (
             /* Keyed on whose turn it is, so each voice's meter is a fresh
                mount: the arrival choreography lives in a starting style, and
                only a mount reads one. Luke's turn is what grows the capsule,
@@ -321,54 +384,6 @@ export function NotchWings({
                 connecting={voiceOpening && !analyser}
                 onVoiceActivity={reportVoiceActivity}
               />
-            </span>
-          ) : (
-            <span className="wing-marks" ref={marksRef}>
-              {drawnSlots.map(({ item, leaving }) => {
-                // How the reorder measurement finds this slot again after a
-                // re-sort has moved it, and how a slot whose provider left
-                // says so while it fades where the reader last saw it.
-                const motion = {
-                  [WING_SLOT_ID_ATTRIBUTE]: item.id,
-                  [LEAVING_ATTRIBUTE]: String(leaving),
-                };
-                if (!("provider" in item)) {
-                  return (
-                    <span className="wing-more" key={item.id} {...motion} aria-hidden="true">
-                      +{item.unshown}
-                    </span>
-                  );
-                }
-                const filter = isSessionFilter(item.provider.providerId)
-                  ? item.provider.providerId
-                  : undefined;
-                const active =
-                  filter !== undefined && sameSessionFilters(activeFilters ?? [], [filter]);
-                const label = item.provider.provider;
-                return (
-                  <button
-                    type="button"
-                    className="wing-mark"
-                    key={item.id}
-                    {...motion}
-                    data-hit-region={HIT_REGION.CAPSULE}
-                    data-active={String(active)}
-                    aria-label={active ? `Clear ${label} filter` : `Filter by ${label}`}
-                    title={active ? `Clear ${label} filter` : `Filter by ${label}`}
-                    disabled={leaving}
-                    tabIndex={leaving ? -1 : 0}
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      if (filter !== undefined) {
-                        onSelectFilter?.(filter);
-                      }
-                    }}
-                  >
-                    <ProviderMark providerId={item.provider.providerId} />
-                  </button>
-                );
-              })}
             </span>
           )}
           {/* Luke himself. He is drawn in every state but one: he steps out of
