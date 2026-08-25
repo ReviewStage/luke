@@ -34,14 +34,13 @@ the date its release was published.
 
 ## 0.3.10 — 2026-08-24
 
-### A proper introduction
+### Onboarding
 
-Luke introduces himself on the first interactive launch, points out the coding
-agents already running on your Mac, and hands off to the ordinary signed-out
-panel when the conversation ends. The introduction runs without an account,
-asks for the microphone only when it needs one, and cannot take actions.
+Luke introduces himself to new users.
 ([#497](https://github.com/ReviewStage/luke/pull/497),
 [#508](https://github.com/ReviewStage/luke/pull/508))
+
+![Luke's onboarding takeover, with his face centered over the desktop.](apps/web/public/changelog/0.3.10/onboarding.png)
 
 ### Improvements
 
