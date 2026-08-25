@@ -117,15 +117,11 @@ export const SESSION_TOOL_KIND = {
   RENAME_SESSION: "rename-session",
 } as const;
 
-export type SessionToolKind = (typeof SESSION_TOOL_KIND)[keyof typeof SESSION_TOOL_KIND];
-
 /** What a validated issue tool call asks for, as the bridge names it. */
 export const ISSUE_TOOL_KIND = {
   ISSUE_STATE: "issue-state",
   ISSUE_COMMENT: "issue-comment",
 } as const;
-
-export type IssueToolKind = (typeof ISSUE_TOOL_KIND)[keyof typeof ISSUE_TOOL_KIND];
 
 /** What a validated app tool call asks for, as the app performs it. */
 export const APP_TOOL_KIND = {
@@ -134,8 +130,6 @@ export const APP_TOOL_KIND = {
   FEEDBACK: "feedback",
   UPDATE: "update",
 } as const;
-
-export type AppToolKind = (typeof APP_TOOL_KIND)[keyof typeof APP_TOOL_KIND];
 
 /** The two whole-list scopes of a spoken panel ask beyond the locations. */
 export const SESSION_LIST_ALL = "all";
@@ -1790,27 +1784,6 @@ export function actNarration(action: CarriedAct, sessions: readonly Session[]): 
   return row?.narration(action, sessions) ?? "carried an act";
 }
 
-type RealtimeToolProjection<T extends Record<string, RealtimeToolSpec>> = {
-  [K in keyof T]: Pick<T[K], "name" | "family" | "schema" | "validate">;
-};
-
-function realtimeToolsFromActs<T extends Record<string, RealtimeToolSpec>>(
-  acts: T,
-): RealtimeToolProjection<T> {
-  // SAFETY: every projected entry is constructed from exactly the four fields
-  // required by RealtimeToolProjection, while Object.fromEntries preserves the
-  // keys supplied by Object.entries.
-  return Object.fromEntries(
-    Object.entries(acts).map(([key, act]) => [
-      key,
-      { name: act.name, family: act.family, schema: act.schema, validate: act.validate },
-    ]),
-  ) as RealtimeToolProjection<T>;
-}
-
-/** The Realtime API sees the tool-only projection of the complete act registry. */
-export const REALTIME_TOOLS = realtimeToolsFromActs(ACTS);
-
 function namesFromToolTable<T extends Record<string, { readonly name: string }>>(table: T) {
   // SAFETY: keys are drawn from the same table object; each entry's name field is the tool id.
   const names = {} as { [K in keyof T]: T[K]["name"] };
@@ -1823,8 +1796,6 @@ function namesFromToolTable<T extends Record<string, { readonly name: string }>>
 }
 
 export const REALTIME_TOOL = namesFromToolTable(ACTS);
-
-export type RealtimeToolName = (typeof REALTIME_TOOL)[keyof typeof REALTIME_TOOL];
 
 const REALTIME_TOOL_LIST: readonly RealtimeToolSpec[] = Object.values(ACTS);
 
@@ -1864,37 +1835,6 @@ export function isAppToolCall(call: RealtimeFunctionCall): boolean {
 /** The family a named tool belongs to, or nothing when no such tool exists. */
 export function realtimeToolFamily(name: string): RealtimeToolFamily | undefined {
   return ACTS_BY_NAME.get(name)?.family;
-}
-
-const SPOKEN_CARDINAL = {
-  0: "zero",
-  1: "one",
-  2: "two",
-  3: "three",
-  4: "four",
-  5: "five",
-  6: "six",
-  7: "seven",
-  8: "eight",
-  9: "nine",
-  10: "ten",
-  11: "eleven",
-  12: "twelve",
-  13: "thirteen",
-  14: "fourteen",
-  15: "fifteen",
-  16: "sixteen",
-  17: "seventeen",
-  18: "eighteen",
-  19: "nineteen",
-  20: "twenty",
-} as const;
-
-/** How many tools Luke has, as he says it in the standing instructions. */
-export function spokenRealtimeToolCount(): string {
-  const count = REALTIME_TOOL_LIST.length;
-  // SAFETY: count is a small cardinal; SPOKEN_CARDINAL keys are the documented spoken counts.
-  return SPOKEN_CARDINAL[count as keyof typeof SPOKEN_CARDINAL] ?? String(count);
 }
 
 /** The tool schemas a Realtime session is configured with. */

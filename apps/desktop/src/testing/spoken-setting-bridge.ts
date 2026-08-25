@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import type { WorkspaceAgentSelection } from "@sidecar/session";
-import type { AppSettingField, AppSettingValue } from "@sidecar/settings";
+import {
+  APP_SETTING_FIELDS,
+  type AppSettingField,
+  type AppSettingValue,
+  type StoredAppSettings,
+} from "@sidecar/settings";
 import type { AppBridge, SettingsUpdateResult } from "#shared/contracts";
+import type { AppSettings, AppSettingsView, RuntimeStatus } from "#shared/wire/settings";
 
 export type SpokenSettingBridge = Pick<AppBridge, "updateSetting" | "updateSettingEntry">;
 
@@ -45,4 +51,25 @@ export function spokenSettingBridge(fixture: SpokenSettingBridgeFixture): Spoken
       return carry(field, key, value as WorkspaceAgentSelection | undefined);
     },
   };
+}
+
+/** Turns a renderer view back into wire state for settings-update fixtures. */
+export function appSettingsWire(settings: AppSettingsView): AppSettings {
+  const storedEntries = Object.fromEntries(
+    APP_SETTING_FIELDS.map((field) => [field, settings[field]]),
+  );
+  // SAFETY: APP_SETTING_FIELDS enumerates every schema-derived stored field exactly once.
+  const stored = storedEntries as StoredAppSettings;
+  const status: RuntimeStatus = {
+    credentialSources: settings.credentialSources,
+    codexCloudConnection: settings.codexCloudConnection,
+    secretStorage: settings.secretStorage,
+    voiceAvailable: settings.voiceAvailable,
+    calendarSignInAvailable: settings.calendarSignInAvailable,
+    linearSignInAvailable: settings.linearSignInAvailable,
+    calendarAccounts: settings.calendarAccounts,
+    appleCalendarAvailable: settings.appleCalendarAvailable,
+    ...(settings.appleCalendar ? { appleCalendar: settings.appleCalendar } : undefined),
+  };
+  return { stored, status };
 }

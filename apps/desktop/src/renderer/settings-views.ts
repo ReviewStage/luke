@@ -70,8 +70,6 @@ export const PANEL_STAND_DOWN = {
   FEEDBACK: "feedback",
 } as const;
 
-export type PanelStandDown = (typeof PANEL_STAND_DOWN)[keyof typeof PANEL_STAND_DOWN];
-
 /**
  * The two of those three the slot shape is drawn around, never both at once.
  * A note is not one of them: the composer is its own shape, at its own size.

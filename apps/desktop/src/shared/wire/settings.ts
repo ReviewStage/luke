@@ -1,11 +1,6 @@
 import type { CredentialProviderId } from "@sidecar/credentials/vocabulary";
 import type { CliConnection } from "@sidecar/session";
-import {
-  APP_SETTING_DEFAULTS,
-  APP_SETTING_FIELDS,
-  type StoredAppSettings,
-  VOICE_SOURCE,
-} from "@sidecar/settings";
+import { APP_SETTING_DEFAULTS, type StoredAppSettings, VOICE_SOURCE } from "@sidecar/settings";
 import type { ActResult } from "@sidecar/wire";
 import type { CredentialSource, SecretStorage } from "./account";
 import type { CalendarAccount } from "./calendar";
@@ -61,26 +56,6 @@ export function appSettingsView(settings: AppSettings): AppSettingsView {
     voiceSource: settings.stored.voiceSource ?? VOICE_SOURCE.ACCOUNT,
     formFactor: settings.stored.formFactor ?? APP_SETTING_DEFAULTS.formFactor,
   };
-}
-
-export function appSettingsWire(settings: AppSettingsView): AppSettings {
-  const storedEntries = Object.fromEntries(
-    APP_SETTING_FIELDS.map((field) => [field, settings[field]]),
-  );
-  // SAFETY: APP_SETTING_FIELDS enumerates every schema-derived stored field exactly once.
-  const stored = storedEntries as StoredAppSettings;
-  const status: RuntimeStatus = {
-    credentialSources: settings.credentialSources,
-    codexCloudConnection: settings.codexCloudConnection,
-    secretStorage: settings.secretStorage,
-    voiceAvailable: settings.voiceAvailable,
-    calendarSignInAvailable: settings.calendarSignInAvailable,
-    linearSignInAvailable: settings.linearSignInAvailable,
-    calendarAccounts: settings.calendarAccounts,
-    appleCalendarAvailable: settings.appleCalendarAvailable,
-    ...(settings.appleCalendar ? { appleCalendar: settings.appleCalendar } : undefined),
-  };
-  return { stored, status };
 }
 
 /** Every settings write returns the canonical act result and the latest stored snapshot. */

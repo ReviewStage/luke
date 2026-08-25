@@ -5,11 +5,12 @@ import {
   CONFIRMATION_ENTRANCE_MS,
   CONFIRMATION_REST_MS,
   CONFIRMATION_SCENE,
-  CONFIRMATIONS,
   confirmationHoldMs,
   feedbackConfirmation,
   STILL_CONFIRMATION_MS,
 } from "./feedback-confirmation";
+
+const CONFIRMATIONS = [feedbackConfirmation(() => 0), feedbackConfirmation(() => 0.999)] as const;
 
 test("the coin lands on the shockwave or the boop, and nothing else", () => {
   const low = feedbackConfirmation(() => 0);

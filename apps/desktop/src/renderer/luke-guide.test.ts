@@ -24,15 +24,10 @@ import {
   SECRET_STORAGE,
 } from "#shared/wire/account";
 import type { AppSettingsView, SettingsUpdateResult } from "#shared/wire/settings";
-import {
-  APP_SETTING_DEFAULTS,
-  appSettingsView,
-  appSettingsWire,
-  CLI_CONNECTION,
-} from "#shared/wire/settings";
+import { APP_SETTING_DEFAULTS, appSettingsView, CLI_CONNECTION } from "#shared/wire/settings";
 import type { UpdateSnapshot } from "#shared/wire/update";
 import { UPDATE_STATUS } from "#shared/wire/update";
-import { spokenSettingBridge } from "#testing/spoken-setting-bridge";
+import { appSettingsWire, spokenSettingBridge } from "#testing/spoken-setting-bridge";
 import {
   APP_SETTING_ID,
   applySpokenSetting,
