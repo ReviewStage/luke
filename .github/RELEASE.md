@@ -1,24 +1,120 @@
 # Releasing Luke for macOS
 
-The release workflow builds, signs, notarizes, staples, and validates an arm64 macOS app
-with electron-builder. It creates `Luke-X.Y.Z-macos-arm64.zip` with a matching
-`.sha256` file, and a notarized `Luke-X.Y.Z-arm64.dmg` with its own `.sha256` plus a
-version-free copy named `Luke.dmg`, the asset the website's download button reaches
-through `releases/latest/download/Luke.dmg`, which is why its name must never change.
-Beside them electron-builder writes a version-free `latest-mac.yml`, the electron-updater
-manifest the app updates from through `releases/latest/download/latest-mac.yml`. The
-manifest names the zip beside it with a relative URL and carries its sha512, so its name
-must never change either.
+Releases are cut by pushing a `vX.Y.Z` tag. GitHub Actions does the rest: the **Release**
+workflow builds, signs, notarizes, staples, and validates an arm64 macOS app with
+electron-builder on a `macos-15` runner, then publishes the GitHub Release and uploads
+every asset. The Apple, Google, and PostHog secrets the workflow needs are configured on
+this repository, so the tag push is the whole release.
 
-Pushing a `vX.Y.Z` tag publishes or updates a GitHub Release. A manual
-`workflow_dispatch` run performs the same release rehearsal without publishing; its zip,
-DMG, and checksums are retained as workflow artifacts for 14 days.
+The workflow's first job asks whether the signing certificate secret exists, because a
+job-level `if` cannot read the `secrets` context. It is a guard against a tag pushed
+where the credentials are absent — a fork, or a repository whose secrets were cleared —
+and it never prints a secret. A manual dispatch bypasses the guard on purpose, so a
+rehearsal run without credentials fails loudly at the secret check instead of silently
+doing nothing.
 
-While the Apple secrets below are not configured, a tag push skips the workflow cleanly
-and releases are cut by hand instead; see "Manual release" below. Configuring the
-secrets is what turns the tag push into the whole release.
+## What a release publishes
 
-## Required GitHub Actions secrets
+Six assets, and every one of them is load-bearing:
+
+| Asset | Why it exists |
+| --- | --- |
+| `Luke-X.Y.Z-arm64.dmg` | The versioned, notarized, stapled disk image |
+| `Luke-X.Y.Z-arm64.dmg.sha256` | Its checksum |
+| `Luke.dmg` | A version-free copy of the same DMG — the asset the website's download button reaches through `releases/latest/download/Luke.dmg`, which is why its name must never change |
+| `Luke-X.Y.Z-macos-arm64.zip` | The archive electron-updater downloads |
+| `Luke-X.Y.Z-macos-arm64.zip.sha256` | Its checksum |
+| `latest-mac.yml` | The electron-updater manifest the app updates from through `releases/latest/download/latest-mac.yml`; it names the zip beside it with a relative URL and carries its sha512, so its name must never change either |
+
+The workflow verifies all six before it publishes anything: `Luke.dmg` must be byte-identical
+to the versioned DMG, both checksums must verify, the DMG must pass `codesign`, `spctl`,
+`stapler validate`, and `hdiutil verify`, the app must be arm64-only, hardened-runtime,
+`Notarized Developer ID`, and carrying `LUKE-LICENSE.txt`, and `latest-mac.yml` must name
+the zip with a relative URL and carry both `sha512` and `size`.
+
+## Cut a release
+
+1. **Prepare and merge the version PR.** Bump `apps/desktop/package.json` and add the
+   release's entry to `CHANGELOG.md` at the repository root in the same change. The
+   landing page renders that file at `/changelog`, and `scripts/repository-checks.sh`
+   refuses a desktop version the changelog does not name, so a bump cannot land without
+   its notes. Merge it through protected `main` like any other change.
+
+2. **Confirm the hosted service is live.** The service deploys from `main` on merge while
+   the desktop ships on the tag, so a build released ahead of its service answers 404
+   where a feature expected an endpoint. The one endpoint with no fallback at all is
+   `/api/voice/introduction-mint` — the spoken introduction runs before any account or
+   key exists, so that endpoint is its only possible voice, and a desktop carrying the
+   introduction must not be tagged until the service serving it is live.
+
+3. **Tag the merged commit.** The tag must point at the squash-merged commit on `main`
+   and its version must match `apps/desktop/package.json` exactly; the workflow refuses a
+   tag that does not.
+
+   ```sh
+   git fetch origin main
+   git tag v0.1.0 origin/main
+   ```
+
+4. **Push the tag.** This is the human release decision — the workflow creates no
+   credentials and pushes no tags.
+
+   ```sh
+   git push origin v0.1.0
+   ```
+
+5. **Let Actions finish.** The run bootstraps the workspace, runs `./scripts/check.sh`,
+   imports the Developer ID certificate into a throwaway keychain, builds the signed and
+   notarized artifacts, validates them, and then creates a published, non-draft release
+   titled `Luke X.Y.Z` with generated notes and uploads all six assets. The keychain is
+   removed whether the run succeeds or fails.
+
+Re-running the workflow on the same tag is safe: an existing release is reused and its
+assets are replaced with `gh release upload --clobber`. The release must stay non-draft
+and non-prerelease — `releases/latest` and the app's own update check both ignore drafts
+and prereleases, so a draft is a release nobody can reach.
+
+## Rehearse the release
+
+Run the **Release** workflow from the Actions tab with **Run workflow**. A manual dispatch
+runs the identical build, signing, notarization, and validation path but publishes
+nothing: no release is created and no assets are attached. The six artifacts are kept as a
+workflow artifact for 14 days instead.
+
+This is what to run after changing credentials, the signing or notarization setup, the
+packaging configuration, or the workflow itself — it proves the whole path works before a
+tag commits the repository to a release.
+
+## Verify after a release
+
+Confirm the three consumers see the build:
+
+```sh
+curl -sI -o /dev/null -w '%{http_code}\n' \
+  https://github.com/ReviewStage/luke/releases/latest/download/Luke.dmg
+curl -s https://api.github.com/repos/ReviewStage/luke/releases/latest | grep tag_name
+curl -sL https://github.com/ReviewStage/luke/releases/latest/download/latest-mac.yml
+```
+
+To check a downloaded build by hand, keep the zip and its checksum file in the same
+directory and verify the checksum:
+
+```sh
+shasum -a 256 -c Luke-0.1.0-macos-arm64.zip.sha256
+```
+
+After unzipping, ask Gatekeeper to assess the application:
+
+```sh
+spctl -a -t exec -vv Luke.app
+```
+
+A successful assessment identifies the source as `Notarized Developer ID`.
+
+## GitHub Actions secrets
+
+All seven are configured. This section is for rotating them or standing the workflow up
+somewhere else; the workflow fails its secret check if any one is missing.
 
 | Secret | Purpose | Source |
 | --- | --- | --- |
@@ -45,79 +141,29 @@ From macOS, set the repository secrets with the GitHub CLI:
 
 ```sh
 base64 -i DeveloperIDApplication.p12 | gh secret set MACOS_CERTIFICATE_P12_BASE64
-printf '%s' 'the-p12-password' | gh secret set MACOS_CERTIFICATE_PASSWORD
 base64 -i AuthKey_KEYID.p8 | gh secret set APPLE_API_KEY_P8_BASE64
 printf '%s' 'KEYID' | gh secret set APPLE_API_KEY_ID
 printf '%s' 'issuer-uuid' | gh secret set APPLE_API_ISSUER_ID
+gh secret set MACOS_CERTIFICATE_PASSWORD
 gh secret set GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET
 gh secret set POSTHOG_PROJECT_API_KEY
 ```
 
-The commands use macOS `base64`, where `-i` names an input file. Entering the certificate
-password interactively instead of placing it in shell history is safer:
+The commands use macOS `base64`, where `-i` names an input file. The last three read the
+value from a prompt rather than from shell history, which is how any secret worth
+protecting should be entered.
 
-```sh
-gh secret set MACOS_CERTIFICATE_PASSWORD
-```
+After rotating anything here, dispatch a rehearsal run before the next tag.
 
-## Rehearse the release
+## Emergency fallback: release from a Mac
 
-Run the **Release** workflow from the Actions tab with **Run workflow**. This checks the
-credentials and performs the entire signing and notarization path, but only uploads a
-workflow artifact. It does not create a GitHub Release.
-
-## Cut a release
-
-First land the version bump and packaging changes. The same change must add the
-release's entry to `CHANGELOG.md` at the repository root. The landing page renders that
-file at `/changelog`, and `scripts/repository-checks.sh` refuses a desktop version the
-changelog does not name, so a bump cannot land without its notes.
-
-The hosted service must already serve every endpoint the desktop build calls, because
-the service deploys from `main` on merge while the desktop ships on the tag: a build
-released ahead of its service answers 404 where a feature expected an endpoint. The
-one endpoint with no fallback at all is `/api/voice/introduction-mint` — the spoken
-introduction runs before any account or key exists, so that endpoint is its only
-possible voice, and a desktop carrying the introduction must not be tagged until the
-service serving it is live.
-
-The tag must exactly
-match `apps/desktop/package.json`; for version `0.1.0`:
-
-```sh
-git tag v0.1.0
-git push origin v0.1.0
-```
-
-The tag push is the human release decision. The workflow does not create credentials or
-push tags. It creates a published, non-draft release with generated notes. Re-running the
-workflow is safe: an existing release is reused and its assets are replaced with
-`gh release upload --clobber`.
-
-## Verify a download
-
-Keep the zip and checksum file in the same directory, then verify the checksum:
-
-```sh
-shasum -a 256 -c Luke-0.1.0-macos-arm64.zip.sha256
-```
-
-After unzipping, ask Gatekeeper to assess the application:
-
-```sh
-spctl -a -t exec -vv Luke.app
-```
-
-A successful assessment identifies the source as `Notarized Developer ID`.
-
-## Manual release
-
-Until the workflow's secrets exist, the whole release runs from a Mac holding the
-Developer ID identity and a stored `luke-notary` notarytool profile
+**Use this only when Actions cannot cut the release** — the hosted path above is the
+release process. Everything below runs from a Mac holding the Developer ID identity and a
+stored `luke-notary` notarytool profile
 (`xcrun notarytool store-credentials luke-notary`), plus a `gh` login with write access.
 
 ```sh
-export LUKE_CODESIGN_IDENTITY='Developer ID Application: …'
+export LUKE_CODESIGN_IDENTITY='Your Name (TEAMID)'
 export GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET='GOCSPX-…'   # from the Google Cloud console
 export POSTHOG_PROJECT_API_KEY='phc_…'                  # from PostHog project settings
 pnpm release:macos                    # signs, notarizes, staples; writes the DMG, zip, and manifest
@@ -125,26 +171,21 @@ git tag v0.1.1 && git push origin v0.1.1
 ./scripts/release/publish-github.sh   # creates the release and uploads every asset
 ```
 
-The calendar secret is baked into the app bundle while packaging. The Google Calendar
-sign-in exists only in builds carrying it, so the builder refuses to run without the
-variable rather than shipping a DMG the integration is silently missing from. It is the
-same value the Actions secret holds; take it from the Luke project's Desktop OAuth
-client under **APIs & Services → Credentials**.
+`LUKE_CODESIGN_IDENTITY` goes to electron-builder's `mac.identity` unchanged, which
+expects the identity's name **without** the `Developer ID Application:` prefix — the
+common name and team identifier alone, as in `Your Name (TEAMID)`. Run
+`security find-identity -v -p codesigning` to read the exact name off the certificate.
 
-Electron-builder writes the distribution artifacts under `artifacts/release-builder/`,
-and the publish script is what knows the asset set: the versioned DMG and zip with their
-checksums, plus the version-free `Luke.dmg` the website's download link depends on and
-the version-free `latest-mac.yml` the app updates from. It
-refuses to publish when the tag does not match `apps/desktop/package.json`, and it
-creates a published, non-draft release. The `releases/latest` link and the app's own
-update check both ignore drafts and prereleases, so a draft is a release nobody can
-reach. Re-running it is safe: assets are replaced with `--clobber`.
+The calendar and PostHog secrets are baked into the build while packaging, and
+`scripts/release-macos.sh` refuses to run without either rather than shipping a DMG whose
+calendar sign-in or analytics is silently missing. They are the same values the Actions
+secrets hold.
 
-Afterwards, confirm the three consumers see the build:
+Electron-builder writes the distribution artifacts under `artifacts/release-builder/`, and
+the publish script is what knows the asset set: it refuses to publish unless all six are
+present, refuses a tag that does not match `apps/desktop/package.json`, refuses a tag that
+does not exist, and creates a published, non-draft release. Re-running it is safe: assets
+are replaced with `--clobber`.
 
-```sh
-curl -sI -o /dev/null -w '%{http_code}\n' \
-  https://github.com/ReviewStage/luke/releases/latest/download/Luke.dmg
-curl -s https://api.github.com/repos/ReviewStage/luke/releases/latest | grep tag_name
-curl -sL https://github.com/ReviewStage/luke/releases/latest/download/latest-mac.yml
-```
+Then run the checks under "Verify after a release" above, and afterwards find out why
+Actions could not cut the release — a hand-cut release is a workflow bug left standing.
