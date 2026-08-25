@@ -1341,8 +1341,16 @@ test("inbound events the conversation acts on are parsed, and nothing else is", 
     }),
     {
       type: REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_COMPLETED,
+      itemId: "item-2",
       transcript: "how is the checkout agent doing?",
     },
+  );
+  assert.deepEqual(
+    parseRealtimeServerEvent({
+      type: REALTIME_SERVER_EVENT.INPUT_AUDIO_BUFFER_COMMITTED,
+      item_id: "item-2",
+    }),
+    { type: REALTIME_SERVER_EVENT.INPUT_AUDIO_BUFFER_COMMITTED, itemId: "item-2" },
   );
   assert.deepEqual(parseRealtimeServerEvent({ type: REALTIME_SERVER_EVENT.RESPONSE_DONE }), {
     type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
@@ -1384,6 +1392,8 @@ test("inbound events the conversation acts on are parsed, and nothing else is", 
     { type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA, item_id: "item-1" },
     // A transcription that came back empty said nothing worth acting on.
     { type: REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_COMPLETED, transcript: "  " },
+    { type: REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_COMPLETED, transcript: "hello" },
+    { type: REALTIME_SERVER_EVENT.INPUT_AUDIO_BUFFER_COMMITTED },
     { type: "session.updated" },
   ];
   for (const payload of payloads) {

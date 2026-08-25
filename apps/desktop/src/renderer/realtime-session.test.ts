@@ -104,6 +104,8 @@ interface Harness {
   replyEndings: { texts: readonly string[]; about: string | undefined }[];
   /** The developer's spoken turns, as the service handed them back. */
   spokenAsks: string[];
+  /** Conversation items fixed for those turns before their transcripts returned. */
+  spokenAskItems: string[];
   microphoneEnabled: () => boolean;
   microphoneStopped: () => boolean;
   emit: (event: JsonValue) => void;
@@ -212,6 +214,7 @@ function harness(
   const captionSubjects: (string | undefined)[] = [];
   const replyEndings: { texts: readonly string[]; about: string | undefined }[] = [];
   const spokenAsks: string[] = [];
+  const spokenAskItems: string[] = [];
   const requests: { url: string; init: RequestInit }[] = [];
   const calls: string[] = [];
   let enabled = false;
@@ -352,6 +355,7 @@ function harness(
     onSpokenAsk: (transcript) => {
       spokenAsks.push(transcript);
     },
+    onSpokenAskCommitted: (itemId) => spokenAskItems.push(itemId),
   };
   if (options.connectTimeoutMs !== undefined) {
     sessionOptions.connectTimeoutMs = options.connectTimeoutMs;
@@ -388,6 +392,7 @@ function harness(
     captionSubjects,
     replyEndings,
     spokenAsks,
+    spokenAskItems,
     microphoneEnabled: () => enabled,
     microphoneStopped: () => stopped,
     lukeAudible: () => remoteTrack.enabled,
@@ -2100,6 +2105,18 @@ test("the developer's spoken words come back only from their own call", async ()
   });
 
   assert.deepEqual(context.spokenAsks, ["how is the checkout agent doing?"]);
+});
+
+test("a developer turn is identified before its transcript returns", async () => {
+  const context = harness();
+  await context.session.connect();
+
+  context.emit({
+    type: REALTIME_SERVER_EVENT.INPUT_AUDIO_BUFFER_COMMITTED,
+    item_id: "item-1",
+  });
+
+  assert.deepEqual(context.spokenAskItems, ["item-1"]);
 });
 
 test("a speak-only call has no spoken turns to hand back", async () => {

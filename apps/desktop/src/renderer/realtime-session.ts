@@ -253,7 +253,9 @@ export interface RealtimeVoiceSessionCallbacks {
    * offers no microphone, so it has no spoken turns to hand back. The caller
    * records the words so the thread holds both halves of the exchange.
    */
-  onSpokenAsk?(transcript: string): void;
+  onSpokenAsk?(transcript: string, itemId: string): void;
+  /** The server item that fixes which current-launch history a spoken turn belongs to. */
+  onSpokenAskCommitted?(itemId: string): void;
   /**
    * A reply concluding, words or none. `onReplyEnded` hands over only words
    * that exist, so a reply the server failed or answered without a transcript
@@ -2350,7 +2352,10 @@ export class RealtimeVoiceSession {
         // Only the developer's own call has spoken turns to hand back; the
         // guard is belt to the speak-only shape's suspenders, so a stray
         // event on Luke's own call can never write a developer line.
-        if (this.#withMicrophone) this.#options.onSpokenAsk?.(event.transcript);
+        if (this.#withMicrophone) this.#options.onSpokenAsk?.(event.transcript, event.itemId);
+        return;
+      case REALTIME_SERVER_EVENT.INPUT_AUDIO_BUFFER_COMMITTED:
+        if (this.#withMicrophone) this.#options.onSpokenAskCommitted?.(event.itemId);
         return;
       case REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED:
         this.#audioEndingsReported = true;
