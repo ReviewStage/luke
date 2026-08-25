@@ -89,6 +89,8 @@ const FLOWN_BEATS: ReadonlySet<IntroductionBeat> = new Set([
   INTRODUCTION_BEAT.GLIDE,
   INTRODUCTION_BEAT.TOUR,
   INTRODUCTION_BEAT.MICROPHONE,
+  INTRODUCTION_BEAT.MICROPHONE_DIALOG,
+  INTRODUCTION_BEAT.MICROPHONE_DENIED,
   INTRODUCTION_BEAT.PRACTICE,
   INTRODUCTION_BEAT.SIGN_OFF,
   INTRODUCTION_BEAT.STAND_DOWN,
@@ -104,6 +106,8 @@ const FLOWN_BEATS: ReadonlySet<IntroductionBeat> = new Set([
 const LANDED_BEATS: ReadonlySet<IntroductionBeat> = new Set([
   INTRODUCTION_BEAT.TOUR,
   INTRODUCTION_BEAT.MICROPHONE,
+  INTRODUCTION_BEAT.MICROPHONE_DIALOG,
+  INTRODUCTION_BEAT.MICROPHONE_DENIED,
   INTRODUCTION_BEAT.PRACTICE,
   INTRODUCTION_BEAT.SIGN_OFF,
   INTRODUCTION_BEAT.STAND_DOWN,
@@ -534,18 +538,29 @@ export function IntroductionTakeover({
           dispatch(INTRODUCTION_EVENT.MICROPHONE_DENIED_SAID);
           return;
         }
-        speakLines(INTRODUCTION_SCRIPT.MICROPHONE, undefined, () => {
-          void window.sidecar.requestMicrophone().then((status) => {
-            if (beatRef.current !== INTRODUCTION_BEAT.MICROPHONE) return;
-            if (status === "granted") {
-              dispatch(INTRODUCTION_EVENT.MICROPHONE_GRANTED);
-              return;
-            }
-            speakLines(INTRODUCTION_SCRIPT.MICROPHONE_DENIED, undefined, () =>
-              dispatch(INTRODUCTION_EVENT.MICROPHONE_DENIED_SAID),
-            );
-          });
+        speakLines(INTRODUCTION_SCRIPT.MICROPHONE, undefined, () =>
+          dispatch(INTRODUCTION_EVENT.LINES_DONE),
+        );
+        return;
+      }
+      case INTRODUCTION_BEAT.MICROPHONE_DIALOG: {
+        // The dialog is macOS's own window mid-screen; while it stands, the
+        // panel is the capsule beside the housing — the same courtesy it pays
+        // a calendar consent — and the answer is what brings it back.
+        void window.sidecar.requestMicrophone().then((status) => {
+          if (beatRef.current !== INTRODUCTION_BEAT.MICROPHONE_DIALOG) return;
+          dispatch(
+            status === "granted"
+              ? INTRODUCTION_EVENT.MICROPHONE_GRANTED
+              : INTRODUCTION_EVENT.MICROPHONE_DENIED,
+          );
         });
+        return;
+      }
+      case INTRODUCTION_BEAT.MICROPHONE_DENIED: {
+        speakLines(INTRODUCTION_SCRIPT.MICROPHONE_DENIED, undefined, () =>
+          dispatch(INTRODUCTION_EVENT.MICROPHONE_DENIED_SAID),
+        );
         return;
       }
       case INTRODUCTION_BEAT.PRACTICE: {
@@ -651,6 +666,9 @@ export function IntroductionTakeover({
     return () => clearTimeout(timer);
   }, [landed]);
   const standingDown = STANDING_DOWN_BEATS.has(beat);
+  // Stood aside, not down: the capsule while macOS's microphone dialog is
+  // up, with the wings ungated — the panel it springs back to is unchanged.
+  const standingAside = beat === INTRODUCTION_BEAT.MICROPHONE_DIALOG;
   // The tour's flipped row wears the attention look and rides to the top,
   // exactly as the panel re-sorts a session that starts needing someone.
   const tourFlipped = tourFlipId ? rows.find((row) => row.id === tourFlipId) : undefined;
@@ -697,9 +715,8 @@ export function IntroductionTakeover({
       data-notch={String(bootstrap.display.notch.hasNotch)}
       {...(landed
         ? {
-            "data-presentation": standingDown
-              ? PANEL_PRESENTATION.CAPSULE
-              : PANEL_PRESENTATION.PANEL,
+            "data-presentation":
+              standingDown || standingAside ? PANEL_PRESENTATION.CAPSULE : PANEL_PRESENTATION.PANEL,
           }
         : undefined)}
       style={{
@@ -760,7 +777,9 @@ export function IntroductionTakeover({
           meetingQuiet={false}
           voiceSpent={false}
           sessionsSettled={true}
-          presentation={standingDown ? PANEL_PRESENTATION.CAPSULE : PANEL_PRESENTATION.PANEL}
+          presentation={
+            standingDown || standingAside ? PANEL_PRESENTATION.CAPSULE : PANEL_PRESENTATION.PANEL
+          }
           housingWidth={bootstrap.display.notch.housingWidth}
           accountGated={standingDown}
         />

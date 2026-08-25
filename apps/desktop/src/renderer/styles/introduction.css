@@ -250,12 +250,20 @@
   scrollbar-width: thin;
   animation: scroll-edge-fade linear both;
   animation-timeline: scroll(self block);
+  /* The return from the microphone aside: the rows wait out the surface's
+     whole spring back to the panel's bounds — the exit hold plus the shape —
+     so they never stand over desktop the shape does not yet back. Leaving
+     rides the exit rule below instead, exit-first as every shrink is. */
+  transition: opacity var(--duration-fast) var(--motion-exit)
+    calc(var(--duration-exit) + var(--duration-shape));
 }
 
-/* Standing down, the rows leave first — the same exit-first ordering the
-   real collapse keeps — and the real surface follows them on its own spring
-   into the capsule's bounds. */
+/* Standing down — or aside, while macOS's microphone dialog holds the room —
+   the rows leave first, the same exit-first ordering the real collapse
+   keeps, and the real surface follows them on its own spring into the
+   capsule's bounds. */
 .introduction-stage[data-beat="glide"] .introduction-rows,
+.introduction-stage[data-beat="microphone-dialog"] .introduction-rows,
 .introduction-stage[data-beat="stand-down"] .introduction-rows,
 .introduction-stage[data-beat="done"] .introduction-rows {
   opacity: 0;

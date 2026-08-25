@@ -28,6 +28,14 @@ export const INTRODUCTION_BEAT = {
   TOUR: "tour",
   /** Luke asks before macOS does. */
   MICROPHONE: "microphone",
+  /**
+   * macOS's own dialog is up: the landed panel stands aside to the capsule
+   * for as long as the ask stands — the same courtesy the panel pays a
+   * calendar consent — and springs back the moment it is answered.
+   */
+  MICROPHONE_DIALOG: "microphone-dialog",
+  /** The panel back up, the refusal answered kindly. */
+  MICROPHONE_DENIED: "microphone-denied",
   /** The talk key is drawn and a real spoken exchange happens. */
   PRACTICE: "practice",
   /** The sign-off line, spoken over the landed panel with the voice still up. */
@@ -50,6 +58,8 @@ export const INTRODUCTION_EVENT = {
   LINES_DONE: "lines-done",
   FLIGHT_SETTLED: "flight-settled",
   MICROPHONE_GRANTED: "microphone-granted",
+  /** macOS's dialog was refused; the kind answer has not been spoken yet. */
+  MICROPHONE_DENIED: "microphone-refused",
   /** The refusal was answered kindly and the answer has finished. */
   MICROPHONE_DENIED_SAID: "microphone-denied-said",
   /** The practice exchange was answered, or its patience ran out. */
@@ -94,7 +104,18 @@ const TRANSITIONS = {
     [INTRODUCTION_EVENT.LINES_DONE]: INTRODUCTION_BEAT.MICROPHONE,
   },
   [INTRODUCTION_BEAT.MICROPHONE]: {
+    // A grant or refusal already standing needs no dialog: the beat's own
+    // probe short-circuits straight past the aside.
     [INTRODUCTION_EVENT.MICROPHONE_GRANTED]: INTRODUCTION_BEAT.PRACTICE,
+    [INTRODUCTION_EVENT.MICROPHONE_DENIED_SAID]: INTRODUCTION_BEAT.SIGN_OFF,
+    // The warning spoken, macOS asks next — and the panel gets out of its way.
+    [INTRODUCTION_EVENT.LINES_DONE]: INTRODUCTION_BEAT.MICROPHONE_DIALOG,
+  },
+  [INTRODUCTION_BEAT.MICROPHONE_DIALOG]: {
+    [INTRODUCTION_EVENT.MICROPHONE_GRANTED]: INTRODUCTION_BEAT.PRACTICE,
+    [INTRODUCTION_EVENT.MICROPHONE_DENIED]: INTRODUCTION_BEAT.MICROPHONE_DENIED,
+  },
+  [INTRODUCTION_BEAT.MICROPHONE_DENIED]: {
     [INTRODUCTION_EVENT.MICROPHONE_DENIED_SAID]: INTRODUCTION_BEAT.SIGN_OFF,
   },
   [INTRODUCTION_BEAT.PRACTICE]: {
