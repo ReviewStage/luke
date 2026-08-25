@@ -316,7 +316,10 @@
 }
 
 /* The practice beat's keycaps, drawn on the panel itself: the surface takes
-   their room at once and they arrive over black behind the shape's delay. */
+   their room at once, and they wait out the shape's whole travel like the
+   returning rows do, because practice arrives from the microphone aside with
+   the surface still springing back from the capsule — a shorter delay would
+   draw the caps over desktop the shape does not yet back. */
 .introduction-keycaps {
   display: flex;
   align-items: center;
@@ -326,7 +329,7 @@
   --keycap-size: 32px;
   --keycap-text: 15px;
   animation: introduction-arrive var(--duration-fast) var(--spring) backwards;
-  animation-delay: var(--slot-delay);
+  animation-delay: calc(var(--duration-exit) + var(--duration-shape));
 }
 
 .introduction-keycaps-hold {
