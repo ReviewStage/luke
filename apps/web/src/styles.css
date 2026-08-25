@@ -384,6 +384,318 @@
   width: 26px;
 }
 
+/* Works-with variants — comparison rig
+   Four of the five "works with" presentations in WorksWithVariants.tsx need
+   hand-written CSS Tailwind utilities cannot express: a looping marquee, a
+   trigonometric ring layout, and a terminal window's own vocabulary. The
+   fifth (Signal Grid) is plain utilities at its call site. This whole block
+   is scaffolding for that comparison and leaves with it once one variant is
+   chosen. --------------------------------------------------------------- */
+
+/* Rolling Belt */
+.belt-row {
+  overflow: hidden;
+  padding-block: var(--space-2);
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    black var(--space-7),
+    black calc(100% - var(--space-7)),
+    transparent
+  );
+}
+
+.belt-track {
+  display: flex;
+  width: max-content;
+  align-items: center;
+  gap: var(--space-7);
+  padding-inline: var(--space-5);
+  animation: belt-scroll-left 36s linear infinite;
+}
+
+.belt-track-right {
+  animation-name: belt-scroll-right;
+  animation-duration: 32s;
+}
+
+@keyframes belt-scroll-left {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes belt-scroll-right {
+  from {
+    transform: translateX(-50%);
+  }
+}
+
+.belt-item {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.mark-tile.belt-mark {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+}
+
+.mark-tile.belt-mark .provider-mark {
+  width: 30px;
+  height: 30px;
+}
+
+.belt-name {
+  font-family: var(--font-brand);
+  font-size: 2rem;
+  font-weight: 500;
+  white-space: nowrap;
+  letter-spacing: -0.01em;
+}
+
+/* Orbit */
+.orbit-stage {
+  position: relative;
+  width: min(92vw, 460px);
+  aspect-ratio: 1;
+  margin: 0 auto;
+}
+
+.orbit-ring {
+  position: absolute;
+  inset: 0;
+}
+
+.orbit-ring::before {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: calc(var(--orbit-radius) * 2);
+  height: calc(var(--orbit-radius) * 2);
+  border: 1px dashed var(--border);
+  border-radius: 50%;
+  content: "";
+  transform: translate(-50%, -50%);
+}
+
+.orbit-node {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(var(--orbit-angle))
+    translateY(calc(var(--orbit-radius) * -1)) rotate(calc(var(--orbit-angle) * -1));
+}
+
+.mark-tile.orbit-mark {
+  width: 40px;
+  height: 40px;
+}
+
+.orbit-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  transform: translate(-50%, -50%);
+}
+
+.orbit-center-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--primary);
+  box-shadow: 0 0 0 7px color-mix(in oklab, var(--primary) 16%, transparent);
+}
+
+.orbit-center-label {
+  font-family: var(--font-brand);
+  font-size: 0.8rem;
+  color: var(--muted-foreground);
+}
+
+/* Status Log */
+.term-window {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: #0b0d10;
+  box-shadow: 0 20px 60px -30px rgba(0, 0, 0, 0.5);
+}
+
+.term-titlebar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: #16181c;
+}
+
+.term-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+}
+
+.term-dot-red {
+  background: #ff5f57;
+}
+
+.term-dot-yellow {
+  background: #febc2e;
+}
+
+.term-dot-green {
+  background: #28c840;
+}
+
+.term-title {
+  margin-left: var(--space-2);
+  color: rgba(255, 255, 255, 0.45);
+  font-family: var(--font-code);
+  font-size: 0.75rem;
+}
+
+.term-body {
+  max-height: 420px;
+  overflow-y: auto;
+  padding: var(--space-5);
+  color: rgba(255, 255, 255, 0.82);
+  font-family: var(--font-code);
+  font-size: 0.85rem;
+  line-height: 1.9;
+}
+
+.term-line {
+  margin: 0;
+}
+
+.term-prompt {
+  margin-right: var(--space-2);
+  color: #5cd5ff;
+}
+
+.term-heading {
+  margin-top: var(--space-3);
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.term-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding-left: var(--space-4);
+}
+
+.term-ok {
+  color: #6fdca4;
+}
+
+.mark-tile.term-mark {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+}
+
+.mark-tile.term-mark .provider-mark {
+  width: 13px;
+  height: 13px;
+}
+
+.term-cursor-line {
+  display: flex;
+  align-items: center;
+  margin-top: var(--space-2);
+}
+
+.term-cursor {
+  display: inline-block;
+  width: 8px;
+  height: 16px;
+  background: #5cd5ff;
+  animation: term-blink 1s steps(1) infinite;
+}
+
+@keyframes term-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* The Roster */
+.index-sheet {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-7);
+}
+
+@media (width >= 640px) {
+  .index-sheet {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.index-heading {
+  margin: 0 0 var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--foreground);
+  font-family: var(--font-brand);
+  font-size: 1.1rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+.index-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.index-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.index-row:last-child {
+  border-bottom: none;
+}
+
+.index-number {
+  min-width: 1.5em;
+  color: var(--muted-foreground);
+  font-family: var(--font-code);
+  font-size: 0.7rem;
+}
+
+.index-name {
+  font-size: 0.95rem;
+  letter-spacing: -0.005em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .belt-track {
+    animation: none;
+  }
+
+  .term-cursor {
+    animation: none;
+    opacity: 1;
+  }
+}
+
 /* Documents
    Generated markdown — the privacy policy and each changelog release — read
    start to finish, so they get more vertical rhythm than the marketing copy

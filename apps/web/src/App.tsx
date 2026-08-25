@@ -1,7 +1,7 @@
 import { captureSiteEvent, SITE_EVENT } from "./analytics";
 import { NotchMock } from "./NotchMock";
 import { DMG_URL, GitHubMark, REPOSITORY_URL, SiteFooter, SiteHeader } from "./SiteChrome";
-import { WorksWith } from "./WorksWith";
+import { WorksWithSwitcher } from "./WorksWithVariants";
 
 export function App(): React.JSX.Element {
   return (
@@ -49,7 +49,7 @@ export function App(): React.JSX.Element {
           <NotchMock />
         </section>
 
-        <WorksWith />
+        <WorksWithSwitcher />
       </main>
 
       <SiteFooter />

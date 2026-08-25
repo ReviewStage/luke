@@ -1,57 +1,20 @@
 import { ProviderMark } from "@sidecar/panel";
-import {
-  PROVIDER_ID_LIST,
-  PROVIDER_IDENTITY_BY_ID,
-  SESSION_APPLICATION_ID,
-  SESSION_APPLICATION_ID_LIST,
-  type SessionApplicationId,
-} from "@sidecar/session";
+import { AGENTS, APPS, type RosterEntry } from "./connections-roster";
 
 /**
  * The landing page's answer to "does it work with mine?": the agents Luke
  * observes and the apps that hold their sessions, each under its own mark.
  *
- * Both rosters walk the product's own id lists — `PROVIDER_ID_LIST` and
- * `SESSION_APPLICATION_ID_LIST` — in each list's own registry order, an agent
- * being a session provider and an app holding agent sessions without becoming
- * their provider. Because the rosters are the id lists rather than a
- * hand-written array, a renamed or removed provider breaks this page's build
- * instead of leaving it advertising one the app no longer knows. Agent names
- * come from the registry's own `displayName`; apps have no such registry, so
- * `APPLICATION_DISPLAY_NAME` stands in as one, typed to require an entry for
- * every id `SESSION_APPLICATION_ID_LIST` can hand it.
+ * The roster itself lives in `connections-roster.ts`, walking the product's
+ * own id lists in each list's own registry order rather than a hand-written
+ * array, so a renamed or removed provider breaks this page's build instead of
+ * leaving it advertising one the app no longer knows.
  *
  * `ProviderMark` is `@sidecar/panel`'s own, the same component the desktop
  * panel and the hero mock above draw with — not a duplicate traced from path
  * data, per the standing decision in `packages/surface/AGENTS.md` that
  * `@sidecar/panel` is the one shared React layer for provider marks.
  */
-interface RosterEntry {
-  readonly id: string;
-  readonly name: string;
-}
-
-const AGENTS: readonly RosterEntry[] = PROVIDER_ID_LIST.map((id) => ({
-  id,
-  name: PROVIDER_IDENTITY_BY_ID[id].displayName,
-}));
-
-const APPLICATION_DISPLAY_NAME = {
-  [SESSION_APPLICATION_ID.CHATGPT]: "ChatGPT",
-  [SESSION_APPLICATION_ID.CMUX]: "cmux",
-  [SESSION_APPLICATION_ID.CONDUCTOR]: "Conductor",
-  [SESSION_APPLICATION_ID.CURSOR]: "Cursor",
-  [SESSION_APPLICATION_ID.ORCA]: "Orca",
-  [SESSION_APPLICATION_ID.RADIUS]: "Radius",
-  [SESSION_APPLICATION_ID.REPLICAS]: "Replicas",
-  [SESSION_APPLICATION_ID.SUPERSET]: "Superset",
-} as const satisfies Readonly<Record<SessionApplicationId, string>>;
-
-const APPS: readonly RosterEntry[] = SESSION_APPLICATION_ID_LIST.map((id) => ({
-  id,
-  name: APPLICATION_DISPLAY_NAME[id],
-}));
-
 function Roster({
   label,
   entries,
