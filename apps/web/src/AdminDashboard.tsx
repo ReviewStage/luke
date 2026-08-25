@@ -1584,19 +1584,23 @@ function PageHeader({
   account: ViewerAccount | undefined;
   onSignOut: () => void;
 }): React.JSX.Element {
+  const hasControls = controls !== null && controls !== undefined;
+
   return (
     <header className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-4 min-[720px]:flex min-[720px]:gap-x-6 min-[720px]:gap-y-3">
       {/* On a phone the identity is one row and the controls are a deliberate
           second row. This keeps the account trigger from becoming a stray
           button after whichever control happened to wrap first. */}
       <h1 className="col-start-1 row-start-1 text-lg font-semibold tracking-[-0.01em]">{title}</h1>
-      {controls !== null && controls !== undefined ? (
+      {hasControls ? (
         <div className="col-span-2 row-start-2 flex flex-wrap items-center gap-3 min-[720px]:ml-auto min-[720px]:gap-4">
           {controls}
         </div>
       ) : null}
       {account ? (
-        <div className="col-start-2 row-start-1 flex items-center min-[720px]:gap-4">
+        <div
+          className={`col-start-2 row-start-1 flex items-center min-[720px]:gap-4 ${hasControls ? "" : "min-[720px]:ml-auto"}`}
+        >
           <span className="hidden h-8 w-px bg-border min-[720px]:inline-block" aria-hidden="true" />
           <AccountMenu account={account} onSignOut={onSignOut} />
         </div>
