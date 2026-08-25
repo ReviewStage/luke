@@ -400,6 +400,16 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
           : "Not signed in. The sign-in screen offers Google and GitHub, and hovering or pressing the strip beside the housing brings it back; live sessions and Luke's controls stay off until sign-in finishes.",
     },
     {
+      label: "The introduction",
+      detail:
+        "On the first launch, before anyone signs in, Luke gives a one-time spoken " +
+        "introduction: the screen dims, he wakes, shows the coding agents already on the " +
+        "machine (or pretend examples, said to be pretend), flies up into the notch with " +
+        "them, asks about the microphone before macOS does, and hands over to sign-in. It " +
+        "plays once, never repeats after finishing, and its voice runs on Luke's own " +
+        "service without an account; nothing in it can act on a session.",
+    },
+    {
       label: "Feedback and prompts",
       detail:
         "The Feedback section on the Settings tab opens a composer: Send feedback for bugs " +

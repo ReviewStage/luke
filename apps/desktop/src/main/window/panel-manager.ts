@@ -17,8 +17,8 @@ import {
 } from "electron";
 import { channels, type DisplayDiagnostic, type WindowMode } from "#shared/contracts";
 import { readMacScreenGeometry } from "../native/screen-geometry";
-import { keepWindowStationary } from "../native/stationary-window";
 import type { RunMode } from "../run-mode";
+import { dressMacWindow, hardenedWebPreferences, refuseForeignNavigation } from "./hardened-window";
 
 export interface PanelDuck {
   setExchangeActive(active: boolean): void;
@@ -398,15 +398,7 @@ export class PanelManager {
 
   #configure(window: BrowserWindow): void {
     window.setAlwaysOnTop(true, "pop-up-menu");
-    if (process.platform === "darwin") {
-      window.setVisibleOnAllWorkspaces(true, {
-        visibleOnFullScreen: true,
-        skipTransformProcessType: true,
-      });
-      window.setHiddenInMissionControl(true);
-      window.setWindowButtonVisibility(false);
-      keepWindowStationary(window);
-    }
+    dressMacWindow(window);
   }
 
   /**
@@ -460,24 +452,16 @@ export class PanelManager {
       focusable: this.initialMode === "expanded" && this.#runMode.takesFocus,
       acceptFirstMouse: true,
       type: process.platform === "darwin" ? "panel" : undefined,
-      webPreferences: {
-        preload: this.#preloadPath,
-        contextIsolation: true,
-        nodeIntegration: false,
-        sandbox: true,
-        webSecurity: true,
-        devTools: this.#runMode.takesFocus,
-        backgroundThrottling: false,
-      },
+      webPreferences: hardenedWebPreferences({
+        preloadPath: this.#preloadPath,
+        runMode: this.#runMode,
+      }),
     });
     this.#windows.set(displayId, window);
 
     this.#configure(window);
     window.setIgnoreMouseEvents(true, { forward: true });
-    window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
-    window.webContents.on("will-navigate", (event, url) => {
-      if (url !== this.#rendererUrl) event.preventDefault();
-    });
+    refuseForeignNavigation(window, this.#rendererUrl);
     window.once("ready-to-show", () => {
       if (this.#runMode.takesFocus && !window.isDestroyed()) window.showInactive();
     });

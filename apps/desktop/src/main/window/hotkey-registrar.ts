@@ -51,7 +51,13 @@ export interface HotkeyRegistrarOptions {
   host: HotkeyHost;
   /** A capture run drives the panel itself and must not grab a system key. */
   registersGlobalKeys: boolean;
-  hasCredentials: () => boolean;
+  /**
+   * Whether the named key currently has something to serve. Answered per rank
+   * because the ranks can diverge: the introduction holds a voice for the talk
+   * key alone, and claiming the ask and stop chords beside it would take two
+   * system keys from every other app for nothing.
+   */
+  hasCredentials: (rank: HotkeyRank) => boolean;
   recordProductEvent: RecordProductEvent;
   shortcut?: ShortcutSurface;
   createTalkKeyWatcher?: (edges: TalkKeyEdges) => TalkKeyHandle;
@@ -69,7 +75,7 @@ export interface HotkeyRegistrarOptions {
 export class HotkeyRegistrar {
   readonly #host: HotkeyHost;
   readonly #registersGlobalKeys: boolean;
-  readonly #hasCredentials: () => boolean;
+  readonly #hasCredentials: (rank: HotkeyRank) => boolean;
   readonly #recordProductEvent: RecordProductEvent;
   readonly #shortcut: ShortcutSurface;
   readonly #createTalkKeyWatcher: (edges: TalkKeyEdges) => TalkKeyHandle;
@@ -192,7 +198,7 @@ export class HotkeyRegistrar {
     if (!this.#registersGlobalKeys) return;
     // Taking a system-wide key for a feature that cannot run would make every
     // press somewhere else in macOS do nothing, visibly.
-    if (!this.#hasCredentials()) return;
+    if (!this.#hasCredentials(HOTKEY_RANK.TALK)) return;
     // The helper first, because it is the only one of the two that reports the
     // key being let go of, and a key you hold is the whole point.
     this.#talkKeyWatcher = this.#createTalkKeyWatcher({
@@ -253,7 +259,7 @@ export class HotkeyRegistrar {
     // and a key that could not be re-taken must not still be claimed anywhere.
     this.#ask = undefined;
     if (!this.#registersGlobalKeys) return;
-    if (!this.#hasCredentials()) return;
+    if (!this.#hasCredentials(HOTKEY_RANK.ASK)) return;
     // Every chord the talk key could sit on is taken, not just the one it has
     // announced: its helper falls back through its own candidates after this
     // runs, so a chord it merely might take is already not the ask key's to
@@ -298,7 +304,7 @@ export class HotkeyRegistrar {
     // and a chord that could not be re-taken must not still be claimed anywhere.
     this.#stop = undefined;
     if (!this.#registersGlobalKeys) return;
-    if (!this.#hasCredentials()) return;
+    if (!this.#hasCredentials(HOTKEY_RANK.STOP)) return;
     // Every chord the other two keys could sit on is taken, not just the ones
     // they have announced: the talk key's helper falls back through its own
     // candidates on its own clock, and the ask key re-registers behind it.

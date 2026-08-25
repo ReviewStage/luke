@@ -64,8 +64,13 @@ export function WingFace({ motion, repeat = false }: WingFaceProps): React.JSX.E
       <g className="luke-face-part luke-face-layer luke-face-layer-2">
         <g className="luke-face-part luke-face-layer luke-face-layer-1">
           <g transform={FACE_ART.TILT}>
+            {/* Named, and with its length normalized to 1, so the introduction's
+                draw-on reveal can dash it without measuring: no other rule sets
+                a dash, so the normalization is invisible everywhere else. */}
             <path
+              className="luke-face-smile"
               d={FACE_ART.SMILE}
+              pathLength={1}
               {...STROKE}
               strokeWidth={FACE_ART.STROKE_WIDTH}
               strokeLinejoin="round"

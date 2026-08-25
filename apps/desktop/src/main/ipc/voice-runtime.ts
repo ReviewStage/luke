@@ -1,23 +1,34 @@
-import { PRODUCT_EVENT, type RecordProductEvent } from "@sidecar/analytics";
+import {
+  PRODUCT_EVENT,
+  type ProductCredentialSource,
+  type RecordProductEvent,
+} from "@sidecar/analytics";
 import { CREDENTIAL_CONNECTION, CREDENTIAL_PROVIDERS } from "@sidecar/credentials";
-import type { VoiceSource } from "@sidecar/settings";
 import type { HostedUsageReader, RealtimeCredentialMinter } from "@sidecar/voice";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from "electron";
 import { BRIDGE } from "#shared/bridge";
-import { VOICE_SOURCE_COUNTED_AS } from "#shared/product-vocabulary";
 import { registerBridge } from "../register-bridge";
 import type { PanelManager } from "../window/panel-manager";
+
+/**
+ * The minter a call will run on and the source its count names, chosen
+ * together: two closures deciding independently across the awaited mint could
+ * disagree at exactly the transitions the introduction is built around — an
+ * account landing, or leaving, while a mint is in flight.
+ */
+export interface ChosenRealtimeCredentials {
+  minter: RealtimeCredentialMinter;
+  countedSource: ProductCredentialSource;
+}
 
 export interface VoiceRuntimeIpcDependencies {
   ipcMain: Pick<IpcMain, "handle" | "on">;
   trustedSender: (event: IpcMainEvent | IpcMainInvokeEvent) => boolean;
   panels: PanelManager;
   openExternal: (url: string) => Promise<void>;
-  realtimeCredentials: () => RealtimeCredentialMinter | undefined;
+  chooseRealtimeCredentials: () => ChosenRealtimeCredentials | undefined;
   unavailableDiagnostics: () => ReturnType<RealtimeCredentialMinter["diagnostics"]>;
   hostedUsageReader: () => HostedUsageReader | undefined;
-  /** Which credential the voice would run on, as the last applied policy decided. */
-  voiceSource: () => VoiceSource;
   recordProductEvent: RecordProductEvent;
 }
 
@@ -45,16 +56,21 @@ export function registerVoiceRuntimeIpc(dependencies: VoiceRuntimeIpcDependencie
         if (displayId !== undefined) panels.focusIfExpanded(displayId);
       },
       async requestRealtimeCredential() {
-        const credential = await dependencies.realtimeCredentials()?.mint();
-        if (credential) {
+        // Chosen once, before the awaited mint: the source counted is the
+        // source the credential actually came from, whatever the account did
+        // while the request was in flight.
+        const chosen = dependencies.chooseRealtimeCredentials();
+        const credential = await chosen?.minter.mint();
+        if (credential && chosen) {
           dependencies.recordProductEvent(PRODUCT_EVENT.VOICE_CALL_START, {
-            credential_source: VOICE_SOURCE_COUNTED_AS[dependencies.voiceSource()],
+            credential_source: chosen.countedSource,
           });
         }
         return credential;
       },
       requestRealtimeDiagnostics: () =>
-        dependencies.realtimeCredentials()?.diagnostics() ?? dependencies.unavailableDiagnostics(),
+        dependencies.chooseRealtimeCredentials()?.minter.diagnostics() ??
+        dependencies.unavailableDiagnostics(),
       requestHostedUsage: () => dependencies.hostedUsageReader()?.read(),
     },
     { ipcMain: dependencies.ipcMain, trustedSender: dependencies.trustedSender },

@@ -56,6 +56,7 @@ export const PRODUCT_EVENT = {
   FEEDBACK_SEND: "feedback:send",
   ASK_SUBMIT: "ask:submit",
   VOICE_CALL_START: "voice:call_start",
+  INTRODUCTION_COMPLETE: "introduction:complete",
   VOICE_EXCHANGE: "voice:exchange",
   VOICE_PERMISSION: "voice:permission",
   VOICE_ANNOUNCEMENT_SPEAK: "voice:announcement_speak",
@@ -150,6 +151,8 @@ export type ProductConnectionId =
 export const PRODUCT_CREDENTIAL_SOURCE = {
   ACCOUNT: "account",
   KEY: "key",
+  /** The one-time onboarding introduction's own bounded, accountless mint. */
+  INTRODUCTION: "introduction",
 } as const;
 
 export type ProductCredentialSource =
@@ -448,6 +451,7 @@ export const PRODUCT_EVENT_PROPERTIES = {
     PRODUCT_EVENT_PROPERTY.ISSUE_ACT,
   ],
   [PRODUCT_EVENT.VOICE_CALL_START]: [PRODUCT_EVENT_PROPERTY.CREDENTIAL_SOURCE],
+  [PRODUCT_EVENT.INTRODUCTION_COMPLETE]: [],
   [PRODUCT_EVENT.VOICE_ANNOUNCEMENT_SPEAK]: [
     PRODUCT_EVENT_PROPERTY.PROVIDER_ID,
     PRODUCT_EVENT_PROPERTY.SESSION_STATUS,

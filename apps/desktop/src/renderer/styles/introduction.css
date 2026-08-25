@@ -1,0 +1,385 @@
+/* The one-time introduction takeover: a fullscreen stage that dims the
+   desktop, wakes the face, stages the detected rows on the app's own panel
+   surface, and springs the lot of them up into the notch. Everything drawn is
+   the app's own furniture — the panel's session rows, the wings, the sign-in
+   gate — on the same tokens, so what lands at the top of the screen is
+   pixel-for-pixel what the panel window draws the moment the takeover
+   closes. Everything layered here moves with transform and opacity alone;
+   the surface's size follows its content at once, never by animation. */
+
+.introduction-stage {
+  position: fixed;
+  inset: 0;
+  overflow: clip;
+  /* The panel surface's flares turn the panel's corner — the same 0.489 the
+     panel presentation derives. */
+  --notch-concave-radius: calc(var(--panel-radius) * 0.489);
+  /* Where the panel stands mid-screen before the flight carries it up. */
+  --introduction-panel-stage-y: 40vh;
+  transition: opacity var(--duration-quick) var(--motion-exit);
+}
+
+.introduction-stage[data-fading="true"] {
+  opacity: 0;
+  transition: opacity var(--duration-shape) var(--motion-exit);
+}
+
+/* The panel's own row-arrival vocabulary hides rows until the presentation
+   declares them arrived; before the flight the introduction has no
+   presentation, so its rows simply stand once their own staging lands them. */
+.introduction-stage .session-row {
+  opacity: 1;
+  transform: none;
+}
+
+/* The dimming itself: the window behind it is transparent, so this layer is
+   the whole takeover of the desktop. It arrives on its own mount animation —
+   an element cannot transition from a style it never held — and is inhaled
+   upward with the flight: the veil hangs past the bottom edge with a
+   feathered hem kept offscreen at rest, so its exit can travel — the hem
+   sweeps up through the screen while the dark dissolves, and the room reads
+   as released toward the housing rather than merely revealed. */
+.introduction-scrim {
+  position: absolute;
+  inset: 0 0 -12vh;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.72) calc(100% - 12vh), rgba(0, 0, 0, 0));
+  animation: introduction-scrim-arrive var(--duration-shape) var(--motion-exit) backwards;
+  /* Twice the shape's beat: the dark lifting is the room changing, not a
+     control answering, and it reads calmer a breath slower than the flight. */
+  transition:
+    opacity calc(var(--duration-shape) * 2) var(--motion-exit),
+    transform calc(var(--duration-shape) * 2) var(--motion-exit);
+}
+
+.introduction-stage[data-flown="true"] .introduction-scrim {
+  opacity: 0;
+  transform: translateY(-16vh);
+}
+
+@keyframes introduction-scrim-arrive {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.introduction-face-anchor {
+  position: absolute;
+  left: 50%;
+  top: 40%;
+  transform: translate(-50%, -50%);
+  transition: transform var(--duration-shape) var(--spring);
+}
+
+/* The something-is-here in the dark: a slow breath, held like every loop by
+   the play-state token, centred on the face it halos and gone with the veil. */
+.introduction-glow {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 72vmin;
+  height: 72vmin;
+  pointer-events: none;
+  background: radial-gradient(
+    circle,
+    rgba(126, 134, 255, 0.12),
+    rgba(126, 134, 255, 0.04) 38%,
+    transparent 66%
+  );
+  transform: translate(-50%, -50%);
+  animation: introduction-breathe 4.6s ease-in-out infinite;
+  animation-play-state: var(--loop-motion);
+  transition: opacity calc(var(--duration-shape) * 2) var(--motion-exit);
+}
+
+.introduction-stage[data-flown="true"] .introduction-glow {
+  opacity: 0;
+}
+
+@keyframes introduction-breathe {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+
+  50% {
+    transform: translate(-50%, -50%) scale(1.1);
+  }
+}
+
+/* The rows arriving is what nudges him upward: centre stage alone, standing
+   over the sessions once there are sessions to stand over. */
+.introduction-stage[data-lifted="true"] .introduction-face-anchor {
+  transform: translate(-50%, -50%) translateY(-16vh);
+}
+
+.introduction-face {
+  position: relative;
+  display: block;
+  width: clamp(180px, 24vh, 260px);
+  height: clamp(180px, 24vh, 260px);
+  color: var(--text-primary);
+  opacity: 1;
+  transform-origin: center;
+  transition:
+    transform var(--duration-shape) var(--spring),
+    opacity var(--duration-quick) var(--motion-exit);
+}
+
+.introduction-face .luke-face {
+  width: 100%;
+  height: 100%;
+}
+
+/* The meter beside him on the dark stage: the wings' own bars, scaled to the
+   room-sized face they accompany, riding transform alone. */
+.introduction-face-meter {
+  position: absolute;
+  right: calc(100% + 26px);
+  top: 50%;
+  transform: translateY(-50%) scale(2.4);
+  transform-origin: right center;
+  animation: introduction-fade-arrive var(--duration-quick) var(--motion-exit) backwards;
+}
+
+/* Dark: the stage holds nothing; the face exists only from the wake on, so
+   its first drawn frame is the gesture's own first frame. */
+.introduction-stage[data-beat="dark"] .introduction-face {
+  opacity: 0;
+}
+
+/* The flight: Luke becomes the capsule's own face. The offsets and the scale
+   are measured by the component at the moment of the leap, so the landing is
+   the wing face's exact spot and size — the spot the real wings' face takes
+   over the moment the flight settles. */
+.introduction-stage[data-flown="true"] .introduction-face {
+  transform: translate(var(--flight-x, 0px), var(--flight-y, 0px)) scale(var(--flight-scale, 1));
+}
+
+/* Companion to the generated wake gesture (luke-wake, 2.8s cycle): the
+   nose-and-smile stroke draws itself over the cycle's first 0.9s, onto a face
+   whose eyes the gesture holds at nothing until 0.35 of it — the stroke
+   finishes, then the eyes blink open. It answers `--face-motion` like the
+   gesture it follows and does no work when wake is not selected. */
+.introduction-stage .luke-face[data-motion="wake"] .luke-face-smile {
+  stroke-dasharray: 1;
+  animation: introduction-smile-draw 0.9s ease-out backwards;
+  animation-play-state: var(--face-motion);
+}
+
+/* The first step is opacity alone: a fully offset dash still renders its
+   round cap as a parked dot at the stroke's end, so the undrawn line's first
+   frame stays unseen and it blinks in over the draw's first sliver. */
+@keyframes introduction-smile-draw {
+  0% {
+    stroke-dashoffset: 1;
+    opacity: 0;
+  }
+
+  1.5% {
+    opacity: 1;
+  }
+
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+}
+
+/* The panel's content: one travelling group holding the app's own rows and
+   bands. It stands mid-screen for the detection and rides one spring up to
+   the top, where the real surface (mounted with the flight) meets it. Only
+   transform travels; the group's size is its content's, and the measure the
+   surface springs to. */
+.introduction-panel {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: min(var(--panel-width), 100vw);
+  padding: calc(var(--capsule-height) + 14px) var(--panel-inset) var(--panel-inset);
+  transform: translateX(-50%) translateY(var(--introduction-panel-stage-y));
+  transition: transform var(--duration-shape) var(--spring);
+  opacity: 0;
+}
+
+.introduction-stage[data-lifted="true"] .introduction-panel {
+  opacity: 1;
+  /* A fade alone: the arrive keyframes animate transform, and an animation's
+     transform replaces the element's own — the panel would render at its
+     untranslated spot for the animation's whole length. */
+  animation: introduction-fade-arrive var(--duration-fast) var(--motion-exit) backwards;
+}
+
+@keyframes introduction-fade-arrive {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.introduction-stage[data-flown="true"] .introduction-panel {
+  transform: translateX(-50%) translateY(0);
+}
+
+/* The real surface arrives with the flight: its bounds, corners, flares,
+   and every presentation move are base.css's own — this only fades it in as
+   the flight carries the content up to meet it. */
+.introduction-stage .panel-surface {
+  animation: introduction-fade-arrive var(--duration-shape) var(--motion-exit) backwards;
+}
+
+/* The list scrolls inside the panel exactly as the real one does: bounded to
+   the panel's own height ceiling less the strip and insets, overscroll kept
+   from chaining to the stage, and rows dissolving into the shape's edge on
+   the shared scroll fade rather than being cut. */
+.introduction-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: calc(var(--panel-height-max) - var(--capsule-height) - 14px - var(--panel-inset));
+  overflow-x: clip;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  scrollbar-width: thin;
+  animation: scroll-edge-fade linear both;
+  animation-timeline: scroll(self block);
+}
+
+/* Standing down, the rows leave first — the same exit-first ordering the
+   real collapse keeps — and the real surface follows them on its own spring
+   into the capsule's bounds. */
+.introduction-stage[data-beat="glide"] .introduction-rows,
+.introduction-stage[data-beat="stand-down"] .introduction-rows,
+.introduction-stage[data-beat="done"] .introduction-rows {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--duration-exit) var(--motion-exit);
+}
+
+/* Away from the panel each row is its own solid card — no panel box around
+   the list, and nothing of the desktop reading through a row. They hold that
+   solidity through the whole flight *and* through the surface's own spring
+   from the capsule's bounds to the panel's, releasing only once the expanded
+   shape stands beneath them: translucency any earlier reads the desktop
+   through rows the panel does not yet back. The release rides the row's own
+   background transition from base.css. */
+.introduction-stage:not([data-settled="true"]) .introduction-rows .session-row {
+  background: var(--surface-overlay);
+}
+
+/* A row already asking for someone keeps its whole answer while solid: the
+   panel's attention fill is the accent at 9% over the shape, so the opaque
+   card mixes the same 9% into itself — the identical colour the translucent
+   fill lands on once the surface stands beneath it. Without this the solid
+   rule above out-specifies the tint and leaves the accent border ringing a
+   plain dark card. */
+.introduction-stage:not([data-settled="true"])
+  .introduction-rows
+  .session-row[data-state="attention"] {
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface-overlay));
+}
+
+/* Rows materialize with the panel's own stagger idiom, as a mount animation
+   with backwards fill so each holds its covered pose through its delay. Only
+   on the dark stage: past the flight the rows answer the tour's FLIP reorder
+   alone, and a re-evaluated delay must not replay a finished arrival. */
+.introduction-stage:not([data-flown="true"]) .introduction-rows .session-row {
+  animation: introduction-arrive var(--duration-fast) var(--spring) backwards;
+  animation-delay: calc(min(var(--row-index, 0), var(--row-fan-limit)) * var(--row-stagger));
+}
+
+@keyframes introduction-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* The practice beat's keycaps, drawn on the panel itself: the surface takes
+   their room at once and they arrive over black behind the shape's delay. */
+.introduction-keycaps {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 18px;
+  --keycap-size: 32px;
+  --keycap-text: 15px;
+  animation: introduction-arrive var(--duration-fast) var(--spring) backwards;
+  animation-delay: var(--slot-delay);
+}
+
+.introduction-keycaps-hold {
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 560;
+}
+
+/* A nudge while the beat waits: the caps hop once in a while, the way a hint
+   should — mostly still, never nagging. An endless loop, so its duration is
+   a literal and its play-state answers `--loop-motion`. */
+.introduction-keycaps .keycap-chord {
+  animation: introduction-keycap-hint 3.8s ease-in-out infinite;
+  animation-play-state: var(--loop-motion);
+}
+
+/* The caps answer the developer's own hands: while the talk key is truly
+   held, the drawn keys sit pressed, and the hint yields — a hop mid-press
+   would contradict the fingers it is mirroring. */
+.introduction-keycaps .keycap {
+  transition: transform var(--duration-hover) ease;
+}
+
+.introduction-keycaps[data-held="true"] .keycap {
+  transform: translateY(2px);
+}
+
+.introduction-keycaps[data-held="true"] .keycap-chord {
+  animation: none;
+}
+
+@keyframes introduction-keycap-hint {
+  0%,
+  86%,
+  100% {
+    transform: none;
+  }
+
+  90% {
+    transform: translateY(-5px);
+  }
+
+  94% {
+    transform: translateY(0);
+  }
+
+  97% {
+    transform: translateY(-2px);
+  }
+}
+
+/* Spoken into a silent output, the caption is the speech — the same posture
+   the panel keeps, at the stage's foot. */
+.introduction-caption {
+  position: absolute;
+  left: 50%;
+  bottom: 12vh;
+  width: min(560px, 80vw);
+  transform: translateX(-50%);
+  color: var(--text-primary);
+  font-size: 15px;
+  line-height: 1.45;
+  text-align: center;
+}
