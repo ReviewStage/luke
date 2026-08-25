@@ -165,6 +165,13 @@ export class UpdateService {
   #publishingRetry: NodeJS.Timeout | undefined;
   #publishingVersion: string | undefined;
   #publishingRetriesUsed = 0;
+  /**
+   * The version a live publishing wait is about, or undefined outside one.
+   * Distinct from `#publishingVersion`, which keys the spent budget and must
+   * outlive the wait: an exhausted version stays exhausted, so a later check
+   * that finds it still failing lands on the error row, not a fresh schedule.
+   */
+  #publishingWait: string | undefined;
 
   constructor(options: UpdateServiceOptions) {
     this.#currentVersion = options.currentVersion;
@@ -184,13 +191,17 @@ export class UpdateService {
         this.#latestVersion = version;
         this.#move({ ...this.#base(UPDATE_STATUS.DOWNLOADING), latestVersion: version });
       },
-      onNotAvailable: () => this.#move(this.#idle(true)),
+      onNotAvailable: () => {
+        this.#publishingWait = undefined;
+        this.#move(this.#idle(true));
+      },
       onProgress: (progress) => {
         if (this.#snapshot.status !== UPDATE_STATUS.DOWNLOADING) return;
         this.#move({ ...this.#snapshot, progress });
       },
       onDownloaded: (version) => {
         this.#latestVersion = version;
+        this.#publishingWait = undefined;
         this.#move({ ...this.#base(UPDATE_STATUS.READY), latestVersion: version });
       },
       onError: (message) => {
@@ -198,11 +209,13 @@ export class UpdateService {
         // install guard, or the row's restart press dies with the attempt.
         this.#installing = false;
         if (isNetworkErrorMessage(message)) {
+          if (this.#resumePublishingWait(message)) return;
           this.#report(`Update check could not reach the feed: ${message}`);
           this.#move(this.#idle(false));
           return;
         }
         if (this.#retryWhilePublishing(message)) return;
+        this.#publishingWait = undefined;
         this.#report(`Update failed: ${message}`);
         void this.#engine?.clearCachedUpdate().catch(() => undefined);
         this.#move({ ...this.#base(UPDATE_STATUS.ERROR), latestVersion: this.#latestVersion });
@@ -247,9 +260,12 @@ export class UpdateService {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (isNetworkErrorMessage(message)) {
-        this.#report(`Update check could not reach the feed: ${message}`);
-        this.#move(this.#idle(false));
+        if (!this.#resumePublishingWait(message)) {
+          this.#report(`Update check could not reach the feed: ${message}`);
+          this.#move(this.#idle(false));
+        }
       } else {
+        this.#publishingWait = undefined;
         this.#report(`Update check failed: ${message}`);
         this.#move({ ...this.#base(UPDATE_STATUS.ERROR), latestVersion: this.#latestVersion });
       }
@@ -304,17 +320,13 @@ export class UpdateService {
   }
 
   /**
-   * A download that 404s or fails its sha512 right after a check found the
-   * version is a release still publishing: the manifest went live before its
-   * archive finished uploading. The same check is retried on the bounded
-   * schedule, keyed to the version so a later release starts fresh; a
-   * version that outlives the schedule falls to the error row it always
-   * was, because a genuinely corrupt release fails the same way.
+   * Spends the next slot of the version's retry budget and arms the timer.
+   * The budget is keyed to the version so a later release starts fresh, and
+   * it survives the wait itself: an exhausted version stays exhausted, so a
+   * later check that finds it still failing lands on the error row rather
+   * than a fresh schedule.
    */
-  #retryWhilePublishing(message: string): boolean {
-    if (this.#snapshot.status !== UPDATE_STATUS.DOWNLOADING) return false;
-    if (!isPublishingWindowErrorMessage(message)) return false;
-    const version = this.#snapshot.latestVersion;
+  #armPublishingRetry(version: string): boolean {
     if (version !== this.#publishingVersion) {
       this.#publishingVersion = version;
       this.#publishingRetriesUsed = 0;
@@ -322,12 +334,51 @@ export class UpdateService {
     const delayMs = this.#publishingRetryDelaysMs[this.#publishingRetriesUsed];
     if (delayMs === undefined) return false;
     this.#publishingRetriesUsed += 1;
-    this.#report(`Release ${version} is still publishing, retrying: ${message}`);
-    // The partial archive must not stand, or the retry re-verifies it forever.
-    void this.#engine?.clearCachedUpdate().catch(() => undefined);
     if (this.#publishingRetry) clearTimeout(this.#publishingRetry);
     this.#publishingRetry = setTimeout(() => void this.check(), delayMs);
     this.#publishingRetry.unref();
+    return true;
+  }
+
+  /**
+   * A download that 404s or fails its sha512 right after a check found the
+   * version is a release still publishing: the manifest went live before its
+   * archive finished uploading. The same check is retried on the bounded
+   * schedule; a version that outlives it falls to the error row it always
+   * was, because a genuinely corrupt release fails the same way.
+   */
+  #retryWhilePublishing(message: string): boolean {
+    if (this.#snapshot.status !== UPDATE_STATUS.DOWNLOADING) return false;
+    if (!isPublishingWindowErrorMessage(message)) return false;
+    const version = this.#snapshot.latestVersion;
+    if (!this.#armPublishingRetry(version)) {
+      this.#publishingWait = undefined;
+      return false;
+    }
+    this.#publishingWait = version;
+    this.#report(`Release ${version} is still publishing, retrying: ${message}`);
+    // The partial archive must not stand, or the retry re-verifies it forever.
+    void this.#engine?.clearCachedUpdate().catch(() => undefined);
+    this.#move({ ...this.#base(UPDATE_STATUS.PUBLISHING), latestVersion: version });
+    return true;
+  }
+
+  /**
+   * A network failure while a publishing wait stands must not orphan the
+   * wait: the interrupted check was the wait's own retry, or a press
+   * standing in for it, and falling to idle silence would leave the found
+   * version to the four-hour timer. The resume spends the same bounded
+   * budget, so a machine that stays offline runs out of slots instead of
+   * checking forever.
+   */
+  #resumePublishingWait(message: string): boolean {
+    const version = this.#publishingWait;
+    if (version === undefined) return false;
+    if (!this.#armPublishingRetry(version)) {
+      this.#publishingWait = undefined;
+      return false;
+    }
+    this.#report(`Update check could not reach the feed, still waiting on ${version}: ${message}`);
     this.#move({ ...this.#base(UPDATE_STATUS.PUBLISHING), latestVersion: version });
     return true;
   }

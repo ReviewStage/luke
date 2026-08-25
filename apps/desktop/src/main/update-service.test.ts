@@ -220,6 +220,48 @@ test("the exhausted retry schedule falls to the error row a corrupt release dese
   updates.stop();
 });
 
+test("a network blip mid-wait resumes the bounded schedule instead of orphaning it", async () => {
+  const { calls, fire, engine } = fakeEngine();
+  const updates = service({ engine, publishingRetryDelaysMs: [10, 10, 60_000] });
+
+  fire().onAvailable("0.2.0");
+  fire().onError('Cannot download "https://github.com/x", status 404: Not Found');
+  await sleep(30);
+  assert.equal(calls.checks, 1, "the first retry ran");
+
+  // The retry's own check dying on the network keeps the wait standing, on
+  // the next slot of the same budget, rather than falling to idle silence
+  // that would leave the found version to the four-hour timer.
+  fire().onError("net::ERR_INTERNET_DISCONNECTED");
+  assert.deepEqual(updates.snapshot(), {
+    status: UPDATE_STATUS.PUBLISHING,
+    currentVersion: "0.1.0",
+    installSupported: true,
+    latestVersion: "0.2.0",
+  });
+  await sleep(30);
+  assert.equal(calls.checks, 2, "the resumed retry ran");
+  updates.stop();
+});
+
+test("a wait that outlives the budget offline falls silent like any network failure", async () => {
+  const { fire, engine } = fakeEngine();
+  const updates = service({ engine, publishingRetryDelaysMs: [60_000] });
+
+  fire().onAvailable("0.2.0");
+  fire().onError("sha512 checksum mismatch, expected aaa, got bbb");
+  assert.equal(updates.snapshot().status, UPDATE_STATUS.PUBLISHING);
+
+  fire().onError("net::ERR_INTERNET_DISCONNECTED");
+  assert.deepEqual(updates.snapshot(), {
+    status: UPDATE_STATUS.IDLE,
+    currentVersion: "0.1.0",
+    installSupported: true,
+    upToDate: false,
+  });
+  updates.stop();
+});
+
 test("stopping the service clears a pending publishing retry", async () => {
   const { calls, fire, engine } = fakeEngine();
   const updates = service({ engine, publishingRetryDelaysMs: [10] });

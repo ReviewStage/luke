@@ -409,7 +409,8 @@ Trust constraints:
   the next timed check; a download refused just after its check found the
   version is a release still publishing, and the same check is retried at a
   few fixed delays against the same fixed feed — nothing new sent or read,
-  only the cadence — with the row saying the wait honestly, before the
+  only the cadence, and a network failure mid-wait spends the same bounded
+  budget rather than orphaning it — with the row saying the wait honestly, before the
   schedule ends in the same error row a corrupt release deserves; any other
   failure is an answer on the row whose way forward
   is the browser, at the releases page fixed by the build, the same page
