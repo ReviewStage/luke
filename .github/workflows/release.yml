@@ -192,6 +192,15 @@ jobs:
           if (!/size: \d+/.test(manifest)) throw new Error("latest-mac.yml is missing size");
           NODE
 
+      # The release stays a draft until every asset has finished uploading,
+      # so nothing points releases/latest at the new version while its
+      # archive is still in flight: an updater that checks mid-upload keeps
+      # resolving the previous release's self-consistent manifest instead of
+      # a new manifest whose archive is incomplete. gh resolves a draft by
+      # its pending tag, so a re-run's view and upload find it the same way
+      # they find a published release, and the flip runs only while the
+      # release is still a draft, so re-running an old tag's workflow can
+      # never re-mark a superseded release Latest.
       - name: Publish GitHub Release
         if: ${{ github.event_name == 'push' && github.ref_type == 'tag' }}
         env:
@@ -200,6 +209,7 @@ jobs:
           TAG="$GITHUB_REF_NAME"
           if ! gh release view "$TAG" >/dev/null 2>&1; then
             gh release create "$TAG" \
+              --draft \
               --verify-tag \
               --title "Luke $VERSION" \
               --generate-notes
@@ -212,6 +222,9 @@ jobs:
             "$DIST_DIR/$LATEST_DMG_ASSET_NAME" \
             "$DIST_DIR/$UPDATE_FEED_ASSET_NAME" \
             --clobber
+          if [[ "$(gh release view "$TAG" --json isDraft --jq .isDraft)" == "true" ]]; then
+            gh release edit "$TAG" --draft=false --latest
+          fi
 
       - name: Preserve rehearsal artifacts
         if: ${{ github.event_name == 'workflow_dispatch' }}
