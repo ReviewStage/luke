@@ -1506,11 +1506,13 @@ function PageHeader({
   title,
   controls,
   account,
+  accountSkeleton = false,
   onSignOut,
 }: {
   title: string;
   controls: React.ReactNode;
   account: ViewerAccount | undefined;
+  accountSkeleton?: boolean;
   onSignOut: () => void;
 }): React.JSX.Element {
   const hasControls = controls !== null && controls !== undefined;
@@ -1526,11 +1528,17 @@ function PageHeader({
           {controls}
         </div>
       ) : null}
-      {account ? (
+      {accountSkeleton || account ? (
         <div
           className={`col-start-2 row-start-1 flex items-center ${hasControls ? "" : "min-[720px]:ml-auto"}`}
         >
-          <AccountMenu account={account} onSignOut={onSignOut} />
+          {accountSkeleton ? (
+            <div className="flex size-11 items-center justify-center">
+              <Skeleton circle className={AVATAR_FRAME.small} />
+            </div>
+          ) : account ? (
+            <AccountMenu account={account} onSignOut={onSignOut} />
+          ) : null}
         </div>
       ) : null}
     </header>
@@ -1873,6 +1881,7 @@ function DashboardSkeleton({
       <PageHeader
         title="Dashboard"
         account={account}
+        accountSkeleton
         onSignOut={onSignOut}
         controls={
           <>
@@ -1969,6 +1978,7 @@ function UsersSkeleton({
       <PageHeader
         title="Users"
         account={account}
+        accountSkeleton
         onSignOut={onSignOut}
         controls={
           <>
@@ -2011,6 +2021,7 @@ function AccountSkeleton({
       <PageHeader
         title="Account"
         account={account}
+        accountSkeleton
         onSignOut={onSignOut}
         controls={<WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />}
       />
@@ -2086,6 +2097,7 @@ function DaySkeleton({
       <PageHeader
         title="Day"
         account={account}
+        accountSkeleton
         onSignOut={onSignOut}
         controls={<HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />}
       />
