@@ -304,7 +304,7 @@ interface ViewerAccount {
 
 /** The page's one button treatment: sign out, refresh, and try again all wear it. */
 const PLAIN_BUTTON =
-  "cursor-pointer rounded-md border border-border bg-card px-3 py-1.5 text-sm font-medium transition-colors duration-150 hover:bg-muted disabled:cursor-default disabled:opacity-60 disabled:hover:bg-card";
+  "inline-flex min-h-11 cursor-pointer items-center justify-center rounded-md border border-border bg-card px-3 py-1.5 text-sm font-medium transition-colors duration-150 hover:bg-muted disabled:cursor-default disabled:opacity-60 disabled:hover:bg-card";
 
 /**
  * What the fetch resolved to: the gate's refusals stay distinct here, and a
@@ -1224,7 +1224,7 @@ function AccountAvatar({
  * seam rather than as focus.
  */
 const ACCOUNT_MENU_ITEM =
-  "block w-full cursor-pointer px-3 py-2 text-left text-sm font-medium transition-colors duration-150 outline-offset-[-2px] hover:bg-muted focus-visible:bg-muted";
+  "flex min-h-11 w-full cursor-pointer items-center px-3 py-2 text-left text-sm font-medium transition-colors duration-150 outline-offset-[-2px] hover:bg-muted focus-visible:bg-muted";
 
 function AccountMenu({
   account,
@@ -1264,7 +1264,7 @@ function AccountMenu({
       <button
         type="button"
         ref={triggerRef}
-        className="flex cursor-pointer items-center rounded-full transition-opacity duration-150 hover:opacity-80"
+        className="flex size-11 cursor-pointer items-center justify-center rounded-full transition-opacity duration-150 hover:opacity-80"
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={`Account menu for ${accountLabel(account)}`}
@@ -1448,7 +1448,7 @@ function AdminSidebar({
         href={tabHref(tab)}
         aria-current={active === tab ? "page" : undefined}
         title={collapsed ? label : undefined}
-        className={`group relative flex items-center py-2 pr-3 text-sm font-medium transition-colors duration-150 focus-visible:outline-none ${styling.ROW}`}
+        className={`group relative flex min-h-11 items-center py-2 pr-3 text-sm font-medium transition-colors duration-150 focus-visible:outline-none ${styling.ROW}`}
         onClick={(event) => {
           if (!plainLeftClick(event)) return;
           event.preventDefault();
@@ -1469,7 +1469,7 @@ function AdminSidebar({
         href={tabHref(tab)}
         aria-label={label}
         aria-current={active === tab ? "page" : undefined}
-        className={`group relative flex min-w-0 items-center justify-center px-2 py-2 text-sm font-medium transition-colors duration-150 focus-visible:outline-none min-[520px]:px-2.5 ${styling.ROW}`}
+        className={`group relative flex min-h-11 min-w-0 items-center justify-center px-2 py-2 text-sm font-medium transition-colors duration-150 focus-visible:outline-none min-[520px]:px-2.5 ${styling.ROW}`}
         onClick={(event) => {
           if (!plainLeftClick(event)) return;
           event.preventDefault();
@@ -1531,7 +1531,7 @@ function AdminSidebar({
           <button
             type="button"
             aria-label={sidebarToggleLabel(collapsed)}
-            className={`group relative flex cursor-pointer items-center py-2 pr-3 text-sm font-medium transition-colors duration-150 focus-visible:outline-none ${SIDEBAR_ITEM.IDLE.ROW}`}
+            className={`group relative flex min-h-11 cursor-pointer items-center py-2 pr-3 text-sm font-medium transition-colors duration-150 focus-visible:outline-none ${SIDEBAR_ITEM.IDLE.ROW}`}
             onClick={onToggle}
           >
             {pill(SIDEBAR_ITEM.IDLE)}
@@ -1668,7 +1668,7 @@ function WindowSwitcher({
           aria-label={`${windowDays}-day window`}
           aria-pressed={value === windowDays}
           data-active={value === windowDays}
-          className="cursor-pointer rounded px-2 py-0.5 text-xs font-medium text-muted-foreground transition-colors duration-150 outline-offset-2 hover:text-foreground data-[active=true]:bg-muted data-[active=true]:text-foreground"
+          className="min-h-10 cursor-pointer rounded px-2 py-0.5 text-xs font-medium text-muted-foreground transition-colors duration-150 outline-offset-2 hover:text-foreground data-[active=true]:bg-muted data-[active=true]:text-foreground"
           onClick={() => onChange(windowDays)}
         >
           {windowDays}d
@@ -1686,10 +1686,10 @@ function HideAdminsToggle({
   onChange: (hide: boolean) => void;
 }): React.JSX.Element {
   return (
-    <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground select-none">
+    <label className="inline-flex min-h-11 cursor-pointer items-center gap-1.5 text-xs text-muted-foreground select-none">
       <input
         type="checkbox"
-        className="size-3.5 cursor-pointer accent-primary"
+        className="size-4 cursor-pointer accent-primary"
         checked={checked}
         onChange={(event) => onChange(event.target.checked)}
       />
@@ -3388,7 +3388,7 @@ function AccountsTable<Row extends AccountsTableRow>({
                   <td className="w-0 py-3 pr-0 pl-5">
                     <button
                       type="button"
-                      className="flex cursor-pointer text-muted-foreground opacity-0 transition-opacity duration-150 outline-offset-2 group-hover:opacity-100 hover:text-foreground focus-visible:opacity-100 data-[favorite=true]:text-attention data-[favorite=true]:opacity-100"
+                      className="-my-2 -ml-3 flex size-11 cursor-pointer items-center justify-center text-muted-foreground opacity-60 transition-opacity duration-150 outline-offset-2 hover:text-foreground hover:opacity-100 focus-visible:opacity-100 data-[favorite=true]:text-attention data-[favorite=true]:opacity-100"
                       data-favorite={favorite.starred(row)}
                       aria-pressed={favorite.starred(row)}
                       aria-label={`${favorite.starred(row) ? "Unfavorite" : "Favorite"} ${row.name || row.email}`}
@@ -3558,7 +3558,7 @@ function UsersPage({
             maxLength={ADMIN_USERS_SEARCH_MAX_LENGTH}
             placeholder="Search by name or email…"
             aria-label="Search accounts by name or email"
-            className="w-full max-w-[320px] rounded-md border border-border bg-card px-3 py-1.5 text-sm placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2"
+            className="min-h-11 w-full max-w-[320px] rounded-md border border-border bg-card px-3 py-1.5 text-sm placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2"
             onChange={(event) => onQueryChange(event.target.value)}
           />
           <span className="text-xs text-muted-foreground tabular-nums">
