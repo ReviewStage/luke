@@ -36,6 +36,7 @@ import {
   parseRealtimeServerEvent,
   proactiveSpeechEvents,
   pushToTalkCommitEvents,
+  REALTIME_CLIENT_EVENT,
   REALTIME_DATA_CHANNEL,
   REALTIME_SERVER_EVENT,
   REALTIME_STATUS,
@@ -254,6 +255,8 @@ export interface RealtimeVoiceSessionCallbacks {
    * records the words so the thread holds both halves of the exchange.
    */
   onSpokenAsk?(transcript: string, itemId: string): void;
+  /** The local audio turn closed, before its commit can be acknowledged. */
+  onSpokenAskClosed?(): void;
   /** The server item that fixes which current-launch history a spoken turn belongs to. */
   onSpokenAskCommitted?(itemId: string): void;
   /**
@@ -1759,6 +1762,9 @@ export class RealtimeVoiceSession {
     // exchange keeps the words just said, and its own words stack under them.
     if (!keepCaption) this.#clearCaption();
     this.#clearSettleTimer();
+    if (events.some((event) => event.type === REALTIME_CLIENT_EVENT.INPUT_AUDIO_BUFFER_COMMIT)) {
+      this.#options.onSpokenAskClosed?.();
+    }
     this.#send(events);
     this.#setStatus(REALTIME_STATUS.RESPONDING);
   }

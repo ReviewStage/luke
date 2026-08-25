@@ -106,6 +106,8 @@ interface Harness {
   spokenAsks: string[];
   /** Conversation items fixed for those turns before their transcripts returned. */
   spokenAskItems: string[];
+  /** Number of local audio turns closed before the server acknowledged them. */
+  spokenAskClosures: () => number;
   microphoneEnabled: () => boolean;
   microphoneStopped: () => boolean;
   emit: (event: JsonValue) => void;
@@ -215,6 +217,7 @@ function harness(
   const replyEndings: { texts: readonly string[]; about: string | undefined }[] = [];
   const spokenAsks: string[] = [];
   const spokenAskItems: string[] = [];
+  let spokenAskClosures = 0;
   const requests: { url: string; init: RequestInit }[] = [];
   const calls: string[] = [];
   let enabled = false;
@@ -355,6 +358,9 @@ function harness(
     onSpokenAsk: (transcript) => {
       spokenAsks.push(transcript);
     },
+    onSpokenAskClosed: () => {
+      spokenAskClosures += 1;
+    },
     onSpokenAskCommitted: (itemId) => spokenAskItems.push(itemId),
   };
   if (options.connectTimeoutMs !== undefined) {
@@ -393,6 +399,7 @@ function harness(
     replyEndings,
     spokenAsks,
     spokenAskItems,
+    spokenAskClosures: () => spokenAskClosures,
     microphoneEnabled: () => enabled,
     microphoneStopped: () => stopped,
     lukeAudible: () => remoteTrack.enabled,
@@ -875,6 +882,7 @@ test("a release during the handshake delivers the words once the channel opens",
   await deviceArrives();
 
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+  assert.equal(context.spokenAskClosures(), 1);
   assert.equal(context.session.turnPending, false);
   assert.deepEqual(
     context.sent.map((event) => event.type),
@@ -2110,6 +2118,10 @@ test("the developer's spoken words come back only from their own call", async ()
 test("a developer turn is identified before its transcript returns", async () => {
   const context = harness();
   await context.session.connect();
+  await armDeveloperTurn(context);
+
+  assert.equal(context.spokenAskClosures(), 1);
+  assert.deepEqual(context.spokenAskItems, []);
 
   context.emit({
     type: REALTIME_SERVER_EVENT.INPUT_AUDIO_BUFFER_COMMITTED,

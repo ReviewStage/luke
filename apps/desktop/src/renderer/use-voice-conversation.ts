@@ -605,10 +605,10 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   const pendingSpokenTurnMarksRef = useRef<
     { after: ConversationEntry | undefined; generation: number }[]
   >([]);
-  /** The status edge that fixes the local turn-close mark above. */
-  const previousVoiceStatus = useRef<RealtimeStatus>(REALTIME_STATUS.IDLE);
-  /** The history generation in which the developer began the active spoken turn. */
-  const activeSpokenTurnGenerationRef = useRef<number | undefined>(undefined);
+  /** The turn opened by the current talk-key press, before it closes. */
+  const activeSpokenTurnMarkRef = useRef<
+    { after: ConversationEntry | undefined; generation: number } | undefined
+  >(undefined);
   /**
    * Whether the turn under way read a transcript aloud. The rendering travels
    * only in the turn that asked for it, so the reply that spoke it must not
@@ -773,6 +773,11 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       onSpokenAskCommitted: (itemId) => {
         const mark = pendingSpokenTurnMarksRef.current.shift();
         if (mark) spokenTurnMarksRef.current.set(itemId, mark);
+      },
+      onSpokenAskClosed: () => {
+        const mark = activeSpokenTurnMarkRef.current;
+        activeSpokenTurnMarkRef.current = undefined;
+        if (mark) pendingSpokenTurnMarksRef.current.push(mark);
       },
       // The developer's spoken words, back from the service that heard them,
       // placed where their turn happened: the thread holds both halves of
@@ -1022,6 +1027,10 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       // that is already up.
       if (talkPressedAt.current !== pressedAt) return;
     }
+    activeSpokenTurnMarkRef.current = {
+      after: conversationRef.current.at(-1),
+      generation: conversationGenerationRef.current,
+    };
     session.beginTurn();
     const press = talkKeyPress({ latched: false, microphoneCall: session.microphoneCall });
     // A press against no call — or against Luke's own speak-only call, which
@@ -1236,24 +1245,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     // next reply from the history.
     if (voiceStatus === REALTIME_STATUS.LISTENING) {
       transcriptSpokenRef.current = false;
-      if (previousVoiceStatus.current !== REALTIME_STATUS.LISTENING) {
-        activeSpokenTurnGenerationRef.current = conversationGenerationRef.current;
-      }
     }
-    // Capture the ask's place at the local turn boundary. The server's commit
-    // acknowledgement supplies its item id later; any announcement arriving
-    // between those two edges still belongs after the ask.
-    if (
-      previousVoiceStatus.current === REALTIME_STATUS.LISTENING &&
-      voiceStatus === REALTIME_STATUS.RESPONDING
-    ) {
-      pendingSpokenTurnMarksRef.current.push({
-        after: conversationRef.current.at(-1),
-        generation: activeSpokenTurnGenerationRef.current ?? conversationGenerationRef.current,
-      });
-      activeSpokenTurnGenerationRef.current = undefined;
-    }
-    previousVoiceStatus.current = voiceStatus;
     // Any settled status ends the wait the press started, however it ended:
     // listening takes the meter live, ready means the turn was dropped
     // mid-handshake, and a failure has its own message to show. Unless the
