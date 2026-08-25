@@ -1420,8 +1420,9 @@ function AdminSidebar({
     return (
       <a
         href={tabHref(tab)}
+        aria-label={label}
         aria-current={active === tab ? "page" : undefined}
-        className={`group relative flex items-center px-2.5 py-2 text-sm font-medium transition-colors duration-150 focus-visible:outline-none ${styling.ROW}`}
+        className={`group relative flex min-w-0 items-center justify-center px-2 py-2 text-sm font-medium transition-colors duration-150 focus-visible:outline-none min-[520px]:px-2.5 ${styling.ROW}`}
         onClick={(event) => {
           if (!plainLeftClick(event)) return;
           event.preventDefault();
@@ -1434,9 +1435,9 @@ function AdminSidebar({
           aria-hidden="true"
           className={`absolute inset-0 rounded-full transition-[background-color] duration-150 ${styling.PILL}`}
         />
-        <span className="relative flex items-center gap-2.5">
+        <span className="relative flex min-w-0 items-center gap-2.5">
           {icon}
-          {label}
+          <span className="hidden truncate min-[520px]:inline">{label}</span>
         </span>
       </a>
     );
@@ -1446,9 +1447,9 @@ function AdminSidebar({
     <>
       <nav
         aria-label="Admin sections"
-        className="flex items-center gap-1 border-b border-border bg-card px-4 py-2 min-[720px]:hidden"
+        className="grid grid-cols-[auto_repeat(3,minmax(0,1fr))] items-center gap-1 border-b border-border bg-card px-3 py-2 min-[720px]:hidden"
       >
-        <span className="mr-2 inline-flex w-6 shrink-0 text-foreground" aria-hidden="true">
+        <span className="mr-1 inline-flex w-6 shrink-0 text-foreground" aria-hidden="true">
           <LukeMark className="h-auto w-full" />
         </span>
         {barItem("dashboard", "Dashboard", <DashboardIcon />)}
@@ -1509,25 +1510,20 @@ function PageHeader({
   onSignOut: () => void;
 }): React.JSX.Element {
   return (
-    <header className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
-      {/* The title holds a whole line on a phone, so the controls wrap into
-          rows of their own instead of raggedly around it; the divider stands
-          only beside the rail, where the row is wide enough to need a seam. */}
-      <h1 className="w-full text-lg font-semibold tracking-[-0.01em] min-[720px]:w-auto">
-        {title}
-      </h1>
-      <div className="flex flex-wrap items-center gap-3 min-[720px]:gap-4">
+    <header className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-4 min-[720px]:flex min-[720px]:gap-x-6 min-[720px]:gap-y-3">
+      {/* On a phone the identity is one row and the controls are a deliberate
+          second row. This keeps the account trigger from becoming a stray
+          button after whichever control happened to wrap first. */}
+      <h1 className="col-start-1 row-start-1 text-lg font-semibold tracking-[-0.01em]">{title}</h1>
+      <div className="col-span-2 row-start-2 flex flex-wrap items-center gap-3 min-[720px]:ml-auto min-[720px]:gap-4">
         {controls}
-        {account ? (
-          <>
-            <span
-              className="hidden h-8 w-px bg-border min-[720px]:inline-block"
-              aria-hidden="true"
-            />
-            <AccountMenu account={account} onSignOut={onSignOut} />
-          </>
-        ) : null}
       </div>
+      {account ? (
+        <div className="col-start-2 row-start-1 flex items-center min-[720px]:gap-4">
+          <span className="hidden h-8 w-px bg-border min-[720px]:inline-block" aria-hidden="true" />
+          <AccountMenu account={account} onSignOut={onSignOut} />
+        </div>
+      ) : null}
     </header>
   );
 }
@@ -1882,7 +1878,10 @@ function DashboardSkeleton({
   onSignOut: () => void;
 }): React.JSX.Element {
   return (
-    <main className="mx-auto max-w-[1040px] px-6 py-10" aria-busy="true">
+    <main
+      className="mx-auto max-w-[1040px] px-4 py-8 min-[520px]:px-6 min-[720px]:py-10"
+      aria-busy="true"
+    >
       <PageHeader
         title="Dashboard"
         account={account}
@@ -1979,7 +1978,10 @@ function UsersSkeleton({
   onSignOut: () => void;
 }): React.JSX.Element {
   return (
-    <main className="mx-auto max-w-[1040px] px-6 py-10" aria-busy="true">
+    <main
+      className="mx-auto max-w-[1040px] px-4 py-8 min-[520px]:px-6 min-[720px]:py-10"
+      aria-busy="true"
+    >
       <PageHeader
         title="Users"
         account={account}
@@ -2022,7 +2024,10 @@ function AccountSkeleton({
   onBack: () => void;
 }): React.JSX.Element {
   return (
-    <main className="mx-auto max-w-[1040px] px-6 py-10" aria-busy="true">
+    <main
+      className="mx-auto max-w-[1040px] px-4 py-8 min-[520px]:px-6 min-[720px]:py-10"
+      aria-busy="true"
+    >
       <PageHeader
         title="Account"
         account={account}
@@ -2102,7 +2107,10 @@ function DaySkeleton({
   onBack: () => void;
 }): React.JSX.Element {
   return (
-    <main className="mx-auto max-w-[1040px] px-6 py-10" aria-busy="true">
+    <main
+      className="mx-auto max-w-[1040px] px-4 py-8 min-[520px]:px-6 min-[720px]:py-10"
+      aria-busy="true"
+    >
       <PageHeader
         title="Day"
         account={account}
@@ -2195,7 +2203,7 @@ function Dashboard({
   const db = metrics.systemHealth.database;
 
   return (
-    <main className="mx-auto max-w-[1040px] px-6 py-10">
+    <main className="mx-auto max-w-[1040px] px-4 py-8 min-[520px]:px-6 min-[720px]:py-10">
       <PageHeader
         title="Dashboard"
         account={account}
@@ -2560,7 +2568,7 @@ function UserDetailPage({
       : formatNumber(activity.currentStreakDays);
 
   return (
-    <main className="mx-auto max-w-[1040px] px-6 py-10">
+    <main className="mx-auto max-w-[1040px] px-4 py-8 min-[520px]:px-6 min-[720px]:py-10">
       <PageHeader
         title="Account"
         account={account}
@@ -2755,6 +2763,9 @@ function DayAccountsTable({
   }
   return (
     <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <div className="border-b border-border px-4 py-2 font-mono text-[10px] tracking-[0.2px] text-muted-foreground uppercase min-[720px]:hidden">
+        Swipe table for more columns
+      </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[520px] text-sm">
           <thead>
@@ -2864,7 +2875,7 @@ function DayDetailPage({
   const soFar = stillFilling ? "so far today" : undefined;
 
   return (
-    <main className="mx-auto max-w-[1040px] px-6 py-10">
+    <main className="mx-auto max-w-[1040px] px-4 py-8 min-[520px]:px-6 min-[720px]:py-10">
       <PageHeader
         title="Day"
         account={account}
@@ -3260,6 +3271,9 @@ function AccountsTable<Row extends AccountsTableRow>({
   const sorted = sortAccountsRows(rows, sort, detailColumns, favorite?.starred);
   return (
     <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <div className="border-b border-border px-4 py-2 font-mono text-[10px] tracking-[0.2px] text-muted-foreground uppercase min-[720px]:hidden">
+        Swipe table for more columns
+      </div>
       <div className="overflow-x-auto">
         <table className={`w-full ${minWidth} text-sm`}>
           <thead>
@@ -3461,7 +3475,7 @@ function UsersPage({
     : list.rows;
 
   return (
-    <main className="mx-auto max-w-[1040px] px-6 py-10">
+    <main className="mx-auto max-w-[1040px] px-4 py-8 min-[520px]:px-6 min-[720px]:py-10">
       <PageHeader
         title="Users"
         account={account}
@@ -4118,7 +4132,7 @@ function AnimationsPage({
   }, []);
 
   return (
-    <main className="mx-auto max-w-[1040px] px-6 py-10">
+    <main className="mx-auto max-w-[1040px] px-4 py-8 min-[520px]:px-6 min-[720px]:py-10">
       <PageHeader title="Animations" account={account} onSignOut={onSignOut} controls={null} />
       <div
         ref={previewsRef}
