@@ -9,11 +9,11 @@ import {
   ATTENTION_SPEECH_SOURCE,
   type AttentionSpeech,
   announcementConversationEntry,
-  appendConversationEntry,
+  appendConversationThreadEntry,
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
   dispatchByKind,
-  insertSpokenAskEntry,
+  insertSpokenAskThreadEntry,
   isArrivalSpeech,
   isCarriedAppAction,
   isCarriedIssueAction,
@@ -22,6 +22,7 @@ import {
   type RealtimeStatus,
   type RealtimeVoice,
   type RealtimeVoiceSpeed,
+  recentConversationEntries,
   SESSION_TOOL_KIND,
   sessionActConversationEntry,
 } from "@sidecar/realtime";
@@ -466,6 +467,13 @@ export interface VoiceConversation {
   startMicrophone: () => Promise<MicrophoneStatus>;
   stopMicrophone: () => Promise<void>;
   askLuke: (text: string) => Promise<string | undefined>;
+  /**
+   * Every bounded line from this app launch. It lives only in this renderer;
+   * the model receives a recent slice and the whole view disappears on exit.
+   */
+  conversationHistory: readonly ConversationEntry[];
+  /** Clears the visible history and the context handed to the next call. */
+  clearConversationHistory: () => void;
   voiceTurn: WaveformVoice | undefined;
   /**
    * The words being spoken, one entry per response: a turn that speaks twice
@@ -571,10 +579,14 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
    * transport that comes and goes — an announcement is often read out on
    * Luke's own speak-only call, which the talk-key press tears down on its
    * way to opening the developer's, and an idle call retires — while the
-   * thread itself lives here and re-feeds whichever call opens next. The
-   * session's own copy goes with its teardown; this one is the conversation.
+   * whole thread itself lives here for this app launch. Only its bounded
+   * recent slice re-feeds whichever call opens next; the session's own copy
+   * goes with its teardown.
    */
   const conversationRef = useRef<readonly ConversationEntry[]>([]);
+  // State is the ref's identical drawn copy, so History retains the whole
+  // current launch even though a call receives only the recent context slice.
+  const [conversationHistory, setConversationHistory] = useState<readonly ConversationEntry[]>([]);
   /**
    * Whether the turn under way read a transcript aloud. The rendering travels
    * only in the turn that asked for it, so the reply that spoke it must not
@@ -584,15 +596,21 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   const transcriptSpokenRef = useRef(false);
 
   /**
-   * Appends one line to the history and tells the call now open, when there
-   * is a line to append. Nothing here ever removes a line — the history's own
-   * bounds retire the oldest, and a session leaving the roster costs a line
-   * its identity at render, never its words.
+   * Appends one bounded line to this launch's history and tells the call now
+   * open about only the recent context slice. A session leaving the roster
+   * costs a line its identity at model render, never its visible words.
    */
   const rememberConversationEntry = useCallback((entry: ConversationEntry | undefined) => {
     if (!entry) return;
-    conversationRef.current = appendConversationEntry(conversationRef.current, entry);
-    voiceSession.current?.updateConversation(conversationRef.current);
+    conversationRef.current = appendConversationThreadEntry(conversationRef.current, entry);
+    setConversationHistory(conversationRef.current);
+    voiceSession.current?.updateConversation(recentConversationEntries(conversationRef.current));
+  }, []);
+
+  const clearConversationHistory = useCallback(() => {
+    conversationRef.current = [];
+    setConversationHistory([]);
+    voiceSession.current?.updateConversation([]);
   }, []);
 
   /**
@@ -620,12 +638,13 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     const mark = spokenTurnMarkRef.current;
     spokenTurnMarkRef.current = undefined;
     conversationRef.current = mark
-      ? insertSpokenAskEntry(conversationRef.current, transcript, mark.after)
-      : appendConversationEntry(conversationRef.current, {
+      ? insertSpokenAskThreadEntry(conversationRef.current, transcript, mark.after)
+      : appendConversationThreadEntry(conversationRef.current, {
           kind: CONVERSATION_ENTRY_KIND.SPOKEN_ASK,
           words: transcript,
         });
-    voiceSession.current?.updateConversation(conversationRef.current);
+    setConversationHistory(conversationRef.current);
+    voiceSession.current?.updateConversation(recentConversationEntries(conversationRef.current));
   }, []);
 
   const ensureVoiceSession = useCallback((): RealtimeVoiceSession => {
@@ -875,7 +894,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     // is only the newest transport to carry it — the announcement a "what did
     // you just say?" points back at was often read out on the speak-only call
     // this one just replaced.
-    session.updateConversation(conversationRef.current);
+    session.updateConversation(recentConversationEntries(conversationRef.current));
     session.updateWorkspaceProjects(
       workspaceProjectsRef.current,
       defaultWorkspaceProviderRef.current,
@@ -1439,6 +1458,8 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     startMicrophone,
     stopMicrophone,
     askLuke,
+    conversationHistory,
+    clearConversationHistory,
     voiceTurn,
     lukeCaptions,
     mentionedSessions: mentioned,

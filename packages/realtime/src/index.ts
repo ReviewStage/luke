@@ -7,13 +7,16 @@ export {
 export {
   announcementConversationEntry,
   appendConversationEntry,
+  appendConversationThreadEntry,
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
   type ConversationEntryKind,
   conversationHistoryText,
   insertSpokenAskEntry,
+  insertSpokenAskThreadEntry,
   maximumConversationEntries,
   maximumConversationEntryLength,
+  recentConversationEntries,
   sessionActConversationEntry,
 } from "./conversation-history.js";
 export {

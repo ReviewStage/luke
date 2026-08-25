@@ -46,6 +46,7 @@ import {
   type RealtimeToolFamily,
   realtimeSessionSyncEvents,
   realtimeToolFamily,
+  recentConversationEntries,
   type ScheduledTimer,
   SESSION_TOOL_KIND,
   sessionContextEvents,
@@ -2036,7 +2037,9 @@ export class RealtimeVoiceSession {
    * own conversation items.
    */
   updateConversation(entries: readonly ConversationEntry[]): void {
-    this.#conversationEntries = entries;
+    // The caller may retain the whole current-launch thread for its own UI;
+    // this transport accepts only the recent slice that may reach the model.
+    this.#conversationEntries = recentConversationEntries(entries);
     this.#rememberConversation();
   }
 

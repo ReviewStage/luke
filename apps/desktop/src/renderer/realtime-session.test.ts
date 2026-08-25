@@ -15,6 +15,7 @@ import {
   inputAudioFormatUpdateEvents,
   isCarriedAppAction,
   isCarriedIssueAction,
+  maximumConversationEntries,
   REALTIME_CLIENT_EVENT,
   REALTIME_SERVER_EVENT,
   REALTIME_STATUS,
@@ -1916,6 +1917,27 @@ test("an empty history says nothing at all", async () => {
   await armDeveloperTurn(context);
 
   assert.deepEqual(contextItems(context, "[recent conversation"), []);
+});
+
+test("a call accepts only the recent slice of a full current-launch thread", async () => {
+  const context = harness();
+  await context.session.connect();
+  const thread = Array.from(
+    { length: maximumConversationEntries + 3 },
+    (_, index): ConversationEntry => ({
+      kind: CONVERSATION_ENTRY_KIND.REPLY,
+      words: `launch line ${index}`,
+    }),
+  );
+
+  context.session.updateConversation(thread);
+  await armDeveloperTurn(context);
+
+  const item = contextItems(context, "[recent conversation")[0];
+  assert.ok(item);
+  assert.doesNotMatch(itemText(item), /launch line 0/);
+  assert.match(itemText(item), /launch line 3/);
+  assert.match(itemText(item), /launch line 22/);
 });
 
 test("the history is rendered from the roster as it now stands", async () => {
