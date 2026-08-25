@@ -50,7 +50,11 @@ test("shared CTO and agent-language rules retain every speaking boundary", () =>
     /never by a provider, session, workspace, worktree, repository, or branch name/i,
   );
   assert.match(AGENT_WORK_LANGUAGE_INSTRUCTION, /work is unclear/i);
-  assert.match(AGENT_WORK_LANGUAGE_INSTRUCTION, /use "your agent"/i);
+  assert.match(
+    AGENT_WORK_LANGUAGE_INSTRUCTION,
+    /say "your agent working on \[work\]" and name the work/i,
+  );
+  assert.match(AGENT_WORK_LANGUAGE_INSTRUCTION, /never use "your agent" alone/i);
   assert.match(AGENT_WORK_LANGUAGE_INSTRUCTION, /sessions, turns, context windows, or tool calls/i);
 });
 

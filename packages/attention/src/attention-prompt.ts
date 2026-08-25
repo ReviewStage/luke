@@ -23,8 +23,8 @@ export const CTO_RELEVANCE_INSTRUCTION =
 export const AGENT_WORK_LANGUAGE_INSTRUCTION =
   "Describe work at the outcome or workstream level; include implementation details only when " +
   "asked. Speak about the agent as the person doing that work, and identify them only by the " +
-  "work, never by a provider, session, workspace, worktree, repository, or branch name. If the " +
-  'work is unclear, say what happened without naming it. When a label is needed, use "your agent". Never expose agent mechanics such as sessions, turns, context windows, or tool calls.';
+  "work, never by a provider, session, workspace, worktree, repository, or branch name. When a " +
+  'label is needed, say "your agent working on [work]" and name the work; never use "your agent" alone. If the work is unclear, state what happened without an agent label. Never expose agent mechanics such as sessions, turns, context windows, or tool calls.';
 
 const ATTENTION_INSTRUCTION_LINES: readonly string[] = [
   "As the engineering manager for the user's coding agents, decide whether Luke should speak about an update.",
