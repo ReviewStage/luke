@@ -29,13 +29,14 @@ export interface UpdateRow {
  * the Settings tab and moves the Updates section to the head of the front
  * page — one judgment, so the dot, the section's place, and the row can
  * never disagree about whether there is news. The news stands through the
- * whole install: a release downloading, waiting on its restart, or failed
- * mid-fetch is still one this build is not on.
+ * whole install: a release downloading, still publishing, waiting on its
+ * restart, or failed mid-fetch is still one this build is not on.
  */
 export function updateAvailable(update: UpdateSnapshot): boolean {
   return (
     update.status === UPDATE_STATUS.DOWNLOADING ||
     update.status === UPDATE_STATUS.READY ||
+    update.status === UPDATE_STATUS.PUBLISHING ||
     (update.status === UPDATE_STATUS.ERROR && update.latestVersion !== undefined)
   );
 }
@@ -85,6 +86,12 @@ export function updateRow(update: UpdateSnapshot): UpdateRow {
         detail: `Updated from version ${update.previousVersion}.`,
         action: UPDATE_ROW_ACTION.CHECK,
         current: true,
+      };
+    case UPDATE_STATUS.PUBLISHING:
+      return {
+        detail: `Version ${update.latestVersion} was found but its download isn't ready yet. Luke will retry in a few minutes.`,
+        action: UPDATE_ROW_ACTION.CHECK,
+        current: false,
       };
     case UPDATE_STATUS.ERROR:
       return {

@@ -5,8 +5,10 @@
  * question as an answer. A check that finds a newer build downloads it at
  * once, so there is no standing "available" state: the news arrives as
  * `DOWNLOADING`. `UPDATED` is transient — the first launch after an install
- * confirms what just happened. `ERROR` must be drawn as the way back to the
- * browser, never as a dead end.
+ * confirms what just happened. `PUBLISHING` is the window between a release's
+ * manifest and its archive: a version was found but its download is not
+ * servable yet, and the service is retrying on its own bounded schedule.
+ * `ERROR` must be drawn as the way back to the browser, never as a dead end.
  */
 export const UPDATE_STATUS = {
   IDLE: "idle",
@@ -14,6 +16,7 @@ export const UPDATE_STATUS = {
   DOWNLOADING: "downloading",
   READY: "ready",
   UPDATED: "updated",
+  PUBLISHING: "publishing",
   ERROR: "error",
 } as const;
 
@@ -68,6 +71,12 @@ export type UpdateSnapshot =
       installSupported: boolean;
       /** The version this build replaced, for the row to name the arrival. */
       previousVersion: string;
+    }
+  | {
+      status: typeof UPDATE_STATUS.PUBLISHING;
+      currentVersion: string;
+      installSupported: boolean;
+      latestVersion: string;
     }
   | {
       status: typeof UPDATE_STATUS.ERROR;
