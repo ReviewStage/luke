@@ -44,6 +44,19 @@ export type SessionTranscriptResult =
   | { status: typeof ACT_RESULT_STATUS.REJECTED; reason: string }
   | { status: typeof ACT_RESULT_STATUS.UNSUPPORTED; reason: string };
 
+/**
+ * Which surface a window exists to draw. Every window loads the same renderer
+ * bundle, so the role is what tells the one fullscreen introduction takeover
+ * apart from the panel windows — decided in the main process by which window
+ * asked, never by anything the renderer could claim about itself.
+ */
+export const WINDOW_ROLE = {
+  PANEL: "panel",
+  INTRODUCTION: "introduction",
+} as const;
+
+export type WindowRole = (typeof WINDOW_ROLE)[keyof typeof WINDOW_ROLE];
+
 export interface DisplayDiagnostic {
   id: number;
   label: string;

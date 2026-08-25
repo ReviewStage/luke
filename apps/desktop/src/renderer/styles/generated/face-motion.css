@@ -665,6 +665,67 @@
   animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
 }
 
+/* wake — first waking (introduction: eyes blink open) */
+
+@keyframes luke-wake-1 {
+  0% {
+    transform: translate(0px, 5px);
+  }
+
+  28% {
+    transform: translate(0px, 5px);
+  }
+
+  62% {
+    transform: translate(0px, -1.2px);
+  }
+
+  78% {
+    transform: translate(0px, 0px);
+  }
+
+  100% {
+    transform: translate(0px, 0px);
+  }
+}
+
+@keyframes luke-wake-eyes {
+  0% {
+    transform: scaleY(0);
+  }
+
+  35% {
+    transform: scaleY(0);
+  }
+
+  45% {
+    transform: scaleY(1);
+  }
+
+  55% {
+    transform: scaleY(0.1);
+  }
+
+  68% {
+    transform: scaleY(1);
+  }
+
+  100% {
+    transform: scaleY(1);
+  }
+}
+
+.luke-face[data-motion="wake"] .luke-face-layer-1 {
+  animation-name: luke-wake-1;
+  animation-duration: 2.8s;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+}
+
+.luke-face[data-motion="wake"] .luke-face-eye {
+  animation-name: luke-wake-eyes;
+  animation-duration: 2.8s;
+}
+
 /* attention — attention caught (perk up) */
 
 @keyframes luke-attention-1 {

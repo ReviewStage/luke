@@ -32,6 +32,53 @@
 Notable changes to Luke, newest first. Each heading is a released version and
 the date its release was published.
 
+## 0.3.10 — 2026-08-24
+
+### Onboarding
+
+Luke introduces himself to new users.
+([#497](https://github.com/ReviewStage/luke/pull/497),
+[#508](https://github.com/ReviewStage/luke/pull/508))
+
+![Luke's onboarding takeover, with his face centered over the desktop.](apps/web/public/changelog/0.3.10/onboarding.png)
+
+### Improvements
+
+- Luke is more conversational and proactive about work that needs your
+  attention ([#500](https://github.com/ReviewStage/luke/pull/500))
+- Luke draws loading rows while a provider roster is temporarily unreadable
+  instead of making those agents disappear
+  ([#498](https://github.com/ReviewStage/luke/pull/498))
+- The website demonstrates Luke's panel with a live mesh gradient and an
+  animated tour of its presentations
+  ([#499](https://github.com/ReviewStage/luke/pull/499),
+  [#502](https://github.com/ReviewStage/luke/pull/502),
+  [#504](https://github.com/ReviewStage/luke/pull/504))
+
+### Fixes
+
+- Fixed Preview deployments failing to complete sign-in
+  ([#408](https://github.com/ReviewStage/luke/pull/408))
+- Fixed workspace creation losing the provider selected in Settings
+  ([#475](https://github.com/ReviewStage/luke/pull/475))
+- Fixed the web service omitting the acts package from its runtime wiring
+  ([#495](https://github.com/ReviewStage/luke/pull/495))
+- Fixed signed-out voice runs reporting the wrong missing credential
+  ([#505](https://github.com/ReviewStage/luke/pull/505))
+- Fixed workspace-only providers being rejected by the desktop bridge
+  ([#507](https://github.com/ReviewStage/luke/pull/507))
+- Fixed Apple notarization uploads using the accelerated transfer path that
+  could leave incomplete submissions stuck as In Progress
+
+### Miscellaneous
+
+- Updated the README and privacy policy for the current product behavior
+  ([#474](https://github.com/ReviewStage/luke/pull/474),
+  [#476](https://github.com/ReviewStage/luke/pull/476))
+- Updated the account connection pages and the internal animation reference
+  ([#488](https://github.com/ReviewStage/luke/pull/488),
+  [#501](https://github.com/ReviewStage/luke/pull/501))
+
 ## 0.3.9 — 2026-08-23
 
 ### More agents, one roster

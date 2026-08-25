@@ -21,7 +21,12 @@ test("hovering the capsule peeks; any other shape is already answering", () => {
 
 test("the slot and the composer stay put when the pointer leaves", () => {
   assert.equal(
-    pointerLeaveSchedules({ presentation: PANEL_PRESENTATION.SLOT, hold: false, receded: false }),
+    pointerLeaveSchedules({
+      presentation: PANEL_PRESENTATION.SLOT,
+      hold: false,
+      receded: false,
+      travelled: true,
+    }),
     false,
     "someone fetching a key is in a browser; the pointer being away is the normal case",
   );
@@ -30,6 +35,7 @@ test("the slot and the composer stay put when the pointer leaves", () => {
       presentation: PANEL_PRESENTATION.FEEDBACK,
       hold: false,
       receded: false,
+      travelled: true,
     }),
     false,
     "a note being written must not be discarded by the pointer wandering off",
@@ -39,6 +45,7 @@ test("the slot and the composer stay put when the pointer leaves", () => {
       presentation: PANEL_PRESENTATION.CAPSULE,
       hold: false,
       receded: false,
+      travelled: true,
     }),
     false,
   );
@@ -46,7 +53,12 @@ test("the slot and the composer stay put when the pointer leaves", () => {
 
 test("a key or ask being typed holds the panel against the pointer", () => {
   assert.equal(
-    pointerLeaveSchedules({ presentation: PANEL_PRESENTATION.PANEL, hold: true, receded: false }),
+    pointerLeaveSchedules({
+      presentation: PANEL_PRESENTATION.PANEL,
+      hold: true,
+      receded: false,
+      travelled: true,
+    }),
     false,
   );
   assert.equal(
@@ -54,23 +66,62 @@ test("a key or ask being typed holds the panel against the pointer", () => {
       presentation: PANEL_PRESENTATION.PANEL,
       hold: false,
       receded: false,
+      travelled: true,
     }),
     true,
   );
   assert.equal(
-    pointerLeaveSchedules({ presentation: PANEL_PRESENTATION.PEEK, hold: false, receded: false }),
+    pointerLeaveSchedules({
+      presentation: PANEL_PRESENTATION.PEEK,
+      hold: false,
+      receded: false,
+      travelled: true,
+    }),
     true,
+  );
+});
+
+test("a leave at a point the pointer never moved from is the shape's own doing", () => {
+  assert.equal(
+    pointerLeaveSchedules({
+      presentation: PANEL_PRESENTATION.PANEL,
+      hold: false,
+      receded: false,
+      travelled: false,
+    }),
+    false,
+    "the greeting expanding under a resting cursor must not collapse on the synthetic leave",
+  );
+  assert.equal(
+    pointerLeaveSchedules({
+      presentation: PANEL_PRESENTATION.PEEK,
+      hold: false,
+      receded: false,
+      travelled: false,
+    }),
+    true,
+    "only the panel is ever opened by the app itself under a pointer that did nothing",
   );
 });
 
 test("a shape that receded out from under the pointer does not close by leaving", () => {
   assert.equal(
-    pointerLeaveSchedules({ presentation: PANEL_PRESENTATION.PANEL, hold: false, receded: true }),
+    pointerLeaveSchedules({
+      presentation: PANEL_PRESENTATION.PANEL,
+      hold: false,
+      receded: true,
+      travelled: true,
+    }),
     false,
     "a settings page opening shorter than the last shrinks the shape past a resting hand",
   );
   assert.equal(
-    pointerLeaveSchedules({ presentation: PANEL_PRESENTATION.PEEK, hold: false, receded: true }),
+    pointerLeaveSchedules({
+      presentation: PANEL_PRESENTATION.PEEK,
+      hold: false,
+      receded: true,
+      travelled: true,
+    }),
     true,
     "the peek never follows the panel's content, so a mark there explains nothing",
   );

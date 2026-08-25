@@ -423,15 +423,18 @@ Trust constraints:
   scripted turn opened with none — and no carrier is wired behind it, so
   nothing said, heard, or shown during the introduction can become an act.
   What travels on it is the build's own script and one observed thing: the
-  detected sessions' titles, as data behind a marker, never as instructions.
-  Detection is the keyless local peek — the same read-only observe every pass
-  runs, once, with no hook registration and no credential, answered only to
-  the takeover window and capped at the panel's own depth. The microphone is
+  detected sessions' titles, as data behind a marker, never as instructions,
+  and capped at the panel's own visible depth however many sessions stand on
+  screen. Detection is the keyless local peek — the same read-only observe
+  every pass runs, once, with no hook registration and no credential, and
+  answered only to the takeover window, which draws every fresh session it
+  reports in a list that scrolls like the panel's own. The microphone is
   asked for at its own beat through the system's real dialog, the talk key is
-  routed to the takeover for the introduction's duration, and the account
-  landing is what completes the flow: the takeover closes, the panels stand
-  up, and observation, announcements, and every other capability release
-  through the ordinary account gate rather than around it. An introduction
+  routed to the takeover for the introduction's duration, and the spoken
+  sign-off is where the introduction ends: the takeover closes, the ordinary
+  signed-out panel stands up with its own gate, and observation,
+  announcements, and every other capability still release only through the
+  ordinary account gate when the sign-in itself lands. An introduction
   that cannot speak stands down to the ordinary signed-out launch and writes
   nothing. Widening what the introduction reads, sends, or can do is a
   product decision, not an implementation detail.

@@ -14,6 +14,10 @@ export {
   HostedRealtimeCredentialMinter,
   type HostedRealtimeCredentialOptions,
 } from "./hosted-credentials.js";
+export {
+  IntroductionRealtimeCredentialMinter,
+  type IntroductionRealtimeCredentialOptions,
+} from "./introduction-credentials.js";
 export type { RealtimeCredentialMinter } from "./minter.js";
 export {
   environmentRealtimeSpeed,

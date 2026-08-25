@@ -439,7 +439,7 @@ function WorkspaceTrayActs({
  * shrinks to the row's first line, so a mispress near the field cannot open a
  * window, and the whole row stays one article for a reader.
  */
-function SessionRow({
+export function SessionRow({
   session,
   index,
   now,

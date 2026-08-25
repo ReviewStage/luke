@@ -4,6 +4,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { AccountClient, AccountSessionManager, accountGateOpen } from "@sidecar/account";
 import {
+  PRODUCT_CREDENTIAL_SOURCE,
   PRODUCT_EVENT,
   PRODUCT_SUPERSET_ACT,
   PRODUCT_UPDATE_ACT,
@@ -32,6 +33,7 @@ import {
   ObservationHookRegistry,
   OrcaWorkspaceReader,
   type ProviderRegistration,
+  peekLocalSessions,
   providerRegistrations,
   type WorkspaceHostEnrichment,
   type WorkspaceHostRegistration,
@@ -75,7 +77,11 @@ import {
 } from "@sidecar/superset";
 import { DEFAULT_PANEL_FORM_FACTOR } from "@sidecar/surface";
 import { LinearCredentials, LinearIssueTracker, LinearSignIn } from "@sidecar/trackers";
-import { sessionNoticeSpeech, VoiceCapabilityAssembler } from "@sidecar/voice";
+import {
+  IntroductionRealtimeCredentialMinter,
+  sessionNoticeSpeech,
+  VoiceCapabilityAssembler,
+} from "@sidecar/voice";
 import { ACT_RESULT_STATUS, isRecord, text, type UnparsedWireValue } from "@sidecar/wire";
 import {
   app,
@@ -105,9 +111,22 @@ import {
   type SessionRosterPayload,
   SUPERSET_SIGN_IN_STAGE,
   SUPERSET_WORKSPACE_PROVIDER_ID,
+  WINDOW_ROLE,
 } from "#shared/contracts";
+import { VOICE_SOURCE_COUNTED_AS } from "#shared/product-vocabulary";
 import { buildCarriesDeveloperIdSigning, resolveAppName } from "./app-identity";
 import { AppleCalendarReader } from "./apple-calendar";
+import {
+  INTRODUCTION_FADE_MS,
+  INTRODUCTION_HANDOFF_READY_MS,
+  INTRODUCTION_PEEK_FRESH_MS,
+  INTRODUCTION_RENDER_DEADLINE_MS,
+  INTRODUCTION_STATE_FILE,
+  introductionCompleted,
+  introductionRecord,
+  shouldBackfillIntroductionCompletion,
+  shouldRunIntroduction,
+} from "./introduction-flow";
 import { registerAccountSessionIpc } from "./ipc/account-session";
 import { registerCalendarConnectionIpc } from "./ipc/calendar-connection";
 import { registerSessionActsIpc } from "./ipc/session-acts";
@@ -126,6 +145,7 @@ import { createElectronUpdaterEngine } from "./update-installer";
 import { UPDATE_ENDPOINT, UpdateService } from "./update-service";
 import { DockPresence } from "./window/dock-presence";
 import { HOTKEY_RANK, HotkeyRegistrar } from "./window/hotkey-registrar";
+import { IntroductionWindow } from "./window/introduction-window";
 import { PanelManager } from "./window/panel-manager";
 
 // Which Luke this process is decides where its state lives and which Keychain
@@ -543,6 +563,123 @@ const panels = new PanelManager({
   rendererHtmlPath: path.join(__dirname, "renderer", "index.html"),
   rendererUrl: rendererUrl(),
 });
+// The one-time spoken introduction: a fullscreen takeover on the first
+// interactive launch, before any account exists. Its voice runs on the hosted
+// service's bounded, accountless introduction mint; its session detection is
+// the keyless local peek, answered only to the takeover window; and the
+// account landing is what completes it — the takeover closes, the panels
+// reconcile, and every account-gated capability releases through the ordinary
+// gate rather than around it.
+const introductionWindow = new IntroductionWindow({
+  runMode,
+  preloadPath: path.join(__dirname, "preload.js"),
+  rendererHtmlPath: path.join(__dirname, "renderer", "index.html"),
+  rendererUrl: rendererUrl(),
+  // A dead takeover renderer can ask for nothing, including its own ending,
+  // so the main process ends it: the ordinary signed-out launch stands in.
+  onGone: (reason) => {
+    process.stderr.write(`Introduction abandoned: ${reason}\n`);
+    void abandonIntroduction();
+  },
+});
+/**
+ * Whether the takeover's renderer ever reported mounting. A takeover that
+ * never draws is a fullscreen window swallowing every click with nothing on
+ * it, so a missing report abandons the introduction at the deadline.
+ */
+let introductionRendererReady = false;
+/**
+ * Set while the handoff waits for the first panel renderer to report ready,
+ * so the takeover's fade lands on a drawn gate rather than a loading window.
+ */
+let resolveIntroductionPanelReady: (() => void) | undefined;
+const introductionMinter = new IntroductionRealtimeCredentialMinter({
+  serviceBaseUrl: HOSTED_SERVICE_BASE_URL,
+});
+const introductionStatePath = () => path.join(app.getPath("userData"), INTRODUCTION_STATE_FILE);
+
+function introductionCompletedOnDisk(): boolean {
+  try {
+    return introductionCompleted(fs.readFileSync(introductionStatePath(), "utf8"));
+  } catch {
+    // A missing or unreadable file is an introduction never finished.
+    return false;
+  }
+}
+
+function markIntroductionComplete(): void {
+  try {
+    fs.writeFileSync(introductionStatePath(), introductionRecord(new Date().toISOString()));
+  } catch (error) {
+    process.stderr.write(
+      `Could not persist the introduction record: ${error instanceof Error ? error.message : String(error)}\n`,
+    );
+  }
+}
+
+/**
+ * The introduction's ordinary end: the sign-off has been spoken, so the real
+ * signed-out panel takes over exactly where the takeover's drawing stands —
+ * the gate, its hover collapse, and the account landing are all the ordinary
+ * panel's from here. Raise before raze, for the same reason the reconciler
+ * does — all windows closed is how this process decides it is done.
+ */
+async function finishIntroduction(given: boolean): Promise<void> {
+  if (!introductionWindow.active) return;
+  // Completed means given to the end: the sign-off is the introduction's last
+  // word, and what follows is the same gate every later launch opens on. A
+  // glide past a voice that never stood up hands off identically but records
+  // nothing — the one moment this flow is still owed its play.
+  if (given) {
+    markIntroductionComplete();
+    productEvents.record(PRODUCT_EVENT.INTRODUCTION_COMPLETE, {});
+  }
+  // Retiring first revokes the takeover's standing — the introduction mint,
+  // the talk key's routing, the reconcile guards — before any panel is raised
+  // beside it; the window itself is destroyed only after the panels stand,
+  // because a swap must never pass through zero windows.
+  introductionWindow.retire();
+  // The real panel stands up behind the takeover and is given until its
+  // renderer reports ready, so the fade the takeover plays on this call's
+  // answer crossfades into a drawn gate rather than a window still loading.
+  const panelReady = new Promise<void>((resolve) => {
+    resolveIntroductionPanelReady = resolve;
+  });
+  // Compact on purpose: the takeover has already stood its drawing down to
+  // the capsule, and the panel renderer's own signed-out greeting is what
+  // expands the gate — the same morph, Luke riding from the wing spot into
+  // the gate's face, that every later signed-out launch plays.
+  panels.reconcile();
+  await Promise.race([
+    panelReady,
+    new Promise((resolve) => setTimeout(resolve, INTRODUCTION_HANDOFF_READY_MS)),
+  ]);
+  resolveIntroductionPanelReady = undefined;
+  // The takeover fades on this function's answer; the window follows once
+  // the fade has run, and the talk key moves home with it — the account's
+  // own credential answers from here.
+  setTimeout(() => {
+    introductionWindow.close();
+    void hotkeys.reapply(HOTKEY_RANK.TALK);
+  }, INTRODUCTION_FADE_MS);
+}
+
+/**
+ * The introduction's other end: it could not be given — the voice never
+ * connected — so the ordinary signed-out launch stands in its place. Nothing
+ * is marked completed, because a moment nobody saw should replay.
+ */
+async function abandonIntroduction(): Promise<void> {
+  if (!introductionWindow.active) return;
+  // Retire first for the same reason the finish does: no panel may be
+  // answered by the introduction's standing while it is being stood down.
+  introductionWindow.retire();
+  panels.reconcile();
+  panels.showInactiveAll();
+  introductionWindow.close();
+  await hotkeys.reapply(HOTKEY_RANK.TALK);
+}
+
 const supersetSignIn = new SupersetSignIn({
   cli: supersetCli,
   openExternal: (url) => shell.openExternal(url),
@@ -561,10 +698,17 @@ const supersetSignIn = new SupersetSignIn({
 });
 const hotkeys = new HotkeyRegistrar({
   registersGlobalKeys: runMode.registersGlobalKeys,
-  hasCredentials: () => voiceCapabilities.realtimeCredentials !== undefined,
+  // The introduction's practice beat is the one time the talk key is claimed
+  // with no account credential behind it: the takeover holds the voice, on
+  // the bounded introduction mint, for exactly as long as it stands. The
+  // talk key alone — the takeover answers no ask or stop press, and a
+  // claimed chord nothing answers is a chord taken from every other app.
+  hasCredentials: (rank) =>
+    voiceCapabilities.realtimeCredentials !== undefined ||
+    (rank === HOTKEY_RANK.TALK && introductionWindow.active),
   recordProductEvent,
   host: {
-    voiceHost: () => panels.voiceHost(),
+    voiceHost: () => introductionWindow.current() ?? panels.voiceHost(),
     displayIdFor: (sender) => panels.displayIdFor(sender),
     modeFor: (displayId) => panels.modeFor(displayId),
     setMode: (displayId, mode, requestFocus) => {
@@ -1129,10 +1273,29 @@ function registerIpc(): void {
     trustedSender,
     panels,
     openExternal: (url) => shell.openExternal(url),
-    realtimeCredentials: () => voiceCapabilities.realtimeCredentials,
+    // While the takeover stands and no account credential exists yet, the
+    // introduction's bounded mint answers; the moment the account lands, the
+    // ordinary policy's credential wins even before the takeover has faded.
+    // The minter and its counted source travel together so the count can
+    // never name a source the credential did not come from.
+    chooseRealtimeCredentials: () => {
+      const accountMinter = voiceCapabilities.realtimeCredentials;
+      if (accountMinter) {
+        return {
+          minter: accountMinter,
+          countedSource: VOICE_SOURCE_COUNTED_AS[voiceCapabilities.voiceSource],
+        };
+      }
+      if (introductionWindow.active) {
+        return {
+          minter: introductionMinter,
+          countedSource: PRODUCT_CREDENTIAL_SOURCE.INTRODUCTION,
+        };
+      }
+      return undefined;
+    },
     unavailableDiagnostics: () => voiceCapabilities.unavailableDiagnostics,
     hostedUsageReader: () => voiceCapabilities.hostedUsageReader,
-    voiceSource: () => voiceCapabilities.voiceSource,
     recordProductEvent,
   });
 
@@ -1187,9 +1350,67 @@ function registerIpc(): void {
     return result;
   });
 
+  // Which surface a window draws, decided by which window asked — never by
+  // anything the renderer could claim about itself.
+  registerContextHandler(BRIDGE.getWindowRole, (context: BridgeContext) =>
+    introductionWindow.owns(context.sender) ? WINDOW_ROLE.INTRODUCTION : WINDOW_ROLE.PANEL,
+  );
+
+  // The introduction's one-shot keyless read of this machine's local
+  // sessions: the same read-only observe every pass runs, once, with no hook
+  // registration and no credential, answered only to the takeover window
+  // while it stands. It bypasses the account gate deliberately — detection is
+  // the introduction's own beat — and stays bounded to what the panel itself
+  // would show: every roster-relevant row, in a list that scrolls like the
+  // panel's own, while what travels to the voice is bounded where the speech
+  // is composed rather than by hiding rows here.
+  registerContextHandler(BRIDGE.peekIntroductionSessions, async (context: BridgeContext) => {
+    if (!introductionWindow.owns(context.sender) || !runMode.observesProviders) return [];
+    const now = Date.now();
+    const sessions = await peekLocalSessions();
+    // Fresher than the roster's own relevance: the roster keeps an unanswered
+    // wait forever, but an introduction that names last year's transcript
+    // introduces a graveyard.
+    return rosterRelevantSessions(sessions, now).filter(
+      (session) => now - session.observedAt <= INTRODUCTION_PEEK_FRESH_MS,
+    );
+  });
+
+  // The takeover reporting the sign-off has been spoken and its fade has
+  // finished: the introduction is over, and the real signed-out panel — the
+  // gate, its hover collapse, the sign-in itself — takes the screen.
+  registerContextHandler(
+    BRIDGE.completeIntroduction,
+    async (context: BridgeContext, given: boolean) => {
+      if (!introductionWindow.owns(context.sender)) return;
+      await finishIntroduction(given === true);
+    },
+  );
+
+  registerContextHandler(BRIDGE.abandonIntroduction, (context: BridgeContext, reason: string) => {
+    if (!introductionWindow.owns(context.sender)) return;
+    process.stderr.write(`Introduction abandoned: ${reason}\n`);
+    void abandonIntroduction();
+  });
+
+  // The takeover surface reporting it mounted — the report its abandon
+  // deadline measures. Deliberately its own channel rather than notifyReady:
+  // the panel surface sends that one too, and a panel accidentally drawn in
+  // the takeover window must read as a takeover that never mounted.
+  registerContextHandler(BRIDGE.introductionMounted, (context: BridgeContext) => {
+    if (!introductionWindow.owns(context.sender)) return;
+    introductionRendererReady = true;
+  });
+
   registerHandler(BRIDGE.quit, app.quit.bind(app));
 
   registerContextHandler(BRIDGE.notifyReady, async (context: BridgeContext) => {
+    // The introduction's handoff waits on the first panel renderer to finish
+    // bootstrapping, so its crossfade lands on a drawn gate.
+    if (resolveIntroductionPanelReady && panels.owns(context.sender)) {
+      resolveIntroductionPanelReady();
+      resolveIntroductionPanelReady = undefined;
+    }
     if (!captureOutput) return;
     // A capture run holds a single window, and the ready message is its own.
     const window = BrowserWindow.fromWebContents(context.sender);
@@ -1952,10 +2173,15 @@ function stopIssueObservation(): void {
 }
 
 function configurePermissions(): void {
+  // The takeover is a window of Luke's own under the same hardening as the
+  // panels, and its practice beat is a real spoken turn, so it is owed the
+  // same audio-only answer.
+  const ownWindow = (webContents: Electron.WebContents) =>
+    panels.owns(webContents) || introductionWindow.owns(webContents);
   session.defaultSession.setPermissionCheckHandler(
     (webContents, permission, _origin, details) =>
       webContents !== null &&
-      panels.owns(webContents) &&
+      ownWindow(webContents) &&
       permission === "media" &&
       details.mediaType === "audio",
   );
@@ -1963,7 +2189,7 @@ function configurePermissions(): void {
     (webContents, permission, callback, details) => {
       const mediaTypes = "mediaTypes" in details ? (details.mediaTypes ?? []) : [];
       callback(
-        panels.owns(webContents) &&
+        ownWindow(webContents) &&
           permission === "media" &&
           mediaTypes.length > 0 &&
           mediaTypes.every((mediaType: string) => mediaType === "audio"),
@@ -1977,6 +2203,13 @@ function handleDisplayChange(): void {
     () =>
       void (async () => {
         await panels.refreshGeometry();
+        // While the introduction holds the screen no panel may be raised
+        // beside it; the takeover re-covers whatever the primary display now
+        // is, and the panels reconcile when it ends.
+        if (introductionWindow.active) {
+          introductionWindow.reposition();
+          return;
+        }
         // The set of displays may have changed, not just their geometry: a chosen
         // display arriving raises its window, one leaving takes its window down.
         panels.reconcile();
@@ -2003,6 +2236,21 @@ export function startDesktopApp(): void {
         ? await settingsStore.accountSnapshot()
         : { status: ACCOUNT_STATUS.SIGNED_OUT };
       accountSession.initialize(account);
+      // Decided once, from what this launch already knows: whether this is
+      // the first interactive launch, before any account exists, that the
+      // spoken introduction plays on. Everything below reads the takeover's
+      // liveness rather than this flag, because the introduction can end —
+      // completed or abandoned — while the launch is still settling.
+      const introductionInput = {
+        requiresAccount: runMode.requiresAccount,
+        signedIn: account.status === ACCOUNT_STATUS.SIGNED_IN,
+        completed: introductionCompletedOnDisk(),
+      };
+      const giveIntroduction = shouldRunIntroduction(introductionInput);
+      // A signed-in launch that never wrote the record — an install upgrading
+      // from before the introduction existed — writes it now, so a later
+      // sign-out lands on the ordinary gate instead of a first meeting.
+      if (shouldBackfillIntroductionCompletion(introductionInput)) markIntroductionComplete();
       await panels.refreshGeometry();
       registerIpc();
       // Resolving settings touches the filesystem, and the OS keychain only for a
@@ -2054,6 +2302,17 @@ export function startDesktopApp(): void {
         const message = error instanceof Error ? error.message : String(error);
         process.stderr.write(`Local session hook registration failed: ${message}\n`);
       });
+      // Opened before the talk key is applied, because the takeover holding
+      // the voice is what lets the key be claimed on a launch with no account
+      // credential — the practice beat needs it.
+      if (giveIntroduction) {
+        introductionWindow.open();
+        setTimeout(() => {
+          if (!introductionWindow.active || introductionRendererReady) return;
+          process.stderr.write("Introduction abandoned: the takeover never reported mounting.\n");
+          void abandonIntroduction();
+        }, INTRODUCTION_RENDER_DEADLINE_MS);
+      }
       // Awaited, so the key and the voice it speaks with are both in hand before
       // the renderer exists to ask for a credential: the first conversation must
       // already have them. It is also what decides whether the talk key below is
@@ -2093,7 +2352,9 @@ export function startDesktopApp(): void {
       // what the renderer draws while Luke speaks unheard, and nothing more.
       startOutputVolumeWatch();
       startMicrophoneRouteWatch();
-      panels.reconcile();
+      // The introduction owns the screen alone until it completes or is
+      // abandoned; both of its endings reconcile the panels themselves.
+      if (!introductionWindow.active) panels.reconcile();
       configurePermissions();
       startSessionObservation();
       startCalendarObservation();
@@ -2113,6 +2374,12 @@ export function startDesktopApp(): void {
       // early is dropped, because startup is about to assert the panel anyway.
       app.on("second-instance", (_event, argv) => {
         void panels.refreshGeometry().then(() => {
+          // A relaunch mid-introduction re-asserts the takeover: raising
+          // panels beside it would put two Lukes on screen.
+          if (introductionWindow.active) {
+            introductionWindow.reposition();
+            return;
+          }
           if (argv.includes("--expanded")) {
             const host = panels.voiceHost();
             const displayId = host ? panels.displayIdFor(host.webContents) : undefined;

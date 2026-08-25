@@ -166,6 +166,7 @@ test("release notarization commands carry key-file credentials", () => {
     "issuer-id",
     "--output-format",
     "json",
+    "--no-s3-acceleration",
   ]);
   assert.deepEqual(notaryInfoArguments("submission-id", credentials), [
     "notarytool",
@@ -203,6 +204,7 @@ test("release notarization commands use the local keychain profile", () => {
     "luke-notary",
     "--output-format",
     "json",
+    "--no-s3-acceleration",
   ]);
   assert.deepEqual(notaryInfoArguments("submission-id", credentials), [
     "notarytool",
@@ -223,7 +225,7 @@ test("release notarization commands use the local keychain profile", () => {
   assert.deepEqual(stapleArguments("/tmp/Luke.dmg"), ["stapler", "staple", "/tmp/Luke.dmg"]);
 });
 
-test("neither notarization path asks notarytool to wait", () => {
+test("notarization uses the stable upload path without asking notarytool to wait", () => {
   const credentials = { source: NOTARY_CREDENTIAL_SOURCE.KEYCHAIN_PROFILE };
   const builderConfig = createElectronBuilderConfig();
   const hooks = fs.readFileSync(
@@ -233,6 +235,7 @@ test("neither notarization path asks notarytool to wait", () => {
 
   assert.ok(!notarySubmitArguments("/tmp/Luke.dmg", credentials).includes("--wait"));
   assert.ok(!notarySubmitArguments("/tmp/Luke.dmg", credentials).includes("--timeout"));
+  assert.ok(notarySubmitArguments("/tmp/Luke.dmg", credentials).includes("--no-s3-acceleration"));
   assert.equal(builderConfig.mac.notarize, false);
   assert.ok(hooks.includes("notaryInfoArguments(submission.id, credentials)"));
 });
