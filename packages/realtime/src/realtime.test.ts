@@ -328,8 +328,8 @@ test("a mint response without a session model falls back to the requested model"
 });
 
 test("a male voice is what the session is minted with", () => {
-  assert.equal(REALTIME_DEFAULTS.VOICE, "cedar");
-  assert.equal(realtimeSessionConfig().audio.output.voice, "cedar");
+  assert.equal(REALTIME_DEFAULTS.VOICE, "echo");
+  assert.equal(realtimeSessionConfig().audio.output.voice, "echo");
 });
 
 test("the default voice is one the settings can offer", () => {
