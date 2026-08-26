@@ -13,6 +13,13 @@
  * itself, never the export.
  */
 
+import {
+  ATTENTION_DECISION_SCHEMA,
+  ATTENTION_DECISION_SCHEMA_NAME,
+  attentionInstructions,
+  attentionPromptUpdateFromWire,
+  attentionUpdateInput,
+} from "@sidecar/attention";
 import { REALTIME_CLIENT_EVENT, REALTIME_SERVER_EVENT } from "@sidecar/realtime";
 import {
   isRecord,
@@ -34,6 +41,19 @@ export interface UnboxExportOptions {
 const DEFAULT_TRACE_NAME = "luke-agent-trace";
 const UNKNOWN_MODEL = "gpt-realtime";
 const ATTENTION_GENERATION_NAME = "attention-review";
+
+/**
+ * The strict decision schema the review pins as its response format, shown in
+ * the gateway document's definitions slot. The viewer's format has no
+ * response-format field of its own, so the schema travels as a tool-shaped
+ * definition typed by what it actually is, never as a callable function —
+ * the review declares no tools at all.
+ */
+const ATTENTION_RESPONSE_FORMAT = {
+  type: "response_format",
+  name: ATTENTION_DECISION_SCHEMA_NAME,
+  inputSchema: ATTENTION_DECISION_SCHEMA,
+};
 
 function recordItems(value: WireValue | undefined): readonly WireRecord[] {
   return Array.isArray(value) ? value.filter(isRecord) : [];
@@ -209,13 +229,28 @@ function applyWireEntry(state: ExportState, entry: WireRecord, atMs: number | un
   }
 }
 
+/**
+ * The prompt the review actually sent, rebuilt from the recorded update by the
+ * same rendering the evaluator uses. An update the current renderer cannot read
+ * — one an older build recorded — falls back to its raw JSON, so the entry
+ * still shows what was reviewed even when it cannot show it verbatim.
+ */
+function attentionInputText(update: WireValue | undefined): string {
+  const promptUpdate = attentionPromptUpdateFromWire(update);
+  if (promptUpdate) return attentionUpdateInput(promptUpdate);
+  return JSON.stringify(update ?? {}, undefined, 2);
+}
+
 function applyAttentionEntry(state: ExportState, entry: WireRecord): void {
   const decision = wireRecord(entry.decision);
   const error = text(entry.error);
   state.events.push({
     type: "generation",
     name: ATTENTION_GENERATION_NAME,
-    model: ATTENTION_GENERATION_NAME,
+    // A hosted pass records no model, because the service's build owns that
+    // choice and the desktop never learns it; the placeholder says so rather
+    // than guessing.
+    model: text(entry.model) ?? ATTENTION_GENERATION_NAME,
     provider: "openai",
     metrics: {
       // The viewer reads latency in seconds; the trace stamps milliseconds.
@@ -223,8 +258,10 @@ function applyAttentionEntry(state: ExportState, entry: WireRecord): void {
       tokens: { input: 0, output: 0 },
       cost: 0,
     },
+    available_tools: [ATTENTION_RESPONSE_FORMAT],
     messages: [
-      { role: "user", content: JSON.stringify(entry.update ?? {}, undefined, 2) },
+      { role: "system", content: attentionInstructions() },
+      { role: "user", content: attentionInputText(entry.update) },
       decision
         ? { role: "assistant", content: JSON.stringify(decision, undefined, 2) }
         : { role: "assistant", content: error ?? "no decision" },

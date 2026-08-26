@@ -25,9 +25,15 @@ export function tracedAttentionEvaluator(
   return {
     evaluate: async (update: AttentionUpdate) => {
       const started = now();
+      const model = evaluator.model;
       try {
         const decision = await evaluator.evaluate(update);
-        recordQuietly({ update, decision, elapsedMs: now() - started });
+        recordQuietly({
+          update,
+          decision,
+          elapsedMs: now() - started,
+          ...(model ? { model } : undefined),
+        });
         return decision;
       } catch (error) {
         recordQuietly({
@@ -35,10 +41,12 @@ export function tracedAttentionEvaluator(
           decision: undefined,
           elapsedMs: now() - started,
           error: error instanceof Error ? error.message : String(error),
+          ...(model ? { model } : undefined),
         });
         throw error;
       }
     },
+    ...(evaluator.model ? { model: evaluator.model } : undefined),
     // Forwarded only when the wrapped evaluator has one: the reviewer treats
     // the member's absence as "requests are welcome", and a wrapper that
     // always answered would change that reading.

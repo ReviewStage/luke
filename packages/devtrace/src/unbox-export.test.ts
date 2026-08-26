@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { ATTENTION_TRIGGER, attentionInstructions, attentionUpdateInput } from "@sidecar/attention";
+import { SESSION_STATUS } from "@sidecar/session";
 import { isRecord, type WireRecord, type WireValue } from "@sidecar/wire";
 import { TRACE_ENTRY_KIND } from "./trace-writer.js";
 import { unboxTraceFromLines } from "./unbox-export.js";
@@ -157,11 +159,61 @@ test("an attention pass becomes its own generation, and junk lines cost only the
   const [generation] = generations(trace);
   assert.ok(generation);
   assert.equal(generation.name, "attention-review");
+  // A record carrying no model — a hosted pass, or an older trace — keeps the
+  // placeholder rather than guessing.
+  assert.equal(generation.model, "attention-review");
   const metrics = isRecord(generation.metrics) ? generation.metrics : undefined;
   assert.equal(metrics?.latency, 0.321);
-  const [update, decision] = messagesOf(generation);
+  const definitions = Array.isArray(generation.available_tools)
+    ? generation.available_tools.filter(isRecord)
+    : [];
+  assert.equal(definitions[0]?.type, "response_format");
+  assert.equal(definitions[0]?.name, "attention_decision");
+  assert.ok(isRecord(definitions[0]?.inputSchema));
+  const [instructions, update, decision] = messagesOf(generation);
+  assert.equal(instructions?.role, "system");
+  assert.equal(instructions?.content, attentionInstructions());
+  // The update misses fields the prompt renderer requires, so it stands as
+  // its raw JSON rather than posing as the prompt the model received.
   assert.equal(update?.role, "user");
   assert.match(String(update?.content), /checkout-service/u);
   assert.equal(decision?.role, "assistant");
   assert.match(String(decision?.content), /silent/u);
+});
+
+test("a readable attention update renders as the exact prompt the model received", () => {
+  const update = {
+    trigger: "status-changed",
+    providerName: "Claude Code",
+    title: "checkout-service",
+    status: "complete",
+    previousStatus: "working",
+    recap: "Shipped the retry fix.",
+    noticeRequest: "Tell me when the retry fix lands.",
+  };
+  const attention = JSON.stringify({
+    at: "2026-08-25T10:05:00.000Z",
+    kind: TRACE_ENTRY_KIND.ATTENTION,
+    update,
+    decision: { disposition: "speak" },
+    elapsedMs: 100,
+    model: "gpt-5.6-luna",
+  });
+  const trace = unboxTraceFromLines([attention]);
+  const [generation] = generations(trace);
+  assert.equal(generation?.model, "gpt-5.6-luna");
+  const rendered = messagesOf(generation).find((message) => message.role === "user");
+  assert.equal(
+    rendered?.content,
+    attentionUpdateInput({
+      trigger: ATTENTION_TRIGGER.STATUS_CHANGED,
+      providerName: "Claude Code",
+      title: "checkout-service",
+      status: SESSION_STATUS.COMPLETE,
+      previousStatus: SESSION_STATUS.WORKING,
+      recap: "Shipped the retry fix.",
+      noticeRequest: "Tell me when the retry fix lands.",
+    }),
+  );
+  assert.match(String(rendered?.content), /Developer's ask: Tell me when the retry fix lands\./u);
 });

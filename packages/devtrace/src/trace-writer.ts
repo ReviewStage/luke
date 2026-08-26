@@ -6,14 +6,16 @@ import { type AgentWireTrace, sanitizedTraceEvent } from "./vocabulary.js";
 
 /**
  * One evaluator pass as the trace records it: the bounded update that went to
- * the model, the decision that came back — absent when the pass failed — and
- * how long the round trip took.
+ * the model, the decision that came back — absent when the pass failed — how
+ * long the round trip took, and which model reviewed it, absent when the pass
+ * ran through the hosted service, whose model the desktop never learns.
  */
 export interface AttentionTraceRecord {
   update: AttentionUpdate;
   decision: AttentionDecision | undefined;
   elapsedMs: number;
   error?: string;
+  model?: string;
 }
 
 export const TRACE_ENTRY_KIND = {

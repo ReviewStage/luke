@@ -170,6 +170,12 @@ export function attentionContext(detail: SessionDetail): AttentionContext | unde
 export interface AttentionEvaluator {
   evaluate(update: AttentionUpdate): Promise<AttentionDecision | undefined>;
   /**
+   * The model reviews are sent to, when this evaluator knows one. The keyed
+   * evaluator names its own; the hosted evaluator's model belongs to the
+   * service's build, so it is honestly absent rather than guessed.
+   */
+  readonly model?: string;
+  /**
    * When the evaluator has stood itself down — a rate limit's quiet — the
    * moment it will take requests again, as epoch milliseconds. A reviewer
    * that asks first skips the pass whole: nothing is sent, no baseline
