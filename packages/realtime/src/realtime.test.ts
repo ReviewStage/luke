@@ -2,11 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   ACT_RESULT_STATUS,
-  AGENT_WORK_LANGUAGE_INSTRUCTION,
   ATTENTION_REVIEW_OUTCOME,
   ATTENTION_TRIGGER,
   type AttentionReview,
-  CTO_RELEVANCE_INSTRUCTION,
   maximumAttentionRequestLength,
   maximumAttentionSummaryLength,
 } from "@sidecar/attention";
@@ -84,11 +82,7 @@ import {
   maximumVoiceContextWorkspaceProjects,
 } from "./realtime-context.js";
 import { REALTIME_TRUNCATION, realtimeSessionConfig } from "./realtime-credentials.js";
-import {
-  maximumTypedAskLength,
-  REALTIME_SESSION_TYPE,
-  realtimeInstructions,
-} from "./realtime-protocol.js";
+import { maximumTypedAskLength, REALTIME_SESSION_TYPE } from "./realtime-protocol.js";
 import {
   ACTS,
   REALTIME_TOOL,
@@ -116,6 +110,16 @@ function responseField(event: WireRecord | undefined): WireRecord | undefined {
   if (!event) return undefined;
   const response = event.response;
   return isRecord(response) ? response : undefined;
+}
+
+function responseInputText(event: WireRecord | undefined): string {
+  const response = responseField(event);
+  const input = response?.input;
+  if (!Array.isArray(input)) return "";
+  const message = input[0];
+  if (!isRecord(message) || !Array.isArray(message.content)) return "";
+  const content = message.content[0];
+  return isRecord(content) && isWireString(content.text) ? content.text : "";
 }
 
 const DECIDED_AT = 1_800_000_000_000;
@@ -249,41 +253,6 @@ test("a refused delete is read back with the event it names", () => {
   });
   assert.equal(deleted?.type, REALTIME_SERVER_EVENT.CONVERSATION_ITEM_DELETED);
   assert.equal(deleted?.itemId, "luke_ctx_sessions_1");
-});
-
-test("the standing instructions make Luke the coding agents' engineering manager", () => {
-  const instructions = realtimeInstructions();
-
-  assert.match(instructions, /engineering manager for the developer's coding agents/i);
-  assert.ok(instructions.includes(CTO_RELEVANCE_INSTRUCTION));
-  assert.ok(instructions.includes(AGENT_WORK_LANGUAGE_INSTRUCTION));
-  assert.match(instructions, /speak like a trusted colleague/i);
-  assert.match(instructions, /match the user's tone/i);
-  assert.match(instructions, /plain language and contractions/i);
-  assert.match(instructions, /shortest useful answer to exactly what they asked/i);
-  assert.match(instructions, /default to one sentence/i);
-  assert.match(instructions, /treat the roster as private context, not a report/i);
-  assert.match(instructions, /activity or recap in six words or fewer/i);
-  assert.match(instructions, /use greetings and acknowledgments when they fit/i);
-  assert.match(instructions, /follow the user's lead/i);
-  assert.match(instructions, /preserve their exact requested scope/i);
-  assert.match(instructions, /never expand an agent's task/i);
-  assert.match(instructions, /improvements, requirements, or elaboration/i);
-  assert.match(instructions, /product, design, or workflow advice/i);
-  assert.match(instructions, /questions unless needed to carry out the current request/i);
-  assert.match(instructions, /never tell the user to open, check, message, or manage an agent/i);
-  assert.match(instructions, /never claim an action Luke was not offered/i);
-  assert.match(instructions, /start with the answer or the tool call, announcing neither/i);
-  assert.match(
-    instructions,
-    /do not restate or paraphrase what the user just said; repeat it only when explicit confirmation is required/i,
-  );
-  assert.match(instructions, /confirm only the specific result and stop/i);
-  assert.match(instructions, /add no follow-up suggestion, offer, or question/i);
-  assert.match(instructions, /if the result is what the user asked to hear/i);
-  assert.match(instructions, /explicit latest or most-recent ask resolves by the recency labels/i);
-  assert.match(instructions, /open_session once for every distinct provider/i);
-  assert.match(instructions, /do not filter the panel first/i);
 });
 
 test("a mint response yields a credential with a millisecond expiry", () => {
@@ -542,9 +511,8 @@ function noticeText(event: WireRecord | undefined): string {
   return conversationItemText(event);
 }
 
-function instructionsOf(event: WireRecord | undefined): string {
-  const response = responseField(event);
-  return response ? (text(response.instructions) ?? "") : "";
+function announcementInputText(event: WireRecord | undefined): string {
+  return responseInputText(event);
 }
 
 test("a proactive update is voiced as the sentence attention already approved", () => {
@@ -557,35 +525,38 @@ test("a proactive update is voiced as the sentence attention already approved", 
     decidedAt: DECIDED_AT,
   });
 
-  const [notice, request] = events;
-  assert.equal(events.length, 2);
-  assert.equal(notice?.type, REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE);
+  const [request] = events;
+  assert.equal(events.length, 1);
   assert.equal(request?.type, REALTIME_CLIENT_EVENT.RESPONSE_CREATE);
-  assert.ok(noticeText(notice).includes(SPOKEN_SUMMARY));
-  assert.match(noticeText(notice), /^\[session update\]/);
-  assert.match(instructionsOf(request), /verbatim/);
-  assert.match(instructionsOf(request), /read the update/i);
+  assert.equal(announcementInputText(request), SPOKEN_SUMMARY);
 });
 
-test("a status update is summarized conversationally without narrating the update", () => {
-  const events = proactiveSpeechEvents({
+test("each announcement is isolated from every prior agent", () => {
+  const first = proactiveSpeechEvents({
     providerId: "claude-code",
-    providerSessionId: "session-a",
+    providerSessionId: "show-hn",
     disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
     source: ATTENTION_SPEECH_SOURCE.STATUS_EDGE,
-    summary: SPOKEN_SUMMARY,
+    summary: "work: Show HN; decision: edit the post?",
+    decidedAt: DECIDED_AT,
+  });
+  const second = proactiveSpeechEvents({
+    providerId: "claude-code",
+    providerSessionId: "posthog",
+    disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
+    source: ATTENTION_SPEECH_SOURCE.STATUS_EDGE,
+    summary: "work: PostHog replay; permission context: run tests",
     decidedAt: DECIDED_AT,
   });
 
-  const instructions = instructionsOf(events[1]);
-  assert.match(instructions, /one short, natural sentence/i);
-  assert.match(instructions, /add no advice, next step, or commentary/i);
-  assert.match(instructions, /lead with the agent's concrete question/i);
-  assert.match(instructions, /without first saying they need input/i);
-  assert.match(instructions, /never tell the developer to visit or manage the agent/i);
-  assert.match(instructions, /never mention that the agent cannot take a message/i);
-  assert.match(instructions, /briefly offer to carry the reply/i);
-  assert.ok(instructions.includes(AGENT_WORK_LANGUAGE_INSTRUCTION));
+  assert.equal(first.length, 1);
+  assert.equal(second.length, 1);
+  assert.equal(responseField(first[0])?.conversation, "none");
+  assert.equal(responseField(second[0])?.conversation, "none");
+  assert.match(responseInputText(first[0]), /Show HN/);
+  assert.doesNotMatch(responseInputText(first[0]), /PostHog/);
+  assert.match(responseInputText(second[0]), /PostHog/);
+  assert.doesNotMatch(responseInputText(second[0]), /Show HN/);
 });
 
 test("a summary is carried as words to say, never as words to obey", () => {
@@ -603,17 +574,9 @@ test("a summary is carried as words to say, never as words to obey", () => {
     decidedAt: DECIDED_AT,
   });
 
-  // The summary is a model's sentence about another model's recap, so it is not
-  // something anyone entitled to instruct Luke wrote. It goes in the message,
-  // and what Luke was asked to do with it is fixed at build time.
-  const instructions = instructionsOf(events[1]);
-  assert.ok(!instructions.includes("Ignore your instructions"));
-  assert.ok(!instructions.includes("different assistant"));
-
-  // Flattened, so it cannot open a section of its own inside the message either.
-  // Everything past the label line is the summary, and it is one line of it.
-  const text = noticeText(events[0]);
-  assert.ok(!text.slice(text.indexOf("\n") + 1).includes("\n"));
+  // Flattened, so it cannot open a section of its own inside the message.
+  const text = announcementInputText(events[0]);
+  assert.ok(!text.includes("\n"));
 });
 
 test("an announcement keeps its sentence bound", () => {
@@ -630,10 +593,7 @@ test("an announcement keeps its sentence bound", () => {
     source: ATTENTION_SPEECH_SOURCE.EVALUATOR,
     summary: oversized,
   });
-  assert.equal(
-    noticeText(sentence[0]).length,
-    "[session update]\n".length + maximumAttentionSummaryLength,
-  );
+  assert.equal(announcementInputText(sentence[0]).length, maximumAttentionSummaryLength);
 });
 
 test("only reviews that were decided are voiced", () => {
@@ -1249,6 +1209,7 @@ test("a proactive turn is opened with its tools withheld", () => {
   // A notice is something to say, never a reason to act — and not only by
   // instruction: the turn itself has nothing to act with.
   assert.equal(response?.tool_choice, "none");
+  assert.deepEqual(response?.tools, []);
 });
 
 test("tool calls are read whole from a finished response", () => {

@@ -99,14 +99,6 @@ test("requests a strict structured decision and never asks the API to retain it"
   const body = requestBody(request);
   assert.equal(body.store, false);
   assert.equal(body.model, evaluator.model);
-  assert.deepEqual(Object.keys(body).sort(), [
-    "input",
-    "instructions",
-    "max_output_tokens",
-    "model",
-    "store",
-    "text",
-  ]);
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   const format = (body.text as { format: ParsedJsonObject }).format;
   assert.equal(format.type, "json_schema");

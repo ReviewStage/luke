@@ -25,6 +25,7 @@ function session(
   providerSessionId: string,
   status: SessionStatus,
   overrides: {
+    activity?: string;
     error?: string;
     repository?: string;
     branch?: string;
@@ -58,8 +59,9 @@ function session(
   if (overrides.realtimeVoiceLive !== undefined) {
     observation.realtimeVoiceLive = overrides.realtimeVoiceLive;
   }
-  if (overrides.error || overrides.repository || overrides.branch) {
+  if (overrides.activity || overrides.error || overrides.repository || overrides.branch) {
     const detail = observation.detail ?? {};
+    if (overrides.activity) detail.activity = overrides.activity;
     if (overrides.error) detail.error = overrides.error;
     if (overrides.repository) detail.repository = overrides.repository;
     if (overrides.branch) detail.branch = overrides.branch;
@@ -318,6 +320,7 @@ test("a permission hold is a waiting notice even without a question in the recap
   const notices = tracker.notices(
     [
       session(claude, "held", SESSION_STATUS.WAITING, {
+        activity: "Bash: pnpm test",
         recap: "Editing the shared session core.",
         holdingForDeveloper: true,
       }),
@@ -327,6 +330,7 @@ test("a permission hold is a waiting notice even without a question in the recap
 
   assert.equal(notices.length, 1);
   assert.equal(notices[0]?.status, SESSION_NOTICE_STATUS.WAITING);
+  assert.equal(notices[0]?.activity, "Bash: pnpm test");
 });
 
 test("a flapping status is noticed once per repeat window, then again after it", () => {

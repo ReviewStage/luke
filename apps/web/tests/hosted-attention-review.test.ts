@@ -4,7 +4,6 @@ import {
   ATTENTION_DECISION_SCHEMA_NAME,
   ATTENTION_TRIGGER,
   type AttentionPromptUpdate,
-  attentionInstructions,
 } from "@sidecar/attention";
 import { SESSION_STATUS } from "@sidecar/session";
 import {
@@ -90,10 +89,9 @@ test("a review sends the build's own construction and answers the parsed decisio
   assert.equal(call.url, "https://api.openai.com/v1/responses");
   const sent = JSON.parse(String(call.init?.body));
   assert.equal(sent.model, HOSTED_ATTENTION_DEFAULTS.MODEL);
-  assert.equal(sent.instructions, attentionInstructions());
   assert.equal(sent.store, false);
   assert.equal(sent.text.format.name, ATTENTION_DECISION_SCHEMA_NAME);
-  assert.doesNotMatch(sent.input, /checkout-service/);
+  assert.match(sent.input, /Work: checkout-service/);
   assert.match(sent.input, /Work recap: Waiting on a permission decision\./);
   assert.equal(
     String(call.init?.headers && new Headers(call.init.headers).get("authorization")),

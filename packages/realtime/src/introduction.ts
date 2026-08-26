@@ -1,3 +1,4 @@
+import { HUMAN_VOICE_INSTRUCTION } from "@sidecar/attention";
 import type { WireRecord } from "@sidecar/wire";
 import { type RealtimeSessionOptions, realtimeSessionConfig } from "./realtime-credentials.js";
 import { REALTIME_CLIENT_EVENT, REALTIME_SESSION_TYPE } from "./realtime-protocol.js";
@@ -25,6 +26,7 @@ const INTRODUCTION_INSTRUCTION_HEAD: string = [
   "watch their coding agents so they do not have to.",
   "",
   "How to speak:",
+  `- ${HUMAN_VOICE_INSTRUCTION}`,
   '- Speak as Luke in first person and address the user directly as "you".',
   "- Warm, unhurried, and brief: one or two short sentences per turn.",
   "- No greetings beyond the script's own, no filler, and never end a reply",

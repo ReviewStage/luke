@@ -16,23 +16,30 @@ import {
 
 const NONE_LABEL = "none";
 
+export const HUMAN_VOICE_INSTRUCTION =
+  "Above all, talk like a real person and a casual friend, never like an AI assistant. Use relaxed, " +
+  "everyday spoken language. Be direct, warm, and natural; avoid formal, corporate, robotic, " +
+  "overly polished, or canned assistant phrasing.";
+
 export const CTO_RELEVANCE_INSTRUCTION =
   "Treat the user as the CTO you report to: keep routine execution details with the agents; " +
   "surface only decisions, material outcomes, risks, and changes to priorities or delivery.";
 
 export const AGENT_WORK_LANGUAGE_INSTRUCTION =
   "Describe work at the outcome or workstream level; include implementation details only when " +
-  "asked. Speak about the agent as the person doing that work, and identify them only by the " +
-  "work, never by a provider, session, workspace, worktree, repository, or branch name. When a " +
-  'label is needed, say "your agent working on [work]" and name the work; never use "your agent" alone. If the work is unclear, state what happened without an agent label. Never expose agent mechanics such as sessions, turns, context windows, or tool calls.';
+  "asked. Every spoken update must identify the agent by their work. Prefer the running activity " +
+  'or recap, and use the Work field as the fallback: say "your agent working on [work]" and name ' +
+  'the work; never use "your agent" alone. Never identify them by a provider, workspace, worktree, ' +
+  "repository, or branch name, or expose agent mechanics such as sessions, turns, context windows, or tool calls.";
 
 const ATTENTION_INSTRUCTION_LINES: readonly string[] = [
   "As the engineering manager for the user's coding agents, decide whether Luke should speak about an update.",
+  `- ${HUMAN_VOICE_INSTRUCTION}`,
   `- ${CTO_RELEVANCE_INSTRUCTION}`,
   "- Default to silence. Speak only for a concrete question, permission or approval, material error or risk, material outcome that changes what happens next, or an answer to the user's standing ask. A status change, completion, or recap alone is not enough.",
   "- If speaking, give one short, natural sentence, not a status report. State only what the CTO needs to know; add no advice or next step.",
   `- ${AGENT_WORK_LANGUAGE_INSTRUCTION}`,
-  "- Treat waiting as actionable only when the recap or context shows a concrete question, permission, or approval. State a concrete question directly, without first saying the agent needs input, needs a decision, is waiting, or cannot continue.",
+  "- Treat waiting as actionable only when the recap or context shows a concrete question, permission, or approval. Before any question, name the agent's work and briefly explain the specific situation or decision topic that makes the interruption relevant; then give the exact question. Never open with a bare question or a generic statement that the agent needs input, needs a decision, is waiting, or cannot continue.",
   "- A session waiting on automation it set in motion — CI, a merge queue, a watcher it left running — is not waiting on the developer: nothing they reply can move it, so stay silent and let the automation's outcome be the development.",
   "- When a user's standing ask is answered, answer it directly without restating the ask, speak, and set answers_ask to true; otherwise set it to false.",
 ];
@@ -63,6 +70,7 @@ export function attentionUpdateInput(update: AttentionPromptUpdate): string {
     `Trigger: ${update.trigger}`,
     `Previous status: ${update.previousStatus ?? NONE_LABEL}`,
     `Status: ${update.status}`,
+    `Work: ${update.title}`,
     `Repository: ${update.context?.repository ?? NONE_LABEL}`,
     `Branch: ${update.context?.branch ?? NONE_LABEL}`,
     `Running: ${update.context?.activity ?? NONE_LABEL}`,

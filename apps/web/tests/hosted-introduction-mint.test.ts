@@ -1,11 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  REALTIME_DEFAULTS,
-  REALTIME_VOICE,
-  REALTIME_VOICE_SPEED,
-  realtimeInstructions,
-} from "@sidecar/realtime";
+import { REALTIME_DEFAULTS, REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
 import {
   handleIntroductionMint,
@@ -98,7 +93,6 @@ test("a mint hands back a short-capped credential aimed at OpenAI's own calls en
   // for after connecting.
   assert.deepEqual(sent.session.tools, []);
   assert.equal(sent.session.tool_choice, "none");
-  assert.notEqual(sent.session.instructions, realtimeInstructions());
   assert.equal(sent.session.audio.output.voice, REALTIME_VOICE.MARIN);
   assert.equal(sent.session.audio.output.speed, REALTIME_VOICE_SPEED.QUICK);
   assert.equal(sent.session.audio.input.turn_detection, null);

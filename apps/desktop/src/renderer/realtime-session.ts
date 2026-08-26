@@ -47,6 +47,7 @@ import {
   realtimeSessionSyncEvents,
   realtimeToolFamily,
   type ScheduledTimer,
+  SESSION_TOOL_KIND,
   sessionContextEvents,
   sessionContextText,
   sessionToolAction,
@@ -2527,7 +2528,14 @@ export class RealtimeVoiceSession {
       return { status: ACT_RESULT_STATUS.REJECTED, reason: "Acting on sessions is not available." };
     }
     try {
-      return await this.#options.carryAct({ id: call.name, act: action, armed });
+      const output = await this.#options.carryAct({ id: call.name, act: action, armed });
+      if (
+        action.kind === SESSION_TOOL_KIND.MESSAGE &&
+        output.status === ACT_RESULT_STATUS.ACCEPTED
+      ) {
+        return { outcome: "message-sent" };
+      }
+      return output;
     } catch (error) {
       return {
         status: ACT_RESULT_STATUS.REJECTED,
