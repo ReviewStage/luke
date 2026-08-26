@@ -1,0 +1,2 @@
+{"v":1,"agent":"claude-code","cli_version":"0.10.2","type":"user","ts":"2026-08-16T19:12:50.367Z","content":[{"id":"0dd169bf-d9cd-40f0-a2f2-09f4fc3f3260","text":"What's the date?"}]}
+{"v":1,"agent":"claude-code","cli_version":"0.10.2","type":"assistant","ts":"2026-08-16T19:12:52.495Z","id":"msg_011Ce6xatCVboaj7TFg5cCvR","input_tokens":2,"output_tokens":15,"content":[{"text":"Today's date is August 16, 2026.","type":"text"}]}
