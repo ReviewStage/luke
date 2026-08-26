@@ -12,6 +12,7 @@ import {
   type FaceMotion,
   SESSION_URGENCY,
   urgencyLabel,
+  WORDMARK_ART,
 } from "@sidecar/surface";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
@@ -60,6 +61,53 @@ const CONNECT_ATTEMPTS = 3;
 const CONNECT_RETRY_MS = 1_500;
 /** The bell leads the wake's end by the eyes' opening, not the head's settle. */
 const WAKE_BELL_LEAD_MS = 600;
+
+/**
+ * The signature reveal's layout, as fractions of the drawn face's size: the
+ * face element is the one sized thing on the dark stage, so the letters' box
+ * and the lockup's centring shift both scale from it, in CSS, whatever the
+ * viewport's clamp resolves to. The lockup units come from the same generated
+ * table the face is drawn from.
+ */
+const WORDMARK_FRACTION = {
+  left:
+    (WORDMARK_ART.LETTERS_BOX.X - WORDMARK_ART.FACE_VIEW.CENTER_X) / WORDMARK_ART.FACE_VIEW.SIZE,
+  top: (WORDMARK_ART.LETTERS_BOX.Y - WORDMARK_ART.FACE_VIEW.CENTER_Y) / WORDMARK_ART.FACE_VIEW.SIZE,
+  width: WORDMARK_ART.LETTERS_BOX.WIDTH / WORDMARK_ART.FACE_VIEW.SIZE,
+  height: WORDMARK_ART.LETTERS_BOX.HEIGHT / WORDMARK_ART.FACE_VIEW.SIZE,
+  shift: (WORDMARK_ART.CENTER_X - WORDMARK_ART.FACE_VIEW.CENTER_X) / WORDMARK_ART.FACE_VIEW.SIZE,
+} as const;
+
+/**
+ * The signature's pen clock, over the wake gesture (luke-wake, 2.8s cycle):
+ * the pen touches down once the eyes are open, spends the write time across
+ * the strokes — each taking its share of the written length, a constant-speed
+ * pen — and lifts briefly between strokes, a little longer between letters,
+ * finishing as the wake hands over to "Hi! I'm Luke."
+ */
+const SIGNATURE_CLOCK = {
+  PEN_DOWN_S: 1.5,
+  WRITE_S: 1.4,
+  LIFT_S: 0.05,
+  CARRY_S: 0.1,
+} as const;
+
+function signatureStrokes(): readonly { d: string; delayS: number; drawS: number }[] {
+  const strokes: { d: string; delayS: number; drawS: number }[] = [];
+  let at = SIGNATURE_CLOCK.PEN_DOWN_S;
+  WORDMARK_ART.LETTERS.forEach((letter, index) => {
+    if (index > 0) at += SIGNATURE_CLOCK.CARRY_S - SIGNATURE_CLOCK.LIFT_S;
+    for (const stroke of letter) {
+      const drawS = SIGNATURE_CLOCK.WRITE_S * stroke.WEIGHT;
+      strokes.push({ d: stroke.D, delayS: at, drawS });
+      at += drawS + SIGNATURE_CLOCK.LIFT_S;
+    }
+  });
+  return strokes;
+}
+
+/** Every stroke of U-K-E in writing order, with its own delay and draw time. */
+const SIGNATURE_STROKES = signatureStrokes();
 
 /**
  * The rows the introduction stages are pictures of sessions, not handles to
@@ -723,6 +771,7 @@ export function IntroductionTakeover({
       data-settled={String(surfaceSettled)}
       data-lifted={String(rows.length > 0)}
       data-notch={String(bootstrap.display.notch.hasNotch)}
+      data-signature={String(!reducedMotion)}
       {...(landed ? { "data-presentation": presentation } : undefined)}
       style={{
         ...cssCustomProperties({
@@ -730,6 +779,11 @@ export function IntroductionTakeover({
           "--notch-housing-width": `${bootstrap.display.notch.housingWidth}px`,
           "--panel-height": `${panelHeight}px`,
           ...(slotHeight !== undefined ? { "--slot-height": `${slotHeight}px` } : undefined),
+          "--introduction-wordmark-left": WORDMARK_FRACTION.left,
+          "--introduction-wordmark-top": WORDMARK_FRACTION.top,
+          "--introduction-wordmark-width": WORDMARK_FRACTION.width,
+          "--introduction-wordmark-height": WORDMARK_FRACTION.height,
+          "--introduction-wordmark-shift": WORDMARK_FRACTION.shift,
         }),
         ...flightStyle,
       }}
@@ -830,18 +884,66 @@ export function IntroductionTakeover({
           exact spot the wings' face takes over. Gone once the wings stand. */}
       {landed ? null : (
         <div className="introduction-face-anchor">
-          {/* The dark's halo, breathing under him and gone with the veil. */}
+          {/* The dark's halo, breathing at the stage's centre and gone with
+              the veil. It halos the lockup rather than following the face:
+              the centring shift below belongs to the word, not to the dark. */}
           <div className="introduction-glow" aria-hidden="true" />
-          <span ref={faceRef} className="introduction-face">
-            <LukeFace key={face.play} motion={face.motion} repeat={face.repeat} />
-          </span>
-          {/* His voice made visible while he speaks on the dark stage — the
-              same meter the wings hold once he lands, at the stage's scale. */}
-          {!flown && meterAnalyser ? (
-            <span className="introduction-face-meter" aria-hidden="true">
-              <Waveform analyser={meterAnalyser} voice={WAVEFORM_VOICE.LUKE} voiceActive />
+          <div className="introduction-lockup">
+            <span ref={faceRef} className="introduction-face">
+              <LukeFace key={face.play} motion={face.motion} repeat={face.repeat} />
             </span>
-          ) : null}
+            {/* The signature reveal: the wordmark's letters, from the same
+              generated table the face is drawn from, standing where the
+              lockup puts them beside the face-L. They draw themselves on as
+              the wake's companion in introduction.css and dissolve when the
+              rows arrive to take the stage. The strokes are a mask, not the
+              ink: the panel's ink carries alpha, and translucent strokes
+              painted one by one would double up where they overlap — the K's
+              joint, the E's corners — so they draw as an opaque matte and
+              the ink is laid over their union exactly once. */}
+            {beat === INTRODUCTION_BEAT.DARK ? null : (
+              <svg
+                className="introduction-wordmark"
+                viewBox={`${WORDMARK_ART.LETTERS_BOX.X} ${WORDMARK_ART.LETTERS_BOX.Y} ${WORDMARK_ART.LETTERS_BOX.WIDTH} ${WORDMARK_ART.LETTERS_BOX.HEIGHT}`}
+                aria-hidden="true"
+                focusable="false"
+              >
+                <mask id="introduction-wordmark-strokes">
+                  {SIGNATURE_STROKES.map((penStroke) => (
+                    <path
+                      key={penStroke.d}
+                      d={penStroke.d}
+                      pathLength={1}
+                      fill="none"
+                      stroke="#fff"
+                      strokeWidth={WORDMARK_ART.STROKE_WIDTH}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      style={cssCustomProperties({
+                        "--introduction-stroke-delay": `${penStroke.delayS}s`,
+                        "--introduction-stroke-time": `${penStroke.drawS}s`,
+                      })}
+                    />
+                  ))}
+                </mask>
+                <rect
+                  x={WORDMARK_ART.LETTERS_BOX.X}
+                  y={WORDMARK_ART.LETTERS_BOX.Y}
+                  width={WORDMARK_ART.LETTERS_BOX.WIDTH}
+                  height={WORDMARK_ART.LETTERS_BOX.HEIGHT}
+                  fill="currentColor"
+                  mask="url(#introduction-wordmark-strokes)"
+                />
+              </svg>
+            )}
+            {/* His voice made visible while he speaks on the dark stage — the
+              same meter the wings hold once he lands, at the stage's scale. */}
+            {!flown && meterAnalyser ? (
+              <span className="introduction-face-meter" aria-hidden="true">
+                <Waveform analyser={meterAnalyser} voice={WAVEFORM_VOICE.LUKE} voiceActive />
+              </span>
+            ) : null}
+          </div>
         </div>
       )}
       {showCaptions ? (
