@@ -182,6 +182,8 @@ const CONDUCTOR_FIELD = {
   MODEL: "model",
   NAME: "name",
   RESOLVED_MODEL: "resolvedModel",
+  /** The workspace listing's own word for where each workspace stands. */
+  STATE: "state",
   STATUS: "status",
   UPDATED_AT: "updatedAt",
   USER_ID: "userId",
@@ -308,9 +310,10 @@ const CONDUCTOR_WORKSPACE_ACTIVITY = {
 
 /**
  * The lifecycle states of a workspace no longer open. Conductor's workspace
- * listing keeps a filed-away workspace in the page without marking it — the
- * lifecycle endpoint is the one place the archive shows — so these are what
- * the roster filters on.
+ * listing keeps a filed-away workspace in the page, but marks it: the
+ * listing's `state` and the lifecycle endpoint's `status` document the same
+ * value set, and the roster filters on these states wherever either read
+ * reports one.
  */
 const CONDUCTOR_RETIRED_WORKSPACE_STATUSES: ReadonlySet<ConductorWorkspaceStatus> = new Set([
   CONDUCTOR_WORKSPACE_STATUS.ARCHIVED,
@@ -590,15 +593,16 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
       .filter((workspace) => workspace.creatorId === userId)
       .sort((first, second) => second.lastActivityAt - first.lastActivityAt);
 
-    // Conductor's listing keeps a filed-away workspace in the page without
-    // marking it — only the lifecycle endpoint says it was archived — so the
-    // lifecycle reads come before the session listings, one per listed
-    // workspace, and a workspace standing archived or deleted is dropped
-    // here, before its chats are ever asked for. This is what makes a press
-    // of the archive control actually clear the rows it acted on. A
-    // lifecycle that could not be read keeps its workspace: a transient
-    // failure costs that workspace's activity words and failure message,
-    // never its rows.
+    // The listing already dropped the workspaces it marked archived or
+    // deleted, so these lifecycle reads cover only the workspaces still
+    // standing: they carry each one's activity words and failure message,
+    // and they catch a filing-away the listing has not caught up with — a
+    // workspace standing archived or deleted here is dropped all the same,
+    // before its chats are ever asked for, which is what makes a press of
+    // the archive control clear the rows it acted on within the pass that
+    // follows it. A lifecycle that could not be read keeps its workspace: a
+    // transient failure costs that workspace's activity words and failure
+    // message, never its rows.
     const workspaceLifecycles = new Map(
       (
         await Promise.all(
@@ -726,11 +730,20 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
           timestampFromRecord(record, CONDUCTOR_FIELD.LAST_ACTIVITY_AT) ??
           timestampFromRecord(record, CONDUCTOR_FIELD.CREATED_AT);
         if (!id || lastActivityAt === undefined) return undefined;
-        // Conductor's listing does not mark a filed-away workspace today —
-        // the lifecycle read in the collect pass is what drops those — but a
-        // record that does carry an archive timestamp is honored without
-        // waiting for that read.
-        if (timestampFromRecord(record, CONDUCTOR_FIELD.ARCHIVED_AT) !== undefined) {
+        // The listing marks a filed-away workspace with its own state, so it
+        // is dropped here, before a lifecycle or session read ever spends a
+        // request on it. This is also what keeps a press of the archive
+        // control durable: judged by the lifecycle read alone, a page of
+        // long-archived workspaces stood or fell with dozens of per-workspace
+        // reads every pass, and any one of them failing resurrected a
+        // workspace the user had already filed away. A state this build does
+        // not know is kept, not dropped — the lifecycle read still decides
+        // for it, as it did when the listing marked nothing.
+        const state = knownValue(
+          CONDUCTOR_WORKSPACE_STATUS,
+          textFromRecord(record, CONDUCTOR_FIELD.STATE),
+        );
+        if (state && CONDUCTOR_RETIRED_WORKSPACE_STATUSES.has(state)) {
           return undefined;
         }
         const creatorId = textFromRecord(record, CONDUCTOR_FIELD.CREATOR_ID);
