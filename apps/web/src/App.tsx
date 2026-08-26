@@ -1,4 +1,3 @@
-import { AboutSection } from "./AboutSection";
 import { captureSiteEvent, SITE_EVENT } from "./analytics";
 import { NotchMock } from "./NotchMock";
 import { DMG_URL, GitHubMark, REPOSITORY_URL, SiteFooter, SiteHeader } from "./SiteChrome";
@@ -48,8 +47,6 @@ export function App(): React.JSX.Element {
 
           <NotchMock />
         </section>
-
-        <AboutSection />
       </main>
 
       <SiteFooter />

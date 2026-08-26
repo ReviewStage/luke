@@ -1,3 +1,5 @@
+import { SiteFooter, SiteHeader } from "./SiteChrome";
+
 type Founder = {
   readonly name: string;
   readonly role: string;
@@ -32,25 +34,26 @@ const FOUNDERS: readonly Founder[] = [
   },
 ];
 
-/** Who is behind the app, at the foot of the landing page's one column. */
-export function AboutSection(): React.JSX.Element {
+/** Who is behind the app: a page of its own, linked from the header and footer. */
+export function AboutPage(): React.JSX.Element {
   return (
-    <section className="hairline pt-12 pb-16" id="about">
-      <h2 className="m-0 text-xl font-semibold tracking-[-0.01em]">About</h2>
-      <p className="mt-4 mb-0 max-w-[34rem] text-base text-pretty text-muted-foreground">
-        We're two engineers who kept losing track of the coding agents we had running. We built Luke
-        so the sessions that need us say so, and the ones that don't stay out of the way. We run him
-        beside our own work every day.
-      </p>
+    <>
+      <SiteHeader />
 
-      {/* Two up where the 700px column still leaves each card its measure, and
-          stacked below that rather than squeezed beside a photo. */}
-      <div className="mt-10 grid gap-8 min-[560px]:grid-cols-2 min-[560px]:gap-6">
-        {FOUNDERS.map((founder) => (
-          <FounderCard founder={founder} key={founder.name} />
-        ))}
-      </div>
-    </section>
+      <main className="shell pt-12 pb-16">
+        <h1 className="m-0 text-[1.75rem] leading-[1.2] font-semibold tracking-[-0.02em]">About</h1>
+
+        {/* Two up where the 700px column still leaves each card its measure, and
+            stacked below that rather than squeezed beside a photo. */}
+        <div className="mt-10 grid gap-8 min-[560px]:grid-cols-2 min-[560px]:gap-6">
+          {FOUNDERS.map((founder) => (
+            <FounderCard founder={founder} key={founder.name} />
+          ))}
+        </div>
+      </main>
+
+      <SiteFooter />
+    </>
   );
 }
 
