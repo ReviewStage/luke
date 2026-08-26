@@ -862,46 +862,58 @@ test("an empty roster says so rather than implying Luke sees nothing at all", ()
   assert.match(sessionContextText([]), /No coding-agent sessions/);
 });
 
-test("the roster carries how long ago each session was last seen, measured against the supplied clock", () => {
+test("the roster carries how long ago each session was last seen, in coarse buckets", () => {
   const minute = 60_000;
+  const hour = 60 * minute;
   const now = DECIDED_AT;
+  const rosterAt = (elapsed: number): string => {
+    const session = normalizeSession(
+      { id: "claude-code", displayName: "Claude Code" },
+      {
+        providerSessionId: "session-a",
+        title: "Bootstrap the desktop shell",
+        status: SESSION_STATUS.WORKING,
+        observedAt: now - elapsed,
+      },
+    );
+    return sessionContextText([session], [], now);
+  };
+
+  assert.match(rosterAt(30_000), /updated just now/);
+  assert.match(rosterAt(4 * minute), /updated just now/);
+  assert.match(rosterAt(30 * minute), /updated minutes ago/);
+  assert.match(rosterAt(90 * minute), /updated about an hour ago/);
+  assert.match(rosterAt(5 * hour), /updated hours ago/);
+  assert.match(rosterAt(3 * 24 * hour), /updated a day or more ago/);
+
+  // Provider clock skew (observedAt ahead of now) also reads as "just now".
+  assert.match(rosterAt(-minute), /updated just now/);
+});
+
+test("the roster text holds still across clock ticks inside one age bucket and moves at its edge", () => {
+  const minute = 60_000;
+  const observedAt = DECIDED_AT;
   const session = normalizeSession(
     { id: "claude-code", displayName: "Claude Code" },
     {
       providerSessionId: "session-a",
       title: "Bootstrap the desktop shell",
       status: SESSION_STATUS.WORKING,
-      observedAt: now - 4 * minute,
+      observedAt,
     },
   );
 
-  const text = sessionContextText([session], [], now);
-
-  assert.match(text, /updated 4 minutes ago/);
-
-  // Under a minute reads as "just now".
-  const fresh = normalizeSession(
-    { id: "claude-code", displayName: "Claude Code" },
-    {
-      providerSessionId: "session-b",
-      title: "Fresh session",
-      status: SESSION_STATUS.WORKING,
-      observedAt: now - 30_000,
-    },
+  // Byte-identical, not merely similar: the roster is re-sent only when its
+  // text changes, and text that moved with every minute tick would invalidate
+  // the conversation's cached prefix with nothing new to say.
+  assert.equal(
+    sessionContextText([session], [], observedAt + 10 * minute),
+    sessionContextText([session], [], observedAt + 45 * minute),
   );
-  assert.match(sessionContextText([fresh], [], now), /updated just now/);
-
-  // Provider clock skew (observedAt ahead of now) also reads as "just now".
-  const ahead = normalizeSession(
-    { id: "claude-code", displayName: "Claude Code" },
-    {
-      providerSessionId: "session-c",
-      title: "Clock-skewed session",
-      status: SESSION_STATUS.WORKING,
-      observedAt: now + minute,
-    },
+  assert.notEqual(
+    sessionContextText([session], [], observedAt + 45 * minute),
+    sessionContextText([session], [], observedAt + 65 * minute),
   );
-  assert.match(sessionContextText([ahead], [], now), /updated just now/);
 });
 
 test("the roster identifies the most recent session and most recent openable chat per provider", () => {
