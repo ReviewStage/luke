@@ -15,6 +15,7 @@ test("the happy path walks every beat in order", () => {
     [INTRODUCTION_EVENT.LINES_DONE, INTRODUCTION_BEAT.FLIGHT],
     [INTRODUCTION_EVENT.FLIGHT_SETTLED, INTRODUCTION_BEAT.TOUR],
     [INTRODUCTION_EVENT.LINES_DONE, INTRODUCTION_BEAT.MICROPHONE],
+    [INTRODUCTION_EVENT.LINES_DONE, INTRODUCTION_BEAT.MICROPHONE_DIALOG],
     [INTRODUCTION_EVENT.MICROPHONE_GRANTED, INTRODUCTION_BEAT.PRACTICE],
     [INTRODUCTION_EVENT.PRACTICE_DONE, INTRODUCTION_BEAT.SIGN_OFF],
     [INTRODUCTION_EVENT.LINES_DONE, INTRODUCTION_BEAT.STAND_DOWN],
@@ -27,7 +28,28 @@ test("the happy path walks every beat in order", () => {
   }
 });
 
-test("a denied microphone walks past practice to the sign-off", () => {
+test("a granted microphone needs no dialog and walks straight to practice", () => {
+  assert.equal(
+    nextIntroductionBeat(INTRODUCTION_BEAT.MICROPHONE, INTRODUCTION_EVENT.MICROPHONE_GRANTED),
+    INTRODUCTION_BEAT.PRACTICE,
+  );
+});
+
+test("a refused dialog is answered kindly, then walks past practice to the sign-off", () => {
+  assert.equal(
+    nextIntroductionBeat(INTRODUCTION_BEAT.MICROPHONE_DIALOG, INTRODUCTION_EVENT.MICROPHONE_DENIED),
+    INTRODUCTION_BEAT.MICROPHONE_DENIED,
+  );
+  assert.equal(
+    nextIntroductionBeat(
+      INTRODUCTION_BEAT.MICROPHONE_DENIED,
+      INTRODUCTION_EVENT.MICROPHONE_DENIED_SAID,
+    ),
+    INTRODUCTION_BEAT.SIGN_OFF,
+  );
+});
+
+test("a refusal standing before Luke ever asked skips the dialog and the answer", () => {
   assert.equal(
     nextIntroductionBeat(INTRODUCTION_BEAT.MICROPHONE, INTRODUCTION_EVENT.MICROPHONE_DENIED_SAID),
     INTRODUCTION_BEAT.SIGN_OFF,
@@ -72,6 +94,10 @@ test("a voice that failed before the flight glides; one that died after stands d
   );
   assert.equal(
     nextIntroductionBeat(INTRODUCTION_BEAT.TOUR, INTRODUCTION_EVENT.VOICE_FAILED),
+    INTRODUCTION_BEAT.STAND_DOWN,
+  );
+  assert.equal(
+    nextIntroductionBeat(INTRODUCTION_BEAT.MICROPHONE_DIALOG, INTRODUCTION_EVENT.VOICE_FAILED),
     INTRODUCTION_BEAT.STAND_DOWN,
   );
   assert.equal(
