@@ -15,6 +15,8 @@ import {
   CALENDARS_USAGE_KEYS,
   MACOS_DEPLOYMENT_TARGET,
   MICROPHONE_USAGE_DESCRIPTION,
+  PROTECTED_FOLDER_USAGE_DESCRIPTION,
+  PROTECTED_FOLDER_USAGE_KEYS,
   resolveSigningMode,
   SIGNING_MODE,
 } from "./package-config.mjs";
@@ -111,6 +113,9 @@ export function createElectronBuilderConfig(env = process.env) {
         NSAppleEventsUsageDescription: APPLE_EVENTS_USAGE_DESCRIPTION,
         ...Object.fromEntries(
           CALENDARS_USAGE_KEYS.map((key) => [key, CALENDARS_USAGE_DESCRIPTION]),
+        ),
+        ...Object.fromEntries(
+          PROTECTED_FOLDER_USAGE_KEYS.map((key) => [key, PROTECTED_FOLDER_USAGE_DESCRIPTION]),
         ),
         NSMicrophoneUsageDescription: MICROPHONE_USAGE_DESCRIPTION,
         NSPrefersDisplaySafeAreaCompatibilityMode: false,

@@ -35,6 +35,24 @@ export const CALENDARS_USAGE_KEYS = [
   "NSCalendarsUsageDescription",
 ];
 
+// The sentence macOS shows when Luke first touches a repository inside a
+// protected folder, reading a session's git branch from its own `.git` HEAD.
+// Without it the dialog gives no reason at all. It has to say what is read
+// there, and what is not.
+export const PROTECTED_FOLDER_USAGE_DESCRIPTION =
+  "Luke reads each coding session's current git branch from its repository, and nothing else in this folder.";
+
+/**
+ * One key per protected folder macOS guards this way. A repository lives
+ * wherever the developer cloned it, so every folder the dialog can name
+ * carries the same sentence.
+ */
+export const PROTECTED_FOLDER_USAGE_KEYS = [
+  "NSDocumentsFolderUsageDescription",
+  "NSDesktopFolderUsageDescription",
+  "NSDownloadsFolderUsageDescription",
+];
+
 /**
  * The Info.plist of the calendar helper's own minimal bundle. The helper
  * answers to TCC as itself, so this plist is what the consent dialog is

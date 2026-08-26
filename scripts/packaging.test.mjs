@@ -24,6 +24,8 @@ import {
   MACOS_DEPLOYMENT_TARGET,
   MICROPHONE_USAGE_DESCRIPTION,
   PACKAGED_ARCHITECTURE,
+  PROTECTED_FOLDER_USAGE_DESCRIPTION,
+  PROTECTED_FOLDER_USAGE_KEYS,
   resolveSigningMode,
   SIGNING_MODE,
   SWIFT_TARGET_TRIPLE,
@@ -258,6 +260,23 @@ test("packaging includes the approved Apple Events description", () => {
     "Luke turns Music and Spotify down while you talk, and back up afterwards",
   );
   assert.equal(config.mac.extendInfo.NSAppleEventsUsageDescription, APPLE_EVENTS_USAGE_DESCRIPTION);
+});
+
+test("packaging includes the approved protected-folder description under every folder's key", () => {
+  const config = builderConfig();
+
+  assert.deepEqual(PROTECTED_FOLDER_USAGE_KEYS, [
+    "NSDocumentsFolderUsageDescription",
+    "NSDesktopFolderUsageDescription",
+    "NSDownloadsFolderUsageDescription",
+  ]);
+  for (const key of PROTECTED_FOLDER_USAGE_KEYS) {
+    assert.equal(
+      config.mac.extendInfo[key],
+      "Luke reads each coding session's current git branch from its repository, and nothing else in this folder.",
+    );
+    assert.equal(config.mac.extendInfo[key], PROTECTED_FOLDER_USAGE_DESCRIPTION);
+  }
 });
 
 test("packaging uses the generated Luke application icon", () => {
