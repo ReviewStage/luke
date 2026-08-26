@@ -13,8 +13,8 @@
 </p>
 
 <p align="center">
-  <strong>Your AI engineering manager.</strong><br>
-  A macOS app that watches your coding agents and keeps you updated.
+  <strong>An engineering manager for your coding agents.</strong><br>
+  A macOS voice agent that keeps you in the loop with your agents.
 </p>
 
 <p align="center">
