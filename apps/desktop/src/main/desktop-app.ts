@@ -12,6 +12,7 @@ import {
   type ProductDiagnosticKind,
   ProductEventSender,
   productSessionCountBucket,
+  productSignInAge,
   type RecordProductEvent,
 } from "@sidecar/analytics";
 import { AttentionRequestRegistry } from "@sidecar/attention";
@@ -123,6 +124,15 @@ import {
 import { VOICE_SOURCE_COUNTED_AS } from "#shared/product-vocabulary";
 import { buildCarriesDeveloperIdSigning, resolveAppName } from "./app-identity";
 import { AppleCalendarReader } from "./apple-calendar";
+import {
+  ARRIVAL_STATE_FILE,
+  type ArrivalState,
+  arrivalBeatOwed,
+  arrivalRecord,
+  arrivalStateFromStored,
+  countsFirstAnnouncement,
+  shouldBackfillArrivalSettled,
+} from "./arrival-flow";
 import {
   INTRODUCTION_FADE_MS,
   INTRODUCTION_HANDOFF_READY_MS,
@@ -284,6 +294,13 @@ const accountSession = new AccountSessionManager({
     // The transition alone: which provider signed in is already on the person
     // from the browser's own sign-in, so nothing about it needs to travel again.
     if (signedIn && !wasSignedIn) productEvents.record(PRODUCT_EVENT.ACCOUNT_SIGN_IN, {});
+    // The first sign-in ever observed is the arrival the spoken beat
+    // addresses; the capability start that follows is what attempts to say
+    // it. A record already on file — settled, backfilled, or still owed —
+    // keeps its history: signing out and back in is not arriving twice.
+    if (signedIn && !wasSignedIn && arrivalState === undefined) {
+      writeArrivalState({ signedInAt: new Date().toISOString() });
+    }
   },
 });
 const observationHooks = new ObservationHookRegistry(() => app.getPath("userData"));
@@ -686,6 +703,102 @@ function markIntroductionComplete(): void {
 }
 
 /**
+ * The arrival record as this run knows it, loaded once at launch and written
+ * through `writeArrivalState` from there on. Undefined is "no record", which
+ * only a launch may turn into a backfill and only a sign-in edge into an
+ * observed arrival.
+ */
+let arrivalState: ArrivalState | undefined;
+const arrivalStatePath = () => path.join(app.getPath("userData"), ARRIVAL_STATE_FILE);
+
+function arrivalStateFromDisk(): ArrivalState | undefined {
+  try {
+    return arrivalStateFromStored(fs.readFileSync(arrivalStatePath(), "utf8"));
+  } catch {
+    return undefined;
+  }
+}
+
+function writeArrivalState(state: ArrivalState): void {
+  arrivalState = state;
+  try {
+    fs.writeFileSync(arrivalStatePath(), arrivalRecord(state));
+  } catch (error) {
+    process.stderr.write(
+      `Could not persist the arrival record: ${error instanceof Error ? error.message : String(error)}\n`,
+    );
+  }
+}
+
+/** Whether an attempt to speak the arrival beat is already under way. */
+let arrivalBeatSpeaking = false;
+
+/**
+ * Whether this run has already sent the trigger. One per run, however many
+ * capability starts a run has: the record only settles when the reply
+ * begins, so a second trigger while the first still sits queued would stack
+ * two beats in the announcer's queue and speak the arrival twice. A trigger
+ * that went nowhere is the next launch's to retry.
+ */
+let arrivalBeatTriggered = false;
+
+/**
+ * Speaks the one-time arrival beat, if it is owed and this moment can carry
+ * it. The trigger is deterministic on every side — the record the sign-in
+ * edge wrote, never anything a model decided — and what is sent is only the
+ * fact of the beat: the script is fixed by the build in the realtime
+ * vocabulary, and its observed values are the renderer's own to read from
+ * the roster it already draws. Sending settles nothing: the trigger can be
+ * lost — a renderer still loading, the announcer's own quiet or age-out
+ * dropping the beat unspoken — so the record settles only when the voice
+ * window reports the reply actually began, and everything short of that
+ * leaves the beat owed for the next signed-in launch, because a moment
+ * nobody heard was not the one moment this plays. The first observation
+ * pass is awaited first, so the beat's suggestion can name a session the
+ * developer actually has running.
+ */
+async function speakArrivalBeat(): Promise<void> {
+  if (arrivalBeatSpeaking || arrivalBeatTriggered) return;
+  if (!runMode.requiresAccount || account.status !== ACCOUNT_STATUS.SIGNED_IN) return;
+  if (!arrivalBeatOwed(arrivalState)) return;
+  if (!voiceCapabilities.realtimeCredentials) return;
+  arrivalBeatSpeaking = true;
+  try {
+    await sessionObservationLoop.refresh().catch(() => undefined);
+    if (account.status !== ACCOUNT_STATUS.SIGNED_IN || !arrivalBeatOwed(arrivalState)) return;
+    // The calendar may not have been read yet this early, so this check can
+    // miss a meeting; the announcer's own quiet still holds the beat there,
+    // and a beat it drops stays owed rather than lost.
+    if (await announcementsQuietNow(Date.now())) return;
+    const host = panels.voiceHost();
+    if (!host) return;
+    host.webContents.send(channels.onArrivalSpeech, undefined);
+    arrivalBeatTriggered = true;
+  } finally {
+    arrivalBeatSpeaking = false;
+  }
+}
+
+/**
+ * Remembers that Luke has now announced to this account at all, and counts
+ * the time from the first sign-in to this moment — as a rung, never a
+ * duration. A record whose sign-in instant does not parse settles without
+ * counting: a broken timestamp must not travel as a made-up rung.
+ */
+function markFirstAnnouncementSpoken(): void {
+  if (!countsFirstAnnouncement(arrivalState)) return;
+  const state = arrivalState ?? {};
+  const now = Date.now();
+  const signedInAtMs = state.signedInAt !== undefined ? Date.parse(state.signedInAt) : Number.NaN;
+  if (Number.isFinite(signedInAtMs)) {
+    productEvents.record(PRODUCT_EVENT.VOICE_FIRST_ANNOUNCEMENT, {
+      sign_in_age: productSignInAge(now - signedInAtMs),
+    });
+  }
+  writeArrivalState({ ...state, firstAnnouncementAt: new Date(now).toISOString() });
+}
+
+/**
  * The introduction's ordinary end: the sign-off has been spoken, so the real
  * signed-out panel takes over exactly where the takeover's drawing stands —
  * the gate, its hover collapse, and the account landing are all the ordinary
@@ -989,6 +1102,10 @@ async function startAccountCapabilities(): Promise<void> {
   startSessionObservation();
   startCalendarObservation();
   observationSupervisor.setEnabled(true);
+  // After the credential and the observation it wants to name a session
+  // from; unawaited because the sign-in that started these capabilities must
+  // not wait on an observation pass to land.
+  void speakArrivalBeat();
 }
 
 async function stopAccountCapabilities(): Promise<void> {
@@ -1202,6 +1319,11 @@ function registerIpc(): void {
       };
     },
   );
+  registerHandler(BRIDGE.completeArrivalBeat, () => {
+    // A report that raced a settle already on file overwrites nothing.
+    if (!arrivalBeatOwed(arrivalState)) return;
+    writeArrivalState({ ...(arrivalState ?? {}), settledAt: new Date().toISOString() });
+  });
   registerHandler(BRIDGE.beginSupersetSignIn, async () => {
     recordProductEvent(PRODUCT_EVENT.SUPERSET_ACT, {
       superset_act: PRODUCT_SUPERSET_ACT.SIGN_IN_START,
@@ -1717,7 +1839,11 @@ async function reviewSessionAttention(generation: number): Promise<void> {
         // Spoken once, by the one window that holds the voice: every display
         // already shows the same session as needing attention, and the surface
         // that speaks is the one that draws the announcement's pressable notice.
-        panels.voiceHost()?.webContents.send(channels.onAttentionSpeech, sendable);
+        const host = panels.voiceHost();
+        if (host) {
+          host.webContents.send(channels.onAttentionSpeech, sendable);
+          markFirstAnnouncementSpoken();
+        }
       }
     }
   } catch (error) {
@@ -1773,7 +1899,11 @@ async function announceSessionNotices(sessions: readonly Session[]): Promise<voi
     return item ? [item] : [];
   });
   countSpokenAnnouncements(immediateNotices);
-  panels.voiceHost()?.webContents.send(channels.onAttentionSpeech, speech);
+  const host = panels.voiceHost();
+  if (host) {
+    host.webContents.send(channels.onAttentionSpeech, speech);
+    markFirstAnnouncementSpoken();
+  }
 }
 
 /**
@@ -1935,7 +2065,11 @@ async function releaseHeldNotices(): Promise<void> {
   ];
   if (speech.length === 0) return;
   countSpokenAnnouncements(released);
-  panels.voiceHost()?.webContents.send(channels.onAttentionSpeech, speech);
+  const host = panels.voiceHost();
+  if (host) {
+    host.webContents.send(channels.onAttentionSpeech, speech);
+    markFirstAnnouncementSpoken();
+  }
 }
 
 /**
@@ -2328,6 +2462,19 @@ export function startDesktopApp(): void {
       // from before the introduction existed — writes it now, so a later
       // sign-out lands on the ordinary gate instead of a first meeting.
       if (shouldBackfillIntroductionCompletion(introductionInput)) markIntroductionComplete();
+      arrivalState = arrivalStateFromDisk();
+      // A signed-in install with no arrival record predates the beat: its
+      // sign-in was never observed, so it is settled now rather than greeted
+      // as an arrival on some later sign-in months in.
+      if (
+        shouldBackfillArrivalSettled({
+          requiresAccount: runMode.requiresAccount,
+          signedIn: introductionInput.signedIn,
+          hasRecord: arrivalState !== undefined,
+        })
+      ) {
+        writeArrivalState({ settledAt: new Date().toISOString() });
+      }
       await panels.refreshGeometry();
       registerIpc();
       // Resolving settings touches the filesystem, and the OS keychain only for a
@@ -2436,6 +2583,10 @@ export function startDesktopApp(): void {
       startSessionObservation();
       startCalendarObservation();
       observationSupervisor.setEnabled(true);
+      // A beat a previous launch could not speak — signed in, but voiceless
+      // or quieted at the moment — is still owed, and this launch may be the
+      // one that can say it.
+      void speakArrivalBeat();
       // Reconcile in the background. Only an explicit invalid_grant removes the
       // stored account; network failures and service outages leave it active.
       void accountSession.refreshOnce();

@@ -612,6 +612,19 @@ export const BRIDGE = {
     args: args<[FeedbackKind]>((v) => v.length === 1 && isFeedbackKind(v[0])),
     result: result<void>(),
   }),
+  /**
+   * The voice window reporting that the arrival beat's reply actually began,
+   * which is the one thing that settles the owed record. A trigger the
+   * renderer never heard, or a beat the announcer dropped unspoken — a
+   * meeting's quiet, a call that would not open, news gone stale — settles
+   * nothing, so the next signed-in launch speaks it instead.
+   */
+  completeArrivalBeat: entry({
+    kind: "invoke",
+    channel: "app:complete-arrival-beat",
+    args: noArgs,
+    result: result<void>(),
+  }),
   focusPanel: entry({ kind: "send", channel: "app:focus-panel", args: noArgs }),
   requestRealtimeCredential: entry({
     kind: "invoke",
@@ -752,6 +765,18 @@ export const BRIDGE = {
     channel: "app:notice-asks-changed",
     args: noArgs,
     result: result<readonly SessionNoticeAsk[]>(),
+  }),
+  /**
+   * The one-time arrival beat, decided in the main process at the sign-in
+   * edge. It carries nothing: the trigger is the whole message, and the
+   * beat's observed values are the renderer's own to read from the roster it
+   * already draws.
+   */
+  onArrivalSpeech: entry({
+    kind: "subscribe",
+    channel: "app:arrival-speech",
+    args: noArgs,
+    result: result<void>((v) => v === undefined),
   }),
   onWorkspaceProjectsChanged: entry({
     kind: "subscribe",

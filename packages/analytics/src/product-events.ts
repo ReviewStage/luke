@@ -61,6 +61,7 @@ export const PRODUCT_EVENT = {
   VOICE_EXCHANGE: "voice:exchange",
   VOICE_PERMISSION: "voice:permission",
   VOICE_ANNOUNCEMENT_SPEAK: "voice:announcement_speak",
+  VOICE_FIRST_ANNOUNCEMENT: "voice:first_announcement",
   SETTING_UPDATE: "setting:update",
   USAGE_SHARING_STOP: "usage:sharing_stop",
   USAGE_SHARING_RESUME: "usage:sharing_resume",
@@ -121,6 +122,7 @@ export const PRODUCT_EVENT_PROPERTY = {
   SEARCH_SURFACE: "search_surface",
   ASK_OUTCOME: "ask_outcome",
   PERMISSION_RESULT: "permission_result",
+  SIGN_IN_AGE: "sign_in_age",
   SETTING_ID: "setting_id",
   SETTING_VALUE: "setting_value",
 } as const;
@@ -335,6 +337,39 @@ export type ProductSettingValue =
   (typeof PRODUCT_SETTING_VALUE)[keyof typeof PRODUCT_SETTING_VALUE];
 
 /**
+ * How long after the account's first sign-in the first announcement was
+ * spoken, as a rung rather than a duration for the reason counts travel as
+ * buckets: an exact elapsed time is a fingerprint, where a rung answers the
+ * one question the event asks — how quickly Luke proved his loop to a new
+ * account. Each rung is the widest window the elapsed time still fits.
+ */
+export const PRODUCT_SIGN_IN_AGE = {
+  WITHIN_TEN_MINUTES: "within_ten_minutes",
+  WITHIN_HOUR: "within_hour",
+  WITHIN_DAY: "within_day",
+  WITHIN_WEEK: "within_week",
+  BEYOND_WEEK: "beyond_week",
+} as const;
+
+export type ProductSignInAge = (typeof PRODUCT_SIGN_IN_AGE)[keyof typeof PRODUCT_SIGN_IN_AGE];
+
+const SIGN_IN_AGE_LADDER: readonly { limitMs: number; age: ProductSignInAge }[] = [
+  { limitMs: 10 * 60 * 1000, age: PRODUCT_SIGN_IN_AGE.WITHIN_TEN_MINUTES },
+  { limitMs: 60 * 60 * 1000, age: PRODUCT_SIGN_IN_AGE.WITHIN_HOUR },
+  { limitMs: 24 * 60 * 60 * 1000, age: PRODUCT_SIGN_IN_AGE.WITHIN_DAY },
+  { limitMs: 7 * 24 * 60 * 60 * 1000, age: PRODUCT_SIGN_IN_AGE.WITHIN_WEEK },
+];
+
+/** The narrowest rung an elapsed time fits; anything unreadable is the widest. */
+export function productSignInAge(elapsedMs: number): ProductSignInAge {
+  if (!Number.isFinite(elapsedMs)) return PRODUCT_SIGN_IN_AGE.BEYOND_WEEK;
+  return (
+    SIGN_IN_AGE_LADDER.find((rung) => elapsedMs < rung.limitMs)?.age ??
+    PRODUCT_SIGN_IN_AGE.BEYOND_WEEK
+  );
+}
+
+/**
  * The rungs every count travels on. A raw count is a weak fingerprint —
  * "137 Codex sessions" identifies a machine across days — where a rung says
  * the same thing about adoption and says it about a crowd rather than a
@@ -389,6 +424,7 @@ interface ProductEventPropertyValue {
   [PRODUCT_EVENT_PROPERTY.SEARCH_SURFACE]: ProductSearchSurface;
   [PRODUCT_EVENT_PROPERTY.ASK_OUTCOME]: ProductAskOutcome;
   [PRODUCT_EVENT_PROPERTY.PERMISSION_RESULT]: ProductPermissionResult;
+  [PRODUCT_EVENT_PROPERTY.SIGN_IN_AGE]: ProductSignInAge;
   [PRODUCT_EVENT_PROPERTY.SETTING_ID]: AppSettingId;
   [PRODUCT_EVENT_PROPERTY.SETTING_VALUE]: ProductSettingValue;
 }
@@ -425,6 +461,7 @@ export const PRODUCT_EVENT_PROPERTY_VALUES = {
   [PRODUCT_EVENT_PROPERTY.SEARCH_SURFACE]: Object.values(PRODUCT_SEARCH_SURFACE),
   [PRODUCT_EVENT_PROPERTY.ASK_OUTCOME]: Object.values(PRODUCT_ASK_OUTCOME),
   [PRODUCT_EVENT_PROPERTY.PERMISSION_RESULT]: Object.values(PRODUCT_PERMISSION_RESULT),
+  [PRODUCT_EVENT_PROPERTY.SIGN_IN_AGE]: Object.values(PRODUCT_SIGN_IN_AGE),
   [PRODUCT_EVENT_PROPERTY.SETTING_ID]: Object.values(APP_SETTING_ID),
   [PRODUCT_EVENT_PROPERTY.SETTING_VALUE]: Object.values(PRODUCT_SETTING_VALUE),
 } as const satisfies Record<EnumeratedProductEventProperty, readonly string[]>;
@@ -480,6 +517,7 @@ export const PRODUCT_EVENT_PROPERTIES = {
     PRODUCT_EVENT_PROPERTY.PROVIDER_ID,
     PRODUCT_EVENT_PROPERTY.SESSION_STATUS,
   ],
+  [PRODUCT_EVENT.VOICE_FIRST_ANNOUNCEMENT]: [PRODUCT_EVENT_PROPERTY.SIGN_IN_AGE],
   [PRODUCT_EVENT.SETTING_UPDATE]: [
     PRODUCT_EVENT_PROPERTY.SETTING_ID,
     PRODUCT_EVENT_PROPERTY.SETTING_VALUE,
@@ -603,6 +641,9 @@ const PRODUCT_EVENT_PROPERTY_READER: PropertyReader = {
   ),
   [PRODUCT_EVENT_PROPERTY.PERMISSION_RESULT]: memberReader(
     PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.PERMISSION_RESULT],
+  ),
+  [PRODUCT_EVENT_PROPERTY.SIGN_IN_AGE]: memberReader(
+    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.SIGN_IN_AGE],
   ),
   [PRODUCT_EVENT_PROPERTY.SETTING_ID]: memberReader(
     PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.SETTING_ID],

@@ -20,6 +20,7 @@ export {
   PRODUCT_SESSION_COUNT_BUCKET,
   PRODUCT_SETTING_VALUE,
   PRODUCT_SETTINGS_VIEW,
+  PRODUCT_SIGN_IN_AGE,
   PRODUCT_SUPERSET_ACT,
   PRODUCT_SURFACE_EVENT,
   PRODUCT_UPDATE_ACT,
@@ -44,12 +45,14 @@ export {
   type ProductSessionCountBucket,
   type ProductSettingsView,
   type ProductSettingValue,
+  type ProductSignInAge,
   type ProductSupersetAct,
   type ProductSurfaceEventName,
   type ProductUpdateAct,
   productEventBatchFromWire,
   productEventFromWire,
   productSessionCountBucket,
+  productSignInAge,
   type RecordProductEvent,
 } from "./product-events.js";
 export {

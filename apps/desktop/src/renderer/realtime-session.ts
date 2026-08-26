@@ -4,9 +4,9 @@ import { type AppGuideSnapshot, appGuideContextText, EMPTY_APP_GUIDE } from "@si
 import type { TrackedIssue } from "@sidecar/issues";
 import {
   type ActEnvelope,
-  type AttentionSpeech,
   appGuideInstructionsEvents,
   appToolAction,
+  arrivalSpeechEvents,
   type CarriedAppAction,
   type CarriedIssueAction,
   type CarriedSessionAction,
@@ -28,9 +28,11 @@ import {
   inputAudioAppendEvents,
   inputAudioFormatUpdateEvents,
   introductionSpeechEvents,
+  isArrivalSpeech,
   issueToolAction,
   outputSpeedUpdateEvents,
   PressAudioBuffer,
+  type ProactiveSpeech,
   parseRealtimeServerEvent,
   proactiveSpeechEvents,
   pushToTalkCommitEvents,
@@ -1571,7 +1573,16 @@ export class RealtimeVoiceSession {
    * is better than holding it — the attention layer supersedes its own
    * decisions, so a sentence saved for later is a sentence likely to be stale.
    */
-  speak(speech: AttentionSpeech): boolean {
+  speak(speech: ProactiveSpeech): boolean {
+    if (isArrivalSpeech(speech)) {
+      const arrivalEvents = arrivalSpeechEvents(speech);
+      if (arrivalEvents.length === 0 || !this.isConnected || this.#turnBusy) return false;
+      // No caption subject: the arrival speaks about no one observed session,
+      // like an introduction beat, so no notice may stand under the housing
+      // claiming it does.
+      this.#startResponse(arrivalEvents);
+      return true;
+    }
     const events = proactiveSpeechEvents(speech);
     if (events.length === 0 || !this.isConnected || this.#turnBusy) return false;
     this.#startResponse(events);
