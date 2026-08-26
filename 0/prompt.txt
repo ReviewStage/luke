@@ -1,0 +1,7 @@
+Pleaes fix these errors that I get when running ./scripts/run.sh  WARN  Unsupported engine: wanted: {"node":">=24.0.0"} (current: {"node":"v22.23.1","pnpm":"9.15.0"})
+
+> luke@0.3.8 start /Users/deanstratakos/Developer/luke
+> pnpm --filter @luke/desktop start "--"
+
+.                                        |  WARN  Unsupported engine: wanted: {"node":">=24.0.0"} (current: {"node":"v22.23.1","pnpm":"9.15.0"})
+apps/web                                 |  WARN  Unsupported engine: wanted: {"node":"24.x"} (current: {"node":"v22.23.1","pnpm":"9.15.0"})
