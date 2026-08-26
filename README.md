@@ -24,7 +24,8 @@
 <p align="center">
   <a href="https://tryluke.dev">Website</a> ·
   <a href="PRIVACY.md">Privacy</a> ·
-  <a href="CHANGELOG.md">Changelog</a>
+  <a href="CHANGELOG.md">Changelog</a> ·
+  <a href="mailto:founders@stagereview.app">Contact</a>
 </p>
 
 ![Luke's panel expanded from the notch, listing local and cloud agent sessions with their status, recaps, and workspace grouping.](docs/media/luke-panel.png)
@@ -100,10 +101,6 @@ See [PRIVACY.md](PRIVACY.md).
 
 Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md)
 to get set up, and [SECURITY.md](SECURITY.md) for reporting a vulnerability.
-
-## Contact
-
-Email [founders@stagereview.app](mailto:founders@stagereview.app).
 
 ## License
 
