@@ -1,0 +1,2 @@
+{"v":1,"agent":"cursor","cli_version":"0.10.2","type":"user","content":[{"text":"\u003ctimestamp\u003eThursday, Aug 20, 2026, 8:40 PM (UTC-7)\u003c/timestamp\u003e\n\nReply with exactly the single word: appback"}]}
+{"v":1,"agent":"cursor","cli_version":"0.10.2","type":"assistant","content":[{"text":"appback\n\nThe user is asking me to reply with exactly the single word: \"appback\"\n\nThis is a straightforward request - they want me to output only that specific word and nothing else.","type":"text"}]}

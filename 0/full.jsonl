@@ -1,0 +1,3 @@
+{"role":"user","message":{"content":[{"type":"text","text":"<timestamp>Thursday, Aug 20, 2026, 8:40 PM (UTC-7)</timestamp>\n<user_query>\nReply with exactly the single word: appback\n</user_query>"}]}}
+{"role":"assistant","message":{"content":[{"type":"text","text":"appback\n\nThe user is asking me to reply with exactly the single word: \"appback\"\n\nThis is a straightforward request - they want me to output only that specific word and nothing else."}]}}
+{"type":"turn_ended","status":"success"}
