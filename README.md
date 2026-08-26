@@ -102,6 +102,11 @@ See [PRIVACY.md](PRIVACY.md).
 Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md)
 to get set up, and [SECURITY.md](SECURITY.md) for reporting a vulnerability.
 
+## Built by
+
+[Charles Pan](https://x.com/ceefryingpan) and
+[Dean Stratakos](https://x.com/DeanStratakos).
+
 ## License
 
 Luke is licensed under the [Apache License 2.0](LICENSE).
