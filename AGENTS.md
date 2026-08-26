@@ -281,10 +281,21 @@ Trust constraints:
   makes a new component silent by construction, so what a recording may see is
   decided by what the panel draws — which makes drawing something new on the
   panel a decision about what leaves the machine. It is still Luke's own panel
-  and never the machine's screen. Recording posts to the provider directly; it
-  is the one place an account id travels to the desktop, and it travels
-  because a recording filed under nobody could neither join the counts nor be
-  erased with them.
+  and never the machine's screen. Recording posts to the provider directly,
+  and it begins at the first paint of every ordinary launch, before any
+  account exists and through the spoken introduction, because the launch is
+  where a first run goes wrong and a recording that waited for a sign-in never
+  saw it. Recording is the one place an account id travels to the desktop, and
+  it travels for what it does when a sign-in lands: the anonymous session
+  already running is joined to that person, so it files with their counts and
+  is erased with them. A session that never reaches a sign-in stays anonymous
+  and can be erased with no account, which is a thing `PRIVACY.md` has to say
+  in as many words rather than leave to be inferred. Deleting an account
+  stands recording down for the rest of that run, unlike signing out, which
+  leaves an anonymous recording running the way the launch before the sign-in
+  was: nothing erased is re-created either way, but a recorder starting up
+  again on the panel that just erased everything reads as though something
+  were, and deletion is the one act treated here as unrecoverable.
   None of the three sends anything in a fixture or evidence run, or while the
   developer has switched sharing off. The counts have their own switch and the
   other two share the recording one, both on by default on the settings front

@@ -25,7 +25,13 @@ import type { SessionReplayBootstrap } from "#shared/wire/session";
  *
  * What this file decides on its own is only whether to record at all: the
  * main process says whether this run may, and the developer's two switches
- * say whether it does.
+ * say whether it does. No account is among those reasons. Recording begins at
+ * the first paint of an ordinary launch, before anyone has signed in and
+ * through the spoken introduction, because the launch is where what goes
+ * wrong goes wrong and a recording that waited for a sign-in never saw it. A
+ * session that reaches one is joined to the person there; a session that
+ * never does stays anonymous, which is the part `PRIVACY.md` has to say
+ * plainly, because such a recording cannot be erased with an account.
  */
 
 /**
@@ -34,10 +40,24 @@ import type { SessionReplayBootstrap } from "#shared/wire/session";
  * sees the address a request arrives from.
  *
  * Exported so the connect policy in `index.html` can be asserted against it.
- * The two are separate literals, and a recording the policy refuses to send
- * is indistinguishable from one that was never started.
+ * The host and the policy are separate literals in separate files, and a
+ * recording the policy refuses to send is indistinguishable from one that was
+ * never started — which is exactly how this went unnoticed once already.
  */
 export const POSTHOG_HOST = "https://us.i.posthog.com";
+
+/**
+ * The library's other host, which it derives from `POSTHOG_HOST`'s region
+ * rather than taking as configuration: captured events go to the ingestion
+ * host above, and the remote configuration saying whether recording is on
+ * comes from this one.
+ *
+ * Named in the policy even though `preloadRemoteConfig` means nothing here
+ * asks for it today. The preload rests on an undocumented global, and a
+ * library that stopped reading it would fall through to fetching this — which
+ * this entry lets succeed rather than fail the same silent way it did before.
+ */
+export const POSTHOG_ASSETS_HOST = "https://us-assets.i.posthog.com";
 
 /**
  * What this window says its address is, in place of the one it has.
@@ -167,6 +187,55 @@ function projectApiKey(): string {
   }
 }
 
+/**
+ * The library's own preloaded-configuration global, which its
+ * `RemoteConfigLoader` reads before it fetches anything: a config found here
+ * is used as it stands, and the fetch never happens.
+ *
+ * Declared here because posthog-js does not declare it — it is assigned by
+ * the hosted `/array/<token>/config.js` bundle rather than by anything in the
+ * package's own types, so the shape is documented by what the loader reads
+ * and nothing in the type system holds it still. `session-replay.test.ts`
+ * asserts both halves against the installed bundle, because a library that
+ * renamed either would take recording out silently.
+ */
+declare global {
+  interface Window {
+    _POSTHOG_REMOTE_CONFIG?: Record<
+      string,
+      { config: { sessionRecording: object; hasFeatureFlags: boolean } }
+    >;
+  }
+}
+
+/**
+ * Says recording is on, without asking.
+ *
+ * The library splits its traffic by kind: what it captures goes to the
+ * ingestion host, and the configuration deciding whether to record at all
+ * comes from `POSTHOG_ASSETS_HOST`, which it derives from the region rather
+ * than taking as configuration. A renderer policy naming only the first
+ * refuses that read, and the refusal is silent — recording is gated on a
+ * property only that response writes, so a blocked config reads exactly like
+ * a project with recording switched off. It was, for every build until this
+ * one.
+ *
+ * Preloading answers it here instead. `sessionRecording` decides the gate by
+ * truthiness alone, so an empty object turns recording on and leaves every
+ * field the library's own default, including the input masking documented
+ * above. `hasFeatureFlags: false` declines the flag fetch Luke has no use for.
+ *
+ * What this omits is deliberate and costs nothing: unhandled errors are
+ * forced on by `capture_exceptions` client-side, and autocapture answers to a
+ * disable flag rather than to a remote yes — which is why clicks and errors
+ * arrived throughout, and recordings never did.
+ */
+function preloadRemoteConfig(key: string): void {
+  window._POSTHOG_REMOTE_CONFIG = {
+    [key]: { config: { sessionRecording: {}, hasFeatureFlags: false } },
+  };
+}
+
 let started = false;
 let initialized = false;
 
@@ -202,14 +271,12 @@ export function sessionReplayWanted(
   sharesUsageData: boolean,
   recordsSurface: boolean,
 ): boolean {
-  return (
-    bootstrap.permitted && sharesUsageData && recordsSurface && bootstrap.accountId !== undefined
-  );
+  return bootstrap.permitted && sharesUsageData && recordsSurface;
 }
 
 function startSessionReplay(bootstrap: SessionReplayBootstrap): void {
   const key = projectApiKey();
-  if (!key || !bootstrap.accountId) return;
+  if (!key) return;
   started = true;
   if (initialized) {
     // The client is built once per window. A second `init` would not rebuild
@@ -218,11 +285,12 @@ function startSessionReplay(bootstrap: SessionReplayBootstrap): void {
     // recording it is, because the person may have changed since the last one.
     optIn();
     registerBuild(bootstrap);
-    posthog.identify(bootstrap.accountId);
+    identifyAccount(bootstrap);
     posthog.startSessionRecording();
     return;
   }
   initialized = true;
+  preloadRemoteConfig(key);
   posthog.init(key, {
     api_host: POSTHOG_HOST,
     defaults: "2025-11-30",
@@ -259,10 +327,24 @@ function startSessionReplay(bootstrap: SessionReplayBootstrap): void {
   // was recording.
   optIn();
   registerBuild(bootstrap);
-  // The same opaque id the counted events resolve to, so a recording and the
-  // counts around it belong to one person — which is also what makes deleting
-  // the account erase the recordings with it.
-  posthog.identify(bootstrap.accountId);
+  identifyAccount(bootstrap);
+}
+
+/**
+ * Files what is being recorded under the account, when there is one.
+ *
+ * The id is the same opaque one the counted events resolve to, so a recording
+ * and the counts around it belong to one person — which is what makes
+ * deleting the account erase the recordings with it.
+ *
+ * Signed out there is no id and none is invented: the recording runs under
+ * the anonymous id the library made for itself, and a sign-in that lands
+ * later calls this, which is where the library joins that anonymous session
+ * to the person. What never reaches a sign-in stays anonymous, and so cannot
+ * be erased with an account — `PRIVACY.md` says so, because it is now true.
+ */
+function identifyAccount(bootstrap: SessionReplayBootstrap): void {
+  if (bootstrap.accountId) posthog.identify(bootstrap.accountId);
 }
 
 /**

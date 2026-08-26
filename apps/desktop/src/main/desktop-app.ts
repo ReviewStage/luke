@@ -583,9 +583,12 @@ function reportAdapterDiagnostic(
  * which is the other half of the same question.
  *
  * `sendsNetwork` is the same suppression the event sender takes — recording
- * must be off wherever counting is — and an account is required because a
- * recording under no person could neither join the counts nor be erased with
- * them.
+ * must be off wherever counting is. An account is not among the reasons: a
+ * recording begins at the first paint of an ordinary launch, before anyone
+ * has signed in, because the launch and the introduction before it are where
+ * a first run goes wrong and a recording that waited for a sign-in never saw
+ * it. A sign-in that lands afterwards is what the id is for, and it joins the
+ * session already running to the person rather than starting a new one.
  */
 async function sessionReplayBootstrap(): Promise<SessionReplayBootstrap> {
   // The in-memory snapshot leads the stored account, and this reads the
@@ -596,7 +599,7 @@ async function sessionReplayBootstrap(): Promise<SessionReplayBootstrap> {
   const signedIn = account.status === ACCOUNT_STATUS.SIGNED_IN;
   const accountId = signedIn ? (await settingsStore.readAccount())?.id : undefined;
   return {
-    permitted: runMode.sendsNetwork && accountId !== undefined,
+    permitted: runMode.sendsNetwork && !sessionReplayEndedByDeletion,
     appVersion: app.getVersion(),
     ...(accountId ? { accountId } : undefined),
   };
@@ -619,6 +622,35 @@ function haltSessionReplay(): void {
     permitted: false,
     appVersion: app.getVersion(),
   });
+}
+
+/**
+ * Whether an account was deleted in this run, which stands recording down for
+ * the rest of it.
+ *
+ * A sign-out is the ordinary way back to a signed-out panel, and one recording
+ * anonymously afterwards is the same thing the launch before the sign-in was.
+ * A deletion is not: it is the one act this repository treats as
+ * unrecoverable, and a recorder that resumed the instant the erasure landed
+ * would be filing fresh recordings of the panel that erased them. Nothing is
+ * re-created by it — the new session is anonymous and joins no person — but
+ * the developer cannot see that, and the reading is the harm. The next launch
+ * or sign-in starts one again.
+ */
+let sessionReplayEndedByDeletion = false;
+
+/**
+ * Stands recording down after a deletion that landed, for good this time.
+ *
+ * The generation moves for the same reason `haltSessionReplay`'s does, and
+ * here it is load-bearing rather than defensive: the erasure reports the
+ * account transition on its way out, so a `broadcastSessionReplay` is already
+ * in flight when this runs and would otherwise answer after it with the
+ * permission this just withdrew.
+ */
+function endSessionReplay(): void {
+  sessionReplayEndedByDeletion = true;
+  haltSessionReplay();
 }
 /**
  * The output's switches as last read, and the helper that reads them. The
@@ -1364,6 +1396,7 @@ function registerIpc(): void {
     recordProductEvent,
     flushProductEvents: () => productEvents.flush(),
     haltSessionReplay,
+    endSessionReplay,
     resumeSessionReplay: () => void broadcastSessionReplay(),
   });
 
