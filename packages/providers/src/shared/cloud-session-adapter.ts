@@ -337,10 +337,18 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
       // Anything else is a bug in this pass — a TypeError thrown by a
       // subclass's parsing is not a network blip, and must not keep serving
       // the stale snapshot with no log, counter, or hook.
-      this.#onDiagnostic?.(error instanceof Error ? error : new Error(String(error)));
+      this.reportDiagnostic(error instanceof Error ? error : new Error(String(error)));
       throw error;
     }
     return this.#observations;
+  }
+
+  /**
+   * A subclass's way onto the same diagnostic channel, for a problem worth
+   * surfacing from a pass that otherwise succeeded.
+   */
+  protected reportDiagnostic(error: Error): void {
+    this.#onDiagnostic?.(error);
   }
 
   /**
