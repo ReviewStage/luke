@@ -3,6 +3,10 @@ import test from "node:test";
 import { SESSION_STATUS } from "@sidecar/session";
 import type { JsonObject } from "@sidecar/wire/testing";
 import { HTTP_STATUS, jsonResponse, recordingFetch } from "@sidecar/wire/testing";
+import {
+  ADAPTER_DIAGNOSTIC_KIND,
+  type AdapterDiagnosticCallback,
+} from "../shared/adapter-diagnostics.js";
 import type { CloudFetch } from "../shared/cloud-session-adapter.js";
 import { describeCloudAdapterContract } from "../testing/cloud-adapter-contract.js";
 import { REPLICAS_PROVIDER, ReplicasSessionAdapter } from "./adapter.js";
@@ -351,7 +355,7 @@ function adapterFor(
     now?: () => number;
     minimumRefreshIntervalMs?: number;
     desktopAppPresent?: () => boolean;
-    onDiagnostic?: (error: Error) => void;
+    onDiagnostic?: AdapterDiagnosticCallback;
   } = {},
 ): ReplicasSessionAdapter {
   const apiKey = "apiKey" in overrides ? overrides.apiKey : TEST_API_KEY;
@@ -535,22 +539,25 @@ test("surfaces a detail read that woke its workspace as a diagnostic", async () 
   const api = fakeReplicasApi([
     { ...activeWorkspace("workspace-woken", TEST_TIME - 1_000), waking: true },
   ]);
-  const diagnostics: Error[] = [];
+  const diagnostics: [string, Error][] = [];
 
   const observations = await adapterFor(api.fetch, {
-    onDiagnostic: (error) => diagnostics.push(error),
+    onDiagnostic: (kind, error) => diagnostics.push([kind, error]),
   }).observe();
 
   assert.equal(diagnostics.length, 1);
+  assert.equal(diagnostics[0]?.[0], ADAPTER_DIAGNOSTIC_KIND.ACCIDENTAL_WAKE);
   // Detection only: the read still succeeded, so its body still serves the pass.
   assert.equal(observations.length, 1);
 });
 
 test("reports no diagnostic for a detail read that woke nothing", async () => {
   const api = fakeReplicasApi([activeWorkspace("workspace-awake", TEST_TIME - 1_000)]);
-  const diagnostics: Error[] = [];
+  const diagnostics: [string, Error][] = [];
 
-  await adapterFor(api.fetch, { onDiagnostic: (error) => diagnostics.push(error) }).observe();
+  await adapterFor(api.fetch, {
+    onDiagnostic: (kind, error) => diagnostics.push([kind, error]),
+  }).observe();
 
   assert.equal(diagnostics.length, 0);
 });

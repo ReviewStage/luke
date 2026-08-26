@@ -19,6 +19,7 @@ import {
   type WorkspaceProject,
 } from "@sidecar/session";
 import { isRecord, isWireBoolean, text, type WireRecord } from "@sidecar/wire";
+import { ADAPTER_DIAGNOSTIC_KIND } from "../shared/adapter-diagnostics.js";
 import {
   CLOUD_FAILURE,
   type CloudAdapterOptions,
@@ -1163,7 +1164,10 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
           body[REPLICAS_FIELD.WAKING] === true ||
           (isRecord(replica) && replica[REPLICAS_FIELD.WAKING] === true)
         ) {
-          this.reportDiagnostic(new Error(REPLICAS_ACCIDENTAL_WAKE_MESSAGE));
+          this.reportDiagnostic(
+            ADAPTER_DIAGNOSTIC_KIND.ACCIDENTAL_WAKE,
+            new Error(REPLICAS_ACCIDENTAL_WAKE_MESSAGE),
+          );
         }
         if (!isRecord(replica)) return;
         const chats = recordsFromPage(replica, REPLICAS_FIELD.CHATS)

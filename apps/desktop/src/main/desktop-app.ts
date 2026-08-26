@@ -5,9 +5,11 @@ import { pathToFileURL } from "node:url";
 import { AccountClient, AccountSessionManager, accountGateOpen } from "@sidecar/account";
 import {
   PRODUCT_CREDENTIAL_SOURCE,
+  PRODUCT_DIAGNOSTIC_KIND,
   PRODUCT_EVENT,
   PRODUCT_SUPERSET_ACT,
   PRODUCT_UPDATE_ACT,
+  type ProductDiagnosticKind,
   ProductEventSender,
   productSessionCountBucket,
   type RecordProductEvent,
@@ -26,6 +28,8 @@ import { type FeedbackSubmission, feedbackDeliveryFromEnvironment } from "@sidec
 import { fixtureSnapshot } from "@sidecar/fixtures";
 import { normalizeTrackedIssue, type TrackedIssue } from "@sidecar/issues";
 import {
+  ADAPTER_DIAGNOSTIC_KIND,
+  type AdapterDiagnosticKind,
   CmuxSessionApplicationReader,
   CodexCloudSessionAdapter,
   ConductorLocalWorkspaceAdapter,
@@ -55,7 +59,9 @@ import {
   ObservationLoop,
   ObservationSupervisor,
   type ObservedWorkspaceProject,
+  PROVIDER_ID,
   PROVIDER_ID_LIST,
+  type ProviderId,
   rosterRelevantSessions,
   type Session,
   type SessionNotice,
@@ -199,7 +205,9 @@ const sessionRegistry = new InMemorySessionRegistry();
 // inside the codex composite the provider registrations build; a fixture or
 // evidence run never refreshes it, so there its answer stays the honest
 // "unknown".
-const codexCloudAdapter = new CodexCloudSessionAdapter();
+const codexCloudAdapter = new CodexCloudSessionAdapter({
+  onDiagnostic: (kind, error) => reportAdapterDiagnostic(PROVIDER_ID.CODEX, kind, error),
+});
 const conductorSessionApplications = new ConductorSessionApplicationReader();
 // The local counterpart of the cloud Conductor adapter's creation path: it
 // reads the repositories Conductor holds and creates a workspace in one by
@@ -291,6 +299,7 @@ const providerRegistry = providerRegistrations({
   // LaunchServices the very question the open will ask it, so the address a
   // row carries and the app that answers its press can never disagree.
   replicasDesktopAppPresent: () => app.getApplicationNameForProtocol("replicas://open") !== "",
+  onDiagnostic: reportAdapterDiagnostic,
 });
 // The record enforces completeness; the shared list preserves provider order.
 const orderedRegistrations: readonly ProviderRegistration[] = PROVIDER_ID_LIST.map(
@@ -520,6 +529,35 @@ const productEvents = new ProductEventSender({
 // count an act without being handed anything it could flush, stop, or read.
 const recordProductEvent: RecordProductEvent = (name, properties) =>
   productEvents.record(name, properties);
+/**
+ * The diagnostic kinds' total `Record` bridge into the counting vocabulary,
+ * like the ones in `#shared/product-vocabulary` but held here because the
+ * renderer bundles that file and the providers vocabulary is this process's
+ * reach alone.
+ */
+const DIAGNOSTIC_COUNTED_AS = {
+  [ADAPTER_DIAGNOSTIC_KIND.PASS_FAILURE]: PRODUCT_DIAGNOSTIC_KIND.PASS_FAILURE,
+  [ADAPTER_DIAGNOSTIC_KIND.ACCIDENTAL_WAKE]: PRODUCT_DIAGNOSTIC_KIND.ACCIDENTAL_WAKE,
+} satisfies Record<AdapterDiagnosticKind, ProductDiagnosticKind>;
+/**
+ * Both sinks of the adapters' diagnostic channel. The error's own words stop
+ * at the local log, because a failure's message can carry a path, a branch,
+ * or a title; only the provider and the bridged kind reach the counted event,
+ * and a kind the bridge does not answer for is dropped rather than forwarded.
+ */
+function reportAdapterDiagnostic(
+  providerId: ProviderId,
+  kind: AdapterDiagnosticKind,
+  error: Error,
+): void {
+  process.stderr.write(`Observation diagnostic (${providerId}, ${kind}): ${error.message}\n`);
+  const counted = DIAGNOSTIC_COUNTED_AS[kind];
+  if (!counted) return;
+  productEvents.record(PRODUCT_EVENT.SESSION_DIAGNOSTIC, {
+    provider_id: providerId,
+    diagnostic_kind: counted,
+  });
+}
 /**
  * What this run can tell the renderer about recording: whether it is the kind
  * of run that may record at all, which build it is, and whom a recording

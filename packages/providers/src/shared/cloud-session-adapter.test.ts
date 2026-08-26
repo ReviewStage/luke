@@ -11,6 +11,7 @@ import {
 } from "@sidecar/session";
 import { isWireString } from "@sidecar/wire";
 import { HTTP_STATUS, jsonResponse, recordingFetch } from "@sidecar/wire/testing";
+import { ADAPTER_DIAGNOSTIC_KIND, type AdapterDiagnosticCallback } from "./adapter-diagnostics.js";
 import {
   type CloudAdapterOptions,
   type CloudFetch,
@@ -99,7 +100,7 @@ function adapterFor(
     readApiKey?: () => Promise<string | undefined>;
     now?: () => number;
     minimumRefreshIntervalMs?: number;
-    onDiagnostic?: (error: Error) => void;
+    onDiagnostic?: AdapterDiagnosticCallback;
   } = {},
 ): StubCloudAdapter {
   const apiKey = "apiKey" in overrides ? overrides.apiKey : TEST_API_KEY;
@@ -271,7 +272,9 @@ test("clears observations when the provider rejects the credential", async () =>
   let rejectRequests = false;
   const diagnostics: unknown[] = [];
   const stub = stubFetch(() => (rejectRequests ? HTTP_STATUS.UNAUTHORIZED : HTTP_STATUS.OK));
-  const adapter = adapterFor(stub.fetch, { onDiagnostic: (error) => diagnostics.push(error) });
+  const adapter = adapterFor(stub.fetch, {
+    onDiagnostic: (kind, error) => diagnostics.push([kind, error]),
+  });
   adapter.collected = [observation("session-one")];
 
   const authorized = await adapter.observe();
@@ -408,7 +411,9 @@ test("a transient provider failure keeps the previous snapshot", async () => {
   let status: number = HTTP_STATUS.OK;
   const diagnostics: unknown[] = [];
   const stub = stubFetch(() => status);
-  const adapter = adapterFor(stub.fetch, { onDiagnostic: (error) => diagnostics.push(error) });
+  const adapter = adapterFor(stub.fetch, {
+    onDiagnostic: (kind, error) => diagnostics.push([kind, error]),
+  });
   adapter.collected = [observation("session-one")];
 
   const first = await adapter.observe();
@@ -428,7 +433,7 @@ test("a programming error during observation is reported rather than swallowed",
   const adapter = adapterFor(stub.fetch, {
     now: () => now,
     minimumRefreshIntervalMs: 60_000,
-    onDiagnostic: (error) => diagnostics.push(error),
+    onDiagnostic: (kind, error) => diagnostics.push([kind, error]),
   });
   adapter.collected = [observation("session-one")];
 
@@ -438,7 +443,7 @@ test("a programming error during observation is reported rather than swallowed",
   adapter.collectError = bug;
 
   await assert.rejects(() => adapter.observe(), bug);
-  assert.deepEqual(diagnostics, [bug]);
+  assert.deepEqual(diagnostics, [[ADAPTER_DIAGNOSTIC_KIND.PASS_FAILURE, bug]]);
 
   adapter.collectError = undefined;
   const cached = await adapter.observe();
