@@ -305,8 +305,9 @@ Trust constraints:
   whether anything is recorded. What it records is the
   desktop's own view of its own conversation — the realtime events already
   crossing the data channel, with an audio append reduced to its byte count
-  before it leaves the renderer, and the attention evaluator's update and
-  decision — appended as JSONL under the developer's chosen directory and
+  before it leaves the renderer, and the attention evaluator's update,
+  decision, and reviewing model when the desktop knows one — appended as
+  JSONL under the developer's chosen directory and
   sent nowhere; `pnpm trace:export` turns one file into a document a local
   viewer opens. The tap only observes: nothing reads its result, and the
   main process drops the renderer's tapped events whenever no writer stands.

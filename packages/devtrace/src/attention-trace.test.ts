@@ -61,6 +61,27 @@ test("a recorder that throws costs the trace line, never the pass", async () => 
   assert.equal(await evaluator.evaluate(UPDATE), DECISION);
 });
 
+test("the reviewing model is recorded and forwarded only when the evaluator names one", async () => {
+  const records: AttentionTraceRecord[] = [];
+  const keyed = tracedAttentionEvaluator(
+    { evaluate: async () => DECISION, model: "gpt-5.6-luna" },
+    (record) => records.push(record),
+    () => 0,
+  );
+  assert.equal(keyed.model, "gpt-5.6-luna");
+  await keyed.evaluate(UPDATE);
+  assert.equal(records[0]?.model, "gpt-5.6-luna");
+
+  const hosted = tracedAttentionEvaluator(
+    { evaluate: async () => DECISION },
+    (record) => records.push(record),
+    () => 0,
+  );
+  assert.equal(hosted.model, undefined);
+  await hosted.evaluate(UPDATE);
+  assert.ok(records[1] && !("model" in records[1]));
+});
+
 test("quietUntil is forwarded only when the wrapped evaluator has one", () => {
   const quiet = tracedAttentionEvaluator(
     { evaluate: async () => undefined, quietUntil: () => 42 },
