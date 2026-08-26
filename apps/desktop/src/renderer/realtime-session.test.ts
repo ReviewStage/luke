@@ -1882,24 +1882,21 @@ test("the history is rendered from the roster as it now stands", async () => {
   });
   context.session.updateSessions([observedSession("session-a")]);
   context.session.updateConversation(history);
-  await armDeveloperTurn(context);
 
   // The words are history and keep their line; the identity is an offer to a
   // tool call, and a session the roster no longer shows is one no call may
   // name — so the line lets go of it rather than steering "that chat" toward
   // a certain refusal.
   context.session.updateSessions([]);
-  context.session.stopSpeaking();
-  const sentBefore = context.sent.length;
   await armDeveloperTurn(context);
 
-  const items = contextItems(context, "[recent conversation", sentBefore);
+  const items = contextItems(context, "[recent conversation");
   assert.equal(items.length, 1);
   assert.match(itemText(items[0]), /finished checkout-service/);
   assert.doesNotMatch(itemText(items[0]), /provider_session_id=session-a/);
 });
 
-test("a fresh history line replaces the item before it", async () => {
+test("the history is seeded once per call and later lines are not re-sent", async () => {
   const context = harness();
   await context.session.connect();
 
@@ -1909,9 +1906,13 @@ test("a fresh history line replaces the item before it", async () => {
   });
   context.session.updateConversation(first);
   await armDeveloperTurn(context);
-  const firstItem = context.session.liveContextItemIds.get(CONTEXT_ITEM_KIND.CONVERSATION);
-  assert.ok(firstItem);
+  const seeded = context.session.liveContextItemIds.get(CONTEXT_ITEM_KIND.CONVERSATION);
+  assert.ok(seeded);
 
+  // Every line said from here on rides this call as its own conversation
+  // items, so re-sending the digest would delete an item out of the cached
+  // prefix to restate turns the model already holds. The seed stands, and the
+  // new line waits for the next call.
   context.session.stopSpeaking();
   context.session.updateConversation(
     appendConversationEntry(first, {
@@ -1922,31 +1923,43 @@ test("a fresh history line replaces the item before it", async () => {
   const sentBefore = context.sent.length;
   await armDeveloperTurn(context);
 
-  // One live item per kind: the old record is deleted before the new goes in,
-  // so the conversation never holds two histories.
+  assert.deepEqual(contextItems(context, "[recent conversation", sentBefore), []);
   assert.equal(
-    context.sent.slice(sentBefore).some(
-      (event) =>
-        event.type === CONVERSATION_ITEM_DELETE &&
-        // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-        (event as { item_id?: string }).item_id === firstItem,
-    ),
-    true,
+    context.sent.slice(sentBefore).some((event) => event.type === CONVERSATION_ITEM_DELETE),
+    false,
   );
+  assert.equal(context.session.liveContextItemIds.get(CONTEXT_ITEM_KIND.CONVERSATION), seeded);
+});
+
+test("a new call after teardown re-seeds the accumulated history", async () => {
+  const context = harness();
+  await context.session.connect();
+
+  const first = conversationEntries({
+    kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
+    words: "Claude Code finished checkout-service.",
+  });
+  context.session.updateConversation(first);
+  await armDeveloperTurn(context);
+
+  const grown = appendConversationEntry(first, {
+    kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
+    words: "Codex failed in payments.",
+  });
+  context.session.updateConversation(grown);
+
+  // The call retires with everything said on it; the caller keeps the thread
+  // and re-reports it, and the next call seeds the whole of it.
+  context.closeChannel();
+  await context.session.connect();
+  context.session.updateConversation(grown);
+  const sentBefore = context.sent.length;
+  await armDeveloperTurn(context);
+
   const items = contextItems(context, "[recent conversation", sentBefore);
   assert.equal(items.length, 1);
   assert.match(itemText(items[0]), /finished checkout-service/);
   assert.match(itemText(items[0]), /failed in payments/);
-  assert.notEqual(
-    context.session.liveContextItemIds.get(CONTEXT_ITEM_KIND.CONVERSATION),
-    firstItem,
-  );
-
-  // The same history again is not news: nothing is resent.
-  context.session.stopSpeaking();
-  const repeatBefore = context.sent.length;
-  await armDeveloperTurn(context);
-  assert.deepEqual(contextItems(context, "[recent conversation", repeatBefore), []);
 });
 
 test("a reply ending at teardown writes nothing back into the retired call", async () => {
