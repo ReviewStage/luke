@@ -11,9 +11,11 @@ export const MICROPHONE_USAGE_DESCRIPTION =
   "Luke uses the microphone for spoken conversation. Audio from a turn you start is sent to OpenAI to answer it, and is never recorded or written to disk.";
 // The sentence macOS shows when it asks whether Luke may speak to Music or
 // Spotify, so it is what consent is given against. It has to say what is done
-// to them, and what is not.
+// to them, and what is not — and because the helper raises the dialog only
+// mid-conversation over audibly playing music, it can also say honestly why
+// it is appearing at this exact moment.
 export const APPLE_EVENTS_USAGE_DESCRIPTION =
-  "Luke turns Music and Spotify down while you are having a spoken conversation, and back up afterwards. He never pauses them, and reads nothing beyond whether each is playing and how loud.";
+  "Your music is playing while you and Luke are in a spoken conversation, which is the one moment he asks this: he turns Music and Spotify down while you talk, and back up afterwards. He never pauses them, and reads nothing beyond whether each is playing and how loud.";
 // The sentence macOS shows when it asks for full calendar access — the only
 // access EventKit reads under — so it is what consent is given against: one
 // sentence naming exactly what is read.
