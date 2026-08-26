@@ -1113,10 +1113,10 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
    * minutes, where a manually created workspace bills nothing under the
    * seat. The next pass reports the wake honestly, and the window is a
    * second against a lifecycle measured in hours. Failures are contained
-   * the way every enrichment's are. It is also the fallback chat source: a workspace the registry did
-   * not answer for this pass still lists its chats here, turn state
-   * included, so an awake workspace's rows survive the registry's
-   * organization-header demands.
+   * the way every enrichment's are. It is also the fallback chat source: a
+   * workspace the registry did not answer for this pass still lists its
+   * chats here, turn state included, so an awake workspace's rows survive
+   * the registry's organization-header demands.
    */
   async #refreshDetails(request: CloudRequest, awake: readonly ReplicasWorkspace[]): Promise<void> {
     if (this.#detailsRefused) return;
