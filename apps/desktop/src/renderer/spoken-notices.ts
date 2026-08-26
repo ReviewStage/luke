@@ -1,4 +1,9 @@
-import type { AttentionSpeech, RealtimeStatus, ScheduledTimer } from "@sidecar/realtime";
+import type {
+  AttentionSpeech,
+  ProactiveSpeech,
+  RealtimeStatus,
+  ScheduledTimer,
+} from "@sidecar/realtime";
 import { REALTIME_STATUS } from "@sidecar/realtime";
 
 /**
@@ -57,7 +62,7 @@ export interface AnnouncerSession {
   readonly status: RealtimeStatus;
   readonly microphoneCall: boolean;
   connect(options: { microphone: false }): Promise<boolean>;
-  speak(speech: AttentionSpeech): boolean;
+  speak(speech: ProactiveSpeech): boolean;
   stopSpeaking(): boolean;
   close(): Promise<void>;
 }
@@ -108,7 +113,7 @@ export interface SpokenNoticeAnnouncerOptions {
  */
 export class SpokenNoticeAnnouncer {
   readonly #options: SpokenNoticeAnnouncerOptions;
-  #queue: AttentionSpeech[] = [];
+  #queue: ProactiveSpeech[] = [];
   /**
    * Evaluator summaries waiting for the developer's own call to pause. They
    * may only ride that call: nothing here opens one for them, and they are
@@ -165,7 +170,7 @@ export class SpokenNoticeAnnouncer {
   }
 
   /** Takes notices the main process decided to voice, and starts saying them. */
-  enqueue(notices: readonly AttentionSpeech[]): void {
+  enqueue(notices: readonly ProactiveSpeech[]): void {
     if (this.#quiet || notices.length === 0) return;
     this.#queue.push(...notices);
     // The oldest waiting sentence is the least newsworthy one; a bounded queue

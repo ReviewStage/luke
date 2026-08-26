@@ -508,6 +508,19 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
               "own provider announces nothing until that conversation closes.",
           },
           {
+            // A behavior rather than a setting, for the announcements' own
+            // reason: Luke must neither deny having just spoken it nor offer
+            // to replay it.
+            label: "The arrival beat",
+            detail:
+              "Right after the account's first sign-in, Luke speaks once, unprompted: go " +
+              "back to work, and he will say when a session needs you, errors, or finishes " +
+              "— closing with one first ask to try, which may name a working session. It " +
+              "plays once per install from a fixed script, can act on nothing, and cannot " +
+              "be replayed; a launch that cannot speak it leaves it for the next one that " +
+              "can.",
+          },
+          {
             label: "How long a conversation lasts",
             detail:
               "A call opens on the first press of the talk key or the first typed ask and " +

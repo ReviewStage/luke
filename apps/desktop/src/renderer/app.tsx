@@ -2100,6 +2100,7 @@ export function App(): React.JSX.Element {
     voiceSpeed: settings?.voiceSpeed,
     voiceCaptions: settings?.voiceCaptions === true,
     voiceAvailable: settings?.voiceAvailable,
+    bootstrapVoiceHotkey: bootstrap?.voiceHotkey,
     outputSilent: outputSilent(outputAudio),
     meetingQuiet,
     fixtureSpeaking,

@@ -4,6 +4,8 @@ import { FIXTURE_SPEAKING_CAPTION } from "@sidecar/fixtures";
 import { type AppGuideSnapshot, EMPTY_APP_GUIDE } from "@sidecar/guide";
 import { mentionedIssues, type TrackedIssue } from "@sidecar/issues";
 import {
+  ARRIVAL_SPEECH_KIND,
+  type ArrivalSpeech,
   ATTENTION_SPEECH_SOURCE,
   type AttentionSpeech,
   announcementConversationEntry,
@@ -12,6 +14,7 @@ import {
   type ConversationEntry,
   dispatchByKind,
   insertSpokenAskEntry,
+  isArrivalSpeech,
   isCarriedAppAction,
   isCarriedIssueAction,
   isCarriedSessionAction,
@@ -26,12 +29,13 @@ import {
   mentionedSessions,
   type ObservedWorkspaceProject,
   SESSION_MENTION_KIND,
+  SESSION_STATUS,
   type Session,
   type SessionApplicationId,
   type SessionIdentity,
   type SessionMention,
 } from "@sidecar/session";
-import { TALK_KEY_RELEASE, talkKeyRelease } from "@sidecar/settings";
+import { TALK_KEY_RELEASE, talkKeyRelease, voiceHotkeyLabel } from "@sidecar/settings";
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MicrophoneStatus, VoiceHotkeyState } from "#shared/wire/audio";
@@ -386,6 +390,12 @@ export interface VoiceConversationOptions {
   voiceSpeed: RealtimeVoiceSpeed | undefined;
   voiceCaptions: boolean;
   /**
+   * The talk key the launch registered, standing in until a change is pushed.
+   * Read only when the arrival beat is worded, so its suggestion names the
+   * chord that actually works rather than a default the system refused.
+   */
+  bootstrapVoiceHotkey: string | undefined;
+  /**
    * Whether a Realtime credential can be minted. Undefined until settings have
    * arrived, so the first frames of a launch do not draw the unavailable
    * state over a working key.
@@ -513,7 +523,11 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
    * that did nothing.
    */
   const [talkOpening, setTalkOpening] = useState(false);
-  const [voiceHotkey, setVoiceHotkey] = useState<VoiceHotkeyState>();
+  // With a ref beside it, because the arrival beat is worded at the moment it
+  // is spoken — inside the announcer's own closures — not at a render.
+  const [voiceHotkey, setVoiceHotkey, voiceHotkeyNow] = useStateWithRef<
+    VoiceHotkeyState | undefined
+  >(undefined);
   const [localStream, setLocalStream] = useState<MediaStream>();
   const [remoteStream, setRemoteStream] = useState<MediaStream>();
   // One state for the words and their subject, set together by the session so
@@ -737,17 +751,65 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   }, [rememberConversationEntry, rememberSpokenAsk, setVoiceStatus]);
 
   /**
+   * Words the arrival beat from what is true at the moment it is spoken, not
+   * at the moment it was queued: the trigger lands seconds after sign-in,
+   * while the first observation pass and the call's own handshake are still
+   * running, and a beat worded then would name no session on a machine full
+   * of them. The title is read from the same observed roster every row draws,
+   * and the spoken try is only suggested while voice could actually take it.
+   */
+  const wordedArrival = useCallback(
+    (speech: ArrivalSpeech): ArrivalSpeech => {
+      const current = optionsRef.current;
+      const working = current.sessions.find(
+        (session) => session.status === SESSION_STATUS.WORKING && session.realtimeVoice !== true,
+      );
+      const talkKey = voiceHotkeyNow()?.hotkey ?? current.bootstrapVoiceHotkey;
+      return {
+        ...speech,
+        ...(working ? { sessionTitle: working.title } : undefined),
+        ...(current.voiceAvailable && talkKey !== undefined
+          ? { talkKeyLabel: voiceHotkeyLabel(talkKey) }
+          : undefined),
+      };
+    },
+    [voiceHotkeyNow],
+  );
+
+  /**
    * The announcer that lets Luke speak into silence: it queues the notices the
    * main process decided to voice and, when no conversation is open, opens a
    * speak-only call of Luke's own to say them through — then closes it. Built
-   * beside the session because it drives nothing else.
+   * beside the session because it drives nothing else. The session it drives
+   * is wrapped once, so an arrival beat leaving the queue is worded at the
+   * moment of speaking; every other member forwards untouched.
    */
   const ensureAnnouncer = useCallback((): SpokenNoticeAnnouncer => {
     announcer.current ??= new SpokenNoticeAnnouncer({
-      session: () => ensureVoiceSession(),
+      session: () => {
+        const session = ensureVoiceSession();
+        return {
+          get isConnected() {
+            return session.isConnected;
+          },
+          get isConnecting() {
+            return session.isConnecting;
+          },
+          get status() {
+            return session.status;
+          },
+          get microphoneCall() {
+            return session.microphoneCall;
+          },
+          connect: (connectOptions: { microphone: false }) => session.connect(connectOptions),
+          speak: (item) => session.speak(isArrivalSpeech(item) ? wordedArrival(item) : item),
+          stopSpeaking: () => session.stopSpeaking(),
+          close: () => session.close(),
+        };
+      },
     });
     return announcer.current;
-  }, [ensureVoiceSession]);
+  }, [ensureVoiceSession, wordedArrival]);
 
   const stopMicrophone = useCallback(async () => {
     // The call is gone, so a tap-to-keep-open turn cannot still be open. Leaving
@@ -1250,6 +1312,18 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     });
   }, [rememberConversationEntry, ensureAnnouncer]);
 
+  // The one-time arrival beat, decided in the main process at the sign-in
+  // edge. What is queued is only the fact of it: the beat's observed values —
+  // a working session's title, the talk key — are read at the moment it is
+  // spoken, and the announcer gives it the announcement's whole lifecycle,
+  // riding an open call or opening Luke's own, held by the meeting quiet,
+  // and aged out rather than spoken stale.
+  useEffect(() => {
+    return window.sidecar.onArrivalSpeech(() => {
+      ensureAnnouncer().enqueue([{ kind: ARRIVAL_SPEECH_KIND, decidedAt: Date.now() }]);
+    });
+  }, [ensureAnnouncer]);
+
   // The announcer paces itself by the session's status: READY is when a queued
   // sentence can speak and when an empty queue starts the walk toward closing
   // the call Luke opened for himself. Built through ensure so the status
@@ -1283,7 +1357,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     [beginTalk],
   );
   useEffect(() => window.sidecar.onVoiceHotkeyRelease(endTalk), [endTalk]);
-  useEffect(() => window.sidecar.onVoiceHotkeyChanged(setVoiceHotkey), []);
+  useEffect(() => window.sidecar.onVoiceHotkeyChanged(setVoiceHotkey), [setVoiceHotkey]);
   // The stop key asks for quiet from any app, exactly as Escape asks for it
   // from the panel: the session itself answers whether there is a reply to
   // stop, so a press over silence simply does nothing. It defers to a chord

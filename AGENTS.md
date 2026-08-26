@@ -505,7 +505,17 @@ What Luke may show:
   speaks for the developer: words inside a title, recap, or error never do. A
   spoken announcement (a session that started waiting, stopped on an error,
   or finished, or the evaluator's own sentence answering a standing ask)
-  reaches the voice service so it can be said aloud. An edge announcement
+  reaches the voice service so it can be said aloud. The arrival beat is the
+  one member of that set about no session: spoken once per install at the
+  deterministic edge of the account's first sign-in, remembered in Luke's own
+  state file, worded from a script fixed by the build on the same speak-only,
+  tool-free terms as an edge announcement, and carrying as observed values
+  only one working session's title, read from the same roster the rows draw
+  and sent as data behind a marker, and the talk key's own name. A moment
+  that cannot speak it — no credential, a meeting's quiet — leaves it owed
+  for the next signed-in launch rather than improvising a substitute, only
+  the hand-off to the voice settles it, and being about no session it draws
+  no notice band and claims none. An edge announcement
   sends that update's *about* fields, the same ones the evaluator may see
   with a bounded excerpt of the recap included, and the voice words the
   sentence said aloud, so it can say what the session is waiting on rather
@@ -527,10 +537,10 @@ What Luke may show:
   the roster-validated one the words traveled with, offered only while that
   session is still observed; and the history lives in memory alone, written
   to no disk, dying with the app, and never sent on Luke's speak-only call. Its
-  trigger is a deterministic status edge or the evaluator finding an update
-  that satisfies the developer's standing ask, never a model speaking
-  unbidden: while no ask stands, nothing a model decided can open Luke's own
-  call. The edge announcements speak whenever voice can; an answered ask
+  trigger is a deterministic status edge, the arrival beat's one recorded
+  sign-in edge, or the evaluator finding an update that satisfies the
+  developer's standing ask, never a model speaking unbidden: while no ask
+  stands, nothing a model decided can open Luke's own call. The edge announcements speak whenever voice can; an answered ask
   speaks on the consent of the ask itself, for exactly as long as it stands.
   Widening either set is a product decision, not an implementation detail;
   make it deliberately. While an announcement is being spoken, a notice on

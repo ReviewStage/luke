@@ -753,6 +753,18 @@ export const BRIDGE = {
     args: noArgs,
     result: result<readonly SessionNoticeAsk[]>(),
   }),
+  /**
+   * The one-time arrival beat, decided in the main process at the sign-in
+   * edge. It carries nothing: the trigger is the whole message, and the
+   * beat's observed values are the renderer's own to read from the roster it
+   * already draws.
+   */
+  onArrivalSpeech: entry({
+    kind: "subscribe",
+    channel: "app:arrival-speech",
+    args: noArgs,
+    result: result<void>((v) => v === undefined),
+  }),
   onWorkspaceProjectsChanged: entry({
     kind: "subscribe",
     channel: "app:workspace-projects-changed",
