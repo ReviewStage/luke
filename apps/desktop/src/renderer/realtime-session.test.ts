@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { TRACE_DIRECTION, type TraceDirection } from "@sidecar/devtrace/vocabulary";
 import { APP_SETTING_KIND, type AppGuideSnapshot } from "@sidecar/guide";
 import { ISSUE_TRACKER_ID, normalizeTrackedIssue, type TrackedIssue } from "@sidecar/issues";
 import {
@@ -28,7 +29,7 @@ import {
   type Session,
   WORKSPACE_TASK_SUPPORT,
 } from "@sidecar/session";
-import { isRecord, text } from "@sidecar/wire";
+import { isRecord, text, type WireRecord } from "@sidecar/wire";
 import type { JsonValue, ParsedJsonObject } from "@sidecar/wire/testing";
 import {
   asMediaStream,
@@ -182,6 +183,8 @@ function harness(
     captureSessionSync?: boolean;
     /** Lets a test ride the status edges, the way the announcer does. */
     onStatus?: (status: RealtimeStatus) => void;
+    /** Lets a test stand where the development trace's tap does. */
+    onWireEvent?: (direction: TraceDirection, event: WireRecord) => void;
     /** Lets a test see what the element would be handed to play. */
     onRemoteStream?: (stream: MediaStream | undefined) => void;
     /**
@@ -352,6 +355,9 @@ function harness(
   if (options.connectTimeoutMs !== undefined) {
     sessionOptions.connectTimeoutMs = options.connectTimeoutMs;
   }
+  if (options.onWireEvent) {
+    sessionOptions.onWireEvent = options.onWireEvent;
+  }
   if (options.now) {
     sessionOptions.now = options.now;
   }
@@ -506,6 +512,34 @@ test("connecting opens the call and leaves the microphone closed", async () => {
   assert.equal(headers.authorization, `Bearer ${CONNECTION.value}`);
   assert.equal(headers["content-type"], "application/sdp");
   assert.equal(request?.init.body, "v=0 local");
+});
+
+test("the wire tap sees both directions, raw, before the parser narrows or drops", async () => {
+  const tapped: { direction: TraceDirection; event: WireRecord }[] = [];
+  const context = harness({
+    onWireEvent: (direction, event) => tapped.push({ direction, event }),
+  });
+  await context.session.connect();
+
+  // The session sync the harness's channel filters out of `sent` still
+  // crosses the tap: it is what the call sends, instructions and tools whole.
+  const clientTypes = tapped
+    .filter((entry) => entry.direction === TRACE_DIRECTION.CLIENT)
+    .map((entry) => entry.event.type);
+  assert.ok(clientTypes.includes(REALTIME_CLIENT_EVENT.SESSION_UPDATE));
+
+  // A reply's `done` reaches the tap with the fields the parser discards, and
+  // an event type this build does not act on reaches it at all.
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: { id: "resp_1", usage: { input_tokens: 12 } },
+  });
+  context.emit({ type: "rate_limits.updated", rate_limits: [] });
+  const server = tapped.filter((entry) => entry.direction === TRACE_DIRECTION.SERVER);
+  const done = server.find((entry) => entry.event.type === REALTIME_SERVER_EVENT.RESPONSE_DONE);
+  assert.ok(isRecord(done?.event.response));
+  assert.deepEqual(done?.event.response.usage, { input_tokens: 12 });
+  assert.ok(server.some((entry) => entry.event.type === "rate_limits.updated"));
 });
 
 test("no credential leaves the voice experience explicitly unavailable", async () => {

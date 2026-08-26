@@ -1,4 +1,5 @@
 import type { SessionNoticeAsk } from "@sidecar/attention";
+import { TRACE_DIRECTION, type TraceDirection } from "@sidecar/devtrace/vocabulary";
 import { type AppGuideSnapshot, appGuideContextText, EMPTY_APP_GUIDE } from "@sidecar/guide";
 import type { TrackedIssue } from "@sidecar/issues";
 import {
@@ -20,6 +21,7 @@ import {
   contextSupersedeEvents,
   conversationContextEvents,
   conversationHistoryText,
+  decodeRealtimePayload,
   functionCallFollowUpEvents,
   functionCallOutputEvents,
   type IntroductionLine,
@@ -333,6 +335,14 @@ export interface RealtimeVoiceSessionOptions extends RealtimeVoiceSessionCallbac
   cancel?: (timer: ScheduledTimer) => void;
   /** Injectable so a test can hold the clock a truncate measures against. */
   now?: () => number;
+  /**
+   * A development tap on the wire itself: every event this call sends and
+   * every event the service answers, as they cross the data channel. The tap
+   * observes and never steers — nothing here reads its result — and the
+   * caller decides per event whether anything leaves it, because the session
+   * outlives the bootstrap that says whether a trace is being written.
+   */
+  onWireEvent?: (direction: TraceDirection, event: WireRecord) => void;
 }
 
 function errorMessage(error: Error): string {
@@ -2258,7 +2268,14 @@ export class RealtimeVoiceSession {
   }
 
   #handleServerEvent(data: UnparsedWireValue): void {
-    const event = parseRealtimeServerEvent(data);
+    // Decoded once, here: the tap reads the record whole — the parser below
+    // keeps only the events the conversation acts on, and what it discards
+    // (usage, errors in full, event types this build does not know) is half
+    // of what a trace exists to show — and the parser accepts the decoded
+    // record as readily as the string, so nothing is parsed twice.
+    const record = decodeRealtimePayload(data);
+    if (record) this.#options.onWireEvent?.(TRACE_DIRECTION.SERVER, record);
+    const event = parseRealtimeServerEvent(record);
     if (!event) return;
 
     switch (event.type) {
@@ -2591,7 +2608,10 @@ export class RealtimeVoiceSession {
   #send(events: readonly WireRecord[]): void {
     const channel = this.#channel;
     if (channel?.readyState !== "open") return;
-    for (const event of events) channel.send(JSON.stringify(event));
+    for (const event of events) {
+      channel.send(JSON.stringify(event));
+      this.#options.onWireEvent?.(TRACE_DIRECTION.CLIENT, event);
+    }
   }
 
   #fail(message: string): boolean {

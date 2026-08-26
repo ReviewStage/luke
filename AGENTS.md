@@ -17,7 +17,7 @@ Canonical commands:
 | `./scripts/test-macos.sh` | Package and validate the macOS app |
 | `./scripts/verify.sh` | Complete macOS validation plus visual evidence |
 | `pnpm release:macos` | Create a local signed, notarized, and verified electron-builder DMG, zip, and update manifest |
-| `./scripts/run.sh` | Launch the app against live sessions, replacing any running instance (`--fixture smoke` for fixture data, `--keep-running` to keep the running instance) |
+| `./scripts/run.sh` | Launch the app against live sessions, replacing any running instance (`--fixture smoke` for fixture data, `--keep-running` to keep the running instance, `--no-trace` to skip the development trace) |
 | `./scripts/evidence.sh` | Write the fixture PNG under `artifacts/` |
 | `pnpm evidence:record` | Record the fixture transition on a physical Mac |
 | `pnpm lint:fix` | Apply repository formatting and safe lint fixes |
@@ -294,6 +294,25 @@ Trust constraints:
   or what the recording client may capture is a product decision, not an
   implementation detail. `PRIVACY.md` describes all three in kind and moves
   when any of them changes character.
+- The development trace is the one place Luke's own agent traffic may reach a
+  file, and it cannot exist for a user: only an unpackaged, live run whose
+  shell set `LUKE_TRACE_DIR` constructs a writer at all, so a packaged build
+  carries nothing to switch off and a fixture or evidence run stays silent
+  behind the same gate that keeps it off the network. `run.sh` sets the
+  variable by default, pointed at the gitignored build directory, so a
+  development launch is traced unless `--no-trace` says otherwise — the
+  launcher supplies the directory, and the app's own gate still decides
+  whether anything is recorded. What it records is the
+  desktop's own view of its own conversation — the realtime events already
+  crossing the data channel, with an audio append reduced to its byte count
+  before it leaves the renderer, and the attention evaluator's update and
+  decision — appended as JSONL under the developer's chosen directory and
+  sent nowhere; `pnpm trace:export` turns one file into a document a local
+  viewer opens. The tap only observes: nothing reads its result, and the
+  main process drops the renderer's tapped events whenever no writer stands.
+  A trace carries real titles, branches, and spoken words, so trace files are
+  never committed, for the same reason fixtures stay synthetic. Widening what
+  a trace records is a product decision, not an implementation detail.
 - The issue tracker follows the same rule at one remove, and is connected the
   way the calendar is rather than the way a cloud provider is. Luke reads the
   issues a tracker lists for the user under a grant the tracker's own consent

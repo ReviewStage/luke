@@ -14,6 +14,7 @@ sidecar_ensure_dependencies
 # new launch then quits on startup and only re-asserts the running panel. Every
 # other argument is forwarded to Electron.
 replace_running_app=true
+capture_trace=true
 remaining_arguments=$#
 while ((remaining_arguments-- > 0)); do
     argument=$1
@@ -22,8 +23,22 @@ while ((remaining_arguments-- > 0)); do
         replace_running_app=false
         continue
     fi
+    if [[ $argument == --no-trace ]]; then
+        capture_trace=false
+        continue
+    fi
     set -- "$@" "$argument"
 done
+
+# Development runs record the trace of Luke's own agent traffic by default,
+# under the gitignored build directory; `pnpm trace:export` turns one file
+# into the document unbox-ai opens. `--no-trace` opts a run out, a directory
+# already in the environment wins over the default, and the app itself keeps
+# the last word: only an unpackaged live run honours the variable at all, so
+# fixture runs and packaged builds record nothing whatever this exports.
+if [[ $capture_trace == true && -z ${LUKE_TRACE_DIR:-} ]]; then
+    export LUKE_TRACE_DIR="$SIDECAR_REPO_ROOT/.build/traces"
+fi
 
 if [[ $replace_running_app == true ]]; then
     sidecar_stop_running_app

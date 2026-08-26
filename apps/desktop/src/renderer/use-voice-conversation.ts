@@ -1,4 +1,5 @@
 import type { SessionNoticeAsk } from "@sidecar/attention";
+import { sanitizedTraceEvent } from "@sidecar/devtrace/vocabulary";
 import { FIXTURE_SPEAKING_CAPTION } from "@sidecar/fixtures";
 import { type AppGuideSnapshot, EMPTY_APP_GUIDE } from "@sidecar/guide";
 import { mentionedIssues, type TrackedIssue } from "@sidecar/issues";
@@ -365,6 +366,12 @@ export interface VoiceConversationOptions {
    * the user's exact choice.
    */
   preferBuiltInMicrophone: boolean;
+  /**
+   * Whether this run records the development trace. True only when the main
+   * process built a writer — an unpackaged, live run the developer pointed at
+   * a directory — so on every other run the wire is never even tapped.
+   */
+  agentTraceEnabled: boolean;
   sessions: readonly Session[];
   /**
    * The standing asks riding the roster they annotate, so a conversation can
@@ -717,6 +724,14 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       // placed where their turn happened: the thread holds both halves of
       // the exchange, in the order they were said.
       onSpokenAsk: rememberSpokenAsk,
+      // The development trace's tap, checked at each event rather than at
+      // construction because the session outlives the bootstrap that says
+      // whether a writer stands behind the bridge. The audio is stripped
+      // here, before the event ever crosses the sandbox.
+      onWireEvent: (direction, event) => {
+        if (!optionsRef.current.agentTraceEnabled) return;
+        window.sidecar.recordAgentTrace({ direction, event: sanitizedTraceEvent(event) });
+      },
     });
     return voiceSession.current;
   }, [rememberConversationEntry, rememberSpokenAsk, setVoiceStatus]);
