@@ -2943,7 +2943,8 @@ html[data-keyboard="true"] .wing-mark:focus-visible {
   place-items: center;
 }
 
-.key-slot-mark .provider-mark {
+.key-slot-mark .provider-mark,
+.key-slot-mark .settings-icon {
   width: 16px;
   height: 16px;
 }

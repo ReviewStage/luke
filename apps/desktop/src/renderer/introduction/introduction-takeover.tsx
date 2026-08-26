@@ -26,6 +26,7 @@ import { PANEL_PRESENTATION } from "../panel-state";
 import { RealtimeVoiceSession } from "../realtime-session";
 import { displaySessions, type SessionView, sessionTally } from "../session-model";
 import { parseMilliseconds, useSessionReorderMotion } from "../session-motion";
+import { MicrophoneIcon } from "../settings-icons";
 import { useSignInFaceCycle } from "../sign-in-gate";
 import { useMeasuredHeight } from "../use-measured-height";
 import { activeVoiceStream } from "../use-voice-conversation";
@@ -769,10 +770,11 @@ export function IntroductionTakeover({
       </div>
       {/* The microphone wait's pill, on the consent slot's exact terms: the
           shape shrinks to a line that says what it is waiting for while
-          macOS's own dialog holds the room. No mark and no way out, because
-          no service tells the pills apart here and the dialog's own buttons
-          are the only honest answer — base.css's slot rules own its arrival,
-          its exit, and the pointer it may take while drawn. */}
+          macOS's own dialog holds the room. Its mark is the microphone
+          itself, in Luke's own glyph vocabulary, because macOS's ask has no
+          brand mark of its own; there is no way out, because the dialog's
+          buttons are the only honest answer — base.css's slot rules own its
+          arrival, its exit, and the pointer it may take while drawn. */}
       {flown ? (
         <div
           className="slot-stage"
@@ -782,6 +784,9 @@ export function IntroductionTakeover({
         >
           <div ref={slotElement} className="key-slot sign-in-slot">
             <div className="key-slot-row">
+              <span className="key-slot-mark">
+                <MicrophoneIcon />
+              </span>
               <span className="sign-in-slot-copy" role="status">
                 <strong>Waiting for macOS…</strong>
                 <small>Allow microphone access in macOS's dialog.</small>
