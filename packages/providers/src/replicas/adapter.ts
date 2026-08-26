@@ -1101,11 +1101,19 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
    * agent for a row with no chats to say so. The read is documented to wake
    * a sleeping or archived workspace, so it is issued only for a workspace
    * the same pass's list just reported awake, where there is nothing to
-   * wake; a workspace that fell asleep in the second between the two reads
-   * would be woken back, which Replicas prices at nothing and the next pass
-   * reports honestly, but the window is a second against a lifecycle
-   * measured in hours. Failures are contained the way every enrichment's
-   * are. It is also the fallback chat source: a workspace the registry did
+   * wake. The read itself counts as no activity: verified live, an idle
+   * workspace polled every fifteen seconds kept its last-activity stamp
+   * unmoved and slept exactly on its one-hour idle schedule under that
+   * polling, so steady-state polling extends no billed runtime. What can
+   * cost is the race: a workspace that fell asleep in the second between
+   * the two reads would be woken back, and while the wake itself is
+   * unpriced, Replicas meters every awake minute of a workspace created by
+   * the API or an automation until its idle timeout re-sleeps it, an hour
+   * by default, so one accidental wake can bill that timeout's worth of
+   * minutes, where a manually created workspace bills nothing under the
+   * seat. The next pass reports the wake honestly, and the window is a
+   * second against a lifecycle measured in hours. Failures are contained
+   * the way every enrichment's are. It is also the fallback chat source: a workspace the registry did
    * not answer for this pass still lists its chats here, turn state
    * included, so an awake workspace's rows survive the registry's
    * organization-header demands.
