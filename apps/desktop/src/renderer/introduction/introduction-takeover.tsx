@@ -27,6 +27,7 @@ import { RealtimeVoiceSession } from "../realtime-session";
 import { displaySessions, type SessionView, sessionTally } from "../session-model";
 import { parseMilliseconds, useSessionReorderMotion } from "../session-motion";
 import { useSignInFaceCycle } from "../sign-in-gate";
+import { useMeasuredHeight } from "../use-measured-height";
 import { activeVoiceStream } from "../use-voice-conversation";
 import { outputSilent } from "../volume-hint";
 import { WAVEFORM_VOICE, Waveform, type WaveformVoice } from "../waveform";
@@ -188,6 +189,8 @@ export function IntroductionTakeover({
     observer.observe(group);
     return () => observer.disconnect();
   }, []);
+  /** The microphone wait's own pill, measured so the surface ends where it does. */
+  const [slotElement, slotHeight] = useMeasuredHeight();
   /** The current beat's remaining lines, and what to do when the last one ends. */
   const lineQueueRef = useRef<readonly string[]>([]);
   const afterLinesRef = useRef<(() => void) | undefined>(undefined);
@@ -545,8 +548,8 @@ export function IntroductionTakeover({
       }
       case INTRODUCTION_BEAT.MICROPHONE_DIALOG: {
         // The dialog is macOS's own window mid-screen; while it stands, the
-        // panel is the capsule beside the housing — the same courtesy it pays
-        // a calendar consent — and the answer is what brings it back.
+        // panel is the waiting slot — the same pill a calendar consent
+        // stands down to — and the answer is what brings it back.
         void window.sidecar.requestMicrophone().then((status) => {
           if (beatRef.current !== INTRODUCTION_BEAT.MICROPHONE_DIALOG) return;
           dispatch(
@@ -634,7 +637,7 @@ export function IntroductionTakeover({
     const handleMove = (event: MouseEvent) => {
       const island = document
         .elementFromPoint(event.clientX, event.clientY)
-        ?.closest(".introduction-panel, .notch-wings");
+        ?.closest(".introduction-panel, .notch-wings, .slot-stage");
       update(island != null);
     };
     const handleLeave = () => {
@@ -666,9 +669,15 @@ export function IntroductionTakeover({
     return () => clearTimeout(timer);
   }, [landed]);
   const standingDown = STANDING_DOWN_BEATS.has(beat);
-  // Stood aside, not down: the capsule while macOS's microphone dialog is
-  // up, with the wings ungated — the panel it springs back to is unchanged.
+  // Stood aside, not down: while macOS's microphone dialog is up the panel
+  // is the waiting slot — the same pill a calendar consent stands down to,
+  // wings ungated — and the panel it springs back to is unchanged.
   const standingAside = beat === INTRODUCTION_BEAT.MICROPHONE_DIALOG;
+  const presentation = standingDown
+    ? PANEL_PRESENTATION.CAPSULE
+    : standingAside
+      ? PANEL_PRESENTATION.SLOT
+      : PANEL_PRESENTATION.PANEL;
   // The tour's flipped row wears the attention look and rides to the top,
   // exactly as the panel re-sorts a session that starts needing someone.
   const tourFlipped = tourFlipId ? rows.find((row) => row.id === tourFlipId) : undefined;
@@ -713,17 +722,13 @@ export function IntroductionTakeover({
       data-settled={String(surfaceSettled)}
       data-lifted={String(rows.length > 0)}
       data-notch={String(bootstrap.display.notch.hasNotch)}
-      {...(landed
-        ? {
-            "data-presentation":
-              standingDown || standingAside ? PANEL_PRESENTATION.CAPSULE : PANEL_PRESENTATION.PANEL,
-          }
-        : undefined)}
+      {...(landed ? { "data-presentation": presentation } : undefined)}
       style={{
         ...cssCustomProperties({
           "--notch-top-inset": `${bootstrap.display.notch.topInset}px`,
           "--notch-housing-width": `${bootstrap.display.notch.housingWidth}px`,
           "--panel-height": `${panelHeight}px`,
+          ...(slotHeight !== undefined ? { "--slot-height": `${slotHeight}px` } : undefined),
         }),
         ...flightStyle,
       }}
@@ -762,6 +767,29 @@ export function IntroductionTakeover({
           </div>
         ) : null}
       </div>
+      {/* The microphone wait's pill, on the consent slot's exact terms: the
+          shape shrinks to a line that says what it is waiting for while
+          macOS's own dialog holds the room. No mark and no way out, because
+          no service tells the pills apart here and the dialog's own buttons
+          are the only honest answer — base.css's slot rules own its arrival,
+          its exit, and the pointer it may take while drawn. */}
+      {flown ? (
+        <div
+          className="slot-stage"
+          data-drawn={String(standingAside)}
+          aria-hidden={!standingAside}
+          inert={!standingAside}
+        >
+          <div ref={slotElement} className="key-slot sign-in-slot">
+            <div className="key-slot-row">
+              <span className="sign-in-slot-copy" role="status">
+                <strong>Waiting for macOS…</strong>
+                <small>Allow microphone access in macOS's dialog.</small>
+              </span>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {/* The real wings, the moment there is a strip to stand in: the same
           face, meter, and count the app draws, trading the face for the meter
           while the developer holds the floor. At the gate the strip goes
@@ -777,9 +805,7 @@ export function IntroductionTakeover({
           meetingQuiet={false}
           voiceSpent={false}
           sessionsSettled={true}
-          presentation={
-            standingDown || standingAside ? PANEL_PRESENTATION.CAPSULE : PANEL_PRESENTATION.PANEL
-          }
+          presentation={presentation}
           housingWidth={bootstrap.display.notch.housingWidth}
           accountGated={standingDown}
         />

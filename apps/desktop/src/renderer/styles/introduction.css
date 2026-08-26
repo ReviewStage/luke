@@ -261,7 +261,7 @@
 /* Standing down — or aside, while macOS's microphone dialog holds the room —
    the rows leave first, the same exit-first ordering the real collapse
    keeps, and the real surface follows them on its own spring into the
-   capsule's bounds. */
+   capsule's bounds, or the waiting slot's for the aside. */
 .introduction-stage[data-beat="glide"] .introduction-rows,
 .introduction-stage[data-beat="microphone-dialog"] .introduction-rows,
 .introduction-stage[data-beat="stand-down"] .introduction-rows,

@@ -29,9 +29,9 @@ export const INTRODUCTION_BEAT = {
   /** Luke asks before macOS does. */
   MICROPHONE: "microphone",
   /**
-   * macOS's own dialog is up: the landed panel stands aside to the capsule
-   * for as long as the ask stands — the same courtesy the panel pays a
-   * calendar consent — and springs back the moment it is answered.
+   * macOS's own dialog is up: the landed panel stands aside to the waiting
+   * slot for as long as the ask stands — the same pill a calendar consent
+   * stands down to — and springs back the moment it is answered.
    */
   MICROPHONE_DIALOG: "microphone-dialog",
   /** The panel back up, the refusal answered kindly. */
