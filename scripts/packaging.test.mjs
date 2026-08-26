@@ -255,7 +255,7 @@ test("packaging includes the approved Apple Events description", () => {
 
   assert.equal(
     config.mac.extendInfo.NSAppleEventsUsageDescription,
-    "Luke turns Music and Spotify down while you are having a spoken conversation, and back up afterwards. He never pauses them, and reads nothing beyond whether each is playing and how loud.",
+    "Your music is playing while you and Luke are in a spoken conversation, which is the one moment he asks this: he turns Music and Spotify down while you talk, and back up afterwards. He never pauses them, and reads nothing beyond whether each is playing and how loud.",
   );
   assert.equal(config.mac.extendInfo.NSAppleEventsUsageDescription, APPLE_EVENTS_USAGE_DESCRIPTION);
 });
