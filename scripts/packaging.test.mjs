@@ -50,7 +50,7 @@ function builderConfig(env = {}) {
   return createElectronBuilderConfig(env);
 }
 
-test("workspace package versions agree on v0.3.11", () => {
+test("workspace package versions agree on v0.3.12", () => {
   // Enumerated rather than listed, so a package added to the workspace is held
   // to the release version without anyone remembering to name it here.
   const packagePaths = [
@@ -74,7 +74,7 @@ test("workspace package versions agree on v0.3.11", () => {
 
   assert.deepEqual(
     versions.map(({ version }) => version),
-    packagePaths.map(() => "0.3.11"),
+    packagePaths.map(() => "0.3.12"),
   );
 });
 
