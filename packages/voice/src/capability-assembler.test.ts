@@ -98,6 +98,39 @@ test("the assembler builds and clears the keyed voice capabilities as one unit",
   assert.match(reports.at(-1) ?? "", /unavailable/);
 });
 
+test("a wrapped evaluator stands where the built one would, and only when one was built", async () => {
+  const wrapped: string[] = [];
+  let key: string | undefined = "test-key";
+  const assembler = new VoiceCapabilityAssembler({
+    settings: {
+      ...settingsFor({ source: VOICE_SOURCE.KEY }),
+      readApiKey: async () => key,
+    },
+    credentialsUsable: () => true,
+    fixtureRun: () => false,
+    accountSignedIn: () => false,
+    hostedServiceBaseUrl: "https://example.test",
+    refreshAccount: async () => undefined,
+    currentSession: () => undefined,
+    noticeRequestFor: () => undefined,
+    report: () => undefined,
+    wrapEvaluator: (evaluator) => {
+      wrapped.push("wrapped");
+      return evaluator;
+    },
+  });
+
+  await assembler.apply();
+  assert.ok(assembler.attentionReviewer);
+  assert.deepEqual(wrapped, ["wrapped"]);
+
+  // No evaluator, nothing to decorate: the wrapper must not conjure one.
+  key = undefined;
+  await assembler.apply();
+  assert.equal(assembler.attentionReviewer, undefined);
+  assert.deepEqual(wrapped, ["wrapped"]);
+});
+
 test("the assembler keeps fixture runs credential-free without reading a key", async () => {
   let keyReads = 0;
   const assembler = new VoiceCapabilityAssembler({

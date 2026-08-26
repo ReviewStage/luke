@@ -13,8 +13,8 @@
 </p>
 
 <p align="center">
-  <strong>Your AI engineering manager.</strong><br>
-  A macOS app that watches your coding agents and keeps you updated.
+  <strong>An engineering manager for your coding agents.</strong><br>
+  A macOS voice agent that keeps you in the loop with your agents.
 </p>
 
 <p align="center">
@@ -24,10 +24,11 @@
 <p align="center">
   <a href="https://tryluke.dev">Website</a> ·
   <a href="PRIVACY.md">Privacy</a> ·
-  <a href="CHANGELOG.md">Changelog</a>
+  <a href="CHANGELOG.md">Changelog</a> ·
+  <a href="mailto:founders@stagereview.app">Contact</a>
 </p>
 
-![Luke's panel expanded from the notch, listing local and cloud agent sessions with their status, recaps, and workspace grouping.](docs/media/luke-panel.png)
+![Luke's panel expanded from the notch on a Mac desktop, listing local and cloud agent sessions with their status, recaps, and workspace grouping.](docs/media/luke-desktop.jpg)
 
 ## Features
 
@@ -100,6 +101,11 @@ See [PRIVACY.md](PRIVACY.md).
 
 Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md)
 to get set up, and [SECURITY.md](SECURITY.md) for reporting a vulnerability.
+
+## Built by
+
+[Charles Pan](https://x.com/ceefryingpan) and
+[Dean Stratakos](https://x.com/DeanStratakos).
 
 ## License
 

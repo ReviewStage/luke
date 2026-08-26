@@ -82,8 +82,9 @@ export interface SessionReplayBootstrap {
   /**
    * Whether this run may record at all, whatever the switches say. False for
    * a fixture and a capture run, which must stay deterministic and send
-   * nothing, and false with no account, because a recording filed under
-   * nobody could be neither joined to its counts nor erased with them.
+   * nothing, and false for the rest of a run in which an account was deleted.
+   * Being signed out is not one of the reasons: recording begins at the first
+   * paint, before an account exists.
    */
   permitted: boolean;
   /**
@@ -97,7 +98,9 @@ export interface SessionReplayBootstrap {
    * The account's opaque id, absent while signed out. It is the same id the
    * hosted endpoints resolve a bearer token to, so a recording lands on the
    * person the counted events already belong to — which is also what makes
-   * deleting the account erase the recordings with it.
+   * deleting the account erase the recordings with it. A recording that runs
+   * while this is absent is anonymous, joined to the person if a sign-in
+   * lands during it and to nobody if none ever does.
    */
   accountId?: string;
 }
@@ -113,6 +116,12 @@ export interface AppBootstrap {
   captureMode: boolean;
   /** True when `--fixture` (or a capture run) makes the panel render fixture sessions. */
   fixtureMode: boolean;
+  /**
+   * Whether this run records the development trace, so the conversation taps
+   * the wire only while a writer actually stands behind the bridge. False on
+   * every packaged run by construction.
+   */
+  agentTraceEnabled: boolean;
   /** Whether Superset's bundled CLI exists on this Mac. */
   supersetInstalled: boolean;
   /** Whether that CLI also has its own login configuration. */

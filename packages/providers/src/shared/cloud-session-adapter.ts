@@ -34,6 +34,11 @@ import {
   type WireRecord,
   wireRecord,
 } from "@sidecar/wire";
+import {
+  ADAPTER_DIAGNOSTIC_KIND,
+  type AdapterDiagnosticCallback,
+  type AdapterDiagnosticKind,
+} from "./adapter-diagnostics.js";
 
 const GIT_SUFFIX = ".git";
 
@@ -131,10 +136,11 @@ export interface CloudAdapterOptions {
   minimumRefreshIntervalMs?: number;
   /**
    * Called when an observation pass fails for a reason other than a network
-   * or credential fault — a TypeError in a subclass's parsing, for example.
+   * or credential fault — a TypeError in a subclass's parsing, for example —
+   * or when a subclass reports a problem of its own, named by the kind.
    * Transient and unauthorized {@link CloudRequestError} never reach it.
    */
-  onDiagnostic?: (error: Error) => void;
+  onDiagnostic?: AdapterDiagnosticCallback;
 }
 
 /** The provider-specific identity and endpoint a subclass supplies once. */
@@ -261,7 +267,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
   readonly #authorizationHeaders: (apiKey: string) => Readonly<Record<string, string>>;
   readonly #now: () => number;
   readonly #minimumRefreshIntervalMs: number;
-  readonly #onDiagnostic: ((error: Error) => void) | undefined;
+  readonly #onDiagnostic: AdapterDiagnosticCallback | undefined;
 
   #credential: string | undefined;
   /**
@@ -337,10 +343,21 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
       // Anything else is a bug in this pass — a TypeError thrown by a
       // subclass's parsing is not a network blip, and must not keep serving
       // the stale snapshot with no log, counter, or hook.
-      this.#onDiagnostic?.(error instanceof Error ? error : new Error(String(error)));
+      this.reportDiagnostic(
+        ADAPTER_DIAGNOSTIC_KIND.PASS_FAILURE,
+        error instanceof Error ? error : new Error(String(error)),
+      );
       throw error;
     }
     return this.#observations;
+  }
+
+  /**
+   * A subclass's way onto the same diagnostic channel, for a problem worth
+   * surfacing from a pass that otherwise succeeded.
+   */
+  protected reportDiagnostic(kind: AdapterDiagnosticKind, error: Error): void {
+    this.#onDiagnostic?.(kind, error);
   }
 
   /**

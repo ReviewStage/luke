@@ -34,7 +34,8 @@ interface TestWorkspace {
   name: string;
   creatorId?: string;
   lastActivityAt: number;
-  archivedAt?: string;
+  /** What the listing marks the workspace as; the real page always carries one. */
+  state?: string;
   lifecycleStatus?: string;
   lifecycleErrorMessage?: string;
   lifecycleHttpStatus?: number;
@@ -73,19 +74,18 @@ function page(data: readonly JsonValue[]): JsonObject {
   return { data, offset: 0, hasMore: false };
 }
 
-function workspacePayload(workspace: TestWorkspace) {
+function workspacePayload(workspace: TestWorkspace, projects: readonly TestProject[]) {
   const payload: JsonObject = {
     id: workspace.id,
     name: workspace.name,
+    state: workspace.state ?? "ready",
+    repoUrl: projects.find((project) => project.id === workspace.projectId)?.gitRemote ?? "",
     createdAt: isoTimestamp(workspace.lastActivityAt),
     deepLink: `conductor://workspace?id=${workspace.id}`,
     lastActivityAt: isoTimestamp(workspace.lastActivityAt),
   };
   if (workspace.creatorId) {
     payload.creatorId = workspace.creatorId;
-  }
-  if (workspace.archivedAt) {
-    payload.archivedAt = workspace.archivedAt;
   }
   return payload;
 }
@@ -207,14 +207,21 @@ function fakeConductorApi(api: TestApi) {
     if (segments[1] === "projects" && segments.length === 2) {
       return jsonResponse(page(api.projects));
     }
-    if (segments[1] === "projects" && segments[3] === "workspaces") {
-      return jsonResponse(
-        page(
-          api.workspaces
-            .filter((workspace) => workspace.projectId === segments[2])
-            .map(workspacePayload),
-        ),
+    if (segments[1] === "workspaces" && segments.length === 2) {
+      const limit = Number(request.searchParams.get("limit") ?? "100");
+      const offset = Number(request.searchParams.get("offset") ?? "0");
+      // The real index hides archived work when asked to; a deleted
+      // workspace stays in the page here so the adapter's own record check
+      // answers for it. The creator filter is deliberately not honored: the
+      // adapter's attribution check answers for whose workspaces these are.
+      const listed = api.workspaces.filter(
+        (workspace) =>
+          request.searchParams.get("includeArchived") !== "false" || workspace.state !== "archived",
       );
+      const rows = listed
+        .slice(offset, offset + limit)
+        .map((workspace) => workspacePayload(workspace, api.projects));
+      return jsonResponse({ data: rows, offset, hasMore: offset + rows.length < listed.length });
     }
     if (segments[1] === "workspaces" && segments[3] === "sessions") {
       return jsonResponse(
@@ -1377,6 +1384,50 @@ test("observes every workspace and chat the pages hold", async () => {
   );
 });
 
+test("keeps an old open workspace that newer pages would have crowded out", async () => {
+  // The listing pages newest-first, so an open workspace can be older than a
+  // whole page of newer work. Following the listing while it says more
+  // remain is what keeps that workspace's chat a row; stopping at the first
+  // page silently retired a conversation to spare a request.
+  const workspaces = [
+    ...Array.from({ length: 100 }, (_value, index) =>
+      ownedWorkspace(`workspace-new-${index}`, TEST_TIME - index * 1_000),
+    ),
+    ownedWorkspace("workspace-old", TEST_TIME - 500_000),
+  ];
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces,
+    sessions: [
+      {
+        id: "session-old",
+        workspaceId: "workspace-old",
+        name: TEST_SESSION_NAME,
+        status: TEST_CONDUCTOR_STATUS.IDLE,
+        statusUpdatedAt: TEST_TIME - 1_000,
+      },
+    ],
+  });
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  assert.deepEqual(
+    observations.map((observation) => observation.providerSessionId),
+    ["session-old"],
+  );
+  // The second page was asked for where the first said more remained, and
+  // every page carried the documented filters: the user the same pass's
+  // identity read reported, and no archived work.
+  const listings = api.requests.filter(
+    (request) => request.method === "GET" && request.pathname === "/v0/workspaces",
+  );
+  assert.equal(listings.length, 2);
+  assert.equal(listings[0]?.searchParams.get("creator"), TEST_USER_ID);
+  assert.equal(listings[0]?.searchParams.get("includeArchived"), "false");
+  assert.equal(listings[1]?.searchParams.get("offset"), "100");
+});
+
 test("lets a crowded workspace keep every chat beside its quiet neighbour", async () => {
   const workspaces = [
     ownedWorkspace("workspace-crowded", TEST_TIME - 1_000),
@@ -1639,10 +1690,19 @@ test("leaves a filed-away workspace and its chats off the roster entirely", asyn
       // Filing a workspace away is how a user says its chats are done being
       // watched, so nothing of it survives to the roster — this is also what
       // makes a press of the archive control actually clear the rows it
-      // acted on, come the next pass.
+      // acted on, come the next pass. The listing marks it, and a page can
+      // hold hundreds of these, so it must cost nothing further: judged by a
+      // per-workspace read instead, one failed read on one long-archived
+      // workspace resurrected rows the user had already filed away.
       {
         ...ownedWorkspace("workspace-filed", TEST_TIME - 30_000),
-        archivedAt: isoTimestamp(TEST_TIME - 20_000),
+        state: "archived",
+        // Misbehave behind the mark: the pass must never ask.
+        lifecycleHttpStatus: HTTP_STATUS.SERVER_ERROR,
+      },
+      {
+        ...ownedWorkspace("workspace-erased", TEST_TIME - 40_000),
+        state: "deleted",
       },
       ownedWorkspace("workspace-open", TEST_TIME - 5_000),
     ],
@@ -1669,26 +1729,34 @@ test("leaves a filed-away workspace and its chats off the roster entirely", asyn
     observations.map((candidate) => candidate.providerSessionId),
     ["session-open"],
   );
-  // Dropped before its sessions are ever asked for: the filed-away workspace
-  // costs no requests, not just no rows.
+  // Dropped before its lifecycle or sessions are ever asked for: the
+  // filed-away workspaces cost no requests, not just no rows.
   assert.equal(
     api.requests.some((request) => request.pathname.includes("workspace-filed")),
+    false,
+  );
+  assert.equal(
+    api.requests.some((request) => request.pathname.includes("workspace-erased")),
     false,
   );
 });
 
 test("leaves a workspace whose lifecycle stands archived off the roster", async () => {
-  // Conductor's listing keeps a filed-away workspace in the page with no
-  // mark of it — no archive timestamp, nothing — and only the lifecycle
-  // endpoint says it was archived. Without that read deciding the roster,
-  // every chat of every workspace ever archived kept its row, standing gray
-  // forever.
+  // A filing-away the listing has not caught up with still shows at the
+  // lifecycle endpoint, and a listing state this build does not know says
+  // nothing either way — in both cases the lifecycle read decides, so
+  // every chat of a workspace actually archived is dropped rather than
+  // standing gray forever.
   const api = fakeConductorApi({
     userId: TEST_USER_ID,
     projects: [LUKE_PROJECT],
     workspaces: [
       { ...ownedWorkspace("workspace-archived", TEST_TIME - 30_000), lifecycleStatus: "archived" },
-      { ...ownedWorkspace("workspace-deleted", TEST_TIME - 40_000), lifecycleStatus: "deleted" },
+      {
+        ...ownedWorkspace("workspace-deleted", TEST_TIME - 40_000),
+        state: "some-future-state",
+        lifecycleStatus: "deleted",
+      },
       ownedWorkspace("workspace-open", TEST_TIME - 5_000),
     ],
     sessions: [

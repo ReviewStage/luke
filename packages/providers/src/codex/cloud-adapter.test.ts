@@ -3,6 +3,10 @@ import test from "node:test";
 import { CLI_CONNECTION, SESSION_LOCATION, SESSION_STATUS } from "@sidecar/session";
 import type { JsonObject } from "@sidecar/wire/testing";
 import {
+  ADAPTER_DIAGNOSTIC_KIND,
+  type AdapterDiagnosticCallback,
+} from "../shared/adapter-diagnostics.js";
+import {
   CLI_ADAPTER_DEFAULTS,
   CLI_FAILURE,
   CliCommandError,
@@ -130,14 +134,33 @@ function fakeCodexCli(behavior: FakeCliBehavior) {
 
 function adapterFor(
   run: CliRun,
-  overrides: { now?: () => number; minimumRefreshIntervalMs?: number } = {},
+  overrides: {
+    now?: () => number;
+    minimumRefreshIntervalMs?: number;
+    onDiagnostic?: AdapterDiagnosticCallback;
+  } = {},
 ): CodexCloudSessionAdapter {
   return new CodexCloudSessionAdapter({
     run,
     now: overrides.now ?? (() => TEST_TIME),
     minimumRefreshIntervalMs: overrides.minimumRefreshIntervalMs ?? 0,
+    ...(overrides.onDiagnostic ? { onDiagnostic: overrides.onDiagnostic } : undefined),
   });
 }
+
+test("a programming error during observation reports a pass-failure diagnostic", async () => {
+  const diagnostics: [string, Error][] = [];
+  const bug = new TypeError("tasks is not iterable");
+  const adapter = adapterFor(
+    async () => {
+      throw bug;
+    },
+    { onDiagnostic: (kind, error) => diagnostics.push([kind, error]) },
+  );
+
+  await assert.rejects(() => adapter.observe(), bug);
+  assert.deepEqual(diagnostics, [[ADAPTER_DIAGNOSTIC_KIND.PASS_FAILURE, bug]]);
+});
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("observes cloud tasks as cloud sessions labelled by their environment's repository", async () => {

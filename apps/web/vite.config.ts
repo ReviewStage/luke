@@ -11,6 +11,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: resolveEntry("./index.html"),
+        about: resolveEntry("./about.html"),
         privacy: resolveEntry("./privacy.html"),
         changelog: resolveEntry("./changelog.html"),
         "sign-in": resolveEntry("./sign-in.html"),

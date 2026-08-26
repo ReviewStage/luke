@@ -7,9 +7,10 @@
  * conversation is sent. A capability this file does not describe is one Luke
  * will not offer, and a setting it does not mark changeable is one no spoken
  * ask can touch, so adding either to the app means adding it here in the same
- * change. The facts cover what a developer would ask and what a spoken ask
- * may do — not exhaustive surface behavior, which the closing fact has Luke
- * redirect to the surface rather than deny.
+ * change. The facts cover what Luke needs to hold a conversation and what a
+ * spoken ask may do — capabilities, refusals, and their bounds — not what the
+ * surface and the settings entries can say for themselves, which the closing
+ * fact has Luke redirect rather than deny.
  *
  * The settings half is built from the exhaustive schema in
  * `shared/settings-schema.ts`, so a new stored setting does not build until its
@@ -73,7 +74,7 @@ const VOICE_SOURCE_SECTION = `${SETTINGS_TAB}, on its front page, in the What Lu
 const ACCOUNT_SECTION = `the Account section, at the foot of ${SETTINGS_TAB}'s front page`;
 const SHORTCUTS_PAGE = `${SETTINGS_TAB}, on its Keyboard shortcuts page`;
 const CONNECTIONS_PAGE = `${SETTINGS_TAB}, on its Connections page`;
-/* Where the Updates and Usage data sections stand, for the facts about them. */
+/* Where the Updates section stands, for the fact about it. */
 const FRONT_PAGE = `${SETTINGS_TAB}, on its front page`;
 
 /**
@@ -144,8 +145,7 @@ function askKeyFact(askKey: string | undefined): AppGuideFact {
 const MICROPHONE_DETAIL = {
   granted:
     "Granted. The microphone opens only when the talk key takes a turn, sends nothing after " +
-    "the key comes up, and closes once the exchange settles. Typing to Luke never opens it. " +
-    "Which device it opens is the Prefer the Mac's microphone setting's to say.",
+    "the key comes up, and closes once the exchange settles. Typing to Luke never opens it.",
   denied:
     "Denied, so the talk key cannot capture. Typing to Luke still works: a typed ask opens no " +
     "capture device, and the reply is spoken either way. It can only be granted back in " +
@@ -186,11 +186,10 @@ function providersFact(settings: AppSettingsView): AppGuideFact {
     label: "Cloud providers",
     detail:
       `${roster.join(", ")}. Connecting one takes the key its row names, typed by hand into ` +
-      `${CONNECTIONS_PAGE}, under Providers — like every key, never spoken, and never ` +
-      "repeated back. Local providers such as Claude Code need no key and are observed on " +
-      `their own. Codex cloud tasks (${CODEX_CLOUD_CONNECTION_WORD[settings.codexCloudConnection]}) ` +
-      "take no key in Luke at all: they follow the Codex CLI's own login — codex login " +
-      "connects them, and signing that CLI out stops them.",
+      `${CONNECTIONS_PAGE}, under Providers — never spoken, and never repeated back. Local ` +
+      "providers such as Claude Code need no key and are observed on their own. Codex cloud " +
+      `tasks (${CODEX_CLOUD_CONNECTION_WORD[settings.codexCloudConnection]}) follow the ` +
+      "Codex CLI's own login: codex login connects them, and signing that CLI out stops them.",
   };
 }
 
@@ -209,10 +208,9 @@ function integrationFacts(settings: AppSettingsView): AppGuideFact[] {
         `${linearProvider.displayName} ` +
         `(${connectionWord(settings.credentialSources[linearProvider.id])}) connects by signing ` +
         `in with Linear from its row in ${CONNECTIONS_PAGE}, under Integrations — no key is ` +
-        `ever typed or spoken. Connected, Luke reads the developer's assigned issues and, ` +
-        `only when asked in a turn the developer opened, can move one to another state or ` +
-        `comment on it; disconnecting from the same row ends the access at Linear as well ` +
-        `as here.`,
+        `ever typed or spoken. Connected, Luke can, when asked, move an issue the developer ` +
+        `names to another state or comment on it; disconnecting from the same row ends the ` +
+        `access at Linear as well as here.`,
     });
   }
   if (settings.appleCalendarAvailable) {
@@ -258,18 +256,17 @@ function integrationFacts(settings: AppSettingsView): AppGuideFact[] {
       "deleting is permanent and takes the whole workspace with every chat in it, a row " +
       "still working is never offered it, a single chat cannot be closed or removed on its " +
       "own, and an ask to archive one means exactly this delete. Superset connects and " +
-      "disconnects from its row under Providers on the Connections page, through Superset's " +
-      "own sign-in; Luke never reads its token or clipboard.",
+      "disconnects by hand, from its row under Providers.",
   });
   facts.push({
     label: "Conductor",
     detail:
       "Conductor cloud connects with a key under Providers and creates workspaces in the " +
-      "cloud projects that key lists. Conductor on this Mac needs no key — it is recognized " +
-      "read-only from Conductor's own index — and an ask can create a new workspace in any " +
-      "repository it holds locally; the opening task is pre-filled in Conductor but not " +
-      "sent, so the developer presses Return there to start it. Local Conductor chats stay " +
-      "read-only otherwise: Luke cannot message, archive, or add an agent to one.",
+      "cloud projects that key lists. Conductor on this Mac needs no key and is recognized " +
+      "read-only, and an ask can create a new workspace in any repository it holds locally; " +
+      "the opening task is pre-filled in Conductor but not sent, so the developer presses " +
+      "Return there to start it. Local Conductor chats stay read-only otherwise: Luke " +
+      "cannot message, archive, or add an agent to one.",
   });
   return facts;
 }
@@ -290,8 +287,7 @@ function voiceKeyFact(settings: AppSettingsView, voiceAvailable: boolean): AppGu
         ? `Voice and session review run on the signed-in Luke account's daily allowance; a ` +
           `key of the developer's own runs them unmetered instead, billed by OpenAI. When a ` +
           `day's allowance is spent, watching continues unmetered and only voice pauses ` +
-          `until the reset — the face beside the housing grays out, and a caption where ` +
-          `replies land says when voice returns. `
+          `until the reset. `
         : source === CREDENTIAL_SOURCE.NONE
           ? `Signing in — or connecting a key — is what lets Luke speak and review sessions. `
           : `Voice and session review run on this key: no daily limit, nothing through Luke's ` +
@@ -313,8 +309,9 @@ const UPDATE_BUTTON_FOR_ROW_ACTION = {
 /**
  * The guide's Updates entry, read from the same row the settings page draws
  * so the sentence out loud and the button on screen can never disagree. The
- * download's progress is stripped before the row is read: the guide re-sends
- * its context whenever its text changes, and a percent tick is not news.
+ * download's progress is stripped before the row is read: the guide refreshes
+ * the session instructions whenever its text changes, and a percent tick is
+ * not news.
  */
 function updateGuideEntry(update: UpdateSnapshot): AppGuideUpdate {
   const steady =
@@ -338,10 +335,9 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
     {
       label: "What Luke is",
       detail:
-        "A macOS sidecar living beside the notch. The number beside the housing is the most " +
-        "pressing count among the sessions the panel lists — how many need the developer, else " +
-        "how many are working, else how many settled — wearing that state's colour. Hovering " +
-        "peeks, pressing opens the panel, and Escape closes what is open.",
+        "A macOS sidecar living beside the notch. The number beside the housing counts the " +
+        "sessions that most need the developer, wearing that state's colour. Hovering peeks, " +
+        "pressing opens the panel, and Escape closes what is open.",
     },
     {
       label: "The panel",
@@ -353,20 +349,16 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
       label: "The sessions list",
       detail:
         "Lists every observed session that still matters. The options button filters by " +
-        "location, kind, app, and agent and orders the list by urgency or recency; a spoken " +
-        "ask can filter, sort, or clear the same way. A row can be opened, messaged, or " +
-        "controlled where its provider allows, a session whose provider reported a pull " +
-        "request grows a chip that opens it in the browser, and Luke's own composer at the " +
-        "foot takes a typed ask.",
+        "location, kind, app, and agent and orders by urgency or recency; a spoken ask can " +
+        "filter, sort, or clear the same way. A row can be opened, messaged, or controlled " +
+        "where its provider allows, and Luke's own composer at the foot takes a typed ask.",
     },
     {
       label: "Apps beside a session",
       detail:
-        "The large mark leading a row names the coding agent; the small marks after its " +
-        "title name the apps holding the same chat — Conductor, ChatGPT, Cursor, Orca, " +
-        "Superset, cmux — recognized read-only from each app's own records. A mark with an " +
-        "exact address opens the chat in that app, the row body opens its preferred one, and " +
-        "an ask can name which app a chat held by several comes forward in.",
+        "A chat held by several apps — Conductor, ChatGPT, Cursor, Orca, Superset, cmux — " +
+        "wears their marks on its row. A mark with an exact address opens the chat in that " +
+        "app, and an ask can name which app it comes forward in.",
     },
     {
       label: "Searching sessions",
@@ -376,18 +368,10 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "magnifier, which is only offered beside a list of more than one session.",
     },
     {
-      label: "Workspaces in the list",
-      detail:
-        "Chats nested in a workspace — Conductor's, Superset's, or Orca's — group under one " +
-        "tray named by the workspace, and each chat is still its own row, opened and " +
-        "messaged individually where its roster entry allows.",
-    },
-    {
       label: "The Settings tab",
       detail:
-        "Where Luke is configured by hand. The front page leads with What Luke runs on — the " +
-        "signed-in account's daily allowance against the developer's own OpenAI key — with " +
-        "meters for the day's use, and opens the Voice, Appearance, Keyboard shortcuts, and " +
+        "Where Luke is configured by hand. The front page leads with What Luke runs on and " +
+        "its usage meters, and opens the Voice, Appearance, Keyboard shortcuts, and " +
         "Connections pages; Feedback, Account, and Quit stay on the front page. A settings " +
         "search — the magnifier, or Command-F — finds any row, by hand alone: no spoken ask " +
         "can search it.",
@@ -400,25 +384,14 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
           : "Not signed in. The sign-in screen offers Google and GitHub, and hovering or pressing the strip beside the housing brings it back; live sessions and Luke's controls stay off until sign-in finishes.",
     },
     {
-      label: "The introduction",
-      detail:
-        "On the first launch, before anyone signs in, Luke gives a one-time spoken " +
-        "introduction: the screen dims, he wakes, shows the coding agents already on the " +
-        "machine (or pretend examples, said to be pretend), flies up into the notch with " +
-        "them, asks about the microphone before macOS does, and hands over to sign-in. It " +
-        "plays once, never repeats after finishing, and its voice runs on Luke's own " +
-        "service without an account; nothing in it can act on a session.",
-    },
-    {
       label: "Feedback and prompts",
       detail:
         "The Feedback section on the Settings tab opens a composer: Send feedback for bugs " +
         "and ideas, Submit a prompt for a prompt to a coding agent, either going by email to " +
-        "the founders with optional credit and up to three screenshots. A spoken ask can " +
-        "open the composer with the developer's own words — Luke offers exactly that after " +
-        "refusing something he cannot do, and a note already being written is never " +
-        "overwritten — but sending is always the Send button's own press: no spoken ask can " +
-        "send one.",
+        "the founders. A spoken ask can open the composer with the developer's own words — " +
+        "Luke offers exactly that after refusing something he cannot do, and a note already " +
+        "being written is never overwritten — but sending is always the Send button's own " +
+        "press: no spoken ask can send one.",
     },
     {
       label: "Reading a session's transcript",
@@ -434,10 +407,10 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
       label: "Messaging local Cursor chats",
       detail:
         "A local Cursor chat whose turn has settled can take the developer's own message, " +
-        "typed on its row or asked of Luke, and the reply lands in the same transcript the " +
-        "row reads. It is offered only with Cursor's own CLI installed and signed in, and " +
-        "never for chats the Cursor app's own windows hold, whose rows open the chat in the " +
-        "app instead; a Superset-managed Cursor chat messages through Superset.",
+        "typed on its row or asked of Luke. It is offered only with Cursor's own CLI " +
+        "installed and signed in, and never for chats the Cursor app's own windows hold, " +
+        "whose rows open the chat in the app instead; a Superset-managed Cursor chat " +
+        "messages through Superset.",
     },
     {
       label: "Creating workspaces",
@@ -486,25 +459,23 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
       detail:
         "Where a provider documents an archive endpoint — a Conductor workspace, a Cursor " +
         "cloud agent, and a Devin cloud session today — Archive is offered once the work " +
-        "was positively seen to settle: pressed, or asked of Luke, it files the work away " +
-        "through the provider's own endpoint, and archiving a Conductor workspace files " +
-        "away every chat in it at once. A row mid-turn offers no archive, a session whose " +
-        "roster entry lists no archive control takes no such ask, and local sessions — " +
-        "which Luke only reads — are never archived. A Superset-managed workspace keeps no " +
-        "archive: an ask to archive one is taken as its Delete workspace control — " +
-        "permanent, never filed away.",
+        "was positively seen to settle: pressed, or asked of Luke, it files the work away, " +
+        "and archiving a Conductor workspace files away every chat in it at once. A row " +
+        "mid-turn offers no archive, a session whose roster entry lists no archive control " +
+        "takes no such ask, and local sessions are never archived. A Superset-managed " +
+        "workspace keeps no archive: an ask to archive one is taken as its Delete workspace " +
+        "control — permanent, never filed away.",
     },
     {
       label: "Standing asks about sessions",
       detail:
         "An ask can be kept standing for one observed session — told when it finishes, " +
-        "warned if it fails, whatever the developer asked in their own words. Luke's " +
-        "background review weighs that session's updates against the ask and speaks when " +
-        "one satisfies it, opening a speak-only call if no conversation is up; the ask " +
-        "itself is the consent. One ask stands per session, a new one replaces it, asking " +
-        "Luke to drop it withdraws it, and an ask ends with its session — Luke can say what " +
-        "he is already listening for. It needs voice to be available, changes nothing about " +
-        "the session itself, and is never sent to a provider.",
+        "warned if it fails, whatever the developer asked in their own words — and Luke " +
+        "speaks when an update satisfies it, opening a speak-only call if no conversation " +
+        "is up. One ask stands per session, a new one replaces it, asking Luke to drop it " +
+        "withdraws it, and an ask ends with its session — Luke can say what he is already " +
+        "listening for. It needs voice to be available, changes nothing about the session " +
+        "itself, and is never sent to a provider.",
     },
     talkKeyFact(input.hotkey),
     askKeyFact(input.askKey),
@@ -531,58 +502,31 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
             detail:
               "Luke says it out loud when an observed session is holding for you, stops on " +
               "an error, or finishes — a hold is a question, a permission, or an approval, " +
-              "not a turn that merely ended — in his own words, naming the session and what " +
-              "it needs. No conversation needs to be open, the microphone stays off, and it " +
-              "is always on while voice is available. A session already in a live voice " +
-              "conversation with its own provider announces nothing until that conversation " +
-              "closes, and nothing from inside it is replayed.",
+              "not a turn that merely ended — naming the session and what it needs. No " +
+              "conversation needs to be open, the microphone stays off, and it is always on " +
+              "while voice is available. A session in a live voice conversation with its " +
+              "own provider announces nothing until that conversation closes.",
           },
           {
-            label: "Session and issue chips",
+            // A behavior rather than a setting, for the announcements' own
+            // reason: Luke must neither deny having just spoken it nor offer
+            // to replay it.
+            label: "The arrival beat",
             detail:
-              "While Luke speaks, pressable chips name the sessions and tracked issues the " +
-              "reply is about — under the housing, or at the open panel's foot. Pressing one " +
-              "opens it where its provider or tracker keeps it; a local session with no page " +
-              "of its own opens Luke's panel. They leave when the reply ends.",
-          },
-          // Only a build that offers a calendar may describe the quiet: a hold
-          // Luke claims without a calendar row to connect is a capability he
-          // does not have.
-          ...(input.settings.calendarSignInAvailable || input.settings.appleCalendarAvailable
-            ? [
-                {
-                  label: "Quiet during meetings",
-                  detail:
-                    "With a calendar connected and Quiet during meetings on, announcements " +
-                    "decided during a meeting wait and are read out together once it ends. " +
-                    "The quiet silences everything Luke would say unbidden — an announcement " +
-                    "mid-sentence included, even on an open conversation — while questions " +
-                    "asked of him still get their replies, and his face sleeps beside the " +
-                    "housing for as long as it holds.",
-                },
-              ]
-            : []),
-          {
-            label: "Muted output",
-            detail:
-              "While the Mac is muted or its volume is at zero, Luke's replies are captioned " +
-              "on screen even with Captions off, and a hint under the words asks for volume; " +
-              "its Got it button rests the hint, and the captions stay.",
+              "Right after the account's first sign-in, Luke speaks once, unprompted: go " +
+              "back to work, and he will say when a session needs you, errors, or finishes " +
+              "— closing with one first ask to try, which may name a working session. It " +
+              "plays once per install from a fixed script, can act on nothing, and cannot " +
+              "be replayed; a launch that cannot speak it leaves it for the next one that " +
+              "can.",
           },
           {
             label: "How long a conversation lasts",
             detail:
-              "A call opens on the first press of the talk key or the first typed ask and is " +
-              "put away after three minutes with nothing said on it; the voice service also " +
-              "ends any call at an hour. The next press picks the conversation back up: a " +
-              "bounded history of the recent exchange is kept in memory, never written to " +
-              "disk, and re-fed to the new call, so Luke remembers what was just said.",
-          },
-          {
-            label: "When a call fails",
-            detail:
-              "Why a call failed or ended is shown for a few seconds where the captions are " +
-              "drawn; trying again is the only fix.",
+              "A call opens on the first press of the talk key or the first typed ask and " +
+              "is put away after a few minutes of silence. The next press picks the " +
+              "conversation back up: the recent exchange is kept in memory alone, never " +
+              "written to disk, so Luke remembers what was just said.",
           },
         ]
       : [
@@ -607,29 +551,11 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
       : []),
     {
       label: "Updates",
-      // A behavior rather than a setting, like the announcements: stated so
-      // Luke neither denies checking nor offers a switch that does not exist.
       detail:
         `The Updates section on ${FRONT_PAGE} says which version this is and where the build ` +
-        "stands. Luke checks on his own a few times a day — the fetch is unauthenticated, " +
-        "and nothing about the developer or their sessions is sent — and a newer release " +
-        "downloads itself and installs when Luke next quits. The row's press can be asked " +
-        "of Luke — check for updates, open the releases page, restart to update — and only " +
-        "the one act the row currently offers runs. The Changelog row opens the changelog " +
-        "in the browser, by hand alone.",
-    },
-    {
-      label: "Usage data",
-      // The behaviour rather than the switch: the setting entry describes the
-      // switch, and a Luke who could describe only that would be one who could
-      // not say what it governs.
-      detail:
-        "Luke counts how his own features are used and sends those counts to Luke's own " +
-        "service, tied to the signed-in account by name and email. Every event and value is " +
-        "fixed by this build, so nothing about a session — no title, branch, path, recap, or " +
-        "transcript — and nothing typed or spoken can travel in one. Nothing is sent while " +
-        `signed out. The switch is Share usage data, in the Usage data section on ${FRONT_PAGE}; ` +
-        "it is on to begin with, and turning it off stops it at once.",
+        "stands. The row's press can be asked of Luke — check for updates, open the releases " +
+        "page, restart to update — and only the one act the row currently offers runs. The " +
+        "Changelog row opens the changelog in the browser, by hand alone.",
     },
     {
       label: "Quitting",

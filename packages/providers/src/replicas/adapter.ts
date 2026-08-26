@@ -19,6 +19,7 @@ import {
   type WorkspaceProject,
 } from "@sidecar/session";
 import { isRecord, isWireBoolean, text, type WireRecord } from "@sidecar/wire";
+import { ADAPTER_DIAGNOSTIC_KIND } from "../shared/adapter-diagnostics.js";
 import {
   CLOUD_FAILURE,
   type CloudAdapterOptions,
@@ -46,6 +47,15 @@ const REPLICAS_PROVIDER_NAME = CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.REPLI
  */
 const REPLICAS_WORKSPACE_ERROR_MESSAGE = "The workspace failed to start or wake";
 
+/**
+ * A detail response marked `waking` means the read itself woke a workspace
+ * that fell asleep after the list reported it active — billed runtime for an
+ * API-sourced workspace until it re-sleeps — and this is the one place the
+ * accident is visible.
+ */
+const REPLICAS_ACCIDENTAL_WAKE_MESSAGE =
+  "A detail read woke a workspace that fell asleep after the list reported it active";
+
 const REPLICAS_ENVIRONMENT = {
   API_URL: "REPLICAS_API_URL",
 } as const;
@@ -72,12 +82,37 @@ const REPLICAS_REQUEST_HEADERS = {
  * address handed to the operating system, reaching no provider — and it
  * lands on the exact workspace the row is. A chat row carries the same
  * address, because the workspace page is where Replicas itself opens every
- * chat the workspace holds, and Replicas documents no narrower address.
+ * chat the workspace holds, and Replicas addresses no chat: the workspace
+ * page's whole URL state is its view mode and a plan or media selection, and
+ * which chat is open never reaches the address bar, so a narrower link could
+ * only land somewhere other than where it said. The origin is the canonical
+ * one the dashboard now answers on; its former home permanently redirects
+ * here.
  */
-const REPLICAS_WORKSPACE_LINK_BASE = "https://tryreplicas.com/home/workspace/";
+const REPLICAS_WEB_APP_ORIGIN = "https://replicas.dev";
 
-function replicasWorkspaceLink(workspaceId: string): string {
-  return `${REPLICAS_WORKSPACE_LINK_BASE}${encodeURIComponent(workspaceId)}`;
+const REPLICAS_WORKSPACE_PATH_PREFIX = "/home/workspace/";
+
+/**
+ * The desktop app's registered way to the same page. Its handler reads one
+ * `path` query parameter, requires it to be an absolute path, and resolves it
+ * against the app's own web origin — verified against the app's handler
+ * itself, which drops anything else unopened — so what travels is exactly the
+ * dashboard path the web address carries, opened in the window the user chose
+ * by installing the app. The host segment is ignored by the handler; `open`
+ * names the act for anyone reading the address.
+ */
+const REPLICAS_DESKTOP_LINK_PREFIX = "replicas://open?path=";
+
+function replicasWorkspacePath(workspaceId: string): string {
+  return `${REPLICAS_WORKSPACE_PATH_PREFIX}${encodeURIComponent(workspaceId)}`;
+}
+
+function replicasWorkspaceLink(workspaceId: string, desktopApp: boolean): string {
+  const path = replicasWorkspacePath(workspaceId);
+  return desktopApp
+    ? `${REPLICAS_DESKTOP_LINK_PREFIX}${encodeURIComponent(path)}`
+    : `${REPLICAS_WEB_APP_ORIGIN}${path}`;
 }
 
 const REPLICAS_ROUTE_SEGMENT = {
@@ -139,6 +174,7 @@ const REPLICAS_FIELD = {
   ID: "id",
   IS_GLOBAL: "is_global",
   LAST_ACTIVITY_AT: "last_activity_at",
+  LIFECYCLE_POLICY: "lifecycle_policy",
   MESSAGE: "message",
   MODEL: "model",
   NAME: "name",
@@ -157,6 +193,16 @@ const REPLICAS_FIELD = {
   TYPE: "type",
   UPDATED_AT: "updated_at",
   URL: "url",
+  WAKING: "waking",
+} as const;
+
+/**
+ * The one lifecycle a creation asks for, out of the four the endpoint
+ * documents. Sleep-when-done is the only one this build sends because the
+ * others either meter, archive, or delete what the developer just made.
+ */
+const REPLICAS_LIFECYCLE_POLICY = {
+  SLEEP_WHEN_DONE: "sleep_when_done",
 } as const;
 
 const REPLICAS_STATUS = {
@@ -350,7 +396,17 @@ export const REPLICAS_PROVIDER: SessionProvider = {
   displayName: REPLICAS_PROVIDER_NAME,
 };
 
-export type ReplicasAdapterOptions = CloudAdapterOptions;
+export type ReplicasAdapterOptions = CloudAdapterOptions & {
+  /**
+   * Whether this machine currently registers a handler for the Replicas
+   * desktop app's URL scheme. The question is the operating system's to
+   * answer — it is what the OS will consult when a row's address is handed
+   * to it — so the caller supplies the probe and this adapter only chooses
+   * between two spellings of the same page. Absent, or answering no, every
+   * address stays the web dashboard's.
+   */
+  desktopAppPresent?: () => boolean;
+};
 
 interface ReplicasWorkspace {
   id: string;
@@ -813,6 +869,17 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
   /** The environments the latest pass reported, offered as creation projects. */
   #projects: readonly WorkspaceProject[] = [];
 
+  #desktopAppPresent?: () => boolean;
+
+  /**
+   * Whether this pass's addresses open in the desktop app. Asked once per
+   * pass rather than per row, so every row of one roster agrees, and asked
+   * fresh each pass, so installing or removing the app applies on the next
+   * one — including to a workspace Luke just created, whose held open uses
+   * the address its first observation reports.
+   */
+  #openInDesktopApp = false;
+
   constructor(options: ReplicasAdapterOptions) {
     super(
       {
@@ -822,6 +889,7 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
       },
       options,
     );
+    this.#desktopAppPresent = options.desktopAppPresent;
   }
 
   protected override requestHeaders() {
@@ -841,6 +909,7 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
     request: CloudRequest,
     now: number,
   ): Promise<readonly ProviderSessionObservation[]> {
+    this.#openInDesktopApp = this.#desktopAppPresent?.() === true;
     // One list call, then bounded per-workspace reads for the newest
     // workspaces. The list carries the status, the timestamps, the
     // repositories, and the pull requests; the chat registry lists each
@@ -940,6 +1009,12 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
    * is the initial message the endpoint requires; the agent choice is left
    * to the environment's own default, because this build fixes no
    * agent-and-model table for Replicas and a choice not offered is not sent.
+   * The lifecycle is asked for rather than defaulted: an API-created
+   * workspace is metered per awake minute, and the default lifecycle leaves
+   * it awake — and metered — for the full inactivity timeout after its agent
+   * finishes, so the creation names sleep-when-done, which stops the meter
+   * the moment the work ends while the documented message-wake keeps every
+   * follow-up working on the workspace it put to sleep.
    */
   protected override workspaceCreationRoute(
     project: WorkspaceProject,
@@ -957,6 +1032,7 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
         [REPLICAS_FIELD.NAME]: replicasWorkspaceName(name ?? task),
         [REPLICAS_FIELD.MESSAGE]: task,
         [REPLICAS_FIELD.ENVIRONMENT_ID]: project.providerProjectId,
+        [REPLICAS_FIELD.LIFECYCLE_POLICY]: REPLICAS_LIFECYCLE_POLICY.SLEEP_WHEN_DONE,
       },
     };
   }
@@ -1053,14 +1129,22 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
    * agent for a row with no chats to say so. The read is documented to wake
    * a sleeping or archived workspace, so it is issued only for a workspace
    * the same pass's list just reported awake, where there is nothing to
-   * wake; a workspace that fell asleep in the second between the two reads
-   * would be woken back, which Replicas prices at nothing and the next pass
-   * reports honestly, but the window is a second against a lifecycle
-   * measured in hours. Failures are contained the way every enrichment's
-   * are. It is also the fallback chat source: a workspace the registry did
-   * not answer for this pass still lists its chats here, turn state
-   * included, so an awake workspace's rows survive the registry's
-   * organization-header demands.
+   * wake. The read itself counts as no activity: verified live, an idle
+   * workspace polled every fifteen seconds kept its last-activity stamp
+   * unmoved and slept exactly on its one-hour idle schedule under that
+   * polling, so steady-state polling extends no billed runtime. What can
+   * cost is the race: a workspace that fell asleep in the second between
+   * the two reads would be woken back, and while the wake itself is
+   * unpriced, Replicas meters every awake minute of a workspace created by
+   * the API or an automation until its idle timeout re-sleeps it, an hour
+   * by default, so one accidental wake can bill that timeout's worth of
+   * minutes, where a manually created workspace bills nothing under the
+   * seat. The next pass reports the wake honestly, and the window is a
+   * second against a lifecycle measured in hours. Failures are contained
+   * the way every enrichment's are. It is also the fallback chat source: a
+   * workspace the registry did not answer for this pass still lists its
+   * chats here, turn state included, so an awake workspace's rows survive
+   * the registry's organization-header demands.
    */
   async #refreshDetails(request: CloudRequest, awake: readonly ReplicasWorkspace[]): Promise<void> {
     if (this.#detailsRefused) return;
@@ -1076,6 +1160,15 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
           return;
         }
         const replica = body[REPLICAS_FIELD.REPLICA];
+        if (
+          body[REPLICAS_FIELD.WAKING] === true ||
+          (isRecord(replica) && replica[REPLICAS_FIELD.WAKING] === true)
+        ) {
+          this.reportDiagnostic(
+            ADAPTER_DIAGNOSTIC_KIND.ACCIDENTAL_WAKE,
+            new Error(REPLICAS_ACCIDENTAL_WAKE_MESSAGE),
+          );
+        }
         if (!isRecord(replica)) return;
         const chats = recordsFromPage(replica, REPLICAS_FIELD.CHATS)
           .map(chatFromDetailRecord)
@@ -1308,7 +1401,7 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
         // once, the hoist proving the reports one change by their shared
         // number.
         ...(workspace.pullRequestUrl ? { change: workspace.pullRequestUrl } : undefined),
-        link: replicasWorkspaceLink(workspace.id),
+        link: replicasWorkspaceLink(workspace.id, this.#openInDesktopApp),
       },
     };
   }
@@ -1392,12 +1485,14 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
 
   /**
    * The Replicas mark rides as the workspace's own app association — scope
-   * workspace, because the one address Replicas documents is the workspace
-   * page, not any chat's own route — so inside a tray the manager is named
-   * once on the header, the way Superset's is, and a lone chat keeps the
-   * chip because no tray names it. Conductor's association stays
-   * session-scoped on the same reasoning read the other way: its address
-   * names the exact chat, so it is the session's own and rides every row.
+   * workspace, because the one address Replicas has is the workspace page,
+   * not any chat's own route, whichever app serves it: the desktop app's
+   * handler takes only dashboard paths, and the dashboard has none for a
+   * chat — so inside a tray the manager is named once on the header, the way
+   * Superset's is, and a lone chat keeps the chip because no tray names it.
+   * Conductor's association stays session-scoped on the same reasoning read
+   * the other way: its address names the exact chat, so it is the session's
+   * own and rides every row.
    */
   #applicationsFor(workspace: ReplicasWorkspace): SessionApplication[] {
     return [
@@ -1405,7 +1500,7 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
         id: SESSION_APPLICATION_ID.REPLICAS,
         displayName: REPLICAS_PROVIDER_NAME,
         scope: SESSION_APPLICATION_SCOPE.WORKSPACE,
-        link: replicasWorkspaceLink(workspace.id),
+        link: replicasWorkspaceLink(workspace.id, this.#openInDesktopApp),
       },
     ];
   }
@@ -1419,7 +1514,7 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
       ...(status === SESSION_STATUS.ERROR
         ? { error: REPLICAS_WORKSPACE_ERROR_MESSAGE }
         : undefined),
-      link: replicasWorkspaceLink(workspace.id),
+      link: replicasWorkspaceLink(workspace.id, this.#openInDesktopApp),
     };
   }
 

@@ -50,7 +50,7 @@ function builderConfig(env = {}) {
   return createElectronBuilderConfig(env);
 }
 
-test("workspace package versions agree on v0.3.10", () => {
+test("workspace package versions agree on v0.3.12", () => {
   // Enumerated rather than listed, so a package added to the workspace is held
   // to the release version without anyone remembering to name it here.
   const packagePaths = [
@@ -74,7 +74,7 @@ test("workspace package versions agree on v0.3.10", () => {
 
   assert.deepEqual(
     versions.map(({ version }) => version),
-    packagePaths.map(() => "0.3.10"),
+    packagePaths.map(() => "0.3.12"),
   );
 });
 
@@ -255,7 +255,7 @@ test("packaging includes the approved Apple Events description", () => {
 
   assert.equal(
     config.mac.extendInfo.NSAppleEventsUsageDescription,
-    "Luke turns Music and Spotify down while you are having a spoken conversation, and back up afterwards. He never pauses them, and reads nothing beyond whether each is playing and how loud.",
+    "Luke turns Music and Spotify down while you talk, and back up afterwards",
   );
   assert.equal(config.mac.extendInfo.NSAppleEventsUsageDescription, APPLE_EVENTS_USAGE_DESCRIPTION);
 });

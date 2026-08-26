@@ -229,7 +229,7 @@ test("the facts say what is connected, never what connects it", () => {
   assert.match(tracker, /"label":"Linear"/);
   assert.match(tracker, /Linear \(not connected\)/);
   assert.match(tracker, /signing in with Linear/);
-  assert.match(tracker, /move one to another state or comment on it/);
+  assert.match(tracker, /move an issue the developer names to another state or comment on it/);
   // Nothing in the guide may send anyone to a key page for Linear: there is
   // no key, and describing one would be describing a row that is not drawn.
   assert.doesNotMatch(tracker, /Linear[^"]*API key/);
@@ -709,30 +709,12 @@ test("the facts describe stopping a reply, exactly where a reply can exist", () 
   assert.doesNotMatch(voiceless, /Stopping a reply/);
 });
 
-test("the announcement facts split the chips band and the meeting quiet", () => {
+test("the announcement fact exists exactly while a voice can speak one", () => {
   const rendered = JSON.stringify(buildLukeGuide(guideInput()).facts);
   assert.match(rendered, /"label":"Announcements"/);
-  assert.match(rendered, /"label":"Session and issue chips"/);
-  // A build with no calendar row to connect may not describe the quiet: a
-  // hold Luke claims without one is a capability he does not have.
-  assert.doesNotMatch(rendered, /Quiet during meetings/);
 
-  const withCalendar = JSON.stringify(
-    buildLukeGuide(guideInput({ settings: settings({ appleCalendarAvailable: true }) })).facts,
-  );
-  assert.match(withCalendar, /"label":"Quiet during meetings"/);
-  assert.match(withCalendar, /announcements decided during a meeting wait/);
-
-  // Announcements exist only with a voice to speak them, and the chips and
-  // the quiet ride the same availability.
-  const voiceless = JSON.stringify(
-    buildLukeGuide(
-      guideInput({ voiceAvailable: false, settings: settings({ appleCalendarAvailable: true }) }),
-    ).facts,
-  );
+  const voiceless = JSON.stringify(buildLukeGuide(guideInput({ voiceAvailable: false })).facts);
   assert.doesNotMatch(voiceless, /"label":"Announcements"/);
-  assert.doesNotMatch(voiceless, /"label":"Session and issue chips"/);
-  assert.doesNotMatch(voiceless, /"label":"Quiet during meetings"/);
 });
 
 test("the facts follow the talk key, the microphone, and the storage the system offers", () => {
@@ -766,12 +748,6 @@ test("the facts follow the talk key, the microphone, and the storage the system 
   // The refusal carries the way out: both ways in live under What Luke runs on,
   // and a fact that stopped at "off" would leave the ask unanswerable.
   assert.match(JSON.stringify(voiceless.facts), /What Luke runs on section at the top/);
-  // The muted-output behavior belongs to speech, so it is described exactly
-  // where speech exists: with a voice it is a fact, without one it would
-  // describe captions no reply will ever draw.
-  assert.match(held, /muted or its volume is at zero/);
-  assert.doesNotMatch(JSON.stringify(voiceless.facts), /muted or its volume/);
-
   const unprotected = buildLukeGuide(
     guideInput({ settings: settings({ secretStorage: SECRET_STORAGE.UNAVAILABLE }) }),
   );
@@ -855,22 +831,6 @@ test("the feedback fact says what a spoken open may do, and that sending stays b
   assert.match(fact.detail, /after refusing something he cannot do/);
   assert.match(fact.detail, /never overwritten/);
   assert.match(fact.detail, /no spoken ask can send one/);
-});
-
-test("the usage-data fact describes the counting, and names no session field", () => {
-  const fact = buildLukeGuide(guideInput()).facts.find(
-    (candidate) => candidate.label === "Usage data",
-  );
-
-  assert.ok(fact);
-  // On by default is the fact a developer is owed without asking, and where
-  // the switch lives is the only useful thing to say next.
-  assert.match(fact.detail, /on to begin with/);
-  assert.match(fact.detail, /Usage data section on the panel's Settings tab, on its front page/);
-  assert.match(fact.detail, /[Nn]othing is sent while signed out/);
-  // The guide leaves the machine, so a fact that claimed a session field
-  // travelled would be describing a Luke that must not exist.
-  assert.match(fact.detail, /no title, branch, path, recap, or transcript/);
 });
 
 test("the usage-data switch is described where it is turned, and is spoken", () => {

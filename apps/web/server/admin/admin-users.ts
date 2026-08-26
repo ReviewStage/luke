@@ -53,10 +53,9 @@ export interface AdminUserListRow {
   /** The account's most recent active day inside the window, if any. */
   lastActiveDay: string | null;
   /**
-   * When the account last touched the service at all, in epoch milliseconds:
-   * its freshest auth-session write, which a plain sign-in moves where the
-   * hosted-tier aggregates above stay at zero. Null for an account whose
-   * sessions have all been pruned.
+   * When the account last touched the service at all, in epoch milliseconds,
+   * as `lastSeenInstant` folds it. Null for an account whose sessions have
+   * all been pruned and which never touched the hosted tier.
    */
   lastSeenAt: number | null;
   voiceCalls: number;
@@ -80,6 +79,26 @@ export interface AdminUserList {
 export interface AdminUserListSource {
   total: number;
   rows: readonly AdminUserListRow[];
+}
+
+/**
+ * When one account last touched the service at all: its freshest auth-session
+ * write or, when later, the start of its most recent hosted-usage day. The
+ * session write alone cannot say it — the desktop spends the hosted tier over
+ * OAuth bearer tokens that never touch a session row, so an account can be
+ * active every day while its sessions age — and folding the usage day in is
+ * what keeps the roster's "Last seen" from trailing the account page's own
+ * "Last active". Null only when there is neither: every session pruned and no
+ * hosted use ever.
+ */
+export function lastSeenInstant(
+  sessionSeenAt: Date | null,
+  lastUsageDay: string | null,
+): number | null {
+  const usageDayStart = lastUsageDay === null ? null : Date.parse(`${lastUsageDay}T00:00:00.000Z`);
+  if (sessionSeenAt === null) return usageDayStart;
+  if (usageDayStart === null) return sessionSeenAt.getTime();
+  return Math.max(sessionSeenAt.getTime(), usageDayStart);
 }
 
 /** Stamps the queried roster with the window its aggregates cover and the search that scoped it. */
@@ -127,7 +146,8 @@ export async function handleAdminUsers(options: AdminUsersOptions): Promise<Resp
   let viewer: AdminViewer | undefined;
   try {
     viewer = await options.resolveViewer(request);
-  } catch {
+  } catch (error) {
+    console.error("admin users viewer resolution failed", error);
     return errorResponse(ADMIN_HTTP_STATUS.SERVICE_UNAVAILABLE, ADMIN_ERROR.UNAVAILABLE);
   }
   if (!viewer) {
@@ -159,7 +179,8 @@ export async function handleAdminUsers(options: AdminUsersOptions): Promise<Resp
         search.term,
       ),
     );
-  } catch {
+  } catch (error) {
+    console.error("admin users read failed", error);
     return errorResponse(ADMIN_HTTP_STATUS.SERVICE_UNAVAILABLE, ADMIN_ERROR.UNAVAILABLE);
   }
 }

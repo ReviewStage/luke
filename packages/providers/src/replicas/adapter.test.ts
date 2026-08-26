@@ -3,6 +3,10 @@ import test from "node:test";
 import { SESSION_STATUS } from "@sidecar/session";
 import type { JsonObject } from "@sidecar/wire/testing";
 import { HTTP_STATUS, jsonResponse, recordingFetch } from "@sidecar/wire/testing";
+import {
+  ADAPTER_DIAGNOSTIC_KIND,
+  type AdapterDiagnosticCallback,
+} from "../shared/adapter-diagnostics.js";
 import type { CloudFetch } from "../shared/cloud-session-adapter.js";
 import { describeCloudAdapterContract } from "../testing/cloud-adapter-contract.js";
 import { REPLICAS_PROVIDER, ReplicasSessionAdapter } from "./adapter.js";
@@ -52,6 +56,8 @@ interface TestWorkspace {
   historyEvents?: readonly JsonObject[];
   refuseHistory?: boolean;
   chats?: readonly TestChat[];
+  /** The detail read woke this workspace: it fell asleep after the list. */
+  waking?: boolean;
 }
 
 interface TestEnvironment {
@@ -301,7 +307,7 @@ function fakeReplicasApi(
         replica: {
           ...workspacePayload(workspace),
           coding_agent: workspace.codingAgent ?? null,
-          waking: null,
+          waking: workspace.waking ?? null,
           chats: (workspace.chats ?? []).map(detailChatPayload),
           repository_statuses: workspace.branch
             ? [
@@ -348,6 +354,8 @@ function adapterFor(
     readApiKey?: () => Promise<string | undefined>;
     now?: () => number;
     minimumRefreshIntervalMs?: number;
+    desktopAppPresent?: () => boolean;
+    onDiagnostic?: AdapterDiagnosticCallback;
   } = {},
 ): ReplicasSessionAdapter {
   const apiKey = "apiKey" in overrides ? overrides.apiKey : TEST_API_KEY;
@@ -357,6 +365,10 @@ function adapterFor(
     fetch,
     now: overrides.now ?? (() => TEST_TIME),
     minimumRefreshIntervalMs: overrides.minimumRefreshIntervalMs ?? 0,
+    ...(overrides.desktopAppPresent
+      ? { desktopAppPresent: overrides.desktopAppPresent }
+      : undefined),
+    ...(overrides.onDiagnostic ? { onDiagnostic: overrides.onDiagnostic } : undefined),
   });
 }
 
@@ -424,7 +436,7 @@ test("observes an active workspace titled by the name Replicas gave it", async (
   // Replicas mark rides as the app association carrying the same address.
   assert.deepEqual(observations[0]?.detail, {
     repository: "luke",
-    link: "https://tryreplicas.com/home/workspace/workspace-active",
+    link: "https://replicas.dev/home/workspace/workspace-active",
   });
   // Workspace-scoped, like Superset's: inside a tray the manager is named
   // once on the header, and only a lone chat's row keeps the chip.
@@ -433,9 +445,36 @@ test("observes an active workspace titled by the name Replicas gave it", async (
       id: "replicas",
       displayName: "Replicas",
       scope: "workspace",
-      link: "https://tryreplicas.com/home/workspace/workspace-active",
+      link: "https://replicas.dev/home/workspace/workspace-active",
     },
   ]);
+});
+
+test("addresses the desktop app while the OS has a handler for its scheme", async () => {
+  const api = fakeReplicasApi([
+    {
+      id: "workspace-active",
+      name: "fix-login-timeout",
+      status: TEST_STATUS.ACTIVE,
+      createdAt: TEST_TIME - 60_000,
+      lastActivityAt: TEST_TIME - 30_000,
+    },
+  ]);
+  // The deep link carries the dashboard path as the one query parameter the
+  // app's handler reads, so it opens exactly the page the web address does.
+  const desktopLink = "replicas://open?path=%2Fhome%2Fworkspace%2Fworkspace-active";
+  let handlerRegistered = false;
+  const adapter = adapterFor(api.fetch, { desktopAppPresent: () => handlerRegistered });
+
+  const webPass = await adapter.observe();
+  handlerRegistered = true;
+  const desktopPass = await adapter.observe();
+
+  // The probe answers per pass, so installing the app applies on the next
+  // one, and the row and its mark always carry the same address.
+  assert.equal(webPass[0]?.detail?.link, "https://replicas.dev/home/workspace/workspace-active");
+  assert.equal(desktopPass[0]?.detail?.link, desktopLink);
+  assert.equal(desktopPass[0]?.applications?.[0]?.link, desktopLink);
 });
 
 test("falls back to the repository for a workspace the list did not name", async () => {
@@ -490,6 +529,37 @@ test("reads awake detail and history tails, never a waking or key-refused read",
     "/v1/replica/workspace-one/history",
     "/v1/replica/workspace-two/history",
   ]);
+});
+
+test("surfaces a detail read that woke its workspace as a diagnostic", async () => {
+  // The list-to-detail race: a workspace that fell asleep between the two
+  // reads is woken back by the detail read, billed for an API-sourced
+  // workspace until it re-sleeps, and the response's own `waking` is the one
+  // place that shows.
+  const api = fakeReplicasApi([
+    { ...activeWorkspace("workspace-woken", TEST_TIME - 1_000), waking: true },
+  ]);
+  const diagnostics: [string, Error][] = [];
+
+  const observations = await adapterFor(api.fetch, {
+    onDiagnostic: (kind, error) => diagnostics.push([kind, error]),
+  }).observe();
+
+  assert.equal(diagnostics.length, 1);
+  assert.equal(diagnostics[0]?.[0], ADAPTER_DIAGNOSTIC_KIND.ACCIDENTAL_WAKE);
+  // Detection only: the read still succeeded, so its body still serves the pass.
+  assert.equal(observations.length, 1);
+});
+
+test("reports no diagnostic for a detail read that woke nothing", async () => {
+  const api = fakeReplicasApi([activeWorkspace("workspace-awake", TEST_TIME - 1_000)]);
+  const diagnostics: [string, Error][] = [];
+
+  await adapterFor(api.fetch, {
+    onDiagnostic: (kind, error) => diagnostics.push([kind, error]),
+  }).observe();
+
+  assert.equal(diagnostics.length, 0);
 });
 
 test("reads a workspace's history once until its activity moves", async () => {
@@ -745,11 +815,15 @@ test("offers the reported environments as projects and creates a workspace in on
   assert.equal(write?.method, "POST");
   assert.equal(write?.pathname, "/v1/replica");
   // The required name is the developer's own words slugged the way the
-  // dashboard slugs one; the task rides as the required initial message.
+  // dashboard slugs one; the task rides as the required initial message; and
+  // the lifecycle asks for sleep-when-done, because an API-created workspace
+  // left on the default lifecycle sits awake and metered for the full
+  // inactivity timeout after its agent finishes.
   assert.deepEqual(JSON.parse(write?.body ?? ""), {
     name: "fix-the-login-timeout-and-open-a-pull-request",
     message: "Fix the login timeout and open a pull request",
     environment_id: "environment-luke",
+    lifecycle_policy: "sleep_when_done",
   });
 
   // A task-less ask is refused rather than a workspace created idle.
@@ -1205,7 +1279,7 @@ test("reports the newest pull request as the workspace's published change", asyn
   // on the row lands on the workspace itself.
   assert.equal(
     observations[0]?.detail?.link,
-    "https://tryreplicas.com/home/workspace/workspace-published",
+    "https://replicas.dev/home/workspace/workspace-published",
   );
   assert.equal(observations[1]?.detail?.change, undefined);
 });

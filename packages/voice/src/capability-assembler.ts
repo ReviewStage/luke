@@ -1,4 +1,8 @@
-import { openAiAttentionEvaluator, SessionAttentionReviewer } from "@sidecar/attention";
+import {
+  type AttentionEvaluator,
+  openAiAttentionEvaluator,
+  SessionAttentionReviewer,
+} from "@sidecar/attention";
 import { VOICE_CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
 import { HOSTED_SERVICE_PATH } from "@sidecar/hosted";
 import { type RealtimeDiagnostics, realtimeMintExplanation } from "@sidecar/realtime";
@@ -69,6 +73,13 @@ export interface VoiceCapabilityAssemblerOptions {
   noticeRequestFor: (identity: SessionIdentity) => string | undefined;
   fetch?: typeof fetch;
   report?: (message: string) => void;
+  /**
+   * Decorates whichever evaluator the policy builds — keyed or hosted — so a
+   * traced development run reads the same however the pass is credentialed.
+   * The decoration may only observe: the reviewer still sees an
+   * `AttentionEvaluator`, and absence means the evaluator is used as built.
+   */
+  wrapEvaluator?: (evaluator: AttentionEvaluator) => AttentionEvaluator;
 }
 
 export class VoiceCapabilityAssembler {
@@ -127,11 +138,15 @@ export class VoiceCapabilityAssembler {
       refreshAccount: this.#options.refreshAccount,
       ...(this.#options.fetch ? { fetch: this.#options.fetch } : undefined),
     };
-    const evaluator = apiKey
+    const builtEvaluator = apiKey
       ? openAiAttentionEvaluator(apiKey)
       : policy.useHosted
         ? new HostedAttentionEvaluator(seams)
         : undefined;
+    const evaluator =
+      builtEvaluator && this.#options.wrapEvaluator
+        ? this.#options.wrapEvaluator(builtEvaluator)
+        : builtEvaluator;
     this.#attentionReviewer = evaluator
       ? new SessionAttentionReviewer({
           evaluator,

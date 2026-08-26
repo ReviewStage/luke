@@ -209,7 +209,8 @@ export async function handleAdminUser(options: AdminUserOptions): Promise<Respon
   let viewer: AdminViewer | undefined;
   try {
     viewer = await options.resolveViewer(request);
-  } catch {
+  } catch (error) {
+    console.error("admin user viewer resolution failed", error);
     return errorResponse(ADMIN_HTTP_STATUS.SERVICE_UNAVAILABLE, ADMIN_ERROR.UNAVAILABLE);
   }
   if (!viewer) {
@@ -236,7 +237,8 @@ export async function handleAdminUser(options: AdminUserOptions): Promise<Respon
       return errorResponse(ADMIN_HTTP_STATUS.NOT_FOUND, ADMIN_ERROR.USER_NOT_FOUND);
     }
     return jsonResponse(ADMIN_HTTP_STATUS.OK, detail);
-  } catch {
+  } catch (error) {
+    console.error("admin user read failed", error);
     return errorResponse(ADMIN_HTTP_STATUS.SERVICE_UNAVAILABLE, ADMIN_ERROR.UNAVAILABLE);
   }
 }

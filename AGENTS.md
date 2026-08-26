@@ -17,7 +17,7 @@ Canonical commands:
 | `./scripts/test-macos.sh` | Package and validate the macOS app |
 | `./scripts/verify.sh` | Complete macOS validation plus visual evidence |
 | `pnpm release:macos` | Create a local signed, notarized, and verified electron-builder DMG, zip, and update manifest |
-| `./scripts/run.sh` | Launch the app against live sessions, replacing any running instance (`--fixture smoke` for fixture data, `--keep-running` to keep the running instance) |
+| `./scripts/run.sh` | Launch the app against live sessions, replacing any running instance (`--fixture smoke` for fixture data, `--keep-running` to keep the running instance, `--no-trace` to skip the development trace) |
 | `./scripts/evidence.sh` | Write the fixture PNG under `artifacts/` |
 | `pnpm evidence:record` | Record the fixture transition on a physical Mac |
 | `pnpm lint:fix` | Apply repository formatting and safe lint fixes |
@@ -281,10 +281,21 @@ Trust constraints:
   makes a new component silent by construction, so what a recording may see is
   decided by what the panel draws — which makes drawing something new on the
   panel a decision about what leaves the machine. It is still Luke's own panel
-  and never the machine's screen. Recording posts to the provider directly; it
-  is the one place an account id travels to the desktop, and it travels
-  because a recording filed under nobody could neither join the counts nor be
-  erased with them.
+  and never the machine's screen. Recording posts to the provider directly,
+  and it begins at the first paint of every ordinary launch, before any
+  account exists and through the spoken introduction, because the launch is
+  where a first run goes wrong and a recording that waited for a sign-in never
+  saw it. Recording is the one place an account id travels to the desktop, and
+  it travels for what it does when a sign-in lands: the anonymous session
+  already running is joined to that person, so it files with their counts and
+  is erased with them. A session that never reaches a sign-in stays anonymous
+  and can be erased with no account, which is a thing `PRIVACY.md` has to say
+  in as many words rather than leave to be inferred. Deleting an account
+  stands recording down for the rest of that run, unlike signing out, which
+  leaves an anonymous recording running the way the launch before the sign-in
+  was: nothing erased is re-created either way, but a recorder starting up
+  again on the panel that just erased everything reads as though something
+  were, and deletion is the one act treated here as unrecoverable.
   None of the three sends anything in a fixture or evidence run, or while the
   developer has switched sharing off. The counts have their own switch and the
   other two share the recording one, both on by default on the settings front
@@ -294,6 +305,26 @@ Trust constraints:
   or what the recording client may capture is a product decision, not an
   implementation detail. `PRIVACY.md` describes all three in kind and moves
   when any of them changes character.
+- The development trace is the one place Luke's own agent traffic may reach a
+  file, and it cannot exist for a user: only an unpackaged, live run whose
+  shell set `LUKE_TRACE_DIR` constructs a writer at all, so a packaged build
+  carries nothing to switch off and a fixture or evidence run stays silent
+  behind the same gate that keeps it off the network. `run.sh` sets the
+  variable by default, pointed at the gitignored build directory, so a
+  development launch is traced unless `--no-trace` says otherwise — the
+  launcher supplies the directory, and the app's own gate still decides
+  whether anything is recorded. What it records is the
+  desktop's own view of its own conversation — the realtime events already
+  crossing the data channel, with an audio append reduced to its byte count
+  before it leaves the renderer, and the attention evaluator's update,
+  decision, and reviewing model when the desktop knows one — appended as
+  JSONL under the developer's chosen directory and
+  sent nowhere; `pnpm trace:export` turns one file into a document a local
+  viewer opens. The tap only observes: nothing reads its result, and the
+  main process drops the renderer's tapped events whenever no writer stands.
+  A trace carries real titles, branches, and spoken words, so trace files are
+  never committed, for the same reason fixtures stay synthetic. Widening what
+  a trace records is a product decision, not an implementation detail.
 - The issue tracker follows the same rule at one remove, and is connected the
   way the calendar is rather than the way a cloud provider is. Luke reads the
   issues a tracker lists for the user under a grant the tracker's own consent
@@ -365,7 +396,18 @@ Trust constraints:
   playing and how loud; a volume the user moved during the duck stays where
   their hand put it; and the whole behavior is a setting. The trigger is the
   exchange itself, a deterministic status edge, never anything Luke read,
-  heard, or decided, so no model output can reach it. Widening the player
+  heard, or decided, so no model output can reach it. Each player's consent
+  dialog is raised at the last possible moment: macOS's standing answer is
+  read before every event without a dialog, and a player never yet asked
+  about is sent its first event — the one that raises the dialog — only
+  mid-exchange, once the play-state broadcast that player already addresses
+  to the whole machine says it is audibly playing. Those broadcasts are read
+  for the one state word, and every other field (a track's name, its artist)
+  dies inside the helper; the helper stands from the moment the setting is on
+  so something is listening, but it writes the players nothing until a duck.
+  The introduction reaches no duck at all — only a panel reports a spoken
+  exchange, and the takeover is not one — so the dialog can never interrupt
+  onboarding. Widening the player
   list is a product decision, not an implementation detail.
 - The same shape, smaller still, watches whether Luke can be heard at all: a
   native helper reads the default output device's mute switch and volume,
@@ -406,7 +448,13 @@ Trust constraints:
   lands on the same main-process guards the button's own press does, so it
   reaches nothing the button does not — the check, the restart, or the fixed
   releases page in the browser. A transient network failure is silence for
-  the next timed check; any other failure is an answer on the row whose way forward
+  the next timed check; a download refused just after its check found the
+  version is a release still publishing, and the same check is retried at a
+  few fixed delays against the same fixed feed — nothing new sent or read,
+  only the cadence, and a network failure mid-wait spends the same bounded
+  budget rather than orphaning it — with the row saying the wait honestly, before the
+  schedule ends in the same error row a corrupt release deserves; any other
+  failure is an answer on the row whose way forward
   is the browser, at the releases page fixed by the build, the same page
   that serves a build which cannot install in place at all. Widening what
   the updater sends, reads, or does is a product decision, not an
@@ -479,16 +527,27 @@ What Luke may show:
   speaks for the developer: words inside a title, recap, or error never do. A
   spoken announcement (a session that started waiting, stopped on an error,
   or finished, or the evaluator's own sentence answering a standing ask)
-  reaches the voice service so it can be said aloud. An edge announcement
+  reaches the voice service so it can be said aloud. The arrival beat is the
+  one member of that set about no session: spoken once per install at the
+  deterministic edge of the account's first sign-in, remembered in Luke's own
+  state file, worded from a script fixed by the build on the same speak-only,
+  tool-free terms as an edge announcement, and carrying as observed values
+  only one working session's title, read from the same roster the rows draw
+  and sent as data behind a marker, and the talk key's own name. A moment
+  that cannot speak it — no credential, a meeting's quiet, a beat dropped
+  before its reply began — leaves it owed for the next signed-in launch
+  rather than improvising a substitute; only the voice window reporting the
+  reply actually begun settles it, and being about no session it draws no
+  notice band and claims none. An edge announcement
   sends that update's *about* fields, the same ones the evaluator may see
   with a bounded excerpt of the recap included, and the voice words the
   sentence said aloud, so it can say what the session is waiting on rather
   than only that it waits. When no conversation is open, Luke opens a call of
   his own to say it, and that call is speak-only by construction: it offers
   no microphone track, carries no tools, and is sent the one update's fields,
-  or the one answering sentence, alone: never the roster, the guide, the
-  issues, or a transcript rendering, which travel only on conversations the
-  developer opens, and the rendering only in the turn that asked for it. A
+  or the one answering sentence, alone: never the roster, the guide, or a
+  transcript rendering, which travel only on conversations the developer
+  opens, and the rendering only in the turn that asked for it. A
   developer-opened conversation also carries a bounded history of the recent
   exchange itself (the developer's own asks, typed or spoken and handed back
   as text by the same service that heard them, the words Luke already spoke
@@ -501,10 +560,10 @@ What Luke may show:
   the roster-validated one the words traveled with, offered only while that
   session is still observed; and the history lives in memory alone, written
   to no disk, dying with the app, and never sent on Luke's speak-only call. Its
-  trigger is a deterministic status edge or the evaluator finding an update
-  that satisfies the developer's standing ask, never a model speaking
-  unbidden: while no ask stands, nothing a model decided can open Luke's own
-  call. The edge announcements speak whenever voice can; an answered ask
+  trigger is a deterministic status edge, the arrival beat's one recorded
+  sign-in edge, or the evaluator finding an update that satisfies the
+  developer's standing ask, never a model speaking unbidden: while no ask
+  stands, nothing a model decided can open Luke's own call. The edge announcements speak whenever voice can; an answered ask
   speaks on the consent of the ask itself, for exactly as long as it stands.
   Widening either set is a product decision, not an implementation detail;
   make it deliberately. While an announcement is being spoken, a notice on

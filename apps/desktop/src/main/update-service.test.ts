@@ -137,7 +137,7 @@ test("a network failure is silence for the next timed check; anything else is th
   // A real failure lands on the error row, still naming the newer build, and
   // drops the cached download a corrupt archive would otherwise pin forever.
   fire().onAvailable("0.2.0");
-  fire().onError("sha512 checksum mismatch");
+  fire().onError("code signature validation failed");
   assert.deepEqual(updates.snapshot(), {
     status: UPDATE_STATUS.ERROR,
     currentVersion: "0.1.0",
@@ -151,6 +151,149 @@ test("a network failure is silence for the next timed check; anything else is th
   assert.equal((await updates.check()).status, UPDATE_STATUS.IDLE);
   rejectNextCheckWith("cannot parse update info");
   assert.equal((await updates.check()).status, UPDATE_STATUS.ERROR);
+});
+
+test("a download refused right after its check retries as a release still publishing", async () => {
+  const { calls, fire, engine } = fakeEngine();
+  const updates = service({ engine, publishingRetryDelaysMs: [10] });
+
+  fire().onAvailable("0.2.0");
+  fire().onError('Cannot download "https://github.com/x", status 404: Not Found');
+  assert.deepEqual(updates.snapshot(), {
+    status: UPDATE_STATUS.PUBLISHING,
+    currentVersion: "0.1.0",
+    installSupported: true,
+    latestVersion: "0.2.0",
+  });
+  // The partial archive is dropped before the retry, like the error path.
+  assert.equal(calls.cacheClears, 1);
+
+  // The scheduled retry is the same check; a completed upload proceeds
+  // through the ordinary download into the restart offer.
+  await sleep(30);
+  assert.equal(calls.checks, 1);
+  fire().onAvailable("0.2.0");
+  fire().onDownloaded("0.2.0");
+  assert.equal(updates.snapshot().status, UPDATE_STATUS.READY);
+  updates.stop();
+});
+
+test("a user press mid-wait collapses the pending retry rather than stacking one", async () => {
+  const { calls, fire, engine } = fakeEngine();
+  const updates = service({ engine, publishingRetryDelaysMs: [20] });
+
+  fire().onAvailable("0.2.0");
+  fire().onError("sha512 checksum mismatch, expected aaa, got bbb");
+  assert.equal(updates.snapshot().status, UPDATE_STATUS.PUBLISHING);
+
+  await updates.check();
+  await sleep(50);
+  assert.equal(calls.checks, 1, "the press replaced the scheduled retry, never joined it");
+  updates.stop();
+});
+
+test("the exhausted retry schedule falls to the error row a corrupt release deserves", async () => {
+  const { calls, fire, engine } = fakeEngine();
+  const updates = service({ engine, publishingRetryDelaysMs: [60_000, 60_000] });
+
+  const stillPublishing = 'Cannot download "https://github.com/x", status 404: Not Found';
+  fire().onAvailable("0.2.0");
+  fire().onError(stillPublishing);
+  fire().onAvailable("0.2.0");
+  fire().onError(stillPublishing);
+  assert.equal(updates.snapshot().status, UPDATE_STATUS.PUBLISHING);
+
+  fire().onAvailable("0.2.0");
+  fire().onError(stillPublishing);
+  assert.deepEqual(updates.snapshot(), {
+    status: UPDATE_STATUS.ERROR,
+    currentVersion: "0.1.0",
+    installSupported: true,
+    latestVersion: "0.2.0",
+  });
+  assert.equal(calls.cacheClears, 3);
+
+  // A later release is its own publishing window, not the spent one's.
+  fire().onAvailable("0.2.1");
+  fire().onError(stillPublishing);
+  assert.equal(updates.snapshot().status, UPDATE_STATUS.PUBLISHING);
+  updates.stop();
+});
+
+test("a network blip mid-wait resumes the bounded schedule instead of orphaning it", async () => {
+  const { calls, fire, engine } = fakeEngine();
+  const updates = service({ engine, publishingRetryDelaysMs: [10, 10, 60_000] });
+
+  fire().onAvailable("0.2.0");
+  fire().onError('Cannot download "https://github.com/x", status 404: Not Found');
+  await sleep(30);
+  assert.equal(calls.checks, 1, "the first retry ran");
+
+  // The retry's own check dying on the network keeps the wait standing, on
+  // the next slot of the same budget, rather than falling to idle silence
+  // that would leave the found version to the four-hour timer.
+  fire().onError("net::ERR_INTERNET_DISCONNECTED");
+  assert.deepEqual(updates.snapshot(), {
+    status: UPDATE_STATUS.PUBLISHING,
+    currentVersion: "0.1.0",
+    installSupported: true,
+    latestVersion: "0.2.0",
+  });
+  await sleep(30);
+  assert.equal(calls.checks, 2, "the resumed retry ran");
+  updates.stop();
+});
+
+test("electron-updater's doubled failure delivery spends one slot, not two", async () => {
+  const { fire, engine, rejectNextCheckWith } = fakeEngine();
+  const updates = service({ engine, publishingRetryDelaysMs: [10, 60_000] });
+
+  fire().onAvailable("0.2.0");
+  fire().onError('Cannot download "https://github.com/x", status 404: Not Found');
+  rejectNextCheckWith("net::ERR_CONNECTION_RESET");
+  await sleep(30);
+  assert.equal(updates.snapshot().status, UPDATE_STATUS.PUBLISHING);
+
+  // A failed check arrives as the `error` event and the rejected promise
+  // both. The budget above has exactly one slot left, so a second delivery
+  // that spent it would fall out of the wait — it must find the wait drawn
+  // and leave the budget alone.
+  fire().onError("net::ERR_CONNECTION_RESET");
+  assert.equal(updates.snapshot().status, UPDATE_STATUS.PUBLISHING);
+  updates.stop();
+});
+
+test("a wait that outlives the budget offline falls silent like any network failure", async () => {
+  const { fire, engine, rejectNextCheckWith } = fakeEngine();
+  const updates = service({ engine, publishingRetryDelaysMs: [10] });
+
+  fire().onAvailable("0.2.0");
+  fire().onError("sha512 checksum mismatch, expected aaa, got bbb");
+  assert.equal(updates.snapshot().status, UPDATE_STATUS.PUBLISHING);
+
+  // The one slot is spent, so the retry dying on the network has no budget
+  // left to resume with and the wait ends in the network failure's own
+  // answer: unmarked idle, never the error row.
+  rejectNextCheckWith("net::ERR_INTERNET_DISCONNECTED");
+  await sleep(30);
+  assert.deepEqual(updates.snapshot(), {
+    status: UPDATE_STATUS.IDLE,
+    currentVersion: "0.1.0",
+    installSupported: true,
+    upToDate: false,
+  });
+  updates.stop();
+});
+
+test("stopping the service clears a pending publishing retry", async () => {
+  const { calls, fire, engine } = fakeEngine();
+  const updates = service({ engine, publishingRetryDelaysMs: [10] });
+
+  fire().onAvailable("0.2.0");
+  fire().onError('Cannot download "https://github.com/x", status 404: Not Found');
+  updates.stop();
+  await sleep(30);
+  assert.equal(calls.checks, 0);
 });
 
 test("an error mid-install releases the guard so the next ready build can install", async () => {

@@ -331,6 +331,17 @@ export function VoiceIcon(): React.JSX.Element {
   );
 }
 
+/** The microphone itself — what macOS's own access ask is about. */
+export function MicrophoneIcon(): React.JSX.Element {
+  return (
+    <Glyph>
+      <rect x="9.2" y="2.6" width="5.6" height="10.6" rx="2.8" />
+      <path d="M5.6 11.4a6.4 6.4 0 0 0 12.8 0" />
+      <path d="M12 17.8V21" />
+    </Glyph>
+  );
+}
+
 /**
  * The stop glyph every chat surface uses: a filled, slightly rounded square.
  * Filled rather than stroked, because at control size a stroked square reads

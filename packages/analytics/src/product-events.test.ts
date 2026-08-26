@@ -8,12 +8,14 @@ import {
   PRODUCT_EVENT_PROPERTY,
   PRODUCT_EVENT_PROPERTY_VALUES,
   PRODUCT_SESSION_COUNT_BUCKET,
+  PRODUCT_SIGN_IN_AGE,
   PRODUCT_SURFACE_EVENT,
   type ProductEventName,
   type ProductEventProperty,
   productEventBatchFromWire,
   productEventFromWire,
   productSessionCountBucket,
+  productSignInAge,
 } from "@sidecar/analytics";
 import type { WireRecord } from "@sidecar/wire";
 
@@ -33,6 +35,7 @@ const SAMPLE_VALUE = {
   [PRODUCT_EVENT_PROPERTY.SESSION_STATUS]: "waiting",
   [PRODUCT_EVENT_PROPERTY.CREDENTIAL_SOURCE]: "account",
   [PRODUCT_EVENT_PROPERTY.SESSION_ACT]: "message_send",
+  [PRODUCT_EVENT_PROPERTY.DIAGNOSTIC_KIND]: "accidental_wake",
   [PRODUCT_EVENT_PROPERTY.ISSUE_ACT]: "comment_add",
   [PRODUCT_EVENT_PROPERTY.ACCOUNT_ACT]: "sign_out",
   [PRODUCT_EVENT_PROPERTY.SUPERSET_ACT]: "disconnect",
@@ -43,6 +46,7 @@ const SAMPLE_VALUE = {
   [PRODUCT_EVENT_PROPERTY.SEARCH_SURFACE]: "sessions",
   [PRODUCT_EVENT_PROPERTY.ASK_OUTCOME]: "sent",
   [PRODUCT_EVENT_PROPERTY.PERMISSION_RESULT]: "granted",
+  [PRODUCT_EVENT_PROPERTY.SIGN_IN_AGE]: "within_hour",
   [PRODUCT_EVENT_PROPERTY.SETTING_ID]: "voice_captions",
   [PRODUCT_EVENT_PROPERTY.SETTING_VALUE]: "on",
 } satisfies Record<ProductEventProperty, string | number>;
@@ -270,4 +274,15 @@ test("the surface channel's names are events the vocabulary already knows", () =
   assert.equal(isProductSurfaceEventName(PRODUCT_EVENT.APP_LAUNCH), false);
   assert.equal(isProductSurfaceEventName("panel:open "), false);
   assert.equal(isProductSurfaceEventName(7), false);
+});
+
+test("an elapsed time travels as the narrowest rung it fits, never a duration", () => {
+  const MINUTE_MS = 60 * 1000;
+  assert.equal(productSignInAge(0), PRODUCT_SIGN_IN_AGE.WITHIN_TEN_MINUTES);
+  assert.equal(productSignInAge(10 * MINUTE_MS - 1), PRODUCT_SIGN_IN_AGE.WITHIN_TEN_MINUTES);
+  assert.equal(productSignInAge(10 * MINUTE_MS), PRODUCT_SIGN_IN_AGE.WITHIN_HOUR);
+  assert.equal(productSignInAge(60 * MINUTE_MS), PRODUCT_SIGN_IN_AGE.WITHIN_DAY);
+  assert.equal(productSignInAge(24 * 60 * MINUTE_MS), PRODUCT_SIGN_IN_AGE.WITHIN_WEEK);
+  assert.equal(productSignInAge(8 * 24 * 60 * MINUTE_MS), PRODUCT_SIGN_IN_AGE.BEYOND_WEEK);
+  assert.equal(productSignInAge(Number.NaN), PRODUCT_SIGN_IN_AGE.BEYOND_WEEK);
 });

@@ -78,6 +78,12 @@ export function SiteHeader(): React.JSX.Element {
         <div className="flex items-center gap-4">
           <a
             className="text-sm font-medium text-muted-foreground no-underline transition-colors duration-150 hover:text-foreground motion-reduce:transition-none"
+            href="/about"
+          >
+            About
+          </a>
+          <a
+            className="text-sm font-medium text-muted-foreground no-underline transition-colors duration-150 hover:text-foreground motion-reduce:transition-none"
             href="/changelog"
           >
             Changelog
@@ -110,6 +116,12 @@ export function SiteFooter(): React.JSX.Element {
         <span>macOS 14+</span>
         <a
           className="no-underline transition-colors duration-150 hover:text-foreground motion-reduce:transition-none"
+          href="/about"
+        >
+          About
+        </a>
+        <a
+          className="no-underline transition-colors duration-150 hover:text-foreground motion-reduce:transition-none"
           href="/changelog"
         >
           Changelog
@@ -119,6 +131,12 @@ export function SiteFooter(): React.JSX.Element {
           href="/privacy"
         >
           Privacy
+        </a>
+        <a
+          className="no-underline transition-colors duration-150 hover:text-foreground motion-reduce:transition-none"
+          href="mailto:founders@stagereview.app"
+        >
+          Contact
         </a>
       </div>
     </footer>

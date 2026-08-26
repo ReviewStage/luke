@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { TRACE_DIRECTION, type TraceDirection } from "@sidecar/devtrace/vocabulary";
 import { APP_SETTING_KIND, type AppGuideSnapshot } from "@sidecar/guide";
 import { ISSUE_TRACKER_ID, normalizeTrackedIssue, type TrackedIssue } from "@sidecar/issues";
 import {
@@ -28,7 +29,7 @@ import {
   type Session,
   WORKSPACE_TASK_SUPPORT,
 } from "@sidecar/session";
-import { isRecord } from "@sidecar/wire";
+import { isRecord, text, type WireRecord } from "@sidecar/wire";
 import type { JsonValue, ParsedJsonObject } from "@sidecar/wire/testing";
 import {
   asMediaStream,
@@ -182,6 +183,8 @@ function harness(
     captureSessionSync?: boolean;
     /** Lets a test ride the status edges, the way the announcer does. */
     onStatus?: (status: RealtimeStatus) => void;
+    /** Lets a test stand where the development trace's tap does. */
+    onWireEvent?: (direction: TraceDirection, event: WireRecord) => void;
     /** Lets a test see what the element would be handed to play. */
     onRemoteStream?: (stream: MediaStream | undefined) => void;
     /**
@@ -352,6 +355,9 @@ function harness(
   if (options.connectTimeoutMs !== undefined) {
     sessionOptions.connectTimeoutMs = options.connectTimeoutMs;
   }
+  if (options.onWireEvent) {
+    sessionOptions.onWireEvent = options.onWireEvent;
+  }
   if (options.now) {
     sessionOptions.now = options.now;
   }
@@ -472,6 +478,17 @@ function contextItems(context: Harness, label: string, from = 0): ParsedJsonObje
     );
 }
 
+/** The instructions each guide-carrying session update sent, oldest first. */
+function guideInstructionUpdates(context: Harness, from = 0): string[] {
+  return context.sent
+    .slice(from)
+    .filter((event) => event.type === REALTIME_CLIENT_EVENT.SESSION_UPDATE)
+    .flatMap((event) => {
+      const instructions = text(sessionField(event)?.instructions);
+      return instructions !== undefined ? [instructions] : [];
+    });
+}
+
 /** The errors actually shown, past the clearing every connect starts with. */
 function reportedErrors(context: Harness): string[] {
   return context.errors.filter((message): message is string => message !== undefined);
@@ -495,6 +512,34 @@ test("connecting opens the call and leaves the microphone closed", async () => {
   assert.equal(headers.authorization, `Bearer ${CONNECTION.value}`);
   assert.equal(headers["content-type"], "application/sdp");
   assert.equal(request?.init.body, "v=0 local");
+});
+
+test("the wire tap sees both directions, raw, before the parser narrows or drops", async () => {
+  const tapped: { direction: TraceDirection; event: WireRecord }[] = [];
+  const context = harness({
+    onWireEvent: (direction, event) => tapped.push({ direction, event }),
+  });
+  await context.session.connect();
+
+  // The session sync the harness's channel filters out of `sent` still
+  // crosses the tap: it is what the call sends, instructions and tools whole.
+  const clientTypes = tapped
+    .filter((entry) => entry.direction === TRACE_DIRECTION.CLIENT)
+    .map((entry) => entry.event.type);
+  assert.ok(clientTypes.includes(REALTIME_CLIENT_EVENT.SESSION_UPDATE));
+
+  // A reply's `done` reaches the tap with the fields the parser discards, and
+  // an event type this build does not act on reaches it at all.
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: { id: "resp_1", usage: { input_tokens: 12 } },
+  });
+  context.emit({ type: "rate_limits.updated", rate_limits: [] });
+  const server = tapped.filter((entry) => entry.direction === TRACE_DIRECTION.SERVER);
+  const done = server.find((entry) => entry.event.type === REALTIME_SERVER_EVENT.RESPONSE_DONE);
+  assert.ok(isRecord(done?.event.response));
+  assert.deepEqual(done?.event.response.usage, { input_tokens: 12 });
+  assert.ok(server.some((entry) => entry.event.type === "rate_limits.updated"));
 });
 
 test("no credential leaves the voice experience explicitly unavailable", async () => {
@@ -1798,6 +1843,27 @@ test("an unchanged session roster is not resent", async () => {
   );
 });
 
+test("a stale session aging across clock ticks does not resend the roster", async (t) => {
+  const context = harness();
+  await context.session.connect();
+  // Six minutes past the fixture's observedAt, inside the minutes bucket.
+  t.mock.timers.enable({ apis: ["Date"], now: 1_800_000_360_000 });
+
+  context.session.updateSessions([observedSession("session-a")]);
+  await armDeveloperTurn(context);
+  const sentBefore = context.sent.length;
+
+  // Two minutes pass and the same roster is reported against the fresh clock.
+  // The bucketed age phrase holds still, so the item keeps its place and the
+  // conversation's cached prefix survives the tick.
+  t.mock.timers.tick(2 * 60_000);
+  context.session.updateSessions([observedSession("session-a")]);
+  context.session.stopSpeaking();
+  await armDeveloperTurn(context);
+
+  assert.deepEqual(contextItems(context, "[observed session status", sentBefore), []);
+});
+
 function conversationEntries(
   ...entries: readonly ConversationEntry[]
 ): readonly ConversationEntry[] {
@@ -1863,24 +1929,21 @@ test("the history is rendered from the roster as it now stands", async () => {
   });
   context.session.updateSessions([observedSession("session-a")]);
   context.session.updateConversation(history);
-  await armDeveloperTurn(context);
 
   // The words are history and keep their line; the identity is an offer to a
   // tool call, and a session the roster no longer shows is one no call may
   // name — so the line lets go of it rather than steering "that chat" toward
   // a certain refusal.
   context.session.updateSessions([]);
-  context.session.stopSpeaking();
-  const sentBefore = context.sent.length;
   await armDeveloperTurn(context);
 
-  const items = contextItems(context, "[recent conversation", sentBefore);
+  const items = contextItems(context, "[recent conversation");
   assert.equal(items.length, 1);
   assert.match(itemText(items[0]), /finished checkout-service/);
   assert.doesNotMatch(itemText(items[0]), /provider_session_id=session-a/);
 });
 
-test("a fresh history line replaces the item before it", async () => {
+test("the history is seeded once per call and later lines are not re-sent", async () => {
   const context = harness();
   await context.session.connect();
 
@@ -1890,9 +1953,13 @@ test("a fresh history line replaces the item before it", async () => {
   });
   context.session.updateConversation(first);
   await armDeveloperTurn(context);
-  const firstItem = context.session.liveContextItemIds.get(CONTEXT_ITEM_KIND.CONVERSATION);
-  assert.ok(firstItem);
+  const seeded = context.session.liveContextItemIds.get(CONTEXT_ITEM_KIND.CONVERSATION);
+  assert.ok(seeded);
 
+  // Every line said from here on rides this call as its own conversation
+  // items, so re-sending the digest would delete an item out of the cached
+  // prefix to restate turns the model already holds. The seed stands, and the
+  // new line waits for the next call.
   context.session.stopSpeaking();
   context.session.updateConversation(
     appendConversationEntry(first, {
@@ -1903,31 +1970,43 @@ test("a fresh history line replaces the item before it", async () => {
   const sentBefore = context.sent.length;
   await armDeveloperTurn(context);
 
-  // One live item per kind: the old record is deleted before the new goes in,
-  // so the conversation never holds two histories.
+  assert.deepEqual(contextItems(context, "[recent conversation", sentBefore), []);
   assert.equal(
-    context.sent.slice(sentBefore).some(
-      (event) =>
-        event.type === CONVERSATION_ITEM_DELETE &&
-        // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-        (event as { item_id?: string }).item_id === firstItem,
-    ),
-    true,
+    context.sent.slice(sentBefore).some((event) => event.type === CONVERSATION_ITEM_DELETE),
+    false,
   );
+  assert.equal(context.session.liveContextItemIds.get(CONTEXT_ITEM_KIND.CONVERSATION), seeded);
+});
+
+test("a new call after teardown re-seeds the accumulated history", async () => {
+  const context = harness();
+  await context.session.connect();
+
+  const first = conversationEntries({
+    kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
+    words: "Claude Code finished checkout-service.",
+  });
+  context.session.updateConversation(first);
+  await armDeveloperTurn(context);
+
+  const grown = appendConversationEntry(first, {
+    kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
+    words: "Codex failed in payments.",
+  });
+  context.session.updateConversation(grown);
+
+  // The call retires with everything said on it; the caller keeps the thread
+  // and re-reports it, and the next call seeds the whole of it.
+  context.closeChannel();
+  await context.session.connect();
+  context.session.updateConversation(grown);
+  const sentBefore = context.sent.length;
+  await armDeveloperTurn(context);
+
   const items = contextItems(context, "[recent conversation", sentBefore);
   assert.equal(items.length, 1);
   assert.match(itemText(items[0]), /finished checkout-service/);
   assert.match(itemText(items[0]), /failed in payments/);
-  assert.notEqual(
-    context.session.liveContextItemIds.get(CONTEXT_ITEM_KIND.CONVERSATION),
-    firstItem,
-  );
-
-  // The same history again is not news: nothing is resent.
-  context.session.stopSpeaking();
-  const repeatBefore = context.sent.length;
-  await armDeveloperTurn(context);
-  assert.deepEqual(contextItems(context, "[recent conversation", repeatBefore), []);
 });
 
 test("a reply ending at teardown writes nothing back into the retired call", async () => {
@@ -4245,16 +4324,29 @@ const CAPTIONS_GUIDE: AppGuideSnapshot = {
   ],
 };
 
-test("the app guide reaches the conversation, and identical guides are not resent", async () => {
+test("the app guide rides the session instructions, and identical guides are not resent", async () => {
   const context = harness();
   await context.session.connect();
 
   context.session.updateGuide(CAPTIONS_GUIDE);
   // The same knowledge again is not news; a changed value is. Neither is worth
-  // an item on its own — the turn that asks is what collects the latest.
+  // an update on its own — the turn that asks is what collects the latest.
   context.session.updateGuide({ ...CAPTIONS_GUIDE });
   await armDeveloperTurn(context);
-  assert.equal(contextItems(context, "[app guide").length, 1);
+  const updates = guideInstructionUpdates(context);
+  assert.equal(updates.length, 1);
+  // The guide is instructions now, never a conversation item: the standing
+  // prompt stays the stable prefix and the guide travels appended behind it.
+  assert.match(updates[0] ?? "", /engineering manager for the developer's coding agents/i);
+  assert.match(updates[0] ?? "", /setting_id=voice_captions/);
+  assert.match(updates[0] ?? "", /value=off/);
+  assert.deepEqual(contextItems(context, "[app guide"), []);
+
+  // A turn opened over an unchanged guide re-sends nothing: the instructions
+  // the call already holds are still true.
+  context.session.stopSpeaking();
+  await armDeveloperTurn(context);
+  assert.equal(guideInstructionUpdates(context).length, 1);
 
   const sentBefore = context.sent.length;
   context.session.updateGuide({
@@ -4267,9 +4359,9 @@ test("the app guide reaches the conversation, and identical guides are not resen
   context.session.stopSpeaking();
   await armDeveloperTurn(context);
 
-  const guideEvents = contextItems(context, "[app guide", sentBefore);
-  assert.equal(guideEvents.length, 1);
-  assert.match(itemText(guideEvents[0]), /on/);
+  const refreshed = guideInstructionUpdates(context, sentBefore);
+  assert.equal(refreshed.length, 1);
+  assert.match(refreshed[0] ?? "", /value=on/);
 });
 
 test("a spoken settings change is validated against the guide and carried", async () => {
@@ -4783,26 +4875,6 @@ function trackedIssue(
   return issue;
 }
 
-test("the conversation is told which issues the tracker lists", async () => {
-  const context = harness();
-  await context.session.connect();
-
-  context.session.updateIssues([trackedIssue()]);
-  await armDeveloperTurn(context);
-
-  const [contextEvent] = contextItems(context, "[observed issue tracker");
-  assert.ok(contextEvent, "the issue roster was sent");
-  assert.match(itemText(contextEvent), /LUKE-123/);
-  assert.match(itemText(contextEvent), /states=Done/);
-
-  // An unchanged roster is not resent, however many turns go by.
-  const sentBefore = context.sent.length;
-  context.session.updateIssues([trackedIssue()]);
-  context.session.stopSpeaking();
-  await armDeveloperTurn(context);
-  assert.deepEqual(contextItems(context, "[observed issue tracker", sentBefore), []);
-});
-
 test("a spoken issue ask is carried through its own carrier and voiced", async () => {
   const carried: unknown[] = [];
   const context = harness({
@@ -5020,56 +5092,6 @@ test("an issue call outside a turn the developer opened cannot act", async () =>
   assert.equal((JSON.parse(raw) as { status?: string }).status, "rejected");
 });
 
-test("a tracker that disconnects withdraws the roster, and a reconnect resends it", async () => {
-  const context = harness();
-  await context.session.connect();
-  context.session.updateIssues([trackedIssue()]);
-  await armDeveloperTurn(context);
-  const board = context.session.liveContextItemIds.get(CONTEXT_ITEM_KIND.ISSUES);
-  assert.ok(board);
-  const sentBefore = context.sent.length;
-
-  // Disconnecting is news once; staying disconnected is not.
-  context.session.updateIssues(undefined);
-  context.session.updateIssues(undefined);
-  context.session.stopSpeaking();
-  await armDeveloperTurn(context);
-
-  const withdrawals = contextItems(context, "[observed issue tracker", sentBefore).filter((event) =>
-    itemText(event).includes("no longer connected"),
-  );
-  assert.equal(withdrawals.length, 1);
-  // The withdrawal takes the board's place rather than sitting beside it: an
-  // answer of "none" is still the answer to the standing question.
-  assert.equal(
-    context.sent.slice(sentBefore).some(
-      (event) =>
-        event.type === CONVERSATION_ITEM_DELETE &&
-        // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-        (event as { item_id?: string }).item_id === board,
-    ),
-    true,
-  );
-
-  // The same roster arriving again after a reconnect is news again.
-  const reconnectBefore = context.sent.length;
-  context.session.updateIssues([trackedIssue()]);
-  context.session.stopSpeaking();
-  await armDeveloperTurn(context);
-  const rosters = contextItems(context, "[observed issue tracker", reconnectBefore).filter(
-    (event) => itemText(event).includes("LUKE-123"),
-  );
-  assert.equal(rosters.length, 1);
-
-  // A conversation never told about a board has nothing to withdraw, and must
-  // not say a tracker is "no longer" connected when none ever was.
-  const fresh = harness();
-  await fresh.session.connect();
-  fresh.session.updateIssues(undefined);
-  await armDeveloperTurn(fresh);
-  assert.deepEqual(contextItems(fresh, "[observed issue tracker"), []);
-});
-
 test("a speak-only connect never asks for the microphone", async () => {
   const context = harness();
 
@@ -5143,6 +5165,26 @@ test("the rosters and the guide never travel on Luke's own call", async () => {
   // The stores still updated — the developer's next call starts current — but
   // nothing left on this one beyond the sentence it exists to say.
   assert.equal(context.sent.length, before);
+
+  // Even the announcement it exists for carries no guide: the readout is the
+  // update's own fields and the ask for the reply, with no instructions
+  // refresh riding ahead of them.
+  assert.equal(
+    context.session.speak({
+      providerId: "claude-code",
+      providerSessionId: "session-a",
+      disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
+      source: ATTENTION_SPEECH_SOURCE.NOTICE_REQUEST,
+      summary: "Claude Code finished checkout-service.",
+      decidedAt: 1_800_000_000_000,
+    }),
+    true,
+  );
+  assert.deepEqual(guideInstructionUpdates(context, before), []);
+  assert.deepEqual(
+    context.sent.slice(before).map((event) => event.type),
+    [REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE, REALTIME_CLIENT_EVENT.RESPONSE_CREATE],
+  );
 });
 
 test("an idle call is put away, and a call being used is not", async () => {

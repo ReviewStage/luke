@@ -9,6 +9,11 @@ export { ObservationHookRegistry } from "./hook-registry.js";
 export { type LocalPeekOptions, peekLocalSessions } from "./local-peek.js";
 export { defaultOrcaDataDirectory, OrcaWorkspaceReader } from "./orca/workspaces.js";
 export { type ProviderRegistration, providerRegistrations } from "./registrations.js";
+export {
+  ADAPTER_DIAGNOSTIC_KIND,
+  type AdapterDiagnosticCallback,
+  type AdapterDiagnosticKind,
+} from "./shared/adapter-diagnostics.js";
 export { canIgnoreFilesystemError, readDirectory } from "./shared/local-session-adapter.js";
 export {
   canIgnoreSqliteError,

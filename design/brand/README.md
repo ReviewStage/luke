@@ -52,7 +52,7 @@ cut from. They are generated files and are not to be hand-edited either:
 
 | File | What it carries |
 |---|---|
-| `packages/surface/src/generated/face-art.ts` | The geometry, the motion names, their cycle lengths, and which parts each one needs drawn |
+| `packages/surface/src/generated/face-art.ts` | The geometry, the motion names, their cycle lengths, which parts each one needs drawn, and the wordmark's letterforms for the introduction's signature reveal |
 | `apps/desktop/src/renderer/styles/generated/face-motion.css` | One `@keyframes` per moving part, with each interval's easing |
 
 `scripts/repository-checks.sh` runs `generate-brand-assets.mjs --check`, which
@@ -82,6 +82,7 @@ spans ~58% of the tile width (typical macOS glyph-in-tile proportion). Only the 
 | `luke-mark-{light,dark}.svg` | The static face mark, tight-cropped on a transparent background |
 | `luke-wordmark-{light,dark}.svg` | Face-first caps LUKE wordmark |
 | `luke-wordmark-talking-{light,dark}.svg` | Animated hero: the face talks mid-word |
+| `luke-wordmark-signature-{light,dark}.svg` | Animated hero: the word signs itself on — the face's stroke draws first, the eyes blink open, then U·K·E are written stroke by stroke the way a hand would write them |
 | `icon/luke-icon-{light,dark}.svg` + `luke-icon-{light,dark}-{16…1024}.png` | App icon (squircle tile), per mode |
 | `dmg/luke-dmg-background.svg` + `luke-dmg-background{,@2x}.png` | Neutral installer background with a branded drag-and-drop arrow |
 | `mark/luke-mark-square{,-transparent}-{light,dark}.svg` + `-1024.png` | The face at the static mark's tight fill on a square canvas, per mode: over the icon's gradient with square corners (the avatar shape for surfaces that round their own tiles, GitHub among them), and the same crop with no tile. A transparent avatar shows GitHub's badge background color instead, so pair the dark set with `#1c1c1e`, the space-black end of the dark icon tile, which reads on either GitHub theme |

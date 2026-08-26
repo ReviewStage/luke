@@ -4,6 +4,7 @@ import {
   type RecordProductEvent,
 } from "@sidecar/analytics";
 import { CREDENTIAL_CONNECTION, CREDENTIAL_PROVIDERS } from "@sidecar/credentials";
+import type { AgentWireTrace } from "@sidecar/devtrace/vocabulary";
 import type { HostedUsageReader, RealtimeCredentialMinter } from "@sidecar/voice";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from "electron";
 import { BRIDGE } from "#shared/bridge";
@@ -30,6 +31,12 @@ export interface VoiceRuntimeIpcDependencies {
   unavailableDiagnostics: () => ReturnType<RealtimeCredentialMinter["diagnostics"]>;
   hostedUsageReader: () => HostedUsageReader | undefined;
   recordProductEvent: RecordProductEvent;
+  /**
+   * Takes one tapped wire event into the development trace. On a run without
+   * a writer — packaged, fixture, or simply untraced — the renderer's
+   * fire-and-forget send lands here and stops.
+   */
+  recordAgentTrace: (trace: AgentWireTrace) => void;
 }
 
 export function registerVoiceRuntimeIpc(dependencies: VoiceRuntimeIpcDependencies): void {
@@ -72,6 +79,9 @@ export function registerVoiceRuntimeIpc(dependencies: VoiceRuntimeIpcDependencie
         dependencies.chooseRealtimeCredentials()?.minter.diagnostics() ??
         dependencies.unavailableDiagnostics(),
       requestHostedUsage: () => dependencies.hostedUsageReader()?.read(),
+      recordAgentTrace(_context, trace) {
+        dependencies.recordAgentTrace(trace);
+      },
     },
     { ipcMain: dependencies.ipcMain, trustedSender: dependencies.trustedSender },
   );

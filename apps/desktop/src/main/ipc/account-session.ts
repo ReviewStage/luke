@@ -26,6 +26,16 @@ export interface AccountSessionIpcDependencies {
    */
   haltSessionReplay: () => void;
   /**
+   * Stands recording down for the rest of the run, after a deletion that
+   * landed. A halt alone would not: signed out, recording is wanted again the
+   * moment the account transition is broadcast, which is right for a sign-out
+   * and wrong here. The new recording would be anonymous and join no person,
+   * so nothing erased is re-created — but a recorder that starts up again on
+   * the panel that just erased everything reads as though something were, and
+   * deletion is the one act this repository treats as unrecoverable.
+   */
+  endSessionReplay: () => void;
+  /**
    * Re-answers what recording may do, for an act that did not happen. A halt
    * ahead of a refused sign-out or a failed deletion is one the account
    * transition never follows, so without this the panel stays halted while the
@@ -41,6 +51,7 @@ export function registerAccountSessionIpc(dependencies: AccountSessionIpcDepende
     recordProductEvent,
     flushProductEvents,
     haltSessionReplay,
+    endSessionReplay,
     resumeSessionReplay,
   } = dependencies;
   // Which provider a sign-in was begun with is deliberately not counted. The
@@ -80,7 +91,13 @@ export function registerAccountSessionIpc(dependencies: AccountSessionIpcDepende
         haltSessionReplay();
         await flushProductEvents();
         try {
-          return await accountSession.deleteEverywhere();
+          const deleted = await accountSession.deleteEverywhere();
+          // After the erasure rather than before it, because only a deletion
+          // that landed stands recording down: one that threw leaves the
+          // account where it was, and `resumeSessionReplay` puts the panel
+          // back the way it found it.
+          endSessionReplay();
+          return deleted;
         } catch (error) {
           resumeSessionReplay();
           throw error;

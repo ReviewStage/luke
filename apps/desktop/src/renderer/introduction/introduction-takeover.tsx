@@ -12,6 +12,7 @@ import {
   type FaceMotion,
   SESSION_URGENCY,
   urgencyLabel,
+  WORDMARK_ART,
 } from "@sidecar/surface";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
@@ -26,7 +27,9 @@ import { PANEL_PRESENTATION } from "../panel-state";
 import { RealtimeVoiceSession } from "../realtime-session";
 import { displaySessions, type SessionView, sessionTally } from "../session-model";
 import { parseMilliseconds, useSessionReorderMotion } from "../session-motion";
+import { MicrophoneIcon } from "../settings-icons";
 import { useSignInFaceCycle } from "../sign-in-gate";
+import { useMeasuredHeight } from "../use-measured-height";
 import { activeVoiceStream } from "../use-voice-conversation";
 import { outputSilent } from "../volume-hint";
 import { WAVEFORM_VOICE, Waveform, type WaveformVoice } from "../waveform";
@@ -60,6 +63,53 @@ const CONNECT_RETRY_MS = 1_500;
 const WAKE_BELL_LEAD_MS = 600;
 
 /**
+ * The signature reveal's layout, as fractions of the drawn face's size: the
+ * face element is the one sized thing on the dark stage, so the letters' box
+ * and the lockup's centring shift both scale from it, in CSS, whatever the
+ * viewport's clamp resolves to. The lockup units come from the same generated
+ * table the face is drawn from.
+ */
+const WORDMARK_FRACTION = {
+  left:
+    (WORDMARK_ART.LETTERS_BOX.X - WORDMARK_ART.FACE_VIEW.CENTER_X) / WORDMARK_ART.FACE_VIEW.SIZE,
+  top: (WORDMARK_ART.LETTERS_BOX.Y - WORDMARK_ART.FACE_VIEW.CENTER_Y) / WORDMARK_ART.FACE_VIEW.SIZE,
+  width: WORDMARK_ART.LETTERS_BOX.WIDTH / WORDMARK_ART.FACE_VIEW.SIZE,
+  height: WORDMARK_ART.LETTERS_BOX.HEIGHT / WORDMARK_ART.FACE_VIEW.SIZE,
+  shift: (WORDMARK_ART.CENTER_X - WORDMARK_ART.FACE_VIEW.CENTER_X) / WORDMARK_ART.FACE_VIEW.SIZE,
+} as const;
+
+/**
+ * The signature's pen clock, over the wake gesture (luke-wake, 2.8s cycle):
+ * the pen touches down once the eyes are open, spends the write time across
+ * the strokes — each taking its share of the written length, a constant-speed
+ * pen — and lifts briefly between strokes, a little longer between letters,
+ * finishing as the wake hands over to "Hi! I'm Luke."
+ */
+const SIGNATURE_CLOCK = {
+  PEN_DOWN_S: 1.5,
+  WRITE_S: 1.4,
+  LIFT_S: 0.05,
+  CARRY_S: 0.1,
+} as const;
+
+function signatureStrokes(): readonly { d: string; delayS: number; drawS: number }[] {
+  const strokes: { d: string; delayS: number; drawS: number }[] = [];
+  let at = SIGNATURE_CLOCK.PEN_DOWN_S;
+  WORDMARK_ART.LETTERS.forEach((letter, index) => {
+    if (index > 0) at += SIGNATURE_CLOCK.CARRY_S - SIGNATURE_CLOCK.LIFT_S;
+    for (const stroke of letter) {
+      const drawS = SIGNATURE_CLOCK.WRITE_S * stroke.WEIGHT;
+      strokes.push({ d: stroke.D, delayS: at, drawS });
+      at += drawS + SIGNATURE_CLOCK.LIFT_S;
+    }
+  });
+  return strokes;
+}
+
+/** Every stroke of U-K-E in writing order, with its own delay and draw time. */
+const SIGNATURE_STROKES = signatureStrokes();
+
+/**
  * The rows the introduction stages are pictures of sessions, not handles to
  * them: nothing on them may open, message, or act. The stripping below is
  * what guarantees these handlers are never called; they answer anyway, with
@@ -89,6 +139,8 @@ const FLOWN_BEATS: ReadonlySet<IntroductionBeat> = new Set([
   INTRODUCTION_BEAT.GLIDE,
   INTRODUCTION_BEAT.TOUR,
   INTRODUCTION_BEAT.MICROPHONE,
+  INTRODUCTION_BEAT.MICROPHONE_DIALOG,
+  INTRODUCTION_BEAT.MICROPHONE_DENIED,
   INTRODUCTION_BEAT.PRACTICE,
   INTRODUCTION_BEAT.SIGN_OFF,
   INTRODUCTION_BEAT.STAND_DOWN,
@@ -104,6 +156,8 @@ const FLOWN_BEATS: ReadonlySet<IntroductionBeat> = new Set([
 const LANDED_BEATS: ReadonlySet<IntroductionBeat> = new Set([
   INTRODUCTION_BEAT.TOUR,
   INTRODUCTION_BEAT.MICROPHONE,
+  INTRODUCTION_BEAT.MICROPHONE_DIALOG,
+  INTRODUCTION_BEAT.MICROPHONE_DENIED,
   INTRODUCTION_BEAT.PRACTICE,
   INTRODUCTION_BEAT.SIGN_OFF,
   INTRODUCTION_BEAT.STAND_DOWN,
@@ -184,6 +238,8 @@ export function IntroductionTakeover({
     observer.observe(group);
     return () => observer.disconnect();
   }, []);
+  /** The microphone wait's own pill, measured so the surface ends where it does. */
+  const [slotElement, slotHeight] = useMeasuredHeight();
   /** The current beat's remaining lines, and what to do when the last one ends. */
   const lineQueueRef = useRef<readonly string[]>([]);
   const afterLinesRef = useRef<(() => void) | undefined>(undefined);
@@ -534,18 +590,29 @@ export function IntroductionTakeover({
           dispatch(INTRODUCTION_EVENT.MICROPHONE_DENIED_SAID);
           return;
         }
-        speakLines(INTRODUCTION_SCRIPT.MICROPHONE, undefined, () => {
-          void window.sidecar.requestMicrophone().then((status) => {
-            if (beatRef.current !== INTRODUCTION_BEAT.MICROPHONE) return;
-            if (status === "granted") {
-              dispatch(INTRODUCTION_EVENT.MICROPHONE_GRANTED);
-              return;
-            }
-            speakLines(INTRODUCTION_SCRIPT.MICROPHONE_DENIED, undefined, () =>
-              dispatch(INTRODUCTION_EVENT.MICROPHONE_DENIED_SAID),
-            );
-          });
+        speakLines(INTRODUCTION_SCRIPT.MICROPHONE, undefined, () =>
+          dispatch(INTRODUCTION_EVENT.LINES_DONE),
+        );
+        return;
+      }
+      case INTRODUCTION_BEAT.MICROPHONE_DIALOG: {
+        // The dialog is macOS's own window mid-screen; while it stands, the
+        // panel is the waiting slot — the same pill a calendar consent
+        // stands down to — and the answer is what brings it back.
+        void window.sidecar.requestMicrophone().then((status) => {
+          if (beatRef.current !== INTRODUCTION_BEAT.MICROPHONE_DIALOG) return;
+          dispatch(
+            status === "granted"
+              ? INTRODUCTION_EVENT.MICROPHONE_GRANTED
+              : INTRODUCTION_EVENT.MICROPHONE_DENIED,
+          );
         });
+        return;
+      }
+      case INTRODUCTION_BEAT.MICROPHONE_DENIED: {
+        speakLines(INTRODUCTION_SCRIPT.MICROPHONE_DENIED, undefined, () =>
+          dispatch(INTRODUCTION_EVENT.MICROPHONE_DENIED_SAID),
+        );
         return;
       }
       case INTRODUCTION_BEAT.PRACTICE: {
@@ -619,7 +686,7 @@ export function IntroductionTakeover({
     const handleMove = (event: MouseEvent) => {
       const island = document
         .elementFromPoint(event.clientX, event.clientY)
-        ?.closest(".introduction-panel, .notch-wings");
+        ?.closest(".introduction-panel, .notch-wings, .slot-stage");
       update(island != null);
     };
     const handleLeave = () => {
@@ -651,6 +718,15 @@ export function IntroductionTakeover({
     return () => clearTimeout(timer);
   }, [landed]);
   const standingDown = STANDING_DOWN_BEATS.has(beat);
+  // Stood aside, not down: while macOS's microphone dialog is up the panel
+  // is the waiting slot — the same pill a calendar consent stands down to,
+  // wings ungated — and the panel it springs back to is unchanged.
+  const standingAside = beat === INTRODUCTION_BEAT.MICROPHONE_DIALOG;
+  const presentation = standingDown
+    ? PANEL_PRESENTATION.CAPSULE
+    : standingAside
+      ? PANEL_PRESENTATION.SLOT
+      : PANEL_PRESENTATION.PANEL;
   // The tour's flipped row wears the attention look and rides to the top,
   // exactly as the panel re-sorts a session that starts needing someone.
   const tourFlipped = tourFlipId ? rows.find((row) => row.id === tourFlipId) : undefined;
@@ -695,18 +771,19 @@ export function IntroductionTakeover({
       data-settled={String(surfaceSettled)}
       data-lifted={String(rows.length > 0)}
       data-notch={String(bootstrap.display.notch.hasNotch)}
-      {...(landed
-        ? {
-            "data-presentation": standingDown
-              ? PANEL_PRESENTATION.CAPSULE
-              : PANEL_PRESENTATION.PANEL,
-          }
-        : undefined)}
+      data-signature={String(!reducedMotion)}
+      {...(landed ? { "data-presentation": presentation } : undefined)}
       style={{
         ...cssCustomProperties({
           "--notch-top-inset": `${bootstrap.display.notch.topInset}px`,
           "--notch-housing-width": `${bootstrap.display.notch.housingWidth}px`,
           "--panel-height": `${panelHeight}px`,
+          ...(slotHeight !== undefined ? { "--slot-height": `${slotHeight}px` } : undefined),
+          "--introduction-wordmark-left": WORDMARK_FRACTION.left,
+          "--introduction-wordmark-top": WORDMARK_FRACTION.top,
+          "--introduction-wordmark-width": WORDMARK_FRACTION.width,
+          "--introduction-wordmark-height": WORDMARK_FRACTION.height,
+          "--introduction-wordmark-shift": WORDMARK_FRACTION.shift,
         }),
         ...flightStyle,
       }}
@@ -745,6 +822,33 @@ export function IntroductionTakeover({
           </div>
         ) : null}
       </div>
+      {/* The microphone wait's pill, on the consent slot's exact terms: the
+          shape shrinks to a line that says what it is waiting for while
+          macOS's own dialog holds the room. Its mark is the microphone
+          itself, in Luke's own glyph vocabulary, because macOS's ask has no
+          brand mark of its own; there is no way out, because the dialog's
+          buttons are the only honest answer — base.css's slot rules own its
+          arrival, its exit, and the pointer it may take while drawn. */}
+      {flown ? (
+        <div
+          className="slot-stage"
+          data-drawn={String(standingAside)}
+          aria-hidden={!standingAside}
+          inert={!standingAside}
+        >
+          <div ref={slotElement} className="key-slot sign-in-slot">
+            <div className="key-slot-row">
+              <span className="key-slot-mark">
+                <MicrophoneIcon />
+              </span>
+              <span className="sign-in-slot-copy" role="status">
+                <strong>Waiting for macOS…</strong>
+                <small>Allow microphone access in macOS's dialog.</small>
+              </span>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {/* The real wings, the moment there is a strip to stand in: the same
           face, meter, and count the app draws, trading the face for the meter
           while the developer holds the floor. At the gate the strip goes
@@ -760,7 +864,7 @@ export function IntroductionTakeover({
           meetingQuiet={false}
           voiceSpent={false}
           sessionsSettled={true}
-          presentation={standingDown ? PANEL_PRESENTATION.CAPSULE : PANEL_PRESENTATION.PANEL}
+          presentation={presentation}
           housingWidth={bootstrap.display.notch.housingWidth}
           accountGated={standingDown}
         />
@@ -780,18 +884,66 @@ export function IntroductionTakeover({
           exact spot the wings' face takes over. Gone once the wings stand. */}
       {landed ? null : (
         <div className="introduction-face-anchor">
-          {/* The dark's halo, breathing under him and gone with the veil. */}
+          {/* The dark's halo, breathing at the stage's centre and gone with
+              the veil. It halos the lockup rather than following the face:
+              the centring shift below belongs to the word, not to the dark. */}
           <div className="introduction-glow" aria-hidden="true" />
-          <span ref={faceRef} className="introduction-face">
-            <LukeFace key={face.play} motion={face.motion} repeat={face.repeat} />
-          </span>
-          {/* His voice made visible while he speaks on the dark stage — the
-              same meter the wings hold once he lands, at the stage's scale. */}
-          {!flown && meterAnalyser ? (
-            <span className="introduction-face-meter" aria-hidden="true">
-              <Waveform analyser={meterAnalyser} voice={WAVEFORM_VOICE.LUKE} voiceActive />
+          <div className="introduction-lockup">
+            <span ref={faceRef} className="introduction-face">
+              <LukeFace key={face.play} motion={face.motion} repeat={face.repeat} />
             </span>
-          ) : null}
+            {/* The signature reveal: the wordmark's letters, from the same
+              generated table the face is drawn from, standing where the
+              lockup puts them beside the face-L. They draw themselves on as
+              the wake's companion in introduction.css and dissolve when the
+              rows arrive to take the stage. The strokes are a mask, not the
+              ink: the panel's ink carries alpha, and translucent strokes
+              painted one by one would double up where they overlap — the K's
+              joint, the E's corners — so they draw as an opaque matte and
+              the ink is laid over their union exactly once. */}
+            {beat === INTRODUCTION_BEAT.DARK ? null : (
+              <svg
+                className="introduction-wordmark"
+                viewBox={`${WORDMARK_ART.LETTERS_BOX.X} ${WORDMARK_ART.LETTERS_BOX.Y} ${WORDMARK_ART.LETTERS_BOX.WIDTH} ${WORDMARK_ART.LETTERS_BOX.HEIGHT}`}
+                aria-hidden="true"
+                focusable="false"
+              >
+                <mask id="introduction-wordmark-strokes">
+                  {SIGNATURE_STROKES.map((penStroke) => (
+                    <path
+                      key={penStroke.d}
+                      d={penStroke.d}
+                      pathLength={1}
+                      fill="none"
+                      stroke="#fff"
+                      strokeWidth={WORDMARK_ART.STROKE_WIDTH}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      style={cssCustomProperties({
+                        "--introduction-stroke-delay": `${penStroke.delayS}s`,
+                        "--introduction-stroke-time": `${penStroke.drawS}s`,
+                      })}
+                    />
+                  ))}
+                </mask>
+                <rect
+                  x={WORDMARK_ART.LETTERS_BOX.X}
+                  y={WORDMARK_ART.LETTERS_BOX.Y}
+                  width={WORDMARK_ART.LETTERS_BOX.WIDTH}
+                  height={WORDMARK_ART.LETTERS_BOX.HEIGHT}
+                  fill="currentColor"
+                  mask="url(#introduction-wordmark-strokes)"
+                />
+              </svg>
+            )}
+            {/* His voice made visible while he speaks on the dark stage — the
+              same meter the wings hold once he lands, at the stage's scale. */}
+            {!flown && meterAnalyser ? (
+              <span className="introduction-face-meter" aria-hidden="true">
+                <Waveform analyser={meterAnalyser} voice={WAVEFORM_VOICE.LUKE} voiceActive />
+              </span>
+            ) : null}
+          </div>
         </div>
       )}
       {showCaptions ? (

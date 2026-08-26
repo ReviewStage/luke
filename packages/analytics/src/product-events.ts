@@ -45,6 +45,7 @@ export const PRODUCT_EVENT = {
   SUPERSET_ACT: "superset:act",
   SESSION_OBSERVE: "session:observe",
   SESSION_ACT_SEND: "session:act_send",
+  SESSION_DIAGNOSTIC: "session:diagnostic",
   ISSUE_ACT_SEND: "issue:act_send",
   PANEL_OPEN: "panel:open",
   PANEL_TAB_CHANGE: "panel:tab_change",
@@ -60,6 +61,7 @@ export const PRODUCT_EVENT = {
   VOICE_EXCHANGE: "voice:exchange",
   VOICE_PERMISSION: "voice:permission",
   VOICE_ANNOUNCEMENT_SPEAK: "voice:announcement_speak",
+  VOICE_FIRST_ANNOUNCEMENT: "voice:first_announcement",
   SETTING_UPDATE: "setting:update",
   USAGE_SHARING_STOP: "usage:sharing_stop",
   USAGE_SHARING_RESUME: "usage:sharing_resume",
@@ -109,6 +111,7 @@ export const PRODUCT_EVENT_PROPERTY = {
   SESSION_STATUS: "session_status",
   CREDENTIAL_SOURCE: "credential_source",
   SESSION_ACT: "session_act",
+  DIAGNOSTIC_KIND: "diagnostic_kind",
   ISSUE_ACT: "issue_act",
   ACCOUNT_ACT: "account_act",
   SUPERSET_ACT: "superset_act",
@@ -119,6 +122,7 @@ export const PRODUCT_EVENT_PROPERTY = {
   SEARCH_SURFACE: "search_surface",
   ASK_OUTCOME: "ask_outcome",
   PERMISSION_RESULT: "permission_result",
+  SIGN_IN_AGE: "sign_in_age",
   SETTING_ID: "setting_id",
   SETTING_VALUE: "setting_value",
 } as const;
@@ -173,6 +177,22 @@ export const PRODUCT_SESSION_ACT = {
 } as const;
 
 export type ProductSessionAct = (typeof PRODUCT_SESSION_ACT)[keyof typeof PRODUCT_SESSION_ACT];
+
+/**
+ * Which kind of fault an observation pass reported, never the fault itself:
+ * the error's message stays in the local log, because the words of a failure
+ * can carry a path, a branch, or a title. It repeats the providers package's
+ * own diagnostic-kind set rather than importing it, the same one-way rule the
+ * connection ids keep; the desktop closes the gap with a total `Record`
+ * bridge, so a new kind does not build until this vocabulary answers for it.
+ */
+export const PRODUCT_DIAGNOSTIC_KIND = {
+  ACCIDENTAL_WAKE: "accidental_wake",
+  PASS_FAILURE: "pass_failure",
+} as const;
+
+export type ProductDiagnosticKind =
+  (typeof PRODUCT_DIAGNOSTIC_KIND)[keyof typeof PRODUCT_DIAGNOSTIC_KIND];
 
 /** Which calendar a connection is to, never whose or what is on it. */
 export const PRODUCT_CALENDAR_SOURCE = {
@@ -317,6 +337,39 @@ export type ProductSettingValue =
   (typeof PRODUCT_SETTING_VALUE)[keyof typeof PRODUCT_SETTING_VALUE];
 
 /**
+ * How long after the account's first sign-in the first announcement was
+ * spoken, as a rung rather than a duration for the reason counts travel as
+ * buckets: an exact elapsed time is a fingerprint, where a rung answers the
+ * one question the event asks — how quickly Luke proved his loop to a new
+ * account. Each rung is the widest window the elapsed time still fits.
+ */
+export const PRODUCT_SIGN_IN_AGE = {
+  WITHIN_TEN_MINUTES: "within_ten_minutes",
+  WITHIN_HOUR: "within_hour",
+  WITHIN_DAY: "within_day",
+  WITHIN_WEEK: "within_week",
+  BEYOND_WEEK: "beyond_week",
+} as const;
+
+export type ProductSignInAge = (typeof PRODUCT_SIGN_IN_AGE)[keyof typeof PRODUCT_SIGN_IN_AGE];
+
+const SIGN_IN_AGE_LADDER: readonly { limitMs: number; age: ProductSignInAge }[] = [
+  { limitMs: 10 * 60 * 1000, age: PRODUCT_SIGN_IN_AGE.WITHIN_TEN_MINUTES },
+  { limitMs: 60 * 60 * 1000, age: PRODUCT_SIGN_IN_AGE.WITHIN_HOUR },
+  { limitMs: 24 * 60 * 60 * 1000, age: PRODUCT_SIGN_IN_AGE.WITHIN_DAY },
+  { limitMs: 7 * 24 * 60 * 60 * 1000, age: PRODUCT_SIGN_IN_AGE.WITHIN_WEEK },
+];
+
+/** The narrowest rung an elapsed time fits; anything unreadable is the widest. */
+export function productSignInAge(elapsedMs: number): ProductSignInAge {
+  if (!Number.isFinite(elapsedMs)) return PRODUCT_SIGN_IN_AGE.BEYOND_WEEK;
+  return (
+    SIGN_IN_AGE_LADDER.find((rung) => elapsedMs < rung.limitMs)?.age ??
+    PRODUCT_SIGN_IN_AGE.BEYOND_WEEK
+  );
+}
+
+/**
  * The rungs every count travels on. A raw count is a weak fingerprint —
  * "137 Codex sessions" identifies a machine across days — where a rung says
  * the same thing about adoption and says it about a crowd rather than a
@@ -360,6 +413,7 @@ interface ProductEventPropertyValue {
   [PRODUCT_EVENT_PROPERTY.SESSION_STATUS]: SessionStatus;
   [PRODUCT_EVENT_PROPERTY.CREDENTIAL_SOURCE]: ProductCredentialSource;
   [PRODUCT_EVENT_PROPERTY.SESSION_ACT]: ProductSessionAct;
+  [PRODUCT_EVENT_PROPERTY.DIAGNOSTIC_KIND]: ProductDiagnosticKind;
   [PRODUCT_EVENT_PROPERTY.ISSUE_ACT]: ProductIssueAct;
   [PRODUCT_EVENT_PROPERTY.ACCOUNT_ACT]: ProductAccountAct;
   [PRODUCT_EVENT_PROPERTY.SUPERSET_ACT]: ProductSupersetAct;
@@ -370,6 +424,7 @@ interface ProductEventPropertyValue {
   [PRODUCT_EVENT_PROPERTY.SEARCH_SURFACE]: ProductSearchSurface;
   [PRODUCT_EVENT_PROPERTY.ASK_OUTCOME]: ProductAskOutcome;
   [PRODUCT_EVENT_PROPERTY.PERMISSION_RESULT]: ProductPermissionResult;
+  [PRODUCT_EVENT_PROPERTY.SIGN_IN_AGE]: ProductSignInAge;
   [PRODUCT_EVENT_PROPERTY.SETTING_ID]: AppSettingId;
   [PRODUCT_EVENT_PROPERTY.SETTING_VALUE]: ProductSettingValue;
 }
@@ -395,6 +450,7 @@ export const PRODUCT_EVENT_PROPERTY_VALUES = {
   [PRODUCT_EVENT_PROPERTY.SESSION_STATUS]: Object.values(SESSION_STATUS),
   [PRODUCT_EVENT_PROPERTY.CREDENTIAL_SOURCE]: Object.values(PRODUCT_CREDENTIAL_SOURCE),
   [PRODUCT_EVENT_PROPERTY.SESSION_ACT]: Object.values(PRODUCT_SESSION_ACT),
+  [PRODUCT_EVENT_PROPERTY.DIAGNOSTIC_KIND]: Object.values(PRODUCT_DIAGNOSTIC_KIND),
   [PRODUCT_EVENT_PROPERTY.ISSUE_ACT]: Object.values(PRODUCT_ISSUE_ACT),
   [PRODUCT_EVENT_PROPERTY.ACCOUNT_ACT]: Object.values(PRODUCT_ACCOUNT_ACT),
   [PRODUCT_EVENT_PROPERTY.SUPERSET_ACT]: Object.values(PRODUCT_SUPERSET_ACT),
@@ -405,6 +461,7 @@ export const PRODUCT_EVENT_PROPERTY_VALUES = {
   [PRODUCT_EVENT_PROPERTY.SEARCH_SURFACE]: Object.values(PRODUCT_SEARCH_SURFACE),
   [PRODUCT_EVENT_PROPERTY.ASK_OUTCOME]: Object.values(PRODUCT_ASK_OUTCOME),
   [PRODUCT_EVENT_PROPERTY.PERMISSION_RESULT]: Object.values(PRODUCT_PERMISSION_RESULT),
+  [PRODUCT_EVENT_PROPERTY.SIGN_IN_AGE]: Object.values(PRODUCT_SIGN_IN_AGE),
   [PRODUCT_EVENT_PROPERTY.SETTING_ID]: Object.values(APP_SETTING_ID),
   [PRODUCT_EVENT_PROPERTY.SETTING_VALUE]: Object.values(PRODUCT_SETTING_VALUE),
 } as const satisfies Record<EnumeratedProductEventProperty, readonly string[]>;
@@ -446,6 +503,10 @@ export const PRODUCT_EVENT_PROPERTIES = {
     PRODUCT_EVENT_PROPERTY.PROVIDER_ID,
     PRODUCT_EVENT_PROPERTY.SESSION_ACT,
   ],
+  [PRODUCT_EVENT.SESSION_DIAGNOSTIC]: [
+    PRODUCT_EVENT_PROPERTY.PROVIDER_ID,
+    PRODUCT_EVENT_PROPERTY.DIAGNOSTIC_KIND,
+  ],
   [PRODUCT_EVENT.ISSUE_ACT_SEND]: [
     PRODUCT_EVENT_PROPERTY.TRACKER_ID,
     PRODUCT_EVENT_PROPERTY.ISSUE_ACT,
@@ -456,6 +517,7 @@ export const PRODUCT_EVENT_PROPERTIES = {
     PRODUCT_EVENT_PROPERTY.PROVIDER_ID,
     PRODUCT_EVENT_PROPERTY.SESSION_STATUS,
   ],
+  [PRODUCT_EVENT.VOICE_FIRST_ANNOUNCEMENT]: [PRODUCT_EVENT_PROPERTY.SIGN_IN_AGE],
   [PRODUCT_EVENT.SETTING_UPDATE]: [
     PRODUCT_EVENT_PROPERTY.SETTING_ID,
     PRODUCT_EVENT_PROPERTY.SETTING_VALUE,
@@ -547,6 +609,9 @@ const PRODUCT_EVENT_PROPERTY_READER: PropertyReader = {
   [PRODUCT_EVENT_PROPERTY.SESSION_ACT]: memberReader(
     PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.SESSION_ACT],
   ),
+  [PRODUCT_EVENT_PROPERTY.DIAGNOSTIC_KIND]: memberReader(
+    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.DIAGNOSTIC_KIND],
+  ),
   [PRODUCT_EVENT_PROPERTY.ISSUE_ACT]: memberReader(
     PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.ISSUE_ACT],
   ),
@@ -576,6 +641,9 @@ const PRODUCT_EVENT_PROPERTY_READER: PropertyReader = {
   ),
   [PRODUCT_EVENT_PROPERTY.PERMISSION_RESULT]: memberReader(
     PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.PERMISSION_RESULT],
+  ),
+  [PRODUCT_EVENT_PROPERTY.SIGN_IN_AGE]: memberReader(
+    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.SIGN_IN_AGE],
   ),
   [PRODUCT_EVENT_PROPERTY.SETTING_ID]: memberReader(
     PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.SETTING_ID],

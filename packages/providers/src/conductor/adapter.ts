@@ -47,8 +47,10 @@ const CONDUCTOR_ENVIRONMENT = {
 const CONDUCTOR_DEFAULT_API_URL = "https://api.conductor.build";
 
 /**
- * Documented public API routes. The reads walk projects, workspaces, and
- * sessions, and poll the status endpoints both of those document; the writers
+ * Documented public API routes. The reads walk projects, the user's own open
+ * workspaces through the workspace listing's documented creator and archive
+ * filters, and each workspace's sessions, and poll the status endpoints
+ * workspaces and sessions document; the writers
  * are `POST …/sessions/{id}/messages`, which is
  * Conductor's documented way to hand a prompt to an existing session — queued
  * while it is idle, steered into the running turn while it works —
@@ -162,8 +164,17 @@ function conductorArchiveWorkspaceControl(workspaceId: string): SessionControl {
   };
 }
 
+/**
+ * The query parameters the reads send, all documented by the endpoints they
+ * ride. Nothing enters a value but what the build fixed, the user id the same
+ * pass's identity read reported, and the arithmetic page cursor the previous
+ * page's own answer earned.
+ */
 const CONDUCTOR_QUERY = {
+  CREATOR: "creator",
+  INCLUDE_ARCHIVED: "includeArchived",
   LIMIT: "limit",
+  OFFSET: "offset",
 } as const;
 
 const CONDUCTOR_FIELD = {
@@ -176,12 +187,16 @@ const CONDUCTOR_FIELD = {
   ERROR_MESSAGE: "errorMessage",
   FAST_MODE: "fastMode",
   GIT_REMOTE: "gitRemote",
+  HAS_MORE: "hasMore",
   ID: "id",
   LAST_ACTIVITY_AT: "lastActivityAt",
   LAST_ERROR: "lastError",
   MODEL: "model",
   NAME: "name",
+  REPO_URL: "repoUrl",
   RESOLVED_MODEL: "resolvedModel",
+  /** The workspace listing's own word for where each workspace stands. */
+  STATE: "state",
   STATUS: "status",
   UPDATED_AT: "updatedAt",
   USER_ID: "userId",
@@ -308,9 +323,10 @@ const CONDUCTOR_WORKSPACE_ACTIVITY = {
 
 /**
  * The lifecycle states of a workspace no longer open. Conductor's workspace
- * listing keeps a filed-away workspace in the page without marking it — the
- * lifecycle endpoint is the one place the archive shows — so these are what
- * the roster filters on.
+ * listing keeps a filed-away workspace in the page, but marks it: the
+ * listing's `state` and the lifecycle endpoint's `status` document the same
+ * value set, and the roster filters on these states wherever either read
+ * reports one.
  */
 const CONDUCTOR_RETIRED_WORKSPACE_STATUSES: ReadonlySet<ConductorWorkspaceStatus> = new Set([
   CONDUCTOR_WORKSPACE_STATUS.ARCHIVED,
@@ -320,6 +336,13 @@ const CONDUCTOR_RETIRED_WORKSPACE_STATUSES: ReadonlySet<ConductorWorkspaceStatus
 const CONDUCTOR_ADAPTER_DEFAULTS = {
   MAXIMUM_PROJECTS: 10,
   WORKSPACE_PAGE_SIZE: 100,
+  /**
+   * How far the workspace listing is followed while it says more remain. The
+   * pages hold only the user's own open workspaces, so the bound is on live
+   * conversations rather than on everything ever archived, and five hundred
+   * of them is far past what one person's panel can mean anything for.
+   */
+  MAXIMUM_WORKSPACE_PAGES: 5,
   SESSION_PAGE_SIZE: 20,
   MAXIMUM_MODEL_LABEL_LENGTH: 60,
   MAXIMUM_ERROR_LENGTH: 120,
@@ -570,35 +593,32 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
     if (!userId) return [];
 
     // Every fan-out below is bounded by the page sizes in
-    // CONDUCTOR_ADAPTER_DEFAULTS — one page of workspaces per project, one
-    // page of chats per workspace — and workspaces and chats are never
-    // capped beyond that: a conversation is never dropped to spare a request.
+    // CONDUCTOR_ADAPTER_DEFAULTS — a bounded run of pages of the user's own
+    // open workspaces, one page of chats per workspace — and workspaces and
+    // chats are never capped beyond that: a conversation is never dropped to
+    // spare a request. The projects are read for their own sake: they are
+    // where a new workspace can be created, not where the workspaces come
+    // from.
     const projects = await this.#listProjects(request);
     this.#projects = projects;
-    const workspaces = (
-      await Promise.all(
-        projects.map((project) =>
-          this.tolerateItemFailure(() => this.#listWorkspaces(request, project)),
-        ),
-      )
-    )
-      .filter(isDefined)
-      .flat()
-      // Conductor does not attribute a workspace Luke can prove belongs to this
-      // user unless it reports a creator, and unattributed org workspaces stay
-      // out of a personal sidecar.
+    const workspaces = (await this.#listWorkspaces(request, userId))
+      // The listing was asked for this user's workspaces, but the records
+      // answer for themselves: Conductor does not attribute a workspace Luke
+      // can prove belongs to this user unless it reports a creator, and
+      // unattributed org workspaces stay out of a personal sidecar.
       .filter((workspace) => workspace.creatorId === userId)
       .sort((first, second) => second.lastActivityAt - first.lastActivityAt);
 
-    // Conductor's listing keeps a filed-away workspace in the page without
-    // marking it — only the lifecycle endpoint says it was archived — so the
-    // lifecycle reads come before the session listings, one per listed
-    // workspace, and a workspace standing archived or deleted is dropped
-    // here, before its chats are ever asked for. This is what makes a press
-    // of the archive control actually clear the rows it acted on. A
-    // lifecycle that could not be read keeps its workspace: a transient
-    // failure costs that workspace's activity words and failure message,
-    // never its rows.
+    // The listing already dropped the workspaces it marked archived or
+    // deleted, so these lifecycle reads cover only the workspaces still
+    // standing: they carry each one's activity words and failure message,
+    // and they catch a filing-away the listing has not caught up with — a
+    // workspace standing archived or deleted here is dropped all the same,
+    // before its chats are ever asked for, which is what makes a press of
+    // the archive control clear the rows it acted on within the pass that
+    // follows it. A lifecycle that could not be read keeps its workspace: a
+    // transient failure costs that workspace's activity words and failure
+    // message, never its rows.
     const workspaceLifecycles = new Map(
       (
         await Promise.all(
@@ -711,42 +731,33 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
       .slice(0, CONDUCTOR_ADAPTER_DEFAULTS.MAXIMUM_PROJECTS);
   }
 
-  async #listWorkspaces(
-    request: CloudRequest,
-    project: ConductorProject,
-  ): Promise<ConductorWorkspace[]> {
-    const body = await request(
-      [...CONDUCTOR_ROUTE.PROJECTS, project.id, CONDUCTOR_ROUTE_SEGMENT.WORKSPACES],
-      { [CONDUCTOR_QUERY.LIMIT]: String(CONDUCTOR_ADAPTER_DEFAULTS.WORKSPACE_PAGE_SIZE) },
-    );
-    return recordsFromPage(body, CONDUCTOR_FIELD.DATA)
-      .map((record): ConductorWorkspace | undefined => {
-        const id = textFromRecord(record, CONDUCTOR_FIELD.ID);
-        const lastActivityAt =
-          timestampFromRecord(record, CONDUCTOR_FIELD.LAST_ACTIVITY_AT) ??
-          timestampFromRecord(record, CONDUCTOR_FIELD.CREATED_AT);
-        if (!id || lastActivityAt === undefined) return undefined;
-        // Conductor's listing does not mark a filed-away workspace today —
-        // the lifecycle read in the collect pass is what drops those — but a
-        // record that does carry an archive timestamp is honored without
-        // waiting for that read.
-        if (timestampFromRecord(record, CONDUCTOR_FIELD.ARCHIVED_AT) !== undefined) {
-          return undefined;
-        }
-        const creatorId = textFromRecord(record, CONDUCTOR_FIELD.CREATOR_ID);
-        const name = textFromRecord(record, CONDUCTOR_FIELD.NAME)?.slice(
-          0,
-          maximumSessionTitleLength,
-        );
-        return {
-          id,
-          repositoryLabel: project.repositoryLabel,
-          lastActivityAt,
-          ...(name ? { name } : undefined),
-          ...(creatorId ? { creatorId } : undefined),
-        };
-      })
-      .filter(isDefined);
+  /**
+   * The user's own open workspaces, from the documented workspace listing
+   * under its own filters: the creator is the user the same pass's identity
+   * read reported, and the archived are excluded where they are indexed
+   * rather than paged through and dropped — a user who files away dozens of
+   * workspaces a week would otherwise fill every page with them and crowd an
+   * old but open workspace off the end of the read. The listing is followed
+   * while it says more remain, to the fixed page bound, and a page that
+   * could not be read fails the pass whole rather than quietly retiring
+   * every row a later page was holding.
+   */
+  async #listWorkspaces(request: CloudRequest, userId: string): Promise<ConductorWorkspace[]> {
+    const workspaces: ConductorWorkspace[] = [];
+    let offset = 0;
+    for (let page = 0; page < CONDUCTOR_ADAPTER_DEFAULTS.MAXIMUM_WORKSPACE_PAGES; page += 1) {
+      const body = await request([CONDUCTOR_ROUTE_SEGMENT.V0, CONDUCTOR_ROUTE_SEGMENT.WORKSPACES], {
+        [CONDUCTOR_QUERY.LIMIT]: String(CONDUCTOR_ADAPTER_DEFAULTS.WORKSPACE_PAGE_SIZE),
+        [CONDUCTOR_QUERY.OFFSET]: String(offset),
+        [CONDUCTOR_QUERY.CREATOR]: userId,
+        [CONDUCTOR_QUERY.INCLUDE_ARCHIVED]: "false",
+      });
+      const records = recordsFromPage(body, CONDUCTOR_FIELD.DATA);
+      workspaces.push(...records.map(workspaceFromRecord).filter(isDefined));
+      offset += records.length;
+      if (body[CONDUCTOR_FIELD.HAS_MORE] !== true || records.length === 0) break;
+    }
+    return workspaces;
   }
 
   async #listSessions(
@@ -1192,6 +1203,40 @@ function agentAndModelLabel(
 ): string | undefined {
   const label = [agentKind, model].filter(isDefined).join(" · ");
   return label || undefined;
+}
+
+/**
+ * One listed workspace, answering for itself. The listing was already asked
+ * to leave the archived out, but a record marked retired is dropped here all
+ * the same, before a lifecycle or session read ever spends a request on it —
+ * judged by the lifecycle read alone, a page of long-archived workspaces
+ * stood or fell with dozens of per-workspace reads every pass, and any one
+ * of them failing resurrected a workspace the user had already filed away.
+ * A state this build does not know is kept, not dropped: the lifecycle read
+ * still decides for it, as it did when the listing marked nothing.
+ */
+function workspaceFromRecord(record: WireRecord): ConductorWorkspace | undefined {
+  const id = textFromRecord(record, CONDUCTOR_FIELD.ID);
+  const lastActivityAt =
+    timestampFromRecord(record, CONDUCTOR_FIELD.LAST_ACTIVITY_AT) ??
+    timestampFromRecord(record, CONDUCTOR_FIELD.CREATED_AT);
+  if (!id || lastActivityAt === undefined) return undefined;
+  const state = knownValue(
+    CONDUCTOR_WORKSPACE_STATUS,
+    textFromRecord(record, CONDUCTOR_FIELD.STATE),
+  );
+  if (state && CONDUCTOR_RETIRED_WORKSPACE_STATUSES.has(state)) return undefined;
+  const creatorId = textFromRecord(record, CONDUCTOR_FIELD.CREATOR_ID);
+  const name = textFromRecord(record, CONDUCTOR_FIELD.NAME)?.slice(0, maximumSessionTitleLength);
+  return {
+    id,
+    // The listing names each workspace's repository itself, so the label no
+    // longer rides in from the project that grouped it.
+    repositoryLabel: repositoryLabel(textFromRecord(record, CONDUCTOR_FIELD.REPO_URL), undefined),
+    lastActivityAt,
+    ...(name ? { name } : undefined),
+    ...(creatorId ? { creatorId } : undefined),
+  };
 }
 
 /** Conductor reports the model it resolved as well as the one that was asked for. */

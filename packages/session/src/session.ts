@@ -306,6 +306,7 @@ export const SESSION_LINK_SCHEME = {
   CODEX: "codex:",
   CONDUCTOR: "conductor:",
   CURSOR: "cursor:",
+  REPLICAS: "replicas:",
   SUPERSET: "superset:",
 } as const;
 

@@ -32,6 +32,91 @@
 Notable changes to Luke, newest first. Each heading is a released version and
 the date its release was published.
 
+## 0.3.12 — 2026-08-26
+
+### Improvements
+
+- Luke uses Echo as his default voice and gives you a short spoken welcome
+  after sign-in ([#520](https://github.com/ReviewStage/luke/pull/520),
+  [#541](https://github.com/ReviewStage/luke/pull/541))
+- Luke keeps his conversation context focused on the app guide and leaves the
+  tracker's issue roster out of the conversation
+  ([#528](https://github.com/ReviewStage/luke/pull/528),
+  [#538](https://github.com/ReviewStage/luke/pull/538),
+  [#539](https://github.com/ReviewStage/luke/pull/539))
+- Replicas workspaces can sleep when their task finishes, and Luke reports
+  unexpected wakes as observation diagnostics
+  ([#530](https://github.com/ReviewStage/luke/pull/530),
+  [#531](https://github.com/ReviewStage/luke/pull/531),
+  [#536](https://github.com/ReviewStage/luke/pull/536))
+- Development traces capture Luke's local agent traffic and export attention
+  reviews in the form the model received
+  ([#534](https://github.com/ReviewStage/luke/pull/534),
+  [#540](https://github.com/ReviewStage/luke/pull/540))
+- Onboarding stays out of the way while macOS asks for microphone access and
+  signs Luke's wordmark onto his introduction
+  ([#524](https://github.com/ReviewStage/luke/pull/524),
+  [#533](https://github.com/ReviewStage/luke/pull/533))
+
+### Fixes
+
+- Fixed provider marks disappearing while Luke speaks
+  ([#517](https://github.com/ReviewStage/luke/pull/517))
+- Fixed update checks giving up while a newly published release is still
+  uploading ([#523](https://github.com/ReviewStage/luke/pull/523))
+- Fixed voice conversations reseeding history or changing roster context on
+  clock ticks ([#526](https://github.com/ReviewStage/luke/pull/526),
+  [#527](https://github.com/ReviewStage/luke/pull/527))
+- Fixed Conductor reads including archived workspaces or starting from an
+  unfiltered workspace list
+  ([#525](https://github.com/ReviewStage/luke/pull/525),
+  [#537](https://github.com/ReviewStage/luke/pull/537))
+- Fixed GitHub releases becoming visible before all six downloadable assets
+  finished uploading ([#521](https://github.com/ReviewStage/luke/pull/521))
+
+### Miscellaneous
+
+- Updated the hosted macOS release and Replicas lifecycle documentation
+  ([#519](https://github.com/ReviewStage/luke/pull/519),
+  [#529](https://github.com/ReviewStage/luke/pull/529),
+  [#532](https://github.com/ReviewStage/luke/pull/532))
+- Added an About page, contact address, maintainer credits, and refreshed
+  product framing across the website and README
+  ([#542](https://github.com/ReviewStage/luke/pull/542),
+  [#543](https://github.com/ReviewStage/luke/pull/543),
+  [#544](https://github.com/ReviewStage/luke/pull/544),
+  [#545](https://github.com/ReviewStage/luke/pull/545),
+  [#546](https://github.com/ReviewStage/luke/pull/546))
+
+## 0.3.11 — 2026-08-25
+
+### Improvements
+
+- Luke opens Replicas sessions directly in the Replicas desktop app
+  ([#516](https://github.com/ReviewStage/luke/pull/516))
+- Luke keeps agent updates concise, specific to the work, and available after
+  meeting quiet ends
+  ([#514](https://github.com/ReviewStage/luke/pull/514),
+  [#515](https://github.com/ReviewStage/luke/pull/515))
+- The admin dashboard makes account status, usage, and controls easier to scan
+  ([#511](https://github.com/ReviewStage/luke/pull/511))
+
+### Fixes
+
+- Fixed first-launch announcements waiting for an interaction before they
+  could be heard ([#477](https://github.com/ReviewStage/luke/pull/477))
+- Fixed signed-in users who finished onboarding being offered the introduction
+  again ([#512](https://github.com/ReviewStage/luke/pull/512))
+- Fixed swallowed admin API failures omitting the upstream 503 cause from logs
+  ([#492](https://github.com/ReviewStage/luke/pull/492))
+- Fixed hosted macOS releases omitting the PostHog project key and silently
+  disabling recording
+
+### Miscellaneous
+
+- Updated the 0.3.10 onboarding notes with its release screenshot
+  ([#510](https://github.com/ReviewStage/luke/pull/510))
+
 ## 0.3.10 — 2026-08-24
 
 ### Onboarding

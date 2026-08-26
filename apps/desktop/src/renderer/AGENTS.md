@@ -122,8 +122,12 @@ against its rock deliberately, like a person mid-sentence.
 `apps/desktop/src/renderer/luke-guide.ts` is the one place Luke's
 self-knowledge is described: what Luke is on screen, every user-facing setting
 with its current value, and where each is changed by hand. The renderer builds
-an `AppGuideSnapshot` from it and sends it into the voice conversation as
-`[app guide]` context, the same way the session roster travels; the spoken
+an `AppGuideSnapshot` from it and sends it into the voice conversation inside
+the session's own instructions, behind an `[app guide]` marker — build-fixed
+prose belongs on the cacheable prefix rather than in a conversation item —
+refreshed by a `session.update` on the same economy the roster items keep: at
+the turn that reads it, only on the developer's call, and never re-sent
+unchanged. The spoken
 `change_app_setting` and `show_panel` tools are validated against that
 snapshot, so the guide is simultaneously what Luke can say about himself and
 the outer bound of what a spoken ask can do to him.
@@ -136,15 +140,17 @@ choice row on the page the entry names. There is no separate renderer record
 whose completeness the compiler checks. A guide entry that deliberately
 builds no row still needs a comment saying which fact or special control covers
 it. The facts half has no compile lever either, so the rule is stated here: a
-capability, surface, or shortcut the guide does not describe is one Luke will
-deny having, and a stale entry is one he will misdescribe.
-The facts deliberately cover what a developer would ask Luke and what a spoken
-ask may do — not exhaustive surface or connector behavior, which the guide's
-closing fact has Luke redirect to the surface rather than deny — so the rule
-binds in full for capabilities, acts, refusals, and boundaries, and a new one
-still lands here in the same change.
-Update the facts whenever you change what the panel holds, what a key does, or
-what a provider connection means.
+capability or act the guide does not describe is one Luke will deny having,
+and a stale entry is one he will misdescribe.
+The facts deliberately cover only what Luke needs to hold a conversation and
+what a spoken ask may do — capabilities, acts, refusals, and their bounds. A
+detail the developer should know but Luke never acts on (the surface's own
+mechanics, a connector's internals, what a privacy switch governs) stays with
+the surface and the settings entries that already describe it, and the guide's
+closing fact has Luke redirect what it leaves out rather than deny it. The
+rule still binds in full at the act level: a new capability, act, refusal, or
+bound lands here in the same change, as does any change to what a key does or
+what a provider connection allows.
 
 Rules the guide must keep:
 

@@ -8,11 +8,9 @@ import {
   maximumAttentionRequestLength,
   maximumAttentionSummaryLength,
 } from "@sidecar/attention";
-import { EMPTY_APP_GUIDE } from "@sidecar/guide";
 import { ISSUE_TRACKER_ID, normalizeTrackedIssue } from "@sidecar/issues";
 import {
   ATTENTION_SPEECH_SOURCE,
-  appGuideContextEvents,
   attentionSpeechFromReviews,
   CONTEXT_ITEM_KIND,
   cancelResponseEvents,
@@ -29,10 +27,7 @@ import {
   isRealtimeVoice,
   isRealtimeVoiceSpeed,
   isSessionToolName,
-  issueContextEvents,
-  issueContextText,
   issueToolAction,
-  issueTrackerDisconnectedEvents,
   outputSpeedUpdateEvents,
   PRESS_AUDIO_SAMPLE_RATE,
   parseRealtimeServerEvent,
@@ -77,7 +72,6 @@ import {
   type WireRecord,
 } from "@sidecar/wire";
 import {
-  maximumVoiceContextIssues,
   maximumVoiceContextSessions,
   maximumVoiceContextWorkspaceProjects,
 } from "./realtime-context.js";
@@ -188,7 +182,7 @@ test("a context item is named so the next one can take its place", () => {
   // The sequence rises rather than the name being reused: a delete that failed
   // would otherwise leave the old item sitting under the new one's name.
   assert.notEqual(first, second);
-  assert.notEqual(first, contextItemId(CONTEXT_ITEM_KIND.ISSUES, 1));
+  assert.notEqual(first, contextItemId(CONTEXT_ITEM_KIND.WORKSPACE_PROJECTS, 1));
 
   const [supersede] = contextSupersedeEvents({ itemId: first, eventId: "luke_supersede_2" });
   assert.equal(supersede?.type, REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_DELETE);
@@ -207,9 +201,6 @@ test("every kind of context travels as one nameable item and never as a prompt",
   const built = [
     sessionContextEvents([], contextItemId(CONTEXT_ITEM_KIND.SESSIONS, 1)),
     workspaceProjectContextEvents([], contextItemId(CONTEXT_ITEM_KIND.WORKSPACE_PROJECTS, 2)),
-    appGuideContextEvents(EMPTY_APP_GUIDE, contextItemId(CONTEXT_ITEM_KIND.APP_GUIDE, 3)),
-    issueContextEvents([], contextItemId(CONTEXT_ITEM_KIND.ISSUES, 4)),
-    issueTrackerDisconnectedEvents(contextItemId(CONTEXT_ITEM_KIND.ISSUES, 5)),
   ];
 
   for (const events of built) {
@@ -297,8 +288,8 @@ test("a mint response without a session model falls back to the requested model"
 });
 
 test("a male voice is what the session is minted with", () => {
-  assert.equal(REALTIME_DEFAULTS.VOICE, "cedar");
-  assert.equal(realtimeSessionConfig().audio.output.voice, "cedar");
+  assert.equal(REALTIME_DEFAULTS.VOICE, "echo");
+  assert.equal(realtimeSessionConfig().audio.output.voice, "echo");
 });
 
 test("the default voice is one the settings can offer", () => {
@@ -822,46 +813,58 @@ test("an empty roster says so rather than implying Luke sees nothing at all", ()
   assert.match(sessionContextText([]), /No coding-agent sessions/);
 });
 
-test("the roster carries how long ago each session was last seen, measured against the supplied clock", () => {
+test("the roster carries how long ago each session was last seen, in coarse buckets", () => {
   const minute = 60_000;
+  const hour = 60 * minute;
   const now = DECIDED_AT;
+  const rosterAt = (elapsed: number): string => {
+    const session = normalizeSession(
+      { id: "claude-code", displayName: "Claude Code" },
+      {
+        providerSessionId: "session-a",
+        title: "Bootstrap the desktop shell",
+        status: SESSION_STATUS.WORKING,
+        observedAt: now - elapsed,
+      },
+    );
+    return sessionContextText([session], [], now);
+  };
+
+  assert.match(rosterAt(30_000), /updated just now/);
+  assert.match(rosterAt(4 * minute), /updated just now/);
+  assert.match(rosterAt(30 * minute), /updated minutes ago/);
+  assert.match(rosterAt(90 * minute), /updated about an hour ago/);
+  assert.match(rosterAt(5 * hour), /updated hours ago/);
+  assert.match(rosterAt(3 * 24 * hour), /updated a day or more ago/);
+
+  // Provider clock skew (observedAt ahead of now) also reads as "just now".
+  assert.match(rosterAt(-minute), /updated just now/);
+});
+
+test("the roster text holds still across clock ticks inside one age bucket and moves at its edge", () => {
+  const minute = 60_000;
+  const observedAt = DECIDED_AT;
   const session = normalizeSession(
     { id: "claude-code", displayName: "Claude Code" },
     {
       providerSessionId: "session-a",
       title: "Bootstrap the desktop shell",
       status: SESSION_STATUS.WORKING,
-      observedAt: now - 4 * minute,
+      observedAt,
     },
   );
 
-  const text = sessionContextText([session], [], now);
-
-  assert.match(text, /updated 4 minutes ago/);
-
-  // Under a minute reads as "just now".
-  const fresh = normalizeSession(
-    { id: "claude-code", displayName: "Claude Code" },
-    {
-      providerSessionId: "session-b",
-      title: "Fresh session",
-      status: SESSION_STATUS.WORKING,
-      observedAt: now - 30_000,
-    },
+  // Byte-identical, not merely similar: the roster is re-sent only when its
+  // text changes, and text that moved with every minute tick would invalidate
+  // the conversation's cached prefix with nothing new to say.
+  assert.equal(
+    sessionContextText([session], [], observedAt + 10 * minute),
+    sessionContextText([session], [], observedAt + 45 * minute),
   );
-  assert.match(sessionContextText([fresh], [], now), /updated just now/);
-
-  // Provider clock skew (observedAt ahead of now) also reads as "just now".
-  const ahead = normalizeSession(
-    { id: "claude-code", displayName: "Claude Code" },
-    {
-      providerSessionId: "session-c",
-      title: "Clock-skewed session",
-      status: SESSION_STATUS.WORKING,
-      observedAt: now + minute,
-    },
+  assert.notEqual(
+    sessionContextText([session], [], observedAt + 45 * minute),
+    sessionContextText([session], [], observedAt + 65 * minute),
   );
-  assert.match(sessionContextText([ahead], [], now), /updated just now/);
 });
 
 test("the roster identifies the most recent session and most recent openable chat per provider", () => {
@@ -2135,49 +2138,6 @@ function issueCall(argumentsJson: string, name: string = REALTIME_TOOL.UPDATE_IS
   return { name, callId: "call-1", argumentsJson };
 }
 
-test("issue context carries the roster and what each issue will take", () => {
-  const context = issueContextText([actionableIssue()]);
-
-  assert.match(context, /Linear — LUKE-123 — Add Codex support — In Progress/);
-  assert.match(context, /tracker_id=linear issue_id=LUKE-123/);
-  assert.match(context, /states=Done, In Review/);
-  assert.match(context, /comments=true/);
-  // A connected tracker with nothing listed is an answer, not an absence.
-  assert.match(issueContextText([]), /lists no issues/i);
-});
-
-test("issue context never asks Luke to start talking", () => {
-  const events = issueContextEvents([actionableIssue()], "luke_ctx_issues_1");
-
-  assert.equal(events.length, 1);
-  assert.equal(events[0]?.type, REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE);
-  assert.equal(
-    events.some((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE),
-    false,
-  );
-});
-
-test("issue context stays bounded when many issues are tracked", () => {
-  const issues = Array.from({ length: maximumVoiceContextIssues + 10 }, (_, index) => {
-    const issue = normalizeTrackedIssue(
-      { id: ISSUE_TRACKER_ID.LINEAR, displayName: "Linear" },
-      {
-        trackerIssueId: `issue-${index}`,
-        identifier: `LUKE-${index}`,
-        title: `Issue ${index}`,
-        stateName: "Todo",
-        observedAt: DECIDED_AT,
-      },
-    );
-    assert.ok(issue);
-    return issue;
-  });
-
-  const lines = issueContextText(issues).split("\n");
-  // One header line plus the bounded roster.
-  assert.equal(lines.length, maximumVoiceContextIssues + 1);
-});
-
 test("an issue tool call can act only on an issue Luke was shown, going where its tracker allows", () => {
   const roster = [actionableIssue()];
   const identity = '"tracker_id":"linear","issue_id":"LUKE-123"';
@@ -2259,18 +2219,6 @@ test("the session and issue tools answer to their own validators", () => {
   assert.equal(ACTS.CHANGE_APP_SETTING.family, REALTIME_TOOL_FAMILY.APP);
   assert.equal(ACTS.SEND_SESSION_MESSAGE.family, REALTIME_TOOL_FAMILY.SESSION);
   assert.equal(ACTS.UPDATE_ISSUE_STATE.family, REALTIME_TOOL_FAMILY.ISSUE);
-});
-
-test("a disconnected tracker withdraws the roster without starting a reply", () => {
-  const events = issueTrackerDisconnectedEvents("luke_ctx_issues_2");
-
-  assert.equal(events.length, 1);
-  assert.equal(events[0]?.type, REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE);
-  assert.match(noticeText(events[0]), /no longer connected/i);
-  assert.equal(
-    events.some((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE),
-    false,
-  );
 });
 
 test("a standing ask is kept only for a session Luke was shown, in bounded words", () => {

@@ -1,11 +1,12 @@
 import type { SessionNoticeAsk } from "@sidecar/attention";
+import { TRACE_DIRECTION, type TraceDirection } from "@sidecar/devtrace/vocabulary";
 import { type AppGuideSnapshot, appGuideContextText, EMPTY_APP_GUIDE } from "@sidecar/guide";
 import type { TrackedIssue } from "@sidecar/issues";
 import {
   type ActEnvelope,
-  type AttentionSpeech,
-  appGuideContextEvents,
+  appGuideInstructionsEvents,
   appToolAction,
+  arrivalSpeechEvents,
   type CarriedAppAction,
   type CarriedIssueAction,
   type CarriedSessionAction,
@@ -20,19 +21,18 @@ import {
   contextSupersedeEvents,
   conversationContextEvents,
   conversationHistoryText,
+  decodeRealtimePayload,
   functionCallFollowUpEvents,
   functionCallOutputEvents,
   type IntroductionLine,
-  ISSUE_TRACKER_DISCONNECTED_TEXT,
   inputAudioAppendEvents,
   inputAudioFormatUpdateEvents,
   introductionSpeechEvents,
-  issueContextEvents,
-  issueContextText,
+  isArrivalSpeech,
   issueToolAction,
-  issueTrackerDisconnectedEvents,
   outputSpeedUpdateEvents,
   PressAudioBuffer,
+  type ProactiveSpeech,
   parseRealtimeServerEvent,
   proactiveSpeechEvents,
   pushToTalkCommitEvents,
@@ -104,15 +104,13 @@ export const VOICE_IDLE_TIMEOUT_MS = 3 * 60_000;
 /**
  * The order context is flushed in, so a turn's items land the same way every
  * time: what Luke can see, then what was already said across calls, then
- * where he can create, then what he knows about himself, then what the
- * tracker lists.
+ * where he can create. What Luke knows about himself is not an item at all:
+ * the guide rides the session instructions, flushed ahead of these.
  */
 const CONTEXT_FLUSH_ORDER: readonly ContextItemKind[] = [
   CONTEXT_ITEM_KIND.SESSIONS,
   CONTEXT_ITEM_KIND.CONVERSATION,
   CONTEXT_ITEM_KIND.WORKSPACE_PROJECTS,
-  CONTEXT_ITEM_KIND.APP_GUIDE,
-  CONTEXT_ITEM_KIND.ISSUES,
 ];
 
 /**
@@ -334,6 +332,14 @@ export interface RealtimeVoiceSessionOptions extends RealtimeVoiceSessionCallbac
   cancel?: (timer: ScheduledTimer) => void;
   /** Injectable so a test can hold the clock a truncate measures against. */
   now?: () => number;
+  /**
+   * A development tap on the wire itself: every event this call sends and
+   * every event the service answers, as they cross the data channel. The tap
+   * observes and never steers — nothing here reads its result — and the
+   * caller decides per event whether anything leaves it, because the session
+   * outlives the bootstrap that says whether a trace is being written.
+   */
+  onWireEvent?: (direction: TraceDirection, event: WireRecord) => void;
 }
 
 function errorMessage(error: Error): string {
@@ -459,6 +465,16 @@ export class RealtimeVoiceSession {
    * call may only name a setting Luke was actually described as having.
    */
   #guide: AppGuideSnapshot = EMPTY_APP_GUIDE;
+  /**
+   * The guide's rendered text, waiting to ride the session instructions, and
+   * the text the call's instructions last carried. The guide is not a context
+   * item: it is the same build-fixed prose on every turn, so it travels as a
+   * `session.update` refreshing the instructions — a stable prefix the
+   * service can cache — held here on the items' own economy: sent at the
+   * turn that reads it, and an unchanged guide sends nothing at all.
+   */
+  #guideTextPending: string | undefined;
+  #guideTextLive: string | undefined;
   /**
    * The projects a workspace can be created in, as last reported — kept whole
    * for the same reason the roster is: a spoken creation ask may only name a
@@ -1452,7 +1468,7 @@ export class RealtimeVoiceSession {
    */
   sendText(text: string): boolean {
     // A typed ask runs only on the developer's own call. Luke's speak-only
-    // call has been sent no roster, no guide, and no issues, so a turn armed
+    // call has been sent no roster and no guide, so a turn armed
     // for tools has nothing real to validate against there — the caller
     // stands that call down and opens the full one before asking. A typed ask
     // needs no capture device, so one this call put away stays put away.
@@ -1558,7 +1574,16 @@ export class RealtimeVoiceSession {
    * is better than holding it — the attention layer supersedes its own
    * decisions, so a sentence saved for later is a sentence likely to be stale.
    */
-  speak(speech: AttentionSpeech): boolean {
+  speak(speech: ProactiveSpeech): boolean {
+    if (isArrivalSpeech(speech)) {
+      const arrivalEvents = arrivalSpeechEvents(speech);
+      if (arrivalEvents.length === 0 || !this.isConnected || this.#turnBusy) return false;
+      // No caption subject: the arrival speaks about no one observed session,
+      // like an introduction beat, so no notice may stand under the housing
+      // claiming it does.
+      this.#startResponse(arrivalEvents);
+      return true;
+    }
     const events = proactiveSpeechEvents(speech);
     if (events.length === 0 || !this.isConnected || this.#turnBusy) return false;
     this.#startResponse(events);
@@ -1650,6 +1675,8 @@ export class RealtimeVoiceSession {
     // is filled from the app afresh before it takes a turn.
     this.#contextPending.clear();
     this.#contextLive.clear();
+    this.#guideTextPending = undefined;
+    this.#guideTextLive = undefined;
     this.#pendingSupersedes.clear();
     this.#pendingInterruptions.clear();
     this.#clearIdleTimer();
@@ -1991,7 +2018,9 @@ export class RealtimeVoiceSession {
     );
     // The history is rendered against the roster, so a fresh roster re-renders
     // it: a line whose session left the roster keeps its words and lets go of
-    // the identity no tool call may name any more.
+    // the identity no tool call may name any more. The render reaches the wire
+    // only until this call seeds its one history item; after that it keeps the
+    // staged copy current for nothing but teardown to clear.
     this.#rememberConversation();
   }
 
@@ -2002,7 +2031,9 @@ export class RealtimeVoiceSession {
    * heard the words it points back at: an announcement is often read out on
    * Luke's own speak-only call, which the developer's own press tears down,
    * and an idle call retires with everything said on it. Context on the
-   * roster's own terms, flushed with it at the turn that reads it.
+   * roster's own terms, flushed with it at the first turn of each call and
+   * left standing after that: what is said from then on lives in the call's
+   * own conversation items.
    */
   updateConversation(entries: readonly ConversationEntry[]): void {
     this.#conversationEntries = entries;
@@ -2048,46 +2079,25 @@ export class RealtimeVoiceSession {
   }
 
   /**
-   * Tells the conversation what Luke currently knows about himself, the same
-   * way the roster does: the standing instructions promise an app guide, so
-   * one has to arrive before a question about Luke can be answered from real
-   * state. Identical guides are not resent, and the snapshot is kept whole for
-   * validating the spoken asks it advertises.
+   * Tells the conversation what Luke currently knows about himself. The guide
+   * rides the session instructions rather than a context item — build-fixed
+   * prose belongs on the cacheable prefix, not in a user message competing
+   * with the conversation — but it travels on the items' own terms: at the
+   * turn that reads it, only on the developer's call, and identical guides
+   * are not resent. The snapshot is kept whole for validating the spoken asks
+   * it advertises.
    */
   updateGuide(guide: AppGuideSnapshot): void {
     this.#guide = guide;
-    this.#rememberContext(CONTEXT_ITEM_KIND.APP_GUIDE, appGuideContextText(guide), (itemId) =>
-      appGuideContextEvents(guide, itemId),
-    );
+    this.#guideTextPending = appGuideContextText(guide);
   }
 
   /**
-   * Tells the conversation what the issue tracker lists, under the same rule
-   * the session roster follows: identical rosters are not resent, and no
-   * tracker connected means no roster at all — the absence is itself what
-   * lets Luke say a tracker is not connected rather than inventing a board.
+   * Holds the tracker's roster a spoken issue act is validated against, here
+   * and again in the main process.
    */
   updateIssues(issues: readonly TrackedIssue[] | undefined): void {
     this.#issues = issues;
-    if (issues) {
-      this.#rememberContext(CONTEXT_ITEM_KIND.ISSUES, issueContextText(issues), (itemId) =>
-        issueContextEvents(issues, itemId),
-      );
-      return;
-    }
-    // A conversation that was never going to be told about a board has nothing
-    // to withdraw, and saying a tracker is "no longer" connected when none ever
-    // was is a different and wrong sentence. One that had a board — or was
-    // about to be given one — is told the board is gone, or Luke keeps
-    // answering from a tracker nobody is observing.
-    if (!this.#contextPending.has(CONTEXT_ITEM_KIND.ISSUES)) return;
-    if (!this.#contextLive.has(CONTEXT_ITEM_KIND.ISSUES)) {
-      this.#contextPending.delete(CONTEXT_ITEM_KIND.ISSUES);
-      return;
-    }
-    this.#rememberContext(CONTEXT_ITEM_KIND.ISSUES, ISSUE_TRACKER_DISCONNECTED_TEXT, (itemId) =>
-      issueTrackerDisconnectedEvents(itemId),
-    );
   }
 
   /**
@@ -2116,10 +2126,25 @@ export class RealtimeVoiceSession {
    */
   #flushContext(): void {
     if (!this.#carriesContext()) return;
+    // The guide leads the items: it refreshes the instructions rather than
+    // occupying a conversation item, so there is nothing to supersede and an
+    // unchanged guide leaves the cached prefix exactly where it was.
+    if (this.#guideTextPending !== undefined && this.#guideTextPending !== this.#guideTextLive) {
+      this.#send(appGuideInstructionsEvents(this.#guideTextPending));
+      this.#guideTextLive = this.#guideTextPending;
+    }
     for (const kind of CONTEXT_FLUSH_ORDER) {
       const pending = this.#contextPending.get(kind);
       if (!pending) continue;
       const live = this.#contextLive.get(kind);
+      // The history is seeded once per call. It exists to bridge the calls
+      // that came before this one, and every turn taken since it went in is
+      // already held by this call as real conversation items — so superseding
+      // it mid-call would delete an item out of the conversation's cached
+      // prefix to restate turns the model already has. The entries keep
+      // accumulating either way, and teardown clears the live map, so the
+      // next call seeds everything said by then.
+      if (kind === CONTEXT_ITEM_KIND.CONVERSATION && live) continue;
       if (live?.text === pending.text) continue;
       this.#contextSequence += 1;
       const itemId = contextItemId(kind, this.#contextSequence);
@@ -2228,7 +2253,14 @@ export class RealtimeVoiceSession {
   }
 
   #handleServerEvent(data: UnparsedWireValue): void {
-    const event = parseRealtimeServerEvent(data);
+    // Decoded once, here: the tap reads the record whole — the parser below
+    // keeps only the events the conversation acts on, and what it discards
+    // (usage, errors in full, event types this build does not know) is half
+    // of what a trace exists to show — and the parser accepts the decoded
+    // record as readily as the string, so nothing is parsed twice.
+    const record = decodeRealtimePayload(data);
+    if (record) this.#options.onWireEvent?.(TRACE_DIRECTION.SERVER, record);
+    const event = parseRealtimeServerEvent(record);
     if (!event) return;
 
     switch (event.type) {
@@ -2568,7 +2600,10 @@ export class RealtimeVoiceSession {
   #send(events: readonly WireRecord[]): void {
     const channel = this.#channel;
     if (channel?.readyState !== "open") return;
-    for (const event of events) channel.send(JSON.stringify(event));
+    for (const event of events) {
+      channel.send(JSON.stringify(event));
+      this.#options.onWireEvent?.(TRACE_DIRECTION.CLIENT, event);
+    }
   }
 
   #fail(message: string): boolean {
