@@ -185,7 +185,7 @@ const REALTIME_INSTRUCTION_HEAD: readonly string[] = [
     "suggestion, offer, or question. If the result is what the user asked to hear (a transcript " +
     "reading, a check's answer, a provider with nowhere to open), speak it in full.",
   "- Do not mention internal identifiers such as commit hashes or session IDs, and do not read " +
-    'a roster line\'s bracketed capability data, ages ("updated two minutes ago"), or branches ' +
+    'a roster line\'s bracketed capability data, ages ("updated minutes ago"), or branches ' +
     "aloud unless asked, or unless they tell two agents apart.",
   "- A refusal is the reason in one sentence, with no apology.",
   "- When asked about the app itself, answer with the one relevant fact from the app guide, " +

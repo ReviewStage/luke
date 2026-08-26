@@ -106,23 +106,39 @@ function prioritizedContextSessions(sessions: readonly Session[]): readonly Sess
 }
 
 /**
- * How long ago Luke last observed this session, as a prose phrase. "Updated"
+ * How long ago Luke last observed this session, in coarse buckets. "Updated"
  * names what observedAt actually measures — when Luke last received fresh data
  * from the provider — without implying anything about the session's current
- * activity level, which the status field already covers. Spelled out in full
- * units so it reads naturally in the conversation context and quotes back
- * clearly when the voice model names it aloud.
+ * activity level, which the status field already covers.
+ *
+ * Coarse deliberately: the roster travels again only when its text changes,
+ * and an unchanged item is what keeps the conversation's cached prefix warm —
+ * so the phrase must hold still across pure clock ticks and move only at a
+ * bucket edge a session actually crossed. An exact age would reword the whole
+ * roster every minute a stale session merely sat there, and the buckets are
+ * wide enough that an ordinary conversation crosses few edges.
  */
-function sessionAgeText(observedAt: number, now: number): string {
-  const elapsedMinutes = Math.floor((now - observedAt) / 60_000);
-  if (elapsedMinutes < 1) return "updated just now";
-  if (elapsedMinutes < 60)
-    return `updated ${elapsedMinutes} ${elapsedMinutes === 1 ? "minute" : "minutes"} ago`;
-  const elapsedHours = Math.floor(elapsedMinutes / 60);
-  if (elapsedHours < 24)
-    return `updated ${elapsedHours} ${elapsedHours === 1 ? "hour" : "hours"} ago`;
-  const elapsedDays = Math.floor(elapsedHours / 24);
-  return `updated ${elapsedDays} ${elapsedDays === 1 ? "day" : "days"} ago`;
+const SESSION_AGE_TEXT = {
+  JUST_NOW: "updated just now",
+  MINUTES: "updated minutes ago",
+  ABOUT_AN_HOUR: "updated about an hour ago",
+  HOURS: "updated hours ago",
+  DAY_OR_MORE: "updated a day or more ago",
+} as const;
+
+type SessionAgeText = (typeof SESSION_AGE_TEXT)[keyof typeof SESSION_AGE_TEXT];
+
+const MINUTE_MS = 60_000;
+const HOUR_MS = 60 * MINUTE_MS;
+const DAY_MS = 24 * HOUR_MS;
+
+function sessionAgeText(observedAt: number, now: number): SessionAgeText {
+  const elapsed = now - observedAt;
+  if (elapsed < 5 * MINUTE_MS) return SESSION_AGE_TEXT.JUST_NOW;
+  if (elapsed < HOUR_MS) return SESSION_AGE_TEXT.MINUTES;
+  if (elapsed < 2 * HOUR_MS) return SESSION_AGE_TEXT.ABOUT_AN_HOUR;
+  if (elapsed < DAY_MS) return SESSION_AGE_TEXT.HOURS;
+  return SESSION_AGE_TEXT.DAY_OR_MORE;
 }
 
 /**

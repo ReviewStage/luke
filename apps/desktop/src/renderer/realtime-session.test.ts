@@ -1796,6 +1796,27 @@ test("an unchanged session roster is not resent", async () => {
   );
 });
 
+test("a stale session aging across clock ticks does not resend the roster", async (t) => {
+  const context = harness();
+  await context.session.connect();
+  // Six minutes past the fixture's observedAt, inside the minutes bucket.
+  t.mock.timers.enable({ apis: ["Date"], now: 1_800_000_360_000 });
+
+  context.session.updateSessions([observedSession("session-a")]);
+  await armDeveloperTurn(context);
+  const sentBefore = context.sent.length;
+
+  // Two minutes pass and the same roster is reported against the fresh clock.
+  // The bucketed age phrase holds still, so the item keeps its place and the
+  // conversation's cached prefix survives the tick.
+  t.mock.timers.tick(2 * 60_000);
+  context.session.updateSessions([observedSession("session-a")]);
+  context.session.stopSpeaking();
+  await armDeveloperTurn(context);
+
+  assert.deepEqual(contextItems(context, "[observed session status", sentBefore), []);
+});
+
 function conversationEntries(
   ...entries: readonly ConversationEntry[]
 ): readonly ConversationEntry[] {
