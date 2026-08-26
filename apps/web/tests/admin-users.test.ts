@@ -7,6 +7,7 @@ import {
   type AdminUserListSource,
   buildAdminUserList,
   handleAdminUsers,
+  lastSeenInstant,
   searchLikePattern,
 } from "../server/admin/admin-users";
 import {
@@ -77,6 +78,22 @@ test("a searched roster echoes the term its rows and total were filtered by", ()
   assert.equal(searched.total, 3);
   assert.equal(searched.limit, ADMIN_USERS_LIMIT);
   assert.deepEqual(searched.rows, [ROW]);
+});
+
+test("last seen is the freshest of the session write and the last usage day", () => {
+  const agingSessionWrite = new Date("2026-08-10T09:30:00.000Z");
+  // Desktop activity rides bearer tokens that never touch a session row, so a
+  // later usage day must win: this is what keeps the roster's "Last seen"
+  // from trailing the account page's "Last active".
+  assert.equal(
+    lastSeenInstant(agingSessionWrite, "2026-08-17"),
+    Date.parse("2026-08-17T00:00:00.000Z"),
+  );
+  const freshSessionWrite = new Date("2026-08-17T09:30:00.000Z");
+  assert.equal(lastSeenInstant(freshSessionWrite, "2026-08-17"), freshSessionWrite.getTime());
+  assert.equal(lastSeenInstant(agingSessionWrite, null), agingSessionWrite.getTime());
+  assert.equal(lastSeenInstant(null, "2026-08-17"), Date.parse("2026-08-17T00:00:00.000Z"));
+  assert.equal(lastSeenInstant(null, null), null);
 });
 
 test("a search pattern matches the term literally, wildcards escaped", () => {

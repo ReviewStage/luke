@@ -34,7 +34,12 @@ import {
   windowFetchDays,
 } from "./admin-metrics.js";
 import { type AdminUserSource, calendarDayKeys } from "./admin-user.js";
-import { ADMIN_USERS_LIMIT, type AdminUserListSource, searchLikePattern } from "./admin-users.js";
+import {
+  ADMIN_USERS_LIMIT,
+  type AdminUserListSource,
+  lastSeenInstant,
+  searchLikePattern,
+} from "./admin-users.js";
 import { ADMIN_METRICS_SCOPE, type AdminMetricsScope, type AdminMetricsWindow } from "./http.js";
 
 /** How many of the most active hosted-tier accounts the overview names. */
@@ -561,9 +566,12 @@ export async function readAdminDaySource(
  * first, the never-active tail ordered by youngest account, and the roster
  * cut at the stated bound while `total` still counts everyone. A search
  * narrows the rows and the total alike, so a truncated answer still states
- * how many accounts match. Last-seen
- * instants ride a query of their own: a second one-to-many join would fan
- * the usage aggregates out across each account's session rows.
+ * how many accounts match. Last-seen instants ride two queries of their own,
+ * folded by `lastSeenInstant`: the freshest session write, which cannot join
+ * the main read because a second one-to-many join would fan the usage
+ * aggregates out across each account's session rows, and the all-time last
+ * usage day, which the main read's own usage join cannot say because that
+ * join is cut at the window where last-seen must not be.
  */
 export async function readAdminUsersSource(
   database: Database,
@@ -578,14 +586,23 @@ export async function readAdminUsersSource(
   const windowStartDay = lastNDayKeys(input.now, input.windowDays)[0] ?? utcDayKey(input.now);
   const kept = and(scopeCondition(input.scope), searchCondition(input.search));
 
-  const [[totalRow], lastSeenRows, rows] = await Promise.all([
+  const [[totalRow], sessionSeenRows, usageSeenRows, rows] = await Promise.all([
     database.select({ value: count() }).from(user).where(kept),
     database
-      .select({ userId: session.userId, lastSeenAt: max(session.updatedAt) })
+      .select({ userId: session.userId, seenAt: max(session.updatedAt) })
       .from(session)
       .innerJoin(user, eq(session.userId, user.id))
       .where(kept)
       .groupBy(session.userId),
+    database
+      .select({
+        userId: hostedUsage.userId,
+        lastUsageDay: sql<string | null>`max(${hostedUsage.day})`,
+      })
+      .from(hostedUsage)
+      .innerJoin(user, eq(hostedUsage.userId, user.id))
+      .where(kept)
+      .groupBy(hostedUsage.userId),
     database
       .select({
         id: user.id,
@@ -617,9 +634,13 @@ export async function readAdminUsersSource(
       .limit(ADMIN_USERS_LIMIT),
   ]);
 
-  const lastSeenByUser = new Map<string, Date>();
-  for (const seen of lastSeenRows) {
-    if (seen.lastSeenAt) lastSeenByUser.set(seen.userId, seen.lastSeenAt);
+  const sessionSeenByUser = new Map<string, Date>();
+  for (const seen of sessionSeenRows) {
+    if (seen.seenAt) sessionSeenByUser.set(seen.userId, seen.seenAt);
+  }
+  const lastUsageDayByUser = new Map<string, string>();
+  for (const seen of usageSeenRows) {
+    if (seen.lastUsageDay) lastUsageDayByUser.set(seen.userId, seen.lastUsageDay);
   }
 
   return {
@@ -633,7 +654,10 @@ export async function readAdminUsersSource(
       createdAt: row.createdAt.getTime(),
       activeDays: toNumber(row.activeDays),
       lastActiveDay: row.lastActiveDay,
-      lastSeenAt: lastSeenByUser.get(row.id)?.getTime() ?? null,
+      lastSeenAt: lastSeenInstant(
+        sessionSeenByUser.get(row.id) ?? null,
+        lastUsageDayByUser.get(row.id) ?? null,
+      ),
       voiceCalls: toNumber(row.voiceCalls),
       attentionReviews: toNumber(row.attentionReviews),
       favorite: row.favorite === true,
