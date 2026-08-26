@@ -29,10 +29,7 @@ import {
   isRealtimeVoice,
   isRealtimeVoiceSpeed,
   isSessionToolName,
-  issueContextEvents,
-  issueContextText,
   issueToolAction,
-  issueTrackerDisconnectedEvents,
   outputSpeedUpdateEvents,
   PRESS_AUDIO_SAMPLE_RATE,
   parseRealtimeServerEvent,
@@ -77,7 +74,6 @@ import {
   type WireRecord,
 } from "@sidecar/wire";
 import {
-  maximumVoiceContextIssues,
   maximumVoiceContextSessions,
   maximumVoiceContextWorkspaceProjects,
 } from "./realtime-context.js";
@@ -182,7 +178,7 @@ test("a context item is named so the next one can take its place", () => {
   // The sequence rises rather than the name being reused: a delete that failed
   // would otherwise leave the old item sitting under the new one's name.
   assert.notEqual(first, second);
-  assert.notEqual(first, contextItemId(CONTEXT_ITEM_KIND.ISSUES, 1));
+  assert.notEqual(first, contextItemId(CONTEXT_ITEM_KIND.WORKSPACE_PROJECTS, 1));
 
   const [supersede] = contextSupersedeEvents({ itemId: first, eventId: "luke_supersede_2" });
   assert.equal(supersede?.type, REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_DELETE);
@@ -201,8 +197,6 @@ test("every kind of context travels as one nameable item and never as a prompt",
   const built = [
     sessionContextEvents([], contextItemId(CONTEXT_ITEM_KIND.SESSIONS, 1)),
     workspaceProjectContextEvents([], contextItemId(CONTEXT_ITEM_KIND.WORKSPACE_PROJECTS, 2)),
-    issueContextEvents([], contextItemId(CONTEXT_ITEM_KIND.ISSUES, 3)),
-    issueTrackerDisconnectedEvents(contextItemId(CONTEXT_ITEM_KIND.ISSUES, 4)),
   ];
 
   for (const events of built) {
@@ -2183,49 +2177,6 @@ function issueCall(argumentsJson: string, name: string = REALTIME_TOOL.UPDATE_IS
   return { name, callId: "call-1", argumentsJson };
 }
 
-test("issue context carries the roster and what each issue will take", () => {
-  const context = issueContextText([actionableIssue()]);
-
-  assert.match(context, /Linear — LUKE-123 — Add Codex support — In Progress/);
-  assert.match(context, /tracker_id=linear issue_id=LUKE-123/);
-  assert.match(context, /states=Done, In Review/);
-  assert.match(context, /comments=true/);
-  // A connected tracker with nothing listed is an answer, not an absence.
-  assert.match(issueContextText([]), /lists no issues/i);
-});
-
-test("issue context never asks Luke to start talking", () => {
-  const events = issueContextEvents([actionableIssue()], "luke_ctx_issues_1");
-
-  assert.equal(events.length, 1);
-  assert.equal(events[0]?.type, REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE);
-  assert.equal(
-    events.some((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE),
-    false,
-  );
-});
-
-test("issue context stays bounded when many issues are tracked", () => {
-  const issues = Array.from({ length: maximumVoiceContextIssues + 10 }, (_, index) => {
-    const issue = normalizeTrackedIssue(
-      { id: ISSUE_TRACKER_ID.LINEAR, displayName: "Linear" },
-      {
-        trackerIssueId: `issue-${index}`,
-        identifier: `LUKE-${index}`,
-        title: `Issue ${index}`,
-        stateName: "Todo",
-        observedAt: DECIDED_AT,
-      },
-    );
-    assert.ok(issue);
-    return issue;
-  });
-
-  const lines = issueContextText(issues).split("\n");
-  // One header line plus the bounded roster.
-  assert.equal(lines.length, maximumVoiceContextIssues + 1);
-});
-
 test("an issue tool call can act only on an issue Luke was shown, going where its tracker allows", () => {
   const roster = [actionableIssue()];
   const identity = '"tracker_id":"linear","issue_id":"LUKE-123"';
@@ -2307,18 +2258,6 @@ test("the session and issue tools answer to their own validators", () => {
   assert.equal(ACTS.CHANGE_APP_SETTING.family, REALTIME_TOOL_FAMILY.APP);
   assert.equal(ACTS.SEND_SESSION_MESSAGE.family, REALTIME_TOOL_FAMILY.SESSION);
   assert.equal(ACTS.UPDATE_ISSUE_STATE.family, REALTIME_TOOL_FAMILY.ISSUE);
-});
-
-test("a disconnected tracker withdraws the roster without starting a reply", () => {
-  const events = issueTrackerDisconnectedEvents("luke_ctx_issues_2");
-
-  assert.equal(events.length, 1);
-  assert.equal(events[0]?.type, REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE);
-  assert.match(noticeText(events[0]), /no longer connected/i);
-  assert.equal(
-    events.some((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE),
-    false,
-  );
 });
 
 test("a standing ask is kept only for a session Luke was shown, in bounded words", () => {

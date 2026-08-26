@@ -208,9 +208,9 @@ function integrationFacts(settings: AppSettingsView): AppGuideFact[] {
         `${linearProvider.displayName} ` +
         `(${connectionWord(settings.credentialSources[linearProvider.id])}) connects by signing ` +
         `in with Linear from its row in ${CONNECTIONS_PAGE}, under Integrations — no key is ` +
-        `ever typed or spoken. Connected, Luke reads the developer's assigned issues and, ` +
-        `when asked, can move one to another state or comment on it; disconnecting from the ` +
-        `same row ends the access at Linear as well as here.`,
+        `ever typed or spoken. Connected, Luke can, when asked, move an issue the developer ` +
+        `names to another state or comment on it; disconnecting from the same row ends the ` +
+        `access at Linear as well as here.`,
     });
   }
   if (settings.appleCalendarAvailable) {

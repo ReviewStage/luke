@@ -1,5 +1,4 @@
 import type { SessionNoticeAsk } from "@sidecar/attention";
-import type { TrackedIssue } from "@sidecar/issues";
 import {
   type ObservedWorkspaceProject,
   SESSION_LOCATION,
@@ -12,8 +11,8 @@ import type { WireRecord } from "@sidecar/wire";
 import { REALTIME_CLIENT_EVENT } from "./realtime-protocol.js";
 
 /**
- * Roster context serialization: the bounded, redacted view of sessions, issues,
- * and workspace projects that a conversation is allowed to know about.
+ * Roster context serialization: the bounded, redacted view of sessions and
+ * workspace projects that a conversation is allowed to know about.
  * Context, never a prompt — arriving must not open Luke's mouth. The app
  * guide deliberately does not travel this way: it is build-fixed prose, so it
  * rides the session instructions instead of a conversation item.
@@ -279,7 +278,7 @@ export function sessionContextText(
 /**
  * The kinds of context a conversation is told, each of which answers exactly
  * one standing question: what Luke can see, what was already said across
- * calls, where he can create, and what the tracker lists.
+ * calls, and where he can create.
  *
  * A kind holds one live item at a time. Saying it again replaces the item that
  * said it before rather than adding a second answer beside the first, because
@@ -290,7 +289,6 @@ export const CONTEXT_ITEM_KIND = {
   SESSIONS: "sessions",
   CONVERSATION: "conversation",
   WORKSPACE_PROJECTS: "workspace-projects",
-  ISSUES: "issues",
 } as const;
 
 export type ContextItemKind = (typeof CONTEXT_ITEM_KIND)[keyof typeof CONTEXT_ITEM_KIND];
@@ -393,86 +391,6 @@ export function sessionContextEvents(
  */
 export function conversationContextEvents(text: string, itemId: string): readonly WireRecord[] {
   return [labeledContextEvent("recent conversation, sent automatically", text, itemId)];
-}
-
-/** How many issues one roster update may describe. */
-export const maximumVoiceContextIssues = 15;
-
-/**
- * What one issue can be asked to do, said in the roster so Luke offers only
- * what its tracker promised: the identity a tool call must name, the states
- * the tracker will accept it into, and whether it takes a comment.
- */
-function issueCapabilityText(issue: TrackedIssue): string {
-  const capabilities = [
-    `tracker_id=${issue.trackerId} issue_id=${issue.identifier}`,
-    `comments=${issue.canComment}`,
-    ...(issue.transitions.length > 0
-      ? [`states=${issue.transitions.map((transition) => transition.name).join(", ")}`]
-      : []),
-  ];
-  return capabilities.join("; ");
-}
-
-/**
- * Renders the issue roster the conversation is allowed to know about: each
- * issue's identifier, title, and state, plus what its tracker will take for
- * it. These are the tracker's own bounded fields — no description, comment
- * thread, or attachment is ever included.
- */
-export function issueContextText(issues: readonly TrackedIssue[]): string {
-  if (issues.length === 0) return "The issue tracker lists no issues assigned to the developer.";
-
-  return [
-    "Tracked issues assigned to the developer:",
-    ...issues
-      .slice(0, maximumVoiceContextIssues)
-      .map((issue) =>
-        [
-          `- ${issue.tracker.displayName}`,
-          issue.identifier,
-          issue.title,
-          issue.stateName,
-          `[${issueCapabilityText(issue)}]`,
-        ].join(" — "),
-      ),
-  ].join("\n");
-}
-
-/**
- * Builds the event that tells the conversation what the tracker lists. Like
- * the session roster it is context, not a prompt — deliberately no
- * `response.create`, so an updated board never makes Luke start talking.
- */
-export function issueContextEvents(
-  issues: readonly TrackedIssue[],
-  itemId: string,
-): readonly WireRecord[] {
-  return [
-    labeledContextEvent(
-      "observed issue tracker, sent automatically",
-      issueContextText(issues),
-      itemId,
-    ),
-  ];
-}
-
-/**
- * Builds the event that withdraws the issue roster. A tracker whose key was
- * removed stops being observed, and a conversation still holding the old
- * board would keep answering from it — so the disconnection is news the same
- * way the roster was, and just as deliberately not a prompt.
- */
-export const ISSUE_TRACKER_DISCONNECTED_TEXT = "The issue tracker is no longer connected.";
-
-export function issueTrackerDisconnectedEvents(itemId: string): readonly WireRecord[] {
-  return [
-    labeledContextEvent(
-      "observed issue tracker, sent automatically",
-      ISSUE_TRACKER_DISCONNECTED_TEXT,
-      itemId,
-    ),
-  ];
 }
 
 /** How many projects one context update may offer workspace creation in. */

@@ -511,9 +511,9 @@ What Luke may show:
   than only that it waits. When no conversation is open, Luke opens a call of
   his own to say it, and that call is speak-only by construction: it offers
   no microphone track, carries no tools, and is sent the one update's fields,
-  or the one answering sentence, alone: never the roster, the guide, the
-  issues, or a transcript rendering, which travel only on conversations the
-  developer opens, and the rendering only in the turn that asked for it. A
+  or the one answering sentence, alone: never the roster, the guide, or a
+  transcript rendering, which travel only on conversations the developer
+  opens, and the rendering only in the turn that asked for it. A
   developer-opened conversation also carries a bounded history of the recent
   exchange itself (the developer's own asks, typed or spoken and handed back
   as text by the same service that heard them, the words Luke already spoke

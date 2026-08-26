@@ -229,7 +229,7 @@ test("the facts say what is connected, never what connects it", () => {
   assert.match(tracker, /"label":"Linear"/);
   assert.match(tracker, /Linear \(not connected\)/);
   assert.match(tracker, /signing in with Linear/);
-  assert.match(tracker, /move one to another state or comment on it/);
+  assert.match(tracker, /move an issue the developer names to another state or comment on it/);
   // Nothing in the guide may send anyone to a key page for Linear: there is
   // no key, and describing one would be describing a row that is not drawn.
   assert.doesNotMatch(tracker, /Linear[^"]*API key/);

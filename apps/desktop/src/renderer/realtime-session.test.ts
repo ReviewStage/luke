@@ -4870,26 +4870,6 @@ function trackedIssue(
   return issue;
 }
 
-test("the conversation is told which issues the tracker lists", async () => {
-  const context = harness();
-  await context.session.connect();
-
-  context.session.updateIssues([trackedIssue()]);
-  await armDeveloperTurn(context);
-
-  const [contextEvent] = contextItems(context, "[observed issue tracker");
-  assert.ok(contextEvent, "the issue roster was sent");
-  assert.match(itemText(contextEvent), /LUKE-123/);
-  assert.match(itemText(contextEvent), /states=Done/);
-
-  // An unchanged roster is not resent, however many turns go by.
-  const sentBefore = context.sent.length;
-  context.session.updateIssues([trackedIssue()]);
-  context.session.stopSpeaking();
-  await armDeveloperTurn(context);
-  assert.deepEqual(contextItems(context, "[observed issue tracker", sentBefore), []);
-});
-
 test("a spoken issue ask is carried through its own carrier and voiced", async () => {
   const carried: unknown[] = [];
   const context = harness({
@@ -5105,56 +5085,6 @@ test("an issue call outside a turn the developer opened cannot act", async () =>
   const raw = (output?.item as { output?: string } | undefined)?.output ?? "{}";
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   assert.equal((JSON.parse(raw) as { status?: string }).status, "rejected");
-});
-
-test("a tracker that disconnects withdraws the roster, and a reconnect resends it", async () => {
-  const context = harness();
-  await context.session.connect();
-  context.session.updateIssues([trackedIssue()]);
-  await armDeveloperTurn(context);
-  const board = context.session.liveContextItemIds.get(CONTEXT_ITEM_KIND.ISSUES);
-  assert.ok(board);
-  const sentBefore = context.sent.length;
-
-  // Disconnecting is news once; staying disconnected is not.
-  context.session.updateIssues(undefined);
-  context.session.updateIssues(undefined);
-  context.session.stopSpeaking();
-  await armDeveloperTurn(context);
-
-  const withdrawals = contextItems(context, "[observed issue tracker", sentBefore).filter((event) =>
-    itemText(event).includes("no longer connected"),
-  );
-  assert.equal(withdrawals.length, 1);
-  // The withdrawal takes the board's place rather than sitting beside it: an
-  // answer of "none" is still the answer to the standing question.
-  assert.equal(
-    context.sent.slice(sentBefore).some(
-      (event) =>
-        event.type === CONVERSATION_ITEM_DELETE &&
-        // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-        (event as { item_id?: string }).item_id === board,
-    ),
-    true,
-  );
-
-  // The same roster arriving again after a reconnect is news again.
-  const reconnectBefore = context.sent.length;
-  context.session.updateIssues([trackedIssue()]);
-  context.session.stopSpeaking();
-  await armDeveloperTurn(context);
-  const rosters = contextItems(context, "[observed issue tracker", reconnectBefore).filter(
-    (event) => itemText(event).includes("LUKE-123"),
-  );
-  assert.equal(rosters.length, 1);
-
-  // A conversation never told about a board has nothing to withdraw, and must
-  // not say a tracker is "no longer" connected when none ever was.
-  const fresh = harness();
-  await fresh.session.connect();
-  fresh.session.updateIssues(undefined);
-  await armDeveloperTurn(fresh);
-  assert.deepEqual(contextItems(fresh, "[observed issue tracker"), []);
 });
 
 test("a speak-only connect never asks for the microphone", async () => {
