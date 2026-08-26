@@ -396,7 +396,18 @@ Trust constraints:
   playing and how loud; a volume the user moved during the duck stays where
   their hand put it; and the whole behavior is a setting. The trigger is the
   exchange itself, a deterministic status edge, never anything Luke read,
-  heard, or decided, so no model output can reach it. Widening the player
+  heard, or decided, so no model output can reach it. Each player's consent
+  dialog is raised at the last possible moment: macOS's standing answer is
+  read before every event without a dialog, and a player never yet asked
+  about is sent its first event — the one that raises the dialog — only
+  mid-exchange, once the play-state broadcast that player already addresses
+  to the whole machine says it is audibly playing. Those broadcasts are read
+  for the one state word, and every other field (a track's name, its artist)
+  dies inside the helper; the helper stands from the moment the setting is on
+  so something is listening, but it writes the players nothing until a duck.
+  The introduction reaches no duck at all — only a panel reports a spoken
+  exchange, and the takeover is not one — so the dialog can never interrupt
+  onboarding. Widening the player
   list is a product decision, not an implementation detail.
 - The same shape, smaller still, watches whether Luke can be heard at all: a
   native helper reads the default output device's mute switch and volume,

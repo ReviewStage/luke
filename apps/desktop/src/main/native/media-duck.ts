@@ -53,6 +53,13 @@ export class MediaDuckController {
 
   setEnabled(enabled: boolean): void {
     this.#enabled = enabled;
+    // The helper spawns with the setting rather than with the first duck: it
+    // is what hears the players' own play-state broadcasts, and a player the
+    // user has never been asked about can only earn its consent dialog — at
+    // the last possible moment, mid-exchange over audible music — for as long
+    // as something has been listening. It still writes the players nothing
+    // until a duck.
+    if (enabled) this.#ensureHelper();
     this.#apply();
   }
 
