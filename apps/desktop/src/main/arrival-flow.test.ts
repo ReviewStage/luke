@@ -11,10 +11,10 @@ import {
 const SIGNED_IN_AT = "2026-08-24T00:00:00.000Z";
 const LATER = "2026-08-24T00:05:00.000Z";
 
-test("the beat is owed from an observed sign-in until it is handed to the voice", () => {
+test("the beat is owed from an observed sign-in until its reply actually begins", () => {
   assert.equal(arrivalBeatOwed({ signedInAt: SIGNED_IN_AT }), true);
   assert.equal(arrivalBeatOwed({ signedInAt: SIGNED_IN_AT, settledAt: LATER }), false);
-  // The first announcement is its own count; only the hand-off settles the beat.
+  // The first announcement is its own count; only the spoken beat settles it.
   assert.equal(arrivalBeatOwed({ signedInAt: SIGNED_IN_AT, firstAnnouncementAt: LATER }), true);
 });
 

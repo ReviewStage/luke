@@ -739,12 +739,14 @@ let arrivalBeatSpeaking = false;
  * edge wrote, never anything a model decided — and what is sent is only the
  * fact of the beat: the script is fixed by the build in the realtime
  * vocabulary, and its observed values are the renderer's own to read from
- * the roster it already draws. A moment that cannot speak — no credential,
- * a meeting's quiet, no window holding the voice — leaves the beat owed for
- * the next signed-in launch, because a moment nobody heard was not the one
- * moment this plays; only the hand-off itself settles the record. The first
- * observation pass is awaited first, so the beat's suggestion can name a
- * session the developer actually has running.
+ * the roster it already draws. Sending settles nothing: the trigger can be
+ * lost — a renderer still loading, the announcer's own quiet or age-out
+ * dropping the beat unspoken — so the record settles only when the voice
+ * window reports the reply actually began, and everything short of that
+ * leaves the beat owed for the next signed-in launch, because a moment
+ * nobody heard was not the one moment this plays. The first observation
+ * pass is awaited first, so the beat's suggestion can name a session the
+ * developer actually has running.
  */
 async function speakArrivalBeat(): Promise<void> {
   if (arrivalBeatSpeaking) return;
@@ -755,11 +757,11 @@ async function speakArrivalBeat(): Promise<void> {
   try {
     await sessionObservationLoop.refresh().catch(() => undefined);
     if (account.status !== ACCOUNT_STATUS.SIGNED_IN || !arrivalBeatOwed(arrivalState)) return;
+    // The calendar may not have been read yet this early, so this check can
+    // miss a meeting; the announcer's own quiet still holds the beat there,
+    // and a beat it drops stays owed rather than lost.
     if (await announcementsQuietNow(Date.now())) return;
-    const host = panels.voiceHost();
-    if (!host) return;
-    host.webContents.send(channels.onArrivalSpeech, undefined);
-    writeArrivalState({ ...(arrivalState ?? {}), settledAt: new Date().toISOString() });
+    panels.voiceHost()?.webContents.send(channels.onArrivalSpeech, undefined);
   } finally {
     arrivalBeatSpeaking = false;
   }
@@ -1305,6 +1307,11 @@ function registerIpc(): void {
       };
     },
   );
+  registerHandler(BRIDGE.completeArrivalBeat, () => {
+    // A report that raced a settle already on file overwrites nothing.
+    if (!arrivalBeatOwed(arrivalState)) return;
+    writeArrivalState({ ...(arrivalState ?? {}), settledAt: new Date().toISOString() });
+  });
   registerHandler(BRIDGE.beginSupersetSignIn, async () => {
     recordProductEvent(PRODUCT_EVENT.SUPERSET_ACT, {
       superset_act: PRODUCT_SUPERSET_ACT.SIGN_IN_START,

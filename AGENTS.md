@@ -512,10 +512,11 @@ What Luke may show:
   tool-free terms as an edge announcement, and carrying as observed values
   only one working session's title, read from the same roster the rows draw
   and sent as data behind a marker, and the talk key's own name. A moment
-  that cannot speak it — no credential, a meeting's quiet — leaves it owed
-  for the next signed-in launch rather than improvising a substitute, only
-  the hand-off to the voice settles it, and being about no session it draws
-  no notice band and claims none. An edge announcement
+  that cannot speak it — no credential, a meeting's quiet, a beat dropped
+  before its reply began — leaves it owed for the next signed-in launch
+  rather than improvising a substitute; only the voice window reporting the
+  reply actually begun settles it, and being about no session it draws no
+  notice band and claims none. An edge announcement
   sends that update's *about* fields, the same ones the evaluator may see
   with a bounded excerpt of the recap included, and the voice words the
   sentence said aloud, so it can say what the session is waiting on rather

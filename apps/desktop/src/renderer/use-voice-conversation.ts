@@ -802,7 +802,16 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
             return session.microphoneCall;
           },
           connect: (connectOptions: { microphone: false }) => session.connect(connectOptions),
-          speak: (item) => session.speak(isArrivalSpeech(item) ? wordedArrival(item) : item),
+          speak: (item) => {
+            if (!isArrivalSpeech(item)) return session.speak(item);
+            const spoke = session.speak(wordedArrival(item));
+            // The reply has actually begun, which is the one moment the owed
+            // record may settle: a beat dropped anywhere earlier — a trigger
+            // this renderer never heard, the quiet, an age-out — reports
+            // nothing, and the next signed-in launch speaks it instead.
+            if (spoke) void window.sidecar.completeArrivalBeat();
+            return spoke;
+          },
           stopSpeaking: () => session.stopSpeaking(),
           close: () => session.close(),
         };

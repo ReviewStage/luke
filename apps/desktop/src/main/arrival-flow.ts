@@ -10,10 +10,11 @@ import { isRecord, text, type UnparsedWireValue } from "@sidecar/wire";
  * is reactive, and nothing says "you're done here — go work, and you'll be
  * told". So the one time an account arrives, Luke says exactly that aloud,
  * on the same speak-only terms as an edge announcement. It is owed from the
- * first sign-in until it is actually handed to the voice; a launch that
- * cannot speak it — no credential, a meeting's quiet — leaves it owed, so
- * the next signed-in launch that can speak does, because a moment nobody
- * heard was not the one moment this plays.
+ * first sign-in until its reply actually begins, as the voice window
+ * reports; a launch that cannot speak it — no credential, a meeting's quiet,
+ * a beat the announcer dropped unspoken — leaves it owed, so the next
+ * signed-in launch that can speak does, because a moment nobody heard was
+ * not the one moment this plays.
  */
 
 /**
@@ -33,7 +34,7 @@ export interface ArrivalState {
    */
   signedInAt?: string;
   /**
-   * When the beat stopped being owed: it was handed to the voice, or — on a
+   * When the beat stopped being owed: its reply actually began, or — on a
    * backfilled record — the install was recognized as predating it.
    */
   settledAt?: string;
@@ -73,8 +74,9 @@ export function arrivalRecord(state: ArrivalState): string {
 
 /**
  * Whether the arrival beat is still owed: an observed sign-in that has never
- * been spoken to. Only handing the beat to the voice settles it — a launch
- * that could not speak leaves it standing for the next one that can.
+ * been spoken to. Only the beat's reply actually beginning settles it — a
+ * send the renderer never heard, or a beat the announcer dropped unspoken,
+ * leaves it standing for the next launch that can say it.
  */
 export function arrivalBeatOwed(state: ArrivalState | undefined): boolean {
   return state?.signedInAt !== undefined && state.settledAt === undefined;
