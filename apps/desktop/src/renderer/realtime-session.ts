@@ -1990,7 +1990,9 @@ export class RealtimeVoiceSession {
     );
     // The history is rendered against the roster, so a fresh roster re-renders
     // it: a line whose session left the roster keeps its words and lets go of
-    // the identity no tool call may name any more.
+    // the identity no tool call may name any more. The render reaches the wire
+    // only until this call seeds its one history item; after that it keeps the
+    // staged copy current for nothing but teardown to clear.
     this.#rememberConversation();
   }
 
@@ -2001,7 +2003,9 @@ export class RealtimeVoiceSession {
    * heard the words it points back at: an announcement is often read out on
    * Luke's own speak-only call, which the developer's own press tears down,
    * and an idle call retires with everything said on it. Context on the
-   * roster's own terms, flushed with it at the turn that reads it.
+   * roster's own terms, flushed with it at the first turn of each call and
+   * left standing after that: what is said from then on lives in the call's
+   * own conversation items.
    */
   updateConversation(entries: readonly ConversationEntry[]): void {
     this.#conversationEntries = entries;
@@ -2119,6 +2123,14 @@ export class RealtimeVoiceSession {
       const pending = this.#contextPending.get(kind);
       if (!pending) continue;
       const live = this.#contextLive.get(kind);
+      // The history is seeded once per call. It exists to bridge the calls
+      // that came before this one, and every turn taken since it went in is
+      // already held by this call as real conversation items — so superseding
+      // it mid-call would delete an item out of the conversation's cached
+      // prefix to restate turns the model already has. The entries keep
+      // accumulating either way, and teardown clears the live map, so the
+      // next call seeds everything said by then.
+      if (kind === CONTEXT_ITEM_KIND.CONVERSATION && live) continue;
       if (live?.text === pending.text) continue;
       this.#contextSequence += 1;
       const itemId = contextItemId(kind, this.#contextSequence);
