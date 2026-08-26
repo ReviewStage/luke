@@ -78,6 +78,12 @@ export function SiteHeader(): React.JSX.Element {
         <div className="flex items-center gap-4">
           <a
             className="text-sm font-medium text-muted-foreground no-underline transition-colors duration-150 hover:text-foreground motion-reduce:transition-none"
+            href="/about"
+          >
+            About
+          </a>
+          <a
+            className="text-sm font-medium text-muted-foreground no-underline transition-colors duration-150 hover:text-foreground motion-reduce:transition-none"
             href="/changelog"
           >
             Changelog
@@ -108,6 +114,12 @@ export function SiteFooter(): React.JSX.Element {
       <div className="flex flex-wrap gap-2 [&>*+*]:before:mr-2 [&>*+*]:before:content-['·']">
         <span>Apache-2.0</span>
         <span>macOS 14+</span>
+        <a
+          className="no-underline transition-colors duration-150 hover:text-foreground motion-reduce:transition-none"
+          href="/about"
+        >
+          About
+        </a>
         <a
           className="no-underline transition-colors duration-150 hover:text-foreground motion-reduce:transition-none"
           href="/changelog"
