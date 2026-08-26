@@ -124,3 +124,61 @@ export const FACE_MOTION_PARTS = {
   dizzy: { brows: false, lids: false, sleepZ: false },
   glance: { brows: false, lids: false, sleepZ: false },
 } as const satisfies Record<FaceMotion, { brows: boolean; lids: boolean; sleepZ: boolean }>;
+
+/**
+ * The wordmark's U-K-E letterforms, in the lockup's own coordinates, so the
+ * introduction's signature reveal can draw LUKE around the face it already
+ * draws. FACE_VIEW is where FACE_ART.VIEW_BOX's window sits in these
+ * coordinates: everything here scales from the drawn face's size through it.
+ */
+export const WORDMARK_ART = {
+  /**
+   * Each letter as the pen strokes that would write it, in writing order and
+   * direction. A stroke's WEIGHT is its share of the whole word's written
+   * length — what paces a constant-speed pen — and its length in the path
+   * data is normalized to 1 for a dash reveal.
+   */
+  LETTERS: [
+    [
+      {
+        D: "M 204.5 44 V 124 Q 204.5 170 250.5 170 H 250.5 Q 296.5 170 296.5 124 V 44",
+        WEIGHT: 0.331,
+      },
+    ],
+    [
+      {
+        D: "M 350.5 44 V 170",
+        WEIGHT: 0.1348,
+      },
+      {
+        D: "M 414.5 44 L 350.5 112 L 418.5 170",
+        WEIGHT: 0.1956,
+      },
+    ],
+    [
+      {
+        D: "M 468.5 44 V 170",
+        WEIGHT: 0.1348,
+      },
+      {
+        D: "M 468.5 44 H 538.5",
+        WEIGHT: 0.0749,
+      },
+      {
+        D: "M 468.5 107 H 518.9",
+        WEIGHT: 0.0539,
+      },
+      {
+        D: "M 468.5 170 H 538.5",
+        WEIGHT: 0.0749,
+      },
+    ],
+  ],
+  STROKE_WIDTH: 24.8,
+  /** The letters' ink box, stroke caps included: their viewBox and extent. */
+  LETTERS_BOX: { X: 192.1, Y: 31.6, WIDTH: 358.8, HEIGHT: 150.8 },
+  /** The face's drawn window: its centre and its side, in lockup units. */
+  FACE_VIEW: { CENTER_X: 105.25, CENTER_Y: 108, SIZE: 226.3 },
+  /** The lockup's ink centre, for centring the reveal on screen. */
+  CENTER_X: 280.68,
+} as const;

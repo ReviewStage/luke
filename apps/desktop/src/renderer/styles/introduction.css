@@ -16,6 +16,10 @@
   --notch-concave-radius: calc(var(--panel-radius) * 0.489);
   /* Where the panel stands mid-screen before the flight carries it up. */
   --introduction-panel-stage-y: 40vh;
+  /* The face's stage size, named because the signature reveal's letters and
+     centring shift all scale from it — the fractions arrive from the
+     component, cut from the same generated table the face is drawn from. */
+  --introduction-face-size: clamp(180px, 24vh, 260px);
   transition: opacity var(--duration-quick) var(--motion-exit);
 }
 
@@ -74,6 +78,22 @@
   transition: transform var(--duration-shape) var(--spring);
 }
 
+/* While the wordmark is on stage the lockup slides the face to the word's L,
+   so the whole word is what is centred. The shift is the lockup's own rather
+   than the anchor's, because the glow beneath must keep the stage's centre;
+   the rows arriving slide him back on the same spring the anchor rises on,
+   while the letters dissolve. */
+.introduction-lockup {
+  transform: translateX(
+    calc(-1 * var(--introduction-wordmark-shift, 0) * var(--introduction-face-size))
+  );
+  transition: transform var(--duration-shape) var(--spring);
+}
+
+.introduction-stage[data-lifted="true"] .introduction-lockup {
+  transform: translateX(0);
+}
+
 /* The something-is-here in the dark: a slow breath, held like every loop by
    the play-state token, centred on the face it halos and gone with the veil. */
 .introduction-glow {
@@ -118,9 +138,14 @@
 
 .introduction-face {
   position: relative;
+  /* Above the wordmark's letters: at rest the smile clears the U, but the
+     talking bob swings its tip into the U's stem, and the face — the one
+     part in colour while he speaks — should pass over the letters, not
+     behind them. */
+  z-index: 1;
   display: block;
-  width: clamp(180px, 24vh, 260px);
-  height: clamp(180px, 24vh, 260px);
+  width: var(--introduction-face-size);
+  height: var(--introduction-face-size);
   color: var(--text-primary);
   opacity: 1;
   transform-origin: center;
@@ -166,14 +191,14 @@
    gesture it follows and does no work when wake is not selected. */
 .introduction-stage .luke-face[data-motion="wake"] .luke-face-smile {
   stroke-dasharray: 1;
-  animation: introduction-smile-draw 0.9s ease-out backwards;
+  animation: introduction-stroke-draw 0.9s ease-out backwards;
   animation-play-state: var(--face-motion);
 }
 
 /* The first step is opacity alone: a fully offset dash still renders its
    round cap as a parked dot at the stroke's end, so the undrawn line's first
    frame stays unseen and it blinks in over the draw's first sliver. */
-@keyframes introduction-smile-draw {
+@keyframes introduction-stroke-draw {
   0% {
     stroke-dashoffset: 1;
     opacity: 0;
@@ -187,6 +212,46 @@
     stroke-dashoffset: 0;
     opacity: 1;
   }
+}
+
+/* The signature reveal's letters: the wordmark's own U-K-E, standing where
+   the lockup puts them beside the face-L, everything scaled from the drawn
+   face through the fractions the component hands over. Only opacity ever
+   transitions here; the draw below is an animation of the strokes. */
+.introduction-wordmark {
+  position: absolute;
+  left: calc(50% + var(--introduction-wordmark-left) * var(--introduction-face-size));
+  top: calc(50% + var(--introduction-wordmark-top) * var(--introduction-face-size));
+  width: calc(var(--introduction-wordmark-width) * var(--introduction-face-size));
+  height: calc(var(--introduction-wordmark-height) * var(--introduction-face-size));
+  color: var(--text-primary);
+  transition: opacity var(--duration-quick) var(--motion-exit);
+}
+
+/* The word yields the stage: the rows arriving (or the flight, when a voice
+   that failed early glides off before any rows stand) dissolve the letters
+   while the anchor springs the face back to centre — the lockup collapses
+   into the face that goes on to live in the notch. */
+.introduction-stage[data-lifted="true"] .introduction-wordmark,
+.introduction-stage[data-flown="true"] .introduction-wordmark {
+  opacity: 0;
+}
+
+/* The wake's second companion: once the eyes are open (1.9s of luke-wake's
+   2.8s cycle), the word writes itself on the way a hand would — the U in one
+   stroke, the K's stem then its right half, the E's spine then its bars —
+   each pen stroke its own path on the smile's draw keyframes, with the delay
+   and draw time the component hands each one from the artwork's own stroke
+   lengths. The gate is the stage's signature flag rather than the wake
+   selector, because the draw outlives the wake beat — and under reduced
+   motion the flag stays off outright, since a paused backwards-filled
+   animation would hold the strokes unseen forever; there the word simply
+   stands already written. */
+.introduction-stage[data-signature="true"] .introduction-wordmark path {
+  stroke-dasharray: 1;
+  animation: introduction-stroke-draw var(--introduction-stroke-time, 0.5s) ease-out backwards;
+  animation-delay: var(--introduction-stroke-delay, 0s);
+  animation-play-state: var(--face-motion);
 }
 
 /* The panel's content: one travelling group holding the app's own rows and

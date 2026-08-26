@@ -9,7 +9,7 @@
 // its motions further down:
 //
 //   design/brand/**.svg                              standalone assets (SMIL)
-//   packages/surface/src/generated/face-art.ts       the face, for both processes
+//   packages/surface/src/generated/face-art.ts       the face and the wordmark's letters
 //   apps/desktop/src/renderer/styles/generated/face-motion.css  the motions, as @keyframes
 //
 // The app draws the face itself rather than loading these SVGs, because it needs
@@ -55,6 +55,9 @@ const APP_VIEW = { size: 146, cx: 121, cy: 124 };
 
 // ---------- Helpers ----------
 const fmt = (v) => Math.round(v * 100) / 100;
+// Four decimals for the values two are too coarse for: keyTime fractions of a
+// long clock, and a short stroke's share of the written length.
+const fmt4 = (v) => Math.round(v * 10000) / 10000;
 const EASE = "0.4 0 0.6 1";
 // A spline is written for SMIL; CSS wants the same four numbers as a function.
 const bezier = (spline) => `cubic-bezier(${spline.split(" ").join(", ")})`;
@@ -921,10 +924,51 @@ const tsList = (values) => values.join(", ");
 const tsRecord = (entries, indent = "  ") =>
   entries.map(([key, value]) => `${indent}${key}: ${value},`).join("\n");
 
+// The wordmark's letters and layout, in the lockup's own coordinates, for the
+// introduction's signature reveal: the renderer draws the face itself, so what
+// it needs is where the letters stand relative to the face window it already
+// draws, not another baked SVG.
+function wordmarkArt() {
+  const s = WORDMARK.scale;
+  const x0 = 20;
+  const tx = x0 - 66 * s;
+  const ty = 170 - 164 * s;
+  const caps = capsUKE(tx + 176 * s + WORDMARK.gap, fmt(FACE.sw * s));
+  const sw = FACE.sw * s;
+  const u0 = tx + 176 * s + WORDMARK.gap;
+  // The lockup's ink centre, the same optical centre the social card uses:
+  // the crop's own box carries uneven air, so centring on it reads off-centre.
+  const inkLeft = tx + faceBBox().x * s;
+  const inkRight = caps.end + sw / 2;
+  const totalLength = caps.letters.flat().reduce((sum, penStroke) => sum + penStroke.length, 0);
+  return {
+    letters: caps.letters.map((strokes) =>
+      strokes.map((penStroke) => ({
+        d: penStroke.d,
+        weight: fmt4(penStroke.length / totalLength),
+      })),
+    ),
+    sw: fmt(sw),
+    box: {
+      x: fmt(u0 - sw / 2),
+      y: fmt(44 - sw / 2),
+      w: fmt(caps.end + sw / 2 - (u0 - sw / 2)),
+      h: fmt(170 + sw / 2 - (44 - sw / 2)),
+    },
+    faceView: {
+      centerX: fmt(tx + APP_VIEW.cx * s),
+      centerY: fmt(ty + APP_VIEW.cy * s),
+      size: fmt(APP_VIEW.size * s),
+    },
+    centerX: fmt((inkLeft + inkRight) / 2),
+  };
+}
+
 function faceArtModule() {
   const [c1, c2] = eyeXs();
   const view = APP_VIEW;
   const box = [view.cx - view.size / 2, view.cy - view.size / 2, view.size, view.size];
+  const wordmarkData = wordmarkArt();
   const parts = MOTION_NAMES.map((name) => {
     const motion = MOTIONS[name];
     const flags = [
@@ -987,39 +1031,125 @@ ${tsRecord(MOTION_NAMES.map((name) => [name, motionCycleMs(MOTIONS[name])]))}
 export const FACE_MOTION_PARTS = {
 ${tsRecord(parts)}
 } as const satisfies Record<FaceMotion, { brows: boolean; lids: boolean; sleepZ: boolean }>;
+
+/**
+ * The wordmark's U-K-E letterforms, in the lockup's own coordinates, so the
+ * introduction's signature reveal can draw LUKE around the face it already
+ * draws. FACE_VIEW is where FACE_ART.VIEW_BOX's window sits in these
+ * coordinates: everything here scales from the drawn face's size through it.
+ */
+export const WORDMARK_ART = {
+  /**
+   * Each letter as the pen strokes that would write it, in writing order and
+   * direction. A stroke's WEIGHT is its share of the whole word's written
+   * length — what paces a constant-speed pen — and its length in the path
+   * data is normalized to 1 for a dash reveal.
+   */
+  LETTERS: [
+${wordmarkData.letters
+  .map(
+    (strokes) =>
+      `    [\n${strokes
+        .map(
+          (penStroke) =>
+            `      {\n        D: "${penStroke.d}",\n        WEIGHT: ${penStroke.weight},\n      },`,
+        )
+        .join("\n")}\n    ],`,
+  )
+  .join("\n")}
+  ],
+  STROKE_WIDTH: ${wordmarkData.sw},
+  /** The letters' ink box, stroke caps included: their viewBox and extent. */
+  LETTERS_BOX: { X: ${wordmarkData.box.x}, Y: ${wordmarkData.box.y}, WIDTH: ${wordmarkData.box.w}, HEIGHT: ${wordmarkData.box.h} },
+  /** The face's drawn window: its centre and its side, in lockup units. */
+  FACE_VIEW: { CENTER_X: ${wordmarkData.faceView.centerX}, CENTER_Y: ${wordmarkData.faceView.centerY}, SIZE: ${wordmarkData.faceView.size} },
+  /** The lockup's ink centre, for centring the reveal on screen. */
+  CENTER_X: ${wordmarkData.centerX},
+} as const;
 `;
 }
 
 // ---------- Wordmark ----------
 // Custom monoline U-K-E letterforms at cap height (44..170), following the
 // face-L. The U keeps a fully round bottom, echoing the smile.
+// Each letter is described as the pen strokes that would write it, in writing
+// order and direction — the stem before the arms, a bar left to right —
+// because the signature reveal draws them one at a time, paced by length.
+// Static assets join a letter's strokes into one path, which inks identically:
+// every meeting of strokes lands inside another stroke's own width.
 function capsUKE(u0, w) {
   const A = 44;
   const B = 170;
   const sp = WORDMARK.sp;
   const uW = 92;
   const r = Math.min(WORDMARK.uRadius, uW / 2);
-  const S = stroke(w);
-  const U = `<path d="M ${fmt(u0)} ${A} V ${fmt(B - r)} Q ${fmt(u0)} ${B} ${fmt(u0 + r)} ${B} H ${fmt(u0 + uW - r)} Q ${fmt(u0 + uW)} ${B} ${fmt(u0 + uW)} ${fmt(B - r)} V ${A}" ${S}/>`;
+  const seg = (x0, y0, x1, y1) => Math.hypot(x1 - x0, y1 - y0);
+  const quad = ([x0, y0], [x1, y1], [x2, y2]) => {
+    let length = 0;
+    let px = x0;
+    let py = y0;
+    for (let i = 1; i <= 16; i += 1) {
+      const t = i / 16;
+      const mt = 1 - t;
+      const x = mt * mt * x0 + 2 * mt * t * x1 + t * t * x2;
+      const y = mt * mt * y0 + 2 * mt * t * y1 + t * t * y2;
+      length += Math.hypot(x - px, y - py);
+      px = x;
+      py = y;
+    }
+    return length;
+  };
   const xk = u0 + uW + 46 + sp;
   const kArm = 64;
-  const K = `<path d="M ${fmt(xk)} ${A} V ${B} M ${fmt(xk)} 112 L ${fmt(xk + kArm)} ${A} M ${fmt(xk)} 112 L ${fmt(xk + kArm + 4)} ${B}" ${S}/>`;
   const xe = xk + kArm + 46 + sp;
   const eW = 70;
-  const E = `<path d="M ${fmt(xe + eW)} ${A} H ${fmt(xe)} V ${B} H ${fmt(xe + eW)} M ${fmt(xe)} 107 H ${fmt(xe + eW * 0.72)}" ${S}/>`;
-  return { body: U + K + E, end: xe + eW };
+  const letters = [
+    // U: one stroke, down the left side, around the bowl, back up the right.
+    [
+      {
+        d: `M ${fmt(u0)} ${A} V ${fmt(B - r)} Q ${fmt(u0)} ${B} ${fmt(u0 + r)} ${B} H ${fmt(u0 + uW - r)} Q ${fmt(u0 + uW)} ${B} ${fmt(u0 + uW)} ${fmt(B - r)} V ${A}`,
+        length:
+          2 * (B - r - A) +
+          (uW - 2 * r) +
+          quad([u0, B - r], [u0, B], [u0 + r, B]) +
+          quad([u0 + uW - r, B], [u0 + uW, B], [u0 + uW, B - r]),
+      },
+    ],
+    // K: the stem, then the right half in one stroke — in from the top arm's
+    // tip to the joint and out to the leg's.
+    [
+      { d: `M ${fmt(xk)} ${A} V ${B}`, length: B - A },
+      {
+        d: `M ${fmt(xk + kArm)} ${A} L ${fmt(xk)} 112 L ${fmt(xk + kArm + 4)} ${B}`,
+        length: seg(xk + kArm, A, xk, 112) + seg(xk, 112, xk + kArm + 4, B),
+      },
+    ],
+    // E: the spine, then the three bars, top to bottom, each left to right.
+    [
+      { d: `M ${fmt(xe)} ${A} V ${B}`, length: B - A },
+      { d: `M ${fmt(xe)} ${A} H ${fmt(xe + eW)}`, length: eW },
+      { d: `M ${fmt(xe)} 107 H ${fmt(xe + eW * 0.72)}`, length: eW * 0.72 },
+      { d: `M ${fmt(xe)} ${B} H ${fmt(xe + eW)}`, length: eW },
+    ],
+  ];
+  const S = stroke(w);
+  const body = letters
+    .map((strokes) => `<path d="${strokes.map((penStroke) => penStroke.d).join(" ")}" ${S}/>`)
+    .join("");
+  return { body, end: xe + eW, letters, sw: w };
 }
 
 // The face scaled up to cap height (smile on the baseline), then the letters.
-// `faceHtml` lets callers substitute an animated face.
-function wordmark(faceHtml = face()) {
+// `faceHtml` lets callers substitute an animated face, and `letters` lets them
+// redraw the U-K-E paths — the signature reveal wraps each in its own draw-on.
+function wordmark(faceHtml = face(), letters = (caps) => caps.body) {
   const s = WORDMARK.scale;
   const x0 = 20;
   const tx = x0 - 66 * s;
   const ty = 170 - 164 * s;
   const scaledFace = `<g transform="translate(${fmt(tx)} ${fmt(ty)}) scale(${fmt(s)})">${faceHtml}</g>`;
-  const letters = capsUKE(tx + 176 * s + WORDMARK.gap, fmt(FACE.sw * s));
-  return { body: scaledFace + letters.body, width: letters.end + 40 - x0 };
+  const caps = capsUKE(tx + 176 * s + WORDMARK.gap, fmt(FACE.sw * s));
+  return { body: scaledFace + letters(caps), width: caps.end + 40 - x0 };
 }
 
 // ---------- Sizing ----------
@@ -1308,6 +1438,85 @@ for (const name of MOTION_NAMES) {
 }
 // Animated hero wordmark: the face talks inside the caps word.
 emitModes("luke-wordmark-talking", wordSvg(wordmark(motionSvg(MOTIONS.talking))), "LUKE — talking");
+
+// Signature-reveal wordmark: the word signs itself on. The face's stroke draws
+// first over an eyeless face (the wake motion's rule), the eyes blink open,
+// then U-K-E are written stroke by stroke the way a hand would write them, and
+// the face gives one small hop once the E's last bar lands. It is not a
+// MOTIONS entry because the motion table models transforms of a finished face,
+// and a draw-on animates the strokes themselves. Everything shares one clock
+// with a long rest at the end, the house shape for a one-shot gesture that
+// must also read as a loop.
+const SIGNATURE = {
+  dur: 5.2,
+  // The face's beats, as fractions of the clock.
+  smile: [0, 0.16],
+  eyesOpenAt: 0.16,
+  bounce: [0.63, 0.75],
+  // The pen's clock, in seconds: touchdown, total pen-down time (split among
+  // the strokes by their share of the written length, a constant-speed pen),
+  // the lift between strokes, and the longer carry between letters.
+  penDownAt: 1.35,
+  write: 1.4,
+  lift: 0.05,
+  carry: 0.1,
+};
+
+/** Each stroke's draw window, as fractions of the signature's clock. */
+function signatureWindows(letters) {
+  const total = letters.flat().reduce((sum, penStroke) => sum + penStroke.length, 0);
+  const windows = [];
+  let at = SIGNATURE.penDownAt;
+  letters.forEach((strokes, index) => {
+    if (index > 0) at += SIGNATURE.carry - SIGNATURE.lift;
+    for (const penStroke of strokes) {
+      const draw = SIGNATURE.write * (penStroke.length / total);
+      windows.push([at / SIGNATURE.dur, (at + draw) / SIGNATURE.dur]);
+      at += draw + SIGNATURE.lift;
+    }
+  });
+  return windows;
+}
+
+// A stroke that draws itself over `window`, then holds complete for the rest of
+// the clock. pathLength normalizes every letter to the same dash space, and the
+// full-length gap keeps a round-capped dot from standing at the path's start
+// while the offset still hides it.
+const drawOn = (d, sw, [from, to]) =>
+  `<path d="${d}" ${stroke(sw)} pathLength="1" stroke-dasharray="1 1" stroke-dashoffset="1">` +
+  `<animate attributeName="stroke-dashoffset" values="1;1;0;0" keyTimes="0;${fmt4(from)};${fmt4(to)};1" ` +
+  `calcMode="spline" keySplines="${EASE};${EASE};${EASE}" dur="${fmt(SIGNATURE.dur)}s" repeatCount="indefinite"/></path>`;
+
+function signatureFace() {
+  const [c1, c2] = eyeXs();
+  const open = SIGNATURE.eyesOpenAt;
+  const kt = [0, open, open + 0.03, open + 0.06, open + 0.09, 1].map(fmt).join(";");
+  const radii = [0, 0, 1, 0.15, 1, 1].map((factor) => fmt(FACE.eyeR * factor)).join(";");
+  const eyes = eyeRy(c1, radii, kt, SIGNATURE.dur) + eyeRy(c2, radii, kt, SIGNATURE.dur);
+  const inner = `<g transform="rotate(${FACE.tilt} 120 124)">${drawOn(smileD(FACE.lift), FACE.sw, SIGNATURE.smile)}${eyes}</g>`;
+  const [b0, b1] = SIGNATURE.bounce;
+  return wrapAnim(
+    inner,
+    animT("translate", "0 0;0 0;0 -7;0 0;0 0", SIGNATURE.dur, {
+      keyTimes: [0, b0, (b0 + b1) / 2, b1, 1].map(fmt).join(";"),
+      spline: Array(4).fill(EASE).join(";"),
+    }),
+  );
+}
+
+emitModes(
+  "luke-wordmark-signature",
+  wordSvg(
+    wordmark(signatureFace(), (caps) => {
+      const windows = signatureWindows(caps.letters);
+      return caps.letters
+        .flat()
+        .map((penStroke, index) => drawOn(penStroke.d, caps.sw, windows[index]))
+        .join("");
+    }),
+  ),
+  "LUKE — signature reveal",
+);
 
 // The desktop renderer's two inputs, from the same table the SVGs came from.
 put(join(SURFACE, "face-art.ts"), faceArtModule());

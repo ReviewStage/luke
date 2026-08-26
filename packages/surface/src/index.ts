@@ -4,6 +4,7 @@ export {
   FACE_MOTION_CYCLE_MS,
   FACE_MOTION_PARTS,
   type FaceMotion,
+  WORDMARK_ART,
 } from "./generated/face-art.js";
 export {
   MOTION_DELAY_MS,
