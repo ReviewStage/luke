@@ -215,9 +215,45 @@ function trimmedText(value: string | undefined): string | undefined {
   return normalized || undefined;
 }
 
-/** The standing instructions that give Luke its spoken voice and its limits. */
-export function realtimeInstructions(): string {
-  return REALTIME_INSTRUCTION_HEAD.join("\n");
+/**
+ * The marker the app guide stands behind inside the instructions. The guide
+ * is observed data riding the standing prompt — settings values, versions —
+ * so it is fenced off from the instruction text above it the same way every
+ * observed value the conversation sees is labelled as data.
+ */
+const APP_GUIDE_INSTRUCTIONS_MARKER = "[app guide]";
+
+/**
+ * The standing instructions that give Luke its spoken voice and its limits.
+ *
+ * The guide rides here rather than as a conversation item because it is the
+ * same build-fixed prose on every turn: instructions are a stable prefix the
+ * service can cache, where a user message re-created on each change is paid
+ * for out of the window the developer's own turns are evicted from.
+ */
+export function realtimeInstructions(guideText?: string): string {
+  const guide = guideText?.trim();
+  const lines = guide
+    ? [...REALTIME_INSTRUCTION_HEAD, APP_GUIDE_INSTRUCTIONS_MARKER, guide]
+    : REALTIME_INSTRUCTION_HEAD;
+  return lines.join("\n");
+}
+
+/**
+ * Builds the event that carries the app guide on a live call, as a refresh of
+ * the session's own instructions. Only the instructions travel: the update is
+ * a partial one, so the tools and audio the call opened with stay exactly as
+ * the sync asserted them. Blank text builds nothing rather than an update
+ * that would erase the standing instructions.
+ */
+export function appGuideInstructionsEvents(guideText: string): readonly WireRecord[] {
+  if (!guideText.trim()) return [];
+  return [
+    {
+      type: REALTIME_CLIENT_EVENT.SESSION_UPDATE,
+      session: { type: REALTIME_SESSION_TYPE, instructions: realtimeInstructions(guideText) },
+    },
+  ];
 }
 
 /** Clears audio already queued for playback, naming the request for error correlation. */

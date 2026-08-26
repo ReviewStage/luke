@@ -4,7 +4,7 @@ import type { TrackedIssue } from "@sidecar/issues";
 import {
   type ActEnvelope,
   type AttentionSpeech,
-  appGuideContextEvents,
+  appGuideInstructionsEvents,
   appToolAction,
   type CarriedAppAction,
   type CarriedIssueAction,
@@ -103,14 +103,14 @@ export const VOICE_IDLE_TIMEOUT_MS = 3 * 60_000;
 /**
  * The order context is flushed in, so a turn's items land the same way every
  * time: what Luke can see, then what was already said across calls, then
- * where he can create, then what he knows about himself, then what the
- * tracker lists.
+ * where he can create, then what the tracker lists. What Luke knows about
+ * himself is not an item at all: the guide rides the session instructions,
+ * flushed ahead of these.
  */
 const CONTEXT_FLUSH_ORDER: readonly ContextItemKind[] = [
   CONTEXT_ITEM_KIND.SESSIONS,
   CONTEXT_ITEM_KIND.CONVERSATION,
   CONTEXT_ITEM_KIND.WORKSPACE_PROJECTS,
-  CONTEXT_ITEM_KIND.APP_GUIDE,
   CONTEXT_ITEM_KIND.ISSUES,
 ];
 
@@ -458,6 +458,16 @@ export class RealtimeVoiceSession {
    * call may only name a setting Luke was actually described as having.
    */
   #guide: AppGuideSnapshot = EMPTY_APP_GUIDE;
+  /**
+   * The guide's rendered text, waiting to ride the session instructions, and
+   * the text the call's instructions last carried. The guide is not a context
+   * item: it is the same build-fixed prose on every turn, so it travels as a
+   * `session.update` refreshing the instructions — a stable prefix the
+   * service can cache — held here on the items' own economy: sent at the
+   * turn that reads it, and an unchanged guide sends nothing at all.
+   */
+  #guideTextPending: string | undefined;
+  #guideTextLive: string | undefined;
   /**
    * The projects a workspace can be created in, as last reported — kept whole
    * for the same reason the roster is: a spoken creation ask may only name a
@@ -1649,6 +1659,8 @@ export class RealtimeVoiceSession {
     // is filled from the app afresh before it takes a turn.
     this.#contextPending.clear();
     this.#contextLive.clear();
+    this.#guideTextPending = undefined;
+    this.#guideTextLive = undefined;
     this.#pendingSupersedes.clear();
     this.#pendingInterruptions.clear();
     this.#clearIdleTimer();
@@ -2047,17 +2059,17 @@ export class RealtimeVoiceSession {
   }
 
   /**
-   * Tells the conversation what Luke currently knows about himself, the same
-   * way the roster does: the standing instructions promise an app guide, so
-   * one has to arrive before a question about Luke can be answered from real
-   * state. Identical guides are not resent, and the snapshot is kept whole for
-   * validating the spoken asks it advertises.
+   * Tells the conversation what Luke currently knows about himself. The guide
+   * rides the session instructions rather than a context item — build-fixed
+   * prose belongs on the cacheable prefix, not in a user message competing
+   * with the conversation — but it travels on the items' own terms: at the
+   * turn that reads it, only on the developer's call, and identical guides
+   * are not resent. The snapshot is kept whole for validating the spoken asks
+   * it advertises.
    */
   updateGuide(guide: AppGuideSnapshot): void {
     this.#guide = guide;
-    this.#rememberContext(CONTEXT_ITEM_KIND.APP_GUIDE, appGuideContextText(guide), (itemId) =>
-      appGuideContextEvents(guide, itemId),
-    );
+    this.#guideTextPending = appGuideContextText(guide);
   }
 
   /**
@@ -2115,6 +2127,13 @@ export class RealtimeVoiceSession {
    */
   #flushContext(): void {
     if (!this.#carriesContext()) return;
+    // The guide leads the items: it refreshes the instructions rather than
+    // occupying a conversation item, so there is nothing to supersede and an
+    // unchanged guide leaves the cached prefix exactly where it was.
+    if (this.#guideTextPending !== undefined && this.#guideTextPending !== this.#guideTextLive) {
+      this.#send(appGuideInstructionsEvents(this.#guideTextPending));
+      this.#guideTextLive = this.#guideTextPending;
+    }
     for (const kind of CONTEXT_FLUSH_ORDER) {
       const pending = this.#contextPending.get(kind);
       if (!pending) continue;

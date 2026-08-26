@@ -28,7 +28,7 @@ import {
   type Session,
   WORKSPACE_TASK_SUPPORT,
 } from "@sidecar/session";
-import { isRecord } from "@sidecar/wire";
+import { isRecord, text } from "@sidecar/wire";
 import type { JsonValue, ParsedJsonObject } from "@sidecar/wire/testing";
 import {
   asMediaStream,
@@ -470,6 +470,17 @@ function contextItems(context: Harness, label: string, from = 0): ParsedJsonObje
         event.type === REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE &&
         itemText(event).startsWith(label),
     );
+}
+
+/** The instructions each guide-carrying session update sent, oldest first. */
+function guideInstructionUpdates(context: Harness, from = 0): string[] {
+  return context.sent
+    .slice(from)
+    .filter((event) => event.type === REALTIME_CLIENT_EVENT.SESSION_UPDATE)
+    .flatMap((event) => {
+      const instructions = text(sessionField(event)?.instructions);
+      return instructions !== undefined ? [instructions] : [];
+    });
 }
 
 /** The errors actually shown, past the clearing every connect starts with. */
@@ -4240,16 +4251,29 @@ const CAPTIONS_GUIDE: AppGuideSnapshot = {
   ],
 };
 
-test("the app guide reaches the conversation, and identical guides are not resent", async () => {
+test("the app guide rides the session instructions, and identical guides are not resent", async () => {
   const context = harness();
   await context.session.connect();
 
   context.session.updateGuide(CAPTIONS_GUIDE);
   // The same knowledge again is not news; a changed value is. Neither is worth
-  // an item on its own — the turn that asks is what collects the latest.
+  // an update on its own — the turn that asks is what collects the latest.
   context.session.updateGuide({ ...CAPTIONS_GUIDE });
   await armDeveloperTurn(context);
-  assert.equal(contextItems(context, "[app guide").length, 1);
+  const updates = guideInstructionUpdates(context);
+  assert.equal(updates.length, 1);
+  // The guide is instructions now, never a conversation item: the standing
+  // prompt stays the stable prefix and the guide travels appended behind it.
+  assert.match(updates[0] ?? "", /engineering manager for the developer's coding agents/i);
+  assert.match(updates[0] ?? "", /setting_id=voice_captions/);
+  assert.match(updates[0] ?? "", /value=off/);
+  assert.deepEqual(contextItems(context, "[app guide"), []);
+
+  // A turn opened over an unchanged guide re-sends nothing: the instructions
+  // the call already holds are still true.
+  context.session.stopSpeaking();
+  await armDeveloperTurn(context);
+  assert.equal(guideInstructionUpdates(context).length, 1);
 
   const sentBefore = context.sent.length;
   context.session.updateGuide({
@@ -4262,9 +4286,9 @@ test("the app guide reaches the conversation, and identical guides are not resen
   context.session.stopSpeaking();
   await armDeveloperTurn(context);
 
-  const guideEvents = contextItems(context, "[app guide", sentBefore);
-  assert.equal(guideEvents.length, 1);
-  assert.match(itemText(guideEvents[0]), /on/);
+  const refreshed = guideInstructionUpdates(context, sentBefore);
+  assert.equal(refreshed.length, 1);
+  assert.match(refreshed[0] ?? "", /value=on/);
 });
 
 test("a spoken settings change is validated against the guide and carried", async () => {
@@ -5138,6 +5162,26 @@ test("the rosters and the guide never travel on Luke's own call", async () => {
   // The stores still updated — the developer's next call starts current — but
   // nothing left on this one beyond the sentence it exists to say.
   assert.equal(context.sent.length, before);
+
+  // Even the announcement it exists for carries no guide: the readout is the
+  // update's own fields and the ask for the reply, with no instructions
+  // refresh riding ahead of them.
+  assert.equal(
+    context.session.speak({
+      providerId: "claude-code",
+      providerSessionId: "session-a",
+      disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
+      source: ATTENTION_SPEECH_SOURCE.NOTICE_REQUEST,
+      summary: "Claude Code finished checkout-service.",
+      decidedAt: 1_800_000_000_000,
+    }),
+    true,
+  );
+  assert.deepEqual(guideInstructionUpdates(context, before), []);
+  assert.deepEqual(
+    context.sent.slice(before).map((event) => event.type),
+    [REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE, REALTIME_CLIENT_EVENT.RESPONSE_CREATE],
+  );
 });
 
 test("an idle call is put away, and a call being used is not", async () => {
