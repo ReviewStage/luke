@@ -498,10 +498,6 @@ test("a typed ask is bounded like a session message", () => {
   assert.equal(conversationItemText(events[0]).length, maximumTypedAskLength);
 });
 
-function noticeText(event: WireRecord | undefined): string {
-  return conversationItemText(event);
-}
-
 function announcementInputText(event: WireRecord | undefined): string {
   return responseInputText(event);
 }
