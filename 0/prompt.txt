@@ -1,0 +1,1 @@
+[Cross-session delivery notice] Your message to another session was held for the recipient user's approval (recipient: uds:/tmp/cc-socks/39976.sock). Not delivered to that session's Claude yet; its user must approve first. Do not wait for a reply; continue, or choose another approach.
