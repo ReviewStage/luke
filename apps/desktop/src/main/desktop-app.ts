@@ -734,6 +734,15 @@ function writeArrivalState(state: ArrivalState): void {
 let arrivalBeatSpeaking = false;
 
 /**
+ * Whether this run has already sent the trigger. One per run, however many
+ * capability starts a run has: the record only settles when the reply
+ * begins, so a second trigger while the first still sits queued would stack
+ * two beats in the announcer's queue and speak the arrival twice. A trigger
+ * that went nowhere is the next launch's to retry.
+ */
+let arrivalBeatTriggered = false;
+
+/**
  * Speaks the one-time arrival beat, if it is owed and this moment can carry
  * it. The trigger is deterministic on every side — the record the sign-in
  * edge wrote, never anything a model decided — and what is sent is only the
@@ -749,7 +758,7 @@ let arrivalBeatSpeaking = false;
  * developer actually has running.
  */
 async function speakArrivalBeat(): Promise<void> {
-  if (arrivalBeatSpeaking) return;
+  if (arrivalBeatSpeaking || arrivalBeatTriggered) return;
   if (!runMode.requiresAccount || account.status !== ACCOUNT_STATUS.SIGNED_IN) return;
   if (!arrivalBeatOwed(arrivalState)) return;
   if (!voiceCapabilities.realtimeCredentials) return;
@@ -761,7 +770,10 @@ async function speakArrivalBeat(): Promise<void> {
     // miss a meeting; the announcer's own quiet still holds the beat there,
     // and a beat it drops stays owed rather than lost.
     if (await announcementsQuietNow(Date.now())) return;
-    panels.voiceHost()?.webContents.send(channels.onArrivalSpeech, undefined);
+    const host = panels.voiceHost();
+    if (!host) return;
+    host.webContents.send(channels.onArrivalSpeech, undefined);
+    arrivalBeatTriggered = true;
   } finally {
     arrivalBeatSpeaking = false;
   }
