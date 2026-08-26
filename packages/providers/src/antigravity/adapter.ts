@@ -12,7 +12,7 @@ import {
   type SessionProvider,
   type SessionStatus,
 } from "@sidecar/session";
-import { isRecord, oneLine, text, type WireRecord } from "@sidecar/wire";
+import { isRecord, oneLine, type WireRecord } from "@sidecar/wire";
 import {
   canIgnoreFilesystemError,
   fileStats,
@@ -149,33 +149,6 @@ const ANTIGRAVITY_METADATA_QUERY = `
   FROM trajectory_metadata_blob
   LIMIT 1
 `;
-
-const GIT_HEAD_BRANCH_PATTERN = /^ref: refs\/heads\/(.+)$/m;
-const GIT_DIRECTORY_POINTER_PATTERN = /^gitdir: (.+)$/m;
-const MAXIMUM_BRANCH_LENGTH = 120;
-
-/**
- * The branch the folder's own HEAD names right now, the same reading the
- * Cursor adapter takes: a worktree's `.git` is a pointer file to its own git
- * directory, followed for the same HEAD; a detached HEAD, an unreadable
- * file, or a folder that is not a repository names no branch at all.
- */
-async function branchFromGitHead(folderPath: string): Promise<string | undefined> {
-  const gitPath = path.join(folderPath, ".git");
-  const stats = await fileStats(gitPath);
-  let headPath: string | undefined;
-  if (stats?.isDirectory()) {
-    headPath = path.join(gitPath, "HEAD");
-  } else if (stats?.isFile()) {
-    const pointer = GIT_DIRECTORY_POINTER_PATTERN.exec((await readTextFile(gitPath)) ?? "")?.[1];
-    const gitDirectory = text(pointer);
-    if (gitDirectory) headPath = path.resolve(folderPath, gitDirectory, "HEAD");
-  }
-  if (!headPath) return undefined;
-  const head = await readTextFile(headPath);
-  if (!head) return undefined;
-  return oneLine(text(GIT_HEAD_BRANCH_PATTERN.exec(head)?.[1]), MAXIMUM_BRANCH_LENGTH);
-}
 
 export interface AntigravityAdapterOptions extends LocalSessionAdapterOptions {
   antigravityHome?: string;
@@ -508,13 +481,12 @@ export class AntigravitySessionAdapter extends LocalSessionAdapter {
       const derived = await this.#derivedConversation(storePath, stats.mtimeMs);
       if (!derived) continue;
       const title = await this.#annotationTitle(profileDirectory, conversationId);
-      // The branch is the folder's own HEAD, read each pass rather than
-      // cached with the store — a checkout moves it without touching the
-      // conversation — with the branch the store's metadata recorded at the
-      // start standing in where the folder cannot say.
-      const branch =
-        (derived.folderPath ? await branchFromGitHead(derived.folderPath) : undefined) ??
-        derived.storedBranch;
+      // The branch the store's metadata recorded at the start, which can be
+      // stale after a checkout. The folder's own HEAD would say where it
+      // stands now, but a repository under Documents, Desktop, or Downloads
+      // pays for that read with macOS's folder consent dialog: a label is
+      // not worth a permission, so observation never touches the folder.
+      const branch = derived.storedBranch;
       observations.set(
         conversationId,
         this.#derivedObservation(

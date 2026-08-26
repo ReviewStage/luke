@@ -676,39 +676,6 @@ function matchingChats(
   }
 }
 
-/** The shape a symbolic HEAD names its branch in; a detached HEAD names none. */
-const GIT_HEAD_BRANCH_PATTERN = /^ref: refs\/heads\/(.+)$/m;
-const GIT_DIRECTORY_POINTER_PATTERN = /^gitdir: (.+)$/m;
-
-/**
- * The branch the chat's folder stands on right now, from the folder's own
- * `.git` HEAD — the one fact read outside Cursor's files, two bounded file
- * reads and never a git invocation, because the header's `createdOnBranch`
- * says where a chat began rather than where its folder stands after a
- * checkout. A worktree's `.git` is a pointer file to its own git directory,
- * followed for the same HEAD; a detached HEAD, an unreadable file, or a
- * folder that is not a repository names no branch at all.
- */
-async function branchFromGitHead(folderPath: string): Promise<string | undefined> {
-  const gitPath = path.join(folderPath, ".git");
-  const stats = await fileStats(gitPath);
-  let headPath: string | undefined;
-  if (stats?.isDirectory()) {
-    headPath = path.join(gitPath, "HEAD");
-  } else if (stats?.isFile()) {
-    const pointer = GIT_DIRECTORY_POINTER_PATTERN.exec((await readTextFile(gitPath)) ?? "")?.[1];
-    const gitDirectory = text(pointer);
-    if (gitDirectory) headPath = path.resolve(folderPath, gitDirectory, "HEAD");
-  }
-  if (!headPath) return undefined;
-  const head = await readTextFile(headPath);
-  if (!head) return undefined;
-  return oneLine(
-    text(GIT_HEAD_BRANCH_PATTERN.exec(head)?.[1]),
-    CURSOR_HEADER_BOUNDS.MAXIMUM_BRANCH_LENGTH,
-  );
-}
-
 /**
  * What Cursor knows about a local session beyond its state: the folder, the
  * tool call an open turn is running, that a turn failed, the branch and
@@ -1151,11 +1118,13 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
     }
     const appHeld = this.#appChatIndex.held.has(candidate.providerSessionId);
     const link = appHeld ? cursorChatLink(candidate.providerSessionId) : undefined;
-    // The branch is the folder's own HEAD wherever the folder is known — a
-    // header's created-on branch says where a chat began, not where its
-    // folder stands after a checkout — with that header record standing in
-    // where the folder cannot say.
-    const branch = (directory ? await branchFromGitHead(directory) : undefined) ?? header?.branch;
+    // The branch is the header's created-on record — where the chat began,
+    // which can be stale after a checkout. The folder's own HEAD would say
+    // where it stands now, but reading it is the one observation that leaves
+    // Cursor's files, and a repository under Documents, Desktop, or Downloads
+    // pays for that read with macOS's folder consent dialog: a label is not
+    // worth a permission, so observation never touches the folder.
+    const branch = header?.branch;
     // A message is advertised only where the CLI's documented resume can
     // honestly land one: the turn is settled and nothing newer says work is
     // running — a prompt hook can know about a turn the transcript has not
@@ -1233,9 +1202,9 @@ export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
     }
     const appHeld = this.#appChatIndex.held.has(candidate.providerSessionId);
     const link = appHeld ? cursorChatLink(candidate.providerSessionId) : undefined;
-    const branch =
-      (candidate.meta.cwd ? await branchFromGitHead(candidate.meta.cwd) : undefined) ??
-      header?.branch;
+    // The header's created-on record, on the transcript rows' own terms: no
+    // folder is ever read for a label.
+    const branch = header?.branch;
     this.#sendTargets.delete(candidate.providerSessionId);
     return {
       providerSessionId: candidate.providerSessionId,

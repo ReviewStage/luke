@@ -545,7 +545,11 @@ test("an IDE conversation's address opens its own workspace window", async (t) =
   assert.equal(observation.title, "roster");
   assert.equal(observation.directory, workspaceFolder);
   assert.equal(observation.detail?.repository, "roster");
-  assert.equal(observation.detail?.branch, "dev/fix-roster");
+  // The repository stands right there to ask, and observation still reports
+  // no branch: the store's metadata recorded none, and reading the folder's
+  // `.git` costs macOS's folder consent dialog when a repository lives under
+  // Documents, Desktop, or Downloads.
+  assert.equal(observation.detail?.branch, undefined);
   assert.equal(observation.detail?.link, `antigravity-ide://file${workspaceFolder}`);
 });
 
