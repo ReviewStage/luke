@@ -45,6 +45,7 @@ export const PRODUCT_EVENT = {
   SUPERSET_ACT: "superset:act",
   SESSION_OBSERVE: "session:observe",
   SESSION_ACT_SEND: "session:act_send",
+  SESSION_DIAGNOSTIC: "session:diagnostic",
   ISSUE_ACT_SEND: "issue:act_send",
   PANEL_OPEN: "panel:open",
   PANEL_TAB_CHANGE: "panel:tab_change",
@@ -109,6 +110,7 @@ export const PRODUCT_EVENT_PROPERTY = {
   SESSION_STATUS: "session_status",
   CREDENTIAL_SOURCE: "credential_source",
   SESSION_ACT: "session_act",
+  DIAGNOSTIC_KIND: "diagnostic_kind",
   ISSUE_ACT: "issue_act",
   ACCOUNT_ACT: "account_act",
   SUPERSET_ACT: "superset_act",
@@ -173,6 +175,22 @@ export const PRODUCT_SESSION_ACT = {
 } as const;
 
 export type ProductSessionAct = (typeof PRODUCT_SESSION_ACT)[keyof typeof PRODUCT_SESSION_ACT];
+
+/**
+ * Which kind of fault an observation pass reported, never the fault itself:
+ * the error's message stays in the local log, because the words of a failure
+ * can carry a path, a branch, or a title. It repeats the providers package's
+ * own diagnostic-kind set rather than importing it, the same one-way rule the
+ * connection ids keep; the desktop closes the gap with a total `Record`
+ * bridge, so a new kind does not build until this vocabulary answers for it.
+ */
+export const PRODUCT_DIAGNOSTIC_KIND = {
+  ACCIDENTAL_WAKE: "accidental_wake",
+  PASS_FAILURE: "pass_failure",
+} as const;
+
+export type ProductDiagnosticKind =
+  (typeof PRODUCT_DIAGNOSTIC_KIND)[keyof typeof PRODUCT_DIAGNOSTIC_KIND];
 
 /** Which calendar a connection is to, never whose or what is on it. */
 export const PRODUCT_CALENDAR_SOURCE = {
@@ -360,6 +378,7 @@ interface ProductEventPropertyValue {
   [PRODUCT_EVENT_PROPERTY.SESSION_STATUS]: SessionStatus;
   [PRODUCT_EVENT_PROPERTY.CREDENTIAL_SOURCE]: ProductCredentialSource;
   [PRODUCT_EVENT_PROPERTY.SESSION_ACT]: ProductSessionAct;
+  [PRODUCT_EVENT_PROPERTY.DIAGNOSTIC_KIND]: ProductDiagnosticKind;
   [PRODUCT_EVENT_PROPERTY.ISSUE_ACT]: ProductIssueAct;
   [PRODUCT_EVENT_PROPERTY.ACCOUNT_ACT]: ProductAccountAct;
   [PRODUCT_EVENT_PROPERTY.SUPERSET_ACT]: ProductSupersetAct;
@@ -395,6 +414,7 @@ export const PRODUCT_EVENT_PROPERTY_VALUES = {
   [PRODUCT_EVENT_PROPERTY.SESSION_STATUS]: Object.values(SESSION_STATUS),
   [PRODUCT_EVENT_PROPERTY.CREDENTIAL_SOURCE]: Object.values(PRODUCT_CREDENTIAL_SOURCE),
   [PRODUCT_EVENT_PROPERTY.SESSION_ACT]: Object.values(PRODUCT_SESSION_ACT),
+  [PRODUCT_EVENT_PROPERTY.DIAGNOSTIC_KIND]: Object.values(PRODUCT_DIAGNOSTIC_KIND),
   [PRODUCT_EVENT_PROPERTY.ISSUE_ACT]: Object.values(PRODUCT_ISSUE_ACT),
   [PRODUCT_EVENT_PROPERTY.ACCOUNT_ACT]: Object.values(PRODUCT_ACCOUNT_ACT),
   [PRODUCT_EVENT_PROPERTY.SUPERSET_ACT]: Object.values(PRODUCT_SUPERSET_ACT),
@@ -445,6 +465,10 @@ export const PRODUCT_EVENT_PROPERTIES = {
   [PRODUCT_EVENT.SESSION_ACT_SEND]: [
     PRODUCT_EVENT_PROPERTY.PROVIDER_ID,
     PRODUCT_EVENT_PROPERTY.SESSION_ACT,
+  ],
+  [PRODUCT_EVENT.SESSION_DIAGNOSTIC]: [
+    PRODUCT_EVENT_PROPERTY.PROVIDER_ID,
+    PRODUCT_EVENT_PROPERTY.DIAGNOSTIC_KIND,
   ],
   [PRODUCT_EVENT.ISSUE_ACT_SEND]: [
     PRODUCT_EVENT_PROPERTY.TRACKER_ID,
@@ -546,6 +570,9 @@ const PRODUCT_EVENT_PROPERTY_READER: PropertyReader = {
   ),
   [PRODUCT_EVENT_PROPERTY.SESSION_ACT]: memberReader(
     PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.SESSION_ACT],
+  ),
+  [PRODUCT_EVENT_PROPERTY.DIAGNOSTIC_KIND]: memberReader(
+    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.DIAGNOSTIC_KIND],
   ),
   [PRODUCT_EVENT_PROPERTY.ISSUE_ACT]: memberReader(
     PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.ISSUE_ACT],

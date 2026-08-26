@@ -21,6 +21,7 @@ import {
   type WireRecord,
   wireRecord,
 } from "@sidecar/wire";
+import { ADAPTER_DIAGNOSTIC_KIND, type AdapterDiagnosticCallback } from "./adapter-diagnostics.js";
 
 /**
  * How a CLI-observed provider fails. Unavailable means there is nothing to
@@ -111,7 +112,7 @@ export interface CliAdapterOptions {
    * being unavailable or a command failing — a TypeError in a subclass's
    * parsing, for example. Unavailable and transient failures never reach it.
    */
-  onDiagnostic?: (error: Error) => void;
+  onDiagnostic?: AdapterDiagnosticCallback;
 }
 
 /** The provider identity and the one binary a subclass observes with. */
@@ -156,7 +157,7 @@ export abstract class CliSessionAdapter extends SessionProviderAdapterBase {
   readonly #run: CliRun;
   readonly #now: () => number;
   readonly #minimumRefreshIntervalMs: number;
-  readonly #onDiagnostic: ((error: Error) => void) | undefined;
+  readonly #onDiagnostic: AdapterDiagnosticCallback | undefined;
 
   #observations: readonly ProviderSessionObservation[] = [];
   #lastAttemptAt = Number.NEGATIVE_INFINITY;
@@ -214,7 +215,10 @@ export abstract class CliSessionAdapter extends SessionProviderAdapterBase {
       // Anything else is a bug in this pass — a TypeError thrown by a
       // subclass's parsing is not a flaky command, and must not keep serving
       // the stale snapshot with no log, counter, or hook.
-      this.#onDiagnostic?.(error instanceof Error ? error : new Error(String(error)));
+      this.#onDiagnostic?.(
+        ADAPTER_DIAGNOSTIC_KIND.PASS_FAILURE,
+        error instanceof Error ? error : new Error(String(error)),
+      );
       throw error;
     }
     return this.#observations;

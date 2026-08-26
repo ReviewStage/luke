@@ -26,6 +26,10 @@ import { JulesSessionAdapter } from "./jules/adapter.js";
 import { localSessionAdapters } from "./local-adapters.js";
 import { installOpenCodeObservationPlugin } from "./opencode/hooks.js";
 import { ReplicasSessionAdapter } from "./replicas/adapter.js";
+import type {
+  AdapterDiagnosticCallback,
+  AdapterDiagnosticKind,
+} from "./shared/adapter-diagnostics.js";
 import {
   HOOK_SPOOL_MAXIMUM_AGE_MS,
   type ObservationHookInstallation,
@@ -58,7 +62,23 @@ export interface ProviderRegistrationOptions {
    * dashboard's.
    */
   replicasDesktopAppPresent?: () => boolean;
+  /**
+   * Where every cloud adapter constructed here lands its diagnostic channel,
+   * tagged with the provider it came from. The `codexCloudAdapter` above is
+   * the caller's to wire, at the construction the caller already owns. Absent,
+   * diagnostics reach nobody, which is what a fixture run wants.
+   */
+  onDiagnostic?: (providerId: ProviderId, kind: AdapterDiagnosticKind, error: Error) => void;
   now?: () => number;
+}
+
+function adapterDiagnostics(
+  providerId: ProviderId,
+  onDiagnostic: ProviderRegistrationOptions["onDiagnostic"],
+): { onDiagnostic: AdapterDiagnosticCallback } | undefined {
+  return onDiagnostic
+    ? { onDiagnostic: (kind, error) => onDiagnostic(providerId, kind, error) }
+    : undefined;
 }
 
 /**
@@ -107,6 +127,7 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
       locals.cursorLocal,
       new CursorSessionAdapter({
         readApiKey: () => options.readApiKey(CREDENTIAL_PROVIDER_ID.CURSOR),
+        ...adapterDiagnostics(PROVIDER_ID.CURSOR, options.onDiagnostic),
       }),
     ],
   });
@@ -116,6 +137,7 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
       locals.devinLocal,
       new DevinSessionAdapter({
         readApiKey: () => options.readApiKey(CREDENTIAL_PROVIDER_ID.DEVIN),
+        ...adapterDiagnostics(PROVIDER_ID.DEVIN, options.onDiagnostic),
       }),
     ],
   });
@@ -146,12 +168,14 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
     [PROVIDER_ID.CONDUCTOR]: {
       adapter: new ConductorSessionAdapter({
         readApiKey: () => options.readApiKey(CREDENTIAL_PROVIDER_ID.CONDUCTOR),
+        ...adapterDiagnostics(PROVIDER_ID.CONDUCTOR, options.onDiagnostic),
       }),
       credential: CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.CONDUCTOR],
     },
     [PROVIDER_ID.COPILOT]: {
       adapter: new CopilotSessionAdapter({
         readApiKey: () => options.readApiKey(CREDENTIAL_PROVIDER_ID.COPILOT),
+        ...adapterDiagnostics(PROVIDER_ID.COPILOT, options.onDiagnostic),
       }),
       credential: CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.COPILOT],
     },
@@ -188,6 +212,7 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
     [PROVIDER_ID.JULES]: {
       adapter: new JulesSessionAdapter({
         readApiKey: () => options.readApiKey(CREDENTIAL_PROVIDER_ID.JULES),
+        ...adapterDiagnostics(PROVIDER_ID.JULES, options.onDiagnostic),
       }),
       credential: CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.JULES],
     },
@@ -212,6 +237,7 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
         ...(options.replicasDesktopAppPresent
           ? { desktopAppPresent: options.replicasDesktopAppPresent }
           : undefined),
+        ...adapterDiagnostics(PROVIDER_ID.REPLICAS, options.onDiagnostic),
       }),
       credential: CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.REPLICAS],
     },
