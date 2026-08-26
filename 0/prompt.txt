@@ -1,0 +1,7 @@
+<task-notification>
+<task-id>bqli9whpo</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-deanstratakos-Developer-luke/0b5f1d85-4d62-4a32-8b1b-e3236c47e0ab/tasks/bqli9whpo.output</output-file>
+<status>completed</status>
+<summary>Background command "Launch the app via run.sh" completed (exit code 0)</summary>
+</task-notification>
