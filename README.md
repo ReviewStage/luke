@@ -27,7 +27,7 @@
   <a href="CHANGELOG.md">Changelog</a>
 </p>
 
-![Luke's panel expanded from the notch, listing local and cloud agent sessions with their status, recaps, and workspace grouping.](docs/media/luke-panel.png)
+![Luke's panel expanded from the notch on a Mac desktop, listing local and cloud agent sessions with their status, recaps, and workspace grouping.](docs/media/luke-desktop.jpg)
 
 ## Features
 
