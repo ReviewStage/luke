@@ -25,14 +25,10 @@ import {
   functionCallFollowUpEvents,
   functionCallOutputEvents,
   type IntroductionLine,
-  ISSUE_TRACKER_DISCONNECTED_TEXT,
   inputAudioAppendEvents,
   inputAudioFormatUpdateEvents,
   introductionSpeechEvents,
-  issueContextEvents,
-  issueContextText,
   issueToolAction,
-  issueTrackerDisconnectedEvents,
   outputSpeedUpdateEvents,
   PressAudioBuffer,
   parseRealtimeServerEvent,
@@ -105,15 +101,13 @@ export const VOICE_IDLE_TIMEOUT_MS = 3 * 60_000;
 /**
  * The order context is flushed in, so a turn's items land the same way every
  * time: what Luke can see, then what was already said across calls, then
- * where he can create, then what the tracker lists. What Luke knows about
- * himself is not an item at all: the guide rides the session instructions,
- * flushed ahead of these.
+ * where he can create. What Luke knows about himself is not an item at all:
+ * the guide rides the session instructions, flushed ahead of these.
  */
 const CONTEXT_FLUSH_ORDER: readonly ContextItemKind[] = [
   CONTEXT_ITEM_KIND.SESSIONS,
   CONTEXT_ITEM_KIND.CONVERSATION,
   CONTEXT_ITEM_KIND.WORKSPACE_PROJECTS,
-  CONTEXT_ITEM_KIND.ISSUES,
 ];
 
 /**
@@ -1471,7 +1465,7 @@ export class RealtimeVoiceSession {
    */
   sendText(text: string): boolean {
     // A typed ask runs only on the developer's own call. Luke's speak-only
-    // call has been sent no roster, no guide, and no issues, so a turn armed
+    // call has been sent no roster and no guide, so a turn armed
     // for tools has nothing real to validate against there — the caller
     // stands that call down and opens the full one before asking. A typed ask
     // needs no capture device, so one this call put away stays put away.
@@ -2087,32 +2081,11 @@ export class RealtimeVoiceSession {
   }
 
   /**
-   * Tells the conversation what the issue tracker lists, under the same rule
-   * the session roster follows: identical rosters are not resent, and no
-   * tracker connected means no roster at all — the absence is itself what
-   * lets Luke say a tracker is not connected rather than inventing a board.
+   * Holds the tracker's roster a spoken issue act is validated against, here
+   * and again in the main process.
    */
   updateIssues(issues: readonly TrackedIssue[] | undefined): void {
     this.#issues = issues;
-    if (issues) {
-      this.#rememberContext(CONTEXT_ITEM_KIND.ISSUES, issueContextText(issues), (itemId) =>
-        issueContextEvents(issues, itemId),
-      );
-      return;
-    }
-    // A conversation that was never going to be told about a board has nothing
-    // to withdraw, and saying a tracker is "no longer" connected when none ever
-    // was is a different and wrong sentence. One that had a board — or was
-    // about to be given one — is told the board is gone, or Luke keeps
-    // answering from a tracker nobody is observing.
-    if (!this.#contextPending.has(CONTEXT_ITEM_KIND.ISSUES)) return;
-    if (!this.#contextLive.has(CONTEXT_ITEM_KIND.ISSUES)) {
-      this.#contextPending.delete(CONTEXT_ITEM_KIND.ISSUES);
-      return;
-    }
-    this.#rememberContext(CONTEXT_ITEM_KIND.ISSUES, ISSUE_TRACKER_DISCONNECTED_TEXT, (itemId) =>
-      issueTrackerDisconnectedEvents(itemId),
-    );
   }
 
   /**
