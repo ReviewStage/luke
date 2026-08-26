@@ -11,11 +11,17 @@ type Founder = {
   };
 };
 
+/**
+ * The portraits are 128px webp — twice the box they are drawn in, and no more.
+ * The camera originals carried EXIF the site has no business publishing, GPS
+ * among it, so what ships is re-encoded with its metadata dropped rather than
+ * the file that came off the phone.
+ */
 const FOUNDERS: readonly Founder[] = [
   {
     name: "Charles Pan",
     role: "Cofounder",
-    photoSrc: "/assets/charles-pan.jpeg",
+    photoSrc: "/assets/charles-pan.webp",
     bio: "Previously developer at Five Rings, early engineer at Yuzu Health.",
     socials: {
       linkedin: "https://www.linkedin.com/in/charleslpan/",
@@ -25,7 +31,7 @@ const FOUNDERS: readonly Founder[] = [
   {
     name: "Dean Stratakos",
     role: "Cofounder",
-    photoSrc: "/assets/dean-stratakos.jpeg",
+    photoSrc: "/assets/dean-stratakos.webp",
     bio: "Previously building coding agents at Five Rings.",
     socials: {
       linkedin: "https://www.linkedin.com/in/dean-stratakos/",
