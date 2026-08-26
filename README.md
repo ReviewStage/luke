@@ -101,6 +101,10 @@ See [PRIVACY.md](PRIVACY.md).
 Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md)
 to get set up, and [SECURITY.md](SECURITY.md) for reporting a vulnerability.
 
+## Contact
+
+Email [founders@stagereview.app](mailto:founders@stagereview.app).
+
 ## License
 
 Luke is licensed under the [Apache License 2.0](LICENSE).
