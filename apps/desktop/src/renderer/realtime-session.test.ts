@@ -5167,8 +5167,8 @@ test("the rosters and the guide never travel on Luke's own call", async () => {
   assert.equal(context.sent.length, before);
 
   // Even the announcement it exists for carries no guide: the readout is the
-  // update's own fields and the ask for the reply, with no instructions
-  // refresh riding ahead of them.
+  // update's own fields inside its isolated response, with no instructions
+  // refresh riding ahead of it.
   assert.equal(
     context.session.speak({
       providerId: "claude-code",
@@ -5183,7 +5183,7 @@ test("the rosters and the guide never travel on Luke's own call", async () => {
   assert.deepEqual(guideInstructionUpdates(context, before), []);
   assert.deepEqual(
     context.sent.slice(before).map((event) => event.type),
-    [REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE, REALTIME_CLIENT_EVENT.RESPONSE_CREATE],
+    [REALTIME_CLIENT_EVENT.RESPONSE_CREATE],
   );
 });
 
