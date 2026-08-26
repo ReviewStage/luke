@@ -2528,10 +2528,15 @@ export function startDesktopApp(): void {
       });
       // Armed from the settings file alone, like the status item, and for the
       // same reason. A file that cannot be read leaves the duck on, the same
-      // answer a file that has never said gives.
-      void settingsStore
-        .get(APP_SETTING_SCHEMA.duckOtherMedia.field)
-        .then((enabled) => mediaDuck.setEnabled(enabled === true));
+      // answer a file that has never said gives. Never armed in a fixture or
+      // capture run, under the output watch's own rule: the helper stands
+      // with the setting so it can hear the players' play-state broadcasts,
+      // and evidence must not read the machine it happens to run on.
+      if (runMode.observesProviders) {
+        void settingsStore
+          .get(APP_SETTING_SCHEMA.duckOtherMedia.field)
+          .then((enabled) => mediaDuck.setEnabled(enabled === true));
+      }
       // Armed from the settings file alone, like the duck above, and on the
       // same terms: a file that cannot be read leaves counting on, the answer
       // a file that has never said gives.

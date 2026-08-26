@@ -140,19 +140,28 @@ test("a helper that dies is replaced for the next exchange", async () => {
   assert.deepEqual(context.commands, ["duck", "duck"]);
 });
 
+test("enabling spawns the listening helper before any exchange", () => {
+  const context = harness();
+  context.controller.setEnabled(true);
+
+  // The helper is up so it can hear the players' play-state broadcasts, but
+  // nothing has asked for quiet, so nothing is written to it.
+  assert.equal(context.spawns(), 1);
+  assert.deepEqual(context.commands, []);
+});
+
 test("a helper that cannot be spawned leaves the exchange unharmed", () => {
-  const context = harness({
-    spawns: [
-      () => {
-        throw new Error("no helper on this platform");
-      },
-    ],
-  });
+  const failure = () => {
+    throw new Error("no helper on this platform");
+  };
+  // Enabling tries the spawn once for the listener, and the duck once more.
+  const context = harness({ spawns: [failure, failure] });
   context.controller.setEnabled(true);
 
   context.controller.setExchangeActive(true);
   context.controller.setExchangeActive(false);
 
+  assert.equal(context.spawns(), 2);
   assert.deepEqual(context.commands, []);
 });
 

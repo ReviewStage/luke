@@ -1,4 +1,5 @@
 import AppKit
+import CoreServices
 import Foundation
 
 /// Turns the media players Luke knows how to speak to down while a spoken
@@ -12,6 +13,20 @@ import Foundation
 /// playing and how loud, and told only a volume: nothing is paused, nothing is
 /// read beyond that, and an app the user never granted simply stays at its own
 /// volume.
+///
+/// The consent dialog each player costs is raised at the last possible
+/// moment. macOS keeps one standing answer per player, and this helper reads
+/// it before every event without raising the dialog: granted flows on as
+/// before, refused is skipped aloud, and a player never yet asked about is
+/// sent its first event — the one that raises the dialog — only while that
+/// player's own play-state broadcast says it is audibly playing, so the
+/// question appears exactly when it is about something. The broadcasts are
+/// what Music and Spotify already address to the whole machine on every
+/// start, stop, and track change; they are read for the one state word, and
+/// every other field dies here unread. A player already playing when this
+/// helper started has said nothing yet, and unknown is a skip, never a
+/// dialog: its next broadcast — a track change at the latest — is when a
+/// later exchange gets to ask.
 ///
 /// The one command language: `duck` fades every playing player down, `restore`
 /// fades back whatever `duck` changed. Stdin closing is the app going away, so
@@ -27,6 +42,105 @@ private let PLAYERS = [
     MediaPlayer(bundleIdentifier: "com.apple.Music"),
     MediaPlayer(bundleIdentifier: "com.spotify.client"),
 ]
+
+/// The broadcasts the players address to the whole machine when playback
+/// starts, stops, or moves to another track. Music has worn two names for
+/// its own across macOS releases; both are listened for, and either speaks
+/// for the same app.
+private let PLAY_STATE_BROADCASTS: [(notification: String, bundleIdentifier: String)] = [
+    (notification: "com.apple.Music.playerInfo", bundleIdentifier: "com.apple.Music"),
+    (notification: "com.apple.iTunes.playerInfo", bundleIdentifier: "com.apple.Music"),
+    (
+        notification: "com.spotify.client.PlaybackStateChanged",
+        bundleIdentifier: "com.spotify.client"
+    ),
+]
+
+private let PLAY_STATE_BROADCAST_SOURCES = Dictionary(
+    uniqueKeysWithValues: PLAY_STATE_BROADCASTS.map { ($0.notification, $0.bundleIdentifier) }
+)
+
+/// The one field read out of a broadcast, and the one value that means
+/// audibly playing. Everything else in the envelope — the track, its artist,
+/// its album — dies here unread.
+private let PLAYER_STATE_FIELD = "Player State"
+private let PLAYER_STATE_PLAYING = "Playing"
+
+/// Hears the players' own play-state broadcasts, which cost no consent to
+/// hear, and remembers only the last state word each player spoke. A player
+/// that has said nothing since this helper started is unknown rather than
+/// assumed, and a player that quit is unknown again — its next launch owes a
+/// fresh word before it can be believed playing.
+private final class PlayStateWatch: NSObject {
+    private var playing: [String: Bool] = [:]
+
+    func start() {
+        for broadcast in PLAY_STATE_BROADCASTS {
+            // deliverImmediately: a broadcast held back on this helper's
+            // behalf is a play state learned late, and a consent dialog
+            // delayed past the exchange it was supposed to appear in.
+            DistributedNotificationCenter.default().addObserver(
+                self,
+                selector: #selector(playerSpoke(_:)),
+                name: Notification.Name(broadcast.notification),
+                object: nil,
+                suspensionBehavior: .deliverImmediately
+            )
+        }
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(playerQuit(_:)),
+            name: NSWorkspace.didTerminateApplicationNotification,
+            object: nil
+        )
+    }
+
+    func believesPlaying(_ player: MediaPlayer) -> Bool {
+        playing[player.bundleIdentifier] == true
+    }
+
+    @objc private func playerSpoke(_ notification: Notification) {
+        guard let bundleIdentifier = PLAY_STATE_BROADCAST_SOURCES[notification.name.rawValue]
+        else { return }
+        guard let state = notification.userInfo?[PLAYER_STATE_FIELD] as? String else { return }
+        playing[bundleIdentifier] = state == PLAYER_STATE_PLAYING
+    }
+
+    @objc private func playerQuit(_ notification: Notification) {
+        guard
+            let application = notification.userInfo?[NSWorkspace.applicationUserInfoKey]
+                as? NSRunningApplication,
+            let bundleIdentifier = application.bundleIdentifier
+        else { return }
+        playing.removeValue(forKey: bundleIdentifier)
+    }
+}
+
+/// macOS's word for a consent question never yet asked. The other two answers
+/// need no naming: 0 is a yes, and anything else — most commonly -1743,
+/// refused on the user's behalf — is a no this helper honors.
+private let CONSENT_NOT_YET_ASKED: OSStatus = -1744
+
+private enum AutomationConsent {
+    case granted
+    case notYetAsked
+    case withheld(OSStatus)
+}
+
+/// macOS's standing answer about this helper speaking to one player, read
+/// without raising the dialog, so the dialog itself can be saved for the
+/// moment it is about.
+private func automationConsent(for player: MediaPlayer) -> AutomationConsent {
+    let target = NSAppleEventDescriptor(bundleIdentifier: player.bundleIdentifier)
+    // A target descriptor that cannot even be read back cannot carry an event
+    // either; -50 is the paramErr such an event would earn.
+    guard let address = target.aeDesc else { return .withheld(-50) }
+    switch AEDeterminePermissionToAutomateTarget(address, typeWildCard, typeWildCard, false) {
+    case noErr: return .granted
+    case CONSENT_NOT_YET_ASKED: return .notYetAsked
+    case let status: return .withheld(status)
+    }
+}
 
 /// Where a player's volume was, and where the duck put it. The ducked level is
 /// what decides whether the original may be restored: a volume that no longer
@@ -135,6 +249,7 @@ private func fade(_ player: MediaPlayer, from: Int, to: Int, stepSeconds: Double
 private struct MediaDuckCommand {
     static var buffer = ""
     static var ducked: [String: DuckedPlayer] = [:]
+    static let playStateWatch = PlayStateWatch()
 
     static func main() {
         // The signals that quit the app must not quit the helper: Luke and
@@ -147,6 +262,11 @@ private struct MediaDuckCommand {
         signal(SIGTERM, SIG_IGN)
         signal(SIGHUP, SIG_IGN)
         signal(SIGPIPE, SIG_IGN)
+        // Hearing broadcasts starts with the process, before the first
+        // command can arrive: the watch is the only way a never-consented
+        // player can ever be believed playing, so every moment it is not
+        // listening narrows when that player can be asked.
+        playStateWatch.start()
         FileHandle.standardInput.readabilityHandler = { handle in
             let data = handle.availableData
             DispatchQueue.main.async {
@@ -162,7 +282,10 @@ private struct MediaDuckCommand {
                 }
             }
         }
-        dispatchMain()
+        // The run loop rather than dispatchMain: the broadcasts land as
+        // run-loop sources, and the main run loop also drains the main queue
+        // the stdin reader dispatches onto, so one loop serves both.
+        RunLoop.main.run()
     }
 
     static func read(_ data: Data) {
@@ -186,7 +309,24 @@ private struct MediaDuckCommand {
     /// ducked volume back as the one to restore to.
     static func duck() {
         for player in PLAYERS where ducked[player.bundleIdentifier] == nil {
-            guard isRunning(player), isPlaying(player) else { continue }
+            guard isRunning(player) else { continue }
+            switch automationConsent(for: player) {
+            case .granted:
+                break
+            case .notYetAsked:
+                // The first event below is the one that raises this player's
+                // consent dialog, so it is sent only at the moment the dialog
+                // is about: mid-exchange, over music the player's own
+                // broadcast says is audibly playing. Unknown is a skip, never
+                // a dialog — a later exchange will know.
+                guard playStateWatch.believesPlaying(player) else { continue }
+            case .withheld(let status):
+                // Said aloud like a live refusal, because honored consent and
+                // a lost duck look identical otherwise.
+                emit("refused \(status)")
+                continue
+            }
+            guard isPlaying(player) else { continue }
             guard let original = volume(of: player), original > 0 else { continue }
             let requested = Int((Double(original) * DUCK_FACTOR).rounded())
             fade(player, from: original, to: requested, stepSeconds: DUCK_STEP_SECONDS)
