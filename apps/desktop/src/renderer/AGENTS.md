@@ -140,15 +140,17 @@ choice row on the page the entry names. There is no separate renderer record
 whose completeness the compiler checks. A guide entry that deliberately
 builds no row still needs a comment saying which fact or special control covers
 it. The facts half has no compile lever either, so the rule is stated here: a
-capability, surface, or shortcut the guide does not describe is one Luke will
-deny having, and a stale entry is one he will misdescribe.
-The facts deliberately cover what a developer would ask Luke and what a spoken
-ask may do — not exhaustive surface or connector behavior, which the guide's
-closing fact has Luke redirect to the surface rather than deny — so the rule
-binds in full for capabilities, acts, refusals, and boundaries, and a new one
-still lands here in the same change.
-Update the facts whenever you change what the panel holds, what a key does, or
-what a provider connection means.
+capability or act the guide does not describe is one Luke will deny having,
+and a stale entry is one he will misdescribe.
+The facts deliberately cover only what Luke needs to hold a conversation and
+what a spoken ask may do — capabilities, acts, refusals, and their bounds. A
+detail the developer should know but Luke never acts on (the surface's own
+mechanics, a connector's internals, what a privacy switch governs) stays with
+the surface and the settings entries that already describe it, and the guide's
+closing fact has Luke redirect what it leaves out rather than deny it. The
+rule still binds in full at the act level: a new capability, act, refusal, or
+bound lands here in the same change, as does any change to what a key does or
+what a provider connection allows.
 
 Rules the guide must keep:
 
