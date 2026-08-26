@@ -13,6 +13,7 @@ import {
 import type { AttentionRequestResult, SessionNoticeAsk } from "@sidecar/attention";
 import type { ObservedAccountCalendars } from "@sidecar/calendar/observation";
 import { type CredentialProviderId, isCredentialProviderId } from "@sidecar/credentials/vocabulary";
+import { type AgentWireTrace, isAgentWireTrace } from "@sidecar/devtrace/vocabulary";
 import {
   type FeedbackKind,
   type FeedbackResult,
@@ -629,6 +630,18 @@ export const BRIDGE = {
     channel: "app:request-hosted-usage",
     args: noArgs,
     result: result<HostedUsageAnswer | undefined>(),
+  }),
+  /**
+   * One tapped realtime event for the development trace. Fire-and-forget on
+   * purpose: the tap must cost the conversation nothing, and the main process
+   * simply drops it when no traced run is on — which is every packaged run,
+   * because the writer only exists behind the unpackaged `LUKE_TRACE_DIR`
+   * gate.
+   */
+  recordAgentTrace: entry({
+    kind: "send",
+    channel: "app:record-agent-trace",
+    args: args<[AgentWireTrace]>((v) => v.length === 1 && isAgentWireTrace(v[0])),
   }),
   notifyReady: entry({ kind: "send", channel: "app:renderer-ready", args: noArgs }),
   /**

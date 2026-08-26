@@ -64,6 +64,7 @@ export {
   cancelResponseEvents,
   clearInputAudioEvents,
   clearOutputAudioEvents,
+  decodeRealtimePayload,
   functionCallFollowUpEvents,
   functionCallOutputEvents,
   inputAudioAppendEvents,

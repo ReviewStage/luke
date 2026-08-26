@@ -2090,6 +2090,7 @@ export function App(): React.JSX.Element {
     syncIssues,
   } = useVoiceConversation({
     preferBuiltInMicrophone: (settings ?? bootstrapSettings)?.preferBuiltInMicrophone ?? true,
+    agentTraceEnabled: bootstrap?.agentTraceEnabled === true,
     sessions,
     noticeAsks,
     workspaceProjects,

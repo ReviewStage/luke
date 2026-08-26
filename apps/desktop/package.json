@@ -43,6 +43,7 @@
     "@sidecar/attention": "workspace:*",
     "@sidecar/calendar": "workspace:*",
     "@sidecar/credentials": "workspace:*",
+    "@sidecar/devtrace": "workspace:*",
     "@sidecar/feedback": "workspace:*",
     "@sidecar/fixtures": "workspace:*",
     "@sidecar/guide": "workspace:*",

@@ -21,6 +21,7 @@ import {
   nextMeetingBoundary,
 } from "@sidecar/calendar";
 import { CREDENTIAL_PROVIDER_ID, type CredentialProviderId } from "@sidecar/credentials";
+import { AgentTraceWriter, tracedAttentionEvaluator } from "@sidecar/devtrace";
 import { type FeedbackSubmission, feedbackDeliveryFromEnvironment } from "@sidecar/feedback";
 import { fixtureSnapshot } from "@sidecar/fixtures";
 import { normalizeTrackedIssue, type TrackedIssue } from "@sidecar/issues";
@@ -430,6 +431,21 @@ const createdWorkspaceOpens = new CreatedWorkspaceOpenTracker();
  * — and are dropped only when withdrawn or when the session itself goes.
  */
 const attentionRequests = new AttentionRequestRegistry();
+/**
+ * The development trace: Luke's own agent traffic — the realtime wire and the
+ * attention evaluator's passes — appended as JSONL under a directory the
+ * developer's own shell named. Gated so it cannot exist for a user: a
+ * packaged build never reads the variable, a fixture or evidence run has no
+ * traffic to tap and constructs no writer, and everything a traced run
+ * writes stays under that directory on this machine. What a trace may record
+ * is a product decision, not an implementation detail.
+ */
+const agentTraceDirectory =
+  app.isPackaged || !runMode.sendsNetwork ? undefined : process.env.LUKE_TRACE_DIR;
+const agentTrace = agentTraceDirectory
+  ? new AgentTraceWriter({ directory: agentTraceDirectory })
+  : undefined;
+if (agentTrace) process.stderr.write(`Agent trace: ${agentTrace.file}\n`);
 const voiceCapabilities = new VoiceCapabilityAssembler({
   settings: settingsStore,
   credentialsUsable: () => runMode.sendsNetwork && accountCapabilitiesActive(),
@@ -439,6 +455,12 @@ const voiceCapabilities = new VoiceCapabilityAssembler({
   refreshAccount: accountSession.refreshOnce,
   currentSession: (identity) => sessionRegistry.get(identity),
   noticeRequestFor: (identity) => attentionRequests.get(identity),
+  ...(agentTrace
+    ? {
+        wrapEvaluator: (evaluator) =>
+          tracedAttentionEvaluator(evaluator, (record) => agentTrace.recordAttention(record)),
+      }
+    : undefined),
 });
 // Quiets Music and Spotify while a spoken exchange is live. It lives here
 // rather than in the renderer because letting the players back up must survive
@@ -1086,6 +1108,7 @@ function registerIpc(): void {
         fixture,
         captureMode,
         fixtureMode,
+        agentTraceEnabled: agentTrace !== undefined,
         supersetInstalled,
         supersetConnected,
         accountRequired: runMode.requiresAccount,
@@ -1305,6 +1328,7 @@ function registerIpc(): void {
     unavailableDiagnostics: () => voiceCapabilities.unavailableDiagnostics,
     hostedUsageReader: () => voiceCapabilities.hostedUsageReader,
     recordProductEvent,
+    recordAgentTrace: (trace) => agentTrace?.recordWire(trace),
   });
 
   registerSessionActsIpc({

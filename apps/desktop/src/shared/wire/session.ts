@@ -113,6 +113,12 @@ export interface AppBootstrap {
   captureMode: boolean;
   /** True when `--fixture` (or a capture run) makes the panel render fixture sessions. */
   fixtureMode: boolean;
+  /**
+   * Whether this run records the development trace, so the conversation taps
+   * the wire only while a writer actually stands behind the bridge. False on
+   * every packaged run by construction.
+   */
+  agentTraceEnabled: boolean;
   /** Whether Superset's bundled CLI exists on this Mac. */
   supersetInstalled: boolean;
   /** Whether that CLI also has its own login configuration. */

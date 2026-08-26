@@ -662,7 +662,13 @@ function audioFromDone(event: WireRecord): boolean | undefined {
   });
 }
 
-function decodeRealtimePayload(data: UnparsedWireValue): WireRecord | undefined {
+/**
+ * Decodes one data-channel payload to the record it carries, or nothing. This
+ * is the wire format's own reader — exported so a tap on the channel reads
+ * the payload the same way the parser below does, rather than re-encoding
+ * the grammar in a second style.
+ */
+export function decodeRealtimePayload(data: UnparsedWireValue): WireRecord | undefined {
   let payload: UnparsedWireValue = data;
   if (isWireString(data)) {
     try {
