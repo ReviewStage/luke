@@ -1,6 +1,6 @@
 # Privacy
 
-Last updated: 24 August 2026
+Last updated: 25 August 2026
 
 Luke is a macOS app that watches your coding agent sessions. This policy
 explains what we collect, who we send it to, and how to turn it off.
@@ -31,6 +31,12 @@ recording leaves your Mac, so an API key or a sign-in code you enter is not in
 it. While recording is on, Luke also reports what you clicked, including the
 text on it, and any error his panel runs into, with its message and code path;
 the fixed list above does not cover those two.
+
+Recording starts when Luke opens, before you sign in, so it covers the spoken
+introduction on first launch and the signed-out panel. A recording that begins
+before you sign in is attached to your account if you sign in while it is
+running. One that never reaches a sign-in belongs to nobody, so deleting your
+account does not reach it — we have no way to tell it was yours.
 
 Usage data and recording are both on by default, with their own switches in
 Settings. Turning off Record my screen in Luke leaves the counts on; turning off
@@ -91,8 +97,11 @@ held by our own service, and usage counts and recordings by PostHog.
 - Luke does not use your microphone until you start a turn.
 - Delete your account from the Account section in Settings. This erases your
   account, your sign-in records, and your usage counts, and asks PostHog to
-  erase your usage data and recordings. It does not affect your Google or GitHub
-  account, and anything stored only on your Mac stays there until you remove it.
+  erase your usage data and recordings. It does not reach a recording that was
+  never attached to your account, as described above. Luke stops recording for
+  the rest of the session, and starts again the next time you open it or sign
+  in. Deleting does not affect your Google or GitHub account, and anything
+  stored only on your Mac stays there until you remove it.
 
 ## Google user data
 
