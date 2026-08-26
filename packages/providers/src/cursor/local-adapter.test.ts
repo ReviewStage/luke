@@ -848,7 +848,7 @@ test("titles a chat by the name Cursor's own header keeps for it", async (t) => 
   assert.equal(observations[0]?.title, "Fix sticky scrolling");
   // The header's own folder outranks the reduced-name workspace match, for
   // the label and the branch alike; the branch is the header's created-on
-  // record where the folder holds no repository to ask.
+  // record, the one branch observation reports.
   assert.equal(observations[0]?.detail?.repository, "stage");
   assert.equal(observations[0]?.detail?.branch, "dean/fix-sticky-scrolling");
   assert.deepEqual(observations[0]?.detail?.diff, {
@@ -861,7 +861,7 @@ test("titles a chat by the name Cursor's own header keeps for it", async (t) => 
   assert.equal(JSON.stringify(observations).includes(SECRET_TRANSCRIPT_TEXT), false);
 });
 
-test("the folder's own HEAD names the branch over where the chat began", async (t) => {
+test("the folder's own HEAD is never read for the branch, even where one stands", async (t) => {
   const state = await temporaryCursorState(t);
   const folder = path.join(path.dirname(state.cursorHome), "repo");
   await fs.mkdir(path.join(folder, ".git"), { recursive: true });
@@ -900,8 +900,12 @@ test("the folder's own HEAD names the branch over where the chat began", async (
 
   const observations = await adapterFor(state).observe();
 
-  assert.equal(observations[0]?.detail?.branch, "feature/live-branch");
-  assert.equal(observations[1]?.detail?.branch, "wt-branch");
+  // Both repositories stand right there to ask, and observation still
+  // reports only the header's created-on record: reading a folder's `.git`
+  // costs macOS's folder consent dialog when a repository lives under
+  // Documents, Desktop, or Downloads, and a label is not worth a permission.
+  assert.equal(observations[0]?.detail?.branch, "main");
+  assert.equal(observations[1]?.detail?.branch, undefined);
 });
 
 test("a tool call holding for the user reads as waiting, not working", async (t) => {
