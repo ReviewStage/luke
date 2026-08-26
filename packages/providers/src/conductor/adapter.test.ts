@@ -74,11 +74,12 @@ function page(data: readonly JsonValue[]): JsonObject {
   return { data, offset: 0, hasMore: false };
 }
 
-function workspacePayload(workspace: TestWorkspace) {
+function workspacePayload(workspace: TestWorkspace, projects: readonly TestProject[]) {
   const payload: JsonObject = {
     id: workspace.id,
     name: workspace.name,
     state: workspace.state ?? "ready",
+    repoUrl: projects.find((project) => project.id === workspace.projectId)?.gitRemote ?? "",
     createdAt: isoTimestamp(workspace.lastActivityAt),
     deepLink: `conductor://workspace?id=${workspace.id}`,
     lastActivityAt: isoTimestamp(workspace.lastActivityAt),
@@ -206,14 +207,21 @@ function fakeConductorApi(api: TestApi) {
     if (segments[1] === "projects" && segments.length === 2) {
       return jsonResponse(page(api.projects));
     }
-    if (segments[1] === "projects" && segments[3] === "workspaces") {
-      return jsonResponse(
-        page(
-          api.workspaces
-            .filter((workspace) => workspace.projectId === segments[2])
-            .map(workspacePayload),
-        ),
+    if (segments[1] === "workspaces" && segments.length === 2) {
+      const limit = Number(request.searchParams.get("limit") ?? "100");
+      const offset = Number(request.searchParams.get("offset") ?? "0");
+      // The real index hides archived work when asked to; a deleted
+      // workspace stays in the page here so the adapter's own record check
+      // answers for it. The creator filter is deliberately not honored: the
+      // adapter's attribution check answers for whose workspaces these are.
+      const listed = api.workspaces.filter(
+        (workspace) =>
+          request.searchParams.get("includeArchived") !== "false" || workspace.state !== "archived",
       );
+      const rows = listed
+        .slice(offset, offset + limit)
+        .map((workspace) => workspacePayload(workspace, api.projects));
+      return jsonResponse({ data: rows, offset, hasMore: offset + rows.length < listed.length });
     }
     if (segments[1] === "workspaces" && segments[3] === "sessions") {
       return jsonResponse(
@@ -1374,6 +1382,50 @@ test("observes every workspace and chat the pages hold", async () => {
     observations.map((observation) => observation.providerSessionId),
     ["session-0", "session-1", "session-2", "session-3", "session-4", "session-5"],
   );
+});
+
+test("keeps an old open workspace that newer pages would have crowded out", async () => {
+  // The listing pages newest-first, so an open workspace can be older than a
+  // whole page of newer work. Following the listing while it says more
+  // remain is what keeps that workspace's chat a row; stopping at the first
+  // page silently retired a conversation to spare a request.
+  const workspaces = [
+    ...Array.from({ length: 100 }, (_value, index) =>
+      ownedWorkspace(`workspace-new-${index}`, TEST_TIME - index * 1_000),
+    ),
+    ownedWorkspace("workspace-old", TEST_TIME - 500_000),
+  ];
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces,
+    sessions: [
+      {
+        id: "session-old",
+        workspaceId: "workspace-old",
+        name: TEST_SESSION_NAME,
+        status: TEST_CONDUCTOR_STATUS.IDLE,
+        statusUpdatedAt: TEST_TIME - 1_000,
+      },
+    ],
+  });
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  assert.deepEqual(
+    observations.map((observation) => observation.providerSessionId),
+    ["session-old"],
+  );
+  // The second page was asked for where the first said more remained, and
+  // every page carried the documented filters: the user the same pass's
+  // identity read reported, and no archived work.
+  const listings = api.requests.filter(
+    (request) => request.method === "GET" && request.pathname === "/v0/workspaces",
+  );
+  assert.equal(listings.length, 2);
+  assert.equal(listings[0]?.searchParams.get("creator"), TEST_USER_ID);
+  assert.equal(listings[0]?.searchParams.get("includeArchived"), "false");
+  assert.equal(listings[1]?.searchParams.get("offset"), "100");
 });
 
 test("lets a crowded workspace keep every chat beside its quiet neighbour", async () => {
