@@ -1,0 +1,3 @@
+<timestamp>Wednesday, Aug 12, 2026, 7:51 PM (UTC-7)</timestamp>
+
+Add a CLAUDE.md and symlink it to AGENTS.md. When done, create a PR and babysit it. Merge it when there are no unresolved comments and all CI is done.
