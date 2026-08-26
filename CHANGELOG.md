@@ -39,8 +39,8 @@ the date its release was published.
 - Luke uses Echo as his default voice and gives you a short spoken welcome
   after sign-in ([#520](https://github.com/ReviewStage/luke/pull/520),
   [#541](https://github.com/ReviewStage/luke/pull/541))
-- Luke keeps his conversation context focused on the app guide and the actions
-  you can actually ask him to take
+- Luke keeps his conversation context focused on the app guide and leaves the
+  tracker's issue roster out of the conversation
   ([#528](https://github.com/ReviewStage/luke/pull/528),
   [#538](https://github.com/ReviewStage/luke/pull/538),
   [#539](https://github.com/ReviewStage/luke/pull/539))
