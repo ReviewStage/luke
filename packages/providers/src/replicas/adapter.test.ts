@@ -52,6 +52,8 @@ interface TestWorkspace {
   historyEvents?: readonly JsonObject[];
   refuseHistory?: boolean;
   chats?: readonly TestChat[];
+  /** The detail read woke this workspace: it fell asleep after the list. */
+  waking?: boolean;
 }
 
 interface TestEnvironment {
@@ -301,7 +303,7 @@ function fakeReplicasApi(
         replica: {
           ...workspacePayload(workspace),
           coding_agent: workspace.codingAgent ?? null,
-          waking: null,
+          waking: workspace.waking ?? null,
           chats: (workspace.chats ?? []).map(detailChatPayload),
           repository_statuses: workspace.branch
             ? [
@@ -349,6 +351,7 @@ function adapterFor(
     now?: () => number;
     minimumRefreshIntervalMs?: number;
     desktopAppPresent?: () => boolean;
+    onDiagnostic?: (error: Error) => void;
   } = {},
 ): ReplicasSessionAdapter {
   const apiKey = "apiKey" in overrides ? overrides.apiKey : TEST_API_KEY;
@@ -361,6 +364,7 @@ function adapterFor(
     ...(overrides.desktopAppPresent
       ? { desktopAppPresent: overrides.desktopAppPresent }
       : undefined),
+    ...(overrides.onDiagnostic ? { onDiagnostic: overrides.onDiagnostic } : undefined),
   });
 }
 
@@ -521,6 +525,34 @@ test("reads awake detail and history tails, never a waking or key-refused read",
     "/v1/replica/workspace-one/history",
     "/v1/replica/workspace-two/history",
   ]);
+});
+
+test("surfaces a detail read that woke its workspace as a diagnostic", async () => {
+  // The list-to-detail race: a workspace that fell asleep between the two
+  // reads is woken back by the detail read, billed for an API-sourced
+  // workspace until it re-sleeps, and the response's own `waking` is the one
+  // place that shows.
+  const api = fakeReplicasApi([
+    { ...activeWorkspace("workspace-woken", TEST_TIME - 1_000), waking: true },
+  ]);
+  const diagnostics: Error[] = [];
+
+  const observations = await adapterFor(api.fetch, {
+    onDiagnostic: (error) => diagnostics.push(error),
+  }).observe();
+
+  assert.equal(diagnostics.length, 1);
+  // Detection only: the read still succeeded, so its body still serves the pass.
+  assert.equal(observations.length, 1);
+});
+
+test("reports no diagnostic for a detail read that woke nothing", async () => {
+  const api = fakeReplicasApi([activeWorkspace("workspace-awake", TEST_TIME - 1_000)]);
+  const diagnostics: Error[] = [];
+
+  await adapterFor(api.fetch, { onDiagnostic: (error) => diagnostics.push(error) }).observe();
+
+  assert.equal(diagnostics.length, 0);
 });
 
 test("reads a workspace's history once until its activity moves", async () => {

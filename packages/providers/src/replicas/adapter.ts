@@ -46,6 +46,15 @@ const REPLICAS_PROVIDER_NAME = CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.REPLI
  */
 const REPLICAS_WORKSPACE_ERROR_MESSAGE = "The workspace failed to start or wake";
 
+/**
+ * A detail response marked `waking` means the read itself woke a workspace
+ * that fell asleep after the list reported it active — billed runtime for an
+ * API-sourced workspace until it re-sleeps — and this is the one place the
+ * accident is visible.
+ */
+const REPLICAS_ACCIDENTAL_WAKE_MESSAGE =
+  "A detail read woke a workspace that fell asleep after the list reported it active";
+
 const REPLICAS_ENVIRONMENT = {
   API_URL: "REPLICAS_API_URL",
 } as const;
@@ -183,6 +192,7 @@ const REPLICAS_FIELD = {
   TYPE: "type",
   UPDATED_AT: "updated_at",
   URL: "url",
+  WAKING: "waking",
 } as const;
 
 /**
@@ -1149,6 +1159,12 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
           return;
         }
         const replica = body[REPLICAS_FIELD.REPLICA];
+        if (
+          body[REPLICAS_FIELD.WAKING] === true ||
+          (isRecord(replica) && replica[REPLICAS_FIELD.WAKING] === true)
+        ) {
+          this.reportDiagnostic(new Error(REPLICAS_ACCIDENTAL_WAKE_MESSAGE));
+        }
         if (!isRecord(replica)) return;
         const chats = recordsFromPage(replica, REPLICAS_FIELD.CHATS)
           .map(chatFromDetailRecord)
