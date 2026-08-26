@@ -120,6 +120,12 @@ export function SiteFooter(): React.JSX.Element {
         >
           Privacy
         </a>
+        <a
+          className="no-underline transition-colors duration-150 hover:text-foreground motion-reduce:transition-none"
+          href="mailto:founders@stagereview.app"
+        >
+          Contact
+        </a>
       </div>
     </footer>
   );

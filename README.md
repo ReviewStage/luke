@@ -24,7 +24,8 @@
 <p align="center">
   <a href="https://tryluke.dev">Website</a> ·
   <a href="PRIVACY.md">Privacy</a> ·
-  <a href="CHANGELOG.md">Changelog</a>
+  <a href="CHANGELOG.md">Changelog</a> ·
+  <a href="mailto:founders@stagereview.app">Contact</a>
 </p>
 
 ![Luke's panel expanded from the notch, listing local and cloud agent sessions with their status, recaps, and workspace grouping.](docs/media/luke-panel.png)
