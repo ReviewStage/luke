@@ -164,6 +164,7 @@ const REPLICAS_FIELD = {
   ID: "id",
   IS_GLOBAL: "is_global",
   LAST_ACTIVITY_AT: "last_activity_at",
+  LIFECYCLE_POLICY: "lifecycle_policy",
   MESSAGE: "message",
   MODEL: "model",
   NAME: "name",
@@ -182,6 +183,15 @@ const REPLICAS_FIELD = {
   TYPE: "type",
   UPDATED_AT: "updated_at",
   URL: "url",
+} as const;
+
+/**
+ * The one lifecycle a creation asks for, out of the four the endpoint
+ * documents. Sleep-when-done is the only one this build sends because the
+ * others either meter, archive, or delete what the developer just made.
+ */
+const REPLICAS_LIFECYCLE_POLICY = {
+  SLEEP_WHEN_DONE: "sleep_when_done",
 } as const;
 
 const REPLICAS_STATUS = {
@@ -988,6 +998,12 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
    * is the initial message the endpoint requires; the agent choice is left
    * to the environment's own default, because this build fixes no
    * agent-and-model table for Replicas and a choice not offered is not sent.
+   * The lifecycle is asked for rather than defaulted: an API-created
+   * workspace is metered per awake minute, and the default lifecycle leaves
+   * it awake — and metered — for the full inactivity timeout after its agent
+   * finishes, so the creation names sleep-when-done, which stops the meter
+   * the moment the work ends while the documented message-wake keeps every
+   * follow-up working on the workspace it put to sleep.
    */
   protected override workspaceCreationRoute(
     project: WorkspaceProject,
@@ -1005,6 +1021,7 @@ export class ReplicasSessionAdapter extends CloudSessionAdapter {
         [REPLICAS_FIELD.NAME]: replicasWorkspaceName(name ?? task),
         [REPLICAS_FIELD.MESSAGE]: task,
         [REPLICAS_FIELD.ENVIRONMENT_ID]: project.providerProjectId,
+        [REPLICAS_FIELD.LIFECYCLE_POLICY]: REPLICAS_LIFECYCLE_POLICY.SLEEP_WHEN_DONE,
       },
     };
   }

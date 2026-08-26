@@ -776,11 +776,15 @@ test("offers the reported environments as projects and creates a workspace in on
   assert.equal(write?.method, "POST");
   assert.equal(write?.pathname, "/v1/replica");
   // The required name is the developer's own words slugged the way the
-  // dashboard slugs one; the task rides as the required initial message.
+  // dashboard slugs one; the task rides as the required initial message; and
+  // the lifecycle asks for sleep-when-done, because an API-created workspace
+  // left on the default lifecycle sits awake and metered for the full
+  // inactivity timeout after its agent finishes.
   assert.deepEqual(JSON.parse(write?.body ?? ""), {
     name: "fix-the-login-timeout-and-open-a-pull-request",
     message: "Fix the login timeout and open a pull request",
     environment_id: "environment-luke",
+    lifecycle_policy: "sleep_when_done",
   });
 
   // A task-less ask is refused rather than a workspace created idle.
