@@ -10,11 +10,9 @@ import {
   maximumAttentionRequestLength,
   maximumAttentionSummaryLength,
 } from "@sidecar/attention";
-import { EMPTY_APP_GUIDE } from "@sidecar/guide";
 import { ISSUE_TRACKER_ID, normalizeTrackedIssue } from "@sidecar/issues";
 import {
   ATTENTION_SPEECH_SOURCE,
-  appGuideContextEvents,
   attentionSpeechFromReviews,
   CONTEXT_ITEM_KIND,
   cancelResponseEvents,
@@ -203,9 +201,8 @@ test("every kind of context travels as one nameable item and never as a prompt",
   const built = [
     sessionContextEvents([], contextItemId(CONTEXT_ITEM_KIND.SESSIONS, 1)),
     workspaceProjectContextEvents([], contextItemId(CONTEXT_ITEM_KIND.WORKSPACE_PROJECTS, 2)),
-    appGuideContextEvents(EMPTY_APP_GUIDE, contextItemId(CONTEXT_ITEM_KIND.APP_GUIDE, 3)),
-    issueContextEvents([], contextItemId(CONTEXT_ITEM_KIND.ISSUES, 4)),
-    issueTrackerDisconnectedEvents(contextItemId(CONTEXT_ITEM_KIND.ISSUES, 5)),
+    issueContextEvents([], contextItemId(CONTEXT_ITEM_KIND.ISSUES, 3)),
+    issueTrackerDisconnectedEvents(contextItemId(CONTEXT_ITEM_KIND.ISSUES, 4)),
   ];
 
   for (const events of built) {

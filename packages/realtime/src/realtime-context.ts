@@ -1,5 +1,4 @@
 import type { SessionNoticeAsk } from "@sidecar/attention";
-import { type AppGuideSnapshot, appGuideContextText } from "@sidecar/guide";
 import type { TrackedIssue } from "@sidecar/issues";
 import {
   type ObservedWorkspaceProject,
@@ -14,8 +13,10 @@ import { REALTIME_CLIENT_EVENT } from "./realtime-protocol.js";
 
 /**
  * Roster context serialization: the bounded, redacted view of sessions, issues,
- * workspace projects, and the app guide that a conversation is allowed to know
- * about. Context, never a prompt — arriving must not open Luke's mouth.
+ * and workspace projects that a conversation is allowed to know about.
+ * Context, never a prompt — arriving must not open Luke's mouth. The app
+ * guide deliberately does not travel this way: it is build-fixed prose, so it
+ * rides the session instructions instead of a conversation item.
  */
 
 /**
@@ -278,8 +279,7 @@ export function sessionContextText(
 /**
  * The kinds of context a conversation is told, each of which answers exactly
  * one standing question: what Luke can see, what was already said across
- * calls, where he can create, what he knows about himself, and what the
- * tracker lists.
+ * calls, where he can create, and what the tracker lists.
  *
  * A kind holds one live item at a time. Saying it again replaces the item that
  * said it before rather than adding a second answer beside the first, because
@@ -290,7 +290,6 @@ export const CONTEXT_ITEM_KIND = {
   SESSIONS: "sessions",
   CONVERSATION: "conversation",
   WORKSPACE_PROJECTS: "workspace-projects",
-  APP_GUIDE: "app-guide",
   ISSUES: "issues",
 } as const;
 
@@ -572,17 +571,4 @@ export function workspaceProjectContextEvents(
       itemId,
     ),
   ];
-}
-
-/**
- * Builds the event that tells the conversation what the app knows about
- * itself. The same shape as the session roster, for the same reason: the
- * standing instructions describe a guide, so one has to actually arrive, and
- * it must never open Luke's mouth by itself — context, not a prompt.
- */
-export function appGuideContextEvents(
-  guide: AppGuideSnapshot,
-  itemId: string,
-): readonly WireRecord[] {
-  return [labeledContextEvent("app guide, sent automatically", appGuideContextText(guide), itemId)];
 }

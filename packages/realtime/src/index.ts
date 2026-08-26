@@ -28,7 +28,6 @@ export {
   PressAudioBuffer,
 } from "./press-audio.js";
 export {
-  appGuideContextEvents,
   CONTEXT_ITEM_KIND,
   type ContextItemKind,
   contextItemId,
@@ -60,6 +59,7 @@ export {
   ATTENTION_SPEECH_SOURCE,
   type AttentionSpeech,
   announcementSummaryText,
+  appGuideInstructionsEvents,
   attentionSpeechFromReviews,
   cancelResponseEvents,
   clearInputAudioEvents,

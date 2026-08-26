@@ -122,8 +122,12 @@ against its rock deliberately, like a person mid-sentence.
 `apps/desktop/src/renderer/luke-guide.ts` is the one place Luke's
 self-knowledge is described: what Luke is on screen, every user-facing setting
 with its current value, and where each is changed by hand. The renderer builds
-an `AppGuideSnapshot` from it and sends it into the voice conversation as
-`[app guide]` context, the same way the session roster travels; the spoken
+an `AppGuideSnapshot` from it and sends it into the voice conversation inside
+the session's own instructions, behind an `[app guide]` marker — build-fixed
+prose belongs on the cacheable prefix rather than in a conversation item —
+refreshed by a `session.update` on the same economy the roster items keep: at
+the turn that reads it, only on the developer's call, and never re-sent
+unchanged. The spoken
 `change_app_setting` and `show_panel` tools are validated against that
 snapshot, so the guide is simultaneously what Luke can say about himself and
 the outer bound of what a spoken ask can do to him.

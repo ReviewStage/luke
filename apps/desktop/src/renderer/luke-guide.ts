@@ -313,8 +313,9 @@ const UPDATE_BUTTON_FOR_ROW_ACTION = {
 /**
  * The guide's Updates entry, read from the same row the settings page draws
  * so the sentence out loud and the button on screen can never disagree. The
- * download's progress is stripped before the row is read: the guide re-sends
- * its context whenever its text changes, and a percent tick is not news.
+ * download's progress is stripped before the row is read: the guide refreshes
+ * the session instructions whenever its text changes, and a percent tick is
+ * not news.
  */
 function updateGuideEntry(update: UpdateSnapshot): AppGuideUpdate {
   const steady =
