@@ -1,0 +1,1 @@
+[Cross-session delivery notice] Your message to another session was not approved before expiry (recipient: uds:/tmp/cc-socks/39976.sock). Not delivered to that session's Claude. Do not wait for a reply; continue, or choose another approach.
