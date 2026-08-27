@@ -61,10 +61,15 @@ test("a concrete question is announced with the decision itself", () => {
 
 test("a permission hold is announced with the action awaiting approval", () => {
   const speech = sessionNoticeSpeech(
-    { ...waitingNotice(true), activity: "Bash: pnpm test" },
+    {
+      ...waitingNotice(true),
+      activity: "Bash: pnpm test",
+      recap: "Should the test plan cover live audio?",
+    },
     2_000,
   );
 
   assert.ok(speech);
   assert.match(speech.summary, /permission context: "Bash: pnpm test"/);
+  assert.doesNotMatch(speech.summary, /test plan cover live audio/);
 });

@@ -2106,8 +2106,10 @@ test("the reply that voices an outcome cannot itself call a tool", () => {
   assert.equal(request?.type, REALTIME_CLIENT_EVENT.RESPONSE_CREATE);
   const response = responseField(request);
   // The follow-up is opened to say what happened, not to act again — a tool
-  // output that reads like an instruction has nothing to act with.
+  // output that reads like an instruction has nothing to act with. It also
+  // inherits the session's standing instructions rather than replacing them.
   assert.equal(response?.tool_choice, "none");
+  assert.equal(response?.instructions, undefined);
 });
 
 function actionableIssue() {

@@ -49,10 +49,10 @@ function containsConcreteQuestion(value: string | undefined): value is string {
 }
 
 function decisionContext(notice: SessionNotice): readonly [string, string] | undefined {
+  if (notice.activity) return ["permission context", quoted(notice.activity)];
   if (containsConcreteQuestion(notice.recap)) {
     return ["decision", quoted(recapExcerpt(notice.recap))];
   }
-  if (notice.activity) return ["permission context", quoted(notice.activity)];
   return undefined;
 }
 

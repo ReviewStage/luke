@@ -974,12 +974,6 @@ export function functionCallFollowUpEvents(): readonly WireRecord[] {
     {
       type: REALTIME_CLIENT_EVENT.RESPONSE_CREATE,
       response: {
-        instructions: [
-          HUMAN_VOICE_INSTRUCTION,
-          "Explain tool results in ordinary spoken language. Do not repeat backend field names " +
-            "or machine statuses. Confirm only what actually happened and phrase it naturally " +
-            "in context.",
-        ].join("\n"),
         tool_choice: "none",
       },
     },
