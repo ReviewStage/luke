@@ -312,7 +312,15 @@ export function spokenAskBelongsToConversation(
   markGeneration: number | undefined,
   conversationGeneration: number,
 ): boolean {
-  return markGeneration !== undefined && markGeneration === conversationGeneration;
+  return conversationEntryBelongsToConversation(markGeneration, conversationGeneration);
+}
+
+/** An asynchronous entry belongs only to the history generation in which its work began. */
+export function conversationEntryBelongsToConversation(
+  entryGeneration: number | undefined,
+  conversationGeneration: number,
+): boolean {
+  return entryGeneration !== undefined && entryGeneration === conversationGeneration;
 }
 
 /**
@@ -609,6 +617,8 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   const activeSpokenTurnMarkRef = useRef<
     { after: ConversationEntry | undefined; generation: number } | undefined
   >(undefined);
+  /** The generation of the developer-opened turn whose reply is still in flight. */
+  const activeReplyGenerationRef = useRef<number | undefined>(undefined);
   /**
    * Whether the turn under way read a transcript aloud. The rendering travels
    * only in the turn that asked for it, so the reply that spoke it must not
@@ -622,12 +632,20 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
    * open about only the recent context slice. A session leaving the roster
    * costs a line its identity at model render, never its visible words.
    */
-  const rememberConversationEntry = useCallback((entry: ConversationEntry | undefined) => {
-    if (!entry) return;
-    conversationRef.current = appendConversationThreadEntry(conversationRef.current, entry);
-    setConversationHistory(conversationRef.current);
-    voiceSession.current?.updateConversation(recentConversationEntries(conversationRef.current));
-  }, []);
+  const rememberConversationEntry = useCallback(
+    (entry: ConversationEntry | undefined, generation = conversationGenerationRef.current) => {
+      if (
+        !entry ||
+        !conversationEntryBelongsToConversation(generation, conversationGenerationRef.current)
+      ) {
+        return;
+      }
+      conversationRef.current = appendConversationThreadEntry(conversationRef.current, entry);
+      setConversationHistory(conversationRef.current);
+      voiceSession.current?.updateConversation(recentConversationEntries(conversationRef.current));
+    },
+    [],
+  );
 
   const clearConversationHistory = useCallback(() => {
     conversationGenerationRef.current += 1;
@@ -684,6 +702,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       // press that opens a session: a spoken ask is a third way to ask for the
       // same act, behind the same gauntlet in the main process.
       carryAct: async (envelope) => {
+        const generation = activeReplyGenerationRef.current;
         const authorization = await window.sidecar.authorizeAct(envelope);
         if (authorization.status !== ACT_RESULT_STATUS.ACCEPTED) return authorization;
         const { act: action, armed } = envelope;
@@ -709,7 +728,10 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
         // leaves the developer having asked it, and the next turn may point
         // back at the session it named. The outcome needs no line of its own —
         // the reply voicing it is recorded as what Luke said.
-        rememberConversationEntry(sessionActConversationEntry(action, sessionsRef.current));
+        rememberConversationEntry(
+          sessionActConversationEntry(action, sessionsRef.current),
+          generation,
+        );
         // The reply that voices a transcript reading must stay out of the
         // history: the rendering travels only in the turn that asked for it.
         if (action.kind === SESSION_TOOL_KIND.READ_TRANSCRIPT) {
@@ -761,6 +783,8 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       onError: setVoiceError,
       onCaption: (texts, about) => setVoiceCaption({ texts, about }),
       onReplyEnded: (texts, about) => {
+        const generation = activeReplyGenerationRef.current;
+        activeReplyGenerationRef.current = undefined;
         const spokeTranscript = transcriptSpokenRef.current;
         transcriptSpokenRef.current = false;
         // An announcement's reply is already recorded from the update that
@@ -768,7 +792,10 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
         // the words alone cannot carry — and a transcript reading enters the
         // record only as the act it was.
         if (about || spokeTranscript) return;
-        rememberConversationEntry({ kind: CONVERSATION_ENTRY_KIND.REPLY, words: texts.join(" ") });
+        rememberConversationEntry(
+          { kind: CONVERSATION_ENTRY_KIND.REPLY, words: texts.join(" ") },
+          generation,
+        );
       },
       onSpokenAskCommitted: (itemId) => {
         const mark = pendingSpokenTurnMarksRef.current.shift();
@@ -1027,11 +1054,17 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       // that is already up.
       if (talkPressedAt.current !== pressedAt) return;
     }
+    // The interruption can synchronously hand over the reply the developer
+    // just cut off. Let that older line land before marking the new turn, so
+    // its delayed transcript is inserted after everything that preceded it.
+    session.beginTurn();
     activeSpokenTurnMarkRef.current = {
       after: conversationRef.current.at(-1),
       generation: conversationGenerationRef.current,
     };
-    session.beginTurn();
+    // Only after the interrupted reply's handover does this new turn own the
+    // active reply generation.
+    activeReplyGenerationRef.current = activeSpokenTurnMarkRef.current.generation;
     const press = talkKeyPress({ latched: false, microphoneCall: session.microphoneCall });
     // A press against no call — or against Luke's own speak-only call, which
     // has no microphone to offer — has seconds of handshake ahead of it, and
@@ -1113,6 +1146,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
    */
   const askLuke = useCallback(
     async (text: string): Promise<string | undefined> => {
+      const generation = conversationGenerationRef.current;
       const session = ensureVoiceSession();
       // Luke's own speak-only call cannot carry a typed ask — it was sent no
       // roster to validate one against — so it counts as no call here, and
@@ -1122,6 +1156,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
         await startConversation();
       }
       if (session.sendText(text)) {
+        activeReplyGenerationRef.current = generation;
         setTypedAsk(true);
         // A new typed turn lets a leftover transcript skip go, exactly as a
         // spoken one does — after the send, whose interrupt hands over the
@@ -1129,7 +1164,10 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
         transcriptSpokenRef.current = false;
         // The developer's own words enter the history as they were typed, so
         // the thread holds both halves of the exchange the reply answers.
-        rememberConversationEntry({ kind: CONVERSATION_ENTRY_KIND.TYPED_ASK, words: text });
+        rememberConversationEntry(
+          { kind: CONVERSATION_ENTRY_KIND.TYPED_ASK, words: text },
+          generation,
+        );
         // A sent ask outdates whatever refusal the strip was still reading:
         // a call already open skips `startConversation`, so the clear it
         // would have run happens here.

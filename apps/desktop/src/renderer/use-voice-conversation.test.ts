@@ -20,6 +20,7 @@ import {
 import {
   activeVoiceStream,
   announcerNotices,
+  conversationEntryBelongsToConversation,
   evaluatorSummaries,
   liveSpeedApplies,
   lukeCaptionsToShow,
@@ -43,6 +44,12 @@ test("a delayed transcription cannot repopulate history after Clear", () => {
   assert.equal(spokenAskBelongsToConversation(3, 4), false);
   assert.equal(spokenAskBelongsToConversation(4, 4), true);
   assert.equal(spokenAskBelongsToConversation(undefined, 4), false);
+});
+
+test("work that began before Clear cannot repopulate conversation history", () => {
+  assert.equal(conversationEntryBelongsToConversation(3, 4), false);
+  assert.equal(conversationEntryBelongsToConversation(4, 4), true);
+  assert.equal(conversationEntryBelongsToConversation(undefined, 4), false);
 });
 
 test("the meter follows whoever is actually talking", () => {
