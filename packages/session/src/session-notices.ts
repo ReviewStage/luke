@@ -78,6 +78,8 @@ export interface SessionNotice {
   recap?: string;
   /** Why the session stopped, when its provider said. */
   error?: string;
+  /** The provider's bounded description of the action currently awaiting permission. */
+  activity?: string;
   repository?: string;
   branch?: string;
   /** Whether the provider will take a reply for this session right now. */
@@ -132,6 +134,7 @@ function sessionNotice(session: Session, previousStatus: SessionStatus): Session
   }
   if (session.recap) notice.recap = session.recap;
   if (session.detail.error) notice.error = session.detail.error;
+  if (session.detail.activity) notice.activity = session.detail.activity;
   if (session.detail.repository) notice.repository = session.detail.repository;
   if (session.detail.branch) notice.branch = session.detail.branch;
   return notice;

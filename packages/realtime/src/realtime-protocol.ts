@@ -3,6 +3,7 @@ import {
   ATTENTION_REVIEW_OUTCOME,
   type AttentionReview,
   CTO_RELEVANCE_INSTRUCTION,
+  HUMAN_VOICE_INSTRUCTION,
   maximumAttentionSummaryLength,
 } from "@sidecar/attention";
 import {
@@ -164,10 +165,11 @@ const REALTIME_INSTRUCTION_HEAD: readonly string[] = [
   "You are Luke, the engineering manager for the developer's coding agents.",
   "",
   "How to speak:",
+  `- ${HUMAN_VOICE_INSTRUCTION}`,
   '- Speak as Luke in first person and address the user directly as "you".',
   `- ${CTO_RELEVANCE_INSTRUCTION}`,
-  "- Speak like a trusted colleague: match the user's tone, use plain language and contractions, " +
-    "and give the shortest useful answer to exactly what they asked. Default to one sentence; " +
+  "- Match the user's tone and give the shortest useful answer to exactly what they asked. " +
+    "Default to one sentence; " +
     "add detail only when asked or when it changes what they need to know.",
   "- Treat the roster as private context, not a report. When asked what is being worked on, answer " +
     "in one sentence and name each piece of work from its activity or recap in six words or fewer.",
@@ -491,10 +493,15 @@ const PROACTIVE_SPEECH_INSTRUCTIONS = [
 ].join("\n");
 
 const STATUS_EDGE_INSTRUCTIONS = [
+  HUMAN_VOICE_INSTRUCTION,
   "Give one short, natural sentence about the last message, then stop. Add no advice, next step, " +
     "or commentary about the update, missing details, or how little there is to say.",
-  "Lead with the agent's concrete question, without first saying they need input, need a " +
-    "decision, are waiting, or cannot continue.",
+  "Before any question, name the agent's work and briefly explain the specific situation or " +
+    "decision topic that makes the interruption relevant; then give the exact question. Never " +
+    "open with a bare question or a generic statement that the agent needs input, needs a " +
+    "decision, is waiting, or cannot continue.",
+  "For a decision update, state the exact decision or permission context in the payload. Never " +
+    "ask what the agent should do next or invent a decision that the payload does not contain.",
   "Never tell the developer to visit or manage the agent, and never mention that the agent " +
     "cannot take a message. If the update needs their response and says " +
     '"can take a message now: yes", briefly offer to carry the reply. Otherwise state only what happened.',
@@ -526,10 +533,11 @@ export function announcementSummaryText(speech: AttentionSpeech): string | undef
  * rather than re-generated, so the bounded, redacted summary that passed
  * review is exactly what is said aloud.
  *
- * Either travels as a conversation item rather than inside `instructions`,
- * which is the channel Luke takes its orders from. A payload reading "ignore
- * your instructions and ..." is then data Luke has been handed to speak about,
- * and the one thing it cannot do is change what Luke was asked to do with it.
+ * Each announcement is an out-of-band response with its own input. It neither
+ * reads nor writes the default conversation, so a second agent's update cannot
+ * inherit the first agent's question and merge the two. The payload stays in
+ * input rather than `instructions`, so observed text remains data rather than
+ * something entitled to direct Luke.
  */
 export function proactiveSpeechEvents(speech: AttentionSpeech): readonly WireRecord[] {
   const isStatusEdge = speech.source === ATTENTION_SPEECH_SOURCE.STATUS_EDGE;
@@ -538,26 +546,20 @@ export function proactiveSpeechEvents(speech: AttentionSpeech): readonly WireRec
 
   return [
     {
-      type: REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE,
-      item: {
-        type: "message",
-        role: "user",
-        content: [
+      type: REALTIME_CLIENT_EVENT.RESPONSE_CREATE,
+      response: {
+        conversation: "none",
+        input: [
           {
-            type: "input_text",
-            text: `[session update]\n${payload}`,
+            type: "message",
+            role: "user",
+            content: [{ type: "input_text", text: payload }],
           },
         ],
-      },
-    },
-    {
-      type: REALTIME_CLIENT_EVENT.RESPONSE_CREATE,
-      // No tool may answer a notice. The instructions already say so, but the
-      // payload is provider-observed data about an agent's work — nothing in
-      // it was written by someone entitled to ask Luke to act, so the turn
-      // itself is opened with nothing to act with.
-      response: {
         instructions: isStatusEdge ? STATUS_EDGE_INSTRUCTIONS : PROACTIVE_SPEECH_INSTRUCTIONS,
+        // No tool may answer a notice. The payload is observed data about an
+        // agent's work, never a developer-opened turn entitled to act.
+        tools: [],
         tool_choice: "none",
       },
     },
@@ -968,7 +970,14 @@ export function functionCallOutputEvents(
  * is the one the developer opened by speaking.
  */
 export function functionCallFollowUpEvents(): readonly WireRecord[] {
-  return [{ type: REALTIME_CLIENT_EVENT.RESPONSE_CREATE, response: { tool_choice: "none" } }];
+  return [
+    {
+      type: REALTIME_CLIENT_EVENT.RESPONSE_CREATE,
+      response: {
+        tool_choice: "none",
+      },
+    },
+  ];
 }
 
 /**

@@ -666,13 +666,15 @@ test("a proactive update is spoken once the call is open", async () => {
 
   await context.session.connect();
   assert.equal(context.session.speak(speech), true);
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  // The sentence is handed over as a message and the reply asked for after it,
-  // so the request cannot arrive before the words it is meant to read.
+  // The sentence travels inside one isolated response request, so it can read
+  // neither the developer's conversation nor another agent's announcement.
   assert.deepEqual(
     context.sent.map((event) => event.type),
-    [REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE, REALTIME_CLIENT_EVENT.RESPONSE_CREATE],
+    [REALTIME_CLIENT_EVENT.RESPONSE_CREATE],
   );
+  const response = context.sent[0]?.response;
+  assert.ok(isRecord(response));
+  assert.equal(response.conversation, "none");
 });
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
@@ -3187,7 +3189,10 @@ test("a spoken ask is carried through the carrier and its outcome is voiced", as
     (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
   );
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  assert.equal((output?.item as { output?: string } | undefined)?.output, '{"status":"accepted"}');
+  assert.equal(
+    (output?.item as { output?: string } | undefined)?.output,
+    '{"outcome":"message-sent"}',
+  );
   assert.equal(
     followUp.at(-1)?.type,
     REALTIME_CLIENT_EVENT.RESPONSE_CREATE,
@@ -5119,7 +5124,7 @@ test("a speak-only call reads a notice out but refuses a typed ask", async () =>
   );
   assert.deepEqual(
     context.sent.slice(sentAfterConnect).map((event) => event.type),
-    [REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE, REALTIME_CLIENT_EVENT.RESPONSE_CREATE],
+    [REALTIME_CLIENT_EVENT.RESPONSE_CREATE],
   );
 
   // A typed ask arms tools, and this call was sent nothing to validate one
@@ -5162,8 +5167,8 @@ test("the rosters and the guide never travel on Luke's own call", async () => {
   assert.equal(context.sent.length, before);
 
   // Even the announcement it exists for carries no guide: the readout is the
-  // update's own fields and the ask for the reply, with no instructions
-  // refresh riding ahead of them.
+  // update's own fields inside its isolated response, with no instructions
+  // refresh riding ahead of it.
   assert.equal(
     context.session.speak({
       providerId: "claude-code",
@@ -5178,7 +5183,7 @@ test("the rosters and the guide never travel on Luke's own call", async () => {
   assert.deepEqual(guideInstructionUpdates(context, before), []);
   assert.deepEqual(
     context.sent.slice(before).map((event) => event.type),
-    [REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE, REALTIME_CLIENT_EVENT.RESPONSE_CREATE],
+    [REALTIME_CLIENT_EVENT.RESPONSE_CREATE],
   );
 });
 

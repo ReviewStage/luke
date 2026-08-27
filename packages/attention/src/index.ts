@@ -30,6 +30,7 @@ export {
   attentionPromptUpdateFromWire,
   attentionUpdateInput,
   CTO_RELEVANCE_INSTRUCTION,
+  HUMAN_VOICE_INSTRUCTION,
 } from "./attention-prompt.js";
 export {
   ATTENTION_RATE_LIMIT_COOLDOWN_MS,

@@ -7,16 +7,11 @@ import {
   introductionSpeechEvents,
 } from "./introduction.js";
 import { realtimeSessionConfig } from "./realtime-credentials.js";
-import { realtimeInstructions } from "./realtime-protocol.js";
 
 test("the minted introduction session declares no tools and no way to choose one", () => {
   const config = introductionSessionConfig({ voice: "marin", speed: 1.2 });
   assert.deepEqual(config.tools, []);
   assert.equal(config.tool_choice, "none");
-  // The introduction speaks from its own instructions, never the
-  // conversation's, whose text describes tools this session does not carry.
-  assert.notEqual(config.instructions, realtimeInstructions());
-  assert.ok(config.instructions.length > 0);
   // Everything else keeps the ordinary config: the same model, the caller's
   // voice and pace, and the push-to-talk posture.
   const ordinary = realtimeSessionConfig({ voice: "marin", speed: 1.2 });

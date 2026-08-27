@@ -43,13 +43,29 @@ function quoted(value: string): string {
   return `"${flattened(value).replaceAll('"', "'")}"`;
 }
 
+function containsConcreteQuestion(value: string | undefined): value is string {
+  if (!value) return false;
+  return value.replace(/\bhttps?:\/\/[^\s?]+(?:\?[^\s#]+)?(?:#[^\s]+)?/gi, "").includes("?");
+}
+
+function decisionContext(notice: SessionNotice): readonly [string, string] | undefined {
+  if (notice.activity) return ["permission context", quoted(notice.activity)];
+  if (containsConcreteQuestion(notice.recap)) {
+    return ["decision", quoted(recapExcerpt(notice.recap))];
+  }
+  return undefined;
+}
+
 /** Renders provider-observed status fields for the voice to summarize. */
 function noticeUpdateContext(notice: SessionNotice): string {
+  const decision = notice.holdingForDeveloper === true ? decisionContext(notice) : undefined;
   const fields: readonly (readonly [string, string] | undefined)[] = [
     ["provider", quoted(notice.providerName)],
+    ["work", quoted(notice.title)],
     ["event", noticeEvent(notice)],
     notice.error ? ["error", quoted(notice.error)] : undefined,
-    notice.recap && notice.status !== SESSION_NOTICE_STATUS.ERROR
+    decision,
+    !decision && notice.recap && notice.status !== SESSION_NOTICE_STATUS.ERROR
       ? ["work recap", quoted(recapExcerpt(notice.recap))]
       : undefined,
     notice.holdingForDeveloper === true && notice.canReceiveMessage
@@ -76,6 +92,7 @@ export function sessionNoticeSpeech(
   if (notice.status === SESSION_NOTICE_STATUS.WAITING && notice.holdingForDeveloper !== true) {
     return undefined;
   }
+  if (notice.status === SESSION_NOTICE_STATUS.WAITING && !decisionContext(notice)) return undefined;
   return {
     providerId: notice.providerId,
     providerSessionId: notice.providerSessionId,
