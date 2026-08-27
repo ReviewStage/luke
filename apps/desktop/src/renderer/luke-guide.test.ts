@@ -882,6 +882,7 @@ test("every adjustable setting is carried to the bridge call its row uses", asyn
     "shareUsageData:true",
     "showInDock:true",
     "showOnAllDisplays:true",
+    "showTalkButton:true",
     "voice:alloy",
     "voiceCaptions:true",
     // The first choice offered is "slow", which is the 0.75 multiple.

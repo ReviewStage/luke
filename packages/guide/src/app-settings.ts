@@ -14,6 +14,7 @@ export const APP_SETTING_ID = {
   QUIET_DURING_MEETINGS: "quiet_during_meetings",
   SHOW_IN_DOCK: "show_in_dock",
   SHOW_ON_ALL_DISPLAYS: "show_on_all_displays",
+  SHOW_TALK_BUTTON: "show_talk_button",
   FORM_FACTOR: "form_factor",
   DEFAULT_WORKSPACE_PROVIDER: "default_workspace_provider",
   WORKSPACE_AGENT_MODEL: "workspace_agent_model",

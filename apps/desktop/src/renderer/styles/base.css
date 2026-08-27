@@ -786,13 +786,57 @@ html[data-keyboard="true"] .wing-mark:focus-visible {
   border-radius: 2px;
 }
 
+/* The talk key at one remove. It stands beside the face it opens a turn with,
+   at the face's own size, and follows the marks' rules for when it can be
+   pressed: only where the wing is unfolded, because in the capsule the strip
+   is one button and that button opens the peek. */
+.wing-talk {
+  display: flex;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  outline: none;
+  -webkit-app-region: no-drag;
+  -webkit-tap-highlight-color: transparent;
+  pointer-events: none;
+}
+
+.wing-talk .settings-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.wing-talk:hover {
+  color: var(--text-primary);
+}
+
+/* While the developer holds the turn its next press sends, the button wears
+   the meter's own green, so the two read as one state. */
+.wing-talk[data-active="true"] {
+  color: var(--voice-developer);
+}
+
+html[data-keyboard="true"] .wing-talk:focus-visible {
+  outline: 2px solid var(--state-working);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
 /* The capsule keeps the face and nothing else; what Luke is watching belongs to
    the states with room for it, and unfolds outward from the notch on the same
    spring, at the same distance, as the count's caption does on the other side.
    The two wings are one gesture, so they move as one. */
 .wing-mark,
 .wing-more,
-.wing-meter {
+.wing-meter,
+.wing-talk {
   opacity: 0;
   transform: translateX(8px);
   transition:
@@ -803,9 +847,11 @@ html[data-keyboard="true"] .wing-mark:focus-visible {
 .app-stage[data-presentation="peek"] .wing-mark,
 .app-stage[data-presentation="peek"] .wing-more,
 .app-stage[data-presentation="peek"] .wing-meter,
+.app-stage[data-presentation="peek"] .wing-talk,
 .app-stage[data-presentation="panel"] .wing-mark,
 .app-stage[data-presentation="panel"] .wing-more,
-.app-stage[data-presentation="panel"] .wing-meter {
+.app-stage[data-presentation="panel"] .wing-meter,
+.app-stage[data-presentation="panel"] .wing-talk {
   opacity: 1;
   transform: none;
   transition-duration: var(--duration-quick), var(--duration-shape);
@@ -814,7 +860,9 @@ html[data-keyboard="true"] .wing-mark:focus-visible {
 }
 
 .app-stage[data-presentation="peek"] .wing-mark:not([data-leaving="true"]),
-.app-stage[data-presentation="panel"] .wing-mark:not([data-leaving="true"]) {
+.app-stage[data-presentation="peek"] .wing-talk,
+.app-stage[data-presentation="panel"] .wing-mark:not([data-leaving="true"]),
+.app-stage[data-presentation="panel"] .wing-talk {
   pointer-events: auto;
 }
 
@@ -834,9 +882,12 @@ html[data-keyboard="true"] .wing-mark:focus-visible {
 
 /* A mark can mount into an already unfolded wing. On a compact mount its
    computed destination is the same covered pose, so this costs nothing; on an
-   open wing the backwards-filled keyframes provide the missing start state. */
+   open wing the backwards-filled keyframes provide the missing start state.
+   The talk button mounts the same way, at its setting flipping while the wing
+   stands open. */
 .wing-mark,
-.wing-more {
+.wing-more,
+.wing-talk {
   animation:
     wing-mount-fade var(--duration-quick) var(--motion-exit)
     calc(var(--duration-shape) - var(--duration-quick)) backwards,

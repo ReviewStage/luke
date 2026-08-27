@@ -461,6 +461,11 @@ export interface VoiceConversation {
   setVoiceStatus: (status: RealtimeStatus) => void;
   talkOpening: boolean;
   voiceHotkey: VoiceHotkeyState | undefined;
+  /**
+   * The talk key's tap at one remove, for the strip's talk button: one press
+   * opens a latched turn, the next sends it.
+   */
+  pressTalk: () => void;
   handleVoiceActivity: (active: boolean) => void;
   requestMicrophoneAccess: () => Promise<void>;
   startMicrophone: () => Promise<MicrophoneStatus>;
@@ -1052,6 +1057,20 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   }, [voiceStatusNow]);
 
   /**
+   * A click on the strip's talk button: the talk key's tap at one remove. The
+   * release lands on the press's own instant rather than waiting out the
+   * handshake behind it — exactly as a tapped key's two edges do — so it reads
+   * as a tap and latches: the session already holds the press as a pending
+   * turn until its call and device arrive, and {@link endTalk} reads that
+   * pending turn (or the listening already open) as the latch. The next click
+   * finds the latch and sends the turn.
+   */
+  const pressTalk = useCallback(() => {
+    void beginTalk();
+    endTalk();
+  }, [beginTalk, endTalk]);
+
+  /**
    * A typed ask to Luke himself. It rides the same call the talk key opens
    * and opens the same kind of turn: typing is the developer asking in their
    * own words, so the turn may carry a tool the way a spoken one may, behind
@@ -1434,6 +1453,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     setVoiceStatus,
     talkOpening,
     voiceHotkey,
+    pressTalk,
     handleVoiceActivity,
     requestMicrophoneAccess,
     startMicrophone,

@@ -2074,6 +2074,7 @@ export function App(): React.JSX.Element {
     voiceStatus,
     talkOpening,
     voiceHotkey,
+    pressTalk,
     handleVoiceActivity,
     requestMicrophoneAccess,
     startMicrophone,
@@ -3420,6 +3421,9 @@ export function App(): React.JSX.Element {
         accountGated={accountGated}
         onSelectFilter={handleSelectWingFilter}
         activeFilters={sessionView.filters}
+        {...((settings ?? bootstrapSettings)?.showTalkButton === true
+          ? { onTalkPress: pressTalk }
+          : undefined)}
       />
 
       {/* The one signed-out Luke. Like the caption, he is a single element in

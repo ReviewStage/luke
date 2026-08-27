@@ -26,6 +26,7 @@ import {
   useWingReorderMotion,
   WING_SLOT_ID_ATTRIBUTE,
 } from "./session-motion";
+import { MicrophoneIcon } from "./settings-icons";
 import { WAVEFORM_VOICE, Waveform, type WaveformVoice } from "./waveform";
 
 /**
@@ -69,6 +70,12 @@ interface NotchWingsProps {
   /** Carries a filter to narrow the session list by when an icon in the wing is clicked. */
   onSelectFilter?: (filter: SessionFilter) => void;
   activeFilters?: readonly SessionFilter[];
+  /**
+   * The talk key's tap at one remove: present only while its setting is on,
+   * and the presence is what draws the button. One press opens a latched
+   * turn, the next sends it — the same two things a tapped talk key does.
+   */
+  onTalkPress?: () => void;
 }
 
 /**
@@ -208,6 +215,7 @@ export function NotchWings({
   accountGated,
   onSelectFilter,
   activeFilters,
+  onTalkPress,
 }: NotchWingsProps): React.JSX.Element {
   const [voiceActive, setVoiceActive] = useState(false);
   const reportVoiceActivity = useCallback(
@@ -260,16 +268,22 @@ export function NotchWings({
     useFaceHover(faceElement),
   );
 
+  // The talk button stands only where the face does: a gated Luke offers no
+  // turn to open, so the strip stays bare there exactly as it does of him.
+  const talkButton = onTalkPress !== undefined && !accountGated;
+  // Whether the developer holds the turn the button's next press would send —
+  // from the press itself, on the meter's own reasoning above.
+  const developerTurn = meterVoice === WAVEFORM_VOICE.DEVELOPER;
   // The wing is bounded by the shape its state draws, so its capacity is too:
   // the panel's side holds more marks than the peek's, and every other state
   // keeps the peek's capacity because that is the set the next peek unfolds.
   // Whenever the meter stands beside the face rather than in its place, the
   // marks give up whatever room it costs rather than letting it draw across
-  // them.
+  // them — and the talk button, whenever it is drawn, costs them the same way.
   const capacity =
     presentation === PANEL_PRESENTATION.PANEL
-      ? wingMarkCapacity((PANEL_WIDTH - housingWidth) / 2, meterBesideFace)
-      : wingMarkCapacity(peekSideWidth(housingWidth), meterBesideFace);
+      ? wingMarkCapacity((PANEL_WIDTH - housingWidth) / 2, meterBesideFace, talkButton)
+      : wingMarkCapacity(peekSideWidth(housingWidth), meterBesideFace, talkButton);
   // Memoized because the roster below notices a new list by identity: the
   // slots may only change when what they summarize does, not on every render
   // a spoken word or a face gesture asks for.
@@ -367,6 +381,27 @@ export function NotchWings({
               );
             })}
           </span>
+          {talkButton ? (
+            /* The talk key for whoever forgets the chord. It presses the same
+               two edges a tapped key lands, so everything downstream — the
+               latch, the meter, the interrupt — is the key's own behavior
+               rather than a second path to the microphone. */
+            <button
+              type="button"
+              className="wing-talk"
+              data-hit-region={HIT_REGION.CAPSULE}
+              data-active={String(developerTurn)}
+              aria-label={developerTurn ? "Send what you said" : "Talk to Luke"}
+              title={developerTurn ? "Send what you said" : "Talk to Luke"}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={(event) => {
+                event.stopPropagation();
+                onTalkPress?.();
+              }}
+            >
+              <MicrophoneIcon />
+            </button>
+          ) : null}
           {meterShown && (
             /* Keyed on whose turn it is, so each voice's meter is a fresh
                mount: the arrival choreography lives in a starting style, and

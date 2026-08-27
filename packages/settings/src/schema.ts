@@ -588,6 +588,35 @@ export const APP_SETTING_SCHEMA = {
     spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
     analytics: { id: APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS, value: toggleAnalytics },
   },
+  showTalkButton: {
+    field: "showTalkButton",
+    default: false,
+    guard: boolean(false),
+    settingsPage: SETTINGS_PAGE.APPEARANCE,
+    resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
+    guideEntry: settingGuideEntry(
+      "showTalkButton",
+      [APP_SETTING_ID.SHOW_TALK_BUTTON],
+      (settings, defaultValue) => ({
+        id: APP_SETTING_ID.SHOW_TALK_BUTTON,
+        label: "Show a talk button",
+        description:
+          "Whether a microphone button stands beside Luke's face when the strip unfolds: one " +
+          "press starts a spoken turn and the next sends it, the same two things a tap of the " +
+          "talk key does — for whoever would rather click than remember the chord.",
+        kind: APP_SETTING_KIND.TOGGLE,
+        value: appToggleText(guideValue<boolean>(settings, "showTalkButton")),
+        defaultValue: appToggleText(defaultValue),
+        adjustable: true,
+        manual: APPEARANCE_PAGE,
+      }),
+    ),
+    // None in the main process: the button lives in the renderer's own wing,
+    // which redraws from the settings change it is already handed.
+    mainProcessSideEffect: SETTING_SIDE_EFFECT.NONE,
+    spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
+    analytics: { id: APP_SETTING_ID.SHOW_TALK_BUTTON, value: toggleAnalytics },
+  },
   shareUsageData: {
     field: "shareUsageData",
     default: true,
