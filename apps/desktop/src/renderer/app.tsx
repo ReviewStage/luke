@@ -71,6 +71,7 @@ import type { AppSettings, AppSettingsView, SettingsUpdateResult } from "#shared
 import { appSettingsView } from "#shared/wire/settings";
 import type { UpdateSnapshot } from "#shared/wire/update";
 import { ASK_LUKE_INPUT_ID, focusAskField } from "./ask-luke";
+import type { CalendarGateSources } from "./calendar-gate";
 import { type ConsentConnectEntry, ConsentConnectSlot } from "./consent-connect-slot";
 import type { CredentialEntry, CredentialEntryControl } from "./credential-entry";
 import { isSubmittable, removalEndsEntry } from "./credential-entry";
@@ -445,6 +446,8 @@ export function App(): React.JSX.Element {
   const [calendars, setCalendars] = useState<readonly ObservedAccountCalendars[]>([]);
   /** Whether the calendar's quiet is holding announcements — the face sleeps on it. */
   const [meetingQuiet, setMeetingQuiet] = useState(false);
+  /** Whether the mandatory calendar step of onboarding still stands. */
+  const [calendarOnboardingOwed, setCalendarOnboardingOwed] = useState(false);
   /**
    * Where the app stands against the latest release, as last pushed or
    * answered. Absent until bootstrap carries the main process's snapshot.
@@ -2509,6 +2512,11 @@ export function App(): React.JSX.Element {
     (onChange) => window.sidecar.onMeetingQuietChanged(onChange),
     setMeetingQuiet,
   );
+  // Whether the calendar step of onboarding stands, for the gate alone.
+  const acceptCalendarOnboardingBootstrap = useBootstrapRacedChannel(
+    (onChange) => window.sidecar.onCalendarOnboardingChanged(onChange),
+    setCalendarOnboardingOwed,
+  );
 
   /**
    * The two writes a row can ask for, handed to the main process by session
@@ -2597,6 +2605,7 @@ export function App(): React.JSX.Element {
       // holds the live pushes, and a thread this window has touched is always
       // the newer word than the snapshot.
       seedConversationHistory(value.conversationHistory);
+      acceptCalendarOnboardingBootstrap(value.calendarOnboardingOwed);
       acceptSessionReplayBootstrap(value.sessionReplay);
       acceptSettingsBootstrap(value.settings);
       // The stored filter chips and search words come back with the panel:
@@ -2687,6 +2696,7 @@ export function App(): React.JSX.Element {
     };
   }, [
     acceptAccountBootstrap,
+    acceptCalendarOnboardingBootstrap,
     acceptCalendarsBootstrap,
     acceptIssuesBootstrap,
     acceptMeetingQuietBootstrap,
@@ -3098,6 +3108,42 @@ export function App(): React.JSX.Element {
     onCapture: changeShortcutCapture,
   };
 
+  // The mandatory calendar step of onboarding, assembled only while it
+  // stands: still owed by the main process's record, nothing connected yet,
+  // and at least one source this build can offer — a gate with no way through
+  // is never drawn. Connection is read from the settings snapshot too, so the
+  // gate falls with a connect's own reply rather than waiting on the
+  // broadcast that settles the record.
+  const gateSettings = settings ?? bootstrapSettings ?? appSettingsView(bootstrap.settings);
+  const gateCalendarConnected =
+    gateSettings.calendarAccounts.length > 0 || gateSettings.appleCalendar !== undefined;
+  const calendarGate: CalendarGateSources | undefined =
+    calendarOnboardingOwed &&
+    !gateCalendarConnected &&
+    (gateSettings.appleCalendarAvailable || gateSettings.calendarSignInAvailable)
+      ? {
+          ...(gateSettings.appleCalendarAvailable
+            ? {
+                apple: {
+                  connecting:
+                    appleCalendarBusy ||
+                    consentConnect.entry?.serviceId === CONSENT_SERVICE_ID.APPLE_CALENDAR,
+                  onConnect: () => void connectAppleCalendar(),
+                },
+              }
+            : undefined),
+          ...(gateSettings.calendarSignInAvailable
+            ? {
+                google: {
+                  connecting:
+                    consentConnect.entry?.serviceId === CONSENT_SERVICE_ID.GOOGLE_CALENDAR,
+                  onConnect: () => beginConsentSignIn(CONSENT_SERVICE_ID.GOOGLE_CALENDAR),
+                },
+              }
+            : undefined),
+        }
+      : undefined;
+
   return (
     <div
       className="app-stage"
@@ -3153,6 +3199,7 @@ export function App(): React.JSX.Element {
             account={account ?? bootstrap.account}
             onBeginSignIn={beginSignIn}
             {...(signInFailure ? { signInFailure } : undefined)}
+            {...(calendarGate ? { calendarGate } : undefined)}
             list={list}
             sessionsSettled={sessionsSettled}
             view={sessionView}

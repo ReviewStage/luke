@@ -210,6 +210,12 @@ export interface AppBootstrap {
   conversationHistory: readonly ConversationEntry[];
   /** Luke's bounded durable facts about the developer. Empty in fixture and capture runs. */
   rememberedFacts: readonly RememberedFact[];
+  /**
+   * Whether the mandatory calendar step of onboarding still stands: this
+   * install's first sign-in has been observed and no calendar has connected
+   * since. The panel gates on it only while signed in.
+   */
+  calendarOnboardingOwed: boolean;
   /** Whether, where, and for whom this run may record its own surface. */
   sessionReplay: SessionReplayBootstrap;
   settings: AppSettings;

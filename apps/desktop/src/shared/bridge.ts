@@ -850,6 +850,12 @@ export const BRIDGE = {
     args: noArgs,
     result: result<boolean>(isWireBoolean),
   }),
+  onCalendarOnboardingChanged: entry({
+    kind: "subscribe",
+    channel: "app:calendar-onboarding-changed",
+    args: noArgs,
+    result: result<boolean>(isWireBoolean),
+  }),
   onVoiceHotkeyPress: entry({
     kind: "subscribe",
     channel: "app:voice-hotkey-press",

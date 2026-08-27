@@ -141,6 +141,14 @@ import {
   shouldBackfillArrivalSettled,
 } from "./arrival-flow";
 import {
+  CALENDAR_ONBOARDING_STATE_FILE,
+  type CalendarOnboardingState,
+  calendarOnboardingOwed,
+  calendarOnboardingRecord,
+  calendarOnboardingStateFromStored,
+  shouldBackfillCalendarOnboardingSettled,
+} from "./calendar-onboarding-flow";
+import {
   INTRODUCTION_FADE_MS,
   INTRODUCTION_HANDOFF_READY_MS,
   INTRODUCTION_PEEK_FRESH_MS,
@@ -335,6 +343,13 @@ const accountSession = new AccountSessionManager({
     // keeps its history: signing out and back in is not arriving twice.
     if (signedIn && !wasSignedIn && arrivalState === undefined) {
       writeArrivalState({ signedInAt: new Date().toISOString() });
+    }
+    // The same first sign-in is where the calendar step of onboarding goes
+    // up: recorded on disk rather than derived, so quitting at the gate and
+    // relaunching finds it standing, while a record already on file — settled
+    // by a connect or backfilled for a veteran — keeps its history.
+    if (signedIn && !wasSignedIn && calendarOnboardingState === undefined) {
+      writeCalendarOnboardingState({ requiredAt: new Date().toISOString() });
     }
   },
 });
@@ -856,6 +871,7 @@ function readStoredState(at: string): string | undefined {
   }
 }
 
+
 function writeStoredState(at: string, contents: string, what: string): boolean {
   const temporary = `${at}.tmp`;
   try {
@@ -889,6 +905,44 @@ function removeStoredState(at: string, what: string): boolean {
 }
 
 let rememberedFacts: readonly RememberedFact[] = [];
+
+/**
+ * The calendar onboarding record as this run knows it, loaded once at launch
+ * and written through `writeCalendarOnboardingState` from there on. Undefined
+ * is "no record", which only a launch may turn into a backfill and only a
+ * sign-in edge into a standing gate.
+ */
+let calendarOnboardingState: CalendarOnboardingState | undefined;
+const calendarOnboardingStatePath = () =>
+  path.join(app.getPath("userData"), CALENDAR_ONBOARDING_STATE_FILE);
+
+function calendarOnboardingStateFromDisk(): CalendarOnboardingState | undefined {
+  try {
+    return calendarOnboardingStateFromStored(
+      fs.readFileSync(calendarOnboardingStatePath(), "utf8"),
+    );
+  } catch {
+    return undefined;
+  }
+}
+
+
+/** Whether the onboarding gate stands, as the panels should currently draw it. */
+function calendarOnboardingGateOwed(): boolean {
+  return runMode.requiresAccount && calendarOnboardingOwed(calendarOnboardingState);
+}
+
+function writeCalendarOnboardingState(state: CalendarOnboardingState): void {
+  calendarOnboardingState = state;
+  try {
+    fs.writeFileSync(calendarOnboardingStatePath(), calendarOnboardingRecord(state));
+  } catch (error) {
+    process.stderr.write(
+      `Could not persist the calendar onboarding record: ${error instanceof Error ? error.message : String(error)}\n`,
+    );
+  }
+  panels.broadcast(channels.onCalendarOnboardingChanged, calendarOnboardingGateOwed());
+}
 
 /** Whether an attempt to speak the arrival beat is already under way. */
 let arrivalBeatSpeaking = false;
@@ -1488,6 +1542,7 @@ function registerIpc(): void {
         meetingQuiet: accountCapabilitiesActive() && meetingQuietActive,
         conversationHistory,
         rememberedFacts,
+        calendarOnboardingOwed: calendarOnboardingGateOwed(),
         sessionReplay: await sessionReplayBootstrap(),
         settings: await settingsStore.snapshot(),
       };
@@ -1624,6 +1679,16 @@ function registerIpc(): void {
     refresh: () => calendarObservationLoop.refresh(),
     openExternal: (url) => void shell.openExternal(url),
     recordProductEvent,
+    calendarConnected: () => {
+      // A connect from anywhere — the gate, or the settings rows the gate
+      // never replaced — settles the onboarding step for good: the gate asks
+      // for a calendar once, not for this calendar forever.
+      if (!calendarOnboardingOwed(calendarOnboardingState)) return;
+      writeCalendarOnboardingState({
+        ...(calendarOnboardingState ?? {}),
+        settledAt: new Date().toISOString(),
+      });
+    },
   });
 
   registerTrackerConnectionIpc({
@@ -2680,6 +2745,19 @@ export function startDesktopApp(): void {
         })
       ) {
         writeArrivalState({ settledAt: new Date().toISOString() });
+      }
+      calendarOnboardingState = calendarOnboardingStateFromDisk();
+      // A signed-in install with no calendar onboarding record predates the
+      // mandatory step: it finished onboarding under the old terms, so it is
+      // settled now rather than gated by an update months in.
+      if (
+        shouldBackfillCalendarOnboardingSettled({
+          requiresAccount: runMode.requiresAccount,
+          signedIn: introductionInput.signedIn,
+          hasRecord: calendarOnboardingState !== undefined,
+        })
+      ) {
+        writeCalendarOnboardingState({ settledAt: new Date().toISOString() });
       }
       await panels.refreshGeometry();
       registerIpc();

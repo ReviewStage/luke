@@ -135,6 +135,20 @@
   color: var(--state-attention);
 }
 
+/* The calendar gate borrows the sign-in gate's whole shape. It reserves no
+   face box — signed in, Luke already stands in the housing's wing — so the
+   copy itself centres in the room the face would have held. */
+.calendar-gate {
+  align-content: center;
+}
+
+/* Each source's own mark, at the size the account marks keep beside a label. */
+.calendar-gate .provider-mark {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+}
+
 /* Quiet on purpose: leaving is the one act here that is not the reason the
    screen exists, so it reads as a footnote until it is asked after — and then
    admits what it is the way every destructive control does. */

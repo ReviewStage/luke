@@ -30,6 +30,12 @@ export interface CalendarConnectionIpcDependencies {
   /** Opens a page in the default browser; the addresses live in this file. */
   openExternal: (url: string) => void;
   recordProductEvent: RecordProductEvent;
+  /**
+   * A connect actually stored a connection, from either source — the one
+   * edge that settles the onboarding gate, reported beside the count that
+   * shares its terms.
+   */
+  calendarConnected: () => void;
 }
 
 const CALENDAR_PRIVACY_PANE_URL =
@@ -47,6 +53,7 @@ export function registerCalendarConnectionIpc(
     refresh,
     openExternal,
     recordProductEvent,
+    calendarConnected,
   } = dependencies;
   registerSetting(BRIDGE.connectGoogleCalendar, {
     validate: () => undefined,
@@ -81,6 +88,7 @@ export function registerCalendarConnectionIpc(
         recordProductEvent(PRODUCT_EVENT.CALENDAR_CONNECT, {
           calendar_source: PRODUCT_CALENDAR_SOURCE.GOOGLE,
         });
+        calendarConnected();
       }
     },
     refusal: "Could not connect Google Calendar on this system.",
@@ -148,6 +156,7 @@ export function registerCalendarConnectionIpc(
         recordProductEvent(PRODUCT_EVENT.CALENDAR_CONNECT, {
           calendar_source: PRODUCT_CALENDAR_SOURCE.APPLE,
         });
+        calendarConnected();
       }
     },
     refusal: "Could not connect Apple Calendar on this system.",
