@@ -36,6 +36,7 @@ import {
   ConductorLocalWorkspaceAdapter,
   ConductorSessionApplicationReader,
   defaultOrcaDataDirectory,
+  HerdrSessionApplicationReader,
   ObservationHookRegistry,
   OrcaWorkspaceReader,
   type ProviderRegistration,
@@ -237,6 +238,9 @@ const cmuxSessionApplications = new CmuxSessionApplicationReader({
     ? { stateDirectory: process.env.CMUX_AGENT_HOOK_STATE_DIR }
     : undefined),
 });
+// Herdr's CLI resolves its own sockets, so the reader takes no path at all:
+// where the user pointed herdr is where its own binary answers from.
+const herdrSessionApplications = new HerdrSessionApplicationReader();
 const supersetHomeDirectory =
   process.env.SUPERSET_HOME_DIR ?? path.join(app.getPath("home"), ".superset");
 const supersetWorkspaces = new SupersetWorkspaceReader({
@@ -259,6 +263,7 @@ const workspaceHosts = workspaceHostRegistrations({
   conductorApplications: conductorSessionApplications,
   orcaWorkspaces,
   cmuxApplications: cmuxSessionApplications,
+  herdrApplications: herdrSessionApplications,
 });
 // `directory` and the cipher are read lazily so the store can be declared before
 // the Electron app is ready.

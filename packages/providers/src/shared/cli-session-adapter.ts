@@ -83,7 +83,7 @@ export type CliRun = (
  * a probe's no is an answer, not a failure. Only a binary that cannot run at
  * all is unavailable; a command that ran out of time or output is transient.
  */
-const defaultRun: CliRun = async (binary, argv, options) => {
+export const defaultCliRun: CliRun = async (binary, argv, options) => {
   try {
     const result = await boundedInvocation({
       binary,
@@ -169,7 +169,7 @@ export abstract class CliSessionAdapter extends SessionProviderAdapterBase {
     this.provider = profile.provider;
     this.#binary = profile.binary;
     this.#loginProbeArgv = profile.loginProbeArgv;
-    this.#run = options.run ?? defaultRun;
+    this.#run = options.run ?? defaultCliRun;
     this.#now = options.now ?? Date.now;
     const { minimumRefreshIntervalMs } = resolveOptions(
       options,

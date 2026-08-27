@@ -119,6 +119,27 @@ Trust constraints:
   outlives the short refusal window is a delivered message, never a process
   to kill. This authorizes no other `cursor-agent` command; widening it is a
   product decision, not an implementation detail.
+- Herdr, the terminal multiplexer coding agents run inside, is the one local
+  surface observed through its own CLI, because its state lives inside its
+  server and the CLI is the documented read of it — the Codex cloud rule kept
+  its shape at one remove, here with no login at all. The reads are two:
+  `session list --json`, the CLI's client-side enumeration of its named
+  sessions, which answers with no server and starts none, and, for each
+  session that enumeration reported running, `agent list` behind a
+  `--session` carrying that session's own name, re-validated against the
+  charset Herdr itself enforces before it may ride the invocation. No shell
+  stands between Luke and the binary, no server is ever started — a
+  `server_not_running` answer is a machine observed as holding nothing, the
+  same answer an absent binary gives — and of each agent record one thing is
+  kept: the hosted session reference Herdr's own integrations recorded, the
+  id that joins a pane to a session Luke already observes from that
+  provider's own files. What the join earns is an association chip on the
+  row Luke already draws, never a row of Herdr's own — a Herdr pane's
+  session is its provider's session, and a pane Herdr cannot name a session
+  for draws nothing rather than a gamble. No write command of Herdr's is
+  ever invoked, and its sessions advertise nothing to write with. Widening
+  the invocation set, or the agent kinds the join reads, is a product
+  decision, not an implementation detail.
 - One registration is the exception the previous rule's word "require" leaves
   room for, and it is bounded on every side: Luke may join an observation
   hook to a provider's own user-level hook surface (today the `settings.json`

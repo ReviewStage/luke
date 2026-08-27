@@ -7,6 +7,10 @@ import {
   type ConductorSessionApplicationReader,
   ConductorSessionApplicationSnapshot,
 } from "../conductor/session-applications.js";
+import {
+  type HerdrSessionApplicationReader,
+  HerdrSessionApplicationSnapshot,
+} from "../herdr/session-applications.js";
 import { type OrcaWorkspaceReader, OrcaWorkspaceSnapshot } from "../orca/workspaces.js";
 
 /** One manager's annotation of one provider's already-observed sessions. */
@@ -37,6 +41,7 @@ export interface WorkspaceHostRegistrationOptions {
   conductorApplications: ConductorSessionApplicationReader;
   orcaWorkspaces: OrcaWorkspaceReader;
   cmuxApplications: CmuxSessionApplicationReader;
+  herdrApplications: HerdrSessionApplicationReader;
 }
 
 function enrichmentFrom(snapshot: {
@@ -53,10 +58,11 @@ function enrichmentFrom(snapshot: {
  * claims its workspaces first and Conductor next — the precedence that stood
  * before Orca joined, so no existing tray moves — and Orca defers to both:
  * one chat is grouped by exactly one manager however many of them hold it,
- * and a chat only Orca holds still groups under its worktree. cmux runs last
- * and claims no workspace at all: it only adds its own association, and its
- * pane address stands in as the row's link only where none of the managers
- * before it gave one.
+ * and a chat only Orca holds still groups under its worktree. cmux and Herdr
+ * run last and claim no workspace at all: each only adds its own association —
+ * cmux's pane address stands in as the row's link only where none of the
+ * managers before it gave one, and Herdr, a terminal with no address scheme,
+ * adds the association alone.
  */
 export function workspaceHostRegistrations(
   options: WorkspaceHostRegistrationOptions,
@@ -77,6 +83,11 @@ export function workspaceHostRegistrations(
       observationFailureLabel: "cmux application observation",
       read: async () => enrichmentFrom(await options.cmuxApplications.read()),
       emptyEnrichment: enrichmentFrom(new CmuxSessionApplicationSnapshot()),
+    },
+    {
+      observationFailureLabel: "Herdr application observation",
+      read: async () => enrichmentFrom(await options.herdrApplications.read()),
+      emptyEnrichment: enrichmentFrom(new HerdrSessionApplicationSnapshot()),
     },
   ];
 }

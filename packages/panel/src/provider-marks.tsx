@@ -30,6 +30,7 @@ import {
   GOOGLE_CALENDAR_MARK_LAYERS,
   GROK_BUILD_ORBIT_PATH,
   GROK_BUILD_TAIL_PATH,
+  HERDR_PATH,
   JULES_PATH,
   LINEAR_PATH,
   OPENAI_PATH,
@@ -78,6 +79,8 @@ void React;
  * Google Calendar via Simple Icons (CC0-1.0, sourced from
  * https://developers.google.com/calendar), Grok Build's comet mark verbatim
  * from the favicon https://grok.com serves (a trademark of xAI),
+ * Herdr's ram mark verbatim from the icon https://herdr.dev serves as its own
+ * site mark (assets/ram.svg, Apache-2.0),
  * Jules via Simple Icons (CC0-1.0, sourced from
  * https://jules.google), OpenAI via Simple Icons (CC0-1.0), Linear via Simple Icons (CC0-1.0, sourced from
  * https://linear.app), OpenCode's two-tone terminal mark verbatim from
@@ -93,9 +96,9 @@ void React;
  * favicon draws it with. Each keeps its own brand colour
  * (see the `--mark-*` custom properties), so a mark says which provider a
  * session belongs to while the chips and row tints say what state it is in.
- * Copilot, Cursor, Devin, Grok Build, and Radius each publish one silhouette
- * rather than a colour, so all five are drawn in the light form their brand
- * uses on a dark surface. They are trademarks of their respective owners. Do not restyle the
+ * Copilot, Cursor, Devin, Grok Build, Herdr, and Radius each publish one
+ * silhouette rather than a colour, so all six are drawn in the light form
+ * their brand uses on a dark surface. They are trademarks of their respective owners. Do not restyle the
  * geometry or recolour them; swap the path in the generator if a provider
  * publishes an updated mark. Apple Calendar is the one exception to
  * "reproduced rather than redrawn": Apple distributes the Calendar icon only
@@ -391,6 +394,26 @@ function GrokBuildMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
+function HerdrMark({ className }: MarkProps): React.JSX.Element {
+  // Herdr's published artwork stores its geometry potrace-style, upside down
+  // at ten times the 512-square canvas; the group reproduces the published
+  // flip-and-scale rather than rewriting the verbatim path. The box crops the
+  // canvas to the glyph, which the artwork anchors to its lower right.
+  return (
+    <svg
+      className={className}
+      data-mark={SESSION_APPLICATION_ID.HERDR}
+      viewBox="103 138 409 374"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <g fill="currentColor" transform="translate(0 512) scale(0.1 -0.1)">
+        <path d={HERDR_PATH} />
+      </g>
+    </svg>
+  );
+}
+
 function JulesMark({ className }: MarkProps): React.JSX.Element {
   return (
     <svg
@@ -660,6 +683,7 @@ const PROVIDER_MARKS = {
   [PROVIDER_ID.GEMINI_CLI]: GeminiCliMark,
   [GOOGLE_CALENDAR_ID]: GoogleCalendarMark,
   [PROVIDER_ID.GROK_BUILD]: GrokBuildMark,
+  [SESSION_APPLICATION_ID.HERDR]: HerdrMark,
   [PROVIDER_ID.JULES]: JulesMark,
   [ISSUE_TRACKER_ID.LINEAR]: LinearMark,
   [CREDENTIAL_PROVIDER_ID.OPENAI]: OpenAiMark,

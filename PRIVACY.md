@@ -1,6 +1,6 @@
 # Privacy
 
-Last updated: 25 August 2026
+Last updated: 27 August 2026
 
 Luke is a macOS app that watches your coding agent sessions. This policy
 explains what we collect, who we send it to, and how to turn it off.
@@ -10,8 +10,11 @@ explains what we collect, who we send it to, and how to turn it off.
 **On your Mac.** Luke reads the session files your coding agents already write,
 using the session title, status, repository, branch, model, current tool,
 errors, and the summary the agent wrote. It does not read message history, file
-contents, or command output, and it writes none of this to disk. It stays on
-your Mac unless a feature below sends it.
+contents, or command output, and it writes none of this to disk. If you run
+agents inside the Herdr terminal manager, Luke also asks Herdr's own
+command-line tool which of those sessions it holds, so their rows can say so;
+that read never starts Herdr, reads no terminal output, and sends nothing
+anywhere. It stays on your Mac unless a feature below sends it.
 
 **Your account.** Signing in with Google or GitHub gives us your name, email
 address, and which of the two you used. We also keep the records that keep you
