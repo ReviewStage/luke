@@ -79,6 +79,7 @@ export const ERRAND_ORIGIN_ATTRIBUTE = "data-errand-origin";
  */
 export const ERRAND_TARGET = {
   SESSIONS_TAB: "tab-sessions",
+  HISTORY_TAB: "tab-history",
   SETTINGS_TAB: "tab-settings",
   LIST_OPTIONS: "list-options",
   LIST_CLEAR: "list-clear",
@@ -89,6 +90,7 @@ export type ErrandTarget = AppSettingId | (typeof ERRAND_TARGET)[keyof typeof ER
 
 const TAB_ERRAND_TARGET = {
   [APP_PANEL_TAB.SESSIONS]: ERRAND_TARGET.SESSIONS_TAB,
+  [APP_PANEL_TAB.HISTORY]: ERRAND_TARGET.HISTORY_TAB,
   [APP_PANEL_TAB.SETTINGS]: ERRAND_TARGET.SETTINGS_TAB,
 };
 

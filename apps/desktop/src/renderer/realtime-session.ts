@@ -36,6 +36,7 @@ import {
   parseRealtimeServerEvent,
   proactiveSpeechEvents,
   pushToTalkCommitEvents,
+  REALTIME_CLIENT_EVENT,
   REALTIME_DATA_CHANNEL,
   REALTIME_SERVER_EVENT,
   REALTIME_STATUS,
@@ -46,6 +47,7 @@ import {
   type RealtimeToolFamily,
   realtimeSessionSyncEvents,
   realtimeToolFamily,
+  recentConversationEntries,
   type ScheduledTimer,
   SESSION_TOOL_KIND,
   sessionContextEvents,
@@ -147,10 +149,15 @@ const TRUNCATION_PAST_AUDIO_END = /^Audio content of \d+ms is already shorter th
  * unchanged answer from a fresh one, and how to build the item once it has a
  * name to occupy.
  */
-interface PendingContext {
-  text: string;
-  build: (itemId: string) => readonly WireRecord[];
-}
+type PendingContext =
+  | {
+      text: string;
+      build: (itemId: string) => readonly WireRecord[];
+    }
+  | {
+      /** This kind should occupy no item once the next turn flushes context. */
+      text: undefined;
+    };
 
 /** A context item this call put in the conversation, and what it says. */
 interface LiveContext {
@@ -247,7 +254,11 @@ export interface RealtimeVoiceSessionCallbacks {
    * offers no microphone, so it has no spoken turns to hand back. The caller
    * records the words so the thread holds both halves of the exchange.
    */
-  onSpokenAsk?(transcript: string): void;
+  onSpokenAsk?(transcript: string, itemId: string): void;
+  /** The local audio turn closed, before its commit can be acknowledged. */
+  onSpokenAskClosed?(): void;
+  /** The server item that fixes which current-launch history a spoken turn belongs to. */
+  onSpokenAskCommitted?(itemId: string): void;
   /**
    * A reply concluding, words or none. `onReplyEnded` hands over only words
    * that exist, so a reply the server failed or answered without a transcript
@@ -1613,6 +1624,16 @@ export class RealtimeVoiceSession {
   }
 
   async close(): Promise<void> {
+    this.clearConversation();
+  }
+
+  /**
+   * Retires the call that owns the current conversation. Realtime items cannot
+   * be enumerated and deleted reliably, so Clear crosses a call boundary: the
+   * next developer turn receives a fresh server-side conversation as well as
+   * the caller's freshly emptied local history.
+   */
+  clearConversation(): void {
     this.#closed = true;
     this.#teardown();
     this.#setStatus(REALTIME_STATUS.IDLE);
@@ -1751,6 +1772,9 @@ export class RealtimeVoiceSession {
     // exchange keeps the words just said, and its own words stack under them.
     if (!keepCaption) this.#clearCaption();
     this.#clearSettleTimer();
+    if (events.some((event) => event.type === REALTIME_CLIENT_EVENT.INPUT_AUDIO_BUFFER_COMMIT)) {
+      this.#options.onSpokenAskClosed?.();
+    }
     this.#send(events);
     this.#setStatus(REALTIME_STATUS.RESPONDING);
   }
@@ -2036,7 +2060,9 @@ export class RealtimeVoiceSession {
    * own conversation items.
    */
   updateConversation(entries: readonly ConversationEntry[]): void {
-    this.#conversationEntries = entries;
+    // The caller may retain the whole current-launch thread for its own UI;
+    // this transport accepts only the recent slice that may reach the model.
+    this.#conversationEntries = recentConversationEntries(entries);
     this.#rememberConversation();
   }
 
@@ -2047,7 +2073,10 @@ export class RealtimeVoiceSession {
    */
   #rememberConversation(): void {
     const text = conversationHistoryText(this.#conversationEntries, this.#sessions);
-    if (text === undefined) return;
+    if (text === undefined) {
+      this.#forgetContext(CONTEXT_ITEM_KIND.CONVERSATION);
+      return;
+    }
     this.#rememberContext(CONTEXT_ITEM_KIND.CONVERSATION, text, (itemId) =>
       conversationContextEvents(text, itemId),
     );
@@ -2112,6 +2141,11 @@ export class RealtimeVoiceSession {
     this.#contextPending.set(kind, { text, build });
   }
 
+  /** Holds the absence of one context kind until the next developer turn. */
+  #forgetContext(kind: ContextItemKind): void {
+    this.#contextPending.set(kind, { text: undefined });
+  }
+
   /**
    * Puts the context a turn is about to be answered from into the conversation,
    * each kind replacing whatever it said before.
@@ -2137,6 +2171,13 @@ export class RealtimeVoiceSession {
       const pending = this.#contextPending.get(kind);
       if (!pending) continue;
       const live = this.#contextLive.get(kind);
+      if (pending.text === undefined) {
+        if (!live) continue;
+        this.#contextSequence += 1;
+        this.#supersede(live.itemId);
+        this.#contextLive.delete(kind);
+        continue;
+      }
       // The history is seeded once per call. It exists to bridge the calls
       // that came before this one, and every turn taken since it went in is
       // already held by this call as real conversation items — so superseding
@@ -2327,7 +2368,10 @@ export class RealtimeVoiceSession {
         // Only the developer's own call has spoken turns to hand back; the
         // guard is belt to the speak-only shape's suspenders, so a stray
         // event on Luke's own call can never write a developer line.
-        if (this.#withMicrophone) this.#options.onSpokenAsk?.(event.transcript);
+        if (this.#withMicrophone) this.#options.onSpokenAsk?.(event.transcript, event.itemId);
+        return;
+      case REALTIME_SERVER_EVENT.INPUT_AUDIO_BUFFER_COMMITTED:
+        if (this.#withMicrophone) this.#options.onSpokenAskCommitted?.(event.itemId);
         return;
       case REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED:
         this.#audioEndingsReported = true;

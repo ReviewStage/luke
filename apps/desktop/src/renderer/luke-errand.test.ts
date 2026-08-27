@@ -126,6 +126,9 @@ test("showing a tab is signed on that tab", () => {
   assert.deepEqual(errandTargets({ kind: "panel", tab: APP_PANEL_TAB.SESSIONS }), [
     ERRAND_TARGET.SESSIONS_TAB,
   ]);
+  assert.deepEqual(errandTargets({ kind: "panel", tab: APP_PANEL_TAB.HISTORY }), [
+    ERRAND_TARGET.HISTORY_TAB,
+  ]);
   assert.deepEqual(errandTargets({ kind: "panel", tab: APP_PANEL_TAB.SETTINGS }), [
     ERRAND_TARGET.SETTINGS_TAB,
   ]);

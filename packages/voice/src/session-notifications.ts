@@ -56,6 +56,14 @@ function decisionContext(notice: SessionNotice): readonly [string, string] | und
   return undefined;
 }
 
+/** The useful part of a status edge when it is read later as a chat message. */
+function noticeHistoryText(notice: SessionNotice): string {
+  if (notice.error) return flattened(notice.error);
+  if (notice.recap) return recapExcerpt(notice.recap);
+  const event = noticeEvent(notice);
+  return `${event[0]?.toUpperCase() ?? ""}${event.slice(1)}.`;
+}
+
 /** Renders provider-observed status fields for the voice to summarize. */
 function noticeUpdateContext(notice: SessionNotice): string {
   const decision = notice.holdingForDeveloper === true ? decisionContext(notice) : undefined;
@@ -99,6 +107,7 @@ export function sessionNoticeSpeech(
     disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
     source: ATTENTION_SPEECH_SOURCE.STATUS_EDGE,
     summary: noticeUpdateContext(notice),
+    historyText: noticeHistoryText(notice),
     decidedAt,
   };
 }

@@ -10,6 +10,7 @@
    out-specifying the cap itself. */
 @import "./keycaps.css";
 @import "./sessions.css";
+@import "./history.css";
 @import "./sign-in.css";
 @import "./voice.css";
 /* After sessions.css and sign-in.css: the takeover restages their rows and

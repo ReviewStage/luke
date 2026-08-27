@@ -144,6 +144,7 @@ export const EMPTY_APP_GUIDE: AppGuideSnapshot = { facts: [], settings: [] };
  */
 export const APP_PANEL_TAB = {
   SESSIONS: "sessions",
+  HISTORY: "history",
   SETTINGS: "settings",
 } as const;
 

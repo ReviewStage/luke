@@ -243,6 +243,7 @@ export type ProductUpdateAct = (typeof PRODUCT_UPDATE_ACT)[keyof typeof PRODUCT_
 /** Which half of the panel is drawn, said exactly as the guide says it. */
 export const PRODUCT_PANEL_TAB = {
   SESSIONS: APP_PANEL_TAB.SESSIONS,
+  HISTORY: APP_PANEL_TAB.HISTORY,
   SETTINGS: APP_PANEL_TAB.SETTINGS,
 } as const satisfies Record<string, AppPanelTab>;
 

@@ -292,30 +292,36 @@ Trust constraints:
   them. Both stop with the recording switch, because the client opts out
   rather than only stopping the recorder; a switch that named recording and
   left these running would be a consent nobody gave.
-- The replay stream has the opposite shape from the counted events. It records
-  the rendered panel, so everything drawn travels: a session's title, branch,
-  recap, and error line, the account's own name and address, and any
+- The replay stream has the opposite shape from the counted events. Except for
+  the conversation History tab, it records the rendered panel, so everything
+  drawn travels: a session's title, branch, recap, and error line, the account's
+  own name and address, and any
   screenshot attached to the feedback composer, which is drawn as its own
   bytes and which input masking does not reach. The one thing withheld is what
   is typed into a field, and that is the library's default rather than a
-  posture Luke keeps. There is no masking module to consult and nothing that
-  makes a new component silent by construction, so what a recording may see is
-  decided by what the panel draws — which makes drawing something new on the
-  panel a decision about what leaves the machine. It is still Luke's own panel
-  and never the machine's screen. Recording posts to the provider directly,
-  and it begins at the first paint of every ordinary launch, before any
-  account exists and through the spoken introduction, because the launch is
-  where a first run goes wrong and a recording that waited for a sign-in never
-  saw it. Recording is the one place an account id travels to the desktop, and
-  it travels for what it does when a sign-in lands: the anonymous session
-  already running is joined to that person, so it files with their counts and
-  is erased with them. A session that never reaches a sign-in stays anonymous
-  and can be erased with no account, which is a thing `PRIVACY.md` has to say
-  in as many words rather than leave to be inferred. Deleting an account
-  stands recording down for the rest of that run, unlike signing out, which
-  leaves an anonymous recording running the way the launch before the sign-in
-  was: nothing erased is re-created either way, but a recorder starting up
-  again on the panel that just erased everything reads as though something
+  posture Luke keeps. The one explicit blocked subtree is History: its root
+  carries the recording library's fixed blocking class, so the conversation's
+  words do not leave the machine in a recording. That view retains every
+  bounded line from the current renderer lifetime, including session acts, until the developer clears
+  it or quits, while only the 20 most recent lines enter model context. There
+  is no general masking module to consult and nothing that makes any other new
+  component silent by construction, so what a recording may see is decided by
+  what the panel draws or explicitly blocks — which makes drawing something
+  new on the panel a decision about what leaves the machine. It is still Luke's
+  own panel and never the machine's screen. Recording posts to the provider
+  directly, and it begins at the first paint of every ordinary launch, before
+  any account exists and through the spoken introduction, because the launch
+  is where a first run goes wrong and a recording that waited for a sign-in
+  never saw it. Recording is the one place an account id travels to the
+  desktop, and it travels for what it does when a sign-in lands: the anonymous
+  session already running is joined to that person, so it files with their
+  counts and is erased with them. A session that never reaches a sign-in stays
+  anonymous and can be erased with no account, which is a thing `PRIVACY.md`
+  has to say in as many words rather than leave to be inferred. Deleting an
+  account stands recording down for the rest of that run, unlike signing out,
+  which leaves an anonymous recording running the way the launch before the
+  sign-in was: nothing erased is re-created either way, but a recorder starting
+  up again on the panel that just erased everything reads as though something
   were, and deletion is the one act treated here as unrecoverable.
   None of the three sends anything in a fixture or evidence run, or while the
   developer has switched sharing off. The counts have their own switch and the

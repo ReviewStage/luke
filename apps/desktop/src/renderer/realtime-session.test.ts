@@ -15,6 +15,7 @@ import {
   inputAudioFormatUpdateEvents,
   isCarriedAppAction,
   isCarriedIssueAction,
+  maximumConversationEntries,
   REALTIME_CLIENT_EVENT,
   REALTIME_SERVER_EVENT,
   REALTIME_STATUS,
@@ -103,6 +104,10 @@ interface Harness {
   replyEndings: { texts: readonly string[]; about: string | undefined }[];
   /** The developer's spoken turns, as the service handed them back. */
   spokenAsks: string[];
+  /** Conversation items fixed for those turns before their transcripts returned. */
+  spokenAskItems: string[];
+  /** Number of local audio turns closed before the server acknowledged them. */
+  spokenAskClosures: () => number;
   microphoneEnabled: () => boolean;
   microphoneStopped: () => boolean;
   emit: (event: JsonValue) => void;
@@ -211,6 +216,8 @@ function harness(
   const captionSubjects: (string | undefined)[] = [];
   const replyEndings: { texts: readonly string[]; about: string | undefined }[] = [];
   const spokenAsks: string[] = [];
+  const spokenAskItems: string[] = [];
+  let spokenAskClosures = 0;
   const requests: { url: string; init: RequestInit }[] = [];
   const calls: string[] = [];
   let enabled = false;
@@ -351,6 +358,10 @@ function harness(
     onSpokenAsk: (transcript) => {
       spokenAsks.push(transcript);
     },
+    onSpokenAskClosed: () => {
+      spokenAskClosures += 1;
+    },
+    onSpokenAskCommitted: (itemId) => spokenAskItems.push(itemId),
   };
   if (options.connectTimeoutMs !== undefined) {
     sessionOptions.connectTimeoutMs = options.connectTimeoutMs;
@@ -387,6 +398,8 @@ function harness(
     captionSubjects,
     replyEndings,
     spokenAsks,
+    spokenAskItems,
+    spokenAskClosures: () => spokenAskClosures,
     microphoneEnabled: () => enabled,
     microphoneStopped: () => stopped,
     lukeAudible: () => remoteTrack.enabled,
@@ -869,6 +882,7 @@ test("a release during the handshake delivers the words once the channel opens",
   await deviceArrives();
 
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+  assert.equal(context.spokenAskClosures(), 1);
   assert.equal(context.session.turnPending, false);
   assert.deepEqual(
     context.sent.map((event) => event.type),
@@ -1918,6 +1932,27 @@ test("an empty history says nothing at all", async () => {
   assert.deepEqual(contextItems(context, "[recent conversation"), []);
 });
 
+test("a call accepts only the recent slice of a full current-launch thread", async () => {
+  const context = harness();
+  await context.session.connect();
+  const thread = Array.from(
+    { length: maximumConversationEntries + 3 },
+    (_, index): ConversationEntry => ({
+      kind: CONVERSATION_ENTRY_KIND.REPLY,
+      words: `launch line ${index}`,
+    }),
+  );
+
+  context.session.updateConversation(thread);
+  await armDeveloperTurn(context);
+
+  const item = contextItems(context, "[recent conversation")[0];
+  assert.ok(item);
+  assert.doesNotMatch(itemText(item), /launch line 0/);
+  assert.match(itemText(item), /launch line 3/);
+  assert.match(itemText(item), /launch line 22/);
+});
+
 test("the history is rendered from the roster as it now stands", async () => {
   const context = harness();
   await context.session.connect();
@@ -2009,6 +2044,34 @@ test("a new call after teardown re-seeds the accumulated history", async () => {
   assert.match(itemText(items[0]), /failed in payments/);
 });
 
+test("clearing history deletes its live model-context item", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.session.updateConversation(
+    conversationEntries({ kind: CONVERSATION_ENTRY_KIND.REPLY, words: "Earlier words." }),
+  );
+  await armDeveloperTurn(context);
+  const historyItem = context.session.liveContextItemIds.get(CONTEXT_ITEM_KIND.CONVERSATION);
+  assert.ok(historyItem);
+
+  context.session.stopSpeaking();
+  context.session.updateConversation([]);
+  const sentBefore = context.sent.length;
+  await armDeveloperTurn(context);
+
+  assert.equal(
+    context.sent.slice(sentBefore).some(
+      (event) =>
+        event.type === CONVERSATION_ITEM_DELETE &&
+        // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+        (event as { item_id?: string }).item_id === historyItem,
+    ),
+    true,
+  );
+  assert.equal(context.session.liveContextItemIds.has(CONTEXT_ITEM_KIND.CONVERSATION), false);
+  assert.deepEqual(contextItems(context, "[recent conversation", sentBefore), []);
+});
+
 test("a reply ending at teardown writes nothing back into the retired call", async () => {
   const context = harness({ writeBackOnReplyEnded: true });
   await context.session.connect();
@@ -2050,6 +2113,22 @@ test("the developer's spoken words come back only from their own call", async ()
   });
 
   assert.deepEqual(context.spokenAsks, ["how is the checkout agent doing?"]);
+});
+
+test("a developer turn is identified before its transcript returns", async () => {
+  const context = harness();
+  await context.session.connect();
+  await armDeveloperTurn(context);
+
+  assert.equal(context.spokenAskClosures(), 1);
+  assert.deepEqual(context.spokenAskItems, []);
+
+  context.emit({
+    type: REALTIME_SERVER_EVENT.INPUT_AUDIO_BUFFER_COMMITTED,
+    item_id: "item-1",
+  });
+
+  assert.deepEqual(context.spokenAskItems, ["item-1"]);
 });
 
 test("a speak-only call has no spoken turns to hand back", async () => {
@@ -2909,6 +2988,26 @@ test("closing stops the microphone track", async () => {
 
   assert.equal(context.microphoneStopped(), true);
   assert.equal(context.session.status, REALTIME_STATUS.IDLE);
+});
+
+test("clearing a conversation retires its call before another turn can begin", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.session.updateConversation([
+    { kind: CONVERSATION_ENTRY_KIND.TYPED_ASK, words: "Do not keep this after Clear." },
+  ]);
+  assert.equal(context.session.sendText("This real turn belongs to the old call."), true);
+
+  context.session.clearConversation();
+
+  assert.equal(context.session.status, REALTIME_STATUS.IDLE);
+  assert.equal(context.session.isConnected, false);
+  const sentBeforeReconnect = context.sent.length;
+  await context.session.connect();
+  await armDeveloperTurn(context);
+
+  assert.equal(context.requests.length, 2);
+  assert.deepEqual(contextItems(context, "[recent conversation", sentBeforeReconnect), []);
 });
 /** Opens and commits a developer turn, which is the only turn a tool may run in. */
 async function armDeveloperTurn(context: Harness): Promise<void> {

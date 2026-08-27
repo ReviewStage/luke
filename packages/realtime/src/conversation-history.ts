@@ -3,8 +3,10 @@
  * of the wire. A Realtime call is a transport that comes and goes — the
  * announcer's speak-only call is torn down by the very talk-key press that
  * asks about it, and the developer's call retires when idle — so the thread
- * itself is kept here, as a bounded record of what was already said and done,
- * and re-fed to whichever call the developer opens next.
+ * itself is kept here, as a record of what was already said and done during
+ * this app launch. A bounded recent slice is re-fed to whichever call the
+ * developer opens next; the whole in-memory thread remains available to the
+ * developer in the panel until they clear it or quit.
  *
  * Every line already traveled to the voice service once, on the call that
  * said it: the developer's own asks — typed, or spoken and handed back as
@@ -36,10 +38,9 @@ export type ConversationEntryKind =
   (typeof CONVERSATION_ENTRY_KIND)[keyof typeof CONVERSATION_ENTRY_KIND];
 
 /**
- * How many lines the history keeps, and how long each may run. Together they
- * bound what one context item can cost the model's window: the record is a
- * thread to pick back up, not an archive, and its oldest lines leave first —
- * the same eviction the window itself would choose.
+ * How many recent lines the model receives, and how long every stored line may
+ * run. Together they bound what one context item can cost the model's window;
+ * the panel may keep more lines from this launch without sending them all.
  */
 export const maximumConversationEntries = 20;
 export const maximumConversationEntryLength = 400;
@@ -52,6 +53,8 @@ export interface ConversationEntry {
    * about, not every word of it.
    */
   words: string;
+  /** Cleaner visible copy when the model context in `words` is structured. */
+  displayWords?: string;
   /**
    * The roster-validated session the line was about, when it was about one.
    * Only ever an identity the roster reported at the moment of the entry —
@@ -63,19 +66,36 @@ export interface ConversationEntry {
 }
 
 /**
- * Appends one line, holding the history to its bounds. An entry with nothing
- * left after flattening appends nothing: an empty line says nothing worth a
- * window's space.
+ * Appends one length-bounded line to the current-launch thread. An entry with
+ * nothing left after flattening appends nothing: an empty line says nothing
+ * worth keeping or spending model-window space on.
  */
-export function appendConversationEntry(
+export function appendConversationThreadEntry(
   entries: readonly ConversationEntry[],
   entry: ConversationEntry,
 ): readonly ConversationEntry[] {
   const words = boundedEntryWords(entry.words);
   if (!words) return entries;
   const appended: ConversationEntry = { kind: entry.kind, words };
+  const displayWords = entry.displayWords ? boundedEntryWords(entry.displayWords) : undefined;
+  if (displayWords) appended.displayWords = displayWords;
   if (entry.identity) appended.identity = entry.identity;
-  return [...entries, appended].slice(-maximumConversationEntries);
+  return [...entries, appended];
+}
+
+/** The recent slice safe to place back into the model's context window. */
+export function recentConversationEntries(
+  entries: readonly ConversationEntry[],
+): readonly ConversationEntry[] {
+  return entries.slice(-maximumConversationEntries);
+}
+
+/** Appends one bounded line to the recent model context. */
+export function appendConversationEntry(
+  entries: readonly ConversationEntry[],
+  entry: ConversationEntry,
+): readonly ConversationEntry[] {
+  return recentConversationEntries(appendConversationThreadEntry(entries, entry));
 }
 
 /** One flattening and one bound for every line, however it enters. */
@@ -92,22 +112,31 @@ function boundedEntryWords(words: string): string {
  * against the entries: `after` is the entry the history ended with at the
  * moment the spoken turn committed — everything behind it is that turn's own
  * produce — or nothing for a turn committed against an empty history, which
- * belongs at the very front. A mark the bounds have already retired lands
- * there too: an ask older than everything left comes before all of it.
+ * belongs at the very front. A missing mark lands there too: an ask older than
+ * everything left comes before all of it.
  */
-export function insertSpokenAskEntry(
+export function insertSpokenAskThreadEntry(
   entries: readonly ConversationEntry[],
   words: string,
   after: ConversationEntry | undefined,
 ): readonly ConversationEntry[] {
   const bounded = boundedEntryWords(words);
   if (!bounded) return entries;
-  // indexOf answers -1 for a retired mark, so the ask lands at the front —
+  // indexOf answers -1 for a missing mark, so the ask lands at the front —
   // exactly where an entry older than the whole history belongs.
   const at = after ? entries.indexOf(after) + 1 : 0;
   const placed = [...entries];
   placed.splice(at, 0, { kind: CONVERSATION_ENTRY_KIND.SPOKEN_ASK, words: bounded });
-  return placed.slice(-maximumConversationEntries);
+  return placed;
+}
+
+/** Places a spoken ask into the recent model context and retires old lines. */
+export function insertSpokenAskEntry(
+  entries: readonly ConversationEntry[],
+  words: string,
+  after: ConversationEntry | undefined,
+): readonly ConversationEntry[] {
+  return recentConversationEntries(insertSpokenAskThreadEntry(entries, words, after));
 }
 
 /**
@@ -123,6 +152,7 @@ export function announcementConversationEntry(
   return {
     kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
     words,
+    ...(speech.historyText ? { displayWords: speech.historyText } : undefined),
     identity: { providerId: speech.providerId, providerSessionId: speech.providerSessionId },
   };
 }

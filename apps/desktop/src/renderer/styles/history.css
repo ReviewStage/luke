@@ -1,0 +1,141 @@
+/* A compact chat thread: sent and received messages use the familiar two-sided
+   bubble grammar, while the developer's requested actions sit between them. */
+.history-view {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.history-header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 2px;
+}
+
+.history-clear-controls {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+}
+
+.history-clear,
+.history-clear-cancel {
+  min-height: 28px;
+  padding: 0 9px;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 620;
+  transition:
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+}
+
+.history-clear:hover,
+.history-clear-cancel:hover {
+  background: var(--raised);
+  color: var(--text-primary);
+}
+
+.history-clear-controls:has(.history-clear-cancel) .history-clear {
+  color: var(--danger);
+}
+
+.history-list {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 4px 4px 8px;
+  overflow-x: clip;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  scrollbar-width: thin;
+  list-style: none;
+  animation: scroll-edge-fade linear both;
+  animation-timeline: scroll(self block);
+}
+
+.history-entry {
+  display: flex;
+  max-width: min(82%, 58ch);
+  flex: 0 0 auto;
+  flex-direction: column;
+}
+
+.history-entry p {
+  margin: 0;
+  padding: 7px 10px 8px;
+  color: var(--text-primary);
+  font-size: 12.5px;
+  line-height: 1.38;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.history-entry[data-speaker="you"] {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.history-entry[data-speaker="you"] p {
+  border-radius: 15px 15px 5px 15px;
+  background: var(--message-sent);
+  color: rgba(255, 255, 255, 0.98);
+}
+
+.history-entry[data-speaker="luke"] {
+  align-self: flex-start;
+}
+
+.history-entry[data-speaker="luke"] p {
+  border-radius: 15px 15px 15px 5px;
+  background: var(--raised-strong);
+}
+
+.history-entry[data-speaker="event"] {
+  max-width: 84%;
+  align-self: center;
+  align-items: center;
+  padding: 8px 12px;
+  text-align: center;
+}
+
+.history-entry[data-speaker="event"] p {
+  padding: 0;
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  line-height: 1.4;
+}
+
+/* Consecutive bubbles stay conversationally tight. A speaker change gets the
+   small pause chat apps use instead of repeating names above every message. */
+.history-entry[data-speaker="you"] + .history-entry[data-speaker="luke"],
+.history-entry[data-speaker="luke"] + .history-entry[data-speaker="you"] {
+  margin-top: 6px;
+}
+
+.history-empty {
+  display: grid;
+  min-height: 126px;
+  flex: 1;
+  align-content: center;
+  justify-items: center;
+  gap: 5px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.history-empty strong {
+  color: var(--text-primary);
+  font-size: 12px;
+}

@@ -11,12 +11,15 @@ import {
 import {
   announcementConversationEntry,
   appendConversationEntry,
+  appendConversationThreadEntry,
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
   conversationHistoryText,
   insertSpokenAskEntry,
+  insertSpokenAskThreadEntry,
   maximumConversationEntries,
   maximumConversationEntryLength,
+  recentConversationEntries,
   sessionActConversationEntry,
 } from "./conversation-history.js";
 import { ATTENTION_SPEECH_SOURCE, type AttentionSpeech } from "./realtime-protocol.js";
@@ -31,13 +34,14 @@ function rosterSession(providerSessionId: string, title: string) {
   );
 }
 
-function announcement(summary: string): AttentionSpeech {
+function announcement(summary: string, historyText?: string): AttentionSpeech {
   return {
     providerId: "claude-code",
     providerSessionId: "session-a",
     disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
     source: ATTENTION_SPEECH_SOURCE.NOTICE_REQUEST,
     summary,
+    ...(historyText ? { historyText } : undefined),
     decidedAt: OBSERVED_AT,
   };
 }
@@ -71,14 +75,37 @@ test("appending flattens, bounds, and retires the oldest lines", () => {
   assert.equal(entries[0]?.words, "line 3");
 });
 
+test("the current-launch thread keeps every entry while model context stays recent", () => {
+  let thread: readonly ConversationEntry[] = [];
+  for (let index = 0; index < maximumConversationEntries + 3; index += 1) {
+    thread = appendConversationThreadEntry(thread, {
+      kind: CONVERSATION_ENTRY_KIND.REPLY,
+      words: `line ${index}`,
+    });
+  }
+
+  assert.equal(thread.length, maximumConversationEntries + 3);
+  assert.equal(thread[0]?.words, "line 0");
+  const recent = recentConversationEntries(thread);
+  assert.equal(recent.length, maximumConversationEntries);
+  assert.equal(recent[0]?.words, "line 3");
+});
+
 test("an announcement's line carries its bounded words and validated identity", () => {
   const entry = announcementConversationEntry(
-    announcement("Claude Code finished checkout-service."),
+    announcement(
+      'provider: "Claude Code"; event: finished; work recap: "Checkout is ready."',
+      "Checkout is ready.",
+    ),
   );
 
   assert.ok(entry);
   assert.equal(entry.kind, CONVERSATION_ENTRY_KIND.ANNOUNCEMENT);
-  assert.equal(entry.words, "Claude Code finished checkout-service.");
+  assert.equal(
+    entry.words,
+    'provider: "Claude Code"; event: finished; work recap: "Checkout is ready."',
+  );
+  assert.equal(entry.displayWords, "Checkout is ready.");
   assert.deepEqual(entry.identity, {
     providerId: "claude-code",
     providerSessionId: "session-a",
@@ -206,6 +233,24 @@ test("a spoken ask reads as the developer's own words, said rather than typed", 
 
   assert.ok(text);
   assert.match(text, /^- the developer said: "how is the checkout agent doing\?"$/m);
+});
+
+test("a delayed spoken ask keeps its place in the full current-launch thread", () => {
+  const prior: ConversationEntry = {
+    kind: CONVERSATION_ENTRY_KIND.REPLY,
+    words: "Earlier reply.",
+  };
+  const later: ConversationEntry = {
+    kind: CONVERSATION_ENTRY_KIND.REPLY,
+    words: "Later reply.",
+  };
+
+  const placed = insertSpokenAskThreadEntry([prior, later], "What happened between those?", prior);
+
+  assert.deepEqual(
+    placed.map((entry) => entry.words),
+    ["Earlier reply.", "What happened between those?", "Later reply."],
+  );
 });
 
 test("a spoken ask lands at its turn's own mark, not where its transcription did", () => {

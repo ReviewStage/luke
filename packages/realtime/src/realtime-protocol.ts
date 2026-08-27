@@ -122,6 +122,8 @@ export const REALTIME_SERVER_EVENT = {
   RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA: "response.output_audio_transcript.delta",
   /** The reply's complete text, which supersedes whatever the deltas built. */
   RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DONE: "response.output_audio_transcript.done",
+  /** The server has made one developer audio turn into a conversation item. */
+  INPUT_AUDIO_BUFFER_COMMITTED: "input_audio_buffer.committed",
   /**
    * The developer's own spoken turn, as the service transcribed it. It
    * arrives on its own clock — transcription runs beside the reply, not ahead
@@ -158,6 +160,8 @@ export interface AttentionSpeech extends SessionIdentity {
   disposition: AttentionDisposition;
   source: AttentionSpeechSource;
   summary: string;
+  /** User-facing words for History when `summary` is structured model context. */
+  historyText?: string;
   decidedAt: number;
 }
 
@@ -726,8 +730,10 @@ export type ParsedRealtimeServerEvent =
     }
   | {
       type: typeof REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_COMPLETED;
+      itemId: string;
       transcript: string;
     }
+  | { type: typeof REALTIME_SERVER_EVENT.INPUT_AUDIO_BUFFER_COMMITTED; itemId: string }
   | { type: typeof REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED; responseId?: string }
   | { type: typeof REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STARTED; responseId?: string }
   | {
@@ -873,11 +879,18 @@ export function parseRealtimeServerEvent(
       // A transcription that came back empty said nothing worth a history
       // line, and a failed one arrives as its own event this parser ignores.
       const transcript = text(event.transcript);
-      if (!transcript) return undefined;
+      const itemId = text(event.item_id);
+      if (!transcript || !itemId) return undefined;
       return {
         type: REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_COMPLETED,
+        itemId,
         transcript,
       };
+    }
+    case REALTIME_SERVER_EVENT.INPUT_AUDIO_BUFFER_COMMITTED: {
+      const itemId = text(event.item_id);
+      if (!itemId) return undefined;
+      return { type: REALTIME_SERVER_EVENT.INPUT_AUDIO_BUFFER_COMMITTED, itemId };
     }
     case REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED: {
       // The drain names the response it drained. An old reply's buffer can
