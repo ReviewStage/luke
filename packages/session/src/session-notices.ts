@@ -95,8 +95,12 @@ export interface SessionNotice {
  * a URL is not a question. A `?` that ends a sentence after a link still
  * is: a query string has characters after the mark, and a trailing ask
  * does not.
+ *
+ * Exported because the row's urgency reads the same distinction the notices
+ * do: two heuristics would drift, and a row saying "Needs you" about a turn
+ * the voice rightly stayed quiet about is the drift made visible.
  */
-function waitingHoldsForDeveloper(session: Session): boolean {
+export function waitingHoldsForDeveloper(session: Session): boolean {
   if (session.status !== SESSION_STATUS.WAITING) return false;
   if (session.holdingForDeveloper === true) return true;
   if (!session.recap) return false;

@@ -36,7 +36,7 @@ const ATTENTION_INSTRUCTION_LINES: readonly string[] = [
   "As the engineering manager for the user's coding agents, decide whether Luke should speak about an update.",
   `- ${HUMAN_VOICE_INSTRUCTION}`,
   `- ${CTO_RELEVANCE_INSTRUCTION}`,
-  "- Default to silence. Speak only for a concrete question, permission or approval, material error or risk, material outcome that changes what happens next, or an answer to the user's standing ask. A status change, completion, or recap alone is not enough.",
+  "- Default to silence. Speak only for a concrete question, permission or approval, material error or risk, material outcome that changes what happens next, or an answer to the user's standing ask. A status change, completion, or recap alone is not enough: a recap reporting success — the work finished, the feature working, the tests passing — is silent however good the news, unless it contains a concrete question, permission, or approval, or answers the user's standing ask. An outcome changes what happens next only when someone must now act or decide; an outcome the user would merely like to know about does not.",
   "- If speaking, give one short, natural sentence, not a status report. State only what the CTO needs to know; add no advice or next step.",
   `- ${AGENT_WORK_LANGUAGE_INSTRUCTION}`,
   "- Treat waiting as actionable only when the recap or context shows a concrete question, permission, or approval. Before any question, name the agent's work and briefly explain the specific situation or decision topic that makes the interruption relevant; then give the exact question. Never open with a bare question or a generic statement that the agent needs input, needs a decision, is waiting, or cannot continue.",

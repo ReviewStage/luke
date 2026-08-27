@@ -82,7 +82,13 @@ test("the most urgent sessions are listed first in either data source", () => {
   const live = displaySessions(bootstrap(false), [
     liveSession(CODEX_PROVIDER, "codex-1", SESSION_STATUS.COMPLETE),
     liveSession(CLAUDE_PROVIDER, "claude-1", SESSION_STATUS.WORKING),
-    liveSession(CODEX_PROVIDER, "codex-2", SESSION_STATUS.WAITING),
+    normalizeSession(CODEX_PROVIDER, {
+      providerSessionId: "codex-2",
+      title: "Session codex-2",
+      status: SESSION_STATUS.WAITING,
+      observedAt: 1_000,
+      holdingForDeveloper: true,
+    }),
   ]);
   assert.deepEqual(
     live.map((session) => session.id),
@@ -280,6 +286,43 @@ test("a speaking disposition needs a person even while the session works", () =>
     ],
   );
   assert.equal(session?.urgency, SESSION_URGENCY.ATTENTION);
+});
+
+// A local CLI reports every ordinary finished turn as waiting — completion is
+// session teardown, which a terminal left open never reaches — so waiting
+// alone must not read as "Needs you". Only a turn holding for the developer,
+// or a recap that itself asks, is an ask; a finished turn reads as settled.
+test("a finished turn is not an ask; a held or asking one is", () => {
+  const waiting = (
+    providerSessionId: string,
+    extras: { recap?: string; holdingForDeveloper?: boolean },
+  ) =>
+    normalizeSession(CLAUDE_PROVIDER, {
+      providerSessionId,
+      title: `Session ${providerSessionId}`,
+      status: SESSION_STATUS.WAITING,
+      observedAt: 1_000,
+      ...extras,
+    });
+
+  const sessions = displaySessions(bootstrap(false), [
+    waiting("claude-finished", { recap: "Great—the feature is fully working now." }),
+    waiting("claude-held", { holdingForDeveloper: true }),
+    waiting("claude-asking", { recap: "Should I ship it?" }),
+  ]);
+  const byId = new Map(sessions.map((session) => [session.id, session]));
+
+  assert.equal(byId.get("claude-finished")?.urgency, SESSION_URGENCY.COMPLETE);
+  assert.equal(byId.get("claude-finished")?.detail, "Great—the feature is fully working now.");
+  assert.equal(byId.get("claude-held")?.urgency, SESSION_URGENCY.ATTENTION);
+  assert.equal(byId.get("claude-asking")?.urgency, SESSION_URGENCY.ATTENTION);
+
+  // The badge counts the same reading: the finished turn is a Complete, never
+  // a tallied ask for the notch to number.
+  const tally = sessionTally(sessions);
+  assert.equal(tally.attention, 2);
+  assert.equal(tally.complete, 1);
+  assert.equal(tally.attentionIds.includes("claude-finished"), false);
 });
 
 test("attention joins on the whole provider identity and supplies the row detail", () => {
@@ -830,18 +873,20 @@ test("chats of one workspace sit together and read as one tray run", () => {
     id: string,
     status: (typeof SESSION_STATUS)[keyof typeof SESSION_STATUS],
     observedAt: number,
+    recap?: string,
   ) =>
     normalizeSession(CONDUCTOR_PROVIDER, {
       providerSessionId: id,
       title: `Chat ${id}`,
       status,
       observedAt,
+      ...(recap ? { recap } : undefined),
       detail: { repository: "luke" },
       workspace: { providerWorkspaceId: "workspace-lisbon", name: "lisbon-v2" },
     });
 
   const rows = displaySessions(bootstrap(false), [
-    chatOf("chat-asking", SESSION_STATUS.WAITING, 1_000),
+    chatOf("chat-asking", SESSION_STATUS.WAITING, 1_000, "Keep the run seated together?"),
     liveSession(CODEX_PROVIDER, "codex-between", SESSION_STATUS.WORKING, 5_000),
     chatOf("chat-finished", SESSION_STATUS.COMPLETE, 9_000),
   ]);
@@ -1327,6 +1372,7 @@ test("a query finds a session by its status word, even under a busy detail line"
       title: "Fix the login flow",
       status: SESSION_STATUS.WAITING,
       observedAt: 2_000,
+      holdingForDeveloper: true,
       detail: { activity: "Holding for an approval" },
     }),
   ]);

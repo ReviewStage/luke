@@ -132,6 +132,7 @@ export {
   type SessionNotice,
   type SessionNoticeStatus,
   SessionNoticeTracker,
+  waitingHoldsForDeveloper,
 } from "./session-notices.js";
 export {
   InMemorySessionRegistry,

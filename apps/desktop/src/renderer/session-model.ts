@@ -35,6 +35,7 @@ import {
   sessionChangeNumber,
   sessionFilterAxis,
   silentAttention,
+  waitingHoldsForDeveloper,
 } from "@sidecar/session";
 import {
   compareSessionsByUrgency,
@@ -497,7 +498,13 @@ type SessionWithAttention = Session & { attention: AttentionDecision };
 
 function sessionNeedsAttention(session: SessionWithAttention): boolean {
   return (
-    session.status === SESSION_STATUS.WAITING ||
+    // Waiting alone is not an ask: a local CLI reports every ordinary finished
+    // turn as waiting, because completion is session teardown, which a
+    // terminal left open never reaches. Only a turn actually holding for the
+    // developer — a permission or question the provider reported, or a recap
+    // that itself asks — reads as "Needs you"; the notices and the voice
+    // already draw this line, and the row draws the same one.
+    waitingHoldsForDeveloper(session) ||
     // A session that stopped on a failure cannot get itself going again, so it
     // wants a person at least as much as one that finished its turn.
     session.status === SESSION_STATUS.ERROR ||
@@ -559,6 +566,9 @@ function noticeAsksByIdentity(
 
 function sessionUrgency(session: SessionWithAttention): SessionUrgency {
   if (sessionNeedsAttention(session)) return SESSION_URGENCY.ATTENTION;
+  // A waiting turn not holding for the developer is a turn that settled: it
+  // reads as Complete, not Working — nothing is running — and not as an ask.
+  if (session.status === SESSION_STATUS.WAITING) return SESSION_URGENCY.COMPLETE;
   if (session.status === SESSION_STATUS.COMPLETE) return SESSION_URGENCY.COMPLETE;
   if (session.status === SESSION_STATUS.UNKNOWN) return SESSION_URGENCY.UNKNOWN;
   return SESSION_URGENCY.WORKING;
