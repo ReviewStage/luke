@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { SESSION_STATUS } from "@sidecar/session";
+import { SESSION_STATUS, type SessionControl } from "@sidecar/session";
 import type { JsonObject, JsonValue } from "@sidecar/wire/testing";
 import { HTTP_STATUS, jsonResponse, recordingFetch } from "@sidecar/wire/testing";
-import type { CloudFetch } from "../shared/cloud-session-adapter.js";
+import { CLOUD_ADAPTER_DEFAULTS, type CloudFetch } from "../shared/cloud-session-adapter.js";
 import { describeCloudAdapterContract } from "../testing/cloud-adapter-contract.js";
 import { CONDUCTOR_PROVIDER, ConductorSessionAdapter } from "./adapter.js";
 
@@ -1888,6 +1888,31 @@ test("archives the workspace the user saw through Conductor's archive endpoint, 
   // Conductor documents no body for an archive.
   assert.equal(write?.contentType, undefined);
   assert.equal(write?.body, undefined);
+});
+
+test("asks the slow deadline for an archive, whose answer waits on the workspace standing down", () => {
+  // The route is protected — nothing outside the adapter builds one — so the
+  // probe is a subclass reading its own seam. Archiving answers only once the
+  // workspace is filed away, past the shared request bound, and a deadline
+  // shorter than the act reports an archive that landed as one that may not
+  // have.
+  class ControlRouteProbe extends ConductorSessionAdapter {
+    deadlineFor(control: SessionControl): number | undefined {
+      return this.controlRoute("session-idle", control)?.timeoutMs;
+    }
+  }
+  const probe = new ControlRouteProbe({
+    readApiKey: async () => TEST_API_KEY,
+    baseUrl: TEST_BASE_URL,
+    fetch: async () => jsonResponse({}),
+  });
+
+  assert.equal(
+    probe.deadlineFor({ id: "archive-workspace", label: "Archive", target: "workspace-active" }),
+    CLOUD_ADAPTER_DEFAULTS.SLOW_REQUEST_TIMEOUT_MS,
+  );
+  // The turn's stop answers at once, so it rides the shared bound.
+  assert.equal(probe.deadlineFor({ id: "cancel-turn", label: "Stop this turn" }), undefined);
 });
 
 test("refuses to archive a workspace no row advertised, before any request exists", async () => {

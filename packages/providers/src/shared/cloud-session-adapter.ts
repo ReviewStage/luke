@@ -187,6 +187,27 @@ export interface CloudWriteRoute {
   action?: string;
   /** Left off entirely for an endpoint that documents an empty request. */
   body?: Readonly<WireRecord>;
+  /**
+   * For the rare write the provider answers only once the act itself is done
+   * — Conductor's archive stands the whole workspace down before it says so,
+   * well past the shared request bound. A deadline shorter than the act turns
+   * a write that landed into "may not have landed", so such a route asks for
+   * the slow bound, the same ceiling a slow read gets and the widest this one
+   * can reach.
+   */
+  timeoutMs?: number;
+}
+
+/**
+ * A request's deadline never widens past the slow bound: the option exists for
+ * a read or write the provider is known to answer slowly, not for one that
+ * never ends.
+ */
+export function requestDeadlineMs(requested: number | undefined): number {
+  return Math.min(
+    positiveInteger(requested, CLOUD_ADAPTER_DEFAULTS.REQUEST_TIMEOUT_MS),
+    CLOUD_ADAPTER_DEFAULTS.SLOW_REQUEST_TIMEOUT_MS,
+  );
 }
 
 export function isDefined<Value>(value: Value | undefined): value is Value {
@@ -965,7 +986,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
           ...(route.body === undefined ? undefined : { "Content-Type": "application/json" }),
         },
         ...(route.body === undefined ? undefined : { body: JSON.stringify(route.body) }),
-        signal: AbortSignal.timeout(CLOUD_ADAPTER_DEFAULTS.REQUEST_TIMEOUT_MS),
+        signal: AbortSignal.timeout(requestDeadlineMs(route.timeoutMs)),
       });
     } catch {
       // A thrown fetch cannot say which side of the wire failed: a connection
@@ -1021,6 +1042,12 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
         },
       };
     }
+    // Any other status is an answer that says nothing certain about the act —
+    // a gateway that gave up may stand in front of a write that finished — so
+    // this hedges the way a thrown fetch does, and the refresh that follows
+    // must actually ask rather than keep advertising what the provider may
+    // have already taken.
+    this.#lastAttemptAt = Number.NEGATIVE_INFINITY;
     return {
       outcome: {
         status: ACT_RESULT_STATUS.REJECTED,
@@ -1036,12 +1063,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     options: Readonly<{ timeoutMs?: number; document?: string }> = {},
   ): Promise<WireRecord> {
     const name = this.provider.displayName;
-    // A widened deadline never widens past the slow bound: the option exists
-    // for a read the provider documents as slow, not for one that never ends.
-    const timeoutMs = Math.min(
-      positiveInteger(options.timeoutMs, CLOUD_ADAPTER_DEFAULTS.REQUEST_TIMEOUT_MS),
-      CLOUD_ADAPTER_DEFAULTS.SLOW_REQUEST_TIMEOUT_MS,
-    );
+    const timeoutMs = requestDeadlineMs(options.timeoutMs);
     // A read document rides as a POST because that is how its endpoint is
     // documented, not because it writes: the body carries the document and
     // nothing else, so the request can still express nothing but a read.

@@ -22,6 +22,7 @@ import {
 } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
 import {
+  CLOUD_ADAPTER_DEFAULTS,
   type CloudAdapterOptions,
   type CloudRequest,
   CloudSessionAdapter,
@@ -883,6 +884,12 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
           CONDUCTOR_ROUTE_SEGMENT.ARCHIVE,
         ],
         // Conductor documents no body for an archive, so none is sent.
+        // The answer comes back only once the workspace is actually filed
+        // away — measured near eleven seconds against the live API, past the
+        // shared request bound — so the write rides the slow deadline. On a
+        // shorter one the fetch gives up mid-act and an archive that landed
+        // is reported as one that may not have.
+        timeoutMs: CLOUD_ADAPTER_DEFAULTS.SLOW_REQUEST_TIMEOUT_MS,
       };
     }
     return undefined;
