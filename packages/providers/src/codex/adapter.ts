@@ -655,8 +655,9 @@ function statusFromRow(
  * holds, and a turn's true end can sit past the rollout's read. The
  * notification keeps waiting past freshness — a standing event is proof the
  * approval dialog is still up, because any record at or past it would have
- * discarded it, and a process killed mid-hold leaves that proof standing
- * only until the spool prune retires it.
+ * discarded it — but only within the hold horizon: a process killed mid-hold
+ * discards nothing, so past it the shared refinement stands the event down
+ * and the rollout's own verdict answers alone.
  */
 const CODEX_HOOK_STATUS_REFINEMENT = {
   definitive: [{ event: CODEX_HOOK_EVENT.SESSION_END, fresh: SESSION_STATUS.COMPLETE }],

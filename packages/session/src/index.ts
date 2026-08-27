@@ -55,6 +55,7 @@ export {
   workspaceProjectSelectionId,
 } from "./providers.js";
 export {
+  ATTENTION_DECISION_FRESHNESS_MS,
   ATTENTION_DISPOSITION,
   type AttentionDecision,
   type AttentionDisposition,

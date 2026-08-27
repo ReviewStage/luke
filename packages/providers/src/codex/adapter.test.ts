@@ -12,6 +12,7 @@ import {
   SESSION_STATUS,
 } from "@sidecar/session";
 import type { ParsedJsonObject } from "@sidecar/wire/testing";
+import { HOOK_NOTIFICATION_HOLD_HORIZON_MS } from "../shared/local-session-adapter.js";
 import { CODEX_PROVIDER, CodexSessionAdapter, isCodexRealtimeDelegationText } from "./adapter.js";
 
 const TEST_TIME = Date.parse("2026-08-11T23:45:00.000Z");
@@ -1554,4 +1555,40 @@ test("a permission hold that outlives the freshness window is still an ask", asy
   const [observation] = await adapter.observe();
 
   assert.equal(observation?.status, SESSION_STATUS.WAITING);
+});
+
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+test("a permission hold past the hold horizon stands down on its own", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  const spool = await temporaryHookSpool(t);
+  const rolloutPath = path.join(codexHome, "rollout-dead-hold.jsonl");
+  // A process killed mid-hold writes neither the approval nor a closing
+  // hook, so the standing event is the only trace of a dialog no longer on
+  // any screen. Past the horizon it refines nothing, and the row says what
+  // the rollout alone says: an open turn.
+  await writeCodexState(codexHome, [
+    {
+      id: "codex-dead-hold",
+      cwd: "/Users/test/luke",
+      observedAt: TEST_TIME - HOOK_NOTIFICATION_HOLD_HORIZON_MS - 60 * 60 * 1000,
+      rolloutPath,
+    },
+  ]);
+  await writeRollout(rolloutPath, [{ type: "event_msg", payload: { type: "task_started" } }]);
+  await writeHookEvent(
+    spool,
+    "codex-dead-hold",
+    "notification",
+    TEST_TIME - HOOK_NOTIFICATION_HOLD_HORIZON_MS - 60_000,
+  );
+
+  const adapter = new CodexSessionAdapter({
+    codexHome,
+    hookEventsDirectory: () => spool,
+    now: () => TEST_TIME,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.WORKING);
+  assert.equal(observation?.holdingForDeveloper, undefined);
 });

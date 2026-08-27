@@ -64,6 +64,19 @@ test("declares credentials and observation hooks beside their adapters", () => {
       PROVIDER_ID.OPENCODE,
     ].sort(),
   );
+  // The recurring spool prune travels with the registration: a provider whose
+  // hook writes a spool is exactly the one whose spool must not wait for a
+  // relaunch to shed its dead sessions' files.
+  assert.deepEqual(
+    Object.entries(registrations)
+      .filter(([, registration]) => "pruneObservationHookSpool" in registration)
+      .map(([providerId]) => providerId)
+      .sort(),
+    Object.entries(registrations)
+      .filter(([, registration]) => "registerObservationHook" in registration)
+      .map(([providerId]) => providerId)
+      .sort(),
+  );
 });
 
 test("every registration exposes the one total adapter interface", () => {

@@ -5,6 +5,7 @@ import path from "node:path";
 import test, { type TestContext } from "node:test";
 import { isRosterRelevant, SESSION_COMPLETION_CAUSE, SESSION_STATUS } from "@sidecar/session";
 import type { ParsedJsonObject } from "@sidecar/wire/testing";
+import { HOOK_NOTIFICATION_HOLD_HORIZON_MS } from "../shared/local-session-adapter.js";
 import { CLAUDE_CODE_PROVIDER, ClaudeCodeSessionAdapter } from "./adapter.js";
 
 const TEST_TIME = Date.parse("2026-08-11T23:45:00.000Z");
@@ -1070,6 +1071,38 @@ test("a permission prompt the transcript cannot show turns the row to waiting", 
   // The event also dates the session: the spool is written only by Luke's own
   // script, so its clock cannot suffer the transcripts' bulk-touch problem.
   assert.equal(observation?.observedAt, TEST_TIME - 60_000);
+});
+
+test("a permission hold past the hold horizon stands down on its own", async (t) => {
+  const claudeHome = await temporaryClaudeHome(t);
+  const spool = await temporaryHookSpool(t);
+  // A process killed mid-hold writes neither the answer nor a closing hook.
+  // Past the horizon the standing event refines nothing, and the mid-turn
+  // transcript decays to unknown exactly as it would with no event at all.
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+  await writeSessionFile(
+    claudeHome,
+    "-Users-test-luke",
+    "dead-hold",
+    midTurnRecords("/Users/test/luke", "2026-08-11T18:40:00.000Z"),
+    TEST_TIME - 5 * 60 * 60 * 1000,
+  );
+  await writeHookEvent(
+    spool,
+    "dead-hold",
+    "notification",
+    TEST_TIME - HOOK_NOTIFICATION_HOLD_HORIZON_MS - 60_000,
+  );
+
+  const adapter = new ClaudeCodeSessionAdapter({
+    claudeHome,
+    hookEventsDirectory: () => spool,
+    now: () => TEST_TIME,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.UNKNOWN);
+  assert.equal(observation?.holdingForDeveloper, undefined);
 });
 
 test("a session-end event settles a row the tail would leave waiting", async (t) => {

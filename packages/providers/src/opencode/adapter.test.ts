@@ -6,6 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
 import { SESSION_COMPLETION_CAUSE, SESSION_STATUS } from "@sidecar/session";
 import type { ParsedJsonObject } from "@sidecar/wire/testing";
+import { HOOK_NOTIFICATION_HOLD_HORIZON_MS } from "../shared/local-session-adapter.js";
 import { OPENCODE_PROVIDER, OpenCodeSessionAdapter } from "./adapter.js";
 
 const TEST_TIME = Date.parse("2026-08-13T21:30:00.000Z");
@@ -911,6 +912,26 @@ test("a permission hold that outlives the freshness window is still an ask", asy
 
   assert.equal(observation?.status, SESSION_STATUS.WAITING);
   assert.equal(observation?.holdingForDeveloper, true);
+});
+
+test("a permission hold past the hold horizon stands down on its own", async (t) => {
+  const dataDirectory = await temporaryDataDirectory(t);
+  const spoolDirectory = path.join(dataDirectory, "events");
+  await writeWorkingSession(dataDirectory, "ses_dead_hold");
+  await writeHookEvent(spoolDirectory, "ses_dead_hold", "notification", TEST_TIME);
+
+  // A process killed mid-hold writes neither the answer nor a closing hook.
+  // Past the horizon the standing event refines nothing, and the open turn
+  // decays to unknown exactly as it would with no event at all.
+  const adapter = new OpenCodeSessionAdapter({
+    dataDirectory,
+    now: () => TEST_TIME + HOOK_NOTIFICATION_HOLD_HORIZON_MS + 60_000,
+    hookEventsDirectory: () => spoolDirectory,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.UNKNOWN);
+  assert.equal(observation?.holdingForDeveloper, undefined);
 });
 
 test("a session-end event reads as complete with the closure as its cause", async (t) => {

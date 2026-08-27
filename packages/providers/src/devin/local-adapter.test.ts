@@ -6,6 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
 import { SESSION_COMPLETION_CAUSE, SESSION_STATUS } from "@sidecar/session";
 import type { MutableWireRecord, ParsedJsonObject } from "@sidecar/wire/testing";
+import { HOOK_NOTIFICATION_HOLD_HORIZON_MS } from "../shared/local-session-adapter.js";
 import { DEVIN_PROVIDER } from "./adapter.js";
 import { DevinLocalSessionAdapter } from "./local-adapter.js";
 
@@ -859,6 +860,35 @@ test("a permission hold that outlives the freshness window is still an ask", asy
   const [observation] = await adapter.observe();
 
   assert.equal(observation?.status, SESSION_STATUS.WAITING);
+});
+
+test("a permission hold past the hold horizon stands down on its own", async (t) => {
+  const cliDirectory = await temporaryCliDirectory(t);
+  const spool = await temporaryHookSpool(t);
+  // A process killed mid-hold writes neither the approval nor a closing
+  // hook. Past the horizon the standing event refines nothing, and the open
+  // turn decays to unknown exactly as it would with no event at all.
+  await writeOpenTurnState(
+    cliDirectory,
+    "dead-hold",
+    TEST_TIME - HOOK_NOTIFICATION_HOLD_HORIZON_MS - 60 * 60_000,
+  );
+  await writeHookEvent(
+    spool,
+    "dead-hold",
+    "notification",
+    TEST_TIME - HOOK_NOTIFICATION_HOLD_HORIZON_MS - 60_000,
+  );
+
+  const adapter = new DevinLocalSessionAdapter({
+    cliDirectory,
+    hookEventsDirectory: () => spool,
+    now: () => TEST_TIME,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.UNKNOWN);
+  assert.equal(observation?.holdingForDeveloper, undefined);
 });
 
 test("honors the CLI's own database override", async (t) => {

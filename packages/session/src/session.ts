@@ -166,6 +166,17 @@ export interface AttentionDecision {
 /** A spoken sentence stays far shorter than a provider recap. */
 export const maximumAttentionSummaryLength = 180;
 
+/**
+ * How long a decision keeps standing for a session that has not moved since.
+ * The evaluator re-decides only on a session's next development, so without a
+ * bound a non-silent decision pins its row lit — under a summary growing ever
+ * staler — for as long as the session keeps its place on the roster. The
+ * bound is the roster's own freshness window: a decision judges one observed
+ * moment, and once that moment is older than what the roster itself still
+ * believes as live, the row falls back to the urgency its status earns.
+ */
+export const ATTENTION_DECISION_FRESHNESS_MS = OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS;
+
 /** Validates an untrusted attention decision without importing evaluator behavior. */
 export function attentionDecisionFromWire(
   value: UnparsedWireValue,

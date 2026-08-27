@@ -250,8 +250,10 @@ function statusFromTail(
  * than when the awaiting call reaches the tail, and a stop keeps a settled
  * turn waiting past the freshness decay. The notification keeps waiting past
  * freshness too — a standing event is proof the hold still stands, because
- * any record at or past it would have discarded it, and a crash mid-hold
- * leaves that proof standing only until the spool prune retires it.
+ * any record at or past it would have discarded it — but only within the
+ * hold horizon: a crash mid-hold discards nothing, so past it the shared
+ * refinement stands the event down and the recording's own decay answers
+ * alone.
  */
 const GEMINI_HOOK_STATUS_REFINEMENT = {
   definitive: [{ event: GEMINI_HOOK_EVENT.SESSION_END, fresh: SESSION_STATUS.COMPLETE }],

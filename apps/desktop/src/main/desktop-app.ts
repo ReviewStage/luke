@@ -209,6 +209,13 @@ const ACCOUNT_BASE_URL =
 const HOSTED_SERVICE_BASE_URL = ACCOUNT_BASE_URL.replace(/\/api\/auth\/?$/, "");
 const ACCOUNT_CLIENT_ID = "luke-desktop";
 const SESSION_REFRESH_INTERVAL_MS = 5_000;
+/**
+ * How often the hook spools shed files old enough to refine nothing. Launch
+ * convergence prunes once; this cadence covers the app left running across
+ * days, where a dead session's spool file would otherwise wait for the next
+ * relaunch. An hour is frequency enough for a bound whose scale is a day.
+ */
+const HOOK_SPOOL_PRUNE_INTERVAL_MS = 60 * 60 * 1000;
 const sessionRegistry = new InMemorySessionRegistry();
 // Declared before the settings store because the store's snapshot asks it
 // what the latest pass learned about the Codex CLI's login. It observes only
@@ -1707,6 +1714,27 @@ async function applyLocalSessionHooks(): Promise<void> {
 }
 
 /**
+ * The recurring half of the spool prune the launch convergence above starts,
+ * absorbing failures per provider for the same reason it does: a spool that
+ * cannot be pruned costs only its own disk, never another provider's pass.
+ */
+async function pruneLocalSessionHookSpools(): Promise<void> {
+  await Promise.all(
+    orderedRegistrations.map(async ({ adapter, pruneObservationHookSpool }) => {
+      if (!pruneObservationHookSpool) return;
+      try {
+        await pruneObservationHookSpool();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        process.stderr.write(
+          `${adapter.provider.displayName} hook spool prune failed: ${message}\n`,
+        );
+      }
+    }),
+  );
+}
+
+/**
  * The Superset entry of the workspace-host registry carries the whole
  * Superset pass, not only the enrichment: the acts a drawn row still
  * advertises resolve against this module's latest snapshot, and the chatless
@@ -2165,6 +2193,11 @@ const sessionObservationLoop = new ObservationLoop({
   // A pass is also when the Codex CLI login can have changed hands, and no
   // settings save stands behind that to announce it.
   afterRun: () => {
+    // Time alone can expire an attention decision, and the registry has no
+    // clock of its own, so expiry rides the same cadence that ages statuses:
+    // a flagged row returns to status-derived urgency the pass after its
+    // decision ages out, not whenever something else happens to change.
+    sessionRegistry.expireAttention(Date.now());
     broadcastRelevantSessions();
     void broadcastCodexCloudConnection();
   },
@@ -2184,11 +2217,17 @@ const calendarObservationLoop = new ObservationLoop({
   intervalMs: CALENDAR_REFRESH_INTERVAL_MS,
   run: refreshCalendarMeetings,
 });
+const hookSpoolPruneLoop = new ObservationLoop({
+  gate: observationGate,
+  intervalMs: HOOK_SPOOL_PRUNE_INTERVAL_MS,
+  run: () => pruneLocalSessionHookSpools(),
+});
 const observationSupervisor = new ObservationSupervisor([
   sessionObservationLoop,
   attentionObservationLoop,
   issueObservationLoop,
   calendarObservationLoop,
+  hookSpoolPruneLoop,
 ]);
 
 /**

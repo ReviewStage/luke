@@ -79,6 +79,20 @@ function refineStatusWithHookEvent<Event extends string>(
  */
 export const HOOK_EVENT_TOLERANCE_MS = 5_000;
 
+/**
+ * How long a standing notification hold is believed. A hold is a live fact
+ * rather than an inference — answering it writes provider state at or past
+ * the event, which discards it — so it rightly outlives the freshness decay.
+ * But the proof assumes a process still holding the dialog, and its one
+ * failure mode is silent: a process killed mid-hold, a closed terminal tab, a
+ * crash, writes neither the answer nor a closing hook, and leaves the event
+ * standing for a dialog no longer on any screen. Four hours believes every
+ * hold a developer plausibly comes back to — a meeting, a long review, a
+ * lunch — and retires a dead one the same working day, instead of pinning
+ * "needs you" on a ghost until the day-scale spool prune drops the file.
+ */
+export const HOOK_NOTIFICATION_HOLD_HORIZON_MS = 4 * 60 * 60 * 1000;
+
 /** What the hook settled for one observation, beyond the status itself. */
 export interface HookRefinedStatus {
   status: SessionStatus;
@@ -106,7 +120,12 @@ export interface HookRefinedStatus {
  * own script writes the spool, so its date cannot suffer the bulk-touch
  * problem a provider's files can — and dates the session for the freshness
  * decay as well. A notification alone gets no tolerance: a granted
- * permission must not read as waiting for even one more pass.
+ * permission must not read as waiting for even one more pass. It is also the
+ * one event with a horizon of its own: its hold rightly outlives the
+ * freshness decay, because holding writes nothing and the standing event is
+ * the proof, but that proof holds only while a process is alive to show the
+ * dialog, so past {@link HOOK_NOTIFICATION_HOLD_HORIZON_MS} the event is
+ * ignored whole too and the provider's own state answers alone.
  */
 export function hookRefinedStatus<Event extends string>(options: {
   refinement: HookStatusRefinement<Event>;
@@ -120,11 +139,13 @@ export function hookRefinedStatus<Event extends string>(options: {
   activeSessionFreshnessMs: number;
 }): HookRefinedStatus {
   const { refinement, hookEvent, providerAtMs } = options;
-  const toleranceMs =
-    refinement.notificationEvent !== undefined && hookEvent?.event === refinement.notificationEvent
-      ? 0
-      : HOOK_EVENT_TOLERANCE_MS;
-  const eventStands = hookEvent !== undefined && hookEvent.atMs + toleranceMs >= providerAtMs;
+  const isNotification =
+    refinement.notificationEvent !== undefined && hookEvent?.event === refinement.notificationEvent;
+  const toleranceMs = isNotification ? 0 : HOOK_EVENT_TOLERANCE_MS;
+  const eventStands =
+    hookEvent !== undefined &&
+    hookEvent.atMs + toleranceMs >= providerAtMs &&
+    !(isNotification && options.now - hookEvent.atMs > HOOK_NOTIFICATION_HOLD_HORIZON_MS);
   const observedAt = eventStands ? Math.max(providerAtMs, hookEvent.atMs) : providerAtMs;
   let status = options.statusAt(observedAt);
   if (eventStands) {

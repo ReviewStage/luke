@@ -1,5 +1,6 @@
 import type { SessionProviderAdapter } from "./providers.js";
 import {
+  ATTENTION_DECISION_FRESHNESS_MS,
   type AttentionDecision,
   normalizeAttention,
   normalizeSession,
@@ -343,6 +344,29 @@ export class InMemorySessionRegistry {
     this.#revision += 1;
     this.#notify();
     return copySession(existing);
+  }
+
+  /**
+   * Drops decisions past their freshness, returning each row to the urgency
+   * its status earns. The evaluator re-decides a session only when it moves
+   * again, so nothing replaces an expired decision here — it simply stops
+   * being reported. Time is the caller's to supply: the registry keeps no
+   * clock, and only the observation cadence can make expiry land on a
+   * session nothing else is changing.
+   */
+  expireAttention(now: number): void {
+    let expired = false;
+    for (const [providerId, decisions] of this.#attention) {
+      for (const [providerSessionId, decision] of decisions) {
+        if (now - decision.decidedAt <= ATTENTION_DECISION_FRESHNESS_MS) continue;
+        decisions.delete(providerSessionId);
+        expired = true;
+      }
+      if (decisions.size === 0) this.#attention.delete(providerId);
+    }
+    if (!expired) return;
+    this.#revision += 1;
+    this.#notify();
   }
 
   remove(identity: SessionIdentity): boolean {

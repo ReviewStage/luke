@@ -314,8 +314,9 @@ function activityFromToolCallRows(rows: readonly DevinRow[]): string | undefined
  * and the database records no closure at all. The notification keeps waiting
  * past freshness for the same reason Codex's does — a standing event is
  * proof the approval dialog is still up, because any row at or past it would
- * have discarded it, and a process killed mid-hold leaves that proof
- * standing only until the spool prune retires it.
+ * have discarded it — but only within the hold horizon: a process killed
+ * mid-hold discards nothing, so past it the shared refinement stands the
+ * event down and the database's own decay answers alone.
  */
 const DEVIN_HOOK_STATUS_REFINEMENT = {
   definitive: [{ event: DEVIN_HOOK_EVENT.SESSION_END, fresh: SESSION_STATUS.COMPLETE }],

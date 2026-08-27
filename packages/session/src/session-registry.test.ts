@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  ATTENTION_DECISION_FRESHNESS_MS,
   ATTENTION_DISPOSITION,
   InMemorySessionRegistry,
   maximumSessionRecapLength,
@@ -466,6 +467,29 @@ test("attention changes only for a standing session and one effective decision",
       decision,
     },
   ]);
+});
+
+test("an attention decision past its freshness expires on the clock alone", () => {
+  const registry = new InMemorySessionRegistry();
+  const identity = { providerId: codex.id, providerSessionId: "active" };
+  registry.upsert(codex, observation("active", 10));
+  registry.setAttention(identity, {
+    disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
+    decidedAt: 20,
+    summary: "A review decision is ready.",
+  });
+  const revision = registry.revision;
+
+  registry.expireAttention(20 + ATTENTION_DECISION_FRESHNESS_MS);
+  assert.equal(registry.revision, revision);
+  assert.equal(registry.snapshot().attention.length, 1);
+
+  registry.expireAttention(21 + ATTENTION_DECISION_FRESHNESS_MS);
+  assert.equal(registry.revision, revision + 1);
+  assert.deepEqual(registry.snapshot().attention, []);
+  // Only the decision ages out: the session it was about keeps its row and
+  // falls back to the urgency its own status earns.
+  assert.equal(registry.get(identity)?.providerSessionId, "active");
 });
 
 test("each registry listener receives an isolated snapshot", () => {

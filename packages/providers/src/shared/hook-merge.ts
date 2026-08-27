@@ -581,7 +581,9 @@ export async function readObservationHookEvent<Event extends string>(
 /**
  * Drops spool files old enough that the adapter would no longer read them:
  * an event beyond the observation window refines nothing, and the sessions
- * behind such files are mostly gone for good. Run where install is run, so
+ * behind such files are mostly gone for good. Run where install is run, and
+ * again on the caller's observation cadence — an app left running across
+ * days must not hold every dead session's file until its next relaunch — so
  * the spool's size tracks the sessions actually alive rather than every
  * session ever observed.
  */

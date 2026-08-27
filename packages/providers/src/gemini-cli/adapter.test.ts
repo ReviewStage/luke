@@ -9,6 +9,7 @@ import {
   UNKNOWN_WORKSPACE_LABEL,
 } from "@sidecar/session";
 import type { ParsedJsonObject } from "@sidecar/wire/testing";
+import { HOOK_NOTIFICATION_HOLD_HORIZON_MS } from "../shared/local-session-adapter.js";
 import { GEMINI_CLI_PROVIDER, GeminiCliSessionAdapter } from "./adapter.js";
 
 const TEST_TIME = Date.parse("2026-08-20T12:00:00.000Z");
@@ -606,6 +607,32 @@ test("a permission hold that outlives the freshness window is still an ask", asy
 
   assert.equal(observation?.status, SESSION_STATUS.WAITING);
   assert.equal(observation?.holdingForDeveloper, true);
+});
+
+test("a permission hold past the hold horizon stands down on its own", async (t) => {
+  const geminiHome = await temporaryGeminiHome(t);
+  const spool = await temporaryHookSpool(t);
+  // A process killed mid-hold writes neither the confirmation nor a closing
+  // hook. Past the horizon the standing event refines nothing, and the
+  // mid-turn recording decays to unknown exactly as it would with no event.
+  await writeSessionFile(
+    geminiHome,
+    "luke",
+    "session-2026-08-20T11-00-abcd1234",
+    midTurnRecords("2026-08-20T11:40:00.000Z"),
+    TEST_TIME - 20 * 60 * 1000,
+  );
+  await writeHookEvent(spool, FULL_SESSION_ID, "notification", TEST_TIME - 60_000);
+
+  const adapter = new GeminiCliSessionAdapter({
+    geminiHome,
+    hookEventsDirectory: () => spool,
+    now: () => TEST_TIME + HOOK_NOTIFICATION_HOLD_HORIZON_MS,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.UNKNOWN);
+  assert.equal(observation?.holdingForDeveloper, undefined);
 });
 
 test("a stop event keeps a finished turn waiting past the freshness decay", async (t) => {

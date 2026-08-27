@@ -426,8 +426,9 @@ function statusFromTail(
  * definite alongside a closed session because the tail may hold nothing about
  * either. The notification keeps waiting past freshness — a standing event is
  * proof the permission dialog is still up, because any record at or past it
- * would have discarded it, and a crash mid-hold leaves that proof standing
- * only until the spool prune retires it.
+ * would have discarded it — but only within the hold horizon: a crash
+ * mid-hold discards nothing, so past it the shared refinement stands the
+ * event down and the transcript's own decay answers alone.
  */
 const CLAUDE_HOOK_STATUS_REFINEMENT = {
   definitive: [

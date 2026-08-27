@@ -40,6 +40,13 @@ export interface ProviderRegistration {
   adapter: SessionProviderAdapter;
   credential?: CredentialProvider;
   registerObservationHook?: () => Promise<void>;
+  /**
+   * Drops this provider's spool files old enough to refine nothing. The
+   * registration above already prunes once at launch; this one is for the
+   * observation cadence, because an app left running across days would
+   * otherwise carry every dead session's file until its next relaunch.
+   */
+  pruneObservationHookSpool?: () => Promise<void>;
 }
 
 export interface ProviderRegistrationOptions {
@@ -82,19 +89,24 @@ function adapterDiagnostics(
 }
 
 /**
- * One provider's launch convergence: install the arrangement, then prune the
- * spool it writes into, so the spool's size tracks the sessions actually
- * alive rather than every session ever observed.
+ * One provider's hook convergence: install the arrangement at launch, and
+ * prune the spool it writes into — at launch and again whenever the caller's
+ * cadence asks — so the spool's size tracks the sessions actually alive
+ * rather than every session ever observed.
  */
 function observationHookRegistration(
   installHooks: (installation: ObservationHookInstallation) => Promise<void>,
   installation: () => ObservationHookInstallation,
   now: () => number,
-): () => Promise<void> {
-  return async () => {
-    const resolved = installation();
-    await installHooks(resolved);
-    await pruneObservationHookSpool(resolved.spoolDirectory, HOOK_SPOOL_MAXIMUM_AGE_MS, now());
+): Pick<ProviderRegistration, "registerObservationHook" | "pruneObservationHookSpool"> {
+  const prune = () =>
+    pruneObservationHookSpool(installation().spoolDirectory, HOOK_SPOOL_MAXIMUM_AGE_MS, now());
+  return {
+    registerObservationHook: async () => {
+      await installHooks(installation());
+      await prune();
+    },
+    pruneObservationHookSpool: prune,
   };
 }
 
@@ -151,19 +163,11 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
     },
     [PROVIDER_ID.CLAUDE_CODE]: {
       adapter: locals.claudeCode,
-      registerObservationHook: observationHookRegistration(
-        installClaudeCodeObservationHooks,
-        claudeInstallation,
-        now,
-      ),
+      ...observationHookRegistration(installClaudeCodeObservationHooks, claudeInstallation, now),
     },
     [PROVIDER_ID.CODEX]: {
       adapter: codex,
-      registerObservationHook: observationHookRegistration(
-        installCodexObservationHooks,
-        codexInstallation,
-        now,
-      ),
+      ...observationHookRegistration(installCodexObservationHooks, codexInstallation, now),
     },
     [PROVIDER_ID.CONDUCTOR]: {
       adapter: new ConductorSessionAdapter({
@@ -182,28 +186,16 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
     [PROVIDER_ID.CURSOR]: {
       adapter: cursor,
       credential: CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.CURSOR],
-      registerObservationHook: observationHookRegistration(
-        installCursorObservationHooks,
-        cursorInstallation,
-        now,
-      ),
+      ...observationHookRegistration(installCursorObservationHooks, cursorInstallation, now),
     },
     [PROVIDER_ID.DEVIN]: {
       adapter: devin,
       credential: CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.DEVIN],
-      registerObservationHook: observationHookRegistration(
-        installDevinObservationHooks,
-        devinInstallation,
-        now,
-      ),
+      ...observationHookRegistration(installDevinObservationHooks, devinInstallation, now),
     },
     [PROVIDER_ID.GEMINI_CLI]: {
       adapter: locals.geminiCli,
-      registerObservationHook: observationHookRegistration(
-        installGeminiObservationHooks,
-        geminiInstallation,
-        now,
-      ),
+      ...observationHookRegistration(installGeminiObservationHooks, geminiInstallation, now),
     },
     // Grok Build's own stores already say whose move it is — the database's
     // newest message, or the 1.0.x lifecycle log with its permission prompts
@@ -220,12 +212,8 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
       adapter: locals.openCode,
       // The registration is a managed plugin file in OpenCode's own plugin
       // directory rather than a merged entry, but it converges and prunes on
-      // the same launch cadence as every other provider's.
-      registerObservationHook: observationHookRegistration(
-        installOpenCodeObservationPlugin,
-        opencodeInstallation,
-        now,
-      ),
+      // the same cadences as every other provider's.
+      ...observationHookRegistration(installOpenCodeObservationPlugin, opencodeInstallation, now),
     },
     // The browser's own store already says whose move it is — a turn's row
     // records when it ended and what ended it — so its adapter needs no
