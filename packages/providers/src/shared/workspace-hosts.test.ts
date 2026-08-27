@@ -6,6 +6,7 @@ import test, { type TestContext } from "node:test";
 import { PROVIDER_ID, SESSION_APPLICATION_ID, SESSION_STATUS } from "@sidecar/session";
 import { CmuxSessionApplicationReader } from "../cmux/session-applications.js";
 import { ConductorSessionApplicationReader } from "../conductor/session-applications.js";
+import { HerdrSessionApplicationReader } from "../herdr/session-applications.js";
 import { OrcaWorkspaceReader } from "../orca/workspaces.js";
 import { type WorkspaceHostRegistration, workspaceHostRegistrations } from "./workspace-hosts.js";
 
@@ -31,6 +32,11 @@ function registrations(directory: string, superset?: WorkspaceHostRegistration) 
     cmuxApplications: new CmuxSessionApplicationReader({
       stateDirectory: path.join(directory, "cmux"),
     }),
+    // The stub answers the way a machine with no herdr binary does, so no
+    // test ever invokes a real CLI.
+    herdrApplications: new HerdrSessionApplicationReader({
+      run: async () => ({ exitCode: 1, stdout: "" }),
+    }),
   });
 }
 
@@ -49,6 +55,7 @@ test("registers the managers in the claim order the trays grew up with", async (
       "Conductor application observation",
       "Orca application observation",
       "cmux application observation",
+      "Herdr application observation",
     ],
   );
 });
@@ -86,7 +93,9 @@ test("a read enrichment annotates from the manager's own records", async (t) => 
     }),
   );
   const hosts = registrations(directory);
-  const cmux = hosts[hosts.length - 1];
+  const cmux = hosts.find(
+    (host) => host.observationFailureLabel === "cmux application observation",
+  );
   assert.ok(cmux);
   const enrichment = await cmux.read();
   const observations = enrichment(PROVIDER_ID.CLAUDE_CODE, [

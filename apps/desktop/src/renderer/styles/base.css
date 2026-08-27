@@ -40,6 +40,7 @@
   --mark-deepseek: #5786fe;
   --mark-devin: #ffffff;
   --mark-grok-build: #fcfcfc;
+  --mark-herdr: #ffffff;
   --mark-pi: #ffffff;
   --mark-jules: #715cd7;
   --mark-linear: #5e6ad2;
@@ -974,6 +975,15 @@ html[data-keyboard="true"] .wing-mark:focus-visible {
    publishes it in. */
 .provider-mark[data-mark="grok-build"] {
   color: var(--mark-grok-build);
+  transform: scale(0.94);
+}
+
+/* Herdr's ram fills its cropped box edge to edge the way the Codex and Cursor
+   marks do, so it takes the same scale they do. Herdr publishes the glyph as
+   a mask its site inks in the page colour, so it is drawn in the light form
+   its own dark surface uses, like Copilot, Cursor, and Devin. */
+.provider-mark[data-mark="herdr"] {
+  color: var(--mark-herdr);
   transform: scale(0.94);
 }
 

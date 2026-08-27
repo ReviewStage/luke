@@ -238,6 +238,7 @@ export const SESSION_APPLICATION_ID = {
   // agents — where the agent chip counts every Cursor chat, CLI ones
   // included, so the two ride separate axes under separate ids.
   CURSOR: "cursor-app",
+  HERDR: "herdr",
   ORCA: "orca",
   // The browser is its provider, the same sharing Conductor and Replicas
   // keep: every Radius row is native to the Radius app, so separate ids

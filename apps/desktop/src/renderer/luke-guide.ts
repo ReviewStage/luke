@@ -356,7 +356,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
     {
       label: "Apps beside a session",
       detail:
-        "A chat held by several apps — Conductor, ChatGPT, Cursor, Orca, Superset, cmux — " +
+        "A chat held by several apps — Conductor, ChatGPT, Cursor, Herdr, Orca, Superset, cmux — " +
         "wears their marks on its row. A mark with an exact address opens the chat in that " +
         "app, and an ask can name which app it comes forward in.",
     },
