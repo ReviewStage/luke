@@ -7,7 +7,7 @@
   },
   "files": {
     "ignoreUnknown": true,
-    "includes": ["**", "!!**/pnpm-lock.yaml", "!!**/.agents"]
+    "includes": ["**", "!!**/pnpm-lock.yaml", "!!**/.agents", "!!apps/ios"]
   },
   "formatter": {
     "enabled": true,
