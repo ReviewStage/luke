@@ -358,7 +358,9 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
       detail:
         "A chat held by several apps — Conductor, ChatGPT, Cursor, Herdr, Orca, Superset, cmux — " +
         "wears their marks on its row. A mark with an exact address opens the chat in that " +
-        "app, and an ask can name which app it comes forward in.",
+        "app, and an ask can name which app it comes forward in. A Herdr pane earns its mark " +
+        "only once that agent's own `herdr integration install` has run, because that hook is " +
+        "how Herdr itself learns which session a pane holds.",
     },
     {
       label: "Searching sessions",

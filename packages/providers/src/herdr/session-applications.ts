@@ -96,7 +96,11 @@ type HerdrAgentKind = (typeof HERDR_AGENT_KIND)[keyof typeof HERDR_AGENT_KIND];
  * The agent kinds whose herdr integrations report a session id Luke already
  * observes that agent's sessions under. Herdr recognizes far more kinds than
  * Luke observes; a pane holding one of those carries a reference this reader
- * has no row to join, and is not read.
+ * has no row to join, and is not read. The reference itself exists only where
+ * the user has run that agent's own `herdr integration install`, which joins
+ * herdr's hook to the agent — herdr's screen detection alone learns no
+ * session id, so a pane watched only by screen carries no reference and
+ * draws no association.
  */
 const HERDR_PROVIDER_BY_KIND = {
   [HERDR_AGENT_KIND.CLAUDE]: AGENT_IDENTITY.CLAUDE_CODE.id,
