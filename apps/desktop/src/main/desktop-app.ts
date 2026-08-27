@@ -331,6 +331,20 @@ const accountSession = new AccountSessionManager({
     const signedIn = next.status === ACCOUNT_STATUS.SIGNED_IN;
     const wasSignedIn = account.status === ACCOUNT_STATUS.SIGNED_IN;
     account = next;
+    // The first sign-in ever observed is also where the calendar step of
+    // onboarding goes up: recorded on disk rather than derived, so quitting
+    // at the gate and relaunching finds it standing, while a record already
+    // on file — settled by a connect or backfilled for a veteran — keeps its
+    // history. Written before the account broadcast below, so the gate is
+    // already standing when the renderer learns it is signed in, rather than
+    // the roster being drawn for a beat and replaced. An install whose
+    // settings already hold a calendar has what the gate asks for, and
+    // settles as soon as the snapshot answers; the renderer's own connected
+    // check hides the gate in the meantime.
+    if (signedIn && !wasSignedIn && calendarOnboardingState === undefined) {
+      writeCalendarOnboardingState({ requiredAt: new Date().toISOString() });
+      void settleCalendarOnboardingIfConnected();
+    }
     broadcastAccount();
     void broadcastVoiceAvailability();
     void broadcastSessionReplay();
@@ -343,13 +357,6 @@ const accountSession = new AccountSessionManager({
     // keeps its history: signing out and back in is not arriving twice.
     if (signedIn && !wasSignedIn && arrivalState === undefined) {
       writeArrivalState({ signedInAt: new Date().toISOString() });
-    }
-    // The same first sign-in is where the calendar step of onboarding goes
-    // up: recorded on disk rather than derived, so quitting at the gate and
-    // relaunching finds it standing, while a record already on file — settled
-    // by a connect or backfilled for a veteran — keeps its history.
-    if (signedIn && !wasSignedIn && calendarOnboardingState === undefined) {
-      writeCalendarOnboardingState({ requiredAt: new Date().toISOString() });
     }
   },
 });
@@ -942,6 +949,26 @@ function writeCalendarOnboardingState(state: CalendarOnboardingState): void {
     );
   }
   panels.broadcast(channels.onCalendarOnboardingChanged, calendarOnboardingGateOwed());
+}
+
+/**
+ * Settles an owed record the settings already satisfy. The connect IPC is
+ * the ordinary settler, but a calendar can predate the record — an install
+ * that connected one before this step existed, then signed in again — and a
+ * record left owed over a standing connection would let a later disconnect
+ * resurrect a gate this user already passed under another name.
+ */
+async function settleCalendarOnboardingIfConnected(): Promise<void> {
+  if (!calendarOnboardingOwed(calendarOnboardingState)) return;
+  const settings = await settingsStore.snapshot();
+  const connected =
+    settings.status.calendarAccounts.length > 0 || settings.status.appleCalendar !== undefined;
+  // Re-checked after the await: a connect's own settle may have landed first.
+  if (!connected || !calendarOnboardingOwed(calendarOnboardingState)) return;
+  writeCalendarOnboardingState({
+    ...(calendarOnboardingState ?? {}),
+    settledAt: new Date().toISOString(),
+  });
 }
 
 /** Whether an attempt to speak the arrival beat is already under way. */
@@ -2759,6 +2786,10 @@ export function startDesktopApp(): void {
       ) {
         writeCalendarOnboardingState({ settledAt: new Date().toISOString() });
       }
+      // A record left owed over a calendar that already stands — a crash
+      // between a connect's two writes, or a sign-in edge whose settle never
+      // ran — settles now rather than waiting to gate a disconnect.
+      void settleCalendarOnboardingIfConnected();
       await panels.refreshGeometry();
       registerIpc();
       // Resolving settings touches the filesystem, and the OS keychain only for a
