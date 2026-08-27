@@ -13,12 +13,14 @@ import { isWireString } from "@sidecar/wire";
 import { HTTP_STATUS, jsonResponse, recordingFetch } from "@sidecar/wire/testing";
 import { ADAPTER_DIAGNOSTIC_KIND, type AdapterDiagnosticCallback } from "./adapter-diagnostics.js";
 import {
+  CLOUD_ADAPTER_DEFAULTS,
   type CloudAdapterOptions,
   type CloudFetch,
   type CloudRequest,
   CloudSessionAdapter,
   isDefined,
   knownValue,
+  requestDeadlineMs,
 } from "./cloud-session-adapter.js";
 
 const TEST_TIME = Date.parse("2026-08-12T02:45:00.000Z");
@@ -46,6 +48,11 @@ function observation(
 
 const STUB_APPROVE_CONTROL = { id: "approve", label: "Approve" } as const;
 
+/** An act whose provider answers only once it is done, on its route's own deadline. */
+const STUB_SLOW_ACT_CONTROL = { id: "file-away", label: "File away" } as const;
+/** Short enough for a test to overrun; what matters is that it is the route's own. */
+const STUB_SLOW_ACT_DEADLINE_MS = 25;
+
 /** Stands in for a real provider so the shared half can be tested on its own. */
 class StubCloudAdapter extends CloudSessionAdapter {
   passes = 0;
@@ -70,6 +77,12 @@ class StubCloudAdapter extends CloudSessionAdapter {
   }
 
   protected override controlRoute(providerSessionId: string, control: SessionControl) {
+    if (control.id === STUB_SLOW_ACT_CONTROL.id) {
+      return {
+        segments: ["v0", "sessions", providerSessionId, "file-away"],
+        timeoutMs: STUB_SLOW_ACT_DEADLINE_MS,
+      };
+    }
     if (control.id !== STUB_APPROVE_CONTROL.id) return undefined;
     return { segments: ["v0", "sessions", providerSessionId, "approve"] };
   }
@@ -604,6 +617,67 @@ test("reports an unanswered send as indeterminate and makes the next refresh ask
   // instead of serving the cache for the rest of the interval.
   await adapter.observe();
   assert.equal(adapter.passes, 2);
+});
+
+test("a write answered with an unnamed status makes the next refresh ask", async () => {
+  let status: number = HTTP_STATUS.OK;
+  const stub = stubFetch(() => status);
+  const adapter = adapterFor(stub.fetch, { minimumRefreshIntervalMs: 60_000 });
+  adapter.collected = [observation("session-one", { canReceiveMessage: true })];
+  await adapter.observe();
+
+  status = HTTP_STATUS.SERVER_ERROR;
+  const result = await adapter.sendMessage({ providerSessionId: "session-one", text: "go on" });
+
+  assert.equal(result.status, "rejected");
+  assert.match(result.status === "rejected" ? result.reason : "", /may not have landed/);
+  // A gateway that gave up may stand in front of a write that finished, so
+  // the cache must not keep advertising what the provider may have taken.
+  await adapter.observe();
+  assert.equal(adapter.passes, 2);
+});
+
+test("a write runs on the deadline its own route asked for", async () => {
+  const { fetch } = recordingFetch((request) => {
+    if (request.method !== "POST") return jsonResponse({});
+    // An act still in progress at the deadline: the response arrives only as
+    // the refusal the route's own signal raises.
+    return new Promise((_resolve, reject) => {
+      request.init.signal?.addEventListener("abort", () => reject(new Error("deadline")));
+    });
+  });
+  const adapter = adapterFor(fetch, { minimumRefreshIntervalMs: 60_000 });
+  adapter.collected = [observation("session-slow", { controls: [STUB_SLOW_ACT_CONTROL] })];
+  await adapter.observe();
+
+  const startedAt = performance.now();
+  const result = await adapter.executeControl({
+    providerSessionId: "session-slow",
+    control: STUB_SLOW_ACT_CONTROL,
+  });
+
+  assert.equal(result.status, "rejected");
+  assert.match(result.status === "rejected" ? result.reason : "", /may not have landed/);
+  // Refused by the route's own short deadline, not the shared bound: waiting
+  // out the shared bound here would mean the route's ask never reached the
+  // request.
+  assert.ok(performance.now() - startedAt < CLOUD_ADAPTER_DEFAULTS.REQUEST_TIMEOUT_MS / 2);
+  // The act may have finished behind the lost answer, so the next refresh
+  // asks the provider instead of serving the cache.
+  await adapter.observe();
+  assert.equal(adapter.passes, 2);
+});
+
+test("no route can widen a request past the slow bound", () => {
+  assert.equal(requestDeadlineMs(undefined), CLOUD_ADAPTER_DEFAULTS.REQUEST_TIMEOUT_MS);
+  assert.equal(
+    requestDeadlineMs(CLOUD_ADAPTER_DEFAULTS.SLOW_REQUEST_TIMEOUT_MS),
+    CLOUD_ADAPTER_DEFAULTS.SLOW_REQUEST_TIMEOUT_MS,
+  );
+  assert.equal(
+    requestDeadlineMs(Number.MAX_SAFE_INTEGER),
+    CLOUD_ADAPTER_DEFAULTS.SLOW_REQUEST_TIMEOUT_MS,
+  );
 });
 
 test("runs an advertised control through its documented route, sending no body", async () => {
