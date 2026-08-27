@@ -1064,6 +1064,12 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
    * turn until its call and device arrive, and {@link endTalk} reads that
    * pending turn (or the listening already open) as the latch. The next click
    * finds the latch and sends the turn.
+   *
+   * A click before the microphone is granted keeps the key's own answer, on
+   * purpose: it raises the system's prompt and opens no turn, because the
+   * release already landed while the prompt stood, and a microphone that
+   * went live the instant the dialog closed would be capturing under a
+   * gesture already over. The click after the grant talks.
    */
   const pressTalk = useCallback(() => {
     void beginTalk();
