@@ -323,6 +323,15 @@ export function conversationEntryBelongsToConversation(
   return entryGeneration !== undefined && entryGeneration === conversationGeneration;
 }
 
+/** Captures the reply that owns an act before main-process authorization can pause it. */
+export async function authorizeConversationAct<T>(
+  activeReplyGeneration: { readonly current: number | undefined },
+  authorize: () => Promise<T>,
+): Promise<{ authorization: T; generation: number | undefined }> {
+  const generation = activeReplyGeneration.current;
+  return { authorization: await authorize(), generation };
+}
+
 /**
  * The sessions the replies being spoken are about, for the surface to draw
  * pressable previews of. An announcement already carries its one
@@ -705,8 +714,10 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       // press that opens a session: a spoken ask is a third way to ask for the
       // same act, behind the same gauntlet in the main process.
       carryAct: async (envelope) => {
-        const generation = activeReplyGenerationRef.current;
-        const authorization = await window.sidecar.authorizeAct(envelope);
+        const { authorization, generation } = await authorizeConversationAct(
+          activeReplyGenerationRef,
+          () => window.sidecar.authorizeAct(envelope),
+        );
         if (authorization.status !== ACT_RESULT_STATUS.ACCEPTED) return authorization;
         const { act: action, armed } = envelope;
         if (!armed) {
