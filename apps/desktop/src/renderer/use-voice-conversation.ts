@@ -653,7 +653,10 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     spokenTurnMarksRef.current.clear();
     pendingSpokenTurnMarksRef.current = [];
     setConversationHistory([]);
-    voiceSession.current?.updateConversation([]);
+    talkLatched.current = false;
+    talkPressedAt.current = undefined;
+    voiceSession.current?.clearConversation();
+    activeReplyGenerationRef.current = undefined;
   }, []);
 
   /**

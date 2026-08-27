@@ -1624,6 +1624,16 @@ export class RealtimeVoiceSession {
   }
 
   async close(): Promise<void> {
+    this.clearConversation();
+  }
+
+  /**
+   * Retires the call that owns the current conversation. Realtime items cannot
+   * be enumerated and deleted reliably, so Clear crosses a call boundary: the
+   * next developer turn receives a fresh server-side conversation as well as
+   * the caller's freshly emptied local history.
+   */
+  clearConversation(): void {
     this.#closed = true;
     this.#teardown();
     this.#setStatus(REALTIME_STATUS.IDLE);

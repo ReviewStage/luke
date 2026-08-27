@@ -2989,6 +2989,26 @@ test("closing stops the microphone track", async () => {
   assert.equal(context.microphoneStopped(), true);
   assert.equal(context.session.status, REALTIME_STATUS.IDLE);
 });
+
+test("clearing a conversation retires its call before another turn can begin", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.session.updateConversation([
+    { kind: CONVERSATION_ENTRY_KIND.TYPED_ASK, words: "Do not keep this after Clear." },
+  ]);
+  assert.equal(context.session.sendText("This real turn belongs to the old call."), true);
+
+  context.session.clearConversation();
+
+  assert.equal(context.session.status, REALTIME_STATUS.IDLE);
+  assert.equal(context.session.isConnected, false);
+  const sentBeforeReconnect = context.sent.length;
+  await context.session.connect();
+  await armDeveloperTurn(context);
+
+  assert.equal(context.requests.length, 2);
+  assert.deepEqual(contextItems(context, "[recent conversation", sentBeforeReconnect), []);
+});
 /** Opens and commits a developer turn, which is the only turn a tool may run in. */
 async function armDeveloperTurn(context: Harness): Promise<void> {
   await holdTurn(context);
