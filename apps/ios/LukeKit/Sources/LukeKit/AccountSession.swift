@@ -1,6 +1,12 @@
 import Foundation
 import Observation
 
+public enum AccountSessionError: Error, Equatable {
+    /// No usable credential stands — never signed in, signed out mid-flight,
+    /// or the refresh token was rejected outright.
+    case signedOut
+}
+
 public enum AuthState: Equatable {
     case signedOut
     case signedIn(AccountIdentity)
@@ -59,7 +65,48 @@ public final class AccountSession {
         }
     }
 
+    /// The access token an authorized hosted call should carry, refreshed
+    /// first when the stored one is near expiry (the restore path's window).
+    /// A refresh that merely failed hands back the stored token, which may
+    /// still work; one the server rejected outright has already signed out.
+    public func validAccessToken() async throws -> String {
+        guard case .signedIn = state, let accessToken = KeychainStore.get(.accessToken) else {
+            throw AccountSessionError.signedOut
+        }
+        guard storedTokenIsNearExpiry else { return accessToken }
+        if let refreshed = try? await refreshAccessToken() { return refreshed }
+        guard case .signedIn = state else { throw AccountSessionError.signedOut }
+        return accessToken
+    }
+
+    /// Mints a fresh access token — the retry half of the 401 → refresh →
+    /// retry discipline, for a caller whose first attempt was refused. A
+    /// refresh rejected as invalid_grant signs the user out, mirroring the
+    /// restore path.
+    public func refreshAccessToken() async throws -> String {
+        guard let refreshToken = KeychainStore.get(.refreshToken) else {
+            throw AccountSessionError.signedOut
+        }
+        let gen = generation
+        do {
+            let tokens = try await client.refresh(refreshToken: refreshToken)
+            guard self.generation == gen else { throw AccountSessionError.signedOut }
+            storeTokens(tokens)
+            return tokens.accessToken
+        } catch AccountClientError.serverError(_, let oauthError) where oauthError == "invalid_grant" {
+            if self.generation == gen { await signOut() }
+            throw AccountSessionError.signedOut
+        }
+    }
+
     // MARK: - Private
+
+    private var storedTokenIsNearExpiry: Bool {
+        guard let expiryStr = KeychainStore.get(.expiry),
+              let expiryInterval = TimeInterval(expiryStr)
+        else { return true }
+        return Date(timeIntervalSinceReferenceDate: expiryInterval).timeIntervalSinceNow < 300
+    }
 
     private func restoreFromKeychain() {
         guard let accessToken = KeychainStore.get(.accessToken),
@@ -79,14 +126,9 @@ public final class AccountSession {
     }
 
     private func refreshIfNearExpiry(accessToken: String, generation: Int) async {
-        let shouldRefresh: Bool = {
-            guard let expiryStr = KeychainStore.get(.expiry),
-                  let expiryInterval = TimeInterval(expiryStr)
-            else { return true }
-            let expiry = Date(timeIntervalSinceReferenceDate: expiryInterval)
-            return expiry.timeIntervalSinceNow < 300
-        }()
-        guard shouldRefresh, let refreshToken = KeychainStore.get(.refreshToken) else { return }
+        guard storedTokenIsNearExpiry, let refreshToken = KeychainStore.get(.refreshToken) else {
+            return
+        }
         do {
             let tokens = try await client.refresh(refreshToken: refreshToken)
             guard self.generation == generation else { return }

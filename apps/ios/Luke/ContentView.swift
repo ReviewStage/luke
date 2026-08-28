@@ -107,29 +107,39 @@ struct ContentView: View {
     private func signedInCard(identity: AccountIdentity) -> some View {
         ZStack {
             Color(red: 0.09, green: 0.09, blue: 0.10).ignoresSafeArea()
-            VStack(spacing: 12) {
-                Text(identity.name ?? identity.email)
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(Color.white)
-                Text(identity.email)
-                    .font(.subheadline)
-                    .foregroundStyle(Color(white: 1, opacity: 0.5))
-                Button("Sign out") {
-                    Task { await session.signOut() }
-                }
-                .buttonStyle(CardButtonStyle())
-                .padding(.top, 8)
-            }
-            .padding(40)
-            .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(Color(red: 0.12, green: 0.12, blue: 0.13))
-                    .overlay(
+            ScrollView {
+                VStack(spacing: 16) {
+                    VStack(spacing: 12) {
+                        Text(identity.name ?? identity.email)
+                            .font(.system(size: 22, weight: .semibold))
+                            .foregroundStyle(Color.white)
+                        Text(identity.email)
+                            .font(.subheadline)
+                            .foregroundStyle(Color(white: 1, opacity: 0.5))
+                        Button("Sign out") {
+                            Task { await session.signOut() }
+                        }
+                        .buttonStyle(CardButtonStyle())
+                        .padding(.top, 8)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(40)
+                    .background(
                         RoundedRectangle(cornerRadius: 10)
-                            .stroke(Color(white: 1, opacity: 0.08), lineWidth: 1)
+                            .fill(Color(red: 0.12, green: 0.12, blue: 0.13))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(Color(white: 1, opacity: 0.08), lineWidth: 1)
+                            )
                     )
-            )
-            .padding(24)
+
+                    // Keyed by account so a different sign-in loads its own
+                    // list rather than standing on the last account's.
+                    VaultSection()
+                        .id(identity.email)
+                }
+                .padding(24)
+            }
         }
         .preferredColorScheme(.dark)
     }
