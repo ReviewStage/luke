@@ -335,9 +335,19 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
     {
       label: "What Luke is",
       detail:
-        "A macOS sidecar living beside the notch. The number beside the housing counts the " +
-        "sessions that most need the developer, wearing that state's colour. Hovering peeks, " +
-        "pressing opens the panel, and Escape closes what is open.",
+        "A macOS sidecar living beside the notch. Luke's own face sits on one side of the " +
+        "housing and the marks of the apps holding tracked work sit on the other. Hovering " +
+        "peeks, pressing opens the panel, and Escape closes what is open.",
+    },
+    {
+      label: "The marks beside the housing",
+      detail:
+        "The apps holding the tracked sessions, most urgent first. At rest there is room " +
+        "for one, so the capsule shows the app whose session needs a person soonest; " +
+        "hovering or opening the panel spreads the whole set out. They report which apps " +
+        "Luke is watching and nothing more — they are not controls, and pressing one does " +
+        "nothing. Narrowing the list by app is done with the filter chips in the Sessions " +
+        "tab.",
     },
     {
       label: "The panel",

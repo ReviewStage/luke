@@ -205,9 +205,10 @@ const NARROWED_ON_BUTTON = 2;
  * that is the row the panel already spends on saying what you are looking at.
  *
  * It also has to say when the list is narrowed. A control that hides its own
- * effect is the one thing this panel cannot afford — the capsule is out there
- * counting sessions the list would not be showing — so the selection in force
- * is named on the button itself rather than only inside the sheet it opens.
+ * effect is the one thing this panel cannot afford — the wing's pile of marks
+ * is out there naming an app the narrowed list is not showing — so the
+ * selection in force is named on the button itself rather than only inside the
+ * sheet it opens.
  * The button has one line to say it on, so it names the first two choices and
  * counts the rest; the full selection stays on the hover and in the sheet.
  * While a selection stands, an X on the right clears every chosen chip at

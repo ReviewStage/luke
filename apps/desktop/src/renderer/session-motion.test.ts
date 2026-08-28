@@ -7,6 +7,7 @@ import {
   planReorder,
   rosterRows,
   travelApplies,
+  wingSlotOffset,
   withoutDeparture,
 } from "./session-motion";
 
@@ -162,4 +163,27 @@ test("a departure still fading is kept while another begins", () => {
     { item: { id: "b" }, index: 1 },
     { item: { id: "c" }, index: 2 },
   ]);
+});
+
+test("a mark's seat is invariant to the wing's bound moving under it", () => {
+  // A morph grows the wing 88px. The marks are anchored beside the housing,
+  // so the offset must not read that growth as a travel and animate the whole
+  // strip across the wing.
+  // SAFETY: The two fields below are every property the offset reads.
+  const capsule = { offsetLeft: 9, offsetParent: { clientWidth: 36 } } as unknown as HTMLElement;
+  // SAFETY: The same shape at the peek's own bound.
+  const peek = { offsetLeft: 9, offsetParent: { clientWidth: 124 } } as unknown as HTMLElement;
+  assert.equal(wingSlotOffset(capsule, true), wingSlotOffset(peek, true));
+});
+
+test("a stacked strip reports one seat, so a reorder at rest is no travel", () => {
+  // Every mark is drawn on the first slot while the strip is stacked. Reading
+  // the laid-out seat instead would spring the new lead mark in from a slot
+  // past the capsule's own side, which the wing does not clip.
+  // SAFETY: `offsetLeft` is every property the offset reads.
+  const lead = { offsetLeft: 9 } as unknown as HTMLElement;
+  // SAFETY: The seat the flex strip lays out for the second mark.
+  const second = { offsetLeft: 30 } as unknown as HTMLElement;
+  assert.equal(wingSlotOffset(lead, false), wingSlotOffset(second, false));
+  assert.notEqual(wingSlotOffset(lead, true), wingSlotOffset(second, true));
 });

@@ -11,6 +11,7 @@ import {
   SessionRow,
   WingFace,
   wingMarkCapacity,
+  wingPileOffset,
 } from "@sidecar/panel";
 import {
   CAPSULE_SIDE_WIDTH,
@@ -19,7 +20,6 @@ import {
   PANEL_WIDTH,
   PEEK_SIDE_GROWTH,
   SESSION_URGENCY,
-  type SessionUrgency,
   urgencyLabel,
 } from "@sidecar/surface";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
@@ -51,8 +51,8 @@ type MockMode = (typeof MOCK_MODE)[keyof typeof MOCK_MODE];
 /**
  * How long each presentation holds before the loop moves on. The capsule
  * keeps a beat so the product is seen at rest before it answers; the peek
- * holds long enough for its count caption to be read after the surface
- * settles; the panel holds far longest, because the pause on the open state
+ * holds long enough for the marks to be read once the surface settles; the
+ * panel holds far longest, because the pause on the open state
  * is the point and the walk exists to frame it.
  */
 const CYCLE = {
@@ -78,18 +78,6 @@ const MOCK_SESSIONS = fixtureSnapshot("smoke")
   }))
   .toSorted(compareSessionsByUrgency);
 
-const ATTENTION_COUNT = MOCK_SESSIONS.filter(
-  (session) => session.urgency === SESSION_URGENCY.ATTENTION,
-).length;
-
-/** The urgency the count badge and the capsule adopt, as `sessionTally` decides it. */
-const TALLY_URGENCY: SessionUrgency =
-  ATTENTION_COUNT > 0 ? SESSION_URGENCY.ATTENTION : SESSION_URGENCY.WORKING;
-
-/** `tallyCaption` in the renderer: the caption names its own number. */
-const TALLY_CAPTION =
-  ATTENTION_COUNT > 0 ? `${ATTENTION_COUNT} ${ATTENTION_COUNT === 1 ? "needs" : "need"} you` : "";
-
 /**
  * The wing's marks as the renderer's `sessionTally` seats them, first to need
  * a person first: each chat counts under the app holding it — the lead of its
@@ -100,11 +88,9 @@ const WING_PROVIDERS = MOCK_SESSIONS.map(
 ).filter((markId, index, all) => all.indexOf(markId) === index);
 
 /**
- * `wingMarkCapacity` and its constants in the renderer's notch-wings.tsx: what
- * one wing costs to fill, so the peek counts its remainder and the panel does
- * not have to. The insets are `--panel-inset` on the far side, where the marks
- * start level with the tab bar and the rows, plus `--wing-inset` beside the
- * housing.
+ * `wingMarkCapacity` in `@sidecar/panel`: how many marks a wing of each width
+ * lays flat. Whatever a state cannot hold is truncated rather than counted,
+ * and the capsule's own side holds one.
  */
 const PEEK_CAPACITY = wingMarkCapacity(CAPSULE_SIDE_WIDTH + PEEK_SIDE_GROWTH);
 const PANEL_CAPACITY = wingMarkCapacity((PANEL_WIDTH - HOUSING_WIDTH) / 2);
@@ -238,9 +224,7 @@ export function NotchMock(): React.JSX.Element {
     return () => window.clearTimeout(timer);
   }, [capacity, drawnCapacity]);
 
-  const overflowing = WING_PROVIDERS.length > drawnCapacity;
-  const providers = WING_PROVIDERS.slice(0, overflowing ? drawnCapacity - 1 : drawnCapacity);
-  const unshown = WING_PROVIDERS.length - providers.length;
+  const providers = WING_PROVIDERS.slice(0, drawnCapacity);
 
   const mockStyle =
     panelHeight === undefined
@@ -313,28 +297,28 @@ export function NotchMock(): React.JSX.Element {
           </section>
         </div>
 
-        {/* The wings: Luke nearest the housing, what he is watching resting
-              against the shape's far edge, the count and its caption on the
-              other side. */}
+        {/* The wings: Luke beside the housing on one side, the marks of what
+              he is watching beside it on the other — piled at rest, spread
+              flat once the shape has room. */}
         <div className="wing wing-left">
           <div className="wing-inner">
-            <span className="wing-marks">
-              {providers.map((providerId) => (
-                <span className="wing-mark" key={providerId}>
-                  <ProviderMark providerId={providerId} />
-                </span>
-              ))}
-              {unshown > 0 ? <span className="wing-more">+{unshown}</span> : null}
-            </span>
             <WingFace />
           </div>
         </div>
 
         <div className="wing wing-right">
           <div className="wing-inner">
-            <span className="count-badge" data-state={TALLY_URGENCY}>
-              <span className="count-value">{MOCK_SESSIONS.length}</span>
-              <span className="count-caption">{TALLY_CAPTION}</span>
+            <span className="wing-marks">
+              {providers.map((providerId, index) => (
+                <span
+                  className="wing-mark"
+                  key={providerId}
+                  data-piled={String(index === 0)}
+                  style={cssCustomProperties({ "--mark-rest": `${wingPileOffset(index)}px` })}
+                >
+                  <ProviderMark providerId={providerId} />
+                </span>
+              ))}
             </span>
           </div>
         </div>

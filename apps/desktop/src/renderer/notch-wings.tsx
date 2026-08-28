@@ -1,5 +1,4 @@
-import { ProviderMark, WingFace, wingMarkCapacity } from "@sidecar/panel";
-import { isSessionFilter, type SessionFilter } from "@sidecar/session";
+import { ProviderMark, WingFace, wingMarkCapacity, wingPileOffset } from "@sidecar/panel";
 import { CAPSULE_SIDE_WIDTH, PANEL_WIDTH, peekWidth } from "@sidecar/surface";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -11,30 +10,24 @@ import {
   useFaceMotion,
   usePrefersReducedMotion,
 } from "./luke-face-mood";
-import { HIT_REGION, PANEL_PRESENTATION, type PanelPresentation } from "./panel-state";
-import {
-  type ProviderTally,
-  type SessionTally,
-  sameSessionFilters,
-  tallyCaption,
-  tallySummary,
-  tallyValue,
-} from "./session-model";
+import { PANEL_PRESENTATION, type PanelPresentation } from "./panel-state";
+import type { ProviderTally, SessionTally } from "./session-model";
 import {
   LEAVING_ATTRIBUTE,
   useRoster,
   useWingReorderMotion,
   WING_SLOT_ID_ATTRIBUTE,
+  WING_SPREAD_ATTRIBUTE,
 } from "./session-motion";
 import { WAVEFORM_VOICE, Waveform, type WaveformVoice } from "./waveform";
 
 /**
  * The strips beside the camera housing. They are rendered once for both window
  * modes and anchored to the notch rather than to a stage, so growing the window
- * re-lays out nothing here: the face and the count badge stay put, the meter
- * and the captions unfold into the space the expanded panel adds, and the
- * marks — resting against the shape's far edge — glide outward with it on the
- * surface's own spring.
+ * re-lays out nothing here: the face keeps its place beside the housing on one
+ * side and the marks keep theirs on the other, the meter unfolds into the
+ * space the expanded panel adds, and the marks spread out of their resting
+ * pile on the surface's own spring.
  */
 interface NotchWingsProps {
   tally: SessionTally;
@@ -53,42 +46,32 @@ interface NotchWingsProps {
   /**
    * Whether the roster has been read at all yet. Until it has, the wing is
    * loading rather than empty: the face waits awake instead of sleeping on a
-   * zero that only means "not looked yet", and the badge says it is checking
-   * rather than counting nothing.
+   * zero that only means "not looked yet".
    */
   sessionsSettled: boolean;
   presentation: PanelPresentation;
   housingWidth: number;
   /**
    * True while sign-in stands between Luke and anything to watch. The strip
-   * stays deliberately bare — no face, no count — so the gate in the panel is
-   * the one thing introducing him, and a zero that means "not looking yet"
-   * never poses as a zero that means "nothing happening".
+   * stays deliberately bare — no face, no marks — so the gate in the panel is
+   * the one thing introducing him.
    */
   accountGated: boolean;
-  /** Carries a filter to narrow the session list by when an icon in the wing is clicked. */
-  onSelectFilter?: (filter: SessionFilter) => void;
-  activeFilters?: readonly SessionFilter[];
+  /**
+   * The one sentence the wing states about the roster, derived where the
+   * capsule button's own label is so the two can never drift. The live region
+   * below is what speaks it as it changes.
+   */
+  statusLabel: string;
 }
 
 /**
- * What one wing costs to fill, in the stylesheet's numbers: `--panel-inset` on
- * the far side, where the marks start level with the tab bar and the rows,
- * `--wing-inset` beside the housing, then the face and its gap, then a first
- * mark and a gap-and-mark for every mark after it.
- */
-/**
  * How many marks fit beside the face in a wing of this width. The peek's side
  * is 124px beside the housing it was measured against, which is where its
- * limit of three comes from: the face and its gap cost 26px of the 95px
- * between the wing's insets, and each mark past the first costs 21px of the
- * 55px that remain. The panel's side is what is left of `--panel-width` after
- * the housing, so it holds roughly twice as many. Whenever the meter stands
- * beside the face rather than in its place, the second argument reserves the
- * same 26px again for it, so the marks give up a slot rather than the meter
- * drawing over one.
+ * limit of four comes from; the panel's side is what is left of
+ * `--panel-width` after the housing, so it holds roughly twice as many.
  */
-export { wingMarkCapacity } from "@sidecar/panel";
+export { wingMarkCapacity, wingPileOffset } from "@sidecar/panel";
 
 /**
  * The peek's side beside this housing: what is left of the floored peek after
@@ -101,95 +84,49 @@ export function peekSideWidth(housingWidth: number): number {
 }
 
 /**
- * What the count badge costs to draw, in the stylesheet's numbers:
- * `--wing-inset` before the number starts, the caption's own margin between
- * the number and its words, and the 0.88 the badge rests at outside the
- * panel. The keep is the last two pixels before the shape's edge, where the
- * black is already turning its corner.
- */
-const COUNT_INSET = 9;
-const COUNT_CAPTION_GAP = 9;
-const COUNT_RESTING_SCALE = 0.88;
-const COUNT_EDGE_KEEP = 2;
-
-/**
  * The sign-in label's own margins, in the stylesheet's numbers. It starts at
  * the housing's edge itself — black on black, the notch is indistinguishable
- * from padding, so the inset a numeral keeps buys nothing here — and keeps
- * more from the strip's outer end, where the shape is already turning its
- * corner and words pressed into the curve read as clipped.
+ * from padding, so an inset there buys nothing — and keeps more from the
+ * strip's outer end, where the shape is already turning its corner and words
+ * pressed into the curve read as clipped.
  */
 const SIGN_IN_INSET = 0;
 const SIGN_IN_EDGE_KEEP = 6;
 
+/** The scale the label rests at, so its text never crosses the shape's edge. */
+const SIGN_IN_RESTING_SCALE = 0.88;
+
 /**
- * How much of its resting scale the count badge keeps so the text never
- * crosses the shape's edge. The number grows with the sessions it counts and
- * the shape beside the housing does not, so past the width the wing can hold
- * the text scales down instead of being drawn onto the desktop. The widths
- * arrive in layout pixels — measured before any transform — so the room is
- * compared against them at the scale the stylesheet is about to apply; the
- * factor multiplies that resting scale rather than replacing it, and is 1
- * whenever the room already suffices. The caption unfolds only in the peek
- * and the panel, so only those states have to fit it; every other state
- * draws the number alone inside the capsule's own side.
+ * How much of its resting scale the sign-in label keeps so the words stay
+ * inside the shape beside the housing. The width arrives in layout pixels —
+ * measured before any transform — so the room is compared against it at the
+ * scale the stylesheet is about to apply; the factor multiplies that resting
+ * scale rather than replacing it, and is 1 whenever the room already
+ * suffices. The label is drawn only in the compact shapes, so the capsule's
+ * own side is the room it has to fit.
  */
-export function countBadgeFit(
-  presentation: PanelPresentation,
-  housingWidth: number,
-  valueWidth: number,
-  captionWidth: number,
-  /** True for the sign-in label, which starts flush at the housing's edge. */
-  flushToHousing = false,
-): number {
-  const captioned =
-    presentation === PANEL_PRESENTATION.PEEK || presentation === PANEL_PRESENTATION.PANEL;
-  const textWidth = captioned ? valueWidth + COUNT_CAPTION_GAP + captionWidth : valueWidth;
-  if (textWidth <= 0) return 1;
-  const sideWidth =
-    presentation === PANEL_PRESENTATION.PANEL
-      ? (PANEL_WIDTH - housingWidth) / 2
-      : presentation === PANEL_PRESENTATION.PEEK
-        ? peekSideWidth(housingWidth)
-        : CAPSULE_SIDE_WIDTH;
-  const restingScale = presentation === PANEL_PRESENTATION.PANEL ? 1 : COUNT_RESTING_SCALE;
-  const inset = flushToHousing ? SIGN_IN_INSET : COUNT_INSET;
-  const keep = flushToHousing ? SIGN_IN_EDGE_KEEP : COUNT_EDGE_KEEP;
-  const room = Math.max(0, sideWidth - inset - keep);
-  return Math.min(1, room / (restingScale * textWidth));
+export function signInLabelFit(labelWidth: number): number {
+  if (labelWidth <= 0) return 1;
+  const room = Math.max(0, CAPSULE_SIDE_WIDTH - SIGN_IN_INSET - SIGN_IN_EDGE_KEEP);
+  return Math.min(1, room / (SIGN_IN_RESTING_SCALE * labelWidth));
 }
 
 /**
- * The wing's strip, as slots: the mark of each app holding tracked work,
- * then — when the apps outnumber the slots — the count standing in for the
- * rest. The
- * marks are a summary, and a summary that hides its own remainder reads as a
- * complete list, so whatever does not fit is counted rather than dropped. The
- * count is a slot like any other, so it takes the last one rather than being
- * added past the edge of the peek — and it carries a slot id like any other,
- * so a reorder glides it along with the marks instead of teleporting it.
+ * The wing's strip, as slots: the mark of each app holding tracked work, in
+ * the order the rows read. Whatever the wing cannot hold is truncated rather
+ * than counted — the marks say which apps are working, and a remainder glyph
+ * would put a number back beside the housing that says nothing about which.
  */
-export type WingSlot =
-  | { id: string; provider: ProviderTally }
-  | { id: typeof OVERFLOW_SLOT_ID; unshown: number };
-
-/**
- * The one slot that is not a provider's, named by the glyph it draws. A mark's
- * slot id is its provider id verbatim, so the count's must be a string no
- * provider id can be — an id is a slug, and a slug never opens with the sign.
- */
-export const OVERFLOW_SLOT_ID = "+";
+export interface WingSlot {
+  id: string;
+  provider: ProviderTally;
+}
 
 export function wingSlots(
   providers: readonly ProviderTally[],
   capacity: number,
 ): readonly WingSlot[] {
-  const overflowing = providers.length > capacity;
-  const shown = providers.slice(0, overflowing ? capacity - 1 : capacity);
-  const unshown = providers.length - shown.length;
-  const slots: WingSlot[] = shown.map((provider) => ({ id: provider.providerId, provider }));
-  if (unshown > 0) slots.push({ id: OVERFLOW_SLOT_ID, unshown });
-  return slots;
+  return providers.slice(0, capacity).map((provider) => ({ id: provider.providerId, provider }));
 }
 
 export function NotchWings({
@@ -206,8 +143,7 @@ export function NotchWings({
   presentation,
   housingWidth,
   accountGated,
-  onSelectFilter,
-  activeFilters,
+  statusLabel,
 }: NotchWingsProps): React.JSX.Element {
   const [voiceActive, setVoiceActive] = useState(false);
   const reportVoiceActivity = useCallback(
@@ -231,12 +167,6 @@ export function NotchWings({
     ...(meterVoice ? { turn: meterVoice } : undefined),
     hasAudioSignal: meterShown,
   });
-  // Whether the meter is standing beside the face rather than in its place —
-  // Luke's own turn, and an audio signal with no turn to read at all. Only
-  // then does the wing draw two things nearest the housing instead of one;
-  // the developer's real turn hands the meter the face's own slot, at the
-  // face's own width, so it costs the marks nothing extra.
-  const meterBesideFace = meterShown && !yieldToMeter;
   // The box the hover is read against, not the face itself: the drawing is
   // remounted for every play, and the hover has to survive the trick it fires.
   const faceElement = useRef<HTMLSpanElement>(null);
@@ -263,13 +193,12 @@ export function NotchWings({
   // The wing is bounded by the shape its state draws, so its capacity is too:
   // the panel's side holds more marks than the peek's, and every other state
   // keeps the peek's capacity because that is the set the next peek unfolds.
-  // Whenever the meter stands beside the face rather than in its place, the
-  // marks give up whatever room it costs rather than letting it draw across
-  // them.
+  // The marks have this wing to themselves — no face, no meter — so nothing
+  // else has to be reserved for.
   const capacity =
     presentation === PANEL_PRESENTATION.PANEL
-      ? wingMarkCapacity((PANEL_WIDTH - housingWidth) / 2, meterBesideFace)
-      : wingMarkCapacity(peekSideWidth(housingWidth), meterBesideFace);
+      ? wingMarkCapacity((PANEL_WIDTH - housingWidth) / 2)
+      : wingMarkCapacity(peekSideWidth(housingWidth));
   // Memoized because the roster below notices a new list by identity: the
   // slots may only change when what they summarize does, not on every render
   // a spoken word or a face gesture asks for.
@@ -280,35 +209,24 @@ export function NotchWings({
   // unmounting marks mid-fade — and only then does the gap close.
   const marksRef = useWingReorderMotion();
   const drawnSlots = useRoster(slots, marksRef);
+  // Whether the shape has room to lay the strip out flat. The stylesheet
+  // decides the same thing from the presentation; the strip carries it so the
+  // reorder measurement reads the layout actually drawn rather than inferring
+  // it a second way.
+  const spread =
+    presentation === PANEL_PRESENTATION.PEEK || presentation === PANEL_PRESENTATION.PANEL;
 
-  // The count's text, measured in layout pixels: `offsetWidth` never sees the
+  // The label's text, measured in layout pixels: `offsetWidth` never sees the
   // transform about to draw it, so the fit below can divide by the scale the
   // stylesheet applies without measuring its own answer. No dependency list,
-  // the way the reorder motion measures — the words change with the tally, and
-  // a re-read per commit costs less than proving which commits reworded them —
-  // and the guard keeps an unchanged measurement from re-rendering anything.
-  const countValueElement = useRef<HTMLSpanElement>(null);
-  const countCaptionElement = useRef<HTMLSpanElement>(null);
-  const [countWidths, setCountWidths] = useState({ value: 0, caption: 0 });
+  // the way the reorder motion measures — and the guard keeps an unchanged
+  // measurement from re-rendering anything.
+  const signInElement = useRef<HTMLSpanElement>(null);
+  const [signInWidth, setSignInWidth] = useState(0);
   useLayoutEffect(() => {
-    const value = countValueElement.current?.offsetWidth ?? 0;
-    const caption = countCaptionElement.current?.offsetWidth ?? 0;
-    setCountWidths((held) =>
-      held.value === value && held.caption === caption ? held : { value, caption },
-    );
+    const width = signInElement.current?.offsetWidth ?? 0;
+    setSignInWidth((held) => (held === width ? held : width));
   });
-  const countFit = countBadgeFit(
-    presentation,
-    housingWidth,
-    countWidths.value,
-    countWidths.caption,
-    accountGated,
-  );
-  // The badge must not count a roster nobody has read: until the first
-  // reading lands it says it is checking, because "0 none tracked" is a
-  // claim about the desk and "still looking" is not. The sign-in label
-  // outranks it — a gated Luke is not checking anything.
-  const rosterLoading = !accountGated && !sessionsSettled && tally.total === 0;
 
   return (
     <>
@@ -316,57 +234,6 @@ export function NotchWings({
         {/* Ordered so the element nearest the notch is the one the capsule
             keeps: the rest unfold outward and never displace it. */}
         <div className="wing-inner">
-          {/* What Luke is watching stays on screen through every turn: whoever
-              is speaking, the marks hold their own place at the shape's far
-              edge rather than giving it up to the meter — the capacity above
-              is what keeps the meter from ever drawing across one. */}
-          <span className="wing-marks" ref={marksRef}>
-            {drawnSlots.map(({ item, leaving }) => {
-              // How the reorder measurement finds this slot again after a
-              // re-sort has moved it, and how a slot whose provider left
-              // says so while it fades where the reader last saw it.
-              const motion = {
-                [WING_SLOT_ID_ATTRIBUTE]: item.id,
-                [LEAVING_ATTRIBUTE]: String(leaving),
-              };
-              if (!("provider" in item)) {
-                return (
-                  <span className="wing-more" key={item.id} {...motion} aria-hidden="true">
-                    +{item.unshown}
-                  </span>
-                );
-              }
-              const filter = isSessionFilter(item.provider.providerId)
-                ? item.provider.providerId
-                : undefined;
-              const active =
-                filter !== undefined && sameSessionFilters(activeFilters ?? [], [filter]);
-              const label = item.provider.provider;
-              return (
-                <button
-                  type="button"
-                  className="wing-mark"
-                  key={item.id}
-                  {...motion}
-                  data-hit-region={HIT_REGION.CAPSULE}
-                  data-active={String(active)}
-                  aria-label={active ? `Clear ${label} filter` : `Filter by ${label}`}
-                  title={active ? `Clear ${label} filter` : `Filter by ${label}`}
-                  disabled={leaving}
-                  tabIndex={leaving ? -1 : 0}
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    if (filter !== undefined) {
-                      onSelectFilter?.(filter);
-                    }
-                  }}
-                >
-                  <ProviderMark providerId={item.provider.providerId} />
-                </button>
-              );
-            })}
-          </span>
           {meterShown && (
             /* Keyed on whose turn it is, so each voice's meter is a fresh
                mount: the arrival choreography lives in a starting style, and
@@ -388,7 +255,7 @@ export function NotchWings({
           )}
           {/* Luke himself. He is drawn in every state but one: he steps out of
               the way of your own voice, which is the only thing that displaces
-              him. Everything else in the wing is what he is watching.
+              him.
 
               Keyed on the play so that each one is a new drawing: a motion plays
               once now, and an element already wearing an animation does not
@@ -411,41 +278,57 @@ export function NotchWings({
 
       <div className="wing wing-right">
         <div className="wing-inner">
-          {/* While sign-in stands between Luke and anything to watch, the
-              badge's place says the one honest thing instead of a zero that
-              would pose as "nothing happening": why Luke is idle, and the one
-              act that wakes him. It shares the count's element and fit, so it
-              scales into the capsule's side exactly as a wide number does. */}
+          {/* What Luke is watching: which apps hold the work. The capsule's
+              side has room for one, so at rest it draws the app whose session
+              needs a person soonest and the rest wait behind it; the peek and
+              the panel lay the whole strip out flat. Drawn in every state but
+              the gate, which takes this place for the label below. Decorative —
+              the live region beside them already states everything they show,
+              and the panel's own filter chips are what filtering is done
+              with. */}
           <span
-            className="count-badge"
-            style={cssCustomProperties({ "--count-fit": countFit })}
-            data-state={tally.urgency}
-            data-empty={String(accountGated || tally.total === 0)}
-            data-sign-in={String(accountGated)}
-            role="status"
-            aria-live="polite"
-            aria-label={
-              accountGated
-                ? "Sign in"
-                : rosterLoading
-                  ? "Checking for sessions"
-                  : tallySummary(tally)
-            }
+            className="wing-marks"
+            ref={marksRef}
+            data-drawn={String(!accountGated)}
+            {...{ [WING_SPREAD_ATTRIBUTE]: String(spread) }}
           >
-            <span className="count-value" aria-hidden="true" ref={countValueElement}>
-              {/* Blank while checking: the accessible label already says so,
-                  and a drawn placeholder poses as a count that is not there
-                  yet. */}
-              {accountGated ? "Sign in" : rosterLoading ? null : tallyValue(tally)}
+            {drawnSlots.map(({ item, leaving }, index) => (
+              <span
+                className="wing-mark"
+                key={item.id}
+                // How the reorder measurement finds this slot again after a
+                // re-sort has moved it, and how a slot whose provider left
+                // says so while it fades where the reader last saw it.
+                {...{
+                  [WING_SLOT_ID_ATTRIBUTE]: item.id,
+                  [LEAVING_ATTRIBUTE]: String(leaving),
+                }}
+                data-piled={String(index === 0)}
+                style={cssCustomProperties({ "--mark-rest": `${wingPileOffset(index)}px` })}
+                aria-hidden="true"
+              >
+                <ProviderMark providerId={item.provider.providerId} />
+              </span>
+            ))}
+          </span>
+          {/* While sign-in stands between Luke and anything to watch, the
+              strip says the one honest thing instead: why Luke is idle, and
+              the one act that wakes him. */}
+          {accountGated && (
+            <span
+              className="sign-in-label"
+              style={cssCustomProperties({ "--sign-in-fit": signInLabelFit(signInWidth) })}
+              aria-hidden="true"
+              ref={signInElement}
+            >
+              Sign in
             </span>
-            <span className="count-caption" aria-hidden="true" ref={countCaptionElement}>
-              {/* No caption while signed out: the two words are the label
-                  entire, and with nothing beside them the fit keeps their
-                  natural size inside the peek's side. Nor while checking —
-                  the badge stays blank until there is a count to put words
-                  beside. */}
-              {accountGated || rosterLoading ? null : tallyCaption(tally)}
-            </span>
+          )}
+          {/* The roster's own sentence, spoken rather than drawn. It rides its
+              own element rather than the label's, which is rendered only while
+              signed out and would take every later announcement down with it. */}
+          <span className="wing-status" role="status" aria-live="polite">
+            {statusLabel}
           </span>
         </div>
       </div>

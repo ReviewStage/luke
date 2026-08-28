@@ -2,19 +2,18 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { CAPSULE_SIDE_WIDTH, PANEL_WIDTH, PEEK_MIN_WIDTH } from "@sidecar/surface";
 import {
-  countBadgeFit,
-  OVERFLOW_SLOT_ID,
   peekSideWidth,
+  signInLabelFit,
   wingMarkCapacity,
+  wingPileOffset,
   wingSlots,
 } from "./notch-wings";
-import { PANEL_PRESENTATION } from "./panel-state";
 import type { ProviderTally } from "./session-model";
 
 const panelSideWidth = (housingWidth: number) => (PANEL_WIDTH - housingWidth) / 2;
 
-test("the peek's side beside the 14-inch housing holds three marks", () => {
-  assert.equal(wingMarkCapacity(peekSideWidth(210)), 3);
+test("the peek's side beside the 14-inch housing holds four marks", () => {
+  assert.equal(wingMarkCapacity(peekSideWidth(210)), 4);
 });
 
 test("the bubble's peek side is half the floored peek, so it holds more marks", () => {
@@ -24,9 +23,9 @@ test("the bubble's peek side is half the floored peek, so it holds more marks", 
 
 test("the panel's side holds what is left after the housing", () => {
   // The fixture display's 210px housing: (620 - 210) / 2 = 205px a side.
-  assert.equal(wingMarkCapacity(panelSideWidth(210)), 7);
+  assert.equal(wingMarkCapacity(panelSideWidth(210)), 8);
   // No housing at all — a display without a notch — leaves the most room.
-  assert.equal(wingMarkCapacity(panelSideWidth(0)), 12);
+  assert.equal(wingMarkCapacity(panelSideWidth(0)), 13);
 });
 
 test("a wider housing costs marks rather than clipping them", () => {
@@ -37,21 +36,27 @@ test("a wing too narrow for the arithmetic still shows one mark", () => {
   assert.equal(wingMarkCapacity(0), 1);
 });
 
-test("while the meter stands beside the face it reserves its own room", () => {
-  // Both reservations spend the same 29 + 26 + 14 the plain arithmetic does,
-  // plus a second 26 for the meter now standing beside the face too.
-  assert.equal(wingMarkCapacity(peekSideWidth(210), true), 2);
-  assert.equal(wingMarkCapacity(panelSideWidth(210), true), 6);
+// The capsule's own side, and the last pixels of it the resting mark keeps
+// clear: the shape is turning its corner there, and the wing clips at the
+// peek's bound rather than the capsule's, so nothing catches a mark drawn past
+// it.
+const RESTING_KEEP = 6;
+const WING_INSET = 9;
+const MARK_WIDTH = 14;
+const MARK_AND_GAP = 21;
+
+test("the one mark drawn at rest stays inside the capsule's side", () => {
+  // The invariant the whole opacity-at-rest change hangs on: a resting mark
+  // drawn past the capsule is drawn on the desktop, and no clip saves it.
+  const right = WING_INSET + wingPileOffset(0) + MARK_WIDTH;
+  assert.ok(right <= CAPSULE_SIDE_WIDTH - RESTING_KEEP);
 });
 
-test("the meter's reservation never grows the capacity, only shrinks it", () => {
-  for (const sideWidth of [0, 40, peekSideWidth(210), panelSideWidth(210), panelSideWidth(0)]) {
-    assert.ok(wingMarkCapacity(sideWidth, true) <= wingMarkCapacity(sideWidth));
-  }
-});
-
-test("a wing too narrow for the meter's own room still shows one mark", () => {
-  assert.equal(wingMarkCapacity(0, true), 1);
+test("every mark past the first rests exactly on it", () => {
+  const seat = (index: number) => wingPileOffset(index) + MARK_AND_GAP * index;
+  assert.equal(seat(0), 0);
+  assert.equal(seat(1), 0);
+  assert.equal(seat(4), 0);
 });
 
 const providers = (...ids: string[]): ProviderTally[] =>
@@ -65,27 +70,15 @@ test("providers that fit are one slot each, named by their own id", () => {
   );
 });
 
-test("more providers than slots ends the strip with the count of the rest", () => {
+test("more providers than slots truncates rather than counting the rest", () => {
   const slots = wingSlots(providers("a", "b", "c", "d", "e"), 4);
   assert.deepEqual(
     slots.map((slot) => slot.id),
-    ["a", "b", "c", OVERFLOW_SLOT_ID],
+    ["a", "b", "c", "d"],
   );
-  const overflow = slots[3];
-  assert.ok(overflow !== undefined && !("provider" in overflow));
-  // The count names its own number: the two that lost the arithmetic, plus the
-  // one whose slot the count itself took.
-  assert.equal(overflow.unshown, 2);
 });
 
-test("the count keeps one id however many it stands for, so it glides rather than re-arriving", () => {
-  const [grown] = wingSlots(providers("a", "b", "c", "d", "e", "f"), 4).slice(-1);
-  const [shrunk] = wingSlots(providers("a", "b", "c", "d", "e"), 4).slice(-1);
-  assert.ok(grown !== undefined && shrunk !== undefined);
-  assert.equal(grown.id, shrunk.id);
-});
-
-test("exactly filling the wing needs no count", () => {
+test("exactly filling the wing drops nothing", () => {
   const slots = wingSlots(providers("a", "b", "c", "d"), 4);
   assert.deepEqual(
     slots.map((slot) => slot.id),
@@ -93,76 +86,17 @@ test("exactly filling the wing needs no count", () => {
   );
 });
 
-// The badge's room in the arithmetic below: the capsule's 36px side minus the
-// wing's 9px inset and the 2px kept off the shape's edge, and the peek's 124px
-// side minus the same.
-const capsuleRoom = CAPSULE_SIDE_WIDTH - 11;
-const peekRoom = peekSideWidth(210) - 11;
+test("the sign-in label keeps its resting scale while the words fit", () => {
+  assert.equal(signInLabelFit(30), 1);
+});
 
-test("the sign-in label starts at the housing and keeps clear of the strip's corner", () => {
-  // Flush to the housing, the label spends no inset and keeps more from the
-  // outer corner, so the same words render larger than a numeral's margins
-  // would allow — and still inside the capsule's side.
+test("a label wider than the capsule's side stands down to fit it", () => {
   const width = 42;
-  const label = countBadgeFit(PANEL_PRESENTATION.CAPSULE, 180, width, 0, true);
-  const count = countBadgeFit(PANEL_PRESENTATION.CAPSULE, 180, width, 0);
-  assert.ok(label > count);
-  assert.ok(label * 0.88 * width <= 36 - 6);
-});
-
-test("a count that fits keeps its resting scale", () => {
-  // Two tabular digits: about 19 layout pixels, 17 once the 0.88 draws them.
-  assert.equal(countBadgeFit(PANEL_PRESENTATION.CAPSULE, 210, 19, 0), 1);
-});
-
-test("a number wider than the capsule's side stands down to fit it", () => {
-  // Five digits: about 47 layout pixels against the capsule's 25 of room.
-  const fit = countBadgeFit(PANEL_PRESENTATION.CAPSULE, 210, 47, 0);
+  const fit = signInLabelFit(width);
   assert.ok(fit < 1);
-  assert.ok(0.88 * fit * 47 <= capsuleRoom + 1e-9);
-});
-
-test("the capsule ignores the caption it never draws", () => {
-  assert.equal(
-    countBadgeFit(PANEL_PRESENTATION.CAPSULE, 210, 19, 400),
-    countBadgeFit(PANEL_PRESENTATION.CAPSULE, 210, 19, 0),
-  );
-});
-
-test("the peek fits the number and its caption together", () => {
-  // A three-digit count beside "121 need you": each fits the peek alone, and
-  // together they outgrow it.
-  const fit = countBadgeFit(PANEL_PRESENTATION.PEEK, 210, 29, 100);
-  assert.ok(fit < 1);
-  assert.ok(0.88 * fit * (29 + 9 + 100) <= peekRoom + 1e-9);
-});
-
-test("the bubble's wider peek side keeps the same text at its resting scale", () => {
-  assert.equal(countBadgeFit(PANEL_PRESENTATION.PEEK, 0, 29, 100), 1);
-});
-
-test("the panel's wider side stands the same text down less than the peek's", () => {
-  const peek = countBadgeFit(PANEL_PRESENTATION.PEEK, 210, 38, 160);
-  const panel = countBadgeFit(PANEL_PRESENTATION.PANEL, 210, 38, 160);
-  assert.ok(peek < panel);
-});
-
-test("the slot keeps the capsule's quiet wing, so it keeps the capsule's fit", () => {
-  assert.equal(
-    countBadgeFit(PANEL_PRESENTATION.SLOT, 210, 47, 0),
-    countBadgeFit(PANEL_PRESENTATION.CAPSULE, 210, 47, 0),
-  );
+  assert.ok(fit * 0.88 * width <= CAPSULE_SIDE_WIDTH - 6 + 1e-9);
 });
 
 test("text not yet measured is not scaled", () => {
-  assert.equal(countBadgeFit(PANEL_PRESENTATION.CAPSULE, 210, 0, 0), 1);
-});
-
-test("wing mark provider slots map to valid session filters", () => {
-  const slots = wingSlots(providers("claude", "codex", "cursor"), 3);
-  for (const slot of slots) {
-    if ("provider" in slot) {
-      assert.ok(["claude", "codex", "cursor"].includes(slot.provider.providerId));
-    }
-  }
+  assert.equal(signInLabelFit(0), 1);
 });

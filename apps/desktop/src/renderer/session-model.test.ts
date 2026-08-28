@@ -33,9 +33,7 @@ import {
   sessionRunKeys,
   sessionTally,
   spokenSearchOutcome,
-  tallyCaption,
   tallySummary,
-  tallyValue,
   toggledSessionFilters,
   workspaceTrayActions,
   workspaceTrayChange,
@@ -333,7 +331,6 @@ test("the tally counts per state and per app", () => {
       working: 3,
       complete: 1,
       idle: 1,
-      urgency: SESSION_URGENCY.ATTENTION,
       providers: undefined,
     },
   );
@@ -341,9 +338,7 @@ test("the tally counts per state and per app", () => {
   // under the app holding it: both Conductor chats land under Conductor's
   // mark whatever agent runs them, the Codex chat under ChatGPT, its lead
   // app, and a chat no app holds — the local Claude Code session, the Devin
-  // cloud session — under its provider's own. Five is one more than the
-  // wings hold, so the fixture also proves the remainder is counted rather
-  // than dropped.
+  // cloud session — under its provider's own.
   assert.deepEqual(tally.providers, [
     { providerId: PROVIDER_ID.CLAUDE_CODE, provider: "Claude Code", total: 1, attention: 1 },
     { providerId: SESSION_APPLICATION_ID.CHATGPT, provider: "ChatGPT", total: 1, attention: 0 },
@@ -376,57 +371,16 @@ test("the apps re-seat with the rows when the other sort is chosen", () => {
   );
 });
 
-test("the badge urgency follows the most urgent session", () => {
-  const working = sessionTally(
-    displaySessions(bootstrap(false), [liveSession(CODEX_PROVIDER, "a", SESSION_STATUS.WORKING)]),
-  );
-  const complete = sessionTally(
-    displaySessions(bootstrap(false), [liveSession(CODEX_PROVIDER, "a", SESSION_STATUS.COMPLETE)]),
-  );
-  const empty = sessionTally([]);
-
-  assert.equal(working.urgency, SESSION_URGENCY.WORKING);
-  assert.equal(complete.urgency, SESSION_URGENCY.COMPLETE);
-  assert.equal(empty.urgency, SESSION_URGENCY.UNKNOWN);
-});
-
-test("the badge number counts the state its colour names", () => {
-  // The fixture holds 1 attention, 3 working, 1 complete, and 1 idle session:
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  // the badge says 1 in the attention colour, never a 6 posing as urgent.
-  const attention = sessionTally(displaySessions(bootstrap(true), []));
-  const working = sessionTally(
-    displaySessions(bootstrap(false), [
-      liveSession(CODEX_PROVIDER, "a", SESSION_STATUS.WORKING),
-      liveSession(CODEX_PROVIDER, "b", SESSION_STATUS.WORKING),
-    ]),
-  );
-  const complete = sessionTally(
-    displaySessions(bootstrap(false), [liveSession(CODEX_PROVIDER, "a", SESSION_STATUS.COMPLETE)]),
-  );
-
-  assert.equal(tallyValue(attention), 1);
-  assert.equal(tallyValue(working), 2);
-  assert.equal(tallyValue(complete), 1);
-  assert.equal(tallyValue(sessionTally([])), 0);
-});
-
-test("the caption is the badge state's own words, never a second number", () => {
+test("the spoken summary names the state its own number counts", () => {
   const tally = sessionTally(displaySessions(bootstrap(true), []));
 
-  assert.equal(tallyCaption(tally), "needs you");
   assert.equal(tallySummary(tally), "1 session needs you");
-  assert.equal(tallyCaption({ ...tally, attention: 2 }), "need you");
-  assert.equal(tallyCaption({ ...tally, attention: 0, working: 3 }), "working");
   assert.equal(tallySummary({ ...tally, attention: 0, working: 3 }), "3 sessions working");
-  assert.equal(tallyCaption({ ...tally, attention: 0, working: 0 }), "complete");
   assert.equal(tallySummary({ ...tally, attention: 0, working: 0 }), "1 session complete");
-  assert.equal(tallyCaption({ ...tally, attention: 0, working: 0, complete: 0 }), "tracked");
   assert.equal(
     tallySummary({ ...tally, attention: 0, working: 0, complete: 0 }),
     "6 sessions tracked",
   );
-  assert.equal(tallyCaption(sessionTally([])), "none tracked");
   assert.equal(tallySummary(sessionTally([])), "No sessions tracked");
 });
 

@@ -266,20 +266,6 @@
   right: calc(50% + var(--notch-housing-width) / 2);
   left: calc(50% - var(--wing-bound) / 2);
   justify-content: flex-end;
-  /* The marks rest against this edge, and this edge is the one a morph moves.
-     In the product session-motion glides them along it on the surface's own
-     spring; here the edge itself takes the surface's exact timing — both
-     travel 50% minus half a springing width — so the marks track the black
-     without a frame of being drawn past it. The handful of fixed-size glyphs
-     inside re-lay out for pennies, and no text is re-shaped. */
-  transition: left var(--duration-shape) var(--spring) var(--duration-exit);
-}
-
-/* Growing, the far edge leads with the surface; shrinking, the base rule's
-   delay holds both back together — the two edges never part. */
-.mock[data-mode="peek"] .wing-left,
-.mock[data-mode="panel"] .wing-left {
-  transition-delay: 0s;
 }
 
 .mock .wing-right {
@@ -295,52 +281,43 @@
   padding: 0 var(--wing-inset);
 }
 
-/* The left wing's inner spans the whole strip rather than shrinking to its
-   contents: the face keeps the notch's edge it always had, and the marks' own
-   auto margin is what holds them against the shape's far edge instead of
-   beside the face. */
-.mock .wing-left .wing-inner {
-  flex: 1;
-  justify-content: flex-end;
-}
-
-/* Anchored to the shape's far edge — the auto margin holds it there — and
-   starting at `--panel-inset` from it, so the first mark lines up with the tab
-   bar and the rows below. The wing already pads `--wing-inset`; the margin
-   makes up the difference. Read the way a list is: the first provider — the
-   one that needs a person soonest — holds the leftmost slot, and the overflow
-   count trails the rest. */
+/* Anchored beside the housing rather than at the shape's far edge, in every
+   state: the far edge is the one a morph moves, and marks that are opaque at
+   rest would travel its whole growth on every peek. Beside the housing the
+   black under them never moves, so the pile closes toward the notch and
+   nothing is drawn outside the shape. Read the way a list is — the first
+   provider, the one that needs a person soonest, holds the slot nearest the
+   housing. */
 .mock .wing-marks {
   display: flex;
   height: 22px;
   align-items: center;
   gap: 7px;
-  margin-right: auto;
-  margin-left: calc(var(--panel-inset) - var(--wing-inset));
 }
 
+/* Stacked at rest and spread flat once the shape has room. The spread is
+   transform-only, as the renderer's own sheet insists: `--mark-rest` carries
+   each mark's resting seat as an offset from where the flat strip already
+   lays it out. */
 .mock .wing-mark {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   color: var(--text-secondary);
-}
-
-/* The capsule keeps the face and nothing else; what Luke is watching unfolds
-   outward from the notch on the same spring, at the same distance, as the
-   count's caption does on the other side. The two wings are one gesture. */
-.mock .wing-mark,
-.mock .wing-more {
-  opacity: 0;
-  transform: translateX(8px);
+  transform: translateX(var(--mark-rest, 0px));
   transition:
     opacity var(--duration-exit) var(--motion-exit),
     transform var(--duration-shape) var(--spring);
 }
 
+/* The capsule's side has room for one mark, so every mark past the first rests
+   exactly on it and is drawn nowhere until the shape spreads the strip out. */
+.mock .wing-mark[data-piled="false"] {
+  opacity: 0;
+}
+
 .mock[data-mode="peek"] .wing-mark,
-.mock[data-mode="peek"] .wing-more,
-.mock[data-mode="panel"] .wing-mark,
-.mock[data-mode="panel"] .wing-more {
+.mock[data-mode="panel"] .wing-mark {
   opacity: 1;
   transform: none;
   transition-duration: var(--duration-quick), var(--duration-shape);
@@ -350,26 +327,14 @@
 
 /* A mark can mount into a wing that is already unfolded — the panel's wing
    holds more marks than the peek's — and a transition only runs from a style
-   the element has held, so a mark that arrives late unfolds on the same
+   the element has held, so a mark that arrives late spreads on the same
    gesture as the rest instead of appearing in place. */
 @starting-style {
   .mock[data-mode="peek"] .wing-mark,
-  .mock[data-mode="peek"] .wing-more,
-  .mock[data-mode="panel"] .wing-mark,
-  .mock[data-mode="panel"] .wing-more {
+  .mock[data-mode="panel"] .wing-mark {
     opacity: 0;
-    transform: translateX(8px);
+    transform: translateX(var(--mark-rest, 0px));
   }
-}
-
-/* More agents than the wing can hold: counted rather than dropped, at the far
-   end of the row, where it reads as the remainder of a list. */
-.mock .wing-more {
-  flex: 0 0 auto;
-  color: var(--text-tertiary);
-  font-size: 9.5px;
-  font-weight: 660;
-  letter-spacing: -0.2px;
 }
 
 .mock .provider-mark {
@@ -413,72 +378,14 @@
   transform: scale(1.22);
 }
 
-/* Luke holds the place nearest the housing in every state: the marks and the
-   captions unfold around a fixed point, and the strip at rest is him rather
-   than whichever agent happens to be first. */
+/* Luke holds the place nearest the housing in every state, as the marks hold
+   theirs on the other side: everything unfolds around two fixed points. */
 .mock .luke-face {
   width: 18px;
   height: 18px;
   flex: 0 0 auto;
   overflow: visible;
   color: var(--text-primary);
-}
-
-/* A number, not a badge: the rounded system face macOS uses for glanceable
-   numerals, in the tally's own state colour. */
-.mock .count-badge {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--accent);
-  font-family: ui-rounded, -apple-system, "SF Pro Rounded", blinkmacsystemfont, sans-serif;
-  font-size: 16px;
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
-  letter-spacing: -0.2px;
-  transform: scale(0.88);
-  transform-origin: left center;
-  transition: transform var(--duration-shape) var(--spring);
-  will-change: transform;
-}
-
-.mock .count-badge[data-state="attention"] {
-  text-shadow: 0 0 14px color-mix(in srgb, var(--accent) 45%, transparent);
-}
-
-/* The panel has room for it to sit at full size; the capsule and the peek do
-   not, and growing it there read as a second movement competing with the
-   widening. */
-.mock[data-mode="panel"] .count-badge {
-  transform: scale(1);
-}
-
-.mock .count-caption {
-  position: absolute;
-  top: 50%;
-  left: 100%;
-  margin-left: 9px;
-  color: var(--text-secondary);
-  font-size: 9.5px;
-  font-weight: 600;
-  letter-spacing: 0.2px;
-  opacity: 0;
-  text-transform: uppercase;
-  transform: translate(-8px, -50%);
-  transition:
-    opacity var(--duration-exit) var(--motion-exit),
-    transform var(--duration-shape) var(--spring);
-  white-space: nowrap;
-}
-
-.mock[data-mode="peek"] .count-caption,
-.mock[data-mode="panel"] .count-caption {
-  opacity: 1;
-  transform: translate(0, -50%);
-  transition-duration: var(--duration-quick), var(--duration-shape);
-  transition-timing-function: var(--motion-exit), var(--spring);
-  transition-delay: var(--peek-delay);
 }
 
 /* Expanded panel. Content arrives behind the surface, never in front of it:
