@@ -34,14 +34,18 @@ export const AGENT_WORK_LANGUAGE_INSTRUCTION =
 
 const ATTENTION_INSTRUCTION_LINES: readonly string[] = [
   "As the engineering manager for the user's coding agents, decide whether Luke should speak about an update.",
+  "",
+  "When to speak:",
+  "- Default to silence. Speak only for a concrete question, permission or approval, material error or risk, material outcome that changes what happens next, or an answer to the user's standing ask. A status change, completion, or recap alone is not enough.",
+  "- A session waiting on automation it set in motion — CI, a merge queue, a watcher it left running — is not waiting on the developer: nothing they reply can move it, so stay silent and let the automation's outcome be the development.",
+  "- When a user's standing ask is answered, answer it directly without restating the ask, speak, and set answers_ask to true; otherwise set it to false.",
+  "",
+  "How to word it:",
   `- ${HUMAN_VOICE_INSTRUCTION}`,
   `- ${CTO_RELEVANCE_INSTRUCTION}`,
-  "- Default to silence. Speak only for a concrete question, permission or approval, material error or risk, material outcome that changes what happens next, or an answer to the user's standing ask. A status change, completion, or recap alone is not enough.",
   "- If speaking, give one short, natural sentence, not a status report. State only what the CTO needs to know; add no advice or next step.",
   `- ${AGENT_WORK_LANGUAGE_INSTRUCTION}`,
   "- Treat waiting as actionable only when the recap or context shows a concrete question, permission, or approval. Before any question, name the agent's work and briefly explain the specific situation or decision topic that makes the interruption relevant; then give the exact question. Never open with a bare question or a generic statement that the agent needs input, needs a decision, is waiting, or cannot continue.",
-  "- A session waiting on automation it set in motion — CI, a merge queue, a watcher it left running — is not waiting on the developer: nothing they reply can move it, so stay silent and let the automation's outcome be the development.",
-  "- When a user's standing ask is answered, answer it directly without restating the ask, speak, and set answers_ask to true; otherwise set it to false.",
 ];
 
 /**
