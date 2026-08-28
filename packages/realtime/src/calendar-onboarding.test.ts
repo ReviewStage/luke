@@ -20,7 +20,8 @@ test("the beat is one marker item and one tool-free response, fixed by the build
   assert.equal(responseBody.tool_choice, "none");
   const instructions = responseBody.instructions;
   assert.ok(isWireString(instructions));
-  assert.ok(instructions.includes("never titles or attendees"));
+  assert.ok(instructions.includes("during your meetings"));
+  assert.ok(instructions.includes("one short sentence"));
 });
 
 test("the guard tells the onboarding beat from the arrival's", () => {

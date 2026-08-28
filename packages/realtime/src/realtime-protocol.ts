@@ -691,19 +691,16 @@ export function arrivalSpeechEvents(speech: ArrivalSpeech): readonly WireRecord[
 }
 
 /**
- * What Luke is told the calendar onboarding beat is, fixed at build time. It
- * explains the gate the panel is already showing — why a calendar is being
- * asked for and what will never be read — and nothing else, because the
- * screen itself carries every control the words could name.
+ * What Luke is told the calendar onboarding beat is, fixed at build time.
+ * One short sentence naming why the gate is asking, and nothing else: the
+ * screen itself carries every control, choice, and boundary the words could
+ * otherwise have to explain.
  */
 const CALENDAR_ONBOARDING_SPEECH_HEAD = [
   "The developer has just signed in for the first time, and Luke's panel is asking them to " +
-    "connect a calendar before anything else. Say, warmly and in two or three short " +
-    "sentences: connecting a calendar (this Mac's own, or Google) lets you hold your " +
-    "spoken announcements while they are in a meeting, and you read only when meetings " +
-    "start and end, never titles or attendees. Mention they can choose which calendars " +
-    "count once one is connected, and press Done, or skip the step.",
-  "Do not greet, do not ask a question back, and stop there.",
+    'connect a calendar. Say one short sentence, warmly, to the effect of: "Connect your ' +
+    "calendar so I don't talk during your meetings.\"",
+  "Do not greet, do not explain further, do not ask a question back, and stop there.",
 ] as const;
 
 /**
