@@ -70,6 +70,22 @@ test("conversation history is blocked from optional panel recordings", () => {
   assert.doesNotMatch(markup, /stays in memory|typed or spoken exchange/);
 });
 
+test("messages offer a copy control while quiet events offer none", () => {
+  const markup = renderToStaticMarkup(
+    createElement(ConversationHistoryPanel, {
+      entries: [
+        { kind: CONVERSATION_ENTRY_KIND.TYPED_ASK, words: "ship it" },
+        { kind: CONVERSATION_ENTRY_KIND.REPLY, words: "Shipping." },
+        { kind: CONVERSATION_ENTRY_KIND.ACT, words: "Sent to Codex." },
+      ],
+      onClear: () => undefined,
+    }),
+  );
+
+  assert.equal(markup.match(/class="history-copy"/g)?.length, 2);
+  assert.match(markup, /aria-label="Copy message"/);
+});
+
 test("the empty history reports only its state", () => {
   const markup = renderToStaticMarkup(
     createElement(ConversationHistoryPanel, {

@@ -33,12 +33,39 @@ export function historyEntryPresentation(kind: ConversationEntryKind): HistoryEn
   }
 }
 
+const COPY_CONFIRMATION_MS = 1500;
+
 function HistoryEntryRow({ entry }: { entry: ConversationEntry }): React.JSX.Element {
   const presentation = historyEntryPresentation(entry.kind);
+  const words = entry.displayWords ?? entry.words;
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), COPY_CONFIRMATION_MS);
+    return () => clearTimeout(timer);
+  }, [copied]);
+
   return (
     <li className="history-entry" data-speaker={presentation.speaker}>
       <small className="visually-hidden">{presentation.label}</small>
-      <p>{entry.displayWords ?? entry.words}</p>
+      <p>{words}</p>
+      {presentation.speaker === HISTORY_ENTRY_SPEAKER.EVENT ? null : (
+        <button
+          type="button"
+          className="history-copy"
+          data-copied={copied ? "true" : undefined}
+          aria-label={copied ? "Copied" : "Copy message"}
+          onClick={() => {
+            // The visible words, never the structured model context behind an
+            // announcement: copy takes exactly what the bubble shows.
+            window.sidecar.copyText(words);
+            setCopied(true);
+          }}
+        >
+          {copied ? "Copied" : "Copy"}
+        </button>
+      )}
     </li>
   );
 }

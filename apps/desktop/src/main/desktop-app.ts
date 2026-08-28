@@ -95,6 +95,7 @@ import { ACT_RESULT_STATUS, isRecord, text, type UnparsedWireValue } from "@side
 import {
   app,
   BrowserWindow,
+  clipboard,
   type IpcMainEvent,
   type IpcMainInvokeEvent,
   ipcMain,
@@ -1630,6 +1631,8 @@ function registerIpc(): void {
     if (!introductionWindow.owns(context.sender)) return;
     introductionRendererReady = true;
   });
+
+  registerHandler(BRIDGE.copyText, (words: string) => clipboard.writeText(words));
 
   registerHandler(BRIDGE.quit, app.quit.bind(app));
 

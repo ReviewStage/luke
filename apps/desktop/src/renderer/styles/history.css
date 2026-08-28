@@ -66,10 +66,51 @@
 }
 
 .history-entry {
+  position: relative;
   display: flex;
   max-width: min(82%, 58ch);
   flex: 0 0 auto;
   flex-direction: column;
+}
+
+/* Copy sits in the bubble's free margin, absolutely positioned so a thread
+   with the control lays out exactly like one without it, and hover-revealed
+   because a control on every bubble would out-shout the words. It stays
+   keyboard-reachable while hidden, and :focus-visible reveals it. */
+.history-copy {
+  position: absolute;
+  top: 50%;
+  padding: 3px 8px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 620;
+  opacity: 0;
+  transform: translateY(-50%);
+  transition:
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease,
+    opacity var(--duration-hover) ease;
+}
+
+.history-entry[data-speaker="luke"] .history-copy {
+  left: calc(100% + 4px);
+}
+
+.history-entry[data-speaker="you"] .history-copy {
+  right: calc(100% + 4px);
+}
+
+.history-entry:hover .history-copy,
+.history-copy:focus-visible,
+.history-copy[data-copied] {
+  opacity: 1;
+}
+
+.history-copy:hover {
+  background: var(--raised);
+  color: var(--text-primary);
 }
 
 .history-entry p {

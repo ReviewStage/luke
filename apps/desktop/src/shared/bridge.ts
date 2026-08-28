@@ -625,6 +625,13 @@ export const BRIDGE = {
     args: noArgs,
     result: result<void>(),
   }),
+  /**
+   * Words the renderer already draws, placed on this machine's clipboard and
+   * nowhere else. Routed through the main process because the panel's
+   * permission handlers deny the sandboxed renderer every Chromium
+   * permission but audio capture, the async clipboard included.
+   */
+  copyText: entry({ kind: "send", channel: "app:copy-text", args: oneString }),
   focusPanel: entry({ kind: "send", channel: "app:focus-panel", args: noArgs }),
   requestRealtimeCredential: entry({
     kind: "invoke",
