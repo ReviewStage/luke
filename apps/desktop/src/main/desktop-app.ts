@@ -128,7 +128,13 @@ import {
   WINDOW_ROLE,
 } from "#shared/contracts";
 import { VOICE_SOURCE_COUNTED_AS } from "#shared/product-vocabulary";
-import { buildCarriesDeveloperIdSigning, resolveAppName } from "./app-identity";
+import {
+  APP_CHANNEL,
+  buildCarriesDeveloperIdSigning,
+  HOOK_ARTIFACT_QUALIFIER_BY_CHANNEL,
+  resolveAppChannel,
+  resolveAppName,
+} from "./app-identity";
 import { AppleCalendarReader } from "./apple-calendar";
 import {
   ARRIVAL_STATE_FILE,
@@ -186,10 +192,12 @@ import { PanelManager } from "./window/panel-manager";
 // run must never share the release's. Applied before anything derives a path:
 // the single-instance lock, the settings store, and the hook spools all live
 // under this name.
-const appName = resolveAppName({
+const appIdentity = {
   packaged: app.isPackaged,
   developerIdSigned: buildCarriesDeveloperIdSigning(),
-});
+};
+const appChannel = resolveAppChannel(appIdentity);
+const appName = resolveAppName(appIdentity);
 app.setName(appName);
 // `setName` renames the app, not the paths Electron already derived from the
 // manifest name, so the state directory is pointed at the chosen name by
@@ -326,7 +334,13 @@ const accountSession = new AccountSessionManager({
     }
   },
 });
-const observationHooks = new ObservationHookRegistry(() => app.getPath("userData"));
+// Qualified per channel so an always-on released instance and a development
+// run each hold a registration of their own in a provider's configuration,
+// each feeding its own spool, neither converging the other's away.
+const observationHooks = new ObservationHookRegistry(
+  () => app.getPath("userData"),
+  HOOK_ARTIFACT_QUALIFIER_BY_CHANNEL[appChannel],
+);
 // Every provider this build observes, with the credential it reads and the
 // observation hook it registers, described in one place rather than assembled
 // from three parallel lists here.
@@ -515,8 +529,10 @@ const feedbackDelivery = feedbackDeliveryFromEnvironment();
 // user asks for. It lives here rather than in a renderer because the timer
 // must survive every window, only this process may run the updater, and what
 // it learns reaches them all through the same broadcast settings use.
-// Squirrel can only replace a signed, packaged build, and a fixture or
-// evidence run must not fetch, so every other run carries no engine and its
+// Squirrel can only replace a Developer ID-signed, packaged build — it
+// refuses an archive whose signature does not match the running app's, which
+// an ad-hoc package's never can — and a fixture or evidence run must not
+// fetch, so every run outside the release channel carries no engine and its
 // row offers the browser instead. The last-run version lives in its own file
 // so the first launch after an install can say what just happened.
 const lastRunVersionPath = () => path.join(app.getPath("userData"), "last-run-version.json");
@@ -524,7 +540,7 @@ const updateService = new UpdateService({
   currentVersion: app.getVersion(),
   onChange: (update) => panels.broadcast(channels.onUpdateChanged, update),
   engine:
-    app.isPackaged && runMode.sendsNetwork && process.platform === "darwin"
+    appChannel === APP_CHANNEL.RELEASE && runMode.sendsNetwork && process.platform === "darwin"
       ? createElectronUpdaterEngine()
       : undefined,
   lastRunVersion: {

@@ -25,9 +25,12 @@ import { canIgnoreFilesystemError } from "./local-session-adapter.js";
  * The registration is the one file of a provider's Luke writes, and it is
  * bounded the way the trust constraints demand: entries are merged into the
  * provider's own hook configuration beside whatever the user put there,
- * recognized by the script's own name, stripped cleanly on removal, and never
- * written at all when the existing file cannot be parsed — a file Luke cannot
- * read back is a file Luke must not rewrite.
+ * recognized by the installed script's own name — which carries the channel
+ * qualifier where the registry spliced one in, so the released app and a
+ * development run each converge their own entry without touching the other's
+ * — stripped cleanly on removal, and never written at all when the existing
+ * file cannot be parsed — a file Luke cannot read back is a file Luke must
+ * not rewrite.
  *
  * One module, described per provider: everything a provider decides — its
  * hook file, its event names, how it hands the script its envelope — lives in
@@ -75,12 +78,6 @@ export type HookEntryNesting = (typeof HOOK_ENTRY_NESTING)[keyof typeof HOOK_ENT
  * names the provider's shapes.
  */
 export interface ObservationHookSpec<Event extends string> {
-  /**
-   * The script's file name, which is also the marker a managed entry is
-   * recognized by — so renaming it is a migration: an entry naming the old
-   * script would stop being recognized as ours and would be left behind.
-   */
-  scriptName: string;
   /** The provider's own hook-configuration file, inside its home directory. */
   configurationFileName: string;
   /** The first line of the script's comment header, naming the provider. */
@@ -249,10 +246,14 @@ function observationHookCommand<Event extends string>(
 }
 
 /**
- * Whether a hook command is one of ours. The script's distinctive file name is
- * the marker, so entries written by an older build — a different data path, a
- * different guard — are still recognized and reconciled rather than left to
- * pile up beside the current one.
+ * Whether a hook command is this installation's own. The installed script's
+ * distinctive file name is the marker, so entries written by an older build —
+ * a different data path, a different guard — are still recognized and
+ * reconciled rather than left to pile up beside the current one. The name
+ * carries the channel qualifier where the installing registry spliced one in,
+ * and no channel's name is a substring of another's, so a sibling channel's
+ * entries are never recognized here: each always-on channel converges its own
+ * registration and leaves the others standing.
  */
 function isLukeHookCommand(command: UnparsedWireValue, scriptName: string): boolean {
   return isWireString(command) && command.includes(scriptName);
@@ -377,7 +378,7 @@ export function configurationWithObservationHooks<Event extends string>(
   }
   const events = mutableHooks(root);
   root.hooks = events;
-  stripLukeEntries(events, spec.scriptName, spec.entryNesting);
+  stripLukeEntries(events, path.basename(hookScriptPath), spec.entryNesting);
 
   for (const [eventName, registration] of Object.entries(spec.registration)) {
     const existing = events[eventName];
@@ -396,6 +397,7 @@ export function configurationWithObservationHooks<Event extends string>(
 export function configurationWithoutObservationHooks<Event extends string>(
   spec: ObservationHookSpec<Event>,
   source: string,
+  hookScriptPath: string,
 ): string | undefined {
   let parsed: WireBoundaryInput;
   try {
@@ -409,7 +411,7 @@ export function configurationWithoutObservationHooks<Event extends string>(
   const root = { ...parsedRecord };
   const events = mutableHooks(root);
   if (!readWireRecord(unparsedWire(root.hooks))) return undefined;
-  if (!stripLukeEntries(events, spec.scriptName, spec.entryNesting)) return undefined;
+  if (!stripLukeEntries(events, path.basename(hookScriptPath), spec.entryNesting)) return undefined;
   if (Object.keys(events).length === 0) delete root.hooks;
   else root.hooks = events;
 
@@ -527,7 +529,11 @@ export async function removeObservationHooks<Event extends string>(
   const configurationPath = path.join(installation.providerHome, spec.configurationFileName);
   const source = await readFileIfPresent(configurationPath);
   if (source !== undefined) {
-    const stripped = configurationWithoutObservationHooks(spec, source);
+    const stripped = configurationWithoutObservationHooks(
+      spec,
+      source,
+      installation.hookScriptPath,
+    );
     if (stripped !== undefined) await replaceConfigurationFile(configurationPath, stripped);
   }
   await fs.rm(installation.hookScriptPath, { force: true });

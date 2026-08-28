@@ -29,9 +29,11 @@ import {
  */
 
 /**
- * The script's name is also the marker a managed entry is recognized by, so
- * renaming it is a migration: an entry naming the old script would stop being
- * recognized as ours and would be left behind.
+ * The base of the installed script's name — the registry splices a channel
+ * qualifier in ahead of the extension — and the installed name is the marker
+ * a managed entry is recognized by, so renaming it is a migration: an entry
+ * naming the old script would stop being recognized as ours and would be
+ * left behind.
  */
 export const GEMINI_HOOK_SCRIPT_NAME = "luke-gemini-observation-hook.sh";
 
@@ -64,7 +66,6 @@ export type ObservedGeminiHookEvent = ObservedHookEvent<GeminiHookEvent>;
  * narrow what is already the hold itself.
  */
 const GEMINI_HOOK_SPEC: ObservationHookSpec<GeminiHookEvent> = {
-  scriptName: GEMINI_HOOK_SCRIPT_NAME,
   configurationFileName: "settings.json",
   scriptTitle: "Luke Gemini CLI observation hook v1",
   registration: {

@@ -49,9 +49,12 @@ const OPENCODE_CONFIG_DIRECTORY_NAME = "opencode";
 const OPENCODE_PLUGIN_DIRECTORY_NAME = "plugin";
 
 /**
- * The plugin file's name inside OpenCode's plugin directory. Recognition does
- * not rest on it — the marker header is what proves a file ours — but renaming
- * it still strands a file under the old name, so it is a migration too.
+ * The base of the plugin file's name inside OpenCode's plugin directory — the
+ * registry splices a channel qualifier in ahead of the extension, so each
+ * always-on channel manages a file of its own. Ownership of a given file
+ * still rests on the marker header, not the name — a foreign file wearing a
+ * managed name is never touched — but renaming this strands a file under the
+ * old name, so it is a migration too.
  */
 export const OPENCODE_PLUGIN_FILE_NAME = "luke-opencode-observation-plugin.js";
 

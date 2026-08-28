@@ -22,9 +22,11 @@ import {
  */
 
 /**
- * The script's name is also the marker a managed entry is recognized by, so
- * renaming it is a migration: an entry naming the old script would stop being
- * recognized as ours and would be left behind.
+ * The base of the installed script's name — the registry splices a channel
+ * qualifier in ahead of the extension — and the installed name is the marker
+ * a managed entry is recognized by, so renaming it is a migration: an entry
+ * naming the old script would stop being recognized as ours and would be
+ * left behind.
  */
 export const CODEX_HOOK_SCRIPT_NAME = "luke-codex-observation-hook.sh";
 
@@ -60,7 +62,6 @@ export type ObservedCodexHookEvent = ObservedHookEvent<CodexHookEvent>;
  * always exits zero, so nothing here can answer the request.
  */
 const CODEX_HOOK_SPEC: ObservationHookSpec<CodexHookEvent> = {
-  scriptName: CODEX_HOOK_SCRIPT_NAME,
   configurationFileName: "hooks.json",
   scriptTitle: "Luke Codex observation hook v1",
   registration: {

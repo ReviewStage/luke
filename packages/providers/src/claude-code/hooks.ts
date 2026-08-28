@@ -23,9 +23,11 @@ const CLAUDE_ENVIRONMENT = {
 } as const;
 
 /**
- * The script's name is also the marker a managed entry is recognized by, so
- * renaming it is a migration: an entry naming the old script would stop being
- * recognized as ours and would be left behind.
+ * The base of the installed script's name — the registry splices a channel
+ * qualifier in ahead of the extension — and the installed name is the marker
+ * a managed entry is recognized by, so renaming it is a migration: an entry
+ * naming the old script would stop being recognized as ours and would be
+ * left behind.
  */
 export const CLAUDE_HOOK_SCRIPT_NAME = "luke-claude-observation-hook.sh";
 
@@ -61,7 +63,6 @@ export type ObservedClaudeHookEvent = ObservedHookEvent<ClaudeHookEvent>;
  * moments the transcript shows nothing new.
  */
 const CLAUDE_HOOK_SPEC: ObservationHookSpec<ClaudeHookEvent> = {
-  scriptName: CLAUDE_HOOK_SCRIPT_NAME,
   configurationFileName: "settings.json",
   scriptTitle: "Luke Claude Code observation hook v1",
   registration: {

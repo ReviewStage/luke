@@ -59,7 +59,11 @@ export function createElectronBuilderConfig(env = process.env) {
   const developerIdSigned = signing.mode === SIGNING_MODE.DEVELOPER_ID;
 
   return {
-    appId: "dev.reviewstage.luke",
+    // The release bundle identifier belongs to the installed production app
+    // alone. An ad-hoc test package is a separate channel meant to run beside
+    // it, and LaunchServices keys on the bundle identifier, so a test bundle
+    // wearing the release's would shadow or be shadowed by the installed app.
+    appId: developerIdSigned ? "dev.reviewstage.luke" : "dev.reviewstage.luke.test",
     productName,
     copyright: `Copyright (c) ${new Date().getFullYear()} ReviewStage`,
     electronVersion: desktopPackage.devDependencies.electron,

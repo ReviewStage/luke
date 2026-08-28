@@ -10,9 +10,12 @@ sidecar_require_node
 sidecar_ensure_dependencies
 
 # Running this script means "launch the build I just made", so an already-running
-# instance is replaced rather than left in place. `--keep-running` opts out: the
-# new launch then quits on startup and only re-asserts the running panel. Every
-# other argument is forwarded to Electron.
+# development-channel instance is replaced rather than left in place. The
+# released app is the production channel and is never touched: it runs beside
+# the development build, each under its own name, lock, and state directory.
+# `--keep-running` opts out of the replacement too: the new launch then quits
+# on startup and only re-asserts the running development panel. Every other
+# argument is forwarded to Electron.
 replace_running_app=true
 capture_trace=true
 remaining_arguments=$#

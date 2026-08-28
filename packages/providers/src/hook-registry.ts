@@ -17,6 +17,33 @@ import type { ObservationHookInstallation } from "./shared/hook-merge.js";
 
 const SPOOL_DIRECTORY = "events";
 
+/**
+ * The shape a channel qualifier must keep to ride an artifact's file name.
+ * The qualifier is fixed by the build that supplies it, never observed, so a
+ * value outside this shape is a programming error worth stopping on.
+ */
+const ARTIFACT_QUALIFIER_PATTERN = /^[a-z0-9]+$/;
+
+/**
+ * The installed artifact's name: the provider's base name with the channel
+ * qualifier spliced in ahead of the extension, so
+ * `luke-claude-observation-hook.sh` installs as
+ * `luke-claude-observation-hook.dev.sh` on a qualified channel. The name is
+ * also the marker a channel's registered entries are recognized by, so the
+ * splice is what lets two channels' registrations stand side by side in one
+ * provider configuration: neither channel's name is a substring of the
+ * other's, so neither reconciles the other's entries. The extension is kept
+ * last because providers select plugin files by it (OpenCode globs `*.js`).
+ */
+function qualifiedArtifactName(baseName: string, qualifier: string | undefined): string {
+  if (qualifier === undefined) return baseName;
+  if (!ARTIFACT_QUALIFIER_PATTERN.test(qualifier)) {
+    throw new Error(`observation hook artifact qualifier is not a lowercase token: ${qualifier}`);
+  }
+  const extension = path.extname(baseName);
+  return `${baseName.slice(0, baseName.length - extension.length)}.${qualifier}${extension}`;
+}
+
 interface ObservationHookProviderEntry {
   directoryName: string;
   scriptName: string;
@@ -83,9 +110,19 @@ export type ObservationHookProviderId = keyof typeof OBSERVATION_HOOK_PROVIDERS;
  */
 export class ObservationHookRegistry {
   readonly #userDataDirectory: () => string;
+  readonly #artifactQualifier: string | undefined;
 
-  constructor(userDataDirectory: () => string) {
+  /**
+   * The qualifier names the channel this instance installs for — the caller's
+   * build fixes it, `dev` and `test` for the desktop's non-release channels —
+   * so several always-on channels each converge their own registrations
+   * without reconciling a sibling's. Absent, artifacts keep their base names,
+   * which is the released channel's shape and the one entries written before
+   * any qualifier existed already carry.
+   */
+  constructor(userDataDirectory: () => string, artifactQualifier?: string) {
     this.#userDataDirectory = userDataDirectory;
+    this.#artifactQualifier = artifactQualifier;
   }
 
   installation(providerId: ObservationHookProviderId): ObservationHookInstallation {
@@ -96,7 +133,7 @@ export class ObservationHookRegistry {
       providerHome,
       hookScriptPath: path.join(
         entry.artifactDirectory?.(providerHome) ?? directory,
-        entry.scriptName,
+        qualifiedArtifactName(entry.scriptName, this.#artifactQualifier),
       ),
       spoolDirectory: path.join(directory, SPOOL_DIRECTORY),
     };

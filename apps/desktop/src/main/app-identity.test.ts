@@ -4,9 +4,12 @@ import fs from "node:fs/promises";
 import test from "node:test";
 import {
   AD_HOC_APP_NAME,
+  APP_CHANNEL,
   buildCarriesDeveloperIdSigning,
   DEVELOPMENT_APP_NAME,
+  HOOK_ARTIFACT_QUALIFIER_BY_CHANNEL,
   RELEASE_APP_NAME,
+  resolveAppChannel,
   resolveAppName,
 } from "./app-identity";
 
@@ -23,6 +26,30 @@ test("an unpackaged run answers to the development name whatever it was built fo
   // bundle itself was built alongside Developer ID packaging.
   assert.equal(resolveAppName({ packaged: false, developerIdSigned: true }), DEVELOPMENT_APP_NAME);
   assert.equal(resolveAppName({ packaged: false, developerIdSigned: false }), DEVELOPMENT_APP_NAME);
+});
+
+test("channel resolution mirrors the name resolution", () => {
+  assert.equal(resolveAppChannel({ packaged: true, developerIdSigned: true }), APP_CHANNEL.RELEASE);
+  assert.equal(resolveAppChannel({ packaged: true, developerIdSigned: false }), APP_CHANNEL.AD_HOC);
+  assert.equal(
+    resolveAppChannel({ packaged: false, developerIdSigned: true }),
+    APP_CHANNEL.DEVELOPMENT,
+  );
+  assert.equal(
+    resolveAppChannel({ packaged: false, developerIdSigned: false }),
+    APP_CHANNEL.DEVELOPMENT,
+  );
+});
+
+test("only the development channels qualify their hook artifacts", () => {
+  // The release channel keeps the bare names the installed base already
+  // carries, so entries written before channels existed stay the release's to
+  // reconcile; the qualified names must never contain each other or the bare
+  // name's extension boundary, or one channel would reconcile another's
+  // entries away.
+  assert.equal(HOOK_ARTIFACT_QUALIFIER_BY_CHANNEL[APP_CHANNEL.RELEASE], undefined);
+  assert.equal(HOOK_ARTIFACT_QUALIFIER_BY_CHANNEL[APP_CHANNEL.DEVELOPMENT], "dev");
+  assert.equal(HOOK_ARTIFACT_QUALIFIER_BY_CHANNEL[APP_CHANNEL.AD_HOC], "test");
 });
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
@@ -49,14 +76,13 @@ test("the names hold to the manifest and to the shell derivation", async () => {
   assert.equal(AD_HOC_APP_NAME, `${productName} Test`);
   const shellNames = execFileSync(
     "bash",
-    ["-c", "source scripts/lib/workspace.sh; sidecar_app_names"],
+    ["-c", "source scripts/lib/workspace.sh; sidecar_development_channel_app_names"],
     { cwd: new URL("../../../..", import.meta.url), encoding: "utf8" },
   );
-  assert.deepEqual(shellNames.trim().split("\n"), [
-    DEVELOPMENT_APP_NAME,
-    AD_HOC_APP_NAME,
-    RELEASE_APP_NAME,
-  ]);
+  // The names the launcher may stop are exactly the development channels': the
+  // release name must never appear here, because the released instance is the
+  // always-on production channel a development launch runs beside.
+  assert.deepEqual(shellNames.trim().split("\n"), [DEVELOPMENT_APP_NAME, AD_HOC_APP_NAME]);
 });
 
 test("the desktop composition applies identity before taking its lock", async () => {

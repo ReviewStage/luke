@@ -17,7 +17,7 @@ Canonical commands:
 | `./scripts/test-macos.sh` | Package and validate the macOS app |
 | `./scripts/verify.sh` | Complete macOS validation plus visual evidence |
 | `pnpm release:macos` | Create a local signed, notarized, and verified electron-builder DMG, zip, and update manifest |
-| `./scripts/run.sh` | Launch the app against live sessions, replacing any running instance (`--fixture smoke` for fixture data, `--keep-running` to keep the running instance, `--no-trace` to skip the development trace) |
+| `./scripts/run.sh` | Launch the app against live sessions, replacing any running development-channel instance while the released app keeps running beside it (`--fixture smoke` for fixture data, `--keep-running` to keep the running development instance, `--no-trace` to skip the development trace) |
 | `./scripts/evidence.sh` | Write the fixture PNG under `artifacts/` |
 | `pnpm evidence:record` | Record the fixture transition on a physical Mac |
 | `pnpm lint:fix` | Apply repository formatting and safe lint fixes |

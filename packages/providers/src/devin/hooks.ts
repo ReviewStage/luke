@@ -24,9 +24,11 @@ import {
  */
 
 /**
- * The script's name is also the marker a managed entry is recognized by, so
- * renaming it is a migration: an entry naming the old script would stop being
- * recognized as ours and would be left behind.
+ * The base of the installed script's name — the registry splices a channel
+ * qualifier in ahead of the extension — and the installed name is the marker
+ * a managed entry is recognized by, so renaming it is a migration: an entry
+ * naming the old script would stop being recognized as ours and would be
+ * left behind.
  */
 export const DEVIN_HOOK_SCRIPT_NAME = "luke-devin-observation-hook.sh";
 
@@ -74,7 +76,6 @@ export type ObservedDevinHookEvent = ObservedHookEvent<DevinHookEvent>;
  * under their own `SubagentStop` event, which is simply not registered.
  */
 const DEVIN_HOOK_SPEC: ObservationHookSpec<DevinHookEvent> = {
-  scriptName: DEVIN_HOOK_SCRIPT_NAME,
   configurationFileName: "config.json",
   scriptTitle: "Luke Devin observation hook v1",
   registration: {

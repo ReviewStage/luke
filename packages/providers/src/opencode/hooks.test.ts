@@ -117,6 +117,22 @@ test("the registry resolves the plugin into OpenCode's plugin directory", () => 
   );
 });
 
+test("a qualified registry splices the channel into every artifact's name", () => {
+  const registry = new ObservationHookRegistry(() => path.join(path.sep, "luke-data"), "dev");
+
+  // The extension stays last — OpenCode selects plugin files by it — and the
+  // qualified name contains neither the bare name nor another channel's, so
+  // no channel reconciles a sibling's registration.
+  assert.equal(
+    path.basename(registry.installation(PROVIDER_ID.OPENCODE).hookScriptPath),
+    "luke-opencode-observation-plugin.dev.js",
+  );
+  assert.equal(
+    path.basename(registry.installation(PROVIDER_ID.CLAUDE_CODE).hookScriptPath),
+    "luke-claude-observation-hook.dev.sh",
+  );
+});
+
 test("touches nothing on a machine with no OpenCode home at all", async (t) => {
   const installation = await temporaryInstallation(t);
   await fs.rm(installation.providerHome, { recursive: true, force: true });

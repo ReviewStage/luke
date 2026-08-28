@@ -82,13 +82,20 @@ test("electron-builder answers to Luke's application identity", () => {
   const manifest = JSON.parse(
     fs.readFileSync(path.join(repoRoot, "apps", "desktop", "package.json"), "utf8"),
   );
-  const config = builderConfig();
+  const config = builderConfig({ LUKE_CODESIGN_IDENTITY: "Developer ID Application: Test" });
 
   assert.equal(config.productName, manifest.productName);
   assert.equal(config.mac.executableName, manifest.productName);
   assert.equal(config.mac.extendInfo.CFBundleName, manifest.productName);
   assert.equal(config.mac.extendInfo.CFBundleDisplayName, manifest.productName);
   assert.equal(config.appId, "dev.reviewstage.luke");
+});
+
+test("an ad-hoc package carries its own bundle identifier", () => {
+  // The test channel runs beside the installed production app, and
+  // LaunchServices keys on the bundle identifier, so the two must never share
+  // one.
+  assert.equal(builderConfig().appId, "dev.reviewstage.luke.test");
 });
 
 test("electron-builder generates the updater config electron-updater reads before downloads", () => {

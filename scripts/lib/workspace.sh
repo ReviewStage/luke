@@ -56,18 +56,20 @@ sidecar_wait_for_exit() {
 # The app chooses its own name at launch — the product name for a Developer ID
 # release, "<product name> Dev" for an unpackaged run, and "<product name> Test"
 # for an ad-hoc package, so differently signed builds never share a Keychain
-# entry (see apps/desktop/src/main/app-identity.ts). Each name keeps a lock of its own,
-# so a caller replacing "the running instance" asks about all three. The product
-# name is still derived the way Electron derives its default, from the manifest:
+# entry (see apps/desktop/src/main/app-identity.ts). Each name keeps a lock of
+# its own, and only the two development-channel names are ever stopped from
+# here: the release name is the production channel, an always-on installation
+# a development launch runs beside, never in place of. The product name is
+# still derived the way Electron derives its default, from the manifest:
 # `productName` when it sets one, the package name otherwise.
-sidecar_app_names() {
+sidecar_development_channel_app_names() {
     local app_name
     if ! app_name=$(cd "$SIDECAR_DESKTOP_APP_ROOT" &&
         node -p 'const manifest = require("./package.json"); manifest.productName ?? manifest.name'); then
         printf 'error: could not read the desktop app name\n' >&2
         return 1
     fi
-    printf '%s Dev\n%s Test\n%s\n' "$app_name" "$app_name" "$app_name"
+    printf '%s Dev\n%s Test\n' "$app_name" "$app_name"
 }
 
 sidecar_app_lock_holder_pid() {
@@ -98,12 +100,15 @@ sidecar_app_lock_holder_pid() {
 }
 
 # Stopping a holder has to wait for it to exit, because the lock is released
-# as that process goes away rather than when it is signalled. Development, test,
-# and release instances hold separate locks, so all are stopped: a launch means
-# "this build owns the screen now", whichever build was there before.
+# as that process goes away rather than when it is signalled. Development and
+# test instances hold separate locks, so both are stopped: a development
+# launch means "this build owns the development channel now", whichever
+# development build was there before. The released instance is never one of
+# them — quitting the production channel is the user's own act, not a side
+# effect of running a build from a checkout.
 sidecar_stop_running_app() {
     local app_names
-    app_names=$(sidecar_app_names) || return 1
+    app_names=$(sidecar_development_channel_app_names) || return 1
 
     local app_name pid
     while IFS= read -r app_name; do

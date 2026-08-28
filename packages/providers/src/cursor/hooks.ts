@@ -24,9 +24,11 @@ import {
  */
 
 /**
- * The script's name is also the marker a managed entry is recognized by, so
- * renaming it is a migration: an entry naming the old script would stop being
- * recognized as ours and would be left behind.
+ * The base of the installed script's name — the registry splices a channel
+ * qualifier in ahead of the extension — and the installed name is the marker
+ * a managed entry is recognized by, so renaming it is a migration: an entry
+ * naming the old script would stop being recognized as ours and would be
+ * left behind.
  */
 export const CURSOR_HOOK_SCRIPT_NAME = "luke-cursor-observation-hook.sh";
 
@@ -54,7 +56,6 @@ export type CursorHookEvent = (typeof CURSOR_HOOK_EVENT)[keyof typeof CURSOR_HOO
 export type ObservedCursorHookEvent = ObservedHookEvent<CursorHookEvent>;
 
 const CURSOR_HOOK_SPEC: ObservationHookSpec<CursorHookEvent> = {
-  scriptName: CURSOR_HOOK_SCRIPT_NAME,
   configurationFileName: "hooks.json",
   scriptTitle: "Luke Cursor observation hook v1",
   registration: {

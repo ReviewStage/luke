@@ -36,15 +36,61 @@ export interface AppIdentityContext {
 }
 
 /**
- * The name this run answers to. Both facts must hold for the product name:
- * a bundle built for release but launched unpackaged runs under the Electron
- * dev binary's signature, which is exactly the mismatch the split exists to
- * prevent.
+ * The channel a run belongs to, and the identity split's other face: the
+ * released app is a standing installation the development channels run
+ * beside, never in place of. The release channel is the one users hold; the
+ * development channel is `electron .` from a checkout; and the ad-hoc channel
+ * is a locally packaged build under an ad-hoc signature. Each keeps its own
+ * name, state directory, Keychain entry, and single-instance lock, so a
+ * development launch never contends with the released instance — replacing a
+ * running build is `scripts/run.sh`'s act, and it reaches only the
+ * development channels.
  */
-export function resolveAppName({ packaged, developerIdSigned }: AppIdentityContext): string {
-  if (!packaged) return DEVELOPMENT_APP_NAME;
-  return developerIdSigned ? RELEASE_APP_NAME : AD_HOC_APP_NAME;
+export const APP_CHANNEL = {
+  RELEASE: "release",
+  DEVELOPMENT: "development",
+  AD_HOC: "ad-hoc",
+} as const;
+
+export type AppChannel = (typeof APP_CHANNEL)[keyof typeof APP_CHANNEL];
+
+/**
+ * The channel this run belongs to. Both facts must hold for the release
+ * channel: a bundle built for release but launched unpackaged runs under the
+ * Electron dev binary's signature, which is exactly the mismatch the split
+ * exists to prevent.
+ */
+export function resolveAppChannel({ packaged, developerIdSigned }: AppIdentityContext): AppChannel {
+  if (!packaged) return APP_CHANNEL.DEVELOPMENT;
+  return developerIdSigned ? APP_CHANNEL.RELEASE : APP_CHANNEL.AD_HOC;
 }
+
+const APP_NAME_BY_CHANNEL = {
+  [APP_CHANNEL.RELEASE]: RELEASE_APP_NAME,
+  [APP_CHANNEL.DEVELOPMENT]: DEVELOPMENT_APP_NAME,
+  [APP_CHANNEL.AD_HOC]: AD_HOC_APP_NAME,
+} as const satisfies Readonly<Record<AppChannel, string>>;
+
+/** The name this run answers to: its channel's. */
+export function resolveAppName(context: AppIdentityContext): string {
+  return APP_NAME_BY_CHANNEL[resolveAppChannel(context)];
+}
+
+/**
+ * What each channel splices into its observation hook artifacts' file names,
+ * so the registrations two always-on channels merge into one provider's
+ * configuration are each recognized only by the channel that wrote them —
+ * recognition is by the installed script's name, and no qualified name
+ * contains another channel's. The release channel stays unqualified because
+ * the installed base already carries the bare names: entries written before
+ * channels existed remain the release channel's to reconcile, whichever
+ * build wrote them.
+ */
+export const HOOK_ARTIFACT_QUALIFIER_BY_CHANNEL = {
+  [APP_CHANNEL.RELEASE]: undefined,
+  [APP_CHANNEL.DEVELOPMENT]: "dev",
+  [APP_CHANNEL.AD_HOC]: "test",
+} as const satisfies Readonly<Record<AppChannel, string | undefined>>;
 
 /**
  * Baked by `build.mjs` from the same environment `resolveSigningMode` reads,

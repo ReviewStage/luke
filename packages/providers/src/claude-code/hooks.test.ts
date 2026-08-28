@@ -185,6 +185,49 @@ test("converges rather than accumulates: reinstalling changes nothing", async (t
   assert.equal(await fs.readFile(settingsPath(installation), "utf8"), first);
 });
 
+test("two channels' registrations stand side by side, each converging its own", async (t) => {
+  const releaseInstallation = await temporaryInstallation(t);
+  // The shape a development-channel installation takes: its own state
+  // directory and a script name carrying the registry's channel qualifier,
+  // neither name a substring of the other's.
+  const developmentInstallation: ObservationHookInstallation = {
+    providerHome: releaseInstallation.providerHome,
+    hookScriptPath: path.join(
+      path.dirname(path.dirname(releaseInstallation.hookScriptPath)),
+      "luke-dev-data",
+      "luke-claude-observation-hook.dev.sh",
+    ),
+    spoolDirectory: path.join(
+      path.dirname(path.dirname(releaseInstallation.spoolDirectory)),
+      "luke-dev-data",
+      "events",
+    ),
+  };
+
+  await installClaudeCodeObservationHooks(releaseInstallation);
+  await installClaudeCodeObservationHooks(developmentInstallation);
+  // The release channel converging again — the always-on production launch —
+  // must reconcile only its own entry, never the development channel's.
+  await installClaudeCodeObservationHooks(releaseInstallation);
+
+  const settings = await readSettings(releaseInstallation);
+  for (const eventName of REGISTERED_EVENT_NAMES) {
+    const commands = entryCommands(hookEntries(settings, eventName));
+    assert.equal(
+      commands.filter((command) => command.includes(`"${releaseInstallation.hookScriptPath}"`))
+        .length,
+      1,
+      `${eventName} carries exactly one release entry`,
+    );
+    assert.equal(
+      commands.filter((command) => command.includes(`"${developmentInstallation.hookScriptPath}"`))
+        .length,
+      1,
+      `${eventName} keeps the development channel's entry`,
+    );
+  }
+});
+
 test("reconciles entries an older build registered under another path", async (t) => {
   const installation = await temporaryInstallation(t);
   const staleCommand = `/old/data/${CLAUDE_HOOK_SCRIPT_NAME} stop`;
