@@ -99,6 +99,7 @@ struct ContentView: View {
             )
             .padding(24)
         }
+        .preferredColorScheme(.dark)
     }
 
     // MARK: - Signed-in card
@@ -130,6 +131,7 @@ struct ContentView: View {
             )
             .padding(24)
         }
+        .preferredColorScheme(.dark)
     }
 
     // MARK: - Sign-in flow

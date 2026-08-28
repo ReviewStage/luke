@@ -48,6 +48,9 @@ enum KeychainStore {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: key.rawValue,
+            // ThisDeviceOnly prevents tokens from being included in encrypted backups
+            // or restored onto a different device, which would allow impersonation.
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
         ]
     }
 }

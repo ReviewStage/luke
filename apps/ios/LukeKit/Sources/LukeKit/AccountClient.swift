@@ -83,11 +83,14 @@ public final class AccountClient: Sendable {
     }
 
     public func refresh(refreshToken: String) async throws -> AccountTokens {
-        try await tokenRequest(fields: [
-            "grant_type": "refresh_token",
-            "refresh_token": refreshToken,
-            "client_id": clientID,
-        ])
+        try await tokenRequest(
+            fields: [
+                "grant_type": "refresh_token",
+                "refresh_token": refreshToken,
+                "client_id": clientID,
+            ],
+            fallbackRefreshToken: refreshToken
+        )
     }
 
     /// Revokes the long-lived credential; local sign-out never depends on this succeeding.
@@ -127,7 +130,11 @@ public final class AccountClient: Sendable {
         )
     }
 
-    private func tokenRequest(fields: [String: String]) async throws -> AccountTokens {
+    // `fallbackRefreshToken` is used when the server does not rotate the token on refresh.
+    private func tokenRequest(
+        fields: [String: String],
+        fallbackRefreshToken: String? = nil
+    ) async throws -> AccountTokens {
         var request = URLRequest(url: baseURL.appendingPathComponent("oauth2/token"))
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
@@ -139,7 +146,7 @@ public final class AccountClient: Sendable {
             throw AccountClientError.serverError(status: status, oauthError: json["error"] as? String)
         }
         guard let accessToken = json["access_token"] as? String,
-              let refreshToken = json["refresh_token"] as? String
+              let refreshToken = (json["refresh_token"] as? String) ?? fallbackRefreshToken
         else {
             throw AccountClientError.tokensMissing
         }
@@ -152,10 +159,14 @@ public final class AccountClient: Sendable {
     }
 
     private func formEncode(_ fields: [String: String]) -> Data {
-        fields
+        // urlQueryAllowed leaves +, &, and = unescaped; remove them so field values
+        // containing those characters are not misread by the server.
+        var allowed = CharacterSet.urlQueryAllowed
+        allowed.remove(charactersIn: "+&=")
+        return fields
             .map { k, v in
-                let ek = k.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? k
-                let ev = v.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? v
+                let ek = k.addingPercentEncoding(withAllowedCharacters: allowed) ?? k
+                let ev = v.addingPercentEncoding(withAllowedCharacters: allowed) ?? v
                 return "\(ek)=\(ev)"
             }
             .joined(separator: "&")

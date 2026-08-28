@@ -27,6 +27,9 @@ public final class AccountSession {
     public private(set) var state: AuthState = .signedOut
 
     private let client: AccountClient
+    // Incremented on every sign-out so an in-flight restore refresh cannot write
+    // back after the user has already asked to leave (mirrors the desktop generation counter).
+    private var generation = 0
 
     public init(client: AccountClient) {
         self.client = client
@@ -47,6 +50,7 @@ public final class AccountSession {
     }
 
     public func signOut() async {
+        generation += 1
         let refreshToken = KeychainStore.get(.refreshToken)
         KeychainStore.clearAll()
         state = .signedOut
@@ -67,13 +71,14 @@ public final class AccountSession {
             name: KeychainStore.get(.name)
         )
         state = .signedIn(identity)
+        let gen = generation
         Task { [weak self] in
             guard let self else { return }
-            await self.refreshIfNearExpiry(accessToken: accessToken)
+            await self.refreshIfNearExpiry(accessToken: accessToken, generation: gen)
         }
     }
 
-    private func refreshIfNearExpiry(accessToken: String) async {
+    private func refreshIfNearExpiry(accessToken: String, generation: Int) async {
         let shouldRefresh: Bool = {
             guard let expiryStr = KeychainStore.get(.expiry),
                   let expiryInterval = TimeInterval(expiryStr)
@@ -84,12 +89,18 @@ public final class AccountSession {
         guard shouldRefresh, let refreshToken = KeychainStore.get(.refreshToken) else { return }
         do {
             let tokens = try await client.refresh(refreshToken: refreshToken)
+            guard self.generation == generation else { return }
             storeTokens(tokens)
             let identity = try await client.userInfo(accessToken: tokens.accessToken)
+            guard self.generation == generation else { return }
             storeIdentity(identity)
             state = .signedIn(identity)
+        } catch AccountClientError.serverError(let status, _) where (400 ..< 500).contains(status) {
+            guard self.generation == generation else { return }
+            // Refresh token rejected — clear the dead session rather than leaving the user stuck.
+            await signOut()
         } catch {
-            // Silent failure — the stored tokens may still be valid for this session.
+            // Transient network failure; the stored tokens may still be valid.
         }
     }
 
