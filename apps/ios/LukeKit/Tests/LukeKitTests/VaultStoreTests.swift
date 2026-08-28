@@ -102,6 +102,39 @@ final class VaultStoreTests: XCTestCase {
         XCTAssertNil(store.entry(for: .cursor))
     }
 
+    func testARetryNeverActsForADifferentAccount() async throws {
+        let gate = Gate()
+        let counter = CallCounter()
+        let stub = StubHTTPClient { request in
+            // The store request: held open until the account below has changed
+            // hands, then refused, which is where a retry would fire.
+            _ = await counter.next()
+            await gate.wait()
+            return (
+                jsonData(["error": "invalid-token"]),
+                makeResponse(url: request.url!, status: 401)
+            )
+        }
+        let source = StubTokenSource(email: "first@example.com")
+        let store = VaultStore(client: VaultClient(baseURL: base, http: stub), session: source)
+
+        let save = Task { try await store.store(key: "sk-abcd", for: .cursor) }
+        while await counter.calls < 1 { await Task.yield() }
+        source.accountEmail = "second@example.com"
+        await gate.open()
+
+        do {
+            try await save.value
+            XCTFail("Expected throw")
+        } catch AccountSessionError.signedOut {
+            // expected: the act refuses rather than replaying under the new account
+        } catch {
+            XCTFail("Unexpected: \(error)")
+        }
+        XCTAssertEqual(source.refreshCalls, 0)
+        XCTAssertNil(store.entry(for: .cursor))
+    }
+
     func testSuccessfulActClearsAStaleLoadError() async throws {
         let counter = CallCounter()
         let stub = StubHTTPClient { request in

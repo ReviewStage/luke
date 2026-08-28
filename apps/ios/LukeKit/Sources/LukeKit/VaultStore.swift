@@ -115,20 +115,31 @@ public final class VaultStore {
     private func refreshEntries() async throws {
         let gen = answerGeneration
         let entries = try await authorized { try await self.client.listKeys(accessToken: $0) }
-        // A newer act landed while this answer traveled; its state wins.
-        guard gen == answerGeneration else { return }
+        // A newer act, or another account's sign-in, landed while this answer
+        // traveled; its state wins.
+        guard gen == answerGeneration, entriesAccount == session.accountEmail else { return }
         entriesByProvider = Dictionary(
             entries.map { ($0.provider, $0) },
             uniquingKeysWith: { _, last in last }
         )
     }
 
+    /// Runs one authorized call for the account signed in when it was asked.
+    /// Every step that could pick up a different account's credential — the
+    /// initial token read, the 401 retry's refresh, the replay — re-checks
+    /// that the account still stands, because a retry that changed hands
+    /// mid-flight would carry one account's act (and a pasted key) into
+    /// another account's vault.
     private func authorized<T>(_ call: (String) async throws -> T) async throws -> T {
+        guard let account = session.accountEmail else { throw AccountSessionError.signedOut }
         let token = try await session.validAccessToken()
+        guard session.accountEmail == account else { throw AccountSessionError.signedOut }
         do {
             return try await call(token)
         } catch VaultClientError.serverError(let status, _) where status == 401 {
+            guard session.accountEmail == account else { throw AccountSessionError.signedOut }
             let refreshed = try await session.refreshAccessToken()
+            guard session.accountEmail == account else { throw AccountSessionError.signedOut }
             return try await call(refreshed)
         }
     }
