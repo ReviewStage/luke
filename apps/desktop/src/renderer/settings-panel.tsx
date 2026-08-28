@@ -1521,30 +1521,32 @@ function SyncedKeysSection({ panelOpen }: { panelOpen: boolean }): React.JSX.Ele
   const [clearing, setClearing] = useState<VaultProviderId>();
   const [removalRejection, setRemovalRejection] = useState<string>();
   const field = useRef<HTMLInputElement | null>(null);
+  const listAsk = useRef(0);
 
   // A confirm left open when the panel goes is withdrawn, the same correction
   // the local key rows apply: reopening onto a question nobody remembers
   // asking reads as a trap.
   if (asking && !panelOpen && !clearing) setAsking(undefined);
 
+  // A refresh that failed, or was overtaken by a later one, keeps what is
+  // already known: after a confirmed act the list on screen says what the
+  // service just agreed to, and wiping it for a list call that merely could
+  // not travel would report the opposite of what happened.
   const refresh = async () => {
+    const ask = ++listAsk.current;
     const answer = await window.sidecar.requestVaultKeys().catch(() => undefined);
-    setKeys(answer ?? undefined);
+    if (ask !== listAsk.current) return;
+    setKeys((held) => answer ?? held);
     setAnswered(true);
   };
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refresh is remade every render but reads nothing that changes between them — depending on it would re-read the list on every render instead of at mount and after each act.
   useEffect(() => {
-    let stale = false;
-    void window.sidecar
-      .requestVaultKeys()
-      .catch(() => undefined)
-      .then((answer) => {
-        if (stale) return;
-        setKeys(answer ?? undefined);
-        setAnswered(true);
-      });
+    void refresh();
     return () => {
-      stale = true;
+      // Retiring the section retires its in-flight list read the same way an
+      // overtaken one is: the generation moves past it.
+      listAsk.current += 1;
     };
   }, []);
 
@@ -1561,6 +1563,13 @@ function SyncedKeysSection({ panelOpen }: { panelOpen: boolean }): React.JSX.Ele
     );
     if (reason === undefined) {
       setEntry(undefined);
+      // The service confirmed the write, so the row says so at once, by the
+      // same hint rule the service applies; the refresh that follows replaces
+      // this with the service's own record when it answers.
+      setKeys((held) => [
+        ...(held ?? []).filter((stored) => stored.providerId !== providerId),
+        { providerId, hint: key.slice(-4), updatedAt: Date.now() },
+      ]);
       await refresh();
       return;
     }
@@ -1576,6 +1585,7 @@ function SyncedKeysSection({ panelOpen }: { panelOpen: boolean }): React.JSX.Ele
     setClearing(undefined);
     setAsking(undefined);
     if (reason === undefined) {
+      setKeys((held) => held?.filter((stored) => stored.providerId !== providerId));
       await refresh();
       return;
     }
@@ -1628,11 +1638,15 @@ function SyncedKeysSection({ panelOpen }: { panelOpen: boolean }): React.JSX.Ele
                       aria-hidden={confirming}
                       inert={confirming}
                     >
+                      {/* The row's two acts exclude each other: a delete may
+                          not be asked while its editor is open, and opening
+                          the editor withdraws a standing confirm, so Save and
+                          Delete can never run together on one provider. */}
                       {stored ? (
                         <button
                           type="button"
                           className="icon-button credential-remove"
-                          disabled={busy}
+                          disabled={busy || editing !== undefined}
                           aria-label={`Delete the synced ${provider.displayName} ${credential}`}
                           title="Delete…"
                           onClick={() => {
@@ -1650,7 +1664,10 @@ function SyncedKeysSection({ panelOpen }: { panelOpen: boolean }): React.JSX.Ele
                           disabled={busy || entry !== undefined}
                           aria-label={`Replace the synced ${provider.displayName} ${credential}`}
                           title={held ? HELD_TITLE : "Replace"}
-                          onClick={() => setEntry({ providerId, draft: "", busy: false })}
+                          onClick={() => {
+                            setAsking(undefined);
+                            setEntry({ providerId, draft: "", busy: false });
+                          }}
                         >
                           <PencilIcon />
                         </button>
@@ -1661,7 +1678,10 @@ function SyncedKeysSection({ panelOpen }: { panelOpen: boolean }): React.JSX.Ele
                           disabled={busy || entry !== undefined}
                           aria-label={`Sync a ${provider.displayName} ${credential} to Luke's service`}
                           title={held ? HELD_TITLE : undefined}
-                          onClick={() => setEntry({ providerId, draft: "", busy: false })}
+                          onClick={() => {
+                            setAsking(undefined);
+                            setEntry({ providerId, draft: "", busy: false });
+                          }}
                         >
                           Sync
                         </button>
