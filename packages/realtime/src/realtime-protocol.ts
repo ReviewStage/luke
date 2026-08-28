@@ -301,10 +301,10 @@ export function cancelResponseEvents(input: {
  *
  * `audioEndMs` is how long the reply was audible, measured on a wall clock —
  * which can outrun the audio itself when playback stalls, or when the stop
- * lands at the reply's very end. The server refuses a trim past the end, so
- * the event carries a name for the session to recognize that refusal as its
- * own: a reply refused this way was heard whole, and the record it would have
- * corrected is already right.
+ * lands at the reply's very end. The server answers such a trim with a refusal
+ * and then clamps it to the audio's real end and truncates anyway, so the
+ * record is right either way; the refusal names no event of its own on the
+ * wire, and the session recognizes it by its sentence instead.
  */
 export function truncateResponseEvents(input: {
   itemId: string;

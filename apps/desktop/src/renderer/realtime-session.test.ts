@@ -2670,15 +2670,17 @@ test("a stop does not surface the server refusing a trim past the audio's end", 
   assert.ok(truncate);
 
   // The audible clock runs on the wall, so a stop landing at the reply's very
-  // end can measure past the audio itself. The refusal means every word was
-  // heard and the record is already right — nothing the developer can or
-  // should act on.
+  // end can measure past the audio itself. The refusal names no event — a null
+  // `event_id` is the shape the service actually sends — so the sentence is
+  // all there is to recognize it by, and nothing about it is the developer's
+  // to act on.
   context.emit({
     type: REALTIME_SERVER_EVENT.ERROR,
     error: {
       type: "invalid_request_error",
+      code: "invalid_value",
       message: "Audio content of 1500ms is already shorter than 2000ms",
-      event_id: truncate?.event_id,
+      event_id: null,
     },
   });
 
