@@ -1513,6 +1513,259 @@ function syncedKeySavedOn(updatedAt: number): string {
  * above, whose keys stay in this machine's encrypted storage, a key entered
  * here travels once — outward, at the Save press — and is held nowhere local.
  */
+/**
+ * One provider's synced-key row: its mark, its name, the stored key's tail
+ * and date if one stands, and the acts the state allows. The two acts
+ * exclude each other — a delete may not be asked while the editor is open,
+ * and opening the editor withdraws a standing confirm — so Save and Delete
+ * can never run together on one provider. Focus follows the confirm the way
+ * the local rows' does: onto Cancel when the question appears, back onto the
+ * row's own control when it withdraws, because a question that strands the
+ * keyboard is one a keyboard cannot answer.
+ */
+function SyncedKeyRow({
+  provider,
+  providerId,
+  stored,
+  editing,
+  held,
+  confirming,
+  clearing,
+  panelOpen,
+  onBegin,
+  onDraft,
+  onCancelEntry,
+  onCommit,
+  onAsk,
+  onKeep,
+  onDelete,
+}: {
+  provider: CredentialProvider;
+  providerId: VaultProviderId;
+  stored: VaultKeyListEntry | undefined;
+  editing: SyncedKeyEntry | undefined;
+  held: boolean;
+  confirming: boolean;
+  clearing: boolean;
+  panelOpen: boolean;
+  onBegin: () => void;
+  onDraft: (draft: string) => void;
+  onCancelEntry: () => void;
+  onCommit: () => void;
+  onAsk: () => void;
+  onKeep: () => void;
+  onDelete: () => void;
+}): React.JSX.Element {
+  const field = useRef<HTMLInputElement | null>(null);
+  const trash = useRef<HTMLButtonElement | null>(null);
+  const keep = useRef<HTMLButtonElement | null>(null);
+  const editControl = useRef<HTMLButtonElement | null>(null);
+  const returnFocus = useRef(false);
+  const busy = clearing || (editing?.busy ?? false);
+  const credential = provider.keyFormat?.label ?? "API key";
+  const fieldId = `${providerId}-synced-key`;
+  const submittable = editing ? vaultKeyIsStorable(editing.draft.trim()) : false;
+
+  useStagedFocus(field, editing !== undefined && panelOpen && !busy);
+  useStagedFocus(keep, confirming && !clearing);
+
+  useEffect(() => {
+    if (confirming || !returnFocus.current) return;
+    returnFocus.current = false;
+    return focusWhenVisible(trash.current ?? editControl.current);
+  }, [confirming]);
+
+  const keepKey = () => {
+    if (clearing) return;
+    returnFocus.current = true;
+    onKeep();
+  };
+  const removeKey = () => {
+    returnFocus.current = true;
+    onDelete();
+  };
+
+  return (
+    <div className="credential">
+      <div className="credential-row">
+        <span className="credential-identity">
+          <span className="credential-mark">
+            <ProviderMark providerId={providerId} />
+            <CloudBadge />
+          </span>
+          <span className="credential-name">{provider.displayName}</span>
+          {stored ? <CheckIcon /> : null}
+        </span>
+        {stored ? (
+          <span className="credential-status">
+            {`····${stored.hint} · ${syncedKeySavedOn(stored.updatedAt)}`}
+          </span>
+        ) : null}
+        <span className="credential-actions">
+          <span
+            className="settings-actions credential-controls"
+            data-drawn={String(!confirming)}
+            aria-hidden={confirming}
+            inert={confirming}
+          >
+            {stored ? (
+              <button
+                type="button"
+                ref={trash}
+                className="icon-button credential-remove"
+                disabled={busy || editing !== undefined}
+                aria-label={`Delete the synced ${provider.displayName} ${credential}`}
+                title="Delete…"
+                onClick={onAsk}
+              >
+                <TrashIcon />
+              </button>
+            ) : null}
+            {stored ? (
+              <button
+                type="button"
+                ref={editControl}
+                className="icon-button"
+                disabled={busy || editing !== undefined || held}
+                aria-label={`Replace the synced ${provider.displayName} ${credential}`}
+                title={held ? HELD_TITLE : "Replace"}
+                onClick={onBegin}
+              >
+                <PencilIcon />
+              </button>
+            ) : (
+              <button
+                type="button"
+                ref={editControl}
+                className="quiet-button"
+                disabled={busy || editing !== undefined || held}
+                aria-label={`Sync a ${provider.displayName} ${credential} to Luke's service`}
+                title={held ? HELD_TITLE : undefined}
+                onClick={onBegin}
+              >
+                Sync
+              </button>
+            )}
+          </span>
+          {stored ? (
+            <fieldset
+              className="settings-actions credential-confirm"
+              aria-label={`Delete the synced ${provider.displayName} ${credential}?`}
+              data-drawn={String(confirming)}
+              aria-hidden={!confirming}
+              inert={!confirming}
+              onKeyDown={(event) => {
+                if (event.key !== "Escape" || clearing) return;
+                event.stopPropagation();
+                keepKey();
+              }}
+            >
+              <button
+                type="button"
+                ref={keep}
+                className="quiet-button"
+                style={answerOrder(REMOVAL_ANSWER_INDEX.KEEP)}
+                disabled={clearing}
+                onClick={keepKey}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="danger-button"
+                style={answerOrder(REMOVAL_ANSWER_INDEX.DELETE)}
+                disabled={clearing}
+                onClick={removeKey}
+              >
+                {clearing ? "Deleting…" : "Delete"}
+              </button>
+            </fieldset>
+          ) : null}
+        </span>
+      </div>
+      {editing ? (
+        <fieldset
+          className="credential-editor"
+          aria-label={`Synced ${provider.displayName} ${credential}`}
+        >
+          <label className="settings-field" htmlFor={fieldId}>
+            <span className="settings-label">{credential}</span>
+            <input
+              id={fieldId}
+              ref={field}
+              aria-label={`Synced ${provider.displayName} ${credential}`}
+              className="settings-input"
+              type="password"
+              autoComplete="off"
+              spellCheck={false}
+              placeholder={CREDENTIAL_PLACEHOLDER[CREDENTIAL_SOURCE.NONE]}
+              value={editing.draft}
+              disabled={busy}
+              onChange={(event) => onDraft(event.target.value)}
+              onFocus={() => {
+                window.sidecar.focusPanel();
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && submittable) onCommit();
+                if (event.key === "Escape") {
+                  event.stopPropagation();
+                  onCancelEntry();
+                }
+              }}
+            />
+          </label>
+          <div className="settings-row">
+            <small className="settings-note">
+              {provider.hint}{" "}
+              <button
+                type="button"
+                className="link-button"
+                disabled={busy}
+                onClick={() => window.sidecar.openProviderApiKeys(providerId)}
+              >
+                Where to get one
+                <ExternalIcon />
+              </button>
+            </small>
+            <span className="settings-actions">
+              <button
+                type="button"
+                className="quiet-button"
+                disabled={busy}
+                onClick={onCancelEntry}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="action-button"
+                disabled={busy || !submittable}
+                onClick={onCommit}
+              >
+                {editing.busy ? "Saving…" : "Save"}
+              </button>
+            </span>
+          </div>
+        </fieldset>
+      ) : null}
+      {editing?.rejection ? (
+        <p className="error-message" role="alert">
+          {editing.rejection}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * The provider keys synced to Luke's hosted service, one row per provider the
+ * vault accepts, drawn only while an account is signed in because the vault is
+ * the account's. The list is read fresh each time the page opens and after
+ * every act; what it carries is ids, hints, and timestamps, because the
+ * service holds no endpoint that reads a key back. Unlike the Providers rows
+ * above, whose keys stay in this machine's encrypted storage, a key entered
+ * here travels once — outward, at the Save press — and is held nowhere local.
+ */
 function SyncedKeysSection({ panelOpen }: { panelOpen: boolean }): React.JSX.Element {
   const [keys, setKeys] = useState<readonly VaultKeyListEntry[]>();
   const [answered, setAnswered] = useState(false);
@@ -1520,7 +1773,6 @@ function SyncedKeysSection({ panelOpen }: { panelOpen: boolean }): React.JSX.Ele
   const [asking, setAsking] = useState<VaultProviderId>();
   const [clearing, setClearing] = useState<VaultProviderId>();
   const [removalRejection, setRemovalRejection] = useState<string>();
-  const field = useRef<HTMLInputElement | null>(null);
   const listAsk = useRef(0);
 
   // A confirm left open when the panel goes is withdrawn, the same correction
@@ -1549,8 +1801,6 @@ function SyncedKeysSection({ panelOpen }: { panelOpen: boolean }): React.JSX.Ele
       listAsk.current += 1;
     };
   }, []);
-
-  useStagedFocus(field, entry !== undefined && panelOpen && !entry.busy);
 
   const commit = async () => {
     if (!entry || entry.busy) return;
@@ -1607,194 +1857,32 @@ function SyncedKeysSection({ panelOpen }: { panelOpen: boolean }): React.JSX.Ele
         ? CLOUD_AGENT_PROVIDER_LIST.map((provider) => {
             const providerId = provider.id;
             if (!isVaultProviderId(providerId)) return null;
-            const stored = keys.find((key) => key.providerId === providerId);
             const editing = entry?.providerId === providerId ? entry : undefined;
-            const held = entry !== undefined && !editing;
-            const busy = clearing === providerId || (editing?.busy ?? false);
-            const confirming = asking === providerId;
-            const credential = provider.keyFormat?.label ?? "API key";
-            const fieldId = `${providerId}-synced-key`;
-            const submittable = editing ? vaultKeyIsStorable(editing.draft.trim()) : false;
             return (
-              <div className="credential" key={providerId}>
-                <div className="credential-row">
-                  <span className="credential-identity">
-                    <span className="credential-mark">
-                      <ProviderMark providerId={providerId} />
-                      <CloudBadge />
-                    </span>
-                    <span className="credential-name">{provider.displayName}</span>
-                    {stored ? <CheckIcon /> : null}
-                  </span>
-                  {stored ? (
-                    <span className="credential-status">
-                      {`····${stored.hint} · ${syncedKeySavedOn(stored.updatedAt)}`}
-                    </span>
-                  ) : null}
-                  <span className="credential-actions">
-                    <span
-                      className="settings-actions credential-controls"
-                      data-drawn={String(!confirming)}
-                      aria-hidden={confirming}
-                      inert={confirming}
-                    >
-                      {/* The row's two acts exclude each other: a delete may
-                          not be asked while its editor is open, and opening
-                          the editor withdraws a standing confirm, so Save and
-                          Delete can never run together on one provider. */}
-                      {stored ? (
-                        <button
-                          type="button"
-                          className="icon-button credential-remove"
-                          disabled={busy || editing !== undefined}
-                          aria-label={`Delete the synced ${provider.displayName} ${credential}`}
-                          title="Delete…"
-                          onClick={() => {
-                            setRemovalRejection(undefined);
-                            setAsking(providerId);
-                          }}
-                        >
-                          <TrashIcon />
-                        </button>
-                      ) : null}
-                      {stored ? (
-                        <button
-                          type="button"
-                          className="icon-button"
-                          disabled={busy || entry !== undefined}
-                          aria-label={`Replace the synced ${provider.displayName} ${credential}`}
-                          title={held ? HELD_TITLE : "Replace"}
-                          onClick={() => {
-                            setAsking(undefined);
-                            setEntry({ providerId, draft: "", busy: false });
-                          }}
-                        >
-                          <PencilIcon />
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          className="quiet-button"
-                          disabled={busy || entry !== undefined}
-                          aria-label={`Sync a ${provider.displayName} ${credential} to Luke's service`}
-                          title={held ? HELD_TITLE : undefined}
-                          onClick={() => {
-                            setAsking(undefined);
-                            setEntry({ providerId, draft: "", busy: false });
-                          }}
-                        >
-                          Sync
-                        </button>
-                      )}
-                    </span>
-                    {stored ? (
-                      <fieldset
-                        className="settings-actions credential-confirm"
-                        aria-label={`Delete the synced ${provider.displayName} ${credential}?`}
-                        data-drawn={String(confirming)}
-                        aria-hidden={!confirming}
-                        inert={!confirming}
-                        onKeyDown={(event) => {
-                          if (event.key !== "Escape" || clearing) return;
-                          event.stopPropagation();
-                          setAsking(undefined);
-                        }}
-                      >
-                        <button
-                          type="button"
-                          className="quiet-button"
-                          style={answerOrder(REMOVAL_ANSWER_INDEX.KEEP)}
-                          disabled={clearing !== undefined}
-                          onClick={() => setAsking(undefined)}
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          className="danger-button"
-                          style={answerOrder(REMOVAL_ANSWER_INDEX.DELETE)}
-                          disabled={clearing !== undefined}
-                          onClick={() => void removeKey(providerId)}
-                        >
-                          {clearing === providerId ? "Deleting…" : "Delete"}
-                        </button>
-                      </fieldset>
-                    ) : null}
-                  </span>
-                </div>
-                {editing ? (
-                  <fieldset
-                    className="credential-editor"
-                    aria-label={`Synced ${provider.displayName} ${credential}`}
-                  >
-                    <label className="settings-field" htmlFor={fieldId}>
-                      <span className="settings-label">{credential}</span>
-                      <input
-                        id={fieldId}
-                        ref={field}
-                        aria-label={`Synced ${provider.displayName} ${credential}`}
-                        className="settings-input"
-                        type="password"
-                        autoComplete="off"
-                        spellCheck={false}
-                        placeholder={CREDENTIAL_PLACEHOLDER[CREDENTIAL_SOURCE.NONE]}
-                        value={editing.draft}
-                        disabled={busy}
-                        onChange={(event) =>
-                          setEntry((held) => (held ? { ...held, draft: event.target.value } : held))
-                        }
-                        onFocus={() => {
-                          window.sidecar.focusPanel();
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" && submittable) void commit();
-                          if (event.key === "Escape") {
-                            event.stopPropagation();
-                            setEntry(undefined);
-                          }
-                        }}
-                      />
-                    </label>
-                    <div className="settings-row">
-                      <small className="settings-note">
-                        {provider.hint}{" "}
-                        <button
-                          type="button"
-                          className="link-button"
-                          disabled={busy}
-                          onClick={() => window.sidecar.openProviderApiKeys(providerId)}
-                        >
-                          Where to get one
-                          <ExternalIcon />
-                        </button>
-                      </small>
-                      <span className="settings-actions">
-                        <button
-                          type="button"
-                          className="quiet-button"
-                          disabled={busy}
-                          onClick={() => setEntry(undefined)}
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          className="action-button"
-                          disabled={busy || !submittable}
-                          onClick={() => void commit()}
-                        >
-                          {editing.busy ? "Saving…" : "Save"}
-                        </button>
-                      </span>
-                    </div>
-                  </fieldset>
-                ) : null}
-                {editing?.rejection ? (
-                  <p className="error-message" role="alert">
-                    {editing.rejection}
-                  </p>
-                ) : null}
-              </div>
+              <SyncedKeyRow
+                key={providerId}
+                provider={provider}
+                providerId={providerId}
+                stored={keys.find((stored) => stored.providerId === providerId)}
+                editing={editing}
+                held={entry !== undefined && !editing}
+                confirming={asking === providerId}
+                clearing={clearing === providerId}
+                panelOpen={panelOpen}
+                onBegin={() => {
+                  setAsking(undefined);
+                  setEntry({ providerId, draft: "", busy: false });
+                }}
+                onDraft={(draft) => setEntry((held) => (held ? { ...held, draft } : held))}
+                onCancelEntry={() => setEntry(undefined)}
+                onCommit={() => void commit()}
+                onAsk={() => {
+                  setRemovalRejection(undefined);
+                  setAsking(providerId);
+                }}
+                onKeep={() => setAsking(undefined)}
+                onDelete={() => void removeKey(providerId)}
+              />
             );
           })
         : null}
