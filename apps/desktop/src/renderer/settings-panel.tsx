@@ -1439,6 +1439,7 @@ function CredentialsSection({
                 <SyncedKeyLine
                   provider={provider}
                   entry={syncedEntry}
+                  panelOpen={panelOpen}
                   onRemove={() => vault.remove(vaultId)}
                 />
               ) : null}
@@ -1489,6 +1490,7 @@ function CredentialsSection({
         writes={writes}
         {...(supersetWorkspace ? { workspaceProvider: supersetWorkspace } : {})}
       />
+      {vault.unreachable ? <p className="settings-note">{VAULT_UNREACHABLE_NOTE}</p> : null}
       {/* The same refusal the trackers' section explains: a Connect stilled by
           missing storage needs its why in this section too. */}
       {storageUnavailable ? <p className="settings-note">{STORAGE_UNAVAILABLE_NOTE}</p> : null}
@@ -1503,9 +1505,20 @@ export interface VaultControl {
    * or nothing before the first answer and while signed out.
    */
   keys: readonly VaultKeyListEntry[] | undefined;
+  /**
+   * True while nothing synced can be shown at all: signed in, but the list
+   * has never answered and the latest read failed. The section says so
+   * rather than letting an empty answer pass for none synced.
+   */
+  unreachable: boolean;
   /** Deletes one provider's synced key. Answers why if it could not. */
   remove(providerId: VaultProviderId): Promise<ActResult>;
 }
+
+/* Why no synced line can be drawn, said once per section like the storage
+   refusal below it: rows silently missing read as keys silently gone. */
+const VAULT_UNREACHABLE_NOTE =
+  "Luke's service did not answer just now, so keys synced to it cannot be shown yet.";
 
 /* The entry checkbox's words for keeping a save local. It opts out rather
    than in, because a signed-in entry syncs by default; absent an account the
@@ -1532,10 +1545,12 @@ function syncedKeySavedOn(updatedAt: number): string {
 function SyncedKeyLine({
   provider,
   entry,
+  panelOpen,
   onRemove,
 }: {
   provider: CredentialProvider;
   entry: VaultKeyListEntry;
+  panelOpen: boolean;
   onRemove: () => Promise<ActResult>;
 }): React.JSX.Element {
   const [asking, setAsking] = useState(false);
@@ -1544,6 +1559,11 @@ function SyncedKeyLine({
   const trash = useRef<HTMLButtonElement | null>(null);
   const keep = useRef<HTMLButtonElement | null>(null);
   const returnFocus = useRef(false);
+
+  // A confirm left open when the panel goes is withdrawn, the same correction
+  // the local key rows apply: reopening onto a question nobody remembers
+  // asking reads as a trap.
+  if (asking && !panelOpen && !clearing) setAsking(false);
 
   useStagedFocus(keep, asking && !clearing);
 

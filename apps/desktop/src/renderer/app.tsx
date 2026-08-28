@@ -1097,30 +1097,48 @@ export function App(): React.JSX.Element {
    * what is already known, since after a confirmed act the list on screen says
    * what the service just agreed to.
    */
-  const [vaultKeys, setVaultKeys] = useState<readonly VaultKeyListEntry[] | undefined>();
+  const [vaultKeys, setVaultKeys, vaultKeysNow] = useStateWithRef<
+    readonly VaultKeyListEntry[] | undefined
+  >(undefined);
+  // True only while nothing synced can be shown at all: the list has never
+  // answered and the latest ask failed. A refresh that failed over a held
+  // list stays quiet, because the rows are still telling the truth.
+  const [vaultUnreachable, setVaultUnreachable] = useState(false);
   const vaultListAsk = useRef(0);
   const refreshVaultKeys = useCallback(async () => {
     const ask = ++vaultListAsk.current;
     const answer = await window.sidecar.requestVaultKeys().catch(() => undefined);
     if (ask !== vaultListAsk.current) return;
-    setVaultKeys((held) => answer ?? held);
-  }, []);
+    const next = answer ?? vaultKeysNow();
+    setVaultKeys(next);
+    setVaultUnreachable(next === undefined);
+  }, [setVaultKeys, vaultKeysNow]);
 
   useEffect(() => {
     if (!bootstrap) return;
     if ((account ?? bootstrap.account).status !== ACCOUNT_STATUS.SIGNED_IN) {
       vaultListAsk.current += 1;
       setVaultKeys(undefined);
+      setVaultUnreachable(false);
       return;
     }
     void refreshVaultKeys();
-  }, [account, bootstrap, refreshVaultKeys]);
+  }, [account, bootstrap, setVaultKeys, refreshVaultKeys]);
+
+  // Each Settings visit re-reads the list: a first read that failed would
+  // otherwise leave synced keys invisible and undeletable with no way back,
+  // and hints move with saves made elsewhere.
+  useEffect(() => {
+    if (tab !== PANEL_TAB.SETTINGS || !bootstrap) return;
+    if ((account ?? bootstrap.account).status !== ACCOUNT_STATUS.SIGNED_IN) return;
+    void refreshVaultKeys();
+  }, [tab, account, bootstrap, refreshVaultKeys]);
 
   const removeVaultKey = useCallback(
     async (providerId: VaultProviderId): Promise<ActResult> => {
       const answer = await window.sidecar.deleteVaultKey(providerId).catch(() => undefined);
       if (answer?.status === ACT_RESULT_STATUS.ACCEPTED) {
-        setVaultKeys((held) => held?.filter((stored) => stored.providerId !== providerId));
+        setVaultKeys(vaultKeysNow()?.filter((stored) => stored.providerId !== providerId));
         void refreshVaultKeys();
         return answer;
       }
@@ -1131,7 +1149,7 @@ export function App(): React.JSX.Element {
         }
       );
     },
-    [refreshVaultKeys],
+    [refreshVaultKeys, setVaultKeys, vaultKeysNow],
   );
 
   /**
@@ -1150,14 +1168,15 @@ export function App(): React.JSX.Element {
       if (result?.status !== ACT_RESULT_STATUS.ACCEPTED) {
         return "The key is stored on this Mac, but Luke's service could not take the synced copy. Save again to retry, or turn syncing off.";
       }
-      setVaultKeys((held) => [
-        ...(held ?? []).filter((stored) => stored.providerId !== providerId),
+      setVaultKeys([
+        ...(vaultKeysNow() ?? []).filter((stored) => stored.providerId !== providerId),
         { providerId, hint: key.slice(-4), updatedAt: Date.now() },
       ]);
+      setVaultUnreachable(false);
       void refreshVaultKeys();
       return undefined;
     },
-    [refreshVaultKeys],
+    [refreshVaultKeys, setVaultKeys, vaultKeysNow],
   );
 
   /**
@@ -3371,7 +3390,7 @@ export function App(): React.JSX.Element {
               ...(hostedUsage ? { hostedUsage } : undefined),
               onSettingsChange: applySettings,
               credentials,
-              vault: { keys: vaultKeys, remove: removeVaultKey },
+              vault: { keys: vaultKeys, unreachable: vaultUnreachable, remove: removeVaultKey },
               feedback: feedbackControl,
               panelOpen,
               workspaceProviders: workspaceProviderOptions,
