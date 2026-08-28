@@ -679,6 +679,17 @@ export const BRIDGE = {
    * permission but audio capture, the async clipboard included.
    */
   copyText: entry({ kind: "send", channel: "app:copy-text", args: oneString }),
+  /**
+   * The calendar gate's own skip: declines the onboarding step for good and
+   * is remembered like a settle. It carries nothing and answers nothing —
+   * the standing-down travels back on the onboarding broadcast.
+   */
+  skipCalendarOnboarding: entry({
+    kind: "invoke",
+    channel: "app:skip-calendar-onboarding",
+    args: noArgs,
+    result: result<void>(),
+  }),
   focusPanel: entry({ kind: "send", channel: "app:focus-panel", args: noArgs }),
   requestRealtimeCredential: entry({
     kind: "invoke",

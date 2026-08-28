@@ -71,7 +71,7 @@ import type { AppSettings, AppSettingsView, SettingsUpdateResult } from "#shared
 import { appSettingsView } from "#shared/wire/settings";
 import type { UpdateSnapshot } from "#shared/wire/update";
 import { ASK_LUKE_INPUT_ID, focusAskField } from "./ask-luke";
-import type { CalendarGateSources } from "./calendar-gate";
+import type { CalendarGateControl } from "./calendar-gate";
 import { type ConsentConnectEntry, ConsentConnectSlot } from "./consent-connect-slot";
 import type { CredentialEntry, CredentialEntryControl } from "./credential-entry";
 import { isSubmittable, removalEndsEntry } from "./credential-entry";
@@ -3117,7 +3117,7 @@ export function App(): React.JSX.Element {
   const gateSettings = settings ?? bootstrapSettings ?? appSettingsView(bootstrap.settings);
   const gateCalendarConnected =
     gateSettings.calendarAccounts.length > 0 || gateSettings.appleCalendar !== undefined;
-  const calendarGate: CalendarGateSources | undefined =
+  const calendarGate: CalendarGateControl | undefined =
     calendarOnboardingOwed &&
     !gateCalendarConnected &&
     (gateSettings.appleCalendarAvailable || gateSettings.calendarSignInAvailable)
@@ -3141,6 +3141,7 @@ export function App(): React.JSX.Element {
                 },
               }
             : undefined),
+          onSkip: () => void window.sidecar.skipCalendarOnboarding(),
         }
       : undefined;
 

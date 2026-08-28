@@ -15,6 +15,10 @@ test("the gate is owed from an observed sign-in until a calendar settles it", ()
   assert.equal(calendarOnboardingOwed({ requiredAt: REQUIRED_AT, settledAt: LATER }), false);
 });
 
+test("a decline on the gate stands it down for good, like a settle", () => {
+  assert.equal(calendarOnboardingOwed({ requiredAt: REQUIRED_AT, skippedAt: LATER }), false);
+});
+
 test("no record, and a backfilled record, owe no gate", () => {
   assert.equal(calendarOnboardingOwed(undefined), false);
   assert.equal(calendarOnboardingOwed({ settledAt: LATER }), false);
@@ -57,7 +61,7 @@ test("a signed-in launch with no record backfills a settled one", () => {
 });
 
 test("the record round-trips, and anything unreadable reads as no record", () => {
-  const state = { requiredAt: REQUIRED_AT, settledAt: LATER };
+  const state = { requiredAt: REQUIRED_AT, skippedAt: LATER };
   assert.deepEqual(calendarOnboardingStateFromStored(calendarOnboardingRecord(state)), state);
   assert.deepEqual(calendarOnboardingStateFromStored(calendarOnboardingRecord({})), {});
   assert.equal(calendarOnboardingStateFromStored(undefined), undefined);

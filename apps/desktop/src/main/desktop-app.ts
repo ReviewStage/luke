@@ -1618,6 +1618,15 @@ function registerIpc(): void {
     if (!arrivalBeatOwed(arrivalState)) return;
     writeArrivalState({ ...(arrivalState ?? {}), settledAt: new Date().toISOString() });
   });
+  registerHandler(BRIDGE.skipCalendarOnboarding, () => {
+    // A skip that raced a connect's settle overwrites nothing: the step was
+    // answered, and a calendar answered it better than the decline did.
+    if (!calendarOnboardingOwed(calendarOnboardingState)) return;
+    writeCalendarOnboardingState({
+      ...(calendarOnboardingState ?? {}),
+      skippedAt: new Date().toISOString(),
+    });
+  });
   registerHandler(BRIDGE.beginSupersetSignIn, async () => {
     recordProductEvent(PRODUCT_EVENT.SUPERSET_ACT, {
       superset_act: PRODUCT_SUPERSET_ACT.SIGN_IN_START,

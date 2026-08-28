@@ -10,9 +10,11 @@ import { isRecord, text, type UnparsedWireValue } from "@sidecar/wire";
  * can see: announcements land mid-meeting exactly for the developer who never
  * found the calendar rows in settings. So onboarding does not end at the
  * sign-in — from the first sign-in this install observes, the panel stands a
- * gate asking for a calendar, and it stands until one connects. Connecting is
- * still the user's own press through the same consent flows the settings rows
- * run; the gate changes when the ask is made, never what it may do.
+ * gate asking for a calendar, and it stands until it is answered: a calendar
+ * connecting, or the gate's own quiet skip declining the step for good.
+ * Connecting is still the user's own press through the same consent flows the
+ * settings rows run; the gate changes when the ask is made, never what it may
+ * do.
  */
 
 /**
@@ -35,6 +37,13 @@ export interface CalendarOnboardingState {
    * backfilled record — the install was recognized as predating the step.
    */
   settledAt?: string;
+  /**
+   * When the user declined the step instead. Its own field rather than a
+   * settle, so the record keeps what actually happened, but it stands the
+   * gate down the same way: a decline is answered once and remembered, never
+   * re-asked, and the settings rows stay the way to connect later.
+   */
+  skippedAt?: string;
 }
 
 /**
@@ -56,9 +65,11 @@ export function calendarOnboardingStateFromStored(
   if (!isRecord(parsed)) return undefined;
   const requiredAt = text(parsed.requiredAt);
   const settledAt = text(parsed.settledAt);
+  const skippedAt = text(parsed.skippedAt);
   return {
     ...(requiredAt !== undefined ? { requiredAt } : undefined),
     ...(settledAt !== undefined ? { settledAt } : undefined),
+    ...(skippedAt !== undefined ? { skippedAt } : undefined),
   };
 }
 
@@ -68,13 +79,18 @@ export function calendarOnboardingRecord(state: CalendarOnboardingState): string
 }
 
 /**
- * Whether the gate is still owed: a sign-in observed under the mandatory
- * step that no calendar connection has settled. Only a connection settles
- * it — quitting at the gate and relaunching finds it standing again, because
- * a step a quit could skip would not be one.
+ * Whether the gate is still owed: a sign-in observed under the step that no
+ * calendar connection has settled and no press on the gate's own skip has
+ * declined. Both are answers; a quit is not — quitting at the gate and
+ * relaunching finds it standing again, because a step a quit could dodge
+ * would never be answered at all.
  */
 export function calendarOnboardingOwed(state: CalendarOnboardingState | undefined): boolean {
-  return state?.requiredAt !== undefined && state.settledAt === undefined;
+  return (
+    state?.requiredAt !== undefined &&
+    state.settledAt === undefined &&
+    state.skippedAt === undefined
+  );
 }
 
 /**

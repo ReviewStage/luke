@@ -17,7 +17,7 @@ import { useCallback, useRef, useState } from "react";
 import { ACCOUNT_STATUS, type AccountProvider, type AccountSnapshot } from "#shared/wire/account";
 import type { SessionOpenResult } from "#shared/wire/session";
 import { type AskHandler, AskLuke } from "./ask-luke";
-import { CalendarGate, type CalendarGateSources } from "./calendar-gate";
+import { CalendarGate, type CalendarGateControl } from "./calendar-gate";
 import { ConversationHistoryPanel } from "./conversation-history-panel";
 import { PANEL_TAB, type PanelTab, TabBar } from "./panel-tabs";
 import {
@@ -768,11 +768,11 @@ export interface PanelBodyProps {
   /** Why the last sign-in ended without landing, for the gate to show. */
   signInFailure?: string;
   /**
-   * The mandatory calendar step of onboarding, present exactly while it
-   * stands: signed in, still owed, unconnected, and with at least one source
-   * this build can offer. Assembled by the app, which knows all four.
+   * The calendar step of onboarding, present exactly while it stands: signed
+   * in, still owed, unconnected, and with at least one source this build can
+   * offer. Assembled by the app, which knows all four.
    */
-  calendarGate?: CalendarGateSources;
+  calendarGate?: CalendarGateControl;
   list: ArrangedSessions;
   /**
    * Whether the roster has been read at all yet. Until it has, an empty list
@@ -901,12 +901,13 @@ export function PanelBody({
     );
   }
   // Onboarding's second gate, past the account's: the roster and the settings
-  // both wait behind it, so connecting a calendar is the one thing the panel
-  // offers until Luke can tell a meeting from a moment to speak into.
+  // both wait behind it until the step is answered — a calendar connected, so
+  // Luke can tell a meeting from a moment to speak into, or the skip
+  // declining it for good.
   if (calendarGate) {
     return (
       <div className="body">
-        <CalendarGate sources={calendarGate} onQuit={settings.onQuit} />
+        <CalendarGate control={calendarGate} onQuit={settings.onQuit} />
       </div>
     );
   }

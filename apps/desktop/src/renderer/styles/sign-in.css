@@ -149,6 +149,40 @@
   flex: 0 0 auto;
 }
 
+/* The two footnotes share a line and a voice; only the quit admits danger on
+   hover, because only it ends the run. */
+.calendar-gate-footer {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.calendar-gate-footer .sign-in-quit {
+  margin-top: 0;
+}
+
+.calendar-gate-skip {
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text-tertiary);
+  font-size: 10.5px;
+  font-weight: 620;
+  transition:
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+}
+
+.calendar-gate-skip:hover:not(:disabled) {
+  background: var(--raised);
+  color: var(--text-primary);
+}
+
+.calendar-gate-skip:disabled {
+  opacity: 0.55;
+}
+
 /* Quiet on purpose: leaving is the one act here that is not the reason the
    screen exists, so it reads as a footnote until it is asked after — and then
    admits what it is the way every destructive control does. */

@@ -2,10 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { CalendarGate, type CalendarGateSources } from "./calendar-gate";
+import { CalendarGate, type CalendarGateControl } from "./calendar-gate";
 
-function render(sources: CalendarGateSources): string {
-  return renderToStaticMarkup(createElement(CalendarGate, { sources, onQuit: () => undefined }));
+function render(control: Omit<CalendarGateControl, "onSkip">): string {
+  return renderToStaticMarkup(
+    createElement(CalendarGate, {
+      control: { ...control, onSkip: () => undefined },
+      onQuit: () => undefined,
+    }),
+  );
 }
 
 const stillSource = { connecting: false, onConnect: () => undefined };
@@ -31,12 +36,15 @@ test("the gate says what connecting buys and what it will never read", () => {
   assert.match(markup, /never their titles or/);
 });
 
-test("either connect under way holds both buttons", () => {
+test("either connect under way holds the connects and the skip, never the quit", () => {
   const markup = render({ apple: { ...stillSource, connecting: true }, google: stillSource });
   const disabled = markup.match(/disabled=""/g) ?? [];
-  assert.equal(disabled.length, 2);
+  assert.equal(disabled.length, 3);
+  assert.doesNotMatch(markup, /sign-in-quit[^>]*disabled/);
 });
 
-test("the way out stays offered, quiet as the sign-in gate keeps it", () => {
-  assert.match(render({ google: stillSource }), /sign-in-quit[^>]*>Quit Luke/);
+test("both ways out stay offered: the skip that answers, the quit that only leaves", () => {
+  const markup = render({ google: stillSource });
+  assert.match(markup, /calendar-gate-skip[^>]*>Set up later/);
+  assert.match(markup, /sign-in-quit[^>]*>Quit Luke/);
 });

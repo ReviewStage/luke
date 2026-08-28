@@ -11,30 +11,32 @@ export interface CalendarGateSource {
 }
 
 /**
- * The sources the gate may offer. Assembled by the app, which is what knows
- * the build's capabilities; a gate offered neither is never drawn at all,
- * because a mandatory step with no way through would be a locked door.
+ * What the gate can do, assembled by the app, which is what knows the
+ * build's capabilities. A gate offered no source is never drawn at all,
+ * because an onboarding step with nothing to offer would be a locked door.
  */
-export interface CalendarGateSources {
+export interface CalendarGateControl {
   apple?: CalendarGateSource;
   google?: CalendarGateSource;
+  /** Declines the step for good; the settings rows stay the way to connect later. */
+  onSkip: () => void;
 }
 
 /**
- * The mandatory calendar step of onboarding, standing where the roster would
- * be from the first sign-in until a calendar connects. It only asks: each
- * button runs the same consent flow the source's settings row does, and the
- * gate falls on the connection the main process records, never on anything
- * decided here.
+ * The calendar step of onboarding, standing where the roster would be from
+ * the first sign-in until it is answered — by a calendar connecting, or by
+ * the quiet skip declining it. It only asks: each button runs the same
+ * consent flow the source's settings row does, and the gate falls on the
+ * answer the main process records, never on anything decided here.
  */
 export function CalendarGate({
-  sources,
+  control,
   onQuit,
 }: {
-  sources: CalendarGateSources;
+  control: CalendarGateControl;
   onQuit: () => void;
 }): React.JSX.Element {
-  const pending = sources.apple?.connecting === true || sources.google?.connecting === true;
+  const pending = control.apple?.connecting === true || control.google?.connecting === true;
   return (
     <section className="sign-in-gate calendar-gate" aria-labelledby="calendar-gate-title">
       <h1 id="calendar-gate-title">Quiet during meetings</h1>
@@ -44,33 +46,44 @@ export function CalendarGate({
         attends.
       </p>
       <div className="sign-in-actions">
-        {sources.apple ? (
+        {control.apple ? (
           <button
             type="button"
             className="sign-in-provider"
             disabled={pending}
-            onClick={sources.apple.onConnect}
+            onClick={control.apple.onConnect}
           >
             <ProviderMark providerId={APPLE_CALENDAR_ID} />
             Use this Mac's Calendar
           </button>
         ) : null}
-        {sources.google ? (
+        {control.google ? (
           <button
             type="button"
             className="sign-in-provider"
             disabled={pending}
-            onClick={sources.google.onConnect}
+            onClick={control.google.onConnect}
           >
             <ProviderMark providerId={GOOGLE_CALENDAR_ID} />
             Connect Google Calendar
           </button>
         ) : null}
       </div>
-      {/* The way out, quiet on purpose, exactly as the sign-in gate keeps it. */}
-      <button type="button" className="sign-in-quit" onClick={onQuit}>
-        Quit Luke
-      </button>
+      {/* Both ways out, quiet on purpose: the skip answers the step and is
+          remembered, the quit only postpones it — so the skip leads. */}
+      <div className="calendar-gate-footer">
+        <button
+          type="button"
+          className="calendar-gate-skip"
+          disabled={pending}
+          onClick={control.onSkip}
+        >
+          Set up later
+        </button>
+        <button type="button" className="sign-in-quit" onClick={onQuit}>
+          Quit Luke
+        </button>
+      </div>
     </section>
   );
 }
