@@ -3243,7 +3243,7 @@ function AccountSection({
   };
 
   return (
-    <section className="settings-section" style={cssCustomProperties({ "--row-index": 6 })}>
+    <section className="settings-section" style={cssCustomProperties({ "--row-index": 5 })}>
       <h2>
         <UserIcon />
         Account
@@ -3533,45 +3533,6 @@ function UpdatesSection({
   );
 }
 
-/**
- * The one thing Luke sends without being asked, and the switch for it. It sits
- * beside Updates because both are always-on background behaviours rather than
- * features with a page: the section is where the developer learns the counting
- * happens at all, so the detail says what travels rather than only naming the
- * switch.
- */
-function UsageDataSection({
-  settings,
-  writes,
-}: {
-  settings: AppSettingsView;
-  writes: SettingsWrites;
-}): React.JSX.Element {
-  return (
-    <section className="settings-section" style={cssCustomProperties({ "--row-index": 4 })}>
-      <h2>
-        <ShieldIcon />
-        Usage data
-      </h2>
-      <SchemaSettingRows
-        page={SCHEMA_SETTINGS_PAGE.ROOT}
-        settings={settings}
-        writes={writes}
-        exclude={[APP_SETTING_SCHEMA.voiceSource.field]}
-        details={{
-          [APP_SETTING_SCHEMA.shareUsageData.field]:
-            "Counts of feature use, tied to your account. Never session contents.",
-          [APP_SETTING_SCHEMA.sessionReplay.field]:
-            "A video of the panel: session titles, summaries, and your name. Not what you type.",
-        }}
-        disabled={{
-          [APP_SETTING_SCHEMA.sessionReplay.field]: !settings.shareUsageData,
-        }}
-      />
-    </section>
-  );
-}
-
 export function SettingsPanel({
   account,
   onSignOut,
@@ -3837,8 +3798,6 @@ export function SettingsPanel({
         <>
           {updateLeads ? null : <UpdatesSection control={updates} rowIndex={3} />}
 
-          {settings ? <UsageDataSection settings={settings} writes={writes} /> : null}
-
           <FeedbackSection control={feedback} />
 
           {/* The account and the two ways out of it, last of the sections:
@@ -3856,7 +3815,7 @@ export function SettingsPanel({
           <button
             type="button"
             className="quit-button"
-            style={cssCustomProperties({ "--row-index": 7 })}
+            style={cssCustomProperties({ "--row-index": 6 })}
             {...searchAnchorProps(SETTINGS_SEARCH_ROW.QUIT)}
             onClick={onQuit}
           >

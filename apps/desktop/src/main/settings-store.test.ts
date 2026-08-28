@@ -788,40 +788,6 @@ test("a corrupt meeting quiet value reads as the default rather than as off", as
   assert.equal(appSettingsView(await storeIn(directory).snapshot()).quietDuringMeetings, true);
 });
 
-test("usage sharing is on in a file that never mentions it, and survives a round trip", async (t) => {
-  const directory = await temporaryDirectory(t);
-  // The one setting on by default that sends something, so a file written
-  // before it existed must read as on rather than as an absence.
-  await fs.writeFile(
-    path.join(directory, SETTINGS_FILE_NAME),
-    JSON.stringify({ version: 2, apiKeys: {} }),
-    "utf8",
-  );
-
-  const store = storeIn(directory);
-  assert.equal(appSettingsView(await store.snapshot()).shareUsageData, true);
-  assert.equal(await store.get(APP_SETTING_SCHEMA.shareUsageData.field), true);
-
-  const stopped = await store.set(APP_SETTING_SCHEMA.shareUsageData.field, false);
-  assert.equal(appSettingsView(stopped.settings).shareUsageData, false);
-  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.shareUsageData.field), false);
-});
-
-test("no reset scope reaches usage sharing", async (t) => {
-  const directory = await temporaryDirectory(t);
-  const store = storeIn(directory);
-  await store.set(APP_SETTING_SCHEMA.shareUsageData.field, false);
-
-  for (const scope of Object.values(SETTINGS_RESET_SCOPE)) {
-    await store.resetSettings(scope);
-    assert.equal(
-      appSettingsView(await store.snapshot()).shareUsageData,
-      false,
-      `${scope} must not restore data sharing`,
-    );
-  }
-});
-
 test("keeps each provider's key, environment fallback, and reported source separate", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory, {

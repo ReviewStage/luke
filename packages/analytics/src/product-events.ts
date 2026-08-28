@@ -63,8 +63,6 @@ export const PRODUCT_EVENT = {
   VOICE_ANNOUNCEMENT_SPEAK: "voice:announcement_speak",
   VOICE_FIRST_ANNOUNCEMENT: "voice:first_announcement",
   SETTING_UPDATE: "setting:update",
-  USAGE_SHARING_STOP: "usage:sharing_stop",
-  USAGE_SHARING_RESUME: "usage:sharing_resume",
 } as const;
 
 export type ProductEventName = (typeof PRODUCT_EVENT)[keyof typeof PRODUCT_EVENT];
@@ -523,8 +521,6 @@ export const PRODUCT_EVENT_PROPERTIES = {
     PRODUCT_EVENT_PROPERTY.SETTING_ID,
     PRODUCT_EVENT_PROPERTY.SETTING_VALUE,
   ],
-  [PRODUCT_EVENT.USAGE_SHARING_STOP]: [],
-  [PRODUCT_EVENT.USAGE_SHARING_RESUME]: [],
 } as const satisfies { [Name in ProductEventName]: readonly ProductEventProperty[] };
 
 /** Exactly the properties one event carries, each with its own value type. */

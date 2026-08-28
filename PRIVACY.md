@@ -45,10 +45,6 @@ before you sign in is attached to your account if you sign in while it is
 running. One that never reaches a sign-in belongs to nobody, so deleting your
 account does not reach it — we have no way to tell it was yours.
 
-Usage data and recording are both on by default, with their own switches in
-Settings. Turning off Record my screen in Luke leaves the counts on; turning off
-Share usage data stops everything in these two sections.
-
 **Feedback.** If you use the feedback form, we receive what you typed, the name
 and email you signed it with, and any screenshots you attached.
 

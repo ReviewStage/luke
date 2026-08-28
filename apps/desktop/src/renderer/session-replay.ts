@@ -24,15 +24,18 @@ import type { SessionReplayBootstrap } from "#shared/wire/session";
  * file and that one blocked subtree are the whole of what decides it. Nothing
  * else stands between what the panel draws and what leaves the machine.
  *
- * What this file decides on its own is only whether to record at all: the
- * main process says whether this run may, and the developer's two switches
- * say whether it does. No account is among those reasons. Recording begins at
- * the first paint of an ordinary launch, before anyone has signed in and
- * through the spoken introduction, because the launch is where what goes
- * wrong goes wrong and a recording that waited for a sign-in never saw it. A
- * session that reaches one is joined to the person there; a session that
- * never does stays anonymous, which is the part `PRIVACY.md` has to say
- * plainly, because such a recording cannot be erased with an account.
+ * What this file decides on its own is only whether to record at all, and the
+ * main process is the whole of that answer: an ordinary run records, a
+ * fixture or capture run does not, and a run whose account was deleted stops.
+ * There is no switch — `PRIVACY.md` is where a user learns this happens, so
+ * that file carries the whole of the disclosure and has to keep doing it. No
+ * account is among the reasons either. Recording begins at the first paint of
+ * an ordinary launch, before anyone has signed in and through the spoken
+ * introduction, because the launch is where what goes wrong goes wrong and a
+ * recording that waited for a sign-in never saw it. A session that reaches
+ * one is joined to the person there; a session that never does stays
+ * anonymous, which is the part `PRIVACY.md` has to say plainly, because such
+ * a recording cannot be erased with an account.
  */
 
 /**
@@ -241,38 +244,24 @@ let started = false;
 let initialized = false;
 
 /**
- * Brings recording into line with what the developer has just asked for, in
- * either direction. Called at bootstrap and again whenever a settings change
- * lands, so a switch turned off stops the recording where it stands rather
- * than at the next launch — and one turned back on starts a new one.
- *
- * Both switches are read live and both are required: `shareUsageData` is the
- * outer consent and a recording is a thing sent, so recording cannot outlive
- * the sharing it travels under.
+ * Brings recording into line with what the run allows, in either direction.
+ * Called at bootstrap and again on every account transition, so a deletion
+ * stops the recording where it stands rather than at the next launch.
  */
-export function applySessionReplay(
-  bootstrap: SessionReplayBootstrap,
-  sharesUsageData: boolean,
-  recordsSurface: boolean,
-): void {
-  const wanted = sessionReplayWanted(bootstrap, sharesUsageData, recordsSurface);
+export function applySessionReplay(bootstrap: SessionReplayBootstrap): void {
+  const wanted = sessionReplayWanted(bootstrap);
   if (wanted === started) return;
   if (wanted) startSessionReplay(bootstrap);
   else stopSessionReplay();
 }
 
 /**
- * Whether recording should be running, given what the run allows and where
- * the developer's two switches stand. Named and exported so the reasons can
- * be asserted one at a time: this decides whether the one thing Luke sends
+ * Whether recording should be running. Named and exported so the one reason
+ * can be asserted on its own: this decides whether the one thing Luke sends
  * that no vocabulary bounds happens at all.
  */
-export function sessionReplayWanted(
-  bootstrap: SessionReplayBootstrap,
-  sharesUsageData: boolean,
-  recordsSurface: boolean,
-): boolean {
-  return bootstrap.permitted && sharesUsageData && recordsSurface;
+export function sessionReplayWanted(bootstrap: SessionReplayBootstrap): boolean {
+  return bootstrap.permitted;
 }
 
 function startSessionReplay(bootstrap: SessionReplayBootstrap): void {
@@ -281,9 +270,9 @@ function startSessionReplay(bootstrap: SessionReplayBootstrap): void {
   started = true;
   if (initialized) {
     // The client is built once per window. A second `init` would not rebuild
-    // it, so a recording resumed after a switch or an account change is
-    // started rather than re-configured — but it must still be told whose
-    // recording it is, because the person may have changed since the last one.
+    // it, so a recording resumed after an account change is started rather
+    // than re-configured — but it must still be told whose recording it is,
+    // because the person may have changed since the last one.
     optIn();
     registerBuild(bootstrap);
     identifyAccount(bootstrap);
@@ -324,8 +313,7 @@ function startSessionReplay(bootstrap: SessionReplayBootstrap): void {
   });
   // Stopping opts out, and that is written into the same storage this client
   // reads at launch — so without opting back in here, a run that had ever
-  // been stopped would come up recording nothing while every switch said it
-  // was recording.
+  // been stopped would come up recording nothing for the rest of the install.
   optIn();
   registerBuild(bootstrap);
   identifyAccount(bootstrap);
@@ -352,14 +340,12 @@ function identifyAccount(bootstrap: SessionReplayBootstrap): void {
  * Opting in and out rather than only starting and stopping the recorder,
  * because this client sends more than recordings. On the library's own
  * configuration it also autocaptures what was clicked and reports unhandled
- * errors, and neither answers to `stopSessionRecording`. The switch says
- * "record my screen", so everything this client would send has to stop with
- * it — otherwise the developer turns off the one thing they were shown and
- * the rest keeps travelling.
+ * errors, and neither answers to `stopSessionRecording`. A stop has to reach
+ * all three — a deleted account whose clicks kept travelling would be the
+ * erasure failing to erase.
  *
- * The opt-in names no event, because the `$opt_in` the library captures by
- * default is a count of the switch moving, which Luke's own counted events
- * already hold.
+ * The opt-in names no event: `$opt_in` counts a consent moving, and nothing
+ * here moves one.
  */
 function optIn(): void {
   posthog.opt_in_capturing({ captureEventName: false });
