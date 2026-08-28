@@ -54,6 +54,15 @@ export function CheckIcon(): React.JSX.Element {
   );
 }
 
+export function CopyIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <rect x="8.6" y="8.6" width="11" height="11" rx="2.4" />
+      <path d="M5.6 15.4H5A2.4 2.4 0 0 1 2.6 13V5A2.4 2.4 0 0 1 5 2.6h8A2.4 2.4 0 0 1 15.4 5v.6" />
+    </Glyph>
+  );
+}
+
 export function PencilIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
