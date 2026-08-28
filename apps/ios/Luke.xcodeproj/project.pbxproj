@@ -11,6 +11,10 @@
 		AABBCC000000000000000021 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000013 /* ContentView.swift */; };
 		AABBCC000000000000000022 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000014 /* Assets.xcassets */; };
 		AABBCC000000000000000023 /* LukeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000015 /* LukeTests.swift */; };
+		AABBCC000000000000000083 /* LukeKit in Frameworks */ = {isa = PBXBuildFile; productRef = AABBCC000000000000000081 /* LukeKit */; };
+		AABBCC000000000000000084 /* LukeKit in Frameworks */ = {isa = PBXBuildFile; productRef = AABBCC000000000000000082 /* LukeKit */; };
+		AABBCC000000000000000085 /* Marks.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000016 /* Marks.swift */; };
+		AABBCC000000000000000086 /* SVGPath.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000017 /* SVGPath.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -20,6 +24,8 @@
 		AABBCC000000000000000013 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		AABBCC000000000000000014 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		AABBCC000000000000000015 /* LukeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LukeTests.swift; sourceTree = "<group>"; };
+		AABBCC000000000000000016 /* Marks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Marks.swift; sourceTree = "<group>"; };
+		AABBCC000000000000000017 /* SVGPath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SVGPath.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -27,6 +33,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AABBCC000000000000000083 /* LukeKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -34,6 +41,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AABBCC000000000000000084 /* LukeKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -63,6 +71,8 @@
 			children = (
 				AABBCC000000000000000012 /* LukeApp.swift */,
 				AABBCC000000000000000013 /* ContentView.swift */,
+				AABBCC000000000000000016 /* Marks.swift */,
+				AABBCC000000000000000017 /* SVGPath.swift */,
 				AABBCC000000000000000014 /* Assets.xcassets */,
 			);
 			path = Luke;
@@ -92,6 +102,9 @@
 			dependencies = (
 			);
 			name = Luke;
+			packageProductDependencies = (
+				AABBCC000000000000000081 /* LukeKit */,
+			);
 			productName = Luke;
 			productReference = AABBCC000000000000000010 /* Luke.app */;
 			productType = "com.apple.product-type.application";
@@ -109,6 +122,9 @@
 			dependencies = (
 			);
 			name = LukeTests;
+			packageProductDependencies = (
+				AABBCC000000000000000082 /* LukeKit */,
+			);
 			productName = LukeTests;
 			productReference = AABBCC000000000000000011 /* LukeTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -141,6 +157,9 @@
 				Base,
 			);
 			mainGroup = AABBCC000000000000000002;
+			packageReferences = (
+				AABBCC000000000000000080 /* XCLocalSwiftPackageReference "LukeKit" */,
+			);
 			productRefGroup = AABBCC000000000000000003 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -176,6 +195,8 @@
 			files = (
 				AABBCC000000000000000020 /* LukeApp.swift in Sources */,
 				AABBCC000000000000000021 /* ContentView.swift in Sources */,
+				AABBCC000000000000000085 /* Marks.swift in Sources */,
+				AABBCC000000000000000086 /* SVGPath.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -328,7 +349,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.example.luke";
+				PRODUCT_BUNDLE_IDENTIFIER = "dev.tryluke.ios";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -355,7 +376,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.example.luke";
+				PRODUCT_BUNDLE_IDENTIFIER = "dev.tryluke.ios";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -370,7 +391,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.example.luke.LukeTests";
+				PRODUCT_BUNDLE_IDENTIFIER = "dev.tryluke.ios.LukeTests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
@@ -385,7 +406,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.example.luke.LukeTests";
+				PRODUCT_BUNDLE_IDENTIFIER = "dev.tryluke.ios.LukeTests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
@@ -424,6 +445,27 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		AABBCC000000000000000080 /* XCLocalSwiftPackageReference "LukeKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = LukeKit;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		AABBCC000000000000000081 /* LukeKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AABBCC000000000000000080 /* XCLocalSwiftPackageReference "LukeKit" */;
+			productName = LukeKit;
+		};
+		AABBCC000000000000000082 /* LukeKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AABBCC000000000000000080 /* XCLocalSwiftPackageReference "LukeKit" */;
+			productName = LukeKit;
+		};
+/* End XCSwiftPackageProductDependency section */
+
 	};
 	rootObject = AABBCC000000000000000001 /* Project object */;
 }

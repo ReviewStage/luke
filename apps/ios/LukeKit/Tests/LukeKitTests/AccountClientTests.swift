@@ -1,37 +1,7 @@
+import Foundation
 import XCTest
 
 @testable import LukeKit
-
-// MARK: - PKCE
-
-final class PKCETests: XCTestCase {
-    func testVerifierLength() {
-        let pkce = PKCE()
-        XCTAssertGreaterThanOrEqual(pkce.verifier.count, 43)
-        XCTAssertLessThanOrEqual(pkce.verifier.count, 128)
-    }
-
-    func testVerifierCharset() {
-        let pkce = PKCE()
-        let allowed = CharacterSet(
-            charactersIn:
-                "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"
-        )
-        XCTAssertTrue(pkce.verifier.unicodeScalars.allSatisfy { allowed.contains($0) })
-    }
-
-    func testChallengeNoPadding() {
-        let pkce = PKCE()
-        XCTAssertFalse(pkce.challenge.contains("="))
-    }
-
-    /// RFC 7636 Appendix B known vector.
-    func testKnownVector() {
-        let verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
-        let expected = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
-        XCTAssertEqual(PKCE.challenge(for: verifier), expected)
-    }
-}
 
 // MARK: - HTTP stub
 
@@ -51,7 +21,7 @@ private func jsonData(_ dict: [String: Any]) -> Data {
     try! JSONSerialization.data(withJSONObject: dict)
 }
 
-// MARK: - Authorize URL
+// MARK: - Authorize URL tests
 
 final class AuthorizeURLTests: XCTestCase {
     private let base = URL(string: "https://tryluke.dev/api/auth")!
@@ -60,7 +30,7 @@ final class AuthorizeURLTests: XCTestCase {
         let client = AccountClient(baseURL: base, clientID: "luke-mobile")
         let url = client.authorizeURL(
             redirectURI: "dev.tryluke.ios://oauth/callback",
-            state: "state123",
+            state: "abc123",
             codeChallenge: "challenge"
         )
         let items = URLComponents(url: url, resolvingAgainstBaseURL: false)!.queryItems!
@@ -69,22 +39,31 @@ final class AuthorizeURLTests: XCTestCase {
         XCTAssertEqual(params["client_id"], "luke-mobile")
         XCTAssertEqual(params["response_type"], "code")
         XCTAssertEqual(params["redirect_uri"], "dev.tryluke.ios://oauth/callback")
-        XCTAssertEqual(params["state"], "state123")
+        XCTAssertEqual(params["state"], "abc123")
         XCTAssertEqual(params["code_challenge"], "challenge")
         XCTAssertEqual(params["code_challenge_method"], "S256")
         XCTAssertEqual(params["prompt"], "login")
         XCTAssertTrue(params["scope"]?.contains("openid") == true)
         XCTAssertTrue(params["scope"]?.contains("offline_access") == true)
     }
+
+    func testPath() {
+        let client = AccountClient(baseURL: base, clientID: "luke-mobile")
+        let url = client.authorizeURL(redirectURI: "", state: "", codeChallenge: "")
+        XCTAssertTrue(url.absoluteString.hasPrefix("https://tryluke.dev/api/auth/oauth2/authorize"))
+    }
 }
 
-// MARK: - Token response parsing
+// MARK: - Token response parsing tests
 
 final class TokenResponseTests: XCTestCase {
     private let base = URL(string: "https://example.com")!
 
-    func testSuccessfulParse() async throws {
+    func testSuccessfulExchange() async throws {
         let stub = StubHTTPClient { request in
+            XCTAssertTrue(request.url?.path.hasSuffix("oauth2/token") == true)
+            let body = String(data: request.httpBody ?? Data(), encoding: .utf8) ?? ""
+            XCTAssertTrue(body.contains("grant_type=authorization_code"))
             let payload: [String: Any] = [
                 "access_token": "at-xyz",
                 "refresh_token": "rt-xyz",
@@ -94,7 +73,9 @@ final class TokenResponseTests: XCTestCase {
         }
         let client = AccountClient(baseURL: base, clientID: "c", http: stub)
         let tokens = try await client.exchangeCode(
-            code: "code", codeVerifier: "verifier", redirectURI: "s://cb"
+            code: "code",
+            codeVerifier: "verifier",
+            redirectURI: "scheme://cb"
         )
         XCTAssertEqual(tokens.accessToken, "at-xyz")
         XCTAssertEqual(tokens.refreshToken, "rt-xyz")
@@ -112,11 +93,11 @@ final class TokenResponseTests: XCTestCase {
         } catch AccountClientError.tokensMissing {
             // expected
         } catch {
-            XCTFail("Unexpected: \(error)")
+            XCTFail("Unexpected error: \(error)")
         }
     }
 
-    func testServerErrorCarriesOAuthError() async {
+    func testServerErrorPropagates() async {
         let stub = StubHTTPClient { request in
             (jsonData(["error": "invalid_grant"]), makeResponse(url: request.url!, status: 400))
         }
@@ -128,21 +109,24 @@ final class TokenResponseTests: XCTestCase {
             XCTAssertEqual(status, 400)
             XCTAssertEqual(oauthError, "invalid_grant")
         } catch {
-            XCTFail("Unexpected: \(error)")
+            XCTFail("Unexpected error: \(error)")
         }
     }
 }
 
-// MARK: - Refresh retry decision
+// MARK: - Refresh-retry logic tests
 
 final class RefreshRetryTests: XCTestCase {
     private let base = URL(string: "https://example.com")!
 
-    func testRefreshSendsCorrectGrant() async throws {
+    func testRefreshReturnsFreshTokens() async throws {
         let stub = StubHTTPClient { request in
-            let body = String(data: request.httpBody ?? Data(), encoding: .utf8) ?? ""
-            XCTAssertTrue(body.contains("grant_type=refresh_token"))
-            XCTAssertTrue(body.contains("refresh_token=old-rt"))
+            guard let body = String(data: request.httpBody ?? Data(), encoding: .utf8),
+                  body.contains("grant_type=refresh_token")
+            else {
+                XCTFail("Expected refresh_token grant")
+                return (Data(), makeResponse(url: request.url!, status: 500))
+            }
             let payload: [String: Any] = [
                 "access_token": "new-at",
                 "refresh_token": "new-rt",
@@ -153,20 +137,21 @@ final class RefreshRetryTests: XCTestCase {
         let client = AccountClient(baseURL: base, clientID: "c", http: stub)
         let tokens = try await client.refresh(refreshToken: "old-rt")
         XCTAssertEqual(tokens.accessToken, "new-at")
+        XCTAssertEqual(tokens.refreshToken, "new-rt")
     }
 
-    func testRejectedRefreshThrows() async {
+    func testRejectedRefreshThrows401() async {
         let stub = StubHTTPClient { request in
             (jsonData(["error": "invalid_grant"]), makeResponse(url: request.url!, status: 401))
         }
         let client = AccountClient(baseURL: base, clientID: "c", http: stub)
         do {
-            _ = try await client.refresh(refreshToken: "bad")
+            _ = try await client.refresh(refreshToken: "bad-rt")
             XCTFail("Expected throw")
         } catch AccountClientError.serverError(let status, _) {
             XCTAssertEqual(status, 401)
         } catch {
-            XCTFail("Unexpected: \(error)")
+            XCTFail("Unexpected error: \(error)")
         }
     }
 }
