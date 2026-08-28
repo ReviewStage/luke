@@ -13,36 +13,9 @@ import {
   type AttentionTrigger,
   attentionRequestText,
 } from "./attention.js";
+import { LUKE_PERSONA } from "./persona.js";
 
 const NONE_LABEL = "none";
-
-export const HUMAN_VOICE_INSTRUCTION =
-  "Above all, talk like a real person and a casual friend, never like an AI assistant. Use relaxed, " +
-  "everyday spoken language. Be direct, warm, and natural; avoid formal, corporate, robotic, " +
-  "overly polished, or canned assistant phrasing.";
-
-export const CTO_RELEVANCE_INSTRUCTION =
-  "Treat the user as the CTO you report to: keep routine execution details with the agents; " +
-  "surface only decisions, material outcomes, risks, and changes to priorities or delivery.";
-
-/**
- * Naming the blockage is not reporting it. The enumerated openers are
- * exemplars rather than the rule, because the rule is what they have in
- * common: each says only that the agent is stuck, which the developer already
- * knows by being told at all.
- */
-export const INTERRUPTION_CONTEXT_INSTRUCTION =
-  "Before any question, name the agent's work and briefly explain the specific situation or " +
-  "decision topic that makes the interruption relevant; then give the exact question. Never open " +
-  "with the fact that the agent is blocked — needing input, needing a decision, waiting, being " +
-  "unable to continue, or any variant — open with what it is blocked on.";
-
-export const AGENT_WORK_LANGUAGE_INSTRUCTION =
-  "Describe work at the outcome or workstream level; include implementation details only when " +
-  "asked. Every spoken update must identify the agent by their work. Prefer the running activity " +
-  'or recap, and use the Work field as the fallback: say "your agent working on [work]" and name ' +
-  'the work; never use "your agent" alone. Never identify them by a provider, workspace, worktree, ' +
-  "repository, or branch name, or expose agent mechanics such as sessions, turns, context windows, or tool calls.";
 
 const ATTENTION_INSTRUCTION_LINES: readonly string[] = [
   "As the engineering manager for the user's coding agents, decide whether Luke should speak about an update.",
@@ -54,11 +27,9 @@ const ATTENTION_INSTRUCTION_LINES: readonly string[] = [
   "- When a user's standing ask is answered, answer it directly without restating the ask, speak, and set answers_ask to true; otherwise set it to false.",
   "",
   "How to word it:",
-  `- ${HUMAN_VOICE_INSTRUCTION}`,
-  `- ${CTO_RELEVANCE_INSTRUCTION}`,
-  "- If speaking, give one short, natural sentence, not a status report. State only what the CTO needs to know; add no advice or next step.",
-  `- ${AGENT_WORK_LANGUAGE_INSTRUCTION}`,
-  `- ${INTERRUPTION_CONTEXT_INSTRUCTION}`,
+  "- If speaking, write the sentence Luke says, in Luke's own voice as it is described below. State what the CTO needs to know and stop; add no advice and no next step.",
+  "",
+  LUKE_PERSONA,
 ];
 
 /**

@@ -24,14 +24,10 @@ export {
   attentionResponsesRequest,
 } from "./attention-openai.js";
 export {
-  AGENT_WORK_LANGUAGE_INSTRUCTION,
   type AttentionPromptUpdate,
   attentionInstructions,
   attentionPromptUpdateFromWire,
   attentionUpdateInput,
-  CTO_RELEVANCE_INSTRUCTION,
-  HUMAN_VOICE_INSTRUCTION,
-  INTERRUPTION_CONTEXT_INSTRUCTION,
 } from "./attention-prompt.js";
 export {
   ATTENTION_RATE_LIMIT_COOLDOWN_MS,
@@ -40,3 +36,9 @@ export {
   type OpenAiAttentionOptions,
   openAiAttentionEvaluator,
 } from "./openai-evaluator.js";
+export {
+  AGENT_WORK_LANGUAGE_INSTRUCTION,
+  CTO_RELEVANCE_INSTRUCTION,
+  INTERRUPTION_CONTEXT_INSTRUCTION,
+  LUKE_PERSONA,
+} from "./persona.js";
