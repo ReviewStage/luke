@@ -84,6 +84,7 @@ test("messages offer a copy control while quiet events offer none", () => {
 
   assert.equal(markup.match(/class="history-copy"/g)?.length, 2);
   assert.match(markup, /aria-label="Copy message"/);
+  assert.match(markup, /icon-button-glyph/);
 });
 
 test("the empty history reports only its state", () => {

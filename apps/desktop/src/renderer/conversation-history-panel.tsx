@@ -5,6 +5,7 @@ import {
 } from "@sidecar/realtime";
 import { useEffect, useRef, useState } from "react";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
+import { CheckIcon, CopyIcon } from "./settings-icons";
 
 export const HISTORY_ENTRY_SPEAKER = {
   YOU: "you",
@@ -63,7 +64,7 @@ function HistoryEntryRow({ entry }: { entry: ConversationEntry }): React.JSX.Ele
             setCopied(true);
           }}
         >
-          {copied ? "Copied" : "Copy"}
+          {copied ? <CheckIcon /> : <CopyIcon />}
         </button>
       )}
     </li>

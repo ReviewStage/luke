@@ -76,16 +76,20 @@
 /* Copy sits in the bubble's free margin, absolutely positioned so a thread
    with the control lays out exactly like one without it, and hover-revealed
    because a control on every bubble would out-shout the words. It stays
-   keyboard-reachable while hidden, and :focus-visible reveals it. */
+   keyboard-reachable while hidden, :focus-visible reveals it, and the glyph
+   alone speaks: the accessible name captions it for a reader, and the copied
+   confirmation is the same green check a finished session wears. */
 .history-copy {
   position: absolute;
   top: 50%;
-  padding: 3px 8px;
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
   border-radius: 8px;
   background: transparent;
   color: var(--text-secondary);
-  font-size: 10px;
-  font-weight: 620;
   opacity: 0;
   transform: translateY(-50%);
   transition:
