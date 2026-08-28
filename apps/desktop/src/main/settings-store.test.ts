@@ -609,6 +609,19 @@ test("a corrupt session search query reads as unset rather than refilling the fi
   assert.equal(appSettingsView(await storeIn(directory).snapshot()).sessionSearchQuery, undefined);
 });
 
+test("a stored connection answers presence without touching any grant", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+
+  assert.equal(await store.calendarConnectionStored(), false);
+  await store.connectAppleCalendar(["home"]);
+  assert.equal(await store.calendarConnectionStored(), true);
+  await store.disconnectAppleCalendar();
+  assert.equal(await store.calendarConnectionStored(), false);
+  await store.addCalendarAccount("dev@example.com", "1//grant", ["dev@example.com"]);
+  assert.equal(await store.calendarConnectionStored(), true);
+});
+
 test("a calendar account stores its grant encrypted and survives a reopen", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);

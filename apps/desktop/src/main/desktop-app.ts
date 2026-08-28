@@ -963,10 +963,11 @@ function writeCalendarOnboardingState(state: CalendarOnboardingState): void {
  */
 async function settleCalendarOnboardingIfConnected(): Promise<void> {
   if (!calendarOnboardingOwed(calendarOnboardingState)) return;
-  const settings = await settingsStore.snapshot();
-  const connected =
-    settings.status.calendarAccounts.length > 0 || settings.status.appleCalendar !== undefined;
-  // Re-checked after the await: a connect's own settle may have landed first.
+  // Presence alone, not the credential-resolving snapshot: the reconcile
+  // must land fast, because until it does an owed record over a standing
+  // calendar draws the gate's review half over a step already passed.
+  const connected = await settingsStore.calendarConnectionStored();
+  // Re-checked after the await: another settle may have landed first.
   if (!connected || !calendarOnboardingOwed(calendarOnboardingState)) return;
   writeCalendarOnboardingState({
     ...(calendarOnboardingState ?? {}),
@@ -1004,6 +1005,10 @@ let calendarOnboardingBeatTriggered = false;
 async function calendarGateOfferable(): Promise<boolean> {
   if (!calendarOnboardingGateOwed()) return false;
   const settings = await settingsStore.snapshot();
+  // Re-checked after the await: the reconcile settling a pre-standing
+  // calendar may have landed while the snapshot resolved, and a beat about
+  // a gate no longer standing must not go out over the roster.
+  if (!calendarOnboardingGateOwed()) return false;
   return settings.status.appleCalendarAvailable || settings.status.calendarSignInAvailable;
 }
 

@@ -166,6 +166,16 @@ export class SpokenNoticeAnnouncer {
   }
 
   /**
+   * Drops a calendar onboarding beat still waiting to be spoken: the gate it
+   * explains has stood down, and a sentence asking for what was just given
+   * would speak over the answer. One already being said finishes — a reply
+   * begun is delivered — and the arrival queues behind it.
+   */
+  dropCalendarOnboardingSpeech(): void {
+    this.#queue = this.#queue.filter((item) => !isCalendarOnboardingSpeech(item));
+  }
+
+  /**
    * Follows the session's status, which is the announcer's only clock: READY
    * is when a queued sentence can be spoken and when an empty queue starts the
    * linger toward closing Luke's own call.

@@ -1756,6 +1756,16 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     });
   }, [ensureAnnouncer]);
 
+  // The gate standing down outruns a beat still queued about it: a fast Done
+  // or skip must not be answered by the ask it just settled, so the queued
+  // beat is dropped the moment the record says the step is over. The main
+  // process settles before it triggers the arrival, so the drop lands first.
+  useEffect(() => {
+    return window.sidecar.onCalendarOnboardingChanged((owed) => {
+      if (!owed) announcer.current?.dropCalendarOnboardingSpeech();
+    });
+  }, []);
+
   // The announcer paces itself by the session's status: READY is when a queued
   // sentence can speak and when an empty queue starts the walk toward closing
   // the call Luke opened for himself. Built through ensure so the status
