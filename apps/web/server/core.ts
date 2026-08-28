@@ -22,6 +22,7 @@
  * already exports.
  */
 import "../../../packages/acts/src/index.js";
+import "../../../packages/credentials/src/credential-providers.js";
 import "../../../packages/guide/src/index.js";
 import "../../../packages/issues/src/index.js";
 

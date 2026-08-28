@@ -43,6 +43,12 @@ export const HOSTED_SERVICE_PATH = {
   VAULT_KEY: "/api/vault/key",
   /** List stored provider keys — ids and timestamps, never keys. */
   VAULT_KEYS: "/api/vault/keys",
+  /**
+   * Observe cloud sessions on demand for the signed-in user. GET: decrypts the
+   * caller's vault keys, runs each provider's cloud adapter once, and returns a
+   * bounded roster. Stateless: no session state is stored between requests.
+   */
+  OBSERVE: "/api/observe",
 } as const;
 
 /**
@@ -305,4 +311,71 @@ export function vaultKeyDeleteAnswerFromWire(
 ): VaultKeyDeleteAnswer | undefined {
   if (!isRecord(value) || !isWireBoolean(value.deleted)) return undefined;
   return { deleted: value.deleted };
+}
+
+// --- Observe wire contract ---
+
+/**
+ * One cloud session as reported by the observe endpoint. The fields are a
+ * bounded subset of `ProviderSessionObservation`: what mobile can show in a
+ * roster row. The service maps the adapter's observation onto this shape and
+ * stores nothing — a new request is a new observation pass.
+ */
+export interface ObservedSession {
+  /** The vault provider id for this session (conductor, devin, …). */
+  providerId: string;
+  /** The provider's own id for this session. */
+  sessionId: string;
+  /** Bounded session title. */
+  title: string;
+  /** One of the SESSION_STATUS string values. */
+  status: string;
+  /** Repository label or workspace name, when the provider reported one. */
+  workspace?: string;
+  /** Current branch, when the provider reported one. */
+  branch?: string;
+  /** Bounded recap of where the work stands, when the provider reported one. */
+  recap?: string;
+  /** Error description, when the session stopped on something it cannot pass. */
+  error?: string;
+}
+
+/** The observe endpoint answer: the caller's cloud sessions across all providers. */
+export interface ObserveAnswer {
+  sessions: ObservedSession[];
+}
+
+const OBSERVED_SESSION_STATUS_SET = new Set(["working", "waiting", "error", "complete", "unknown"]);
+
+function observedSessionFromWire(value: UnparsedWireValue): ObservedSession | undefined {
+  if (!isRecord(value)) return undefined;
+  const providerId = text(value.providerId);
+  if (!providerId) return undefined;
+  const sessionId = text(value.sessionId);
+  if (!sessionId) return undefined;
+  const title = text(value.title);
+  if (!title) return undefined;
+  const status = text(value.status);
+  if (!status || !OBSERVED_SESSION_STATUS_SET.has(status)) return undefined;
+  const workspace = text(value.workspace);
+  const branch = text(value.branch);
+  const recap = text(value.recap);
+  const error = text(value.error);
+  const session: ObservedSession = { providerId, sessionId, title, status };
+  if (workspace) session.workspace = workspace;
+  if (branch) session.branch = branch;
+  if (recap) session.recap = recap;
+  if (error) session.error = error;
+  return session;
+}
+
+/** Validates an observe answer; a malformed entry is skipped, not fatal. */
+export function observeAnswerFromWire(value: UnparsedWireValue): ObserveAnswer | undefined {
+  if (!isRecord(value) || !Array.isArray(value.sessions)) return undefined;
+  const sessions: ObservedSession[] = [];
+  for (const item of value.sessions) {
+    const session = observedSessionFromWire(item);
+    if (session) sessions.push(session);
+  }
+  return { sessions };
 }
