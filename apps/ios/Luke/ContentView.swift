@@ -14,9 +14,21 @@ private final class WindowAnchorProvider: NSObject, ASWebAuthenticationPresentat
     }
 }
 
+private enum SocialProvider: String {
+    case google
+    case github
+
+    var label: String {
+        switch self {
+        case .google: "Continue with Google"
+        case .github: "Continue with GitHub"
+        }
+    }
+}
+
 struct ContentView: View {
     @Environment(AccountSession.self) private var session
-    @State private var isSigningIn = false
+    @State private var pendingProvider: SocialProvider?
     @State private var signInError: String?
     @State private var contextProvider = WindowAnchorProvider()
 
@@ -42,11 +54,31 @@ struct ContentView: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
             }
-            Button(isSigningIn ? "Signing in…" : "Sign in to Luke") {
-                startSignIn()
+            // Mirror the desktop: show individual provider buttons so the
+            // sign-in page knows which provider to launch without a selection step.
+            Button {
+                startSignIn(provider: .google)
+            } label: {
+                Label(SocialProvider.google.label, systemImage: "globe")
+                    .frame(maxWidth: 280)
             }
             .buttonStyle(.borderedProminent)
-            .disabled(isSigningIn)
+            .disabled(pendingProvider != nil)
+
+            Button {
+                startSignIn(provider: .github)
+            } label: {
+                Label(SocialProvider.github.label, systemImage: "chevron.left.forwardslash.chevron.right")
+                    .frame(maxWidth: 280)
+            }
+            .buttonStyle(.bordered)
+            .disabled(pendingProvider != nil)
+
+            if pendingProvider != nil {
+                Text("Opening…")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .padding()
     }
@@ -70,12 +102,14 @@ struct ContentView: View {
 
     // MARK: - Sign-in flow
 
-    private func startSignIn() {
-        isSigningIn = true
+    private func startSignIn(provider: SocialProvider) {
+        pendingProvider = provider
         signInError = nil
 
         let pkce = PKCE()
-        let state = UUID().uuidString
+        // The sign-in page reads the state prefix to select the provider automatically,
+        // matching the desktop's "{provider}.{randomState}" discipline.
+        let state = "\(provider.rawValue).\(UUID().uuidString)"
         let client = AccountClient(
             baseURL: AccountConstants.baseURL,
             clientID: AccountConstants.clientID
@@ -91,7 +125,7 @@ struct ContentView: View {
             callbackURLScheme: "dev.tryluke.ios"
         ) { [session] callbackURL, error in
             Task { @MainActor in
-                defer { isSigningIn = false }
+                defer { pendingProvider = nil }
                 if let asError = error as? ASWebAuthenticationSessionError,
                    asError.code == .canceledLogin
                 {
