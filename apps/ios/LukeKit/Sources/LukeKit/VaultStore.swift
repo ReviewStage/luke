@@ -49,6 +49,7 @@ public final class VaultStore {
     /// sign-in may have left standing.
     public func load() async {
         answerGeneration += 1
+        let gen = answerGeneration
         entriesByProvider = [:]
         entriesAccount = session.accountEmail
         loadError = nil
@@ -56,7 +57,9 @@ public final class VaultStore {
         do {
             try await refreshEntries()
         } catch {
-            loadError = VaultStore.message(for: error)
+            // An act that landed while this load traveled has fresher word on
+            // whether the vault answers; its state stands.
+            if gen == answerGeneration { loadError = VaultStore.message(for: error) }
         }
         isLoading = false
     }
@@ -66,6 +69,8 @@ public final class VaultStore {
     public func store(key: String, for provider: VaultProviderID) async throws {
         try await authorized { try await self.client.storeKey(key, for: provider, accessToken: $0) }
         answerGeneration += 1
+        // The vault just answered an act, so a standing load failure is stale.
+        loadError = nil
         // The server's hint is the key's last four characters, so the row can
         // say what landed even when the list round-trip below does not.
         entriesByProvider[provider] = VaultKeyEntry(
@@ -80,6 +85,7 @@ public final class VaultStore {
     public func delete(_ provider: VaultProviderID) async throws {
         _ = try await authorized { try await self.client.deleteKey(for: provider, accessToken: $0) }
         answerGeneration += 1
+        loadError = nil
         entriesByProvider[provider] = nil
         try? await refreshEntries()
     }

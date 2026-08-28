@@ -102,6 +102,35 @@ final class VaultStoreTests: XCTestCase {
         XCTAssertNil(store.entry(for: .cursor))
     }
 
+    func testSuccessfulActClearsAStaleLoadError() async throws {
+        let counter = CallCounter()
+        let stub = StubHTTPClient { request in
+            switch await counter.next() {
+            case 1:
+                return (
+                    jsonData(["error": "upstream-error"]),
+                    makeResponse(url: request.url!, status: 502)
+                )
+            case 2:
+                return (jsonData(["stored": true]), makeResponse(url: request.url!, status: 200))
+            default:
+                let payload: [String: Any] = [
+                    "keys": [["providerId": "cursor", "hint": "k123", "updatedAt": 1000]],
+                ]
+                return (jsonData(payload), makeResponse(url: request.url!, status: 200))
+            }
+        }
+        let source = StubTokenSource()
+        let store = VaultStore(client: VaultClient(baseURL: base, http: stub), session: source)
+
+        await store.load()
+        XCTAssertNotNil(store.loadError)
+
+        try await store.store(key: "sk-k123", for: .cursor)
+        XCTAssertNil(store.loadError)
+        XCTAssertEqual(store.entry(for: .cursor)?.hint, "k123")
+    }
+
     func testStaleListAnswerDoesNotOverwriteASave() async throws {
         let gate = Gate()
         let counter = CallCounter()

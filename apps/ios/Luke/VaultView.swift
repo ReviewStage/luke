@@ -144,7 +144,7 @@ private struct VaultKeyEditor: View {
                     )
                     .padding(.top, 8)
 
-                if let message = errorMessage ?? formatRejection {
+                if let message = errorMessage ?? shapeRejection ?? formatRejection {
                     Text(message)
                         .font(.caption)
                         .foregroundStyle(Color(red: 0.95, green: 0.4, blue: 0.4))
@@ -184,6 +184,13 @@ private struct VaultKeyEditor: View {
     private var promptText: Text {
         Text("Paste \(credentialNoun.lowercased())")
             .foregroundStyle(Color(white: 1, opacity: 0.3))
+    }
+
+    /// Says why Save is disabled for a malformed key; a silently dead button
+    /// explains nothing.
+    private var shapeRejection: String? {
+        guard !key.isEmpty, !VaultClient.isValidKey(key) else { return nil }
+        return VaultStore.message(for: VaultClientError.invalidKey)
     }
 
     private var formatRejection: String? {
