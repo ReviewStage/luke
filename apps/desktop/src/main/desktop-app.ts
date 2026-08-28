@@ -952,11 +952,14 @@ function writeCalendarOnboardingState(state: CalendarOnboardingState): void {
 }
 
 /**
- * Settles an owed record the settings already satisfy. The connect IPC is
- * the ordinary settler, but a calendar can predate the record — an install
- * that connected one before this step existed, then signed in again — and a
- * record left owed over a standing connection would let a later disconnect
- * resurrect a gate this user already passed under another name.
+ * Settles an owed record the settings already satisfy, at a launch or a
+ * sign-in edge — never mid-run, where the gate deliberately stands over a
+ * fresh connection until Done confirms it. This covers the calendar that
+ * predates the record (an install that connected one before this step
+ * existed, then signed in again) and the connect made at the gate but never
+ * confirmed before a quit: either way the step's purpose is standing, and a
+ * record left owed over it would let a later disconnect resurrect a gate
+ * already passed.
  */
 async function settleCalendarOnboardingIfConnected(): Promise<void> {
   if (!calendarOnboardingOwed(calendarOnboardingState)) return;
@@ -984,6 +987,27 @@ let arrivalBeatSpeaking = false;
 let arrivalBeatTriggered = false;
 
 /**
+ * Whether this run has already sent the calendar onboarding beat's trigger.
+ * Per run rather than per install: the gate is the durable prompt, and a
+ * launch that still finds it standing may say so again, but one run says it
+ * once however many capability starts it has.
+ */
+let calendarOnboardingBeatTriggered = false;
+
+/**
+ * Whether the calendar gate is actually being offered: owed by the record,
+ * and with at least one source this build can connect — the same two facts
+ * the renderer draws the gate from. An owed record no gate can be drawn for
+ * must hold nothing, or the arrival beat would wait on a step that can
+ * never be answered.
+ */
+async function calendarGateOfferable(): Promise<boolean> {
+  if (!calendarOnboardingGateOwed()) return false;
+  const settings = await settingsStore.snapshot();
+  return settings.status.appleCalendarAvailable || settings.status.calendarSignInAvailable;
+}
+
+/**
  * Speaks the one-time arrival beat, if it is owed and this moment can carry
  * it. The trigger is deterministic on every side — the record the sign-in
  * edge wrote, never anything a model decided — and what is sent is only the
@@ -997,14 +1021,27 @@ let arrivalBeatTriggered = false;
  * nobody heard was not the one moment this plays. The first observation
  * pass is awaited first, so the beat's suggestion can name a session the
  * developer actually has running.
+ *
+ * While the calendar gate stands, the calendar onboarding beat speaks in the
+ * arrival's place — "you're all set" over a panel still asking for something
+ * would be false — and the arrival waits for the step to settle, whose Done
+ * and skip both call back here.
  */
 async function speakArrivalBeat(): Promise<void> {
-  if (arrivalBeatSpeaking || arrivalBeatTriggered) return;
+  if (arrivalBeatSpeaking) return;
   if (!runMode.requiresAccount || account.status !== ACCOUNT_STATUS.SIGNED_IN) return;
-  if (!arrivalBeatOwed(arrivalState)) return;
   if (!voiceCapabilities.realtimeCredentials) return;
   arrivalBeatSpeaking = true;
   try {
+    if (await calendarGateOfferable()) {
+      if (calendarOnboardingBeatTriggered) return;
+      const host = panels.voiceHost();
+      if (!host) return;
+      host.webContents.send(channels.onCalendarOnboardingSpeech, undefined);
+      calendarOnboardingBeatTriggered = true;
+      return;
+    }
+    if (arrivalBeatTriggered || !arrivalBeatOwed(arrivalState)) return;
     await sessionObservationLoop.refresh().catch(() => undefined);
     if (account.status !== ACCOUNT_STATUS.SIGNED_IN || !arrivalBeatOwed(arrivalState)) return;
     // The calendar may not have been read yet this early, so this check can
@@ -1619,13 +1656,27 @@ function registerIpc(): void {
     writeArrivalState({ ...(arrivalState ?? {}), settledAt: new Date().toISOString() });
   });
   registerHandler(BRIDGE.skipCalendarOnboarding, () => {
-    // A skip that raced a connect's settle overwrites nothing: the step was
-    // answered, and a calendar answered it better than the decline did.
+    // A skip that raced the step already settling overwrites nothing: it was
+    // answered, and a confirmed calendar answered it better than the decline.
     if (!calendarOnboardingOwed(calendarOnboardingState)) return;
     writeCalendarOnboardingState({
       ...(calendarOnboardingState ?? {}),
       skippedAt: new Date().toISOString(),
     });
+    // The step is over, so the arrival beat it was holding may speak now.
+    void speakArrivalBeat();
+  });
+  registerHandler(BRIDGE.completeCalendarOnboarding, () => {
+    // Done is what settles the step, not the connect before it: the gate
+    // stays standing over a fresh connection so the calendars that count can
+    // still be chosen and another account added, and this press is the
+    // developer saying the choice is right.
+    if (!calendarOnboardingOwed(calendarOnboardingState)) return;
+    writeCalendarOnboardingState({
+      ...(calendarOnboardingState ?? {}),
+      settledAt: new Date().toISOString(),
+    });
+    void speakArrivalBeat();
   });
   registerHandler(BRIDGE.beginSupersetSignIn, async () => {
     recordProductEvent(PRODUCT_EVENT.SUPERSET_ACT, {
@@ -1715,16 +1766,6 @@ function registerIpc(): void {
     refresh: () => calendarObservationLoop.refresh(),
     openExternal: (url) => void shell.openExternal(url),
     recordProductEvent,
-    calendarConnected: () => {
-      // A connect from anywhere — the gate, or the settings rows the gate
-      // never replaced — settles the onboarding step for good: the gate asks
-      // for a calendar once, not for this calendar forever.
-      if (!calendarOnboardingOwed(calendarOnboardingState)) return;
-      writeCalendarOnboardingState({
-        ...(calendarOnboardingState ?? {}),
-        settledAt: new Date().toISOString(),
-      });
-    },
   });
 
   registerTrackerConnectionIpc({

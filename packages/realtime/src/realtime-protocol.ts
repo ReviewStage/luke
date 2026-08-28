@@ -563,11 +563,39 @@ export interface ArrivalSpeech {
   decidedAt: number;
 }
 
-/** One Realtime response: the arrival alone, or every session update batched together. */
-export type ProactiveSpeechTurn = ArrivalSpeech | readonly SessionAnnouncement[];
+/**
+ * The marker a calendar onboarding item discriminates on, on the arrival's
+ * own terms: its trigger is the deterministic standing of the calendar step's
+ * gate after the first sign-in, and its words are a script fixed by the build
+ * that carries no observed value at all.
+ */
+export const CALENDAR_ONBOARDING_SPEECH_KIND = "calendar-onboarding";
+
+/**
+ * The spoken line beside the calendar step of onboarding: the gate the panel
+ * is showing is the whole subject, so the beat is about no session, names
+ * nothing observed, and exists only so the one screen Luke asks something on
+ * is also one he explains out loud.
+ */
+export interface CalendarOnboardingSpeech {
+  kind: typeof CALENDAR_ONBOARDING_SPEECH_KIND;
+  decidedAt: number;
+}
+
+/** One Realtime response: an onboarding beat alone, or every session update batched together. */
+export type ProactiveSpeechTurn =
+  | ArrivalSpeech
+  | CalendarOnboardingSpeech
+  | readonly SessionAnnouncement[];
 
 export function isArrivalSpeech(speech: ProactiveSpeechTurn): speech is ArrivalSpeech {
   return "kind" in speech && speech.kind === ARRIVAL_SPEECH_KIND;
+}
+
+export function isCalendarOnboardingSpeech(
+  speech: ProactiveSpeechTurn,
+): speech is CalendarOnboardingSpeech {
+  return "kind" in speech && speech.kind === CALENDAR_ONBOARDING_SPEECH_KIND;
 }
 
 /**
@@ -656,6 +684,47 @@ export function arrivalSpeechEvents(speech: ArrivalSpeech): readonly WireRecord[
             ...(talkKeyLabel !== undefined ? { talkKeyLabel } : undefined),
           }),
         ].join("\n"),
+        tool_choice: "none",
+      },
+    },
+  ];
+}
+
+/**
+ * What Luke is told the calendar onboarding beat is, fixed at build time. It
+ * explains the gate the panel is already showing — why a calendar is being
+ * asked for and what will never be read — and nothing else, because the
+ * screen itself carries every control the words could name.
+ */
+const CALENDAR_ONBOARDING_SPEECH_HEAD = [
+  "The developer has just signed in for the first time, and Luke's panel is asking them to " +
+    "connect a calendar before anything else. Say, warmly and in two or three short " +
+    "sentences: connecting a calendar (this Mac's own, or Google) lets you hold your " +
+    "spoken announcements while they are in a meeting, and you read only when meetings " +
+    "start and end, never titles or attendees. Mention they can choose which calendars " +
+    "count once one is connected, and press Done, or skip the step.",
+  "Do not greet, do not ask a question back, and stop there.",
+] as const;
+
+/**
+ * Builds the events that speak the calendar onboarding beat. There is no data
+ * item because the beat carries no observed value; the turn is still opened
+ * with `tool_choice: "none"`, so the beat can never become an act.
+ */
+export function calendarOnboardingSpeechEvents(): readonly WireRecord[] {
+  return [
+    {
+      type: REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE,
+      item: {
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: "[calendar note]" }],
+      },
+    },
+    {
+      type: REALTIME_CLIENT_EVENT.RESPONSE_CREATE,
+      response: {
+        instructions: CALENDAR_ONBOARDING_SPEECH_HEAD.join("\n"),
         tool_choice: "none",
       },
     },

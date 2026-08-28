@@ -10,11 +10,12 @@ import { isRecord, text, type UnparsedWireValue } from "@sidecar/wire";
  * can see: announcements land mid-meeting exactly for the developer who never
  * found the calendar rows in settings. So onboarding does not end at the
  * sign-in — from the first sign-in this install observes, the panel stands a
- * gate asking for a calendar, and it stands until it is answered: a calendar
- * connecting, or the gate's own quiet skip declining the step for good.
- * Connecting is still the user's own press through the same consent flows the
- * settings rows run; the gate changes when the ask is made, never what it may
- * do.
+ * gate asking for a calendar, and it stands until it is answered: Done
+ * confirming the connected calendars, or the gate's own quiet skip declining
+ * the step for good. A connection alone leaves it standing, so which
+ * calendars count can be chosen and another account added first. Connecting
+ * is still the user's own press through the same consent flows the settings
+ * rows run; the gate changes when the ask is made, never what it may do.
  */
 
 /**
@@ -33,8 +34,9 @@ export interface CalendarOnboardingState {
    */
   requiredAt?: string;
   /**
-   * When the gate stopped standing: a calendar connected, or — on a
-   * backfilled record — the install was recognized as predating the step.
+   * When the gate stopped standing: Done confirmed the connected calendars,
+   * a calendar already standing was recognized at a launch or a sign-in, or —
+   * on a backfilled record — the install was recognized as predating the step.
    */
   settledAt?: string;
   /**
@@ -80,10 +82,10 @@ export function calendarOnboardingRecord(state: CalendarOnboardingState): string
 
 /**
  * Whether the gate is still owed: a sign-in observed under the step that no
- * calendar connection has settled and no press on the gate's own skip has
- * declined. Both are answers; a quit is not — quitting at the gate and
- * relaunching finds it standing again, because a step a quit could dodge
- * would never be answered at all.
+ * Done has settled and no press on the gate's own skip has declined. Both
+ * are answers; a quit is not — quitting at the gate and relaunching finds it
+ * standing again, because a step a quit could dodge would never be answered
+ * at all.
  */
 export function calendarOnboardingOwed(state: CalendarOnboardingState | undefined): boolean {
   return (

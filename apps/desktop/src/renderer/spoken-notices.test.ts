@@ -3,6 +3,7 @@ import test from "node:test";
 import type { ProactiveSpeechTurn, RealtimeStatus, ScheduledTimer } from "@sidecar/realtime";
 import {
   isArrivalSpeech,
+  isCalendarOnboardingSpeech,
   REALTIME_STATUS,
   SESSION_ANNOUNCEMENT_CHANGE,
   type SessionAnnouncement,
@@ -70,7 +71,7 @@ function fakeSession(): FakeSession {
     },
     speak(item: ProactiveSpeechTurn) {
       if (!this.isConnected || this.status === REALTIME_STATUS.RESPONDING) return false;
-      if (!isArrivalSpeech(item)) {
+      if (!isArrivalSpeech(item) && !isCalendarOnboardingSpeech(item)) {
         this.turns.push([...item]);
         this.spoken.push(...item);
       }

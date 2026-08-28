@@ -149,6 +149,43 @@
   flex: 0 0 auto;
 }
 
+/* The review half: each connection is a bordered block of the settings rows'
+   own calendar checkboxes, reading left like the page they came from. */
+.calendar-gate-connections {
+  display: grid;
+  width: 100%;
+  gap: 8px;
+  margin-top: 4px;
+  text-align: left;
+}
+
+.calendar-gate-connection {
+  padding: 8px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+}
+
+.calendar-gate-connection-name {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text-primary);
+  font-size: 11.5px;
+  font-weight: 650;
+}
+
+/* The first observation pass has not answered yet; the block says so instead
+   of standing empty under its name. */
+.calendar-gate-reading {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+/* Done carries the step, so it reads a shade firmer than the add buttons. */
+.calendar-gate-done {
+  background: var(--raised-strong);
+}
+
 /* The two footnotes share a line and a voice; only the quit admits danger on
    hover, because only it ends the run. */
 .calendar-gate-footer {

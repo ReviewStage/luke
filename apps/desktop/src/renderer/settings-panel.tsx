@@ -1498,7 +1498,7 @@ export interface CalendarControl {
  * either way. The names drawn here are the user's own calendar names, on the
  * user's own screen.
  */
-function CalendarChoices({
+export function CalendarChoices({
   account,
   calendars,
   disabled,

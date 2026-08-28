@@ -47,7 +47,11 @@ import {
   useRef,
   useState,
 } from "react";
-import { APPLE_CALENDAR_ACCESS, APPLE_CALENDAR_ID } from "#shared/apple-calendar";
+import {
+  APPLE_CALENDAR_ACCESS,
+  APPLE_CALENDAR_ID,
+  APPLE_CALENDAR_NAME,
+} from "#shared/apple-calendar";
 import { CONSENT_SERVICE_ID, type ConsentServiceId } from "#shared/consent-services";
 import type { AccountProvider, AccountSnapshot } from "#shared/wire/account";
 import { ACCOUNT_STATUS, CREDENTIAL_SOURCE } from "#shared/wire/account";
@@ -71,7 +75,7 @@ import type { AppSettings, AppSettingsView, SettingsUpdateResult } from "#shared
 import { appSettingsView } from "#shared/wire/settings";
 import type { UpdateSnapshot } from "#shared/wire/update";
 import { ASK_LUKE_INPUT_ID, focusAskField } from "./ask-luke";
-import type { CalendarGateControl } from "./calendar-gate";
+import type { CalendarGateConnection, CalendarGateControl } from "./calendar-gate";
 import { type ConsentConnectEntry, ConsentConnectSlot } from "./consent-connect-slot";
 import type { CredentialEntry, CredentialEntryControl } from "./credential-entry";
 import { isSubmittable, removalEndsEntry } from "./credential-entry";
@@ -3108,21 +3112,42 @@ export function App(): React.JSX.Element {
     onCapture: changeShortcutCapture,
   };
 
-  // The mandatory calendar step of onboarding, assembled only while it
-  // stands: still owed by the main process's record, nothing connected yet,
-  // and at least one source this build can offer — a gate with no way through
-  // is never drawn. Connection is read from the settings snapshot too, so the
-  // gate falls with a connect's own reply rather than waiting on the
-  // broadcast that settles the record.
+  // The calendar step of onboarding, assembled only while it stands: still
+  // owed by the main process's record, and with at least one source this
+  // build can offer — a gate with no way through is never drawn. A connection
+  // does not lower it: the gate keeps standing over the connected calendars
+  // so their choice can be edited and another added, until Done or the skip
+  // answers the step and the record's broadcast takes it down.
   const gateSettings = settings ?? bootstrapSettings ?? appSettingsView(bootstrap.settings);
-  const gateCalendarConnected =
-    gateSettings.calendarAccounts.length > 0 || gateSettings.appleCalendar !== undefined;
+  const gateConnections: readonly CalendarGateConnection[] = [
+    ...(gateSettings.appleCalendar
+      ? [
+          {
+            id: APPLE_CALENDAR_ID,
+            name: APPLE_CALENDAR_NAME,
+            account: gateSettings.appleCalendar,
+            calendars: appleCalendarObserved?.calendars ?? [],
+            onToggle: (calendarId: string, selected: boolean) =>
+              void toggleAppleCalendarSelected(calendarId, selected),
+          },
+        ]
+      : []),
+    ...gateSettings.calendarAccounts.map((account) => ({
+      id: account.id,
+      name: account.id,
+      account,
+      calendars: calendars.find((choice) => choice.accountId === account.id)?.calendars ?? [],
+      onToggle: (calendarId: string, selected: boolean) =>
+        void toggleCalendarSelected(account.id, calendarId, selected),
+    })),
+  ];
   const calendarGate: CalendarGateControl | undefined =
     calendarOnboardingOwed &&
-    !gateCalendarConnected &&
     (gateSettings.appleCalendarAvailable || gateSettings.calendarSignInAvailable)
       ? {
-          ...(gateSettings.appleCalendarAvailable
+          // The Mac holds one connection, so its button leaves with it; Google
+          // stays offered for another account beside the first.
+          ...(gateSettings.appleCalendarAvailable && gateSettings.appleCalendar === undefined
             ? {
                 apple: {
                   connecting:
@@ -3141,7 +3166,9 @@ export function App(): React.JSX.Element {
                 },
               }
             : undefined),
+          connections: gateConnections,
           onSkip: () => void window.sidecar.skipCalendarOnboarding(),
+          onDone: () => void window.sidecar.completeCalendarOnboarding(),
         }
       : undefined;
 

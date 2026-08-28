@@ -10,6 +10,7 @@ import {
   adoptConversationThread,
   announcementConversationEntry,
   appendConversationThreadEntry,
+  CALENDAR_ONBOARDING_SPEECH_KIND,
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
   dispatchByKind,
@@ -1744,6 +1745,14 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   useEffect(() => {
     return window.sidecar.onArrivalSpeech(() => {
       ensureAnnouncer().enqueue({ kind: ARRIVAL_SPEECH_KIND, decidedAt: Date.now() });
+    });
+  }, [ensureAnnouncer]);
+
+  // The calendar onboarding beat rides the same queue on the same terms; it
+  // settles no record, because the gate it speaks about is the durable prompt.
+  useEffect(() => {
+    return window.sidecar.onCalendarOnboardingSpeech(() => {
+      ensureAnnouncer().enqueue({ kind: CALENDAR_ONBOARDING_SPEECH_KIND, decidedAt: Date.now() });
     });
   }, [ensureAnnouncer]);
 

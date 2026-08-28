@@ -769,8 +769,8 @@ export interface PanelBodyProps {
   signInFailure?: string;
   /**
    * The calendar step of onboarding, present exactly while it stands: signed
-   * in, still owed, unconnected, and with at least one source this build can
-   * offer. Assembled by the app, which knows all four.
+   * in, still owed, and with at least one source this build can offer.
+   * Assembled by the app, which knows all three.
    */
   calendarGate?: CalendarGateControl;
   list: ArrangedSessions;
