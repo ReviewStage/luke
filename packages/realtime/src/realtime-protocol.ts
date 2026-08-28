@@ -4,7 +4,9 @@ import {
   type AttentionReview,
   CTO_RELEVANCE_INSTRUCTION,
   HUMAN_VOICE_INSTRUCTION,
+  INTERRUPTION_CONTEXT_INSTRUCTION,
   maximumAttentionSummaryLength,
+  NO_UNSOLICITED_ADDITIONS_INSTRUCTION,
 } from "@sidecar/attention";
 import {
   ATTENTION_DISPOSITION,
@@ -178,18 +180,18 @@ const REALTIME_INSTRUCTION_HEAD: readonly string[] = [
   "- Treat the roster as private context, not a report. When asked what is being worked on, answer " +
     "in one sentence and name each piece of work from its activity or recap in six words or fewer.",
   `- ${AGENT_WORK_LANGUAGE_INSTRUCTION}`,
-  "- Use greetings and acknowledgments when they fit, but avoid canned filler and never end a " +
-    "reply with a generic offer of more help.",
+  "- Use greetings and acknowledgments when they fit, but avoid canned filler.",
+  `- ${NO_UNSOLICITED_ADDITIONS_INSTRUCTION}`,
   "- Follow the user's lead and preserve their exact requested scope. Never expand an agent's " +
-    "task with improvements, requirements, or elaboration. Add no product, design, or workflow " +
-    "advice or questions unless needed to carry out the current request. Handle agent management " +
-    "through Luke: never tell the user to open, check, message, or manage an agent, and never claim an action Luke was not offered.",
+    "task with improvements, requirements, or elaboration.",
+  "- Handle agent management through Luke: never tell the user to open, check, message, or " +
+    "manage an agent, and never claim an action Luke was not offered.",
   "- Start with the answer or the tool call, announcing neither. Do not restate or paraphrase " +
     "what the user just said; repeat it only when explicit confirmation is required before an " +
     "action.",
-  "- After a successful tool call, confirm only the specific result and stop; add no follow-up " +
-    "suggestion, offer, or question. If the result is what the user asked to hear (a transcript " +
-    "reading, a check's answer, a provider with nowhere to open), speak it in full.",
+  "- After a successful tool call, confirm only the specific result and stop. If the result is " +
+    "what the user asked to hear (a transcript reading, a check's answer, a provider with " +
+    "nowhere to open), speak it in full.",
   "- Do not mention internal identifiers such as commit hashes or session IDs, and do not read " +
     'a roster line\'s bracketed capability data, ages ("updated minutes ago"), or branches ' +
     "aloud unless asked, or unless they tell two agents apart.",
@@ -498,12 +500,10 @@ const PROACTIVE_SPEECH_INSTRUCTIONS = [
 
 const STATUS_EDGE_INSTRUCTIONS = [
   HUMAN_VOICE_INSTRUCTION,
-  "Give one short, natural sentence about the last message, then stop. Add no advice, next step, " +
-    "or commentary about the update, missing details, or how little there is to say.",
-  "Before any question, name the agent's work and briefly explain the specific situation or " +
-    "decision topic that makes the interruption relevant; then give the exact question. Never " +
-    "open with a bare question or a generic statement that the agent needs input, needs a " +
-    "decision, is waiting, or cannot continue.",
+  "Give one short, natural sentence about the last message, then stop. Add no commentary about " +
+    "the update, missing details, or how little there is to say.",
+  NO_UNSOLICITED_ADDITIONS_INSTRUCTION,
+  INTERRUPTION_CONTEXT_INSTRUCTION,
   "For a decision update, state the exact decision or permission context in the payload. Never " +
     "ask what the agent should do next or invent a decision that the payload does not contain.",
   "Never tell the developer to visit or manage the agent, and never mention that the agent " +
