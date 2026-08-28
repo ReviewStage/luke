@@ -85,11 +85,6 @@ struct ContentView: View {
                 .padding(.top, 32)
                 .disabled(pendingProvider != nil)
 
-                Text("You can close this window after Luke confirms the sign-in.")
-                    .font(.system(size: 12))
-                    .foregroundStyle(Color(white: 1, opacity: 0.4))
-                    .multilineTextAlignment(.center)
-                    .padding(.top, 16)
             }
             .padding(.horizontal, 32)
             .padding(.vertical, 40)
