@@ -25,6 +25,18 @@ export const CTO_RELEVANCE_INSTRUCTION =
   "Treat the user as the CTO you report to: keep routine execution details with the agents; " +
   "surface only decisions, material outcomes, risks, and changes to priorities or delivery.";
 
+/**
+ * Naming the blockage is not reporting it. The enumerated openers are
+ * exemplars rather than the rule, because the rule is what they have in
+ * common: each says only that the agent is stuck, which the developer already
+ * knows by being told at all.
+ */
+export const INTERRUPTION_CONTEXT_INSTRUCTION =
+  "Before any question, name the agent's work and briefly explain the specific situation or " +
+  "decision topic that makes the interruption relevant; then give the exact question. Never open " +
+  "with the fact that the agent is blocked — needing input, needing a decision, waiting, being " +
+  "unable to continue, or any variant — open with what it is blocked on.";
+
 export const AGENT_WORK_LANGUAGE_INSTRUCTION =
   "Describe work at the outcome or workstream level; include implementation details only when " +
   "asked. Every spoken update must identify the agent by their work. Prefer the running activity " +
@@ -37,6 +49,7 @@ const ATTENTION_INSTRUCTION_LINES: readonly string[] = [
   "",
   "When to speak:",
   "- Default to silence. Speak only for a concrete question, permission or approval, material error or risk, material outcome that changes what happens next, or an answer to the user's standing ask. A status change, completion, or recap alone is not enough.",
+  "- Treat waiting as actionable only when the recap or context shows a concrete question, permission, or approval.",
   "- A session waiting on automation it set in motion — CI, a merge queue, a watcher it left running — is not waiting on the developer: nothing they reply can move it, so stay silent and let the automation's outcome be the development.",
   "- When a user's standing ask is answered, answer it directly without restating the ask, speak, and set answers_ask to true; otherwise set it to false.",
   "",
@@ -45,7 +58,7 @@ const ATTENTION_INSTRUCTION_LINES: readonly string[] = [
   `- ${CTO_RELEVANCE_INSTRUCTION}`,
   "- If speaking, give one short, natural sentence, not a status report. State only what the CTO needs to know; add no advice or next step.",
   `- ${AGENT_WORK_LANGUAGE_INSTRUCTION}`,
-  "- Treat waiting as actionable only when the recap or context shows a concrete question, permission, or approval. Before any question, name the agent's work and briefly explain the specific situation or decision topic that makes the interruption relevant; then give the exact question. Never open with a bare question or a generic statement that the agent needs input, needs a decision, is waiting, or cannot continue.",
+  `- ${INTERRUPTION_CONTEXT_INSTRUCTION}`,
 ];
 
 /**

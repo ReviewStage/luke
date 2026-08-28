@@ -31,6 +31,7 @@ export {
   attentionUpdateInput,
   CTO_RELEVANCE_INSTRUCTION,
   HUMAN_VOICE_INSTRUCTION,
+  INTERRUPTION_CONTEXT_INSTRUCTION,
 } from "./attention-prompt.js";
 export {
   ATTENTION_RATE_LIMIT_COOLDOWN_MS,
