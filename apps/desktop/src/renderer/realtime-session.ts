@@ -2244,11 +2244,9 @@ export class RealtimeVoiceSession {
 
   /**
    * Handles an error answering one interruption without letting an old reply's
-   * failure finish the new turn that interrupted it. Two refusals are quiet —
-   * the documented no-active-response race, and a trim refused for asking past
-   * the audio's end, which means the reply was heard whole and the record is
-   * already right; every other refusal still reaches the developer as a real
-   * voice error.
+   * failure finish the new turn that interrupted it. The documented
+   * no-active-response race is quiet; every other refusal still reaches the
+   * developer as a real voice error.
    */
   #interruptionError(event: { message: string; eventId?: string; errorType?: string }): boolean {
     if (event.eventId === undefined) return false;
@@ -2259,11 +2257,7 @@ export class RealtimeVoiceSession {
       kind === INTERRUPTION_EVENT_KIND.CANCELLATION &&
       event.errorType === "invalid_request_error" &&
       NO_ACTIVE_RESPONSE_CANCELLATION.test(event.message);
-    const benignTruncation =
-      kind === INTERRUPTION_EVENT_KIND.TRUNCATION &&
-      event.errorType === "invalid_request_error" &&
-      TRUNCATION_PAST_AUDIO_END.test(event.message);
-    if (!benignCancellation && !benignTruncation) this.#options.onError(event.message);
+    if (!benignCancellation) this.#options.onError(event.message);
     return true;
   }
 
@@ -2477,6 +2471,11 @@ export class RealtimeVoiceSession {
         if (event.itemId) this.#settleSupersede(event.itemId);
         return;
       case REALTIME_SERVER_EVENT.ERROR:
+        // Only Luke's own trim can draw a past-the-end refusal, the service
+        // clamps and truncates anyway, and it names no event this could match
+        // it by — `error.event_id` is null on the wire. Recognized by its
+        // sentence and never shown.
+        if (TRUNCATION_PAST_AUDIO_END.test(event.message)) return;
         // A delete this call issued can be answered with an error rather than a
         // deletion, because the item was already gone — evicted at the window's
         // edge is the way that happens. It is nothing the developer did and
