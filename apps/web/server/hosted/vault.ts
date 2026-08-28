@@ -1,32 +1,21 @@
 import {
   isRecord,
+  isVaultProviderId,
   isWireString,
   text,
   type UnparsedWireValue,
-  VAULT_PROVIDER_ID,
-  type VaultProviderId,
+  vaultKeyIsStorable,
 } from "../core.js";
 import { encryptProviderKey } from "./encryption.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
 
-/** Maximum length accepted for a provider API key. */
-const KEY_MAX_LENGTH = 512;
-
 /**
- * A valid provider key: non-empty, no whitespace anywhere, bounded length.
- * Loose by design — shape validation only, not provider-specific format.
+ * A valid provider key, by the shape rule the wire contract fixes for both
+ * sides. Loose by design — never provider-specific format.
  */
 function parseProviderKey(value: UnparsedWireValue): string | undefined {
-  if (!isWireString(value)) return undefined;
-  if (!value || value.length > KEY_MAX_LENGTH) return undefined;
-  if (/\s/u.test(value)) return undefined;
+  if (!isWireString(value) || !vaultKeyIsStorable(value)) return undefined;
   return value;
-}
-
-const VAULT_PROVIDER_ID_SET: ReadonlySet<string> = new Set(Object.values(VAULT_PROVIDER_ID));
-
-function isVaultProviderId(value: string | undefined): value is VaultProviderId {
-  return value !== undefined && VAULT_PROVIDER_ID_SET.has(value);
 }
 
 /**

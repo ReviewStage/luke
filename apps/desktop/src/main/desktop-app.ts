@@ -2,7 +2,12 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { AccountClient, AccountSessionManager, accountGateOpen } from "@sidecar/account";
+import {
+  AccountClient,
+  AccountSessionManager,
+  accountGateOpen,
+  HostedVaultClient,
+} from "@sidecar/account";
 import {
   PRODUCT_CREDENTIAL_SOURCE,
   PRODUCT_DIAGNOSTIC_KIND,
@@ -148,6 +153,7 @@ import {
 } from "./introduction-flow";
 import { registerAccountSessionIpc } from "./ipc/account-session";
 import { registerCalendarConnectionIpc } from "./ipc/calendar-connection";
+import { registerHostedVaultIpc } from "./ipc/hosted-vault";
 import { registerSessionActsIpc } from "./ipc/session-acts";
 import { registerSettingsRowsIpc } from "./ipc/settings-rows";
 import { registerTrackerConnectionIpc } from "./ipc/tracker-connection";
@@ -546,6 +552,17 @@ const productEvents = new ProductEventSender({
   appVersion: app.getVersion(),
   sends: runMode.sendsNetwork,
   readAccessToken: async () => (await settingsStore.readAccount())?.accessToken,
+  refreshAccount: accountSession.refreshOnce,
+});
+// The provider-key vault's client, on the same bearer the counting sender
+// reads fresh per ask. Constructed unconditionally because it holds nothing:
+// without a token no call leaves, and a fixture or evidence run reads no
+// token at all — the machine it happens to run on may hold a real account,
+// and the run mode is the whole of the gate here as everywhere.
+const hostedVault = new HostedVaultClient({
+  serviceBaseUrl: HOSTED_SERVICE_BASE_URL,
+  readAccessToken: async () =>
+    runMode.sendsNetwork ? (await settingsStore.readAccount())?.accessToken : undefined,
   refreshAccount: accountSession.refreshOnce,
 });
 // One narrow function rather than the service itself, so an IPC module can
@@ -1415,6 +1432,8 @@ function registerIpc(): void {
     endSessionReplay,
     resumeSessionReplay: () => void broadcastSessionReplay(),
   });
+
+  registerHostedVaultIpc({ ipcMain, trustedSender, vault: hostedVault });
 
   registerWindowSurfaceIpc({
     ipcMain,

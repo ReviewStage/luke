@@ -51,9 +51,11 @@ AES-256-GCM with a server-only secret. The key is never returned to any caller:
 there is no endpoint that reads it back, and no code path that decrypts it for
 any purpose other than the observation or acts you explicitly request through
 that provider. The server-side use of these keys ships as a separate feature;
-this describes only the storage. You can delete a key at any time from the
-provider's row in Settings, and it is deleted alongside your account if you
-delete that.
+this describes only the storage. Syncing is opt-in per provider, from that
+provider's row under Synced keys in Settings · Connections; the same row shows
+only the last four characters of what is stored and when it was saved, and can
+delete the key at any time. Every synced key is deleted alongside your account
+if you delete that.
 
 **Feedback.** If you use the feedback form, we receive what you typed, the name
 and email you signed it with, and any screenshots you attached.

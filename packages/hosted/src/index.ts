@@ -13,6 +13,8 @@ export {
   hostedQuotaFromWire,
   hostedReviewAnswerFromWire,
   hostedUsageAnswerFromWire,
+  isVaultProviderId,
+  VAULT_KEY_MAX_LENGTH,
   VAULT_PROVIDER_ID,
   type VaultKeyDeleteAnswer,
   type VaultKeyListEntry,
@@ -20,6 +22,7 @@ export {
   type VaultKeysListAnswer,
   type VaultProviderId,
   vaultKeyDeleteAnswerFromWire,
+  vaultKeyIsStorable,
   vaultKeyStoreAnswerFromWire,
   vaultKeysListAnswerFromWire,
 } from "./hosted-service.js";

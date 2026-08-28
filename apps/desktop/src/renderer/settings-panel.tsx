@@ -10,7 +10,14 @@ import {
   VOICE_CREDENTIAL_PROVIDER,
 } from "@sidecar/credentials/vocabulary";
 import { APP_SETTING_KIND, APP_TOGGLE_VALUE } from "@sidecar/guide";
-import type { HostedQuota, HostedUsageAnswer } from "@sidecar/hosted";
+import {
+  type HostedQuota,
+  type HostedUsageAnswer,
+  isVaultProviderId,
+  type VaultKeyListEntry,
+  type VaultProviderId,
+  vaultKeyIsStorable,
+} from "@sidecar/hosted";
 import { CloudBadge, ProviderMark } from "@sidecar/panel";
 import {
   isRealtimeVoice,
@@ -127,6 +134,7 @@ import {
   CheckIcon,
   ChevronIcon,
   CloseIcon,
+  CloudIcon,
   DisplayIcon,
   DownloadIcon,
   ExternalIcon,
@@ -1461,6 +1469,335 @@ function CredentialsSection({
   );
 }
 
+/* The synced rows' one explanation of what a key given here becomes. It says
+   the two things the rows cannot: where the key goes, and that it never comes
+   back. */
+const SYNCED_KEYS_NOTE =
+  "A key synced here is stored encrypted by Luke's own service and never sent back — " +
+  "a row shows only how its key ends and when it was saved. Deleting your account " +
+  "deletes them with it.";
+
+const SYNCED_KEYS_UNREACHABLE_NOTE =
+  "Luke's service did not answer just now, so what is synced cannot be shown.";
+
+/* A vault ask whose invoke itself failed, worded like the main process's own
+   refusal so the row cannot tell the two apart. */
+const VAULT_ASK_FAILED: ActResult = {
+  status: ACT_RESULT_STATUS.REJECTED,
+  reason: "Luke's service did not take that. Check the connection and try again.",
+};
+
+/** A key being typed for one synced row, and what became of the last attempt. */
+interface SyncedKeyEntry {
+  providerId: VaultProviderId;
+  draft: string;
+  busy: boolean;
+  rejection?: string;
+}
+
+/** When a synced key was last written, in the row's own short words. */
+function syncedKeySavedOn(updatedAt: number): string {
+  return new Date(updatedAt).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+/**
+ * The provider keys synced to Luke's hosted service, one row per provider the
+ * vault accepts, drawn only while an account is signed in because the vault is
+ * the account's. The list is read fresh each time the page opens and after
+ * every act; what it carries is ids, hints, and timestamps, because the
+ * service holds no endpoint that reads a key back. Unlike the Providers rows
+ * above, whose keys stay in this machine's encrypted storage, a key entered
+ * here travels once — outward, at the Save press — and is held nowhere local.
+ */
+function SyncedKeysSection({ panelOpen }: { panelOpen: boolean }): React.JSX.Element {
+  const [keys, setKeys] = useState<readonly VaultKeyListEntry[]>();
+  const [answered, setAnswered] = useState(false);
+  const [entry, setEntry] = useState<SyncedKeyEntry>();
+  const [asking, setAsking] = useState<VaultProviderId>();
+  const [clearing, setClearing] = useState<VaultProviderId>();
+  const [removalRejection, setRemovalRejection] = useState<string>();
+  const field = useRef<HTMLInputElement | null>(null);
+
+  // A confirm left open when the panel goes is withdrawn, the same correction
+  // the local key rows apply: reopening onto a question nobody remembers
+  // asking reads as a trap.
+  if (asking && !panelOpen && !clearing) setAsking(undefined);
+
+  const refresh = async () => {
+    const answer = await window.sidecar.requestVaultKeys().catch(() => undefined);
+    setKeys(answer ?? undefined);
+    setAnswered(true);
+  };
+
+  useEffect(() => {
+    let stale = false;
+    void window.sidecar
+      .requestVaultKeys()
+      .catch(() => undefined)
+      .then((answer) => {
+        if (stale) return;
+        setKeys(answer ?? undefined);
+        setAnswered(true);
+      });
+    return () => {
+      stale = true;
+    };
+  }, []);
+
+  useStagedFocus(field, entry !== undefined && panelOpen && !entry.busy);
+
+  const commit = async () => {
+    if (!entry || entry.busy) return;
+    const key = entry.draft.trim();
+    if (!vaultKeyIsStorable(key)) return;
+    const providerId = entry.providerId;
+    setEntry({ providerId, draft: entry.draft, busy: true });
+    const reason = actRejection(
+      await window.sidecar.storeVaultKey(providerId, key).catch(() => VAULT_ASK_FAILED),
+    );
+    if (reason === undefined) {
+      setEntry(undefined);
+      await refresh();
+      return;
+    }
+    setEntry((held) => (held ? { ...held, busy: false, rejection: reason } : held));
+  };
+
+  const removeKey = async (providerId: VaultProviderId) => {
+    setClearing(providerId);
+    setRemovalRejection(undefined);
+    const reason = actRejection(
+      await window.sidecar.deleteVaultKey(providerId).catch(() => VAULT_ASK_FAILED),
+    );
+    setClearing(undefined);
+    setAsking(undefined);
+    if (reason === undefined) {
+      await refresh();
+      return;
+    }
+    setRemovalRejection(reason);
+  };
+
+  const unreachable = answered && keys === undefined;
+  return (
+    <section
+      className="settings-section"
+      style={cssCustomProperties({ "--row-index": 3 })}
+      {...searchAnchorProps(SETTINGS_SEARCH_ROW.SYNCED_KEYS)}
+    >
+      <h2>
+        <CloudIcon />
+        Synced keys
+      </h2>
+      {keys
+        ? CLOUD_AGENT_PROVIDER_LIST.map((provider) => {
+            const providerId = provider.id;
+            if (!isVaultProviderId(providerId)) return null;
+            const stored = keys.find((key) => key.providerId === providerId);
+            const editing = entry?.providerId === providerId ? entry : undefined;
+            const held = entry !== undefined && !editing;
+            const busy = clearing === providerId || (editing?.busy ?? false);
+            const confirming = asking === providerId;
+            const credential = provider.keyFormat?.label ?? "API key";
+            const fieldId = `${providerId}-synced-key`;
+            const submittable = editing ? vaultKeyIsStorable(editing.draft.trim()) : false;
+            return (
+              <div className="credential" key={providerId}>
+                <div className="credential-row">
+                  <span className="credential-identity">
+                    <span className="credential-mark">
+                      <ProviderMark providerId={providerId} />
+                      <CloudBadge />
+                    </span>
+                    <span className="credential-name">{provider.displayName}</span>
+                    {stored ? <CheckIcon /> : null}
+                  </span>
+                  {stored ? (
+                    <span className="credential-status">
+                      {`····${stored.hint} · ${syncedKeySavedOn(stored.updatedAt)}`}
+                    </span>
+                  ) : null}
+                  <span className="credential-actions">
+                    <span
+                      className="settings-actions credential-controls"
+                      data-drawn={String(!confirming)}
+                      aria-hidden={confirming}
+                      inert={confirming}
+                    >
+                      {stored ? (
+                        <button
+                          type="button"
+                          className="icon-button credential-remove"
+                          disabled={busy}
+                          aria-label={`Delete the synced ${provider.displayName} ${credential}`}
+                          title="Delete…"
+                          onClick={() => {
+                            setRemovalRejection(undefined);
+                            setAsking(providerId);
+                          }}
+                        >
+                          <TrashIcon />
+                        </button>
+                      ) : null}
+                      {stored ? (
+                        <button
+                          type="button"
+                          className="icon-button"
+                          disabled={busy || entry !== undefined}
+                          aria-label={`Replace the synced ${provider.displayName} ${credential}`}
+                          title={held ? HELD_TITLE : "Replace"}
+                          onClick={() => setEntry({ providerId, draft: "", busy: false })}
+                        >
+                          <PencilIcon />
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="quiet-button"
+                          disabled={busy || entry !== undefined}
+                          aria-label={`Sync a ${provider.displayName} ${credential} to Luke's service`}
+                          title={held ? HELD_TITLE : undefined}
+                          onClick={() => setEntry({ providerId, draft: "", busy: false })}
+                        >
+                          Sync
+                        </button>
+                      )}
+                    </span>
+                    {stored ? (
+                      <fieldset
+                        className="settings-actions credential-confirm"
+                        aria-label={`Delete the synced ${provider.displayName} ${credential}?`}
+                        data-drawn={String(confirming)}
+                        aria-hidden={!confirming}
+                        inert={!confirming}
+                        onKeyDown={(event) => {
+                          if (event.key !== "Escape" || clearing) return;
+                          event.stopPropagation();
+                          setAsking(undefined);
+                        }}
+                      >
+                        <button
+                          type="button"
+                          className="quiet-button"
+                          style={answerOrder(REMOVAL_ANSWER_INDEX.KEEP)}
+                          disabled={clearing !== undefined}
+                          onClick={() => setAsking(undefined)}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          className="danger-button"
+                          style={answerOrder(REMOVAL_ANSWER_INDEX.DELETE)}
+                          disabled={clearing !== undefined}
+                          onClick={() => void removeKey(providerId)}
+                        >
+                          {clearing === providerId ? "Deleting…" : "Delete"}
+                        </button>
+                      </fieldset>
+                    ) : null}
+                  </span>
+                </div>
+                {editing ? (
+                  <fieldset
+                    className="credential-editor"
+                    aria-label={`Synced ${provider.displayName} ${credential}`}
+                  >
+                    <label className="settings-field" htmlFor={fieldId}>
+                      <span className="settings-label">{credential}</span>
+                      <input
+                        id={fieldId}
+                        ref={field}
+                        aria-label={`Synced ${provider.displayName} ${credential}`}
+                        className="settings-input"
+                        type="password"
+                        autoComplete="off"
+                        spellCheck={false}
+                        placeholder={CREDENTIAL_PLACEHOLDER[CREDENTIAL_SOURCE.NONE]}
+                        value={editing.draft}
+                        disabled={busy}
+                        onChange={(event) =>
+                          setEntry((held) => (held ? { ...held, draft: event.target.value } : held))
+                        }
+                        onFocus={() => {
+                          window.sidecar.focusPanel();
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" && submittable) void commit();
+                          if (event.key === "Escape") {
+                            event.stopPropagation();
+                            setEntry(undefined);
+                          }
+                        }}
+                      />
+                    </label>
+                    <div className="settings-row">
+                      <small className="settings-note">
+                        {provider.hint}{" "}
+                        <button
+                          type="button"
+                          className="link-button"
+                          disabled={busy}
+                          onClick={() => window.sidecar.openProviderApiKeys(providerId)}
+                        >
+                          Where to get one
+                          <ExternalIcon />
+                        </button>
+                      </small>
+                      <span className="settings-actions">
+                        <button
+                          type="button"
+                          className="quiet-button"
+                          disabled={busy}
+                          onClick={() => setEntry(undefined)}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          className="action-button"
+                          disabled={busy || !submittable}
+                          onClick={() => void commit()}
+                        >
+                          {editing.busy ? "Saving…" : "Save"}
+                        </button>
+                      </span>
+                    </div>
+                  </fieldset>
+                ) : null}
+                {editing?.rejection ? (
+                  <p className="error-message" role="alert">
+                    {editing.rejection}
+                  </p>
+                ) : null}
+              </div>
+            );
+          })
+        : null}
+      {removalRejection ? (
+        <p className="error-message" role="alert">
+          {removalRejection}
+        </p>
+      ) : null}
+      {unreachable ? (
+        <div className="settings-row">
+          <p className="settings-note">{SYNCED_KEYS_UNREACHABLE_NOTE}</p>
+          <span className="settings-actions">
+            <button type="button" className="quiet-button" onClick={() => void refresh()}>
+              Check again
+            </button>
+          </span>
+        </div>
+      ) : null}
+      <p className="settings-note">{SYNCED_KEYS_NOTE}</p>
+    </section>
+  );
+}
+
 /** Everything the Google Calendar block can do, wired above the panel. */
 export interface CalendarControl {
   /** Each connected account's calendars, as last observed. */
@@ -2272,7 +2609,7 @@ function IntegrationsSection({
 }): React.JSX.Element {
   const storageUnavailable = settings.secretStorage === SECRET_STORAGE.UNAVAILABLE;
   return (
-    <section className="settings-section" style={cssCustomProperties({ "--row-index": 3 })}>
+    <section className="settings-section" style={cssCustomProperties({ "--row-index": 4 })}>
       <h2>
         <PlugIcon />
         Integrations
@@ -3812,6 +4149,12 @@ export function SettingsPanel({
             superset={superset}
             workspaceProviders={workspaceProviders}
           />
+          {/* Right under the same providers' local key rows, because the two
+              sections answer the same question about the same services — here
+              or with Luke's service — and only an account has a vault. */}
+          {account.status === ACCOUNT_STATUS.SIGNED_IN ? (
+            <SyncedKeysSection panelOpen={panelOpen} />
+          ) : null}
           <IntegrationsSection
             settings={settings}
             writes={writes}

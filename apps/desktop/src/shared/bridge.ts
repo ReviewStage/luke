@@ -23,7 +23,13 @@ import {
   feedbackSubmission,
   isFeedbackKind,
 } from "@sidecar/feedback";
-import type { HostedUsageAnswer } from "@sidecar/hosted";
+import {
+  type HostedUsageAnswer,
+  isVaultProviderId,
+  type VaultKeyListEntry,
+  type VaultProviderId,
+  vaultKeyIsStorable,
+} from "@sidecar/hosted";
 import {
   type IssueIdentity,
   isIssueTrackerId,
@@ -324,6 +330,31 @@ export const BRIDGE = {
     kind: "send",
     channel: "app:open-provider-api-keys",
     args: args<[CredentialProviderId]>((v) => v.length === 1 && isCredentialProviderId(v[0])),
+  }),
+  // The provider-key vault, three asks and nothing else: store, list, delete.
+  // The store's key argument is checked here by the same shape rule the
+  // service enforces, so a key a hostile renderer could not have read from a
+  // field (a whole file, say) is refused at the boundary rather than sent.
+  storeVaultKey: entry({
+    kind: "invoke",
+    channel: "app:store-vault-key",
+    args: args<[VaultProviderId, string]>(
+      (v) =>
+        v.length === 2 && isVaultProviderId(v[0]) && isWireString(v[1]) && vaultKeyIsStorable(v[1]),
+    ),
+    result: result<ActResult>(isActResult),
+  }),
+  requestVaultKeys: entry({
+    kind: "invoke",
+    channel: "app:request-vault-keys",
+    args: noArgs,
+    result: result<readonly VaultKeyListEntry[] | undefined>(),
+  }),
+  deleteVaultKey: entry({
+    kind: "invoke",
+    channel: "app:delete-vault-key",
+    args: args<[VaultProviderId]>((v) => v.length === 1 && isVaultProviderId(v[0])),
+    result: result<ActResult>(isActResult),
   }),
   resetSettings: entry({
     kind: "invoke",

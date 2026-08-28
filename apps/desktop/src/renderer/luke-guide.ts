@@ -207,7 +207,10 @@ function providersFact(settings: AppSettingsView): AppGuideFact {
       `${CONNECTIONS_PAGE}, under Providers — never spoken, and never repeated back. Local ` +
       "providers such as Claude Code need no key and are observed on their own. Codex cloud " +
       `tasks (${CODEX_CLOUD_CONNECTION_WORD[settings.codexCloudConnection]}) follow the ` +
-      "Codex CLI's own login: codex login connects them, and signing that CLI out stops them.",
+      "Codex CLI's own login: codex login connects them, and signing that CLI out stops them. " +
+      "A provider key can also be synced to Luke's own service by hand, under Synced keys on " +
+      "the same page; the service stores it encrypted and never sends it back, and Luke can " +
+      "say only whether a row holds one.",
   };
 }
 

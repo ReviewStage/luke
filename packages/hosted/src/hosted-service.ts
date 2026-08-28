@@ -7,6 +7,7 @@ import {
   isRecord,
   isWireBoolean,
   isWireNumber,
+  isWireString,
   text,
   type UnparsedWireValue,
   wholeNumber,
@@ -69,6 +70,26 @@ export const VAULT_PROVIDER_ID = {
 } as const satisfies Record<string, ProviderId>;
 
 export type VaultProviderId = (typeof VAULT_PROVIDER_ID)[keyof typeof VAULT_PROVIDER_ID];
+
+const VAULT_PROVIDER_ID_SET: ReadonlySet<string> = new Set(Object.values(VAULT_PROVIDER_ID));
+
+/** Whether an untrusted value names a provider the vault accepts keys for. */
+export function isVaultProviderId(value: UnparsedWireValue): value is VaultProviderId {
+  return isWireString(value) && VAULT_PROVIDER_ID_SET.has(value);
+}
+
+/** Maximum length the vault accepts for a provider API key. */
+export const VAULT_KEY_MAX_LENGTH = 512;
+
+/**
+ * The shape a provider key must have before the vault stores it: non-empty,
+ * no whitespace anywhere, bounded length. Loose by design — shape validation
+ * only, never provider-specific format. Living on the wire contract, the
+ * desktop refuses the same keys the service would, before one travels.
+ */
+export function vaultKeyIsStorable(key: string): boolean {
+  return key.length > 0 && key.length <= VAULT_KEY_MAX_LENGTH && !/\s/u.test(key);
+}
 
 /** Every refusal a hosted endpoint answers with, by its reason. */
 export const HOSTED_API_ERROR = {
@@ -256,8 +277,6 @@ export interface VaultKeysListAnswer {
   keys: VaultKeyListEntry[];
 }
 
-const VAULT_PROVIDER_ID_SET: ReadonlySet<string> = new Set(Object.values(VAULT_PROVIDER_ID));
-
 /** Reads a vault keys-list answer; any malformed entry drops the whole answer. */
 export function vaultKeysListAnswerFromWire(
   value: UnparsedWireValue,
@@ -267,11 +286,10 @@ export function vaultKeysListAnswerFromWire(
   for (const item of value.keys) {
     if (!isRecord(item)) return undefined;
     const providerId = text(item.providerId);
-    if (!providerId || !VAULT_PROVIDER_ID_SET.has(providerId)) return undefined;
+    if (!isVaultProviderId(providerId)) return undefined;
     const updatedAt = wholeNumber(item.updatedAt);
     if (updatedAt === undefined || !isWireNumber(updatedAt) || updatedAt < 0) return undefined;
-    // SAFETY: providerId is a string and a member of VAULT_PROVIDER_ID_SET.
-    keys.push({ providerId: providerId as VaultProviderId, updatedAt });
+    keys.push({ providerId, updatedAt });
   }
   return { keys };
 }
