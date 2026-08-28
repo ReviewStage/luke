@@ -80,13 +80,21 @@ export function hostedQuotaFromWire(value: UnparsedWireValue): HostedQuota | und
 }
 
 /**
- * The one address a hosted credential may point a call at. The renderer's
- * content-security policy only permits the canonical OpenAI host, so a
- * credential aimed anywhere else could not work — validating it here means a
- * mis-answering service reads as a malformed response rather than as a call
- * that dies mid-handshake.
+ * The one address a hosted credential may point a WebRTC call at. The
+ * renderer's content-security policy only permits the canonical OpenAI host,
+ * so a credential aimed anywhere else could not work — validating it here
+ * means a mis-answering service reads as a malformed response rather than as
+ * a call that dies mid-handshake.
  */
 export const HOSTED_CALLS_URL = `https://api.openai.com/v1${REALTIME_CALLS_PATH}`;
+
+/**
+ * The build-pinned WebSocket base URL for OpenAI Realtime. The full endpoint
+ * appends ?model=<model> and is validated field-by-field in the wire reader
+ * the same way callsUrl is, so a mis-answering service cannot redirect a
+ * mobile client's connection.
+ */
+export const HOSTED_WS_BASE_URL = "wss://api.openai.com/v1/realtime";
 
 export interface HostedMintAnswer {
   connection: RealtimeConnection;
@@ -110,12 +118,17 @@ export function hostedMintAnswerFromWire(
   if (!secret || !model) return undefined;
   if (expiresAt === undefined) return undefined;
   if (connection.callsUrl !== HOSTED_CALLS_URL) return undefined;
+  const wsUrlFromWire = text(connection.wsUrl);
+  if (wsUrlFromWire !== undefined && wsUrlFromWire !== `${HOSTED_WS_BASE_URL}?model=${model}`) {
+    return undefined;
+  }
   const credential: RealtimeConnection = {
     value: secret,
     expiresAt,
     model,
     callsUrl: HOSTED_CALLS_URL,
   };
+  if (wsUrlFromWire !== undefined) credential.wsUrl = wsUrlFromWire;
   if (!realtimeCredentialIsUsable(credential, now)) return undefined;
   const quota = hostedQuotaFromWire(value.quota);
   const answer: HostedMintAnswer = { connection: credential };

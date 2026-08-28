@@ -1,4 +1,5 @@
 import {
+  HOSTED_WS_BASE_URL,
   isRealtimeVoice,
   isRealtimeVoiceSpeed,
   isRecord,
@@ -145,6 +146,7 @@ export async function mintRealtimeConnection(
     connection: {
       ...credential,
       callsUrl: `${HOSTED_OPENAI_DEFAULTS.BASE_URL}${REALTIME_CALLS_PATH}`,
+      wsUrl: `${HOSTED_WS_BASE_URL}?model=${credential.model}`,
     },
   };
 }

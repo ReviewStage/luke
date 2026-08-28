@@ -2,6 +2,7 @@ export {
   HOSTED_API_ERROR,
   HOSTED_CALLS_URL,
   HOSTED_SERVICE_PATH,
+  HOSTED_WS_BASE_URL,
   type HostedApiError,
   type HostedMintAnswer,
   type HostedQuota,

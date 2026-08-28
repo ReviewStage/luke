@@ -28,6 +28,7 @@
     "@paper-design/shaders": "0.0.80",
     "@sidecar/attention": "workspace:*",
     "@sidecar/credentials": "workspace:*",
+    "@sidecar/hosted": "workspace:*",
     "@sidecar/fixtures": "workspace:*",
     "@sidecar/panel": "workspace:*",
     "@sidecar/realtime": "workspace:*",

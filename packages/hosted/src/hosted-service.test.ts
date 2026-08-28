@@ -3,25 +3,30 @@ import test from "node:test";
 import {
   HOSTED_CALLS_URL,
   HOSTED_SERVICE_PATH,
+  HOSTED_WS_BASE_URL,
   hostedMintAnswerFromWire,
 } from "./hosted-service.js";
 
 const NOW = 1_800_000_000_000;
+const MODEL = "gpt-realtime-2.1";
 
 interface MintedWireOverrides {
   value?: string;
   expiresAt?: number;
   model?: string;
   callsUrl?: string;
+  wsUrl?: string;
 }
 
 function mintedWire(overrides: MintedWireOverrides = {}) {
+  const model = overrides.model ?? MODEL;
   return {
     connection: {
       value: "eph-secret",
       expiresAt: NOW + 60_000,
-      model: "gpt-realtime-2.1",
+      model,
       callsUrl: HOSTED_CALLS_URL,
+      wsUrl: `${HOSTED_WS_BASE_URL}?model=${model}`,
       ...overrides,
     },
   };
@@ -38,8 +43,9 @@ test("a mint answer round-trips through the wire reader, with or without a quota
     connection: {
       value: "eph-secret",
       expiresAt: NOW + 60_000,
-      model: "gpt-realtime-2.1",
+      model: MODEL,
       callsUrl: HOSTED_CALLS_URL,
+      wsUrl: `${HOSTED_WS_BASE_URL}?model=${MODEL}`,
     },
   });
 
@@ -48,12 +54,47 @@ test("a mint answer round-trips through the wire reader, with or without a quota
   assert.deepEqual(metered?.quota, quota);
 });
 
+test("a mint answer without wsUrl (old server) still parses for new readers", () => {
+  const wire = {
+    connection: {
+      value: "eph-secret",
+      expiresAt: NOW + 60_000,
+      model: MODEL,
+      callsUrl: HOSTED_CALLS_URL,
+    },
+  };
+  const answer = hostedMintAnswerFromWire(wire, NOW);
+  assert.ok(answer);
+  assert.equal(answer.connection.wsUrl, undefined);
+});
+
 test("a credential aimed anywhere but the canonical calls endpoint is discarded", () => {
   const foreign = hostedMintAnswerFromWire(
     mintedWire({ callsUrl: "https://evil.example/v1/realtime/calls" }),
     NOW,
   );
   assert.equal(foreign, undefined);
+});
+
+test("a wsUrl aimed at any non-canonical base is discarded", () => {
+  const foreignWs = hostedMintAnswerFromWire(
+    mintedWire({ wsUrl: `wss://evil.example/v1/realtime?model=${MODEL}` }),
+    NOW,
+  );
+  assert.equal(foreignWs, undefined);
+});
+
+test("a wsUrl whose model param does not match the credential's model is discarded", () => {
+  const mismatch = hostedMintAnswerFromWire(
+    mintedWire({ wsUrl: `${HOSTED_WS_BASE_URL}?model=wrong-model` }),
+    NOW,
+  );
+  assert.equal(mismatch, undefined);
+});
+
+test("the wsUrl carries the model the credential was minted for", () => {
+  const answer = hostedMintAnswerFromWire(mintedWire({ model: "gpt-realtime-next" }), NOW);
+  assert.equal(answer?.connection.wsUrl, `${HOSTED_WS_BASE_URL}?model=gpt-realtime-next`);
 });
 
 test("an expired or incomplete credential reads as no answer at all", () => {
