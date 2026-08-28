@@ -40,13 +40,8 @@
       buildConfiguration = "Debug"
       selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
-      shouldUseLaunchSchemeArgsEnv = "YES">
-      <TestPlans>
-         <TestPlanReference
-            reference = "container:Luke.xctestplan"
-            default = "YES">
-         </TestPlanReference>
-      </TestPlans>
+      shouldUseLaunchSchemeArgsEnv = "YES"
+      shouldAutocreateTestPlan = "YES">
       <Testables>
          <TestableReference
             skipped = "NO"
@@ -57,17 +52,6 @@
                BuildableName = "LukeTests.xctest"
                BlueprintName = "LukeTests"
                ReferencedContainer = "container:Luke.xcodeproj">
-            </BuildableReference>
-         </TestableReference>
-         <TestableReference
-            skipped = "NO"
-            parallelizable = "YES">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "LukeKitTests"
-               BuildableName = "LukeKitTests"
-               BlueprintName = "LukeKitTests"
-               ReferencedContainer = "container:LukeKit">
             </BuildableReference>
          </TestableReference>
       </Testables>

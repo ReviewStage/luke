@@ -14,8 +14,8 @@ xcodebuild \
 
 ## Test
 
-The Luke scheme's test plan (`Luke.xctestplan`) runs the app-target suites and
-the LukeKit package suites together:
+The tests live in two places, and each has its own entry. The Luke scheme runs
+the app target's suites on a simulator:
 
 ```sh
 xcodebuild \
@@ -25,8 +25,13 @@ xcodebuild \
   test
 ```
 
-For quick iteration on the package alone, without a simulator:
+The LukeKit package's suites run through SwiftPM, with no simulator:
 
 ```sh
 cd apps/ios/LukeKit && swift test
 ```
+
+Both are required. They stay separate because Xcode 26's xcodebuild does not
+pick up an SPM test target from this app scheme — neither as a testable
+reference nor through a test plan — so a scheme entry would claim coverage the
+simulator run does not deliver.
