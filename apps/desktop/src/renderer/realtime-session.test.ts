@@ -4438,7 +4438,7 @@ test("the app guide rides the session instructions, and identical guides are not
   assert.equal(updates.length, 1);
   // The guide is instructions now, never a conversation item: the standing
   // prompt stays the stable prefix and the guide travels appended behind it.
-  assert.match(updates[0] ?? "", /engineering manager for the developer's coding agents/i);
+  assert.match(updates[0] ?? "", /You are Luke\./);
   assert.match(updates[0] ?? "", /setting_id=voice_captions/);
   assert.match(updates[0] ?? "", /value=off/);
   assert.deepEqual(contextItems(context, "[app guide"), []);
