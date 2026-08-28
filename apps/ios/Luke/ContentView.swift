@@ -3,6 +3,8 @@ import LukeKit
 import SwiftUI
 import UIKit
 
+// MARK: - Window anchor
+
 /// Provides a UIWindow anchor for ASWebAuthenticationSession.
 @MainActor
 private final class WindowAnchorProvider: NSObject, ASWebAuthenticationPresentationContextProviding {
@@ -14,9 +16,10 @@ private final class WindowAnchorProvider: NSObject, ASWebAuthenticationPresentat
     }
 }
 
+// MARK: - Provider
+
 private enum SocialProvider: String {
-    case google
-    case github
+    case google, github
 
     var label: String {
         switch self {
@@ -25,6 +28,8 @@ private enum SocialProvider: String {
         }
     }
 }
+
+// MARK: - Root view
 
 struct ContentView: View {
     @Environment(AccountSession.self) private var session
@@ -35,69 +40,101 @@ struct ContentView: View {
     var body: some View {
         switch session.state {
         case .signedOut:
-            signedOutView
+            signedOutCard
         case .signedIn(let identity):
-            signedInView(identity: identity)
+            signedInCard(identity: identity)
         }
     }
 
-    // MARK: - Signed-out
+    // MARK: - Signed-out card (matches web AUTH_CARD vocabulary)
 
-    private var signedOutView: some View {
-        VStack(spacing: 20) {
-            Text("Luke")
-                .font(.largeTitle.bold())
-            if let error = signInError {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(.red)
+    private var signedOutCard: some View {
+        ZStack {
+            Color(red: 0.09, green: 0.09, blue: 0.10).ignoresSafeArea()
+            VStack(spacing: 0) {
+                // Luke face mark
+                LukeMark()
+                    .foregroundStyle(Color.white)
+                    .frame(width: 52)
+                    .padding(.bottom, 16)
+
+                Text("Sign in to Luke")
+                    .font(.system(size: 28, weight: .semibold))
+                    .foregroundStyle(Color.white)
+                    .padding(.bottom, 8)
+
+                if let error = signInError {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(Color(red: 0.95, green: 0.4, blue: 0.4))
+                        .multilineTextAlignment(.center)
+                        .padding(.bottom, 8)
+                }
+
+                VStack(spacing: 12) {
+                    ProviderButton(
+                        provider: .google,
+                        pending: pendingProvider == .google
+                    ) { startSignIn(provider: .google) }
+
+                    ProviderButton(
+                        provider: .github,
+                        pending: pendingProvider == .github
+                    ) { startSignIn(provider: .github) }
+                }
+                .padding(.top, 32)
+                .disabled(pendingProvider != nil)
+
+                Text("You can close this window after Luke confirms the sign-in.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color(white: 1, opacity: 0.4))
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal)
+                    .padding(.top, 16)
             }
-            // Mirror the desktop: show individual provider buttons so the
-            // sign-in page knows which provider to launch without a selection step.
-            Button {
-                startSignIn(provider: .google)
-            } label: {
-                Label(SocialProvider.google.label, systemImage: "globe")
-                    .frame(maxWidth: 280)
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(pendingProvider != nil)
-
-            Button {
-                startSignIn(provider: .github)
-            } label: {
-                Label(SocialProvider.github.label, systemImage: "chevron.left.forwardslash.chevron.right")
-                    .frame(maxWidth: 280)
-            }
-            .buttonStyle(.bordered)
-            .disabled(pendingProvider != nil)
-
-            if pendingProvider != nil {
-                Text("Opening…")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+            .padding(.horizontal, 32)
+            .padding(.vertical, 40)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color(red: 0.12, green: 0.12, blue: 0.13))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(Color(white: 1, opacity: 0.08), lineWidth: 1)
+                    )
+                    .shadow(color: Color.black.opacity(0.42), radius: 40, y: 16)
+            )
+            .padding(24)
         }
-        .padding()
     }
 
-    // MARK: - Signed-in
+    // MARK: - Signed-in card
 
-    private func signedInView(identity: AccountIdentity) -> some View {
-        VStack(spacing: 12) {
-            Text(identity.name ?? identity.email)
-                .font(.title2.bold())
-            Text(identity.email)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            Button("Sign out") {
-                Task { await session.signOut() }
+    private func signedInCard(identity: AccountIdentity) -> some View {
+        ZStack {
+            Color(red: 0.09, green: 0.09, blue: 0.10).ignoresSafeArea()
+            VStack(spacing: 12) {
+                Text(identity.name ?? identity.email)
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(Color.white)
+                Text(identity.email)
+                    .font(.subheadline)
+                    .foregroundStyle(Color(white: 1, opacity: 0.5))
+                Button("Sign out") {
+                    Task { await session.signOut() }
+                }
+                .buttonStyle(CardButtonStyle())
+                .padding(.top, 8)
             }
-            .buttonStyle(.bordered)
+            .padding(40)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color(red: 0.12, green: 0.12, blue: 0.13))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(Color(white: 1, opacity: 0.08), lineWidth: 1)
+                    )
+            )
+            .padding(24)
         }
-        .padding()
     }
 
     // MARK: - Sign-in flow
@@ -107,8 +144,8 @@ struct ContentView: View {
         signInError = nil
 
         let pkce = PKCE()
-        // The sign-in page reads the state prefix to select the provider automatically,
-        // matching the desktop's "{provider}.{randomState}" discipline.
+        // Prefix state with provider so tryluke.dev/sign-in can skip the
+        // selection step — mirrors the desktop's "{provider}.{randomState}" convention.
         let state = "\(provider.rawValue).\(UUID().uuidString)"
         let client = AccountClient(
             baseURL: AccountConstants.baseURL,
@@ -127,21 +164,16 @@ struct ContentView: View {
             Task { @MainActor in
                 defer { pendingProvider = nil }
                 if let asError = error as? ASWebAuthenticationSessionError,
-                   asError.code == .canceledLogin
-                {
-                    return
-                }
+                   asError.code == .canceledLogin { return }
                 if let error {
                     signInError = error.localizedDescription
                     return
                 }
                 guard
                     let callbackURL,
-                    let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false),
-                    let code = components.queryItems?.first(where: { $0.name == "code" })?.value,
-                    let returnedState = components.queryItems?.first(where: {
-                        $0.name == "state"
-                    })?.value,
+                    let comps = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false),
+                    let code = comps.queryItems?.first(where: { $0.name == "code" })?.value,
+                    let returnedState = comps.queryItems?.first(where: { $0.name == "state" })?.value,
                     returnedState == state
                 else {
                     signInError = "Invalid callback URL"
@@ -157,5 +189,57 @@ struct ContentView: View {
         webSession.presentationContextProvider = contextProvider
         webSession.prefersEphemeralWebBrowserSession = false
         webSession.start()
+    }
+}
+
+// MARK: - Provider button
+
+private struct ProviderButton: View {
+    let provider: SocialProvider
+    let pending: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                mark
+                    .frame(width: 16, height: 16)
+                Text(pending ? "Opening…" : provider.label)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Color.white)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 46)
+        }
+        .buttonStyle(CardButtonStyle())
+    }
+
+    @ViewBuilder
+    private var mark: some View {
+        switch provider {
+        case .google: GoogleMark()
+        case .github: GitHubMark().foregroundStyle(Color.white)
+        }
+    }
+}
+
+// MARK: - Button style (matches web AUTH_BUTTON)
+
+private struct CardButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .padding(.horizontal, 16)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(configuration.isPressed
+                          ? Color(white: 1, opacity: 0.06)
+                          : Color(red: 0.12, green: 0.12, blue: 0.13))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(Color(white: 1, opacity: 0.10), lineWidth: 1)
+                    )
+            )
+            .opacity(configuration.isPressed ? 0.85 : 1)
+            .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
     }
 }
