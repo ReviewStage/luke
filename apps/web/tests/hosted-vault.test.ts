@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { CLOUD_AGENT_PROVIDER_LIST } from "@sidecar/credentials";
 import { VAULT_PROVIDER_ID } from "@sidecar/hosted";
 import { decryptProviderKey, encryptProviderKey } from "../server/hosted/encryption";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
@@ -303,6 +304,14 @@ test("the delete passes the resolved user id and provider id to the seam", async
   );
 
   assert.deepEqual(calledWith, { userId: "user-abc", providerId: VAULT_PROVIDER_ID.CURSOR });
+});
+
+// --- Provider set parity ---
+
+test("VAULT_PROVIDER_ID matches CLOUD_AGENT_PROVIDER_LIST exactly", () => {
+  const vaultIds = new Set(Object.values(VAULT_PROVIDER_ID));
+  const cloudIds = new Set(CLOUD_AGENT_PROVIDER_LIST.map((p) => p.id));
+  assert.deepEqual(vaultIds, cloudIds);
 });
 
 // --- Replace-on-upsert ---

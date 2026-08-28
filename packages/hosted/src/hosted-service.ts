@@ -53,8 +53,14 @@ export const HOSTED_SERVICE_PATH = {
  * `satisfies` constraint enforces that membership. A new entry must be a
  * known provider id and requires a matching server-side observation strategy,
  * which ships in a separate PR.
+ *
+ * This set must stay in sync with `CLOUD_AGENT_PROVIDER_LIST` in
+ * `@sidecar/credentials`. That package is not importable here (it sits above
+ * `@sidecar/hosted` in the dependency graph), so drift is caught by a
+ * parity test in `apps/web/tests/hosted-vault.test.ts` instead.
  */
 export const VAULT_PROVIDER_ID = {
+  CONDUCTOR: "conductor",
   COPILOT: "copilot",
   CURSOR: "cursor",
   DEVIN: "devin",
