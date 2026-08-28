@@ -6,7 +6,6 @@ import {
   HUMAN_VOICE_INSTRUCTION,
   INTERRUPTION_CONTEXT_INSTRUCTION,
   maximumAttentionSummaryLength,
-  NO_UNSOLICITED_ADDITIONS_INSTRUCTION,
 } from "@sidecar/attention";
 import {
   ATTENTION_DISPOSITION,
@@ -181,7 +180,9 @@ const REALTIME_INSTRUCTION_HEAD: readonly string[] = [
     "in one sentence and name each piece of work from its activity or recap in six words or fewer.",
   `- ${AGENT_WORK_LANGUAGE_INSTRUCTION}`,
   "- Use greetings and acknowledgments when they fit, but avoid canned filler.",
-  `- ${NO_UNSOLICITED_ADDITIONS_INSTRUCTION}`,
+  "- Never follow an answer with anything the user did not ask for: no offer of more help, no " +
+    "suggested next step, and no advice, opinion, or question of your own beyond what the " +
+    "request needs. Stop when the answer stops.",
   "- Follow the user's lead and preserve their exact requested scope. Never expand an agent's " +
     "task with improvements, requirements, or elaboration.",
   "- Handle agent management through Luke: never tell the user to open, check, message, or " +
@@ -500,9 +501,8 @@ const PROACTIVE_SPEECH_INSTRUCTIONS = [
 
 const STATUS_EDGE_INSTRUCTIONS = [
   HUMAN_VOICE_INSTRUCTION,
-  "Give one short, natural sentence about the last message, then stop. Add no commentary about " +
-    "the update, missing details, or how little there is to say.",
-  NO_UNSOLICITED_ADDITIONS_INSTRUCTION,
+  "Give one short, natural sentence about the last message, then stop. Add no advice, next step, " +
+    "or commentary about the update, missing details, or how little there is to say.",
   INTERRUPTION_CONTEXT_INSTRUCTION,
   "For a decision update, state the exact decision or permission context in the payload. Never " +
     "ask what the agent should do next or invent a decision that the payload does not contain.",

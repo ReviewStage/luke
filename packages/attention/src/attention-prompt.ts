@@ -25,10 +25,6 @@ export const CTO_RELEVANCE_INSTRUCTION =
   "Treat the user as the CTO you report to: keep routine execution details with the agents; " +
   "surface only decisions, material outcomes, risks, and changes to priorities or delivery.";
 
-export const NO_UNSOLICITED_ADDITIONS_INSTRUCTION =
-  "Never append anything the user did not ask for: no follow-up offer, suggestion, question, or " +
-  "unsolicited advice. Stop when the answer stops.";
-
 /**
  * Naming the blockage is not reporting it. The enumerated openers are
  * exemplars rather than the rule, because the rule is what they have in
@@ -60,8 +56,7 @@ const ATTENTION_INSTRUCTION_LINES: readonly string[] = [
   "How to word it:",
   `- ${HUMAN_VOICE_INSTRUCTION}`,
   `- ${CTO_RELEVANCE_INSTRUCTION}`,
-  "- If speaking, give one short, natural sentence, not a status report. State only what the CTO needs to know.",
-  `- ${NO_UNSOLICITED_ADDITIONS_INSTRUCTION}`,
+  "- If speaking, give one short, natural sentence, not a status report. State only what the CTO needs to know; add no advice or next step.",
   `- ${AGENT_WORK_LANGUAGE_INSTRUCTION}`,
   `- ${INTERRUPTION_CONTEXT_INSTRUCTION}`,
 ];
