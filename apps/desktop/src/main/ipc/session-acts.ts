@@ -123,8 +123,10 @@ export function authorizeActEnvelope(
     }
   }
   if (target === ACT_VALIDATION_TARGET.ISSUE_ROSTER) {
+    if (act.kind !== ISSUE_TOOL_KIND.ISSUE_STATE && act.kind !== ISSUE_TOOL_KIND.ISSUE_COMMENT) {
+      return { status: ACT_RESULT_STATUS.REJECTED, reason: "That act has the wrong target." };
+    }
     if (
-      (act.kind !== ISSUE_TOOL_KIND.ISSUE_STATE && act.kind !== ISSUE_TOOL_KIND.ISSUE_COMMENT) ||
       !dependencies
         .trackedIssues()
         ?.some(
@@ -140,11 +142,16 @@ export function authorizeActEnvelope(
     }
   }
   if (target === ACT_VALIDATION_TARGET.WORKSPACE_PROJECT) {
+    if (act.kind !== SESSION_TOOL_KIND.CREATE_WORKSPACE) {
+      return { status: ACT_RESULT_STATUS.REJECTED, reason: "That act has the wrong target." };
+    }
+    const adapter = dependencies.adapterFor(act.providerId);
+    if (!adapter) {
+      return { status: ACT_RESULT_STATUS.REJECTED, reason: "That provider is not connected." };
+    }
     if (
-      act.kind !== SESSION_TOOL_KIND.CREATE_WORKSPACE ||
-      !dependencies
-        .adapterFor(act.providerId)
-        ?.workspaceProjects()
+      !adapter
+        .workspaceProjects()
         .some((project) => project.providerProjectId === act.providerProjectId)
     ) {
       return {
@@ -233,13 +240,13 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
     if (!session)
       return {
         status: ACT_RESULT_STATUS.UNSUPPORTED,
-        reason: "That act is not supported by the latest observation.",
+        reason: "No observed session matches that identity.",
       };
     const adapter = adapterFor(identity.providerId);
     if (!adapter)
       return {
         status: ACT_RESULT_STATUS.UNSUPPORTED,
-        reason: "That act is not supported by the latest observation.",
+        reason: "That session's provider is not connected.",
       };
     const result = await act(adapter, session);
     // A rejection refreshes like an acceptance: a write whose answer never
@@ -255,16 +262,20 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
   const registerOpenAction = (
     definition: Parameters<typeof registerAction>[0],
     address: (identity: SessionIdentity) => string | undefined,
+    // A session that left the roster and one still standing with nowhere to
+    // go are different answers, and only the second says what to try instead.
+    absentAddressReason: string,
     failureReason: string,
   ) =>
     registerAction<[SessionIdentity], SessionOpenResult>(definition, {
       async act(identity) {
-        const url = address(identity);
-        if (!url)
+        if (!sessionRegistry.get(identity))
           return {
             status: ACT_RESULT_STATUS.UNSUPPORTED,
-            reason: "That act is not supported by the latest observation.",
+            reason: "No observed session matches that identity.",
           };
+        const url = address(identity);
+        if (!url) return { status: ACT_RESULT_STATUS.UNSUPPORTED, reason: absentAddressReason };
         await openExternal(url);
         if (isProviderId(identity.providerId)) {
           recordProductEvent(PRODUCT_EVENT.SESSION_ACT_SEND, {
@@ -285,19 +296,34 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
   registerOpenAction(
     BRIDGE.openSession,
     (identity) => pressedLink(sessionRegistry.get(identity)?.detail.link),
+    "That session has no address to open.",
     "The system could not open that session.",
   );
   registerAction<[SessionIdentity, string], SessionOpenResult>(BRIDGE.openSessionApplication, {
     async act(identity, applicationId) {
-      const url = pressedLink(
-        sessionRegistry
-          .get(identity)
-          ?.applications.find((application) => application.id === applicationId)?.link,
-      );
+      const session = sessionRegistry.get(identity);
+      if (!session)
+        return {
+          status: ACT_RESULT_STATUS.UNSUPPORTED,
+          reason: "No observed session matches that identity.",
+        };
+      const application = session.applications.find((candidate) => candidate.id === applicationId);
+      if (!application) {
+        // The display names travel with the roster the caller already read,
+        // so naming what still opens surfaces nothing the roster withheld.
+        const openable = session.applications.filter((candidate) => candidate.link);
+        return {
+          status: ACT_RESULT_STATUS.UNSUPPORTED,
+          reason: openable.length
+            ? `That session opens only in ${openable.map((candidate) => candidate.displayName).join(", ")}.`
+            : "That session lists no app to open in.",
+        };
+      }
+      const url = pressedLink(application.link);
       if (!url)
         return {
           status: ACT_RESULT_STATUS.UNSUPPORTED,
-          reason: "That act is not supported by the latest observation.",
+          reason: "That session has no address to open in that app.",
         };
       await openExternal(url);
       if (isProviderId(identity.providerId)) {
@@ -316,6 +342,7 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
   registerOpenAction(
     BRIDGE.openSessionChange,
     (identity) => sessionRegistry.get(identity)?.detail.change,
+    "That session reports no pull request.",
     "The system could not open that pull request.",
   );
 
@@ -328,17 +355,22 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
   // run observes no tracker and so opens nothing.
   registerAction<[IssueIdentity], SessionOpenResult>(BRIDGE.openIssue, {
     async act(identity) {
-      const url = trackedIssues()?.find(
+      const issue = trackedIssues()?.find(
         (candidate) =>
           candidate.trackerId === identity.trackerId &&
           candidate.identifier === identity.identifier,
-      )?.url;
-      if (!url)
+      );
+      if (!issue)
         return {
           status: ACT_RESULT_STATUS.UNSUPPORTED,
-          reason: "That act is not supported by the latest observation.",
+          reason: "No tracked issue matches that identity.",
         };
-      await openExternal(url);
+      if (!issue.url)
+        return {
+          status: ACT_RESULT_STATUS.UNSUPPORTED,
+          reason: "That issue has no address to open.",
+        };
+      await openExternal(issue.url);
       // A roster reports its tracker id as a string; only one this build's own
       // vocabulary names has anything to be counted under, exactly as the
       // session opens narrow their provider id.
@@ -431,10 +463,16 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       }
       const messageText = message.value;
       const session = sessionRegistry.get(identity);
-      if (!session?.canReceiveMessage) {
+      if (!session) {
         return {
           status: ACT_RESULT_STATUS.UNSUPPORTED,
-          reason: "That act is not supported by the latest observation.",
+          reason: "No observed session matches that identity.",
+        };
+      }
+      if (!session.canReceiveMessage) {
+        return {
+          status: ACT_RESULT_STATUS.UNSUPPORTED,
+          reason: "That session does not take messages right now.",
         };
       }
       const managed = supersetContext(identity);
@@ -462,11 +500,20 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
     BRIDGE.executeSessionControl,
     async (identity: SessionIdentity, controlId: string): Promise<ProviderControlResult> => {
       const session = sessionRegistry.get(identity);
-      const control = session?.controls.find((candidate) => candidate.id === controlId);
+      if (!session)
+        return {
+          status: ACT_RESULT_STATUS.UNSUPPORTED,
+          reason: "No observed session matches that identity.",
+        };
+      const control = session.controls.find((candidate) => candidate.id === controlId);
+      // The labels travel with the roster the caller already read, so naming
+      // what still stands surfaces nothing the roster withheld.
       if (!control)
         return {
           status: ACT_RESULT_STATUS.UNSUPPORTED,
-          reason: "That act is not supported by the latest observation.",
+          reason: session.controls.length
+            ? `That session advertises no such control, only ${session.controls.map((candidate) => candidate.label).join(", ")}.`
+            : "That session advertises no controls right now.",
         };
       const managed = supersetContext(identity);
       if (managed && isSupersetControlId(control.id)) {
@@ -571,28 +618,33 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       if (!sendsNetwork)
         return {
           status: ACT_RESULT_STATUS.UNSUPPORTED,
-          reason: "That act is not supported by the latest observation.",
+          reason: "This run reaches no provider, so it can create nothing.",
         };
       const adapter = adapterFor(providerId);
       if (!adapter) {
         return {
           status: ACT_RESULT_STATUS.UNSUPPORTED,
-          reason: "That act is not supported by the latest observation.",
+          reason: "That provider is not connected.",
         };
       }
-      const offered = adapter
+      const project = adapter
         .workspaceProjects()
-        .some(
-          (project) =>
-            project.providerProjectId === providerProjectId &&
-            project.providerTargetId === providerTargetId &&
-            (!project.spawnableAgents ||
-              (!!agent && project.spawnableAgents.includes(agent.trim()))),
+        .find(
+          (candidate) =>
+            candidate.providerProjectId === providerProjectId &&
+            candidate.providerTargetId === providerTargetId,
         );
-      if (!offered)
+      if (!project)
         return {
           status: ACT_RESULT_STATUS.UNSUPPORTED,
-          reason: "That act is not supported by the latest observation.",
+          reason: "No listed project matches that identity.",
+        };
+      if (project.spawnableAgents && !(agent && project.spawnableAgents.includes(agent.trim())))
+        return {
+          status: ACT_RESULT_STATUS.UNSUPPORTED,
+          reason: project.spawnableAgents.length
+            ? `That project lists no such agent, only ${project.spawnableAgents.join(", ")}.`
+            : "That project lists no agent to create with.",
         };
       const workspaceName = boundedField(name, workspaceNameText);
       if (!workspaceName.ok) {
@@ -702,13 +754,13 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       if (!issue)
         return {
           status: ACT_RESULT_STATUS.UNSUPPORTED,
-          reason: "That act is not supported by the latest observation.",
+          reason: "No tracked issue matches that identity.",
         };
       const tracker = issueTrackers.find((candidate) => candidate.tracker.id === issue.trackerId);
       if (!tracker)
         return {
           status: ACT_RESULT_STATUS.UNSUPPORTED,
-          reason: "That act is not supported by the latest observation.",
+          reason: "That issue's tracker is not connected.",
         };
 
       let result: TrackerActionResult;
@@ -719,7 +771,7 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
         if (!transition)
           return {
             status: ACT_RESULT_STATUS.UNSUPPORTED,
-            reason: "That act is not supported by the latest observation.",
+            reason: "That issue lists no such state.",
           };
         result = await tracker.execute({
           kind: ISSUE_ACTION_KIND.SET_STATE,
@@ -730,7 +782,7 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
         if (!issue.canComment)
           return {
             status: ACT_RESULT_STATUS.UNSUPPORTED,
-            reason: "That act is not supported by the latest observation.",
+            reason: "That issue does not take comments.",
           };
         const body = boundedField(action.body, issueCommentText);
         if (!body.ok || body.value === undefined) {
@@ -782,13 +834,15 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       if (!session)
         return {
           status: ACT_RESULT_STATUS.UNSUPPORTED,
-          reason: "That act is not supported by the latest observation.",
+          reason: "No observed session matches that identity.",
         };
       const advertised = session.spawnableAgents.find((candidate) => candidate === agent.trim());
       if (!advertised)
         return {
           status: ACT_RESULT_STATUS.UNSUPPORTED,
-          reason: "That act is not supported by the latest observation.",
+          reason: session.spawnableAgents.length
+            ? `That session lists no such agent to add, only ${session.spawnableAgents.join(", ")}.`
+            : "That session lists no agent to add.",
         };
       // A model named for this one agent must be a documented pairing of
       // exactly the asked-for kind: the user's chosen agent is never
@@ -862,10 +916,15 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
         };
       }
       const session = sessionRegistry.get(identity);
-      if (!session?.renameTarget)
+      if (!session)
         return {
           status: ACT_RESULT_STATUS.UNSUPPORTED,
-          reason: "That act is not supported by the latest observation.",
+          reason: "No observed session matches that identity.",
+        };
+      if (!session.renameTarget)
+        return {
+          status: ACT_RESULT_STATUS.UNSUPPORTED,
+          reason: "That session's workspace cannot be renamed.",
         };
       const managed = supersetContext(identity);
       if (managed) {
@@ -898,10 +957,15 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
         };
       }
       const session = sessionRegistry.get(identity);
-      if (!session?.canRename)
+      if (!session)
         return {
           status: ACT_RESULT_STATUS.UNSUPPORTED,
-          reason: "That act is not supported by the latest observation.",
+          reason: "No observed session matches that identity.",
+        };
+      if (!session.canRename)
+        return {
+          status: ACT_RESULT_STATUS.UNSUPPORTED,
+          reason: "That chat cannot be renamed.",
         };
       return performSessionAct(identity, PRODUCT_SESSION_ACT.SESSION_RENAME, (adapter) =>
         adapter.renameSession({
