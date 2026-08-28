@@ -17,6 +17,7 @@ import {
   useRoster,
   useWingReorderMotion,
   WING_SLOT_ID_ATTRIBUTE,
+  WING_SPREAD_ATTRIBUTE,
 } from "./session-motion";
 import { WAVEFORM_VOICE, Waveform, type WaveformVoice } from "./waveform";
 
@@ -208,6 +209,12 @@ export function NotchWings({
   // unmounting marks mid-fade — and only then does the gap close.
   const marksRef = useWingReorderMotion();
   const drawnSlots = useRoster(slots, marksRef);
+  // Whether the shape has room to lay the strip out flat. The stylesheet
+  // decides the same thing from the presentation; the strip carries it so the
+  // reorder measurement reads the layout actually drawn rather than inferring
+  // it a second way.
+  const spread =
+    presentation === PANEL_PRESENTATION.PEEK || presentation === PANEL_PRESENTATION.PANEL;
 
   // The label's text, measured in layout pixels: `offsetWidth` never sees the
   // transform about to draw it, so the fit below can divide by the scale the
@@ -279,7 +286,12 @@ export function NotchWings({
               the live region beside them already states everything they show,
               and the panel's own filter chips are what filtering is done
               with. */}
-          <span className="wing-marks" ref={marksRef} data-drawn={String(!accountGated)}>
+          <span
+            className="wing-marks"
+            ref={marksRef}
+            data-drawn={String(!accountGated)}
+            {...{ [WING_SPREAD_ATTRIBUTE]: String(spread) }}
+          >
             {drawnSlots.map(({ item, leaving }, index) => (
               <span
                 className="wing-mark"

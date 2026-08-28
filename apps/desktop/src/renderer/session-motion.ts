@@ -136,20 +136,36 @@ const SESSION_LIST: ReorderList = {
 };
 
 /**
- * Where a mark sits along the wing. The marks are anchored beside the housing,
- * which is the wing's own left edge, so `offsetLeft` is already the distance
- * from the edge that never moves: `--wing-bound` grows the wing 88px on a
- * morph, and a position measured from the far edge would read that growth as
- * a travel and animate the whole pile across the wing.
+ * How the wing's strip says whether it is laid out flat or stacked on its
+ * first slot. The stylesheet decides that from the presentation, and the
+ * measurement below has to agree with it, so the strip states it rather than
+ * either side inferring it.
  */
-export function wingSlotOffset(element: HTMLElement): number {
-  return element.offsetLeft;
+export const WING_SPREAD_ATTRIBUTE = "data-spread";
+
+/**
+ * Where a mark is drawn along the wing. Flat, that is `offsetLeft`: the marks
+ * are anchored beside the housing, which is the wing's own left edge, so it is
+ * already the distance from the edge that never moves — `--wing-bound` grows
+ * the wing 88px on a morph, and a position measured from the far edge would
+ * read that growth as a travel and animate the whole strip across the wing.
+ *
+ * Stacked, every mark is drawn on the first slot whatever seat the flex strip
+ * laid out for it, so they all report the same position and a reorder is no
+ * travel at all. The laid-out seat would be a lie there, and an expensive one:
+ * the new lead mark would spring in from a slot past the capsule's own side,
+ * which the wing does not clip — it is bounded by the peek the capsule can
+ * grow into — and would be drawn on the desktop.
+ */
+export function wingSlotOffset(element: HTMLElement, spread: boolean): number {
+  return spread ? element.offsetLeft : 0;
 }
 
 /** The wing's strip: marks laid along the wing, anchored beside the housing. */
 const WING_STRIP: ReorderList = {
   idAttribute: WING_SLOT_ID_ATTRIBUTE,
-  offset: (element, _container) => wingSlotOffset(element),
+  offset: (element, container) =>
+    wingSlotOffset(element, container.getAttribute(WING_SPREAD_ATTRIBUTE) === "true"),
   translate: (px) => `translateX(${px}px)`,
   arrivesFromFan: false,
 };

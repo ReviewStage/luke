@@ -301,6 +301,7 @@
    lays it out. */
 .mock .wing-mark {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   color: var(--text-secondary);
   transform: translateX(var(--mark-rest, 0px));

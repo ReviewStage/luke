@@ -761,12 +761,14 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
    and `--mark-rest` carries each mark's resting seat as an offset from where
    the flat strip already lays it out.
 
-   The animation is what a mark mounting into an already unfolded wing needs:
-   on a compact mount its computed destination is its own resting seat, so it
-   costs nothing; on an open wing the backwards-filled keyframes provide the
-   missing start state. */
+   A mark never gives up its own width: while a shrinking capacity holds the
+   marks it dropped through their exit beat, the strip briefly carries more
+   than the wing has room for, and a shrinking flex item would squeeze the
+   marks that are staying out of their 14px seat to make room for ones already
+   leaving. */
 .wing-mark {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: center;
   color: var(--text-secondary);
@@ -774,6 +776,15 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   transition:
     opacity var(--duration-exit) var(--motion-exit),
     transform var(--duration-shape) var(--spring);
+  animation: wing-mount-fade var(--duration-quick) var(--motion-exit) backwards;
+}
+
+/* A mark mounting into a wing that is already unfolded waits out the shape's
+   own beat, or it is drawn ahead of an edge still most of its travel away. A
+   mark mounting into the resting strip waits for nothing: no shape is moving,
+   and the lead mark is drawn at rest, so a delay here would leave the wing
+   blank for the whole beat on a first roster or a new most urgent app. */
+.wing-marks[data-spread="true"] .wing-mark {
   animation:
     wing-mount-fade var(--duration-quick) var(--motion-exit)
     calc(var(--duration-shape) - var(--duration-quick)) backwards,
