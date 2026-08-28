@@ -3,6 +3,10 @@ import LukeKit
 import SwiftUI
 import UIKit
 
+// MARK: - Act client (shared singleton for the app lifetime)
+
+private let sharedActClient = ActClient(baseURL: AccountConstants.serviceURL)
+
 // MARK: - Window anchor
 
 /// Provides a UIWindow anchor for ASWebAuthenticationSession.
@@ -275,6 +279,7 @@ private struct ProfileSheet: View {
     @Environment(\.dismiss) private var dismiss
     let identity: AccountIdentity
     @State private var editingProvider: VaultProviderID?
+    @State private var showingWriteDemo = false
 
     var body: some View {
         NavigationStack {
@@ -305,6 +310,27 @@ private struct ProfileSheet: View {
                 }
 
                 VaultSection(editing: $editingProvider)
+
+                // Write-path verification panel. The read path surfaces
+                // session and project identifiers from the roster; until then
+                // this panel lets the developer try the act endpoints directly.
+                Section {
+                    Button {
+                        showingWriteDemo.toggle()
+                    } label: {
+                        Label(
+                            showingWriteDemo ? "Hide act demo" : "Try act endpoints",
+                            systemImage: "arrow.up.message"
+                        )
+                        .font(.system(size: 14))
+                    }
+                    if showingWriteDemo {
+                        WriteDemoPanel(actClient: sharedActClient)
+                            .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                    }
+                } header: {
+                    Text("Developer")
+                }
 
                 Section {
                     Button("Sign out", role: .destructive) {
@@ -442,5 +468,80 @@ private struct CardButtonStyle: ButtonStyle {
             )
             .opacity(configuration.isPressed ? 0.85 : 1)
             .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
+    }
+}
+
+// MARK: - Write-path verification panel
+
+/// Lets the developer try the act endpoints directly before the read-path
+/// roster is built. Enter a session id or project id from Conductor's dashboard
+/// and send a message or create a workspace.
+private struct WriteDemoPanel: View {
+    let actClient: ActClient
+
+    @State private var sessionId = ""
+    @State private var projectId = ""
+    @State private var selectedTab = 0
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Picker("", selection: $selectedTab) {
+                Text("Message").tag(0)
+                Text("Workspace").tag(1)
+            }
+            .pickerStyle(.segmented)
+
+            if selectedTab == 0 {
+                VStack(alignment: .leading, spacing: 8) {
+                    DemoField(label: "Conductor session ID", text: $sessionId)
+                    SessionComposerView(
+                        providerId: "conductor",
+                        providerSessionId: sessionId,
+                        actClient: actClient
+                    )
+                    .disabled(sessionId.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .opacity(sessionId.trimmingCharacters(in: .whitespaces).isEmpty ? 0.4 : 1)
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    DemoField(label: "Conductor project ID", text: $projectId)
+                    WorkspaceCreatorView(
+                        providerId: "conductor",
+                        providerProjectId: projectId,
+                        actClient: actClient
+                    )
+                    .disabled(projectId.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .opacity(projectId.trimmingCharacters(in: .whitespaces).isEmpty ? 0.4 : 1)
+                }
+            }
+        }
+    }
+}
+
+private struct DemoField: View {
+    let label: String
+    @Binding var text: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Color.inkSecondary)
+            TextField("", text: $text)
+                .textFieldStyle(.plain)
+                .font(.system(size: 14, design: .monospaced))
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(Color.cardFill)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(Color.controlStroke, lineWidth: 1)
+                        )
+                )
+        }
     }
 }

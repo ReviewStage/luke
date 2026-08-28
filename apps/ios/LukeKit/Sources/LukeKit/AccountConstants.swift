@@ -14,7 +14,8 @@ public enum AccountConstants {
     }()
 
     /// The hosted service origin. The auth base lives under `/api/auth`,
-    /// vault endpoints under `/api/vault`, and observe under `/api/observe`.
+    /// vault endpoints under `/api/vault`, act endpoints under `/api/acts`,
+    /// and observe under `/api/observe`.
     public static let serviceURL: URL = {
         #if DEBUG
         if let override = ProcessInfo.processInfo.environment["LUKE_SERVICE_BASE_URL"],
