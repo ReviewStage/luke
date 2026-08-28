@@ -183,3 +183,23 @@ one atomic upsert before each upstream call, checked against the ceilings in
 `server/hosted/quota.ts`. The ceilings bound how often calls open, not how
 long they run; a spend limit on the OpenAI project behind the key is the
 backstop and should be configured with it.
+
+# Provider key vault
+
+`api/vault/key.ts` and `api/vault/keys.ts` store, list, and delete the provider
+API keys a signed-in user syncs for server-side observation. Keys are encrypted
+at rest using AES-256-GCM before they touch the database; the plaintext never
+reaches a database column and there is no endpoint that reads it back.
+
+The three endpoints require `PROVIDER_KEY_ENCRYPTION_SECRET`, a 64-character
+hex string (32 bytes). Generate one with:
+
+```sh
+openssl rand -hex 32
+```
+
+All three vault endpoints answer 503 if the variable is absent or blank — the
+same kill switch as the OpenAI endpoints — so a Preview deployment with no
+secret simply has no working vault, and no plaintext key can be stored
+accidentally. Set this variable in the Vercel project environment (production
+and any Preview that needs a working vault) alongside `DATABASE_URL`.

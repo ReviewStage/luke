@@ -13,6 +13,15 @@ export {
   hostedQuotaFromWire,
   hostedReviewAnswerFromWire,
   hostedUsageAnswerFromWire,
+  VAULT_PROVIDER_ID,
+  type VaultKeyDeleteAnswer,
+  type VaultKeyListEntry,
+  type VaultKeyStoreAnswer,
+  type VaultKeysListAnswer,
+  type VaultProviderId,
+  vaultKeyDeleteAnswerFromWire,
+  vaultKeyStoreAnswerFromWire,
+  vaultKeysListAnswerFromWire,
 } from "./hosted-service.js";
 export {
   REALTIME_CALLS_PATH,

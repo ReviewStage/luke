@@ -3,3 +3,4 @@
 export * from "./auth-schema.js";
 export * from "./favorite-schema.js";
 export * from "./usage-schema.js";
+export * from "./vault-schema.js";
