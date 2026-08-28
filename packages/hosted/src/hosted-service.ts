@@ -1,5 +1,16 @@
-import { type AttentionDecision, attentionDecisionFromWire } from "@sidecar/session";
-import { isRecord, text, type UnparsedWireValue, wholeNumber } from "@sidecar/wire";
+import {
+  type AttentionDecision,
+  attentionDecisionFromWire,
+  type ProviderId,
+} from "@sidecar/session";
+import {
+  isRecord,
+  isWireBoolean,
+  isWireNumber,
+  text,
+  type UnparsedWireValue,
+  wholeNumber,
+} from "@sidecar/wire";
 import {
   REALTIME_CALLS_PATH,
   type RealtimeConnection,
@@ -27,7 +38,37 @@ export const HOSTED_SERVICE_PATH = {
   ACCOUNT_DELETE: "/api/account/delete",
   USAGE: "/api/usage",
   EVENTS: "/api/events",
+  /** Store or replace a provider key (POST) or delete one (DELETE). */
+  VAULT_KEY: "/api/vault/key",
+  /** List stored provider keys — ids and display hints, never keys. */
+  VAULT_KEYS: "/api/vault/keys",
 } as const;
+
+/**
+ * The cloud providers whose API keys the vault accepts. Only providers that
+ * Luke's service can observe on the user's behalf belong here; local-only
+ * providers supply their credentials directly on the user's machine.
+ *
+ * The values are a subset of `PROVIDER_ID` from `@sidecar/session`; the
+ * `satisfies` constraint enforces that membership. A new entry must be a
+ * known provider id and requires a matching server-side observation strategy,
+ * which ships in a separate PR.
+ *
+ * This set must stay in sync with `CLOUD_AGENT_PROVIDER_LIST` in
+ * `@sidecar/credentials`. That package is not importable here (it sits above
+ * `@sidecar/hosted` in the dependency graph), so drift is caught by a
+ * parity test in `apps/web/tests/hosted-vault.test.ts` instead.
+ */
+export const VAULT_PROVIDER_ID = {
+  CONDUCTOR: "conductor",
+  COPILOT: "copilot",
+  CURSOR: "cursor",
+  DEVIN: "devin",
+  JULES: "jules",
+  REPLICAS: "replicas",
+} as const satisfies Record<string, ProviderId>;
+
+export type VaultProviderId = (typeof VAULT_PROVIDER_ID)[keyof typeof VAULT_PROVIDER_ID];
 
 /** Every refusal a hosted endpoint answers with, by its reason. */
 export const HOSTED_API_ERROR = {
@@ -187,4 +228,66 @@ export function hostedErrorFromWire(value: UnparsedWireValue): HostedApiError | 
   return HOSTED_API_ERROR_LIST.includes(error as HostedApiError)
     ? (error as HostedApiError)
     : undefined;
+}
+
+// --- Vault wire contract ---
+
+/** Confirms that a store operation landed. */
+export interface VaultKeyStoreAnswer {
+  stored: true;
+}
+
+/** Reads a vault store answer; anything other than `{ stored: true }` is invalid. */
+export function vaultKeyStoreAnswerFromWire(
+  value: UnparsedWireValue,
+): VaultKeyStoreAnswer | undefined {
+  if (!isRecord(value) || value.stored !== true) return undefined;
+  return { stored: true };
+}
+
+/** One key entry as returned by the list endpoint — never contains the key. */
+export interface VaultKeyListEntry {
+  providerId: VaultProviderId;
+  hint: string;
+  updatedAt: number;
+}
+
+/** The list endpoint answer. */
+export interface VaultKeysListAnswer {
+  keys: VaultKeyListEntry[];
+}
+
+const VAULT_PROVIDER_ID_SET: ReadonlySet<string> = new Set(Object.values(VAULT_PROVIDER_ID));
+
+/** Reads a vault keys-list answer; any malformed entry drops the whole answer. */
+export function vaultKeysListAnswerFromWire(
+  value: UnparsedWireValue,
+): VaultKeysListAnswer | undefined {
+  if (!isRecord(value) || !Array.isArray(value.keys)) return undefined;
+  const keys: VaultKeyListEntry[] = [];
+  for (const item of value.keys) {
+    if (!isRecord(item)) return undefined;
+    const providerId = text(item.providerId);
+    if (!providerId || !VAULT_PROVIDER_ID_SET.has(providerId)) return undefined;
+    const hint = text(item.hint);
+    if (!hint) return undefined;
+    const updatedAt = wholeNumber(item.updatedAt);
+    if (updatedAt === undefined || !isWireNumber(updatedAt) || updatedAt < 0) return undefined;
+    // SAFETY: providerId is a string and a member of VAULT_PROVIDER_ID_SET.
+    keys.push({ providerId: providerId as VaultProviderId, hint, updatedAt });
+  }
+  return { keys };
+}
+
+/** Confirms whether a delete operation found and removed a key. */
+export interface VaultKeyDeleteAnswer {
+  deleted: boolean;
+}
+
+/** Reads a vault delete answer. */
+export function vaultKeyDeleteAnswerFromWire(
+  value: UnparsedWireValue,
+): VaultKeyDeleteAnswer | undefined {
+  if (!isRecord(value) || !isWireBoolean(value.deleted)) return undefined;
+  return { deleted: value.deleted };
 }

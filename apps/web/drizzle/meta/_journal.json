@@ -36,6 +36,13 @@
       "when": 1787607782598,
       "tag": "0004_white_brood",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1787961600000,
+      "tag": "0005_crimson_vault",
+      "breakpoints": true
     }
   ]
 }

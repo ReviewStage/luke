@@ -45,6 +45,16 @@ before you sign in is attached to your account if you sign in while it is
 running. One that never reaches a sign-in belongs to nobody, so deleting your
 account does not reach it — we have no way to tell it was yours.
 
+**Provider API keys (server-side vault).** If you choose to sync a provider API
+key to Luke's hosted service, we store it encrypted in our own database using
+AES-256-GCM with a server-only secret. The key is never returned to any caller:
+there is no endpoint that reads it back, and no code path that decrypts it for
+any purpose other than the observation or acts you explicitly request through
+that provider. The server-side use of these keys ships as a separate feature;
+this describes only the storage. You can delete a key at any time from the
+provider's row in Settings, and it is deleted alongside your account if you
+delete that.
+
 **Feedback.** If you use the feedback form, we receive what you typed, the name
 and email you signed it with, and any screenshots you attached.
 
@@ -89,18 +99,23 @@ your network address, as it does for the app's recordings.
 
 ## Storage
 
-Your settings, provider API keys, and calendar access stay on your Mac. Keys and
-calendar access are encrypted in the macOS Keychain. Your account information is
-held by our own service, and usage counts and recordings by PostHog.
+Your settings, local provider API keys, and calendar access stay on your Mac.
+Local keys and calendar access are encrypted in the macOS Keychain. Provider
+API keys you sync to the hosted service are stored encrypted in our own
+database, as described above. Your account information is held by our own
+service, and usage counts and recordings by PostHog.
 
 ## Your choices
 
 - Disconnect any provider, issue tracker, or calendar to stop it being read.
 - Delete your OpenAI key to turn voice off.
+- Delete any synced provider API key from that provider's row in Settings. Keys
+  are also deleted when you delete your account.
 - Luke does not use your microphone until you start a turn.
 - Delete your account from the Account section in Settings. This erases your
-  account, your sign-in records, and your usage counts, and asks PostHog to
-  erase your usage data and recordings. It does not reach a recording that was
+  account, your sign-in records, your usage counts, and any provider API keys
+  you synced to the hosted service, and asks PostHog to erase your usage data
+  and recordings. It does not reach a recording that was
   never attached to your account, as described above. Luke stops recording for
   the rest of the session, and starts again the next time you open it or sign
   in. Deleting does not affect your Google or GitHub account, and anything
