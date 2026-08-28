@@ -54,6 +54,17 @@
                ReferencedContainer = "container:Luke.xcodeproj">
             </BuildableReference>
          </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "LukeKitTests"
+               BuildableName = "LukeKitTests"
+               BlueprintName = "LukeKitTests"
+               ReferencedContainer = "container:LukeKit">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
    </TestAction>
    <LaunchAction
