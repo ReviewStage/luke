@@ -162,6 +162,9 @@ importers:
       '@sidecar/fixtures':
         specifier: workspace:*
         version: link:../../packages/fixtures
+      '@sidecar/hosted':
+        specifier: workspace:*
+        version: link:../../packages/hosted
       '@sidecar/panel':
         specifier: workspace:*
         version: link:../../packages/panel

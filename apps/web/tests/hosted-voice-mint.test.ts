@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { HOSTED_WS_BASE_URL } from "@sidecar/hosted";
 import type { RealtimeVoice, RealtimeVoiceSpeed } from "@sidecar/realtime";
 import { REALTIME_DEFAULTS, REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
@@ -79,6 +80,7 @@ test("a mint hands back an ephemeral credential aimed at OpenAI's own calls endp
     expiresAt: NOW + 60_000,
     model: REALTIME_DEFAULTS.MODEL,
     callsUrl: "https://api.openai.com/v1/realtime/calls",
+    wsUrl: `${HOSTED_WS_BASE_URL}?model=${REALTIME_DEFAULTS.MODEL}`,
   });
   assert.deepEqual(body.quota, OPEN_SPEND.quota);
 
@@ -88,6 +90,16 @@ test("a mint hands back an ephemeral credential aimed at OpenAI's own calls endp
   assert.equal(sent.session.audio.output.voice, REALTIME_VOICE.MARIN);
   assert.equal(sent.session.audio.output.speed, REALTIME_VOICE_SPEED.QUICK);
   assert.equal(sent.session.audio.input.turn_detection, null);
+});
+
+test("the wsUrl is pinned to the build's websocket base and carries the session's model", async () => {
+  const response = await handleVoiceMint(
+    options({ model: "gpt-realtime-next", fetch: upstream({}, mintedPayload) }),
+  );
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.connection.wsUrl, `${HOSTED_WS_BASE_URL}?model=gpt-realtime-next`);
+  assert.ok(body.connection.wsUrl.startsWith("wss://api.openai.com/v1/realtime"));
 });
 
 test("an empty body mints the build's own defaults", async () => {

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { HOSTED_WS_BASE_URL } from "@sidecar/hosted";
 import { REALTIME_DEFAULTS, REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
 import {
@@ -78,6 +79,7 @@ test("a mint hands back a short-capped credential aimed at OpenAI's own calls en
       expiresAt: NOW + 60_000,
       model: REALTIME_DEFAULTS.MODEL,
       callsUrl: "https://api.openai.com/v1/realtime/calls",
+      wsUrl: `${HOSTED_WS_BASE_URL}?model=${REALTIME_DEFAULTS.MODEL}`,
     },
   });
 

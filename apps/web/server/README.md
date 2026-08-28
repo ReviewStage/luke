@@ -128,6 +128,17 @@ The logic lives in `server/hosted/` behind injected seams, and each request is
 resolved to a user through the auth service's own `/oauth2/userinfo` endpoint,
 called in process.
 
+The mint answer's `connection` object carries both a WebRTC calls endpoint
+(`callsUrl`) for the desktop renderer and a WebSocket endpoint (`wsUrl`) for
+mobile clients such as the iOS/watchOS companion, which has no WebRTC. Both
+point at the canonical OpenAI host and are pinned by the build rather than
+composed by the client: `callsUrl` is the calls endpoint at
+`https://api.openai.com/v1/realtime/calls`; `wsUrl` is the WebSocket base at
+`wss://api.openai.com/v1/realtime` with the session's model appended as
+`?model=<model>`. The same ephemeral client secret authenticates both
+transports. Clients predating this field ignore `wsUrl`; clients predating
+this server receive a connection without it and must handle its absence.
+
 The endpoints need one secret: `OPENAI_API_KEY`. Without it both answer 503
 and the hosted tier is simply off, the same kill switch as the feedback
 endpoint, which is the intended state for Preview deployments, so a preview
