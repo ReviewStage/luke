@@ -95,12 +95,13 @@ public final class AccountSession {
             guard self.generation == generation else { return }
             storeIdentity(identity)
             state = .signedIn(identity)
-        } catch AccountClientError.serverError(let status, _) where (400 ..< 500).contains(status) {
+        } catch AccountClientError.serverError(_, let oauthError) where oauthError == "invalid_grant" {
             guard self.generation == generation else { return }
-            // Refresh token rejected — clear the dead session rather than leaving the user stuck.
+            // The refresh token has been permanently revoked — sign out rather than
+            // leaving the user stuck with a broken session (mirrors desktop behaviour).
             await signOut()
         } catch {
-            // Transient network failure; the stored tokens may still be valid.
+            // Transient failure (network error, rate limit, etc.); stored tokens may still work.
         }
     }
 
