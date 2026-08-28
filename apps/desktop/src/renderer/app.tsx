@@ -3167,8 +3167,19 @@ export function App(): React.JSX.Element {
               }
             : undefined),
           connections: gateConnections,
-          onSkip: () => void window.sidecar.skipCalendarOnboarding(),
-          onDone: () => void window.sidecar.completeCalendarOnboarding(),
+          // A consent flow run from the gate parks the panel's tab on the
+          // Connections page for its slot to come back to, and the gate masks
+          // that while it stands — so answering the step also brings the tab
+          // home, or onboarding would end on Integrations instead of the
+          // roster the arrival beat is about to call all set.
+          onSkip: () => {
+            changeTab(PANEL_TAB.SESSIONS);
+            void window.sidecar.skipCalendarOnboarding();
+          },
+          onDone: () => {
+            changeTab(PANEL_TAB.SESSIONS);
+            void window.sidecar.completeCalendarOnboarding();
+          },
         }
       : undefined;
 

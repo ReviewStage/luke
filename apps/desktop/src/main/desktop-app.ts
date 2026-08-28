@@ -878,7 +878,6 @@ function readStoredState(at: string): string | undefined {
   }
 }
 
-
 function writeStoredState(at: string, contents: string, what: string): boolean {
   const temporary = `${at}.tmp`;
   try {
@@ -932,7 +931,6 @@ function calendarOnboardingStateFromDisk(): CalendarOnboardingState | undefined 
     return undefined;
   }
 }
-
 
 /** Whether the onboarding gate stands, as the panels should currently draw it. */
 function calendarOnboardingGateOwed(): boolean {
