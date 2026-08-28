@@ -49,8 +49,7 @@ public final class AccountSession {
             redirectURI: AccountConstants.redirectURI
         )
         storeTokens(tokens)
-        let identity = try await resolvedIdentity(accessToken: tokens.accessToken,
-                                                   refreshToken: tokens.refreshToken)
+        let identity = try await resolvedIdentity(accessToken: tokens.accessToken)
         storeIdentity(identity)
         state = .signedIn(identity)
     }
@@ -84,6 +83,26 @@ public final class AccountSession {
     /// refresh rejected as invalid_grant signs the user out, mirroring the
     /// restore path.
     public func refreshAccessToken() async throws -> String {
+        try await refreshStoredTokens().accessToken
+    }
+
+    // MARK: - Private
+
+    private var refreshInFlight: Task<AccountTokens, Error>?
+
+    /// Spends the stored refresh token at most once however many callers
+    /// race: the server rotates the token on use, so a second concurrent
+    /// spend would read as revocation and sign the user out. Concurrent
+    /// callers await the same in-flight request instead.
+    private func refreshStoredTokens() async throws -> AccountTokens {
+        if let inFlight = refreshInFlight { return try await inFlight.value }
+        let task = Task { try await self.performRefresh() }
+        refreshInFlight = task
+        defer { refreshInFlight = nil }
+        return try await task.value
+    }
+
+    private func performRefresh() async throws -> AccountTokens {
         guard let refreshToken = KeychainStore.get(.refreshToken) else {
             throw AccountSessionError.signedOut
         }
@@ -92,14 +111,13 @@ public final class AccountSession {
             let tokens = try await client.refresh(refreshToken: refreshToken)
             guard self.generation == gen else { throw AccountSessionError.signedOut }
             storeTokens(tokens)
-            return tokens.accessToken
+            return tokens
         } catch AccountClientError.serverError(_, let oauthError) where oauthError == "invalid_grant" {
+            // Permanently revoked — sign out rather than leaving a broken session.
             if self.generation == gen { await signOut() }
             throw AccountSessionError.signedOut
         }
     }
-
-    // MARK: - Private
 
     private var storedTokenIsNearExpiry: Bool {
         guard let expiryStr = KeychainStore.get(.expiry),
@@ -126,36 +144,27 @@ public final class AccountSession {
     }
 
     private func refreshIfNearExpiry(accessToken: String, generation: Int) async {
-        guard storedTokenIsNearExpiry, let refreshToken = KeychainStore.get(.refreshToken) else {
-            return
-        }
+        guard storedTokenIsNearExpiry else { return }
         do {
-            let tokens = try await client.refresh(refreshToken: refreshToken)
+            let tokens = try await refreshStoredTokens()
             guard self.generation == generation else { return }
-            storeTokens(tokens)
             let identity = try await client.userInfo(accessToken: tokens.accessToken)
             guard self.generation == generation else { return }
             storeIdentity(identity)
             state = .signedIn(identity)
-        } catch AccountClientError.serverError(_, let oauthError) where oauthError == "invalid_grant" {
-            guard self.generation == generation else { return }
-            // The refresh token has been permanently revoked — sign out rather than
-            // leaving the user stuck with a broken session (mirrors desktop behaviour).
-            await signOut()
         } catch {
-            // Transient failure (network error, rate limit, etc.); stored tokens may still work.
+            // A rejected refresh has already signed out inside performRefresh;
+            // anything else is transient (network error, rate limit, etc.) and
+            // the stored tokens may still work.
         }
     }
 
     /// Fetches userinfo, refreshing once on 401 (mirrors the desktop 401 → refresh → retry).
-    private func resolvedIdentity(accessToken: String, refreshToken: String) async throws
-        -> AccountIdentity
-    {
+    private func resolvedIdentity(accessToken: String) async throws -> AccountIdentity {
         do {
             return try await client.userInfo(accessToken: accessToken)
         } catch AccountClientError.serverError(let status, _) where status == 401 {
-            let refreshed = try await client.refresh(refreshToken: refreshToken)
-            storeTokens(refreshed)
+            let refreshed = try await refreshStoredTokens()
             return try await client.userInfo(accessToken: refreshed.accessToken)
         }
     }
@@ -173,5 +182,12 @@ public final class AccountSession {
         KeychainStore.set(identity.email, for: .email)
         if let id = identity.id { KeychainStore.set(id, for: .accountID) }
         if let name = identity.name { KeychainStore.set(name, for: .name) }
+    }
+}
+
+extension AccountSession: AccountTokenProviding {
+    public var accountEmail: String? {
+        guard case .signedIn(let identity) = state else { return nil }
+        return identity.email
     }
 }

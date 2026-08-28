@@ -1,34 +1,56 @@
 import Foundation
 import Observation
 
+/// What the vault needs from the account: whose keys these are, and a bearer
+/// for each call. `AccountSession` is the one real source; the protocol
+/// exists so tests can stand in a stub without a keychain.
+@MainActor
+public protocol AccountTokenProviding: AnyObject {
+    /// The signed-in account's email, or nil when signed out.
+    var accountEmail: String? { get }
+    func validAccessToken() async throws -> String
+    func refreshAccessToken() async throws -> String
+}
+
 /// Holds what the vault last answered and runs the three acts against it.
 /// Every call carries the account's bearer token and follows the same
 /// 401 → refresh → retry discipline the sign-in path uses.
 @MainActor
 @Observable
 public final class VaultStore {
-    /// The list endpoint's last answer, keyed by provider so no caller builds
-    /// a lookup of its own.
-    public private(set) var entriesByProvider: [VaultProviderID: VaultKeyEntry] = [:]
     public private(set) var isLoading = false
     public private(set) var loadError: String?
 
-    private let client: VaultClient
-    private let session: AccountSession
+    /// The list endpoint's last answer, keyed by provider.
+    private var entriesByProvider: [VaultProviderID: VaultKeyEntry] = [:]
+    /// The account the entries were loaded for. The store outlives a sign-out,
+    /// so entries answer only under the account that earned them — a new
+    /// sign-in reads nothing until its own load lands.
+    private var entriesAccount: String?
+    /// Bumped by every act that makes the standing entries newer than any
+    /// answer still in flight, so a slow list response cannot resurrect a
+    /// key that was just deleted or hide one that was just stored.
+    private var answerGeneration = 0
 
-    public init(client: VaultClient, session: AccountSession) {
+    private let client: VaultClient
+    private let session: any AccountTokenProviding
+
+    public init(client: VaultClient, session: any AccountTokenProviding) {
         self.client = client
         self.session = session
     }
 
     public func entry(for provider: VaultProviderID) -> VaultKeyEntry? {
-        entriesByProvider[provider]
+        guard let account = session.accountEmail, account == entriesAccount else { return nil }
+        return entriesByProvider[provider]
     }
 
     /// Fetches the list fresh, first clearing whatever a previous account's
     /// sign-in may have left standing.
     public func load() async {
+        answerGeneration += 1
         entriesByProvider = [:]
+        entriesAccount = session.accountEmail
         loadError = nil
         isLoading = true
         do {
@@ -43,6 +65,7 @@ public final class VaultStore {
     /// own list.
     public func store(key: String, for provider: VaultProviderID) async throws {
         try await authorized { try await self.client.storeKey(key, for: provider, accessToken: $0) }
+        answerGeneration += 1
         // The server's hint is the key's last four characters, so the row can
         // say what landed even when the list round-trip below does not.
         entriesByProvider[provider] = VaultKeyEntry(
@@ -56,6 +79,7 @@ public final class VaultStore {
     /// Removes one provider's key, then converges on the server's own list.
     public func delete(_ provider: VaultProviderID) async throws {
         _ = try await authorized { try await self.client.deleteKey(for: provider, accessToken: $0) }
+        answerGeneration += 1
         entriesByProvider[provider] = nil
         try? await refreshEntries()
     }
@@ -83,7 +107,10 @@ public final class VaultStore {
     }
 
     private func refreshEntries() async throws {
+        let gen = answerGeneration
         let entries = try await authorized { try await self.client.listKeys(accessToken: $0) }
+        // A newer act landed while this answer traveled; its state wins.
+        guard gen == answerGeneration else { return }
         entriesByProvider = Dictionary(
             entries.map { ($0.provider, $0) },
             uniquingKeysWith: { _, last in last }
