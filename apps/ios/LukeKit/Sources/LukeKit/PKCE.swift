@@ -19,7 +19,7 @@ public struct PKCE {
 
     /// Derives the S256 challenge for an arbitrary verifier string (for testing).
     public static func challenge(for verifier: String) -> String {
-        SHA256.hash(data: Data(verifier.utf8)).base64URLEncoded()
+        Data(SHA256.hash(data: Data(verifier.utf8))).base64URLEncoded()
     }
 }
 
