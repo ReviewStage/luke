@@ -73,12 +73,11 @@ struct GoogleMark: View {
 
     var body: some View {
         Canvas { ctx, size in
-            let scale = size.width / 18
-            let t = CGAffineTransform(scaleX: scale, y: scale)
-            ctx.fill(Path(cgPath(fromSVG: Self.blue).copy(using: &t)!), with: .color(.googleBlue))
-            ctx.fill(Path(cgPath(fromSVG: Self.green).copy(using: &t)!), with: .color(.googleGreen))
-            ctx.fill(Path(cgPath(fromSVG: Self.yellow).copy(using: &t)!), with: .color(.googleYellow))
-            ctx.fill(Path(cgPath(fromSVG: Self.red).copy(using: &t)!), with: .color(.googleRed))
+            ctx.transform = CGAffineTransform(scaleX: size.width / 18, y: size.width / 18)
+            ctx.fill(Path(cgPath(fromSVG: Self.blue)), with: .color(.googleBlue))
+            ctx.fill(Path(cgPath(fromSVG: Self.green)), with: .color(.googleGreen))
+            ctx.fill(Path(cgPath(fromSVG: Self.yellow)), with: .color(.googleYellow))
+            ctx.fill(Path(cgPath(fromSVG: Self.red)), with: .color(.googleRed))
         }
         .aspectRatio(1, contentMode: .fit)
     }
@@ -100,9 +99,8 @@ struct GitHubMark: View {
 
     var body: some View {
         Canvas { ctx, size in
-            let scale = size.width / 16
-            var t = CGAffineTransform(scaleX: scale, y: scale)
-            ctx.fill(Path(cgPath(fromSVG: Self.path).copy(using: &t)!), with: .foreground)
+            ctx.transform = CGAffineTransform(scaleX: size.width / 16, y: size.width / 16)
+            ctx.fill(Path(cgPath(fromSVG: Self.path)), with: .foreground)
         }
         .aspectRatio(1, contentMode: .fit)
     }

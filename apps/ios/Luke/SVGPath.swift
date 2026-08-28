@@ -28,14 +28,15 @@ func cgPath(fromSVG d: String) -> CGPath {
 
         let rel = cmd.isLowercase
 
-        func abs(_ dx: CGFloat, _ dy: CGFloat) -> CGPoint {
+        // Resolve a coordinate pair: offset from current if relative, absolute otherwise.
+        func pt(_ dx: CGFloat, _ dy: CGFloat) -> CGPoint {
             rel ? CGPoint(x: cur.x + dx, y: cur.y + dy) : CGPoint(x: dx, y: dy)
         }
 
         switch cmd.lowercased() {
         case "m":
             let (x, y) = tok.nextPair()
-            cur = abs(x, y)
+            cur = pt(x, y)
             p.move(to: cur)
             sub = cur
             lastCmd = rel ? "l" : "L"
@@ -43,7 +44,7 @@ func cgPath(fromSVG d: String) -> CGPath {
 
         case "l":
             let (x, y) = tok.nextPair()
-            cur = abs(x, y)
+            cur = pt(x, y)
             p.addLine(to: cur)
             lastCtrl = nil
 
@@ -63,7 +64,7 @@ func cgPath(fromSVG d: String) -> CGPath {
             let (x1, y1) = tok.nextPair()
             let (x2, y2) = tok.nextPair()
             let (x, y) = tok.nextPair()
-            let c1 = abs(x1, y1), c2 = abs(x2, y2), end = abs(x, y)
+            let c1 = pt(x1, y1), c2 = pt(x2, y2), end = pt(x, y)
             p.addCurve(to: end, control1: c1, control2: c2)
             lastCtrl = c2
             cur = end
@@ -72,7 +73,7 @@ func cgPath(fromSVG d: String) -> CGPath {
             let (x2, y2) = tok.nextPair()
             let (x, y) = tok.nextPair()
             let c1 = lastCtrl.map { CGPoint(x: 2 * cur.x - $0.x, y: 2 * cur.y - $0.y) } ?? cur
-            let c2 = abs(x2, y2), end = abs(x, y)
+            let c2 = pt(x2, y2), end = pt(x, y)
             p.addCurve(to: end, control1: c1, control2: c2)
             lastCtrl = c2
             cur = end
@@ -80,7 +81,7 @@ func cgPath(fromSVG d: String) -> CGPath {
         case "q":
             let (x1, y1) = tok.nextPair()
             let (x, y) = tok.nextPair()
-            let c = abs(x1, y1), end = abs(x, y)
+            let c = pt(x1, y1), end = pt(x, y)
             p.addQuadCurve(to: end, control: c)
             lastCtrl = nil
             cur = end
@@ -89,7 +90,7 @@ func cgPath(fromSVG d: String) -> CGPath {
             let rx = tok.nextNumber(), ry = tok.nextNumber(), xRot = tok.nextNumber()
             let la = tok.nextFlag(), sw = tok.nextFlag()
             let (x, y) = tok.nextPair()
-            let end = abs(x, y)
+            let end = pt(x, y)
             addSVGArc(to: p, from: cur, rx: rx, ry: ry, xRot: xRot, la: la, sw: sw, end: end)
             cur = end
             lastCtrl = nil
