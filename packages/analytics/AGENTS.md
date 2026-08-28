@@ -54,7 +54,6 @@ governed.
 
 `PRIVACY.md` describes all three in kind: fixed names and values with no free
 text for the counts, and a recording of Luke's own panel that shows what the
-panel showed, with the clicks and errors that ride beside it. The counts have
-their own switch and the other two share the recording one, both on by
-default. It moves when any of them stops being true, not when an event is
-added.
+panel showed, with the clicks and errors that ride beside it. None of the
+three has a switch, so that file is the whole of what a user is told. It moves
+when any of them stops being true, not when an event is added.

@@ -38,7 +38,6 @@ import {
   PlugIcon,
   PowerIcon,
   SearchIcon,
-  ShieldIcon,
   UserIcon,
 } from "./settings-icons";
 import {
@@ -241,12 +240,11 @@ const RESULT_PAGE_WORD = {
 const PAGE_ORDER: readonly SettingsView[] = [SETTINGS_VIEW.ROOT, ...SETTINGS_SUBVIEW_LIST];
 
 /**
- * The two front-page settings wear their sections' own glyphs, because the
- * headless front-page group has no head to carry one for them.
+ * The front-page setting wears its section's own glyph, because the headless
+ * front-page group has no head to carry one for it.
  */
 const ROOT_SETTING_ICON = {
   [APP_SETTING_ID.VOICE_SOURCE]: <LukeIcon />,
-  [APP_SETTING_ID.SHARE_USAGE_DATA]: <ShieldIcon />,
 } satisfies Partial<Record<AppSettingId, React.JSX.Element>>;
 
 /** The words every shortcut row can be found by, beside its own name. */

@@ -44,7 +44,7 @@ function sharingSender(
   respond?: (request: RecordedRequest) => Response,
 ) {
   const built = senderWith(overrides, respond);
-  built.sender.setSharing(true);
+  built.sender.arm();
   return built;
 }
 
@@ -83,31 +83,12 @@ test("a flush posts one bearer-authenticated batch and empties the queue", async
   assert.equal(requests.length, 1);
 });
 
-test("arming records no transition; turning it off records one stop and then goes quiet", async () => {
+test("a sender that was never armed sends nothing", async () => {
   const { sender, requests } = senderWith();
-  sender.setSharing(true);
-  sender.setSharing(true);
-  await sender.flush();
-  assert.deepEqual(requests, []);
-
-  sender.setSharing(false);
-  await sender.flush();
-  assert.equal(requests.length, 1);
-  assert.deepEqual(sentEvents(recordedRequest(requests)), [
-    { name: PRODUCT_EVENT.USAGE_SHARING_STOP, at: NOON, properties: {} },
-  ]);
-
   sender.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: APP_VERSION });
   sender.markDayActive();
   await sender.flush();
-  assert.equal(requests.length, 1);
-
-  sender.setSharing(true);
-  await sender.flush();
-  assert.equal(requests.length, 2);
-  assert.deepEqual(sentEvents(recordedRequest(requests, 1)), [
-    { name: PRODUCT_EVENT.USAGE_SHARING_RESUME, at: NOON, properties: {} },
-  ]);
+  assert.deepEqual(requests, []);
 });
 
 test("a 401 refreshes and retries once, and the same token twice does not", async () => {
@@ -130,7 +111,7 @@ test("a 401 refreshes and retries once, and the same token twice does not", asyn
     fetch,
     now: () => NOON,
   });
-  sender.setSharing(true);
+  sender.arm();
   sender.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: APP_VERSION });
   await sender.flush();
 
@@ -144,7 +125,7 @@ test("a 401 refreshes and retries once, and the same token twice does not", asyn
     { readAccessToken: async () => "same" },
     () => new Response("{}", { status: HTTP_STATUS.UNAUTHORIZED }),
   );
-  stuck.sender.setSharing(true);
+  stuck.sender.arm();
   stuck.sender.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: APP_VERSION });
   await stuck.sender.flush();
   assert.equal(stuck.requests.length, 1);
@@ -163,7 +144,7 @@ test("a failed send drops its batch rather than retrying it behind the next one"
     fetch,
     now: () => NOON,
   });
-  sender.setSharing(true);
+  sender.arm();
   sender.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: APP_VERSION });
   await sender.flush();
   assert.equal(requests.length, 1);
@@ -188,7 +169,7 @@ test("signed out the queue waits rather than being spent", async () => {
     fetch,
     now: () => NOON,
   });
-  sender.setSharing(true);
+  sender.arm();
   sender.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: APP_VERSION });
   await sender.flush();
   assert.deepEqual(requests, []);

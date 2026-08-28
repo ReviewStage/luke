@@ -323,15 +323,15 @@ Trust constraints:
   sign-in was: nothing erased is re-created either way, but a recorder starting
   up again on the panel that just erased everything reads as though something
   were, and deletion is the one act treated here as unrecoverable.
-  None of the three sends anything in a fixture or evidence run, or while the
-  developer has switched sharing off. The counts have their own switch and the
-  other two share the recording one, both on by default on the settings front
-  page, both belonging to no reset scope, because a reset that turned either
-  back on would be a consent nobody gave; sharing is the outer one, and
-  recording cannot outlive it. Widening the event list, a property's value set,
-  or what the recording client may capture is a product decision, not an
-  implementation detail. `PRIVACY.md` describes all three in kind and moves
-  when any of them changes character.
+  None of the three sends anything in a fixture or evidence run, and nothing
+  else stands in front of any of them: there is no switch, and the run mode is
+  the whole of the gate. That is the deliberate posture of an early product
+  and it puts the entire weight of disclosure on `PRIVACY.md`, which is where
+  a user learns any of this happens — so that file says all three in kind, in
+  as many words, and moves whenever one of them changes character. Widening
+  the event list, a property's value set, or what the recording client may
+  capture is a product decision, not an implementation detail, and each one
+  widens what a user was never offered a way to decline.
 - The development trace is the one place Luke's own agent traffic may reach a
   file, and it cannot exist for a user: only an unpackaged, live run whose
   shell set `LUKE_TRACE_DIR` constructs a writer at all, so a packaged build

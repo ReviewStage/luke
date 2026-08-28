@@ -41,8 +41,6 @@ export interface SettingsRowsIpcDependencies {
   workspaceProjectOffered: (providerId: string, providerProjectId: string) => boolean;
   refreshMeetingQuiet: () => void;
   releaseHeldNotices: () => void;
-  /** Moves the counting switch, which is also what records the move itself. */
-  setUsageSharing: (enabled: boolean) => void;
   recordProductEvent: RecordProductEvent;
 }
 
@@ -62,7 +60,6 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
     workspaceProjectOffered,
     refreshMeetingQuiet,
     releaseHeldNotices,
-    setUsageSharing,
     recordProductEvent,
   } = dependencies;
   // The renderer can replace or clear a provider's credential but never reads
@@ -166,9 +163,6 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
       case SETTING_SIDE_EFFECT.MEETING_QUIET:
         refreshMeetingQuiet();
         releaseHeldNotices();
-        break;
-      case SETTING_SIDE_EFFECT.USAGE_SHARING:
-        setUsageSharing(settings.stored.shareUsageData);
         break;
       case SETTING_SIDE_EFFECT.NONE:
         break;

@@ -384,7 +384,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "The panel's History tab shows every typed ask, transcribed spoken ask, reply, " +
         "announcement, and session act from this app launch. Luke carries only the 20 most recent " +
         "entries into a call. The full view stays only in this app's memory, is blocked from " +
-        "optional panel recordings, disappears when Luke quits, and can be cleared by hand " +
+        "panel recordings, disappears when Luke quits, and can be cleared by hand " +
         "from that tab. It is not saved or exportable.",
     },
     {

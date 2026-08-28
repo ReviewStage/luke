@@ -552,9 +552,9 @@ export function App(): React.JSX.Element {
    */
   const replayBootstrap = useRef<SessionReplayBootstrap | undefined>(undefined);
   /**
-   * Recording follows the account as well as the switches: a sign-out ends it
-   * rather than leaving it filed under the person who just left, and a sign-in
-   * can start one without waiting for a relaunch.
+   * Recording follows the account: a sign-out ends it rather than leaving it
+   * filed under the person who just left, and a sign-in can start one without
+   * waiting for a relaunch.
    *
    * It rides the raced-bootstrap rule for a sharper reason than the lists do.
    * Sign-out and deletion halt recording before the account is cleared, so the
@@ -567,10 +567,7 @@ export function App(): React.JSX.Element {
     (onChange) => window.sidecar.onSessionReplayChanged(onChange),
     (replay: SessionReplayBootstrap) => {
       replayBootstrap.current = replay;
-      const current = answeredSettings.current;
-      if (current) {
-        applySessionReplay(replay, current.shareUsageData, current.sessionReplay);
-      }
+      applySessionReplay(replay);
     },
   );
 
@@ -578,12 +575,6 @@ export function App(): React.JSX.Element {
     (next: AppSettingsView) => {
       answeredSettings.current = next;
       setSettings(next);
-      // Every settings change lands here — the panel's own writes, a spoken
-      // change, and a push from another window alike — so this is the one
-      // place recording has to follow the switches from.
-      if (replayBootstrap.current) {
-        applySessionReplay(replayBootstrap.current, next.shareUsageData, next.sessionReplay);
-      }
     },
     [setSettings],
   );

@@ -93,7 +93,6 @@ export const SETTING_SIDE_EFFECT = {
   MEDIA_DUCK: "media-duck",
   VOICE_SOURCE: "voice-source",
   MEETING_QUIET: "meeting-quiet",
-  USAGE_SHARING: "usage-sharing",
 } as const;
 
 export type SettingSideEffect = (typeof SETTING_SIDE_EFFECT)[keyof typeof SETTING_SIDE_EFFECT];
@@ -135,7 +134,6 @@ interface SettingEntryDefinition<Value> {
 const SETTINGS_TAB = "the panel's Settings tab";
 const VOICE_PAGE = `${SETTINGS_TAB}, on its Voice page`;
 const VOICE_SOURCE_SECTION = `${SETTINGS_TAB}, on its front page, in the What Luke runs on section at the top`;
-const USAGE_DATA_SECTION = `${SETTINGS_TAB}, on its front page, in the Usage data section`;
 const APPEARANCE_PAGE = `${SETTINGS_TAB}, on its Appearance page`;
 const CONNECTIONS_PAGE = `${SETTINGS_TAB}, on its Connections page`;
 const CONDUCTOR_ROW_PATH = `the Conductor row under Providers, in ${CONNECTIONS_PAGE} — drawn once Conductor is connected`;
@@ -587,71 +585,6 @@ export const APP_SETTING_SCHEMA = {
     mainProcessSideEffect: SETTING_SIDE_EFFECT.DISPLAYS,
     spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
     analytics: { id: APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS, value: toggleAnalytics },
-  },
-  shareUsageData: {
-    field: "shareUsageData",
-    default: true,
-    guard: boolean(true),
-    settingsPage: SETTINGS_PAGE.ROOT,
-    // No reset scope on purpose: a "reset appearance" that quietly turned
-    // sharing back on would be a consent the developer never gave.
-    guideEntry: settingGuideEntry(
-      "shareUsageData",
-      [APP_SETTING_ID.SHARE_USAGE_DATA],
-      (settings, defaultValue) => ({
-        id: APP_SETTING_ID.SHARE_USAGE_DATA,
-        label: "Share usage data",
-        description:
-          "Whether Luke counts how his own features are used — a launch, a provider connected, " +
-          "a call opened — and sends those counts to Luke's own service, tied to the signed-in " +
-          "account by name and email. Every event and value is fixed by this build, so nothing " +
-          "about a session and nothing typed or spoken can travel in one. On to begin with.",
-        kind: APP_SETTING_KIND.TOGGLE,
-        value: appToggleText(guideValue<boolean>(settings, "shareUsageData")),
-        defaultValue: appToggleText(defaultValue),
-        adjustable: true,
-        manual: USAGE_DATA_SECTION,
-      }),
-    ),
-    mainProcessSideEffect: SETTING_SIDE_EFFECT.USAGE_SHARING,
-    spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
-    analytics: { id: APP_SETTING_ID.SHARE_USAGE_DATA, value: toggleAnalytics },
-  },
-  sessionReplay: {
-    field: "sessionReplay",
-    default: true,
-    guard: boolean(true),
-    settingsPage: SETTINGS_PAGE.ROOT,
-    // No reset scope, for the reason sharing has none: a reset that turned
-    // recording back on would be a consent nobody gave. It is also why this
-    // switch stands on its own rather than riding the sharing one — sharing
-    // off stops recording too, but recording off has to be reachable without
-    // giving up the counts.
-    guideEntry: settingGuideEntry(
-      "sessionReplay",
-      [APP_SETTING_ID.SESSION_REPLAY],
-      (settings, defaultValue) => ({
-        id: APP_SETTING_ID.SESSION_REPLAY,
-        label: "Record my screen in Luke",
-        description:
-          "Whether Luke records what his own panel draws and sends it, as a video of the " +
-          "panel rather than a count. Everything drawn is in it: session titles, branches, " +
-          "summaries, error lines, and your own name and address. Only what you type into a " +
-          "field is hidden. It is the panel alone and never the rest of your screen. Off " +
-          "whenever Share usage data is off. On to begin with.",
-        kind: APP_SETTING_KIND.TOGGLE,
-        value: appToggleText(guideValue<boolean>(settings, "sessionReplay")),
-        defaultValue: appToggleText(defaultValue),
-        adjustable: true,
-        manual: USAGE_DATA_SECTION,
-      }),
-    ),
-    // None in the main process: the recorder lives in the renderer, which
-    // brings itself into line from the settings change it is already handed.
-    // A side effect declared here would be one the switch never runs.
-    mainProcessSideEffect: SETTING_SIDE_EFFECT.NONE,
-    spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
-    analytics: { id: APP_SETTING_ID.SESSION_REPLAY, value: toggleAnalytics },
   },
   formFactor: {
     field: "formFactor",

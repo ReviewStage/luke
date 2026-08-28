@@ -13,8 +13,9 @@ import {
 
 /**
  * The gate, on its own. Recording is the one thing Luke sends that a fixed
- * vocabulary does not bound, so every reason it must not start is asserted
- * here rather than left to be read off three `&&`s.
+ * vocabulary does not bound, and no switch stands in front of it, so the one
+ * reason it must not start is asserted here rather than left to be read off
+ * the run mode it arrives from.
  */
 
 function bootstrap(over: Partial<SessionReplayBootstrap> = {}): SessionReplayBootstrap {
@@ -26,22 +27,16 @@ function bootstrap(over: Partial<SessionReplayBootstrap> = {}): SessionReplayBoo
   };
 }
 
-test("both switches on, in a run that may record, is the only yes", () => {
-  assert.equal(sessionReplayWanted(bootstrap(), true, true), true);
+test("an ordinary run records", () => {
+  assert.equal(sessionReplayWanted(bootstrap()), true);
 });
 
-test("a fixture or capture run records nothing whatever the switches say", () => {
+test("a fixture or capture run records nothing", () => {
   // `permitted` is where `runMode.sendsNetwork` arrives, so this is the same
   // suppression the event sender takes — and the reason an evidence run
-  // reaches no network.
-  assert.equal(sessionReplayWanted(bootstrap({ permitted: false }), true, true), false);
-});
-
-test("sharing is the outer switch: recording cannot outlive it", () => {
-  assert.equal(sessionReplayWanted(bootstrap(), false, true), false);
-  // And the recording switch alone still stops it, without giving up counts.
-  assert.equal(sessionReplayWanted(bootstrap(), true, false), false);
-  assert.equal(sessionReplayWanted(bootstrap(), false, false), false);
+  // reaches no network. A deleted account arrives here too, standing
+  // recording down for the rest of the run.
+  assert.equal(sessionReplayWanted(bootstrap({ permitted: false })), false);
 });
 
 test("no account is no reason not to record: the launch is what it is there for", () => {
@@ -49,7 +44,7 @@ test("no account is no reason not to record: the launch is what it is there for"
   // first run goes wrong, and a recording that waited for a sign-in never saw
   // any of it. What the id decides is whom the recording is filed under, not
   // whether there is one.
-  assert.equal(sessionReplayWanted(bootstrap({ accountId: undefined }), true, true), true);
+  assert.equal(sessionReplayWanted(bootstrap({ accountId: undefined })), true);
 });
 
 /**

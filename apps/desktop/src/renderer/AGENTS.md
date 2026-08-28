@@ -145,7 +145,7 @@ and a stale entry is one he will misdescribe.
 The facts deliberately cover only what Luke needs to hold a conversation and
 what a spoken ask may do — capabilities, acts, refusals, and their bounds. A
 detail the developer should know but Luke never acts on (the surface's own
-mechanics, a connector's internals, what a privacy switch governs) stays with
+mechanics, a connector's internals, what an update check sends) stays with
 the surface and the settings entries that already describe it, and the guide's
 closing fact has Luke redirect what it leaves out rather than deny it. The
 rule still binds in full at the act level: a new capability, act, refusal, or

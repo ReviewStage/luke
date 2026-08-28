@@ -1432,7 +1432,6 @@ function registerIpc(): void {
     workspaceProjectOffered,
     refreshMeetingQuiet: () => void refreshMeetingQuiet(),
     releaseHeldNotices: () => void releaseHeldNotices(),
-    setUsageSharing: (enabled) => productEvents.setSharing(enabled),
     recordProductEvent,
   });
 
@@ -2542,18 +2541,15 @@ export function startDesktopApp(): void {
           .get(APP_SETTING_SCHEMA.duckOtherMedia.field)
           .then((enabled) => mediaDuck.setEnabled(enabled === true));
       }
-      // Armed from the settings file alone, like the duck above, and on the
-      // same terms: a file that cannot be read leaves counting on, the answer
-      // a file that has never said gives.
-      void settingsStore.get(APP_SETTING_SCHEMA.shareUsageData.field).then((share) => {
-        productEvents.setSharing(share);
-        // Recorded behind the read, because nothing may be counted before
-        // the file has said whether counting is wanted at all.
-        productEvents.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: app.getVersion() });
-        // Luke can run for a week on one launch, so launches alone would
-        // undercount the days he was actually used.
-        productEvents.markDayActive();
-      });
+      // Counting answers to the run and to nothing else. The sender starts
+      // knowing nothing rather than assuming, so this is the arming it waits
+      // for, and it is unconditional: `PRIVACY.md` is where a user learns
+      // this happens at all.
+      productEvents.arm();
+      productEvents.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: app.getVersion() });
+      // Luke can run for a week on one launch, so launches alone would
+      // undercount the days he was actually used.
+      productEvents.markDayActive();
       // Always on, like the announcements: the timed check answers to no
       // setting, only to the run — a fixture or capture run sends no network,
       // so it never asks GitHub anything.

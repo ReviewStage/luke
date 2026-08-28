@@ -46,8 +46,6 @@ function settings(overrides: Partial<AppSettingsView> = {}): AppSettingsView {
       linearSignInAvailable: false,
       calendarAccounts: [],
       showOnAllDisplays: false,
-      shareUsageData: true,
-      sessionReplay: true,
       formFactor: PANEL_FORM_FACTOR.BUBBLE,
     },
     overrides,

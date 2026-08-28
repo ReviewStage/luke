@@ -85,8 +85,7 @@ export class ProductEventSender {
   readonly #queue: ProductEvent[] = [];
   /** Nested rather than an interpolated key: the name and the discriminator stay apart. */
   readonly #recordedDays = new Map<ProductEventName, Map<string, string>>();
-  #sharing = false;
-  #sharingKnown = false;
+  #armed = false;
   #timer: NodeJS.Timeout | undefined;
   #inFlight: Promise<void> | undefined;
 
@@ -166,27 +165,12 @@ export class ProductEventSender {
   }
 
   /**
-   * Arms or moves the switch. The first call is the settings file answering
-   * and records no transition — there is no change yet to count. A later turn
-   * to off records the stop *while sharing still stands* and flushes it: a
-   * stop recorded after the switch moved could never be sent, and the opt-out
-   * rate would be unmeasurable, visible only as people who stayed.
+   * Arms counting. The sender comes up disarmed rather than assuming, so
+   * nothing recorded while the app is still standing itself up can be sent
+   * before the launch has decided whether this run counts at all.
    */
-  setSharing(enabled: boolean): void {
-    if (!this.#sharingKnown) {
-      this.#sharingKnown = true;
-      this.#sharing = enabled;
-      return;
-    }
-    if (this.#sharing === enabled) return;
-    if (enabled) {
-      this.#sharing = true;
-      this.record(PRODUCT_EVENT.USAGE_SHARING_RESUME, {});
-      return;
-    }
-    this.record(PRODUCT_EVENT.USAGE_SHARING_STOP, {});
-    this.#sharing = false;
-    void this.flush();
+  arm(): void {
+    this.#armed = true;
   }
 
   /** Starts the timed flush. The timer never holds the process open. */
@@ -230,7 +214,7 @@ export class ProductEventSender {
   }
 
   #allowed(): boolean {
-    return this.#sends && this.#sharing;
+    return this.#sends && this.#armed;
   }
 
   async #send(): Promise<void> {
