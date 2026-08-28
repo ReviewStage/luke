@@ -34,18 +34,31 @@ filesystem routing phase, so it cannot reach the Better Auth handler; keep this
 rule in `routes`, ahead of the detected routes.
 
 Each deployment build runs `pnpm auth:seed` after the migration and before Vite,
-so every database the application reaches already carries the client, including
+so every database the application reaches already carries the clients, including
 the branch database Neon creates for a Preview deployment, which would otherwise
-be migrated but empty. The Drizzle seed is idempotent, upserting the one public
+be migrated but empty. The Drizzle seed is idempotent, upserting each public
 OAuth client compiled into Luke, which is what makes running it on every build
 safe. To apply it by hand against production:
 
 ```sh
 vercel env run --environment production --scope stage-review -- \
   pnpm --filter @luke/web auth:seed
-``` Dynamic client registration stays disabled; the client has no secret,
-requires PKCE, accepts loopback callbacks, and skips consent as a trusted
-first-party app.
+```
+
+Dynamic client registration stays disabled. Two public clients are compiled in:
+
+- **`luke-desktop`** (`server/desktop-oauth-client.ts`) — the macOS companion
+  app. It accepts loopback callbacks (`http://127.0.0.1/callback`) via a local
+  HTTP server during sign-in.
+
+- **`luke-mobile`** (`server/mobile-oauth-client.ts`) — the iOS companion app.
+  It uses a custom URL scheme (`dev.tryluke.ios://oauth/callback`) because iOS
+  sign-in runs through `ASWebAuthenticationSession`, which delivers the callback
+  via the registered scheme rather than a local HTTP server. The scheme passes
+  Better Auth's `SafeUrlSchema` validation, which explicitly allows custom
+  schemes for native clients. Both clients share the same trust posture: no
+  client secret, PKCE required, skip consent as a trusted first-party app,
+  public client.
 
 Google's callback is `${BETTER_AUTH_URL}/api/auth/callback/google`; GitHub's is
 `${BETTER_AUTH_URL}/api/auth/callback/github`. The GitHub provider requests

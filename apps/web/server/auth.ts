@@ -13,8 +13,10 @@ import { authProxy } from "./auth-proxy.js";
 import { getDatabase } from "./db/index.js";
 import * as schema from "./db/schema.js";
 import { DESKTOP_OAUTH_CLIENT } from "./desktop-oauth-client.js";
+import { MOBILE_OAUTH_CLIENT } from "./mobile-oauth-client.js";
 
 export const DESKTOP_OAUTH_CLIENT_ID = DESKTOP_OAUTH_CLIENT.id;
+export const MOBILE_OAUTH_CLIENT_ID = MOBILE_OAUTH_CLIENT.id;
 
 const deployment = authDeployment(process.env);
 
@@ -59,7 +61,7 @@ export const auth = betterAuth({
       consentPage: "/consent.html",
       allowDynamicClientRegistration: false,
       clientPrivileges: denyOAuthClientPrivileges,
-      cachedTrustedClients: new Set([DESKTOP_OAUTH_CLIENT_ID]),
+      cachedTrustedClients: new Set([DESKTOP_OAUTH_CLIENT_ID, MOBILE_OAUTH_CLIENT_ID]),
       accessTokenExpiresIn: 60 * 60,
     }),
   ],
