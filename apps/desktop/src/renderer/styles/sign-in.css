@@ -135,11 +135,23 @@
   color: var(--state-attention);
 }
 
-/* The calendar gate borrows the sign-in gate's whole shape. It reserves no
-   face box — signed in, Luke already stands in the housing's wing — so the
-   copy itself centres in the room the face would have held. */
+/* The calendar gate borrows the sign-in gate's voice but not its grid: the
+   review half can hold more calendars than the panel has height, so the gate
+   is a column whose connections region alone shrinks and scrolls while the
+   title, the buttons, and the footer stay on screen. It reserves no face
+   box — signed in, Luke already stands in the housing's wing. */
 .calendar-gate {
-  align-content: center;
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Only the connections region may give up height; squashing a button or the
+   heading instead would trade the crop for a different one. */
+.calendar-gate > * {
+  flex-shrink: 0;
 }
 
 /* Each source's own mark, at the size the account marks keep beside a label. */
@@ -150,13 +162,23 @@
 }
 
 /* The review half: each connection is a bordered block of the settings rows'
-   own calendar checkboxes, reading left like the page they came from. */
+   own calendar checkboxes, reading left like the page they came from, and
+   scrolling on the settings page's own terms when the Mac's calendar list
+   outgrows the panel. */
 .calendar-gate-connections {
   display: grid;
   width: 100%;
+  min-height: 0;
+  flex-shrink: 1;
   gap: 8px;
   margin-top: 4px;
   text-align: left;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  scrollbar-width: thin;
+  animation: scroll-edge-fade linear both;
+  animation-timeline: scroll(self block);
 }
 
 .calendar-gate-connection {
