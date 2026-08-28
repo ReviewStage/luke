@@ -95,6 +95,7 @@ export const SETTING_SIDE_EFFECT = {
   VOICE_SOURCE: "voice-source",
   MEETING_QUIET: "meeting-quiet",
   VAULT_SYNC: "vault-sync",
+  DEVELOPER_MODE: "developer-mode",
 } as const;
 
 export type SettingSideEffect = (typeof SETTING_SIDE_EFFECT)[keyof typeof SETTING_SIDE_EFFECT];
@@ -673,6 +674,43 @@ export const APP_SETTING_SCHEMA = {
     mainProcessSideEffect: SETTING_SIDE_EFFECT.FORM_FACTOR,
     spokenValue: (value: string) => (isPanelFormFactor(value) ? value : undefined),
     analytics: { id: APP_SETTING_ID.FORM_FACTOR, value: choiceAnalytics },
+  },
+  // Carries no reset scope on purpose: an Appearance reset flipping this off
+  // would stand a development instance back onto the released app's surface,
+  // keys, and voice mid-run, which is not what resetting appearance means.
+  // The schema default is the release channel's; a development-channel run
+  // resolves an unset value to on in the settings snapshot instead, because a
+  // schema in a reusable package cannot know which build is reading it.
+  developerMode: {
+    field: "developerMode",
+    default: false,
+    // Optional rather than defaulted at the guard, so an unset value stays
+    // distinguishable from a chosen "off": the snapshot resolves the absence
+    // to the channel's own default, and only the user's hand writes a value.
+    guard: (value: UnparsedWireValue) =>
+      optional(
+        value,
+        (candidate): candidate is boolean => candidate === true || candidate === false,
+      ),
+    settingsPage: SETTINGS_PAGE.APPEARANCE,
+    guideEntry: settingGuideEntry(
+      "developerMode",
+      [APP_SETTING_ID.DEVELOPER_MODE],
+      (settings, defaultValue) => ({
+        id: APP_SETTING_ID.DEVELOPER_MODE,
+        label: "Developer mode",
+        description:
+          "Whether this instance stands out of the released app's way: the panel floats as a bubble below the housing, spoken announcements stay silent, and the global keys are left to the released app. On by default in a development build, so running one never talks over — or draws over — the Luke already installed.",
+        kind: APP_SETTING_KIND.TOGGLE,
+        value: appToggleText(guideValue<boolean>(settings, "developerMode")),
+        defaultValue: appToggleText(defaultValue),
+        adjustable: true,
+        manual: APPEARANCE_PAGE,
+      }),
+    ),
+    mainProcessSideEffect: SETTING_SIDE_EFFECT.DEVELOPER_MODE,
+    spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
+    analytics: { id: APP_SETTING_ID.DEVELOPER_MODE, value: toggleAnalytics },
   },
   sessionFilters: {
     field: "sessionFilters",

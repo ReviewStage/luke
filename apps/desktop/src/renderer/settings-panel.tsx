@@ -109,6 +109,7 @@ import { type ErrandTarget, errandTargetProps } from "./luke-errand";
 import { APP_SETTING_ID } from "./luke-guide";
 import {
   currentQuota,
+  DEVELOPER_MODE_KEYLESS_NOTE,
   fresherQuota,
   HOSTED_METER_LABEL,
   hostedVoiceSpentNote,
@@ -2911,28 +2912,36 @@ function ShortcutSection({
   writes: SettingsWrites;
   voiceAvailable: boolean;
 }): React.JSX.Element {
-  // While voice is off the system keys are deliberately not taken — a global
-  // chord answering nothing is a key stolen from every other app — so no
-  // registered chord ever arrives here. The rows still show the chord each
-  // key will hold once voice is on — the stored choice, or the first default
-  // — wearing the same mark the Voice page does instead of an "Unavailable"
-  // that reads as broken. A key that is genuinely unregistered while voice is
-  // on — another app owns the chord — keeps the honest "Unavailable". A key
-  // deleted outright shows neither chord nor mark whatever voice does: "None"
-  // is already the whole truth about a key that will never register.
-  const attention = voiceAvailable ? undefined : VOICE_KEYLESS_NOTE;
+  // While voice is off — or developer mode leaves the keys to the released
+  // app — the system keys are deliberately not taken: a global chord
+  // answering nothing is a key stolen from every other app, and one answered
+  // by two instances is a turn taken twice. No registered chord arrives here
+  // either way. The rows still show the chord each key will hold once the
+  // keys are taken — the stored choice, or the first default — wearing the
+  // note that says why, instead of an "Unavailable" that reads as broken. A
+  // key that is genuinely unregistered while the keys are on — another app
+  // owns the chord — keeps the honest "Unavailable". A key deleted outright
+  // shows neither chord nor mark whatever else holds: "None" is already the
+  // whole truth about a key that will never register.
+  const developerModeHoldsKeys = voiceAvailable && settings?.developerMode === true;
+  const keysDeliberatelyOff = !voiceAvailable || developerModeHoldsKeys;
+  const attention = !voiceAvailable
+    ? VOICE_KEYLESS_NOTE
+    : developerModeHoldsKeys
+      ? DEVELOPER_MODE_KEYLESS_NOTE
+      : undefined;
   const promisedTalk = settings?.voiceHotkey ?? DEFAULT_VOICE_HOTKEYS[0];
   const promisedAsk = settings?.askHotkey ?? DEFAULT_ASK_HOTKEYS[0];
   const promisedStop = settings?.stopHotkey ?? DEFAULT_STOP_HOTKEYS[0];
   const shownTalk = shortcuts.voiceOff
     ? undefined
-    : (shortcuts.voiceHotkey ?? (voiceAvailable ? undefined : promisedTalk));
+    : (shortcuts.voiceHotkey ?? (keysDeliberatelyOff ? promisedTalk : undefined));
   const shownAsk = shortcuts.askOff
     ? undefined
-    : (shortcuts.askHotkey ?? (voiceAvailable ? undefined : promisedAsk));
+    : (shortcuts.askHotkey ?? (keysDeliberatelyOff ? promisedAsk : undefined));
   const shownStop = shortcuts.stopOff
     ? undefined
-    : (shortcuts.stopHotkey ?? (voiceAvailable ? undefined : promisedStop));
+    : (shortcuts.stopHotkey ?? (keysDeliberatelyOff ? promisedStop : undefined));
   return (
     <section
       className="settings-section settings-plain"

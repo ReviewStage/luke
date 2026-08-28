@@ -899,6 +899,7 @@ test("every adjustable setting is carried to the bridge call its row uses", asyn
   }
 
   assert.deepEqual(calls.sort(), [
+    "developerMode:true",
     "duckOtherMedia:true",
     "formFactor:notch",
     "openAtLogin:true",

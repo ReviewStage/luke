@@ -209,15 +209,21 @@ test("the kept rows come back grouped under their pages, in the pages' order", (
   ]);
   assert.equal(shortcuts.matched, 3);
 
-  // "key" lands on the front page and two others; the groups keep the front
-  // page's own order, front page first.
+  // "key" lands on the front page and three others — developer mode's row
+  // says it leaves the global keys alone; the groups keep the front page's
+  // own order, front page first.
   const keys = searchSettings(entries, "key");
   assert.ok(keys);
   assert.equal(keys.groups[0]?.page, SETTINGS_VIEW.ROOT);
   const pages = keys.groups.map((group) => group.page);
   assert.deepEqual(
     pages,
-    [SETTINGS_VIEW.ROOT, SETTINGS_VIEW.SHORTCUTS, SETTINGS_VIEW.CONNECTIONS],
+    [
+      SETTINGS_VIEW.ROOT,
+      SETTINGS_VIEW.APPEARANCE,
+      SETTINGS_VIEW.SHORTCUTS,
+      SETTINGS_VIEW.CONNECTIONS,
+    ],
     "groups follow the nav's order",
   );
 });

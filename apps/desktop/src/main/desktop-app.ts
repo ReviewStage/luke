@@ -198,6 +198,10 @@ const appIdentity = {
 };
 const appChannel = resolveAppChannel(appIdentity);
 const appName = resolveAppName(appIdentity);
+// A development-channel run stands out of the released app's way from its
+// first launch; the release and ad-hoc channels keep the schema's own
+// default, and the user's stored choice always wins over either.
+const developerModeChannelDefault = appChannel === APP_CHANNEL.DEVELOPMENT;
 app.setName(appName);
 // `setName` renames the app, not the paths Electron already derived from the
 // manifest name, so the state directory is pointed at the chosen name by
@@ -304,7 +308,31 @@ const settingsStore = new SettingsStore({
     decrypt: (cipherText) => safeStorage.decryptString(cipherText),
   },
   codexCloudConnection: () => codexCloudAdapter.connection(),
+  developerModeDefault: developerModeChannelDefault,
 });
+/**
+ * The developer-mode posture this run currently holds, mirrored from the
+ * settings snapshot so the hotkey predicate and the announcement gates can
+ * read it synchronously at their own moments. While it holds, this instance
+ * stays off the shared surfaces: the panel stands detached below the housing,
+ * spoken announcements are dropped, and the global keys are left unbound for
+ * the released instance to hold.
+ */
+let developerModeActive = developerModeChannelDefault;
+
+/**
+ * Moves this run between the ordinary posture and developer mode in one act,
+ * so the three surfaces the toggle governs — the panel's place, the unbidden
+ * voice, and the global keys — can never disagree about which posture holds.
+ * The announcement gates read the flag at their own moments, so a sentence
+ * already being spoken finishes rather than being cut.
+ */
+async function applyDeveloperMode(enabled: boolean): Promise<void> {
+  developerModeActive = enabled;
+  panels.setDetached(enabled);
+  panels.positionAll();
+  await hotkeys.reapply(HOTKEY_RANK.TALK);
+}
 const accountClient = new AccountClient({ baseUrl: ACCOUNT_BASE_URL, clientId: ACCOUNT_CLIENT_ID });
 let account: AccountSnapshot = { status: ACCOUNT_STATUS.SIGNED_OUT };
 const accountSession = new AccountSessionManager({
@@ -923,6 +951,9 @@ async function speakArrivalBeat(): Promise<void> {
   if (!runMode.requiresAccount || account.status !== ACCOUNT_STATUS.SIGNED_IN) return;
   if (!arrivalBeatOwed(arrivalState)) return;
   if (!voiceCapabilities.realtimeCredentials) return;
+  // Developer mode drops the beat the way an early meeting does: unspoken and
+  // still owed, for a launch where the mode is off.
+  if (developerModeActive) return;
   arrivalBeatSpeaking = true;
   try {
     await sessionObservationLoop.refresh().catch(() => undefined);
@@ -1045,9 +1076,13 @@ const hotkeys = new HotkeyRegistrar({
   // the bounded introduction mint, for exactly as long as it stands. The
   // talk key alone — the takeover answers no ask or stop press, and a
   // claimed chord nothing answers is a chord taken from every other app.
+  // Developer mode leaves every global key to the released instance —
+  // otherwise one press would take a turn on both — except during the
+  // introduction, whose takeover owns the talk key for its own bounded
+  // duration and is untestable without it.
   hasCredentials: (rank) =>
-    voiceCapabilities.realtimeCredentials !== undefined ||
-    (rank === HOTKEY_RANK.TALK && introductionWindow.active),
+    (rank === HOTKEY_RANK.TALK && introductionWindow.active) ||
+    (!developerModeActive && voiceCapabilities.realtimeCredentials !== undefined),
   recordProductEvent,
   host: {
     voiceHost: () => introductionWindow.current() ?? panels.voiceHost(),
@@ -1608,6 +1643,7 @@ function registerIpc(): void {
     workspaceProjectOffered,
     refreshMeetingQuiet: () => void refreshMeetingQuiet(),
     releaseHeldNotices: () => void releaseHeldNotices(),
+    setDeveloperMode: applyDeveloperMode,
     recordProductEvent,
     vaultSync: providerKeyVaultSync,
   });
@@ -2050,7 +2086,12 @@ async function reviewSessionAttention(generation: number): Promise<void> {
       // against the current roster instead of replaying words that may have
       // gone stale.
       let sendable: readonly SessionAnnouncement[] = speech;
-      if (await announcementsQuietNow(Date.now())) {
+      // Developer mode drops unbidden speech outright — the released instance
+      // observing the same sessions is the one announcing — where the
+      // meeting's quiet below holds it for a release.
+      if (developerModeActive) {
+        sendable = [];
+      } else if (await announcementsQuietNow(Date.now())) {
         heldEvaluatorSpeech.hold(speech);
         sendable = [];
       }
@@ -2101,6 +2142,10 @@ async function announceSessionNotices(sessions: readonly Session[]): Promise<voi
   // pressable notice is the spoken announcement's face, so it goes with the
   // speech rather than standing for news nobody is telling.
   if (!voiceCapabilities.realtimeCredentials) return;
+  // Developer mode drops the announcement outright — the released instance
+  // observing the same sessions is the one speaking — while the panel keeps
+  // showing every state.
+  if (developerModeActive) return;
   // A meeting on the connected calendar holds the sentence rather than
   // dropping it; the release tick reads the backlog out once the meeting
   // ends. The panel has shown every state the whole time either way.
@@ -2238,6 +2283,14 @@ async function releaseHeldNotices(): Promise<void> {
   }
   const now = Date.now();
   if (await announcementsQuietNow(now)) return;
+  // A backlog met by developer mode is dropped whole: reading it out would
+  // speak over the released instance announcing the same sessions, and the
+  // panel has shown every state the whole time.
+  if (developerModeActive) {
+    heldNotices.release();
+    heldEvaluatorSpeech.release();
+    return;
+  }
   // Voice went away while the backlog waited; there is nothing to say it
   // with, and by the time a key returns the news is the panel's.
   if (!voiceCapabilities.realtimeCredentials) {
@@ -2767,6 +2820,15 @@ export function startDesktopApp(): void {
       panels.setFormFactor(
         (await settingsStore.get(APP_SETTING_SCHEMA.formFactor.field)) ?? DEFAULT_PANEL_FORM_FACTOR,
       );
+      // Resolved before the panels take their places and before the keys are
+      // claimed below, so a development launch never flashes onto the released
+      // instance's surfaces first. An unset value is the channel's default;
+      // the panel drop rides the reconcile below, and the key gate rides the
+      // reapply, so nothing more is applied here.
+      developerModeActive =
+        (await settingsStore.get(APP_SETTING_SCHEMA.developerMode.field)) ??
+        developerModeChannelDefault;
+      panels.setDetached(developerModeActive);
       // Awaited for the same reason the voice is: the chosen chord has to be in
       // hand before the key is registered, or the first registration would take
       // the default away from the user who moved off it. A file that cannot be

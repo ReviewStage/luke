@@ -87,6 +87,8 @@ export class PanelManager {
   #showOnAllDisplays = false;
   /** The chosen form for displays without a housing, mirrored the same way. */
   #panelFormFactor: PanelFormFactor = DEFAULT_PANEL_FORM_FACTOR;
+  /** Whether the panels stand detached below the top edge, mirrored the same way. */
+  #detached = false;
   #nativeScreens = new Map<number, NativeNotchGeometry>();
 
   constructor(options: PanelManagerOptions) {
@@ -236,6 +238,7 @@ export class PanelManager {
         display,
         this.#nativeScreens.get(display.id),
         this.#panelFormFactor,
+        this.#detached,
       ),
     };
   }
@@ -280,6 +283,17 @@ export class PanelManager {
 
   setFormFactor(formFactor: PanelFormFactor): void {
     this.#panelFormFactor = formFactor;
+  }
+
+  /**
+   * Whether the panels stand detached — dropped below the top edge, in the
+   * bubble form — so a development-mode instance shares the screen with the
+   * released one instead of drawing over it. Takes hold at the next
+   * positioning, so callers follow with `positionAll()` the way a form-factor
+   * change does.
+   */
+  setDetached(detached: boolean): void {
+    this.#detached = detached;
   }
 
   setVoiceExchange(displayId: number, active: boolean): void {
@@ -341,6 +355,7 @@ export class PanelManager {
       mode,
       this.#nativeScreens.get(display.id),
       this.#panelFormFactor,
+      this.#detached,
     );
   }
 

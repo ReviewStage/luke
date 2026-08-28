@@ -72,6 +72,15 @@ export const SIMULATED_HOUSING_WIDTH = 210;
 
 export type WindowMode = "compact" | "expanded";
 
+/**
+ * How far a detached panel stands below the display's top edge. Detachment
+ * exists so two instances can share a screen — a development run standing
+ * clear of the released app's surface — so the drop clears the housing strip
+ * and the menu bar with room to read as its own object, rather than as the
+ * production surface having slipped.
+ */
+export const DETACHED_PANEL_DROP = 64;
+
 export interface NotchWindowLayout extends Rectangle {
   notch: ResolvedNotchGeometry;
 }
@@ -133,6 +142,7 @@ export function resolveNotchGeometry(
   display: DisplayGeometry,
   native?: NativeNotchGeometry,
   formFactor: PanelFormFactor = DEFAULT_PANEL_FORM_FACTOR,
+  detached = false,
 ): ResolvedNotchGeometry {
   const physical: ResolvedNotchGeometry = native
     ? {
@@ -150,6 +160,19 @@ export function resolveNotchGeometry(
         hasNotch: false,
         source: "work-area",
       };
+  // A detached surface stands clear of the top edge, so nothing it draws can
+  // meet a housing: it takes the bubble whatever the display has and whatever
+  // the form factor asks, because a housing shape below the real one would
+  // read as the production surface having slipped. The physical depth still
+  // travels — the strip's height is measured against it either way.
+  if (detached) {
+    return {
+      topInset: physical.topInset,
+      housingWidth: 0,
+      hasNotch: false,
+      source: physical.source,
+    };
+  }
   // A real housing is never argued with; only its absence takes the form
   // factor's answer. Its resolved depth is carried through untouched — the
   // window and the stylesheet already hold every housing to the same 32px floor.
@@ -167,8 +190,10 @@ export function positionNotchWindow(
   mode: WindowMode,
   native?: NativeNotchGeometry,
   formFactor: PanelFormFactor = DEFAULT_PANEL_FORM_FACTOR,
+  detached = false,
 ): NotchWindowLayout {
-  const notch = resolveNotchGeometry(display, native, formFactor);
+  const notch = resolveNotchGeometry(display, native, formFactor, detached);
+  const drop = detached ? DETACHED_PANEL_DROP : 0;
   const housingWidth = notch.hasNotch ? notch.housingWidth : 0;
   // One width for both modes, so a mode change is a height-only resize and the
   // window never moves. macOS lands a window's move and its content's relayout
@@ -184,11 +209,13 @@ export function positionNotchWindow(
   // A bubble panel floats `BUBBLE_LIFT` below the top edge, and the margin was
   // measured from a panel drawn at the edge, so the lift is added back or the
   // last of the shadow's tail meets the window edge as a faint line.
+  // A dropped window has that much less display below it, so the clamp that
+  // keeps a window on its display shrinks by the same drop.
   const height =
     mode === "expanded"
       ? Math.min(
           PANEL_MAX_HEIGHT + SURFACE_MARGIN + (notch.hasNotch ? 0 : BUBBLE_LIFT),
-          display.bounds.height,
+          display.bounds.height - drop,
         )
       : Math.min(
           Math.ceil(Math.max(32, notch.topInset)) +
@@ -196,7 +223,7 @@ export function positionNotchWindow(
             SESSION_NOTICE_HEIGHT * SESSION_NOTICE_MAX_ROWS +
             VOICE_BAND_INSET +
             SURFACE_MARGIN,
-          display.bounds.height,
+          display.bounds.height - drop,
         );
   const x = Math.round(display.bounds.x + (display.bounds.width - width) / 2);
 
@@ -204,8 +231,9 @@ export function positionNotchWindow(
     x,
     // Electron coordinates start at the display's top edge. Anchoring here
     // makes the black surface meet the camera housing instead of floating below
-    // the menu bar or in the middle of the screen.
-    y: display.bounds.y,
+    // the menu bar or in the middle of the screen; a detached surface stands
+    // its drop below, clear of the housing and the released instance's strip.
+    y: display.bounds.y + drop,
     width,
     height,
     notch,

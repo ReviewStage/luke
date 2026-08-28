@@ -14,6 +14,13 @@ import { VOICE_SOURCE, type VoiceSource } from "#shared/wire/settings";
 export const VOICE_KEYLESS_NOTE = "Voice is off: sign in, or connect an OpenAI key.";
 
 /**
+ * Why the shortcut rows show unclaimed chords while developer mode holds:
+ * the keys are left to the released instance, not lost.
+ */
+export const DEVELOPER_MODE_KEYLESS_NOTE =
+  "Developer mode leaves the global keys to the released app.";
+
+/**
  * When the day's counters return, in words a sentence can hold: the quota's
  * own `resetsAt` read on the wearer's own clock rather than as a subtraction
  * they have to do. The counters turn over at midnight UTC, which is somebody

@@ -43,6 +43,12 @@ export interface SettingsRowsIpcDependencies {
   workspaceProjectOffered: (providerId: string, providerProjectId: string) => boolean;
   refreshMeetingQuiet: () => void;
   releaseHeldNotices: () => void;
+  /**
+   * Stands this instance out of the released app's way, or back into the
+   * ordinary posture: the panel drop, the announcement mute, and the global
+   * keys all move together behind the one toggle.
+   */
+  setDeveloperMode: (enabled: boolean) => Promise<void>;
   recordProductEvent: RecordProductEvent;
   /** Mirrors local provider keys into the account vault, main-process only. */
   vaultSync: ProviderKeyVaultSync;
@@ -65,6 +71,7 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
     workspaceProjectOffered,
     refreshMeetingQuiet,
     releaseHeldNotices,
+    setDeveloperMode,
     recordProductEvent,
     vaultSync,
   } = dependencies;
@@ -183,6 +190,11 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
         // The flip is a hand on the switch, so an on claims the keys for the
         // signed-in account — the one act that may move the tenant record.
         void vaultSync.apply(settings.stored.syncProviderKeys, { claim: true });
+        break;
+      case SETTING_SIDE_EFFECT.DEVELOPER_MODE:
+        await setDeveloperMode(
+          settings.stored.developerMode ?? APP_SETTING_SCHEMA.developerMode.default,
+        );
         break;
       case SETTING_SIDE_EFFECT.NONE:
         break;

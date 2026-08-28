@@ -187,6 +187,7 @@ function storeIn(
     environment?: NodeJS.ProcessEnv;
     providers?: readonly CredentialProvider[];
     appleCalendarSupported?: boolean;
+    developerModeDefault?: boolean;
   } = {},
 ): SettingsStore {
   const config: SettingsStoreOptions = {
@@ -200,8 +201,29 @@ function storeIn(
   if (options.appleCalendarSupported !== undefined) {
     config.appleCalendarSupported = options.appleCalendarSupported;
   }
+  if (options.developerModeDefault !== undefined) {
+    config.developerModeDefault = options.developerModeDefault;
+  }
   return new SettingsStore(config);
 }
+
+test("developer mode resolves an unset value to the channel's default", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const developmentChannel = storeIn(directory, { developerModeDefault: true });
+
+  // Nothing stored: the snapshot answers with the channel's default, while
+  // the persisted read stays honestly unset so a choice can still be told
+  // from an absence.
+  assert.equal((await developmentChannel.snapshot()).stored.developerMode, true);
+  assert.equal(await developmentChannel.get(APP_SETTING_SCHEMA.developerMode.field), undefined);
+
+  // The user's own hand wins over the channel: off stays off on a
+  // development channel, and the release channel keeps the schema default.
+  await developmentChannel.set(APP_SETTING_SCHEMA.developerMode.field, false);
+  assert.equal((await developmentChannel.snapshot()).stored.developerMode, false);
+  const releaseChannel = storeIn(await temporaryDirectory(t));
+  assert.equal((await releaseChannel.snapshot()).stored.developerMode, false);
+});
 
 test("a failed first load is retried before a later write", async (t) => {
   const directory = await temporaryDirectory(t);

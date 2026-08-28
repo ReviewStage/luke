@@ -26,6 +26,7 @@ export const APP_SETTING_ID = {
   ASK_HOTKEY: "ask_hotkey",
   STOP_HOTKEY: "stop_hotkey",
   CALENDAR_SELECTED: "calendar_selected",
+  DEVELOPER_MODE: "developer_mode",
 } as const;
 
 export type AppSettingId = (typeof APP_SETTING_ID)[keyof typeof APP_SETTING_ID];

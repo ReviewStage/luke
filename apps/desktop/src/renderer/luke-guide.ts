@@ -115,7 +115,10 @@ export interface LukeGuideInput {
   stopKeyRemoved?: boolean;
 }
 
-function talkKeyFact(hotkey: LukeGuideInput["hotkey"]): AppGuideFact {
+function talkKeyFact(
+  hotkey: LukeGuideInput["hotkey"],
+  developerModeHoldsKeys: boolean,
+): AppGuideFact {
   if (hotkey.removed) {
     return {
       label: "Talk key",
@@ -125,8 +128,9 @@ function talkKeyFact(hotkey: LukeGuideInput["hotkey"]): AppGuideFact {
   if (!hotkey.hotkey) {
     return {
       label: "Talk key",
-      detail:
-        "None is registered right now — another app may own the shortcut. The Settings tab's Keyboard shortcuts page shows its state.",
+      detail: developerModeHoldsKeys
+        ? DEVELOPER_MODE_KEYS_DETAIL
+        : "None is registered right now — another app may own the shortcut. The Settings tab's Keyboard shortcuts page shows its state.",
     };
   }
   const use = hotkey.held
@@ -138,7 +142,21 @@ function talkKeyFact(hotkey: LukeGuideInput["hotkey"]): AppGuideFact {
   };
 }
 
-function askKeyFact(askKey: string | undefined, removed: boolean | undefined): AppGuideFact {
+/**
+ * Why every global key is unregistered while developer mode holds: the keys
+ * are deliberately left to the released instance, not lost to another app,
+ * and the guide must say so or Luke misattributes his own choice.
+ */
+const DEVELOPER_MODE_KEYS_DETAIL =
+  "None is registered while developer mode is on: the global keys are left to the released " +
+  "app, so one press cannot take a turn on both. Turning developer mode off, at the bottom of " +
+  "the Settings tab's front page, takes them back.";
+
+function askKeyFact(
+  askKey: string | undefined,
+  removed: boolean | undefined,
+  developerModeHoldsKeys: boolean,
+): AppGuideFact {
   if (removed) {
     return {
       label: "Ask key",
@@ -148,8 +166,9 @@ function askKeyFact(askKey: string | undefined, removed: boolean | undefined): A
   if (!askKey) {
     return {
       label: "Ask key",
-      detail:
-        "None is registered right now — another app may own the shortcut, or voice is off. The Settings tab's Keyboard shortcuts page shows its state.",
+      detail: developerModeHoldsKeys
+        ? DEVELOPER_MODE_KEYS_DETAIL
+        : "None is registered right now — another app may own the shortcut, or voice is off. The Settings tab's Keyboard shortcuts page shows its state.",
     };
   }
   return {
@@ -513,8 +532,8 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "workspace keeps no archive: an ask to archive one is taken as its Delete workspace " +
         "control — permanent, never filed away.",
     },
-    talkKeyFact(input.hotkey),
-    askKeyFact(input.askKey, input.askKeyRemoved),
+    talkKeyFact(input.hotkey, input.settings.developerMode),
+    askKeyFact(input.askKey, input.askKeyRemoved, input.settings.developerMode),
     { label: "Microphone access", detail: MICROPHONE_DETAIL[input.microphoneStatus] },
     ...(input.voiceAvailable
       ? [
@@ -531,8 +550,10 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
                   ? `${input.stopKey}, from any app, cuts the reply off and asks for nothing in ` +
                     "its place; Escape does the same while Luke's panel has the keyboard."
                   : "Escape while Luke is speaking cuts the reply off and asks for nothing in " +
-                    "its place. No system-wide stop key is registered right now — another app " +
-                    "may own the shortcut.") +
+                    "its place. No system-wide stop key is registered right now — " +
+                    (input.settings.developerMode
+                      ? "developer mode leaves the global keys to the released app."
+                      : "another app may own the shortcut.")) +
               " The talk key over a reply interrupts too, but takes the turn with the same " +
               `press. A different stop chord can be recorded, the default restored, or the ` +
               `shortcut removed, in ${SHORTCUTS_PAGE}.`,
@@ -545,8 +566,13 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
               "Luke says it out loud when an observed session is holding for you, stops on " +
               "an error, or finishes — a hold is a question, a permission, or an approval, " +
               "not a turn that merely ended — naming the session and what it needs. No " +
-              "conversation needs to be open, the microphone stays off, and it is always on " +
-              "while voice is available. A session in a live voice conversation with its " +
+              "conversation needs to be open, the microphone stays off, and it is " +
+              (input.settings.developerMode
+                ? "silenced right now by developer mode: the released app is the one " +
+                  "announcing, and turning developer mode off, on the Settings tab's " +
+                  "Appearance page, speaks them here again."
+                : "always on while voice is available.") +
+              " A session in a live voice conversation with its " +
               "own provider announces nothing until that conversation closes.",
           },
           {

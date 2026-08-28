@@ -139,6 +139,14 @@ export interface SettingsStoreOptions {
    * asked, which is what a store without an app around it can honestly say.
    */
   codexCloudConnection?: () => CliConnection;
+  /**
+   * What an unset developer-mode toggle resolves to. The schema's own default
+   * is the release channel's `false`; a development build supplies `true` here
+   * so a fresh checkout stands out of the released app's way from its first
+   * launch, while the user's own choice — either way — always wins. Only the
+   * app knows which channel this run is, so the store takes it as an option.
+   */
+  developerModeDefault?: boolean;
 }
 
 interface PersistedSettings extends StoredAppSettings {
@@ -486,6 +494,7 @@ export class SettingsStore {
   readonly #credentialsUsable: boolean;
   readonly #appleCalendarSupported: boolean;
   readonly #codexCloudConnection: () => CliConnection;
+  readonly #developerModeDefault: boolean;
   #loading: Promise<PersistedSettings> | undefined;
   #resolved = new Map<CredentialProviderId, ResolvedApiKey>();
   /** Decrypted accounts, cached like the keys so timers never drum the Keychain. */
@@ -591,6 +600,7 @@ export class SettingsStore {
     this.#credentialsUsable = options.credentialsUsable ?? true;
     this.#appleCalendarSupported = options.appleCalendarSupported ?? process.platform === "darwin";
     this.#codexCloudConnection = options.codexCloudConnection ?? (() => CLI_CONNECTION.UNKNOWN);
+    this.#developerModeDefault = options.developerModeDefault ?? false;
   }
 
   async snapshot(): Promise<AppSettings> {
@@ -621,6 +631,7 @@ export class SettingsStore {
           REALTIME_DEFAULTS.SPEED,
         voiceSource: voiceCapability.source,
         formFactor: persisted.formFactor ?? DEFAULT_PANEL_FORM_FACTOR,
+        developerMode: persisted.developerMode ?? this.#developerModeDefault,
       },
       status: {
         // SAFETY: #providers contains every credential provider exactly once.

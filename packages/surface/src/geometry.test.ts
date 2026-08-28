@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   CAPSULE_SIDE_WIDTH,
+  DETACHED_PANEL_DROP,
   PANEL_FORM_FACTOR,
   PANEL_MAX_HEIGHT,
   PANEL_WIDTH,
@@ -285,6 +286,49 @@ test("keeps the safe-area depth when the menu bar reading is absent", () => {
 
   assert.equal(hiddenMenuBar.notch.topInset, 34);
   assert.equal(olderHelper.notch.topInset, 34);
+});
+
+test("a detached window drops below the housing and takes the bubble", () => {
+  const attached = positionNotchWindow(notchedDisplay, "compact", {
+    displayId: 1,
+    safeAreaTop: 38,
+    menuBarHeight: 38,
+    notchWidth: 210,
+    hasNotch: true,
+  });
+  const detached = positionNotchWindow(
+    notchedDisplay,
+    "compact",
+    { displayId: 1, safeAreaTop: 38, menuBarHeight: 38, notchWidth: 210, hasNotch: true },
+    PANEL_FORM_FACTOR.NOTCH,
+    true,
+  );
+
+  // The drop is the whole point: two instances share the screen only because
+  // the detached one stands clear of the housing the attached one meets.
+  assert.equal(detached.y, attached.y + DETACHED_PANEL_DROP);
+  // Detachment takes the bubble whatever the display has and whatever the
+  // form factor asks: a housing shape below the real housing would read as
+  // the production surface having slipped.
+  assert.deepEqual(detached.notch, {
+    topInset: 38,
+    housingWidth: 0,
+    hasNotch: false,
+    source: "appkit",
+  });
+});
+
+test("a detached window still fits the display it dropped down", () => {
+  const shortDisplay = {
+    bounds: { x: 0, y: 0, width: 1512, height: PANEL_MAX_HEIGHT + SURFACE_MARGIN + 10 },
+    workArea: { x: 0, y: 38, width: 1512, height: PANEL_MAX_HEIGHT - 28 },
+    scaleFactor: 2,
+  };
+  const detached = positionNotchWindow(shortDisplay, "expanded", undefined, undefined, true);
+
+  // The clamp that keeps a window on its display shrinks by the drop, so the
+  // dropped window's bottom edge still lands inside the display.
+  assert.equal(detached.y + detached.height, shortDisplay.bounds.height);
 });
 
 test("snaps fractional depths to device pixels and ceils the window height", () => {
