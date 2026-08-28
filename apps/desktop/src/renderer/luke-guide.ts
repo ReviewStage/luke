@@ -208,9 +208,9 @@ function providersFact(settings: AppSettingsView): AppGuideFact {
       "providers such as Claude Code need no key and are observed on their own. Codex cloud " +
       `tasks (${CODEX_CLOUD_CONNECTION_WORD[settings.codexCloudConnection]}) follow the ` +
       "Codex CLI's own login: codex login connects them, and signing that CLI out stops them. " +
-      "A provider key can also be synced to Luke's own service by hand, under Synced keys on " +
-      "the same page; the service stores it encrypted and never sends it back, and Luke can " +
-      "say only whether a row holds one.",
+      "A key entered while signed in is also synced to Luke's own service unless its entry's " +
+      "checkbox says not to; the service stores the synced copy encrypted and never sends it " +
+      "back, the provider's row deletes it, and Luke can say only whether one stands.",
   };
 }
 

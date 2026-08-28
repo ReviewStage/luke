@@ -32,7 +32,6 @@ import { Highlighted } from "./session-search";
 import {
   ChevronIcon,
   CloseIcon,
-  CloudIcon,
   DownloadIcon,
   LukeIcon,
   MegaphoneIcon,
@@ -113,7 +112,6 @@ export const SETTINGS_SEARCH_ROW = {
   ASK_KEY: "ask-key",
   STOP_KEY: "stop-key",
   CODEX_CLOUD: "codex-cloud",
-  SYNCED_KEYS: "synced-keys",
 } as const;
 
 /**
@@ -253,7 +251,7 @@ const ROOT_SETTING_ICON = {
 const SHORTCUT_WORDS = "keyboard shortcut hotkey key chord record remove delete none";
 
 /** The words every key row can be found by, beside its provider's name. */
-const KEY_WORDS = "API key credential connect cloud agent";
+const KEY_WORDS = "API key credential connect cloud agent sync synced";
 
 /**
  * The rows that are not stored settings, each gated by the condition that
@@ -375,22 +373,6 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
       icon: <ProviderMark providerId={PROVIDER_ID.CODEX} />,
       haystack: ["Codex", "cloud tasks CLI login connect"],
     },
-    // The vault's rows stand only while an account is signed in, so the
-    // section is findable exactly while it is drawn.
-    input.accountDrawn
-      ? {
-          id: SETTINGS_SEARCH_ROW.SYNCED_KEYS,
-          label: "Synced keys",
-          page: SETTINGS_VIEW.CONNECTIONS,
-          icon: <CloudIcon />,
-          haystack: [
-            "Synced keys",
-            KEY_WORDS,
-            "vault hosted service sync",
-            ...CLOUD_AGENT_PROVIDER_LIST.map((provider) => provider.displayName),
-          ],
-        }
-      : undefined,
     input.settings.linearSignInAvailable
       ? {
           id: CREDENTIAL_PROVIDER_ID.LINEAR,

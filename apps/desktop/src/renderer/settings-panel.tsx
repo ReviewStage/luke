@@ -16,7 +16,6 @@ import {
   isVaultProviderId,
   type VaultKeyListEntry,
   type VaultProviderId,
-  vaultKeyIsStorable,
 } from "@sidecar/hosted";
 import { CloudBadge, ProviderMark } from "@sidecar/panel";
 import {
@@ -134,7 +133,6 @@ import {
   CheckIcon,
   ChevronIcon,
   CloseIcon,
-  CloudIcon,
   DisplayIcon,
   DownloadIcon,
   ExternalIcon,
@@ -327,6 +325,8 @@ export interface SettingsPanelProps {
   hostedUsage?: HostedUsageAnswer;
   /** The one credential being entered anywhere, and everything that can be done to it. */
   credentials: CredentialEntryControl;
+  /** The account vault's synced keys, and the one act a row takes on one. */
+  vault: VaultControl;
   /** The one note to the founders being written, and everything that can be done to it. */
   feedback: FeedbackEntryControl;
   /**
@@ -723,6 +723,20 @@ function ProviderCredential({
               }}
             />
           </label>
+          {/* Drawn only when the entry offers the synced save at all — a vault
+              provider's, while signed in — and opting out rather than in,
+              because syncing is that entry's default. */}
+          {entry.sync !== undefined ? (
+            <label className="sync-choice">
+              <input
+                type="checkbox"
+                checked={!entry.sync}
+                disabled={busy}
+                onChange={(event) => control.setSync(!event.target.checked)}
+              />
+              <span className="sync-choice-name">{SYNC_OPT_OUT_LABEL}</span>
+            </label>
+          ) : null}
           <div className="settings-row">
             <small className="settings-note">
               {provider.hint}{" "}
@@ -1359,6 +1373,7 @@ function CodexCloudConnection({
 function CredentialsSection({
   settings,
   control,
+  vault,
   panelOpen,
   writes,
   superset,
@@ -1366,6 +1381,7 @@ function CredentialsSection({
 }: {
   settings: AppSettingsView;
   control: CredentialEntryControl;
+  vault: VaultControl;
   panelOpen: boolean;
   writes: SettingsWrites;
   superset: SupersetControl;
@@ -1406,6 +1422,10 @@ function CredentialsSection({
             ? provider.id
             : undefined;
         const workspaceProvider = workspaceProviders.find((option) => option.id === provider.id);
+        const vaultId = isVaultProviderId(provider.id) ? provider.id : undefined;
+        const syncedEntry = vaultId
+          ? vault.keys?.find((stored) => stored.providerId === vaultId)
+          : undefined;
         return (
           <Fragment key={provider.id}>
             <ProviderCredential
@@ -1415,6 +1435,13 @@ function CredentialsSection({
               control={control}
               panelOpen={panelOpen}
             >
+              {vaultId && syncedEntry ? (
+                <SyncedKeyLine
+                  provider={provider}
+                  entry={syncedEntry}
+                  onRemove={() => vault.remove(vaultId)}
+                />
+              ) : null}
               {agentRow ? (
                 <WorkspaceAgentRow
                   provider={provider}
@@ -1469,33 +1496,23 @@ function CredentialsSection({
   );
 }
 
-/* The synced rows' one explanation of what a key given here becomes. It says
-   the two things the rows cannot: where the key goes, and that it never comes
-   back. */
-const SYNCED_KEYS_NOTE =
-  "A key synced here is stored encrypted by Luke's own service and never sent back — " +
-  "a row shows only how its key ends and when it was saved. Deleting your account " +
-  "deletes them with it.";
-
-const SYNCED_KEYS_UNREACHABLE_NOTE =
-  "Luke's service did not answer just now, so what is synced cannot be shown.";
-
-/* A vault ask whose invoke itself failed, worded like the main process's own
-   refusal so the row cannot tell the two apart. */
-const VAULT_ASK_FAILED: ActResult = {
-  status: ACT_RESULT_STATUS.REJECTED,
-  reason: "Luke's service did not take that. Check the connection and try again.",
-};
-
-/** A key being typed for one synced row, and what became of the last attempt. */
-interface SyncedKeyEntry {
-  providerId: VaultProviderId;
-  draft: string;
-  busy: boolean;
-  rejection?: string;
+/** The vault's panel-side control: what is synced, and the one act on it. */
+export interface VaultControl {
+  /**
+   * The synced entries as last read — ids, hints, and timestamps, never keys —
+   * or nothing before the first answer and while signed out.
+   */
+  keys: readonly VaultKeyListEntry[] | undefined;
+  /** Deletes one provider's synced key. Answers why if it could not. */
+  remove(providerId: VaultProviderId): Promise<ActResult>;
 }
 
-/** When a synced key was last written, in the row's own short words. */
+/* The entry checkbox's words for keeping a save local. It opts out rather
+   than in, because a signed-in entry syncs by default; absent an account the
+   choice is not drawn and the save is local, the only thing it could be. */
+const SYNC_OPT_OUT_LABEL = "Do not sync to your other Luke devices";
+
+/** When a synced key was last written, in the line's own short words. */
 function syncedKeySavedOn(updatedAt: number): string {
   return new Date(updatedAt).toLocaleDateString(undefined, {
     month: "short",
@@ -1505,404 +1522,119 @@ function syncedKeySavedOn(updatedAt: number): string {
 }
 
 /**
- * The provider keys synced to Luke's hosted service, one row per provider the
- * vault accepts, drawn only while an account is signed in because the vault is
- * the account's. The list is read fresh each time the page opens and after
- * every act; what it carries is ids, hints, and timestamps, because the
- * service holds no endpoint that reads a key back. Unlike the Providers rows
- * above, whose keys stay in this machine's encrypted storage, a key entered
- * here travels once — outward, at the Save press — and is held nowhere local.
+ * The synced copy standing behind a provider's row: the key's tail and date,
+ * and the delete that is the one act a synced key takes here. The service
+ * holds no endpoint that reads a key back, so this line is everything the
+ * panel can say about one. Deleting asks first, exactly like the local key's
+ * trash, and focus follows the confirm the same way: onto Cancel when the
+ * question appears, back onto the trash when it withdraws.
  */
-/**
- * One provider's synced-key row: its mark, its name, the stored key's tail
- * and date if one stands, and the acts the state allows. The two acts
- * exclude each other — a delete may not be asked while the editor is open,
- * and opening the editor withdraws a standing confirm — so Save and Delete
- * can never run together on one provider. Focus follows the confirm the way
- * the local rows' does: onto Cancel when the question appears, back onto the
- * row's own control when it withdraws, because a question that strands the
- * keyboard is one a keyboard cannot answer.
- */
-function SyncedKeyRow({
+function SyncedKeyLine({
   provider,
-  providerId,
-  stored,
-  editing,
-  held,
-  confirming,
-  clearing,
-  panelOpen,
-  onBegin,
-  onDraft,
-  onCancelEntry,
-  onCommit,
-  onAsk,
-  onKeep,
-  onDelete,
+  entry,
+  onRemove,
 }: {
   provider: CredentialProvider;
-  providerId: VaultProviderId;
-  stored: VaultKeyListEntry | undefined;
-  editing: SyncedKeyEntry | undefined;
-  held: boolean;
-  confirming: boolean;
-  clearing: boolean;
-  panelOpen: boolean;
-  onBegin: () => void;
-  onDraft: (draft: string) => void;
-  onCancelEntry: () => void;
-  onCommit: () => void;
-  onAsk: () => void;
-  onKeep: () => void;
-  onDelete: () => void;
+  entry: VaultKeyListEntry;
+  onRemove: () => Promise<ActResult>;
 }): React.JSX.Element {
-  const field = useRef<HTMLInputElement | null>(null);
+  const [asking, setAsking] = useState(false);
+  const [clearing, setClearing] = useState(false);
+  const [rejection, setRejection] = useState<string>();
   const trash = useRef<HTMLButtonElement | null>(null);
   const keep = useRef<HTMLButtonElement | null>(null);
-  const editControl = useRef<HTMLButtonElement | null>(null);
   const returnFocus = useRef(false);
-  const busy = clearing || (editing?.busy ?? false);
-  const credential = provider.keyFormat?.label ?? "API key";
-  const fieldId = `${providerId}-synced-key`;
-  const submittable = editing ? vaultKeyIsStorable(editing.draft.trim()) : false;
 
-  useStagedFocus(field, editing !== undefined && panelOpen && !busy);
-  useStagedFocus(keep, confirming && !clearing);
+  useStagedFocus(keep, asking && !clearing);
 
   useEffect(() => {
-    if (confirming || !returnFocus.current) return;
+    if (asking || !returnFocus.current) return;
     returnFocus.current = false;
-    return focusWhenVisible(trash.current ?? editControl.current);
-  }, [confirming]);
+    return focusWhenVisible(trash.current);
+  }, [asking]);
 
   const keepKey = () => {
     if (clearing) return;
     returnFocus.current = true;
-    onKeep();
+    setAsking(false);
   };
-  const removeKey = () => {
+  const removeKey = async () => {
+    setClearing(true);
     returnFocus.current = true;
-    onDelete();
+    const reason = actRejection(await onRemove());
+    setClearing(false);
+    setAsking(false);
+    setRejection(reason);
   };
 
   return (
-    <div className="credential">
-      <div className="credential-row">
-        <span className="credential-identity">
-          <span className="credential-mark">
-            <ProviderMark providerId={providerId} />
-            <CloudBadge />
-          </span>
-          <span className="credential-name">{provider.displayName}</span>
-          {stored ? <CheckIcon /> : null}
-        </span>
-        {stored ? (
-          <span className="credential-status">
-            {`····${stored.hint} · ${syncedKeySavedOn(stored.updatedAt)}`}
-          </span>
-        ) : null}
+    <>
+      <div className="settings-row">
+        <small className="settings-note">
+          {`Synced to Luke's service ····${entry.hint} · ${syncedKeySavedOn(entry.updatedAt)}`}
+        </small>
         <span className="credential-actions">
           <span
             className="settings-actions credential-controls"
-            data-drawn={String(!confirming)}
-            aria-hidden={confirming}
-            inert={confirming}
+            data-drawn={String(!asking)}
+            aria-hidden={asking}
+            inert={asking}
           >
-            {stored ? (
-              <button
-                type="button"
-                ref={trash}
-                className="icon-button credential-remove"
-                disabled={busy || editing !== undefined}
-                aria-label={`Delete the synced ${provider.displayName} ${credential}`}
-                title="Delete…"
-                onClick={onAsk}
-              >
-                <TrashIcon />
-              </button>
-            ) : null}
-            {stored ? (
-              <button
-                type="button"
-                ref={editControl}
-                className="icon-button"
-                disabled={busy || editing !== undefined || held}
-                aria-label={`Replace the synced ${provider.displayName} ${credential}`}
-                title={held ? HELD_TITLE : "Replace"}
-                onClick={onBegin}
-              >
-                <PencilIcon />
-              </button>
-            ) : (
-              <button
-                type="button"
-                ref={editControl}
-                className="quiet-button"
-                disabled={busy || editing !== undefined || held}
-                aria-label={`Sync a ${provider.displayName} ${credential} to Luke's service`}
-                title={held ? HELD_TITLE : undefined}
-                onClick={onBegin}
-              >
-                Sync
-              </button>
-            )}
-          </span>
-          {stored ? (
-            <fieldset
-              className="settings-actions credential-confirm"
-              aria-label={`Delete the synced ${provider.displayName} ${credential}?`}
-              data-drawn={String(confirming)}
-              aria-hidden={!confirming}
-              inert={!confirming}
-              onKeyDown={(event) => {
-                if (event.key !== "Escape" || clearing) return;
-                event.stopPropagation();
-                keepKey();
+            <button
+              type="button"
+              ref={trash}
+              className="icon-button credential-remove"
+              disabled={clearing}
+              aria-label={`Delete the synced ${provider.displayName} key from Luke's service`}
+              title="Delete the synced copy…"
+              onClick={() => {
+                setRejection(undefined);
+                setAsking(true);
               }}
             >
-              <button
-                type="button"
-                ref={keep}
-                className="quiet-button"
-                style={answerOrder(REMOVAL_ANSWER_INDEX.KEEP)}
-                disabled={clearing}
-                onClick={keepKey}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="danger-button"
-                style={answerOrder(REMOVAL_ANSWER_INDEX.DELETE)}
-                disabled={clearing}
-                onClick={removeKey}
-              >
-                {clearing ? "Deleting…" : "Delete"}
-              </button>
-            </fieldset>
-          ) : null}
-        </span>
-      </div>
-      {editing ? (
-        <fieldset
-          className="credential-editor"
-          aria-label={`Synced ${provider.displayName} ${credential}`}
-        >
-          <label className="settings-field" htmlFor={fieldId}>
-            <span className="settings-label">{credential}</span>
-            <input
-              id={fieldId}
-              ref={field}
-              aria-label={`Synced ${provider.displayName} ${credential}`}
-              className="settings-input"
-              type="password"
-              autoComplete="off"
-              spellCheck={false}
-              placeholder={CREDENTIAL_PLACEHOLDER[CREDENTIAL_SOURCE.NONE]}
-              value={editing.draft}
-              disabled={busy}
-              onChange={(event) => onDraft(event.target.value)}
-              onFocus={() => {
-                window.sidecar.focusPanel();
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && submittable) onCommit();
-                if (event.key === "Escape") {
-                  event.stopPropagation();
-                  onCancelEntry();
-                }
-              }}
-            />
-          </label>
-          <div className="settings-row">
-            <small className="settings-note">
-              {provider.hint}{" "}
-              <button
-                type="button"
-                className="link-button"
-                disabled={busy}
-                onClick={() => window.sidecar.openProviderApiKeys(providerId)}
-              >
-                Where to get one
-                <ExternalIcon />
-              </button>
-            </small>
-            <span className="settings-actions">
-              <button
-                type="button"
-                className="quiet-button"
-                disabled={busy}
-                onClick={onCancelEntry}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="action-button"
-                disabled={busy || !submittable}
-                onClick={onCommit}
-              >
-                {editing.busy ? "Saving…" : "Save"}
-              </button>
-            </span>
-          </div>
-        </fieldset>
-      ) : null}
-      {editing?.rejection ? (
-        <p className="error-message" role="alert">
-          {editing.rejection}
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
-/**
- * The provider keys synced to Luke's hosted service, one row per provider the
- * vault accepts, drawn only while an account is signed in because the vault is
- * the account's. The list is read fresh each time the page opens and after
- * every act; what it carries is ids, hints, and timestamps, because the
- * service holds no endpoint that reads a key back. Unlike the Providers rows
- * above, whose keys stay in this machine's encrypted storage, a key entered
- * here travels once — outward, at the Save press — and is held nowhere local.
- */
-function SyncedKeysSection({ panelOpen }: { panelOpen: boolean }): React.JSX.Element {
-  const [keys, setKeys] = useState<readonly VaultKeyListEntry[]>();
-  const [answered, setAnswered] = useState(false);
-  const [entry, setEntry] = useState<SyncedKeyEntry>();
-  const [asking, setAsking] = useState<VaultProviderId>();
-  const [clearing, setClearing] = useState<VaultProviderId>();
-  const [removalRejection, setRemovalRejection] = useState<string>();
-  const listAsk = useRef(0);
-
-  // A confirm left open when the panel goes is withdrawn, the same correction
-  // the local key rows apply: reopening onto a question nobody remembers
-  // asking reads as a trap.
-  if (asking && !panelOpen && !clearing) setAsking(undefined);
-
-  // A refresh that failed, or was overtaken by a later one, keeps what is
-  // already known: after a confirmed act the list on screen says what the
-  // service just agreed to, and wiping it for a list call that merely could
-  // not travel would report the opposite of what happened.
-  const refresh = async () => {
-    const ask = ++listAsk.current;
-    const answer = await window.sidecar.requestVaultKeys().catch(() => undefined);
-    if (ask !== listAsk.current) return;
-    setKeys((held) => answer ?? held);
-    setAnswered(true);
-  };
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: refresh is remade every render but reads nothing that changes between them — depending on it would re-read the list on every render instead of at mount and after each act.
-  useEffect(() => {
-    void refresh();
-    return () => {
-      // Retiring the section retires its in-flight list read the same way an
-      // overtaken one is: the generation moves past it.
-      listAsk.current += 1;
-    };
-  }, []);
-
-  const commit = async () => {
-    if (!entry || entry.busy) return;
-    const key = entry.draft.trim();
-    if (!vaultKeyIsStorable(key)) return;
-    const providerId = entry.providerId;
-    setEntry({ providerId, draft: entry.draft, busy: true });
-    const reason = actRejection(
-      await window.sidecar.storeVaultKey(providerId, key).catch(() => VAULT_ASK_FAILED),
-    );
-    if (reason === undefined) {
-      setEntry(undefined);
-      // The service confirmed the write, so the row says so at once, by the
-      // same hint rule the service applies; the refresh that follows replaces
-      // this with the service's own record when it answers.
-      setKeys((held) => [
-        ...(held ?? []).filter((stored) => stored.providerId !== providerId),
-        { providerId, hint: key.slice(-4), updatedAt: Date.now() },
-      ]);
-      await refresh();
-      return;
-    }
-    setEntry((held) => (held ? { ...held, busy: false, rejection: reason } : held));
-  };
-
-  const removeKey = async (providerId: VaultProviderId) => {
-    setClearing(providerId);
-    setRemovalRejection(undefined);
-    const reason = actRejection(
-      await window.sidecar.deleteVaultKey(providerId).catch(() => VAULT_ASK_FAILED),
-    );
-    setClearing(undefined);
-    setAsking(undefined);
-    if (reason === undefined) {
-      setKeys((held) => held?.filter((stored) => stored.providerId !== providerId));
-      await refresh();
-      return;
-    }
-    setRemovalRejection(reason);
-  };
-
-  const unreachable = answered && keys === undefined;
-  return (
-    <section
-      className="settings-section"
-      style={cssCustomProperties({ "--row-index": 3 })}
-      {...searchAnchorProps(SETTINGS_SEARCH_ROW.SYNCED_KEYS)}
-    >
-      <h2>
-        <CloudIcon />
-        Synced keys
-      </h2>
-      {keys
-        ? CLOUD_AGENT_PROVIDER_LIST.map((provider) => {
-            const providerId = provider.id;
-            if (!isVaultProviderId(providerId)) return null;
-            const editing = entry?.providerId === providerId ? entry : undefined;
-            return (
-              <SyncedKeyRow
-                key={providerId}
-                provider={provider}
-                providerId={providerId}
-                stored={keys.find((stored) => stored.providerId === providerId)}
-                editing={editing}
-                held={entry !== undefined && !editing}
-                confirming={asking === providerId}
-                clearing={clearing === providerId}
-                panelOpen={panelOpen}
-                onBegin={() => {
-                  setAsking(undefined);
-                  setEntry({ providerId, draft: "", busy: false });
-                }}
-                onDraft={(draft) => setEntry((held) => (held ? { ...held, draft } : held))}
-                onCancelEntry={() => setEntry(undefined)}
-                onCommit={() => void commit()}
-                onAsk={() => {
-                  setRemovalRejection(undefined);
-                  setAsking(providerId);
-                }}
-                onKeep={() => setAsking(undefined)}
-                onDelete={() => void removeKey(providerId)}
-              />
-            );
-          })
-        : null}
-      {removalRejection ? (
-        <p className="error-message" role="alert">
-          {removalRejection}
-        </p>
-      ) : null}
-      {unreachable ? (
-        <div className="settings-row">
-          <p className="settings-note">{SYNCED_KEYS_UNREACHABLE_NOTE}</p>
-          <span className="settings-actions">
-            <button type="button" className="quiet-button" onClick={() => void refresh()}>
-              Check again
+              <TrashIcon />
             </button>
           </span>
-        </div>
+          <fieldset
+            className="settings-actions credential-confirm"
+            aria-label={`Delete the synced ${provider.displayName} key from Luke's service?`}
+            data-drawn={String(asking)}
+            aria-hidden={!asking}
+            inert={!asking}
+            onKeyDown={(event) => {
+              if (event.key !== "Escape" || clearing) return;
+              event.stopPropagation();
+              keepKey();
+            }}
+          >
+            <button
+              type="button"
+              ref={keep}
+              className="quiet-button"
+              style={answerOrder(REMOVAL_ANSWER_INDEX.KEEP)}
+              disabled={clearing}
+              onClick={keepKey}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="danger-button"
+              style={answerOrder(REMOVAL_ANSWER_INDEX.DELETE)}
+              disabled={clearing}
+              onClick={() => void removeKey()}
+            >
+              {clearing ? "Deleting…" : "Delete"}
+            </button>
+          </fieldset>
+        </span>
+      </div>
+      {rejection ? (
+        <p className="error-message" role="alert">
+          {rejection}
+        </p>
       ) : null}
-      <p className="settings-note">{SYNCED_KEYS_NOTE}</p>
-    </section>
+    </>
   );
 }
 
@@ -2717,7 +2449,7 @@ function IntegrationsSection({
 }): React.JSX.Element {
   const storageUnavailable = settings.secretStorage === SECRET_STORAGE.UNAVAILABLE;
   return (
-    <section className="settings-section" style={cssCustomProperties({ "--row-index": 4 })}>
+    <section className="settings-section" style={cssCustomProperties({ "--row-index": 3 })}>
       <h2>
         <PlugIcon />
         Integrations
@@ -4036,6 +3768,7 @@ export function SettingsPanel({
   voiceService,
   hostedUsage,
   credentials,
+  vault,
   feedback,
   panelOpen,
   workspaceProviders,
@@ -4252,17 +3985,12 @@ export function SettingsPanel({
           <CredentialsSection
             settings={settings}
             control={credentials}
+            vault={vault}
             panelOpen={panelOpen}
             writes={writes}
             superset={superset}
             workspaceProviders={workspaceProviders}
           />
-          {/* Right under the same providers' local key rows, because the two
-              sections answer the same question about the same services — here
-              or with Luke's service — and only an account has a vault. */}
-          {account.status === ACCOUNT_STATUS.SIGNED_IN ? (
-            <SyncedKeysSection panelOpen={panelOpen} />
-          ) : null}
           <IntegrationsSection
             settings={settings}
             writes={writes}

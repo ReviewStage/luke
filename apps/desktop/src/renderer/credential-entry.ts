@@ -33,6 +33,15 @@ export interface CredentialEntry {
   /** True while the key is being written. */
   busy: boolean;
   /**
+   * Whether saving also syncs the key to the account's vault on Luke's
+   * service. Present only when the entry can offer it — a vault provider,
+   * while signed in — and defaulting to true there, so the ordinary save is
+   * the synced one and the checkbox beside the field is the way out. Absent,
+   * no view draws the choice and the save stays local, which is the whole of
+   * what a signed-out entry can do.
+   */
+  sync?: boolean;
+  /**
    * True once the provider's key page has been opened. It is the difference
    * between someone standing in front of Luke and someone reading a browser, so
    * it decides where giving up returns them to.
@@ -61,6 +70,8 @@ export interface CredentialEntryControl {
    */
   connect(providerId: CredentialProviderId): void;
   change(draft: string): void;
+  /** Answers the sync choice, for an entry that offers one. */
+  setSync(sync: boolean): void;
   /**
    * Sends the browser to the provider's key page and stands the panel down to
    * the slot, because Luke floats above the page holding the answer.

@@ -45,17 +45,18 @@ before you sign in is attached to your account if you sign in while it is
 running. One that never reaches a sign-in belongs to nobody, so deleting your
 account does not reach it — we have no way to tell it was yours.
 
-**Provider API keys (server-side vault).** If you choose to sync a provider API
-key to Luke's hosted service, we store it encrypted in our own database using
-AES-256-GCM with a server-only secret. The key is never returned to any caller:
-there is no endpoint that reads it back, and no code path that decrypts it for
-any purpose other than the observation or acts you explicitly request through
-that provider. The server-side use of these keys ships as a separate feature;
-this describes only the storage. Syncing is opt-in per provider, from that
-provider's row under Synced keys in Settings · Connections; the same row shows
-only the last four characters of what is stored and when it was saved, and can
-delete the key at any time. Every synced key is deleted alongside your account
-if you delete that.
+**Provider API keys (server-side vault).** A provider API key you enter while
+signed in is synced to Luke's hosted service by default; the checkbox beside
+the field ("Do not sync to your other Luke devices") keeps that save on this
+Mac alone, and signed out no key is ever synced. We store a synced key
+encrypted in our own database using AES-256-GCM with a server-only secret. The
+key is never returned to any caller: there is no endpoint that reads it back,
+and no code path that decrypts it for any purpose other than the observation
+or acts you explicitly request through that provider. The server-side use of
+these keys ships as a separate feature; this describes only the storage. The
+provider's row in Settings · Connections shows only the last four characters
+of what is synced and when it was saved, and can delete the synced copy at any
+time. Every synced key is deleted alongside your account if you delete that.
 
 **Feedback.** If you use the feedback form, we receive what you typed, the name
 and email you signed it with, and any screenshots you attached.
