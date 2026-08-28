@@ -480,15 +480,13 @@ export interface SessionTally {
    * The same sessions the count above counts, by id, because one of them
    * starting to ask is a different event from three of them still asking and
    * the count cannot tell those apart: answer one while another starts in the
-   * same poll and it never moves. Luke's face reacts to the event and the badge
-   * reports the count, so the tally has to carry both.
+   * same poll and it never moves. Luke's face reacts to the event and the
+   * spoken summary reports the count, so the tally has to carry both.
    */
   attentionIds: readonly string[];
   working: number;
   complete: number;
   idle: number;
-  /** The urgency the count badge and the notch capsule adopt. */
-  urgency: SessionUrgency;
   /** One app each, seated where its first session reads under the sort. */
   providers: readonly ProviderTally[];
 }
@@ -1208,42 +1206,8 @@ export function sessionTally(
     ...counts,
     attentionIds,
     total: sessions.length,
-    urgency: dominantUrgency(counts),
     providers: [...providers.values()],
   };
-}
-
-function dominantUrgency(counts: {
-  attention: number;
-  working: number;
-  complete: number;
-}): SessionUrgency {
-  if (counts.attention > 0) return SESSION_URGENCY.ATTENTION;
-  if (counts.working > 0) return SESSION_URGENCY.WORKING;
-  if (counts.complete > 0) return SESSION_URGENCY.COMPLETE;
-  return SESSION_URGENCY.UNKNOWN;
-}
-
-/**
- * The number the badge draws: the count of the state its colour names, so the
- * numeral and the tint state one fact. A "12" that meant "12 tracked" while
- * its colour meant "something needs you" made the reader hold two channels
- * apart; here an attention-coloured 2 is 2 sessions needing you. The total
- * only stands in when nothing is live enough to colour, because "how many
- * need me" and "how many are working" are the questions the badge exists to
- * answer, and the total answers neither.
- */
-export function tallyValue(tally: SessionTally): number {
-  switch (tally.urgency) {
-    case SESSION_URGENCY.ATTENTION:
-      return tally.attention;
-    case SESSION_URGENCY.WORKING:
-      return tally.working;
-    case SESSION_URGENCY.COMPLETE:
-      return tally.complete;
-    default:
-      return tally.total;
-  }
 }
 
 /** One sentence that reads correctly for a screen reader in either mode. */
@@ -1273,17 +1237,3 @@ export function tallySummary(tally: SessionTally): string {
  * stays reproducible, and live rows against whatever render tick asked.
  */
 export { observedAgoLabel } from "@sidecar/panel";
-
-/**
- * The caption beside the count once the panel has room for it. The badge's
- * number is the count of the state its colour names, so the caption is only
- * that state's words — never a number of its own, which would stand two
- * numerals with different denominators side by side.
- */
-export function tallyCaption(tally: SessionTally): string {
-  if (tally.total === 0) return "none tracked";
-  if (tally.attention > 0) return tally.attention === 1 ? "needs you" : "need you";
-  if (tally.working > 0) return "working";
-  if (tally.complete > 0) return "complete";
-  return "tracked";
-}

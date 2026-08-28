@@ -45,11 +45,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
  */
 export const SESSION_ROW_ID_ATTRIBUTE = "data-session-id";
 
-/**
- * How each slot in the wing's strip names itself: a provider's mark by the
- * provider, and the overflow count by its own sentinel — the count is a slot
- * like any other, so it glides like any other.
- */
+/** How each slot in the wing's strip names itself: by its provider. */
 export const WING_SLOT_ID_ATTRIBUTE = "data-slot-id";
 
 /**
@@ -140,20 +136,20 @@ const SESSION_LIST: ReorderList = {
 };
 
 /**
- * The wing's strip: marks laid along the wing, resting against the shape's far
- * edge. The wing hangs off the housing and grows that edge as the shape
- * morphs — `--wing-bound` moves the left edge of the very element `offsetLeft`
- * is measured from, and the marks move with it — so a slot's position is its
- * distance from the anchored edge instead: measured from the moving one, a
- * morph would read as stillness and the marks would jump to the new edge in
- * one frame. The distance is negated so the numbers still grow the way the
- * axis runs and the travel arithmetic stays the plan's. Measuring the slot's
- * own near edge also keeps the overflow count still while only its digits
- * widen, because the digits grow away from the anchor.
+ * Where a mark sits along the wing. The marks are anchored beside the housing,
+ * which is the wing's own left edge, so `offsetLeft` is already the distance
+ * from the edge that never moves: `--wing-bound` grows the wing 88px on a
+ * morph, and a position measured from the far edge would read that growth as
+ * a travel and animate the whole pile across the wing.
  */
+export function wingSlotOffset(element: HTMLElement): number {
+  return element.offsetLeft;
+}
+
+/** The wing's strip: marks laid along the wing, anchored beside the housing. */
 const WING_STRIP: ReorderList = {
   idAttribute: WING_SLOT_ID_ATTRIBUTE,
-  offset: (element, _container) => element.offsetLeft - (element.offsetParent?.clientWidth ?? 0),
+  offset: (element, _container) => wingSlotOffset(element),
   translate: (px) => `translateX(${px}px)`,
   arrivesFromFan: false,
 };
@@ -233,10 +229,10 @@ function elementVisible(element: HTMLElement): boolean {
  * Whether a planned travel animates for an element in this visibility. A slot
  * hop leaves a hidden element to take its place unseen — nothing a reader
  * watches moved. A travel the bound caused is the shape's own motion and
- * carries every element it displaced, seen or not: a mark can be
- * mid-entrance, transparent on the frame of the morph and visible before the
- * spring settles, and one left untravelled fades in at its new seat ahead of
- * the surface's edge, drawn on the desktop.
+ * carries every element it displaced, seen or not: a mark resting under the
+ * pile is transparent on the frame of the morph and visible before the spring
+ * settles, and one left untravelled would appear at its new seat without ever
+ * having crossed to it.
  */
 export function travelApplies(input: { boundMoved: boolean; visible: boolean }): boolean {
   return input.boundMoved || input.visible;

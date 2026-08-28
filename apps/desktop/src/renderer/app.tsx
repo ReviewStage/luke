@@ -748,25 +748,6 @@ export function App(): React.JSX.Element {
 
   const leavingPanel = useLeavingPanel(presentation);
 
-  // Clicking an icon in the top strip (notch wing) automatically sets the
-  // filter for that app or provider and reveals the sessions in the panel.
-  // Clicking an already-selected single filter toggles it back to all sessions.
-  const handleSelectWingFilter = useCallback(
-    (filter: SessionFilter) => {
-      cancelHover();
-      if (presentationOf() !== PANEL_PRESENTATION.PANEL) {
-        void changeMode(true);
-      }
-      setTab(PANEL_TAB.SESSIONS);
-      setSessionView((current) => ({
-        ...current,
-        filters: sameSessionFilters(current.filters, [filter]) ? [] : [filter],
-      }));
-      setOptionsOpen(false);
-    },
-    [cancelHover, changeMode, presentationOf, setTab],
-  );
-
   /**
    * The panel following its content down is the one move that can take the
    * shape out from under a resting pointer — a settings page opening shorter
@@ -3018,11 +2999,14 @@ export function App(): React.JSX.Element {
   // Luke is watching, not what the panel is currently showing — but it reads
   // in the list's own sort, so the wing's marks sit in the order the rows do.
   const tally = sessionTally(visibleSessions, sessionView.sort);
-  // The capsule button announces the same fact the badge draws: until the
-  // first roster reading lands, an unread zero is "checking", never "none
-  // tracked" — assistive tech must not hear a claim the wing is not making.
-  const tallyAnnouncement =
-    !accountGated && !sessionsSettled && tally.total === 0
+  // The one sentence the wing states about the roster, derived here so the
+  // capsule button's label and the wing's live region can never drift. Until
+  // the first roster reading lands, an unread zero is "checking", never "none
+  // tracked" — assistive tech must not hear a claim the wing is not making —
+  // and a gated Luke is not checking anything.
+  const tallyAnnouncement = accountGated
+    ? "Sign in"
+    : !sessionsSettled && tally.total === 0
       ? "Checking for sessions"
       : tallySummary(tally);
   const list = arrangeSessions(visibleSessions, sessionView);
@@ -3414,8 +3398,7 @@ export function App(): React.JSX.Element {
         presentation={presentation}
         housingWidth={display.notch.housingWidth}
         accountGated={accountGated}
-        onSelectFilter={handleSelectWingFilter}
-        activeFilters={sessionView.filters}
+        statusLabel={tallyAnnouncement}
       />
 
       {/* The one signed-out Luke. Like the caption, he is a single element in

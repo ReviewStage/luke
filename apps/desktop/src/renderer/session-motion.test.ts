@@ -7,6 +7,7 @@ import {
   planReorder,
   rosterRows,
   travelApplies,
+  wingSlotOffset,
   withoutDeparture,
 } from "./session-motion";
 
@@ -162,4 +163,15 @@ test("a departure still fading is kept while another begins", () => {
     { item: { id: "b" }, index: 1 },
     { item: { id: "c" }, index: 2 },
   ]);
+});
+
+test("a mark's seat is invariant to the wing's bound moving under it", () => {
+  // A morph grows the wing 88px. The marks are anchored beside the housing,
+  // so the offset must not read that growth as a travel and animate the whole
+  // pile across the wing.
+  // SAFETY: The two fields below are every property the offset reads.
+  const capsule = { offsetLeft: 9, offsetParent: { clientWidth: 36 } } as unknown as HTMLElement;
+  // SAFETY: The same shape at the peek's own bound.
+  const peek = { offsetLeft: 9, offsetParent: { clientWidth: 124 } } as unknown as HTMLElement;
+  assert.equal(wingSlotOffset(capsule), wingSlotOffset(peek));
 });

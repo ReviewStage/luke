@@ -25,7 +25,7 @@ import { NotchWings } from "../notch-wings";
 import { SessionRow, type SessionWriteHandlers } from "../panel-body";
 import { PANEL_PRESENTATION } from "../panel-state";
 import { RealtimeVoiceSession } from "../realtime-session";
-import { displaySessions, type SessionView, sessionTally } from "../session-model";
+import { displaySessions, type SessionView, sessionTally, tallySummary } from "../session-model";
 import { parseMilliseconds, useSessionReorderMotion } from "../session-motion";
 import { MicrophoneIcon } from "../settings-icons";
 import { useSignInFaceCycle } from "../sign-in-gate";
@@ -741,6 +741,7 @@ export function IntroductionTakeover({
         ...rows.filter((row) => row.id !== tourFlipId),
       ]
     : rows;
+  const stagedTally = sessionTally(stagedRows);
   const rowsNow = rowsPretend ? FIXTURE_EPOCH_MS : Date.now();
   // Whose turn the strip's meter draws, on the app's own vocabulary. The face
   // yields to the meter while the developer holds the floor — the real wings
@@ -850,12 +851,12 @@ export function IntroductionTakeover({
         </div>
       ) : null}
       {/* The real wings, the moment there is a strip to stand in: the same
-          face, meter, and count the app draws, trading the face for the meter
+          face, meter, and marks the app draws, trading the face for the meter
           while the developer holds the floor. At the gate the strip goes
           deliberately bare, exactly as the app's own signed-out strip does. */}
       {landed ? (
         <NotchWings
-          tally={sessionTally(stagedRows)}
+          tally={stagedTally}
           analyser={meterAnalyser}
           {...(voiceTurn ? { voice: voiceTurn } : undefined)}
           fixtureSpeaking={false}
@@ -867,6 +868,7 @@ export function IntroductionTakeover({
           presentation={presentation}
           housingWidth={bootstrap.display.notch.housingWidth}
           accountGated={standingDown}
+          statusLabel={standingDown ? "Sign in" : tallySummary(stagedTally)}
         />
       ) : null}
       {/* The app's own signed-out Luke, at the wing spot the capsule pose

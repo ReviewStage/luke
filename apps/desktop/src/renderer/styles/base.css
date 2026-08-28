@@ -28,8 +28,8 @@
      terminal mark: the frame, and the gray block its favicon keeps inside the
      frame's opening on every surface, and the vertical metallic gradient
      Superset's favicon draws its bracket mark with. Session state is carried
-     by the chips, row tints, and count badge instead, so the two colour
-     systems never compete for the same pixel. */
+     by the chips and the row tints instead, so the two colour systems never
+     compete for the same pixel. */
   --mark-claude-code: #d97757;
   --mark-cmux-left: #12c7f5;
   --mark-cmux-middle: #2d8cff;
@@ -155,8 +155,7 @@
   --slot-radius: 28px;
   --wing-inset: 9px;
   /* The panel's own content edge: where the tab bar, the rows, and the composer
-     all start. The wing's marks take the same start, so the strip up top reads
-     as the first line of the column below it. */
+     all start. */
   --panel-inset: 20px;
   --scroll-fade: 26px;
 }
@@ -193,10 +192,11 @@
   /* The capsule with room for the meter beside the face rather than instead of
      it. Only the left wing needs it — that is where both are drawn — so only
      that side grows: 18px for the meter and the 8px between them, added to the
-     36px the capsule already has there. The right side keeps its 36px, because
-     a count badge with 26px of new space around it is emptier than it was, not
-     better. It is Luke's reply that needs this at all; your own turn puts the
-     meter where the face was and needs no more room than the face did. */
+     36px the capsule already has there. The right side keeps its 36px: the
+     one resting mark sits there against the housing, and a wider side would
+     only carry it toward an edge it must never reach. It is Luke's reply that needs
+     this at all; your own turn puts the meter where the face was and needs no
+     more room than the face did. */
   --capsule-voice-growth: 26px;
   --capsule-voice-width: calc(var(--capsule-width) + var(--capsule-voice-growth));
   /* Growing one side moves the shape's centre half the growth away from it, so
@@ -300,9 +300,9 @@
   --voice-band-widen: calc((var(--voice-band-width) - var(--voice-band-width-compact)) / 2);
 }
 
-/* The wings keep the capsule's quiet form while the slot is drawn — one mark and
-   the count, nothing unfolded — because the slot is asking for a key, and a list
-   of sessions is not an answer to that. Only the bound changes, so nothing
+/* The wings keep the capsule's quiet form while the slot is drawn — the face
+   and the one resting mark, nothing unfolded — because the slot is asking for a
+   key, and a list of sessions is not an answer to that. Only the bound changes, so nothing
    spills past the narrower shape. The composer is asking for words and gets the
    same quiet. */
 .app-stage[data-presentation="slot"] {
@@ -512,10 +512,8 @@ button:disabled {
   transform: translateX(calc(-50% - var(--capsule-voice-shift)));
 }
 
-/* The meter follows the room being made for it, the way the marks follow the
-   peek — but not on the marks' beat, because the two are not the same distance.
-   A mark fades in early and slides 8px, which the peek's edge has long since
-   passed; the capsule grows 26px, and a meter drawn 60ms in is drawn past an
+/* The meter follows the room being made for it, the way the marks spread into
+   the peek. The capsule grows 26px, and a meter drawn 60ms in is drawn past an
    edge that is still 300ms away from it. So it crosses over the last of the
    shape's travel and finishes as the shape settles, which is the same thing the
    marks are doing — arriving inside the black rather than ahead of it.
@@ -545,9 +543,12 @@ button:disabled {
   }
 }
 
+/* A mark arriving into a resting strip lands in its own resting seat rather
+   than at the meter's unfold pose; the meter, which has no seat of its own,
+   reads the fallback. */
 @keyframes wing-mount-travel {
   from {
-    transform: translateX(8px);
+    transform: translateX(var(--mark-rest, 8px));
   }
 }
 
@@ -606,7 +607,7 @@ button:disabled {
   height: calc(var(--capsule-height) - var(--shape-top) * 2 + var(--caption-growth));
 }
 
-/* Under the pointer: wide enough to say what the count means. */
+/* Under the pointer: wide enough to spread the marks out flat. */
 .app-stage[data-presentation="peek"] .panel-surface {
   width: var(--peek-width);
   transition-duration: var(--duration-shape);
@@ -734,69 +735,70 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   padding: 0 var(--wing-inset);
 }
 
-/* The left wing's inner spans the whole strip rather than shrinking to its
-   contents: the face keeps the notch's edge it always had, and the marks' own
-   auto margin is what holds them against the shape's far edge instead of
-   beside the face. */
-.wing-left .wing-inner {
-  flex: 1;
-  justify-content: flex-end;
-}
-
-/* Anchored to the shape's far edge — the auto margin holds it there — and
-   starting at `--panel-inset` from it, so the first mark lines up with the tab
-   bar and the rows below. The wing already pads `--wing-inset`; the margin
-   makes up the difference. Read the way a list is: the first provider — the
-   one that needs a person soonest — holds the leftmost slot, and the overflow
-   count trails the rest. The far edge is the one a morph moves, so the marks
-   move with it; session-motion glides them there on the surface's own spring,
-   the same way it glides a re-sorted mark to its new slot. */
+/* Anchored beside the housing rather than at the shape's far edge, in every
+   state. The far edge is the one a morph moves; marks that are opaque at rest
+   would travel its whole 88px on every peek, and the strip would collapse
+   toward an edge on its way out. Beside the housing the black under them never
+   moves, so the shrink direction is safe by construction: the strip closes
+   toward the notch and nothing is ever drawn on the desktop. Read the way a
+   list is — the first provider, the one that needs a person soonest, holds the
+   slot nearest the housing, which is also the one the capsule keeps. */
 .wing-marks {
   display: flex;
   height: 22px;
   align-items: center;
   gap: 7px;
-  margin-right: auto;
-  margin-left: calc(var(--panel-inset) - var(--wing-inset));
 }
 
+/* The gate takes this place for its own label, and the two cannot share the
+   capsule's side. */
+.wing-marks[data-drawn="false"] {
+  display: none;
+}
+
+/* Stacked at rest and spread flat once the shape has room. The spread is
+   transform-only: an animated `gap` would re-lay the strip out on every frame,
+   and `--mark-rest` carries each mark's resting seat as an offset from where
+   the flat strip already lays it out.
+
+   The animation is what a mark mounting into an already unfolded wing needs:
+   on a compact mount its computed destination is its own resting seat, so it
+   costs nothing; on an open wing the backwards-filled keyframes provide the
+   missing start state. */
 .wing-mark {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0;
-  border: 0;
-  background: none;
   color: var(--text-secondary);
-  cursor: pointer;
-  outline: none;
-  -webkit-app-region: no-drag;
-  -webkit-tap-highlight-color: transparent;
-  pointer-events: none;
+  transform: translateX(var(--mark-rest, 0px));
+  transition:
+    opacity var(--duration-exit) var(--motion-exit),
+    transform var(--duration-shape) var(--spring);
+  animation:
+    wing-mount-fade var(--duration-quick) var(--motion-exit)
+    calc(var(--duration-shape) - var(--duration-quick)) backwards,
+    wing-mount-travel var(--duration-shape) var(--spring)
+    calc(var(--duration-shape) - var(--duration-quick)) backwards;
 }
 
-.wing-mark:hover,
-.wing-mark[data-active="true"] {
-  color: var(--text-primary);
+/* The capsule's side has room for one mark, so every mark past the first rests
+   exactly on it and is drawn nowhere until the shape spreads the strip out.
+   Overlapping them was tried: a facepile reads because avatars share one
+   circular frame, and these are heterogeneous glyphs at 14px, where a crescent
+   carries no identity at all. */
+.wing-mark[data-piled="false"] {
+  opacity: 0;
 }
 
-.wing-mark[data-leaving="true"] {
-  pointer-events: none;
-}
-
-html[data-keyboard="true"] .wing-mark:focus-visible {
-  outline: 2px solid var(--state-working);
-  outline-offset: 2px;
-  border-radius: 2px;
-}
-
-/* The capsule keeps the face and nothing else; what Luke is watching belongs to
-   the states with room for it, and unfolds outward from the notch on the same
-   spring, at the same distance, as the count's caption does on the other side.
-   The two wings are one gesture, so they move as one. */
-.wing-mark,
-.wing-more,
+/* The meter's slot, rather than the meter itself: unfolding is the wing's
+   gesture and belongs to the slot, while the opacity and scale inside it are
+   the meter's own answer to speech. One element cannot carry both. It unfolds
+   outward from the notch on the same spring, at the same distance, as the
+   marks spread on the other side: the two wings are one gesture, so they move
+   as one. */
 .wing-meter {
+  display: flex;
+  align-items: center;
   opacity: 0;
   transform: translateX(8px);
   transition:
@@ -804,11 +806,7 @@ html[data-keyboard="true"] .wing-mark:focus-visible {
     transform var(--duration-shape) var(--spring);
 }
 
-.app-stage[data-presentation="peek"] .wing-mark,
-.app-stage[data-presentation="peek"] .wing-more,
 .app-stage[data-presentation="peek"] .wing-meter,
-.app-stage[data-presentation="panel"] .wing-mark,
-.app-stage[data-presentation="panel"] .wing-more,
 .app-stage[data-presentation="panel"] .wing-meter {
   opacity: 1;
   transform: none;
@@ -817,35 +815,17 @@ html[data-keyboard="true"] .wing-mark:focus-visible {
   transition-delay: var(--peek-delay);
 }
 
-.app-stage[data-presentation="peek"] .wing-mark:not([data-leaving="true"]),
-.app-stage[data-presentation="panel"] .wing-mark:not([data-leaving="true"]) {
-  pointer-events: auto;
-}
-
-/* The marks rest at the shape's far edge, not beside the face, so the peek's
-   early beat would draw them on the desktop ahead of an edge still most of its
-   travel away. They arrive the way the voice meter arrives in the growing
-   capsule: crossing the last of the shape's travel and finishing as it
+/* The marks spread across the last of the shape's travel and finish as it
    settles, inside the black rather than ahead of it. The meter above keeps the
    early beat — it stands beside the face, where the shape's edge passes at
    once. */
 .app-stage[data-presentation="peek"] .wing-mark,
-.app-stage[data-presentation="peek"] .wing-more,
-.app-stage[data-presentation="panel"] .wing-mark,
-.app-stage[data-presentation="panel"] .wing-more {
+.app-stage[data-presentation="panel"] .wing-mark {
+  opacity: 1;
+  transform: none;
+  transition-duration: var(--duration-quick), var(--duration-shape);
+  transition-timing-function: var(--motion-exit), var(--spring);
   transition-delay: calc(var(--duration-shape) - var(--duration-quick));
-}
-
-/* A mark can mount into an already unfolded wing. On a compact mount its
-   computed destination is the same covered pose, so this costs nothing; on an
-   open wing the backwards-filled keyframes provide the missing start state. */
-.wing-mark,
-.wing-more {
-  animation:
-    wing-mount-fade var(--duration-quick) var(--motion-exit)
-    calc(var(--duration-shape) - var(--duration-quick)) backwards,
-    wing-mount-travel var(--duration-shape) var(--spring)
-    calc(var(--duration-shape) - var(--duration-quick)) backwards;
 }
 
 /* A meter drawn for a live turn does not wait for the wing to unfold. It is
@@ -856,24 +836,6 @@ html[data-keyboard="true"] .wing-mark:focus-visible {
 .wing-meter[data-turn] {
   opacity: 1;
   transform: none;
-}
-
-/* More providers than the wing can hold. Counted rather than dropped, at the
-   far end of the row, where it reads as the remainder of a list. */
-.wing-more {
-  flex: 0 0 auto;
-  color: var(--text-tertiary);
-  font-size: 9.5px;
-  font-weight: 660;
-  letter-spacing: -0.2px;
-}
-
-/* The meter's slot, rather than the meter itself: unfolding is the wing's
-   gesture and belongs to the slot, while the opacity and scale inside it are the
-   meter's own answer to speech. One element cannot carry both. */
-.wing-meter {
-  display: flex;
-  align-items: center;
 }
 
 .provider-mark {
@@ -1358,104 +1320,49 @@ html[data-keyboard="true"] .wing-mark:focus-visible {
   pointer-events: auto;
 }
 
-/* Session count ---------------------------------------------------------- */
+/* Sign-in label ---------------------------------------------------------- */
 
-/* A number, not a badge. Seventeen sessions overflowed a pill, and a pill was
-   never carrying meaning the colour and the caption were not already carrying.
-   The rounded system face is the one macOS uses for glanceable numerals.
-   `--count-fit` is the component's answer to a number that outgrows the shape
-   it sits in: notch-wings measures the text and the wing's own room, and the
-   badge stands down from its resting scale just far enough to stay inside the
-   black — on transform, like everything else that moves, so a count crossing
-   a digit boundary re-shapes no text and rides the same spring as the
-   presentation's own scale change. */
-.count-badge {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--accent);
-  font-family: ui-rounded, -apple-system, "SF Pro Rounded", BlinkMacSystemFont, sans-serif;
-  font-size: 16px;
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
-  letter-spacing: -0.2px;
-  transform: scale(calc(0.88 * var(--count-fit, 1)));
-  transform-origin: left center;
-  transition: transform var(--duration-shape) var(--spring);
-  will-change: transform;
-}
-
-.count-badge[data-state="attention"] {
-  text-shadow: 0 0 14px color-mix(in srgb, var(--accent) 45%, transparent);
-}
-
-.count-badge[data-empty="true"] {
-  color: var(--text-tertiary);
-}
-
-/* The signed-out label wears words, not a numeral: the count's rounded
-   tabular face at label length reads as a button that is not one, so it
-   steps down to the panel's own text voice at a quieter size. It reads in
-   both compact shapes — inside the capsule's side it stands down to fit,
-   exactly as a wide count does — and hides over the open panel, where the
-   gate itself says it larger. The base rule declares only the transform
-   pair, so this restates it beside the fade rather than adding to it. */
-.count-badge[data-sign-in="true"] {
-  /* Flush to the housing's edge: the notch is black on black, so the inset a
-     numeral keeps reads as nothing here, and every pixel of it is room the
-     words need. The fit arithmetic mirrors this with `SIGN_IN_INSET`. */
+/* The one thing the right wing draws instead of the marks: words, in the
+   panel's own text voice at a quieter size, because a rounded tabular face at
+   label length reads as a button that is not one. It reads in both compact
+   shapes — inside the capsule's side it stands down to fit, which is what
+   `--sign-in-fit` carries: notch-wings measures the text and the wing's own
+   room, and the label stands down from its resting scale just far enough to
+   stay inside the black, on transform like everything else that moves. Over
+   the open panel it hides, where the gate itself says it larger. */
+.sign-in-label {
+  /* Flush to the housing's edge: the notch is black on black, so an inset
+     reads as nothing here, and every pixel of it is room the words need. The
+     fit arithmetic mirrors this with `SIGN_IN_INSET`. */
   margin-left: calc(-1 * var(--wing-inset));
-  font-family: inherit;
+  color: var(--text-tertiary);
   font-size: 12px;
-  font-variant-numeric: normal;
   font-weight: 640;
   letter-spacing: 0.1px;
   opacity: 0;
+  transform: scale(calc(0.88 * var(--sign-in-fit, 1)));
+  transform-origin: left center;
   transition:
     transform var(--duration-shape) var(--spring),
     opacity var(--duration-quick) var(--motion-exit);
-}
-
-.app-stage[data-presentation="capsule"] .count-badge[data-sign-in="true"],
-.app-stage[data-presentation="peek"] .count-badge[data-sign-in="true"] {
-  opacity: 1;
-}
-
-/* The panel has room for it to sit at full size; the capsule and the peek do
-   not, and growing it there read as a second movement competing with the
-   widening. */
-.app-stage[data-presentation="panel"] .count-badge {
-  transform: scale(var(--count-fit, 1));
-}
-
-.count-caption {
-  position: absolute;
-  top: 50%;
-  left: 100%;
-  margin-left: 9px;
-  color: var(--text-secondary);
-  font-size: 9.5px;
-  font-weight: 600;
-  letter-spacing: 0.2px;
-  opacity: 0;
-  text-transform: uppercase;
-  transform: translate(-8px, -50%);
-  /* Two properties, and the state below overrides duration and timing by
-     position: a third entry would have to be added there too. */
-  transition:
-    opacity var(--duration-exit) var(--motion-exit),
-    transform var(--duration-shape) var(--spring);
   white-space: nowrap;
+  will-change: transform;
 }
 
-.app-stage[data-presentation="peek"] .count-caption,
-.app-stage[data-presentation="panel"] .count-caption {
+.app-stage[data-presentation="capsule"] .sign-in-label,
+.app-stage[data-presentation="peek"] .sign-in-label {
   opacity: 1;
-  transform: translate(0, -50%);
-  transition-duration: var(--duration-quick), var(--duration-shape);
-  transition-timing-function: var(--motion-exit), var(--spring);
-  transition-delay: var(--peek-delay);
+}
+
+/* The roster's sentence is spoken, never drawn: assistive tech reads it out of
+   the live region while the wing draws the marks. */
+.wing-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 /* Voice caption ----------------------------------------------------------- */
@@ -2068,16 +1975,16 @@ html[data-keyboard="true"] .wing-mark:focus-visible {
 
 /* Waveform --------------------------------------------------------------- */
 
-/* The meter replaces the marks while the microphone is live and stays drawn for
-   the whole of that — silence is a thing it reports, not a reason to disappear.
-   It unfolds with the peek the way the marks do, because the capsule has no room
-   for it beside the face; there, a live microphone is what the face's colour and
-   tempo say. Speech only raises the meter from idle to full. */
+/* The meter takes the face's own place while the microphone is live and stays
+   drawn for the whole of that — silence is a thing it reports, not a reason to
+   disappear. It unfolds with the peek the way the marks spread, because the
+   capsule has no room for it beside the face; there, a live microphone is what
+   the face's colour and tempo say. Speech only raises the meter from idle to
+   full. */
 /* Exactly the face's 18px, because it stands where the face stands and the
    capsule has room for one of them: five bars at 2px with 2px between them. A
    wider meter is drawn past the black and onto the desktop, since the wings are
-   bounded by the peek the capsule can grow into rather than by the capsule. It
-   is also what keeps `FACE_AND_GAP` in notch-wings.tsx true of either one. */
+   bounded by the peek the capsule can grow into rather than by the capsule. */
 .waveform {
   display: flex;
   width: 18px;
@@ -3078,10 +2985,8 @@ html[data-keyboard="true"] .wing-mark:focus-visible {
   .feedback-stage,
   .key-slot-confirm,
   .wing-mark,
-  .wing-more,
   .wing-meter,
-  .count-badge,
-  .count-caption,
+  .sign-in-label,
   .session-row {
     transition-duration: 1ms;
     transition-delay: 0ms;

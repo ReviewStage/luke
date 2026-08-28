@@ -46,7 +46,7 @@ The window never animates its own frame. An animated `setBounds` re-lays out
 the whole renderer on every frame, because the panel is anchored to the
 viewport's centre. Everything layered on the surface must move with `transform`
 and `opacity` only. Animating width, height, padding, or font-size on the
-wings, the count badge, or the rows re-shapes text on every frame and is what
+wings, the sign-in label, or the rows re-shapes text on every frame and is what
 makes the motion stutter.
 
 The surface is opaque in every state, because it has to pass for part of a
