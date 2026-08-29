@@ -1,0 +1,1 @@
+ALTER TABLE "provider_key" DROP COLUMN "hint";

@@ -40,7 +40,7 @@ export const HOSTED_SERVICE_PATH = {
   EVENTS: "/api/events",
   /** Store or replace a provider key (POST) or delete one (DELETE). */
   VAULT_KEY: "/api/vault/key",
-  /** List stored provider keys — ids and display hints, never keys. */
+  /** List stored provider keys — ids and timestamps, never keys. */
   VAULT_KEYS: "/api/vault/keys",
 } as const;
 
@@ -248,7 +248,6 @@ export function vaultKeyStoreAnswerFromWire(
 /** One key entry as returned by the list endpoint — never contains the key. */
 export interface VaultKeyListEntry {
   providerId: VaultProviderId;
-  hint: string;
   updatedAt: number;
 }
 
@@ -269,12 +268,10 @@ export function vaultKeysListAnswerFromWire(
     if (!isRecord(item)) return undefined;
     const providerId = text(item.providerId);
     if (!providerId || !VAULT_PROVIDER_ID_SET.has(providerId)) return undefined;
-    const hint = text(item.hint);
-    if (!hint) return undefined;
     const updatedAt = wholeNumber(item.updatedAt);
     if (updatedAt === undefined || !isWireNumber(updatedAt) || updatedAt < 0) return undefined;
     // SAFETY: providerId is a string and a member of VAULT_PROVIDER_ID_SET.
-    keys.push({ providerId: providerId as VaultProviderId, hint, updatedAt });
+    keys.push({ providerId: providerId as VaultProviderId, updatedAt });
   }
   return { keys };
 }

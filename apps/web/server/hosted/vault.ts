@@ -46,7 +46,7 @@ export interface VaultKeyStoreOptions {
   resolveUserId: (request: Request) => Promise<string | undefined>;
   /** The value of PROVIDER_KEY_ENCRYPTION_SECRET; undefined means the env var is absent. */
   encryptionSecret: string | undefined;
-  storeKey: (userId: string, providerId: string, ciphertext: string, hint: string) => Promise<void>;
+  storeKey: (userId: string, providerId: string, ciphertext: string) => Promise<void>;
 }
 
 /** Stores or replaces the provider API key for the signed-in user. */
@@ -91,16 +91,14 @@ export async function handleVaultKeyStore(options: VaultKeyStoreOptions): Promis
   }
 
   const ciphertext = encryptProviderKey(key, secretResult.secret);
-  const hint = key.slice(-4);
 
-  await storeKey(userId, providerId, ciphertext, hint);
+  await storeKey(userId, providerId, ciphertext);
 
   return jsonResponse(HOSTED_HTTP_STATUS.OK, { stored: true });
 }
 
 export interface VaultKeyEntry {
   providerId: string;
-  hint: string;
   updatedAt: Date;
 }
 
@@ -135,7 +133,6 @@ export async function handleVaultKeysList(options: VaultKeysListOptions): Promis
   return jsonResponse(HOSTED_HTTP_STATUS.OK, {
     keys: rows.map((row) => ({
       providerId: row.providerId,
-      hint: row.hint,
       updatedAt: row.updatedAt.getTime(),
     })),
   });

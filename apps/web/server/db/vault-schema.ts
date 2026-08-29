@@ -19,8 +19,6 @@ export const providerKey = pgTable(
      * The nonce is random per write; the auth tag provides integrity.
      */
     ciphertext: text("ciphertext").notNull(),
-    /** Last four characters of the plaintext key, for display only. */
-    hint: text("hint").notNull(),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
