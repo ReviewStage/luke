@@ -208,7 +208,7 @@ function providersFact(settings: AppSettingsView): AppGuideFact {
       "providers such as Claude Code need no key and are observed on their own. Codex cloud " +
       `tasks (${CODEX_CLOUD_CONNECTION_WORD[settings.codexCloudConnection]}) follow the ` +
       "Codex CLI's own login: codex login connects them, and signing that CLI out stops them. " +
-      "While the Sync provider keys switch under Providers is on, a key saved while signed in " +
+      "While the Sync provider keys switch in the Sync section is on, a key saved while signed in " +
       "is also stored encrypted with Luke's own service, which never sends one back; the " +
       "switch is changed only by hand, and its own entry says what turning it moves.",
   };

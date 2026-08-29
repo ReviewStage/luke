@@ -1178,6 +1178,17 @@ async function startAccountCapabilities(): Promise<void> {
   // from; unawaited because the sign-in that started these capabilities must
   // not wait on an observation pass to land.
   void speakArrivalBeat();
+  // The sync switch is a standing state, not a one-shot act: while it is on,
+  // the vault holds what this Mac's encrypted store holds. Capabilities
+  // starting — a launch with an account, or the sign-in itself — is where
+  // that promise is made true for keys stored before the switch existed, or
+  // saved while signed out; the sweep is idempotent and reads only keys
+  // entered into Luke.
+  void settingsStore
+    .snapshot()
+    .then((settings) =>
+      settings.stored.syncProviderKeys ? providerKeyVaultSync.apply(true) : undefined,
+    );
 }
 
 async function stopAccountCapabilities(): Promise<void> {

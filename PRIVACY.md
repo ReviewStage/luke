@@ -46,12 +46,14 @@ running. One that never reaches a sign-in belongs to nobody, so deleting your
 account does not reach it — we have no way to tell it was yours.
 
 **Provider API keys (server-side vault).** While the "Sync provider keys"
-switch in Settings · Connections is on — it starts on — a provider API key you
-save while signed in is also stored with Luke's hosted service, for your other
-Luke devices. Turning the switch on uploads the provider keys already stored
-on this Mac; turning it off deletes every synced copy from our database while
-the keys on this Mac stay; deleting a key deletes its synced copy too, and
-signed out nothing is ever synced. We store a synced key encrypted in our own
+switch in Settings · Connections is on — it starts on — the provider API keys
+you entered into Luke on this Mac are kept synced to Luke's hosted service,
+for your other Luke devices: a key saved while signed in syncs in the same
+press, and Luke re-syncs the stored keys when he starts signed in, when you
+sign in, and when the switch turns on. Keys Luke merely reads from your
+environment are never synced. Turning the switch off deletes every synced
+copy from our database while the keys on this Mac stay; deleting a key
+deletes its synced copy too, and signed out nothing is ever synced. We store a synced key encrypted in our own
 database using AES-256-GCM with a server-only secret. The key is never
 returned to any caller: there is no endpoint that reads it back, and no code
 path that decrypts it for any purpose other than the observation or acts you
