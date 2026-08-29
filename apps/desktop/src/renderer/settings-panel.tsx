@@ -162,7 +162,7 @@ import {
   type SettingsView,
   settingsNavRowId,
 } from "./settings-views";
-import { UPDATE_ROW_ACTION, type UpdateRowAction, updateAvailable, updateRow } from "./update-row";
+import { UPDATE_ROW_ACTION, type UpdateRowAction, updateRow } from "./update-row";
 
 /** One provider the default-workspace rows can offer, by id and display name. */
 export interface WorkspaceProviderOption {
@@ -3482,11 +3482,9 @@ function updateButton(action: UpdateRowAction, control: UpdateControl): React.JS
 }
 
 /**
- * Where the build stands against the latest release. It sits below the pages
- * until a newer release is positively known, and leads the front page while
- * one is — the place in the stack is itself the answer to "is there news",
- * the same answer the Settings tab's dot gives from outside. The caller says
- * where it stands, because the arrival stagger is counted by the page.
+ * Where the build stands against the latest release. It stays below the pages
+ * while the Settings tab's dot carries the news outside. The caller says where
+ * it stands, because the arrival stagger is counted by the page.
  */
 function UpdatesSection({
   control,
@@ -3653,10 +3651,6 @@ export function SettingsPanel({
   }, [view, panelOpen]);
   // The drawn page's reset, absent while that page stands at its defaults.
   const pageReset = pageResetControl(view, settings, writes);
-  // Whether the Updates section leads the front page instead of sitting below
-  // the pages: a newer release waiting is the one piece of news this page can
-  // hold, and news is not filed under maintenance.
-  const updateLeads = updateAvailable(updates.update);
   return (
     <div
       className="settings"
@@ -3703,15 +3697,13 @@ export function SettingsPanel({
            the founders, whose account this is, and the way out. The allowance leads because it is the one
            thing here worth checking daily; the account itself follows the
            page down to the ways out, which are done once or never. A newer
-           release waiting takes the head of the page for as long as it
-           stands, because it is the one thing here that is news rather than
-           state, and the row indexes below count past it so the arrival
-           stagger keeps one order with the sections. */
+           release waiting is marked on the tab rather than moved here: a
+           section that changed places as its own check found news would
+           rearrange the page under the hand that pressed it. */
         <>
-          {updateLeads ? <UpdatesSection control={updates} rowIndex={1} /> : null}
           {account.status === ACCOUNT_STATUS.SIGNED_IN && settings ? (
             <WhatLukeRunsOnSection
-              rowIndex={updateLeads ? 2 : 1}
+              rowIndex={1}
               panelOpen={panelOpen}
               storageLocked={settings.secretStorage === SECRET_STORAGE.UNAVAILABLE}
               settings={settings}
@@ -3723,7 +3715,7 @@ export function SettingsPanel({
           ) : null}
           <section
             className="settings-section settings-index"
-            style={cssCustomProperties({ "--row-index": updateLeads ? 3 : 2 })}
+            style={cssCustomProperties({ "--row-index": 2 })}
           >
             {SETTINGS_SUBVIEW_LIST.map((subview) => (
               <SettingsNavRow
@@ -3796,7 +3788,7 @@ export function SettingsPanel({
 
       {view !== SETTINGS_VIEW.ROOT || search ? null : (
         <>
-          {updateLeads ? null : <UpdatesSection control={updates} rowIndex={3} />}
+          <UpdatesSection control={updates} rowIndex={3} />
 
           <FeedbackSection control={feedback} />
 

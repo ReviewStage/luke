@@ -26,11 +26,10 @@ export interface UpdateRow {
 
 /**
  * Whether a newer release is positively known to exist. This is what marks
- * the Settings tab and moves the Updates section to the head of the front
- * page — one judgment, so the dot, the section's place, and the row can
- * never disagree about whether there is news. The news stands through the
- * whole install: a release downloading, still publishing, waiting on its
- * restart, or failed mid-fetch is still one this build is not on.
+ * the Settings tab, so the dot and the row can never disagree about whether
+ * there is news. The news stands through the whole install: a release
+ * downloading, still publishing, waiting on its restart, or failed mid-fetch
+ * is still one this build is not on.
  */
 export function updateAvailable(update: UpdateSnapshot): boolean {
   return (
