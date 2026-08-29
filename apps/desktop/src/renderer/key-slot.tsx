@@ -138,20 +138,6 @@ export function KeySlot({
             }}
           />
         </div>
-        {/* The same choice the panel's editor draws, because a Connect press
-            lands here without ever showing that editor: an entry that will
-            sync by default has to say so wherever it can be saved from. */}
-        {entry.sync !== undefined ? (
-          <label className="sync-choice">
-            <input
-              type="checkbox"
-              checked={!entry.sync}
-              disabled={entry.busy || !live}
-              onChange={(event) => control.setSync(!event.target.checked)}
-            />
-            <span className="sync-choice-name">Do not sync to your other Luke devices</span>
-          </label>
-        ) : null}
         {/* The panel's own editor, at the slot's width: what it takes on one
             line, where to go and get it on the next. Making the field the whole
             width is not a flourish — the sentence it holds is the same one the

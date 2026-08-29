@@ -14,13 +14,7 @@ import type { FeedbackImage, FeedbackKind } from "@sidecar/feedback";
 import { FEEDBACK_KIND, FEEDBACK_LIMITS, feedbackKindForLifecycleEvent } from "@sidecar/feedback";
 import { FIXTURE_EPOCH_MS, FIXTURE_SPEAKING_CAPTION } from "@sidecar/fixtures";
 import { APP_UPDATE_ACT, FEEDBACK_COMPOSER_KIND } from "@sidecar/guide";
-import {
-  type HostedUsageAnswer,
-  isVaultProviderId,
-  type VaultKeyListEntry,
-  type VaultProviderId,
-  vaultKeyIsStorable,
-} from "@sidecar/hosted";
+import type { HostedUsageAnswer } from "@sidecar/hosted";
 import { WingFace as LukeFace, ProviderMark } from "@sidecar/panel";
 import {
   APP_TOOL_KIND,
@@ -49,7 +43,7 @@ import {
   VOICE_CAPTION_MAX_HEIGHT,
 } from "@sidecar/surface";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
-import { ACT_RESULT_STATUS, type ActResult, type WireRecord } from "@sidecar/wire";
+import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import {
   type CSSProperties,
   useCallback,
@@ -1090,124 +1084,6 @@ export function App(): React.JSX.Element {
   }, []);
 
   /**
-   * The account vault's list — which providers hold a synced key, each as a
-   * hint and a date, never the key. Read at sign-in and after every vault act,
-   * cleared at sign-out because a vault with no account behind it holds
-   * nothing this panel may claim; a read that failed or was overtaken keeps
-   * what is already known, since after a confirmed act the list on screen says
-   * what the service just agreed to.
-   */
-  const [vaultKeys, setVaultKeys, vaultKeysNow] = useStateWithRef<
-    readonly VaultKeyListEntry[] | undefined
-  >(undefined);
-  // True only while nothing synced can be shown at all: the list has never
-  // answered and the latest ask failed. A refresh that failed over a held
-  // list stays quiet, because the rows are still telling the truth.
-  const [vaultUnreachable, setVaultUnreachable] = useState(false);
-  const vaultListAsk = useRef(0);
-  const refreshVaultKeys = useCallback(async () => {
-    const ask = ++vaultListAsk.current;
-    const answer = await window.sidecar.requestVaultKeys().catch(() => undefined);
-    if (ask !== vaultListAsk.current) return;
-    const next = answer ?? vaultKeysNow();
-    setVaultKeys(next);
-    setVaultUnreachable(next === undefined);
-  }, [setVaultKeys, vaultKeysNow]);
-
-  // Which signed-in era a vault act began in. A sign-out empties the list,
-  // but it cannot cancel a save already past the service — so an act's
-  // writes land only if the era it started in still stands, and a copy
-  // stored by a save that outlived its sign-out never repopulates a panel
-  // that no longer answers for that account.
-  const vaultEra = useRef(0);
-
-  useEffect(() => {
-    if (!bootstrap) return;
-    if ((account ?? bootstrap.account).status !== ACCOUNT_STATUS.SIGNED_IN) {
-      vaultEra.current += 1;
-      vaultListAsk.current += 1;
-      setVaultKeys(undefined);
-      setVaultUnreachable(false);
-      return;
-    }
-    void refreshVaultKeys();
-  }, [account, bootstrap, setVaultKeys, refreshVaultKeys]);
-
-  // Each Settings visit re-reads the list: a first read that failed would
-  // otherwise leave synced keys invisible and undeletable with no way back,
-  // and hints move with saves made elsewhere.
-  useEffect(() => {
-    if (tab !== PANEL_TAB.SETTINGS || !bootstrap) return;
-    if ((account ?? bootstrap.account).status !== ACCOUNT_STATUS.SIGNED_IN) return;
-    void refreshVaultKeys();
-  }, [tab, account, bootstrap, refreshVaultKeys]);
-
-  const removeVaultKey = useCallback(
-    async (providerId: VaultProviderId): Promise<ActResult> => {
-      const era = vaultEra.current;
-      const answer = await window.sidecar.deleteVaultKey(providerId).catch(() => undefined);
-      if (answer?.status === ACT_RESULT_STATUS.ACCEPTED) {
-        if (era === vaultEra.current) {
-          setVaultKeys(vaultKeysNow()?.filter((stored) => stored.providerId !== providerId));
-          void refreshVaultKeys();
-        }
-        return answer;
-      }
-      return (
-        answer ?? {
-          status: ACT_RESULT_STATUS.REJECTED,
-          reason: "Luke's service did not take that. Check the connection and try again.",
-        }
-      );
-    },
-    [refreshVaultKeys, setVaultKeys, vaultKeysNow],
-  );
-
-  /**
-   * The synced half of a save, run only after the local write landed: the
-   * same trimmed draft goes to the vault, and the confirmed copy lands on the
-   * drawn list at once — by the same hint rule the service applies — while
-   * the refresh that follows replaces it with the service's own record.
-   * Answers why it could not, for the entry to keep saying; the local key
-   * stands either way, so a retry is another Save and nothing else.
-   */
-  const syncProviderKey = useCallback(
-    async (providerId: VaultProviderId, key: string): Promise<string | undefined> => {
-      const era = vaultEra.current;
-      const result = vaultKeyIsStorable(key)
-        ? await window.sidecar.storeVaultKey(providerId, key).catch(() => undefined)
-        : undefined;
-      if (result?.status !== ACT_RESULT_STATUS.ACCEPTED) {
-        return "The key is stored on this Mac, but Luke's service could not take the synced copy. Save again to retry, or turn syncing off.";
-      }
-      if (era !== vaultEra.current) return undefined;
-      setVaultKeys([
-        ...(vaultKeysNow() ?? []).filter((stored) => stored.providerId !== providerId),
-        { providerId, hint: key.slice(-4), updatedAt: Date.now() },
-      ]);
-      setVaultUnreachable(false);
-      void refreshVaultKeys();
-      return undefined;
-    },
-    [refreshVaultKeys, setVaultKeys, vaultKeysNow],
-  );
-
-  /**
-   * Whether an entry for this provider offers the synced save: only a vault
-   * provider's, and only while an account stands behind the vault. Decided
-   * when the entry begins, so every view drawing it — the settings row and
-   * the slot alike — offers the same choice or none.
-   */
-  const syncOffer = useCallback(
-    (providerId: CredentialProviderId) =>
-      isVaultProviderId(providerId) &&
-      (accountNow() ?? bootstrap?.account)?.status === ACCOUNT_STATUS.SIGNED_IN
-        ? { sync: true }
-        : undefined,
-    [accountNow, bootstrap],
-  );
-
-  /**
    * Asking to write a key is asking for one thing, so the panel gets out of the
    * way of it: the shape goes down to the slot, which is the field and nothing
    * else. It is the same wherever the key is coming from — a first connection, a
@@ -1221,12 +1097,7 @@ export function App(): React.JSX.Element {
     send: async (sending) => {
       const result = await window.sidecar.setProviderApiKey(sending.providerId, sending.draft);
       applySettings(result.settings);
-      if (result.reason) return { rejection: result.reason };
-      if (sending.sync && isVaultProviderId(sending.providerId)) {
-        const refusal = await syncProviderKey(sending.providerId, sending.draft.trim());
-        if (refusal !== undefined) return { rejection: refusal };
-      }
-      return {};
+      return result.reason ? { rejection: result.reason } : {};
     },
     pointerInside: pointerIsInside,
     presentation: presentationOf,
@@ -1245,15 +1116,9 @@ export function App(): React.JSX.Element {
       // slot so coming back lands on the page the entry began on.
       standDownPage.current = standDownReturnPage({ kind: PANEL_STAND_DOWN.KEY, providerId });
       slotOccupant.current = PANEL_STAND_DOWN.KEY;
-      credentialsEntry.begin({
-        providerId,
-        draft: "",
-        busy: false,
-        away: false,
-        ...syncOffer(providerId),
-      });
+      credentialsEntry.begin({ providerId, draft: "", busy: false, away: false });
     },
-    [credentialsEntry.begin, syncOffer],
+    [credentialsEntry.begin],
   );
 
   /**
@@ -1273,15 +1138,9 @@ export function App(): React.JSX.Element {
       standDownPage.current = standDownReturnPage({ kind: PANEL_STAND_DOWN.KEY, providerId });
       slotOccupant.current = PANEL_STAND_DOWN.KEY;
       window.sidecar.openProviderApiKeys(providerId);
-      credentialsEntry.begin({
-        providerId,
-        draft: "",
-        busy: false,
-        away: true,
-        ...syncOffer(providerId),
-      });
+      credentialsEntry.begin({ providerId, draft: "", busy: false, away: true });
     },
-    [credentialsEntry.begin, syncOffer],
+    [credentialsEntry.begin],
   );
 
   /**
@@ -1324,7 +1183,6 @@ export function App(): React.JSX.Element {
     begin: beginEntry,
     connect: connectEntry,
     change: (draft) => credentialsEntry.patch({ draft }),
-    setSync: (sync) => credentialsEntry.patch({ sync }),
     fetchKey,
     cancel: credentialsEntry.cancel,
     commit: credentialsEntry.commit,
@@ -3403,7 +3261,6 @@ export function App(): React.JSX.Element {
               ...(hostedUsage ? { hostedUsage } : undefined),
               onSettingsChange: applySettings,
               credentials,
-              vault: { keys: vaultKeys, unreachable: vaultUnreachable, remove: removeVaultKey },
               feedback: feedbackControl,
               panelOpen,
               workspaceProviders: workspaceProviderOptions,

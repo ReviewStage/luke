@@ -1182,8 +1182,7 @@
   white-space: nowrap;
 }
 
-.calendar-choice,
-.sync-choice {
+.calendar-choice {
   display: flex;
   align-items: center;
   gap: 7px;
@@ -1194,8 +1193,7 @@
 /* Drawn by hand rather than by the user agent, because the unchecked state
    has to say whose calendar it is too: the box's edge keeps the calendar's
    colour empty, and fills with it when checked. */
-.calendar-choice input[type="checkbox"],
-.sync-choice input[type="checkbox"] {
+.calendar-choice input[type="checkbox"] {
   appearance: none;
   width: 11px;
   height: 11px;
@@ -1210,14 +1208,12 @@
   transition: background-color var(--duration-hover) ease;
 }
 
-.calendar-choice input[type="checkbox"]:checked,
-.sync-choice input[type="checkbox"]:checked {
+.calendar-choice input[type="checkbox"]:checked {
   background: var(--calendar-color, var(--state-working));
 }
 
 /* The check, cut from the page's own dark so it reads on any calendar colour. */
-.calendar-choice input[type="checkbox"]:checked::after,
-.sync-choice input[type="checkbox"]:checked::after {
+.calendar-choice input[type="checkbox"]:checked::after {
   content: "";
   width: 2.5px;
   height: 5.5px;
@@ -1227,15 +1223,13 @@
   transform: rotate(45deg);
 }
 
-.calendar-choice input[type="checkbox"]:focus-visible,
-.sync-choice input[type="checkbox"]:focus-visible {
+.calendar-choice input[type="checkbox"]:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px
     color-mix(in srgb, var(--calendar-color, var(--state-working)) 35%, transparent);
 }
 
-.calendar-choice-name,
-.sync-choice-name {
+.calendar-choice-name {
   font-size: 10.5px;
   color: var(--text-secondary);
   overflow: hidden;
@@ -1243,7 +1237,6 @@
   white-space: nowrap;
 }
 
-.calendar-choice:hover .calendar-choice-name,
-.sync-choice:hover .sync-choice-name {
+.calendar-choice:hover .calendar-choice-name {
   color: var(--text-primary);
 }

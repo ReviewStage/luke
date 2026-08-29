@@ -153,7 +153,6 @@ import {
 } from "./introduction-flow";
 import { registerAccountSessionIpc } from "./ipc/account-session";
 import { registerCalendarConnectionIpc } from "./ipc/calendar-connection";
-import { registerHostedVaultIpc } from "./ipc/hosted-vault";
 import { registerSessionActsIpc } from "./ipc/session-acts";
 import { registerSettingsRowsIpc } from "./ipc/settings-rows";
 import { registerTrackerConnectionIpc } from "./ipc/tracker-connection";
@@ -162,6 +161,7 @@ import { registerWindowSurfaceIpc } from "./ipc/window-surface";
 import { MediaDuckController } from "./native/media-duck";
 import { MicrophoneRouteWatcher } from "./native/microphone-route";
 import { OutputVolumeWatcher } from "./native/output-volume";
+import { ProviderKeyVaultSync } from "./provider-key-vault-sync";
 import { type BridgeContext, registerBridgeEntry } from "./register-bridge";
 import { runModeFor } from "./run-mode";
 import { createSettingsHandler } from "./settings-handler";
@@ -564,6 +564,13 @@ const hostedVault = new HostedVaultClient({
   readAccessToken: async () =>
     runMode.sendsNetwork ? (await settingsStore.readAccount())?.accessToken : undefined,
   refreshAccount: accountSession.refreshOnce,
+});
+// The mirror between the local key store and the vault. It lives here, beside
+// the client it drives, so the keys it reads for a sweep never leave the main
+// process.
+const providerKeyVaultSync = new ProviderKeyVaultSync({
+  vault: hostedVault,
+  readApiKey: (providerId) => settingsStore.readApiKey(providerId),
 });
 // One narrow function rather than the service itself, so an IPC module can
 // count an act without being handed anything it could flush, stop, or read.
@@ -1433,8 +1440,6 @@ function registerIpc(): void {
     resumeSessionReplay: () => void broadcastSessionReplay(),
   });
 
-  registerHostedVaultIpc({ ipcMain, trustedSender, vault: hostedVault });
-
   registerWindowSurfaceIpc({
     ipcMain,
     trustedSender,
@@ -1464,6 +1469,7 @@ function registerIpc(): void {
     refreshMeetingQuiet: () => void refreshMeetingQuiet(),
     releaseHeldNotices: () => void releaseHeldNotices(),
     recordProductEvent,
+    vaultSync: providerKeyVaultSync,
   });
 
   registerCalendarConnectionIpc({

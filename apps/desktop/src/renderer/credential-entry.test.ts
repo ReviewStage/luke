@@ -16,7 +16,6 @@ function control(entry?: CredentialEntry): CredentialEntryControl {
     begin: () => undefined,
     connect: () => undefined,
     change: () => undefined,
-    setSync: () => undefined,
     fetchKey: () => undefined,
     cancel: () => undefined,
     commit: () => undefined,

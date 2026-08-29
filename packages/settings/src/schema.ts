@@ -94,6 +94,7 @@ export const SETTING_SIDE_EFFECT = {
   MEDIA_DUCK: "media-duck",
   VOICE_SOURCE: "voice-source",
   MEETING_QUIET: "meeting-quiet",
+  VAULT_SYNC: "vault-sync",
 } as const;
 
 export type SettingSideEffect = (typeof SETTING_SIDE_EFFECT)[keyof typeof SETTING_SIDE_EFFECT];
@@ -594,6 +595,33 @@ export const APP_SETTING_SCHEMA = {
     mainProcessSideEffect: SETTING_SIDE_EFFECT.MEETING_QUIET,
     spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
     analytics: { id: APP_SETTING_ID.QUIET_DURING_MEETINGS, value: toggleAnalytics },
+  },
+  syncProviderKeys: {
+    field: "syncProviderKeys",
+    default: true,
+    guard: boolean(true),
+    settingsPage: SETTINGS_PAGE.CONNECTIONS,
+    guideEntry: settingGuideEntry(
+      "syncProviderKeys",
+      [APP_SETTING_ID.SYNC_PROVIDER_KEYS],
+      (settings, defaultValue) => ({
+        id: APP_SETTING_ID.SYNC_PROVIDER_KEYS,
+        label: "Sync provider keys",
+        description:
+          "Whether provider API keys are also stored, encrypted, with Luke's own service for the account's other Luke devices. While on, a key saved while signed in syncs in the same press; turning it on syncs the keys already stored here, and turning it off deletes every synced copy while the keys on this Mac stay. The service never sends a key back.",
+        kind: APP_SETTING_KIND.TOGGLE,
+        value: appToggleText(guideValue<boolean>(settings, "syncProviderKeys")),
+        defaultValue: appToggleText(defaultValue),
+        // Not adjustable by a spoken ask, deliberately: flipping it moves
+        // credentials to and from Luke's service, and a credential act is
+        // taken by hand alone.
+        adjustable: false,
+        manual: `${CONNECTIONS_PAGE}, under Providers`,
+      }),
+    ),
+    mainProcessSideEffect: SETTING_SIDE_EFFECT.VAULT_SYNC,
+    spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
+    analytics: { id: APP_SETTING_ID.SYNC_PROVIDER_KEYS, value: toggleAnalytics },
   },
   showOnAllDisplays: {
     field: "showOnAllDisplays",

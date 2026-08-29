@@ -10,13 +10,7 @@ import {
   VOICE_CREDENTIAL_PROVIDER,
 } from "@sidecar/credentials/vocabulary";
 import { APP_SETTING_KIND, APP_TOGGLE_VALUE } from "@sidecar/guide";
-import {
-  type HostedQuota,
-  type HostedUsageAnswer,
-  isVaultProviderId,
-  type VaultKeyListEntry,
-  type VaultProviderId,
-} from "@sidecar/hosted";
+import type { HostedQuota, HostedUsageAnswer } from "@sidecar/hosted";
 import { CloudBadge, ProviderMark } from "@sidecar/panel";
 import {
   isRealtimeVoice,
@@ -325,8 +319,6 @@ export interface SettingsPanelProps {
   hostedUsage?: HostedUsageAnswer;
   /** The one credential being entered anywhere, and everything that can be done to it. */
   credentials: CredentialEntryControl;
-  /** The account vault's synced keys, and the one act a row takes on one. */
-  vault: VaultControl;
   /** The one note to the founders being written, and everything that can be done to it. */
   feedback: FeedbackEntryControl;
   /**
@@ -723,20 +715,6 @@ function ProviderCredential({
               }}
             />
           </label>
-          {/* Drawn only when the entry offers the synced save at all — a vault
-              provider's, while signed in — and opting out rather than in,
-              because syncing is that entry's default. */}
-          {entry.sync !== undefined ? (
-            <label className="sync-choice">
-              <input
-                type="checkbox"
-                checked={!entry.sync}
-                disabled={busy}
-                onChange={(event) => control.setSync(!event.target.checked)}
-              />
-              <span className="sync-choice-name">{SYNC_OPT_OUT_LABEL}</span>
-            </label>
-          ) : null}
           <div className="settings-row">
             <small className="settings-note">
               {provider.hint}{" "}
@@ -1373,7 +1351,6 @@ function CodexCloudConnection({
 function CredentialsSection({
   settings,
   control,
-  vault,
   panelOpen,
   writes,
   superset,
@@ -1381,7 +1358,6 @@ function CredentialsSection({
 }: {
   settings: AppSettingsView;
   control: CredentialEntryControl;
-  vault: VaultControl;
   panelOpen: boolean;
   writes: SettingsWrites;
   superset: SupersetControl;
@@ -1422,10 +1398,6 @@ function CredentialsSection({
             ? provider.id
             : undefined;
         const workspaceProvider = workspaceProviders.find((option) => option.id === provider.id);
-        const vaultId = isVaultProviderId(provider.id) ? provider.id : undefined;
-        const syncedEntry = vaultId
-          ? vault.keys?.find((stored) => stored.providerId === vaultId)
-          : undefined;
         return (
           <Fragment key={provider.id}>
             <ProviderCredential
@@ -1435,14 +1407,6 @@ function CredentialsSection({
               control={control}
               panelOpen={panelOpen}
             >
-              {vaultId && syncedEntry ? (
-                <SyncedKeyLine
-                  provider={provider}
-                  entry={syncedEntry}
-                  panelOpen={panelOpen}
-                  onRemove={() => vault.remove(vaultId)}
-                />
-              ) : null}
               {agentRow ? (
                 <WorkspaceAgentRow
                   provider={provider}
@@ -1490,171 +1454,20 @@ function CredentialsSection({
         writes={writes}
         {...(supersetWorkspace ? { workspaceProvider: supersetWorkspace } : {})}
       />
-      {vault.unreachable ? <p className="settings-note">{VAULT_UNREACHABLE_NOTE}</p> : null}
+      {/* The one choice spanning every key row: whether a saved key also
+          syncs to the account's vault on Luke's service. It lives with the
+          rows it governs rather than among the page's loose settings, and the
+          switch's whole act runs in the main process, where the keys are. */}
+      <SchemaSettingRows
+        page={SCHEMA_SETTINGS_PAGE.CONNECTIONS}
+        fields={[APP_SETTING_SCHEMA.syncProviderKeys.field]}
+        settings={settings}
+        writes={writes}
+      />
       {/* The same refusal the trackers' section explains: a Connect stilled by
           missing storage needs its why in this section too. */}
       {storageUnavailable ? <p className="settings-note">{STORAGE_UNAVAILABLE_NOTE}</p> : null}
     </section>
-  );
-}
-
-/** The vault's panel-side control: what is synced, and the one act on it. */
-export interface VaultControl {
-  /**
-   * The synced entries as last read — ids, hints, and timestamps, never keys —
-   * or nothing before the first answer and while signed out.
-   */
-  keys: readonly VaultKeyListEntry[] | undefined;
-  /**
-   * True while nothing synced can be shown at all: signed in, but the list
-   * has never answered and the latest read failed. The section says so
-   * rather than letting an empty answer pass for none synced.
-   */
-  unreachable: boolean;
-  /** Deletes one provider's synced key. Answers why if it could not. */
-  remove(providerId: VaultProviderId): Promise<ActResult>;
-}
-
-/* Why no synced line can be drawn, said once per section like the storage
-   refusal below it: rows silently missing read as keys silently gone. */
-const VAULT_UNREACHABLE_NOTE =
-  "Luke's service did not answer just now, so keys synced to it cannot be shown yet.";
-
-/* The entry checkbox's words for keeping a save local. It opts out rather
-   than in, because a signed-in entry syncs by default; absent an account the
-   choice is not drawn and the save is local, the only thing it could be. */
-const SYNC_OPT_OUT_LABEL = "Do not sync to your other Luke devices";
-
-/** When a synced key was last written, in the line's own short words. */
-function syncedKeySavedOn(updatedAt: number): string {
-  return new Date(updatedAt).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-/**
- * The synced copy standing behind a provider's row: the key's tail and date,
- * and the delete that is the one act a synced key takes here. The service
- * holds no endpoint that reads a key back, so this line is everything the
- * panel can say about one. Deleting asks first, exactly like the local key's
- * trash, and focus follows the confirm the same way: onto Cancel when the
- * question appears, back onto the trash when it withdraws.
- */
-function SyncedKeyLine({
-  provider,
-  entry,
-  panelOpen,
-  onRemove,
-}: {
-  provider: CredentialProvider;
-  entry: VaultKeyListEntry;
-  panelOpen: boolean;
-  onRemove: () => Promise<ActResult>;
-}): React.JSX.Element {
-  const [asking, setAsking] = useState(false);
-  const [clearing, setClearing] = useState(false);
-  const [rejection, setRejection] = useState<string>();
-  const trash = useRef<HTMLButtonElement | null>(null);
-  const keep = useRef<HTMLButtonElement | null>(null);
-  const returnFocus = useRef(false);
-
-  // A confirm left open when the panel goes is withdrawn, the same correction
-  // the local key rows apply: reopening onto a question nobody remembers
-  // asking reads as a trap.
-  if (asking && !panelOpen && !clearing) setAsking(false);
-
-  useStagedFocus(keep, asking && !clearing);
-
-  useEffect(() => {
-    if (asking || !returnFocus.current) return;
-    returnFocus.current = false;
-    return focusWhenVisible(trash.current);
-  }, [asking]);
-
-  const keepKey = () => {
-    if (clearing) return;
-    returnFocus.current = true;
-    setAsking(false);
-  };
-  const removeKey = async () => {
-    setClearing(true);
-    returnFocus.current = true;
-    const reason = actRejection(await onRemove());
-    setClearing(false);
-    setAsking(false);
-    setRejection(reason);
-  };
-
-  return (
-    <>
-      <div className="settings-row">
-        <small className="settings-note">
-          {`Synced to Luke's service ····${entry.hint} · ${syncedKeySavedOn(entry.updatedAt)}`}
-        </small>
-        <span className="credential-actions">
-          <span
-            className="settings-actions credential-controls"
-            data-drawn={String(!asking)}
-            aria-hidden={asking}
-            inert={asking}
-          >
-            <button
-              type="button"
-              ref={trash}
-              className="icon-button credential-remove"
-              disabled={clearing}
-              aria-label={`Delete the synced ${provider.displayName} key from Luke's service`}
-              title="Delete the synced copy…"
-              onClick={() => {
-                setRejection(undefined);
-                setAsking(true);
-              }}
-            >
-              <TrashIcon />
-            </button>
-          </span>
-          <fieldset
-            className="settings-actions credential-confirm"
-            aria-label={`Delete the synced ${provider.displayName} key from Luke's service?`}
-            data-drawn={String(asking)}
-            aria-hidden={!asking}
-            inert={!asking}
-            onKeyDown={(event) => {
-              if (event.key !== "Escape" || clearing) return;
-              event.stopPropagation();
-              keepKey();
-            }}
-          >
-            <button
-              type="button"
-              ref={keep}
-              className="quiet-button"
-              style={answerOrder(REMOVAL_ANSWER_INDEX.KEEP)}
-              disabled={clearing}
-              onClick={keepKey}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="danger-button"
-              style={answerOrder(REMOVAL_ANSWER_INDEX.DELETE)}
-              disabled={clearing}
-              onClick={() => void removeKey()}
-            >
-              {clearing ? "Deleting…" : "Delete"}
-            </button>
-          </fieldset>
-        </span>
-      </div>
-      {rejection ? (
-        <p className="error-message" role="alert">
-          {rejection}
-        </p>
-      ) : null}
-    </>
   );
 }
 
@@ -3788,7 +3601,6 @@ export function SettingsPanel({
   voiceService,
   hostedUsage,
   credentials,
-  vault,
   feedback,
   panelOpen,
   workspaceProviders,
@@ -4005,7 +3817,6 @@ export function SettingsPanel({
           <CredentialsSection
             settings={settings}
             control={credentials}
-            vault={vault}
             panelOpen={panelOpen}
             writes={writes}
             superset={superset}
@@ -4027,6 +3838,8 @@ export function SettingsPanel({
               APP_SETTING_SCHEMA.defaultWorkspaceProvider.field,
               APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
               APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
+              // Drawn inside the Providers section, beside the key rows it governs.
+              APP_SETTING_SCHEMA.syncProviderKeys.field,
             ]}
           />
         </>
