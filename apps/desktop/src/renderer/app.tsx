@@ -1114,9 +1114,17 @@ export function App(): React.JSX.Element {
     setVaultUnreachable(next === undefined);
   }, [setVaultKeys, vaultKeysNow]);
 
+  // Which signed-in era a vault act began in. A sign-out empties the list,
+  // but it cannot cancel a save already past the service — so an act's
+  // writes land only if the era it started in still stands, and a copy
+  // stored by a save that outlived its sign-out never repopulates a panel
+  // that no longer answers for that account.
+  const vaultEra = useRef(0);
+
   useEffect(() => {
     if (!bootstrap) return;
     if ((account ?? bootstrap.account).status !== ACCOUNT_STATUS.SIGNED_IN) {
+      vaultEra.current += 1;
       vaultListAsk.current += 1;
       setVaultKeys(undefined);
       setVaultUnreachable(false);
@@ -1136,10 +1144,13 @@ export function App(): React.JSX.Element {
 
   const removeVaultKey = useCallback(
     async (providerId: VaultProviderId): Promise<ActResult> => {
+      const era = vaultEra.current;
       const answer = await window.sidecar.deleteVaultKey(providerId).catch(() => undefined);
       if (answer?.status === ACT_RESULT_STATUS.ACCEPTED) {
-        setVaultKeys(vaultKeysNow()?.filter((stored) => stored.providerId !== providerId));
-        void refreshVaultKeys();
+        if (era === vaultEra.current) {
+          setVaultKeys(vaultKeysNow()?.filter((stored) => stored.providerId !== providerId));
+          void refreshVaultKeys();
+        }
         return answer;
       }
       return (
@@ -1162,12 +1173,14 @@ export function App(): React.JSX.Element {
    */
   const syncProviderKey = useCallback(
     async (providerId: VaultProviderId, key: string): Promise<string | undefined> => {
+      const era = vaultEra.current;
       const result = vaultKeyIsStorable(key)
         ? await window.sidecar.storeVaultKey(providerId, key).catch(() => undefined)
         : undefined;
       if (result?.status !== ACT_RESULT_STATUS.ACCEPTED) {
         return "The key is stored on this Mac, but Luke's service could not take the synced copy. Save again to retry, or turn syncing off.";
       }
+      if (era !== vaultEra.current) return undefined;
       setVaultKeys([
         ...(vaultKeysNow() ?? []).filter((stored) => stored.providerId !== providerId),
         { providerId, hint: key.slice(-4), updatedAt: Date.now() },
