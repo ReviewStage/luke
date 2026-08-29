@@ -74,6 +74,9 @@ private struct VaultProviderRow: View {
 
     var body: some View {
         HStack(spacing: 8) {
+            ProviderMark(provider: provider)
+                .foregroundStyle(Color.white)
+                .frame(width: 18, height: 18)
             Text(provider.displayName)
                 .font(.system(size: 15, weight: .medium))
                 .foregroundStyle(Color.white)
@@ -114,9 +117,14 @@ private struct VaultKeyEditor: View {
         ZStack {
             Color(red: 0.09, green: 0.09, blue: 0.10).ignoresSafeArea()
             VStack(alignment: .leading, spacing: 12) {
-                Text(provider.displayName)
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(Color.white)
+                HStack(spacing: 10) {
+                    ProviderMark(provider: provider)
+                        .foregroundStyle(Color.white)
+                        .frame(width: 24, height: 24)
+                    Text(provider.displayName)
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(Color.white)
+                }
 
                 if let entry = vault.entry(for: provider) {
                     Text("A key ending in \(entry.hint) is stored. Saving replaces it.")
