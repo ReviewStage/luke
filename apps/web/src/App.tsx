@@ -11,7 +11,10 @@ export function App(): React.JSX.Element {
         {/* The copy runs left, the way a page of prose does. The mock does not:
             a notch belongs at the horizontal center of a display, so the art
             centers itself inside the column the copy is aligned against. */}
-        <section className="pt-12 pb-16 max-[520px]:pt-8 max-[520px]:pb-0">
+        {/* The footer's hairline draws itself a space-5 above the footer's own
+            box, inside this section's bottom padding, so the padding must keep
+            at least that much clearance or the rule lands across the mock. */}
+        <section className="pt-12 pb-16 max-[520px]:pt-8 max-[520px]:pb-10">
           {/* Fixed rather than fluid, with one step down: at 2.25rem the line
               needs about 490px, so it steps before the column can squeeze it
               rather than at the column's own padding breakpoint. */}
