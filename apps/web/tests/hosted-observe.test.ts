@@ -163,3 +163,22 @@ test("readVaultKeys is called with the resolved user id", async () => {
 
   assert.equal(calledWithUserId, "user-xyz");
 });
+
+// --- Rate brake ---
+
+test("the observe endpoint returns 429 after too many requests in the same window", async () => {
+  // now() stays fixed so all calls land in the same window.
+  const now = () => 1_000_000;
+  // A userId unique to this test run avoids cross-test pollution of the module-level counter.
+  const userId = `ratelimit-${Date.now()}-${process.pid}`;
+
+  // MAX_REQUESTS_PER_WINDOW is 10; the 11th should be rate-limited.
+  for (let i = 0; i < 10; i++) {
+    const res = await handleObserve(observeOptions({ resolveUserId: async () => userId, now }));
+    assert.equal(res.status, 200, `request ${i + 1} should succeed`);
+  }
+
+  const limited = await handleObserve(observeOptions({ resolveUserId: async () => userId, now }));
+  assert.equal(limited.status, 429);
+  assert.equal((await limited.json()).error, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
+});

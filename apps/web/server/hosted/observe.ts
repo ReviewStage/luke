@@ -10,6 +10,36 @@ import { type ObservedSession, VAULT_PROVIDER_ID, type VaultProviderId } from ".
 import { decryptProviderKey } from "./encryption.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
 
+/**
+ * Per-user in-memory brake, keyed on the resolved account rather than the
+ * network address: the token already names who is asking, so rotating IPs
+ * cannot route around it. The counter lives in the function instance, which
+ * makes it a per-instance brake rather than a cluster-wide guarantee —
+ * platform-level rules are the real backstop — but it turns a hammering
+ * client into a trickle and limits amplification against provider quotas.
+ */
+const OBSERVE_RATE_LIMIT = {
+  WINDOW_MS: 60_000,
+  MAX_REQUESTS_PER_WINDOW: 10,
+  /** The map is bounded; past this it forgets the oldest window rather than growing. */
+  MAX_TRACKED_USERS: 10_000,
+} as const;
+
+const observeRecentUsers = new Map<string, { windowStart: number; count: number }>();
+
+function observeRateLimited(userId: string, now: number): boolean {
+  const held = observeRecentUsers.get(userId);
+  if (!held || now - held.windowStart >= OBSERVE_RATE_LIMIT.WINDOW_MS) {
+    if (observeRecentUsers.size >= OBSERVE_RATE_LIMIT.MAX_TRACKED_USERS) {
+      observeRecentUsers.clear();
+    }
+    observeRecentUsers.set(userId, { windowStart: now, count: 1 });
+    return false;
+  }
+  held.count += 1;
+  return held.count > OBSERVE_RATE_LIMIT.MAX_REQUESTS_PER_WINDOW;
+}
+
 /** Stored vault key row as the API route supplies it. */
 export interface VaultKeyRow {
   providerId: string;
@@ -51,6 +81,11 @@ export async function handleObserve(options: ObserveOptions): Promise<Response> 
   const secret = (encryptionSecret ?? "").trim();
   if (!secret) {
     return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
+  }
+
+  const now = (options.now ?? Date.now)();
+  if (observeRateLimited(userId, now)) {
+    return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
   }
 
   const rows = await readVaultKeys(userId);
