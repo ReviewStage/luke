@@ -19,7 +19,6 @@ export default {
         getDatabase()
           .select({
             providerId: providerKey.providerId,
-            hint: providerKey.hint,
             updatedAt: providerKey.updatedAt,
           })
           .from(providerKey)

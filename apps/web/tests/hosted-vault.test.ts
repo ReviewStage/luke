@@ -76,12 +76,7 @@ function storeOptions(overrides: Partial<Parameters<typeof handleVaultKeyStore>[
     request: storeRequest({ providerId: VAULT_PROVIDER_ID.COPILOT, key: "sk-abc1234" }),
     encryptionSecret: SECRET,
     resolveUserId: async () => "user-1",
-    storeKey: async (
-      _userId: string,
-      _providerId: string,
-      _ciphertext: string,
-      _hint: string,
-    ) => {},
+    storeKey: async (_userId: string, _providerId: string, _ciphertext: string) => {},
     ...overrides,
   };
 }
@@ -120,12 +115,12 @@ test("the store gate order is method, secret, token, body", async () => {
 });
 
 test("storing a valid key answers { stored: true } and writes an encrypted ciphertext", async () => {
-  let stored: { userId: string; providerId: string; ciphertext: string; hint: string } | undefined;
+  let stored: { userId: string; providerId: string; ciphertext: string } | undefined;
 
   const response = await handleVaultKeyStore(
     storeOptions({
-      storeKey: async (userId, providerId, ciphertext, hint) => {
-        stored = { userId, providerId, ciphertext, hint };
+      storeKey: async (userId, providerId, ciphertext) => {
+        stored = { userId, providerId, ciphertext };
       },
     }),
   );
@@ -135,8 +130,6 @@ test("storing a valid key answers { stored: true } and writes an encrypted ciphe
   assert.ok(stored);
   assert.equal(stored.userId, "user-1");
   assert.equal(stored.providerId, VAULT_PROVIDER_ID.COPILOT);
-  // The hint is the last 4 chars of "sk-abc1234".
-  assert.equal(stored.hint, "1234");
   // Ciphertext must not equal the plaintext key.
   assert.notEqual(stored.ciphertext, "sk-abc1234");
   // Round-trip: decrypt recovers the original key.
@@ -188,7 +181,7 @@ function listOptions(overrides: Partial<Parameters<typeof handleVaultKeysList>[0
     encryptionSecret: SECRET,
     resolveUserId: async () => "user-1",
     listKeys: async (_userId: string): Promise<VaultKeyEntry[]> => [
-      { providerId: VAULT_PROVIDER_ID.COPILOT, hint: "1234", updatedAt: NOW_DATE },
+      { providerId: VAULT_PROVIDER_ID.COPILOT, updatedAt: NOW_DATE },
     ],
     ...overrides,
   };
@@ -217,7 +210,6 @@ test("the list answer never contains ciphertext or plaintext keys", async () => 
   assert.ok(Array.isArray(body.keys));
   assert.equal(body.keys.length, 1);
   assert.equal(body.keys[0].providerId, VAULT_PROVIDER_ID.COPILOT);
-  assert.equal(body.keys[0].hint, "1234");
   assert.equal(body.keys[0].updatedAt, NOW_DATE.getTime());
   // No ciphertext, no plaintext key field anywhere.
   assert.ok(!("ciphertext" in body.keys[0]));
@@ -317,15 +309,10 @@ test("VAULT_PROVIDER_ID matches CLOUD_AGENT_PROVIDER_LIST exactly", () => {
 // --- Replace-on-upsert ---
 
 test("storing again for the same provider replaces the previous entry (upsert)", async () => {
-  const stored: Array<{ ciphertext: string; hint: string }> = [];
+  const stored: Array<{ ciphertext: string }> = [];
 
-  async function storeKey(
-    _userId: string,
-    _providerId: string,
-    ciphertext: string,
-    hint: string,
-  ): Promise<void> {
-    stored.push({ ciphertext, hint });
+  async function storeKey(_userId: string, _providerId: string, ciphertext: string): Promise<void> {
+    stored.push({ ciphertext });
   }
 
   // First store.
@@ -349,9 +336,6 @@ test("storing again for the same provider replaces the previous entry (upsert)",
   assert.ok(first && second);
   // Both writes produce different ciphertexts.
   assert.notEqual(first.ciphertext, second.ciphertext);
-  // Hints reflect each key's last 4 chars.
-  assert.equal(first.hint, "0001");
-  assert.equal(second.hint, "9999");
   // Each ciphertext decrypts to the respective plaintext.
   assert.equal(decryptProviderKey(first.ciphertext, SECRET), "first-key-0001");
   assert.equal(decryptProviderKey(second.ciphertext, SECRET), "second-key-9999");

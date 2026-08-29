@@ -41,13 +41,13 @@ export default {
       request,
       resolveUserId,
       encryptionSecret,
-      storeKey: async (userId, providerId, ciphertext, hint) => {
+      storeKey: async (userId, providerId, ciphertext) => {
         await getDatabase()
           .insert(providerKey)
-          .values({ userId, providerId, ciphertext, hint, updatedAt: new Date() })
+          .values({ userId, providerId, ciphertext, updatedAt: new Date() })
           .onConflictDoUpdate({
             target: [providerKey.userId, providerKey.providerId],
-            set: { ciphertext, hint, updatedAt: new Date() },
+            set: { ciphertext, updatedAt: new Date() },
           });
       },
     };

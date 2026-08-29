@@ -43,6 +43,13 @@
       "when": 1787961600000,
       "tag": "0005_crimson_vault",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1787963801929,
+      "tag": "0006_famous_fallen_one",
+      "breakpoints": true
     }
   ]
 }
