@@ -564,10 +564,10 @@ const hostedVault = new HostedVaultClient({
   readAccessToken: async () =>
     runMode.sendsNetwork ? (await settingsStore.readAccount())?.accessToken : undefined,
   refreshAccount: accountSession.refreshOnce,
-  readAccountKey: async () => {
-    const held = await settingsStore.readAccount();
-    return held ? (held.id ?? held.email) : undefined;
-  },
+  // The address, not the id: a 401 refresh is exactly when a stored account
+  // may first gain its id, and the retry guard needs the one name that holds
+  // still across that refresh. Compared in this process only, never sent.
+  readAccountKey: async () => (await settingsStore.readAccount())?.email,
 });
 // The mirror between the local key store and the vault. It lives here, beside
 // the client it drives, so the keys it reads for a sweep never leave the main
