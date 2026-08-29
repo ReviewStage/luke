@@ -571,7 +571,27 @@ const hostedVault = new HostedVaultClient({
 const providerKeyVaultSync = new ProviderKeyVaultSync({
   vault: hostedVault,
   readStoredApiKey: (providerId) => settingsStore.readStoredApiKey(providerId),
+  // The id when the sign-in carried one, else the address: both name the
+  // account, and the tenant record only ever compares them to themselves.
+  accountKey: async () => {
+    const held = await settingsStore.readAccount();
+    return held ? (held.id ?? held.email) : undefined;
+  },
+  tenant: {
+    read: () => settingsStore.readVaultSyncAccount(),
+    write: (accountKey) => settingsStore.setVaultSyncAccount(accountKey),
+  },
 });
+/** The standing reconcile the sync switch declares; see ProviderKeyVaultSync. */
+function reconcileProviderKeyVault(): void {
+  void settingsStore
+    .snapshot()
+    .then((settings) =>
+      settings.stored.syncProviderKeys
+        ? providerKeyVaultSync.apply(true, { claim: false })
+        : undefined,
+    );
+}
 // One narrow function rather than the service itself, so an IPC module can
 // count an act without being handed anything it could flush, stop, or read.
 const recordProductEvent: RecordProductEvent = (name, properties) =>
@@ -1179,16 +1199,10 @@ async function startAccountCapabilities(): Promise<void> {
   // not wait on an observation pass to land.
   void speakArrivalBeat();
   // The sync switch is a standing state, not a one-shot act: while it is on,
-  // the vault holds what this Mac's encrypted store holds. Capabilities
-  // starting — a launch with an account, or the sign-in itself — is where
-  // that promise is made true for keys stored before the switch existed, or
-  // saved while signed out; the sweep is idempotent and reads only keys
-  // entered into Luke.
-  void settingsStore
-    .snapshot()
-    .then((settings) =>
-      settings.stored.syncProviderKeys ? providerKeyVaultSync.apply(true) : undefined,
-    );
+  // the vault holds what this Mac's encrypted store holds, reconciled at the
+  // sign-in for the account the keys were last synced for. The launch that
+  // starts capabilities without passing here runs the same reconcile itself.
+  reconcileProviderKeyVault();
 }
 
 async function stopAccountCapabilities(): Promise<void> {
@@ -2676,6 +2690,11 @@ export function startDesktopApp(): void {
       startSessionObservation();
       startCalendarObservation();
       observationSupervisor.setEnabled(true);
+      // The launch-with-account edge of the sync switch's standing state:
+      // this path never enters startAccountCapabilities, so the reconcile
+      // that makes "on" true for keys stored before the switch existed has
+      // to run here as well.
+      if (account.status === ACCOUNT_STATUS.SIGNED_IN) reconcileProviderKeyVault();
       // A beat a previous launch could not speak — signed in, but voiceless
       // or quieted at the moment — is still owed, and this launch may be the
       // one that can say it.

@@ -180,7 +180,9 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
         releaseHeldNotices();
         break;
       case SETTING_SIDE_EFFECT.VAULT_SYNC:
-        void vaultSync.apply(settings.stored.syncProviderKeys);
+        // The flip is a hand on the switch, so an on claims the keys for the
+        // signed-in account — the one act that may move the tenant record.
+        void vaultSync.apply(settings.stored.syncProviderKeys, { claim: true });
         break;
       case SETTING_SIDE_EFFECT.NONE:
         break;

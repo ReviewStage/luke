@@ -51,7 +51,9 @@ you entered into Luke on this Mac are kept synced to Luke's hosted service,
 for your other Luke devices: a key saved while signed in syncs in the same
 press, and Luke re-syncs the stored keys when he starts signed in, when you
 sign in, and when the switch turns on. Keys Luke merely reads from your
-environment are never synced. Turning the switch off deletes every synced
+environment are never synced, and an automatic re-sync happens only for the
+account these keys were last synced for — a different account signing in on
+this Mac syncs nothing until it saves a key or turns the switch on itself. Turning the switch off deletes every synced
 copy from our database while the keys on this Mac stay; deleting a key
 deletes its synced copy too, and signed out nothing is ever synced. We store a synced key encrypted in our own
 database using AES-256-GCM with a server-only secret. The key is never

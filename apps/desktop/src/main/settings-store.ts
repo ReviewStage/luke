@@ -84,6 +84,7 @@ const SETTINGS_FIELD = {
   GRANTS: "grants",
   LEGACY_CONDUCTOR_API_KEY: "conductorApiKey",
   LEGACY_SUPERSET_AGENT_DEFAULT: "supersetAgentDefault",
+  VAULT_SYNC_ACCOUNT: "vaultSyncAccount",
   VERSION: "version",
 } as const;
 
@@ -176,6 +177,14 @@ interface PersistedSettings extends StoredAppSettings {
    * it — the grant lives with macOS, withdrawable in System Settings.
    */
   appleCalendar?: { calendars: readonly string[] };
+  /**
+   * Which account this Mac's provider keys were last synced for — the
+   * account's opaque id, or its address for an account stored before ids
+   * were kept. It outlives a sign-out on purpose: it is what keeps an
+   * automatic sweep from handing one person's keys to whoever signs in
+   * next, so it must remember the person after they have gone.
+   */
+  vaultSyncAccount?: string;
 }
 
 interface ResolvedApiKey {
@@ -449,6 +458,7 @@ function parsePersistedSettings(
   const appleCalendar = storedAppleCalendar(record);
   const grants = storedGrants(record);
   const settings = withLegacySupersetAgentDefault(readStoredSettings(record), record);
+  const vaultSyncAccount = record[SETTINGS_FIELD.VAULT_SYNC_ACCOUNT];
   const persisted = {
     ...settings,
     version: isWireNumber(version) ? version : SETTINGS_FILE_VERSION,
@@ -457,6 +467,7 @@ function parsePersistedSettings(
     ...(storedAccount(record) ? { account: storedAccount(record) } : undefined),
     ...(calendarAccounts.length > 0 ? { calendarAccounts } : undefined),
     ...(appleCalendar ? { appleCalendar } : undefined),
+    ...(isWireString(vaultSyncAccount) && vaultSyncAccount ? { vaultSyncAccount } : undefined),
   };
   // SAFETY: readStoredSettings validated every preference field before this spread.
   return persisted as PersistedSettings;
@@ -782,6 +793,25 @@ export class SettingsStore {
     if (!provider) return undefined;
     const resolved = await this.#resolveApiKey(provider);
     return resolved.source === CREDENTIAL_SOURCE.ENCRYPTED_FILE ? resolved.apiKey : undefined;
+  }
+
+  /** Which account this Mac's provider keys were last synced for; see the field. */
+  async readVaultSyncAccount(): Promise<string | undefined> {
+    return (await this.#load()).vaultSyncAccount;
+  }
+
+  async setVaultSyncAccount(accountKey: string): Promise<void> {
+    await this.#serialize(async () => {
+      const persisted = await this.#load();
+      if (persisted.vaultSyncAccount === accountKey) return;
+      const next: PersistedSettings = {
+        ...persisted,
+        version: SETTINGS_FILE_VERSION,
+        vaultSyncAccount: accountKey,
+      };
+      await this.#write(next);
+      this.#loading = Promise.resolve(next);
+    });
   }
 
   /**

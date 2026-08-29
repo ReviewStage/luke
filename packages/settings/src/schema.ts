@@ -608,7 +608,7 @@ export const APP_SETTING_SCHEMA = {
         id: APP_SETTING_ID.SYNC_PROVIDER_KEYS,
         label: "Sync provider keys",
         description:
-          "Whether provider API keys are also stored, encrypted, with Luke's own service for the account's other Luke devices. While on, the keys stored here are kept synced: a key saved while signed in syncs in the same press, and Luke re-syncs the stored keys when he starts signed in, at a sign-in, and when the switch turns on. Turning it off deletes every synced copy while the keys on this Mac stay. The service never sends a key back.",
+          "Whether provider API keys are also stored, encrypted, with Luke's own service for the account's other Luke devices. While on, the keys stored here are kept synced: a key saved while signed in syncs in the same press, and Luke re-syncs the stored keys when he starts signed in, at a sign-in, and when the switch turns on — automatically only for the account they were last synced for; another account signing in syncs nothing until it saves a key or flips the switch itself. Turning it off deletes every synced copy while the keys on this Mac stay. The service never sends a key back.",
         kind: APP_SETTING_KIND.TOGGLE,
         value: appToggleText(guideValue<boolean>(settings, "syncProviderKeys")),
         defaultValue: appToggleText(defaultValue),
