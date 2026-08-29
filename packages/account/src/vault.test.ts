@@ -5,8 +5,8 @@ import { HostedVaultClient } from "./vault.js";
 
 const LIST_ANSWER = {
   keys: [
-    { providerId: VAULT_PROVIDER_ID.CURSOR, hint: "cd3f", updatedAt: 1_800_000_000_000 },
-    { providerId: VAULT_PROVIDER_ID.DEVIN, hint: "9a1b", updatedAt: 1_800_003_600_000 },
+    { providerId: VAULT_PROVIDER_ID.CURSOR, updatedAt: 1_800_000_000_000 },
+    { providerId: VAULT_PROVIDER_ID.DEVIN, updatedAt: 1_800_003_600_000 },
   ],
 };
 
@@ -149,7 +149,7 @@ test("failures, malformed answers, and a missing account all read as no answer",
 
   const malformed = client({
     fetch: async () =>
-      new Response(JSON.stringify({ keys: [{ providerId: "openai", hint: "abcd" }] }), {
+      new Response(JSON.stringify({ keys: [{ providerId: "openai", updatedAt: 1 }] }), {
         status: 200,
       }),
   });

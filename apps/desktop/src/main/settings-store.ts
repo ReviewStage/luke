@@ -772,6 +772,19 @@ export class SettingsStore {
   }
 
   /**
+   * Main-process only: the key stored encrypted in Luke's own file, and never
+   * one resolved from the launch environment. The vault sweep is the caller —
+   * an environment key was configured for this machine's shell, not entered
+   * into Luke, so it is not Luke's to send anywhere.
+   */
+  async readStoredApiKey(providerId: CredentialProviderId): Promise<string | undefined> {
+    const provider = this.#providers.find((candidate) => candidate.id === providerId);
+    if (!provider) return undefined;
+    const resolved = await this.#resolveApiKey(provider);
+    return resolved.source === CREDENTIAL_SOURCE.ENCRYPTED_FILE ? resolved.apiKey : undefined;
+  }
+
+  /**
    * Stores one provider's key encrypted at rest, or clears it when omitted. A
    * key the user cannot use comes back as a `reason` rather than an exception,
    * so only an unexpected filesystem failure throws.

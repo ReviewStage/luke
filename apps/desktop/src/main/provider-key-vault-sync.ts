@@ -18,47 +18,67 @@ import { isVaultProviderId, VAULT_PROVIDER_ID } from "@sidecar/hosted";
  */
 export class ProviderKeyVaultSync {
   readonly #vault: HostedVaultClient;
-  readonly #readApiKey: (providerId: CredentialProviderId) => Promise<string | undefined>;
+  readonly #readStoredApiKey: (providerId: CredentialProviderId) => Promise<string | undefined>;
+  /**
+   * Every act rides one chain, so saves and switch flips land on the vault
+   * in the order the hands took them: a save mid-sweep, or a quick off-and-on
+   * of the switch, cannot interleave into a vault that agrees with neither.
+   */
+  #acts: Promise<void> = Promise.resolve();
 
   constructor(options: {
     vault: HostedVaultClient;
-    readApiKey: (providerId: CredentialProviderId) => Promise<string | undefined>;
+    /**
+     * The key stored in Luke's own encrypted file, and never one resolved
+     * from the launch environment: an environment key was configured for
+     * this machine's shell, not entered into Luke, so the sweep may not
+     * send it anywhere.
+     */
+    readStoredApiKey: (providerId: CredentialProviderId) => Promise<string | undefined>;
   }) {
     this.#vault = options.vault;
-    this.#readApiKey = options.readApiKey;
+    this.#readStoredApiKey = options.readStoredApiKey;
+  }
+
+  #enqueue(act: () => Promise<void>): Promise<void> {
+    const settled = this.#acts.then(act);
+    // The chain never carries a refusal forward: every act is quiet on its
+    // own, and one that threw must not still a queue of later hands.
+    this.#acts = settled.catch(() => undefined);
+    return settled;
   }
 
   /** A save landed locally; mirror it while the switch is on. */
-  async keySaved(
-    providerId: CredentialProviderId,
-    apiKey: string | undefined,
-    syncOn: boolean,
-  ): Promise<void> {
-    if (!isVaultProviderId(providerId)) return;
-    const key = apiKey?.trim();
-    if (key) {
-      if (syncOn) await this.#vault.storeKey(providerId, key);
-      return;
-    }
-    // A cleared key clears its synced copy regardless of the switch: the
-    // switch governs what goes up, never what may keep standing after the
-    // developer deleted the thing it mirrors.
-    await this.#vault.deleteKey(providerId);
+  keySaved(providerId: CredentialProviderId, apiKey: string | undefined, syncOn: boolean) {
+    return this.#enqueue(async () => {
+      if (!isVaultProviderId(providerId)) return;
+      const key = apiKey?.trim();
+      if (key) {
+        if (syncOn) await this.#vault.storeKey(providerId, key);
+        return;
+      }
+      // A cleared key clears its synced copy regardless of the switch: the
+      // switch governs what goes up, never what may keep standing after the
+      // developer deleted the thing it mirrors.
+      await this.#vault.deleteKey(providerId);
+    });
   }
 
   /**
-   * The switch moved. On sweeps every locally held vault-provider key up;
+   * The switch moved. On sweeps every vault-provider key stored here up;
    * off deletes every synced copy, blindly, because a delete of nothing
    * answers `deleted: false` and costs nothing.
    */
-  async apply(syncOn: boolean): Promise<void> {
-    for (const providerId of Object.values(VAULT_PROVIDER_ID)) {
-      if (!syncOn) {
-        await this.#vault.deleteKey(providerId);
-        continue;
+  apply(syncOn: boolean): Promise<void> {
+    return this.#enqueue(async () => {
+      for (const providerId of Object.values(VAULT_PROVIDER_ID)) {
+        if (!syncOn) {
+          await this.#vault.deleteKey(providerId);
+          continue;
+        }
+        const key = (await this.#readStoredApiKey(providerId))?.trim();
+        if (key) await this.#vault.storeKey(providerId, key);
       }
-      const key = (await this.#readApiKey(providerId))?.trim();
-      if (key) await this.#vault.storeKey(providerId, key);
-    }
+    });
   }
 }

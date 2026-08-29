@@ -570,7 +570,7 @@ const hostedVault = new HostedVaultClient({
 // process.
 const providerKeyVaultSync = new ProviderKeyVaultSync({
   vault: hostedVault,
-  readApiKey: (providerId) => settingsStore.readApiKey(providerId),
+  readStoredApiKey: (providerId) => settingsStore.readStoredApiKey(providerId),
 });
 // One narrow function rather than the service itself, so an IPC module can
 // count an act without being handed anything it could flush, stop, or read.

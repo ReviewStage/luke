@@ -40,8 +40,8 @@ function withoutTrailingSlash(value: string): string {
 
 /**
  * The desktop's side of the provider-key vault: store a key, list what is
- * stored (ids and display hints — the service holds no endpoint that reads a
- * key back), and delete one. The shape follows the hosted usage reader —
+ * stored (ids and timestamps — the service holds no endpoint that reads a
+ * key back, and stores no fragment for display), and delete one. The shape follows the hosted usage reader —
  * token read fresh per ask, a 401 refreshed and retried once, every answer
  * validated by the shared wire contract — and a failure resolves to nothing,
  * leaving the wording to the settings row that asked. Every call here is the
@@ -82,7 +82,7 @@ export class HostedVaultClient {
     );
   }
 
-  /** Lists what is stored — provider ids, hints, and timestamps, never keys. */
+  /** Lists what is stored — provider ids and timestamps, never keys. */
   async listKeys(): Promise<readonly VaultKeyListEntry[] | undefined> {
     const answer = await this.#ask(
       { method: "GET", path: HOSTED_SERVICE_PATH.VAULT_KEYS },
