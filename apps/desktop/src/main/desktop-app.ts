@@ -161,7 +161,7 @@ import { registerWindowSurfaceIpc } from "./ipc/window-surface";
 import { MediaDuckController } from "./native/media-duck";
 import { MicrophoneRouteWatcher } from "./native/microphone-route";
 import { OutputVolumeWatcher } from "./native/output-volume";
-import { ProviderKeyVaultSync } from "./provider-key-vault-sync";
+import { ProviderKeyVaultSync, type VaultSyncAccount } from "./provider-key-vault-sync";
 import { type BridgeContext, registerBridgeEntry } from "./register-bridge";
 import { runModeFor } from "./run-mode";
 import { createSettingsHandler } from "./settings-handler";
@@ -564,6 +564,10 @@ const hostedVault = new HostedVaultClient({
   readAccessToken: async () =>
     runMode.sendsNetwork ? (await settingsStore.readAccount())?.accessToken : undefined,
   refreshAccount: accountSession.refreshOnce,
+  readAccountKey: async () => {
+    const held = await settingsStore.readAccount();
+    return held ? (held.id ?? held.email) : undefined;
+  },
 });
 // The mirror between the local key store and the vault. It lives here, beside
 // the client it drives, so the keys it reads for a sweep never leave the main
@@ -571,11 +575,12 @@ const hostedVault = new HostedVaultClient({
 const providerKeyVaultSync = new ProviderKeyVaultSync({
   vault: hostedVault,
   readStoredApiKey: (providerId) => settingsStore.readStoredApiKey(providerId),
-  // The id when the sign-in carried one, else the address: both name the
-  // account, and the tenant record only ever compares them to themselves.
-  accountKey: async () => {
+  account: async () => {
     const held = await settingsStore.readAccount();
-    return held ? (held.id ?? held.email) : undefined;
+    if (!held) return undefined;
+    const account: VaultSyncAccount = { email: held.email };
+    if (held.id) account.id = held.id;
+    return account;
   },
   tenant: {
     read: () => settingsStore.readVaultSyncAccount(),

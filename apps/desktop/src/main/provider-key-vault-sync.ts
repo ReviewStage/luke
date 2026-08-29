@@ -2,6 +2,22 @@ import type { HostedVaultClient } from "@sidecar/account";
 import type { CredentialProviderId } from "@sidecar/credentials";
 import { isVaultProviderId, VAULT_PROVIDER_ID } from "@sidecar/hosted";
 
+/** The signed-in account, by the names the tenant record may hold it under. */
+export interface VaultSyncAccount {
+  id?: string;
+  email: string;
+}
+
+/** The strongest name an account offers, for writing the tenant record. */
+function tenantName(account: VaultSyncAccount): string {
+  return account.id ?? account.email;
+}
+
+/** Whether a tenant record names this account, under either of its names. */
+function accountAnswersTo(account: VaultSyncAccount, tenant: string): boolean {
+  return tenant === account.id || tenant === account.email;
+}
+
 /**
  * Mirrors the local provider keys into the account's vault, entirely inside
  * the main process: a key on its way to or from the vault never enters the
@@ -28,7 +44,7 @@ import { isVaultProviderId, VAULT_PROVIDER_ID } from "@sidecar/hosted";
 export class ProviderKeyVaultSync {
   readonly #vault: HostedVaultClient;
   readonly #readStoredApiKey: (providerId: CredentialProviderId) => Promise<string | undefined>;
-  readonly #accountKey: () => Promise<string | undefined>;
+  readonly #account: () => Promise<VaultSyncAccount | undefined>;
   readonly #tenant: {
     read: () => Promise<string | undefined>;
     write: (accountKey: string) => Promise<void>;
@@ -49,8 +65,8 @@ export class ProviderKeyVaultSync {
      * send it anywhere.
      */
     readStoredApiKey: (providerId: CredentialProviderId) => Promise<string | undefined>;
-    /** The signed-in account's opaque identity, or nothing signed out. */
-    accountKey: () => Promise<string | undefined>;
+    /** The signed-in account's identity, or nothing signed out. */
+    account: () => Promise<VaultSyncAccount | undefined>;
     /** Which account this Mac's keys were last synced for, persisted. */
     tenant: {
       read: () => Promise<string | undefined>;
@@ -59,7 +75,7 @@ export class ProviderKeyVaultSync {
   }) {
     this.#vault = options.vault;
     this.#readStoredApiKey = options.readStoredApiKey;
-    this.#accountKey = options.accountKey;
+    this.#account = options.account;
     this.#tenant = options.tenant;
   }
 
@@ -84,11 +100,11 @@ export class ProviderKeyVaultSync {
         return;
       }
       if (!syncOn) return;
-      const account = await this.#accountKey();
+      const account = await this.#account();
       if (account === undefined) return;
       const stored = await this.#vault.storeKey(providerId, key);
       // Their own key, saved by their own hand: the save is also the claim.
-      if (stored) await this.#tenant.write(account);
+      if (stored) await this.#tenant.write(tenantName(account));
     });
   }
 
@@ -109,16 +125,24 @@ export class ProviderKeyVaultSync {
         }
         return;
       }
-      const account = await this.#accountKey();
+      const account = await this.#account();
       if (account === undefined) return;
       const tenant = await this.#tenant.read();
-      if (!options.claim && tenant !== undefined && tenant !== account) return;
+      // The record may hold either of the account's names — the id when the
+      // sign-in carried one, else the address — and an identity refresh may
+      // fill the id in later, so a match on either keeps the standing
+      // reconcile standing rather than orphaning it on the stronger name.
+      if (!options.claim && tenant !== undefined && !accountAnswersTo(account, tenant)) return;
+      let storedAny = false;
       for (const providerId of Object.values(VAULT_PROVIDER_ID)) {
-        if ((await this.#accountKey()) !== account) return;
+        if ((await this.#account())?.email !== account.email) return;
         const key = (await this.#readStoredApiKey(providerId))?.trim();
-        if (key) await this.#vault.storeKey(providerId, key);
+        if (key && (await this.#vault.storeKey(providerId, key))) storedAny = true;
       }
-      await this.#tenant.write(account);
+      // Only a sweep that actually moved a key claims the tenant: an empty
+      // one says nothing about whose keys these are, and a claim it made
+      // would let a passing sign-in inherit whatever is saved here later.
+      if (storedAny) await this.#tenant.write(tenantName(account));
     });
   }
 }

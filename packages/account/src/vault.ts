@@ -24,6 +24,13 @@ export interface HostedVaultClientOptions {
   serviceBaseUrl: string;
   readAccessToken: () => Promise<string | undefined>;
   refreshAccount: () => Promise<void>;
+  /**
+   * Who the bearer answers for, as an opaque identity. Read before an ask and
+   * again before its one 401 retry, because the retry re-reads the token: a
+   * sign-out and sign-in between the two must read as the act's account gone,
+   * never as a fresh bearer to carry the old account's payload under.
+   */
+  readAccountKey?: () => Promise<string | undefined>;
   fetch?: FetchLike;
   requestTimeoutMs?: number;
 }
@@ -51,6 +58,7 @@ export class HostedVaultClient {
   readonly #baseUrl: string;
   readonly #readAccessToken: () => Promise<string | undefined>;
   readonly #refreshAccount: () => Promise<void>;
+  readonly #readAccountKey?: () => Promise<string | undefined>;
   readonly #fetch: FetchLike;
   readonly #requestTimeoutMs: number;
 
@@ -60,6 +68,7 @@ export class HostedVaultClient {
     this.#baseUrl = withoutTrailingSlash(baseUrl);
     this.#readAccessToken = options.readAccessToken;
     this.#refreshAccount = options.refreshAccount;
+    if (options.readAccountKey) this.#readAccountKey = options.readAccountKey;
     this.#fetch = options.fetch ?? ((input, init) => fetch(input, init));
     this.#requestTimeoutMs = positiveInteger(
       options.requestTimeoutMs,
@@ -103,6 +112,7 @@ export class HostedVaultClient {
     request: VaultRequest,
     read: (payload: UnparsedWireValue) => Answer | undefined,
   ): Promise<Answer | undefined> {
+    const account = await this.#readAccountKey?.();
     const token = await this.#readAccessToken();
     if (!token) return undefined;
 
@@ -110,7 +120,9 @@ export class HostedVaultClient {
     if (response?.status === UNAUTHORIZED_STATUS) {
       await this.#refreshAccount().catch(() => undefined);
       const refreshed = await this.#readAccessToken();
-      if (refreshed && refreshed !== token) {
+      const sameAccount =
+        this.#readAccountKey === undefined || (await this.#readAccountKey()) === account;
+      if (refreshed && refreshed !== token && sameAccount) {
         response = await this.#request(request, refreshed);
       }
     }
