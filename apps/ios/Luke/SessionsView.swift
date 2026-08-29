@@ -56,6 +56,12 @@ struct SessionsView: View {
         defer { isLoading = false }
         do {
             sessions = try await client.observe(bearerToken: token)
+        } catch RosterClientError.serverError(let status) where status == 401 {
+            // The stored token has expired or been revoked. Sign out so the user
+            // is prompted to sign in again rather than stuck seeing a silent error.
+            // On rebase with #570, this will become a refresh-and-retry via
+            // validAccessToken() instead.
+            await session.signOut()
         } catch {
             fetchError = error.localizedDescription
         }
