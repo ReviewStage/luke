@@ -63,6 +63,18 @@ private actor Gate {
 final class VaultStoreTests: XCTestCase {
     private let base = URL(string: "https://tryluke.dev")!
 
+    /// The two failures need different words: a local sign-out and a server
+    /// that refuses a freshly refreshed token have different ways out, and
+    /// one sentence for both once cost a live debugging session.
+    func testATokenRefusalReadsDifferentlyFromASignOut() {
+        let signedOut = VaultStore.message(for: AccountSessionError.signedOut)
+        let refused = VaultStore.message(
+            for: VaultClientError.serverError(status: 401, apiError: .invalidToken)
+        )
+        XCTAssertNotEqual(signedOut, refused)
+        XCTAssertTrue(refused.contains("token"))
+    }
+
     func testRefusedTokenRefreshesOnceAndRetries() async {
         let counter = CallCounter()
         let stub = StubHTTPClient { request in

@@ -102,7 +102,13 @@ public final class VaultStore {
             return "The vault answered with something unexpected. Try again later."
         case VaultClientError.serverError(let status, let apiError):
             switch apiError {
-            case .invalidToken: return "Sign in again to manage provider keys."
+            case .invalidToken:
+                // Distinct from the signed-out sentence above deliberately:
+                // this one only surfaces after a refresh already succeeded and
+                // the retry was still refused, so the server rejected a token
+                // the account machinery considers fine — a fresh sign-in is
+                // the way out, and the words must not blame the local session.
+                return "The vault refused this account's token. Sign out and back in."
             case .unavailable: return "The vault is not available right now."
             case .invalidRequest: return "The vault refused the request."
             default: return "The vault request failed (\(status))."
