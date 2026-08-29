@@ -26,7 +26,11 @@ import Foundation
 /// every other field dies here unread. A player already playing when this
 /// helper started has said nothing yet, and unknown is a skip, never a
 /// dialog: its next broadcast — a track change at the latest — is when a
-/// later exchange gets to ask.
+/// later exchange gets to ask. The standing answer is read about the
+/// player's running process and against a deadline, because the read
+/// crosses daemons this helper does not own, and a machine that never
+/// answers must cost an exchange one player — never the helper whose exit
+/// is what restores the music.
 ///
 /// The one command language: `duck` fades every playing player down, `restore`
 /// fades back whatever `duck` changed. Stdin closing is the app going away, so
@@ -121,21 +125,72 @@ private final class PlayStateWatch: NSObject {
 /// refused on the user's behalf — is a no this helper honors.
 private let CONSENT_NOT_YET_ASKED: OSStatus = -1744
 
+/// How long macOS may take to answer the standing-consent read. A healthy
+/// machine answers in milliseconds; the observed alternative is Apple Events
+/// daemons that never answer at all, so a generous beat is still the whole
+/// difference between one skipped player and a helper that can no longer
+/// duck, restore, or exit.
+private let CONSENT_ANSWER_SECONDS = 2.0
+
 private enum AutomationConsent {
     case granted
     case notYetAsked
     case withheld(OSStatus)
+    case unanswered
+}
+
+/// The consent reads still waiting on macOS, keyed by the player process each
+/// was about. At most one read may wait per process: on a machine whose
+/// daemons never answer, a wedged player costs one parked thread and every
+/// later exchange skips it outright rather than parking another. A relaunched
+/// player gets a fresh read, because the process it was about is gone.
+@MainActor private var unansweredConsentReads: Set<pid_t> = []
+
+/// Carries the consent read's answer across the queue hop. The semaphore
+/// orders the write before the read, which is what lets this stay a plain
+/// mutable field.
+private final class ConsentAnswer: @unchecked Sendable {
+    var status: OSStatus = noErr
 }
 
 /// macOS's standing answer about this helper speaking to one player, read
 /// without raising the dialog, so the dialog itself can be saved for the
 /// moment it is about.
-private func automationConsent(for player: MediaPlayer) -> AutomationConsent {
-    let target = NSAppleEventDescriptor(bundleIdentifier: player.bundleIdentifier)
-    // A target descriptor that cannot even be read back cannot carry an event
-    // either; -50 is the paramErr such an event would earn.
-    guard let address = target.aeDesc else { return .withheld(-50) }
-    switch AEDeterminePermissionToAutomateTarget(address, typeWildCard, typeWildCard, false) {
+///
+/// The read is addressed to the player's process, never its bundle
+/// identifier: the process is already in hand from the running check, and a
+/// bundle identifier hands macOS a resolution step that a stale
+/// LaunchServices registration — a Spotify updater's leftover staging copy,
+/// in the observed case — can wedge into never answering. And because even
+/// this read is a round trip through daemons outside this process, it waits
+/// on its own thread against a deadline rather than on the main thread the
+/// stdin-closing restore needs: an answer that never comes back is a player
+/// skipped this exchange, not music stranded quiet by a helper that can no
+/// longer hear anything.
+@MainActor
+private func automationConsent(for application: NSRunningApplication) -> AutomationConsent {
+    let pid = application.processIdentifier
+    guard !unansweredConsentReads.contains(pid) else { return .unanswered }
+    unansweredConsentReads.insert(pid)
+    let answered = DispatchSemaphore(value: 0)
+    let answer = ConsentAnswer()
+    DispatchQueue.global().async {
+        let target = NSAppleEventDescriptor(processIdentifier: pid)
+        answer.status = withExtendedLifetime(target) {
+            // A target descriptor that cannot even be read back cannot carry
+            // an event either; -50 is the paramErr such an event would earn.
+            guard let address = target.aeDesc else { return -50 }
+            return AEDeterminePermissionToAutomateTarget(address, typeWildCard, typeWildCard, false)
+        }
+        answered.signal()
+        DispatchQueue.main.async {
+            MainActor.assumeIsolated { _ = unansweredConsentReads.remove(pid) }
+        }
+    }
+    guard answered.wait(timeout: .now() + CONSENT_ANSWER_SECONDS) == .success else {
+        return .unanswered
+    }
+    switch answer.status {
     case noErr: return .granted
     case CONSENT_NOT_YET_ASKED: return .notYetAsked
     case let status: return .withheld(status)
@@ -208,10 +263,14 @@ private func runAppleScript(_ source: String) -> NSAppleEventDescriptor? {
 /// Asked of the system, not of the player: an Apple Event sent to an app that
 /// is not running launches it, and starting the user's music player is the
 /// opposite of quieting it.
-private func isRunning(_ player: MediaPlayer) -> Bool {
-    !NSRunningApplication.runningApplications(
+private func runningApplication(of player: MediaPlayer) -> NSRunningApplication? {
+    NSRunningApplication.runningApplications(
         withBundleIdentifier: player.bundleIdentifier
-    ).isEmpty
+    ).first
+}
+
+private func isRunning(_ player: MediaPlayer) -> Bool {
+    runningApplication(of: player) != nil
 }
 
 private func isPlaying(_ player: MediaPlayer) -> Bool {
@@ -309,8 +368,8 @@ private struct MediaDuckCommand {
     /// ducked volume back as the one to restore to.
     static func duck() {
         for player in PLAYERS where ducked[player.bundleIdentifier] == nil {
-            guard isRunning(player) else { continue }
-            switch automationConsent(for: player) {
+            guard let application = runningApplication(of: player) else { continue }
+            switch automationConsent(for: application) {
             case .granted:
                 break
             case .notYetAsked:
@@ -320,6 +379,11 @@ private struct MediaDuckCommand {
                 // broadcast says is audibly playing. Unknown is a skip, never
                 // a dialog — a later exchange will know.
                 guard playStateWatch.believesPlaying(player) else { continue }
+            case .unanswered:
+                // Said aloud like a refusal, because a machine that answers
+                // nothing and honored consent look identical otherwise.
+                emit("unanswered \(player.bundleIdentifier)")
+                continue
             case .withheld(let status):
                 // Said aloud like a live refusal, because honored consent and
                 // a lost duck look identical otherwise.
