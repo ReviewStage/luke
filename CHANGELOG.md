@@ -32,6 +32,71 @@
 Notable changes to Luke, newest first. Each heading is a released version and
 the date its release was published.
 
+## 0.3.13 — 2026-08-28
+
+### History
+
+Luke keeps the conversation you have been having with him. A History tab holds
+every line of the current launch — what you asked, what he answered, and the
+acts he carried at your request — and each message offers a copy control that
+takes exactly the words the bubble shows. Clear empties both the thread you can
+see and the context the model still holds, and the whole tab stays out of
+session recordings.
+([#513](https://github.com/ReviewStage/luke/pull/513),
+[#569](https://github.com/ReviewStage/luke/pull/569))
+
+### Improvements
+
+- The notch says which apps hold your work: the provider marks take the place
+  of the session count beside the housing and are drawn at rest
+  ([#577](https://github.com/ReviewStage/luke/pull/577))
+- Luke names each agent by its work and gives you the decision context before
+  he asks a question, in his own casual voice rather than scripted lines
+  ([#553](https://github.com/ReviewStage/luke/pull/553),
+  [#566](https://github.com/ReviewStage/luke/pull/566),
+  [#567](https://github.com/ReviewStage/luke/pull/567),
+  [#578](https://github.com/ReviewStage/luke/pull/578))
+- Luke never asks for folder permission: Cursor and Antigravity sessions no
+  longer read a workspace folder to label their branch
+  ([#552](https://github.com/ReviewStage/luke/pull/552))
+- Rows say when a session is running inside a Herdr pane
+  ([#560](https://github.com/ReviewStage/luke/pull/560))
+- Music and Spotify are asked for automation consent only mid-exchange, and
+  only once that player is audibly playing
+  ([#550](https://github.com/ReviewStage/luke/pull/550))
+- Settings drop the Usage data section: counting and screen recording follow
+  the run mode alone, and `PRIVACY.md` is now the whole of what Luke tells you
+  about either ([#563](https://github.com/ReviewStage/luke/pull/563))
+
+### Fixes
+
+- Fixed desktop session recordings never reaching PostHog at all
+  ([#535](https://github.com/ReviewStage/luke/pull/535))
+- Fixed a red voice error appearing when you cut Luke off mid-reply
+  ([#564](https://github.com/ReviewStage/luke/pull/564))
+- Fixed a slow cloud write being cut short by the observation pass's shared
+  deadline ([#557](https://github.com/ReviewStage/luke/pull/557))
+- Fixed the admin roster's last-seen instant ignoring hosted usage
+  ([#548](https://github.com/ReviewStage/luke/pull/548))
+
+### Miscellaneous
+
+- Added an iPhone app that signs in through LukeKit and the registered
+  `luke-mobile` OAuth client
+  ([#554](https://github.com/ReviewStage/luke/pull/554),
+  [#559](https://github.com/ReviewStage/luke/pull/559),
+  [#565](https://github.com/ReviewStage/luke/pull/565))
+- Added the hosted provider-key vault, which encrypts a stored cloud provider
+  key at rest and offers no way to read one back
+  ([#568](https://github.com/ReviewStage/luke/pull/568))
+- Added the websocket realtime endpoint to the voice mint, so a mobile client
+  can open a spoken session on the same credential
+  ([#562](https://github.com/ReviewStage/luke/pull/562))
+- Updated an act handler's refusals to name their cause
+  ([#572](https://github.com/ReviewStage/luke/pull/572))
+- Added the `entire` CLI's session hooks for Codex, Cursor, and OpenCode
+  ([#549](https://github.com/ReviewStage/luke/pull/549))
+
 ## 0.3.12 — 2026-08-26
 
 ### Improvements
