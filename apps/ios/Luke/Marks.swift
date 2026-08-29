@@ -2,6 +2,7 @@
 // Google G keeps its four official brand colours. GitHub mark rides the view's foreground.
 // Luke's face is derived from FACE_ART in @sidecar/surface.
 import CoreGraphics
+import LukeKit
 import SwiftUI
 
 // MARK: - Luke face mark
