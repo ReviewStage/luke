@@ -5,7 +5,8 @@ import SwiftUI
 
 /// The vault card on the signed-in screen: one row per provider the vault
 /// accepts, each opening an editor to enter or delete that provider's key.
-/// Only hints and timestamps are drawn — the vault never answers a key.
+/// Only presence and timestamps are drawn — the vault never answers a key,
+/// nor any fragment of one.
 struct VaultSection: View {
     @Environment(VaultStore.self) private var vault
     @State private var editing: VaultProviderID?
@@ -94,8 +95,7 @@ private struct VaultProviderRow: View {
 
     private var status: String {
         guard let entry else { return "No key" }
-        let date = entry.updatedAt.formatted(date: .abbreviated, time: .omitted)
-        return "···· \(entry.hint) · \(date)"
+        return "Key stored \(entry.updatedAt.formatted(date: .abbreviated, time: .omitted))"
     }
 }
 
@@ -127,7 +127,8 @@ private struct VaultKeyEditor: View {
                 }
 
                 if let entry = vault.entry(for: provider) {
-                    Text("A key ending in \(entry.hint) is stored. Saving replaces it.")
+                    Text("A key stored \(entry.updatedAt.formatted(date: .abbreviated, time: .omitted)) "
+                        + "stands. Saving replaces it.")
                         .font(.caption)
                         .foregroundStyle(Color(white: 1, opacity: 0.5))
                 }

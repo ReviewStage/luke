@@ -75,17 +75,16 @@ public struct VaultKeyFormat: Sendable, Equatable {
     public let rejection: String
 }
 
-/// One stored key as the list endpoint reports it: the provider, a display
-/// hint (the key's last four characters), and when it was stored. Never the
-/// key itself — the vault answers no ciphertext or plaintext to any client.
+/// One stored key as the list endpoint reports it: the provider and when it
+/// was stored, nothing else. The vault persists and transmits zero fragments
+/// of any key — no ciphertext, no plaintext, and since #580 not even a
+/// display hint — so this client keeps none either.
 public struct VaultKeyEntry: Sendable, Equatable {
     public let provider: VaultProviderID
-    public let hint: String
     public let updatedAt: Date
 
-    public init(provider: VaultProviderID, hint: String, updatedAt: Date) {
+    public init(provider: VaultProviderID, updatedAt: Date) {
         self.provider = provider
-        self.hint = hint
         self.updatedAt = updatedAt
     }
 }
@@ -167,12 +166,10 @@ public final class VaultClient: Sendable {
         for row in rows {
             guard let providerId = row["providerId"] as? String,
                   let provider = VaultProviderID(rawValue: providerId),
-                  let hint = row["hint"] as? String, !hint.isEmpty,
                   let updatedAt = row["updatedAt"] as? Double, updatedAt >= 0
             else { throw VaultClientError.invalidResponse }
             entries.append(VaultKeyEntry(
                 provider: provider,
-                hint: hint,
                 updatedAt: Date(timeIntervalSince1970: updatedAt / 1000)
             ))
         }

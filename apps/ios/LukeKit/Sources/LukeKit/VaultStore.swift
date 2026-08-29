@@ -67,23 +67,25 @@ public final class VaultStore {
     /// Stores or replaces one provider's key, then converges on the server's
     /// own list.
     public func store(key: String, for provider: VaultProviderID) async throws {
+        let account = session.accountEmail
         try await authorized { try await self.client.storeKey(key, for: provider, accessToken: $0) }
+        // The act was the asking account's; entries standing under a sign-in
+        // that changed hands mid-flight are not its to touch.
+        guard session.accountEmail == account, entriesAccount == account else { return }
         answerGeneration += 1
         // The vault just answered an act, so a standing load failure is stale.
         loadError = nil
-        // The server's hint is the key's last four characters, so the row can
-        // say what landed even when the list round-trip below does not.
-        entriesByProvider[provider] = VaultKeyEntry(
-            provider: provider,
-            hint: String(key.suffix(4)),
-            updatedAt: Date()
-        )
+        // Upserted locally so the row can say a key stands even when the list
+        // round-trip below does not land.
+        entriesByProvider[provider] = VaultKeyEntry(provider: provider, updatedAt: Date())
         try? await refreshEntries()
     }
 
     /// Removes one provider's key, then converges on the server's own list.
     public func delete(_ provider: VaultProviderID) async throws {
+        let account = session.accountEmail
         _ = try await authorized { try await self.client.deleteKey(for: provider, accessToken: $0) }
+        guard session.accountEmail == account, entriesAccount == account else { return }
         answerGeneration += 1
         loadError = nil
         entriesByProvider[provider] = nil

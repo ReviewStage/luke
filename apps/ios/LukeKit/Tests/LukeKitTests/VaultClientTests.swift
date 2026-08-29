@@ -94,8 +94,8 @@ final class VaultListKeysTests: XCTestCase {
             XCTAssertNil(request.httpBody)
             let payload: [String: Any] = [
                 "keys": [
-                    ["providerId": "devin", "hint": "ab12", "updatedAt": 1_700_000_000_000],
-                    ["providerId": "jules", "hint": "cd34", "updatedAt": 0],
+                    ["providerId": "devin", "updatedAt": 1_700_000_000_000],
+                    ["providerId": "jules", "updatedAt": 0],
                 ],
             ]
             return (jsonData(payload), makeResponse(url: request.url!, status: 200))
@@ -104,7 +104,6 @@ final class VaultListKeysTests: XCTestCase {
         let entries = try await client.listKeys(accessToken: "at-1")
         XCTAssertEqual(entries.count, 2)
         XCTAssertEqual(entries[0].provider, .devin)
-        XCTAssertEqual(entries[0].hint, "ab12")
         XCTAssertEqual(entries[0].updatedAt, Date(timeIntervalSince1970: 1_700_000_000))
         XCTAssertEqual(entries[1].provider, .jules)
     }
@@ -113,8 +112,8 @@ final class VaultListKeysTests: XCTestCase {
         let stub = StubHTTPClient { request in
             let payload: [String: Any] = [
                 "keys": [
-                    ["providerId": "cursor", "hint": "ab12", "updatedAt": 1000],
-                    ["providerId": "not-a-provider", "hint": "cd34", "updatedAt": 1000],
+                    ["providerId": "cursor", "updatedAt": 1000],
+                    ["providerId": "not-a-provider", "updatedAt": 1000],
                 ],
             ]
             return (jsonData(payload), makeResponse(url: request.url!, status: 200))
@@ -130,10 +129,10 @@ final class VaultListKeysTests: XCTestCase {
         }
     }
 
-    func testMissingHintDropsWholeAnswer() async {
+    func testMissingUpdatedAtDropsWholeAnswer() async {
         let stub = StubHTTPClient { request in
             let payload: [String: Any] = [
-                "keys": [["providerId": "cursor", "updatedAt": 1000]],
+                "keys": [["providerId": "cursor"]],
             ]
             return (jsonData(payload), makeResponse(url: request.url!, status: 200))
         }

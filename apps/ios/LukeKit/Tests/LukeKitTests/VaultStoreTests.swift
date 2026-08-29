@@ -98,14 +98,14 @@ final class VaultStoreTests: XCTestCase {
     func testEntriesAnswerOnlyUnderTheirAccount() async {
         let stub = StubHTTPClient { request in
             let payload: [String: Any] = [
-                "keys": [["providerId": "cursor", "hint": "ab12", "updatedAt": 1000]],
+                "keys": [["providerId": "cursor", "updatedAt": 1000]],
             ]
             return (jsonData(payload), makeResponse(url: request.url!, status: 200))
         }
         let source = StubTokenSource(email: "first@example.com")
         let store = VaultStore(client: VaultClient(baseURL: base, http: stub), session: source)
         await store.load()
-        XCTAssertEqual(store.entry(for: .cursor)?.hint, "ab12")
+        XCTAssertNotNil(store.entry(for: .cursor))
 
         source.accountEmail = "second@example.com"
         XCTAssertNil(store.entry(for: .cursor))
@@ -147,6 +147,36 @@ final class VaultStoreTests: XCTestCase {
         XCTAssertNil(store.entry(for: .cursor))
     }
 
+    func testASaveFinishingUnderANewAccountTouchesNothing() async throws {
+        let gate = Gate()
+        let counter = CallCounter()
+        let stub = StubHTTPClient { request in
+            switch await counter.next() {
+            case 1:
+                // The first account's store request: held open until the
+                // account has changed hands and the new account's list landed.
+                await gate.wait()
+                return (jsonData(["stored": true]), makeResponse(url: request.url!, status: 200))
+            default:
+                return (jsonData(["keys": []]), makeResponse(url: request.url!, status: 200))
+            }
+        }
+        let source = StubTokenSource(email: "first@example.com")
+        let store = VaultStore(client: VaultClient(baseURL: base, http: stub), session: source)
+
+        let save = Task { try await store.store(key: "sk-abcd", for: .cursor) }
+        while await counter.calls < 1 { await Task.yield() }
+
+        source.accountEmail = "second@example.com"
+        await store.load()
+        await gate.open()
+        try await save.value
+
+        // The first account's delivered act must not install an entry into
+        // the second account's visible list.
+        XCTAssertNil(store.entry(for: .cursor))
+    }
+
     func testSuccessfulActClearsAStaleLoadError() async throws {
         let counter = CallCounter()
         let stub = StubHTTPClient { request in
@@ -160,7 +190,7 @@ final class VaultStoreTests: XCTestCase {
                 return (jsonData(["stored": true]), makeResponse(url: request.url!, status: 200))
             default:
                 let payload: [String: Any] = [
-                    "keys": [["providerId": "cursor", "hint": "k123", "updatedAt": 1000]],
+                    "keys": [["providerId": "cursor", "updatedAt": 1000]],
                 ]
                 return (jsonData(payload), makeResponse(url: request.url!, status: 200))
             }
@@ -173,7 +203,7 @@ final class VaultStoreTests: XCTestCase {
 
         try await store.store(key: "sk-k123", for: .cursor)
         XCTAssertNil(store.loadError)
-        XCTAssertEqual(store.entry(for: .cursor)?.hint, "k123")
+        XCTAssertNotNil(store.entry(for: .cursor))
     }
 
     func testStaleListAnswerDoesNotOverwriteASave() async throws {
@@ -190,7 +220,7 @@ final class VaultStoreTests: XCTestCase {
                 return (jsonData(["stored": true]), makeResponse(url: request.url!, status: 200))
             default:
                 let payload: [String: Any] = [
-                    "keys": [["providerId": "cursor", "hint": "k123", "updatedAt": 1000]],
+                    "keys": [["providerId": "cursor", "updatedAt": 1000]],
                 ]
                 return (jsonData(payload), makeResponse(url: request.url!, status: 200))
             }
@@ -202,10 +232,10 @@ final class VaultStoreTests: XCTestCase {
         while await counter.calls < 1 { await Task.yield() }
 
         try await store.store(key: "sk-k123", for: .cursor)
-        XCTAssertEqual(store.entry(for: .cursor)?.hint, "k123")
+        XCTAssertNotNil(store.entry(for: .cursor))
 
         await gate.open()
         await initialLoad.value
-        XCTAssertEqual(store.entry(for: .cursor)?.hint, "k123")
+        XCTAssertNotNil(store.entry(for: .cursor))
     }
 }
