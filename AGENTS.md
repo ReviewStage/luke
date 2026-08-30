@@ -245,7 +245,7 @@ Trust constraints:
   on this machine, and rendered into a bounded reply that is kept nowhere:
   the read performs nothing, reaches no provider, and is offered only for a
   local session whose provider's transcript this build documents reading
-  (Antigravity, Claude Code, Codex, Gemini CLI, Grok Build, OpenCode, the
+  (Antigravity, Claude Code, Codex, Gemini CLI, Grok Build, OMP, OpenCode, the
   Radius browser's own agent chats, and the
   Devin and Cursor agents running on this machine today); a cloud
   session's conversation lives with its provider and is never fetched. The

@@ -33,6 +33,7 @@ import {
   HERDR_PATH,
   JULES_PATH,
   LINEAR_PATH,
+  OMP_PATH,
   OPENAI_PATH,
   OPENCODE_BLOCK_PATH,
   OPENCODE_FRAME_PATH,
@@ -572,6 +573,20 @@ function ChatGptMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
+function OmpMark({ className }: MarkProps): React.JSX.Element {
+  return (
+    <svg
+      className={className}
+      data-mark={PROVIDER_ID.OMP}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path fill="currentColor" fillRule="evenodd" d={OMP_PATH} />
+    </svg>
+  );
+}
+
 function OpenCodeMark({ className }: MarkProps): React.JSX.Element {
   // The box crops the favicon's 512 canvas to a square the glyph fills top to
   // bottom, centred as published; the paths themselves are untouched. Verbatim
@@ -687,6 +702,7 @@ const PROVIDER_MARKS = {
   [PROVIDER_ID.JULES]: JulesMark,
   [ISSUE_TRACKER_ID.LINEAR]: LinearMark,
   [CREDENTIAL_PROVIDER_ID.OPENAI]: OpenAiMark,
+  [PROVIDER_ID.OMP]: OmpMark,
   [PROVIDER_ID.OPENCODE]: OpenCodeMark,
   [SESSION_APPLICATION_ID.ORCA]: OrcaMark,
   [HOSTED_AGENT_ID.PI]: PiMark,

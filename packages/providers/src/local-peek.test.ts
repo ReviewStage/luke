@@ -37,6 +37,7 @@ function pinnedPeekOptions(root: string): LocalPeekOptions {
     devinCliDirectory: path.join(root, "devin"),
     geminiHome: path.join(root, "gemini"),
     grokHome: path.join(root, "grok"),
+    ompHome: path.join(root, "omp"),
     openCodeDataDirectory: path.join(root, "opencode"),
     radiusHome: path.join(root, "radius"),
   };

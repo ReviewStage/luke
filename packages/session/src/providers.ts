@@ -31,6 +31,7 @@ export const PROVIDER_ID = {
   GEMINI_CLI: "gemini-cli",
   GROK_BUILD: "grok-build",
   JULES: "jules",
+  OMP: "omp",
   OPENCODE: "opencode",
   RADIUS: "radius",
   REPLICAS: "replicas",
@@ -98,6 +99,11 @@ export const PROVIDER_IDENTITY_BY_ID = {
     id: PROVIDER_ID.JULES,
     displayName: "Jules",
     location: PROVIDER_LOCATION_KIND.CLOUD,
+  },
+  [PROVIDER_ID.OMP]: {
+    id: PROVIDER_ID.OMP,
+    displayName: "OMP",
+    location: PROVIDER_LOCATION_KIND.LOCAL,
   },
   [PROVIDER_ID.OPENCODE]: {
     id: PROVIDER_ID.OPENCODE,
