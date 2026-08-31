@@ -37,3 +37,4 @@ export {
   type AccountSnapshot,
 } from "./snapshot.js";
 export { withIssuedAccountTokens } from "./token-lifecycle.js";
+export { HostedVaultClient, type HostedVaultClientOptions } from "./vault.js";

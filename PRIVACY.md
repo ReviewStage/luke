@@ -45,15 +45,23 @@ before you sign in is attached to your account if you sign in while it is
 running. One that never reaches a sign-in belongs to nobody, so deleting your
 account does not reach it — we have no way to tell it was yours.
 
-**Provider API keys (server-side vault).** If you choose to sync a provider API
-key to Luke's hosted service, we store it encrypted in our own database using
-AES-256-GCM with a server-only secret. The key is never returned to any caller:
-there is no endpoint that reads it back, and no code path that decrypts it for
-any purpose other than the observation or acts you explicitly request through
-that provider. The server-side use of these keys ships as a separate feature;
-this describes only the storage. You can delete a key at any time from the
-provider's row in Settings, and it is deleted alongside your account if you
-delete that.
+**Provider API keys (server-side vault).** While the "Sync provider keys"
+switch in Settings · Connections is on — it starts on — the provider API keys
+you entered into Luke on this Mac are kept synced to Luke's hosted service,
+for your other Luke devices: a key saved while signed in syncs in the same
+press, and Luke re-syncs the stored keys when he starts signed in, when you
+sign in, and when the switch turns on. Keys Luke merely reads from your
+environment are never synced, and an automatic re-sync happens only for the
+account these keys were last synced for — a different account signing in on
+this Mac syncs nothing until it saves a key or turns the switch on itself. Turning the switch off deletes every synced
+copy from our database while the keys on this Mac stay; deleting a key
+deletes its synced copy too, and signed out nothing is ever synced. We store a synced key encrypted in our own
+database using AES-256-GCM with a server-only secret. The key is never
+returned to any caller: there is no endpoint that reads it back, and no code
+path that decrypts it for any purpose other than the observation or acts you
+explicitly request through that provider. The server-side use of these keys
+ships as a separate feature; this describes only the storage. Every synced key
+is deleted alongside your account if you delete that.
 
 **Feedback.** If you use the feedback form, we receive what you typed, the name
 and email you signed it with, and any screenshots you attached.

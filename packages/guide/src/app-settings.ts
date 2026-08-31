@@ -12,6 +12,7 @@ export const APP_SETTING_ID = {
   DUCK_OTHER_MEDIA: "duck_other_media",
   PREFER_BUILT_IN_MICROPHONE: "prefer_built_in_microphone",
   QUIET_DURING_MEETINGS: "quiet_during_meetings",
+  SYNC_PROVIDER_KEYS: "sync_provider_keys",
   SHOW_IN_DOCK: "show_in_dock",
   OPEN_AT_LOGIN: "open_at_login",
   SHOW_ON_ALL_DISPLAYS: "show_on_all_displays",

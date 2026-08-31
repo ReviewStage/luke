@@ -19,6 +19,7 @@ import { BRIDGE, type BridgeArgumentsFor } from "#shared/bridge";
 import type { AppSettings } from "#shared/contracts";
 import { CONNECTION_COUNTED_AS } from "#shared/product-vocabulary";
 import type { MediaDuckController } from "../native/media-duck";
+import type { ProviderKeyVaultSync } from "../provider-key-vault-sync";
 import type { BridgeContext } from "../register-bridge";
 import { type createSettingsHandler, SettingsRefusal } from "../settings-handler";
 import type { SettingsStore } from "../settings-store";
@@ -43,6 +44,8 @@ export interface SettingsRowsIpcDependencies {
   refreshMeetingQuiet: () => void;
   releaseHeldNotices: () => void;
   recordProductEvent: RecordProductEvent;
+  /** Mirrors local provider keys into the account vault, main-process only. */
+  vaultSync: ProviderKeyVaultSync;
 }
 
 export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencies): void {
@@ -63,6 +66,7 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
     refreshMeetingQuiet,
     releaseHeldNotices,
     recordProductEvent,
+    vaultSync,
   } = dependencies;
   // The renderer can replace or clear a provider's credential but never reads
   // it back; the reply reports only where each key now comes from.
@@ -90,6 +94,12 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
       if (!result.reason && providerId === VOICE_CREDENTIAL_PROVIDER_ID) {
         await applyVoiceCredential();
         await hotkeys.reapply(HOTKEY_RANK.TALK);
+      }
+      // The synced copy follows the local save it mirrors — stored while the
+      // switch is on, deleted with its local key regardless — and quietly:
+      // the local key is the working one, and the next save is the retry.
+      if (!result.reason) {
+        void vaultSync.keySaved(providerId, apiKey, result.settings.stored.syncProviderKeys);
       }
       // The store reads a blank key as a clearing, so the count reads it the
       // same way rather than reporting a connection that did not happen.
@@ -168,6 +178,11 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
       case SETTING_SIDE_EFFECT.MEETING_QUIET:
         refreshMeetingQuiet();
         releaseHeldNotices();
+        break;
+      case SETTING_SIDE_EFFECT.VAULT_SYNC:
+        // The flip is a hand on the switch, so an on claims the keys for the
+        // signed-in account — the one act that may move the tenant record.
+        void vaultSync.apply(settings.stored.syncProviderKeys, { claim: true });
         break;
       case SETTING_SIDE_EFFECT.NONE:
         break;

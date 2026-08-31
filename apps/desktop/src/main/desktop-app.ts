@@ -2,7 +2,12 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { AccountClient, AccountSessionManager, accountGateOpen } from "@sidecar/account";
+import {
+  AccountClient,
+  AccountSessionManager,
+  accountGateOpen,
+  HostedVaultClient,
+} from "@sidecar/account";
 import {
   PRODUCT_CREDENTIAL_SOURCE,
   PRODUCT_DIAGNOSTIC_KIND,
@@ -156,6 +161,7 @@ import { registerWindowSurfaceIpc } from "./ipc/window-surface";
 import { MediaDuckController } from "./native/media-duck";
 import { MicrophoneRouteWatcher } from "./native/microphone-route";
 import { OutputVolumeWatcher } from "./native/output-volume";
+import { ProviderKeyVaultSync, type VaultSyncAccount } from "./provider-key-vault-sync";
 import { type BridgeContext, registerBridgeEntry } from "./register-bridge";
 import { runModeFor } from "./run-mode";
 import { createSettingsHandler } from "./settings-handler";
@@ -548,6 +554,49 @@ const productEvents = new ProductEventSender({
   readAccessToken: async () => (await settingsStore.readAccount())?.accessToken,
   refreshAccount: accountSession.refreshOnce,
 });
+// The provider-key vault's client, on the same bearer the counting sender
+// reads fresh per ask. Constructed unconditionally because it holds nothing:
+// without a token no call leaves, and a fixture or evidence run reads no
+// token at all — the machine it happens to run on may hold a real account,
+// and the run mode is the whole of the gate here as everywhere.
+const hostedVault = new HostedVaultClient({
+  serviceBaseUrl: HOSTED_SERVICE_BASE_URL,
+  readAccessToken: async () =>
+    runMode.sendsNetwork ? (await settingsStore.readAccount())?.accessToken : undefined,
+  refreshAccount: accountSession.refreshOnce,
+  // The address, not the id: a 401 refresh is exactly when a stored account
+  // may first gain its id, and the retry guard needs the one name that holds
+  // still across that refresh. Compared in this process only, never sent.
+  readAccountKey: async () => (await settingsStore.readAccount())?.email,
+});
+// The mirror between the local key store and the vault. It lives here, beside
+// the client it drives, so the keys it reads for a sweep never leave the main
+// process.
+const providerKeyVaultSync = new ProviderKeyVaultSync({
+  vault: hostedVault,
+  readStoredApiKey: (providerId) => settingsStore.readStoredApiKey(providerId),
+  account: async () => {
+    const held = await settingsStore.readAccount();
+    if (!held) return undefined;
+    const account: VaultSyncAccount = { email: held.email };
+    if (held.id) account.id = held.id;
+    return account;
+  },
+  tenant: {
+    read: () => settingsStore.readVaultSyncAccount(),
+    write: (accountKey) => settingsStore.setVaultSyncAccount(accountKey),
+  },
+});
+/** The standing reconcile the sync switch declares; see ProviderKeyVaultSync. */
+function reconcileProviderKeyVault(): void {
+  void settingsStore
+    .snapshot()
+    .then((settings) =>
+      settings.stored.syncProviderKeys
+        ? providerKeyVaultSync.apply(true, { claim: false })
+        : undefined,
+    );
+}
 // One narrow function rather than the service itself, so an IPC module can
 // count an act without being handed anything it could flush, stop, or read.
 const recordProductEvent: RecordProductEvent = (name, properties) =>
@@ -1154,6 +1203,11 @@ async function startAccountCapabilities(): Promise<void> {
   // from; unawaited because the sign-in that started these capabilities must
   // not wait on an observation pass to land.
   void speakArrivalBeat();
+  // The sync switch is a standing state, not a one-shot act: while it is on,
+  // the vault holds what this Mac's encrypted store holds, reconciled at the
+  // sign-in for the account the keys were last synced for. The launch that
+  // starts capabilities without passing here runs the same reconcile itself.
+  reconcileProviderKeyVault();
 }
 
 async function stopAccountCapabilities(): Promise<void> {
@@ -1445,6 +1499,7 @@ function registerIpc(): void {
     refreshMeetingQuiet: () => void refreshMeetingQuiet(),
     releaseHeldNotices: () => void releaseHeldNotices(),
     recordProductEvent,
+    vaultSync: providerKeyVaultSync,
   });
 
   registerCalendarConnectionIpc({
@@ -2640,6 +2695,11 @@ export function startDesktopApp(): void {
       startSessionObservation();
       startCalendarObservation();
       observationSupervisor.setEnabled(true);
+      // The launch-with-account edge of the sync switch's standing state:
+      // this path never enters startAccountCapabilities, so the reconcile
+      // that makes "on" true for keys stored before the switch existed has
+      // to run here as well.
+      if (account.status === ACCOUNT_STATUS.SIGNED_IN) reconcileProviderKeyVault();
       // A beat a previous launch could not speak — signed in, but voiceless
       // or quieted at the moment — is still owed, and this launch may be the
       // one that can say it.

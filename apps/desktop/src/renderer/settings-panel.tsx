@@ -127,6 +127,7 @@ import {
   CheckIcon,
   ChevronIcon,
   CloseIcon,
+  CloudIcon,
   DisplayIcon,
   DownloadIcon,
   ExternalIcon,
@@ -1375,7 +1376,7 @@ function CredentialsSection({
     (option) => option.id === CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
   );
   return (
-    <section className="settings-section" style={cssCustomProperties({ "--row-index": 2 })}>
+    <section className="settings-section" style={cssCustomProperties({ "--row-index": 3 })}>
       <h2>
         <KeyIcon />
         Providers
@@ -1457,6 +1458,36 @@ function CredentialsSection({
       {/* The same refusal the trackers' section explains: a Connect stilled by
           missing storage needs its why in this section too. */}
       {storageUnavailable ? <p className="settings-note">{STORAGE_UNAVAILABLE_NOTE}</p> : null}
+    </section>
+  );
+}
+
+/**
+ * The one choice spanning every key row: whether a saved key also syncs to
+ * the account's vault on Luke's service. Its own section between the
+ * workspace choice and the key rows it governs, because it belongs to all of
+ * them and to none; the switch's whole act runs in the main process, where
+ * the keys are.
+ */
+function KeySyncSection({
+  settings,
+  writes,
+}: {
+  settings: AppSettingsView;
+  writes: SettingsWrites;
+}): React.JSX.Element {
+  return (
+    <section className="settings-section" style={cssCustomProperties({ "--row-index": 2 })}>
+      <h2>
+        <CloudIcon />
+        Sync
+      </h2>
+      <SchemaSettingRows
+        page={SCHEMA_SETTINGS_PAGE.CONNECTIONS}
+        fields={[APP_SETTING_SCHEMA.syncProviderKeys.field]}
+        settings={settings}
+        writes={writes}
+      />
     </section>
   );
 }
@@ -2272,7 +2303,7 @@ function IntegrationsSection({
 }): React.JSX.Element {
   const storageUnavailable = settings.secretStorage === SECRET_STORAGE.UNAVAILABLE;
   return (
-    <section className="settings-section" style={cssCustomProperties({ "--row-index": 3 })}>
+    <section className="settings-section" style={cssCustomProperties({ "--row-index": 4 })}>
       <h2>
         <PlugIcon />
         Integrations
@@ -3804,6 +3835,7 @@ export function SettingsPanel({
             workspaceProviders={workspaceProviders}
             writes={writes}
           />
+          <KeySyncSection settings={settings} writes={writes} />
           <CredentialsSection
             settings={settings}
             control={credentials}
@@ -3828,6 +3860,8 @@ export function SettingsPanel({
               APP_SETTING_SCHEMA.defaultWorkspaceProvider.field,
               APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
               APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
+              // Drawn inside the Providers section, beside the key rows it governs.
+              APP_SETTING_SCHEMA.syncProviderKeys.field,
             ]}
           />
         </>

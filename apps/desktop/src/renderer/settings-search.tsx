@@ -251,7 +251,7 @@ const ROOT_SETTING_ICON = {
 const SHORTCUT_WORDS = "keyboard shortcut hotkey key chord record remove delete none";
 
 /** The words every key row can be found by, beside its provider's name. */
-const KEY_WORDS = "API key credential connect cloud agent";
+const KEY_WORDS = "API key credential connect cloud agent sync synced";
 
 /**
  * The rows that are not stored settings, each gated by the condition that
