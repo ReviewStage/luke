@@ -1,6 +1,6 @@
 // Converts an SVG `d` attribute string to a CGPath.
-// Handles: M m L l H h V v C c S s Q q A a Z z
-// Enough to draw the Google G, GitHub mark, and Luke face.
+// Handles: M m L l H h V v C c S s Q q T t A a Z z
+// Enough to draw the Google G, GitHub mark, Luke face, and provider marks.
 import CoreGraphics
 
 func cgPath(fromSVG d: String) -> CGPath {
@@ -9,9 +9,10 @@ func cgPath(fromSVG d: String) -> CGPath {
     var cur = CGPoint.zero
     var sub = CGPoint.zero
     var lastCtrl: CGPoint? = nil
+    var lastQuadCtrl: CGPoint? = nil
     var lastCmd: Character = "M"
 
-    while !tok.isDone {
+    parse: while !tok.isDone {
         let cmd: Character
         if let c = tok.nextCommand() {
             cmd = c
@@ -41,24 +42,28 @@ func cgPath(fromSVG d: String) -> CGPath {
             sub = cur
             lastCmd = rel ? "l" : "L"
             lastCtrl = nil
+            lastQuadCtrl = nil
 
         case "l":
             let (x, y) = tok.nextPair()
             cur = pt(x, y)
             p.addLine(to: cur)
             lastCtrl = nil
+            lastQuadCtrl = nil
 
         case "h":
             let x = tok.nextNumber()
             cur = CGPoint(x: rel ? cur.x + x : x, y: cur.y)
             p.addLine(to: cur)
             lastCtrl = nil
+            lastQuadCtrl = nil
 
         case "v":
             let y = tok.nextNumber()
             cur = CGPoint(x: cur.x, y: rel ? cur.y + y : y)
             p.addLine(to: cur)
             lastCtrl = nil
+            lastQuadCtrl = nil
 
         case "c":
             let (x1, y1) = tok.nextPair()
@@ -67,6 +72,7 @@ func cgPath(fromSVG d: String) -> CGPath {
             let c1 = pt(x1, y1), c2 = pt(x2, y2), end = pt(x, y)
             p.addCurve(to: end, control1: c1, control2: c2)
             lastCtrl = c2
+            lastQuadCtrl = nil
             cur = end
 
         case "s":
@@ -76,6 +82,7 @@ func cgPath(fromSVG d: String) -> CGPath {
             let c2 = pt(x2, y2), end = pt(x, y)
             p.addCurve(to: end, control1: c1, control2: c2)
             lastCtrl = c2
+            lastQuadCtrl = nil
             cur = end
 
         case "q":
@@ -84,6 +91,16 @@ func cgPath(fromSVG d: String) -> CGPath {
             let c = pt(x1, y1), end = pt(x, y)
             p.addQuadCurve(to: end, control: c)
             lastCtrl = nil
+            lastQuadCtrl = c
+            cur = end
+
+        case "t":
+            let (x, y) = tok.nextPair()
+            let c = lastQuadCtrl.map { CGPoint(x: 2 * cur.x - $0.x, y: 2 * cur.y - $0.y) } ?? cur
+            let end = pt(x, y)
+            p.addQuadCurve(to: end, control: c)
+            lastCtrl = nil
+            lastQuadCtrl = c
             cur = end
 
         case "a":
@@ -94,13 +111,18 @@ func cgPath(fromSVG d: String) -> CGPath {
             addSVGArc(to: p, from: cur, rx: rx, ry: ry, xRot: xRot, la: la, sw: sw, end: end)
             cur = end
             lastCtrl = nil
+            lastQuadCtrl = nil
 
         case "z":
             p.closeSubpath()
             cur = sub
             lastCtrl = nil
+            lastQuadCtrl = nil
 
-        default: break
+        // An unrecognised command would otherwise repeat forever, because the
+        // tokenizer only advances through numbers a command consumes — stop
+        // parsing and draw what stands instead of hanging.
+        default: break parse
         }
     }
     return p

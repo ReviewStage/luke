@@ -14,12 +14,16 @@ enum KeychainStore {
         case accountID = "account_id"
     }
 
-    static func set(_ value: String, for key: Key) {
-        guard let data = value.data(using: .utf8) else { return }
+    /// Returns whether the write landed. A keychain can refuse writes outright
+    /// (an unsigned development build on a fresh simulator), and a caller that
+    /// cannot tell draws a signed-in surface whose credentials are not there.
+    @discardableResult
+    static func set(_ value: String, for key: Key) -> Bool {
+        guard let data = value.data(using: .utf8) else { return false }
         var query = baseQuery(for: key)
         SecItemDelete(query as CFDictionary)
         query[kSecValueData as String] = data
-        SecItemAdd(query as CFDictionary, nil)
+        return SecItemAdd(query as CFDictionary, nil) == errSecSuccess
     }
 
     static func get(_ key: Key) -> String? {
