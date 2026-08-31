@@ -1,4 +1,5 @@
 export {
+  isProductExchangeKind,
   isProductSurfaceEventName,
   PRODUCT_ACCOUNT_ACT,
   PRODUCT_ASK_OUTCOME,
@@ -11,6 +12,7 @@ export {
   PRODUCT_EVENT_PROPERTIES,
   PRODUCT_EVENT_PROPERTY,
   PRODUCT_EVENT_PROPERTY_VALUES,
+  PRODUCT_EXCHANGE_KIND,
   PRODUCT_ISSUE_ACT,
   PRODUCT_PANEL_SOURCE,
   PRODUCT_PANEL_TAB,
@@ -36,6 +38,7 @@ export {
   type ProductEventProperties,
   type ProductEventPropertiesFor,
   type ProductEventProperty,
+  type ProductExchangeKind,
   type ProductIssueAct,
   type ProductPanelSource,
   type ProductPanelTab,

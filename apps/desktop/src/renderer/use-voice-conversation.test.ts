@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { PRODUCT_EXCHANGE_KIND } from "@sidecar/analytics";
 import { FIXTURE_SPEAKING_CAPTION } from "@sidecar/fixtures";
 import { ISSUE_TRACKER_ID, normalizeTrackedIssue, type TrackedIssue } from "@sidecar/issues";
 import {
@@ -35,6 +36,7 @@ import {
   VOICE_RESTART,
   voiceErrorToShow,
   voiceExchangeActive,
+  voiceExchangeKind,
   voiceNoticeToShow,
   voiceRestartAction,
   waveformVoice,
@@ -120,6 +122,21 @@ test("the media duck follows the exchange, not a settled call", () => {
   assert.equal(voiceExchangeActive(REALTIME_STATUS.RESPONDING), true);
   assert.equal(voiceExchangeActive(REALTIME_STATUS.READY), false);
   assert.equal(voiceExchangeActive(REALTIME_STATUS.IDLE), false);
+});
+
+test("Luke's own speak-only call is never counted as somebody speaking to him", () => {
+  assert.equal(
+    voiceExchangeKind({ microphoneCall: false, typedAsk: false }),
+    PRODUCT_EXCHANGE_KIND.ANNOUNCEMENT,
+  );
+  assert.equal(
+    voiceExchangeKind({ microphoneCall: true, typedAsk: true }),
+    PRODUCT_EXCHANGE_KIND.TYPED,
+  );
+  assert.equal(
+    voiceExchangeKind({ microphoneCall: true, typedAsk: false }),
+    PRODUCT_EXCHANGE_KIND.SPOKEN,
+  );
 });
 
 test("a capture run always captions the fixture's words", () => {
