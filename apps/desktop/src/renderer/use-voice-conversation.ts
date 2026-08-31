@@ -1,3 +1,4 @@
+import { PRODUCT_EXCHANGE_KIND, type ProductExchangeKind } from "@sidecar/analytics";
 import type { SessionNoticeAsk } from "@sidecar/attention";
 import { sanitizedTraceEvent } from "@sidecar/devtrace/vocabulary";
 import { FIXTURE_SPEAKING_CAPTION } from "@sidecar/fixtures";
@@ -103,6 +104,20 @@ export function voiceExchangeActive(status: RealtimeStatus): boolean {
     status === REALTIME_STATUS.LISTENING ||
     status === REALTIME_STATUS.RESPONDING
   );
+}
+
+/**
+ * Who opened the exchange the count is about. Luke's own speak-only call has
+ * no microphone to offer, which is the whole of what tells his announcement
+ * from a turn the developer took; between the developer's own two ways in,
+ * only the composer says so in advance, so the talk key is what is left.
+ */
+export function voiceExchangeKind(input: {
+  microphoneCall: boolean;
+  typedAsk: boolean;
+}): ProductExchangeKind {
+  if (!input.microphoneCall) return PRODUCT_EXCHANGE_KIND.ANNOUNCEMENT;
+  return input.typedAsk ? PRODUCT_EXCHANGE_KIND.TYPED : PRODUCT_EXCHANGE_KIND.SPOKEN;
 }
 
 /**
@@ -587,6 +602,15 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   const talkPressedAt = useRef<number | undefined>(undefined);
   /** Whether a tap has left a turn open for a later press to end. */
   const talkLatched = useRef(false);
+  /** Whether the exchange the count last saw was still standing. */
+  const exchangeCounted = useRef(false);
+  /**
+   * Whether the exchange about to open was opened by the composer. The
+   * {@link typedAsk} state cannot answer for it: that is set once the words
+   * are away, which is after the call the ask opened has already reached the
+   * edge the count is taken on.
+   */
+  const typedExchange = useRef(false);
   const sessionsRef = useRef(options.sessions);
   const noticeAsksRef = useRef(options.noticeAsks);
   const workspaceProjectsRef = useRef(options.workspaceProjects);
@@ -1040,6 +1064,9 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
    */
   const beginTalk = useCallback(async () => {
     talkPressedAt.current = performance.now();
+    // An ask whose send never landed leaves its mark behind; the key is the
+    // other way in, so this press is what clears it.
+    typedExchange.current = false;
     // A latched turn is already open. This press is someone saying they are
     // done, which is the release's to answer.
     if (talkLatched.current) return;
@@ -1162,6 +1189,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     async (text: string): Promise<string | undefined> => {
       const generation = conversationGenerationRef.current;
       const session = ensureVoiceSession();
+      typedExchange.current = true;
       // Luke's own speak-only call cannot carry a typed ask — it was sent no
       // roster to validate one against — so it counts as no call here, and
       // `connect` inside stands it down for the developer's own. A microphone
@@ -1342,7 +1370,22 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   }, [voiceStatus]);
 
   useEffect(() => {
-    window.sidecar.setVoiceExchangeActive(voiceExchangeActive(voiceStatus));
+    const active = voiceExchangeActive(voiceStatus);
+    // The panel takes the level on every change — the duck and the face
+    // follow it — while the count takes only the rising edge, or one turn's
+    // walk from connecting through responding would be counted three times.
+    const rising = active && !exchangeCounted.current;
+    exchangeCounted.current = active;
+    if (!rising) {
+      window.sidecar.setVoiceExchangeActive(active, undefined);
+      return;
+    }
+    const kind = voiceExchangeKind({
+      microphoneCall: voiceSession.current?.microphoneCall === true,
+      typedAsk: typedExchange.current,
+    });
+    typedExchange.current = false;
+    window.sidecar.setVoiceExchangeActive(active, kind);
   }, [voiceStatus]);
 
   useEffect(() => {

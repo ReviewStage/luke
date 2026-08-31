@@ -119,6 +119,7 @@ export const PRODUCT_EVENT_PROPERTY = {
   SETTINGS_VIEW: "settings_view",
   SEARCH_SURFACE: "search_surface",
   ASK_OUTCOME: "ask_outcome",
+  EXCHANGE_KIND: "exchange_kind",
   PERMISSION_RESULT: "permission_result",
   SIGN_IN_AGE: "sign_in_age",
   SETTING_ID: "setting_id",
@@ -296,6 +297,29 @@ export const PRODUCT_ASK_OUTCOME = {
 
 export type ProductAskOutcome = (typeof PRODUCT_ASK_OUTCOME)[keyof typeof PRODUCT_ASK_OUTCOME];
 
+/**
+ * Who opened the exchange being counted, never a word of it. The developer's
+ * own turn comes two ways — the talk key and the composer — and the third is
+ * no turn of theirs at all: the speak-only call Luke opens himself to read an
+ * announcement out, which reaches the same status edge and would otherwise be
+ * counted as somebody speaking to him.
+ */
+export const PRODUCT_EXCHANGE_KIND = {
+  SPOKEN: "spoken",
+  TYPED: "typed",
+  ANNOUNCEMENT: "announcement",
+} as const;
+
+export type ProductExchangeKind =
+  (typeof PRODUCT_EXCHANGE_KIND)[keyof typeof PRODUCT_EXCHANGE_KIND];
+
+const PRODUCT_EXCHANGE_KINDS: ReadonlySet<string> = new Set(Object.values(PRODUCT_EXCHANGE_KIND));
+
+/** Guards the kind the renderer names for the exchange it just opened. */
+export function isProductExchangeKind(value: UnparsedWireValue): value is ProductExchangeKind {
+  return isWireString(value) && PRODUCT_EXCHANGE_KINDS.has(value);
+}
+
 /** What the system answered a permission ask with. */
 export const PRODUCT_PERMISSION_RESULT = {
   GRANTED: "granted",
@@ -422,6 +446,7 @@ interface ProductEventPropertyValue {
   [PRODUCT_EVENT_PROPERTY.SETTINGS_VIEW]: ProductSettingsView;
   [PRODUCT_EVENT_PROPERTY.SEARCH_SURFACE]: ProductSearchSurface;
   [PRODUCT_EVENT_PROPERTY.ASK_OUTCOME]: ProductAskOutcome;
+  [PRODUCT_EVENT_PROPERTY.EXCHANGE_KIND]: ProductExchangeKind;
   [PRODUCT_EVENT_PROPERTY.PERMISSION_RESULT]: ProductPermissionResult;
   [PRODUCT_EVENT_PROPERTY.SIGN_IN_AGE]: ProductSignInAge;
   [PRODUCT_EVENT_PROPERTY.SETTING_ID]: AppSettingId;
@@ -459,6 +484,7 @@ export const PRODUCT_EVENT_PROPERTY_VALUES = {
   [PRODUCT_EVENT_PROPERTY.SETTINGS_VIEW]: Object.values(PRODUCT_SETTINGS_VIEW),
   [PRODUCT_EVENT_PROPERTY.SEARCH_SURFACE]: Object.values(PRODUCT_SEARCH_SURFACE),
   [PRODUCT_EVENT_PROPERTY.ASK_OUTCOME]: Object.values(PRODUCT_ASK_OUTCOME),
+  [PRODUCT_EVENT_PROPERTY.EXCHANGE_KIND]: Object.values(PRODUCT_EXCHANGE_KIND),
   [PRODUCT_EVENT_PROPERTY.PERMISSION_RESULT]: Object.values(PRODUCT_PERMISSION_RESULT),
   [PRODUCT_EVENT_PROPERTY.SIGN_IN_AGE]: Object.values(PRODUCT_SIGN_IN_AGE),
   [PRODUCT_EVENT_PROPERTY.SETTING_ID]: Object.values(APP_SETTING_ID),
@@ -492,7 +518,7 @@ export const PRODUCT_EVENT_PROPERTIES = {
   [PRODUCT_EVENT.FEEDBACK_OPEN]: [],
   [PRODUCT_EVENT.FEEDBACK_SEND]: [PRODUCT_EVENT_PROPERTY.IMAGE_COUNT],
   [PRODUCT_EVENT.ASK_SUBMIT]: [PRODUCT_EVENT_PROPERTY.ASK_OUTCOME],
-  [PRODUCT_EVENT.VOICE_EXCHANGE]: [],
+  [PRODUCT_EVENT.VOICE_EXCHANGE]: [PRODUCT_EVENT_PROPERTY.EXCHANGE_KIND],
   [PRODUCT_EVENT.VOICE_PERMISSION]: [PRODUCT_EVENT_PROPERTY.PERMISSION_RESULT],
   [PRODUCT_EVENT.SESSION_OBSERVE]: [
     PRODUCT_EVENT_PROPERTY.PROVIDER_ID,
@@ -635,6 +661,9 @@ const PRODUCT_EVENT_PROPERTY_READER: PropertyReader = {
   ),
   [PRODUCT_EVENT_PROPERTY.ASK_OUTCOME]: memberReader(
     PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.ASK_OUTCOME],
+  ),
+  [PRODUCT_EVENT_PROPERTY.EXCHANGE_KIND]: memberReader(
+    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.EXCHANGE_KIND],
   ),
   [PRODUCT_EVENT_PROPERTY.PERMISSION_RESULT]: memberReader(
     PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.PERMISSION_RESULT],

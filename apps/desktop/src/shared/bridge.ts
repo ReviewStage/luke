@@ -5,8 +5,10 @@ import {
 } from "@sidecar/account/snapshot";
 import { type ActEnvelope, isActEnvelope } from "@sidecar/acts";
 import {
+  isProductExchangeKind,
   isProductSurfaceEventName,
   type ProductEventPropertiesFor,
+  type ProductExchangeKind,
   type ProductSurfaceEventName,
   productEventFromWire,
 } from "@sidecar/analytics";
@@ -459,7 +461,17 @@ export const BRIDGE = {
   setVoiceExchangeActive: entry({
     kind: "send",
     channel: "app:set-voice-exchange",
-    args: oneBoolean,
+    // The level and the count are two different things on one channel: the
+    // boolean is the panel's, sent on every change because the duck and the
+    // face follow it, and the kind is the count's, sent only on the edge that
+    // opened the exchange — so a turn walking from connecting to responding
+    // is counted once, and named by who opened it.
+    args: args<[boolean, ProductExchangeKind | undefined]>(
+      (v) =>
+        v.length === 2 &&
+        isWireBoolean(v[0]) &&
+        (v[1] === undefined || (v[0] === true && isProductExchangeKind(v[1]))),
+    ),
   }),
   authorizeAct: entry({
     kind: "invoke",

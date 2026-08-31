@@ -44,10 +44,16 @@ export function registerVoiceRuntimeIpc(dependencies: VoiceRuntimeIpcDependencie
   registerBridge(
     BRIDGE,
     {
-      setVoiceExchangeActive(context, active) {
+      setVoiceExchangeActive(context, active, countedKind) {
         const displayId = panels.displayIdFor(context.sender);
         if (displayId !== undefined) panels.setVoiceExchange(displayId, active);
-        if (active) dependencies.recordProductEvent(PRODUCT_EVENT.VOICE_EXCHANGE, {});
+        // A kind arrives only with the edge that opened the exchange, so its
+        // presence is the count and no level change of its own is one.
+        if (countedKind !== undefined) {
+          dependencies.recordProductEvent(PRODUCT_EVENT.VOICE_EXCHANGE, {
+            exchange_kind: countedKind,
+          });
+        }
       },
       openMicrophoneSettings: () =>
         dependencies.openExternal(
