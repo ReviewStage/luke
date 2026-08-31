@@ -36,6 +36,12 @@ test("describes every provider it lists", () => {
     if (provider.connection === CREDENTIAL_CONNECTION.KEY) {
       assert.ok(provider.hint, provider.id);
       assert.ok(provider.apiKeysUrl, provider.id);
+      // One sentence shape for every key: what to create and where, ending on
+      // the destination the link sits on, named as a ">" path with no closing
+      // punctuation of its own — the renderer supplies the full stop.
+      assert.match(provider.hint.lead, /^Create a .+ under$/, provider.id);
+      assert.ok(provider.hint.destination.length > 0, provider.id);
+      assert.doesNotMatch(provider.hint.destination, /[.·]/, provider.id);
     } else {
       assert.equal(provider.hint, undefined, provider.id);
       assert.equal(provider.apiKeysUrl, undefined, provider.id);
@@ -104,9 +110,9 @@ test("sends the user to the one GitHub token kind the agent-tasks API answers", 
   assert.ok(copilot.apiKeysUrl);
   // The endpoint takes only user tokens, and GitHub also issues the kinds it
   // refuses, so the copy has to name what to create and what will not work.
-  assert.match(copilot.hint, /fine-grained personal access token/i);
-  assert.match(copilot.hint, /Agent tasks/);
-  assert.match(copilot.hint, /installation/i);
+  assert.match(copilot.hint.lead, /fine-grained personal access token/i);
+  assert.match(copilot.hint.trail ?? "", /Agent tasks/);
+  assert.match(copilot.hint.trail ?? "", /installation/i);
   assert.match(copilot.apiKeysUrl, /personal-access-tokens\/new$/);
   // No key format: fine-grained PATs and GitHub App user tokens carry
   // different prefixes, and a single one would refuse a working credential.
@@ -122,7 +128,7 @@ test("takes only the Devin credentials its API version issues", () => {
   // deprecated v1 and v2 keys carry another and would only ever be refused.
   assert.equal(devin.keyFormat?.prefix, "cog_");
   // Devin calls this a personal access token, and the settings field has to
-  // call it that too: its Settings · API keys page issues the `apk_` keys Luke
+  // call it that too: its Settings > API keys page issues the `apk_` keys Luke
   // refuses, so asking for an "API key" would send the user to the wrong one.
   assert.equal(devin.keyFormat?.label, "Personal access token");
   assert.ok(devin.apiKeysUrl);
@@ -167,8 +173,8 @@ test("holds the key Luke speaks through, apart from the agents he observes", () 
   // Realtime is what a spoken turn runs on, and an account that cannot reach it
   // fails at the first word rather than at the paste.
   assert.ok(openai.hint);
-  assert.match(openai.hint, /Realtime/);
-  assert.match(openai.hint, /billing/i);
+  assert.match(openai.hint.trail ?? "", /Realtime/);
+  assert.match(openai.hint.trail ?? "", /billing/i);
   // No prefix: every kind OpenAI issues carries `sk-`, so a format would refuse
   // nothing a working key would not also be refused by.
   assert.equal(openai.keyFormat, undefined);

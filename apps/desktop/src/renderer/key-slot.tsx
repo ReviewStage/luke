@@ -12,8 +12,8 @@ import {
   isSubmittable,
   useStagedFocus,
 } from "./credential-entry";
+import { DestinationNote } from "./destination-note";
 import { HIT_REGION } from "./panel-state";
-import { ExternalIcon } from "./settings-icons";
 
 /**
  * The panel stood down to the one thing anyone entering a key needs: somewhere
@@ -143,22 +143,15 @@ export function KeySlot({
             width is not a flourish — the sentence it holds is the same one the
             panel's field holds, and it has to fit. */}
         <div className="settings-row key-slot-foot">
-          <small className="settings-note">
-            {provider.hint}{" "}
-            {/* A button, not an anchor: the renderer has no browser to navigate,
-                and the main process opens the page by provider rather than by an
-                address the panel supplies. This is what the slot is standing
-                aside for, so it does not move the shape again. */}
-            <button
-              type="button"
-              className="link-button"
+          {/* Opening the key page is what the slot is standing aside for, so
+              the press does not move the shape again. */}
+          {provider.hint ? (
+            <DestinationNote
+              {...provider.hint}
               disabled={entry.busy}
-              onClick={() => control.fetchKey()}
-            >
-              Where to get one
-              <ExternalIcon />
-            </button>
-          </small>
+              onOpen={() => control.fetchKey()}
+            />
+          ) : null}
           <span className="settings-actions">
             <button
               type="button"

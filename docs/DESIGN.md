@@ -158,8 +158,8 @@ Three categories, and only the first is ever cut:
   after." under a switch reading *Quiet Music and Spotify*. Delete it. If the
   line seems necessary, the label is what to fix.
 - **Instructs.** Tells the developer something they cannot act without.
-  "Create a key in Jules under Settings · API key. It is shown only once."
-  Nobody can guess that. Keep it.
+  "Talking uses the Realtime API, which needs billing enabled." Nobody can
+  guess that. Keep it.
 - **Reports state.** This is the row's content. "Version 0.2.0 is available to
   download." Keep it.
 

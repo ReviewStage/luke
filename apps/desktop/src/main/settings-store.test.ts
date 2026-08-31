@@ -57,7 +57,7 @@ const FIRST_CLOUD_PROVIDER: CredentialProvider = {
   id: "first-cloud" as CredentialProviderId,
   displayName: "First Cloud",
   connection: CREDENTIAL_CONNECTION.KEY,
-  hint: "Create a key in First Cloud.",
+  hint: { lead: "Create a key in First Cloud under", destination: "Settings > API keys" },
   environmentVariables: [TEST_ENVIRONMENT_VARIABLE.FIRST_CLOUD_API_KEY],
 };
 
@@ -66,7 +66,7 @@ const SECOND_CLOUD_PROVIDER: CredentialProvider = {
   id: "second-cloud" as CredentialProviderId,
   displayName: "Second Cloud",
   connection: CREDENTIAL_CONNECTION.KEY,
-  hint: "Create a key in Second Cloud.",
+  hint: { lead: "Create a key in Second Cloud under", destination: "Settings > API keys" },
   environmentVariables: [TEST_ENVIRONMENT_VARIABLE.SECOND_CLOUD_API_KEY],
 };
 
@@ -76,7 +76,7 @@ const THIRD_CLOUD_PROVIDER: CredentialProvider = {
   id: "third-cloud" as CredentialProviderId,
   displayName: "Third Cloud",
   connection: CREDENTIAL_CONNECTION.KEY,
-  hint: "Create a key in Third Cloud.",
+  hint: { lead: "Create a key in Third Cloud under", destination: "Settings > API keys" },
   environmentVariables: [TEST_ENVIRONMENT_VARIABLE.THIRD_CLOUD_API_KEY],
   keyFormat: {
     label: "API key",

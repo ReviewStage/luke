@@ -5,6 +5,7 @@ import { CREDENTIAL_SOURCE } from "#shared/wire/account";
 import type { SupersetSignInSnapshot } from "#shared/wire/session";
 import { SUPERSET_SIGN_IN_STAGE } from "#shared/wire/session";
 import { CREDENTIAL_PLACEHOLDER, useStagedFocus } from "./credential-entry";
+import { DestinationNote } from "./destination-note";
 import { HIT_REGION } from "./panel-state";
 import { ExternalIcon } from "./settings-icons";
 
@@ -105,21 +106,15 @@ export function SupersetSignInSlot({
               />
             </div>
             <div className="settings-row key-slot-foot">
-              <small className="settings-note">
-                Superset shows a one-time code at the end of its sign-in page.{" "}
-                {/* A button, not an anchor, like the key slot's own: the main
-                    process reopens the page the waiting flow built, and no
-                    address crosses from here. */}
-                <button
-                  type="button"
-                  className="link-button"
-                  disabled={exchanging}
-                  onClick={onReopen}
-                >
-                  Where to get one
-                  <ExternalIcon />
-                </button>
-              </small>
+              {/* The key hints' own sentence shape: the main process reopens
+                  the page the waiting flow built, and no address crosses from
+                  here. */}
+              <DestinationNote
+                lead="Superset shows a one-time code at the end of"
+                destination="its sign-in page"
+                disabled={exchanging}
+                onOpen={onReopen}
+              />
               <span className="settings-actions">
                 <button type="button" className="quiet-button" onClick={onCancel}>
                   Cancel
