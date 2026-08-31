@@ -144,7 +144,6 @@ const sameAttention = exhaustiveSame<AttentionDecision>({
   disposition: (first, second) => first.disposition === second.disposition,
   decidedAt: (first, second) => first.decidedAt === second.decidedAt,
   summary: (first, second) => first.summary === second.summary,
-  answersAsk: (first, second) => first.answersAsk === second.answersAsk,
 });
 
 const sameWorkspace = exhaustiveSame<SessionWorkspace>({

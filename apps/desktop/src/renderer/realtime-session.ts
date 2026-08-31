@@ -1,4 +1,3 @@
-import type { SessionNoticeAsk } from "@sidecar/attention";
 import { TRACE_DIRECTION, type TraceDirection } from "@sidecar/devtrace/vocabulary";
 import { type AppGuideSnapshot, appGuideContextText, EMPTY_APP_GUIDE } from "@sidecar/guide";
 import type { TrackedIssue } from "@sidecar/issues";
@@ -2032,13 +2031,11 @@ export class RealtimeVoiceSession {
    * provides and a question about live work could not be answered from real
    * data. Identical rosters are not resent.
    */
-  updateSessions(sessions: readonly Session[], noticeAsks: readonly SessionNoticeAsk[] = []): void {
+  updateSessions(sessions: readonly Session[]): void {
     this.#sessions = sessions;
     const now = Date.now();
-    this.#rememberContext(
-      CONTEXT_ITEM_KIND.SESSIONS,
-      sessionContextText(sessions, noticeAsks, now),
-      (itemId) => sessionContextEvents(sessions, itemId, noticeAsks, now),
+    this.#rememberContext(CONTEXT_ITEM_KIND.SESSIONS, sessionContextText(sessions, now), (itemId) =>
+      sessionContextEvents(sessions, itemId, now),
     );
     // The history is rendered against the roster, so a fresh roster re-renders
     // it: a line whose session left the roster keeps its words and lets go of

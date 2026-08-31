@@ -20,7 +20,6 @@ import {
   productSignInAge,
   type RecordProductEvent,
 } from "@sidecar/analytics";
-import { AttentionRequestRegistry } from "@sidecar/attention";
 import {
   activeMeetingEnd,
   GoogleCalendarReader,
@@ -51,11 +50,7 @@ import {
   type WorkspaceHostRegistration,
   workspaceHostRegistrations,
 } from "@sidecar/providers";
-import {
-  ATTENTION_SPEECH_SOURCE,
-  type AttentionSpeech,
-  attentionSpeechFromReviews,
-} from "@sidecar/realtime";
+import { type AttentionSpeech, attentionSpeechFromReviews } from "@sidecar/realtime";
 import {
   CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
   CreatedWorkspaceOpenTracker,
@@ -438,12 +433,6 @@ let appleAccessProbeFailing = false;
 // deterministic, like the edges that produced them.
 const heldNotices = new SessionNoticeHold();
 /**
- * Speech an answered standing ask produced, already worded. It waits out a
- * meeting exactly as a status edge does because the developer explicitly
- * asked for this answer.
- */
-const heldRequestSpeech = new SessionNoticeHold<AttentionSpeech>();
-/**
  * Evaluator approvals deferred by meeting quiet. Their words are not replayed
  * after the meeting because the session may have moved on; release instead
  * reopens a fresh evaluator pass against the current roster.
@@ -463,12 +452,6 @@ const sessionNoticeTracker = new SessionNoticeTracker();
 // only from the validated creation act — nothing a model decided can add one —
 // and each resolves against what observation itself reports.
 const createdWorkspaceOpens = new CreatedWorkspaceOpenTracker();
-/**
- * The standing asks the developer has made about sessions, in their words.
- * They outlive the reviewer — a key re-entered must not forget what was asked
- * — and are dropped only when withdrawn or when the session itself goes.
- */
-const attentionRequests = new AttentionRequestRegistry();
 /**
  * The development trace: Luke's own agent traffic — the realtime wire and the
  * attention evaluator's passes — appended as JSONL under a directory the
@@ -492,7 +475,6 @@ const voiceCapabilities = new VoiceCapabilityAssembler({
   hostedServiceBaseUrl: HOSTED_SERVICE_BASE_URL,
   refreshAccount: accountSession.refreshOnce,
   currentSession: (identity) => sessionRegistry.get(identity),
-  noticeRequestFor: (identity) => attentionRequests.get(identity),
   ...(agentTrace
     ? {
         wrapEvaluator: (evaluator) =>
@@ -1399,10 +1381,6 @@ function registerIpc(): void {
         // on it. A fixture run never broadcasts and its sessions travel in the
         // fixture itself, so it is settled from the start.
         sessionsSettled: !runMode.observesProviders || lastRosterRevision !== -1,
-        // Asks are about observed sessions, so they ride the same gate the
-        // roster does: a panel shown no sessions is shown no asks about them.
-        noticeAsks:
-          runMode.observesProviders && accountCapabilitiesActive() ? attentionRequests.list() : [],
         workspaceProjects: accountCapabilitiesActive()
           ? normalizeObservedWorkspaceProjects(
               offeredWorkspaceProjects(),
@@ -1601,9 +1579,6 @@ function registerIpc(): void {
     sessionRegistry,
     openExternal: (url) => shell.openExternal(url),
     adapterFor,
-    attentionReviewer: () => voiceCapabilities.attentionReviewer,
-    attentionRequests,
-    broadcastNoticeAsks,
     sendsNetwork: runMode.sendsNetwork,
     settingsStore,
     rememberWorkspaceDefaults,
@@ -1927,18 +1902,13 @@ async function reviewSessionAttention(generation: number): Promise<void> {
     // `outcome` says whether to voice it now, which only these reviews do.
     const speech = attentionSpeechFromReviews(reviews);
     if (speech.length > 0) {
-      // The quiet holds everything Luke would say unbidden. An answered
-      // standing ask keeps its already-approved words. An evaluator summary
-      // keeps only its identity: once the meeting ends it is reviewed against
-      // the current roster instead of replaying words that may have gone stale.
+      // The quiet holds everything Luke would say unbidden. An evaluator
+      // summary keeps only its identity: once the meeting ends it is reviewed
+      // against the current roster instead of replaying words that may have
+      // gone stale.
       let sendable: readonly AttentionSpeech[] = speech;
       if (await announcementsQuietNow(Date.now())) {
-        heldRequestSpeech.hold(
-          speech.filter((item) => item.source !== ATTENTION_SPEECH_SOURCE.EVALUATOR),
-        );
-        heldEvaluatorSpeech.hold(
-          speech.filter((item) => item.source === ATTENTION_SPEECH_SOURCE.EVALUATOR),
-        );
+        heldEvaluatorSpeech.hold(speech);
         sendable = [];
       }
       if (sendable.length > 0) {
@@ -1969,16 +1939,11 @@ async function reviewSessionAttention(generation: number): Promise<void> {
  * talk-key press first.
  */
 async function announceSessionNotices(sessions: readonly Session[]): Promise<void> {
-  // Asks about sessions no longer reported have nothing left to be about, and
-  // this commit is the earliest that can be known. The rows marking asks are
-  // told only when one was actually let go.
-  if (attentionRequests.retain(sessions)) broadcastNoticeAsks();
   const now = Date.now();
   // The deterministic path is reserved for an error or a concrete hold for
   // the developer. Routine finishes still reach the attention evaluator,
-  // which can speak when the outcome is useful or answers a standing ask.
-  // Fed before anything is awaited, so passes reach the tracker in order —
-  // the retain above included.
+  // which can speak when the outcome is useful.
+  // Fed before anything is awaited, so passes reach the tracker in order.
   const notices = sessionNoticeTracker.notices(
     sessions.filter((session) => session.realtimeVoice !== true),
     now,
@@ -2125,7 +2090,7 @@ function armQuietBoundaryTimer(): void {
  * announcing its old state would be worse than silence.
  */
 async function releaseHeldNotices(): Promise<void> {
-  if (heldNotices.count === 0 && heldRequestSpeech.count === 0 && heldEvaluatorSpeech.count === 0) {
+  if (heldNotices.count === 0 && heldEvaluatorSpeech.count === 0) {
     return;
   }
   const now = Date.now();
@@ -2134,7 +2099,6 @@ async function releaseHeldNotices(): Promise<void> {
   // with, and by the time a key returns the news is the panel's.
   if (!voiceCapabilities.realtimeCredentials) {
     heldNotices.release();
-    heldRequestSpeech.release();
     heldEvaluatorSpeech.release();
     return;
   }
@@ -2153,22 +2117,15 @@ async function releaseHeldNotices(): Promise<void> {
     // its parting words are still the answer to where the work stands.
     return status === undefined || status === notice.status;
   });
-  // An answered ask was explicit, so it is always still worth its sentence;
-  // like the notices it is re-stamped at release, because the decision to
-  // speak is what is fresh — held any older it would be dropped unread.
-  const releasedAsks = heldRequestSpeech.release().map((item) => ({ ...item, decidedAt: now }));
   const deferredEvaluatorSpeech = heldEvaluatorSpeech.release();
   if (deferredEvaluatorSpeech.length > 0) {
     voiceCapabilities.attentionReviewer?.reconsider(deferredEvaluatorSpeech);
     void attentionObservationLoop.refresh();
   }
-  const speech = [
-    ...releasedAsks,
-    ...released.flatMap((notice) => {
-      const item = sessionNoticeSpeech(notice, now);
-      return item ? [item] : [];
-    }),
-  ];
+  const speech = released.flatMap((notice) => {
+    const item = sessionNoticeSpeech(notice, now);
+    return item ? [item] : [];
+  });
   if (speech.length === 0) return;
   countSpokenAnnouncements(released);
   const host = panels.voiceHost();
@@ -2338,7 +2295,6 @@ function stopCalendarObservation(): void {
   googleCalendar.forget();
   appleCalendar.forget();
   heldNotices.release();
-  heldRequestSpeech.release();
   heldEvaluatorSpeech.release();
   panels.broadcast(channels.onCalendarsChanged, observedCalendars);
   if (meetingQuietActive) {
@@ -2355,15 +2311,6 @@ function stopCalendarObservation(): void {
  */
 let lastRosterRevision = -1;
 let lastRosterIds = "";
-
-/**
- * Hands every panel the standing asks as they now stand, so the rows marking
- * them never describe an ask already withdrawn or let go. The words are the
- * developer's own; nothing here reaches a provider or leaves the machine.
- */
-function broadcastNoticeAsks(): void {
-  panels.broadcast(channels.onNoticeAsksChanged, attentionRequests.list());
-}
 
 function relevantSessionRoster(
   snapshot: SessionRegistrySnapshot,

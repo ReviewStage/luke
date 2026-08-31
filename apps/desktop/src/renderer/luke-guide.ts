@@ -508,17 +508,6 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "workspace keeps no archive: an ask to archive one is taken as its Delete workspace " +
         "control — permanent, never filed away.",
     },
-    {
-      label: "Standing asks about sessions",
-      detail:
-        "An ask can be kept standing for one observed session — told when it finishes, " +
-        "warned if it fails, whatever the developer asked in their own words — and Luke " +
-        "speaks when an update satisfies it, opening a speak-only call if no conversation " +
-        "is up. One ask stands per session, a new one replaces it, asking Luke to drop it " +
-        "withdraws it, and an ask ends with its session — Luke can say what he is already " +
-        "listening for. It needs voice to be available, changes nothing about the session " +
-        "itself, and is never sent to a provider.",
-    },
     talkKeyFact(input.hotkey),
     askKeyFact(input.askKey, input.askKeyRemoved),
     { label: "Microphone access", detail: MICROPHONE_DETAIL[input.microphoneStatus] },

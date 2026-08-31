@@ -17,12 +17,6 @@ import {
   type RecordProductEvent,
 } from "@sidecar/analytics";
 import {
-  type AttentionRequestRegistry,
-  type AttentionRequestResult,
-  attentionRequestText,
-  type SessionAttentionReviewer,
-} from "@sidecar/attention";
-import {
   ISSUE_ACTION_KIND,
   type IssueIdentity,
   isIssueTrackerId,
@@ -64,9 +58,6 @@ export interface SessionActsIpcDependencies {
   sessionRegistry: InMemorySessionRegistry;
   openExternal: (url: string) => Promise<void>;
   adapterFor: (providerId: string) => SessionProviderAdapter | undefined;
-  attentionReviewer: () => SessionAttentionReviewer | undefined;
-  attentionRequests: AttentionRequestRegistry;
-  broadcastNoticeAsks: () => void;
   sendsNetwork: boolean;
   settingsStore: SettingsStore;
   rememberWorkspaceDefaults: (
@@ -176,9 +167,6 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
     sessionRegistry,
     openExternal,
     adapterFor,
-    attentionReviewer,
-    attentionRequests,
-    broadcastNoticeAsks,
     sendsNetwork,
     settingsStore,
     rememberWorkspaceDefaults,
@@ -529,71 +517,6 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
           control,
         });
       });
-    },
-  );
-
-  // A standing ask runs the front half of the message gauntlet — a trusted
-  // sender, a bounded text, a session the registry actually observes — and
-  // then stops on this machine: it is kept for the attention evaluator to
-  // weigh updates against, and no adapter or provider ever sees it. It is
-  // refused while no evaluator is configured, because keeping an ask nothing
-  // will ever read is a promise Luke cannot keep.
-  registerHandler(
-    BRIDGE.requestSessionNotice,
-    (identity: SessionIdentity, request: string): AttentionRequestResult => {
-      const ask = attentionRequestText(request);
-      if (!ask) {
-        return {
-          status: ACT_RESULT_STATUS.REJECTED,
-          reason: "An ask has to be one short request and longer than nothing.",
-        };
-      }
-      const session = sessionRegistry.get(identity);
-      if (!session) {
-        return {
-          status: ACT_RESULT_STATUS.REJECTED,
-          reason: "No observed session matches that identity.",
-        };
-      }
-      if (!attentionReviewer()) {
-        return {
-          status: ACT_RESULT_STATUS.REJECTED,
-          reason: "No OpenAI key is connected, so nothing would ever read the ask.",
-        };
-      }
-      attentionRequests.set(identity, ask);
-      broadcastNoticeAsks();
-      countSessionAct(identity.providerId, PRODUCT_SESSION_ACT.NOTICE_REQUEST, {
-        status: ACT_RESULT_STATUS.ACCEPTED,
-      });
-      // The status rides the acceptance because the ask may already be
-      // answered: a session asked about after it finished has no later finish
-      // coming, and the reply should say so rather than promise one.
-      return { status: ACT_RESULT_STATUS.ACCEPTED, sessionStatus: session.status };
-    },
-  );
-
-  registerHandler(
-    BRIDGE.withdrawSessionNotice,
-    (identity: SessionIdentity): AttentionRequestResult => {
-      const session = sessionRegistry.get(identity);
-      if (!session) {
-        return {
-          status: ACT_RESULT_STATUS.REJECTED,
-          reason: "No observed session matches that identity.",
-        };
-      }
-      if (!attentionRequests.withdraw(identity)) {
-        return {
-          status: ACT_RESULT_STATUS.REJECTED,
-          reason: "No ask was standing for that session.",
-        };
-      }
-      broadcastNoticeAsks();
-      countSessionAct(identity.providerId, PRODUCT_SESSION_ACT.NOTICE_WITHDRAW, {
-        status: ACT_RESULT_STATUS.ACCEPTED,
-      });
-      return { status: ACT_RESULT_STATUS.ACCEPTED, sessionStatus: session.status };
     },
   );
 

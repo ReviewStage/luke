@@ -12,7 +12,6 @@ import {
   type ProductSurfaceEventName,
   productEventFromWire,
 } from "@sidecar/analytics";
-import type { AttentionRequestResult, SessionNoticeAsk } from "@sidecar/attention";
 import type { ObservedAccountCalendars } from "@sidecar/calendar/observation";
 import { type CredentialProviderId, isCredentialProviderId } from "@sidecar/credentials/vocabulary";
 import { type AgentWireTrace, isAgentWireTrace } from "@sidecar/devtrace/vocabulary";
@@ -526,20 +525,6 @@ export const BRIDGE = {
     ),
     result: result<ProviderControlResult>(),
   }),
-  requestSessionNotice: entry({
-    kind: "invoke",
-    channel: "app:request-session-notice",
-    args: args<[SessionIdentity, string]>(
-      (v) => v.length === 2 && isSessionIdentity(v[0]) && isWireString(v[1]),
-    ),
-    result: result<AttentionRequestResult>(),
-  }),
-  withdrawSessionNotice: entry({
-    kind: "invoke",
-    channel: "app:withdraw-session-notice",
-    args: args<[SessionIdentity]>((v) => v.length === 1 && isSessionIdentity(v[0])),
-    result: result<AttentionRequestResult>(),
-  }),
   createSessionWorkspace: entry({
     kind: "invoke",
     channel: "app:create-session-workspace",
@@ -778,12 +763,6 @@ export const BRIDGE = {
     channel: "app:sessions-changed",
     args: noArgs,
     result: result<SessionRosterPayload>(),
-  }),
-  onNoticeAsksChanged: entry({
-    kind: "subscribe",
-    channel: "app:notice-asks-changed",
-    args: noArgs,
-    result: result<readonly SessionNoticeAsk[]>(),
   }),
   /**
    * The one-time arrival beat, decided in the main process at the sign-in

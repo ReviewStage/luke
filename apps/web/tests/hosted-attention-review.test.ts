@@ -32,7 +32,6 @@ const UPDATE = {
 const SPOKEN_DECISION = {
   disposition: "speak-during-turn",
   summary: "Claude Code is waiting on you in checkout-service.",
-  answers_ask: false,
 };
 
 function reviewRequest(body: AttentionPromptUpdate): Request {

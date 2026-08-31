@@ -39,7 +39,7 @@ function announcement(summary: string, historyText?: string): AttentionSpeech {
     providerId: "claude-code",
     providerSessionId: "session-a",
     disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
-    source: ATTENTION_SPEECH_SOURCE.NOTICE_REQUEST,
+    source: ATTENTION_SPEECH_SOURCE.EVALUATOR,
     summary,
     ...(historyText ? { historyText } : undefined),
     decidedAt: OBSERVED_AT,

@@ -268,7 +268,6 @@ test("a speaking disposition needs a person even while the session works", () =>
   const [session] = displaySessions(
     bootstrap(false),
     [speaking],
-    [],
     [
       {
         providerId: speaking.providerId,
@@ -286,7 +285,6 @@ test("attention joins on the whole provider identity and supplies the row detail
   const sessions = displaySessions(
     bootstrap(false),
     [codex, claude],
-    [],
     [
       {
         providerId: claude.providerId,

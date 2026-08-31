@@ -678,7 +678,7 @@ agents, and reads and acts on Linear issues.
 
 Luke speaks up when a session starts waiting, hits an error, or finishes. He can show
 captions on screen, turn down Music and Spotify while he talks, and display a clickable
-chip naming the session. Ask him to "tell me when this session finishes" and he will.
+chip naming the session.
 ([#97](https://github.com/ReviewStage/luke/pull/97),
 [#149](https://github.com/ReviewStage/luke/pull/149),
 [#173](https://github.com/ReviewStage/luke/pull/173))

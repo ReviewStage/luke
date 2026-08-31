@@ -82,7 +82,6 @@ test("the assembler builds and clears the keyed voice capabilities as one unit",
     hostedServiceBaseUrl: "https://example.test",
     refreshAccount: async () => undefined,
     currentSession: () => undefined,
-    noticeRequestFor: () => undefined,
     report: (message) => reports.push(message),
   });
 
@@ -112,7 +111,6 @@ test("a wrapped evaluator stands where the built one would, and only when one wa
     hostedServiceBaseUrl: "https://example.test",
     refreshAccount: async () => undefined,
     currentSession: () => undefined,
-    noticeRequestFor: () => undefined,
     report: () => undefined,
     wrapEvaluator: (evaluator) => {
       wrapped.push("wrapped");
@@ -147,7 +145,6 @@ test("the assembler keeps fixture runs credential-free without reading a key", a
     hostedServiceBaseUrl: "https://example.test",
     refreshAccount: async () => undefined,
     currentSession: () => undefined,
-    noticeRequestFor: () => undefined,
     report: () => undefined,
   });
 
@@ -171,7 +168,6 @@ test("a signed-out live run is diagnosed as missing credentials, not as a fixtur
     hostedServiceBaseUrl: "https://example.test",
     refreshAccount: async () => undefined,
     currentSession: () => undefined,
-    noticeRequestFor: () => undefined,
     report: (message) => reports.push(message),
   });
 

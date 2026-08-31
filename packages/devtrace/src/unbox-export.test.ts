@@ -189,7 +189,6 @@ test("a readable attention update renders as the exact prompt the model received
     status: "complete",
     previousStatus: "working",
     recap: "Shipped the retry fix.",
-    noticeRequest: "Tell me when the retry fix lands.",
   };
   const attention = JSON.stringify({
     at: "2026-08-25T10:05:00.000Z",
@@ -212,8 +211,6 @@ test("a readable attention update renders as the exact prompt the model received
       status: SESSION_STATUS.COMPLETE,
       previousStatus: SESSION_STATUS.WORKING,
       recap: "Shipped the retry fix.",
-      noticeRequest: "Tell me when the retry fix lands.",
     }),
   );
-  assert.match(String(rendered?.content), /Developer's ask: Tell me when the retry fix lands\./u);
 });

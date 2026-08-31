@@ -70,7 +70,6 @@ export interface VoiceCapabilityAssemblerOptions {
   hostedServiceBaseUrl: string;
   refreshAccount: () => Promise<void>;
   currentSession: (identity: SessionIdentity) => Session | undefined;
-  noticeRequestFor: (identity: SessionIdentity) => string | undefined;
   fetch?: typeof fetch;
   report?: (message: string) => void;
   /**
@@ -151,7 +150,6 @@ export class VoiceCapabilityAssembler {
       ? new SessionAttentionReviewer({
           evaluator,
           currentSession: this.#options.currentSession,
-          noticeRequestFor: this.#options.noticeRequestFor,
         })
       : undefined;
     const [voice, speed] = await Promise.all([

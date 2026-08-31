@@ -133,18 +133,10 @@ export const REALTIME_SERVER_EVENT = {
   ERROR: "error",
 } as const;
 
-/**
- * Who decided a proactive sentence was worth voicing. The sources carry
- * different standing. An unbidden evaluator summary is a model's words on a
- * session nobody asked about, and may only ride a call the developer already
- * opened. A notice request is still the evaluator's words, but the developer
- * asked to hear about that session, so it may open Luke's own call for as long
- * as the ask stands.
- */
+/** Who decided a proactive sentence was worth voicing. */
 export const ATTENTION_SPEECH_SOURCE = {
   STATUS_EDGE: "status-edge",
   EVALUATOR: "evaluator",
-  NOTICE_REQUEST: "notice-request",
 } as const;
 
 export type AttentionSpeechSource =
@@ -623,25 +615,21 @@ const ARRIVAL_SPEECH_HEAD = [
 ] as const;
 
 /**
- * The one suggestion the beat closes on, chosen from four build-fixed lines by
- * which bounded values are actually present — a spoken try is only suggested
- * while the talk key would work, and a session is only named while one is
- * working. The selection is arithmetic on presence; no observed value can
- * change which line is said.
+ * The one suggestion the beat closes on, chosen from two build-fixed lines by
+ * whether the talk key would work. No observed value can change which line is
+ * said.
  */
-function arrivalTryDirection(input: { sessionTitle?: string; talkKeyLabel?: string }): string {
+function arrivalTryDirection(input: { talkKeyLabel?: string }): string {
   if (input.talkKeyLabel !== undefined) {
-    return input.sessionTitle !== undefined
-      ? "End by inviting exactly one thing to try: hold the talk key named in the data and " +
-          'say "tell me when <the named session> finishes", naming the session from the data.'
-      : "End by inviting exactly one thing to try: hold the talk key named in the data and " +
-          'ask "what needs me?"';
+    return (
+      "End by inviting exactly one thing to try: hold the talk key named in the data and " +
+      'ask "what needs me?"'
+    );
   }
-  return input.sessionTitle !== undefined
-    ? 'End by inviting exactly one thing to try: type "tell me when <the named session> ' +
-        'finishes" into the field at the foot of the panel, naming the session from the data.'
-    : 'End by inviting exactly one thing to try: type "what needs me?" into the field at ' +
-        "the foot of the panel.";
+  return (
+    'End by inviting exactly one thing to try: type "what needs me?" into the field at ' +
+    "the foot of the panel."
+  );
 }
 
 /**
@@ -678,13 +666,11 @@ export function arrivalSpeechEvents(speech: ArrivalSpeech): readonly WireRecord[
     {
       type: REALTIME_CLIENT_EVENT.RESPONSE_CREATE,
       response: {
-        // The direction is selected by the same bounded values the item
-        // carries, so the suggestion can never name a key or a session the
-        // data does not.
+        // The direction is selected by whether the bounded talk-key value is
+        // present, so the suggestion can never name a key the data does not.
         instructions: [
           ...ARRIVAL_SPEECH_HEAD,
           arrivalTryDirection({
-            ...(sessionTitle !== undefined ? { sessionTitle } : undefined),
             ...(talkKeyLabel !== undefined ? { talkKeyLabel } : undefined),
           }),
         ].join("\n"),
@@ -986,12 +972,7 @@ export function functionCallFollowUpEvents(): readonly WireRecord[] {
 /**
  * Selects the reviews worth voicing right now. A deduplicated review still
  * means the session needs attention, which the panel shows, but repeating the
- * same sentence out loud would be noise rather than news. A review that
- * answers the developer's standing ask — the ask was present, and the
- * evaluator said its sentence answers it — speaks with the notice-request
- * source, which is what entitles it to be heard without a call already open.
- * A watched session the evaluator speaks about for its own reasons keeps the
- * evaluator's terms: the ask licenses its answer, nothing beside it.
+ * same sentence out loud would be noise rather than news.
  */
 export function attentionSpeechFromReviews(
   reviews: readonly AttentionReview[],
@@ -1006,10 +987,7 @@ export function attentionSpeechFromReviews(
       providerId: review.providerId,
       providerSessionId: review.providerSessionId,
       disposition: review.decision.disposition,
-      source:
-        review.update.noticeRequest && review.decision.answersAsk
-          ? ATTENTION_SPEECH_SOURCE.NOTICE_REQUEST
-          : ATTENTION_SPEECH_SOURCE.EVALUATOR,
+      source: ATTENTION_SPEECH_SOURCE.EVALUATOR,
       summary,
       decidedAt: review.decision.decidedAt,
     });
