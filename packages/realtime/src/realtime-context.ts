@@ -1,4 +1,3 @@
-import type { SessionNoticeAsk } from "@sidecar/attention";
 import {
   type ObservedWorkspaceProject,
   SESSION_LOCATION,
@@ -160,22 +159,6 @@ function sessionAboutText(session: Session): readonly string[] {
 }
 
 /**
- * The standing asks by the identity each is about, nested rather than keyed by
- * a composed string, so a roster line can carry the one ask that names it.
- */
-function noticeAsksByIdentity(
-  noticeAsks: readonly SessionNoticeAsk[],
-): ReadonlyMap<string, ReadonlyMap<string, string>> {
-  const byProvider = new Map<string, Map<string, string>>();
-  for (const noticeAsk of noticeAsks) {
-    const providerAsks = byProvider.get(noticeAsk.providerId) ?? new Map<string, string>();
-    providerAsks.set(noticeAsk.providerSessionId, noticeAsk.ask);
-    byProvider.set(noticeAsk.providerId, providerAsks);
-  }
-  return byProvider;
-}
-
-/**
  * How a session is named out loud: the agent having the conversation, with
  * the hosting provider beside it where the two differ — "Claude Code in
  * Conductor" — so the spoken answer matches the mark the row leads with.
@@ -193,8 +176,7 @@ function sessionSpokenName(session: Session): string {
  * sends — provider, title, status, when last seen, repository or branch,
  * current tool, reported error, and the provider's own recap — plus the
  * workspace a chat belongs to when its provider groups them, the apps that
- * independently associate themselves with it, the developer's
- * standing ask where one stands, what each session can be asked to do, and the
+ * independently associate themselves with it, what each session can be asked to do, and the
  * identity a tool call names it by. The newest session and newest openable
  * session within each provider are labelled explicitly, so a recency ask is a
  * selection rather than an ambiguity; those rows are also kept inside the
@@ -205,14 +187,9 @@ function sessionSpokenName(session: Session): string {
  * `Date.now()` for live use; pass a fixed epoch for reproducible fixture or
  * test snapshots.
  */
-export function sessionContextText(
-  sessions: readonly Session[],
-  noticeAsks: readonly SessionNoticeAsk[] = [],
-  now: number = Date.now(),
-): string {
+export function sessionContextText(sessions: readonly Session[], now: number = Date.now()): string {
   if (sessions.length === 0) return "No coding-agent sessions are currently observed.";
 
-  const asks = noticeAsksByIdentity(noticeAsks);
   const mostRecent = firstSessionByProvider(sessions);
   const mostRecentOpenable = firstSessionByProvider(sessions, sessionCanOpen);
   const included = prioritizedContextSessions(sessions);
@@ -220,7 +197,6 @@ export function sessionContextText(
   return [
     "Currently observed sessions:",
     ...included.map((session) => {
-      const ask = asks.get(session.providerId)?.get(session.providerSessionId);
       return [
         // A hosted chat is named by the agent having the conversation, with
         // the host beside it, the same way its row leads with the agent mark.
@@ -255,9 +231,6 @@ export function sessionContextText(
         ...(session.recap
           ? [`context for naming this work — do not list its parts: ${session.recap}`]
           : []),
-        // Only this segment speaks for the developer, on the attention
-        // update's own rule: words inside a title, recap, or error never do.
-        ...(ask ? [`the developer's standing ask: "${ask}"`] : []),
         `[${sessionCapabilityText(session, {
           mostRecentForProvider: mostRecent.get(session.providerId) === session,
           mostRecentOpenableForProvider: mostRecentOpenable.get(session.providerId) === session,
@@ -367,13 +340,12 @@ function labeledContextEvent(label: string, text: string, itemId: string): WireR
 export function sessionContextEvents(
   sessions: readonly Session[],
   itemId: string,
-  noticeAsks: readonly SessionNoticeAsk[] = [],
   now: number = Date.now(),
 ): readonly WireRecord[] {
   return [
     labeledContextEvent(
       "observed session status, sent automatically",
-      sessionContextText(sessions, noticeAsks, now),
+      sessionContextText(sessions, now),
       itemId,
     ),
   ];

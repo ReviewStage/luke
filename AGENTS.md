@@ -543,18 +543,10 @@ What Luke may show:
   message history, file contents, or command output. A recap counts as *about*
   even when it is the agent's own parting words, the one bounded line saying
   where the turn ended, the same standing as a recap a provider designated,
-  but the transcript it was read from never travels. Beside what a provider
-  wrote, an update may carry one thing the developer wrote: their standing
-  ask about that session, "tell me when this finishes", kept in their own
-  words after being asked of Luke in a turn the developer opened, bounded,
-  validated against the observed roster in the renderer and again in the main
-  process, withdrawable the same way it was made, and dropped with the
-  session it was about. The ask is context for deciding what to say, never an
-  instruction to act (it reaches no write path) and only the ask line
-  speaks for the developer: words inside a title, recap, or error never do. A
+  but the transcript it was read from never travels. A
   spoken announcement (a session that started waiting, stopped on an error,
-  or finished, or the evaluator's own sentence answering a standing ask)
-  reaches the voice service so it can be said aloud. The arrival beat is the
+  or finished, or an evaluator sentence approved for speech) reaches the
+  voice service so it can be said aloud. The arrival beat is the
   one member of that set about no session: spoken once per install at the
   deterministic edge of the account's first sign-in, remembered in Luke's own
   state file, worded from a script fixed by the build on the same speak-only,
@@ -572,7 +564,7 @@ What Luke may show:
   than only that it waits. When no conversation is open, Luke opens a call of
   his own to say it, and that call is speak-only by construction: it offers
   no microphone track, carries no tools, and is sent the one update's fields,
-  or the one answering sentence, alone: never the roster, the guide, or a
+  or the one evaluator sentence, alone: never the roster, the guide, or a
   transcript rendering, which travel only on conversations the developer
   opens, and the rendering only in the turn that asked for it. A
   developer-opened conversation also carries a bounded history of the recent
@@ -588,10 +580,8 @@ What Luke may show:
   session is still observed; and the history lives in memory alone, written
   to no disk, dying with the app, and never sent on Luke's speak-only call. Its
   trigger is a deterministic status edge, the arrival beat's one recorded
-  sign-in edge, or the evaluator finding an update that satisfies the
-  developer's standing ask, never a model speaking unbidden: while no ask
-  stands, nothing a model decided can open Luke's own call. The edge announcements speak whenever voice can; an answered ask
-  speaks on the consent of the ask itself, for exactly as long as it stands.
+  sign-in edge, or the evaluator finding an update worth speaking. The edge
+  announcements and approved evaluator sentences speak whenever voice can.
   Widening either set is a product decision, not an implementation detail;
   make it deliberately. While an announcement is being spoken, a notice on
   Luke's own surface under the housing names the session it is about,

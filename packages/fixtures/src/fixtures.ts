@@ -67,8 +67,6 @@ export interface SessionSnapshot {
   hasChange?: boolean;
   /** Drawn only: the number the chip is titled by when the address names one. */
   changeNumber?: number;
-  /** Drawn only: the standing ask a live row would be marked as listened for. */
-  noticeAsk?: string;
   /** The workspace this row is one chat of, when its provider nests them. */
   workspace?: WorkspaceSnapshot;
 }
@@ -158,9 +156,6 @@ const smokeFixture: FixtureSnapshot = {
       urgency: SESSION_URGENCY.WORKING,
       location: SESSION_LOCATION.LOCAL,
       observedAt: minutesBeforeEpoch(4),
-      // A synthetic standing ask, so the one screenshot the evidence is
-      // reviewed from also proves the listening mark is drawn.
-      noticeAsk: "Tell me when the build finishes.",
     },
     {
       id: "claude-review",

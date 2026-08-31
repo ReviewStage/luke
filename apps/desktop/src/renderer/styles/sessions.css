@@ -984,15 +984,6 @@ html[data-keyboard="true"] button.session-row:focus-visible {
   white-space: nowrap;
 }
 
-/* The mark for a row Luke was asked to listen for, riding beside the age in
-   the age's own quiet colour: the ask changes what Luke says, not the row's
-   urgency, so it must not read as a state. The ask itself is the hover. */
-.row-listening {
-  width: 11px;
-  height: 11px;
-  flex: 0 0 auto;
-}
-
 /* App associations sit under the age as bare marks: the leading mark already
    says which agent this is, while these answer where the same local chat also
    appears. Their seat in the trailing column keeps them clear of the title,

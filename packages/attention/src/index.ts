@@ -1,4 +1,3 @@
-export { ACT_RESULT_STATUS } from "@sidecar/wire";
 export {
   ATTENTION_DECISION_SCHEMA,
   ATTENTION_DECISION_SCHEMA_NAME,
@@ -6,16 +5,11 @@ export {
   ATTENTION_REVIEW_OUTCOME,
   ATTENTION_TRIGGER,
   type AttentionEvaluator,
-  AttentionRequestRegistry,
-  type AttentionRequestResult,
   type AttentionReview,
   type AttentionUpdate,
   attentionDecisionFromModel,
-  attentionRequestText,
-  maximumAttentionRequestLength,
   maximumAttentionSummaryLength,
   SessionAttentionReviewer,
-  type SessionNoticeAsk,
 } from "./attention.js";
 export {
   ATTENTION_RESPONSES_PATH,

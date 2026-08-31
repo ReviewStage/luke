@@ -18,7 +18,6 @@ import {
 } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
 import { isRecord } from "@sidecar/wire";
-import { maximumAttentionRequestLength } from "./attention.js";
 
 const UPDATE: AttentionPromptUpdate = {
   trigger: ATTENTION_TRIGGER.STATUS_CHANGED,
@@ -28,7 +27,6 @@ const UPDATE: AttentionPromptUpdate = {
   previousStatus: SESSION_STATUS.WORKING,
   recap: "Waiting on a permission decision.",
   context: { branch: "main" },
-  noticeRequest: "tell me when this finishes",
 };
 
 test("the responses request is the shared construction with only the update varying", () => {
@@ -124,16 +122,4 @@ test("wire fields are cut to the bounds the local roster holds them to", () => {
   assert.equal(parsed?.providerName.length, maximumSessionTitleLength);
   assert.equal(parsed?.title.length, maximumSessionTitleLength);
   assert.equal(parsed?.recap?.length, maximumSessionRecapLength);
-});
-
-test("an overlong ask refuses the whole update, because a cut ask is a different ask", () => {
-  const overlong = {
-    trigger: ATTENTION_TRIGGER.OBSERVED,
-    providerName: "Claude Code",
-    title: "checkout-service",
-    status: SESSION_STATUS.WORKING,
-    noticeRequest: "a".repeat(maximumAttentionRequestLength + 1),
-  };
-  assert.equal(attentionPromptUpdateFromWire(overlong), undefined);
-  assert.equal(attentionPromptUpdateFromWire({ ...overlong, noticeRequest: 5 }), undefined);
 });

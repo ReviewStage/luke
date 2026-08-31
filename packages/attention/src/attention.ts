@@ -1,5 +1,4 @@
 import {
-  type ACT_RESULT_STATUS,
   ATTENTION_DISPOSITION,
   type AttentionDecision,
   type AttentionDisposition,
@@ -13,7 +12,7 @@ import {
   type SessionStatus,
   silentAttention,
 } from "@sidecar/session";
-import { nonNegativeNumber, positiveInteger, text, type UnparsedWireValue } from "@sidecar/wire";
+import { nonNegativeNumber, positiveInteger, type UnparsedWireValue } from "@sidecar/wire";
 
 export const ATTENTION_TRIGGER = {
   OBSERVED: "observed",
@@ -24,20 +23,7 @@ export const ATTENTION_TRIGGER = {
 
 export type AttentionTrigger = (typeof ATTENTION_TRIGGER)[keyof typeof ATTENTION_TRIGGER];
 
-/** A standing ask is one spoken sentence of the developer's, not a document. */
-export const maximumAttentionRequestLength = 300;
 export { maximumAttentionSummaryLength };
-
-/**
- * The text of a standing ask on its way into the registry, or nothing. Refused
- * rather than cut when it runs long, on the message rule's own grounds: a
- * truncated ask asks for something its author did not.
- */
-export function attentionRequestText(value: UnparsedWireValue): string | undefined {
-  const normalized = text(value);
-  if (!normalized || normalized.length > maximumAttentionRequestLength) return undefined;
-  return normalized;
-}
 
 export const ATTENTION_DECISION_SCHEMA_NAME = "attention_decision";
 
@@ -46,7 +32,7 @@ const ATTENTION_DISPOSITIONS: readonly AttentionDisposition[] =
 
 /**
  * What each disposition means, in the wording an evaluator is shown. The
- * schema description and the standing instructions both come from here, so
+ * schema description and the evaluator instructions both come from here, so
  * they cannot drift.
  */
 export const DISPOSITION_GUIDANCE = {
@@ -73,8 +59,7 @@ const ATTENTION_REVIEW_DEFAULTS = {
  * event is old; this is the identical rule for the evaluator's door, keyed on
  * the same provider-written timestamp, so history arriving late is consumed
  * silently instead of reviewed as news. The panel has shown the state the
- * whole time. A development carrying the developer's standing ask is exempt:
- * the ask is consent to hear its answer late rather than never.
+ * whole time.
  */
 export const ATTENTION_EVENT_FRESH_AGE_MS = 5 * 60_000;
 
@@ -85,7 +70,7 @@ export const ATTENTION_EVENT_FRESH_AGE_MS = 5 * 60_000;
 export const ATTENTION_DECISION_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["disposition", "summary", "answers_ask"],
+  required: ["disposition", "summary"],
   properties: {
     disposition: {
       type: "string",
@@ -97,11 +82,6 @@ export const ATTENTION_DECISION_SCHEMA = {
     summary: {
       type: ["string", "null"],
       description: `One short spoken sentence under ${maximumAttentionSummaryLength} characters, or null when the disposition is silent.`,
-    },
-    answers_ask: {
-      type: "boolean",
-      description:
-        "True only when a developer's ask is present and the summary answers it. False when no ask stands, when the update is not what it asked for, or when the disposition is silent.",
     },
   },
 };
@@ -125,10 +105,9 @@ export interface AttentionContext {
 /**
  * A bounded description of what changed for one session, and the only session
  * material an attention evaluator ever receives. It carries what a provider
- * wrote *about* a session — its title, its state, its own closing recap — plus
- * the developer's own standing ask about it when one stands, and never the
- * transcript that sits behind them: no message history, file contents, or
- * command output.
+ * wrote *about* a session — its title, its state, its own closing recap — and
+ * never the transcript that sits behind them: no message history, file
+ * contents, or command output.
  */
 export interface AttentionUpdate extends SessionIdentity {
   trigger: AttentionTrigger;
@@ -145,14 +124,6 @@ export interface AttentionUpdate extends SessionIdentity {
   previousStatus?: SessionStatus;
   recap?: string;
   context?: AttentionContext;
-  /**
-   * The developer's own standing ask about this session — "tell me when this
-   * finishes" — kept in their words. A deliberate widening of what leaves the
-   * machine: it is something the developer said rather than something a
-   * provider wrote, asked of Luke in conversation precisely so the evaluator
-   * would weigh updates against it, and it travels only while it stands.
-   */
-  noticeRequest?: string;
   observedAt: number;
 }
 
@@ -223,13 +194,6 @@ export interface SessionAttentionReviewerOptions {
    * that the state it reasoned about is gone.
    */
   currentSession?: (identity: SessionIdentity) => Session | undefined;
-  /**
-   * Reads the developer's standing ask about a session, when one stands. It
-   * rides the update so the evaluator can weigh the development against what
-   * the developer said they wanted to hear; without it every update is judged
-   * on the default rules alone.
-   */
-  noticeRequestFor?: (identity: SessionIdentity) => string | undefined;
   now?: () => number;
   repeatWindowMs?: number;
   maximumUpdatesPerReview?: number;
@@ -295,11 +259,7 @@ function attentionTrigger(
  * session says the same thing it said last time. A repeated observation is not
  * a development, so it never reaches an evaluator.
  */
-export function attentionUpdate(
-  session: Session,
-  previous?: Session,
-  noticeRequest?: string,
-): AttentionUpdate | undefined {
+export function attentionUpdate(session: Session, previous?: Session): AttentionUpdate | undefined {
   const trigger = attentionTrigger(session, previous);
   if (!trigger) return undefined;
 
@@ -318,7 +278,6 @@ export function attentionUpdate(
   if (previous) update.previousStatus = previous.status;
   if (session.recap) update.recap = session.recap;
   if (context) update.context = context;
-  if (noticeRequest) update.noticeRequest = noticeRequest;
   return update;
 }
 
@@ -413,121 +372,17 @@ export class AttentionSpeechLedger {
   }
 }
 
-/** What became of a standing ask, worded so a spoken reply can carry it. */
-/**
- * The answer to registering or withdrawing a standing ask. An acceptance
- * carries the session's status as observed at that moment, because the ask may
- * already be answered — a session asked about after it finished has no later
- * finish coming, and the reply should be able to say so.
- */
-export type AttentionRequestResult =
-  | { status: typeof ACT_RESULT_STATUS.ACCEPTED; sessionStatus: SessionStatus }
-  | { status: typeof ACT_RESULT_STATUS.REJECTED; reason: string }
-  | { status: typeof ACT_RESULT_STATUS.UNSUPPORTED; reason: string };
-
-/**
- * The standing asks the developer has made about sessions, one per session,
- * each in their own words. Keyed by provider identity rather than a composed
- * string, like the speech ledger, and retained on the same terms: an ask for a
- * session its provider no longer reports has nothing left to be about.
- */
-export class AttentionRequestRegistry {
-  #requests = new Map<string, Map<string, string>>();
-
-  /**
-   * Every standing ask, flattened for the surfaces that show them: the panel's
-   * row marks and the roster a developer-opened conversation carries. The
-   * identity rides each entry because the ask means nothing apart from the
-   * session it is about.
-   */
-  list(): readonly SessionNoticeAsk[] {
-    return [...this.#requests].flatMap(([providerId, providerRequests]) =>
-      [...providerRequests].map(([providerSessionId, ask]) => ({
-        providerId,
-        providerSessionId,
-        ask,
-      })),
-    );
-  }
-
-  set(identity: SessionIdentity, request: string): void {
-    const normalizedIdentity = normalizeSessionIdentity(identity);
-    const providerRequests =
-      this.#requests.get(normalizedIdentity.providerId) ?? new Map<string, string>();
-    providerRequests.set(normalizedIdentity.providerSessionId, request);
-    this.#requests.set(normalizedIdentity.providerId, providerRequests);
-  }
-
-  get(identity: SessionIdentity): string | undefined {
-    const normalizedIdentity = normalizeSessionIdentity(identity);
-    return this.#requests
-      .get(normalizedIdentity.providerId)
-      ?.get(normalizedIdentity.providerSessionId);
-  }
-
-  /** Lets an ask go, and answers whether one was standing to let go of. */
-  withdraw(identity: SessionIdentity): boolean {
-    const normalizedIdentity = normalizeSessionIdentity(identity);
-    const providerRequests = this.#requests.get(normalizedIdentity.providerId);
-    if (!providerRequests?.delete(normalizedIdentity.providerSessionId)) return false;
-    if (providerRequests.size === 0) this.#requests.delete(normalizedIdentity.providerId);
-    return true;
-  }
-
-  /**
-   * Drops asks about sessions a provider no longer reports, and answers
-   * whether any were dropped so the surfaces showing asks can be told exactly
-   * when the set changed.
-   */
-  retain(identities: readonly SessionIdentity[]): boolean {
-    const live = new Map<string, Set<string>>();
-    for (const identity of identities) {
-      const normalizedIdentity = normalizeSessionIdentity(identity);
-      const providerSessionIds = live.get(normalizedIdentity.providerId) ?? new Set<string>();
-      providerSessionIds.add(normalizedIdentity.providerSessionId);
-      live.set(normalizedIdentity.providerId, providerSessionIds);
-    }
-
-    let dropped = false;
-    const retained = new Map<string, Map<string, string>>();
-    for (const [providerId, providerRequests] of this.#requests) {
-      const providerSessionIds = live.get(providerId);
-      const kept = new Map(
-        [...providerRequests].filter(([providerSessionId]) =>
-          providerSessionIds?.has(providerSessionId),
-        ),
-      );
-      if (kept.size < providerRequests.size) dropped = true;
-      if (kept.size > 0) retained.set(providerId, kept);
-    }
-    this.#requests = retained;
-    return dropped;
-  }
-}
-
-/**
- * One standing ask beside the session it is about, as the flattened entry the
- * panel's rows and the conversation roster consume. The words are the
- * developer's own, already bounded by {@link attentionRequestText}.
- */
-export interface SessionNoticeAsk extends SessionIdentity {
-  ask: string;
-}
-
 /**
  * Turns registry snapshots into attention decisions. It reviews only sessions
- * that actually changed and only while their events are fresh — a development
- * older than {@link ATTENTION_EVENT_FRESH_AGE_MS} is consumed silently unless
- * the developer's standing ask names its session — bounds how many updates one
- * pass may evaluate, keeps a single evaluation in flight per session, discards
- * a decision the session has already moved past without consuming that
- * development, and defaults to silence whenever an evaluator fails or returns
- * something outside the decision contract.
+ * that actually changed and only while their events are fresh, bounds how many
+ * updates one pass may evaluate, keeps a single evaluation in flight per
+ * session, discards a decision the session has already moved past without
+ * consuming that development, and defaults to silence whenever an evaluator
+ * fails or returns something outside the decision contract.
  */
 export class SessionAttentionReviewer {
   readonly #evaluator: AttentionEvaluator;
   readonly #currentSession: ((identity: SessionIdentity) => Session | undefined) | undefined;
-  readonly #noticeRequestFor: ((identity: SessionIdentity) => string | undefined) | undefined;
   readonly #now: () => number;
   readonly #maximumUpdatesPerReview: number;
   readonly #ledger: AttentionSpeechLedger;
@@ -541,7 +396,6 @@ export class SessionAttentionReviewer {
   constructor(options: SessionAttentionReviewerOptions) {
     this.#evaluator = options.evaluator;
     this.#currentSession = options.currentSession;
-    this.#noticeRequestFor = options.noticeRequestFor;
     this.#now = options.now ?? Date.now;
     this.#maximumUpdatesPerReview = positiveInteger(
       options.maximumUpdatesPerReview,
@@ -584,22 +438,12 @@ export class SessionAttentionReviewer {
         closedConsumed.push(session);
         continue;
       }
-      const update = attentionUpdate(
-        session,
-        this.#observedSession(session),
-        this.#noticeRequestFor?.(session),
-      );
+      const update = attentionUpdate(session, this.#observedSession(session));
       if (!update) continue;
       // An event older than the freshness window is history arriving late — a
       // launch reading yesterday's roster, a wake replaying the afternoon —
-      // and is never news, unless the developer's own standing ask is waiting
-      // on exactly this session: an ask answered late still beats one answered
-      // never.
-      if (
-        !update.noticeRequest &&
-        !this.#isReconsidered(session) &&
-        now - update.observedAt > this.#freshEventAgeMs
-      ) {
+      // and is never news.
+      if (!this.#isReconsidered(session) && now - update.observedAt > this.#freshEventAgeMs) {
         staleConsumed.push({ session, update });
         continue;
       }

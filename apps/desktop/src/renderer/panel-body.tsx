@@ -44,7 +44,6 @@ import {
 } from "./session-motion";
 import {
   EmptyState,
-  ListeningGlyph,
   LoadingState,
   SessionOptions,
   SessionOptionsButton,
@@ -592,7 +591,6 @@ export function SessionRow({
       branch={Boolean(session.branch)}
       diff={session.diff}
       when={observedAgoLabel(session.observedAt, now)}
-      notice={session.noticeAsk ? <ListeningGlyph ask={session.noticeAsk} /> : undefined}
       applications={applicationMarks}
     />
   );

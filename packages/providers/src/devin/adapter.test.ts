@@ -483,12 +483,12 @@ test("keeps reporting a long turn as working, and a session that ended as comple
   assert.equal(observations[0]?.observedAt, startedAt);
 });
 
-test("a session holding for the user keeps asking however long it has stood", async () => {
+test("a session holding for the user keeps waiting however long it has stood", async () => {
   // Devin asserting waiting-for-user is a live fact about this moment, not a
-  // turn boundary to be guessed stale, so the ask never melts into an idle row.
+  // turn boundary to be guessed stale, so the wait never melts into an idle row.
   const api = fakeDevinApi([
     {
-      id: "devin-standing-ask",
+      id: "devin-long-wait",
       status: TEST_STATUS.RUNNING,
       detail: TEST_DETAIL.WAITING_FOR_USER,
       updatedAt: TEST_TIME - 2 * 60 * 60 * 1000,

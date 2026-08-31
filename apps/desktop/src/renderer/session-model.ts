@@ -1,4 +1,3 @@
-import type { SessionNoticeAsk } from "@sidecar/attention";
 import type { SessionSnapshot } from "@sidecar/fixtures";
 import { SESSION_LIST_SORT, type SessionListSort } from "@sidecar/guide";
 import type { IssueIdentity } from "@sidecar/issues";
@@ -315,12 +314,6 @@ export interface SessionView {
    * absent, the chip keeps the generic words rather than guessing.
    */
   changeNumber?: number;
-  /**
-   * The developer's standing ask about this session, when one stands, so the
-   * row can mark that Luke is listening for it. The words are the developer's
-   * own, drawn only on this machine.
-   */
-  noticeAsk?: string;
   /** The workspace this row is one chat of, when its provider nests them. */
   workspace?: DisplayWorkspace;
 }
@@ -539,22 +532,6 @@ export function sessionDiffLabel(diff: SessionDiffSummary): string {
   return `${files} +${diff.linesAdded} −${diff.linesRemoved}`;
 }
 
-/**
- * The standing asks by the identity each is about — nested maps rather than a
- * composed key — so each row can pick up the one ask that names it.
- */
-function noticeAsksByIdentity(
-  noticeAsks: readonly SessionNoticeAsk[],
-): ReadonlyMap<string, ReadonlyMap<string, string>> {
-  const byProvider = new Map<string, Map<string, string>>();
-  for (const noticeAsk of noticeAsks) {
-    const providerAsks = byProvider.get(noticeAsk.providerId) ?? new Map<string, string>();
-    providerAsks.set(noticeAsk.providerSessionId, noticeAsk.ask);
-    byProvider.set(noticeAsk.providerId, providerAsks);
-  }
-  return byProvider;
-}
-
 function sessionUrgency(session: SessionWithAttention): SessionUrgency {
   if (sessionNeedsAttention(session)) return SESSION_URGENCY.ATTENTION;
   if (session.status === SESSION_STATUS.COMPLETE) return SESSION_URGENCY.COMPLETE;
@@ -656,10 +633,8 @@ function bySort(sort: SessionSort): (first: SessionView, second: SessionView) =>
 export function displaySessions(
   bootstrap: AppBootstrap,
   sessions: readonly Session[],
-  noticeAsks: readonly SessionNoticeAsk[] = [],
   attention: readonly SessionAttentionEntry[] = [],
 ): readonly SessionView[] {
-  const asks = noticeAsksByIdentity(noticeAsks);
   const decisions = new Map(
     attention.map(
       (entry) => [`${entry.providerId}\0${entry.providerSessionId}`, entry.decision] as const,
@@ -696,7 +671,6 @@ export function displaySessions(
             silentAttention(observed.observedAt),
         } satisfies SessionWithAttention;
         const urgency = sessionUrgency(session);
-        const noticeAsk = asks.get(session.providerId)?.get(session.providerSessionId);
         const changeNumber = session.detail.change
           ? sessionChangeNumber(session.detail.change)
           : undefined;
@@ -732,7 +706,6 @@ export function displaySessions(
           actions: session.controls,
           hasChange: session.detail.change !== undefined,
           ...(changeNumber !== undefined ? { changeNumber } : undefined),
-          ...(noticeAsk ? { noticeAsk } : undefined),
           // A workspace the provider left unnamed still groups its chats; the
           // id is at least stable, where a made-up name would claim knowledge
           // the provider never reported.

@@ -171,8 +171,6 @@ export const PRODUCT_SESSION_ACT = {
   WORKSPACE_RENAME: "workspace_rename",
   SESSION_RENAME: "session_rename",
   AGENT_ADD: "agent_add",
-  NOTICE_REQUEST: "notice_request",
-  NOTICE_WITHDRAW: "notice_withdraw",
 } as const;
 
 export type ProductSessionAct = (typeof PRODUCT_SESSION_ACT)[keyof typeof PRODUCT_SESSION_ACT];

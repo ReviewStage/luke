@@ -52,7 +52,6 @@ function promptFields(update: AttentionUpdate): AttentionPromptUpdate {
     ...(update.previousStatus ? { previousStatus: update.previousStatus } : undefined),
     ...(update.recap ? { recap: update.recap } : undefined),
     ...(update.context ? { context: update.context } : undefined),
-    ...(update.noticeRequest ? { noticeRequest: update.noticeRequest } : undefined),
   };
 }
 

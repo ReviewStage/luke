@@ -23,7 +23,6 @@ import {
   announcerNotices,
   authorizeConversationAct,
   conversationEntryBelongsToConversation,
-  evaluatorSummaries,
   liveSpeedApplies,
   lukeCaptionsToShow,
   replyIssueMentions,
@@ -370,21 +369,19 @@ function speech(source: AttentionSpeech["source"], id: string): AttentionSpeech 
 }
 
 test("every approved attention update can open the announcer", () => {
-  const answered = speech(ATTENTION_SPEECH_SOURCE.NOTICE_REQUEST, "schema");
+  const status = speech(ATTENTION_SPEECH_SOURCE.STATUS_EDGE, "schema");
   const summary = speech(ATTENTION_SPEECH_SOURCE.EVALUATOR, "payments");
-  const mixed = [answered, summary];
+  const mixed = [status, summary];
   assert.deepEqual(announcerNotices(mixed), mixed);
-  assert.deepEqual(evaluatorSummaries(mixed), []);
 });
 
 test("a batch enters the history in the order it was decided", () => {
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  // Every source counts — the evaluator's readout here is as much a mention as
-  // the standing-ask answer around it — and the decision order holds whatever
+  // Every source counts, and the decision order holds whatever
   // order the batch arrived in, so the history reads the way things happened.
-  const older = { ...speech(ATTENTION_SPEECH_SOURCE.NOTICE_REQUEST, "checkout"), decidedAt: 1_000 };
+  const older = { ...speech(ATTENTION_SPEECH_SOURCE.STATUS_EDGE, "checkout"), decidedAt: 1_000 };
   const newest = { ...speech(ATTENTION_SPEECH_SOURCE.EVALUATOR, "payments"), decidedAt: 3_000 };
-  const newer = { ...speech(ATTENTION_SPEECH_SOURCE.NOTICE_REQUEST, "schema"), decidedAt: 2_000 };
+  const newer = { ...speech(ATTENTION_SPEECH_SOURCE.EVALUATOR, "schema"), decidedAt: 2_000 };
 
   assert.deepEqual(speechByDecision([newest, older, newer]), [older, newer, newest]);
   assert.deepEqual(speechByDecision([]), []);

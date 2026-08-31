@@ -3,7 +3,6 @@ import {
   PRODUCT_SEARCH_SURFACE,
   PRODUCT_SURFACE_EVENT,
 } from "@sidecar/analytics";
-import type { SessionNoticeAsk } from "@sidecar/attention";
 import type { CredentialProviderId } from "@sidecar/credentials/vocabulary";
 import {
   CREDENTIAL_PROVIDER_LIST,
@@ -379,7 +378,6 @@ export function App(): React.JSX.Element {
   // so a bootstrap replying "not yet" after a push raced past it clobbers
   // nothing, and the wing stops saying "loading" the moment either arrives.
   const [sessionsSettled, setSessionsSettled] = useState(false);
-  const [noticeAsks, setNoticeAsks] = useState<readonly SessionNoticeAsk[]>([]);
   const [workspaceProjects, setWorkspaceProjects] = useState<readonly ObservedWorkspaceProject[]>(
     [],
   );
@@ -1937,13 +1935,10 @@ export function App(): React.JSX.Element {
           // waits for the flight, never the report.
           const searched =
             action.query !== undefined && bootstrap !== undefined
-              ? spokenSearchOutcome(
-                  displaySessions(bootstrap, sessions, noticeAsks, sessionRoster.attention),
-                  {
-                    ...sessionView,
-                    ...view,
-                  },
-                )
+              ? spokenSearchOutcome(displaySessions(bootstrap, sessions, sessionRoster.attention), {
+                  ...sessionView,
+                  ...view,
+                })
               : undefined;
           await changeMode(true);
           // The tab bar and the options button are drawn outside the settings
@@ -2029,7 +2024,6 @@ export function App(): React.JSX.Element {
       presentationOf,
       sessions,
       sessionRoster.attention,
-      noticeAsks,
       sessionView,
       bootstrapSettings,
     ],
@@ -2071,7 +2065,6 @@ export function App(): React.JSX.Element {
     preferBuiltInMicrophone: (settings ?? bootstrapSettings)?.preferBuiltInMicrophone ?? true,
     agentTraceEnabled: bootstrap?.agentTraceEnabled === true,
     sessions,
-    noticeAsks,
     workspaceProjects,
     defaultWorkspaceProvider,
     workspaceProjectDefaults,
@@ -2503,7 +2496,6 @@ export function App(): React.JSX.Element {
       setBootstrap(value);
       acceptSessionsBootstrap(value.sessionRoster);
       if (value.sessionsSettled) setSessionsSettled(true);
-      setNoticeAsks(value.noticeAsks);
       // Only fill in what no push has said yet: the bootstrap snapshot is
       // older than any change that raced past it, and the main process will
       // not repeat a list it believes it already announced.
@@ -2583,7 +2575,6 @@ export function App(): React.JSX.Element {
       }
     });
     const removeDisplay = window.sidecar.onDisplayChanged(setDisplay);
-    const removeNoticeAsks = window.sidecar.onNoticeAsksChanged(setNoticeAsks);
     const removeSupersetSignIn = window.sidecar.onSupersetSignInChanged((next) => {
       setSupersetConnected(next.stage === SUPERSET_SIGN_IN_STAGE.CONNECTED);
       if (!supersetSignInHeld.current) return;
@@ -2597,7 +2588,6 @@ export function App(): React.JSX.Element {
       cancelHover();
       removeLifecycle();
       removeDisplay();
-      removeNoticeAsks();
       removeSupersetSignIn();
       void stopMicrophone();
     };
@@ -3008,7 +2998,7 @@ export function App(): React.JSX.Element {
 
   if (!bootstrap || !display) return <div />;
 
-  const visibleSessions = displaySessions(bootstrap, sessions, noticeAsks, sessionRoster.attention);
+  const visibleSessions = displaySessions(bootstrap, sessions, sessionRoster.attention);
   // The tally is taken before the list is narrowed — the capsule reports what
   // Luke is watching, not what the panel is currently showing — but it reads
   // in the list's own sort, so the wing's marks sit in the order the rows do.

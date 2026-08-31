@@ -154,13 +154,6 @@ export interface AttentionDecision {
   disposition: AttentionDisposition;
   decidedAt: number;
   summary?: string;
-  /**
-   * Whether the summary answers the developer's standing ask about this
-   * session. Only an answer earns an ask's privilege — being heard with no
-   * call open — so an evaluator speaking about a watched session for its own
-   * reasons stays on the evaluator's terms.
-   */
-  answersAsk?: boolean;
 }
 
 /** A spoken sentence stays far shorter than a provider recap. */
@@ -182,9 +175,6 @@ export function attentionDecisionFromWire(
     disposition,
     decidedAt,
     ...(summary ? { summary } : undefined),
-    ...(value.answers_ask === true && disposition !== ATTENTION_DISPOSITION.SILENT
-      ? { answersAsk: true }
-      : undefined),
   });
 }
 
@@ -870,7 +860,6 @@ export function normalizeAttention(decision: AttentionDecision): AttentionDecisi
     decidedAt: timestamp(decision.decidedAt, "attention decidedAt"),
   };
   if (summary) normalized.summary = summary;
-  if (decision.answersAsk) normalized.answersAsk = true;
   return normalized;
 }
 

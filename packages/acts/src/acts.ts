@@ -6,9 +6,8 @@
  * The session trio are the same acts the panel's rows offer — the two writes,
  * and the press that opens a session where its provider keeps it — and the
  * issue pair are the two acts a connected tracker takes. Creating a workspace
- * and the standing-ask pair — keeping the developer's ask to hear about a
- * session, and letting it go — are the acts with no row yet to mirror. The
- * last four are the same presses turned toward the app itself: a settings
+ * is the session act with no row yet to mirror. The last four are the same
+ * presses turned toward the app itself: a settings
  * change, showing the panel, opening the feedback composer, and the Updates
  * row's button.
  *
@@ -19,7 +18,6 @@
  * for the main process's. Luke is another way to ask, never a wider one.
  */
 
-import { attentionRequestText, maximumAttentionRequestLength } from "@sidecar/attention";
 import {
   APP_PANEL_TAB,
   APP_SETTING_KIND,
@@ -108,8 +106,6 @@ export const SESSION_TOOL_KIND = {
   MESSAGE: "message",
   CONTROL: "control",
   OPEN: "open",
-  NOTICE_REQUEST: "notice-request",
-  NOTICE_WITHDRAW: "notice-withdraw",
   READ_TRANSCRIPT: "read-transcript",
   CREATE_WORKSPACE: "create-workspace",
   ADD_AGENT: "add-agent",
@@ -172,8 +168,6 @@ type CarriedSessionActionFields =
       /** The one app the developer named to open it in, resolved to its id. */
       applicationId?: SessionApplicationId;
     }
-  | { kind: typeof SESSION_TOOL_KIND.NOTICE_REQUEST; identity: SessionIdentity; request: string }
-  | { kind: typeof SESSION_TOOL_KIND.NOTICE_WITHDRAW; identity: SessionIdentity }
   | { kind: typeof SESSION_TOOL_KIND.READ_TRANSCRIPT; identity: SessionIdentity }
   | {
       kind: typeof SESSION_TOOL_KIND.CREATE_WORKSPACE;
@@ -631,35 +625,6 @@ function validateOpenSession(parsed: WireRecord, context: SessionToolContext): S
     return { status: ACT_RESULT_STATUS.REJECTED, reason: "That session has no address to open." };
   }
   return { kind: SESSION_TOOL_KIND.OPEN, identity };
-}
-
-function validateRequestSessionNotice(
-  parsed: WireRecord,
-  context: SessionToolContext,
-): SessionToolAction {
-  const found = sessionFromArguments(parsed, context.sessions);
-  if ("status" in found) return found;
-  const { identity } = found;
-  // Observation is the only prerequisite: the ask writes nothing anywhere and
-  // asks the session for nothing, so a session that takes no messages and
-  // advertises no controls can still be asked about.
-  const request = attentionRequestText(parsed.request);
-  if (!request) {
-    return {
-      status: ACT_RESULT_STATUS.REJECTED,
-      reason: `An ask has to be under ${maximumAttentionRequestLength} characters and longer than nothing.`,
-    };
-  }
-  return { kind: SESSION_TOOL_KIND.NOTICE_REQUEST, identity, request };
-}
-
-function validateWithdrawSessionNotice(
-  parsed: WireRecord,
-  context: SessionToolContext,
-): SessionToolAction {
-  const found = sessionFromArguments(parsed, context.sessions);
-  if ("status" in found) return found;
-  return { kind: SESSION_TOOL_KIND.NOTICE_WITHDRAW, identity: found.identity };
 }
 
 function validateReadSessionTranscript(
@@ -1365,54 +1330,6 @@ export const ACTS = {
       },
     },
     validate: validateOpenSession,
-  },
-  REQUEST_SESSION_NOTICE: {
-    name: "request_session_notice",
-    family: REALTIME_TOOL_FAMILY.SESSION,
-    actionKind: SESSION_TOOL_KIND.NOTICE_REQUEST,
-    validatedAgainst: ACT_VALIDATION_TARGET.SESSION_ROSTER,
-    narration: narrate(
-      SESSION_TOOL_KIND.NOTICE_REQUEST,
-      (action, sessions) =>
-        `remembered a standing ask about ${observedSessionName(action.identity, sessions)}: "${action.request}"`,
-    ),
-    guide: "Remember the developer's bounded standing ask for an observed session.",
-    schema: {
-      description: "Remember a request to be notified about an observed session.",
-      parameters: {
-        type: "object",
-        properties: {
-          ...SESSION_IDENTITY_PARAMETERS,
-          request: {
-            type: "string",
-            description: "What to notify the user about.",
-          },
-        },
-        required: ["provider_id", "provider_session_id", "request"],
-      },
-    },
-    validate: validateRequestSessionNotice,
-  },
-  WITHDRAW_SESSION_NOTICE: {
-    name: "withdraw_session_notice",
-    family: REALTIME_TOOL_FAMILY.SESSION,
-    actionKind: SESSION_TOOL_KIND.NOTICE_WITHDRAW,
-    validatedAgainst: ACT_VALIDATION_TARGET.SESSION_ROSTER,
-    narration: narrate(
-      SESSION_TOOL_KIND.NOTICE_WITHDRAW,
-      (action, sessions) =>
-        `withdrew the standing ask about ${observedSessionName(action.identity, sessions)}`,
-    ),
-    guide: "Withdraw a standing ask only while its session remains observed.",
-    schema: {
-      description: "Remove a notification request for an observed session.",
-      parameters: {
-        type: "object",
-        properties: { ...SESSION_IDENTITY_PARAMETERS },
-        required: ["provider_id", "provider_session_id"],
-      },
-    },
-    validate: validateWithdrawSessionNotice,
   },
   READ_SESSION_TRANSCRIPT: {
     name: "read_session_transcript",

@@ -105,11 +105,7 @@ test("requests a strict structured decision and never asks the API to retain it"
   assert.equal(format.strict, true);
   assert.equal(format.name, "attention_decision");
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  assert.deepEqual((format.schema as { required: string[] }).required, [
-    "disposition",
-    "summary",
-    "answers_ask",
-  ]);
+  assert.deepEqual((format.schema as { required: string[] }).required, ["disposition", "summary"]);
 });
 
 test("sends only the bounded update and no provider transcript", async (t) => {

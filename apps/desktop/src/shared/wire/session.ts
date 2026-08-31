@@ -1,5 +1,4 @@
 import type { AccountSnapshot } from "@sidecar/account/snapshot";
-import type { SessionNoticeAsk } from "@sidecar/attention";
 import type { ObservedAccountCalendars } from "@sidecar/calendar/observation";
 import type { FixtureSnapshot } from "@sidecar/fixtures";
 import type { TrackedIssue } from "@sidecar/issues";
@@ -178,12 +177,6 @@ export interface AppBootstrap {
    * itself the settling signal.
    */
   sessionsSettled: boolean;
-  /**
-   * The standing asks the developer has made about sessions, so a panel that
-   * opens late still marks the rows Luke is listening for. The words are the
-   * developer's own and never a provider's.
-   */
-  noticeAsks: readonly SessionNoticeAsk[];
   /** Where a new workspace can be created, as the adapters currently offer it. */
   workspaceProjects: readonly ObservedWorkspaceProject[];
   /** Absent while no issue tracker is connected, which is its own answer. */

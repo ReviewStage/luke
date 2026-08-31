@@ -20,12 +20,9 @@ import {
 } from "@sidecar/session";
 import {
   ATTENTION_REVIEW_OUTCOME,
-  AttentionRequestRegistry,
   AttentionSpeechLedger,
-  attentionRequestText,
   attentionUpdate,
   DISPOSITION_GUIDANCE,
-  maximumAttentionRequestLength,
   maximumAttentionSummaryLength,
 } from "./attention.js";
 
@@ -310,36 +307,6 @@ test("a wake from hours of sleep reviews nothing about the evening it slept thro
   });
   assert.deepEqual(await reviewer.review([finished]), []);
   assert.equal(evaluator.updates.length, 1, "the sleep-aged finish costs no model call");
-});
-
-test("a stale development the developer asked about still reaches the evaluator", async () => {
-  const requests = new AttentionRequestRegistry();
-  requests.set(
-    { providerId: codex.id, providerSessionId: "asked-about" },
-    "Tell me when this finishes.",
-  );
-  const evaluator = evaluatorReturning({
-    disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
-    decidedAt: DECIDED_AT,
-    summary: "Codex finished the release you asked about.",
-    answersAsk: true,
-  });
-  const reviewer = new SessionAttentionReviewer({
-    evaluator,
-    now: () => DECIDED_AT,
-    noticeRequestFor: (identity) => requests.get(identity),
-  });
-
-  // The ask is consent to hear its answer late rather than never: the finish
-  // aged past freshness — an evaluator quiet, a slow pass — but the developer
-  // is still owed the sentence.
-  const finished = session(codex, "asked-about", {
-    status: SESSION_STATUS.COMPLETE,
-    observedAt: DECIDED_AT - 5 * 60 * 60 * 1000,
-  });
-  const [review] = await reviewer.review([finished]);
-  assert.equal(review?.outcome, ATTENTION_REVIEW_OUTCOME.DECIDED);
-  assert.equal(evaluator.updates[0]?.noticeRequest, "Tell me when this finishes.");
 });
 
 test("keeps a second real development visible when Luke stays quiet about it", async () => {
@@ -855,93 +822,13 @@ test("the decision schema carries the disposition contract", () => {
     ATTENTION_DISPOSITION.SPEAK_DURING_TURN,
     ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
   ]);
-  assert.deepEqual(ATTENTION_DECISION_SCHEMA.required, ["disposition", "summary", "answers_ask"]);
+  assert.deepEqual(ATTENTION_DECISION_SCHEMA.required, ["disposition", "summary"]);
   assert.equal(ATTENTION_DECISION_SCHEMA.additionalProperties, false);
 });
-
-test("an ask is bounded like the message it is: refused long or empty, never cut", () => {
-  assert.equal(
-    attentionRequestText("  Tell me when this finishes.  "),
-    "Tell me when this finishes.",
-  );
-  assert.equal(attentionRequestText(""), undefined);
-  assert.equal(attentionRequestText("   "), undefined);
-  assert.equal(attentionRequestText(12), undefined);
-  assert.equal(
-    attentionRequestText("a".repeat(maximumAttentionRequestLength)),
-    "a".repeat(maximumAttentionRequestLength),
-  );
-  assert.equal(attentionRequestText("a".repeat(maximumAttentionRequestLength + 1)), undefined);
-});
-
-test("one ask stands per session: replaced whole, withdrawn honestly, dropped with its session", () => {
-  const requests = new AttentionRequestRegistry();
-  const identity = { providerId: claude.id, providerSessionId: "watched" };
-
-  assert.equal(requests.get(identity), undefined);
-  assert.equal(requests.withdraw(identity), false, "nothing standing is nothing to withdraw");
-
-  requests.set(identity, "Tell me when this finishes.");
-  requests.set(identity, "Warn me if it fails.");
-  assert.equal(requests.get(identity), "Warn me if it fails.");
-  assert.equal(requests.withdraw(identity), true);
-  assert.equal(requests.get(identity), undefined);
-
-  // A session its provider no longer reports takes the ask with it: there is
-  // nothing left for the ask to be about.
-  requests.set(identity, "Tell me when this finishes.");
-  requests.retain([{ providerId: claude.id, providerSessionId: "other" }]);
-  assert.equal(requests.get(identity), undefined);
-});
-
-test("the ask list carries every standing ask, and retain says whether it changed", () => {
-  const requests = new AttentionRequestRegistry();
-  const watched = { providerId: claude.id, providerSessionId: "watched" };
-  const other = { providerId: "codex", providerSessionId: "thread-1" };
-
-  assert.deepEqual(requests.list(), []);
-  requests.set(watched, "Tell me when this finishes.");
-  requests.set(other, "Warn me if it fails.");
-  assert.deepEqual(requests.list(), [
-    { ...watched, ask: "Tell me when this finishes." },
-    { ...other, ask: "Warn me if it fails." },
-  ]);
-
-  // The surfaces marking asks are told only on a real change, so retain has
-  // to answer honestly in both directions.
-  assert.equal(requests.retain([watched, other]), false, "nothing dropped is no change");
-  assert.equal(requests.retain([watched]), true, "a dropped ask is a change");
-  assert.deepEqual(requests.list(), [{ ...watched, ask: "Tell me when this finishes." }]);
-});
-
-test("a standing ask rides the update of the session it was made about, and no other", async () => {
-  const requests = new AttentionRequestRegistry();
-  requests.set(
-    { providerId: claude.id, providerSessionId: "watched" },
-    "Tell me when this finishes.",
-  );
-  const evaluator = evaluatorReturning(undefined);
-  const reviewer = new SessionAttentionReviewer({
-    evaluator,
-    noticeRequestFor: (identity) => requests.get(identity),
-  });
-
-  await reviewer.review([session(claude, "watched"), session(claude, "unwatched")]);
-
-  const watched = evaluator.updates.find((update) => update.providerSessionId === "watched");
-  const unwatched = evaluator.updates.find((update) => update.providerSessionId === "unwatched");
-  assert.equal(watched?.noticeRequest, "Tell me when this finishes.");
-  assert.equal(unwatched?.noticeRequest, undefined);
-});
-
-test("a closed session never reaches the evaluator, even with a standing finish ask", async () => {
-  const requests = new AttentionRequestRegistry();
-  const identity = { providerId: claude.id, providerSessionId: "watched" };
-  requests.set(identity, "Tell me when this finishes.");
+test("a closed session never reaches the evaluator", async () => {
   const evaluator = evaluatorReturning(speakDecision());
   const reviewer = new SessionAttentionReviewer({
     evaluator,
-    noticeRequestFor: (candidate) => requests.get(candidate),
     now: () => DECIDED_AT,
   });
 
@@ -996,45 +883,4 @@ test("closure supersedes an in-flight work-finished review", async () => {
 
   assert.equal(review?.outcome, ATTENTION_REVIEW_OUTCOME.SUPERSEDED);
   assert.equal(review?.decision.disposition, ATTENTION_DISPOSITION.SILENT);
-});
-
-test("answering an ask is earned by a literal true, and never by a silent decision", () => {
-  const spoken = {
-    disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
-    summary: SPOKEN_SUMMARY,
-  };
-
-  assert.equal(
-    attentionDecisionFromModel({ ...spoken, answers_ask: true }, DECIDED_AT)?.answersAsk,
-    true,
-  );
-  // A malformed or absent field reads as not answering: the privileges an
-  // answer earns must come from the model saying so.
-  assert.equal(
-    attentionDecisionFromModel({ ...spoken, answers_ask: "yes" }, DECIDED_AT)?.answersAsk,
-    undefined,
-  );
-  assert.equal(attentionDecisionFromModel(spoken, DECIDED_AT)?.answersAsk, undefined);
-  assert.equal(
-    attentionDecisionFromModel(
-      { disposition: ATTENTION_DISPOSITION.SILENT, summary: null, answers_ask: true },
-      DECIDED_AT,
-    )?.answersAsk,
-    undefined,
-    "a silent decision answers nothing out loud",
-  );
-});
-
-test("the rendered update says the developer's ask, and says none while none stands", () => {
-  const asked = attentionUpdate(
-    session(claude, "watched"),
-    undefined,
-    "Tell me when this finishes.",
-  );
-  assert.ok(asked, "a first observation is an update");
-  assert.ok(attentionUpdateInput(asked).includes("Developer's ask: Tell me when this finishes."));
-
-  const unasked = attentionUpdate(session(claude, "watched"));
-  assert.ok(unasked, "a first observation is an update");
-  assert.ok(attentionUpdateInput(unasked).includes("Developer's ask: none"));
 });

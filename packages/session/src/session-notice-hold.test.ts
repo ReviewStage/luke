@@ -70,8 +70,8 @@ test("the same session id under another provider is another session", () => {
 });
 
 test("already-worded speech holds on the same terms as a notice", () => {
-  // The announcer-bound speech an answered ask produces waits out a meeting
-  // exactly as a status edge does; the hold only needs to know the session.
+  // Announcer-bound speech waits out a meeting exactly as a status edge does;
+  // the hold only needs to know the session.
   const hold = new SessionNoticeHold<{
     providerId: string;
     providerSessionId: string;

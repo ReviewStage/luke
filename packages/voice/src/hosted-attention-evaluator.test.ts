@@ -18,7 +18,6 @@ const UPDATE: AttentionUpdate = {
   previousStatus: SESSION_STATUS.WORKING,
   recap: "Waiting on a permission decision.",
   context: { branch: "main" },
-  noticeRequest: "tell me when this finishes",
   observedAt: NOW - 1_000,
 };
 
@@ -27,7 +26,6 @@ const SPOKEN_ANSWER = {
     disposition: ATTENTION_DISPOSITION.SPEAK_DURING_TURN,
     decidedAt: NOW - 99_999,
     summary: "Claude Code is waiting on you in checkout-service.",
-    answers_ask: true,
   },
   quota: { used: 9, limit: 500, remaining: 491, resetsAt: NOW + 3_600_000 },
 };
@@ -73,7 +71,6 @@ test("sends only what the prompt reads — never the session's identifiers or cl
     disposition: ATTENTION_DISPOSITION.SPEAK_DURING_TURN,
     decidedAt: NOW,
     summary: SPOKEN_ANSWER.decision.summary,
-    answersAsk: true,
   });
 
   const [request] = requests;
@@ -89,7 +86,6 @@ test("sends only what the prompt reads — never the session's identifiers or cl
     previousStatus: UPDATE.previousStatus,
     recap: UPDATE.recap,
     context: UPDATE.context,
-    noticeRequest: UPDATE.noticeRequest,
   });
 });
 

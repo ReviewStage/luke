@@ -7,12 +7,7 @@ import {
   type SessionStatus,
 } from "@sidecar/session";
 import { isRecord, isWireString, text, type UnparsedWireValue } from "@sidecar/wire";
-import {
-  ATTENTION_TRIGGER,
-  type AttentionContext,
-  type AttentionTrigger,
-  attentionRequestText,
-} from "./attention.js";
+import { ATTENTION_TRIGGER, type AttentionContext, type AttentionTrigger } from "./attention.js";
 import { LUKE_PERSONA } from "./persona.js";
 
 const NONE_LABEL = "none";
@@ -21,10 +16,9 @@ const ATTENTION_INSTRUCTION_LINES: readonly string[] = [
   "As the engineering manager for the user's coding agents, decide whether Luke should speak about an update.",
   "",
   "When to speak:",
-  "- Default to silence. Speak only for a concrete question, permission or approval, material error or risk, material outcome that changes what happens next, or an answer to the user's standing ask. A status change, completion, or recap alone is not enough.",
+  "- Default to silence. Speak only for a concrete question, permission or approval, material error or risk, or material outcome that changes what happens next. A status change, completion, or recap alone is not enough.",
   "- Treat waiting as actionable only when the recap or context shows a concrete question, permission, or approval.",
   "- A session waiting on automation it set in motion — CI, a merge queue, a watcher it left running — is not waiting on the developer: nothing they reply can move it, so stay silent and let the automation's outcome be the development.",
-  "- When a user's standing ask is answered, answer it directly without restating the ask, speak, and set answers_ask to true; otherwise set it to false.",
   "",
   "How to word it:",
   "- If speaking, write the sentence Luke says, in Luke's own voice as it is described below. State what the CTO needs to know and stop; add no advice and no next step.",
@@ -48,7 +42,6 @@ export interface AttentionPromptUpdate {
   previousStatus?: SessionStatus;
   recap?: string;
   context?: AttentionContext;
-  noticeRequest?: string;
 }
 
 /** Renders one bounded update as the only session material a model receives. */
@@ -64,7 +57,6 @@ export function attentionUpdateInput(update: AttentionPromptUpdate): string {
     `Running: ${update.context?.activity ?? NONE_LABEL}`,
     `Error: ${update.context?.error ?? NONE_LABEL}`,
     `Work recap: ${update.recap ?? NONE_LABEL}`,
-    `Developer's ask: ${update.noticeRequest ?? NONE_LABEL}`,
   ].join("\n");
 }
 
@@ -117,9 +109,7 @@ function optionalWireText(value: UnparsedWireValue, maximumLength: number): Opti
  * Validates an update arriving as untrusted JSON — a hosted review request —
  * down to the fields the prompt reads, each held to the same bound the local
  * roster holds it to. A value set is checked against the set itself, a
- * malformed field refuses the whole update rather than being repaired, and the
- * developer's ask is refused outright when it fails the registry's own rule,
- * because a cut ask asks for something its author did not.
+ * malformed field refuses the whole update rather than being repaired.
  */
 export function attentionPromptUpdateFromWire(
   value: UnparsedWireValue,
@@ -148,10 +138,6 @@ export function attentionPromptUpdateFromWire(
   const error = optionalWireText(contextRecord.error, maximumSessionDetailLength);
   if (!repository.valid || !branch.valid || !activity.valid || !error.valid) return undefined;
 
-  const noticeRequest =
-    value.noticeRequest === undefined ? undefined : attentionRequestText(value.noticeRequest);
-  if (value.noticeRequest !== undefined && !noticeRequest) return undefined;
-
   const context: AttentionContext = {};
   if (repository.text) context.repository = repository.text;
   if (branch.text) context.branch = branch.text;
@@ -168,6 +154,5 @@ export function attentionPromptUpdateFromWire(
   if (previousStatus) update.previousStatus = previousStatus;
   if (recap.text) update.recap = recap.text;
   if (Object.keys(context).length > 0) update.context = context;
-  if (noticeRequest) update.noticeRequest = noticeRequest;
   return update;
 }

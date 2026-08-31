@@ -1,5 +1,4 @@
 import { PRODUCT_EXCHANGE_KIND, type ProductExchangeKind } from "@sidecar/analytics";
-import type { SessionNoticeAsk } from "@sidecar/attention";
 import { sanitizedTraceEvent } from "@sidecar/devtrace/vocabulary";
 import { FIXTURE_SPEAKING_CAPTION } from "@sidecar/fixtures";
 import { type AppGuideSnapshot, EMPTY_APP_GUIDE } from "@sidecar/guide";
@@ -302,7 +301,6 @@ export function voiceRestartAction(input: {
 const ANNOUNCER_SPEECH_SOURCES: ReadonlySet<string> = new Set([
   ATTENTION_SPEECH_SOURCE.STATUS_EDGE,
   ATTENTION_SPEECH_SOURCE.EVALUATOR,
-  ATTENTION_SPEECH_SOURCE.NOTICE_REQUEST,
 ]);
 
 /** The speech the announcer takes, which may open Luke's own call to be said. */
@@ -396,14 +394,6 @@ export function replyIssueMentions(input: {
   return mentionedIssues(spoken, input.issues);
 }
 
-/**
- * The other half of {@link announcerNotices}. Kept as a separate selector for
- * wire compatibility with an older source that may not earn the announcer.
- */
-export function evaluatorSummaries(speech: readonly AttentionSpeech[]): AttentionSpeech[] {
-  return speech.filter((item) => !ANNOUNCER_SPEECH_SOURCES.has(item.source));
-}
-
 export interface VoiceConversationOptions {
   /**
    * Whether a press may open the Mac's own microphone instead of a Bluetooth
@@ -418,11 +408,6 @@ export interface VoiceConversationOptions {
    */
   agentTraceEnabled: boolean;
   sessions: readonly Session[];
-  /**
-   * The standing asks riding the roster they annotate, so a conversation can
-   * say — and withdraw — what Luke is already listening for.
-   */
-  noticeAsks: readonly SessionNoticeAsk[];
   workspaceProjects: readonly ObservedWorkspaceProject[];
   defaultWorkspaceProvider: WorkspaceProviderId | undefined;
   /** The per-provider default projects, riding the projects context they steer. */
@@ -612,7 +597,6 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
    */
   const typedExchange = useRef(false);
   const sessionsRef = useRef(options.sessions);
-  const noticeAsksRef = useRef(options.noticeAsks);
   const workspaceProjectsRef = useRef(options.workspaceProjects);
   const defaultWorkspaceProviderRef = useRef(options.defaultWorkspaceProvider);
   const workspaceProjectDefaultsRef = useRef(options.workspaceProjectDefaults);
@@ -780,10 +764,6 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
             window.sidecar.sendSessionMessage(act.identity, act.text),
           [SESSION_TOOL_KIND.CONTROL]: (act) =>
             window.sidecar.executeSessionControl(act.identity, act.control.id),
-          [SESSION_TOOL_KIND.NOTICE_REQUEST]: (act) =>
-            window.sidecar.requestSessionNotice(act.identity, act.request),
-          [SESSION_TOOL_KIND.NOTICE_WITHDRAW]: (act) =>
-            window.sidecar.withdrawSessionNotice(act.identity),
           [SESSION_TOOL_KIND.CREATE_WORKSPACE]: (act) =>
             window.sidecar.createSessionWorkspace(
               act.providerId,
@@ -983,7 +963,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     setVoiceNotice(undefined);
     const session = ensureVoiceSession();
     if (!(await session.connect())) return false;
-    session.updateSessions(sessionsRef.current, noticeAsksRef.current);
+    session.updateSessions(sessionsRef.current);
     // After the roster, which it is rendered against. The history outlives
     // the calls themselves on purpose: it is the conversation, and this call
     // is only the newest transport to carry it — the announcement a "what did
@@ -1418,9 +1398,8 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
 
   useEffect(() => {
     sessionsRef.current = options.sessions;
-    noticeAsksRef.current = options.noticeAsks;
-    voiceSession.current?.updateSessions(options.sessions, options.noticeAsks);
-  }, [options.sessions, options.noticeAsks]);
+    voiceSession.current?.updateSessions(options.sessions);
+  }, [options.sessions]);
 
   useEffect(() => {
     workspaceProjectsRef.current = options.workspaceProjects;
@@ -1449,12 +1428,6 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       }
       const notices = announcerNotices(speech);
       if (notices.length > 0) ensureAnnouncer().enqueue(notices);
-      // Any source not entitled to open Luke's call may still ride the
-      // developer's own. The announcer paces it by the READY edge like every
-      // other sentence, so a batch is not refused or lost.
-      if (!voiceSession.current?.microphoneCall) return;
-      const summaries = evaluatorSummaries(speech);
-      if (summaries.length > 0) ensureAnnouncer().enqueueRide(summaries);
     });
   }, [rememberConversationEntry, ensureAnnouncer]);
 
