@@ -81,10 +81,11 @@ private struct VaultProviderRow: View {
             Text(provider.displayName)
                 .font(.system(size: 15, weight: .medium))
                 .foregroundStyle(Color.white)
+            if entry != nil {
+                ConnectedCheck()
+                    .frame(width: 12, height: 12)
+            }
             Spacer()
-            Text(status)
-                .font(.system(size: 13))
-                .foregroundStyle(Color(white: 1, opacity: 0.5))
             Image(systemName: "chevron.right")
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(Color(white: 1, opacity: 0.3))
@@ -92,10 +93,26 @@ private struct VaultProviderRow: View {
         .padding(.vertical, 12)
         .contentShape(Rectangle())
     }
+}
 
-    private var status: String {
-        guard let entry else { return "No key" }
-        return "Key stored \(entry.updatedAt.formatted(date: .abbreviated, time: .omitted))"
+/// The one green thing on the line, matching the desktop's credential check
+/// stroke for stroke: the same path in the palette a finished session uses,
+/// so connected reads the same way complete does.
+private struct ConnectedCheck: View {
+    private static let stateComplete = Color(
+        red: 0x6F / 255, green: 0xDC / 255, blue: 0xA4 / 255
+    )
+
+    var body: some View {
+        Canvas { ctx, size in
+            ctx.transform = CGAffineTransform(scaleX: size.width / 24, y: size.width / 24)
+            ctx.stroke(
+                Path(cgPath(fromSVG: "M4.8 12.6 9.6 17.3 19.2 6.9")),
+                with: .color(Self.stateComplete),
+                style: StrokeStyle(lineWidth: 1.9, lineCap: .round, lineJoin: .round)
+            )
+        }
+        .aspectRatio(1, contentMode: .fit)
     }
 }
 
