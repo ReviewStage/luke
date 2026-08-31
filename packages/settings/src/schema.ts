@@ -83,6 +83,7 @@ export type SettingsResetScope = (typeof SETTINGS_RESET_SCOPE)[keyof typeof SETT
 export const SETTING_SIDE_EFFECT = {
   NONE: "none",
   DOCK: "dock",
+  LOGIN_ITEM: "login-item",
   DISPLAYS: "displays",
   FORM_FACTOR: "form-factor",
   VOICE: "voice",
@@ -320,6 +321,30 @@ function workspaceProjectDefaults(
 }
 
 export const APP_SETTING_SCHEMA = {
+  openAtLogin: {
+    field: "openAtLogin",
+    default: true,
+    guard: boolean(true),
+    settingsPage: SETTINGS_PAGE.APPEARANCE,
+    resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
+    guideEntry: settingGuideEntry(
+      "openAtLogin",
+      [APP_SETTING_ID.OPEN_AT_LOGIN],
+      (settings, defaultValue) => ({
+        id: APP_SETTING_ID.OPEN_AT_LOGIN,
+        label: "Open Luke at login",
+        description: "Whether Luke starts on his own when this Mac signs in.",
+        kind: APP_SETTING_KIND.TOGGLE,
+        value: appToggleText(guideValue<boolean>(settings, "openAtLogin")),
+        defaultValue: appToggleText(defaultValue),
+        adjustable: true,
+        manual: APPEARANCE_PAGE,
+      }),
+    ),
+    mainProcessSideEffect: SETTING_SIDE_EFFECT.LOGIN_ITEM,
+    spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
+    analytics: { id: APP_SETTING_ID.OPEN_AT_LOGIN, value: toggleAnalytics },
+  },
   showInDock: {
     field: "showInDock",
     default: false,

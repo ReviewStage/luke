@@ -942,6 +942,16 @@ const dock = new DockPresence({
 });
 
 /**
+ * Registers or removes Luke's own login item, the stored setting being the
+ * source of truth every launch re-applies. Only a packaged app may: an
+ * unpackaged run would hand macOS the bare Electron binary, and a fixture or
+ * capture run must not touch the machine it happens to run on.
+ */
+function applyLoginItem(openAtLogin: boolean): void {
+  if (app.isPackaged) app.setLoginItemSettings({ openAtLogin });
+}
+
+/**
  * Starts watching whether the Mac's output would let Luke be heard. Not in a
  * fixture or capture run: evidence must not read the machine it happens to
  * run on, and a fixture run has no voice to go unheard — the muted evidence
@@ -1427,6 +1437,7 @@ function registerIpc(): void {
     applyVoiceCredential,
     hotkeys,
     dock,
+    applyLoginItem,
     panels,
     realtimeCredentials: () => voiceCapabilities.realtimeCredentials,
     mediaDuck,
@@ -2533,6 +2544,10 @@ export function startDesktopApp(): void {
       void settingsStore.get(APP_SETTING_SCHEMA.showInDock.field).then((show) => {
         if (show) dock.apply(true);
       });
+      // The login item reads the same file under the opposite default: it is
+      // opt-out, so the stored setting is re-applied every launch and a login
+      // item removed outside Luke comes back until the toggle says otherwise.
+      void settingsStore.get(APP_SETTING_SCHEMA.openAtLogin.field).then(applyLoginItem);
       // Armed from the settings file alone, like the status item, and for the
       // same reason. A file that cannot be read leaves the duck on, the same
       // answer a file that has never said gives. Never armed in a fixture or

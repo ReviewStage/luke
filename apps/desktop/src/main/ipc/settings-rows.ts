@@ -35,6 +35,7 @@ export interface SettingsRowsIpcDependencies {
   applyVoiceCredential: () => Promise<void>;
   hotkeys: HotkeyRegistrar;
   dock: DockPresence;
+  applyLoginItem: (openAtLogin: boolean) => void;
   panels: PanelManager;
   realtimeCredentials: () => RealtimeCredentialMinter | undefined;
   mediaDuck: MediaDuckController;
@@ -54,6 +55,7 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
     applyVoiceCredential,
     hotkeys,
     dock,
+    applyLoginItem,
     panels,
     realtimeCredentials,
     mediaDuck,
@@ -123,6 +125,9 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
     waitForDeferredEffects = false,
   ): Promise<void> {
     switch (APP_SETTING_SCHEMA[field].mainProcessSideEffect) {
+      case SETTING_SIDE_EFFECT.LOGIN_ITEM:
+        applyLoginItem(settings.stored.openAtLogin);
+        break;
       case SETTING_SIDE_EFFECT.DOCK:
         dock.apply(settings.stored.showInDock, panels.displayIdFor(context.sender));
         break;
