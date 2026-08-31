@@ -318,6 +318,34 @@ test("a session_exit completes the row", async (t) => {
   assert.equal(observations[0]?.completionCause, SESSION_COMPLETION_CAUSE.SESSION_CLOSED);
 });
 
+test("a fatal exit is an error, not a completion", async (t) => {
+  const ompHome = await temporaryOmpHome(t);
+  await writeSessionFile(
+    ompHome,
+    "luke",
+    SESSION_ID.CLOSED,
+    [
+      titleSlot("Ship the adapter"),
+      sessionHeader(SESSION_ID.CLOSED, "/Users/test/luke"),
+      assistantMessage("m1", "2026-08-20T11:59:00.000Z"),
+      {
+        type: "custom",
+        customType: "session_exit",
+        id: "x1",
+        parentId: "m1",
+        timestamp: "2026-08-20T11:59:30.000Z",
+        data: { reason: "crash", kind: "fatal", recordedAt: "2026-08-20T11:59:30.000Z" },
+      },
+    ],
+    TEST_TIME - 1_000,
+  );
+
+  const adapter = new OmpSessionAdapter({ ompHome, now: () => TEST_TIME });
+  const observations = await adapter.observe();
+
+  assert.equal(observations[0]?.status, SESSION_STATUS.ERROR);
+});
+
 test("reports the error that stopped a session", async (t) => {
   const ompHome = await temporaryOmpHome(t);
   await writeSessionFile(
@@ -328,8 +356,9 @@ test("reports the error that stopped a session", async (t) => {
       titleSlot(""),
       sessionHeader(SESSION_ID.FAILED, "/Users/test/luke"),
       assistantMessage("m1", "2026-08-20T11:59:00.000Z", {
-        content: [{ type: "text", text: "Provider rejected the request." }],
-        isError: true,
+        content: [{ type: "text", text: SECRET_TRANSCRIPT_TEXT }],
+        stopReason: "error",
+        errorMessage: "Provider rejected the request.",
       }),
     ],
     TEST_TIME - 1_000,
@@ -340,6 +369,102 @@ test("reports the error that stopped a session", async (t) => {
 
   assert.equal(observations[0]?.status, SESSION_STATUS.ERROR);
   assert.equal(observations[0]?.detail?.error, "Provider rejected the request.");
+  assert.equal(observations[0]?.recap, undefined);
+});
+
+test("a new prompt supersedes the turn that failed before it", async (t) => {
+  const ompHome = await temporaryOmpHome(t);
+  await writeSessionFile(
+    ompHome,
+    "luke",
+    SESSION_ID.FAILED,
+    [
+      titleSlot(""),
+      sessionHeader(SESSION_ID.FAILED, "/Users/test/luke"),
+      assistantMessage("m1", "2026-08-20T11:58:30.000Z", {
+        stopReason: "error",
+        errorMessage: "Provider rejected the request.",
+      }),
+      userMessage("m2", "2026-08-20T11:59:00.000Z", SECRET_TRANSCRIPT_TEXT),
+    ],
+    TEST_TIME - 1_000,
+  );
+
+  const adapter = new OmpSessionAdapter({ ompHome, now: () => TEST_TIME });
+  const observations = await adapter.observe();
+
+  assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
+  assert.equal(observations[0]?.detail?.error, undefined);
+});
+
+test("an interrupted turn holds for the developer past its placeholder results", async (t) => {
+  const ompHome = await temporaryOmpHome(t);
+  await writeSessionFile(
+    ompHome,
+    "luke",
+    SESSION_ID.WORKING,
+    [
+      titleSlot(""),
+      sessionHeader(SESSION_ID.WORKING, "/Users/test/luke"),
+      assistantMessage("m1", "2026-08-20T11:58:30.000Z", {
+        content: [
+          { type: "text", text: SECRET_TRANSCRIPT_TEXT },
+          { type: "toolCall", id: "call-1", name: "bash", arguments: { command: "sleep 60" } },
+        ],
+        stopReason: "aborted",
+      }),
+      {
+        type: "message",
+        id: "m2",
+        parentId: "m1",
+        timestamp: "2026-08-20T11:59:00.000Z",
+        message: {
+          role: "toolResult",
+          toolCallId: "call-1",
+          toolName: "bash",
+          content: [{ type: "text", text: "Aborted." }],
+          isError: true,
+        },
+      },
+    ],
+    TEST_TIME - 1_000,
+  );
+
+  const adapter = new OmpSessionAdapter({ ompHome, now: () => TEST_TIME });
+  const observations = await adapter.observe();
+
+  assert.equal(observations[0]?.status, SESSION_STATUS.WAITING);
+  assert.equal(observations[0]?.recap, undefined);
+});
+
+test("a resumed session leaves its exit behind", async (t) => {
+  const ompHome = await temporaryOmpHome(t);
+  await writeSessionFile(
+    ompHome,
+    "luke",
+    SESSION_ID.CLOSED,
+    [
+      titleSlot("Ship the adapter"),
+      sessionHeader(SESSION_ID.CLOSED, "/Users/test/luke"),
+      assistantMessage("m1", "2026-08-20T11:58:00.000Z"),
+      {
+        type: "custom",
+        customType: "session_exit",
+        id: "x1",
+        parentId: "m1",
+        timestamp: "2026-08-20T11:58:30.000Z",
+        data: { reason: "fatal", kind: "fatal", recordedAt: "2026-08-20T11:58:30.000Z" },
+      },
+      userMessage("m2", "2026-08-20T11:59:00.000Z", SECRET_TRANSCRIPT_TEXT),
+    ],
+    TEST_TIME - 1_000,
+  );
+
+  const adapter = new OmpSessionAdapter({ ompHome, now: () => TEST_TIME });
+  const observations = await adapter.observe();
+
+  assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
+  assert.equal(observations[0]?.completionCause, undefined);
 });
 
 test("reads neither sidecar blob directories nor files that are not sessions", async (t) => {

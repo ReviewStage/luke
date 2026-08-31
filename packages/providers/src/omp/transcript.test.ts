@@ -168,6 +168,59 @@ test("keeps the newest turns when the rendering outgrows its bound", async (t) =
   assert.ok(rendered?.endsWith("OMP: Fixed; the test passes now."));
 });
 
+test("renders a string prompt, a turn's recorded error, and no synthetic words", async (t) => {
+  const ompHome = await temporaryOmpHome(t);
+  await writeSessionFile(ompHome, [
+    {
+      type: "session",
+      version: 3,
+      id: SESSION_ID,
+      timestamp: "2026-08-20T11:58:00.000Z",
+      cwd: "/Users/test/luke",
+    },
+    {
+      type: "message",
+      id: "m1",
+      parentId: null,
+      timestamp: "2026-08-20T11:58:00.000Z",
+      message: { role: "user", content: "Fix the flaky updater test" },
+    },
+    {
+      type: "message",
+      id: "m2",
+      parentId: "m1",
+      timestamp: "2026-08-20T11:58:10.000Z",
+      message: {
+        role: "assistant",
+        content: [{ type: "text", text: "Looking." }],
+        stopReason: "error",
+        errorMessage: "Provider rejected the request.",
+      },
+    },
+    {
+      type: "message",
+      id: "m3",
+      parentId: "m2",
+      timestamp: "2026-08-20T11:58:20.000Z",
+      message: { role: "user", content: "continue", synthetic: true },
+    },
+  ]);
+
+  const rendered = await readOmpSessionTranscript({
+    ompHome,
+    providerSessionId: SESSION_ID,
+  });
+
+  assert.equal(
+    rendered,
+    [
+      "Developer: Fix the flaky updater test",
+      "OMP: Looking.",
+      "Error: Provider rejected the request.",
+    ].join("\n"),
+  );
+});
+
 test("refuses an id shaped like a path and answers nothing for an unknown one", async (t) => {
   const ompHome = await temporaryOmpHome(t);
   await writeSessionFile(ompHome, CONVERSATION);

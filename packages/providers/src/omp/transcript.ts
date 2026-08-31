@@ -12,8 +12,14 @@ import {
   transcriptLine,
 } from "../shared/local-transcript.js";
 import {
+  OMP_CONTENT_TYPE,
+  OMP_MESSAGE_ROLE,
   OMP_SESSION_ID_PATTERN,
   OMP_SESSIONS_DIRECTORY,
+  OMP_STOP_REASON,
+  ompContentBlocks,
+  ompMessageFrom,
+  ompMessageText,
   sessionIdFromOmpFileName,
 } from "./records.js";
 
@@ -33,16 +39,6 @@ export interface OmpTranscriptRequest {
   maximumRenderedLength?: number;
 }
 
-function textFromMessage(message: WireRecord): string | undefined {
-  if (!Array.isArray(message.content)) return undefined;
-  const parts = message.content
-    .filter(isRecord)
-    .filter((block) => block.type === "text")
-    .map((block) => text(block.text))
-    .filter((part): part is string => part !== undefined);
-  return parts.length > 0 ? parts.join(" ") : undefined;
-}
-
 function toolCallLine(block: WireRecord): string | undefined {
   const name = text(block.name);
   if (!name) return undefined;
@@ -57,30 +53,35 @@ function toolCallLine(block: WireRecord): string | undefined {
 }
 
 function linesFromRecord(record: WireRecord): string[] {
-  if (record.type !== "message" || !isRecord(record.message)) return [];
-  const message = record.message;
+  const message = ompMessageFrom(record);
+  if (!message) return [];
   const role = text(message.role);
-  if (role === "user") {
-    const prompt = oneLine(textFromMessage(message), TRANSCRIPT_BOUNDS.MAXIMUM_MESSAGE_LENGTH);
+  if (role === OMP_MESSAGE_ROLE.USER) {
+    // A synthetic user message is OMP's own auto-continue, not the
+    // developer's words, so it takes no attributed line.
+    if (message.synthetic === true) return [];
+    const prompt = oneLine(ompMessageText(message), TRANSCRIPT_BOUNDS.MAXIMUM_MESSAGE_LENGTH);
     return prompt ? [transcriptLine.developer(prompt)] : [];
   }
-  if (role === "toolResult") {
-    const answer = oneLine(textFromMessage(message), TRANSCRIPT_BOUNDS.MAXIMUM_TOOL_LENGTH);
+  if (role === OMP_MESSAGE_ROLE.TOOL_RESULT) {
+    const answer = oneLine(ompMessageText(message), TRANSCRIPT_BOUNDS.MAXIMUM_TOOL_LENGTH);
     if (!answer) return [];
     return message.isError === true
       ? [transcriptLine.error(answer)]
       : [transcriptLine.toolResult(answer)];
   }
-  if (role !== "assistant") return [];
+  if (role !== OMP_MESSAGE_ROLE.ASSISTANT) return [];
   const lines: string[] = [];
-  const words = oneLine(textFromMessage(message), TRANSCRIPT_BOUNDS.MAXIMUM_MESSAGE_LENGTH);
+  const words = oneLine(ompMessageText(message), TRANSCRIPT_BOUNDS.MAXIMUM_MESSAGE_LENGTH);
   if (words) lines.push(transcriptLine.agent(OMP_SPEAKER_NAME, words));
-  if (Array.isArray(message.content)) {
-    for (const block of message.content) {
-      if (!isRecord(block) || block.type !== "toolCall") continue;
-      const line = toolCallLine(block);
-      if (line) lines.push(line);
-    }
+  for (const block of ompContentBlocks(message)) {
+    if (block.type !== OMP_CONTENT_TYPE.TOOL_CALL) continue;
+    const line = toolCallLine(block);
+    if (line) lines.push(line);
+  }
+  if (text(message.stopReason) === OMP_STOP_REASON.ERROR) {
+    const reason = oneLine(text(message.errorMessage), TRANSCRIPT_BOUNDS.MAXIMUM_TOOL_LENGTH);
+    if (reason) lines.push(transcriptLine.error(reason));
   }
   return lines;
 }

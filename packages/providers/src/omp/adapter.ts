@@ -26,38 +26,24 @@ import {
   tailRecords,
   workspaceLabel,
 } from "../shared/local-session-adapter.js";
-import { defaultOmpHome, OMP_SESSIONS_DIRECTORY, sessionIdFromOmpFileName } from "./records.js";
+import {
+  defaultOmpHome,
+  OMP_CONTENT_TYPE,
+  OMP_CUSTOM_TYPE,
+  OMP_EXIT_KIND,
+  OMP_MESSAGE_ROLE,
+  OMP_RECORD_TYPE,
+  OMP_SESSIONS_DIRECTORY,
+  OMP_STOP_REASON,
+  ompContentBlocks,
+  ompMessageFrom,
+  ompMessageText,
+  sessionIdFromOmpFileName,
+} from "./records.js";
 import { readOmpSessionTranscript } from "./transcript.js";
 
 const OMP_PROVIDER_ID = PROVIDER_ID.OMP;
 const OMP_PROVIDER_NAME = "OMP";
-
-const OMP_RECORD_TYPE = {
-  TITLE: "title",
-  SESSION: "session",
-  MESSAGE: "message",
-  CUSTOM: "custom",
-} as const;
-
-const OMP_MESSAGE_ROLE = {
-  USER: "user",
-  ASSISTANT: "assistant",
-  TOOL_RESULT: "toolResult",
-} as const;
-
-const OMP_CONTENT_TYPE = {
-  TEXT: "text",
-  TOOL_CALL: "toolCall",
-} as const;
-
-const OMP_CUSTOM_TYPE = {
-  TOOL_EXECUTION_START: "tool_execution_start",
-  SESSION_EXIT: "session_exit",
-} as const;
-
-const OMP_EXIT_KIND = {
-  FATAL: "fatal",
-} as const;
 
 const OMP_ADAPTER_DEFAULTS = {
   MAXIMUM_PROJECT_DIRECTORIES: 200,
@@ -83,23 +69,6 @@ function timestampMsFrom(record: WireRecord): number | undefined {
   if (!isWireString(timestamp)) return undefined;
   const timestampMs = Date.parse(timestamp);
   return Number.isFinite(timestampMs) ? timestampMs : undefined;
-}
-
-function messageFrom(record: WireRecord): WireRecord | undefined {
-  if (record.type !== OMP_RECORD_TYPE.MESSAGE) return undefined;
-  return isRecord(record.message) ? record.message : undefined;
-}
-
-function contentBlocks(message: WireRecord): WireRecord[] {
-  return Array.isArray(message.content) ? message.content.filter(isRecord) : [];
-}
-
-function textFromMessage(message: WireRecord): string | undefined {
-  const parts = contentBlocks(message)
-    .filter((block) => block.type === OMP_CONTENT_TYPE.TEXT)
-    .map((block) => text(block.text))
-    .filter((part): part is string => part !== undefined);
-  return parts.length > 0 ? parts.join(" ") : undefined;
 }
 
 interface OpenTool {
@@ -133,6 +102,8 @@ export interface ParsedOmpSession {
   recap?: string;
   activity?: string;
   failure?: string;
+  turnFailed?: boolean;
+  turnAborted?: boolean;
   sessionClosed?: boolean;
   fatalExit?: boolean;
   openTools?: boolean;
@@ -176,6 +147,8 @@ function parseTail(tail: string): Omit<ParsedOmpSession, "cwd" | "title"> {
             intent: text(record.data.intent),
           });
         }
+        parsed.sessionClosed = false;
+        parsed.fatalExit = false;
         continue;
       }
       if (record.customType === OMP_CUSTOM_TYPE.SESSION_EXIT) {
@@ -185,14 +158,29 @@ function parseTail(tail: string): Omit<ParsedOmpSession, "cwd" | "title"> {
       continue;
     }
 
-    const message = messageFrom(record);
+    const message = ompMessageFrom(record);
     if (!message) continue;
     const role = text(message.role);
-    if (!role) continue;
+    // Roles beyond these three are OMP's own bookkeeping — injected developer
+    // context, continuity notes — and say nothing about whose move it is.
+    if (
+      role !== OMP_MESSAGE_ROLE.USER &&
+      role !== OMP_MESSAGE_ROLE.ASSISTANT &&
+      role !== OMP_MESSAGE_ROLE.TOOL_RESULT
+    ) {
+      continue;
+    }
+    // OMP resumes a session into the same recording, so a turn recorded after
+    // an exit means the session reopened.
+    parsed.sessionClosed = false;
+    parsed.fatalExit = false;
     parsed.lastRole = role;
 
     if (role === OMP_MESSAGE_ROLE.USER) {
       parsed.recap = undefined;
+      parsed.failure = undefined;
+      parsed.turnFailed = false;
+      parsed.turnAborted = false;
       continue;
     }
 
@@ -202,15 +190,19 @@ function parseTail(tail: string): Omit<ParsedOmpSession, "cwd" | "title"> {
       continue;
     }
 
-    if (role !== OMP_MESSAGE_ROLE.ASSISTANT) continue;
     if (text(message.model)) parsed.model = text(message.model);
-    if (message.isError === true) {
-      parsed.failure = oneLine(
-        textFromMessage(message),
-        OMP_ADAPTER_DEFAULTS.MAXIMUM_ACTIVITY_LENGTH,
-      );
-    }
-    for (const block of contentBlocks(message)) {
+    // A turn that stopped on an error says so in its stop reason, with the
+    // words in `errorMessage` beside whatever text streamed before the stop.
+    const stopReason = text(message.stopReason);
+    parsed.turnFailed = stopReason === OMP_STOP_REASON.ERROR;
+    parsed.turnAborted = stopReason === OMP_STOP_REASON.ABORTED;
+    parsed.failure = parsed.turnFailed
+      ? oneLine(
+          text(message.errorMessage) ?? ompMessageText(message),
+          OMP_ADAPTER_DEFAULTS.MAXIMUM_ACTIVITY_LENGTH,
+        )
+      : undefined;
+    for (const block of ompContentBlocks(message)) {
       if (block.type !== OMP_CONTENT_TYPE.TOOL_CALL) continue;
       const id = text(block.id);
       if (!id) continue;
@@ -219,11 +211,12 @@ function parseTail(tail: string): Omit<ParsedOmpSession, "cwd" | "title"> {
         intent: text(block.intent),
       });
     }
-    if (open.size === 0 && message.isError !== true) {
-      parsed.recap = oneLine(textFromMessage(message), maximumSessionRecapLength);
-    } else {
-      parsed.recap = undefined;
-    }
+    // A settled turn's parting words say where the work stands, where half a
+    // sentence mid-turn — or cut by an abort or an error — poses as an outcome.
+    parsed.recap =
+      open.size === 0 && parsed.turnFailed !== true && parsed.turnAborted !== true
+        ? oneLine(ompMessageText(message), maximumSessionRecapLength)
+        : undefined;
   }
 
   parsed.openTools = open.size > 0;
@@ -236,12 +229,15 @@ export function parseOmpSession(head: string, tail: string): ParsedOmpSession {
 }
 
 /**
- * A fatal exit or a recorded assistant error is stuck until someone comes
- * back to it. A `session_exit` otherwise means the process closed, which the
- * recording can say without a hook. Past that, open tools or a prompt the
- * model has not answered are working, and a settled assistant turn is holding
- * for the developer. A killed process can leave an open tool on disk forever,
- * so a working turn gone quiet is unknown rather than still working.
+ * A turn that stopped on a recorded error — or a fatal exit — is stuck until
+ * someone comes back to it. A `session_exit` otherwise means the process
+ * closed, which the recording can say without a hook. Past that, open tools,
+ * a prompt the model has not answered, or a tool result mid-turn are working,
+ * and a settled assistant turn is holding for the developer — as is an
+ * aborted one, whose tool calls OMP settles with placeholder results the
+ * moment the developer cuts it. A killed process can leave an open tool on
+ * disk forever, so a working turn gone quiet is unknown rather than still
+ * working.
  */
 function statusFromParsed(
   parsed: ParsedOmpSession,
@@ -249,12 +245,12 @@ function statusFromParsed(
   now: number,
   freshnessMs: number,
 ): SessionStatus {
-  if (parsed.fatalExit === true || parsed.failure !== undefined) return SESSION_STATUS.ERROR;
+  if (parsed.turnFailed === true || parsed.fatalExit === true) return SESSION_STATUS.ERROR;
   if (parsed.sessionClosed === true) return SESSION_STATUS.COMPLETE;
   const working =
     parsed.openTools === true ||
     parsed.lastRole === OMP_MESSAGE_ROLE.USER ||
-    parsed.lastRole === OMP_MESSAGE_ROLE.TOOL_RESULT;
+    (parsed.lastRole === OMP_MESSAGE_ROLE.TOOL_RESULT && parsed.turnAborted !== true);
   const status = working ? SESSION_STATUS.WORKING : SESSION_STATUS.WAITING;
   return localSessionStatus(status, observedAt, now, freshnessMs);
 }
@@ -278,8 +274,9 @@ interface OmpSessionFileCandidate extends SessionFileCandidate {
 
 /**
  * The sessions directly inside one encoded-cwd directory. A sidecar directory
- * named after a session holds blobs, not a row of its own, so only files are
- * read.
+ * named after a session's file holds its artifacts and its subagents'
+ * recordings — part of the session that spawned them rather than rows of
+ * their own — so only files are read.
  */
 async function sessionFilesIn(
   sessionsDirectory: string,
