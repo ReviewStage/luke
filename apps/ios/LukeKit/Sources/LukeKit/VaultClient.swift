@@ -46,6 +46,24 @@ public enum VaultProviderID: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
+    /// The page that issues this provider's keys, mirrored from `apiKeysUrl`
+    /// in `@sidecar/credentials`. Fixed here so the only addresses the app
+    /// can ever open are the ones in this file — the same posture the
+    /// desktop keeps by opening key pages by provider id rather than by a
+    /// URL its renderer supplies.
+    public var keyPageURL: URL {
+        let address = switch self {
+        case .conductor: "https://app.conductor.build/users/api-keys"
+        case .copilot: "https://github.com/settings/personal-access-tokens/new"
+        case .cursor: "https://cursor.com/dashboard/api"
+        case .devin: "https://app.devin.ai/settings/devin-api?tab=pats"
+        case .jules: "https://jules.google.com/settings"
+        case .replicas: "https://replicas.dev/dashboard/account/api-keys"
+        }
+        // swiftlint:disable:next force_unwrapping
+        return URL(string: address)!
+    }
+
     /// The only kind of credential Luke will hold for a provider that issues
     /// more than one — the desktop's `CredentialFormat`, mirrored so a key the
     /// service cannot use is refused with a reason instead of stored to fail

@@ -28,6 +28,20 @@ final class VaultKeyShapeTests: XCTestCase {
     }
 }
 
+// MARK: - Key pages
+
+final class VaultKeyPageTests: XCTestCase {
+    /// The addresses are fixed in the enum and force-unwrapped, so a typo
+    /// must fail here rather than at the press that opens it.
+    func testEveryKeyPageIsAFixedHTTPSAddress() {
+        for provider in VaultProviderID.allCases {
+            let url = provider.keyPageURL
+            XCTAssertEqual(url.scheme, "https", provider.rawValue)
+            XCTAssertNotNil(url.host, provider.rawValue)
+        }
+    }
+}
+
 // MARK: - Store
 
 final class VaultStoreKeyTests: XCTestCase {

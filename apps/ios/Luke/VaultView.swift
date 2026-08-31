@@ -152,6 +152,13 @@ private struct VaultKeyEditor: View {
                     .font(.caption)
                     .foregroundStyle(Color(white: 1, opacity: 0.5))
 
+                Link(destination: provider.keyPageURL) {
+                    Text("Open the \(provider.displayName) key page")
+                        .font(.caption.weight(.semibold))
+                        .underline()
+                        .foregroundStyle(Color(white: 1, opacity: 0.7))
+                }
+
                 SecureField("", text: $key, prompt: promptText)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
