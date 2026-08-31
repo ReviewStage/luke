@@ -109,12 +109,17 @@ public final class AccountSession {
     /// Spends the stored refresh token at most once however many callers
     /// race: the server rotates the token on use, so a second concurrent
     /// spend would read as revocation and sign the user out. Concurrent
-    /// callers await the same in-flight request instead.
+    /// callers await the same in-flight request instead. The slot lives
+    /// exactly as long as the request — cleared by the task itself, never by
+    /// a waiter, because awaiting a task's value throws on the waiter's own
+    /// cancellation (a view's teardown) while the request is still in flight.
     private func refreshStoredTokens() async throws -> AccountTokens {
         if let inFlight = refreshInFlight { return try await inFlight.value }
-        let task = Task { try await self.performRefresh() }
+        let task = Task { () throws -> AccountTokens in
+            defer { self.refreshInFlight = nil }
+            return try await self.performRefresh()
+        }
         refreshInFlight = task
-        defer { refreshInFlight = nil }
         return try await task.value
     }
 
