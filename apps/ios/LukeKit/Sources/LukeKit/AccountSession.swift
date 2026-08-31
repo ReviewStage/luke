@@ -32,6 +32,19 @@ public enum AuthState: Equatable {
 public final class AccountSession {
     public private(set) var state: AuthState = .signedOut
 
+    /// False when the keychain refused to store this sign-in's credentials.
+    /// The session still works — the running process's tokens live in memory —
+    /// but the next launch starts signed out, and the surface should say so.
+    public private(set) var credentialsPersisted = true
+
+    // The running session's credentials. Memory is the source of truth and
+    // the keychain is persistence, because a keychain that refuses writes (an
+    // unsigned development build on a fresh simulator) would otherwise leave
+    // a signed-in card whose every authorized call fails.
+    private var accessToken: String?
+    private var refreshToken: String?
+    private var accessTokenExpiry: Date?
+
     private let client: AccountClient
     // Incremented on every sign-out so an in-flight restore refresh cannot write
     // back after the user has already asked to leave (mirrors the desktop generation counter).
@@ -56,10 +69,13 @@ public final class AccountSession {
 
     public func signOut() async {
         generation += 1
-        let refreshToken = KeychainStore.get(.refreshToken)
+        let tokenToRevoke = refreshToken
+        accessToken = nil
+        refreshToken = nil
+        accessTokenExpiry = nil
         KeychainStore.clearAll()
         state = .signedOut
-        if let token = refreshToken {
+        if let token = tokenToRevoke {
             try? await client.revoke(refreshToken: token)
         }
     }
@@ -69,10 +85,10 @@ public final class AccountSession {
     /// A refresh that merely failed hands back the stored token, which may
     /// still work; one the server rejected outright has already signed out.
     public func validAccessToken() async throws -> String {
-        guard case .signedIn = state, let accessToken = KeychainStore.get(.accessToken) else {
+        guard case .signedIn = state, let accessToken else {
             throw AccountSessionError.signedOut
         }
-        guard storedTokenIsNearExpiry else { return accessToken }
+        guard tokenIsNearExpiry else { return accessToken }
         if let refreshed = try? await refreshAccessToken() { return refreshed }
         guard case .signedIn = state else { throw AccountSessionError.signedOut }
         return accessToken
@@ -103,7 +119,7 @@ public final class AccountSession {
     }
 
     private func performRefresh() async throws -> AccountTokens {
-        guard let refreshToken = KeychainStore.get(.refreshToken) else {
+        guard let refreshToken else {
             throw AccountSessionError.signedOut
         }
         let gen = generation
@@ -119,17 +135,20 @@ public final class AccountSession {
         }
     }
 
-    private var storedTokenIsNearExpiry: Bool {
-        guard let expiryStr = KeychainStore.get(.expiry),
-              let expiryInterval = TimeInterval(expiryStr)
-        else { return true }
-        return Date(timeIntervalSinceReferenceDate: expiryInterval).timeIntervalSinceNow < 300
+    private var tokenIsNearExpiry: Bool {
+        guard let accessTokenExpiry else { return true }
+        return accessTokenExpiry.timeIntervalSinceNow < 300
     }
 
     private func restoreFromKeychain() {
-        guard let accessToken = KeychainStore.get(.accessToken),
+        guard let storedAccessToken = KeychainStore.get(.accessToken),
               let email = KeychainStore.get(.email)
         else { return }
+        accessToken = storedAccessToken
+        refreshToken = KeychainStore.get(.refreshToken)
+        if let expiryStr = KeychainStore.get(.expiry), let interval = TimeInterval(expiryStr) {
+            accessTokenExpiry = Date(timeIntervalSinceReferenceDate: interval)
+        }
         let identity = AccountIdentity(
             id: KeychainStore.get(.accountID),
             email: email,
@@ -139,12 +158,12 @@ public final class AccountSession {
         let gen = generation
         Task { [weak self] in
             guard let self else { return }
-            await self.refreshIfNearExpiry(accessToken: accessToken, generation: gen)
+            await self.refreshIfNearExpiry(generation: gen)
         }
     }
 
-    private func refreshIfNearExpiry(accessToken: String, generation: Int) async {
-        guard storedTokenIsNearExpiry else { return }
+    private func refreshIfNearExpiry(generation: Int) async {
+        guard tokenIsNearExpiry else { return }
         do {
             let tokens = try await refreshStoredTokens()
             guard self.generation == generation else { return }
@@ -170,16 +189,22 @@ public final class AccountSession {
     }
 
     private func storeTokens(_ tokens: AccountTokens) {
-        KeychainStore.set(tokens.accessToken, for: .accessToken)
-        KeychainStore.set(tokens.refreshToken, for: .refreshToken)
-        KeychainStore.set(
-            String(tokens.expiry.timeIntervalSinceReferenceDate),
-            for: .expiry
-        )
+        accessToken = tokens.accessToken
+        refreshToken = tokens.refreshToken
+        accessTokenExpiry = tokens.expiry
+        let persisted = [
+            KeychainStore.set(tokens.accessToken, for: .accessToken),
+            KeychainStore.set(tokens.refreshToken, for: .refreshToken),
+            KeychainStore.set(String(tokens.expiry.timeIntervalSinceReferenceDate), for: .expiry),
+        ]
+        credentialsPersisted = persisted.allSatisfy { $0 }
     }
 
     private func storeIdentity(_ identity: AccountIdentity) {
-        KeychainStore.set(identity.email, for: .email)
+        // The email gates restore like the tokens do; the id and name are
+        // cosmetic, so their persistence does not decide the flag.
+        let emailPersisted = KeychainStore.set(identity.email, for: .email)
+        credentialsPersisted = credentialsPersisted && emailPersisted
         if let id = identity.id { KeychainStore.set(id, for: .accountID) }
         if let name = identity.name { KeychainStore.set(name, for: .name) }
     }

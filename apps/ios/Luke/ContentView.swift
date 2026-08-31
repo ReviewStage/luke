@@ -116,6 +116,12 @@ struct ContentView: View {
                         Text(identity.email)
                             .font(.subheadline)
                             .foregroundStyle(Color(white: 1, opacity: 0.5))
+                        if !session.credentialsPersisted {
+                            Text("This device is not saving the sign-in, so the next launch will ask again.")
+                                .font(.caption)
+                                .multilineTextAlignment(.center)
+                                .foregroundStyle(Color(red: 0.95, green: 0.75, blue: 0.4))
+                        }
                         Button("Sign out") {
                             Task { await session.signOut() }
                         }
