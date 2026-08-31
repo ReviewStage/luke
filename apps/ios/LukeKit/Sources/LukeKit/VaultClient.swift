@@ -43,8 +43,7 @@ public enum VaultProviderID: String, CaseIterable, Identifiable, Sendable {
             "Create a personal access token in Devin under "
                 + "[Settings > Devin API > PATs](\(keyPageURL))."
         case .jules:
-            "Create a key in Jules under [Settings > API key](\(keyPageURL)). "
-                + "It is shown only once."
+            "Create a key in Jules under [Settings > API Key](\(keyPageURL))."
         case .replicas:
             "Create a key in Replicas under [Dashboard > API Keys](\(keyPageURL))."
         }

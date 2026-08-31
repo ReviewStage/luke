@@ -2,7 +2,7 @@ import { ExternalIcon } from "./settings-icons";
 
 /**
  * One sentence whose link is its destination: the lead, then the linked words
- * that open the page, a full stop, and the caveat if there is one. Every
+ * that open the page, a full stop, and the trail if there is one. Every
  * place the panel says where to fetch a credential — the settings editor, the
  * key slot, the Superset code slot — draws this one shape, so the wording
  * cannot drift apart.
@@ -14,13 +14,13 @@ import { ExternalIcon } from "./settings-icons";
 export function DestinationNote({
   lead,
   destination,
-  caveat,
+  trail,
   disabled,
   onOpen,
 }: {
   lead: string;
   destination: string;
-  caveat?: string;
+  trail?: string;
   disabled: boolean;
   onOpen: () => void;
 }): React.JSX.Element {
@@ -31,7 +31,7 @@ export function DestinationNote({
         {destination}
         <ExternalIcon />
       </button>
-      .{caveat ? ` ${caveat}` : null}
+      .{trail ? ` ${trail}` : null}
     </small>
   );
 }

@@ -111,8 +111,8 @@ test("sends the user to the one GitHub token kind the agent-tasks API answers", 
   // The endpoint takes only user tokens, and GitHub also issues the kinds it
   // refuses, so the copy has to name what to create and what will not work.
   assert.match(copilot.hint.lead, /fine-grained personal access token/i);
-  assert.match(copilot.hint.caveat ?? "", /Agent tasks/);
-  assert.match(copilot.hint.caveat ?? "", /installation/i);
+  assert.match(copilot.hint.trail ?? "", /Agent tasks/);
+  assert.match(copilot.hint.trail ?? "", /installation/i);
   assert.match(copilot.apiKeysUrl, /personal-access-tokens\/new$/);
   // No key format: fine-grained PATs and GitHub App user tokens carry
   // different prefixes, and a single one would refuse a working credential.
@@ -173,8 +173,8 @@ test("holds the key Luke speaks through, apart from the agents he observes", () 
   // Realtime is what a spoken turn runs on, and an account that cannot reach it
   // fails at the first word rather than at the paste.
   assert.ok(openai.hint);
-  assert.match(openai.hint.caveat ?? "", /Realtime/);
-  assert.match(openai.hint.caveat ?? "", /billing/i);
+  assert.match(openai.hint.trail ?? "", /Realtime/);
+  assert.match(openai.hint.trail ?? "", /billing/i);
   // No prefix: every kind OpenAI issues carries `sk-`, so a format would refuse
   // nothing a working key would not also be refused by.
   assert.equal(openai.keyFormat, undefined);

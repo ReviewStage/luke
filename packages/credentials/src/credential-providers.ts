@@ -99,7 +99,7 @@ export interface CredentialFormat {
 /**
  * Where the user creates a key, said the same way for every provider: the
  * lead, then the destination drawn as the link that opens the provider's key
- * page, then a full stop and the caveat if there is one. Structured rather
+ * page, then a full stop and the trail if there is one. Structured rather
  * than one string so the link can sit on the destination itself instead of
  * beside the sentence.
  */
@@ -113,7 +113,7 @@ export interface CredentialHint {
    */
   destination: string;
   /** A sentence after the link, only where the page alone can still go wrong. */
-  caveat?: string;
+  trail?: string;
 }
 
 export interface CredentialProvider {
@@ -169,7 +169,7 @@ export const CREDENTIAL_PROVIDERS: CredentialProviderRegistry = {
     hint: {
       lead: "Create a fine-grained personal access token on GitHub under",
       destination: "Settings > Personal access tokens",
-      caveat: "Give it Agent tasks read access; classic and installation tokens will not work.",
+      trail: "Give it Agent tasks read access; classic and installation tokens will not work.",
     },
     apiKeysUrl: "https://github.com/settings/personal-access-tokens/new",
     environmentVariables: [COPILOT_ENVIRONMENT.API_KEY],
@@ -216,12 +216,7 @@ export const CREDENTIAL_PROVIDERS: CredentialProviderRegistry = {
     id: CREDENTIAL_PROVIDER_ID.JULES,
     connection: CREDENTIAL_CONNECTION.KEY,
     displayName: PROVIDER_IDENTITY_BY_ID[PROVIDER_ID.JULES].displayName,
-    // Jules shows a key once, on creation, and allows at most three at a time.
-    hint: {
-      lead: "Create a key in Jules under",
-      destination: "Settings > API key",
-      caveat: "It is shown only once.",
-    },
+    hint: { lead: "Create a key in Jules under", destination: "Settings > API Key" },
     apiKeysUrl: "https://jules.google.com/settings/api",
     environmentVariables: [JULES_ENVIRONMENT.API_KEY],
   },
@@ -255,7 +250,7 @@ export const CREDENTIAL_PROVIDERS: CredentialProviderRegistry = {
     hint: {
       lead: "Create a key on the OpenAI platform under",
       destination: "API keys",
-      caveat: "Talking uses the Realtime API, which needs billing enabled.",
+      trail: "Talking uses the Realtime API, which needs billing enabled.",
     },
     apiKeysUrl: "https://platform.openai.com/api-keys",
     // Deliberately no environment fallback, alone among the providers: an
