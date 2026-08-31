@@ -524,15 +524,18 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
           {
             label: "Stopping a reply",
             detail:
-              (input.stopKey
-                ? `${input.stopKey}, from any app, cuts the reply off and asks for nothing in ` +
-                  "its place; Escape does the same while Luke's panel has the keyboard."
-                : "Escape while Luke is speaking cuts the reply off and asks for nothing in " +
-                  "its place. " +
-                  (input.stopKeyRemoved
-                    ? "No system-wide stop key is registered — its shortcut was removed."
-                    : "No system-wide stop key is registered right now — another app " +
-                      "may own the shortcut.")) +
+              // The removal outranks a reported chord: a broadcast can lag the
+              // deletion, and teaching the key that was just deleted is worse
+              // than the honest absence.
+              (input.stopKeyRemoved
+                ? "Escape while Luke is speaking cuts the reply off and asks for nothing in " +
+                  "its place. No system-wide stop key is registered — its shortcut was removed."
+                : input.stopKey
+                  ? `${input.stopKey}, from any app, cuts the reply off and asks for nothing in ` +
+                    "its place; Escape does the same while Luke's panel has the keyboard."
+                  : "Escape while Luke is speaking cuts the reply off and asks for nothing in " +
+                    "its place. No system-wide stop key is registered right now — another app " +
+                    "may own the shortcut.") +
               " The talk key over a reply interrupts too, but takes the turn with the same " +
               `press. A different stop chord can be recorded, the default restored, or the ` +
               `shortcut removed, in ${SHORTCUTS_PAGE}.`,

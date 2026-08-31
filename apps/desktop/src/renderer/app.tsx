@@ -2820,17 +2820,20 @@ export function App(): React.JSX.Element {
     voiceStatus,
   ]);
 
+  // A broadcast with no accelerator is still a change — the key was deleted
+  // or lost its chord — so it is kept as one rather than as no news at all,
+  // or bootstrap's old chord would keep winning for the rest of the session.
   useEffect(
     () =>
       window.sidecar.onAskHotkeyChanged((accelerator) =>
-        setAskHotkeyChange(accelerator ? { accelerator } : undefined),
+        setAskHotkeyChange(accelerator ? { accelerator } : {}),
       ),
     [],
   );
   useEffect(
     () =>
       window.sidecar.onStopHotkeyChanged((accelerator) =>
-        setStopHotkeyChange(accelerator ? { accelerator } : undefined),
+        setStopHotkeyChange(accelerator ? { accelerator } : {}),
       ),
     [],
   );

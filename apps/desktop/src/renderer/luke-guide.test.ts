@@ -708,6 +708,16 @@ test("the facts describe stopping a reply, exactly where a reply can exist", () 
   assert.match(removed, /its shortcut was removed/);
   assert.doesNotMatch(removed, /another app/);
 
+  // The removal outranks a chord still being reported beside it: a broadcast
+  // can lag the deletion, and teaching the key that was just deleted is worse
+  // than the honest absence.
+  const removedStale = buildLukeGuide(guideInput({ stopKeyRemoved: true })).facts.find(
+    (fact) => fact.label === "Stopping a reply",
+  );
+  assert.ok(removedStale);
+  assert.match(removedStale.detail, /its shortcut was removed/);
+  assert.doesNotMatch(removedStale.detail, /⌥S, from any app/);
+
   // Without a voice there is no reply to stop, so the fact would describe a
   // key that does nothing.
   const voiceless = JSON.stringify(buildLukeGuide(guideInput({ voiceAvailable: false })).facts);
@@ -737,13 +747,16 @@ test("the facts follow the talk key, the microphone, and the storage the system 
   assert.match(unregistered, /None is registered/);
 
   // A removed talk key is the developer's own deletion, said as one rather
-  // than as a chord another app happens to own.
+  // than as a chord another app happens to own — and the removal outranks a
+  // chord still being reported beside it, because a broadcast can lag the
+  // deletion.
   const talkRemoved = buildLukeGuide(
-    guideInput({ hotkey: { held: true, removed: true } }),
+    guideInput({ hotkey: { hotkey: "⌥Space", held: true, removed: true } }),
   ).facts.find((fact) => fact.label === "Talk key");
   assert.ok(talkRemoved);
   assert.match(talkRemoved.detail, /the shortcut was removed/);
   assert.doesNotMatch(talkRemoved.detail, /another app/);
+  assert.doesNotMatch(talkRemoved.detail, /⌥Space, from any app/);
 
   // The ask key is a fact on the talk key's terms: the registered chord when
   // there is one, and an honest absence when there is not.
