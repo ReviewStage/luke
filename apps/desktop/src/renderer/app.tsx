@@ -29,7 +29,12 @@ import {
   type SessionIdentity,
   workspaceProjectSelectionId,
 } from "@sidecar/session";
-import { APP_SETTING_SCHEMA, voiceHotkeyLabel, voiceHotkeyToShow } from "@sidecar/settings";
+import {
+  APP_SETTING_SCHEMA,
+  VOICE_HOTKEY_NONE,
+  voiceHotkeyLabel,
+  voiceHotkeyToShow,
+} from "@sidecar/settings";
 import {
   MOTION_DURATION_MS,
   SESSION_NOTICE_HEIGHT,
@@ -2674,12 +2679,18 @@ export function App(): React.JSX.Element {
         update: update ?? bootstrap.update,
         voiceAvailable: current.voiceAvailable,
         microphoneStatus,
+        // A removed key reaches the guide as the removal rather than a bare
+        // absence, so Luke says the developer deleted it instead of blaming
+        // another app for a chord nobody is contesting.
         hotkey: {
           ...(talkKey.hotkey ? { hotkey: voiceHotkeyLabel(talkKey.hotkey) } : undefined),
           held: talkKey.held,
+          removed: current.voiceHotkey === VOICE_HOTKEY_NONE,
         },
         ...(askAccelerator ? { askKey: voiceHotkeyLabel(askAccelerator) } : undefined),
+        askKeyRemoved: current.askHotkey === VOICE_HOTKEY_NONE,
         ...(stopAccelerator ? { stopKey: voiceHotkeyLabel(stopAccelerator) } : undefined),
+        stopKeyRemoved: current.stopHotkey === VOICE_HOTKEY_NONE,
       });
       syncGuide(guide);
     },
@@ -3114,14 +3125,17 @@ export function App(): React.JSX.Element {
     ...(shownHotkey.hotkey ? { voiceHotkey: shownHotkey.hotkey } : undefined),
     voiceHotkeyHeld: shownHotkey.held,
     voiceChosen: settings?.voiceHotkey !== undefined,
+    voiceOff: settings?.voiceHotkey === VOICE_HOTKEY_NONE,
     onVoiceHotkeyChange: changeVoiceHotkey,
     // Both rows take the accelerator: they draw the keys apart and
     // label the chord whole for the buttons beside them.
     ...(shownAskHotkey ? { askHotkey: shownAskHotkey } : undefined),
     askChosen: settings?.askHotkey !== undefined,
+    askOff: settings?.askHotkey === VOICE_HOTKEY_NONE,
     onAskHotkeyChange: changeAskHotkey,
     ...(shownStopHotkey ? { stopHotkey: shownStopHotkey } : undefined),
     stopChosen: settings?.stopHotkey !== undefined,
+    stopOff: settings?.stopHotkey === VOICE_HOTKEY_NONE,
     onStopHotkeyChange: changeStopHotkey,
     onCapture: changeShortcutCapture,
   };

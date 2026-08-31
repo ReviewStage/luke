@@ -41,6 +41,7 @@ import {
   settingsScopeChanged,
   spokenSettingValue,
   VOICE_HOTKEY_CAPTURE,
+  VOICE_HOTKEY_NONE,
   voiceHotkeyLabel,
 } from "@sidecar/settings";
 import {
@@ -237,29 +238,39 @@ export interface ShortcutControl {
   /** Whether a chosen talk chord is stored, which is what Reset has to undo. */
   voiceChosen: boolean;
   /**
-   * Moves the talk key to a recorded chord, or back to the defaults when
-   * omitted. The store answers with why when it refuses, and the row is where
-   * that answer belongs.
+   * Whether the talk key was deleted outright: no chord registered, and no
+   * default standing in. The row says "None" rather than "Unavailable",
+   * because this absence is the user's own choice.
+   */
+  voiceOff: boolean;
+  /**
+   * Moves the talk key to a recorded chord, the none token, or back to the
+   * defaults when omitted. The store answers with why when it refuses, and
+   * the row is where that answer belongs.
    */
   onVoiceHotkeyChange: (accelerator: string | undefined) => Promise<ActResult>;
   /** The ask key as registered, an accelerator on the talk key's terms. */
   askHotkey?: string;
   /** Whether a chosen ask chord is stored, on the talk key's terms. */
   askChosen: boolean;
+  /** Whether the ask key was deleted outright, on the talk key's terms. */
+  askOff: boolean;
   /**
-   * Moves the ask key to a recorded chord, or back to the defaults when
-   * omitted, on the talk key's terms: the store answers with why when it
-   * refuses, and the row is where that answer belongs.
+   * Moves the ask key to a recorded chord, the none token, or back to the
+   * defaults when omitted, on the talk key's terms: the store answers with
+   * why when it refuses, and the row is where that answer belongs.
    */
   onAskHotkeyChange: (accelerator: string | undefined) => Promise<ActResult>;
   /** The stop key as registered, an accelerator on the talk key's terms. */
   stopHotkey?: string;
   /** Whether a chosen stop chord is stored, on the other rows' terms. */
   stopChosen: boolean;
+  /** Whether the stop key was deleted outright, on the other rows' terms. */
+  stopOff: boolean;
   /**
-   * Moves the stop key to a recorded chord, or back to the default when
-   * omitted, on the other rows' terms: the store answers with why when it
-   * refuses, and the row is where that answer belongs.
+   * Moves the stop key to a recorded chord, the none token, or back to the
+   * default when omitted, on the other rows' terms: the store answers with
+   * why when it refuses, and the row is where that answer belongs.
    */
   onStopHotkeyChange: (accelerator: string | undefined) => Promise<ActResult>;
   /**
@@ -2684,6 +2695,12 @@ const SHORTCUT_HINT = "Hold ⌃, ⌥ or ⌘ — ⇧ may join — and press a let
  * key as registered, not as stored — the two differ when another app owns the
  * chosen chord, and a row that showed the stored one would name a key that
  * answers nothing.
+ *
+ * Remove stands beside Reset on Reset's own terms — never while it could only
+ * change nothing, which for a removal is while the key is already deleted —
+ * and is what deletes the shortcut outright: no chord registered, no default
+ * standing in. The row then says "None" rather than "Unavailable", because
+ * this absence is the user's own choice, and Reset is the way back.
  */
 function ShortcutRow({
   title,
@@ -2691,6 +2708,7 @@ function ShortcutRow({
   anchor,
   shown,
   chosen,
+  off,
   defaultKey,
   attention,
   onChange,
@@ -2704,6 +2722,8 @@ function ShortcutRow({
   shown?: string | undefined;
   /** Whether a chosen chord is stored, which is what Reset has to undo. */
   chosen: boolean;
+  /** Whether the shortcut was deleted outright, which is what Remove did. */
+  off: boolean;
   /** The first default, which is what the reset offers to return to. */
   defaultKey: string;
   /** Why the key answers nothing right now, absent while it answers. */
@@ -2753,12 +2773,16 @@ function ShortcutRow({
       <span className="shortcut-controls">
         <span className="settings-actions">
           {/* The chord as its own keys while there is one to press, and a
-              sentence when there is not: "Type a shortcut…" and "Unavailable"
-              are things being said about the key, not keys to draw. */}
+              sentence when there is not: "Type a shortcut…", "None" and
+              "Unavailable" are things being said about the key, not keys to
+              draw — and the two absences differ: "None" was asked for, where
+              "Unavailable" is another app owning the chord. */}
           {recording ? (
             <span className="shortcut-state" data-recording="true">
               Type a shortcut…
             </span>
+          ) : off ? (
+            <span className="shortcut-state">None</span>
           ) : shown ? (
             <Keycaps className="shortcut-chord" accelerator={shown} />
           ) : (
@@ -2774,6 +2798,18 @@ function ShortcutRow({
               onClick={() => void apply(undefined)}
             >
               <ResetIcon />
+            </button>
+          ) : null}
+          {!off && !recording ? (
+            <button
+              type="button"
+              className="icon-button"
+              disabled={busy}
+              aria-label={`Remove the shortcut for ${title}, leaving no key`}
+              title="Remove"
+              onClick={() => void apply(VOICE_HOTKEY_NONE)}
+            >
+              <TrashIcon />
             </button>
           ) : null}
           <button
@@ -2857,14 +2893,22 @@ function ShortcutSection({
   // key will hold once voice is on — the stored choice, or the first default
   // — wearing the same mark the Voice page does instead of an "Unavailable"
   // that reads as broken. A key that is genuinely unregistered while voice is
-  // on — another app owns the chord — keeps the honest "Unavailable".
+  // on — another app owns the chord — keeps the honest "Unavailable". A key
+  // deleted outright shows neither chord nor mark whatever voice does: "None"
+  // is already the whole truth about a key that will never register.
   const attention = voiceAvailable ? undefined : VOICE_KEYLESS_NOTE;
   const promisedTalk = settings?.voiceHotkey ?? DEFAULT_VOICE_HOTKEYS[0];
   const promisedAsk = settings?.askHotkey ?? DEFAULT_ASK_HOTKEYS[0];
   const promisedStop = settings?.stopHotkey ?? DEFAULT_STOP_HOTKEYS[0];
-  const shownTalk = shortcuts.voiceHotkey ?? (voiceAvailable ? undefined : promisedTalk);
-  const shownAsk = shortcuts.askHotkey ?? (voiceAvailable ? undefined : promisedAsk);
-  const shownStop = shortcuts.stopHotkey ?? (voiceAvailable ? undefined : promisedStop);
+  const shownTalk = shortcuts.voiceOff
+    ? undefined
+    : (shortcuts.voiceHotkey ?? (voiceAvailable ? undefined : promisedTalk));
+  const shownAsk = shortcuts.askOff
+    ? undefined
+    : (shortcuts.askHotkey ?? (voiceAvailable ? undefined : promisedAsk));
+  const shownStop = shortcuts.stopOff
+    ? undefined
+    : (shortcuts.stopHotkey ?? (voiceAvailable ? undefined : promisedStop));
   return (
     <section
       className="settings-section settings-plain"
@@ -2883,8 +2927,9 @@ function ShortcutSection({
         }
         {...(shownTalk ? { shown: shownTalk } : undefined)}
         chosen={shortcuts.voiceChosen}
+        off={shortcuts.voiceOff}
         defaultKey={DEFAULT_VOICE_HOTKEYS[0] ?? ""}
-        {...(attention ? { attention } : undefined)}
+        {...(attention && !shortcuts.voiceOff ? { attention } : undefined)}
         onChange={shortcuts.onVoiceHotkeyChange}
         onCapture={shortcuts.onCapture}
       />
@@ -2901,8 +2946,9 @@ function ShortcutSection({
         detail="Press to type to Luke from any app."
         {...(shownAsk ? { shown: shownAsk } : undefined)}
         chosen={shortcuts.askChosen}
+        off={shortcuts.askOff}
         defaultKey={DEFAULT_ASK_HOTKEYS[0] ?? ""}
-        {...(attention ? { attention } : undefined)}
+        {...(attention && !shortcuts.askOff ? { attention } : undefined)}
         onChange={shortcuts.onAskHotkeyChange}
         onCapture={shortcuts.onCapture}
       />
@@ -2912,8 +2958,9 @@ function ShortcutSection({
         detail="Press to cut off a reply, from any app."
         {...(shownStop ? { shown: shownStop } : undefined)}
         chosen={shortcuts.stopChosen}
+        off={shortcuts.stopOff}
         defaultKey={DEFAULT_STOP_HOTKEYS[0] ?? ""}
-        {...(attention ? { attention } : undefined)}
+        {...(attention && !shortcuts.stopOff ? { attention } : undefined)}
         onChange={shortcuts.onStopHotkeyChange}
         onCapture={shortcuts.onCapture}
       />

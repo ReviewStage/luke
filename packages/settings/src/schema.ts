@@ -44,7 +44,7 @@ import {
   type PanelFormFactor,
 } from "@sidecar/surface";
 import { isRecord, isWireString, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
-import { parseVoiceHotkey } from "./voice-hotkey.js";
+import { parseVoiceHotkey, VOICE_HOTKEY_NONE } from "./voice-hotkey.js";
 
 // The ids themselves live in core, because the product-event vocabulary names
 // the same set and may not depend on anything here.
@@ -234,9 +234,18 @@ function boolean(defaultValue: boolean) {
 function hotkey(value: UnparsedWireValue): SettingGuardResult<string | undefined> {
   if (value === undefined) return valid(undefined);
   if (!isWireString(value)) return invalid(undefined);
+  // A deletion is a choice the parser cannot spell: no chord at all, with no
+  // default standing in behind the absence.
+  if (value === VOICE_HOTKEY_NONE) return valid(VOICE_HOTKEY_NONE);
   const parsed = parseVoiceHotkey(value);
   return parsed ? valid(parsed) : invalid(undefined);
 }
+
+// A deleted key counts as off rather than set: a stored value stands either
+// way, and the count is the one reader of the difference. The chord itself
+// never travels, whichever shape is reported.
+const hotkeyAnalytics = (value: StoredSettingValue): ProductSettingValue =>
+  value === VOICE_HOTKEY_NONE ? PRODUCT_SETTING_VALUE.OFF : choiceAnalytics(value);
 
 function workspaceAgentDefaults(
   value: UnparsedWireValue,
@@ -460,7 +469,7 @@ export const APP_SETTING_SCHEMA = {
     // the chord's page is named and a change to it can be counted.
     guideEntry: settingGuideEntry("voiceHotkey", [APP_SETTING_ID.TALK_HOTKEY], () => undefined),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.TALK_HOTKEY,
-    analytics: { id: APP_SETTING_ID.TALK_HOTKEY, value: choiceAnalytics },
+    analytics: { id: APP_SETTING_ID.TALK_HOTKEY, value: hotkeyAnalytics },
   },
   askHotkey: {
     field: "askHotkey",
@@ -473,7 +482,7 @@ export const APP_SETTING_SCHEMA = {
     // the chord's page is named and a change to it can be counted.
     guideEntry: settingGuideEntry("askHotkey", [APP_SETTING_ID.ASK_HOTKEY], () => undefined),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.ASK_HOTKEY,
-    analytics: { id: APP_SETTING_ID.ASK_HOTKEY, value: choiceAnalytics },
+    analytics: { id: APP_SETTING_ID.ASK_HOTKEY, value: hotkeyAnalytics },
   },
   stopHotkey: {
     field: "stopHotkey",
@@ -486,7 +495,7 @@ export const APP_SETTING_SCHEMA = {
     // the chord's page is named and a change to it can be counted.
     guideEntry: settingGuideEntry("stopHotkey", [APP_SETTING_ID.STOP_HOTKEY], () => undefined),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.STOP_HOTKEY,
-    analytics: { id: APP_SETTING_ID.STOP_HOTKEY, value: choiceAnalytics },
+    analytics: { id: APP_SETTING_ID.STOP_HOTKEY, value: hotkeyAnalytics },
   },
   duckOtherMedia: {
     field: "duckOtherMedia",

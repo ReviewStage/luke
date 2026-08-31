@@ -248,7 +248,7 @@ const ROOT_SETTING_ICON = {
 } satisfies Partial<Record<AppSettingId, React.JSX.Element>>;
 
 /** The words every shortcut row can be found by, beside its own name. */
-const SHORTCUT_WORDS = "keyboard shortcut hotkey key chord record";
+const SHORTCUT_WORDS = "keyboard shortcut hotkey key chord record remove delete none";
 
 /** The words every key row can be found by, beside its provider's name. */
 const KEY_WORDS = "API key credential connect cloud agent";

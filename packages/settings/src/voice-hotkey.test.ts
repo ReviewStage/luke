@@ -12,6 +12,7 @@ import {
   TALK_KEY_TAP_MS,
   talkKeyRelease,
   VOICE_HOTKEY_CAPTURE,
+  VOICE_HOTKEY_NONE,
   voiceHotkeyCandidates,
   voiceHotkeyKeycaps,
   voiceHotkeyLabel,
@@ -158,6 +159,18 @@ test("a chord the helper cannot register is refused rather than guessed at", () 
   assert.equal(parseVoiceHotkey("Alt+F5"), undefined);
   assert.equal(parseVoiceHotkey("Alt+A+B"), undefined);
   assert.equal(parseVoiceHotkey(""), undefined);
+});
+
+test("a deleted key offers no candidate at all", () => {
+  // The defaults stand behind a choice, never behind a removal: a fallback
+  // for a key the user asked to have none would be the key coming back on
+  // its own.
+  assert.deepEqual(voiceHotkeyCandidates(VOICE_HOTKEY_NONE), []);
+  assert.deepEqual(askHotkeyCandidates(VOICE_HOTKEY_NONE, [undefined, undefined]), []);
+  assert.deepEqual(stopHotkeyCandidates(VOICE_HOTKEY_NONE, [undefined, undefined]), []);
+  // The token shares the chord's field, so no recording may ever produce it:
+  // the parser refusing the word is what keeps the two meanings apart.
+  assert.equal(parseVoiceHotkey(VOICE_HOTKEY_NONE), undefined);
 });
 
 test("a chosen chord is tried first and the defaults stay behind it", () => {
