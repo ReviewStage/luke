@@ -18,6 +18,16 @@
 export const DEFAULT_VOICE_HOTKEYS: readonly string[] = ["Alt+Space"];
 
 /**
+ * The stored choice that says a key was deleted outright: no chord registered,
+ * and no default standing in behind the absence. It shares the chord's field
+ * because it answers the chord's question — which key, if any — and it can
+ * never collide with one: `parseVoiceHotkey` refuses the word, holding no
+ * modifier and naming no key in the helper's table, so no recording can ever
+ * produce it.
+ */
+export const VOICE_HOTKEY_NONE = "none";
+
+/**
  * The key that cuts off a reply being spoken, from whatever app is frontmost.
  *
  * Option-S because S is for stop, and Option-letter is the family the other
@@ -33,12 +43,14 @@ export const DEFAULT_STOP_HOTKEYS: readonly string[] = ["Alt+S"];
  * with the default kept behind it, and any chord the other Luke keys could
  * sit on is left out, because the keys must never compete for one chord —
  * whichever registered first would silently cost the other its whole
- * feature, with nothing on screen saying why.
+ * feature, with nothing on screen saying why. A deleted key offers nothing,
+ * on the talk key's terms.
  */
 export function stopHotkeyCandidates(
   chosen: string | undefined,
   taken: readonly (string | undefined)[],
 ): readonly string[] {
+  if (chosen === VOICE_HOTKEY_NONE) return [];
   const candidates = chosen
     ? [chosen, ...DEFAULT_STOP_HOTKEYS.filter((candidate) => candidate !== chosen)]
     : DEFAULT_STOP_HOTKEYS;
@@ -64,12 +76,14 @@ export const DEFAULT_ASK_HOTKEYS: readonly string[] = ["Alt+L", "Alt+Shift+L"];
  * exactly as the talk key's candidates work. Any chord the talk key holds is
  * left out, the chosen one included: the two Luke keys must never compete for
  * one chord — whichever registered first would silently cost the other its
- * whole feature, with nothing on screen saying why.
+ * whole feature, with nothing on screen saying why. A deleted key offers
+ * nothing, on the talk key's terms.
  */
 export function askHotkeyCandidates(
   chosen: string | undefined,
   taken: readonly (string | undefined)[],
 ): readonly string[] {
+  if (chosen === VOICE_HOTKEY_NONE) return [];
   const candidates = chosen
     ? [chosen, ...DEFAULT_ASK_HOTKEYS.filter((candidate) => candidate !== chosen)]
     : DEFAULT_ASK_HOTKEYS;
@@ -174,9 +188,13 @@ export function parseVoiceHotkey(value: string): string | undefined {
  * The chords to try, in order. A chosen key goes first — it is what the user
  * asked for — and the defaults stay behind it, so a chord another app claims
  * while Luke is closed costs the user a different talk key rather than none.
- * The panel shows whichever one actually registered.
+ * The panel shows whichever one actually registered. A deleted key offers
+ * nothing at all: the defaults stand behind a choice, never behind a removal,
+ * because a fallback the user asked to have no key would be the key coming
+ * back on its own.
  */
 export function voiceHotkeyCandidates(chosen: string | undefined): readonly string[] {
+  if (chosen === VOICE_HOTKEY_NONE) return [];
   if (!chosen) return DEFAULT_VOICE_HOTKEYS;
   return [chosen, ...DEFAULT_VOICE_HOTKEYS.filter((candidate) => candidate !== chosen)];
 }

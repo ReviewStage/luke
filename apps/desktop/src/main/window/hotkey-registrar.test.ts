@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { VOICE_HOTKEY_NONE } from "@sidecar/settings";
 import type { TalkKeyEdges } from "../native/talk-key";
 import {
   HOTKEY_RANK,
@@ -131,6 +132,48 @@ test("reapply from stop lets only itself go", async () => {
   assert.equal(context.unregisterAllCount(), 1);
   assert.deepEqual(context.unregistered().slice(afterTalk), ["Alt+S"]);
   assert.equal(context.registrar.stop, "Control+Alt+X");
+  assert.equal(context.registrar.ask, "Alt+L");
+});
+
+test("a deleted talk key spawns no helper and reserves no chord", async () => {
+  const context = harness();
+  context.registrar.setChosen(HOTKEY_RANK.TALK, VOICE_HOTKEY_NONE);
+  await context.registrar.reapply(HOTKEY_RANK.TALK);
+
+  // Nothing registered and nothing promised: no helper, no toggle fallback,
+  // and the panel is told the honest absence.
+  assert.equal(context.registrar.talk, undefined);
+  assert.deepEqual(context.registered(), ["Alt+L", "Alt+S"]);
+  // A key that will never register defends no candidate list, so the ranks
+  // below may sit even on the talk key's own default.
+  assert.equal(context.registrar.reserve("Alt+Space", HOTKEY_RANK.ASK), undefined);
+});
+
+test("a deleted ask key takes no chord and stop keeps its own", async () => {
+  const context = harness();
+  await context.registrar.reapply(HOTKEY_RANK.TALK);
+  context.announceTalk("Alt+Space");
+
+  context.registrar.setChosen(HOTKEY_RANK.ASK, VOICE_HOTKEY_NONE);
+  await context.registrar.reapply(HOTKEY_RANK.ASK);
+
+  assert.equal(context.registrar.ask, undefined);
+  assert.equal(context.registrar.stop, "Alt+S");
+  // The deleted key's defaults are no longer spoken for either: the stop key
+  // could be moved onto Option-L now without a refusal.
+  assert.equal(context.registrar.reserve("Alt+L", HOTKEY_RANK.STOP), undefined);
+});
+
+test("a deleted stop key lets its chord go and takes nothing back", async () => {
+  const context = harness();
+  await context.registrar.reapply(HOTKEY_RANK.TALK);
+  context.announceTalk("Alt+Space");
+
+  context.registrar.setChosen(HOTKEY_RANK.STOP, VOICE_HOTKEY_NONE);
+  await context.registrar.reapply(HOTKEY_RANK.STOP);
+
+  assert.equal(context.registrar.stop, undefined);
+  assert.ok(context.unregistered().includes("Alt+S"));
   assert.equal(context.registrar.ask, "Alt+L");
 });
 

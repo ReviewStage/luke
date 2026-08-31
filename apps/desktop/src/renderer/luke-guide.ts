@@ -97,19 +97,31 @@ export interface LukeGuideInput {
   /**
    * The talk key labelled the way macOS writes it, absent when none was
    * registered. Labelled rather than drawn as keys: the guide is spoken and
-   * read, and a chord said aloud is one thing to press.
+   * read, and a chord said aloud is one thing to press. `removed` is the one
+   * absence that is the developer's own choice — the shortcut was deleted —
+   * and the fact must say so rather than blame another app.
    */
-  hotkey: { hotkey?: string; held: boolean };
+  hotkey: { hotkey?: string; held: boolean; removed?: boolean };
   /** The ask key labelled on the same terms, absent when none was registered. */
   askKey?: string;
+  /** Whether the ask key's absence is a deleted shortcut, on the talk key's terms. */
+  askKeyRemoved?: boolean;
   /**
    * The stop key labelled on the same terms, absent when none was registered
    * — another app owns Option-S, or another Luke key was moved onto it.
    */
   stopKey?: string;
+  /** Whether the stop key's absence is a deleted shortcut, on the talk key's terms. */
+  stopKeyRemoved?: boolean;
 }
 
 function talkKeyFact(hotkey: LukeGuideInput["hotkey"]): AppGuideFact {
+  if (hotkey.removed) {
+    return {
+      label: "Talk key",
+      detail: `None — the shortcut was removed, so no key is registered anywhere. A chord can be recorded again, or the default restored, in ${SHORTCUTS_PAGE}.`,
+    };
+  }
   if (!hotkey.hotkey) {
     return {
       label: "Talk key",
@@ -122,11 +134,17 @@ function talkKeyFact(hotkey: LukeGuideInput["hotkey"]): AppGuideFact {
     : "press to talk, again to send, again to interrupt";
   return {
     label: "Talk key",
-    detail: `${hotkey.hotkey}, from any app: ${use}. A different chord can be recorded, or the default restored, in ${SHORTCUTS_PAGE}.`,
+    detail: `${hotkey.hotkey}, from any app: ${use}. A different chord can be recorded, the default restored, or the shortcut removed, in ${SHORTCUTS_PAGE}.`,
   };
 }
 
-function askKeyFact(askKey: string | undefined): AppGuideFact {
+function askKeyFact(askKey: string | undefined, removed: boolean | undefined): AppGuideFact {
+  if (removed) {
+    return {
+      label: "Ask key",
+      detail: `None — the shortcut was removed, so no key summons the composer; the panel's own composer still takes a typed ask. A chord can be recorded again, or the default restored, in ${SHORTCUTS_PAGE}.`,
+    };
+  }
   if (!askKey) {
     return {
       label: "Ask key",
@@ -138,7 +156,7 @@ function askKeyFact(askKey: string | undefined): AppGuideFact {
     label: "Ask key",
     detail:
       `${askKey}, from any app: summons the panel with the caret in the typed composer, and the ` +
-      `same press puts it away. A different chord can be recorded, or the default restored, in ${SHORTCUTS_PAGE}.`,
+      `same press puts it away. A different chord can be recorded, the default restored, or the shortcut removed, in ${SHORTCUTS_PAGE}.`,
   };
 }
 
@@ -499,22 +517,28 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "itself, and is never sent to a provider.",
     },
     talkKeyFact(input.hotkey),
-    askKeyFact(input.askKey),
+    askKeyFact(input.askKey, input.askKeyRemoved),
     { label: "Microphone access", detail: MICROPHONE_DETAIL[input.microphoneStatus] },
     ...(input.voiceAvailable
       ? [
           {
             label: "Stopping a reply",
             detail:
-              (input.stopKey
-                ? `${input.stopKey}, from any app, cuts the reply off and asks for nothing in ` +
-                  "its place; Escape does the same while Luke's panel has the keyboard."
-                : "Escape while Luke is speaking cuts the reply off and asks for nothing in " +
-                  "its place. No system-wide stop key is registered right now — another app " +
-                  "may own the shortcut.") +
+              // The removal outranks a reported chord: a broadcast can lag the
+              // deletion, and teaching the key that was just deleted is worse
+              // than the honest absence.
+              (input.stopKeyRemoved
+                ? "Escape while Luke is speaking cuts the reply off and asks for nothing in " +
+                  "its place. No system-wide stop key is registered — its shortcut was removed."
+                : input.stopKey
+                  ? `${input.stopKey}, from any app, cuts the reply off and asks for nothing in ` +
+                    "its place; Escape does the same while Luke's panel has the keyboard."
+                  : "Escape while Luke is speaking cuts the reply off and asks for nothing in " +
+                    "its place. No system-wide stop key is registered right now — another app " +
+                    "may own the shortcut.") +
               " The talk key over a reply interrupts too, but takes the turn with the same " +
-              `press. A different stop chord can be recorded, or the ` +
-              `default restored, in ${SHORTCUTS_PAGE}.`,
+              `press. A different stop chord can be recorded, the default restored, or the ` +
+              `shortcut removed, in ${SHORTCUTS_PAGE}.`,
           },
           {
             // A behavior rather than a setting: stated here so Luke neither

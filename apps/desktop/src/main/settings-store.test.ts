@@ -21,6 +21,7 @@ import {
   APP_SETTING_SCHEMA,
   isKeyedAppSettingField,
   settingEntryGuard,
+  VOICE_HOTKEY_NONE,
 } from "@sidecar/settings";
 import { PANEL_FORM_FACTOR } from "@sidecar/surface";
 import { type UnparsedWireValue, unparsedWire, type WireRecord } from "@sidecar/wire";
@@ -1300,6 +1301,25 @@ test("clearing the talk-key chord returns to no choice at all", async (t) => {
   // Absent from the file rather than stored as an empty value: reset is the
   // absence of a choice, and a reopened store must read it the same way.
   assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.voiceHotkey.field), undefined);
+});
+
+test("stores a deleted talk key as the none token and reads it back", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+
+  const { settings, reason } = await store.set(
+    APP_SETTING_SCHEMA.voiceHotkey.field,
+    VOICE_HOTKEY_NONE,
+  );
+
+  assert.equal(reason, undefined);
+  // A deletion is a choice, not an absence: unlike a reset it survives the
+  // file being reopened, or the key would come back on the next launch.
+  assert.equal(appSettingsView(settings).voiceHotkey, VOICE_HOTKEY_NONE);
+  assert.equal(
+    await storeIn(directory).get(APP_SETTING_SCHEMA.voiceHotkey.field),
+    VOICE_HOTKEY_NONE,
+  );
 });
 
 test("ignores a stored talk-key chord this build cannot register", async (t) => {

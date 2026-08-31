@@ -48,6 +48,7 @@ export {
   talkKeyRelease,
   VOICE_HOTKEY_CAPTURE,
   VOICE_HOTKEY_MODIFIER,
+  VOICE_HOTKEY_NONE,
   type VoiceHotkeyCaptureOutcome,
   type VoiceHotkeyCaptureResult,
   type VoiceHotkeyChord,

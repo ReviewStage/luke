@@ -122,7 +122,12 @@ export class HotkeyRegistrar {
     return this.#stop;
   }
 
-  /** The stored choice for a rank, absent while the defaults stand. */
+  /**
+   * The stored choice for a rank: a chord, the none token for a key deleted
+   * outright, or absent while the defaults stand. The token needs no reading
+   * here — it empties the rank's candidate list at the source, so registration
+   * finds nothing to try and reservation nothing to defend.
+   */
   setChosen(rank: HotkeyRank, chord: string | undefined): void {
     if (rank === HOTKEY_RANK.TALK) this.#chosenTalk = chord;
     else if (rank === HOTKEY_RANK.ASK) this.#chosenAsk = chord;
@@ -199,6 +204,10 @@ export class HotkeyRegistrar {
     // Taking a system-wide key for a feature that cannot run would make every
     // press somewhere else in macOS do nothing, visibly.
     if (!this.#hasCredentials(HOTKEY_RANK.TALK)) return;
+    // A deleted key has no candidates at all, so there is nothing to spawn a
+    // helper for: the honest answer is the absence the panel already shows.
+    const candidates = voiceHotkeyCandidates(this.#chosenTalk);
+    if (candidates.length === 0) return;
     // The helper first, because it is the only one of the two that reports the
     // key being let go of, and a key you hold is the whole point.
     this.#talkKeyWatcher = this.#createTalkKeyWatcher({
@@ -214,7 +223,7 @@ export class HotkeyRegistrar {
         this.#sendTalk();
       },
     });
-    if (this.#talkKeyWatcher.start(voiceHotkeyCandidates(this.#chosenTalk))) return;
+    if (this.#talkKeyWatcher.start(candidates)) return;
     this.#talkKeyWatcher = undefined;
     this.#registerToggle();
   }

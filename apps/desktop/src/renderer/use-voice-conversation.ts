@@ -874,7 +874,11 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       const working = current.sessions.find(
         (session) => session.status === SESSION_STATUS.WORKING && session.realtimeVoice !== true,
       );
-      const talkKey = voiceHotkeyNow()?.hotkey ?? current.bootstrapVoiceHotkey;
+      // A change wins whole, exactly as `voiceHotkeyToShow` reads the pair: a
+      // changed state with no chord is a key deleted or lost, and falling back
+      // to bootstrap would speak a chord that no longer answers.
+      const changedTalkKey = voiceHotkeyNow();
+      const talkKey = changedTalkKey ? changedTalkKey.hotkey : current.bootstrapVoiceHotkey;
       return {
         ...speech,
         ...(working ? { sessionTitle: working.title } : undefined),
