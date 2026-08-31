@@ -148,16 +148,10 @@ private struct VaultKeyEditor: View {
                         .foregroundStyle(Color(white: 1, opacity: 0.5))
                 }
 
-                Text(provider.keyHint)
+                Text(hintText)
                     .font(.caption)
                     .foregroundStyle(Color(white: 1, opacity: 0.5))
-
-                Link(destination: provider.keyPageURL) {
-                    Text("Open the \(provider.displayName) key page")
-                        .font(.caption.weight(.semibold))
-                        .underline()
-                        .foregroundStyle(Color(white: 1, opacity: 0.7))
-                }
+                    .tint(Color(white: 1, opacity: 0.85))
 
                 SecureField("", text: $key, prompt: promptText)
                     .textInputAutocapitalization(.never)
@@ -210,6 +204,18 @@ private struct VaultKeyEditor: View {
 
     private var credentialNoun: String {
         provider.keyFormat?.label ?? "API key"
+    }
+
+    /// The hint with its inline key-page link underlined, so the link reads
+    /// as one inside caption-grey copy rather than by colour alone.
+    private var hintText: AttributedString {
+        guard var text = try? AttributedString(markdown: provider.keyHint) else {
+            return AttributedString(provider.keyHint)
+        }
+        for run in text.runs where run.link != nil {
+            text[run.range].underlineStyle = .single
+        }
+        return text
     }
 
     private var promptText: Text {

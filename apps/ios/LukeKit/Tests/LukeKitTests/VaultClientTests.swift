@@ -40,6 +40,17 @@ final class VaultKeyPageTests: XCTestCase {
             XCTAssertNotNil(url.host, provider.rawValue)
         }
     }
+
+    /// The hint carries the page inline as its one markdown link, so the only
+    /// address the editor's copy can open is the fixed one.
+    func testEveryHintLinksItsOwnKeyPage() {
+        for provider in VaultProviderID.allCases {
+            XCTAssertTrue(
+                provider.keyHint.contains("](\(provider.keyPageURL.absoluteString))"),
+                provider.rawValue
+            )
+        }
+    }
 }
 
 // MARK: - Store

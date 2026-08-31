@@ -27,22 +27,24 @@ public enum VaultProviderID: String, CaseIterable, Identifiable, Sendable {
     }
 
     /// Where the user creates a key, shown in the editor — the same copy the
-    /// desktop's credential rows carry in `@sidecar/credentials`.
+    /// desktop's credential rows carry in `@sidecar/credentials`, as inline
+    /// markdown with `keyPageURL` linked on the phrase that names the page.
     public var keyHint: String {
         switch self {
         case .conductor:
-            "Create a key in Conductor under Settings · API keys."
+            "Create a key in Conductor under [Settings · API keys](\(keyPageURL))."
         case .copilot:
-            "Create a GitHub fine-grained personal access token with Agent tasks read access. "
-                + "Classic and installation tokens will not work."
+            "Create a GitHub [fine-grained personal access token](\(keyPageURL)) with "
+                + "Agent tasks read access. Classic and installation tokens will not work."
         case .cursor:
-            "Create a key in the Cursor dashboard under Integrations · API keys."
+            "Create a key in the Cursor dashboard under [Integrations · API keys](\(keyPageURL))."
         case .devin:
-            "Create one on the Devin API settings page, under PATs."
+            "Create one on the [Devin API settings page](\(keyPageURL)), under PATs."
         case .jules:
-            "Create a key in Jules under Settings · API key. It is shown only once."
+            "Create a key in Jules under [Settings · API key](\(keyPageURL)). "
+                + "It is shown only once."
         case .replicas:
-            "Create a key in the Replicas dashboard under Personal · API keys."
+            "Create a key in the Replicas dashboard under [Personal · API keys](\(keyPageURL))."
         }
     }
 
