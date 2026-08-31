@@ -26,7 +26,7 @@ test("the browser stage speaks the key popups' own language", () => {
   assert.match(markup, /key-slot-foot/);
   assert.match(markup, /type="password"/);
   assert.match(markup, /Paste it here/);
-  assert.match(markup, /Where to get one/);
+  assert.match(markup, /its sign-in page/);
   assert.match(markup, /Cancel/);
   assert.match(markup, /Connect</);
   assert.match(markup, /Superset sign-in code/);
@@ -64,7 +64,7 @@ test("the organization switch keeps the one-line dress and asks for no code", ()
   assert.match(markup, /Cancel/);
   assert.doesNotMatch(markup, /Sign-in code/);
   assert.doesNotMatch(markup, /Paste it here/);
-  assert.doesNotMatch(markup, /Where to get one/);
+  assert.doesNotMatch(markup, /its sign-in page/);
 });
 
 test("a bounded failure offers both another sign-in and close", () => {

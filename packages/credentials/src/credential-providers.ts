@@ -96,6 +96,26 @@ export interface CredentialFormat {
   rejection: string;
 }
 
+/**
+ * Where the user creates a key, said the same way for every provider: the
+ * lead, then the destination drawn as the link that opens the provider's key
+ * page, then a full stop and the caveat if there is one. Structured rather
+ * than one string so the link can sit on the destination itself instead of
+ * beside the sentence.
+ */
+export interface CredentialHint {
+  /** The sentence up to the linked words: "Create a key in Jules under". */
+  lead: string;
+  /**
+   * The linked words: the path to the key page, named the way the provider's
+   * own site names it, with ">" between the steps. Pressing them opens
+   * {@link CredentialProvider.apiKeysUrl}.
+   */
+  destination: string;
+  /** A sentence after the link, only where the page alone can still go wrong. */
+  caveat?: string;
+}
+
 export interface CredentialProvider {
   id: CredentialProviderId;
   displayName: string;
@@ -106,7 +126,7 @@ export interface CredentialProvider {
    * for a provider connected by consent: there is no editor to say it in, and
    * nothing for the user to go and fetch.
    */
-  hint?: string;
+  hint?: CredentialHint;
   /**
    * The page that issues this provider's keys. It is opened by provider id
    * rather than by a URL the renderer supplies, so the only addresses Luke can
@@ -134,7 +154,7 @@ export const CREDENTIAL_PROVIDERS: CredentialProviderRegistry = {
     id: CREDENTIAL_PROVIDER_ID.CONDUCTOR,
     connection: CREDENTIAL_CONNECTION.KEY,
     displayName: PROVIDER_IDENTITY_BY_ID[PROVIDER_ID.CONDUCTOR].displayName,
-    hint: "Create a key in Conductor under Settings · API keys.",
+    hint: { lead: "Create a key in Conductor under", destination: "Settings > API keys" },
     apiKeysUrl: "https://app.conductor.build/users/api-keys",
     environmentVariables: [CONDUCTOR_ENVIRONMENT.API_KEY, CONDUCTOR_ENVIRONMENT.API_TOKEN],
   },
@@ -146,7 +166,11 @@ export const CREDENTIAL_PROVIDERS: CredentialProviderRegistry = {
     // the kind to create because the wrong kinds also come from GitHub: a
     // classic PAT cannot carry the Agent tasks permission, and an installation
     // token is refused by the endpoint itself.
-    hint: "Create a GitHub fine-grained personal access token with Agent tasks read access. Classic and installation tokens will not work.",
+    hint: {
+      lead: "Create a fine-grained personal access token on GitHub under",
+      destination: "Settings > Personal access tokens",
+      caveat: "Give it Agent tasks read access; classic and installation tokens will not work.",
+    },
     apiKeysUrl: "https://github.com/settings/personal-access-tokens/new",
     environmentVariables: [COPILOT_ENVIRONMENT.API_KEY],
     // No key format: Luke accepts two kinds GitHub issues — fine-grained
@@ -157,7 +181,10 @@ export const CREDENTIAL_PROVIDERS: CredentialProviderRegistry = {
     id: CREDENTIAL_PROVIDER_ID.CURSOR,
     connection: CREDENTIAL_CONNECTION.KEY,
     displayName: PROVIDER_IDENTITY_BY_ID[PROVIDER_ID.CURSOR].displayName,
-    hint: "Create a key in the Cursor dashboard under Integrations · API keys.",
+    hint: {
+      lead: "Create a key in Cursor under",
+      destination: "Dashboard > Integrations > API keys",
+    },
     apiKeysUrl: "https://cursor.com/dashboard/api",
     environmentVariables: [CURSOR_ENVIRONMENT.API_KEY],
   },
@@ -165,8 +192,11 @@ export const CREDENTIAL_PROVIDERS: CredentialProviderRegistry = {
     id: CREDENTIAL_PROVIDER_ID.DEVIN,
     connection: CREDENTIAL_CONNECTION.KEY,
     displayName: PROVIDER_IDENTITY_BY_ID[PROVIDER_ID.DEVIN].displayName,
-    hint: "Create one on the Devin API settings page, under PATs.",
-    // Not the Settings · API keys page, which issues the deprecated `apk_`
+    hint: {
+      lead: "Create a personal access token in Devin under",
+      destination: "Settings > Devin's API > PATs",
+    },
+    // Not the Settings > API keys page, which issues the deprecated `apk_`
     // keys Luke refuses. Personal access tokens live on their own tab.
     apiKeysUrl: "https://app.devin.ai/settings/devin-api?tab=pats",
     environmentVariables: [DEVIN_ENVIRONMENT.API_KEY],
@@ -190,7 +220,11 @@ export const CREDENTIAL_PROVIDERS: CredentialProviderRegistry = {
     connection: CREDENTIAL_CONNECTION.KEY,
     displayName: PROVIDER_IDENTITY_BY_ID[PROVIDER_ID.JULES].displayName,
     // Jules shows a key once, on creation, and allows at most three at a time.
-    hint: "Create a key in Jules under Settings · API key. It is shown only once.",
+    hint: {
+      lead: "Create a key in Jules under",
+      destination: "Settings > API key",
+      caveat: "It is shown only once.",
+    },
     apiKeysUrl: "https://jules.google.com/settings",
     environmentVariables: [JULES_ENVIRONMENT.API_KEY],
   },
@@ -221,7 +255,11 @@ export const CREDENTIAL_PROVIDERS: CredentialProviderRegistry = {
     // Realtime is what a spoken turn runs on, and an account that cannot reach
     // it fails at the first word rather than at the paste — so the line says so
     // before the key is entered rather than after.
-    hint: "Create a key on the OpenAI platform under API keys. Talking uses the Realtime API, which needs billing enabled.",
+    hint: {
+      lead: "Create a key on the OpenAI platform under",
+      destination: "API keys",
+      caveat: "Talking uses the Realtime API, which needs billing enabled.",
+    },
     apiKeysUrl: "https://platform.openai.com/api-keys",
     // Deliberately no environment fallback, alone among the providers: an
     // `OPENAI_API_KEY` exported for some other tool would silently start
@@ -239,7 +277,10 @@ export const CREDENTIAL_PROVIDERS: CredentialProviderRegistry = {
     displayName: PROVIDER_IDENTITY_BY_ID[PROVIDER_ID.REPLICAS].displayName,
     // Replicas issues organization keys and personal keys, and its API takes
     // either; the personal page is the one every member can reach.
-    hint: "Create a key in the Replicas dashboard under Personal · API keys.",
+    hint: {
+      lead: "Create a key in Replicas under",
+      destination: "Dashboard > Personal > API keys",
+    },
     apiKeysUrl: "https://replicas.dev/dashboard/account/api-keys",
     environmentVariables: [REPLICAS_ENVIRONMENT.API_KEY],
     // No key format: Replicas publishes none, so a prefix could only refuse a

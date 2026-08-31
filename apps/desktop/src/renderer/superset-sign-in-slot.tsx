@@ -106,19 +106,21 @@ export function SupersetSignInSlot({
             </div>
             <div className="settings-row key-slot-foot">
               <small className="settings-note">
-                Superset shows a one-time code at the end of its sign-in page.{" "}
+                Superset shows a one-time code at the end of{" "}
                 {/* A button, not an anchor, like the key slot's own: the main
                     process reopens the page the waiting flow built, and no
-                    address crosses from here. */}
+                    address crosses from here. The link sits on the
+                    destination itself, exactly as a key hint's does. */}
                 <button
                   type="button"
                   className="link-button"
                   disabled={exchanging}
                   onClick={onReopen}
                 >
-                  Where to get one
+                  its sign-in page
                   <ExternalIcon />
                 </button>
+                .
               </small>
               <span className="settings-actions">
                 <button type="button" className="quiet-button" onClick={onCancel}>

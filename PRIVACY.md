@@ -46,7 +46,7 @@ running. One that never reaches a sign-in belongs to nobody, so deleting your
 account does not reach it — we have no way to tell it was yours.
 
 **Provider API keys (server-side vault).** While the "Sync provider keys"
-switch in Settings · Connections is on — it starts on — the provider API keys
+switch in Settings > Connections is on — it starts on — the provider API keys
 you entered into Luke on this Mac are kept synced to Luke's hosted service,
 for your other Luke devices: a key saved while signed in syncs in the same
 press, and Luke re-syncs the stored keys when he starts signed in, when you
