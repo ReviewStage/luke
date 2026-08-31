@@ -101,6 +101,7 @@ import {
   removalStage,
   removalWithdrawable,
 } from "./credential-removal";
+import { DestinationNote } from "./destination-note";
 import type { FeedbackEntryControl } from "./feedback-entry";
 import { FeedbackSection } from "./feedback-panel";
 import { Keycaps } from "./keycaps";
@@ -717,28 +718,13 @@ function ProviderCredential({
             />
           </label>
           <div className="settings-row">
-            <small className="settings-note">
-              {provider.hint ? (
-                <>
-                  {provider.hint.lead}{" "}
-                  {/* A button, not an anchor: the renderer has no browser to
-                      navigate, and the main process opens the page by provider
-                      rather than by an address the panel supplies. The link
-                      sits on the destination itself, so the sentence names
-                      the page and opens it with the same words. */}
-                  <button
-                    type="button"
-                    className="link-button"
-                    disabled={busy}
-                    onClick={() => control.fetchKey()}
-                  >
-                    {provider.hint.destination}
-                    <ExternalIcon />
-                  </button>
-                  .{provider.hint.caveat ? ` ${provider.hint.caveat}` : null}
-                </>
-              ) : null}
-            </small>
+            {provider.hint ? (
+              <DestinationNote
+                {...provider.hint}
+                disabled={busy}
+                onOpen={() => control.fetchKey()}
+              />
+            ) : null}
             <span className="settings-actions">
               <button
                 type="button"

@@ -32,19 +32,21 @@ public enum VaultProviderID: String, CaseIterable, Identifiable, Sendable {
     public var keyHint: String {
         switch self {
         case .conductor:
-            "Create a key in Conductor under [Settings · API keys](\(keyPageURL))."
+            "Create a key in Conductor under [Settings > API keys](\(keyPageURL))."
         case .copilot:
-            "Create a GitHub [fine-grained personal access token](\(keyPageURL)) with "
-                + "Agent tasks read access. Classic and installation tokens will not work."
+            "Create a fine-grained personal access token on GitHub under "
+                + "[Settings > Personal access tokens](\(keyPageURL)). Give it Agent tasks "
+                + "read access; classic and installation tokens will not work."
         case .cursor:
-            "Create a key in the Cursor dashboard under [Integrations · API keys](\(keyPageURL))."
+            "Create a key in Cursor under [Dashboard > API Keys](\(keyPageURL))."
         case .devin:
-            "Create one on the [Devin API settings page](\(keyPageURL)), under PATs."
+            "Create a personal access token in Devin under "
+                + "[Settings > Devin API > PATs](\(keyPageURL))."
         case .jules:
-            "Create a key in Jules under [Settings · API key](\(keyPageURL)). "
+            "Create a key in Jules under [Settings > API key](\(keyPageURL)). "
                 + "It is shown only once."
         case .replicas:
-            "Create a key in the Replicas dashboard under [Personal · API keys](\(keyPageURL))."
+            "Create a key in Replicas under [Dashboard > API Keys](\(keyPageURL))."
         }
     }
 
@@ -59,7 +61,7 @@ public enum VaultProviderID: String, CaseIterable, Identifiable, Sendable {
         case .copilot: "https://github.com/settings/personal-access-tokens/new"
         case .cursor: "https://cursor.com/dashboard/api"
         case .devin: "https://app.devin.ai/settings/devin-api?tab=pats"
-        case .jules: "https://jules.google.com/settings"
+        case .jules: "https://jules.google.com/settings/api"
         case .replicas: "https://replicas.dev/dashboard/account/api-keys"
         }
         // swiftlint:disable:next force_unwrapping

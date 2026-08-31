@@ -181,10 +181,7 @@ export const CREDENTIAL_PROVIDERS: CredentialProviderRegistry = {
     id: CREDENTIAL_PROVIDER_ID.CURSOR,
     connection: CREDENTIAL_CONNECTION.KEY,
     displayName: PROVIDER_IDENTITY_BY_ID[PROVIDER_ID.CURSOR].displayName,
-    hint: {
-      lead: "Create a key in Cursor under",
-      destination: "Dashboard > Integrations > API keys",
-    },
+    hint: { lead: "Create a key in Cursor under", destination: "Dashboard > API Keys" },
     apiKeysUrl: "https://cursor.com/dashboard/api",
     environmentVariables: [CURSOR_ENVIRONMENT.API_KEY],
   },
@@ -194,7 +191,7 @@ export const CREDENTIAL_PROVIDERS: CredentialProviderRegistry = {
     displayName: PROVIDER_IDENTITY_BY_ID[PROVIDER_ID.DEVIN].displayName,
     hint: {
       lead: "Create a personal access token in Devin under",
-      destination: "Settings > Devin's API > PATs",
+      destination: "Settings > Devin API > PATs",
     },
     // Not the Settings > API keys page, which issues the deprecated `apk_`
     // keys Luke refuses. Personal access tokens live on their own tab.
@@ -225,7 +222,7 @@ export const CREDENTIAL_PROVIDERS: CredentialProviderRegistry = {
       destination: "Settings > API key",
       caveat: "It is shown only once.",
     },
-    apiKeysUrl: "https://jules.google.com/settings",
+    apiKeysUrl: "https://jules.google.com/settings/api",
     environmentVariables: [JULES_ENVIRONMENT.API_KEY],
   },
   [CREDENTIAL_PROVIDER_ID.LINEAR]: {
@@ -277,10 +274,7 @@ export const CREDENTIAL_PROVIDERS: CredentialProviderRegistry = {
     displayName: PROVIDER_IDENTITY_BY_ID[PROVIDER_ID.REPLICAS].displayName,
     // Replicas issues organization keys and personal keys, and its API takes
     // either; the personal page is the one every member can reach.
-    hint: {
-      lead: "Create a key in Replicas under",
-      destination: "Dashboard > Personal > API keys",
-    },
+    hint: { lead: "Create a key in Replicas under", destination: "Dashboard > API Keys" },
     apiKeysUrl: "https://replicas.dev/dashboard/account/api-keys",
     environmentVariables: [REPLICAS_ENVIRONMENT.API_KEY],
     // No key format: Replicas publishes none, so a prefix could only refuse a
