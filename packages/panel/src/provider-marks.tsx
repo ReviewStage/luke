@@ -574,15 +574,29 @@ function ChatGptMark({ className }: MarkProps): React.JSX.Element {
 }
 
 function OmpMark({ className }: MarkProps): React.JSX.Element {
+  // omp.sh fills its pi with a diagonal gradient rather than a flat colour,
+  // so it needs its own paint server, in the site's published stops. The box
+  // crops the favicon's 64 canvas to a square the glyph fills top to bottom,
+  // centred as published; the path itself is untouched. `useId` keeps the
+  // reference unique when several rows render the mark at once.
+  const gradientId = `omp-mark-${useId()}`;
+
   return (
     <svg
       className={className}
       data-mark={PROVIDER_ID.OMP}
-      viewBox="0 0 24 24"
+      viewBox="12 16 40 40"
       aria-hidden="true"
       focusable="false"
     >
-      <path fill="currentColor" fillRule="evenodd" d={OMP_PATH} />
+      <defs>
+        <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="1">
+          <stop stopColor="var(--mark-omp-top, #ed4abf)" />
+          <stop offset="0.5" stopColor="var(--mark-omp-middle, #9b4dff)" />
+          <stop offset="1" stopColor="var(--mark-omp-bottom, #5ad8e6)" />
+        </linearGradient>
+      </defs>
+      <path fill={`url(#${gradientId})`} d={OMP_PATH} />
     </svg>
   );
 }

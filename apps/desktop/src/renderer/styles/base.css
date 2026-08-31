@@ -47,6 +47,9 @@
   --mark-pi: #ffffff;
   --mark-jules: #715cd7;
   --mark-linear: #5e6ad2;
+  --mark-omp-top: #ed4abf;
+  --mark-omp-middle: #9b4dff;
+  --mark-omp-bottom: #5ad8e6;
   --mark-opencode: #ffffff;
   --mark-opencode-block: #5a5858;
   --mark-orca: #ffffff;
@@ -974,6 +977,14 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
    it takes the same scale they do. */
 .provider-mark[data-mark="linear"] {
   color: var(--mark-linear);
+  transform: scale(0.94);
+}
+
+/* OMP's pi fills its cropped box top to bottom the way the Codex and Cursor
+   marks do, so it takes the same scale they do. It carries omp.sh's own
+   published gradient through the mark's paint server, so no colour is set
+   here. */
+.provider-mark[data-mark="omp"] {
   transform: scale(0.94);
 }
 

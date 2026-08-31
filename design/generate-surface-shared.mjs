@@ -158,10 +158,13 @@ const MARK_PATHS = {
    */
   PI: "M165.29 165.29H517.36V400H400V517.36H282.65V634.72H165.29ZM282.65 282.65V400H400V282.65ZM517.36 400H634.72V634.72H517.36Z",
   /*
-   * Letter O with a crossbar, so the row is not the Replicas-hosted Pi mark.
-   * 24-unit canvas, even-odd ring plus bar.
+   * OMP's own site mark, verbatim from the favicon.svg omp.sh serves: a pi
+   * whose right leg runs long, on a 64-unit canvas, filled with the site's
+   * pink-to-cyan diagonal gradient — the component carries the paint server,
+   * and the dark tile behind it stays the row's own ground. Its cut keeps it
+   * apart from the pixel pi the Replicas-hosted Pi mark draws.
    */
-  OMP: "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 3.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM7 10h10v2.5H7z",
+  OMP: "M14 16h36v8H40v32h-8V24h-6v22h-8V24h-4z",
   OPENCODE_FRAME: "M384 416H128V96H384V416ZM320 160H192V352H320V160Z",
   OPENCODE_BLOCK: "M320 224V352H192V224H320Z",
   /*
