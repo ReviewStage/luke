@@ -18,7 +18,7 @@ import Observation
 @MainActor
 @Observable
 public final class ProductEventSender {
-    enum Defaults {
+    private enum Defaults {
         static let requestTimeout: TimeInterval = 10
         /// A minute between flushes, the desktop's own cadence: long enough
         /// that a launch, a sign-in, and a first observation ride one request
@@ -70,8 +70,8 @@ public final class ProductEventSender {
         session: any AccountTokenProviding,
         http: HTTPClient = URLSession.shared,
         now: @escaping () -> Date = Date.init,
-        flushInterval: TimeInterval = Defaults.flushInterval,
-        queueLimit: Int = Defaults.queueLimit
+        flushInterval: TimeInterval? = nil,
+        queueLimit: Int? = nil
     ) {
         endpoint = serviceURL.appendingPathComponent("api/events")
         self.appVersion = appVersion
@@ -79,8 +79,8 @@ public final class ProductEventSender {
         self.session = session
         self.http = http
         self.now = now
-        self.flushInterval = flushInterval
-        self.queueLimit = queueLimit
+        self.flushInterval = flushInterval ?? Defaults.flushInterval
+        self.queueLimit = queueLimit ?? Defaults.queueLimit
     }
 
     /// Queues one event. Synchronous and never throws, so an emit site can
