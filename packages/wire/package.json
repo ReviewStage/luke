@@ -5,12 +5,16 @@
   "type": "module",
   "exports": {
     ".": "./src/index.js",
+    "./schema": "./src/schema.js",
     "./testing": "./src/testing/index.js"
   },
   "types": "./src/index.ts",
   "scripts": {
     "test": "tsx --test 'src/**/*.test.ts'",
     "typecheck": "tsc --project tsconfig.json"
+  },
+  "dependencies": {
+    "effect": "catalog:"
   },
   "devDependencies": {
     "@types/node": "26.2.0",

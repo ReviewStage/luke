@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.js"
+    ".": "./src/index.js",
+    "./schema": "./src/schema.js"
   },
   "types": "./src/index.ts",
   "scripts": {
@@ -17,6 +18,7 @@
     "typescript": "7.0.2"
   },
   "dependencies": {
+    "effect": "catalog:",
     "@sidecar/analytics": "workspace:*",
     "@sidecar/credentials": "workspace:*",
     "@sidecar/guide": "workspace:*",

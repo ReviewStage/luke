@@ -37,6 +37,7 @@
     "@tailwindcss/vite": "4.3.3",
     "better-auth": "1.6.29",
     "drizzle-orm": "0.45.2",
+    "effect": "catalog:",
     "marked": "18.0.9",
     "pg": "8.23.0",
     "posthog-js": "1.418.3",

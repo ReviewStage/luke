@@ -44,6 +44,7 @@ import {
   type PanelFormFactor,
 } from "@sidecar/surface";
 import { isRecord, isWireString, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
+import { settingSchemaFromGuard } from "./setting-schema.js";
 import { parseVoiceHotkey, VOICE_HOTKEY_NONE } from "./voice-hotkey.js";
 
 // The ids themselves live in core, because the product-event vocabulary names
@@ -335,6 +336,7 @@ export const APP_SETTING_SCHEMA = {
     field: "openAtLogin",
     default: true,
     guard: boolean(true),
+    schema: settingSchemaFromGuard(boolean(true)),
     settingsPage: SETTINGS_PAGE.APPEARANCE,
     resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
     guideEntry: settingGuideEntry(
@@ -359,6 +361,7 @@ export const APP_SETTING_SCHEMA = {
     field: "showInDock",
     default: false,
     guard: boolean(false),
+    schema: settingSchemaFromGuard(boolean(false)),
     settingsPage: SETTINGS_PAGE.APPEARANCE,
     resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
     guideEntry: settingGuideEntry(
@@ -383,6 +386,7 @@ export const APP_SETTING_SCHEMA = {
     field: "voice",
     default: REALTIME_DEFAULTS.VOICE,
     guard: (value: UnparsedWireValue) => optional(value, isRealtimeVoice),
+    schema: settingSchemaFromGuard((value: UnparsedWireValue) => optional(value, isRealtimeVoice)),
     settingsPage: SETTINGS_PAGE.VOICE,
     resetScope: SETTINGS_RESET_SCOPE.VOICE,
     guideEntry: settingGuideEntry("voice", [APP_SETTING_ID.VOICE], (settings, defaultValue) => ({
@@ -405,6 +409,9 @@ export const APP_SETTING_SCHEMA = {
     field: "voiceSpeed",
     default: REALTIME_DEFAULTS.SPEED,
     guard: (value: UnparsedWireValue) => optional(value, isRealtimeVoiceSpeed),
+    schema: settingSchemaFromGuard((value: UnparsedWireValue) =>
+      optional(value, isRealtimeVoiceSpeed),
+    ),
     settingsPage: SETTINGS_PAGE.VOICE,
     resetScope: SETTINGS_RESET_SCOPE.VOICE,
     guideEntry: settingGuideEntry(
@@ -436,6 +443,7 @@ export const APP_SETTING_SCHEMA = {
     field: "voiceCaptions",
     default: false,
     guard: boolean(false),
+    schema: settingSchemaFromGuard(boolean(false)),
     settingsPage: SETTINGS_PAGE.VOICE,
     resetScope: SETTINGS_RESET_SCOPE.VOICE,
     guideEntry: settingGuideEntry(
@@ -463,6 +471,7 @@ export const APP_SETTING_SCHEMA = {
     field: "voiceHotkey",
     default: undefined,
     guard: hotkey,
+    schema: settingSchemaFromGuard(hotkey),
     settingsPage: SETTINGS_PAGE.SHORTCUTS,
     resetScope: SETTINGS_RESET_SCOPE.SHORTCUTS,
     // The talk-key fact reports the registered chord and its manual path, so
@@ -476,6 +485,7 @@ export const APP_SETTING_SCHEMA = {
     field: "askHotkey",
     default: undefined,
     guard: hotkey,
+    schema: settingSchemaFromGuard(hotkey),
     settingsPage: SETTINGS_PAGE.SHORTCUTS,
     resetScope: SETTINGS_RESET_SCOPE.SHORTCUTS,
     // The ask-key fact reports the registered chord and its manual path, so
@@ -489,6 +499,7 @@ export const APP_SETTING_SCHEMA = {
     field: "stopHotkey",
     default: undefined,
     guard: hotkey,
+    schema: settingSchemaFromGuard(hotkey),
     settingsPage: SETTINGS_PAGE.SHORTCUTS,
     resetScope: SETTINGS_RESET_SCOPE.SHORTCUTS,
     // The stop-key fact reports the registered chord and its manual path, so
@@ -502,6 +513,7 @@ export const APP_SETTING_SCHEMA = {
     field: "duckOtherMedia",
     default: true,
     guard: boolean(true),
+    schema: settingSchemaFromGuard(boolean(true)),
     settingsPage: SETTINGS_PAGE.VOICE,
     resetScope: SETTINGS_RESET_SCOPE.VOICE,
     guideEntry: settingGuideEntry(
@@ -527,6 +539,7 @@ export const APP_SETTING_SCHEMA = {
     field: "voiceSource",
     default: undefined,
     guard: (value: UnparsedWireValue) => optional(value, isVoiceSource),
+    schema: settingSchemaFromGuard((value: UnparsedWireValue) => optional(value, isVoiceSource)),
     settingsPage: SETTINGS_PAGE.ROOT,
     guideEntry: settingGuideEntry("voiceSource", [APP_SETTING_ID.VOICE_SOURCE], (settings) => ({
       id: APP_SETTING_ID.VOICE_SOURCE,
@@ -549,6 +562,7 @@ export const APP_SETTING_SCHEMA = {
     field: "preferBuiltInMicrophone",
     default: true,
     guard: boolean(true),
+    schema: settingSchemaFromGuard(boolean(true)),
     settingsPage: SETTINGS_PAGE.VOICE,
     resetScope: SETTINGS_RESET_SCOPE.VOICE,
     guideEntry: settingGuideEntry(
@@ -576,6 +590,7 @@ export const APP_SETTING_SCHEMA = {
     field: "quietDuringMeetings",
     default: true,
     guard: boolean(true),
+    schema: settingSchemaFromGuard(boolean(true)),
     settingsPage: SETTINGS_PAGE.CONNECTIONS,
     guideEntry: settingGuideEntry(
       "quietDuringMeetings",
@@ -600,6 +615,7 @@ export const APP_SETTING_SCHEMA = {
     field: "syncProviderKeys",
     default: true,
     guard: boolean(true),
+    schema: settingSchemaFromGuard(boolean(true)),
     settingsPage: SETTINGS_PAGE.CONNECTIONS,
     guideEntry: settingGuideEntry(
       "syncProviderKeys",
@@ -627,6 +643,7 @@ export const APP_SETTING_SCHEMA = {
     field: "showOnAllDisplays",
     default: false,
     guard: boolean(false),
+    schema: settingSchemaFromGuard(boolean(false)),
     settingsPage: SETTINGS_PAGE.APPEARANCE,
     resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
     guideEntry: settingGuideEntry(
@@ -652,6 +669,9 @@ export const APP_SETTING_SCHEMA = {
     field: "formFactor",
     default: DEFAULT_PANEL_FORM_FACTOR,
     guard: (value: UnparsedWireValue) => optional(value, isPanelFormFactor),
+    schema: settingSchemaFromGuard((value: UnparsedWireValue) =>
+      optional(value, isPanelFormFactor),
+    ),
     settingsPage: SETTINGS_PAGE.APPEARANCE,
     resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
     guideEntry: settingGuideEntry(
@@ -678,6 +698,7 @@ export const APP_SETTING_SCHEMA = {
     field: "sessionFilters",
     default: undefined,
     guard: sessionFilters,
+    schema: settingSchemaFromGuard(sessionFilters),
     // The selection backs no settings row — it is the session list's own view
     // state, stored so the chips survive the panel closing and the app
     // restarting. With no guide ids the page below is inert; the root page is
@@ -693,6 +714,7 @@ export const APP_SETTING_SCHEMA = {
     field: "sessionSearchQuery",
     default: undefined,
     guard: sessionSearchQuery,
+    schema: settingSchemaFromGuard(sessionSearchQuery),
     // The query backs no settings row, on the filter selection's own terms: it
     // is the session list's view state, stored so a held search survives the
     // panel closing and the app restarting. With no guide ids the page below
@@ -714,6 +736,13 @@ export const APP_SETTING_SCHEMA = {
         (candidate): candidate is WorkspaceProviderId =>
           isWireString(candidate) && isWorkspaceProviderId(candidate),
       ),
+    schema: settingSchemaFromGuard((value: UnparsedWireValue) =>
+      optional(
+        value,
+        (candidate): candidate is WorkspaceProviderId =>
+          isWireString(candidate) && isWorkspaceProviderId(candidate),
+      ),
+    ),
     settingsPage: SETTINGS_PAGE.CONNECTIONS,
     resetScope: SETTINGS_RESET_SCOPE.WORKSPACES,
     guideEntry: settingGuideEntry(
@@ -754,6 +783,7 @@ export const APP_SETTING_SCHEMA = {
     field: "workspaceAgentDefaults",
     default: undefined,
     guard: workspaceAgentDefaults,
+    schema: settingSchemaFromGuard(workspaceAgentDefaults),
     entry: {
       // Local Conductor is deliberately not a key: its creation link
       // documents no agent choice, so no entry could ever steer one.
@@ -857,6 +887,7 @@ export const APP_SETTING_SCHEMA = {
     field: "workspaceProjectDefaults",
     default: undefined,
     guard: workspaceProjectDefaults,
+    schema: settingSchemaFromGuard(workspaceProjectDefaults),
     entry: {
       isKey: (value: UnparsedWireValue): value is WorkspaceProviderId =>
         isWireString(value) && isWorkspaceProviderId(value),

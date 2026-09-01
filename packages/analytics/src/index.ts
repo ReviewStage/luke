@@ -1,6 +1,5 @@
 export {
   isProductExchangeKind,
-  isProductSurfaceEventName,
   PRODUCT_ACCOUNT_ACT,
   PRODUCT_ASK_OUTCOME,
   PRODUCT_CALENDAR_SOURCE,
@@ -52,12 +51,18 @@ export {
   type ProductSupersetAct,
   type ProductSurfaceEventName,
   type ProductUpdateAct,
-  productEventBatchFromWire,
-  productEventFromWire,
   productSessionCountBucket,
   productSignInAge,
   type RecordProductEvent,
 } from "./product-events.js";
+export {
+  isProductSurfaceEventName,
+  ProductEventBatchSchema,
+  ProductEventSchema,
+  ProductSurfaceEventNameSchema,
+  productEventBatchFromWire,
+  productEventFromWire,
+} from "./product-events-schema.js";
 export {
   ProductEventSender,
   type ProductEventSenderOptions,

@@ -8,13 +8,7 @@ import {
   SESSION_STATUS,
   type SessionStatus,
 } from "@sidecar/session";
-import {
-  isRecord,
-  isWireNumber,
-  isWireString,
-  parseReleaseVersion,
-  type UnparsedWireValue,
-} from "@sidecar/wire";
+import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
 
 /**
  * What the desktop may count about its own use, and the one reader both sides
@@ -86,17 +80,6 @@ export const PRODUCT_SURFACE_EVENT = {
 
 export type ProductSurfaceEventName =
   (typeof PRODUCT_SURFACE_EVENT)[keyof typeof PRODUCT_SURFACE_EVENT];
-
-const PRODUCT_SURFACE_EVENT_NAMES: ReadonlySet<string> = new Set(
-  Object.values(PRODUCT_SURFACE_EVENT),
-);
-
-/** Guards a name arriving from the renderer's own surface-event channel. */
-export function isProductSurfaceEventName(
-  value: UnparsedWireValue,
-): value is ProductSurfaceEventName {
-  return isWireString(value) && PRODUCT_SURFACE_EVENT_NAMES.has(value);
-}
 
 export const PRODUCT_EVENT_PROPERTY = {
   APP_VERSION: "app_version",
@@ -451,11 +434,6 @@ interface ProductEventPropertyValue {
   [PRODUCT_EVENT_PROPERTY.SETTING_VALUE]: ProductSettingValue;
 }
 
-/**
- * The properties no set can enumerate. Each gets a named reader instead, and
- * all are narrower than free text by construction: a version parses as `x.y.z`
- * or not at all, and a count must be a rung of the ladder above.
- */
 export type EnumeratedProductEventProperty = Exclude<
   ProductEventProperty,
   | typeof PRODUCT_EVENT_PROPERTY.APP_VERSION
@@ -572,161 +550,6 @@ export type ProductEventBatch = readonly ProductEvent[];
  * rather than a busy day, so the endpoint refuses the batch whole.
  */
 export const PRODUCT_EVENT_BATCH_LIMIT = 50;
-
-type PropertyReader = {
-  [Property in ProductEventProperty]: (
-    value: UnparsedWireValue,
-  ) => ProductEventPropertyValue[Property] | undefined;
-};
-
-function memberReader<Value extends string>(
-  values: readonly string[],
-): (value: UnparsedWireValue) => Value | undefined {
-  const members: ReadonlySet<string> = new Set(values);
-  return (value: UnparsedWireValue) => {
-    if (!isWireString(value) || !members.has(value)) return undefined;
-    // SAFETY: the value is a member of this property's own declared set.
-    return value as Value;
-  };
-}
-
-const COUNT_BUCKETS: ReadonlySet<number> = new Set(Object.values(PRODUCT_SESSION_COUNT_BUCKET));
-
-function bucketReader(value: UnparsedWireValue): ProductSessionCountBucket | undefined {
-  if (!isWireNumber(value) || !COUNT_BUCKETS.has(value)) return undefined;
-  // SAFETY: the value is a member of the bucket ladder declared above.
-  return value as ProductSessionCountBucket;
-}
-
-/**
- * How each property's value is read. The unenumerable ones are named here,
- * which is what makes "no free text" a property of the type rather than a
- * promise about call sites: a version that is not `x.y.z` and a count that is
- * not a rung are both discarded.
- */
-const PRODUCT_EVENT_PROPERTY_READER: PropertyReader = {
-  [PRODUCT_EVENT_PROPERTY.APP_VERSION]: (value) =>
-    isWireString(value) && parseReleaseVersion(value) ? value.trim() : undefined,
-  [PRODUCT_EVENT_PROPERTY.SESSION_COUNT]: bucketReader,
-  [PRODUCT_EVENT_PROPERTY.IMAGE_COUNT]: bucketReader,
-  [PRODUCT_EVENT_PROPERTY.CONNECTION_ID]: memberReader(
-    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.CONNECTION_ID],
-  ),
-  [PRODUCT_EVENT_PROPERTY.PROVIDER_ID]: memberReader(
-    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.PROVIDER_ID],
-  ),
-  [PRODUCT_EVENT_PROPERTY.TRACKER_ID]: memberReader(
-    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.TRACKER_ID],
-  ),
-  [PRODUCT_EVENT_PROPERTY.CALENDAR_SOURCE]: memberReader(
-    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.CALENDAR_SOURCE],
-  ),
-  [PRODUCT_EVENT_PROPERTY.SESSION_STATUS]: memberReader(
-    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.SESSION_STATUS],
-  ),
-  [PRODUCT_EVENT_PROPERTY.CREDENTIAL_SOURCE]: memberReader(
-    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.CREDENTIAL_SOURCE],
-  ),
-  [PRODUCT_EVENT_PROPERTY.SESSION_ACT]: memberReader(
-    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.SESSION_ACT],
-  ),
-  [PRODUCT_EVENT_PROPERTY.DIAGNOSTIC_KIND]: memberReader(
-    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.DIAGNOSTIC_KIND],
-  ),
-  [PRODUCT_EVENT_PROPERTY.ISSUE_ACT]: memberReader(
-    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.ISSUE_ACT],
-  ),
-  [PRODUCT_EVENT_PROPERTY.ACCOUNT_ACT]: memberReader(
-    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.ACCOUNT_ACT],
-  ),
-  [PRODUCT_EVENT_PROPERTY.SUPERSET_ACT]: memberReader(
-    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.SUPERSET_ACT],
-  ),
-  [PRODUCT_EVENT_PROPERTY.UPDATE_ACT]: memberReader(
-    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.UPDATE_ACT],
-  ),
-  [PRODUCT_EVENT_PROPERTY.PANEL_TAB]: memberReader(
-    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.PANEL_TAB],
-  ),
-  [PRODUCT_EVENT_PROPERTY.PANEL_SOURCE]: memberReader(
-    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.PANEL_SOURCE],
-  ),
-  [PRODUCT_EVENT_PROPERTY.SETTINGS_VIEW]: memberReader(
-    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.SETTINGS_VIEW],
-  ),
-  [PRODUCT_EVENT_PROPERTY.SEARCH_SURFACE]: memberReader(
-    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.SEARCH_SURFACE],
-  ),
-  [PRODUCT_EVENT_PROPERTY.ASK_OUTCOME]: memberReader(
-    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.ASK_OUTCOME],
-  ),
-  [PRODUCT_EVENT_PROPERTY.EXCHANGE_KIND]: memberReader(
-    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.EXCHANGE_KIND],
-  ),
-  [PRODUCT_EVENT_PROPERTY.PERMISSION_RESULT]: memberReader(
-    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.PERMISSION_RESULT],
-  ),
-  [PRODUCT_EVENT_PROPERTY.SIGN_IN_AGE]: memberReader(
-    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.SIGN_IN_AGE],
-  ),
-  [PRODUCT_EVENT_PROPERTY.SETTING_ID]: memberReader(
-    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.SETTING_ID],
-  ),
-  [PRODUCT_EVENT_PROPERTY.SETTING_VALUE]: memberReader(
-    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.SETTING_VALUE],
-  ),
-};
-
-const PRODUCT_EVENT_NAMES: ReadonlySet<string> = new Set(Object.values(PRODUCT_EVENT));
-
-function isProductEventName(value: UnparsedWireValue): value is ProductEventName {
-  return isWireString(value) && PRODUCT_EVENT_NAMES.has(value);
-}
-
-/**
- * Reads one event out of an untrusted envelope, or nothing. The result is
- * assembled from the event's own allowlist rather than copied from what
- * arrived, so a `distinct_id`, an `$ip`, an `email`, or a `$set` on the way in
- * has nowhere to land — naming a field is not a way to send one. A missing or
- * unreadable property discards the whole event rather than being repaired: the
- * desktop only sends what it built from this same table, so anything else is a
- * bug that should be loud.
- */
-export function productEventFromWire(value: UnparsedWireValue): ProductEvent | undefined {
-  if (!isRecord(value) || !isProductEventName(value.name)) return undefined;
-  const at = value.at;
-  if (!isWireNumber(at) || !Number.isFinite(at) || at < 0) return undefined;
-  const source = isRecord(value.properties) ? value.properties : undefined;
-  const allowed: readonly ProductEventProperty[] = PRODUCT_EVENT_PROPERTIES[value.name];
-  const properties: Record<string, string | number> = {};
-  for (const property of allowed) {
-    const read = PRODUCT_EVENT_PROPERTY_READER[property](source?.[property]);
-    if (read === undefined) return undefined;
-    properties[property] = read;
-  }
-  // SAFETY: every key came from this event's allowlist and every value from
-  // that property's own reader, which is exactly the declared shape.
-  return { name: value.name, at, properties: properties as ProductEventProperties };
-}
-
-/**
- * Reads a whole batch, or nothing. One unreadable event refuses the batch
- * rather than trimming it: a partial acceptance would let a desktop bug show
- * up as a quiet gap in the counts instead of a refusal somebody notices.
- */
-export function productEventBatchFromWire(value: UnparsedWireValue): ProductEventBatch | undefined {
-  if (!isRecord(value) || !Array.isArray(value.events)) return undefined;
-  if (value.events.length === 0 || value.events.length > PRODUCT_EVENT_BATCH_LIMIT) {
-    return undefined;
-  }
-  const events: ProductEvent[] = [];
-  for (const candidate of value.events) {
-    const event = productEventFromWire(candidate);
-    if (!event) return undefined;
-    events.push(event);
-  }
-  return events;
-}
 
 /** What every emitter is handed: a name, and exactly that name's properties. */
 export type RecordProductEvent = <Name extends ProductEventName>(
