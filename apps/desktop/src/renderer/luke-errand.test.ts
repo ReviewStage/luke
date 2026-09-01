@@ -57,6 +57,7 @@ function settings(): AppSettingsView {
     linearSignInAvailable: false,
     appleCalendarAvailable: false,
     voiceAvailable: false,
+    developerModeOffered: true,
     voiceSource: VOICE_SOURCE.ACCOUNT,
     preferBuiltInMicrophone: false,
     calendarAccounts: [],

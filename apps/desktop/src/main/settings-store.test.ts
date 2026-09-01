@@ -188,6 +188,7 @@ function storeIn(
     providers?: readonly CredentialProvider[];
     appleCalendarSupported?: boolean;
     developerModeDefault?: boolean;
+    developerModeOffered?: boolean;
   } = {},
 ): SettingsStore {
   const config: SettingsStoreOptions = {
@@ -203,6 +204,9 @@ function storeIn(
   }
   if (options.developerModeDefault !== undefined) {
     config.developerModeDefault = options.developerModeDefault;
+  }
+  if (options.developerModeOffered !== undefined) {
+    config.developerModeOffered = options.developerModeOffered;
   }
   return new SettingsStore(config);
 }
@@ -223,6 +227,18 @@ test("developer mode resolves an unset value to the channel's default", async (t
   assert.equal((await developmentChannel.snapshot()).stored.developerMode, false);
   const releaseChannel = storeIn(await temporaryDirectory(t));
   assert.equal((await releaseChannel.snapshot()).stored.developerMode, false);
+});
+
+test("a build that offers no developer mode resolves even a stored on to off", async (t) => {
+  const directory = await temporaryDirectory(t);
+  await storeIn(directory).set(APP_SETTING_SCHEMA.developerMode.field, true);
+
+  // The released app draws no row and describes none in the guide, so a
+  // leftover file must not put it in a posture it has no switch to leave.
+  const release = storeIn(directory, { developerModeOffered: false });
+  const snapshot = await release.snapshot();
+  assert.equal(snapshot.stored.developerMode, false);
+  assert.equal(snapshot.status.developerModeOffered, false);
 });
 
 test("a failed first load is retried before a later write", async (t) => {

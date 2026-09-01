@@ -65,6 +65,7 @@ function settings(overrides: Partial<AppSettingsView> = {}): AppSettingsView {
       showOnAllDisplays: false,
       formFactor: PANEL_FORM_FACTOR.BUBBLE,
       voiceAvailable: true,
+      developerModeOffered: true,
       voiceSource: VOICE_SOURCE.ACCOUNT,
       preferBuiltInMicrophone: true,
     },
@@ -94,6 +95,17 @@ function guideSetting(id: string, input: LukeGuideInput = guideInput()): AppGuid
   assert.ok(setting, `the guide lists ${id}`);
   return setting;
 }
+
+test("the developer-mode entry exists only where the toggle is offered", () => {
+  // The released app has no developer-mode row, so its guide must not
+  // describe one: an entry here is what a spoken change is validated
+  // against, and Luke may not offer to flip a switch the build does not have.
+  guideSetting(APP_SETTING_ID.DEVELOPER_MODE);
+  const withheld = buildLukeGuide(
+    guideInput({ settings: settings({ developerModeOffered: false }) }),
+  ).settings.some((candidate) => candidate.id === APP_SETTING_ID.DEVELOPER_MODE);
+  assert.equal(withheld, false);
+});
 
 test("the guide keeps the signed-out escape path explicit", () => {
   const quitting = buildLukeGuide(guideInput()).facts.find((fact) => fact.label === "Quitting");

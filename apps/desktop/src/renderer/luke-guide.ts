@@ -641,7 +641,14 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
     },
   ];
 
-  const settings = settingGuideEntries(input.settings);
+  // The developer-mode entry exists only on the channels that offer the
+  // toggle: the released app draws no row, so the guide must not describe
+  // one — an entry here is also what a spoken change is validated against,
+  // and Luke may not offer to flip a switch the build does not have.
+  const settings = settingGuideEntries(input.settings).filter(
+    (setting) =>
+      setting.id !== APP_SETTING_ID.DEVELOPER_MODE || input.settings.developerModeOffered,
+  );
 
   return { facts, settings, update: updateGuideEntry(input.update) };
 }

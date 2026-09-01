@@ -33,6 +33,7 @@ function settings(overrides: Partial<AppSettingsView> = {}): AppSettingsView {
       secretStorage: SECRET_STORAGE.UNKNOWN,
       codexCloudConnection: CLI_CONNECTION.UNKNOWN,
       voiceAvailable: true,
+      developerModeOffered: true,
       voiceSource: VOICE_SOURCE.ACCOUNT,
       showInDock: false,
       voice: REALTIME_VOICE.CEDAR,

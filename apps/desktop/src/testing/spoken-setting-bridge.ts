@@ -65,6 +65,7 @@ export function appSettingsWire(settings: AppSettingsView): AppSettings {
     codexCloudConnection: settings.codexCloudConnection,
     secretStorage: settings.secretStorage,
     voiceAvailable: settings.voiceAvailable,
+    developerModeOffered: settings.developerModeOffered,
     calendarSignInAvailable: settings.calendarSignInAvailable,
     linearSignInAvailable: settings.linearSignInAvailable,
     calendarAccounts: settings.calendarAccounts,

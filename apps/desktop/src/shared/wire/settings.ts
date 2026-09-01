@@ -28,6 +28,13 @@ export interface RuntimeStatus {
   codexCloudConnection: CliConnection;
   secretStorage: SecretStorage;
   voiceAvailable: boolean;
+  /**
+   * Whether this build offers the developer-mode toggle at all. Only the
+   * development channels do: the released app draws no row, describes none in
+   * the guide, and resolves the stored value to off, so the posture cannot be
+   * entered on a build that has no business standing aside for another.
+   */
+  developerModeOffered: boolean;
   calendarSignInAvailable: boolean;
   linearSignInAvailable: boolean;
   calendarAccounts: readonly CalendarAccount[];

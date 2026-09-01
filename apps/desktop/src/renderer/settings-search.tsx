@@ -212,6 +212,10 @@ const SETTING_ROW_DRAWN = {
   // The Superset agent row stands under a connected Superset with agents.
   [APP_SETTING_ID.SUPERSET_AGENT]: (input: SettingsSearchInput) =>
     input.superset.connected && input.superset.agentsOffered,
+  // The developer-mode row exists only on the channels that offer the toggle;
+  // the released app never draws it.
+  [APP_SETTING_ID.DEVELOPER_MODE]: (input: SettingsSearchInput) =>
+    input.settings.developerModeOffered,
 } satisfies Partial<Record<AppSettingId, (input: SettingsSearchInput) => boolean>>;
 
 /** Whether a setting's row is drawn; a setting the table leaves out always is. */

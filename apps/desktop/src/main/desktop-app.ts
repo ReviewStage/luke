@@ -199,9 +199,12 @@ const appIdentity = {
 const appChannel = resolveAppChannel(appIdentity);
 const appName = resolveAppName(appIdentity);
 // A development-channel run stands out of the released app's way from its
-// first launch; the release and ad-hoc channels keep the schema's own
-// default, and the user's stored choice always wins over either.
+// first launch; the ad-hoc channel keeps the schema's own default, and the
+// user's stored choice wins over either. The released app is offered no
+// toggle at all: no row, no guide entry, and a stored value resolved to off,
+// because a build users hold has no released sibling to stand aside for.
 const developerModeChannelDefault = appChannel === APP_CHANNEL.DEVELOPMENT;
+const developerModeOffered = appChannel !== APP_CHANNEL.RELEASE;
 app.setName(appName);
 // `setName` renames the app, not the paths Electron already derived from the
 // manifest name, so the state directory is pointed at the chosen name by
@@ -309,6 +312,7 @@ const settingsStore = new SettingsStore({
   },
   codexCloudConnection: () => codexCloudAdapter.connection(),
   developerModeDefault: developerModeChannelDefault,
+  developerModeOffered,
 });
 /**
  * The developer-mode posture this run currently holds, mirrored from the
@@ -2825,9 +2829,10 @@ export function startDesktopApp(): void {
       // instance's surfaces first. An unset value is the channel's default;
       // the panel drop rides the reconcile below, and the key gate rides the
       // reapply, so nothing more is applied here.
-      developerModeActive =
-        (await settingsStore.get(APP_SETTING_SCHEMA.developerMode.field)) ??
-        developerModeChannelDefault;
+      developerModeActive = developerModeOffered
+        ? ((await settingsStore.get(APP_SETTING_SCHEMA.developerMode.field)) ??
+          developerModeChannelDefault)
+        : false;
       panels.setDetached(developerModeActive);
       // Awaited for the same reason the voice is: the chosen chord has to be in
       // hand before the key is registered, or the first registration would take

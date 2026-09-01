@@ -147,6 +147,15 @@ export interface SettingsStoreOptions {
    * app knows which channel this run is, so the store takes it as an option.
    */
   developerModeDefault?: boolean;
+  /**
+   * Whether this build offers the developer-mode toggle at all. Only the
+   * development channels do; the released app passes false, which drops the
+   * row, the guide entry, and the stored value alike — a posture the build
+   * does not offer is one no leftover file may put it in. True by default so
+   * a store outside the app (tests, tooling) behaves like the build the
+   * setting was made for.
+   */
+  developerModeOffered?: boolean;
 }
 
 interface PersistedSettings extends StoredAppSettings {
@@ -495,6 +504,7 @@ export class SettingsStore {
   readonly #appleCalendarSupported: boolean;
   readonly #codexCloudConnection: () => CliConnection;
   readonly #developerModeDefault: boolean;
+  readonly #developerModeOffered: boolean;
   #loading: Promise<PersistedSettings> | undefined;
   #resolved = new Map<CredentialProviderId, ResolvedApiKey>();
   /** Decrypted accounts, cached like the keys so timers never drum the Keychain. */
@@ -601,6 +611,7 @@ export class SettingsStore {
     this.#appleCalendarSupported = options.appleCalendarSupported ?? process.platform === "darwin";
     this.#codexCloudConnection = options.codexCloudConnection ?? (() => CLI_CONNECTION.UNKNOWN);
     this.#developerModeDefault = options.developerModeDefault ?? false;
+    this.#developerModeOffered = options.developerModeOffered ?? true;
   }
 
   async snapshot(): Promise<AppSettings> {
@@ -631,9 +642,14 @@ export class SettingsStore {
           REALTIME_DEFAULTS.SPEED,
         voiceSource: voiceCapability.source,
         formFactor: persisted.formFactor ?? DEFAULT_PANEL_FORM_FACTOR,
-        developerMode: persisted.developerMode ?? this.#developerModeDefault,
+        // Resolved to off wherever the toggle is not offered, whatever the
+        // file says: a build with no row must not be standing in the posture.
+        developerMode: this.#developerModeOffered
+          ? (persisted.developerMode ?? this.#developerModeDefault)
+          : false,
       },
       status: {
+        developerModeOffered: this.#developerModeOffered,
         // SAFETY: #providers contains every credential provider exactly once.
         credentialSources: Object.fromEntries(sources) as Record<
           CredentialProviderId,

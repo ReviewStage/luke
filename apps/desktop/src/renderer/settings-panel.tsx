@@ -3889,8 +3889,10 @@ export function SettingsPanel({
 
           {/* Developer mode stands at the foot of the page, beside the way
               out: it is about this instance as a whole, read rarely, and
-              never part of any page's own concerns. */}
-          {settings ? (
+              never part of any page's own concerns. Pinned to its one field —
+              the front page's other settings are drawn by their own sections
+              above — and only on the channels that offer the toggle at all. */}
+          {settings?.developerModeOffered ? (
             <section
               className="settings-section settings-plain"
               style={cssCustomProperties({ "--row-index": 6 })}
@@ -3899,6 +3901,7 @@ export function SettingsPanel({
                 page={SCHEMA_SETTINGS_PAGE.ROOT}
                 settings={settings}
                 writes={writes}
+                fields={[APP_SETTING_SCHEMA.developerMode.field]}
               />
             </section>
           ) : null}
