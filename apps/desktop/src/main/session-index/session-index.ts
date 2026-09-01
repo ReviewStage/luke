@@ -81,13 +81,22 @@ function ftsQuery(query: string): string | undefined {
 }
 
 function isCorruptDatabase(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  const code = "code" in error && typeof error.code === "string" ? error.code : "";
-  return (
-    code === "SQLITE_CORRUPT" ||
-    code === "SQLITE_NOTADB" ||
-    /database disk image is malformed|file is not a database/i.test(error.message)
-  );
+  for (
+    let current: unknown = error;
+    current;
+    current = current instanceof Error ? current.cause : undefined
+  ) {
+    if (!(current instanceof Error)) continue;
+    const code = "code" in current && typeof current.code === "string" ? current.code : "";
+    if (
+      code === "SQLITE_CORRUPT" ||
+      code === "SQLITE_NOTADB" ||
+      /database disk image is malformed|file is not a database/i.test(current.message)
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export class SessionIndex {
