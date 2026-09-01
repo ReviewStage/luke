@@ -72,10 +72,7 @@ struct WorkspaceCreatorSheet: View {
         .interactiveDismissDisabled(creating)
         .alert(
             "Not Created",
-            isPresented: Binding(
-                get: { failure != nil },
-                set: { if !$0 { failure = nil } }
-            ),
+            isPresented: Binding(presence: $failure),
             presenting: failure
         ) { _ in
             Button("OK", role: .cancel) {}
@@ -91,7 +88,7 @@ struct WorkspaceCreatorSheet: View {
             Section {
                 Picker("Provider", selection: providerBinding) {
                     ForEach(providerIds, id: \.self) { id in
-                        Text(providerName(id)).tag(id)
+                        Text(VaultProviderID.displayLabel(forWireId: id)).tag(id)
                     }
                 }
                 Picker("Project", selection: $projectId) {
@@ -154,7 +151,7 @@ struct WorkspaceCreatorSheet: View {
             "No Projects",
             systemImage: "folder",
             description: Text(
-                "No provider reported a project to create in. Workspaces can be created in Conductor, Cursor, and Replicas projects once a key for one is stored."
+                "No provider reported a project to create in. Store a key for a provider that hosts workspaces, and its projects appear here."
             )
         )
     }
@@ -174,15 +171,8 @@ struct WorkspaceCreatorSheet: View {
 
     // MARK: - Choices
 
-    /// Providers in the order the answer lists them, each exactly once.
     private var providerIds: [String] {
-        guard let answer else { return [] }
-        var seen = Set<String>()
-        var ids: [String] = []
-        for project in answer.projects where seen.insert(project.providerId).inserted {
-            ids.append(project.providerId)
-        }
-        return ids
+        answer?.providerIds ?? []
     }
 
     private var providerProjects: [RosterProject] {
@@ -220,15 +210,13 @@ struct WorkspaceCreatorSheet: View {
     /// remembered for it, falling back to the answer's own first offer.
     private func selectProvider(_ id: String) {
         providerId = id
-        let candidates = answer?.projects.filter { $0.providerId == id } ?? []
         let storedProject = defaults.lastProjectId(for: id)
         projectId =
-            candidates.first { $0.providerProjectId == storedProject }?.providerProjectId
-            ?? candidates.first?.providerProjectId ?? ""
+            providerProjects.first { $0.providerProjectId == storedProject }?.providerProjectId
+            ?? providerProjects.first?.providerProjectId ?? ""
 
-        let options = answer?.agentModels.filter { $0.providerId == id } ?? []
         if let stored = defaults.agentDefault(for: id),
-            let option = options.first(where: { $0.agent == stored.agent }),
+            let option = agentOptions.first(where: { $0.agent == stored.agent }),
             option.models.contains(where: { $0.id == stored.model }),
             stored.effort == nil || option.efforts.contains(stored.effort ?? "")
         {
@@ -240,10 +228,6 @@ struct WorkspaceCreatorSheet: View {
             modelId = ""
             effort = nil
         }
-    }
-
-    private func providerName(_ id: String) -> String {
-        VaultProviderID(rawValue: id)?.displayName ?? id.capitalized
     }
 
     private func projectLabel(_ project: RosterProject) -> String {
@@ -267,22 +251,11 @@ struct WorkspaceCreatorSheet: View {
 
     private func loadProjects() async {
         do {
-            let token = try await session.validAccessToken()
-            let fetched: ProjectsAnswer
-            do {
-                fetched = try await projectsClient.projects(bearerToken: token)
-            } catch ProjectsClientError.serverError(let status) where status == 401 {
-                // validAccessToken() refreshes near-expiry tokens; a 401 here
-                // means the server rejected the token — refresh and retry once.
-                let fresh = try await session.refreshAccessToken()
-                fetched = try await projectsClient.projects(bearerToken: fresh)
+            let fetched = try await session.authorized { token in
+                try await projectsClient.projects(bearerToken: token)
             }
             answer = fetched
-            var seen = Set<String>()
-            var ids: [String] = []
-            for project in fetched.projects where seen.insert(project.providerId).inserted {
-                ids.append(project.providerId)
-            }
+            let ids = fetched.providerIds
             let stored = defaults.lastProviderId
             let initial = stored.flatMap { ids.contains($0) ? $0 : nil } ?? ids.first
             if let initial { selectProvider(initial) }
@@ -304,30 +277,20 @@ struct WorkspaceCreatorSheet: View {
         let chosenAgent = agentKind
         let chosenModel = chosenAgent != nil ? modelId : nil
         let chosenEffort = chosenAgent != nil ? effort : nil
-        let call: (String) async throws -> ActWorkspaceAnswer = { token in
-            try await actClient.createWorkspace(
-                accessToken: token,
-                providerId: project.providerId,
-                providerProjectId: project.providerProjectId,
-                name: chosenName.isEmpty ? nil : chosenName,
-                task: chosenTask.isEmpty ? nil : chosenTask,
-                agent: chosenAgent,
-                model: chosenModel,
-                effort: chosenEffort
-            )
-        }
         Task {
             defer { creating = false }
             do {
-                let token = try await session.validAccessToken()
-                let created: ActWorkspaceAnswer
-                do {
-                    created = try await call(token)
-                } catch ActClientError.unauthorized {
-                    // validAccessToken() refreshes near-expiry tokens; a 401 here
-                    // means the server rejected the token — refresh and retry once.
-                    let fresh = try await session.refreshAccessToken()
-                    created = try await call(fresh)
+                let created = try await session.authorized { token in
+                    try await actClient.createWorkspace(
+                        accessToken: token,
+                        providerId: project.providerId,
+                        providerProjectId: project.providerProjectId,
+                        name: chosenName.isEmpty ? nil : chosenName,
+                        task: chosenTask.isEmpty ? nil : chosenTask,
+                        agent: chosenAgent,
+                        model: chosenModel,
+                        effort: chosenEffort
+                    )
                 }
                 if created.result == .accepted {
                     rememberChoices()
@@ -367,13 +330,8 @@ struct AgentSpawnerSheet: View {
     @State private var agent: String
     @State private var name = ""
     @State private var task = ""
-    @State private var state: SpawnerState = .idle
-
-    private enum SpawnerState: Equatable {
-        case idle
-        case spawning
-        case result(ActWorkspaceAnswer)
-    }
+    @State private var spawning = false
+    @State private var failure: String?
 
     init(session: RosterSession, actClient: ActClient, onDone: @escaping () -> Void) {
         self.session = session
@@ -384,76 +342,53 @@ struct AgentSpawnerSheet: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
+            Form {
+                Section {
                     Picker("Agent", selection: $agent) {
                         ForEach(session.spawnableAgents, id: \.self) { kind in
                             Text(kind.capitalized).tag(kind)
                         }
                     }
-                    .pickerStyle(.menu)
-                    .tint(Color.ink)
-                    .disabled(state == .spawning)
-
-                    VStack(spacing: 8) {
-                        LabeledTextField(
-                            label: "Name (optional)", text: $name, disabled: state == .spawning)
-                        LabeledTextField(
-                            label: "Opening task (optional)",
-                            text: $task,
-                            axis: .vertical,
-                            disabled: state == .spawning
-                        )
-                    }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 12)
-                    .background(
-                        RoundedRectangle(cornerRadius: 10)
-                            .fill(Color.cardFill)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 10)
-                                    .stroke(Color.controlStroke, lineWidth: 1)
-                            )
-                    )
-
-                    Button(action: spawn) {
-                        HStack(spacing: 8) {
-                            if state == .spawning {
-                                ProgressView()
-                                    .tint(Color.ink)
-                                    .scaleEffect(0.8)
-                            }
-                            Text(state == .spawning ? "Starting…" : "Start agent")
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundStyle(Color.ink)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 42)
-                    }
-                    .disabled(agent.isEmpty || state == .spawning)
-                    .buttonStyle(ActButtonStyle())
-
-                    if case .result(let answer) = state {
-                        spawnBanner(answer)
-                    }
                 }
-                .padding(.horizontal)
-                .padding(.top, 8)
+
+                Section {
+                    TextField("Name", text: $name)
+                } footer: {
+                    Text("Optional — the provider names the agent otherwise.")
+                }
+
+                Section("Task") {
+                    TextField("Describe what the agent should start on…", text: $task, axis: .vertical)
+                        .lineLimit(4 ... 10)
+                }
             }
-            .background(Color.ground.ignoresSafeArea())
+            .disabled(spawning)
             .navigationTitle(session.workspace ?? session.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel", action: onDone)
+                        .disabled(spawning)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    if spawning {
+                        ProgressView()
+                    } else {
+                        Button("Start") { spawn() }
+                            .disabled(agent.isEmpty)
+                    }
                 }
             }
         }
-        .task(id: state) {
-            guard case .result(let answer) = state, answer.result == .accepted else { return }
-            try? await Task.sleep(for: .seconds(0.8))
-            guard !Task.isCancelled else { return }
-            onDone()
+        .interactiveDismissDisabled(spawning)
+        .alert(
+            "Not Started",
+            isPresented: Binding(presence: $failure),
+            presenting: failure
+        ) { _ in
+            Button("OK", role: .cancel) {}
+        } message: { reason in
+            Text(reason)
         }
     }
 
@@ -461,12 +396,13 @@ struct AgentSpawnerSheet: View {
         let agentKind = agent
         let nameValue = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let taskValue = task.trimmingCharacters(in: .whitespacesAndNewlines)
-        state = .spawning
+        spawning = true
+        failure = nil
         Task {
+            defer { spawning = false }
             do {
-                let token = try await account.validAccessToken()
-                do {
-                    let answer = try await actClient.spawnAgent(
+                let answer = try await account.authorized { token in
+                    try await actClient.spawnAgent(
                         accessToken: token,
                         providerId: session.providerId,
                         providerSessionId: session.sessionId,
@@ -474,80 +410,17 @@ struct AgentSpawnerSheet: View {
                         name: nameValue.isEmpty ? nil : nameValue,
                         task: taskValue.isEmpty ? nil : taskValue
                     )
-                    state = .result(answer)
-                } catch ActClientError.unauthorized {
-                    // validAccessToken() refreshes near-expiry tokens; a 401
-                    // here means the server rejected the token outright — refresh and retry once.
-                    let fresh = try await account.refreshAccessToken()
-                    let answer = try await actClient.spawnAgent(
-                        accessToken: fresh,
-                        providerId: session.providerId,
-                        providerSessionId: session.sessionId,
-                        agent: agentKind,
-                        name: nameValue.isEmpty ? nil : nameValue,
-                        task: taskValue.isEmpty ? nil : taskValue
-                    )
-                    state = .result(answer)
                 }
+                if answer.result == .accepted {
+                    onDone()
+                } else {
+                    failure = answer.reason ?? "The agent was not started."
+                }
+            } catch is AccountSessionError {
+                ()  // Signed out — the state change redraws automatically.
             } catch {
-                state = .result(ActWorkspaceAnswer(
-                    result: .rejected,
-                    reason: error.localizedDescription,
-                    providerSessionId: nil
-                ))
+                failure = error.localizedDescription
             }
         }
-    }
-
-    @ViewBuilder
-    private func spawnBanner(_ answer: ActWorkspaceAnswer) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: answer.result == .accepted ? "checkmark.circle" : "exclamationmark.circle")
-                .font(.system(size: 13, weight: .semibold))
-            Text(answer.result == .accepted ? "Agent started" : (answer.reason ?? "Not started"))
-                .font(.system(size: 13))
-                .lineLimit(2)
-        }
-        .foregroundStyle(answer.result == .accepted ? Color.stateComplete : Color.errorInk)
-        .padding(.horizontal, 10)
-        .onTapGesture { state = .idle }
-    }
-}
-
-private struct LabeledTextField: View {
-    let label: String
-    @Binding var text: String
-    var axis: Axis = .horizontal
-    var disabled: Bool = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(label)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(Color.inkSecondary)
-            TextField("", text: $text, axis: axis)
-                .lineLimit(axis == .vertical ? 3 : 1, reservesSpace: false)
-                .textFieldStyle(.plain)
-                .font(.system(size: 15))
-                .foregroundStyle(Color.ink)
-                .disabled(disabled)
-        }
-    }
-}
-
-struct ActButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .padding(.horizontal, 16)
-            .background(
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(configuration.isPressed ? Color.pressedFill : Color.cardFill)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(Color.controlStroke, lineWidth: 1)
-                    )
-            )
-            .opacity(configuration.isPressed ? 0.85 : 1)
-            .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
     }
 }

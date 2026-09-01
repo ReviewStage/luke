@@ -232,7 +232,9 @@ test("advertises the archive only for a session positively seen settled", async 
   const byId = new Map(observations.map((entry) => [entry.providerSessionId, entry]));
 
   for (const sessionId of ["devin-exited", "devin-errored", "devin-suspended", "devin-holding"]) {
-    assert.deepEqual(byId.get(sessionId)?.controls, [{ id: "archive-session", label: "Archive" }]);
+    assert.deepEqual(byId.get(sessionId)?.controls, [
+      { id: "archive-session", label: "Archive", kind: "archive" },
+    ]);
   }
   for (const sessionId of ["devin-working", "devin-detailless", "devin-new"]) {
     assert.equal(byId.get(sessionId)?.controls, undefined);

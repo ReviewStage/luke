@@ -1,5 +1,16 @@
 import Foundation
 
+/// What a control does, as its adapter declared it. Mirrors
+/// `SESSION_CONTROL_KIND` in `@sidecar/session`: the adapter says which its
+/// control is, because only it knows what the endpoint behind the control
+/// means — a surface keying on the id or the label instead would be reading
+/// the provider's own words as a contract they never made.
+public enum RosterSessionControlKind: String, Sendable {
+    case action
+    case archive
+    case stop
+}
+
 /// One control a session's provider advertised for it, as the observe
 /// endpoint reports it. Mirrors the `ObservedSessionControl` wire shape from
 /// `@sidecar/hosted`: the id an act names, and the label and kind the row
@@ -8,10 +19,11 @@ import Foundation
 public struct RosterSessionControl: Identifiable, Equatable, Sendable {
     public let id: String
     public let label: String
-    /// "stop" or "action", when the provider named one.
-    public let kind: String?
+    /// nil when the provider named none, or one this build does not know:
+    /// the control still works, drawn as a plain action by its label.
+    public let kind: RosterSessionControlKind?
 
-    public init(id: String, label: String, kind: String? = nil) {
+    public init(id: String, label: String, kind: RosterSessionControlKind? = nil) {
         self.id = id
         self.label = label
         self.kind = kind
@@ -24,7 +36,7 @@ public struct RosterSessionControl: Identifiable, Equatable, Sendable {
         else { return nil }
         self.id = id
         self.label = label
-        self.kind = json["kind"] as? String
+        self.kind = (json["kind"] as? String).flatMap { RosterSessionControlKind(rawValue: $0) }
     }
 }
 

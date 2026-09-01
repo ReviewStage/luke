@@ -3,6 +3,7 @@ import {
   agedStatus,
   OBSERVATION_WINDOW,
   type ProviderSessionObservation,
+  SESSION_CONTROL_KIND,
   SESSION_STATUS,
   type SessionControl,
   type SessionProvider,
@@ -74,6 +75,7 @@ const DEVIN_MESSAGE_FIELD = {
 const DEVIN_ARCHIVE_SESSION_CONTROL = {
   id: "archive-session",
   label: "Archive",
+  kind: SESSION_CONTROL_KIND.ARCHIVE,
 } as const;
 
 const DEVIN_FIELD = {

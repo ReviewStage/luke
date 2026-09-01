@@ -641,10 +641,10 @@ test("advertises a follow-up only for an agent whose run has finished", async ()
     { id: "cancel-run", label: "Stop this run", kind: "stop", target: "run-agent-running" },
   ]);
   assert.deepEqual(byId.get("agent-finished")?.controls, [
-    { id: "archive-agent", label: "Archive" },
+    { id: "archive-agent", label: "Archive", kind: "archive" },
   ]);
   assert.deepEqual(byId.get("agent-errored")?.controls, [
-    { id: "archive-agent", label: "Archive" },
+    { id: "archive-agent", label: "Archive", kind: "archive" },
   ]);
   assert.equal(byId.get("agent-filed"), undefined);
 });
@@ -715,7 +715,7 @@ test("keeps the archive off an agent whose run could not be read", async () => {
   // positive observation, so it still offers the archive.
   assert.equal(byId.get("agent-unreadable")?.controls, undefined);
   assert.deepEqual(byId.get("agent-never-ran")?.controls, [
-    { id: "archive-agent", label: "Archive" },
+    { id: "archive-agent", label: "Archive", kind: "archive" },
   ]);
 });
 
@@ -726,7 +726,7 @@ test("files a settled agent away through Cursor's archive endpoint, sending no b
 
   const result = await adapter.executeControl({
     providerSessionId: "agent-finished",
-    control: { id: "archive-agent", label: "Archive" },
+    control: { id: "archive-agent", label: "Archive", kind: "archive" },
   });
 
   assert.deepEqual(result, { status: "accepted" });
@@ -749,7 +749,7 @@ test("refuses to archive an agent whose row never advertised it", async () => {
   // behind it and no request exists.
   const result = await adapter.executeControl({
     providerSessionId: "agent-running",
-    control: { id: "archive-agent", label: "Archive" },
+    control: { id: "archive-agent", label: "Archive", kind: "archive" },
   });
 
   assert.deepEqual(result, {

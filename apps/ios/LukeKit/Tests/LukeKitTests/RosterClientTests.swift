@@ -146,7 +146,8 @@ final class RosterSessionActAdvertisementTests: XCTestCase {
             "canReceiveMessage": true,
             "controls": [
                 ["id": "cancel-turn", "label": "Stop", "kind": "stop"],
-                ["id": "archive-workspace", "label": "Archive"],
+                ["id": "archive-workspace", "label": "Archive", "kind": "archive"],
+                ["id": "approve-plan", "label": "Approve the plan", "kind": "someday-kind"],
                 ["id": "", "label": "nameless"],
                 ["id": "no-label"],
             ],
@@ -158,8 +159,10 @@ final class RosterSessionActAdvertisementTests: XCTestCase {
         XCTAssertEqual(
             s?.controls,
             [
-                RosterSessionControl(id: "cancel-turn", label: "Stop", kind: "stop"),
-                RosterSessionControl(id: "archive-workspace", label: "Archive"),
+                RosterSessionControl(id: "cancel-turn", label: "Stop", kind: .stop),
+                RosterSessionControl(id: "archive-workspace", label: "Archive", kind: .archive),
+                // A kind this build does not know is dropped; the control stays.
+                RosterSessionControl(id: "approve-plan", label: "Approve the plan"),
             ]
         )
         XCTAssertEqual(s?.spawnableAgents, ["claude", "codex"])

@@ -115,6 +115,16 @@ public struct ProjectsAnswer: Equatable, Sendable {
         self.projects = projects
         self.agentModels = agentModels
     }
+
+    /// Providers in the order the answer lists them, each exactly once.
+    public var providerIds: [String] {
+        var seen = Set<String>()
+        var ids: [String] = []
+        for project in projects where seen.insert(project.providerId).inserted {
+            ids.append(project.providerId)
+        }
+        return ids
+    }
 }
 
 public enum ProjectsClientError: LocalizedError {

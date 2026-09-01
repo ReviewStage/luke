@@ -177,12 +177,16 @@ export function attentionDecisionFromWire(
 /**
  * What a control does to the session, at the altitude a surface draws at: a
  * stop ends the turn that is running and is drawn as the stop glyph every chat
- * surface uses, while anything else is a provider-worded action drawn by its
- * label. The adapter says which its control is, because only it knows what the
- * endpoint behind the control means.
+ * surface uses, an archive files the settled thing away — whether the provider
+ * scopes that to the session, the agent, or the whole workspace — and anything
+ * else is a provider-worded action drawn by its label. The adapter says which
+ * its control is, because only it knows what the endpoint behind the control
+ * means; a surface that keyed on the id or the label instead would be reading
+ * the provider's own words as a contract they never made.
  */
 export const SESSION_CONTROL_KIND = {
   ACTION: "action",
+  ARCHIVE: "archive",
   STOP: "stop",
 } as const;
 

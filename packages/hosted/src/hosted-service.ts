@@ -564,8 +564,11 @@ function hostedWorkspaceAgentModelsFromWire(
     models.push({ id, label });
   }
   if (models.length === 0) return undefined;
-  const efforts = value.efforts.filter((effort): effort is string => isWireString(effort));
-  if (efforts.length !== value.efforts.length) return undefined;
+  const efforts: string[] = [];
+  for (const effort of value.efforts) {
+    if (!isWireString(effort)) return undefined;
+    efforts.push(effort);
+  }
   return { providerId, agent, models, efforts };
 }
 

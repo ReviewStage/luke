@@ -160,6 +160,7 @@ function conductorArchiveWorkspaceControl(workspaceId: string): SessionControl {
   return {
     id: CONDUCTOR_ARCHIVE_WORKSPACE_CONTROL_ID,
     label: "Archive",
+    kind: SESSION_CONTROL_KIND.ARCHIVE,
     target: workspaceId,
   };
 }
