@@ -16,7 +16,7 @@ public enum RosterSessionControlKind: String, Sendable {
 /// `@sidecar/hosted`: the id an act names, and the label and kind the row
 /// draws. What the control targets never travels — the act endpoint
 /// re-observes and rebuilds the write from its own fresh advertisement.
-public struct RosterSessionControl: Identifiable, Equatable, Sendable {
+public struct RosterSessionControl: Identifiable, Hashable, Sendable {
     public let id: String
     public let label: String
     /// nil when the provider named none, or one this build does not know:
@@ -42,7 +42,7 @@ public struct RosterSessionControl: Identifiable, Equatable, Sendable {
 
 /// One cloud session as reported by the observe endpoint.
 /// Mirrors the `ObservedSession` wire shape from `@sidecar/hosted`.
-public struct RosterSession: Identifiable, Sendable {
+public struct RosterSession: Identifiable, Hashable, Sendable {
     public let providerId: String
     public let sessionId: String
     public let title: String

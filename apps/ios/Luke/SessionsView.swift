@@ -18,7 +18,11 @@ struct SessionsView: View {
     @State private var filters: Set<SessionFilter> = []
     @State private var sort: SessionSort = .urgency
     @State private var optionsShown = false
-    @State private var composingSession: RosterSession?
+    @State private var openedSession: RosterSession?
+    /// Sent bubbles per session, in memory alone for the app run — the
+    /// developer's own words, never written to disk, surviving push and pop
+    /// so a chat reopened mid-run still shows what was just sent.
+    @State private var threads: [String: [OutgoingMessage]] = [:]
     @State private var spawningSession: RosterSession?
     @State private var renaming: RenameTarget?
     @State private var renameText = ""
@@ -63,11 +67,19 @@ struct SessionsView: View {
                 searchableList
             }
         }
-        .sheet(item: $composingSession) { s in
-            SessionComposerSheet(session: s, actClient: actClient) {
-                composingSession = nil
-            }
-            .presentationDetents([.medium, .large])
+        .navigationDestination(item: $openedSession) { opened in
+            // The freshest observation of the opened session wins, so a
+            // refresh behind the screen updates the recap it draws; a session
+            // the refresh no longer reports keeps its last observed word.
+            SessionDetailView(
+                session: sessions.first { $0.id == opened.id } ?? opened,
+                actClient: actClient,
+                thread: Binding(
+                    get: { threads[opened.id] ?? [] },
+                    set: { threads[opened.id] = $0 }
+                ),
+                onDelivered: { await refreshSessions() }
+            )
         }
         .sheet(item: $spawningSession) { s in
             AgentSpawnerSheet(session: s, actClient: actClient) {
@@ -282,14 +294,13 @@ struct SessionsView: View {
 
     @ViewBuilder
     private func rowCore(_ s: RosterSession) -> some View {
-        if s.canReceiveMessage {
-            Button { composingSession = s } label: {
-                SessionRow(session: s)
-            }
-            .buttonStyle(.plain)
-        } else {
+        // Every row opens the session's own screen; whether that screen takes
+        // a message is the observation's word, said there rather than by
+        // making some rows dead to the touch.
+        Button { openedSession = s } label: {
             SessionRow(session: s)
         }
+        .buttonStyle(.plain)
     }
 
     /// The menu reads in the system's own order: what the session takes now,
@@ -302,7 +313,7 @@ struct SessionsView: View {
         Section {
             if s.canReceiveMessage {
                 Button {
-                    composingSession = s
+                    openedSession = s
                 } label: {
                     Label("Send Message…", systemImage: "arrow.up.message")
                 }
