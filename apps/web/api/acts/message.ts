@@ -92,11 +92,9 @@ async function executeConductorMessage(
   return { result: "accepted" };
 }
 
-function unsupportedProvider(providerId: VaultProviderId): ActMessageExecuteResult {
-  return {
-    result: "unsupported",
-    reason: `Mobile message acts are not yet available for ${providerId}. Conductor is supported today; other providers will follow once the read path for each is established.`,
-  };
+function unsupportedReason(providerId: VaultProviderId): string | undefined {
+  if (providerId === "conductor") return undefined;
+  return `Mobile message acts are not yet available for ${providerId}. Conductor is supported today; other providers will follow once the read path for each is established.`;
 }
 
 function resolveUserId(request: Request) {
@@ -121,11 +119,14 @@ export default {
           .limit(1);
         return rows[0];
       },
+      unsupportedReason,
       executeMessage: async ({ providerId, providerSessionId, text, apiKey }) => {
-        if (providerId === "conductor") {
-          return executeConductorMessage(providerSessionId, text, apiKey);
-        }
-        return unsupportedProvider(providerId);
+        // The handler already answers unsupported providers before the key is
+        // read; this guard keeps the Conductor call locally impossible to
+        // reach with another provider's key regardless of that ordering.
+        const reason = unsupportedReason(providerId);
+        if (reason) return { result: "unsupported", reason };
+        return executeConductorMessage(providerSessionId, text, apiKey);
       },
     });
   },

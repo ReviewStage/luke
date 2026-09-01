@@ -56,14 +56,24 @@ async function executeConductorCreateWorkspace(
     // SAFETY: json() returns unknown; isRecord below validates before field access.
     createBody = (await createRes.json()) as UnparsedWireValue;
   } catch {
-    // Creation succeeded but we cannot read the session id; still report accepted.
-    return { result: "accepted" };
+    createBody = undefined;
   }
 
   const sessionId = isRecord(createBody) ? text(createBody.sessionId) : undefined;
 
-  if (!task || !sessionId) {
+  if (!task) {
     return { result: "accepted", ...(sessionId ? { providerSessionId: sessionId } : undefined) };
+  }
+
+  // The developer asked for an opening task, so from here an undelivered task
+  // is a rejection — the same verdict the desktop adapter gives — carrying the
+  // created session id so the caller still knows the workspace exists.
+  if (!sessionId) {
+    return {
+      result: "rejected",
+      reason:
+        "Workspace was created, but Conductor did not identify its session, so the opening task could not be delivered.",
+    };
   }
 
   // Deliver the opening task as a message to the created session, exactly as
@@ -76,30 +86,27 @@ async function executeConductorCreateWorkspace(
       body: JSON.stringify({ message: task }),
     });
   } catch {
-    // Workspace was created; the task did not land. Report partial success.
     return {
-      result: "accepted",
+      result: "rejected",
       providerSessionId: sessionId,
-      reason: "Workspace created but opening task could not be delivered.",
+      reason: "Workspace was created, but the opening task could not be delivered.",
     };
   }
 
   if (!taskRes.ok) {
     return {
-      result: "accepted",
+      result: "rejected",
       providerSessionId: sessionId,
-      reason: "Workspace created but opening task was refused by Conductor.",
+      reason: "Workspace was created, but Conductor refused the opening task.",
     };
   }
 
   return { result: "accepted", providerSessionId: sessionId };
 }
 
-function unsupportedProvider(providerId: VaultProviderId): ActWorkspaceExecuteResult {
-  return {
-    result: "unsupported",
-    reason: `Mobile workspace creation is not yet available for ${providerId}. Conductor is supported today.`,
-  };
+function unsupportedReason(providerId: VaultProviderId): string | undefined {
+  if (providerId === "conductor") return undefined;
+  return `Mobile workspace creation is not yet available for ${providerId}. Conductor is supported today.`;
 }
 
 function resolveUserId(request: Request) {
@@ -124,11 +131,14 @@ export default {
           .limit(1);
         return rows[0];
       },
+      unsupportedReason,
       executeCreateWorkspace: async ({ providerId, providerProjectId, name, task, apiKey }) => {
-        if (providerId === "conductor") {
-          return executeConductorCreateWorkspace(providerProjectId, name, task, apiKey);
-        }
-        return unsupportedProvider(providerId);
+        // The handler already answers unsupported providers before the key is
+        // read; this guard keeps the Conductor call locally impossible to
+        // reach with another provider's key regardless of that ordering.
+        const reason = unsupportedReason(providerId);
+        if (reason) return { result: "unsupported", reason };
+        return executeConductorCreateWorkspace(providerProjectId, name, task, apiKey);
       },
     });
   },

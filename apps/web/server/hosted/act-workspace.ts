@@ -49,6 +49,13 @@ export interface ActWorkspaceOptions {
   encryptionSecret: string | undefined;
   readKey: (userId: string, providerId: string) => Promise<{ ciphertext: string } | undefined>;
   /**
+   * The reason this provider cannot take a workspace act, or undefined for
+   * one that can. Checked before the vault key is required, so an unsupported
+   * provider answers "unsupported" whether or not a key is stored — storing
+   * a key would not enable the act.
+   */
+  unsupportedReason: (providerId: VaultProviderId) => string | undefined;
+  /**
    * Validates (via a fresh observation pass) and creates the workspace. The
    * implementation is provider-specific and injected by the route.
    */
@@ -63,7 +70,14 @@ export interface ActWorkspaceOptions {
 
 /** Validates and creates a workspace in a cloud project on the user's behalf. */
 export async function handleActWorkspace(options: ActWorkspaceOptions): Promise<Response> {
-  const { request, resolveUserId, encryptionSecret, readKey, executeCreateWorkspace } = options;
+  const {
+    request,
+    resolveUserId,
+    encryptionSecret,
+    readKey,
+    unsupportedReason,
+    executeCreateWorkspace,
+  } = options;
 
   if (request.method !== "POST") {
     return errorResponse(
@@ -113,6 +127,15 @@ export async function handleActWorkspace(options: ActWorkspaceOptions): Promise<
   const task = rawTask !== undefined ? sessionMessageText(rawTask) : undefined;
   if (rawTask !== undefined && task === undefined) {
     return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
+  }
+
+  const unsupported = unsupportedReason(providerId);
+  if (unsupported) {
+    const answer: HostedActWorkspaceAnswer = {
+      result: HOSTED_ACT_RESULT.UNSUPPORTED,
+      reason: unsupported,
+    };
+    return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);
   }
 
   const keyRow = await readKey(userId, providerId);

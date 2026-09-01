@@ -53,6 +53,13 @@ export interface ActMessageOptions {
   /** Reads the encrypted key row for this user and provider, or undefined if none stored. */
   readKey: (userId: string, providerId: string) => Promise<{ ciphertext: string } | undefined>;
   /**
+   * The reason this provider cannot take a message act, or undefined for one
+   * that can. Checked before the vault key is required, so an unsupported
+   * provider answers "unsupported" whether or not a key is stored — storing
+   * a key would not enable the act.
+   */
+  unsupportedReason: (providerId: VaultProviderId) => string | undefined;
+  /**
    * Validates (via a fresh observation pass) and delivers the message. The
    * implementation is provider-specific and injected by the route; the handler
    * enforces text bounds and auth before calling it.
@@ -67,7 +74,8 @@ export interface ActMessageOptions {
 
 /** Validates and delivers a message to a cloud session on the user's behalf. */
 export async function handleActMessage(options: ActMessageOptions): Promise<Response> {
-  const { request, resolveUserId, encryptionSecret, readKey, executeMessage } = options;
+  const { request, resolveUserId, encryptionSecret, readKey, unsupportedReason, executeMessage } =
+    options;
 
   if (request.method !== "POST") {
     return errorResponse(
@@ -110,6 +118,15 @@ export async function handleActMessage(options: ActMessageOptions): Promise<Resp
   const messageText = sessionMessageText(body.text);
   if (!messageText) {
     return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
+  }
+
+  const unsupported = unsupportedReason(providerId);
+  if (unsupported) {
+    const answer: HostedActAnswer = {
+      result: HOSTED_ACT_RESULT.UNSUPPORTED,
+      reason: unsupported,
+    };
+    return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);
   }
 
   const keyRow = await readKey(userId, providerId);
