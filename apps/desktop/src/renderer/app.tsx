@@ -2053,7 +2053,7 @@ export function App(): React.JSX.Element {
     conversationHistory,
     clearConversationHistory,
     liveConversationEntries,
-    applySharedConversationHistory,
+    seedConversationHistory,
     voiceTurn,
     lukeCaptions,
     mentionedSessions,
@@ -2422,12 +2422,6 @@ export function App(): React.JSX.Element {
     (onChange) => window.sidecar.onMeetingQuietChanged(onChange),
     setMeetingQuiet,
   );
-  // The other displays' half of the one conversation: an exchange lands on a
-  // single window, and every other panel's History draws the same thread.
-  const acceptConversationHistoryBootstrap = useBootstrapRacedChannel(
-    (onChange) => window.sidecar.onConversationHistoryChanged(onChange),
-    applySharedConversationHistory,
-  );
 
   /**
    * The two writes a row can ask for, handed to the main process by session
@@ -2511,7 +2505,10 @@ export function App(): React.JSX.Element {
       acceptIssuesBootstrap(value.issues);
       acceptCalendarsBootstrap(value.calendars);
       acceptMeetingQuietBootstrap(value.meetingQuiet);
-      acceptConversationHistoryBootstrap({ entries: value.conversationHistory, cleared: false });
+      // The shared thread's seed guards itself: the conversation hook already
+      // holds the live pushes, and a thread this window has touched is always
+      // the newer word than the snapshot.
+      seedConversationHistory(value.conversationHistory);
       acceptSessionReplayBootstrap(value.sessionReplay);
       acceptSettingsBootstrap(value.settings);
       // The stored filter chips and search words come back with the panel:
@@ -2603,7 +2600,6 @@ export function App(): React.JSX.Element {
   }, [
     acceptAccountBootstrap,
     acceptCalendarsBootstrap,
-    acceptConversationHistoryBootstrap,
     acceptIssuesBootstrap,
     acceptMeetingQuietBootstrap,
     acceptOutputAudioBootstrap,
@@ -2618,6 +2614,7 @@ export function App(): React.JSX.Element {
     beginFeedback,
     cancelHover,
     changeTab,
+    seedConversationHistory,
     setMicrophoneStatus,
     setSettingsView,
     startMicrophone,

@@ -531,8 +531,14 @@ export interface VoiceConversation {
    * exactly as the words it previews do.
    */
   liveConversationEntries: readonly ConversationEntry[];
-  /** Another window's report of the shared thread, applied as this window's own. */
-  applySharedConversationHistory: (payload: ConversationHistoryPayload) => void;
+  /**
+   * Bootstrap's snapshot of the shared thread, for a panel that opens late.
+   * Applied only while this window's own thread is untouched: the snapshot is
+   * older than anything that raced past it — another window's report arrives
+   * on the live channel, and this window's own lines never come back at all —
+   * so a touched thread is always the newer word.
+   */
+  seedConversationHistory: (entries: readonly ConversationEntry[]) => void;
   voiceTurn: WaveformVoice | undefined;
   /**
    * The words being spoken, one entry per response: a turn that speaks twice
@@ -787,6 +793,25 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       announced: payload.entries.at(-1)?.kind === CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
     });
   }, []);
+
+  // Every other display's half of the one conversation, mirrored by the main
+  // process. A window's own reports are never echoed back to it, which is why
+  // the bootstrap seed below must yield to a touched thread rather than to a
+  // push having arrived.
+  useEffect(
+    () => window.sidecar.onConversationHistoryChanged(applySharedConversationHistory),
+    [applySharedConversationHistory],
+  );
+
+  const seedConversationHistory = useCallback(
+    (entries: readonly ConversationEntry[]) => {
+      // A snapshot the main process built before this window's first report —
+      // or before a Clear pressed here — must not stand old lines back up.
+      if (conversationRef.current.length > 0 || conversationGenerationRef.current > 0) return;
+      applySharedConversationHistory({ entries, cleared: false });
+    },
+    [applySharedConversationHistory],
+  );
 
   /**
    * Records a spoken ask where its turn happened rather than where its
@@ -1738,7 +1763,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     conversationHistory,
     clearConversationHistory,
     liveConversationEntries: live,
-    applySharedConversationHistory,
+    seedConversationHistory,
     voiceTurn,
     lukeCaptions,
     mentionedSessions: mentioned,
