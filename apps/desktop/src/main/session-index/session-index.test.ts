@@ -104,6 +104,31 @@ test("reconciles added, updated, and disappeared sessions into FTS", async (t) =
   index.close();
 });
 
+test("an unchanged about hash skips the database update", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const index = indexIn(directory);
+  const current = snapshot([session("one")]);
+  await index.reconcile(current);
+
+  const observer = new BetterSqlite3(path.join(directory, SESSION_INDEX_FILE_NAME));
+  observer.exec(`
+    CREATE TABLE update_audit (count INTEGER NOT NULL);
+    INSERT INTO update_audit (count) VALUES (0);
+    CREATE TRIGGER audit_session_update AFTER UPDATE ON observed_sessions BEGIN
+      UPDATE update_audit SET count = count + 1;
+    END;
+  `);
+
+  await index.reconcile(current);
+
+  assert.equal(
+    observer.prepare<[], { count: number }>("SELECT count FROM update_audit").get()?.count,
+    0,
+  );
+  observer.close();
+  index.close();
+});
+
 test("search applies roster retention while standing sessions remain eligible", async (t) => {
   const directory = await temporaryDirectory(t);
   const index = indexIn(directory);
