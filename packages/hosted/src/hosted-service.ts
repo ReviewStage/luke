@@ -2,6 +2,9 @@ import {
   type AttentionDecision,
   attentionDecisionFromWire,
   type ProviderId,
+  SESSION_CONTROL_KIND,
+  WORKSPACE_TASK_SUPPORT,
+  type WorkspaceTaskSupport,
 } from "@sidecar/session";
 import {
   isRecord,
@@ -32,6 +35,20 @@ export const HOSTED_SERVICE_PATH = {
   ACT_MESSAGE: "/api/acts/message",
   /** Create a workspace in a cloud project (POST). */
   ACT_WORKSPACE: "/api/acts/workspace",
+  /** Run a control the session's latest observation advertised (POST). */
+  ACT_CONTROL: "/api/acts/control",
+  /** Start another agent in the workspace an observed session runs in (POST). */
+  ACT_AGENT: "/api/acts/agent",
+  /** Rename an observed session itself — the chat (POST). */
+  ACT_RENAME_SESSION: "/api/acts/rename-session",
+  /** Rename the workspace an observed session runs in (POST). */
+  ACT_RENAME_WORKSPACE: "/api/acts/rename-workspace",
+  /**
+   * List the projects a new workspace can be created in (GET): each entry is
+   * one a provider itself reported on a fresh observation pass, so a creation
+   * ask can only ever name a reported project. Stateless like observe.
+   */
+  PROJECTS: "/api/projects",
   /**
    * The one endpoint a fresh install may call before any account exists: it
    * mints a single short-lived credential for the spoken onboarding
@@ -324,10 +341,26 @@ export function vaultKeyDeleteAnswerFromWire(
 // --- Observe wire contract ---
 
 /**
+ * One control a session's provider advertised for it, as the observe endpoint
+ * reports it: the id an act names, and the label and kind the row draws. What
+ * the control targets never travels — the act endpoint re-observes and builds
+ * the write from its own fresh advertisement, so the wire copy can gate a
+ * button but can never redirect a write.
+ */
+export interface ObservedSessionControl {
+  id: string;
+  label: string;
+  /** One of the SESSION_CONTROL_KIND string values, when the provider named one. */
+  kind?: string;
+}
+
+/**
  * One cloud session as reported by the observe endpoint. The fields are a
  * bounded subset of `ProviderSessionObservation`: what mobile can show in a
- * roster row. The service maps the adapter's observation onto this shape and
- * stores nothing — a new request is a new observation pass.
+ * roster row, and which acts that row may offer. The service maps the
+ * adapter's observation onto this shape and stores nothing — a new request is
+ * a new observation pass, and every act endpoint re-observes for itself
+ * rather than trusting these advertisements.
  */
 export interface ObservedSession {
   /** The vault provider id for this session (conductor, devin, …). */
@@ -348,6 +381,16 @@ export interface ObservedSession {
   error?: string;
   /** Unix milliseconds of the last observed activity, when the provider reported one. */
   observedAt?: number;
+  /** Whether the session's latest observation advertised taking a message. */
+  canReceiveMessage?: boolean;
+  /** The controls the session's latest observation advertised, if any. */
+  controls?: ObservedSessionControl[];
+  /** Agent kinds the latest observation listed as spawnable in this session's workspace. */
+  spawnableAgents?: string[];
+  /** Whether the latest observation advertised renaming the session itself. */
+  canRename?: boolean;
+  /** Whether the latest observation advertised renaming the session's workspace. */
+  canRenameWorkspace?: boolean;
 }
 
 /** The observe endpoint answer: the caller's cloud sessions across all providers. */
@@ -356,6 +399,38 @@ export interface ObserveAnswer {
 }
 
 const OBSERVED_SESSION_STATUS_SET = new Set(["working", "waiting", "error", "complete", "unknown"]);
+
+const OBSERVED_CONTROL_KIND_SET: ReadonlySet<string> = new Set(Object.values(SESSION_CONTROL_KIND));
+
+function observedSessionControlFromWire(
+  value: UnparsedWireValue,
+): ObservedSessionControl | undefined {
+  if (!isRecord(value)) return undefined;
+  const id = text(value.id);
+  if (!id) return undefined;
+  const label = text(value.label);
+  if (!label) return undefined;
+  const kind = text(value.kind);
+  const control: ObservedSessionControl = { id, label };
+  if (kind && OBSERVED_CONTROL_KIND_SET.has(kind)) control.kind = kind;
+  return control;
+}
+
+function observedSessionControlsFromWire(
+  value: UnparsedWireValue,
+): ObservedSessionControl[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const controls = value
+    .map(observedSessionControlFromWire)
+    .filter((control): control is ObservedSessionControl => control !== undefined);
+  return controls.length > 0 ? controls : undefined;
+}
+
+function wireStringList(value: UnparsedWireValue): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const entries = value.filter((entry): entry is string => isWireString(entry) && entry.length > 0);
+  return entries.length > 0 ? entries : undefined;
+}
 
 function observedSessionFromWire(value: UnparsedWireValue): ObservedSession | undefined {
   if (!isRecord(value)) return undefined;
@@ -378,6 +453,13 @@ function observedSessionFromWire(value: UnparsedWireValue): ObservedSession | un
   if (recap) session.recap = recap;
   if (error) session.error = error;
   if (observedAt !== undefined) session.observedAt = observedAt;
+  if (value.canReceiveMessage === true) session.canReceiveMessage = true;
+  const controls = observedSessionControlsFromWire(value.controls);
+  if (controls) session.controls = controls;
+  const spawnableAgents = wireStringList(value.spawnableAgents);
+  if (spawnableAgents) session.spawnableAgents = spawnableAgents;
+  if (value.canRename === true) session.canRename = true;
+  if (value.canRenameWorkspace === true) session.canRenameWorkspace = true;
   return session;
 }
 
@@ -390,6 +472,74 @@ export function observeAnswerFromWire(value: UnparsedWireValue): ObserveAnswer |
     if (session) sessions.push(session);
   }
   return { sessions };
+}
+
+// --- Projects wire contract ---
+
+/**
+ * One place a new workspace can be created, as the projects endpoint reports
+ * it: a project the named provider itself listed on the fresh observation
+ * pass that answered the request. The creation act re-observes and validates
+ * the id against the provider's own list again, so this entry can offer a
+ * project but can never conjure one.
+ */
+export interface HostedWorkspaceProject {
+  /** The vault provider id that reported this project. */
+  providerId: string;
+  /** The provider-owned identifier a creation request names the project by. */
+  providerProjectId: string;
+  /** The repository label the project is named by on screen. */
+  repository: string;
+  /** Whether a new workspace here takes — or needs — an opening task. */
+  taskSupport: WorkspaceTaskSupport;
+  /** The bounded label of the execution target owning this project, when it has one. */
+  targetName?: string;
+}
+
+/** The projects endpoint answer: where the caller's keys can create a workspace. */
+export interface HostedProjectsAnswer {
+  projects: HostedWorkspaceProject[];
+}
+
+const WORKSPACE_TASK_SUPPORT_SET: ReadonlySet<string> = new Set(
+  Object.values(WORKSPACE_TASK_SUPPORT),
+);
+
+function hostedWorkspaceProjectFromWire(
+  value: UnparsedWireValue,
+): HostedWorkspaceProject | undefined {
+  if (!isRecord(value)) return undefined;
+  const providerId = text(value.providerId);
+  if (!providerId) return undefined;
+  const providerProjectId = text(value.providerProjectId);
+  if (!providerProjectId) return undefined;
+  const repository = text(value.repository);
+  if (!repository) return undefined;
+  const taskSupport = text(value.taskSupport);
+  if (!taskSupport || !WORKSPACE_TASK_SUPPORT_SET.has(taskSupport)) return undefined;
+  const targetName = text(value.targetName);
+  const project: HostedWorkspaceProject = {
+    providerId,
+    providerProjectId,
+    repository,
+    // SAFETY: membership in WORKSPACE_TASK_SUPPORT_SET was checked above.
+    taskSupport: taskSupport as WorkspaceTaskSupport,
+  };
+  if (targetName) project.targetName = targetName;
+  return project;
+}
+
+/** Validates a projects answer; a malformed entry is skipped, not fatal. */
+export function hostedProjectsAnswerFromWire(
+  value: UnparsedWireValue,
+): HostedProjectsAnswer | undefined {
+  if (!isRecord(value) || !Array.isArray(value.projects)) return undefined;
+  const projects: HostedWorkspaceProject[] = [];
+  for (const item of value.projects) {
+    const project = hostedWorkspaceProjectFromWire(item);
+    if (project) projects.push(project);
+  }
+  return { projects };
 }
 
 // --- Act wire contract ---

@@ -1,44 +1,27 @@
-import { ConductorSessionAdapter } from "../../../../packages/providers/src/conductor/adapter.js";
-import { CopilotSessionAdapter } from "../../../../packages/providers/src/copilot/adapter.js";
-import { CursorSessionAdapter } from "../../../../packages/providers/src/cursor/adapter.js";
-import { DevinSessionAdapter } from "../../../../packages/providers/src/devin/adapter.js";
-import { JulesSessionAdapter } from "../../../../packages/providers/src/jules/adapter.js";
-import { ReplicasSessionAdapter } from "../../../../packages/providers/src/replicas/adapter.js";
 import type { CloudFetch } from "../../../../packages/providers/src/shared/cloud-session-adapter.js";
 import type { ProviderSessionObservation } from "../core.js";
-import { type ObservedSession, VAULT_PROVIDER_ID, type VaultProviderId } from "../core.js";
+import {
+  type ObservedSession,
+  type ObservedSessionControl,
+  VAULT_PROVIDER_ID,
+  type VaultProviderId,
+} from "../core.js";
+import { cloudSessionAdapterFor } from "./cloud-adapters.js";
 import { decryptProviderKey } from "./encryption.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
+import { createRateBrake } from "./rate-brake.js";
 
-/**
- * Per-user in-memory brake, keyed on the resolved account rather than the
- * network address: the token already names who is asking, so rotating IPs
- * cannot route around it. The counter lives in the function instance, which
- * makes it a per-instance brake rather than a cluster-wide guarantee —
- * platform-level rules are the real backstop — but it turns a hammering
- * client into a trickle and limits amplification against provider quotas.
- */
 const OBSERVE_RATE_LIMIT = {
   WINDOW_MS: 60_000,
   MAX_REQUESTS_PER_WINDOW: 10,
-  /** The map is bounded; past this it forgets the oldest window rather than growing. */
   MAX_TRACKED_USERS: 10_000,
 } as const;
 
-const observeRecentUsers = new Map<string, { windowStart: number; count: number }>();
-
-function observeRateLimited(userId: string, now: number): boolean {
-  const held = observeRecentUsers.get(userId);
-  if (!held || now - held.windowStart >= OBSERVE_RATE_LIMIT.WINDOW_MS) {
-    if (observeRecentUsers.size >= OBSERVE_RATE_LIMIT.MAX_TRACKED_USERS) {
-      observeRecentUsers.clear();
-    }
-    observeRecentUsers.set(userId, { windowStart: now, count: 1 });
-    return false;
-  }
-  held.count += 1;
-  return held.count > OBSERVE_RATE_LIMIT.MAX_REQUESTS_PER_WINDOW;
-}
+const observeRateLimited = createRateBrake({
+  windowMs: OBSERVE_RATE_LIMIT.WINDOW_MS,
+  maxRequestsPerWindow: OBSERVE_RATE_LIMIT.MAX_REQUESTS_PER_WINDOW,
+  maxTrackedUsers: OBSERVE_RATE_LIMIT.MAX_TRACKED_USERS,
+});
 
 /** Stored vault key row as the API route supplies it. */
 export interface VaultKeyRow {
@@ -105,66 +88,18 @@ export async function handleObserve(options: ObserveOptions): Promise<Response> 
     };
   }
 
-  const baseOptions = {
-    minimumRefreshIntervalMs: 0,
-    ...(options.fetch ? { fetch: options.fetch } : undefined),
-    ...(options.now ? { now: options.now } : undefined),
-  };
-
   const providers: Array<{
     providerId: VaultProviderId;
     observe: () => Promise<readonly ProviderSessionObservation[]>;
-  }> = [
-    {
-      providerId: VAULT_PROVIDER_ID.CONDUCTOR,
-      observe: () =>
-        new ConductorSessionAdapter({
-          ...baseOptions,
-          readApiKey: readApiKeyFor(VAULT_PROVIDER_ID.CONDUCTOR),
-        }).observe(),
-    },
-    {
-      providerId: VAULT_PROVIDER_ID.COPILOT,
-      observe: () =>
-        new CopilotSessionAdapter({
-          ...baseOptions,
-          readApiKey: readApiKeyFor(VAULT_PROVIDER_ID.COPILOT),
-        }).observe(),
-    },
-    {
-      providerId: VAULT_PROVIDER_ID.CURSOR,
-      observe: () =>
-        new CursorSessionAdapter({
-          ...baseOptions,
-          readApiKey: readApiKeyFor(VAULT_PROVIDER_ID.CURSOR),
-          skipBackgroundFetches: true,
-        }).observe(),
-    },
-    {
-      providerId: VAULT_PROVIDER_ID.DEVIN,
-      observe: () =>
-        new DevinSessionAdapter({
-          ...baseOptions,
-          readApiKey: readApiKeyFor(VAULT_PROVIDER_ID.DEVIN),
-        }).observe(),
-    },
-    {
-      providerId: VAULT_PROVIDER_ID.JULES,
-      observe: () =>
-        new JulesSessionAdapter({
-          ...baseOptions,
-          readApiKey: readApiKeyFor(VAULT_PROVIDER_ID.JULES),
-        }).observe(),
-    },
-    {
-      providerId: VAULT_PROVIDER_ID.REPLICAS,
-      observe: () =>
-        new ReplicasSessionAdapter({
-          ...baseOptions,
-          readApiKey: readApiKeyFor(VAULT_PROVIDER_ID.REPLICAS),
-        }).observe(),
-    },
-  ];
+  }> = Object.values(VAULT_PROVIDER_ID).map((providerId) => ({
+    providerId,
+    observe: () =>
+      cloudSessionAdapterFor(providerId, {
+        readApiKey: readApiKeyFor(providerId),
+        ...(options.fetch ? { fetch: options.fetch } : undefined),
+        ...(options.now ? { now: options.now } : undefined),
+      }).observe(),
+  }));
 
   const results = await Promise.allSettled(providers.map(({ observe }) => observe()));
 
@@ -195,5 +130,24 @@ function toWireSession(providerId: string, obs: ProviderSessionObservation): Obs
   const error = obs.detail?.error;
   if (error) session.error = error;
   session.observedAt = obs.observedAt;
+  // The act advertisements, so a row can offer only what the observation
+  // promised. Each is presence-only where it can be: what a control targets,
+  // or which workspace a rename lands on, never travels — the act endpoints
+  // re-observe and rebuild every write from their own fresh advertisement.
+  if (obs.canReceiveMessage) session.canReceiveMessage = true;
+  const controls = obs.controls
+    ?.map((control): ObservedSessionControl => {
+      const wireControl: ObservedSessionControl = { id: control.id, label: control.label };
+      if (control.kind) wireControl.kind = control.kind;
+      return wireControl;
+    })
+    .filter((control) => control.id && control.label);
+  if (controls && controls.length > 0) session.controls = controls;
+  const spawnableAgents = obs.spawnableAgents?.filter((agent) => agent.length > 0);
+  if (spawnableAgents && spawnableAgents.length > 0) {
+    session.spawnableAgents = [...spawnableAgents];
+  }
+  if (obs.canRename) session.canRename = true;
+  if (obs.renameTarget) session.canRenameWorkspace = true;
   return session;
 }

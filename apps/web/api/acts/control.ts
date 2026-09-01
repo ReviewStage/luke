@@ -1,16 +1,24 @@
 import { and, eq } from "drizzle-orm";
 import { auth } from "../../server/auth.js";
-import { sessionMessageText } from "../../server/core.js";
+import { text } from "../../server/core.js";
 import { getDatabase } from "../../server/db/index.js";
 import { providerKey } from "../../server/db/schema.js";
 import {
   actUnsupportedReason,
-  executeMessageAct,
+  executeControlAct,
   MOBILE_SESSION_ACT,
 } from "../../server/hosted/act-execute.js";
 import { handleSessionAct } from "../../server/hosted/act-session.js";
 import { hostedUserId, oauthUserInfoFromAuthAnswer } from "../../server/hosted/bearer.js";
 import { VAULT_ENCRYPTION_ENVIRONMENT } from "../../server/hosted/encryption.js";
+
+/**
+ * Control ids are short build-fixed slugs on every provider (`cancel-turn`,
+ * `archive-agent`, `approve-plan`); the bound refuses anything that could not
+ * be one. Which ids exist is not decided here — the executor honours only a
+ * control the fresh observation pass advertised for the session.
+ */
+const CONTROL_ID_MAX_LENGTH = 100;
 
 function resolveUserId(request: Request) {
   return hostedUserId(request, async (input) =>
@@ -22,7 +30,7 @@ const encryptionSecret = process.env[VAULT_ENCRYPTION_ENVIRONMENT.SECRET];
 
 export default {
   async fetch(request: Request): Promise<Response> {
-    return handleSessionAct<{ text: string }>({
+    return handleSessionAct<{ controlId: string }>({
       request,
       resolveUserId,
       encryptionSecret,
@@ -35,12 +43,13 @@ export default {
         return rows[0];
       },
       parseFields: (body) => {
-        const text = sessionMessageText(body.text);
-        return text ? { text } : undefined;
+        const controlId = text(body.controlId);
+        if (!controlId || controlId.length > CONTROL_ID_MAX_LENGTH) return undefined;
+        return { controlId };
       },
       unsupportedReason: (providerId) =>
-        actUnsupportedReason(MOBILE_SESSION_ACT.MESSAGE, providerId),
-      execute: executeMessageAct,
+        actUnsupportedReason(MOBILE_SESSION_ACT.CONTROL, providerId),
+      execute: executeControlAct,
     });
   },
 };

@@ -135,6 +135,79 @@ test("observeAnswerFromWire rejects an unknown status value", () => {
   assert.equal(answer.sessions.length, 0);
 });
 
+test("observeAnswerFromWire carries the act advertisements and bounds them", () => {
+  const raw = {
+    sessions: [
+      {
+        providerId: "jules",
+        sessionId: "sess-3",
+        title: "Jules task",
+        status: "waiting",
+        canReceiveMessage: true,
+        controls: [
+          { id: "approve-plan", label: "Approve the plan" },
+          { id: "cancel-turn", label: "Stop", kind: "stop" },
+          { id: "", label: "nameless" }, // malformed: skipped
+          { id: "no-label" }, // malformed: skipped
+        ],
+        spawnableAgents: ["claude", "codex", ""],
+        canRename: true,
+        canRenameWorkspace: "yes", // not a boolean: dropped
+      },
+    ],
+  };
+  const answer = observeAnswerFromWire(JSON.parse(JSON.stringify(raw)));
+  assert.ok(answer);
+  const session = answer.sessions[0];
+  assert.ok(session);
+  assert.equal(session.canReceiveMessage, true);
+  assert.deepEqual(session.controls, [
+    { id: "approve-plan", label: "Approve the plan" },
+    { id: "cancel-turn", label: "Stop", kind: "stop" },
+  ]);
+  assert.deepEqual(session.spawnableAgents, ["claude", "codex"]);
+  assert.equal(session.canRename, true);
+  assert.equal(session.canRenameWorkspace, undefined);
+});
+
+// --- Act advertisements ride the roster from a live pass ---
+
+test("a session's advertised acts reach the wire from an observation pass", async () => {
+  const ciphertext = encryptProviderKey("jules-key", SECRET);
+  const julesListing = JSON.stringify({
+    sessions: [
+      {
+        id: "jules-1",
+        state: "AWAITING_PLAN_APPROVAL",
+        updateTime: new Date().toISOString(),
+        sourceContext: { source: "github/owner/repo" },
+        url: "https://jules.google.com/session/jules-1",
+      },
+    ],
+  });
+
+  const response = await handleObserve(
+    observeOptions({
+      readVaultKeys: async (): Promise<VaultKeyRow[]> => [{ providerId: "jules", ciphertext }],
+      fetch: async (url) =>
+        url.includes("jules")
+          ? new Response(julesListing, { status: 200 })
+          : new Response(null, { status: 401 }),
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.sessions.length, 1);
+  const session = body.sessions[0];
+  assert.equal(session.providerId, "jules");
+  assert.equal(session.canReceiveMessage, true);
+  assert.deepEqual(session.controls, [{ id: "approve-plan", label: "Approve the plan" }]);
+  assert.equal(session.spawnableAgents, undefined);
+  assert.equal(session.canRename, undefined);
+  assert.equal(session.canRenameWorkspace, undefined);
+});
+
 test("observeAnswerFromWire returns undefined for a non-object", () => {
   assert.equal(observeAnswerFromWire("not an object"), undefined);
   assert.equal(observeAnswerFromWire(null), undefined);
