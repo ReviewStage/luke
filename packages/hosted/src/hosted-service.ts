@@ -338,6 +338,8 @@ export interface ObservedSession {
   recap?: string;
   /** Error description, when the session stopped on something it cannot pass. */
   error?: string;
+  /** Unix milliseconds of the last observed activity, when the provider reported one. */
+  observedAt?: number;
 }
 
 /** The observe endpoint answer: the caller's cloud sessions across all providers. */
@@ -361,11 +363,13 @@ function observedSessionFromWire(value: UnparsedWireValue): ObservedSession | un
   const branch = text(value.branch);
   const recap = text(value.recap);
   const error = text(value.error);
+  const observedAt = wholeNumber(value.observedAt);
   const session: ObservedSession = { providerId, sessionId, title, status };
   if (workspace) session.workspace = workspace;
   if (branch) session.branch = branch;
   if (recap) session.recap = recap;
   if (error) session.error = error;
+  if (observedAt !== undefined) session.observedAt = observedAt;
   return session;
 }
 

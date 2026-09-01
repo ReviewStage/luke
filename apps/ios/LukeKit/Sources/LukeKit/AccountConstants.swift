@@ -13,8 +13,8 @@ public enum AccountConstants {
         return URL(string: "https://tryluke.dev/api/auth")!
     }()
 
-    /// The hosted service origin. The auth base above lives under `/api/auth`
-    /// on it; the vault endpoints live under `/api/vault`.
+    /// The hosted service origin. The auth base lives under `/api/auth`,
+    /// vault endpoints under `/api/vault`, and observe under `/api/observe`.
     public static let serviceURL: URL = {
         #if DEBUG
         if let override = ProcessInfo.processInfo.environment["LUKE_SERVICE_BASE_URL"],

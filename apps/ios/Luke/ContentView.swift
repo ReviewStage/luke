@@ -168,33 +168,24 @@ private struct SignedInView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 16) {
-                    if !session.credentialsPersisted {
-                        persistenceNotice
+            SessionsView()
+                .navigationTitle(identity.name ?? identity.email)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    if #available(iOS 26.0, *) {
+                        ToolbarItem(placement: .topBarLeading) {
+                            profileButton
+                        }
+                        // Separated from the bar's shared glass, which hugs an
+                        // item as a capsule: the avatar's own circle is the
+                        // whole control.
+                        .sharedBackgroundVisibility(.hidden)
+                    } else {
+                        ToolbarItem(placement: .topBarLeading) {
+                            profileButton
+                        }
                     }
                 }
-                // Stretched to the proposal, or the scroll view adopts its
-                // content's ideal width and draws as a strip up the middle.
-                .frame(maxWidth: .infinity)
-                .padding(24)
-            }
-            .background(Color.ground.ignoresSafeArea())
-            .toolbar {
-                if #available(iOS 26.0, *) {
-                    ToolbarItem(placement: .topBarLeading) {
-                        profileButton
-                    }
-                    // Separated from the bar's shared glass, which hugs an
-                    // item as a capsule: the avatar's own circle is the
-                    // whole control.
-                    .sharedBackgroundVisibility(.hidden)
-                } else {
-                    ToolbarItem(placement: .topBarLeading) {
-                        profileButton
-                    }
-                }
-            }
         }
         .sheet(isPresented: $profileShown) {
             ProfileSheet(identity: identity)
@@ -233,22 +224,6 @@ private struct SignedInView: View {
         }
     }
 
-    private var persistenceNotice: some View {
-        Text("This device is not saving the sign-in, so the next launch will ask again.")
-            .font(.caption)
-            .multilineTextAlignment(.center)
-            .foregroundStyle(Color.warningInk)
-            .frame(maxWidth: .infinity)
-            .padding(16)
-            .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(Color.cardFill)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .stroke(Color.cardStroke, lineWidth: 1)
-                    )
-            )
-    }
 }
 
 // MARK: - Profile sheet

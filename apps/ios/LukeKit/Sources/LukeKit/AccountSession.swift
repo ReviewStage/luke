@@ -68,6 +68,12 @@ public final class AccountSession {
         state = .signedIn(identity)
     }
 
+    /// Returns the stored access token when signed in, or nil when signed out.
+    public func currentAccessToken() -> String? {
+        guard case .signedIn = state else { return nil }
+        return KeychainStore.get(.accessToken)
+    }
+
     public func signOut() async {
         generation += 1
         let tokenToRevoke = refreshToken
