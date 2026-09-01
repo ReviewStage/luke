@@ -78,6 +78,11 @@ export async function handleMobileVoiceMint(options: MobileVoiceMintOptions): Pr
 
   const now = options.now ?? Date.now;
 
+  // Ephemeral Realtime keys expire in 60 s. Cap the observe leg to 30 s so the
+  // key still has plenty of time to connect even if a cloud pass runs long.
+  // observe resolves to [] on timeout rather than failing the whole request.
+  const OBSERVE_TIMEOUT_MS = 30_000;
+
   // Mint credential and observe sessions concurrently — neither depends on the
   // other, so there is no reason to serialize them.
   const [minted, sessions] = await Promise.all([
@@ -90,7 +95,12 @@ export async function handleMobileVoiceMint(options: MobileVoiceMintOptions): Pr
       now: options.now,
       timeoutMs: options.timeoutMs,
     }),
-    observeCloudSessions(userId, options),
+    Promise.race([
+      observeCloudSessions(userId, options),
+      new Promise<ObservedSession[]>((resolve) =>
+        setTimeout(() => resolve([]), OBSERVE_TIMEOUT_MS),
+      ),
+    ]),
   ]);
 
   if ("failure" in minted) return minted.failure;
