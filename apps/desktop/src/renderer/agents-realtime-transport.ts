@@ -43,7 +43,8 @@ export class AgentsRealtimeTransport extends OpenAIRealtimeBase {
   }
 
   sendEvent(event: RealtimeClientMessage): void {
-    this.#options.send(event as WireRecord);
+    const parsed: UnparsedWireValue = JSON.parse(JSON.stringify(event));
+    if (isRecord(parsed)) this.#options.send(parsed);
   }
 
   mute(muted: boolean): void {
@@ -63,7 +64,7 @@ export class AgentsRealtimeTransport extends OpenAIRealtimeBase {
 
   receive(event: WireRecord): void {
     if (this.#status !== "connected") return;
-    this._onMessage({ data: JSON.stringify(event) } as MessageEvent<string>);
+    this._onMessage(new MessageEvent("message", { data: JSON.stringify(event) }));
   }
 
   receiveFunctionCall(call: TransportToolCallEvent): void {
@@ -72,21 +73,14 @@ export class AgentsRealtimeTransport extends OpenAIRealtimeBase {
   }
 
   override updateSessionConfig(config: Partial<RealtimeSessionConfig>): void {
-    const source = config as {
-      instructions?: string;
-      tools?: unknown[];
-      toolChoice?: unknown;
-      tracing?: unknown;
+    const session = {
+      type: "realtime",
+      instructions: config.instructions,
+      tools: config.tools,
+      tool_choice: config.toolChoice,
+      tracing: config.tracing,
     };
-    const parsed: UnparsedWireValue = JSON.parse(
-      JSON.stringify({
-        type: "realtime",
-        ...(source.instructions !== undefined ? { instructions: source.instructions } : undefined),
-        ...(source.tools !== undefined ? { tools: source.tools } : undefined),
-        ...(source.toolChoice !== undefined ? { tool_choice: source.toolChoice } : undefined),
-        ...(source.tracing !== undefined ? { tracing: source.tracing } : undefined),
-      }),
-    );
+    const parsed: UnparsedWireValue = JSON.parse(JSON.stringify(session));
     if (isRecord(parsed)) this.#options.send({ type: "session.update", session: parsed });
   }
 

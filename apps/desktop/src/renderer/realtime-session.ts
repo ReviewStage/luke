@@ -2539,12 +2539,13 @@ export class RealtimeVoiceSession {
               responseId: agentsResponseId,
             });
           }
+          let response: WireRecord = { id: agentsResponseId };
+          if (isRecord(record.response)) {
+            response = { ...record.response, id: agentsResponseId };
+          }
           this.#agentsTransport?.receive({
             ...record,
-            response: {
-              ...(isRecord(record.response) ? record.response : {}),
-              id: agentsResponseId,
-            },
+            response,
           });
         }
         // Whether this is the reply now under way, or the finished form of one

@@ -1,6 +1,6 @@
 import { backgroundResult, RealtimeAgent, tool } from "@openai/agents-realtime";
 import { type RealtimeFunctionCall, realtimeToolDefinitions } from "@sidecar/acts";
-import type { WireRecord } from "@sidecar/wire";
+import { isRecord, text, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
 
 export interface AgentsDeveloperToolCall extends RealtimeFunctionCall {
   callId: string;
@@ -23,15 +23,14 @@ export function createDeveloperTurnAgent(
         additionalProperties: true,
       },
       strict: false,
-      execute: async (argumentsValue: unknown, _context, details) => {
-        const toolCall = details?.toolCall as
-          | { callId?: unknown; responseId?: unknown }
-          | undefined;
+      execute: async (argumentsValue, _context, details) => {
+        const unparsedToolCall: UnparsedWireValue = JSON.parse(JSON.stringify(details?.toolCall));
+        const toolCall = isRecord(unparsedToolCall) ? unparsedToolCall : undefined;
         const output = await execute({
           name: definition.name,
           argumentsJson: JSON.stringify(argumentsValue),
-          callId: typeof toolCall?.callId === "string" ? toolCall.callId : "",
-          responseId: typeof toolCall?.responseId === "string" ? toolCall.responseId : "",
+          callId: text(toolCall?.callId) ?? "",
+          responseId: text(toolCall?.responseId) ?? "",
         });
         return backgroundResult(JSON.stringify(output));
       },
