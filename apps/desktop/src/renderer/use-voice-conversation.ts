@@ -44,6 +44,8 @@ import { openPreferredMicrophone } from "./microphone-choice";
 import { type AppActionCarrier, RealtimeVoiceSession } from "./realtime-session";
 import { SpokenNoticeAnnouncer } from "./spoken-notices";
 import { useStateWithRef } from "./use-state-with-ref";
+import { type LegacyVoiceView, VoiceMachineShadowAdapter } from "./voice-machine-adapter";
+import { createVoiceMachineInspector, type VoiceMachineInspector } from "./voice-machine-inspector";
 import { WAVEFORM_VOICE, type WaveformVoice } from "./waveform";
 
 /**
@@ -376,6 +378,12 @@ export interface VoiceConversationOptions {
    * a directory — so on every other run the wire is never even tapped.
    */
   agentTraceEnabled: boolean;
+  voiceMachineInspection: {
+    captureMode: boolean;
+    fixtureMode: boolean;
+    packaged: boolean;
+    requested: boolean;
+  };
   sessions: readonly Session[];
   workspaceProjects: readonly ObservedWorkspaceProject[];
   defaultWorkspaceProvider: WorkspaceProviderId | undefined;
@@ -552,6 +560,8 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   const remoteAudio = useRef<HTMLAudioElement | null>(null);
   const voiceSession = useRef<RealtimeVoiceSession | undefined>(undefined);
   const announcer = useRef<SpokenNoticeAnnouncer | undefined>(undefined);
+  const voiceMachineAdapter = useRef<VoiceMachineShadowAdapter | undefined>(undefined);
+  const voiceMachineInspector = useRef<VoiceMachineInspector | undefined>(undefined);
   /** When the talk key went down, which is what tells a hold from a tap. */
   const talkPressedAt = useRef<number | undefined>(undefined);
   /** Whether a tap has left a turn open for a later press to end. */
@@ -617,6 +627,60 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
    * and not a word of what it rendered.
    */
   const transcriptSpokenRef = useRef(false);
+
+  const voiceMachineView: LegacyVoiceView = {
+    meetingQuiet: options.meetingQuiet,
+    microphoneCall: voiceSession.current?.microphoneCall === true,
+    microphoneStatus,
+    outputSilent: options.outputSilent,
+    status: voiceStatus,
+    typedExchange: typedExchange.current,
+  };
+  const voiceMachineViewRef = useRef(voiceMachineView);
+  voiceMachineViewRef.current = voiceMachineView;
+  const {
+    captureMode: voiceMachineCaptureMode,
+    fixtureMode: voiceMachineFixtureMode,
+    packaged: voiceMachinePackaged,
+    requested: voiceMachineInspectionRequested,
+  } = options.voiceMachineInspection;
+
+  useEffect(() => {
+    let gone = false;
+    void createVoiceMachineInspector({
+      captureMode: voiceMachineCaptureMode,
+      fixtureMode: voiceMachineFixtureMode,
+      packaged: voiceMachinePackaged,
+      requested: voiceMachineInspectionRequested,
+    }).then((inspector) => {
+      if (gone) {
+        inspector?.stop();
+        return;
+      }
+      voiceMachineInspector.current = inspector;
+      const adapter = new VoiceMachineShadowAdapter({
+        ...(inspector ? { inspect: inspector.inspect } : undefined),
+      });
+      voiceMachineAdapter.current = adapter;
+      adapter.sync(voiceMachineViewRef.current);
+    });
+    return () => {
+      gone = true;
+      voiceMachineAdapter.current?.stop();
+      voiceMachineAdapter.current = undefined;
+      voiceMachineInspector.current?.stop();
+      voiceMachineInspector.current = undefined;
+    };
+  }, [
+    voiceMachineCaptureMode,
+    voiceMachineFixtureMode,
+    voiceMachineInspectionRequested,
+    voiceMachinePackaged,
+  ]);
+
+  useEffect(() => {
+    voiceMachineAdapter.current?.sync(voiceMachineView);
+  });
 
   /**
    * Appends one bounded line to this launch's history and tells the call now

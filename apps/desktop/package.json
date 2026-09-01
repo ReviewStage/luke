@@ -37,8 +37,8 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "devDependencies": {
-    "@sidecar/acts": "workspace:*",
     "@sidecar/account": "workspace:*",
+    "@sidecar/acts": "workspace:*",
     "@sidecar/analytics": "workspace:*",
     "@sidecar/attention": "workspace:*",
     "@sidecar/calendar": "workspace:*",
@@ -58,7 +58,9 @@
     "@sidecar/surface": "workspace:*",
     "@sidecar/trackers": "workspace:*",
     "@sidecar/voice": "workspace:*",
+    "@sidecar/voice-machine": "workspace:*",
     "@sidecar/wire": "workspace:*",
+    "@statelyai/inspect": "^0.7.2",
     "@types/node": "26.2.0",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
@@ -69,7 +71,8 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "tsx": "4.23.12",
-    "typescript": "7.0.2"
+    "typescript": "7.0.2",
+    "xstate": "^5.32.6"
   },
   "dependencies": {
     "electron-updater": "6.8.9"

@@ -1349,6 +1349,8 @@ function registerIpc(): void {
         captureMode,
         fixtureMode,
         agentTraceEnabled: agentTrace !== undefined,
+        voiceMachineInspectionEnabled:
+          process.env.LUKE_STATELY_INSPECT === "1" && !app.isPackaged && !fixtureMode,
         supersetInstalled,
         supersetConnected,
         accountRequired: runMode.requiresAccount,
