@@ -56,6 +56,26 @@ test("an announcement shows its spoken transcript", () => {
   assert.doesNotMatch(markup, /provider:|work recap:/);
 });
 
+test("a recorded entry shows its local time", () => {
+  const markup = renderToStaticMarkup(
+    createElement(ConversationHistoryPanel, {
+      entries: [
+        {
+          kind: CONVERSATION_ENTRY_KIND.REPLY,
+          words: "Checkout is ready.",
+          recordedAt: Date.parse("2026-01-02T03:04:00.000Z"),
+        },
+      ],
+      onClear: () => undefined,
+    }),
+  );
+
+  assert.match(
+    markup,
+    /<time class="history-time" dateTime="2026-01-02T03:04:00.000Z">[^<]+<\/time>/,
+  );
+});
+
 test("conversation history is blocked from optional panel recordings", () => {
   const markup = renderToStaticMarkup(
     createElement(ConversationHistoryPanel, {

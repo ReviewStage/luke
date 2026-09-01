@@ -127,6 +127,19 @@
   white-space: pre-wrap;
 }
 
+/* The stamp rides inside the bubble, on the last line where a chat app puts
+   it, so a thread with times lays out exactly like one without and the copy
+   control stays centred on the words. It inherits the bubble's own colour
+   because the sent bubble's ground is the accent, where a fixed secondary
+   grey would not be readable. */
+.history-time {
+  margin-left: 6px;
+  color: inherit;
+  font-size: 9.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .history-entry[data-speaker="you"] {
   align-self: flex-end;
   align-items: flex-end;

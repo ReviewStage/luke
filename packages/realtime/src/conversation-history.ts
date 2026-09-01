@@ -62,6 +62,11 @@ export interface ConversationEntry {
    * toward a refusal nor leave "that chat" open to a lookalike.
    */
   identity?: SessionIdentity;
+  /**
+   * When the line happened in the conversation. Appends stamp themselves;
+   * delayed spoken transcripts carry the time their turn began.
+   */
+  recordedAt?: number;
 }
 
 /**
@@ -75,7 +80,7 @@ export function appendConversationThreadEntry(
 ): readonly ConversationEntry[] {
   const words = boundedEntryWords(entry.words);
   if (!words) return entries;
-  const appended: ConversationEntry = { kind: entry.kind, words };
+  const appended: ConversationEntry = { kind: entry.kind, words, recordedAt: Date.now() };
   if (entry.identity) appended.identity = entry.identity;
   return [...entries, appended];
 }
@@ -116,6 +121,7 @@ export function insertSpokenAskThreadEntry(
   entries: readonly ConversationEntry[],
   words: string,
   after: ConversationEntry | undefined,
+  recordedAt: number,
 ): readonly ConversationEntry[] {
   const bounded = boundedEntryWords(words);
   if (!bounded) return entries;
@@ -123,7 +129,11 @@ export function insertSpokenAskThreadEntry(
   // exactly where an entry older than the whole history belongs.
   const at = after ? entries.indexOf(after) + 1 : 0;
   const placed = [...entries];
-  placed.splice(at, 0, { kind: CONVERSATION_ENTRY_KIND.SPOKEN_ASK, words: bounded });
+  placed.splice(at, 0, {
+    kind: CONVERSATION_ENTRY_KIND.SPOKEN_ASK,
+    words: bounded,
+    recordedAt,
+  });
   return placed;
 }
 
@@ -133,7 +143,7 @@ export function insertSpokenAskEntry(
   words: string,
   after: ConversationEntry | undefined,
 ): readonly ConversationEntry[] {
-  return recentConversationEntries(insertSpokenAskThreadEntry(entries, words, after));
+  return recentConversationEntries(insertSpokenAskThreadEntry(entries, words, after, Date.now()));
 }
 
 /**
