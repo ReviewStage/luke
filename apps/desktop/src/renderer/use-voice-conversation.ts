@@ -361,6 +361,19 @@ export function liveConversationEntries(input: {
   return lines;
 }
 
+/** Moves turns opened before restore behind the restored thread. */
+export function rebaseSpokenTurnMarks(
+  marks: readonly { after: ConversationEntry | undefined }[],
+  restoredTail: ConversationEntry,
+): void {
+  for (const mark of marks) mark.after ??= restoredTail;
+}
+
+/** Stored history may change only after restore and outside a pending Clear. */
+export function conversationHistoryMayPersist(seeded: boolean, clearing: boolean): boolean {
+  return seeded && !clearing;
+}
+
 /** Captures the reply that owns an act before main-process authorization can pause it. */
 export async function authorizeConversationAct<T>(
   activeReplyGeneration: { readonly current: number | undefined },
@@ -670,6 +683,8 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
    * stay cleared.
    */
   const conversationSeeded = useRef(false);
+  /** Whether a Clear's deletion is still in flight, so nothing may rewrite it. */
+  const conversationClearing = useRef(false);
   /** Rises when Clear retires every event that began before that press. */
   const conversationGenerationRef = useRef(0);
   // State is the ref's identical drawn copy, so History retains the whole
@@ -736,7 +751,12 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     voiceSession.current?.updateConversation(recentConversationEntries(conversationRef.current), {
       announced,
     });
-    window.sidecar.reportConversationHistory(conversationRef.current);
+    // Before the restore this thread is only part of itself, and while a Clear
+    // is in flight the file it would write is already being deleted: either
+    // write would stand in for a thread nobody has.
+    if (conversationHistoryMayPersist(conversationSeeded.current, conversationClearing.current)) {
+      window.sidecar.reportConversationHistory(conversationRef.current);
+    }
   }, []);
 
   useEffect(() => {
@@ -776,10 +796,13 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   );
 
   const clearConversationHistory = useCallback(() => {
+    if (conversationClearing.current) return;
+    conversationClearing.current = true;
     void window.sidecar
       .clearConversationHistory()
       .then((cleared) => {
         if (!cleared) {
+          conversationClearing.current = false;
           setVoiceError("Could not clear history. Try again.");
           return;
         }
@@ -799,8 +822,12 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
         voiceSession.current?.clearConversation();
         activeReplyGenerationRef.current = undefined;
         activeAnnouncementGenerationRef.current = undefined;
+        conversationClearing.current = false;
       })
-      .catch(() => setVoiceError("Could not clear history. Try again."));
+      .catch(() => {
+        conversationClearing.current = false;
+        setVoiceError("Could not clear history. Try again.");
+      });
   }, []);
 
   /**
@@ -852,6 +879,17 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       // A snapshot the main process built before this window's first report —
       // or before a Clear pressed here — must not stand old lines back up.
       if (conversationSeeded.current || conversationGenerationRef.current > 0) return;
+      const restoredTail = entries.at(-1);
+      if (restoredTail) {
+        rebaseSpokenTurnMarks(
+          [
+            ...spokenTurnMarksRef.current.values(),
+            ...pendingSpokenTurnMarksRef.current,
+            ...(activeSpokenTurnMarkRef.current ? [activeSpokenTurnMarkRef.current] : []),
+          ],
+          restoredTail,
+        );
+      }
       applySharedConversationHistory({
         entries: [...entries, ...conversationRef.current],
         cleared: false,
