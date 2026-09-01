@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { text } from "../server/core";
+import { text, type WorkspaceAgentSelection } from "../server/core";
 import {
   actUnsupportedReason,
   executeControlAct,
@@ -445,7 +445,7 @@ test("a workspace creation naming an unreported project is rejected without a wr
 // --- The workspace act's agent selection is held to the build's table ---
 
 test("a listed agent selection reaches the executor whole", async () => {
-  let received: unknown;
+  let received: WorkspaceAgentSelection | undefined;
   const response = await handleActWorkspace(
     workspaceOptions({
       request: workspaceRequest({
@@ -506,15 +506,18 @@ test("a selection for a provider with no table is an invalid request", async () 
 });
 
 test("no selection fields is no selection, never a guess", async () => {
-  let received: unknown = "unset";
+  let received: WorkspaceAgentSelection | undefined;
+  let ran = false;
   await handleActWorkspace(
     workspaceOptions({
       executeCreateWorkspace: async (options) => {
         received = options.agentSelection;
+        ran = true;
         return { result: "accepted" };
       },
     }),
   );
 
+  assert.equal(ran, true);
   assert.equal(received, undefined);
 });
