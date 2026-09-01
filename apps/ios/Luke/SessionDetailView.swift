@@ -34,20 +34,33 @@ struct SessionDetailView: View {
     @State private var text = ""
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 14) {
-                metaHeader
-                if let words = session.error ?? session.recap {
-                    agentBubble(words, isError: session.error != nil)
+        // Top-anchored like a short Messages thread; a send scrolls to its
+        // own bubble instead of re-anchoring the whole thread, which would
+        // drop short content to the screen's bottom edge.
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(spacing: 14) {
+                    metaHeader
+                    if let words = session.error ?? session.recap {
+                        agentBubble(words, isError: session.error != nil)
+                    }
+                    ForEach(thread) { message in
+                        userBubble(message)
+                    }
                 }
-                ForEach(thread) { message in
-                    userBubble(message)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+            }
+            .onChange(of: thread.count) {
+                guard let last = thread.last else { return }
+                withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
+            }
+            .onAppear {
+                if let last = thread.last {
+                    proxy.scrollTo(last.id, anchor: .bottom)
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
         }
-        .defaultScrollAnchor(thread.isEmpty ? .top : .bottom)
         .scrollDismissesKeyboard(.interactively)
         .background(Color.ground.ignoresSafeArea())
         .navigationTitle(session.title)
@@ -133,6 +146,7 @@ struct SessionDetailView: View {
                     .padding(.vertical, 7)
                     .background(
                         RoundedRectangle(cornerRadius: 18)
+                            .fill(Color.cardFill)
                             .strokeBorder(Color.controlStroke, lineWidth: 1)
                     )
                 Button(action: send) {
@@ -144,14 +158,17 @@ struct SessionDetailView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(.bar)
+            // The chat's own ground, not the system bar material: the screen
+            // and its bars all stand on Color.ground, and a material would
+            // resolve near-white over it in light mode.
+            .background(Color.ground)
         } else {
             Text("This session isn't accepting messages right now.")
                 .font(.footnote)
                 .foregroundStyle(Color.inkTertiary)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 10)
-                .background(.bar)
+                .background(Color.ground)
         }
     }
 
