@@ -28,6 +28,10 @@ import {
 /** The hosted endpoints, rooted at the service origin. */
 export const HOSTED_SERVICE_PATH = {
   VOICE_MINT: "/api/voice/mint",
+  /** Send a message to a cloud session (POST). */
+  ACT_MESSAGE: "/api/acts/message",
+  /** Create a workspace in a cloud project (POST). */
+  ACT_WORKSPACE: "/api/acts/workspace",
   /**
    * The one endpoint a fresh install may call before any account exists: it
    * mints a single short-lived credential for the spoken onboarding
@@ -386,4 +390,59 @@ export function observeAnswerFromWire(value: UnparsedWireValue): ObserveAnswer |
     if (session) sessions.push(session);
   }
   return { sessions };
+}
+
+// --- Act wire contract ---
+
+/**
+ * The three outcomes a hosted act endpoint can return. Values match
+ * `ACT_RESULT_STATUS` in `@sidecar/acts` so the mobile client and the desktop
+ * can share the same vocabulary without a direct dependency on that package.
+ */
+export const HOSTED_ACT_RESULT = {
+  /** The provider accepted the act. */
+  ACCEPTED: "accepted",
+  /** The provider or server refused the act; `reason` says why. */
+  REJECTED: "rejected",
+  /** The act is not available for this provider via mobile yet. */
+  UNSUPPORTED: "unsupported",
+} as const;
+
+export type HostedActResult = (typeof HOSTED_ACT_RESULT)[keyof typeof HOSTED_ACT_RESULT];
+
+const HOSTED_ACT_RESULT_SET: ReadonlySet<string> = new Set(Object.values(HOSTED_ACT_RESULT));
+
+/** What the message and workspace-creation act endpoints return. */
+export interface HostedActAnswer {
+  result: HostedActResult;
+  /** Human-readable reason; present on rejected and unsupported results. */
+  reason?: string;
+}
+
+/** What the workspace-creation act endpoint returns. */
+export interface HostedActWorkspaceAnswer extends HostedActAnswer {
+  /** The created session's provider id, when the provider reports one. */
+  providerSessionId?: string;
+}
+
+/** Reads an act answer from an untrusted hosted response. */
+export function hostedActAnswerFromWire(value: UnparsedWireValue): HostedActAnswer | undefined {
+  if (!isRecord(value)) return undefined;
+  const result = text(value.result);
+  if (!result || !HOSTED_ACT_RESULT_SET.has(result)) return undefined;
+  const reason = isWireString(value.reason) ? value.reason : undefined;
+  // SAFETY: result is a string and a member of HOSTED_ACT_RESULT_SET.
+  return { result: result as HostedActResult, ...(reason ? { reason } : undefined) };
+}
+
+/** Reads a workspace-creation act answer from an untrusted hosted response. */
+export function hostedActWorkspaceAnswerFromWire(
+  value: UnparsedWireValue,
+): HostedActWorkspaceAnswer | undefined {
+  const base = hostedActAnswerFromWire(value);
+  if (!base || !isRecord(value)) return base;
+  const providerSessionId = isWireString(value.providerSessionId)
+    ? value.providerSessionId
+    : undefined;
+  return { ...base, ...(providerSessionId ? { providerSessionId } : undefined) };
 }
