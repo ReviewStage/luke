@@ -133,6 +133,46 @@ final class TokenResponseTests: XCTestCase {
     }
 }
 
+// MARK: - Userinfo identity
+
+final class UserInfoTests: XCTestCase {
+    private let base = URL(string: "https://example.com")!
+
+    private func identity(fromUserInfo payload: [String: Any]) async throws -> AccountIdentity {
+        let stub = StubHTTPClient { request in
+            (jsonData(payload), makeResponse(url: request.url!, status: 200))
+        }
+        let client = AccountClient(baseURL: base, clientID: "c", http: stub)
+        return try await client.userInfo(accessToken: "at")
+    }
+
+    func testCarriesProviderHostedPicture() async throws {
+        let identity = try await identity(fromUserInfo: [
+            "email": "dev@example.com",
+            "picture": "https://avatars.githubusercontent.com/u/1?v=4",
+        ])
+        XCTAssertEqual(
+            identity.pictureURL?.absoluteString,
+            "https://avatars.githubusercontent.com/u/1?v=4"
+        )
+    }
+
+    func testDropsPictureFromOtherHosts() async throws {
+        let identity = try await identity(fromUserInfo: [
+            "email": "dev@example.com",
+            "picture": "https://example.com/photo.png",
+        ])
+        XCTAssertNil(identity.pictureURL)
+    }
+
+    func testInitialsFallBackFromNameToEmail() {
+        let named = AccountIdentity(id: nil, email: "x@example.com", name: "Ada King Lovelace")
+        XCTAssertEqual(named.initials, "AL")
+        let unnamed = AccountIdentity(id: nil, email: "ada.lovelace@example.com", name: nil)
+        XCTAssertEqual(unnamed.initials, "AL")
+    }
+}
+
 // MARK: - Refresh retry decision
 
 final class RefreshRetryTests: XCTestCase {
