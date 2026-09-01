@@ -1,4 +1,4 @@
-import { REALTIME_STATUS, type RealtimeStatus } from "@sidecar/realtime";
+import { PressAudioBuffer, REALTIME_STATUS, type RealtimeStatus } from "@sidecar/realtime";
 import {
   assign,
   type EventObject,
@@ -79,6 +79,21 @@ export const VOICE_RESOURCE = {
 } as const;
 
 export type VoiceResource = (typeof VOICE_RESOURCE)[keyof typeof VOICE_RESOURCE];
+
+export const PRESS_AUDIO_ACTOR_EVENT = {
+  DRAIN: "pressAudio.drain",
+  PUSH: "pressAudio.push",
+} as const;
+
+export type PressAudioActorEvent =
+  | {
+      type: typeof PRESS_AUDIO_ACTOR_EVENT.DRAIN;
+      consume: (chunks: readonly Int16Array[]) => void;
+    }
+  | {
+      type: typeof PRESS_AUDIO_ACTOR_EVENT.PUSH;
+      chunk: Int16Array;
+    };
 
 export const VOICE_EXCHANGE_KIND = {
   ANNOUNCEMENT: "announcement",
@@ -186,6 +201,21 @@ const resourceActor = fromCallback<EventObject, VoiceResourceInput>(({ input }) 
   return () => input.onStop?.(input.resource);
 });
 
+export const pressAudioBufferActor = fromCallback<PressAudioActorEvent, VoiceResourceInput>(
+  ({ input, receive }) => {
+    const buffer = new PressAudioBuffer();
+    input.onStart?.(input.resource);
+    receive((event) => {
+      if (event.type === PRESS_AUDIO_ACTOR_EVENT.PUSH) {
+        buffer.push(event.chunk);
+        return;
+      }
+      event.consume(buffer.drain());
+    });
+    return () => input.onStop?.(input.resource);
+  },
+);
+
 function resourceInput(resource: VoiceResource) {
   return ({ context }: { context: VoiceMachineContext }): VoiceResourceInput => ({
     resource,
@@ -207,7 +237,7 @@ export const voiceMachine = setup({
     idleTimer: resourceActor,
     noticeHoldQueue: noticeHoldQueueActor,
     peerConnection: resourceActor,
-    pressAudioBuffer: resourceActor,
+    pressAudioBuffer: pressAudioBufferActor,
     quietTimer: resourceActor,
   },
   guards: {

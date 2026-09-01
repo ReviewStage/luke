@@ -4,6 +4,8 @@ import { REALTIME_STATUS } from "@sidecar/realtime";
 import { createActor } from "xstate";
 import {
   type NoticeQueueSnapshot,
+  PRESS_AUDIO_ACTOR_EVENT,
+  pressAudioBufferActor,
   selectDuckActive,
   selectExchangeKind,
   selectForcedCaptions,
@@ -92,6 +94,32 @@ test("a spoken press owns capture through the reply and its connect attempt alon
   assert.equal(active.get(VOICE_RESOURCE.CAPTURE_STREAM), 0);
   assert.ok(stops.includes(VOICE_RESOURCE.PRESS_AUDIO_BUFFER));
   assert.ok(stops.includes(VOICE_RESOURCE.CAPTURE_STREAM));
+  actor.stop();
+});
+
+test("the press-audio actor owns and drains one attempt's buffer", () => {
+  let drained: readonly Int16Array[] = [];
+  const actor = createActor(pressAudioBufferActor, {
+    input: { resource: VOICE_RESOURCE.PRESS_AUDIO_BUFFER },
+  }).start();
+  actor.send({
+    type: PRESS_AUDIO_ACTOR_EVENT.PUSH,
+    chunk: new Int16Array([1, 2]),
+  });
+  actor.send({
+    type: PRESS_AUDIO_ACTOR_EVENT.PUSH,
+    chunk: new Int16Array([3]),
+  });
+  actor.send({
+    type: PRESS_AUDIO_ACTOR_EVENT.DRAIN,
+    consume: (chunks) => {
+      drained = chunks;
+    },
+  });
+  assert.deepEqual(
+    drained.map((chunk) => [...chunk]),
+    [[1, 2], [3]],
+  );
   actor.stop();
 });
 
