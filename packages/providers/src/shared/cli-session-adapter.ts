@@ -1,8 +1,8 @@
 import {
-  boundedInvocation,
   DEFAULT_CLI_PATH_DIRECTORIES,
   INVOCATION_FAILURE,
   InvocationError,
+  runBoundedInvocation,
 } from "@sidecar/process";
 import {
   ACT_RESULT_STATUS,
@@ -85,7 +85,7 @@ export type CliRun = (
  */
 export const defaultCliRun: CliRun = async (binary, argv, options) => {
   try {
-    const result = await boundedInvocation({
+    const result = await runBoundedInvocation({
       binary,
       arguments: argv,
       timeoutMs: options.timeoutMs,

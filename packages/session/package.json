@@ -12,7 +12,8 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
-    "@sidecar/wire": "workspace:*"
+    "@sidecar/wire": "workspace:*",
+    "effect": "3.22.1"
   },
   "devDependencies": {
     "@types/node": "26.2.0",

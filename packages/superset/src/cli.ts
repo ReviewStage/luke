@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { boundedInvocation, INVOCATION_FAILURE, InvocationError } from "@sidecar/process";
+import { INVOCATION_FAILURE, InvocationError, runBoundedInvocation } from "@sidecar/process";
 import { canIgnoreFilesystemError } from "@sidecar/providers";
 import {
   ACT_RESULT_STATUS,
@@ -84,7 +84,7 @@ async function defaultCommandRunner(
   executable: string,
   arguments_: readonly string[],
 ): Promise<void> {
-  const result = await boundedInvocation({
+  const result = await runBoundedInvocation({
     binary: executable,
     arguments: arguments_,
     timeoutMs: 30_000,
@@ -117,7 +117,7 @@ export class SupersetCli {
     this.#organizationId =
       options.organizationId ??
       (async () => {
-        const result = await boundedInvocation({
+        const result = await runBoundedInvocation({
           binary: "/usr/bin/plutil",
           arguments: [
             "-extract",
@@ -136,7 +136,7 @@ export class SupersetCli {
     this.#query =
       options.query ??
       (async (executable, arguments_, timeoutMs) => {
-        const result = await boundedInvocation({
+        const result = await runBoundedInvocation({
           binary: executable,
           arguments: arguments_,
           timeoutMs,

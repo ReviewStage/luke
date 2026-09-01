@@ -1,9 +1,8 @@
-import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { boundedInvocation, DEFAULT_CLI_PATH_DIRECTORIES } from "@sidecar/process";
+import { DEFAULT_CLI_PATH_DIRECTORIES, runBoundedInvocation } from "@sidecar/process";
 import {
   ACT_RESULT_STATUS,
   maximumSessionRecapLength,
@@ -63,6 +62,11 @@ import {
   chatStoreSessionsIn,
   readCursorChatStoreMeta,
 } from "./chat-store.js";
+import {
+  CURSOR_AGENT_EARLY_REFUSAL_WINDOW_MS,
+  type CursorAgentLaunch,
+  launchCursorAgentDetached,
+} from "./cursor-agent-launch.js";
 import {
   CURSOR_HOOK_EVENT,
   type CursorHookEvent,
@@ -745,9 +749,6 @@ function wellKnownCursorAgentDirectories(): readonly string[] {
   return [path.join(os.homedir(), ".local", "bin"), "/opt/homebrew/bin", "/usr/local/bin"];
 }
 
-/** The one launch result: an exit inside the refusal window, or a turn running. */
-export type CursorAgentLaunch = { exitCode: number } | "running";
-
 /**
  * How the adapter reaches Cursor's own CLI, injectable so tests never spawn
  * one. Every method runs the binary directly — no shell, so nothing in an
@@ -779,7 +780,7 @@ async function locateCursorAgent(): Promise<string | undefined> {
 const defaultCursorAgentRunner: CursorAgentRunner = {
   locate: locateCursorAgent,
   probeLogin: async (binaryPath) => {
-    const result = await boundedInvocation({
+    const result = await runBoundedInvocation({
       binary: binaryPath,
       arguments: CURSOR_AGENT_CLI.LOGIN_PROBE_ARGV,
       timeoutMs: CURSOR_SEND_DEFAULTS.LOGIN_PROBE_TIMEOUT_MS,
@@ -789,35 +790,7 @@ const defaultCursorAgentRunner: CursorAgentRunner = {
     return result.exitCode === 0;
   },
   launch: (binaryPath, argv) =>
-    new Promise((resolve) => {
-      // Detached with no pipes: the turn's output lives in the transcript the
-      // adapter already observes, and the send must not hold a handle open
-      // for however long the turn runs.
-      const child = spawn(binaryPath, [...argv], {
-        detached: true,
-        stdio: "ignore",
-        windowsHide: true,
-      });
-      let settled = false;
-      const settle = (result: CursorAgentLaunch) => {
-        if (settled) return;
-        settled = true;
-        resolve(result);
-      };
-      const window = setTimeout(() => {
-        child.unref();
-        settle("running");
-      }, CURSOR_SEND_DEFAULTS.EARLY_REFUSAL_WINDOW_MS);
-      window.unref();
-      child.once("exit", (code) => {
-        clearTimeout(window);
-        settle({ exitCode: code ?? 1 });
-      });
-      child.once("error", () => {
-        clearTimeout(window);
-        settle({ exitCode: 1 });
-      });
-    }),
+    launchCursorAgentDetached(binaryPath, argv, CURSOR_AGENT_EARLY_REFUSAL_WINDOW_MS),
 };
 
 export function defaultCursorHome(): string {
