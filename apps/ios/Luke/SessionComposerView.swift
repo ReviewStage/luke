@@ -11,6 +11,8 @@ struct SessionComposerView: View {
     let providerId: String
     let providerSessionId: String
     let actClient: ActClient
+    /// Called shortly after a successful send so a containing sheet can dismiss.
+    var onDelivered: (() -> Void)? = nil
 
     @Environment(AccountSession.self) private var session
     @State private var text = ""
@@ -81,7 +83,7 @@ struct SessionComposerView: View {
                         providerSessionId: providerSessionId,
                         text: messageText
                     )
-                    state = .result(answer)
+                    await delivered(answer)
                 } catch ActClientError.unauthorized {
                     // validAccessToken() refreshes near-expiry tokens; a 401
                     // here means the server rejected the token outright — refresh and retry once.
@@ -92,7 +94,7 @@ struct SessionComposerView: View {
                         providerSessionId: providerSessionId,
                         text: messageText
                     )
-                    state = .result(answer)
+                    await delivered(answer)
                 }
             } catch {
                 state = .result(ActMessageAnswer(
@@ -100,6 +102,16 @@ struct SessionComposerView: View {
                     reason: error.localizedDescription
                 ))
             }
+        }
+    }
+
+    @MainActor
+    private func delivered(_ answer: ActMessageAnswer) {
+        state = .result(answer)
+        guard answer.result == .accepted, let onDelivered else { return }
+        Task {
+            try? await Task.sleep(for: .seconds(0.8))
+            onDelivered()
         }
     }
 
