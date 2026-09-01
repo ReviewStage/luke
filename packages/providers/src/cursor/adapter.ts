@@ -208,7 +208,14 @@ export const CURSOR_PROVIDER: SessionProvider = {
   displayName: CURSOR_PROVIDER_NAME,
 };
 
-export type CursorAdapterOptions = CloudAdapterOptions;
+export interface CursorAdapterOptions extends CloudAdapterOptions {
+  /**
+   * When true, the adapter never fires the background repository refresh.
+   * Use this in stateless/on-demand contexts where the adapter is discarded
+   * after a single observe() call and the refresh result can never be used.
+   */
+  skipBackgroundFetches?: boolean;
+}
 
 interface CursorAgent {
   id: string;
@@ -294,6 +301,7 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
   #repositories: readonly string[] = [];
   #repositoriesAttemptedAt = Number.NEGATIVE_INFINITY;
   #repositoriesRefreshMs = CURSOR_REPOSITORY_RETRY_MS;
+  readonly #skipBackgroundFetches: boolean;
 
   constructor(options: CursorAdapterOptions) {
     super(
@@ -304,6 +312,7 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
       },
       options,
     );
+    this.#skipBackgroundFetches = options.skipBackgroundFetches ?? false;
   }
 
   protected override forgetCachedIdentity(): void {
@@ -324,7 +333,12 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
     // pass-scoped request, because passes keep coming while it runs and each
     // would discard exactly the slow answer this exists for; only a
     // credential change may do that.
-    void this.#refreshRepositories(now);
+    // The repository refresh exists solely to populate instance state for
+    // future workspace-project queries. In stateless/on-demand contexts the
+    // adapter is discarded after one pass, so the fetch can never be used;
+    // firing it anyway leaks a serverless invocation and spends the caller's
+    // Cursor quota.
+    if (!this.#skipBackgroundFetches) void this.#refreshRepositories(now);
 
     const body = await request(CURSOR_ROUTE.AGENTS, {
       [CURSOR_QUERY.LIMIT]: String(CURSOR_ADAPTER_DEFAULTS.AGENT_PAGE_SIZE),
