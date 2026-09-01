@@ -23,7 +23,6 @@ import {
   conversationHistoryText,
   decodeRealtimePayload,
   functionCallFollowUpEvents,
-  functionCallOutputEvents,
   type IntroductionLine,
   inputAudioAppendEvents,
   inputAudioFormatUpdateEvents,
@@ -2076,7 +2075,7 @@ export class RealtimeVoiceSession {
     this.#turnEpoch += 1;
     // No reply is current once the turn is over, and the arming went with the
     // turn: a `done` that outlives the settle backstop reads as a stranger's,
-    // its calls answered refused rather than run as writes out of a turn the
+    // its calls dropped rather than run as writes out of a turn the
     // developer was already told had ended.
     this.#activeResponseId = undefined;
     this.#toolTurnArmed = false;
@@ -2558,8 +2557,8 @@ export class RealtimeVoiceSession {
         // the old reply before the cancel landed — it generates ahead of the
         // room — so its `done` still arrives, after the interrupt has already
         // opened a new turn. Nothing of it may act with that turn's arming or
-        // end that turn early: its calls are answered refused so the model is
-        // not left waiting, and everything else about it is ignored.
+        // end that turn early: its calls are dropped, and everything else
+        // about it is ignored.
         // Whatever this reply turns out to be below, the server has concluded
         // it: from here the conversation can take a new `response.create`.
         if (fresh) this.#responseOutstanding = false;
@@ -2574,26 +2573,6 @@ export class RealtimeVoiceSession {
             this.#armSettleTimer();
             return;
           }
-          void this.#answerToolCalls(event.calls, fresh && this.#toolTurnArmed);
-          if (fresh && this.#toolTurnArmed) {
-            this.#followUpPending = true;
-            // The turn now holds for the follow-up, because the READY an
-            // ending here would offer while the writes run is the edge the
-            // announcer rides — a reply taken there bumps the epoch, and the
-            // follow-up voicing the outcome stands down against it, the
-            // developer's answer abandoned for a notice. The hold is the
-            // write's, so it gets a clock of its own: whatever backstop the
-            // drain or an aside armed was watching for this `done` and may
-            // have seconds left on it, while a write that hangs past a whole
-            // window still meets a backstop — a turn that never ends is
-            // worse than one that ends early.
-            this.#clearSettleTimer();
-            this.#armSettleTimer();
-            return;
-          }
-          // The spoken half's audio already drained — its ending deferred to
-          // this `done`, and a reply owing no follow-up ends here, exactly
-          // as the drain would have ended it.
           if (fresh && this.#currentReplyDrained()) this.#finishResponse();
           return;
         }
@@ -2663,49 +2642,6 @@ export class RealtimeVoiceSession {
         }
         this.#finishResponse();
     }
-  }
-
-  /**
-   * Answers the tool calls one reply made, then asks for the reply that voices
-   * their outcomes. Every call is validated against the roster Luke was shown
-   * before anything is carried, every outcome — including each refusal — is
-   * answered so the model never waits on a call that will not return, and the
-   * carrier's own failure is an outcome rather than an exception: the developer
-   * asked for something, and what became of it has to be said.
-   */
-  async #answerToolCalls(calls: readonly RealtimeFunctionCall[], armed: boolean): Promise<void> {
-    // `armed` is the hard gate, decided by the caller from two facts together:
-    // a write runs only in a turn the developer opened — by speaking, or by
-    // typing — and only out of the reply that turn actually asked for, never
-    // the finished form of one the developer already interrupted. A call
-    // failing either test is refused whatever it names, so a session summary
-    // or a tool output that reads like an instruction can never make Luke act.
-    // The turn's tools are also withheld at the API on every turn Luke opens
-    // himself, so this is belt to that suspenders rather than the only thing
-    // holding.
-    // The turn these calls belong to. If it is no longer the current turn by
-    // the time the writes finish, the developer has moved on and the outcome
-    // must not be spoken over whatever they are now saying or hearing.
-    const epoch = this.#turnEpoch;
-
-    for (const call of calls) {
-      const output = await this.#toolCallOutput(call, armed);
-      this.#send(functionCallOutputEvents(call.callId, output));
-    }
-
-    // An unarmed turn — a proactive readout, a follow-up — carries no outcome
-    // to voice: every call on it was refused, and opening a reply here would be
-    // a turn that was meant to stay silent talking on without its instructions.
-    // The calls are still answered above, so the model is not left waiting.
-    if (!armed) return;
-    // A follow-up now would talk over a live microphone or a newer reply: the
-    // developer took the turn, started another, or the call is gone. The
-    // outcomes were still delivered as items, so the next turn has them.
-    if (!this.isConnected || this.#turnEpoch !== epoch) return;
-    // The follow-up continues the exchange the developer opened, so whatever
-    // the reply said before its tool call stays on the strip and the outcome
-    // stacks under it, rather than replacing words still being read.
-    this.#startResponse(functionCallFollowUpEvents(), { keepCaption: true });
   }
 
   async #toolCallOutput(call: RealtimeFunctionCall, armed: boolean): Promise<WireRecord> {

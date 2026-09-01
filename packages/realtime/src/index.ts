@@ -63,7 +63,6 @@ export {
   clearOutputAudioEvents,
   decodeRealtimePayload,
   functionCallFollowUpEvents,
-  functionCallOutputEvents,
   inputAudioAppendEvents,
   inputAudioFormatUpdateEvents,
   isArrivalSpeech,
@@ -86,7 +85,6 @@ export {
   SESSION_NO_LONGER_OBSERVED_NOTE,
   type SessionAnnouncement,
   truncateResponseEvents,
-  typedAskEvents,
 } from "./realtime-protocol.js";
 export {
   type ActEnvelope,
