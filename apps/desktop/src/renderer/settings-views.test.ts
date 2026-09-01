@@ -21,14 +21,14 @@ test("a credential entry returns to the page its row is drawn on", () => {
   // Connections. An entry's trip to
   // the key slot has to end back on the page it began on, or the check beside
   // the provider lands on a page nobody is looking at.
-  const expected = {
-    [VOICE_CREDENTIAL_PROVIDER_ID]: SETTINGS_VIEW.ROOT,
-    [SPEECH_CREDENTIAL_PROVIDER_ID]: SETTINGS_VIEW.VOICE,
-  } as Partial<Record<CredentialProviderId, SettingsView>>;
+  const expected = new Map<CredentialProviderId, SettingsView>([
+    [VOICE_CREDENTIAL_PROVIDER_ID, SETTINGS_VIEW.ROOT],
+    [SPEECH_CREDENTIAL_PROVIDER_ID, SETTINGS_VIEW.VOICE],
+  ]);
   for (const provider of CREDENTIAL_PROVIDER_LIST) {
     assert.equal(
       credentialSettingsPage(provider.id),
-      expected[provider.id] ?? SETTINGS_VIEW.CONNECTIONS,
+      expected.get(provider.id) ?? SETTINGS_VIEW.CONNECTIONS,
       provider.id,
     );
   }

@@ -35,13 +35,13 @@ const VOICES_PATH = "/v2/voices";
  * so the panel's list is stable between refreshes and the count ElevenLabs
  * would compute is never asked for.
  */
-const VOICES_QUERY: Readonly<Record<string, string>> = {
+const VOICES_QUERY = {
   voice_type: "personal",
   page_size: "100",
   sort: "name",
   sort_direction: "asc",
   include_total_count: "false",
-};
+} satisfies Readonly<Record<string, string>>;
 
 /** The cursor parameter the previous page hands back, and the only one that varies. */
 const PAGE_TOKEN_PARAMETER = "next_page_token";
@@ -182,6 +182,7 @@ export async function listElevenlabsVoices(options: VoiceListOptions): Promise<V
 
     let payload: UnparsedWireValue;
     try {
+      // SAFETY: An untrusted body is unparsed wire until `pageFromPayload` reads it.
       payload = (await response.json()) as UnparsedWireValue;
     } catch {
       return { outcome: VOICE_LIST_OUTCOME.MALFORMED_RESPONSE };

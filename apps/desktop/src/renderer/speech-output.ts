@@ -11,6 +11,7 @@ import {
   parseDialogueFrame,
   TOKEN_MINT_OUTCOME,
 } from "@sidecar/speech";
+import type { WireRecord } from "@sidecar/wire";
 import type { SpeechTokenAnswer } from "#shared/contracts";
 
 /**
@@ -372,7 +373,7 @@ export class ElevenLabsSpeech implements SpeechSynthesizer {
     }
   }
 
-  #send(frame: object): void {
+  #send(frame: WireRecord): void {
     const socket = this.#socket;
     if (!socket || socket.readyState !== SOCKET_OPEN) return;
     socket.send(JSON.stringify(frame));
@@ -398,17 +399,19 @@ export class ElevenLabsSpeech implements SpeechSynthesizer {
 
   #clearKeepAlive(): void {
     if (this.#keepAliveTimer === undefined) return;
+    // SAFETY: Without an injected scheduler the handle came from setTimeout itself.
     (this.#options.cancelScheduled ?? clearTimeout)(this.#keepAliveTimer as number);
     this.#keepAliveTimer = undefined;
   }
 
   #clearDrainTimer(): void {
     if (this.#drainTimer === undefined) return;
+    // SAFETY: Without an injected scheduler the handle came from setTimeout itself.
     (this.#options.cancelScheduled ?? clearTimeout)(this.#drainTimer as number);
     this.#drainTimer = undefined;
   }
 }
 
 function defaultSocket(url: string): SpeechSocket {
-  return new WebSocket(url) as unknown as SpeechSocket;
+  return new WebSocket(url);
 }

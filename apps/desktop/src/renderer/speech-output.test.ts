@@ -6,6 +6,14 @@ import { ElevenLabsSpeech, type SpeechAudioSink, type SpeechSocket } from "./spe
 
 const VOICE_ID = "voice-1";
 
+/** One server frame, as the fixtures spell the fields the driver reads. */
+interface DialogueFrameFixture {
+  audio?: string;
+  is_final?: boolean;
+  is_final_audio_for_turn?: boolean;
+  error?: string;
+}
+
 /** Two 16-bit little-endian samples, base64, as one server frame carries them. */
 const AUDIO_FRAME = btoa(String.fromCharCode(0, 0, 0, 0x40));
 
@@ -15,6 +23,8 @@ function fakeSink() {
   let stops = 0;
   let closes = 0;
   const sink: SpeechAudioSink = {
+    // SAFETY: These tests exercise the socket driver, which reads the stream's
+    // identity and never its tracks; nothing here touches a media device.
     stream: undefined as unknown as MediaStream,
     play(samples) {
       played.push(samples.length);
@@ -63,7 +73,8 @@ function fakeSocket() {
       socket.readyState = 1;
       socket.onopen?.(new Event("open"));
     },
-    deliver(frame: unknown) {
+    deliver(frame: DialogueFrameFixture) {
+      // SAFETY: The driver reads only `data`; the rest of a MessageEvent is unused.
       socket.onmessage?.({ data: JSON.stringify(frame) } as MessageEvent<string>);
     },
   };
@@ -101,6 +112,7 @@ function harness(options: { token?: SpeechTokenAnswer; failMint?: boolean } = {}
       return id;
     },
     cancelScheduled: (timer) => {
+      // SAFETY: Every handle in `timers` was minted by the `schedule` above as a number.
       timers.delete(timer as number);
     },
   });
@@ -216,6 +228,7 @@ test("a socket closing before its last word settles the turn with the failure", 
   h.speech.append("Hello");
   await settle();
   h.socket.open();
+  // SAFETY: The driver reads nothing off a close event but the fact of it.
   h.socket.socket.onclose?.(new Event("close") as CloseEvent);
   assert.equal(h.events.length, 2);
   assert.match(h.events[0] ?? "", /^error:/);
@@ -229,6 +242,7 @@ test("a close after the last word is the ordinary ending, not a failure", async 
   await settle();
   h.socket.open();
   h.socket.deliver({ is_final: true });
+  // SAFETY: The driver reads nothing off a close event but the fact of it.
   h.socket.socket.onclose?.(new Event("close") as CloseEvent);
   assert.deepEqual(h.events, ["drained"]);
 });

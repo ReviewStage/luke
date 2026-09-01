@@ -102,18 +102,21 @@ function boundedError(value: UnparsedWireValue): string | undefined {
 export function parseDialogueFrame(payload: string): DialogueServerFrame | undefined {
   let parsed: UnparsedWireValue;
   try {
+    // SAFETY: A socket frame is unparsed wire until the field reads below narrow it.
     parsed = JSON.parse(payload) as UnparsedWireValue;
   } catch {
     return undefined;
   }
   if (!isRecord(parsed)) return undefined;
-  const audio = isWireString(parsed.audio) && parsed.audio !== "" ? parsed.audio : undefined;
-  return {
-    ...(audio ? { audio } : {}),
+  const frame: DialogueServerFrame = {
     finalForTurn: parsed.is_final_audio_for_turn === true,
     final: parsed.is_final === true,
-    ...(boundedError(parsed.error) ? { error: boundedError(parsed.error) } : {}),
   };
+  // An empty audio field is no audio, not a frame of silence to schedule.
+  if (isWireString(parsed.audio) && parsed.audio !== "") frame.audio = parsed.audio;
+  const error = boundedError(parsed.error);
+  if (error) frame.error = error;
+  return frame;
 }
 
 /** How far a signed 16-bit sample is from the ±1 range the audio graph reads. */

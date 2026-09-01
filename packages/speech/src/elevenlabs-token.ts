@@ -94,6 +94,7 @@ export async function mintElevenlabsToken(options: TokenMintOptions): Promise<To
 
   let payload: UnparsedWireValue;
   try {
+    // SAFETY: An untrusted body is unparsed wire until `elevenlabsTokenFromResponse` reads it.
     payload = (await response.json()) as UnparsedWireValue;
   } catch {
     return { outcome: TOKEN_MINT_OUTCOME.MALFORMED_RESPONSE };

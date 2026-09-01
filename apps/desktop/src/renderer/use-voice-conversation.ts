@@ -257,7 +257,7 @@ export function liveSpeedApplies(
  * A speech provider chosen with no voice picked yet sounds like the ordinary
  * one, because it is: nothing has been chosen for the other to say.
  */
-export function spokenVoiceShape(input: {
+export function spokenVoiceChoice(input: {
   voice: RealtimeVoice | undefined;
   speechProvider: SpeechProvider;
   speechVoice: string | undefined;
@@ -1292,7 +1292,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
 
   const heardVoice = useRef<string | undefined>(undefined);
   const voiceRestartDue = useRef(false);
-  const voiceShape = spokenVoiceShape({
+  const voiceChoice = spokenVoiceChoice({
     voice: options.voice,
     speechProvider: options.speechProvider,
     speechVoice: options.speechVoice,
@@ -1300,13 +1300,13 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   useEffect(() => {
     const decided = voiceRestartAction({
       previous: heardVoice.current,
-      next: voiceShape,
+      next: voiceChoice,
       live:
         voiceSession.current?.isConnected === true || voiceSession.current?.isConnecting === true,
       due: voiceRestartDue.current,
       status: voiceStatus,
     });
-    if (voiceShape !== undefined) heardVoice.current = voiceShape;
+    if (voiceChoice !== undefined) heardVoice.current = voiceChoice;
     voiceRestartDue.current = decided.due;
     if (decided.action !== VOICE_RESTART.RESTART) return;
     // Reconnecting is the call's act, not a press: the device the old call
@@ -1315,7 +1315,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       await voiceSession.current?.close();
       await startConversation();
     })();
-  }, [voiceShape, startConversation, voiceStatus]);
+  }, [voiceChoice, startConversation, voiceStatus]);
 
   const activeStream = activeVoiceStream({
     status: voiceStatus,

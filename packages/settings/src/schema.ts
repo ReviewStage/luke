@@ -159,10 +159,10 @@ const SPEECH_PROVIDER_CHOICE = {
   [SPEECH_PROVIDER.ELEVENLABS]: "ElevenLabs",
 };
 
-const SPEECH_PROVIDER_BY_CHOICE: Readonly<Record<string, SpeechProvider>> = {
-  [SPEECH_PROVIDER_CHOICE[SPEECH_PROVIDER.OPENAI]]: SPEECH_PROVIDER.OPENAI,
-  [SPEECH_PROVIDER_CHOICE[SPEECH_PROVIDER.ELEVENLABS]]: SPEECH_PROVIDER.ELEVENLABS,
-};
+const SPEECH_PROVIDER_BY_CHOICE = new Map<string, SpeechProvider>([
+  [SPEECH_PROVIDER_CHOICE[SPEECH_PROVIDER.OPENAI], SPEECH_PROVIDER.OPENAI],
+  [SPEECH_PROVIDER_CHOICE[SPEECH_PROVIDER.ELEVENLABS], SPEECH_PROVIDER.ELEVENLABS],
+]);
 
 const VOICE_SPEED_WORD = {
   SLOW: "slow",
@@ -429,7 +429,7 @@ export const APP_SETTING_SCHEMA = {
     // reply under way has settled. Nothing in the main process holds a
     // speech provider to reconfigure.
     mainProcessSideEffect: SETTING_SIDE_EFFECT.NONE,
-    spokenValue: (value: string) => SPEECH_PROVIDER_BY_CHOICE[value],
+    spokenValue: (value: string) => SPEECH_PROVIDER_BY_CHOICE.get(value),
   },
   speechVoice: {
     field: "speechVoice",

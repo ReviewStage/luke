@@ -3,18 +3,23 @@ import test from "node:test";
 import { TOKEN_MINT_OUTCOME, VOICE_LIST_OUTCOME } from "@sidecar/speech";
 import type { IpcMainInvokeEvent } from "electron";
 import { BRIDGE } from "#shared/bridge";
+import type { SpeechTokenAnswer, SpeechVoicesAnswer } from "#shared/contracts";
 import type { PanelManager } from "../window/panel-manager";
 import { registerVoiceRuntimeIpc, type VoiceRuntimeIpcDependencies } from "./voice-runtime";
 
 const SPEECH_KEY = "sk_elevenlabs_secret";
 
-/** Every payload that crossed the bridge, so a test can search it for a key. */
+/** The two answers these tests invoke for; the module's other handlers stay unread. */
+type SpeechAnswer = SpeechVoicesAnswer | SpeechTokenAnswer;
+
+type RecordedHandler = (event: IpcMainInvokeEvent) => Promise<SpeechAnswer>;
+
 function fakeIpcMain() {
-  const handlers = new Map<string, (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown>();
+  const handlers = new Map<string, RecordedHandler>();
   return {
     handlers,
     ipcMain: {
-      handle(channel: string, handler: (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown) {
+      handle(channel: string, handler: RecordedHandler) {
         handlers.set(channel, handler);
       },
       on() {
@@ -35,10 +40,12 @@ function register(
   const { handlers, ipcMain } = fakeIpcMain();
   const opened: string[] = [];
   registerVoiceRuntimeIpc({
-    // SAFETY: These tests exercise the speech handlers alone, which touch none
-    // of the panel surface the other handlers reach for.
+    // SAFETY: The recorder answers `handle` and `on`, which is the whole of the
+    // IpcMain surface this module uses.
     ipcMain: ipcMain as unknown as VoiceRuntimeIpcDependencies["ipcMain"],
     trustedSender: () => true,
+    // SAFETY: These tests exercise the speech handlers alone, which reach for
+    // none of the panel surface the other handlers use.
     panels: {} as PanelManager,
     openExternal: async (url) => {
       opened.push(url);
@@ -54,9 +61,11 @@ function register(
     speechReachesNetwork: () => overrides.reachesNetwork ?? true,
     ...(overrides.fetch ? { fetch: overrides.fetch } : undefined),
   });
-  const invoke = async (channel: string) => {
+  const invoke = async (channel: string): Promise<SpeechAnswer> => {
     const handler = handlers.get(channel);
     assert.ok(handler, channel);
+    // SAFETY: The speech handlers read nothing off the invoke event; the bridge
+    // reads the sender, and `trustedSender` above already answered for it.
     return handler({} as IpcMainInvokeEvent);
   };
   return { invoke, opened };

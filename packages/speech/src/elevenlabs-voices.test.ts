@@ -8,18 +8,34 @@ import {
 } from "./elevenlabs-voices.js";
 import { MAXIMUM_VOICE_FIELD_LENGTH } from "./speech-provider.js";
 
-function jsonResponse(body: unknown, status = 200): Response {
+/** One voice record, as ElevenLabs writes it and as the fixtures bend it. */
+interface VoiceFixture {
+  voice_id?: string;
+  name?: string;
+  category?: string;
+  /** Sent by ElevenLabs and deliberately dropped, so the fixtures carry it. */
+  preview_url?: string;
+}
+
+/** One page of the answer ElevenLabs sends, as the fixtures spell it. */
+interface VoicesPageFixture {
+  voices?: readonly VoiceFixture[];
+  has_more?: boolean;
+  next_page_token?: string;
+}
+
+function jsonResponse(body: VoicesPageFixture, status = 200): Response {
   return new Response(JSON.stringify(body), { status });
 }
 
-function recordingFetch(pages: readonly unknown[]) {
+function recordingFetch(pages: readonly VoicesPageFixture[]) {
   const urls: string[] = [];
   const headers: (string | null)[] = [];
   let index = 0;
   const fetch = async (url: string, init: RequestInit) => {
     urls.push(url);
     headers.push(new Headers(init.headers).get("xi-api-key"));
-    const page = pages[Math.min(index, pages.length - 1)];
+    const page = pages[Math.min(index, pages.length - 1)] ?? {};
     index += 1;
     return jsonResponse(page);
   };
@@ -44,7 +60,7 @@ test("keeps only the bounded fields a row draws", async () => {
   const { fetch, headers } = recordingFetch([
     {
       voices: [
-        { voice_id: " v1 ", name: " Ada ", category: "cloned", preview_url: "https://x", extra: 1 },
+        { voice_id: " v1 ", name: " Ada ", category: "cloned", preview_url: "https://x" },
         { voice_id: "v2", name: "Bee" },
         { name: "no id" },
         { voice_id: "v3" },
