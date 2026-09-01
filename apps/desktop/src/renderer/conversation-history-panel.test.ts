@@ -48,6 +48,8 @@ test("an announcement shows its spoken transcript", () => {
         },
       ],
       onClear: () => undefined,
+      openable: () => false,
+      onOpenSession: () => undefined,
     }),
   );
 
@@ -67,6 +69,8 @@ test("a recorded entry shows its local time", () => {
         },
       ],
       onClear: () => undefined,
+      openable: () => false,
+      onOpenSession: () => undefined,
     }),
   );
 
@@ -81,6 +85,8 @@ test("conversation history is blocked from optional panel recordings", () => {
     createElement(ConversationHistoryPanel, {
       entries: [{ kind: CONVERSATION_ENTRY_KIND.TYPED_ASK, words: "private words" }],
       onClear: () => undefined,
+      openable: () => false,
+      onOpenSession: () => undefined,
     }),
   );
 
@@ -98,6 +104,8 @@ test("messages offer a copy control while quiet events offer none", () => {
         { kind: CONVERSATION_ENTRY_KIND.ACT, words: "Sent to Codex." },
       ],
       onClear: () => undefined,
+      openable: () => false,
+      onOpenSession: () => undefined,
     }),
   );
 
@@ -118,6 +126,8 @@ test("a line still being said draws as the bubble it will settle into", () => {
       ],
       live: [{ kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT, words: "Checkout is" }],
       onClear: () => undefined,
+      openable: () => false,
+      onOpenSession: () => undefined,
     }),
   );
 
@@ -135,6 +145,8 @@ test("words still arriving stand the thread up without a settled line", () => {
       entries: [],
       live: [{ kind: CONVERSATION_ENTRY_KIND.REPLY, words: "Looking now." }],
       onClear: () => undefined,
+      openable: () => false,
+      onOpenSession: () => undefined,
     }),
   );
 
@@ -149,9 +161,117 @@ test("the empty history reports only its state", () => {
     createElement(ConversationHistoryPanel, {
       entries: [],
       onClear: () => undefined,
+      openable: () => false,
+      onOpenSession: () => undefined,
     }),
   );
 
   assert.match(markup, />No messages yet</);
   assert.doesNotMatch(markup, /history-header|next typed|stays in memory/);
+});
+
+test("a line's named chats draw pressable chips, worded as recorded", () => {
+  const asked: string[] = [];
+  const markup = renderToStaticMarkup(
+    createElement(ConversationHistoryPanel, {
+      entries: [
+        {
+          kind: CONVERSATION_ENTRY_KIND.REPLY,
+          words: "checkout-service is done and billing-service is waiting.",
+          mentions: [
+            {
+              providerId: "conductor",
+              providerSessionId: "chat-1",
+              title: "checkout-service",
+              markId: "claude-code",
+              applications: [{ id: "conductor", name: "Conductor" }],
+            },
+            {
+              providerId: "conductor",
+              providerSessionId: "chat-2",
+              title: "billing-service",
+              markId: "conductor",
+              applications: [],
+            },
+          ],
+        },
+        { kind: CONVERSATION_ENTRY_KIND.REPLY, words: "No session here." },
+      ],
+      onClear: () => undefined,
+      openable: (identity) => {
+        asked.push(identity.providerSessionId);
+        return true;
+      },
+      onOpenSession: () => undefined,
+    }),
+  );
+
+  assert.equal(markup.match(/class="history-chip"/g)?.length, 2);
+  assert.match(markup, /aria-label="Open checkout-service"/);
+  assert.match(markup, /aria-label="Open billing-service"/);
+  // The chip leads with the agent's mark and trails the app marks its chat's
+  // row wore when the line was recorded, exactly like the notice band's.
+  assert.match(markup, /data-mark="claude-code"/);
+  assert.match(markup, /aria-label="Also in Conductor"/);
+  // Only the chats the line named ask whether they can still be opened, and
+  // the session ids themselves stay out of the drawn markup.
+  assert.deepEqual(asked, ["chat-1", "chat-2"]);
+  assert.doesNotMatch(markup, /chat-1|chat-2/);
+});
+
+test("a chat with nowhere to go draws no chip", () => {
+  const markup = renderToStaticMarkup(
+    createElement(ConversationHistoryPanel, {
+      entries: [
+        {
+          kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
+          words: "Local run finished.",
+          identity: { providerId: "claude-code", providerSessionId: "local-1" },
+          mentions: [
+            {
+              providerId: "claude-code",
+              providerSessionId: "local-1",
+              title: "local-run",
+              markId: "claude-code",
+              applications: [],
+            },
+          ],
+        },
+      ],
+      onClear: () => undefined,
+      openable: () => false,
+      onOpenSession: () => undefined,
+    }),
+  );
+
+  assert.doesNotMatch(markup, /history-chip|history-mentions/);
+});
+
+test("a quiet act line draws its chat's chip without a copy control", () => {
+  const markup = renderToStaticMarkup(
+    createElement(ConversationHistoryPanel, {
+      entries: [
+        {
+          kind: CONVERSATION_ENTRY_KIND.ACT,
+          words: "sent Checkout a message.",
+          identity: { providerId: "conductor", providerSessionId: "chat-1" },
+          mentions: [
+            {
+              providerId: "conductor",
+              providerSessionId: "chat-1",
+              title: "Checkout",
+              markId: "conductor",
+              applications: [],
+            },
+          ],
+        },
+      ],
+      onClear: () => undefined,
+      openable: () => true,
+      onOpenSession: () => undefined,
+    }),
+  );
+
+  assert.match(markup, /class="history-chip"/);
+  assert.doesNotMatch(markup, /history-copy/);
 });

@@ -6,11 +6,14 @@ export {
 } from "@sidecar/hosted";
 export {
   adoptConversationThread,
+  announcementConversationEntry,
   appendConversationEntry,
   appendConversationThreadEntry,
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
   type ConversationEntryKind,
+  type ConversationEntryMention,
+  type ConversationEntryMentionApplication,
   conversationHistoryText,
   insertSpokenAskEntry,
   insertSpokenAskThreadEntry,
@@ -19,6 +22,7 @@ export {
   maximumConversationEntryLength,
   maximumStoredConversationEntries,
   recentConversationEntries,
+  replyConversationEntry,
   retainedConversationEntries,
   sessionActConversationEntry,
   storedConversationEntry,

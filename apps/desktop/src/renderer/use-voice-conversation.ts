@@ -8,6 +8,7 @@ import {
   ARRIVAL_SPEECH_KIND,
   type ArrivalSpeech,
   adoptConversationThread,
+  announcementConversationEntry,
   appendConversationThreadEntry,
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
@@ -22,6 +23,7 @@ import {
   type RealtimeVoice,
   type RealtimeVoiceSpeed,
   recentConversationEntries,
+  replyConversationEntry,
   retainedConversationEntries,
   SESSION_TOOL_KIND,
   sessionActConversationEntry,
@@ -1057,11 +1059,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
           const generation = activeAnnouncementGenerationRef.current;
           activeAnnouncementGenerationRef.current = undefined;
           rememberConversationEntry(
-            {
-              kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
-              words: texts.join(" "),
-              identity: about,
-            },
+            announcementConversationEntry(texts.join(" "), about, sessionsRef.current),
             generation,
           );
           return;
@@ -1072,8 +1070,12 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
         markTranscriptSpoken(false);
         // A transcript reading enters the record only as the act it was.
         if (spokeTranscript) return;
+        // The chats the reply named ride along as chips, read from its words
+        // against the roster at this moment — the same rule the notice
+        // band's chips keep — so the line can offer a way back to the chats
+        // it answered about, even after one is archived away.
         rememberConversationEntry(
-          { kind: CONVERSATION_ENTRY_KIND.REPLY, words: texts.join(" ") },
+          replyConversationEntry(texts.join(" "), sessionsRef.current),
           generation,
         );
       },
