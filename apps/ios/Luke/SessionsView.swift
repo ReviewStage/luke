@@ -12,26 +12,22 @@ struct SessionsView: View {
     private let client = RosterClient(serviceURL: AccountConstants.serviceURL)
 
     var body: some View {
-        Group {
+        ScrollView {
             if isLoading && sessions.isEmpty {
                 loadingState
             } else if sessions.isEmpty {
                 emptyState
             } else {
-                ScrollView {
-                    LazyVStack(spacing: 8) {
-                        ForEach(sessions) { s in
-                            SessionRow(session: s)
-                        }
+                LazyVStack(spacing: 8) {
+                    ForEach(sessions) { s in
+                        SessionRow(session: s)
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
                 }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
             }
         }
         .background(Color(red: 0.07, green: 0.07, blue: 0.08).ignoresSafeArea())
-        .navigationTitle("Sessions")
-        .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(Color(red: 0.07, green: 0.07, blue: 0.08), for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbarColorScheme(.dark, for: .navigationBar)
@@ -47,7 +43,7 @@ struct SessionsView: View {
         }
         .padding(.horizontal, 16)
         .padding(.top, 12)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var emptyState: some View {
@@ -64,7 +60,8 @@ struct SessionsView: View {
             }
         }
         .padding()
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity)
+        .padding(.top, 60)
     }
 
     private func refreshSessions() async {
