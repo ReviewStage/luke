@@ -66,5 +66,5 @@ export const REALTIME_DEFAULTS = {
    * to the same service to be heard at all; this only asks it to hand the
    * text back.
    */
-  TRANSCRIPTION_MODEL: "gpt-4o-mini-transcribe",
+  TRANSCRIPTION_MODEL: "gpt-live-transcribe",
 } as const;

@@ -114,7 +114,9 @@ test("the minted session closes the microphone until push-to-talk opens it", () 
   const config = realtimeSessionConfig();
 
   assert.equal(config.type, REALTIME_SESSION_TYPE);
+  assert.equal(REALTIME_DEFAULTS.MODEL, "gpt-realtime-2.1");
   assert.equal(config.model, REALTIME_DEFAULTS.MODEL);
+  assert.deepEqual(config.reasoning, { effort: "low" });
   assert.equal(config.audio.output.voice, REALTIME_DEFAULTS.VOICE);
   // An always-open microphone is the one thing a desk-side sidecar must not have.
   assert.equal(config.audio.input.turn_detection, null);
@@ -125,9 +127,24 @@ test("the minted session asks for the developer's spoken words back as text", ()
   // The audio already travels to this same service to be heard at all; the
   // transcription only hands the text back, so the history can hold both
   // halves of the exchange.
+  assert.equal(REALTIME_DEFAULTS.TRANSCRIPTION_MODEL, "gpt-live-transcribe");
   assert.deepEqual(realtimeSessionConfig().audio.input.transcription, {
     model: REALTIME_DEFAULTS.TRANSCRIPTION_MODEL,
   });
+});
+
+test("a model override receives no unsupported reasoning configuration", () => {
+  assert.equal(realtimeSessionConfig({ model: "gpt-realtime-preview" }).reasoning, undefined);
+  const [sync] = realtimeSessionSyncEvents("gpt-realtime-preview");
+  assert.ok(sync && isRecord(sync.session));
+  assert.equal(sync.session.reasoning, undefined);
+});
+
+test("unclear audio is clarified without guessing or acting", () => {
+  const instructions = realtimeInstructions();
+
+  assert.match(instructions, /audio is noisy, ambiguous, or cut off/i);
+  assert.match(instructions, /never infer[\s\S]*or call a tool from unclear audio/i);
 });
 
 test("the minted session chooses how it gives way at the edge of the window", () => {
@@ -371,9 +388,10 @@ test("the session sync asks every call for the developer's words back", () => {
   // The hosted mint composes its session on the service, so the sync the
   // channel opens with is the one place every call — hosted or keyed — can be
   // asked to transcribe the developer's spoken turns.
-  const [sync] = realtimeSessionSyncEvents();
+  const [sync] = realtimeSessionSyncEvents(REALTIME_DEFAULTS.MODEL);
 
   assert.ok(sync && isRecord(sync.session));
+  assert.deepEqual(sync.session.reasoning, { effort: "low" });
   assert.deepEqual(sync.session.audio, {
     input: { transcription: { model: REALTIME_DEFAULTS.TRANSCRIPTION_MODEL } },
   });

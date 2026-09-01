@@ -51,7 +51,6 @@ import {
   REMOTE_QUIET_MS,
   RealtimeVoiceSession,
   type SessionActionCarrier,
-  VOICE_IDLE_TIMEOUT_MS,
 } from "./realtime-session";
 import { SpokenNoticeAnnouncer } from "./spoken-notices";
 
@@ -127,14 +126,6 @@ interface Harness {
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   /** The transceivers declared instead of tracks, as a speak-only call does. */
   transceivers: RecordedTransceiver[];
-  /**
-   * The idle retirement, held rather than run: every test connects and few
-   * close, so a real ten-minute timer would keep the run alive for ten
-   * minutes apiece. Firing one retires it the way the session's re-arm would.
-   */
-  idleArmed: () => boolean;
-  idleDelayMs: () => number | undefined;
-  fireIdle: () => void;
   /** Every track handed to the sender, `null` standing for the device let go. */
   replacedTracks: () => (object | null)[];
   /**
@@ -149,12 +140,6 @@ interface Harness {
   /** Holds device opens in flight until `ungateMicrophone` lets them land. */
   gateMicrophone: () => void;
   ungateMicrophone: () => void;
-}
-
-interface HeldTimer {
-  callback: () => void;
-  delayMs: number;
-  cancelled: boolean;
 }
 
 function observedSession(
@@ -188,7 +173,6 @@ function harness(
     carryAction?: SessionActionCarrier;
     carryAppAction?: AppActionCarrier;
     carryIssueAction?: IssueActionCarrier;
-    idleTimeoutMs?: number;
     captureSessionSync?: boolean;
     /** Lets a test ride the status edges, the way the announcer does. */
     onStatus?: (status: RealtimeStatus) => void;
@@ -205,15 +189,6 @@ function harness(
     writeBackOnReplyEnded?: boolean;
   } = {},
 ): Harness {
-  const timers: HeldTimer[] = [];
-  const armedTimer = (): HeldTimer | undefined => timers.findLast((timer) => !timer.cancelled);
-  const fireTimer = (): void => {
-    const timer = armedTimer();
-    if (!timer) return;
-    // A fired timer is spent: only a re-arm by the session makes a new one.
-    timer.cancelled = true;
-    timer.callback();
-  };
   const sent: ParsedJsonObject[] = [];
   const errors: (string | undefined)[] = [];
   const captions: (readonly string[] | undefined)[] = [];
@@ -333,15 +308,6 @@ function harness(
       }
       return options.sdpResponse ?? new Response("v=0 remote", { status: 200 });
     },
-    schedule: (callback, delayMs) => {
-      const timer: HeldTimer = { callback, delayMs, cancelled: false };
-      timers.push(timer);
-      return timer;
-    },
-    cancel: (timer) => {
-      // SAFETY: Cancelled timer handle matches the HeldTimer shape stored by the harness.
-      (timer as HeldTimer).cancelled = true;
-    },
     onStatus: (status) => options.onStatus?.(status),
     onLocalStream: () => undefined,
     onRemoteStream: (stream) => options.onRemoteStream?.(stream),
@@ -383,9 +349,6 @@ function harness(
   }
   if (options.now) {
     sessionOptions.now = options.now;
-  }
-  if (options.idleTimeoutMs !== undefined) {
-    sessionOptions.idleTimeoutMs = options.idleTimeoutMs;
   }
   if (options.carryAct) {
     sessionOptions.carryAct = options.carryAct;
@@ -443,11 +406,6 @@ function harness(
     },
     requests,
     calls,
-    idleArmed: () => armedTimer() !== undefined,
-    idleDelayMs: () => armedTimer()?.delayMs,
-    fireIdle: () => {
-      fireTimer();
-    },
     replacedTracks: () => replacedTracks,
     failMicrophone: () => {
       microphoneError = new Error("The microphone went away");
@@ -5465,48 +5423,14 @@ test("the rosters and the guide never travel on Luke's own call", async () => {
   );
 });
 
-test("an idle call is put away, and a call being used is not", async () => {
+test("an idle call stays open until the provider closes it", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
   const context = harness();
   await context.session.connect();
 
-  // Settled and unused: the clock is running.
-  assert.equal(context.idleArmed(), true);
-  assert.equal(context.idleDelayMs(), VOICE_IDLE_TIMEOUT_MS);
+  t.mock.timers.tick(4 * 60_000);
 
-  // A turn stops it. A call someone is talking on is never put away underneath
-  // them, however long the turn runs.
-  await holdTurn(context);
-  assert.equal(context.idleArmed(), false);
-  context.session.stopListening(false);
-  assert.equal(context.idleArmed(), true);
-  // The device never waits for the retirement: it left with the turn.
-  assert.equal(context.microphoneStopped(), true);
-
-  context.fireIdle();
-
-  // What the retirement puts away is the conversation; the device is long gone.
-  assert.equal(context.session.status, REALTIME_STATUS.IDLE);
-});
-
-test("an idle call that was taken up in the meantime is left alone", async () => {
-  const context = harness();
-  await context.session.connect();
-  await holdTurn(context);
-
-  // Ten minutes is long enough for the timer to fire against a call that has
-  // since been taken up, so the decision is made again at the moment of it.
-  context.fireIdle();
-
-  assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
-});
-
-test("Luke's own call is not on the developer's idle clock", async () => {
-  const context = harness();
-
-  await context.session.connect({ microphone: false });
-
-  // It holds no device and already puts itself away once its queue is quiet.
-  assert.equal(context.idleArmed(), false);
+  assert.equal(context.session.isConnected, true);
 });
 
 test("the device closes with the exchange and the conversation stays", async () => {

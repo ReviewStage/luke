@@ -1,6 +1,10 @@
 import { LUKE_PERSONA } from "@sidecar/attention";
 import type { WireRecord } from "@sidecar/wire";
-import { type RealtimeSessionOptions, realtimeSessionConfig } from "./realtime-credentials.js";
+import {
+  type RealtimeSessionOptions,
+  realtimeReasoning,
+  realtimeSessionConfig,
+} from "./realtime-credentials.js";
 import { REALTIME_CLIENT_EVENT, REALTIME_SESSION_TYPE } from "./realtime-protocol.js";
 import { REALTIME_DEFAULTS } from "./realtime-voice-settings.js";
 
@@ -37,6 +41,8 @@ const INTRODUCTION_INSTRUCTION_HEAD: string = [
   "- When the developer speaks to you during the practice moment, answer",
   "  their ask directly first, like a colleague they just met: specific,",
   "  warm, no ceremony, and never remark that it was practice or a test.",
+  "- If audio is noisy, ambiguous, or cut off, ask briefly for it to be repeated. Never infer",
+  "  missing words or call a tool from unclear audio.",
   "- You cannot act on anything yet: no messages, no opens, no settings. If",
   "  an ask needs one of those, say what you will do for them once they sign",
   "  in — an invitation, never a cold refusal.",
@@ -72,12 +78,14 @@ export function introductionSessionConfig(options: RealtimeSessionOptions = {}) 
  * the tool list is empty, and `tool_choice` is `"none"` — the call is
  * tool-free by declaration, not merely by nobody asking.
  */
-export function introductionSessionSyncEvents(): readonly WireRecord[] {
+export function introductionSessionSyncEvents(model: string): readonly WireRecord[] {
+  const reasoning = realtimeReasoning(model);
   return [
     {
       type: REALTIME_CLIENT_EVENT.SESSION_UPDATE,
       session: {
         type: REALTIME_SESSION_TYPE,
+        ...(reasoning ? { reasoning } : undefined),
         instructions: introductionInstructions(),
         tools: [],
         tool_choice: "none",

@@ -193,6 +193,8 @@ const REALTIME_INSTRUCTION_HEAD: readonly string[] = [
   "  manage an agent themselves, and never claim an act you were not offered.",
   "- Start on the answer or the tool call and announce neither. Repeat back what they said only",
   "  when an act needs explicit confirmation first.",
+  "- If audio is noisy, ambiguous, or cut off, ask briefly for it to be repeated. Never infer",
+  "  missing words or call a tool from unclear audio.",
   "- After a tool call lands, confirm the specific result and stop. When the result is the thing",
   "  they asked to hear — a transcript reading, a check's answer, a provider with nowhere to open",
   "  — say it in full.",
