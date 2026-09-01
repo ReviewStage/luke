@@ -90,7 +90,9 @@ private struct ConnectedCheck: View {
 
 /// The sheet a row opens: paste a key to store or replace, or delete the one
 /// standing. The field is the one place a key ever appears, and it is never
-/// echoed back after Save.
+/// echoed back after Save. Drawn with the system's own sheet vocabulary —
+/// inline title, toolbar Cancel and Save, grouped form — like the profile
+/// sheet that opens it.
 struct VaultKeyEditor: View {
     @Environment(VaultStore.self) private var vault
     @Environment(\.dismiss) private var dismiss
@@ -101,75 +103,59 @@ struct VaultKeyEditor: View {
     @State private var errorMessage: String?
 
     var body: some View {
-        ZStack {
-            Color.ground.ignoresSafeArea()
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 10) {
+        NavigationStack {
+            Form {
+                Section {
                     ProviderMark(provider: provider)
-                        .frame(width: 24, height: 24)
-                    Text(provider.displayName)
-                        .font(.system(size: 22, weight: .semibold))
-                        .foregroundStyle(Color.ink)
+                        .frame(width: 44, height: 44)
+                        .frame(maxWidth: .infinity)
+                        .listRowBackground(Color.clear)
+                }
+
+                Section {
+                    SecureField("Paste \(credentialNoun.lowercased())", text: $key)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                } footer: {
+                    VStack(alignment: .leading, spacing: 8) {
+                        if let message = errorMessage ?? shapeRejection ?? formatRejection {
+                            Text(message)
+                                .foregroundStyle(Color.errorInk)
+                        }
+                        Text(hintText)
+                    }
                 }
 
                 if let entry = vault.entry(for: provider) {
-                    Text("A key stored \(entry.updatedAt.formatted(date: .abbreviated, time: .omitted)) "
-                        + "stands. Saving replaces it.")
-                        .font(.caption)
-                        .foregroundStyle(Color.inkSecondary)
-                }
-
-                Text(hintText)
-                    .font(.caption)
-                    .foregroundStyle(Color.inkSecondary)
-                    .tint(Color.inkLink)
-
-                SecureField("", text: $key, prompt: promptText)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .font(.system(size: 15))
-                    .foregroundStyle(Color.ink)
-                    .padding(12)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(Color.cardFill)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 6)
-                                    .stroke(Color.controlStroke, lineWidth: 1)
-                            )
-                    )
-                    .padding(.top, 8)
-
-                if let message = errorMessage ?? shapeRejection ?? formatRejection {
-                    Text(message)
-                        .font(.caption)
-                        .foregroundStyle(Color.errorInk)
-                }
-
-                HStack(spacing: 12) {
-                    Button(busy ? "Saving…" : "Save") { save() }
-                        .buttonStyle(EditorButtonStyle())
-                        .disabled(!keyIsSavable || busy)
-
-                    if vault.entry(for: provider) != nil {
+                    Section {
                         Button("Delete key", role: .destructive) { deleteKey() }
-                            .buttonStyle(EditorButtonStyle(destructive: true))
+                            .frame(maxWidth: .infinity)
                             .disabled(busy)
+                    } footer: {
+                        Text("A key stored \(entry.updatedAt.formatted(date: .abbreviated, time: .omitted)) "
+                            + "stands. Saving replaces it.")
                     }
-
-                    Spacer()
-
+                }
+            }
+            .navigationTitle(provider.displayName)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
-                        .buttonStyle(EditorButtonStyle())
                         .disabled(busy)
                 }
-                .padding(.top, 8)
-
-                Spacer()
+                ToolbarItem(placement: .confirmationAction) {
+                    if busy {
+                        ProgressView()
+                    } else {
+                        Button("Save") { save() }
+                            .disabled(!keyIsSavable)
+                    }
+                }
             }
-            .padding(24)
         }
         .presentationDetents([.medium])
+        .interactiveDismissDisabled(busy)
     }
 
     private var credentialNoun: String {
@@ -177,7 +163,7 @@ struct VaultKeyEditor: View {
     }
 
     /// The hint with its inline key-page link underlined, so the link reads
-    /// as one inside caption-grey copy rather than by colour alone.
+    /// as one inside footer-grey copy rather than by colour alone.
     private var hintText: AttributedString {
         guard var text = try? AttributedString(markdown: provider.keyHint) else {
             return AttributedString(provider.keyHint)
@@ -186,11 +172,6 @@ struct VaultKeyEditor: View {
             text[run.range].underlineStyle = .single
         }
         return text
-    }
-
-    private var promptText: Text {
-        Text("Paste \(credentialNoun.lowercased())")
-            .foregroundStyle(Color.inkTertiary)
     }
 
     /// Says why Save is disabled for a malformed key; a silently dead button
@@ -237,27 +218,5 @@ struct VaultKeyEditor: View {
             }
             busy = false
         }
-    }
-}
-
-private struct EditorButtonStyle: ButtonStyle {
-    var destructive = false
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: 15, weight: .semibold))
-            .foregroundStyle(destructive ? Color.errorInk : Color.ink)
-            .frame(height: 40)
-            .padding(.horizontal, 16)
-            .background(
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(configuration.isPressed ? Color.pressedFill : Color.cardFill)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(Color.controlStroke, lineWidth: 1)
-                    )
-            )
-            .opacity(configuration.isPressed ? 0.85 : 1)
-            .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
     }
 }
