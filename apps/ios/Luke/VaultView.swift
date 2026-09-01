@@ -15,22 +15,22 @@ struct VaultSection: View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Provider keys")
                 .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(Color.white)
+                .foregroundStyle(Color.ink)
             Text("Stored encrypted in your Luke account so Luke can observe these providers' cloud sessions.")
                 .font(.caption)
-                .foregroundStyle(Color(white: 1, opacity: 0.5))
+                .foregroundStyle(Color.inkSecondary)
                 .padding(.top, 4)
 
             if let error = vault.loadError {
                 Text(error)
                     .font(.caption)
-                    .foregroundStyle(Color(red: 0.95, green: 0.4, blue: 0.4))
+                    .foregroundStyle(Color.errorInk)
                     .padding(.top, 12)
                 Button("Try again") {
                     Task { await vault.load() }
                 }
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(Color.white)
+                .foregroundStyle(Color.ink)
                 .padding(.top, 8)
             }
 
@@ -43,7 +43,7 @@ struct VaultSection: View {
                     }
                     .buttonStyle(.plain)
                     if provider != VaultProviderID.allCases.last {
-                        Divider().overlay(Color(white: 1, opacity: 0.08))
+                        Divider().overlay(Color.cardStroke)
                     }
                 }
             }
@@ -54,10 +54,10 @@ struct VaultSection: View {
         .padding(20)
         .background(
             RoundedRectangle(cornerRadius: 10)
-                .fill(Color(red: 0.12, green: 0.12, blue: 0.13))
+                .fill(Color.cardFill)
                 .overlay(
                     RoundedRectangle(cornerRadius: 10)
-                        .stroke(Color(white: 1, opacity: 0.08), lineWidth: 1)
+                        .stroke(Color.cardStroke, lineWidth: 1)
                 )
         )
         .task { await vault.load() }
@@ -79,7 +79,7 @@ private struct VaultProviderRow: View {
                 .frame(width: 18, height: 18)
             Text(provider.displayName)
                 .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(Color.white)
+                .foregroundStyle(Color.ink)
             if entry != nil {
                 ConnectedCheck()
                     .frame(width: 12, height: 12)
@@ -87,7 +87,7 @@ private struct VaultProviderRow: View {
             Spacer()
             Image(systemName: "chevron.right")
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(Color(white: 1, opacity: 0.3))
+                .foregroundStyle(Color.inkTertiary)
         }
         .padding(.vertical, 12)
         .contentShape(Rectangle())
@@ -98,16 +98,12 @@ private struct VaultProviderRow: View {
 /// stroke for stroke: the same path in the palette a finished session uses,
 /// so connected reads the same way complete does.
 private struct ConnectedCheck: View {
-    private static let stateComplete = Color(
-        red: 0x6F / 255, green: 0xDC / 255, blue: 0xA4 / 255
-    )
-
     var body: some View {
         Canvas { ctx, size in
             ctx.transform = CGAffineTransform(scaleX: size.width / 24, y: size.width / 24)
             ctx.stroke(
                 Path(cgPath(fromSVG: "M4.8 12.6 9.6 17.3 19.2 6.9")),
-                with: .color(Self.stateComplete),
+                with: .color(.stateComplete),
                 style: StrokeStyle(lineWidth: 1.9, lineCap: .round, lineJoin: .round)
             )
         }
@@ -131,40 +127,40 @@ private struct VaultKeyEditor: View {
 
     var body: some View {
         ZStack {
-            Color(red: 0.09, green: 0.09, blue: 0.10).ignoresSafeArea()
+            Color.ground.ignoresSafeArea()
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 10) {
                     ProviderMark(provider: provider)
                         .frame(width: 24, height: 24)
                     Text(provider.displayName)
                         .font(.system(size: 22, weight: .semibold))
-                        .foregroundStyle(Color.white)
+                        .foregroundStyle(Color.ink)
                 }
 
                 if let entry = vault.entry(for: provider) {
                     Text("A key stored \(entry.updatedAt.formatted(date: .abbreviated, time: .omitted)) "
                         + "stands. Saving replaces it.")
                         .font(.caption)
-                        .foregroundStyle(Color(white: 1, opacity: 0.5))
+                        .foregroundStyle(Color.inkSecondary)
                 }
 
                 Text(hintText)
                     .font(.caption)
-                    .foregroundStyle(Color(white: 1, opacity: 0.5))
-                    .tint(Color(white: 1, opacity: 0.85))
+                    .foregroundStyle(Color.inkSecondary)
+                    .tint(Color.inkLink)
 
                 SecureField("", text: $key, prompt: promptText)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .font(.system(size: 15))
-                    .foregroundStyle(Color.white)
+                    .foregroundStyle(Color.ink)
                     .padding(12)
                     .background(
                         RoundedRectangle(cornerRadius: 6)
-                            .fill(Color(red: 0.12, green: 0.12, blue: 0.13))
+                            .fill(Color.cardFill)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 6)
-                                    .stroke(Color(white: 1, opacity: 0.10), lineWidth: 1)
+                                    .stroke(Color.controlStroke, lineWidth: 1)
                             )
                     )
                     .padding(.top, 8)
@@ -172,7 +168,7 @@ private struct VaultKeyEditor: View {
                 if let message = errorMessage ?? shapeRejection ?? formatRejection {
                     Text(message)
                         .font(.caption)
-                        .foregroundStyle(Color(red: 0.95, green: 0.4, blue: 0.4))
+                        .foregroundStyle(Color.errorInk)
                 }
 
                 HStack(spacing: 12) {
@@ -198,7 +194,6 @@ private struct VaultKeyEditor: View {
             }
             .padding(24)
         }
-        .preferredColorScheme(.dark)
         .presentationDetents([.medium])
     }
 
@@ -220,7 +215,7 @@ private struct VaultKeyEditor: View {
 
     private var promptText: Text {
         Text("Paste \(credentialNoun.lowercased())")
-            .foregroundStyle(Color(white: 1, opacity: 0.3))
+            .foregroundStyle(Color.inkTertiary)
     }
 
     /// Says why Save is disabled for a malformed key; a silently dead button
@@ -276,17 +271,15 @@ private struct EditorButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 15, weight: .semibold))
-            .foregroundStyle(destructive ? Color(red: 0.95, green: 0.4, blue: 0.4) : Color.white)
+            .foregroundStyle(destructive ? Color.errorInk : Color.ink)
             .frame(height: 40)
             .padding(.horizontal, 16)
             .background(
                 RoundedRectangle(cornerRadius: 6)
-                    .fill(configuration.isPressed
-                        ? Color(white: 1, opacity: 0.06)
-                        : Color(red: 0.12, green: 0.12, blue: 0.13))
+                    .fill(configuration.isPressed ? Color.pressedFill : Color.cardFill)
                     .overlay(
                         RoundedRectangle(cornerRadius: 6)
-                            .stroke(Color(white: 1, opacity: 0.10), lineWidth: 1)
+                            .stroke(Color.controlStroke, lineWidth: 1)
                     )
             )
             .opacity(configuration.isPressed ? 0.85 : 1)
