@@ -139,11 +139,16 @@ public final class ProductEventSender {
 
     /// Sends what is queued, at most one request at a time. Never throws: a
     /// failure is a count nobody has, which is the trade this whole pipeline
-    /// makes.
+    /// makes. A flush called mid-request chains behind it rather than
+    /// returning it, because the running request took its batch before this
+    /// call's events were queued — and the one caller that awaits a flush,
+    /// the sign-out, is exactly the one whose event must not wait for a
+    /// token that is about to be cleared.
     @discardableResult
     public func flush() -> Task<Void, Never> {
-        if let inFlight { return inFlight }
+        let previous = inFlight
         let task = Task {
+            if let previous { await previous.value }
             await send()
             inFlight = nil
         }

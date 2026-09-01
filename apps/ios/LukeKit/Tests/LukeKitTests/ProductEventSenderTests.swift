@@ -44,6 +44,24 @@ private final class Clock: @unchecked Sendable {
     var now = Date(timeIntervalSince1970: 1_774_000_000)
 }
 
+/// Holds a stubbed answer open until the test releases it, so a flush can be
+/// made to arrive while another's request is still in flight.
+private actor Gate {
+    private var opened = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func open() {
+        opened = true
+        for waiter in waiters { waiter.resume() }
+        waiters = []
+    }
+
+    func wait() async {
+        if opened { return }
+        await withCheckedContinuation { waiters.append($0) }
+    }
+}
+
 private func accepted(for request: URLRequest, status: Int = 202) -> (Data, URLResponse) {
     let response = HTTPURLResponse(
         url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil
@@ -269,6 +287,37 @@ final class ProductEventSenderTests: XCTestCase {
             ($0["properties"] as? [String: Any])?["provider_id"] as? String
         }
         XCTAssertEqual(providers, ["codex", "claude-code"])
+    }
+
+    /// The sign-out path records its act and awaits a flush while the timed
+    /// flush may already be mid-request with an earlier batch; an act queued
+    /// after that batch was taken must ride its own request, not wait behind
+    /// a token the sign-out is about to clear.
+    func testAFlushCalledMidRequestChainsBehindItRatherThanReturningIt() async {
+        let taken = Gate()
+        let release = Gate()
+        let (sender, log) = makeSender { request in
+            await taken.open()
+            await release.wait()
+            return accepted(for: request)
+        }
+        sender.arm()
+        sender.record(.appLaunch)
+        let first = sender.flush()
+        await taken.wait()
+
+        sender.record(.accountAct(.signOut))
+        let second = sender.flush()
+        await release.open()
+        await first.value
+        await second.value
+
+        let requests = await log.requests
+        XCTAssertEqual(requests.count, 2)
+        XCTAssertEqual(
+            sentEvents(requests[1]).map { $0["name"] as? String },
+            ["account:act"]
+        )
     }
 
     func testStoppingDropsWhatWasQueuedRatherThanHoldingTheQuitOpen() async {

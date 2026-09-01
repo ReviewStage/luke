@@ -62,14 +62,21 @@ struct LukeApp: App {
         }
     }
 
-    /// The two account edges analytics reacts to. Restores never pass here —
-    /// the keychain read lands before this view observes — so a sign-in edge
-    /// is always the developer's own act, the transition the desktop counts.
+    /// The account edges analytics reacts to. Restores never pass here — the
+    /// keychain read lands before this view observes — so a sign-in edge is
+    /// always the developer's own act, the transition the desktop counts.
     private func accountEdge(from previous: AuthState, to current: AuthState) {
         switch (previous, current) {
         case (.signedOut, .signedIn(let identity)):
             events.record(.accountSignIn)
             if let accountId = identity.id {
+                SessionReplay.identify(accountId: accountId)
+            }
+        case (.signedIn(let restored), .signedIn(let resolved)):
+            // A restore whose keychain never held the account id resolves it
+            // from userinfo after first paint; the id arriving is the moment
+            // the running recording can be joined to its account.
+            if restored.id == nil, let accountId = resolved.id {
                 SessionReplay.identify(accountId: accountId)
             }
         case (.signedIn, .signedOut):
