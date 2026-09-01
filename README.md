@@ -39,9 +39,12 @@ Hold <kbd>⌥</kbd><kbd>Space</kbd> to talk to Luke from any app, or press
 status of your agents, kick fresh ones off for you, or message them on your
 behalf.
 
-The **History** tab keeps the complete conversation from the current app launch
-on your Mac until you clear it or quit. It is not saved or exportable, and only
-the 20 most recent entries are carried into Luke's next call.
+The **History** tab keeps your conversation with Luke on your Mac, across
+launches: the 200 most recent entries and nothing older than a fortnight, until
+you clear it. Clearing deletes the file too. Only the 20 most recent entries are
+carried into Luke's next call. Luke also silently keeps a small local memory of
+useful preferences, personal context, goals, and recurring constraints; ask him
+what he remembers, correct something, or tell him to forget it.
 
 ![Luke's capsule under the notch, speaking a summary of which sessions finished and which are waiting.](docs/media/luke-talking.png)
 

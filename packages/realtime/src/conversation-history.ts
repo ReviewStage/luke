@@ -5,8 +5,8 @@
  * asks about it, and the developer's call retires when idle — so the thread
  * itself is kept here, as a record of what was already said and done during
  * this app launch. A bounded recent slice is re-fed to whichever call the
- * developer opens next; the whole in-memory thread remains available to the
- * developer in the panel until they clear it or quit.
+ * developer opens next; the retained thread remains available to the
+ * developer in the panel until they clear it.
  *
  * Every panel window draws the same thread. The window that appends a line
  * reports the whole thread to its own main process, which holds the launch's
@@ -18,11 +18,20 @@
  * text by the service that heard them — the words Luke spoke or announced,
  * and the acts he carried at the developer's ask. Nothing else may enter —
  * not a roster, not a transcript rendering, not an outcome a provider
- * answered with — and the record lives in memory alone, dying with the app.
+ * answered with.
+ *
+ * The thread outlives the app. What is stored is exactly what that rule
+ * already admits — words that were said, each of which reached the voice
+ * service once on the call that said it — and never a claim Luke formed
+ * about the developer, which is a different kind of thing kept somewhere
+ * else. So the justification above holds across a launch unchanged: quitting
+ * and coming back is the same continuity a retired call already has, one
+ * boundary further out. Only the retention changes, because "dies with the
+ * app" was itself a policy and persisting means replacing it with a real one.
  */
 
 import type { Session, SessionIdentity } from "@sidecar/session";
-import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
+import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import { SESSION_NO_LONGER_OBSERVED_NOTE } from "./realtime-protocol.js";
 import { actNarration, type CarriedSessionAction } from "./realtime-tools.js";
 
@@ -59,6 +68,25 @@ export function isConversationEntryKind(value: UnparsedWireValue): value is Conv
 export const maximumConversationEntries = 20;
 export const maximumConversationEntryLength = 400;
 
+/**
+ * How much of the thread survives a quit, and for how long. Two bounds
+ * because they answer different failures: the count keeps a busy week from
+ * making the file the panel's slowest read, and the age keeps a conversation
+ * nobody has looked at since from following the developer around forever.
+ * Whichever cuts first wins, and neither widens what reaches the model —
+ * {@link maximumConversationEntries} still bounds that, and persisting is for
+ * continuity and for the panel.
+ *
+ * At this size continuity needs no retrieval: quitting and returning to the
+ * last twenty lines is the whole of it, and the panel simply draws the rest.
+ * Retrieval starts to matter only if the model's slice stops being the recent
+ * slice — if a turn should be able to reach back to something said last month
+ * rather than last night. That is a different feature with a different budget,
+ * and nothing here anticipates it.
+ */
+export const maximumStoredConversationEntries = 200;
+export const storedConversationMaximumAgeMs = 14 * 24 * 60 * 60 * 1000;
+
 export interface ConversationEntry {
   kind: ConversationEntryKind;
   /**
@@ -78,25 +106,27 @@ export interface ConversationEntry {
   identity?: SessionIdentity;
   /**
    * When the line happened in the conversation. Appends stamp themselves;
-   * delayed spoken transcripts carry the time their turn began.
+   * delayed spoken transcripts carry the time their turn began. This is also
+   * retention's clock and never enters model context.
    */
   recordedAt?: number;
 }
 
 /**
- * Appends one length-bounded line to the current-launch thread. An entry with
+ * Appends one length-bounded line to the retained thread. An entry with
  * nothing left after flattening appends nothing: an empty line says nothing
  * worth keeping or spending model-window space on.
  */
 export function appendConversationThreadEntry(
   entries: readonly ConversationEntry[],
   entry: ConversationEntry,
+  now: number = Date.now(),
 ): readonly ConversationEntry[] {
   const words = boundedEntryWords(entry.words);
   if (!words) return entries;
-  const appended: ConversationEntry = { kind: entry.kind, words, recordedAt: Date.now() };
+  const appended: ConversationEntry = { kind: entry.kind, words, recordedAt: now };
   if (entry.identity) appended.identity = entry.identity;
-  return [...entries, appended];
+  return retainedConversationEntries([...entries, appended], now);
 }
 
 /**
@@ -140,8 +170,9 @@ export function recentConversationEntries(
 export function appendConversationEntry(
   entries: readonly ConversationEntry[],
   entry: ConversationEntry,
+  now: number = Date.now(),
 ): readonly ConversationEntry[] {
-  return recentConversationEntries(appendConversationThreadEntry(entries, entry));
+  return recentConversationEntries(appendConversationThreadEntry(entries, entry, now));
 }
 
 /** One flattening and one bound for every line, however it enters. */
@@ -186,7 +217,7 @@ export function insertSpokenAskThreadEntry(
   entries: readonly ConversationEntry[],
   words: string,
   after: ConversationEntry | undefined,
-  recordedAt: number,
+  recordedAt: number = Date.now(),
 ): readonly ConversationEntry[] {
   const bounded = boundedEntryWords(words);
   if (!bounded) return entries;
@@ -207,8 +238,9 @@ export function insertSpokenAskEntry(
   entries: readonly ConversationEntry[],
   words: string,
   after: ConversationEntry | undefined,
+  now: number = Date.now(),
 ): readonly ConversationEntry[] {
-  return recentConversationEntries(insertSpokenAskThreadEntry(entries, words, after, Date.now()));
+  return recentConversationEntries(insertSpokenAskThreadEntry(entries, words, after, now));
 }
 
 /**
@@ -280,4 +312,67 @@ export function conversationHistoryText(
         : `${line} [${SESSION_NO_LONGER_OBSERVED_NOTE}]`;
     }),
   ].join("\n");
+}
+
+const CONVERSATION_ENTRY_KINDS: ReadonlySet<string> = new Set(
+  Object.values(CONVERSATION_ENTRY_KIND),
+);
+
+function isConversationEntryKind(value: UnparsedWireValue): value is ConversationEntryKind {
+  return isWireString(value) && CONVERSATION_ENTRY_KINDS.has(value);
+}
+
+/**
+ * Parses one stored line back, or nothing. A file half-written by a crash, or
+ * a record from a build that spelled an entry differently, drops the line
+ * rather than the thread: history is not load-bearing, and a single unreadable
+ * line is worth less than everything said around it.
+ */
+export function storedConversationEntry(value: UnparsedWireValue): ConversationEntry | undefined {
+  if (!isRecord(value) || !isConversationEntryKind(value.kind)) return undefined;
+  const words = isWireString(value.words) ? boundedEntryWords(value.words) : undefined;
+  if (!words || words !== value.words) return undefined;
+  const recordedAt =
+    isWireNumber(value.recordedAt) && Number.isFinite(value.recordedAt)
+      ? value.recordedAt
+      : undefined;
+  if (recordedAt === undefined || recordedAt < 0) return undefined;
+  const identity = value.identity;
+  const providerId = isRecord(identity) ? identity.providerId : undefined;
+  const providerSessionId = isRecord(identity) ? identity.providerSessionId : undefined;
+  if (
+    identity !== undefined &&
+    (!isWireString(providerId) ||
+      providerId.length === 0 ||
+      !isWireString(providerSessionId) ||
+      providerSessionId.length === 0)
+  ) {
+    return undefined;
+  }
+  return {
+    kind: value.kind,
+    words,
+    recordedAt,
+    ...(isWireString(providerId) && isWireString(providerSessionId)
+      ? { identity: { providerId, providerSessionId } }
+      : undefined),
+  };
+}
+
+/**
+ * Applies both retention bounds, oldest lines going first. Unclocked draft
+ * entries may participate in pure in-memory ordering; the storage parser above
+ * refuses them, and every live append supplies a clock.
+ */
+export function retainedConversationEntries(
+  entries: readonly ConversationEntry[],
+  now: number,
+): readonly ConversationEntry[] {
+  return entries
+    .filter(
+      (entry) =>
+        entry.recordedAt === undefined ||
+        (entry.recordedAt <= now && now - entry.recordedAt <= storedConversationMaximumAgeMs),
+    )
+    .slice(-maximumStoredConversationEntries);
 }

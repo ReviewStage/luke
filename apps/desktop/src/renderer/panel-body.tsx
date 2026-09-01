@@ -788,11 +788,11 @@ export interface PanelBodyProps {
   onOpenSessionApplication: (session: SessionView, applicationId: SessionApplicationId) => void;
   /** Carries a typed reply or an advertised action to the session's provider. */
   writes: SessionWriteHandlers;
-  /** The current-launch, renderer-memory conversation between the developer and Luke. */
+  /** The conversation between the developer and Luke, this launch's and what survived the last. */
   conversationHistory: readonly ConversationEntry[];
   /** The lines still being said, drawn under that thread while their words grow. */
   liveConversationEntries: readonly ConversationEntry[];
-  /** Clears that same thread from the view and Luke's next conversational context. */
+  /** Clears that same thread from the view, Luke's next context, and the stored file. */
   onClearConversationHistory: () => void;
   /** Carries a typed ask to Luke's own conversation, answering why it could not go. */
   ask: AskHandler;

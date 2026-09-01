@@ -1,3 +1,4 @@
+import type { RememberedFact } from "@sidecar/acts";
 import {
   PRODUCT_PANEL_SOURCE,
   PRODUCT_SEARCH_SURFACE,
@@ -378,6 +379,8 @@ export function App(): React.JSX.Element {
   // so a bootstrap replying "not yet" after a push raced past it clobbers
   // nothing, and the wing stops saying "loading" the moment either arrives.
   const [sessionsSettled, setSessionsSettled] = useState(false);
+  /** The main process's durable memory, mirrored here only to update conversation context. */
+  const [rememberedFacts, setRememberedFacts] = useState<readonly RememberedFact[]>([]);
   const [workspaceProjects, setWorkspaceProjects] = useState<readonly ObservedWorkspaceProject[]>(
     [],
   );
@@ -2011,6 +2014,32 @@ export function App(): React.JSX.Element {
             note: "Luke is quitting to install the downloaded release; this conversation ends with it.",
           };
         },
+        // Automatic memory stays silent; the returned list updates context.
+        [APP_TOOL_KIND.REMEMBER]: async (action): Promise<WireRecord> => {
+          const facts = await window.sidecar.rememberFact(action.words, action.replaces);
+          setRememberedFacts(facts);
+          // The store's answer is the whole report: the words are there or the
+          // write did not land, and a claim to have remembered something the
+          // list does not hold is worse than the refusal.
+          if (!facts.some((fact) => fact.words === action.words)) {
+            return {
+              status: ACT_RESULT_STATUS.REJECTED,
+              reason: "That memory could not be saved.",
+            };
+          }
+          return { status: ACT_RESULT_STATUS.ACCEPTED };
+        },
+        [APP_TOOL_KIND.FORGET]: async (action): Promise<WireRecord> => {
+          const facts = await window.sidecar.forgetFact(action.id);
+          setRememberedFacts(facts);
+          if (facts.some((fact) => fact.id === action.id)) {
+            return {
+              status: ACT_RESULT_STATUS.REJECTED,
+              reason: "That memory could not be removed.",
+            };
+          }
+          return { status: ACT_RESULT_STATUS.ACCEPTED };
+        },
       }),
     [
       accountNow,
@@ -2082,6 +2111,7 @@ export function App(): React.JSX.Element {
     openSession: openSessionAloud,
     openSessionApplication: openSessionApplicationAloud,
     carryAppAction,
+    rememberedFacts,
   });
 
   // A failed call is reported where its reply would have landed: on the
@@ -2498,6 +2528,7 @@ export function App(): React.JSX.Element {
       setBootstrap(value);
       acceptSessionsBootstrap(value.sessionRoster);
       if (value.sessionsSettled) setSessionsSettled(true);
+      setRememberedFacts(value.rememberedFacts);
       // Only fill in what no push has said yet: the bootstrap snapshot is
       // older than any change that raced past it, and the main process will
       // not repeat a list it believes it already announced.

@@ -1,6 +1,6 @@
 # Privacy
 
-Last updated: 27 August 2026
+Last updated: 28 August 2026
 
 Luke is a macOS app that watches your coding agent sessions. This policy
 explains what we collect, who we send it to, and how to turn it off.
@@ -14,10 +14,27 @@ contents, or command output, and it writes none of this to disk. If you run
 agents inside the Herdr terminal manager, Luke also asks Herdr's own
 command-line tool which of those sessions it holds, so their rows can say so;
 that read never starts Herdr, reads no terminal output, and sends nothing
-anywhere. It stays on your Mac unless a feature below sends it. Luke also keeps
-your conversation with him in memory for the current app launch so you can
-review it; it is never written to disk, and only the 20 most recent entries are
-carried into a call.
+anywhere. It stays on your Mac unless a feature below sends it.
+
+**Your conversation with Luke.** Luke keeps the conversation you have with him
+— what you typed or said, what he spoke or announced, and the actions he took
+at your request — in a file on your Mac, so it is still there the next time you
+open him. It holds the 200 most recent entries and nothing older than 14 days,
+whichever runs out first; each entry is capped at 400 characters. Only the 20
+most recent are carried into a call, the same as before. Clearing the History
+tab deletes the file as well as the view. Nothing about the conversation is
+written on our servers, and a fixture or evidence run keeps no conversation at
+all.
+
+**Things Luke remembers about you.** During a conversation you start, Luke may
+silently save a concise preference, personal fact, goal, or recurring constraint
+that looks useful later. He skips temporary details and uncertain guesses, never
+saves credentials, and saves sensitive facts only when you explicitly ask. At
+most 32 are stored on your Mac beside your settings and they do not expire. You
+can ask Luke what he remembers, correct something, or tell him to forget it.
+They are sent to OpenAI with the rest of a conversation's context so Luke can
+personalize replies; they are not sent to a coding-agent provider, a tracker, or
+our own service, and they are never used to decide anything on your behalf.
 
 **Your account.** Signing in with Google or GitHub gives us your name, email
 address, and which of the two you used. We also keep the records that keep you
@@ -32,8 +49,8 @@ branches, file paths, summaries, prompts, or error text.
 screen, your editor, your terminal, or any other app. A recording shows whatever
 the panel showed you, including session titles, branches, summaries and error
 text, your name and email address, and any screenshot you attached to the
-feedback form. The History tab is blocked from recordings, so the words in your
-conversation with Luke are not included. Text you type into a field is replaced
+feedback form. The History tab is blocked from recordings, so neither the words in your
+conversation with Luke nor the things he remembers about you are included. Text you type into a field is replaced
 with blocks before the recording leaves your Mac, so an API key or a sign-in
 code you enter is not in it. While recording is on, Luke also reports what you
 clicked, including the text on it, and any error his panel runs into, with its
@@ -71,8 +88,9 @@ and email you signed it with, and any screenshots you attached.
 - OpenAI, for voice and session summaries. A spoken turn sends its audio, a
   typed turn sends your words, and both send the session fields listed above.
   We do not send message history, file contents, or command output, and we ask
-  OpenAI not to store the request. Your conversation is kept in memory so it
-  carries across calls, and is discarded when you quit Luke.
+  OpenAI not to store the request. Your conversation and Luke's durable memory
+  are kept on your Mac and sent with a call so the
+  conversation carries across calls and across launches.
   The one voice call that happens before you sign in is the spoken
   introduction on first launch: it sends its own fixed script, the titles of
   the coding agent sessions found on your Mac, and anything you say during its
@@ -107,7 +125,8 @@ your network address, as it does for the app's recordings.
 
 ## Storage
 
-Your settings, local provider API keys, and calendar access stay on your Mac.
+Your settings, your conversation with Luke, the things he remembers about you,
+local provider API keys, and calendar access stay on your Mac.
 Local keys and calendar access are encrypted in the macOS Keychain. Provider
 API keys you sync to the hosted service are stored encrypted in our own
 database, as described above. Your account information is held by our own
@@ -119,6 +138,8 @@ service, and usage counts and recordings by PostHog.
 - Delete your OpenAI key to turn voice off.
 - Delete any synced provider API key from that provider's row in Settings. Keys
   are also deleted when you delete your account.
+- Clear the History tab to delete your stored conversation from your Mac.
+- Ask Luke what he remembers, correct a memory, or tell him to forget one.
 - Luke does not use your microphone until you start a turn.
 - Delete your account from the Account section in Settings. This erases your
   account, your sign-in records, your usage counts, and any provider API keys

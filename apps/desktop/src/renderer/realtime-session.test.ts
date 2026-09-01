@@ -1945,7 +1945,7 @@ test("an empty history says nothing at all", async () => {
   assert.deepEqual(contextItems(context, "[recent conversation"), []);
 });
 
-test("a call accepts only the recent slice of a full current-launch thread", async () => {
+test("a call accepts only the recent slice of the retained thread", async () => {
   const context = harness();
   await context.session.connect();
   const thread = Array.from(

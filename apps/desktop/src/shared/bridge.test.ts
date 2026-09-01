@@ -30,6 +30,7 @@ test("a conversation history report carries only bounded history lines", () => {
     kind: "announcement",
     words: "A chat finished.",
     identity: { providerId: "claude-code", providerSessionId: "session-a" },
+    recordedAt: 2,
   };
   assert.equal(guard([[]]), true);
   assert.equal(guard([[ask, announcement]]), true);
@@ -48,4 +49,24 @@ test("a conversation history report carries only bounded history lines", () => {
     false,
   );
   assert.equal(guard([[{ ...ask, recordedAt: Number.POSITIVE_INFINITY }]]), false);
+});
+
+test("clearing conversation history is acknowledged", () => {
+  assert.equal(BRIDGE.clearConversationHistory.kind, "invoke");
+  assert.equal(BRIDGE.clearConversationHistory.result?.(true), true);
+  assert.equal(BRIDGE.clearConversationHistory.result?.(false), true);
+  assert.equal(BRIDGE.clearConversationHistory.result?.(undefined), false);
+});
+
+test("remembered-fact responses enforce their complete bounded shape", () => {
+  const guard = BRIDGE.rememberFact.result;
+  assert.equal(guard?.([{ id: "one", words: "kept" }]), true);
+  assert.equal(guard?.([{ id: "one", words: "x".repeat(241) }]), false);
+  assert.equal(
+    guard?.([
+      { id: "one", words: "first" },
+      { id: "one", words: "second" },
+    ]),
+    false,
+  );
 });

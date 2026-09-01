@@ -75,6 +75,13 @@ import {
   type WireRecord,
   text as wireText,
 } from "@sidecar/wire";
+import {
+  holdsRememberedFact,
+  maximumRememberedFactLength,
+  maximumRememberedFacts,
+  type RememberedFact,
+  rememberedFactText,
+} from "./memory.js";
 export interface RealtimeFunctionCall {
   name: string;
   argumentsJson: string;
@@ -96,6 +103,7 @@ export const ACT_VALIDATION_TARGET = {
   SETTING_ID: "setting-id",
   UPDATE_ROW: "update-row",
   APP_GUIDE: "app-guide",
+  REMEMBERED_FACT: "remembered-fact",
 } as const;
 
 export type ActValidationTarget =
@@ -125,6 +133,8 @@ export const APP_TOOL_KIND = {
   PANEL: "panel",
   FEEDBACK: "feedback",
   UPDATE: "update",
+  REMEMBER: "remember",
+  FORGET: "forget",
 } as const;
 
 /** The two whole-list scopes of a spoken panel ask beyond the locations. */
@@ -255,7 +265,15 @@ type CarriedAppActionFields =
       query?: string;
     }
   | { kind: typeof APP_TOOL_KIND.FEEDBACK; composer: FeedbackComposerKind; draft?: string }
-  | { kind: typeof APP_TOOL_KIND.UPDATE; act: AppUpdateAct };
+  | { kind: typeof APP_TOOL_KIND.UPDATE; act: AppUpdateAct }
+  | {
+      kind: typeof APP_TOOL_KIND.REMEMBER;
+      /** One concise durable fact selected from the developer-opened turn. */
+      words: string;
+      /** The id of the fact this one stands in for, when it changes one. */
+      replaces?: string;
+    }
+  | { kind: typeof APP_TOOL_KIND.FORGET; id: string };
 
 export type CarriedAppAction = CarriedAppActionFields & {
   status?: never;
@@ -321,6 +339,12 @@ export interface IssueToolContext {
 export interface AppToolContext {
   guide: AppGuideSnapshot;
   sessions: readonly Session[];
+  /**
+   * The facts standing right now, which a replacement or a removal is
+   * validated against — the same discipline a session act keeps against the
+   * roster. An id the conversation was never shown names nothing.
+   */
+  rememberedFacts: readonly RememberedFact[];
 }
 
 type JsonSchemaStringProperty = {
@@ -1198,6 +1222,40 @@ function validateRunUpdateAction(parsed: WireRecord, context: AppToolContext): A
   return { kind: APP_TOOL_KIND.UPDATE, act };
 }
 
+/** Validates one automatic memory update against the bounded list in context. */
+function validateRememberFact(parsed: WireRecord, context: AppToolContext): AppToolAction {
+  const words = rememberedFactText(parsed.words);
+  if (!words) {
+    return {
+      status: ACT_RESULT_STATUS.REJECTED,
+      reason: `A memory has to be under ${maximumRememberedFactLength} characters and longer than nothing.`,
+    };
+  }
+  const replaces = textArgument(parsed, "replaces");
+  if (replaces !== undefined && !holdsRememberedFact(context.rememberedFacts, replaces)) {
+    return {
+      status: ACT_RESULT_STATUS.REJECTED,
+      reason: "Nothing remembered goes by that id.",
+    };
+  }
+  // A replacement retires one as it lands; a new fact never evicts silently.
+  if (replaces === undefined && context.rememberedFacts.length >= maximumRememberedFacts) {
+    return {
+      status: ACT_RESULT_STATUS.REJECTED,
+      reason: `Luke already remembers ${maximumRememberedFacts} things; replace or forget one first.`,
+    };
+  }
+  return { kind: APP_TOOL_KIND.REMEMBER, words, ...(replaces ? { replaces } : undefined) };
+}
+
+function validateForgetFact(parsed: WireRecord, context: AppToolContext): AppToolAction {
+  const id = textArgument(parsed, "id");
+  if (!id || !holdsRememberedFact(context.rememberedFacts, id)) {
+    return { status: ACT_RESULT_STATUS.REJECTED, reason: "Nothing remembered goes by that id." };
+  }
+  return { kind: APP_TOOL_KIND.FORGET, id };
+}
+
 function observedSessionName(identity: SessionIdentity, sessions: readonly Session[]): string {
   const session = sessions.find(
     (candidate) =>
@@ -1693,6 +1751,63 @@ export const ACTS = {
     },
     validate: validateRunUpdateAction,
   },
+  REMEMBER_FACT: {
+    name: "remember_fact",
+    family: REALTIME_TOOL_FAMILY.APP,
+    actionKind: APP_TOOL_KIND.REMEMBER,
+    validatedAgainst: ACT_VALIDATION_TARGET.REMEMBERED_FACT,
+    narration: narrate(APP_TOOL_KIND.REMEMBER, (action) =>
+      action.replaces
+        ? `remembered "${action.words}" in place of something remembered before`
+        : `remembered "${action.words}"`,
+    ),
+    guide: "Silently save useful durable context about the developer.",
+    schema: {
+      description:
+        "Silently save a concise stable preference, personal fact, goal, or recurring constraint " +
+        "from this developer-opened turn. Skip transient details and uncertain inferences. Never " +
+        "save credentials; save sensitive facts only when explicitly asked. Do not mention routine " +
+        "memory changes. Skip duplicates, and pass an existing id as replaces when updating a " +
+        "contradiction.",
+      parameters: {
+        type: "object",
+        properties: {
+          words: {
+            type: "string",
+            description: "A concise durable fact about the developer.",
+          },
+          replaces: {
+            type: "string",
+            description:
+              "The id of the remembered entry this one stands in for, when it changes one.",
+          },
+        },
+        required: ["words"],
+      },
+    },
+    validate: validateRememberFact,
+  },
+  FORGET_FACT: {
+    name: "forget_fact",
+    family: REALTIME_TOOL_FAMILY.APP,
+    actionKind: APP_TOOL_KIND.FORGET,
+    validatedAgainst: ACT_VALIDATION_TARGET.REMEMBERED_FACT,
+    narration: narrate(APP_TOOL_KIND.FORGET, () => "forgot something remembered before"),
+    guide: "Silently forget an outdated entry or one the developer asked to drop.",
+    schema: {
+      description:
+        "Silently forget an outdated or explicitly unwanted memory. Only an id from the remembered " +
+        "list can be named. Do not mention routine memory changes.",
+      parameters: {
+        type: "object",
+        properties: {
+          id: { type: "string", description: "The remembered entry's id." },
+        },
+        required: ["id"],
+      },
+    },
+    validate: validateForgetFact,
+  },
 } as const satisfies Record<string, RealtimeToolSpec>;
 
 /** The history sentence declared by the same row that declared the act. */
@@ -1834,6 +1949,7 @@ export function appToolAction(
   call: RealtimeFunctionCall,
   guide: AppGuideSnapshot,
   sessions: readonly Session[],
+  rememberedFacts: readonly RememberedFact[] = [],
 ): AppToolAction {
   const parsed = parseToolArguments(call);
   if (!parsed.ok) return { status: ACT_RESULT_STATUS.REJECTED, reason: parsed.reason };
@@ -1841,7 +1957,7 @@ export function appToolAction(
   if (!tool || tool.family !== REALTIME_TOOL_FAMILY.APP) {
     return { status: ACT_RESULT_STATUS.REJECTED, reason: "No such tool exists." };
   }
-  return tool.validate(parsed.value, { guide, sessions });
+  return tool.validate(parsed.value, { guide, sessions, rememberedFacts });
 }
 
 /**

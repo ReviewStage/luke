@@ -1,4 +1,5 @@
 import type { AccountSnapshot } from "@sidecar/account/snapshot";
+import type { RememberedFact } from "@sidecar/acts";
 import type { ObservedAccountCalendars } from "@sidecar/calendar/observation";
 import type { FixtureSnapshot } from "@sidecar/fixtures";
 import type { TrackedIssue } from "@sidecar/issues";
@@ -201,11 +202,14 @@ export interface AppBootstrap {
   /** Whether the calendar's quiet is holding announcements right now. */
   meetingQuiet: boolean;
   /**
-   * The launch's conversation history so far, so a panel that opens late — a
-   * display plugged in mid-conversation — draws the History every other
-   * window already holds.
+   * The conversation thread as the last launch left it, already retained.
+   * Only the recent slice reaches a model; the rest is shared across every
+   * display's panel, so History opens where the developer left it.
+   * Empty in a fixture or capture run, which reads no thread and writes none.
    */
   conversationHistory: readonly ConversationEntry[];
+  /** Luke's bounded durable facts about the developer. Empty in fixture and capture runs. */
+  rememberedFacts: readonly RememberedFact[];
   /** Whether, where, and for whom this run may record its own surface. */
   sessionReplay: SessionReplayBootstrap;
   settings: AppSettings;
