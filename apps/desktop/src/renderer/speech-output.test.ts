@@ -12,6 +12,7 @@ interface DialogueFrameFixture {
   is_final?: boolean;
   is_final_audio_for_turn?: boolean;
   error?: string;
+  message?: string;
 }
 
 /** Two 16-bit little-endian samples, base64, as one server frame carries them. */
@@ -76,6 +77,10 @@ function fakeSocket() {
     deliver(frame: DialogueFrameFixture) {
       // SAFETY: The driver reads only `data`; the rest of a MessageEvent is unused.
       socket.onmessage?.({ data: JSON.stringify(frame) } as MessageEvent<string>);
+    },
+    shut(code = 1000, reason = "") {
+      // SAFETY: The driver reads a close event's code and reason and nothing else.
+      socket.onclose?.({ code, reason } as CloseEvent);
     },
   };
 }
@@ -228,11 +233,29 @@ test("a socket closing before its last word settles the turn with the failure", 
   h.speech.append("Hello");
   await settle();
   h.socket.open();
-  // SAFETY: The driver reads nothing off a close event but the fact of it.
-  h.socket.socket.onclose?.(new Event("close") as CloseEvent);
-  assert.equal(h.events.length, 2);
-  assert.match(h.events[0] ?? "", /^error:/);
-  assert.equal(h.events[1], "drained");
+  h.socket.shut(1008, "invalid_model_id");
+  // The service's own reason for closing is what the failure says, so a refused
+  // model or voice names itself rather than reading as a lost connection.
+  assert.deepEqual(h.events, [
+    "error:The speech connection closed before Luke finished speaking: invalid_model_id",
+    "drained",
+  ]);
+});
+
+test("a handshake refused before the socket opened is named by its close code", async () => {
+  const h = harness();
+  h.speech.start();
+  h.speech.append("Hello");
+  await settle();
+  // The socket never opened, so an error fires first; the close behind it is
+  // the one that knows anything, and reporting on the error would say less.
+  h.socket.socket.onerror?.(new Event("error"));
+  assert.deepEqual(h.events, []);
+  h.socket.shut(1006, "");
+  assert.deepEqual(h.events, [
+    "error:The speech connection closed before Luke finished speaking (code 1006).",
+    "drained",
+  ]);
 });
 
 test("a close after the last word is the ordinary ending, not a failure", async () => {
@@ -242,8 +265,7 @@ test("a close after the last word is the ordinary ending, not a failure", async 
   await settle();
   h.socket.open();
   h.socket.deliver({ is_final: true });
-  // SAFETY: The driver reads nothing off a close event but the fact of it.
-  h.socket.socket.onclose?.(new Event("close") as CloseEvent);
+  h.socket.shut();
   assert.deepEqual(h.events, ["drained"]);
 });
 
@@ -258,6 +280,18 @@ test("an error frame is said once and settles the turn", async () => {
   assert.deepEqual(h.events, ["error:voice not found", "drained"]);
   // Nothing more is owed, so the turn does not wait on a drain that cannot come.
   assert.equal(h.speech.finish(), false);
+});
+
+test("an error frame carrying only its sentence is still a failure", async () => {
+  const h = harness();
+  h.speech.start();
+  h.speech.append("Hello");
+  await settle();
+  h.socket.open();
+  // The sentence is the field a reader can act on; an error frame that names
+  // its failure only there must not fall through to the socket's silent close.
+  h.socket.deliver({ message: "voice_id not found in this account" });
+  assert.deepEqual(h.events, ["error:voice_id not found in this account", "drained"]);
 });
 
 test("a refused mint reports the service's own sentence and owes nothing", async () => {

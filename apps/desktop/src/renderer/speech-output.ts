@@ -8,6 +8,7 @@ import {
   ELEVENLABS_KEEP_ALIVE_MS,
   ELEVENLABS_SAMPLE_RATE,
   elevenlabsDialogueUrl,
+  MAXIMUM_DIALOGUE_ERROR_LENGTH,
   parseDialogueFrame,
   TOKEN_MINT_OUTCOME,
 } from "@sidecar/speech";
@@ -175,7 +176,21 @@ export interface ElevenLabsSpeechOptions {
 
 const SOCKET_OPEN = 1;
 
-const SOCKET_FAILURE_MESSAGE = "The speech connection closed before Luke finished speaking.";
+const SOCKET_FAILURE_MESSAGE = "The speech connection closed before Luke finished speaking";
+
+/**
+ * What a close says about itself. ElevenLabs refuses a model, a voice, or a
+ * credential by closing the socket rather than by an error frame, and the code
+ * and reason it closes with are the only account of why — a sentence that
+ * withholds them names a failure nobody can act on. A handshake refused before
+ * the socket ever opened closes abnormally with no reason at all, so the code
+ * stands in for one.
+ */
+function socketFailureMessage(event: CloseEvent): string {
+  const reason = event.reason?.trim().slice(0, MAXIMUM_DIALOGUE_ERROR_LENGTH);
+  if (reason) return `${SOCKET_FAILURE_MESSAGE}: ${reason}`;
+  return `${SOCKET_FAILURE_MESSAGE} (code ${event.code}).`;
+}
 
 export class ElevenLabsSpeech implements SpeechSynthesizer {
   readonly #options: ElevenLabsSpeechOptions;
@@ -299,16 +314,16 @@ export class ElevenLabsSpeech implements SpeechSynthesizer {
       this.#readFrame(event.data);
     };
     socket.onerror = () => {
-      if (generation !== this.#generation) return;
-      this.#fail(SOCKET_FAILURE_MESSAGE);
+      // Every socket error is followed by a close, and the close is the one
+      // that knows why. Reporting here would win the race and say less.
     };
-    socket.onclose = () => {
+    socket.onclose = (event) => {
       if (generation !== this.#generation) return;
       // A close after the service's last word is the ordinary ending, and the
       // drain already armed decides when the reply is over. A close before it
       // is the reply lost, and the turn must still settle.
       if (this.#ended) return;
-      this.#fail(SOCKET_FAILURE_MESSAGE);
+      this.#fail(socketFailureMessage(event));
     };
   }
 

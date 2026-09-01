@@ -80,7 +80,13 @@ export interface DialogueServerFrame {
   finalForTurn: boolean;
   /** The socket has said everything it will say. */
   final: boolean;
-  /** The server's own message, bounded, never echoed back to it. */
+  /**
+   * The server's own account of a failure, bounded, never echoed back to it.
+   * An error frame carries a sentence in `message` and a machine identifier in
+   * `error`, and either may be absent, so both are read and the sentence is
+   * preferred: a frame naming its failure only in prose is still a failure, and
+   * dropping it leaves the turn to end on the socket's silent close instead.
+   */
   error?: string;
 }
 
@@ -114,7 +120,7 @@ export function parseDialogueFrame(payload: string): DialogueServerFrame | undef
   };
   // An empty audio field is no audio, not a frame of silence to schedule.
   if (isWireString(parsed.audio) && parsed.audio !== "") frame.audio = parsed.audio;
-  const error = boundedError(parsed.error);
+  const error = boundedError(parsed.message) ?? boundedError(parsed.error);
   if (error) frame.error = error;
   return frame;
 }
