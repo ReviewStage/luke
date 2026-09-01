@@ -266,40 +266,39 @@ private struct PlaceLine: View {
 
 // MARK: - Skeleton row
 
-/// Three pulsing placeholder cards while the first fetch is in flight.
+/// Pulsing placeholder cards while the first fetch is in flight: the real
+/// SessionRow rendered under `.redacted(reason: .placeholder)`, so the
+/// skeleton's geometry is the row's own rather than a copy kept by hand.
 private struct SkeletonRow: View {
     @State private var opacity: Double = 0.55
 
+    /// Synthetic content sized like a typical row. Redaction replaces every
+    /// text and glyph with a block, so none of these words can draw; the
+    /// status is `complete` because it is the one glyph-bearing status whose
+    /// row neither animates nor tints its border.
+    private static let placeholder = RosterSession(
+        providerId: "placeholder",
+        sessionId: "placeholder",
+        title: "Placeholder session title",
+        status: "complete",
+        workspace: "workspace",
+        branch: "branch-name",
+        recap: "Placeholder recap sized like a settled turn's parting words",
+        observedAt: Date()
+    )
+
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            RoundedRectangle(cornerRadius: 7)
-                .fill(Color.ink.opacity(0.1))
-                .frame(width: 30, height: 30)
-            VStack(alignment: .leading, spacing: 6) {
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(Color.ink.opacity(0.1))
-                    .frame(height: 12)
-                    .frame(maxWidth: 160)
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(Color.ink.opacity(0.07))
-                    .frame(height: 10)
-                    .frame(maxWidth: 220)
+        SessionRow(session: Self.placeholder)
+            .redacted(reason: .placeholder)
+            // Redaction only hides the synthetic words visually; VoiceOver
+            // would still read them as three real sessions, so the row hides
+            // itself the way the desktop skeleton's aria-hidden does.
+            .accessibilityHidden(true)
+            .opacity(opacity)
+            .onAppear {
+                withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
+                    opacity = 1.0
+                }
             }
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 11)
-        .background(Color(white: 1, opacity: 0.028))
-        .overlay(
-            RoundedRectangle(cornerRadius: 15)
-                .strokeBorder(Color(white: 1, opacity: 0.08), lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 15))
-        .opacity(opacity)
-        .onAppear {
-            withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
-                opacity = 1.0
-            }
-        }
     }
 }
