@@ -3,7 +3,7 @@
 Releases are cut by pushing a `vX.Y.Z` tag. GitHub Actions does the rest: the **Release**
 workflow builds, signs, notarizes, staples, and validates an arm64 macOS app with
 electron-builder on a `macos-15` runner, then publishes the GitHub Release and uploads
-every asset. The Apple, Google, and PostHog secrets the workflow needs are configured on
+every asset. The Apple, Google, PostHog, and Sentry secrets the workflow needs are configured on
 this repository, so the tag push is the whole release.
 
 The workflow's first job asks whether the signing certificate secret exists, because a
@@ -31,6 +31,13 @@ to the versioned DMG, both checksums must verify, the DMG must pass `codesign`, 
 `stapler validate`, and `hdiutil verify`, the app must be arm64-only, hardened-runtime,
 `Notarized Developer ID`, and carrying `LUKE-LICENSE.txt`, and `latest-mac.yml` must name
 the zip with a relative URL and carry both `sha512` and `size`.
+
+The packaged Sentry SDK uses `production` as its environment and `Luke@X.Y.Z`
+as its release. When `SENTRY_AUTH_TOKEN` is present, the final esbuild plugin on
+the main, preload, and renderer JavaScript builds uploads their source maps to
+that release before electron-builder packages the app. The maps remain excluded
+from the app bundle; ordinary local builds need neither Sentry value and upload
+nothing.
 
 ## Cut a release
 
@@ -113,7 +120,7 @@ A successful assessment identifies the source as `Notarized Developer ID`.
 
 ## GitHub Actions secrets
 
-All seven are configured. This section is for rotating them or standing the workflow up
+All nine are configured. This section is for rotating them or standing the workflow up
 somewhere else; the workflow fails its secret check if any one is missing.
 
 | Secret | Purpose | Source |
@@ -125,6 +132,8 @@ somewhere else; the workflow fails its secret check if any one is missing.
 | `APPLE_API_ISSUER_ID` | Identifies the App Store Connect API key issuer | App Store Connect, Users and Access, Integrations |
 | `GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET` | Google Calendar desktop OAuth client secret, baked into the app bundle at package time; a build without it ships no calendar sign-in | Google Cloud console, the Luke project's Desktop client under APIs & Services → Credentials |
 | `POSTHOG_PROJECT_API_KEY` | PostHog project key, baked into the renderer at build time; a build without it records nothing at all, silently | PostHog, Project settings → Project API key |
+| `SENTRY_DSN` | Sentry project DSN, baked into main; a build without it sends no crash reports | Sentry, `luke-desktop` → Client Keys |
+| `SENTRY_AUTH_TOKEN` | Secret build token used only to upload source maps for `Luke@X.Y.Z` | Sentry, Organization Settings → Auth → Auth Tokens |
 
 ### Export the signing certificate
 
@@ -147,9 +156,11 @@ printf '%s' 'issuer-uuid' | gh secret set APPLE_API_ISSUER_ID
 gh secret set MACOS_CERTIFICATE_PASSWORD
 gh secret set GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET
 gh secret set POSTHOG_PROJECT_API_KEY
+gh secret set SENTRY_DSN
+gh secret set SENTRY_AUTH_TOKEN
 ```
 
-The commands use macOS `base64`, where `-i` names an input file. The last three read the
+The commands use macOS `base64`, where `-i` names an input file. The final five read the
 value from a prompt rather than from shell history, which is how any secret worth
 protecting should be entered.
 
@@ -166,6 +177,8 @@ stored `luke-notary` notarytool profile
 export LUKE_CODESIGN_IDENTITY='Your Name (TEAMID)'
 export GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET='GOCSPX-…'   # from the Google Cloud console
 export POSTHOG_PROJECT_API_KEY='phc_…'                  # from PostHog project settings
+export SENTRY_DSN='https://…'                            # from the luke-desktop project
+export SENTRY_AUTH_TOKEN='sntrys_…'                     # source-map upload token
 pnpm release:macos                    # signs, notarizes, staples; writes the DMG, zip, and manifest
 git tag v0.1.1 && git push origin v0.1.1
 ./scripts/release/publish-github.sh   # creates the release and uploads every asset
@@ -176,10 +189,10 @@ expects the identity's name **without** the `Developer ID Application:` prefix �
 common name and team identifier alone, as in `Your Name (TEAMID)`. Run
 `security find-identity -v -p codesigning` to read the exact name off the certificate.
 
-The calendar and PostHog secrets are baked into the build while packaging, and
-`scripts/release-macos.sh` refuses to run without either rather than shipping a DMG whose
-calendar sign-in or analytics is silently missing. They are the same values the Actions
-secrets hold.
+The calendar, PostHog, and Sentry values are supplied while packaging, and
+`scripts/release-macos.sh` refuses to run without them rather than shipping a
+DMG whose calendar sign-in, analytics, crash reporting, or symbolication is
+silently missing. They are the same values the Actions secrets hold.
 
 Electron-builder writes the distribution artifacts under `artifacts/release-builder/`, and
 the publish script is what knows the asset set: it refuses to publish unless all six are

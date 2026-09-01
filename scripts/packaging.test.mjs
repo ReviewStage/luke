@@ -122,6 +122,7 @@ test("packaging is pinned to Apple Silicon and the builder output directory", ()
 
   assert.equal(PACKAGED_ARCHITECTURE, "arm64");
   assert.equal(config.mac.target, "default");
+  assert.deepEqual(config.files, ["dist/**/*", "package.json", "!dist/**/*.map"]);
   assert.equal(
     config.mac.artifactName,
     `Luke-${versionMacro}-macos-${archMacro}.${extensionMacro}`,

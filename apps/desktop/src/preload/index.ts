@@ -1,6 +1,9 @@
+import * as Sentry from "@sentry/electron/renderer";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import { contextBridge, ipcRenderer } from "electron";
 import { type AppBridge, bridgeEntries } from "#shared/bridge";
+
+Sentry.init();
 
 const bridge: Record<string, CallableFunction> = {};
 

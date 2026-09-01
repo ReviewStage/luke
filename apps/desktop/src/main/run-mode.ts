@@ -37,3 +37,7 @@ export function runModeFor(input: { capture: boolean; fixture: boolean }): RunMo
     sendsNetwork: !deterministic,
   };
 }
+
+export function sentryReportingEnabled(sendsNetwork: boolean, dsn: string): boolean {
+  return sendsNetwork && dsn.length > 0;
+}

@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { sentryEsbuildPlugin } from "@sentry/esbuild-plugin";
 import { build } from "esbuild";
 import { signingModeDefine } from "./package-config.mjs";
 
@@ -8,11 +9,26 @@ const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(scriptDirectory, "..");
 const outputRoot = path.join(appRoot, "dist");
 const brandRoot = path.resolve(appRoot, "../../design/brand");
+const appVersion = JSON.parse(
+  await fs.readFile(path.join(appRoot, "package.json"), "utf8"),
+).version;
 // The Dock takes one large PNG per mode and swaps them as the theme changes.
 const DOCK_ICON_IMAGES = {
   "luke-icon-light.png": "luke-icon-light-512.png",
   "luke-icon-dark.png": "luke-icon-dark-512.png",
 };
+
+function sentryPlugins() {
+  if (!process.env.SENTRY_AUTH_TOKEN) return [];
+  return [
+    sentryEsbuildPlugin({
+      authToken: process.env.SENTRY_AUTH_TOKEN,
+      org: "stage-review",
+      project: "luke-desktop",
+      release: { name: `Luke@${appVersion}` },
+    }),
+  ];
+}
 
 await fs.rm(outputRoot, { recursive: true, force: true });
 await fs.mkdir(path.join(outputRoot, "renderer"), { recursive: true });
@@ -27,6 +43,7 @@ await Promise.all([
     format: "cjs",
     target: "node22",
     external: ["electron"],
+    plugins: sentryPlugins(),
     define: {
       // The Google Calendar client secret rides into the bundle from the
       // packaging environment rather than sitting in source, where secret
@@ -35,6 +52,7 @@ await Promise.all([
       PACKAGED_GOOGLE_CALENDAR_CLIENT_SECRET: JSON.stringify(
         process.env.GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET ?? "",
       ),
+      PACKAGED_SENTRY_DSN: JSON.stringify(process.env.SENTRY_DSN ?? ""),
       // Whether this bundle rides in a Developer ID release, which is what
       // decides the name — and so the state directory and Keychain entry —
       // the run answers to; see app-identity.ts.
@@ -51,6 +69,7 @@ await Promise.all([
     format: "cjs",
     target: "node22",
     external: ["electron"],
+    plugins: sentryPlugins(),
     sourcemap: true,
     logLevel: "info",
   }),
@@ -74,6 +93,7 @@ await Promise.all([
     target: "chrome140",
     jsx: "automatic",
     minify: true,
+    plugins: sentryPlugins(),
     define: {
       "process.env.NODE_ENV": '"production"',
       // The analytics project the screen recorder files into, from the
