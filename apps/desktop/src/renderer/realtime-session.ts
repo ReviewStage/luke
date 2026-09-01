@@ -857,6 +857,7 @@ export class RealtimeVoiceSession {
         // about a thread nobody lost.
         // A channel that closes on its own still leaves the capture running,
         // so this has to release the device as thoroughly as an explicit stop.
+        if (this.#captionAbout) this.#discardCaption();
         this.#teardown();
         this.#setStatus(REALTIME_STATUS.IDLE);
       };
@@ -1510,9 +1511,9 @@ export class RealtimeVoiceSession {
     // made. A disabled track drops what is buffered rather than playing it
     // out, so the cut-off is immediate rather than eventual.
     this.#silenceLuke();
-    // The caption is cut with the audio. It already held words the room
-    // never heard — the text runs ahead of the speech — and leaving them up
-    // would show Luke finishing a sentence he was just stopped from saying.
+    // The caption is cut with the audio, but handed over first. Generated text
+    // runs slightly ahead of playback; History keeps that available transcript
+    // so an interrupted announcement can still be recalled.
     this.#clearCaption();
     this.#interruptionSequence += 1;
     const cancellationEventId = `response_cancel_${this.#interruptionSequence}`;
@@ -1915,6 +1916,13 @@ export class RealtimeVoiceSession {
     // final and still known.
     const texts = this.#captionTexts();
     if (texts) this.#options.onReplyEnded?.(texts, this.#captionAbout);
+    this.#captionSegments = [];
+    this.#captionAbout = undefined;
+    this.#options.onCaption(undefined, undefined);
+  }
+
+  /** Clears an undelivered announcement without admitting it to History. */
+  #discardCaption(): void {
     this.#captionSegments = [];
     this.#captionAbout = undefined;
     this.#options.onCaption(undefined, undefined);
@@ -2674,6 +2682,7 @@ export class RealtimeVoiceSession {
   #fail(message: string): boolean {
     // Release the device before reporting. `FAILED` offers "Start voice" again,
     // and retrying must not stack a second call on top of a live microphone.
+    if (this.#captionAbout) this.#discardCaption();
     this.#teardown();
     this.#options.onError(message);
     this.#setStatus(REALTIME_STATUS.FAILED);

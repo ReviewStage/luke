@@ -1,10 +1,17 @@
+import { ATTENTION_DISPOSITION, type AttentionDisposition } from "@sidecar/session";
 import { isRecord, isWireString, text, type UnparsedWireValue } from "@sidecar/wire";
-import { ATTENTION_DECISION_SCHEMA, ATTENTION_DECISION_SCHEMA_NAME } from "./attention.js";
+import {
+  ATTENTION_DECISION_SCHEMA,
+  ATTENTION_DECISION_SCHEMA_NAME,
+  attentionDecisionFromModel,
+  DISPOSITION_GUIDANCE,
+} from "./attention.js";
 import {
   type AttentionPromptUpdate,
   attentionInstructions,
   attentionUpdateInput,
 } from "./attention-prompt.js";
+import { LUKE_PERSONA } from "./persona.js";
 
 /**
  * The one OpenAI Responses request an attention review may be. The desktop
@@ -24,27 +31,92 @@ export interface AttentionResponsesOptions {
   maximumOutputTokens: number;
 }
 
-/** Builds the Responses request body one bounded update is reviewed with. */
-export function attentionResponsesRequest(
+const LEGACY_SUMMARY_LENGTH = 180;
+const LEGACY_ATTENTION_DECISION_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["disposition", "summary"],
+  properties: {
+    disposition: {
+      type: "string",
+      enum: Object.values(ATTENTION_DISPOSITION),
+      description: Object.values(ATTENTION_DISPOSITION)
+        .map((disposition) => `${disposition}: ${DISPOSITION_GUIDANCE[disposition]}`)
+        .join(" "),
+    },
+    summary: {
+      type: ["string", "null"],
+      description: `One short spoken sentence under ${LEGACY_SUMMARY_LENGTH} characters, or null when the disposition is silent.`,
+    },
+  },
+};
+
+const LEGACY_ATTENTION_INSTRUCTIONS = attentionInstructions().replace(
+  /What you return:[\s\S]*$/u,
+  `How to word it:\n- If speaking, write the sentence Luke says, in Luke's own voice as it is described below. State what the CTO needs to know and stop; add no advice and no next step.\n\n${LUKE_PERSONA}`,
+);
+
+export interface LegacyAttentionDecision {
+  disposition: AttentionDisposition;
+  decidedAt: number;
+  summary?: string;
+}
+
+function responsesRequest(
   update: AttentionPromptUpdate,
   options: AttentionResponsesOptions,
+  instructions: string,
+  schema: typeof ATTENTION_DECISION_SCHEMA | typeof LEGACY_ATTENTION_DECISION_SCHEMA,
 ) {
   return {
     model: options.model,
-    instructions: attentionInstructions(),
+    instructions,
     input: attentionUpdateInput(update),
     max_output_tokens: options.maximumOutputTokens,
-    // The update is reviewed and discarded; the API is never asked to keep it.
     store: false,
     text: {
       format: {
         type: RESPONSES_TEXT_FORMAT_TYPE,
         name: ATTENTION_DECISION_SCHEMA_NAME,
-        schema: ATTENTION_DECISION_SCHEMA,
+        schema,
         strict: true,
       },
     },
   };
+}
+
+/** Builds the Responses request body one bounded update is reviewed with. */
+export function attentionResponsesRequest(
+  update: AttentionPromptUpdate,
+  options: AttentionResponsesOptions,
+) {
+  return responsesRequest(update, options, attentionInstructions(), ATTENTION_DECISION_SCHEMA);
+}
+
+/** Builds the summary-bearing response older desktop clients still require. */
+export function legacyAttentionResponsesRequest(
+  update: AttentionPromptUpdate,
+  options: AttentionResponsesOptions,
+) {
+  return responsesRequest(
+    update,
+    options,
+    LEGACY_ATTENTION_INSTRUCTIONS,
+    LEGACY_ATTENTION_DECISION_SCHEMA,
+  );
+}
+
+/** Validates the legacy summary-bearing decision without widening the current contract. */
+export function legacyAttentionDecisionFromModel(
+  value: UnparsedWireValue,
+  decidedAt: number,
+): LegacyAttentionDecision | undefined {
+  if (!isRecord(value)) return undefined;
+  const decision = attentionDecisionFromModel(value, decidedAt);
+  if (!decision) return undefined;
+  const summary = text(value.summary)?.slice(0, LEGACY_SUMMARY_LENGTH);
+  if (decision.disposition !== ATTENTION_DISPOSITION.SILENT && !summary) return undefined;
+  return { ...decision, ...(summary ? { summary } : undefined) };
 }
 
 function outputTextFromContent(content: UnparsedWireValue): string {

@@ -5,6 +5,10 @@ import {
   ATTENTION_TRIGGER,
   type AttentionPromptUpdate,
 } from "@sidecar/attention";
+import {
+  HOSTED_ATTENTION_CONTRACT_HEADER,
+  HOSTED_ATTENTION_CONTRACT_VERSION,
+} from "@sidecar/hosted";
 import { SESSION_STATUS } from "@sidecar/session";
 import {
   HOSTED_ATTENTION_DEFAULTS,
@@ -31,13 +35,17 @@ const UPDATE = {
 
 const SPOKEN_DECISION = {
   disposition: "speak-during-turn",
-  summary: "Claude Code is waiting on you in checkout-service.",
 };
 
-function reviewRequest(body: AttentionPromptUpdate): Request {
+function reviewRequest(
+  body: AttentionPromptUpdate,
+  contractVersion: string | null = HOSTED_ATTENTION_CONTRACT_VERSION,
+): Request {
+  const headers = new Headers({ authorization: "Bearer token-1" });
+  if (contractVersion) headers.set(HOSTED_ATTENTION_CONTRACT_HEADER, contractVersion);
   return new Request("https://luke.test/api/attention/review", {
     method: "POST",
-    headers: { authorization: "Bearer token-1" },
+    headers,
     body: JSON.stringify(body),
   });
 }
@@ -80,7 +88,6 @@ test("a review sends the build's own construction and answers the parsed decisio
   const body = await response.json();
   assert.deepEqual(body.decision, {
     disposition: SPOKEN_DECISION.disposition,
-    summary: SPOKEN_DECISION.summary,
     decidedAt: NOW,
   });
   assert.deepEqual(body.quota, OPEN_SPEND.quota);
@@ -96,6 +103,48 @@ test("a review sends the build's own construction and answers the parsed decisio
     String(call.init?.headers && new Headers(call.init.headers).get("authorization")),
     `Bearer ${API_KEY}`,
   );
+});
+
+test("an old client receives the summary-bearing contract from a new server", async () => {
+  const call: UpstreamCall = {};
+  const legacyDecision = {
+    disposition: "speak-during-turn",
+    summary: "Claude Code needs permission to continue.",
+  };
+  const response = await handleAttentionReview(
+    options({
+      request: reviewRequest(UPDATE, null),
+      fetch: upstream(
+        call,
+        () =>
+          new Response(JSON.stringify({ output_text: JSON.stringify(legacyDecision) }), {
+            status: 200,
+          }),
+      ),
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).decision, { ...legacyDecision, decidedAt: NOW });
+  const sent = JSON.parse(String(call.init?.body));
+  assert.deepEqual(sent.text.format.schema.required, ["disposition", "summary"]);
+  assert.match(sent.instructions, /How to word it:/);
+});
+
+test("an unknown contract version is refused before anything is spent", async () => {
+  let spent = 0;
+  const response = await handleAttentionReview(
+    options({
+      request: reviewRequest(UPDATE, "99"),
+      spend: async () => {
+        spent += 1;
+        return OPEN_SPEND;
+      },
+    }),
+  );
+
+  assert.equal(response.status, 400);
+  assert.equal(spent, 0);
 });
 
 test("a blank model override is no override at all", async () => {

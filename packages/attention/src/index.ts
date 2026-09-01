@@ -8,7 +8,6 @@ export {
   type AttentionReview,
   type AttentionUpdate,
   attentionDecisionFromModel,
-  maximumAttentionSummaryLength,
   SessionAttentionReviewer,
 } from "./attention.js";
 export {
@@ -16,6 +15,9 @@ export {
   attentionResponsesMissingReason,
   attentionResponsesOutputText,
   attentionResponsesRequest,
+  type LegacyAttentionDecision,
+  legacyAttentionDecisionFromModel,
+  legacyAttentionResponsesRequest,
 } from "./attention-openai.js";
 export {
   type AttentionPromptUpdate,

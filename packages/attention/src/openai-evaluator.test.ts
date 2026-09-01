@@ -12,7 +12,6 @@ import {
 
 const DECIDED_AT = 1_800_000_000_000;
 const API_KEY = "test-openai-key";
-const SPOKEN_SUMMARY = "Claude Code is waiting on you in checkout-service.";
 const TRANSCRIPT_SECRET = "SECRET_TRANSCRIPT_TEXT";
 
 function update(overrides: Partial<AttentionUpdate> = {}): AttentionUpdate {
@@ -73,10 +72,7 @@ function recordStderr(t: TestContext): string[] {
 test("requests a strict structured decision and never asks the API to retain it", async (t) => {
   silenceStderr(t);
   const { evaluator, requests } = evaluatorWith(() =>
-    structuredResponse({
-      disposition: ATTENTION_DISPOSITION.SPEAK_DURING_TURN,
-      summary: SPOKEN_SUMMARY,
-    }),
+    structuredResponse({ disposition: ATTENTION_DISPOSITION.SPEAK_DURING_TURN }),
   );
 
   const decision = await evaluator.evaluate(update());
@@ -84,7 +80,6 @@ test("requests a strict structured decision and never asks the API to retain it"
   assert.deepEqual(decision, {
     disposition: ATTENTION_DISPOSITION.SPEAK_DURING_TURN,
     decidedAt: DECIDED_AT,
-    summary: SPOKEN_SUMMARY,
   });
 
   const [request] = requests;
@@ -105,13 +100,13 @@ test("requests a strict structured decision and never asks the API to retain it"
   assert.equal(format.strict, true);
   assert.equal(format.name, "attention_decision");
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  assert.deepEqual((format.schema as { required: string[] }).required, ["disposition", "summary"]);
+  assert.deepEqual((format.schema as { required: string[] }).required, ["disposition"]);
 });
 
 test("sends only the bounded update and no provider transcript", async (t) => {
   silenceStderr(t);
   const { evaluator, requests } = evaluatorWith(() =>
-    structuredResponse({ disposition: ATTENTION_DISPOSITION.SILENT, summary: null }),
+    structuredResponse({ disposition: ATTENTION_DISPOSITION.SILENT }),
   );
 
   await evaluator.evaluate(update());
@@ -130,8 +125,8 @@ test("stays silent when the API is unavailable or answers outside the contract",
   const failures: Array<() => Response | Promise<Response>> = [
     () => new Response("rate limited", { status: 429 }),
     () => new Response("not json", { status: 200 }),
-    () => structuredResponse({ disposition: "shout", summary: SPOKEN_SUMMARY }),
-    () => structuredResponse({ disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END }),
+    () => structuredResponse({ disposition: "shout" }),
+    () => structuredResponse({}),
     () => Response.json({ output: [] }),
     () => {
       throw new Error("network unreachable");
@@ -213,17 +208,13 @@ test("reads a decision from a payload that carries aggregated output text", asyn
   silenceStderr(t);
   const { evaluator } = evaluatorWith(() =>
     Response.json({
-      output_text: JSON.stringify({
-        disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
-        summary: "Codex finished its turn in billing-api.",
-      }),
+      output_text: JSON.stringify({ disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END }),
     }),
   );
 
   assert.deepEqual(await evaluator.evaluate(update()), {
     disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
     decidedAt: DECIDED_AT,
-    summary: "Codex finished its turn in billing-api.",
   });
 });
 
@@ -257,7 +248,7 @@ test("builds an evaluator only when there is a key to build one from", (t) => {
 test("honors a configured base URL without doubling its separator", async (t) => {
   silenceStderr(t);
   const { fetch, requests } = recordingFetch(() =>
-    structuredResponse({ disposition: ATTENTION_DISPOSITION.SILENT, summary: null }),
+    structuredResponse({ disposition: ATTENTION_DISPOSITION.SILENT }),
   );
   const evaluator = new OpenAiAttentionEvaluator({
     apiKey: API_KEY,

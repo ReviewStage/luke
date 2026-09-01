@@ -5,6 +5,11 @@ import {
   attentionPromptUpdateFromWire,
   attentionResponsesOutputText,
   attentionResponsesRequest,
+  HOSTED_ATTENTION_CONTRACT_HEADER,
+  HOSTED_ATTENTION_CONTRACT_VERSION,
+  type LegacyAttentionDecision,
+  legacyAttentionDecisionFromModel,
+  legacyAttentionResponsesRequest,
   text as trimmedText,
   type UnparsedWireValue,
 } from "../core.js";
@@ -50,7 +55,7 @@ export interface AttentionReviewOptions {
 }
 
 export interface AttentionReviewAnswer {
-  decision: AttentionDecision;
+  decision: AttentionDecision | LegacyAttentionDecision;
   quota: HostedSpend["quota"];
 }
 
@@ -74,6 +79,12 @@ export async function handleAttentionReview(options: AttentionReviewOptions): Pr
     return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
   }
 
+  const contractVersion = request.headers.get(HOSTED_ATTENTION_CONTRACT_HEADER);
+  const legacyContract = contractVersion === null;
+  if (!legacyContract && contractVersion !== HOSTED_ATTENTION_CONTRACT_VERSION) {
+    return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
+  }
+
   const payload: unknown = await request.json().catch(() => undefined);
   const update =
     payload === undefined
@@ -95,7 +106,7 @@ export async function handleAttentionReview(options: AttentionReviewOptions): Pr
 
   const response = await postOpenAi(
     ATTENTION_RESPONSES_PATH,
-    attentionResponsesRequest(update, {
+    (legacyContract ? legacyAttentionResponsesRequest : attentionResponsesRequest)(update, {
       model: trimmedText(options.model) ?? HOSTED_ATTENTION_DEFAULTS.MODEL,
       maximumOutputTokens: HOSTED_ATTENTION_DEFAULTS.MAXIMUM_OUTPUT_TOKENS,
     }),
@@ -116,10 +127,13 @@ export async function handleAttentionReview(options: AttentionReviewOptions): Pr
           body as UnparsedWireValue,
         );
   const now = options.now ?? Date.now;
-  let decision: AttentionDecision | undefined;
+  let decision: AttentionDecision | LegacyAttentionDecision | undefined;
   if (text) {
     try {
-      decision = attentionDecisionFromModel(JSON.parse(text), now());
+      decision = (legacyContract ? legacyAttentionDecisionFromModel : attentionDecisionFromModel)(
+        JSON.parse(text),
+        now(),
+      );
     } catch {
       decision = undefined;
     }

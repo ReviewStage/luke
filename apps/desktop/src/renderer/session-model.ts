@@ -497,11 +497,11 @@ function sessionNeedsAttention(session: SessionWithAttention): boolean {
 }
 
 /**
- * The line under the title. What stopped a session outranks everything; while
- * the evaluator has flagged the session, its one-line reason outranks what the
- * session was doing — the row lit up for that reason, and a stale recap under
- * an attention colour says the wrong thing — and what a session was doing
- * outranks the recap of a turn that has already ended.
+ * The line under the title. What stopped a session outranks everything, and
+ * what a session was doing outranks the recap of a turn that has already
+ * ended. An attention decision adds nothing here: it is a judgment about
+ * whether to speak, carrying no words of its own, and the fields it was
+ * reached on are the ones already in this chain.
  *
  * When a provider reported none of them, the line says the state in so many
  * words. This sentence is the one place the row states it, so a session whose
@@ -509,17 +509,7 @@ function sessionNeedsAttention(session: SessionWithAttention): boolean {
  * row with a line missing.
  */
 function sessionDetail(session: SessionWithAttention, urgency: SessionUrgency): string {
-  const flaggedSummary =
-    session.attention.disposition === ATTENTION_DISPOSITION.SILENT
-      ? undefined
-      : session.attention.summary;
-  return (
-    session.detail.error ??
-    flaggedSummary ??
-    session.detail.activity ??
-    session.recap ??
-    urgencyLabel(urgency)
-  );
+  return session.detail.error ?? session.detail.activity ?? session.recap ?? urgencyLabel(urgency);
 }
 
 /**

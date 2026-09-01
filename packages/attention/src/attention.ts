@@ -3,7 +3,6 @@ import {
   type AttentionDecision,
   type AttentionDisposition,
   attentionDecisionFromWire,
-  maximumAttentionSummaryLength,
   normalizeSessionIdentity,
   SESSION_COMPLETION_CAUSE,
   type Session,
@@ -22,8 +21,6 @@ export const ATTENTION_TRIGGER = {
 } as const;
 
 export type AttentionTrigger = (typeof ATTENTION_TRIGGER)[keyof typeof ATTENTION_TRIGGER];
-
-export { maximumAttentionSummaryLength };
 
 export const ATTENTION_DECISION_SCHEMA_NAME = "attention_decision";
 
@@ -64,13 +61,16 @@ const ATTENTION_REVIEW_DEFAULTS = {
 export const ATTENTION_EVENT_FRESH_AGE_MS = 5 * 60_000;
 
 /**
- * The decision contract an evaluator must satisfy. It is deliberately small so
- * a background model returns a disposition and, at most, one spoken sentence.
+ * The decision contract an evaluator must satisfy. It is one judgment and no
+ * words at all, deliberately: a background classifier scoring dispositions
+ * under a character cap has no ear for how a sentence lands out loud, and a
+ * sentence it wrote would reduce the voice to reciting. The voice words what
+ * is said, from the same observed fields this decision was reached on.
  */
 export const ATTENTION_DECISION_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["disposition", "summary"],
+  required: ["disposition"],
   properties: {
     disposition: {
       type: "string",
@@ -78,10 +78,6 @@ export const ATTENTION_DECISION_SCHEMA = {
       description: ATTENTION_DISPOSITIONS.map(
         (disposition) => `${disposition}: ${DISPOSITION_GUIDANCE[disposition]}`,
       ).join(" "),
-    },
-    summary: {
-      type: ["string", "null"],
-      description: `One short spoken sentence under ${maximumAttentionSummaryLength} characters, or null when the disposition is silent.`,
     },
   },
 };
@@ -121,6 +117,8 @@ export interface AttentionUpdate extends SessionIdentity {
    */
   workspace?: string;
   status: SessionStatus;
+  /** Local announcement context; intentionally absent from the evaluator prompt. */
+  holdingForDeveloper?: boolean;
   previousStatus?: SessionStatus;
   recap?: string;
   context?: AttentionContext;
@@ -173,7 +171,7 @@ export type AttentionReviewOutcome =
  * session warrants attention and how urgently, and is what callers store, while
  * `outcome` says whether Luke should voice it now. A repeated development
  * carries a speaking `decision` with a `deduplicated` outcome — the session
- * still needs attention, but saying the same sentence again would be noise.
+ * still needs attention, but saying the same thing again would be noise.
  */
 export interface AttentionReview extends SessionIdentity {
   update: AttentionUpdate;
@@ -205,7 +203,13 @@ export interface SessionAttentionReviewerOptions {
 
 interface SpokenRecord {
   disposition: AttentionDisposition;
-  summary?: string;
+  /**
+   * The observed fields the voice would use, as they stood when Luke last
+   * spoke. This is wider than the fields that trigger a model review: activity
+   * changes do not open reviews, but two reviewed permission prompts must not
+   * collapse merely because their status is the same.
+   */
+  speech: readonly (string | undefined)[];
   spokenAt: number;
 }
 
@@ -237,6 +241,19 @@ const ATTENTION_DEVELOPMENT = [
     ofUpdate: (update: AttentionUpdate) => update.recap,
   },
 ] as const;
+
+/** Fields that change what the voice would say, without opening extra model reviews. */
+function speechValues(update: AttentionUpdate): readonly (string | undefined)[] {
+  return [
+    update.trigger === ATTENTION_TRIGGER.ERROR_REPORTED ? update.trigger : undefined,
+    update.title,
+    update.status,
+    update.holdingForDeveloper ? "holding-for-developer" : undefined,
+    update.context?.activity,
+    update.context?.error,
+    update.recap,
+  ];
+}
 
 /**
  * What a session is running changes with every tool call, so it is deliberately
@@ -275,6 +292,7 @@ export function attentionUpdate(session: Session, previous?: Session): Attention
     observedAt: session.observedAt,
   };
   if (workspace) update.workspace = workspace;
+  if (session.holdingForDeveloper === true) update.holdingForDeveloper = true;
   if (previous) update.previousStatus = previous.status;
   if (session.recap) update.recap = session.recap;
   if (context) update.context = context;
@@ -311,8 +329,12 @@ export class AttentionSpeechLedger {
     );
   }
 
-  /** Reports whether a decision says something new enough to be worth speaking. */
-  shouldSpeak(identity: SessionIdentity, decision: AttentionDecision): boolean {
+  /** Reports whether a development says something new enough to be worth speaking. */
+  shouldSpeak(
+    identity: SessionIdentity,
+    decision: AttentionDecision,
+    update: AttentionUpdate,
+  ): boolean {
     if (decision.disposition === ATTENTION_DISPOSITION.SILENT) return false;
 
     const normalizedIdentity = normalizeSessionIdentity(identity);
@@ -321,20 +343,20 @@ export class AttentionSpeechLedger {
       ?.get(normalizedIdentity.providerSessionId);
     if (!record) return true;
     if (record.disposition !== decision.disposition) return true;
-    if (record.summary !== decision.summary) return true;
+    const speech = speechValues(update);
+    if (speech.some((value, index) => value !== record.speech[index])) return true;
     return this.#now() - record.spokenAt >= this.#repeatWindowMs;
   }
 
-  remember(identity: SessionIdentity, decision: AttentionDecision): void {
+  remember(identity: SessionIdentity, decision: AttentionDecision, update: AttentionUpdate): void {
     const normalizedIdentity = normalizeSessionIdentity(identity);
     const providerRecords =
       this.#spoken.get(normalizedIdentity.providerId) ?? new Map<string, SpokenRecord>();
-    const record: SpokenRecord = {
+    providerRecords.set(normalizedIdentity.providerSessionId, {
       disposition: decision.disposition,
+      speech: speechValues(update),
       spokenAt: this.#now(),
-    };
-    if (decision.summary) record.summary = decision.summary;
-    providerRecords.set(normalizedIdentity.providerSessionId, record);
+    });
     this.#spoken.set(normalizedIdentity.providerId, providerRecords);
   }
 
@@ -630,11 +652,11 @@ export class SessionAttentionReviewer {
     if (this.#isSuperseded(review, review.update)) {
       return this.#silentReview(review, review.update, ATTENTION_REVIEW_OUTCOME.SUPERSEDED);
     }
-    if (!this.#ledger.shouldSpeak(review, review.decision)) {
+    if (!this.#ledger.shouldSpeak(review, review.decision, review.update)) {
       return { ...review, outcome: ATTENTION_REVIEW_OUTCOME.DEDUPLICATED };
     }
 
-    this.#ledger.remember(review, review.decision);
+    this.#ledger.remember(review, review.decision, review.update);
     return review;
   }
 

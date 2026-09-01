@@ -95,9 +95,8 @@ test("only an arrival item reads as one", () => {
     isArrivalSpeech({
       providerId: "codex",
       providerSessionId: "s1",
-      disposition: "speak-at-turn-end",
-      source: "status-edge",
-      summary: "done",
+      work: "checkout",
+      change: "finished",
       decidedAt: AT,
     }),
     false,

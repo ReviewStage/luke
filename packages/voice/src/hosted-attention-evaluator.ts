@@ -4,6 +4,8 @@ import type {
   AttentionUpdate,
 } from "@sidecar/attention";
 import {
+  HOSTED_ATTENTION_CONTRACT_HEADER,
+  HOSTED_ATTENTION_CONTRACT_VERSION,
   HOSTED_SERVICE_PATH,
   hostedQuotaFromWire,
   hostedReviewAnswerFromWire,
@@ -160,6 +162,7 @@ export class HostedAttentionEvaluator implements AttentionEvaluator {
         headers: {
           authorization: `Bearer ${token}`,
           "content-type": "application/json",
+          [HOSTED_ATTENTION_CONTRACT_HEADER]: HOSTED_ATTENTION_CONTRACT_VERSION,
         },
         body: JSON.stringify(promptFields(update)),
         signal: AbortSignal.timeout(this.#requestTimeoutMs),

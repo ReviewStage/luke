@@ -50,7 +50,7 @@ import {
   type WorkspaceHostRegistration,
   workspaceHostRegistrations,
 } from "@sidecar/providers";
-import { type AttentionSpeech, attentionSpeechFromReviews } from "@sidecar/realtime";
+import type { SessionAnnouncement } from "@sidecar/realtime";
 import {
   CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
   CreatedWorkspaceOpenTracker,
@@ -88,7 +88,8 @@ import { DEFAULT_PANEL_FORM_FACTOR } from "@sidecar/surface";
 import { LinearCredentials, LinearIssueTracker, LinearSignIn } from "@sidecar/trackers";
 import {
   IntroductionRealtimeCredentialMinter,
-  sessionNoticeSpeech,
+  sessionAnnouncementsFromReviews,
+  sessionNoticeAnnouncement,
   VoiceCapabilityAssembler,
 } from "@sidecar/voice";
 import { ACT_RESULT_STATUS, isRecord, text, type UnparsedWireValue } from "@sidecar/wire";
@@ -437,7 +438,7 @@ const heldNotices = new SessionNoticeHold();
  * after the meeting because the session may have moved on; release instead
  * reopens a fresh evaluator pass against the current roster.
  */
-const heldEvaluatorSpeech = new SessionNoticeHold<AttentionSpeech>();
+const heldEvaluatorSpeech = new SessionNoticeHold<SessionAnnouncement>();
 /**
  * Whether the quiet is holding right now, as last computed — what the
  * renderer draws Luke's sleeping face from. Kept and broadcast on change so
@@ -1900,13 +1901,13 @@ async function reviewSessionAttention(generation: number): Promise<void> {
     }
     // `decision` says the session needs attention, which the panel shows;
     // `outcome` says whether to voice it now, which only these reviews do.
-    const speech = attentionSpeechFromReviews(reviews);
+    const speech = sessionAnnouncementsFromReviews(reviews);
     if (speech.length > 0) {
       // The quiet holds everything Luke would say unbidden. An evaluator
       // summary keeps only its identity: once the meeting ends it is reviewed
       // against the current roster instead of replaying words that may have
       // gone stale.
-      let sendable: readonly AttentionSpeech[] = speech;
+      let sendable: readonly SessionAnnouncement[] = speech;
       if (await announcementsQuietNow(Date.now())) {
         heldEvaluatorSpeech.hold(speech);
         sendable = [];
@@ -1917,7 +1918,7 @@ async function reviewSessionAttention(generation: number): Promise<void> {
         // that speaks is the one that draws the announcement's pressable notice.
         const host = panels.voiceHost();
         if (host) {
-          host.webContents.send(channels.onAttentionSpeech, sendable);
+          host.webContents.send(channels.onSessionAnnouncements, sendable);
           markFirstAnnouncementSpoken();
         }
       }
@@ -1950,7 +1951,7 @@ async function announceSessionNotices(sessions: readonly Session[]): Promise<voi
   );
   if (notices.length === 0) return;
   const immediateNotices = notices.filter(
-    (notice) => sessionNoticeSpeech(notice, now) !== undefined,
+    (notice) => sessionNoticeAnnouncement(notice, now) !== undefined,
   );
   if (immediateNotices.length === 0) return;
   // No voice, nothing to say it with: without a Realtime credential the
@@ -1966,13 +1967,13 @@ async function announceSessionNotices(sessions: readonly Session[]): Promise<voi
     return;
   }
   const speech = immediateNotices.flatMap((notice) => {
-    const item = sessionNoticeSpeech(notice, now);
+    const item = sessionNoticeAnnouncement(notice, now);
     return item ? [item] : [];
   });
   countSpokenAnnouncements(immediateNotices);
   const host = panels.voiceHost();
   if (host) {
-    host.webContents.send(channels.onAttentionSpeech, speech);
+    host.webContents.send(channels.onSessionAnnouncements, speech);
     markFirstAnnouncementSpoken();
   }
 }
@@ -2123,14 +2124,14 @@ async function releaseHeldNotices(): Promise<void> {
     void attentionObservationLoop.refresh();
   }
   const speech = released.flatMap((notice) => {
-    const item = sessionNoticeSpeech(notice, now);
+    const item = sessionNoticeAnnouncement(notice, now);
     return item ? [item] : [];
   });
   if (speech.length === 0) return;
   countSpokenAnnouncements(released);
   const host = panels.voiceHost();
   if (host) {
-    host.webContents.send(channels.onAttentionSpeech, speech);
+    host.webContents.send(channels.onSessionAnnouncements, speech);
     markFirstAnnouncementSpoken();
   }
 }

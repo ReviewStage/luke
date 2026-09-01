@@ -5,8 +5,6 @@ import { TRACE_DIRECTION, type TraceDirection } from "@sidecar/devtrace/vocabula
 import { APP_SETTING_KIND, type AppGuideSnapshot } from "@sidecar/guide";
 import { ISSUE_TRACKER_ID, normalizeTrackedIssue, type TrackedIssue } from "@sidecar/issues";
 import {
-  ATTENTION_SPEECH_SOURCE,
-  type AttentionSpeech,
   appendConversationEntry,
   CONTEXT_ITEM_KIND,
   CONVERSATION_ENTRY_KIND,
@@ -21,10 +19,11 @@ import {
   REALTIME_STATUS,
   type RealtimeConnection,
   type RealtimeStatus,
+  SESSION_ANNOUNCEMENT_CHANGE,
   SESSION_NO_LONGER_OBSERVED_NOTE,
+  type SessionAnnouncement,
 } from "@sidecar/realtime";
 import {
-  ATTENTION_DISPOSITION,
   normalizeSession,
   type ProviderSessionObservation,
   SESSION_STATUS,
@@ -669,9 +668,9 @@ test("a proactive update is spoken once the call is open", async () => {
   const speech = {
     providerId: "claude-code",
     providerSessionId: "session-a",
-    disposition: ATTENTION_DISPOSITION.SPEAK_DURING_TURN,
-    source: ATTENTION_SPEECH_SOURCE.EVALUATOR,
-    summary: "Claude Code is waiting on you in checkout-service.",
+    work: "checkout-service",
+    change: SESSION_ANNOUNCEMENT_CHANGE.NEEDS_INPUT,
+    detail: "The checkout service needs a decision.",
     decidedAt: 1_800_000_000_000,
   };
 
@@ -1170,13 +1169,12 @@ test("the reply ends when the server says the audio ran out", async () => {
 });
 
 /** A proactive update on the announcer's terms, decided a moment ago. */
-function announcedFinish(id: string): AttentionSpeech {
+function announcedFinish(id: string): SessionAnnouncement {
   return {
     providerId: "claude-code",
     providerSessionId: id,
-    disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
-    source: ATTENTION_SPEECH_SOURCE.EVALUATOR,
-    summary: `${id} finished.`,
+    work: id,
+    change: SESSION_ANNOUNCEMENT_CHANGE.FINISHED,
     decidedAt: Date.now(),
   };
 }
@@ -2238,9 +2236,8 @@ test("an announcement's reply hands its subject back with the words", async () =
   context.session.speak({
     providerId: "claude-code",
     providerSessionId: "session-a",
-    disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
-    source: ATTENTION_SPEECH_SOURCE.EVALUATOR,
-    summary: "Claude Code finished checkout-service.",
+    work: "checkout-service",
+    change: SESSION_ANNOUNCEMENT_CHANGE.FINISHED,
     decidedAt: 1_800_000_000_000,
   });
   context.emit({
@@ -2254,12 +2251,31 @@ test("an announcement's reply hands its subject back with the words", async () =
   });
   context.session.stopSpeaking();
 
-  // The subject rides along so the caller can tell an announcement's reply —
-  // already recorded from the update that decided it — from a conversation
-  // reply that still needs a line.
+  // The subject rides along so the caller can store the spoken transcript
+  // with the identity the approved announcement carried.
   assert.deepEqual(context.replyEndings, [
     { texts: ["Claude Code finished checkout-service."], about: "session-a" },
   ]);
+});
+
+test("a failed announcement delivery leaves no transcript for History", async () => {
+  const context = harness();
+  await context.session.connect({ microphone: false });
+  context.session.speak({
+    providerId: "claude-code",
+    providerSessionId: "session-a",
+    work: "checkout-service",
+    change: SESSION_ANNOUNCEMENT_CHANGE.FINISHED,
+    decidedAt: 1_800_000_000_000,
+  });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
+    delta: "Checkout finished.",
+  });
+
+  context.closeChannel();
+
+  assert.deepEqual(context.replyEndings, []);
 });
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
@@ -2356,9 +2372,9 @@ test("a turn is refused while another is already under way", async () => {
   const speech = {
     providerId: "claude-code",
     providerSessionId: "session-a",
-    disposition: ATTENTION_DISPOSITION.SPEAK_DURING_TURN,
-    source: ATTENTION_SPEECH_SOURCE.EVALUATOR,
-    summary: "Claude Code is waiting on you in checkout-service.",
+    work: "checkout-service",
+    change: SESSION_ANNOUNCEMENT_CHANGE.NEEDS_INPUT,
+    detail: "The checkout service needs a decision.",
     decidedAt: 1_800_000_000_000,
   };
 
@@ -4362,9 +4378,8 @@ test("an announcement's caption names its session; a conversation's names none",
   context.session.speak({
     providerId: "claude-code",
     providerSessionId: "session-a",
-    disposition: ATTENTION_DISPOSITION.SPEAK_DURING_TURN,
-    source: ATTENTION_SPEECH_SOURCE.EVALUATOR,
-    summary: "Checkout finished.",
+    work: "checkout",
+    change: SESSION_ANNOUNCEMENT_CHANGE.FINISHED,
     decidedAt: 1_800_000_000_000,
   });
   context.emit({
@@ -5274,9 +5289,8 @@ test("a speak-only call reads a notice out but refuses a typed ask", async () =>
     context.session.speak({
       providerId: "claude-code",
       providerSessionId: "session-a",
-      disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
-      source: ATTENTION_SPEECH_SOURCE.EVALUATOR,
-      summary: "Claude Code finished checkout-service.",
+      work: "checkout-service",
+      change: SESSION_ANNOUNCEMENT_CHANGE.FINISHED,
       decidedAt: 1_800_000_000_000,
     }),
     true,
@@ -5332,9 +5346,8 @@ test("the rosters and the guide never travel on Luke's own call", async () => {
     context.session.speak({
       providerId: "claude-code",
       providerSessionId: "session-a",
-      disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
-      source: ATTENTION_SPEECH_SOURCE.EVALUATOR,
-      summary: "Claude Code finished checkout-service.",
+      work: "checkout-service",
+      change: SESSION_ANNOUNCEMENT_CHANGE.FINISHED,
       decidedAt: 1_800_000_000_000,
     }),
     true,

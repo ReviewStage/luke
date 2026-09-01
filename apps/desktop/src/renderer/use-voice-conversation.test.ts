@@ -3,15 +3,8 @@ import test from "node:test";
 import { PRODUCT_EXCHANGE_KIND } from "@sidecar/analytics";
 import { FIXTURE_SPEAKING_CAPTION } from "@sidecar/fixtures";
 import { ISSUE_TRACKER_ID, normalizeTrackedIssue, type TrackedIssue } from "@sidecar/issues";
+import { REALTIME_STATUS, REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
 import {
-  ATTENTION_SPEECH_SOURCE,
-  type AttentionSpeech,
-  REALTIME_STATUS,
-  REALTIME_VOICE,
-  REALTIME_VOICE_SPEED,
-} from "@sidecar/realtime";
-import {
-  ATTENTION_DISPOSITION,
   normalizeSession,
   type ProviderSessionObservation,
   SESSION_MENTION_KIND,
@@ -20,14 +13,12 @@ import {
 } from "@sidecar/session";
 import {
   activeVoiceStream,
-  announcerNotices,
   authorizeConversationAct,
   conversationEntryBelongsToConversation,
   liveSpeedApplies,
   lukeCaptionsToShow,
   replyIssueMentions,
   replyMentions,
-  speechByDecision,
   spokenAskBelongsToConversation,
   talkKeyPress,
   talkOpeningHolds,
@@ -355,36 +346,6 @@ test("a connecting call counts as one to reopen: its credential may already be t
     }),
     { due: true, action: VOICE_RESTART.WAIT },
   );
-});
-
-function speech(source: AttentionSpeech["source"], id: string): AttentionSpeech {
-  return {
-    providerId: "claude-code",
-    providerSessionId: id,
-    disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
-    source,
-    summary: `${id} finished.`,
-    decidedAt: 1_000,
-  };
-}
-
-test("every approved attention update can open the announcer", () => {
-  const status = speech(ATTENTION_SPEECH_SOURCE.STATUS_EDGE, "schema");
-  const summary = speech(ATTENTION_SPEECH_SOURCE.EVALUATOR, "payments");
-  const mixed = [status, summary];
-  assert.deepEqual(announcerNotices(mixed), mixed);
-});
-
-test("a batch enters the history in the order it was decided", () => {
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  // Every source counts, and the decision order holds whatever
-  // order the batch arrived in, so the history reads the way things happened.
-  const older = { ...speech(ATTENTION_SPEECH_SOURCE.STATUS_EDGE, "checkout"), decidedAt: 1_000 };
-  const newest = { ...speech(ATTENTION_SPEECH_SOURCE.EVALUATOR, "payments"), decidedAt: 3_000 };
-  const newer = { ...speech(ATTENTION_SPEECH_SOURCE.EVALUATOR, "schema"), decidedAt: 2_000 };
-
-  assert.deepEqual(speechByDecision([newest, older, newer]), [older, newer, newest]);
-  assert.deepEqual(speechByDecision([]), []);
 });
 
 function rosterSession(

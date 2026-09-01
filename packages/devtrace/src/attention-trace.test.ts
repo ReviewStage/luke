@@ -18,7 +18,6 @@ const UPDATE: AttentionUpdate = {
 const DECISION: AttentionDecision = {
   disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
   decidedAt: 1_800_000_000_500,
-  summary: "The checkout agent wants an answer.",
 };
 
 test("a traced pass returns the decision unchanged and records both halves", async () => {

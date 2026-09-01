@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { ATTENTION_TRIGGER, type AttentionUpdate } from "@sidecar/attention";
+import {
+  HOSTED_ATTENTION_CONTRACT_HEADER,
+  HOSTED_ATTENTION_CONTRACT_VERSION,
+} from "@sidecar/hosted";
 import { ATTENTION_DISPOSITION, SESSION_STATUS } from "@sidecar/session";
 import { HostedAttentionEvaluator } from "./hosted-attention-evaluator.js";
 
@@ -25,7 +29,6 @@ const SPOKEN_ANSWER = {
   decision: {
     disposition: ATTENTION_DISPOSITION.SPEAK_DURING_TURN,
     decidedAt: NOW - 99_999,
-    summary: "Claude Code is waiting on you in checkout-service.",
   },
   quota: { used: 9, limit: 500, remaining: 491, resetsAt: NOW + 3_600_000 },
 };
@@ -70,12 +73,15 @@ test("sends only what the prompt reads — never the session's identifiers or cl
   assert.deepEqual(decision, {
     disposition: ATTENTION_DISPOSITION.SPEAK_DURING_TURN,
     decidedAt: NOW,
-    summary: SPOKEN_ANSWER.decision.summary,
   });
 
   const [request] = requests;
   assert.equal(request?.url, "https://tryluke.dev/api/attention/review");
   assert.equal(new Headers(request?.init.headers).get("authorization"), "Bearer token-1");
+  assert.equal(
+    new Headers(request?.init.headers).get(HOSTED_ATTENTION_CONTRACT_HEADER),
+    HOSTED_ATTENTION_CONTRACT_VERSION,
+  );
   const sent = String(request?.init.body);
   assert.doesNotMatch(sent, new RegExp(TRANSCRIPT_SECRET));
   assert.deepEqual(JSON.parse(sent), {

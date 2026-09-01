@@ -38,14 +38,13 @@ test("session acts remain quiet events between messages", () => {
   );
 });
 
-test("an announcement shows its readable copy instead of model context", () => {
+test("an announcement shows its spoken transcript", () => {
   const markup = renderToStaticMarkup(
     createElement(ConversationHistoryPanel, {
       entries: [
         {
           kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
-          words: 'provider: "Codex"; event: finished; work recap: "Checkout is ready."',
-          displayWords: "Checkout is ready.",
+          words: "Checkout is ready.",
         },
       ],
       onClear: () => undefined,

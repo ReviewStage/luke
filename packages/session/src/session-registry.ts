@@ -143,7 +143,6 @@ const sameApplication = exhaustiveSame<SessionApplication>({
 const sameAttention = exhaustiveSame<AttentionDecision>({
   disposition: (first, second) => first.disposition === second.disposition,
   decidedAt: (first, second) => first.decidedAt === second.decidedAt,
-  summary: (first, second) => first.summary === second.summary,
 });
 
 const sameWorkspace = exhaustiveSame<SessionWorkspace>({
