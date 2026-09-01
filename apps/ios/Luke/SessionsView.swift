@@ -290,6 +290,10 @@ private struct SkeletonRow: View {
     var body: some View {
         SessionRow(session: Self.placeholder)
             .redacted(reason: .placeholder)
+            // Redaction only hides the synthetic words visually; VoiceOver
+            // would still read them as three real sessions, so the row hides
+            // itself the way the desktop skeleton's aria-hidden does.
+            .accessibilityHidden(true)
             .opacity(opacity)
             .onAppear {
                 withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
