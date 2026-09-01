@@ -32,6 +32,8 @@ function sessionAgeText(observedAt: number | undefined, now: number): string {
 }
 
 function providerDisplayName(providerId: string): string {
+  // SAFETY: providerId is set by cloud adapters to a key in PROVIDER_IDENTITY_BY_ID; an
+  // unrecognized id falls through the optional chain and the id itself is returned as-is.
   const identity = PROVIDER_IDENTITY_BY_ID[providerId as keyof typeof PROVIDER_IDENTITY_BY_ID];
   return identity?.displayName ?? providerId;
 }

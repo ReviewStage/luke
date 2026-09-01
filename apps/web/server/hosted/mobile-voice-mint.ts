@@ -3,6 +3,7 @@ import {
   contextItemId,
   mobileRealtimeClientSecretRequest,
   type ObservedSession,
+  type ObservedSessionControl,
   VAULT_PROVIDER_ID,
   type VaultProviderId,
 } from "../core.js";
@@ -165,7 +166,11 @@ async function observeCloudSessions(
       if (obs.observedAt !== undefined) session.observedAt = obs.observedAt;
       if (obs.canReceiveMessage) session.canReceiveMessage = true;
       const controls = obs.controls
-        ?.map((c) => ({ id: c.id, label: c.label, ...(c.kind ? { kind: c.kind } : {}) }))
+        ?.map((c): ObservedSessionControl => {
+          const control: ObservedSessionControl = { id: c.id, label: c.label };
+          if (c.kind) control.kind = c.kind;
+          return control;
+        })
         .filter((c) => c.id && c.label);
       if (controls && controls.length > 0) session.controls = controls;
       const spawnableAgents = obs.spawnableAgents?.filter((a) => a.length > 0);
