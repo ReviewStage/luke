@@ -135,6 +135,8 @@ export interface ConversationEntry {
    * toward a refusal nor leave "that chat" open to a lookalike.
    */
   identity?: SessionIdentity;
+  /** Every roster-validated session named by one batched announcement. */
+  identities?: readonly SessionIdentity[];
   /**
    * When the line happened in the conversation. Appends stamp themselves;
    * delayed spoken transcripts carry the time their turn began. This is also
@@ -146,7 +148,7 @@ export interface ConversationEntry {
    * an identity the roster reported at the moment of the entry, with the
    * title it wore then — never anything a model composed — and none of it is
    * ever rendered into model context: {@link conversationHistoryText}
-   * carries `identity` and nothing of this list, so however many chats a
+   * carries `identity` or `identities` and nothing of this list, so however many chats a
    * line names, the model's window pays for one subject at most. A chip's
    * press hands its identity — never an address — back to the main process,
    * which answers from what observation itself reported, which is what lets
@@ -171,6 +173,7 @@ export function appendConversationThreadEntry(
   if (!words) return entries;
   const appended: ConversationEntry = { kind: entry.kind, words, recordedAt: now };
   if (entry.identity) appended.identity = entry.identity;
+  if (entry.identities) appended.identities = entry.identities;
   if (entry.mentions && entry.mentions.length > 0) appended.mentions = entry.mentions;
   return retainedConversationEntries([...entries, appended], now);
 }
@@ -196,13 +199,25 @@ export function adoptConversationThread(
 }
 
 function sameConversationEntry(a: ConversationEntry, b: ConversationEntry): boolean {
-  return (
-    a.kind === b.kind &&
-    a.words === b.words &&
-    a.recordedAt === b.recordedAt &&
-    a.identity?.providerId === b.identity?.providerId &&
-    a.identity?.providerSessionId === b.identity?.providerSessionId
-  );
+  return conversationEntryKey(a) === conversationEntryKey(b);
+}
+
+/** Stable value identity shared by renderer adoption and main-process merging. */
+export function conversationEntryKey(entry: ConversationEntry): string {
+  const identities = entry.identities ?? (entry.identity ? [entry.identity] : undefined);
+  return JSON.stringify([
+    entry.kind,
+    entry.words,
+    entry.recordedAt,
+    identities?.map(({ providerId, providerSessionId }) => [providerId, providerSessionId]),
+    entry.mentions?.map(({ providerId, providerSessionId, title, markId, applications }) => [
+      providerId,
+      providerSessionId,
+      title,
+      markId,
+      applications.map(({ id, name }) => [id, name]),
+    ]),
+  ]);
 }
 
 /** The recent slice safe to place back into the model's context window. */
@@ -239,11 +254,13 @@ export function streamingConversationEntry(
   kind: ConversationEntryKind,
   words: string,
   identity?: SessionIdentity,
+  identities?: readonly SessionIdentity[],
 ): ConversationEntry | undefined {
   const bounded = boundedEntryWords(words);
   if (!bounded) return undefined;
   const entry: ConversationEntry = { kind, words: bounded };
   if (identity) entry.identity = identity;
+  if (identities) entry.identities = identities;
   return entry;
 }
 
@@ -311,23 +328,25 @@ export function sessionActConversationEntry(
 }
 
 /**
- * The history line an announcement leaves behind: the spoken words, the one
- * roster-validated subject the update was about, and that subject's chip.
- * The subject stays the whole answer however many sessions the sentence
- * brushes past — the same rule the notice band keeps while it speaks.
+ * The history line an announcement leaves behind: the spoken words, every
+ * roster-validated subject the batch was about, and those subjects' chips.
  */
 export function announcementConversationEntry(
   words: string,
-  about: SessionIdentity,
+  about: readonly SessionIdentity[],
   sessions: readonly Session[],
 ): ConversationEntry {
   const entry: ConversationEntry = {
     kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
     words,
-    identity: about,
   };
-  const mention = rosterMention(about, sessions);
-  if (mention) entry.mentions = [mention];
+  if (about.length === 1) entry.identity = about[0];
+  if (about.length > 1) entry.identities = about;
+  const mentions = about.flatMap((identity) => {
+    const mention = rosterMention(identity, sessions);
+    return mention ? [mention] : [];
+  });
+  if (mentions.length > 0) entry.mentions = mentions;
   return entry;
 }
 
@@ -446,18 +465,19 @@ export function conversationHistoryText(
         entry.kind === CONVERSATION_ENTRY_KIND.ACT
           ? `- ${lead} ${entry.words}`
           : `- ${lead}: "${entry.words}"`;
-      const identity = entry.identity;
-      const observed =
-        identity &&
-        sessions.some(
+      const identities = entry.identities ?? (entry.identity ? [entry.identity] : []);
+      if (identities.length === 0) return line;
+      const identityNotes = identities.map((identity) => {
+        const observed = sessions.some(
           (candidate) =>
             candidate.providerId === identity.providerId &&
             candidate.providerSessionId === identity.providerSessionId,
         );
-      if (!identity) return line;
-      return observed
-        ? `${line} [provider_id=${identity.providerId} provider_session_id=${identity.providerSessionId}]`
-        : `${line} [${SESSION_NO_LONGER_OBSERVED_NOTE}]`;
+        return observed
+          ? `[provider_id=${identity.providerId} provider_session_id=${identity.providerSessionId}]`
+          : `[${SESSION_NO_LONGER_OBSERVED_NOTE}]`;
+      });
+      return `${line} ${identityNotes.join(" ")}`;
     }),
   ].join("\n");
 }
@@ -491,6 +511,31 @@ export function storedConversationEntry(value: UnparsedWireValue): ConversationE
   }
   const mentions = value.mentions === undefined ? [] : storedEntryMentions(value.mentions);
   if (mentions === undefined) return undefined;
+  if (identity !== undefined && value.identities !== undefined) return undefined;
+  const rawIdentities = value.identities;
+  const identityCount = Array.isArray(rawIdentities) ? rawIdentities.length : undefined;
+  const identities = Array.isArray(rawIdentities)
+    ? rawIdentities.flatMap((candidate) => {
+        if (!isRecord(candidate)) return [];
+        const candidateProviderId = candidate.providerId;
+        const candidateSessionId = candidate.providerSessionId;
+        return isWireString(candidateProviderId) &&
+          candidateProviderId.length > 0 &&
+          isWireString(candidateSessionId) &&
+          candidateSessionId.length > 0
+          ? [{ providerId: candidateProviderId, providerSessionId: candidateSessionId }]
+          : [];
+      })
+    : undefined;
+  if (
+    rawIdentities !== undefined &&
+    (!identities ||
+      identities.length === 0 ||
+      identities.length !== identityCount ||
+      identities.length > MAXIMUM_MENTIONED_SESSIONS)
+  ) {
+    return undefined;
+  }
   return {
     kind: value.kind,
     words,
@@ -498,6 +543,7 @@ export function storedConversationEntry(value: UnparsedWireValue): ConversationE
     ...(isWireString(providerId) && isWireString(providerSessionId)
       ? { identity: { providerId, providerSessionId } }
       : undefined),
+    ...(identities ? { identities } : undefined),
     ...(mentions.length > 0 ? { mentions } : undefined),
   };
 }

@@ -344,7 +344,7 @@ const NO_SPOKEN_ASK_PREVIEWS: ReadonlyMap<string, string> = new Map();
 export function liveConversationEntries(input: {
   spokenAskPreviews: ReadonlyMap<string, string>;
   captions: readonly string[] | undefined;
-  about: SessionIdentity | undefined;
+  about: readonly SessionIdentity[] | undefined;
   transcriptSpoken: boolean;
 }): readonly ConversationEntry[] {
   const lines: ConversationEntry[] = [];
@@ -356,7 +356,8 @@ export function liveConversationEntries(input: {
     const speech = streamingConversationEntry(
       input.about ? CONVERSATION_ENTRY_KIND.ANNOUNCEMENT : CONVERSATION_ENTRY_KIND.REPLY,
       input.captions.join(" "),
-      input.about,
+      input.about?.length === 1 ? input.about[0] : undefined,
+      input.about && input.about.length > 1 ? input.about : undefined,
     );
     if (speech) lines.push(speech);
   }
@@ -396,9 +397,9 @@ export async function authorizeConversationAct<T>(
 
 /**
  * The sessions the replies being spoken are about, for the surface to draw
- * pressable previews of. An announcement already carries its one
- * roster-validated subject, and that stays the whole answer: the update was
- * about one session, whatever else its sentence brushes past. A conversation
+ * pressable previews of. An announcement carries its roster-validated
+ * subjects, and those stay the whole answer: the update was about those
+ * sessions, whatever else its sentence brushes past. A conversation
  * reply carries no subject, so its previews are read from the words
  * themselves — the roster sessions whose own titles appear whole in the
  * captions, and the workspaces whose names do, each resolved to its freshest
@@ -413,11 +414,13 @@ export async function authorizeConversationAct<T>(
  */
 export function replyMentions(input: {
   fixtureSpeaking: boolean;
-  about: SessionIdentity | undefined;
+  about: readonly SessionIdentity[] | undefined;
   captions: readonly string[] | undefined;
   sessions: readonly Session[];
 }): readonly SessionMention[] {
-  if (input.about) return [{ ...input.about, kind: SESSION_MENTION_KIND.SESSION }];
+  if (input.about) {
+    return input.about.map((identity) => ({ ...identity, kind: SESSION_MENTION_KIND.SESSION }));
+  }
   const spoken = input.fixtureSpeaking ? FIXTURE_SPEAKING_CAPTION : input.captions?.join("\n");
   return mentionedSessions(spoken, input.sessions);
 }
@@ -426,15 +429,15 @@ export function replyMentions(input: {
  * The issue half of {@link replyMentions}, on its rules exactly: the tracked
  * issues the replies being spoken name — by identifier like LUKE-123, or by
  * whole title — each resolved against the observed issue roster and never
- * from the model's words alone. An announcement's one validated subject is a
- * session, and it stays the whole answer: identifiers riding along in its
- * sentence earn nothing, because the update was about the session. The
+ * from the model's words alone. An announcement's validated subjects are
+ * sessions, and they stay the whole answer: identifiers riding along in its
+ * sentence earn nothing, because the update was about those sessions. The
  * fixture sentence names no issues and a capture run observes no tracker, so
  * a capture run draws none.
  */
 export function replyIssueMentions(input: {
   fixtureSpeaking: boolean;
-  about: SessionIdentity | undefined;
+  about: readonly SessionIdentity[] | undefined;
   captions: readonly string[] | undefined;
   issues: readonly TrackedIssue[] | undefined;
 }): readonly TrackedIssue[] {
@@ -588,7 +591,7 @@ export interface VoiceConversation {
    * The tracked issues the reply being spoken names — by identifier or by
    * whole title — on the session mentions' own terms: resolved against the
    * observed issue roster, present exactly as long as the reply, and empty
-   * for an announcement, whose one validated subject is a session. The rows
+   * for an announcement, whose validated subjects are sessions. The rows
    * are the roster's own, because no panel surface holds the issue roster
    * for the chips to resolve against.
    */
@@ -638,7 +641,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   // caption from a different reply.
   const [voiceCaption, setVoiceCaption] = useState<{
     texts: readonly string[] | undefined;
-    about: SessionIdentity | undefined;
+    about: readonly SessionIdentity[] | undefined;
   }>({ texts: undefined, about: undefined });
   /**
    * Whether the reply under way answers an ask the developer typed. A typed
@@ -1750,7 +1753,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   // and aged out rather than spoken stale.
   useEffect(() => {
     return window.sidecar.onArrivalSpeech(() => {
-      ensureAnnouncer().enqueue([{ kind: ARRIVAL_SPEECH_KIND, decidedAt: Date.now() }]);
+      ensureAnnouncer().enqueue({ kind: ARRIVAL_SPEECH_KIND, decidedAt: Date.now() });
     });
   }, [ensureAnnouncer]);
 

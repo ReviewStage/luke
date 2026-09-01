@@ -1,6 +1,7 @@
 import { isRememberedFact, maximumRememberedFacts, type RememberedFact } from "@sidecar/acts";
 import {
   type ConversationEntry,
+  conversationEntryKey,
   retainedConversationEntries,
   storedConversationEntry,
 } from "@sidecar/realtime";
@@ -106,14 +107,4 @@ function parsedList(stored: string | undefined, field: string): readonly Unparse
   if (!isRecord(parsed)) return [];
   const list = parsed[field];
   return Array.isArray(list) ? list : [];
-}
-
-function conversationEntryKey(entry: ConversationEntry): string {
-  return JSON.stringify([
-    entry.kind,
-    entry.words,
-    entry.recordedAt,
-    entry.identity?.providerId,
-    entry.identity?.providerSessionId,
-  ]);
 }
