@@ -2620,6 +2620,9 @@ function SpeechVoiceRows({
         panelOpen={panelOpen}
       />
       {view.state === SPEECH_VOICES_STATE.READY ? (
+        /* PostHog blocks this fixed class and its whole subtree. The names in
+           this list are the developer's own, written when they made the clone,
+           and a recording is the rendered panel. */
         <span className="ph-no-capture">
           <SelectRow
             label="ElevenLabs voice"

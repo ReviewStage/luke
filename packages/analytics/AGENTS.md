@@ -38,8 +38,9 @@ the app runs, on the library's own configuration, and nothing in this package
 governs a byte of it. Do not let this file's promise be read as covering it.
 Three things leave that way and none is validated here:
 
-- The recording itself, which is the rendered panel except for the History
-  tab's explicitly blocked `ph-no-capture` subtree — a session's title, branch,
+- The recording itself, which is the rendered panel except for the two
+  explicitly blocked `ph-no-capture` subtrees, the History tab and the Voice
+  page's list of the developer's own speech voices — a session's title, branch,
   recap, and error line, the account's name and address, and a screenshot
   attached to the feedback composer all travel because they are drawn. Only
   what is typed into a field is masked, and that is the library's default

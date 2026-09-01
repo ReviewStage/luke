@@ -33,7 +33,8 @@ screen, your editor, your terminal, or any other app. A recording shows whatever
 the panel showed you, including session titles, branches, summaries and error
 text, your name and email address, and any screenshot you attached to the
 feedback form. The History tab is blocked from recordings, so the words in your
-conversation with Luke are not included. Text you type into a field is replaced
+conversation with Luke are not included, and so is the list of your own
+ElevenLabs voices on the Voice page, so the names you gave them are not either. Text you type into a field is replaced
 with blocks before the recording leaves your Mac, so an API key or a sign-in
 code you enter is not in it. While recording is on, Luke also reports what you
 clicked, including the text on it, and any error his panel runs into, with its

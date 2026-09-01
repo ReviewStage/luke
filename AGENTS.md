@@ -299,9 +299,11 @@ Trust constraints:
   screenshot attached to the feedback composer, which is drawn as its own
   bytes and which input masking does not reach. The one thing withheld is what
   is typed into a field, and that is the library's default rather than a
-  posture Luke keeps. The one explicit blocked subtree is History: its root
-  carries the recording library's fixed blocking class, so the conversation's
-  words do not leave the machine in a recording. That view retains every
+  posture Luke keeps. Two subtrees are explicitly blocked, each carrying the
+  recording library's fixed blocking class on its root: the History tab, so the
+  conversation's words do not leave the machine in a recording, and the Voice
+  page's list of the developer's own speech voices, whose names they wrote
+  themselves. That view retains every
   bounded line from the current renderer lifetime, including session acts, until the developer clears
   it or quits, while only the 20 most recent lines enter model context. There
   is no general masking module to consult and nothing that makes any other new

@@ -38,8 +38,16 @@ export interface SpeechVoicesView {
 const CONNECT_NOTE =
   "Connect an ElevenLabs key above to choose one of your own voices. Everything else about the conversation stays with OpenAI.";
 
+/**
+ * ElevenLabs' own recording guidance for an Instant Voice Clone, said here
+ * because the way to a first voice is the whole of what this state can offer.
+ * Luke records nothing and uploads nothing: the microphone he asks for is for
+ * talking to him, and the clone is made in ElevenLabs by its owner.
+ */
 const EMPTY_NOTE =
-  "This ElevenLabs account holds no personal voices yet. Make one in ElevenLabs with an Instant Voice Clone, then refresh.";
+  "This ElevenLabs account holds no personal voices yet. Make one in ElevenLabs with an " +
+  "Instant Voice Clone — one to two minutes of clean, consistent audio of a single speaker, " +
+  "MP3 at 192 kbps or better, of a voice you own or have consent to clone — then refresh.";
 
 const MISSING_NOTE =
   "The voice Luke was set to speak with is no longer in this account. Choose another, or Luke keeps speaking as OpenAI.";
