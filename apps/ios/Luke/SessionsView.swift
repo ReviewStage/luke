@@ -246,8 +246,8 @@ private struct SessionOptionsSheet: View {
         NavigationStack {
             List {
                 Section("Sort by") {
-                    sortRow(.urgency, label: "Urgent", detail: "Most urgent first")
-                    sortRow(.recency, label: "Recent", detail: "Most recently observed first")
+                    sortRow(.urgency, label: "Urgent")
+                    sortRow(.recency, label: "Recent")
                 }
                 if !groups.isEmpty {
                     Section("Filter by") {
@@ -279,18 +279,13 @@ private struct SessionOptionsSheet: View {
         }
     }
 
-    private func sortRow(_ value: SessionSort, label: String, detail: String) -> some View {
+    private func sortRow(_ value: SessionSort, label: String) -> some View {
         Button {
             sort = value
         } label: {
             HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(label)
-                        .foregroundStyle(Color.ink)
-                    Text(detail)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
+                Text(label)
+                    .foregroundStyle(Color.ink)
                 Spacer()
                 Image(systemName: "checkmark")
                     .fontWeight(.semibold)
@@ -308,9 +303,8 @@ private struct SessionOptionsSheet: View {
     }
 }
 
-/// One axis's checklist page: every observed value with its session count,
-/// toggled by row press. The checkmark keeps its slot when unchosen so rows
-/// do not shift underfoot.
+/// One axis's checklist page: every observed value, toggled by row press. The
+/// checkmark keeps its slot when unchosen so rows do not shift underfoot.
 private struct AxisFilterPage: View {
     let group: SessionFilterAxisOptions
     @Binding var filters: Set<SessionFilter>
@@ -330,8 +324,6 @@ private struct AxisFilterPage: View {
                         Text(optionTitle(option.filter))
                             .foregroundStyle(Color.ink)
                         Spacer()
-                        Text(option.count, format: .number)
-                            .foregroundStyle(.secondary)
                         Image(systemName: "checkmark")
                             .fontWeight(.semibold)
                             .opacity(filters.contains(option.filter) ? 1 : 0)
