@@ -44,6 +44,22 @@ private final class Clock: @unchecked Sendable {
     var now = Date(timeIntervalSince1970: 1_774_000_000)
 }
 
+/// Counts how many stubbed requests stand open at once, so a test can assert
+/// the sender's requests never overlap.
+private actor Meter {
+    private var active = 0
+    private(set) var peak = 0
+
+    func enter() {
+        active += 1
+        peak = max(peak, active)
+    }
+
+    func exit() {
+        active -= 1
+    }
+}
+
 /// Holds a stubbed answer open until the test releases it, so a flush can be
 /// made to arrive while another's request is still in flight.
 private actor Gate {
@@ -318,6 +334,61 @@ final class ProductEventSenderTests: XCTestCase {
             sentEvents(requests[1]).map { $0["name"] as? String },
             ["account:act"]
         )
+    }
+
+    /// A predecessor finishing must not free the slot a successor still
+    /// holds: a third flush arriving then would run beside the successor,
+    /// and two requests would overlap.
+    func testFlushesNeverOverlapHoweverTheyInterleave() async {
+        let meter = Meter()
+        let firstTaken = Gate()
+        let firstRelease = Gate()
+        let secondTaken = Gate()
+        let secondRelease = Gate()
+        let (sender, log) = makeSender { request in
+            await meter.enter()
+            let names = sentEvents(request).compactMap { $0["name"] as? String }
+            if names == ["app:launch"] {
+                await firstTaken.open()
+                await firstRelease.wait()
+            }
+            if names == ["account:sign_in"] {
+                await secondTaken.open()
+                await secondRelease.wait()
+            }
+            await meter.exit()
+            return accepted(for: request)
+        }
+        sender.arm()
+        sender.record(.appLaunch)
+        let first = sender.flush()
+        await firstTaken.wait()
+
+        sender.record(.accountSignIn)
+        let second = sender.flush()
+        await firstRelease.open()
+        await first.value
+        await secondTaken.wait()
+
+        // The predecessor has finished and the successor's request is being
+        // held open; a flush arriving now is the clobbered-slot case.
+        sender.record(.accountAct(.signOut))
+        let third = sender.flush()
+        // Room for a wrongly unchained third send to reach the stub before
+        // the successor is released; a chained one cannot.
+        for _ in 0 ..< 20 { await Task.yield() }
+        await secondRelease.open()
+        await second.value
+        await third.value
+
+        let requests = await log.requests
+        XCTAssertEqual(requests.count, 3)
+        XCTAssertEqual(
+            sentEvents(requests[2]).map { $0["name"] as? String },
+            ["account:act"]
+        )
+        let peak = await meter.peak
+        XCTAssertEqual(peak, 1)
     }
 
     func testStoppingDropsWhatWasQueuedRatherThanHoldingTheQuitOpen() async {

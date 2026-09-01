@@ -143,14 +143,17 @@ public final class ProductEventSender {
     /// returning it, because the running request took its batch before this
     /// call's events were queued — and the one caller that awaits a flush,
     /// the sign-out, is exactly the one whose event must not wait for a
-    /// token that is about to be cleared.
+    /// token that is about to be cleared. The slot is never cleared, only
+    /// replaced: a finished predecessor resolving a successor's chain
+    /// instantly costs one held task, where clearing it from inside the task
+    /// let a finished predecessor free the slot a successor still held, and
+    /// the next flush run beside it.
     @discardableResult
     public func flush() -> Task<Void, Never> {
         let previous = inFlight
         let task = Task {
             if let previous { await previous.value }
             await send()
-            inFlight = nil
         }
         inFlight = task
         return task

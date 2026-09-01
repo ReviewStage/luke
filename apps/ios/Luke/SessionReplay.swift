@@ -52,8 +52,13 @@ enum SessionReplay {
         // Wireframe capture cannot see SwiftUI content; screenshots are how
         // this SDK records a SwiftUI app at all.
         config.sessionReplayConfig.screenshotMode = true
-        // The desktop's autocapture: what was pressed, including its words.
-        config.captureElementInteractions = true
+        // `captureElementInteractions` stays off, deliberately: it is not the
+        // desktop's click autocapture. This SDK's element interactions copy a
+        // text control's live contents on end-of-edit, skipping only secure
+        // fields — a composed message or opening task would travel as typed —
+        // where the desktop's autocapture names pressed controls and never an
+        // input's value. An event stream that carries typed text has no place
+        // under a disclosure that says typed text is withheld.
         // The desktop's `capture_exceptions: true`: a crash is sent as an
         // exception event on the next launch.
         config.errorTrackingConfig.autoCapture = true

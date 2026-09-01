@@ -289,7 +289,11 @@ Trust constraints:
   and both come from one client per app —
   `apps/desktop/src/renderer/session-replay.ts` on the desktop,
   `apps/ios/Luke/SessionReplay.swift` on iOS — each configured as its library
-  ships rather than hardened. The first of them is what that client captures
+  ships rather than hardened. On iOS only the recording and the crash
+  reports leave: the SDK's element-interaction autocapture is not the
+  desktop's click stream — it copies a text control's live contents on
+  end-of-edit, typed text no disclosure covers — so it stays at its off
+  default. The first of them is what that client captures
   beside a recording: an autocaptured event names the text of whatever was
   clicked, so pressing a session row sends that row's title, recap, and
   branch, and an unhandled error travels with its message and stack, which can

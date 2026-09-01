@@ -60,7 +60,9 @@ covering them. Three things leave that way and none is validated here:
   screens on the same terms, captured as screenshots because that is how the
   SDK records SwiftUI at all.
 - Autocaptured events, which name the text of whatever was clicked. Pressing a
-  session row sends that row's words.
+  session row sends that row's words. Desktop only: the iOS SDK's equivalent
+  copies a text control's live contents on end-of-edit, which is typed text
+  and not a click, so it stays at its off default there.
 - Unhandled exceptions, with their message and stack — on iOS, a crash sent
   as an exception event on the next launch.
 

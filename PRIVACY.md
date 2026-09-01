@@ -67,10 +67,11 @@ account does not reach it — we have no way to tell it was yours.
 The iOS app records on the same terms: its own screens as screenshots, never
 anything else on your device, from the moment it opens, and shows the same
 things its screens show — session titles, branches, summaries, error text, and
-your name and email. Text you type into a field is masked, what you tapped is
-reported with its text, and a crash is reported on the next launch with its
-message and code path. Signing in attaches the running recording to your
-account, and signing out starts a fresh anonymous one.
+your name and email. Text you type into a field is masked, and a crash is
+reported on the next launch with its message and code path. Unlike the Mac
+app, taps are not separately reported with their text — only the recording
+itself shows what was pressed. Signing in attaches the running recording to
+your account, and signing out starts a fresh anonymous one.
 
 **Provider API keys (server-side vault).** While the "Sync provider keys"
 switch in Settings > Connections is on — it starts on — the provider API keys
