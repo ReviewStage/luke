@@ -6,60 +6,80 @@ import LukeKit
 import SwiftUI
 import UIKit
 
-// MARK: - Luke face mark
+// MARK: - Luke face art
 
-struct LukeMark: View {
-    // FACE_ART constants (packages/surface/src/generated/face-art.ts)
-    private static let vbX: CGFloat = 53.85, vbY: CGFloat = 62.67
-    private static let vbW: CGFloat = 134.29, vbH: CGFloat = 122.37
-    private static let tiltDeg: CGFloat = -8
-    private static let pivotX: CGFloat = 120, pivotY: CGFloat = 124
-    private static let eyeY: CGFloat = 92, eyeR: CGFloat = 12
-    private static let leftEyeX: CGFloat = 78, rightEyeX: CGFloat = 162
-    private static let strokeW: CGFloat = 16
+/// FACE_ART constants (packages/surface/src/generated/face-art.ts), in the
+/// artwork's own 240×240 canvas coordinates. A hand copy, like every mark in
+/// this file: change both when the artwork moves.
+enum FaceArt {
+    /// The face cropped to itself (MARK_VIEW_BOX). Only for a face that never
+    /// moves: it is tight enough that any motion would leave it.
+    static let markBox = CGRect(x: 53.85, y: 62.67, width: 134.29, height: 122.37)
+    /// The square window motions play in (VIEW_BOX), with headroom to move.
+    static let motionBox = CGRect(x: 48, y: 51, width: 146, height: 146)
+    static let strokeWidth: CGFloat = 16
+    static let eyeY: CGFloat = 92
+    static let eyeRadius: CGFloat = 12
+    static let eyeXs: [CGFloat] = [78, 162]
+    private static let tiltDegrees: CGFloat = -8
+    private static let tiltPivot = CGPoint(x: 120, y: 124)
 
-    var body: some View {
-        Canvas { ctx, size in
-            let scale = min(size.width / Self.vbW, size.height / Self.vbH)
-            let t = faceTransform(scale: scale)
+    /// Smile: M 104 84 V 150 Q 104 164 118 164 Q 140 164 168 142
+    static let smile: Path = {
+        var path = Path()
+        path.move(to: CGPoint(x: 104, y: 84))
+        path.addLine(to: CGPoint(x: 104, y: 150))
+        path.addQuadCurve(to: CGPoint(x: 118, y: 164), control: CGPoint(x: 104, y: 164))
+        path.addQuadCurve(to: CGPoint(x: 168, y: 142), control: CGPoint(x: 140, y: 164))
+        return path
+    }()
 
-            // Smile: M 104 84 V 150 Q 104 164 118 164 Q 140 164 168 142
-            let smile = CGMutablePath()
-            smile.move(to: CGPoint(x: 104, y: 84), transform: t)
-            smile.addLine(to: CGPoint(x: 104, y: 150), transform: t)
-            smile.addQuadCurve(
-                to: CGPoint(x: 118, y: 164), control: CGPoint(x: 104, y: 164), transform: t
-            )
-            smile.addQuadCurve(
-                to: CGPoint(x: 168, y: 142), control: CGPoint(x: 140, y: 164), transform: t
-            )
-            ctx.stroke(
-                Path(smile), with: .foreground,
-                style: StrokeStyle(lineWidth: Self.strokeW * scale, lineCap: .round, lineJoin: .round)
-            )
+    /// The head's resting tilt, about the point the motions pivot on.
+    static let tilt = rotation(degrees: tiltDegrees, about: tiltPivot)
 
-            let r = Self.eyeR * scale
-            let lc = CGPoint(x: Self.leftEyeX, y: Self.eyeY).applying(t)
-            let rc = CGPoint(x: Self.rightEyeX, y: Self.eyeY).applying(t)
-            ctx.fill(Path(ellipseIn: CGRect(cx: lc, r: r)), with: .foreground)
-            ctx.fill(Path(ellipseIn: CGRect(cx: rc, r: r)), with: .foreground)
-        }
-        .aspectRatio(Self.vbW / Self.vbH, contentMode: .fit)
+    static func rotation(degrees: CGFloat, about pivot: CGPoint) -> CGAffineTransform {
+        CGAffineTransform(translationX: pivot.x, y: pivot.y)
+            .rotated(by: degrees * .pi / 180)
+            .translatedBy(x: -pivot.x, y: -pivot.y)
     }
 
-    private func faceTransform(scale: CGFloat) -> CGAffineTransform {
-        let angle = Self.tiltDeg * .pi / 180
-        let cx = Self.pivotX, cy = Self.pivotY
-        return CGAffineTransform(translationX: -cx, y: -cy)
-            .concatenating(.init(rotationAngle: angle))
-            .concatenating(.init(translationX: cx - Self.vbX, y: cy - Self.vbY))
-            .concatenating(.init(scaleX: scale, y: scale))
+    /// Draws the face fitted to `box`'s crop of the canvas, with `motion`
+    /// applied to the whole head in canvas coordinates outside the resting
+    /// tilt — the same nesting the desktop's layer groups give the generated
+    /// keyframes.
+    static func draw(
+        _ ctx: GraphicsContext,
+        size: CGSize,
+        box: CGRect,
+        motion: CGAffineTransform = .identity
+    ) {
+        let scale = min(size.width / box.width, size.height / box.height)
+        let placement = CGAffineTransform(scaleX: scale, y: scale)
+            .translatedBy(x: -box.minX, y: -box.minY)
+        let t = tilt.concatenating(motion).concatenating(placement)
+
+        ctx.stroke(
+            smile.applying(t), with: .foreground,
+            style: StrokeStyle(lineWidth: strokeWidth * scale, lineCap: .round, lineJoin: .round)
+        )
+        for eyeX in eyeXs {
+            let eye = CGRect(
+                x: eyeX - eyeRadius, y: eyeY - eyeRadius,
+                width: eyeRadius * 2, height: eyeRadius * 2
+            )
+            ctx.fill(Path(ellipseIn: eye).applying(t), with: .foreground)
+        }
     }
 }
 
-extension CGRect {
-    init(cx: CGPoint, r: CGFloat) {
-        self.init(x: cx.x - r, y: cx.y - r, width: 2 * r, height: 2 * r)
+// MARK: - Luke face mark
+
+struct LukeMark: View {
+    var body: some View {
+        Canvas { ctx, size in
+            FaceArt.draw(ctx, size: size, box: FaceArt.markBox)
+        }
+        .aspectRatio(FaceArt.markBox.width / FaceArt.markBox.height, contentMode: .fit)
     }
 }
 

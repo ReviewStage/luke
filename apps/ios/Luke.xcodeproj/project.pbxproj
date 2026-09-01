@@ -19,6 +19,7 @@
 		AABBCC000000000000000088 /* Palette.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000019 /* Palette.swift */; };
 		AABBCC000000000000000089 /* CanvasInkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC00000000000000001A /* CanvasInkTests.swift */; };
 		AABBCC00000000000000008A /* SessionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC00000000000000001B /* SessionsView.swift */; };
+		AABBCC00000000000000008B /* LukeLoadingFace.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC00000000000000001C /* LukeLoadingFace.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -34,6 +35,7 @@
 		AABBCC000000000000000019 /* Palette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Palette.swift; sourceTree = "<group>"; };
 		AABBCC00000000000000001A /* CanvasInkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasInkTests.swift; sourceTree = "<group>"; };
 		AABBCC00000000000000001B /* SessionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionsView.swift; sourceTree = "<group>"; };
+		AABBCC00000000000000001C /* LukeLoadingFace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LukeLoadingFace.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -81,6 +83,7 @@
 				AABBCC000000000000000013 /* ContentView.swift */,
 				AABBCC000000000000000016 /* Marks.swift */,
 				AABBCC000000000000000019 /* Palette.swift */,
+				AABBCC00000000000000001C /* LukeLoadingFace.swift */,
 				AABBCC000000000000000017 /* SVGPath.swift */,
 				AABBCC000000000000000018 /* VaultView.swift */,
 				AABBCC00000000000000001B /* SessionsView.swift */,
@@ -209,6 +212,7 @@
 				AABBCC000000000000000021 /* ContentView.swift in Sources */,
 				AABBCC000000000000000085 /* Marks.swift in Sources */,
 				AABBCC000000000000000088 /* Palette.swift in Sources */,
+				AABBCC00000000000000008B /* LukeLoadingFace.swift in Sources */,
 				AABBCC000000000000000086 /* SVGPath.swift in Sources */,
 				AABBCC000000000000000087 /* VaultView.swift in Sources */,
 				AABBCC00000000000000008A /* SessionsView.swift in Sources */,
