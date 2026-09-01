@@ -89,10 +89,7 @@ export function currentSessionAnnouncements(
   return pending.filter((item) => {
     const current = currentSession(item.announcement);
     if (item.source === "notice") {
-      return (
-        current === undefined ||
-        (current.status === item.notice.status && current.observedAt === item.notice.observedAt)
-      );
+      return current === undefined || current.status === item.notice.status;
     }
     return (
       current !== undefined &&

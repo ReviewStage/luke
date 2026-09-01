@@ -126,7 +126,7 @@ test("revalidates queued state and restores mixed sources to their meeting holds
         providerSessionId: "waiting",
         title: "waiting",
         status: SESSION_STATUS.WAITING,
-        observedAt: 1_000,
+        observedAt: 1_100,
       },
     ),
     normalizeSession(
