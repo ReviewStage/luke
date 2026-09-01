@@ -1,3 +1,4 @@
+import { RealtimeSession } from "@openai/agents-realtime";
 import { TRACE_DIRECTION, type TraceDirection } from "@sidecar/devtrace/vocabulary";
 import { type AppGuideSnapshot, appGuideContextText, EMPTY_APP_GUIDE } from "@sidecar/guide";
 import type { TrackedIssue } from "@sidecar/issues";
@@ -29,6 +30,7 @@ import {
   introductionSpeechEvents,
   isArrivalSpeech,
   issueToolAction,
+  maximumTypedAskLength,
   outputSpeedUpdateEvents,
   PressAudioBuffer,
   type ProactiveSpeech,
@@ -44,6 +46,7 @@ import {
   type RealtimeFunctionCall,
   type RealtimeStatus,
   type RealtimeToolFamily,
+  realtimeInstructions,
   realtimeSessionSyncEvents,
   realtimeToolFamily,
   recentConversationEntries,
@@ -53,7 +56,6 @@ import {
   sessionContextText,
   sessionToolAction,
   truncateResponseEvents,
-  typedAskEvents,
   workspaceProjectContextEvents,
   workspaceProjectContextText,
 } from "@sidecar/realtime";
@@ -61,10 +63,13 @@ import type { ObservedWorkspaceProject, Session, SessionIdentity } from "@sideca
 import { workspaceAgentModels } from "@sidecar/session";
 import {
   ACT_RESULT_STATUS,
+  isRecord,
   positiveInteger,
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
+import { type AgentsDeveloperToolCall, createDeveloperTurnAgent } from "./agents-developer-agent";
+import { AgentsRealtimeTransport } from "./agents-realtime-transport";
 import { MICROPHONE_PROCESSING } from "./microphone-choice";
 import {
   createPressCaptureSource,
@@ -691,6 +696,11 @@ export class RealtimeVoiceSession {
    * `tool_choice` withheld on every turn Luke opens himself.
    */
   #toolTurnArmed = false;
+  #agentsTransport: AgentsRealtimeTransport | undefined;
+  #agentsSession: RealtimeSession | undefined;
+  #agentsTypedTurn = false;
+  #agentsToolsRunning = 0;
+  #agentsToolResponseDone = false;
   /**
    * A monotonic id for the turn now under way, bumped at every boundary a
    * turn crosses — a new one beginning, or the old one declared over. A tool
@@ -890,7 +900,11 @@ export class RealtimeVoiceSession {
 
       await this.#waitForChannel(channel, deadline.signal);
       if (this.#closed) return this.#abandonConnect();
-      this.#send((this.#options.sessionSyncEvents ?? realtimeSessionSyncEvents)());
+      if (this.#withMicrophone && this.#options.sessionSyncEvents === undefined) {
+        await this.#connectAgents(connection);
+      } else {
+        this.#send((this.#options.sessionSyncEvents ?? realtimeSessionSyncEvents)());
+      }
       this.#setStatus(REALTIME_STATUS.READY);
       // A pace changed during the handshake could not be sent then, and the
       // credential this call answered may have been minted before the change.
@@ -926,6 +940,69 @@ export class RealtimeVoiceSession {
     } finally {
       if (deadlineTimer !== undefined) clearTimeout(deadlineTimer);
     }
+  }
+
+  async #connectAgents(connection: RealtimeConnection): Promise<void> {
+    const transport = new AgentsRealtimeTransport({
+      send: (event) => this.#send([event]),
+      interrupt: () => {
+        if (this.#status === REALTIME_STATUS.RESPONDING) this.#interruptReply();
+      },
+      mute: (muted) => {
+        if (this.#microphone) this.#microphone.enabled = !muted;
+      },
+      muted: () => (this.#microphone ? !this.#microphone.enabled : true),
+    });
+    const agent = createDeveloperTurnAgent(realtimeInstructions(), (call) =>
+      this.#agentsToolCallOutput(call),
+    );
+    const session = new RealtimeSession(agent, {
+      transport,
+      model: connection.model,
+      tracingDisabled: true,
+    });
+    session.on("error", (error) => {
+      this.#options.onError(
+        error.error instanceof Error ? error.error.message : String(error.error),
+      );
+    });
+    this.#agentsTransport = transport;
+    this.#agentsSession = session;
+    await session.connect({
+      apiKey: connection.value,
+      model: connection.model,
+      url: connection.callsUrl,
+    });
+  }
+
+  async #agentsToolCallOutput(call: AgentsDeveloperToolCall): Promise<WireRecord> {
+    this.#agentsToolsRunning += 1;
+    try {
+      const armed =
+        this.#agentsTypedTurn &&
+        this.#toolTurnArmed &&
+        (call.responseId === this.#activeResponseId ||
+          (this.#activeResponseId === undefined &&
+            call.responseId === `developer_turn_${this.#turnEpoch}`));
+      return await this.#toolCallOutput(call, armed);
+    } finally {
+      this.#agentsToolsRunning = Math.max(0, this.#agentsToolsRunning - 1);
+      this.#continueAfterAgentsTools();
+    }
+  }
+
+  #continueAfterAgentsTools(): void {
+    if (
+      !this.#agentsToolResponseDone ||
+      this.#agentsToolsRunning > 0 ||
+      !this.#agentsTypedTurn ||
+      !this.isConnected
+    ) {
+      return;
+    }
+    this.#agentsToolResponseDone = false;
+    this.#agentsTypedTurn = false;
+    this.#startResponse(functionCallFollowUpEvents(), { keepCaption: true });
   }
 
   /**
@@ -1495,10 +1572,14 @@ export class RealtimeVoiceSession {
     // needs no capture device, so one this call put away stays put away.
     if (!this.isConnected || !this.#withMicrophone) return false;
     if (this.#status === REALTIME_STATUS.LISTENING) return false;
-    const events = typedAskEvents(text);
-    if (events.length === 0) return false;
+    const ask = text.trim().slice(0, maximumTypedAskLength);
+    if (!ask || !this.#agentsSession) return false;
     if (this.#status === REALTIME_STATUS.RESPONDING) this.#interruptReply();
-    this.#startResponse(events, { toolsArmed: true });
+    this.#agentsTypedTurn = true;
+    this.#agentsToolResponseDone = false;
+    this.#agentsToolsRunning = 0;
+    this.#startResponse([], { toolsArmed: true });
+    this.#agentsSession.sendMessage(ask);
     return true;
   }
 
@@ -1656,6 +1737,12 @@ export class RealtimeVoiceSession {
    * to turn it off.
    */
   #teardown(): void {
+    this.#agentsSession?.close();
+    this.#agentsSession = undefined;
+    this.#agentsTransport = undefined;
+    this.#agentsTypedTurn = false;
+    this.#agentsToolsRunning = 0;
+    this.#agentsToolResponseDone = false;
     const channel = this.#channel;
     if (channel) {
       // Detach before closing. `close()` fires `onclose` asynchronously, and
@@ -2325,6 +2412,14 @@ export class RealtimeVoiceSession {
     // record as readily as the string, so nothing is parsed twice.
     const record = decodeRealtimePayload(data);
     if (record) this.#options.onWireEvent?.(TRACE_DIRECTION.SERVER, record);
+    if (
+      record &&
+      this.#agentsTypedTurn &&
+      record.type !== REALTIME_SERVER_EVENT.RESPONSE_DONE &&
+      record.type !== REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_DONE
+    ) {
+      this.#agentsTransport?.receive(record);
+    }
     const event = parseRealtimeServerEvent(record);
     if (!event) return;
 
@@ -2425,6 +2520,33 @@ export class RealtimeVoiceSession {
         this.#finishResponse();
         return;
       case REALTIME_SERVER_EVENT.RESPONSE_DONE: {
+        const fresh = event.responseId === this.#activeResponseId;
+        if (this.#agentsTypedTurn && fresh && record) {
+          const agentsResponseId = event.responseId ?? `developer_turn_${this.#turnEpoch}`;
+          if (event.responseId === undefined) {
+            this.#agentsTransport?.receive({
+              type: REALTIME_SERVER_EVENT.RESPONSE_CREATED,
+              response: { id: agentsResponseId },
+            });
+          }
+          for (const call of event.calls) {
+            this.#agentsTransport?.receiveFunctionCall({
+              id: call.callId,
+              type: "function_call",
+              name: call.name,
+              callId: call.callId,
+              arguments: call.argumentsJson,
+              responseId: agentsResponseId,
+            });
+          }
+          this.#agentsTransport?.receive({
+            ...record,
+            response: {
+              ...(isRecord(record.response) ? record.response : {}),
+              id: agentsResponseId,
+            },
+          });
+        }
         // Whether this is the reply now under way, or the finished form of one
         // the developer already talked or typed over. The server had completed
         // the old reply before the cancel landed — it generates ahead of the
@@ -2432,7 +2554,6 @@ export class RealtimeVoiceSession {
         // opened a new turn. Nothing of it may act with that turn's arming or
         // end that turn early: its calls are answered refused so the model is
         // not left waiting, and everything else about it is ignored.
-        const fresh = event.responseId === this.#activeResponseId;
         // Whatever this reply turns out to be below, the server has concluded
         // it: from here the conversation can take a new `response.create`.
         if (fresh) this.#responseOutstanding = false;
@@ -2440,6 +2561,14 @@ export class RealtimeVoiceSession {
         // answered and the reply resumes over their outcomes, so the turn stays
         // open rather than ending on a reply that was only half made.
         if (event.calls.length > 0) {
+          if (this.#agentsTypedTurn && fresh) {
+            this.#agentsToolResponseDone = true;
+            this.#followUpPending = true;
+            this.#clearSettleTimer();
+            this.#armSettleTimer();
+            setTimeout(() => this.#continueAfterAgentsTools(), 0);
+            return;
+          }
           void this.#answerToolCalls(event.calls, fresh && this.#toolTurnArmed);
           if (fresh && this.#toolTurnArmed) {
             this.#followUpPending = true;
@@ -2463,6 +2592,7 @@ export class RealtimeVoiceSession {
           if (fresh && this.#currentReplyDrained()) this.#finishResponse();
           return;
         }
+        this.#agentsTypedTurn = false;
         if (!fresh) return;
         // A reply the server says made no sound has nothing to play out — a
         // success is said with silence, so the follow-up after a tool call is

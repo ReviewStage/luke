@@ -68,6 +68,7 @@ export {
   inputAudioFormatUpdateEvents,
   isArrivalSpeech,
   maximumFeedbackDraftLength,
+  maximumTypedAskLength,
   outputSpeedUpdateEvents,
   type ProactiveSpeech,
   parseRealtimeServerEvent,

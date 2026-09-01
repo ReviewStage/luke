@@ -81,6 +81,7 @@ export const REALTIME_CLIENT_EVENT = {
 
 export const REALTIME_SERVER_EVENT = {
   RESPONSE_CREATED: "response.created",
+  RESPONSE_OUTPUT_ITEM_DONE: "response.output_item.done",
   /** The server confirming a superseded context item is gone. */
   CONVERSATION_ITEM_DELETED: "conversation.item.deleted",
   /** The server confirming it dropped the audio it had queued for us. */

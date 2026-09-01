@@ -3149,6 +3149,13 @@ test("a typed ask can carry a tool call, because the developer opened the turn",
       text: "add tests",
     },
   ]);
+  const followUp = context.sent.find(
+    (event) =>
+      event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE &&
+      isRecord(event.response) &&
+      event.response.tool_choice === "none",
+  );
+  assert.ok(followUp, "the SDK tool outcome is voiced only by a tool-free follow-up");
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // The outcome is voiced, exactly as a spoken ask's would be.
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
