@@ -5,7 +5,6 @@ export {
   realtimeCredentialIsUsable,
 } from "@sidecar/hosted";
 export {
-  announcementConversationEntry,
   appendConversationEntry,
   appendConversationThreadEntry,
   CONVERSATION_ENTRY_KIND,
@@ -57,12 +56,8 @@ export {
 export {
   ARRIVAL_SPEECH_KIND,
   type ArrivalSpeech,
-  ATTENTION_SPEECH_SOURCE,
-  type AttentionSpeech,
-  announcementSummaryText,
   appGuideInstructionsEvents,
   arrivalSpeechEvents,
-  attentionSpeechFromReviews,
   cancelResponseEvents,
   clearInputAudioEvents,
   clearOutputAudioEvents,
@@ -86,7 +81,9 @@ export {
   type RealtimeStatus,
   realtimeInstructions,
   type ScheduledTimer,
+  SESSION_ANNOUNCEMENT_CHANGE,
   SESSION_NO_LONGER_OBSERVED_NOTE,
+  type SessionAnnouncement,
   truncateResponseEvents,
   typedAskEvents,
 } from "./realtime-protocol.js";

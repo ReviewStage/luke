@@ -63,7 +63,6 @@ export {
   boundedText,
   isRosterRelevant,
   isSessionApplicationId,
-  maximumAttentionSummaryLength,
   maximumSessionApplications,
   maximumSessionDetailLength,
   maximumSessionMessageLength,

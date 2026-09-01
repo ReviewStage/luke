@@ -6,9 +6,6 @@ import { mentionedIssues, type TrackedIssue } from "@sidecar/issues";
 import {
   ARRIVAL_SPEECH_KIND,
   type ArrivalSpeech,
-  ATTENTION_SPEECH_SOURCE,
-  type AttentionSpeech,
-  announcementConversationEntry,
   appendConversationThreadEntry,
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
@@ -290,34 +287,6 @@ export function voiceRestartAction(input: {
     due: boolean;
     action: VoiceRestart;
   };
-}
-
-/**
- * Every attention sentence already passed the evaluator's CTO-relevance gate,
- * so each may open a speak-only call of Luke's own to be heard. The call stays
- * tool-free; this permission changes only whether the approved words wait for
- * an existing conversation.
- */
-const ANNOUNCER_SPEECH_SOURCES: ReadonlySet<string> = new Set([
-  ATTENTION_SPEECH_SOURCE.STATUS_EDGE,
-  ATTENTION_SPEECH_SOURCE.EVALUATOR,
-]);
-
-/** The speech the announcer takes, which may open Luke's own call to be said. */
-export function announcerNotices(speech: readonly AttentionSpeech[]): AttentionSpeech[] {
-  return speech.filter((item) => ANNOUNCER_SPEECH_SOURCES.has(item.source));
-}
-
-/**
- * One batch of attention speech in the order it was decided. Every item
- * counts, however it reached the developer — spoken on an open call, read out
- * on Luke's own, or only shown as a popup — since each is something Luke just
- * told them, and each earns a history line so the next call remembers it.
- * Ordering by decision is arithmetic, so no model output chooses what the
- * history holds.
- */
-export function speechByDecision(speech: readonly AttentionSpeech[]): readonly AttentionSpeech[] {
-  return [...speech].sort((a, b) => a.decidedAt - b.decidedAt);
 }
 
 /** A transcription belongs only to the same visible history generation as its turn. */
@@ -636,6 +605,8 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   >(undefined);
   /** The generation of the developer-opened turn whose reply is still in flight. */
   const activeReplyGenerationRef = useRef<number | undefined>(undefined);
+  /** The History generation in which the current announcement began speaking. */
+  const activeAnnouncementGenerationRef = useRef<number | undefined>(undefined);
   /**
    * Whether the turn under way read a transcript aloud. The rendering travels
    * only in the turn that asked for it, so the reply that spoke it must not
@@ -680,6 +651,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     talkPressedAt.current = undefined;
     voiceSession.current?.clearConversation();
     activeReplyGenerationRef.current = undefined;
+    activeAnnouncementGenerationRef.current = undefined;
   }, []);
 
   /**
@@ -807,15 +779,25 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       onError: setVoiceError,
       onCaption: (texts, about) => setVoiceCaption({ texts, about }),
       onReplyEnded: (texts, about) => {
+        if (about) {
+          const generation = activeAnnouncementGenerationRef.current;
+          activeAnnouncementGenerationRef.current = undefined;
+          rememberConversationEntry(
+            {
+              kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
+              words: texts.join(" "),
+              identity: about,
+            },
+            generation,
+          );
+          return;
+        }
         const generation = activeReplyGenerationRef.current;
         activeReplyGenerationRef.current = undefined;
         const spokeTranscript = transcriptSpokenRef.current;
         transcriptSpokenRef.current = false;
-        // An announcement's reply is already recorded from the update that
-        // decided it — with the identity the attention layer validated, which
-        // the words alone cannot carry — and a transcript reading enters the
-        // record only as the act it was.
-        if (about || spokeTranscript) return;
+        // A transcript reading enters the record only as the act it was.
+        if (spokeTranscript) return;
         rememberConversationEntry(
           { kind: CONVERSATION_ENTRY_KIND.REPLY, words: texts.join(" ") },
           generation,
@@ -903,7 +885,13 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
           },
           connect: (connectOptions: { microphone: false }) => session.connect(connectOptions),
           speak: (item) => {
-            if (!isArrivalSpeech(item)) return session.speak(item);
+            if (!isArrivalSpeech(item)) {
+              const spoke = session.speak(item);
+              if (spoke) {
+                activeAnnouncementGenerationRef.current = conversationGenerationRef.current;
+              }
+              return spoke;
+            }
             const spoke = session.speak(wordedArrival(item));
             // The reply has actually begun, which is the one moment the owed
             // record may settle: a beat dropped anywhere earlier — a trigger
@@ -1423,19 +1411,10 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   ]);
 
   useEffect(() => {
-    return window.sidecar.onAttentionSpeech((speech) => {
-      // However a mention reaches the developer — spoken on this call, read
-      // out on Luke's own, or only shown as a popup — it is something Luke
-      // just told them, so it enters the history: the next turn may say just
-      // "that chat", and the line carries the identity the words alone
-      // cannot.
-      for (const item of speechByDecision(speech)) {
-        rememberConversationEntry(announcementConversationEntry(item));
-      }
-      const notices = announcerNotices(speech);
-      if (notices.length > 0) ensureAnnouncer().enqueue(notices);
+    return window.sidecar.onSessionAnnouncements((announcements) => {
+      if (announcements.length > 0) ensureAnnouncer().enqueue(announcements);
     });
-  }, [rememberConversationEntry, ensureAnnouncer]);
+  }, [ensureAnnouncer]);
 
   // The one-time arrival beat, decided in the main process at the sign-in
   // edge. What is queued is only the fact of it: the beat's observed values —

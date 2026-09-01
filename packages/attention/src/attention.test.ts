@@ -23,14 +23,13 @@ import {
   AttentionSpeechLedger,
   attentionUpdate,
   DISPOSITION_GUIDANCE,
-  maximumAttentionSummaryLength,
 } from "./attention.js";
 
 const claude: SessionProvider = { id: "claude-code", displayName: "Claude Code" };
 const codex: SessionProvider = { id: "codex", displayName: "Codex" };
 const DECIDED_AT = 1_800_000_000_000;
-const SPOKEN_SUMMARY = "Claude Code is waiting on you in checkout-service.";
-const OTHER_SUMMARY = "Claude Code finished its turn in checkout-service.";
+const SPOKEN_RECAP = "Claude Code is waiting on you in checkout-service.";
+const OTHER_RECAP = "Claude Code finished its turn in checkout-service.";
 const TRANSCRIPT_SECRET = "SECRET_TRANSCRIPT_TEXT";
 /**
  * A session's own address and the change it opened stay on the machine, so the
@@ -56,11 +55,24 @@ function session(
   return normalizeSession(provider, observation);
 }
 
-function speakDecision(summary = SPOKEN_SUMMARY): AttentionDecision {
+function speakDecision(): AttentionDecision {
   return {
     disposition: ATTENTION_DISPOSITION.SPEAK_DURING_TURN,
     decidedAt: DECIDED_AT,
-    summary,
+  };
+}
+
+/** A development the ledger can weigh: the observed fields, not a sentence. */
+function spokenUpdate(recap = SPOKEN_RECAP): AttentionUpdate {
+  return {
+    providerId: claude.id,
+    providerSessionId: "review",
+    trigger: ATTENTION_TRIGGER.RECAP_CHANGED,
+    providerName: claude.displayName,
+    title: "Review the trust constraints",
+    status: SESSION_STATUS.WAITING,
+    recap,
+    observedAt: DECIDED_AT,
   };
 }
 
@@ -99,6 +111,16 @@ test("derives an update only when a session reports something new", () => {
     attentionUpdate(session(claude, "review", { recap: "Claude Code waiting." }), working)?.trigger,
     ATTENTION_TRIGGER.RECAP_CHANGED,
   );
+
+  const held = attentionUpdate(
+    session(claude, "held", {
+      status: SESSION_STATUS.WAITING,
+      holdingForDeveloper: true,
+    }),
+  );
+  assert.ok(held);
+  assert.equal(held?.holdingForDeveloper, true);
+  assert.doesNotMatch(attentionUpdateInput(held), /holdingForDeveloper/);
 });
 
 test("the update names the workspace a chat belongs to, and only by its name", () => {
@@ -121,38 +143,25 @@ test("rejects model output that does not satisfy the decision contract", () => {
   assert.equal(attentionDecisionFromModel("silent", DECIDED_AT), undefined);
   assert.equal(attentionDecisionFromModel([], DECIDED_AT), undefined);
   assert.equal(attentionDecisionFromModel({ disposition: "speak" }, DECIDED_AT), undefined);
-  assert.equal(
-    attentionDecisionFromModel(
-      { disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END, summary: null },
-      DECIDED_AT,
-    ),
-    undefined,
-    "a speaking decision must carry the sentence Luke would say",
-  );
-
   assert.deepEqual(
-    attentionDecisionFromModel(
-      { disposition: ATTENTION_DISPOSITION.SILENT, summary: null },
-      DECIDED_AT,
-    ),
+    attentionDecisionFromModel({ disposition: ATTENTION_DISPOSITION.SILENT }, DECIDED_AT),
     { disposition: ATTENTION_DISPOSITION.SILENT, decidedAt: DECIDED_AT },
   );
   assert.deepEqual(
     attentionDecisionFromModel(
-      { disposition: ATTENTION_DISPOSITION.SPEAK_DURING_TURN, summary: `  ${SPOKEN_SUMMARY}  ` },
+      { disposition: ATTENTION_DISPOSITION.SPEAK_DURING_TURN },
       DECIDED_AT,
     ),
     speakDecision(),
   );
-  assert.equal(
+  // A decision carries a judgment and nothing else, so words a model sends
+  // anyway are dropped rather than kept: the voice writes what is said.
+  assert.deepEqual(
     attentionDecisionFromModel(
-      {
-        disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
-        summary: "a".repeat(maximumAttentionSummaryLength + 40),
-      },
+      { disposition: ATTENTION_DISPOSITION.SPEAK_DURING_TURN, summary: SPOKEN_RECAP },
       DECIDED_AT,
-    )?.summary?.length,
-    maximumAttentionSummaryLength,
+    ),
+    speakDecision(),
   );
 });
 
@@ -164,39 +173,60 @@ test("deduplicates repeated speech per session without composing identity keys",
   const otherProvider = { providerId: codex.id, providerSessionId: "review" };
 
   assert.equal(
-    ledger.shouldSpeak(review, { disposition: ATTENTION_DISPOSITION.SILENT, decidedAt: now }),
+    ledger.shouldSpeak(
+      review,
+      { disposition: ATTENTION_DISPOSITION.SILENT, decidedAt: now },
+      spokenUpdate(),
+    ),
     false,
   );
 
-  assert.equal(ledger.shouldSpeak(review, speakDecision()), true);
-  ledger.remember(review, speakDecision());
-  assert.equal(ledger.shouldSpeak(review, speakDecision()), false);
+  assert.equal(ledger.shouldSpeak(review, speakDecision(), spokenUpdate()), true);
+  ledger.remember(review, speakDecision(), spokenUpdate());
+  assert.equal(ledger.shouldSpeak(review, speakDecision(), spokenUpdate()), false);
+  const firstPermission = {
+    ...spokenUpdate(),
+    context: { activity: "Approve reading package.json" },
+  };
+  const secondPermission = {
+    ...spokenUpdate(),
+    context: { activity: "Approve running pnpm test" },
+  };
+  ledger.remember(review, speakDecision(), firstPermission);
+  assert.equal(ledger.shouldSpeak(review, speakDecision(), firstPermission), false);
+  assert.equal(ledger.shouldSpeak(review, speakDecision(), secondPermission), true);
   assert.equal(
-    ledger.shouldSpeak(otherProvider, speakDecision()),
+    ledger.shouldSpeak(otherProvider, speakDecision(), spokenUpdate()),
     true,
     "the same session id under another provider is a different session",
   );
-  assert.equal(ledger.shouldSpeak(review, speakDecision(OTHER_SUMMARY)), true);
+  // The decision carries no words, so what tells fresh news from a repeat is
+  // the observed state the decision was reached on.
+  assert.equal(ledger.shouldSpeak(review, speakDecision(), spokenUpdate(OTHER_RECAP)), true);
   assert.equal(
-    ledger.shouldSpeak(review, {
-      disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
-      decidedAt: now,
-      summary: SPOKEN_SUMMARY,
-    }),
+    ledger.shouldSpeak(
+      review,
+      { disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END, decidedAt: now },
+      spokenUpdate(),
+    ),
     true,
   );
 
   now += repeatWindowMs;
-  assert.equal(ledger.shouldSpeak(review, speakDecision()), true);
+  assert.equal(ledger.shouldSpeak(review, speakDecision(), spokenUpdate()), true);
 
   now = DECIDED_AT;
-  ledger.remember(review, speakDecision());
-  assert.equal(ledger.shouldSpeak(review, speakDecision()), false);
+  ledger.remember(review, speakDecision(), spokenUpdate());
+  assert.equal(ledger.shouldSpeak(review, speakDecision(), spokenUpdate()), false);
   ledger.retain([otherProvider]);
-  assert.equal(ledger.shouldSpeak(review, speakDecision()), true, "forgotten sessions speak again");
+  assert.equal(
+    ledger.shouldSpeak(review, speakDecision(), spokenUpdate()),
+    true,
+    "forgotten sessions speak again",
+  );
 });
 
-test("reviews only changed sessions and suppresses a repeated decision", async () => {
+test("reviews only changed sessions and speaks again once the state moves on", async () => {
   const evaluator = evaluatorReturning(speakDecision());
   const reviewer = new SessionAttentionReviewer({
     evaluator,
@@ -215,14 +245,13 @@ test("reviews only changed sessions and suppresses a repeated decision", async (
     "an unchanged session is not re-evaluated",
   );
 
+  // A decision carries no words to compare, so what a repeat means is the
+  // observed state: working becoming waiting is a second development and is
+  // spoken again, where the same state twice would not be.
   const waiting = session(claude, "review", { status: SESSION_STATUS.WAITING });
-  const [repeatReview] = await reviewer.review([waiting]);
-  assert.equal(repeatReview?.outcome, ATTENTION_REVIEW_OUTCOME.DEDUPLICATED);
-  assert.deepEqual(
-    repeatReview?.decision,
-    speakDecision(),
-    "a repeat stays worth attention even though Luke will not say it again",
-  );
+  const [movedOn] = await reviewer.review([waiting]);
+  assert.equal(movedOn?.outcome, ATTENTION_REVIEW_OUTCOME.DECIDED);
+  assert.deepEqual(movedOn?.decision, speakDecision());
   assert.equal(evaluator.updates.length, 2);
 });
 
@@ -310,14 +339,19 @@ test("a wake from hours of sleep reviews nothing about the evening it slept thro
 });
 
 test("keeps a second real development visible when Luke stays quiet about it", async () => {
-  // Two turns finishing minutes apart produce the same sentence, so the ledger
-  // suppresses the second one. The session still finished twice.
-  const evaluator = evaluatorReturning({
-    disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
-    decidedAt: DECIDED_AT,
-    summary: "Codex finished its turn in billing-api.",
+  // Two turns finishing minutes apart leave the session in the same observed
+  // state, so the ledger suppresses the second one. It still finished twice.
+  // The turn between them is silent, as a session merely resuming work is:
+  // only what Luke actually said is remembered as said.
+  const reviewer = new SessionAttentionReviewer({
+    evaluator: {
+      evaluate: async (update) =>
+        update.status === SESSION_STATUS.COMPLETE
+          ? { disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END, decidedAt: DECIDED_AT }
+          : { disposition: ATTENTION_DISPOSITION.SILENT, decidedAt: DECIDED_AT },
+    },
+    now: () => DECIDED_AT,
   });
-  const reviewer = new SessionAttentionReviewer({ evaluator, now: () => DECIDED_AT });
 
   const complete = session(codex, "build", { status: SESSION_STATUS.COMPLETE });
   const working = session(codex, "build");
@@ -332,7 +366,7 @@ test("keeps a second real development visible when Luke stays quiet about it", a
   assert.notEqual(
     second?.decision.disposition,
     ATTENTION_DISPOSITION.SILENT,
-    "a second completed turn must not be hidden because its sentence matches a recent one",
+    "a second completed turn must not be hidden because its state matches a recent one",
   );
 });
 
@@ -660,7 +694,6 @@ test("reviews a session that round-trips back to the state it was reopened from"
   const finished: AttentionDecision = {
     disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
     decidedAt: DECIDED_AT,
-    summary: "Codex finished its turn in billing-api.",
   };
 
   const reviewer = new SessionAttentionReviewer({
@@ -822,7 +855,7 @@ test("the decision schema carries the disposition contract", () => {
     ATTENTION_DISPOSITION.SPEAK_DURING_TURN,
     ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
   ]);
-  assert.deepEqual(ATTENTION_DECISION_SCHEMA.required, ["disposition", "summary"]);
+  assert.deepEqual(ATTENTION_DECISION_SCHEMA.required, ["disposition"]);
   assert.equal(ATTENTION_DECISION_SCHEMA.additionalProperties, false);
 });
 test("a closed session never reaches the evaluator", async () => {

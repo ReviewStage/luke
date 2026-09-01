@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  ATTENTION_DISPOSITION,
   normalizeSession,
   SESSION_APPLICATION_ID,
   SESSION_APPLICATION_SCOPE,
@@ -9,7 +8,6 @@ import {
   type SessionControl,
 } from "@sidecar/session";
 import {
-  announcementConversationEntry,
   appendConversationEntry,
   appendConversationThreadEntry,
   CONVERSATION_ENTRY_KIND,
@@ -22,11 +20,7 @@ import {
   recentConversationEntries,
   sessionActConversationEntry,
 } from "./conversation-history.js";
-import {
-  ATTENTION_SPEECH_SOURCE,
-  type AttentionSpeech,
-  SESSION_NO_LONGER_OBSERVED_NOTE,
-} from "./realtime-protocol.js";
+import { SESSION_NO_LONGER_OBSERVED_NOTE } from "./realtime-protocol.js";
 import { SESSION_TOOL_KIND } from "./realtime-tools.js";
 
 const OBSERVED_AT = 1_800_000_000_000;
@@ -38,28 +32,19 @@ function rosterSession(providerSessionId: string, title: string) {
   );
 }
 
-function announcement(summary: string, historyText?: string): AttentionSpeech {
-  return {
-    providerId: "claude-code",
-    providerSessionId: "session-a",
-    disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
-    source: ATTENTION_SPEECH_SOURCE.EVALUATOR,
-    summary,
-    ...(historyText ? { historyText } : undefined),
-    decidedAt: OBSERVED_AT,
-  };
-}
-
 test("appending flattens, bounds, and retires the oldest lines", () => {
+  const identity = { providerId: "claude-code", providerSessionId: "session-a" };
   // Whitespace is flattened before the bound, so a pasted paragraph cannot
   // open a new section of the context item it will be rendered into.
   const appended = appendConversationEntry([], {
     kind: CONVERSATION_ENTRY_KIND.TYPED_ASK,
     words: `  hello\n\nthere ${"x".repeat(2 * maximumConversationEntryLength)}  `,
+    identity,
   });
   assert.equal(appended.length, 1);
   assert.match(appended[0]?.words ?? "", /^hello there x/);
   assert.ok((appended[0]?.words.length ?? 0) <= maximumConversationEntryLength);
+  assert.deepEqual(appended[0]?.identity, identity);
 
   // An entry with nothing left says nothing worth a window's space.
   assert.deepEqual(
@@ -93,30 +78,6 @@ test("the current-launch thread keeps every entry while model context stays rece
   const recent = recentConversationEntries(thread);
   assert.equal(recent.length, maximumConversationEntries);
   assert.equal(recent[0]?.words, "line 3");
-});
-
-test("an announcement's line carries its bounded words and validated identity", () => {
-  const entry = announcementConversationEntry(
-    announcement(
-      'provider: "Claude Code"; event: finished; work recap: "Checkout is ready."',
-      "Checkout is ready.",
-    ),
-  );
-
-  assert.ok(entry);
-  assert.equal(entry.kind, CONVERSATION_ENTRY_KIND.ANNOUNCEMENT);
-  assert.equal(
-    entry.words,
-    'provider: "Claude Code"; event: finished; work recap: "Checkout is ready."',
-  );
-  assert.equal(entry.displayWords, "Checkout is ready.");
-  assert.deepEqual(entry.identity, {
-    providerId: "claude-code",
-    providerSessionId: "session-a",
-  });
-
-  // An announcement whose words bound away to nothing leaves no line.
-  assert.equal(announcementConversationEntry(announcement("   ")), undefined);
 });
 
 test("an act's line records the ask in words, with the identity it named", () => {

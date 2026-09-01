@@ -1,46 +1,37 @@
-import { ATTENTION_SPEECH_SOURCE, type AttentionSpeech } from "@sidecar/realtime";
-import { ATTENTION_DISPOSITION, SESSION_NOTICE_STATUS, type SessionNotice } from "@sidecar/session";
+import {
+  ATTENTION_REVIEW_OUTCOME,
+  ATTENTION_TRIGGER,
+  type AttentionReview,
+} from "@sidecar/attention";
+import { SESSION_ANNOUNCEMENT_CHANGE, type SessionAnnouncement } from "@sidecar/realtime";
+import {
+  ATTENTION_DISPOSITION,
+  SESSION_NOTICE_STATUS,
+  SESSION_STATUS,
+  type SessionIdentity,
+  type SessionNotice,
+} from "@sidecar/session";
 
-const RECAP_EXCERPT_LENGTH = 240;
-const MINIMUM_SENTENCE_CUT = RECAP_EXCERPT_LENGTH / 2;
-
-function flattened(value: string): string {
-  return value.replace(/\s+/g, " ").trim();
-}
+const maximumRecapExcerptLength = 240;
+const MINIMUM_RECAP_SENTENCE_CUT = maximumRecapExcerptLength / 2;
 
 function recapExcerpt(value: string): string {
   const line = flattened(value);
-  if (line.length <= RECAP_EXCERPT_LENGTH) return line;
-  const window = line.slice(0, RECAP_EXCERPT_LENGTH + 1);
+  if (line.length <= maximumRecapExcerptLength) return line;
+  const window = line.slice(0, maximumRecapExcerptLength + 1);
   const sentenceEnd = Math.max(
     window.lastIndexOf(". "),
     window.lastIndexOf("? "),
     window.lastIndexOf("! "),
   );
-  if (sentenceEnd + 1 >= MINIMUM_SENTENCE_CUT) return window.slice(0, sentenceEnd + 1);
-  const cut = line.slice(0, RECAP_EXCERPT_LENGTH - 1);
+  if (sentenceEnd + 1 >= MINIMUM_RECAP_SENTENCE_CUT) return window.slice(0, sentenceEnd + 1);
+  const cut = line.slice(0, maximumRecapExcerptLength - 1);
   const wordEnd = cut.lastIndexOf(" ");
   return `${(wordEnd > 0 ? cut.slice(0, wordEnd) : cut).trimEnd()}…`;
 }
 
-function noticeEvent(notice: SessionNotice): string {
-  const { status } = notice;
-  switch (status) {
-    case SESSION_NOTICE_STATUS.WAITING:
-      return notice.holdingForDeveloper === true
-        ? "needs a decision to continue"
-        : "finished what it was working on";
-    case SESSION_NOTICE_STATUS.ERROR:
-      return "ran into an error";
-    case SESSION_NOTICE_STATUS.COMPLETE:
-      return "finished";
-    default:
-      throw new Error(`Unknown notice status: ${String(status)}`);
-  }
-}
-
-function quoted(value: string): string {
-  return `"${flattened(value).replaceAll('"', "'")}"`;
+function flattened(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
 }
 
 function containsConcreteQuestion(value: string | undefined): value is string {
@@ -48,42 +39,57 @@ function containsConcreteQuestion(value: string | undefined): value is string {
   return value.replace(/\bhttps?:\/\/[^\s?]+(?:\?[^\s#]+)?(?:#[^\s]+)?/gi, "").includes("?");
 }
 
-function decisionContext(notice: SessionNotice): readonly [string, string] | undefined {
-  if (notice.activity) return ["permission context", quoted(notice.activity)];
-  if (containsConcreteQuestion(notice.recap)) {
-    return ["decision", quoted(recapExcerpt(notice.recap))];
+interface AnnouncementSource extends SessionIdentity {
+  title: string;
+  activity?: string;
+  error?: string;
+  recap?: string;
+}
+
+function announcementDetail(
+  source: AnnouncementSource,
+  change: SessionAnnouncement["change"],
+): string | undefined {
+  if (change === SESSION_ANNOUNCEMENT_CHANGE.NEEDS_INPUT) {
+    if (source.activity) return flattened(source.activity);
+    if (containsConcreteQuestion(source.recap)) return recapExcerpt(source.recap);
+    return undefined;
   }
-  return undefined;
+  if (change === SESSION_ANNOUNCEMENT_CHANGE.FAILED) {
+    return source.error
+      ? flattened(source.error)
+      : source.recap
+        ? recapExcerpt(source.recap)
+        : source.activity
+          ? flattened(source.activity)
+          : undefined;
+  }
+  return source.recap
+    ? recapExcerpt(source.recap)
+    : source.activity
+      ? flattened(source.activity)
+      : undefined;
 }
 
-/** The useful part of a status edge when it is read later as a chat message. */
-function noticeHistoryText(notice: SessionNotice): string {
-  if (notice.error) return flattened(notice.error);
-  if (notice.recap) return recapExcerpt(notice.recap);
-  const event = noticeEvent(notice);
-  return `${event[0]?.toUpperCase() ?? ""}${event.slice(1)}.`;
-}
-
-/** Renders provider-observed status fields for the voice to summarize. */
-function noticeUpdateContext(notice: SessionNotice): string {
-  const decision = notice.holdingForDeveloper === true ? decisionContext(notice) : undefined;
-  const fields: readonly (readonly [string, string] | undefined)[] = [
-    ["provider", quoted(notice.providerName)],
-    ["work", quoted(notice.title)],
-    ["event", noticeEvent(notice)],
-    notice.error ? ["error", quoted(notice.error)] : undefined,
-    decision,
-    !decision && notice.recap && notice.status !== SESSION_NOTICE_STATUS.ERROR
-      ? ["work recap", quoted(recapExcerpt(notice.recap))]
-      : undefined,
-    notice.holdingForDeveloper === true && notice.canReceiveMessage
-      ? ["can take a message now", "yes"]
-      : undefined,
-  ];
-  return fields
-    .filter((field): field is readonly [string, string] => field !== undefined)
-    .map(([label, value]) => `${label}: ${value}`)
-    .join("; ");
+function announcement(
+  source: AnnouncementSource,
+  change: SessionAnnouncement["change"],
+  decidedAt: number,
+): SessionAnnouncement | undefined {
+  const detail = announcementDetail(source, change);
+  const base = {
+    providerId: source.providerId,
+    providerSessionId: source.providerSessionId,
+    work: source.title,
+    decidedAt,
+  };
+  if (
+    change === SESSION_ANNOUNCEMENT_CHANGE.NEEDS_INPUT ||
+    change === SESSION_ANNOUNCEMENT_CHANGE.UPDATED
+  ) {
+    return detail ? { ...base, change, detail } : undefined;
+  }
+  return { ...base, change, ...(detail ? { detail } : undefined) };
 }
 
 /**
@@ -92,22 +98,55 @@ function noticeUpdateContext(notice: SessionNotice): string {
  * their outcome is actually useful; the status edge alone does not earn an
  * interruption.
  */
-export function sessionNoticeSpeech(
+export function sessionNoticeAnnouncement(
   notice: SessionNotice,
   decidedAt: number,
-): AttentionSpeech | undefined {
+): SessionAnnouncement | undefined {
   if (notice.status === SESSION_NOTICE_STATUS.COMPLETE) return undefined;
   if (notice.status === SESSION_NOTICE_STATUS.WAITING && notice.holdingForDeveloper !== true) {
     return undefined;
   }
-  if (notice.status === SESSION_NOTICE_STATUS.WAITING && !decisionContext(notice)) return undefined;
-  return {
-    providerId: notice.providerId,
-    providerSessionId: notice.providerSessionId,
-    disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
-    source: ATTENTION_SPEECH_SOURCE.STATUS_EDGE,
-    summary: noticeUpdateContext(notice),
-    historyText: noticeHistoryText(notice),
-    decidedAt,
-  };
+  const change =
+    notice.status === SESSION_NOTICE_STATUS.WAITING
+      ? SESSION_ANNOUNCEMENT_CHANGE.NEEDS_INPUT
+      : SESSION_ANNOUNCEMENT_CHANGE.FAILED;
+  return announcement(notice, change, decidedAt);
+}
+
+function reviewAnnouncement(review: AttentionReview): SessionAnnouncement | undefined {
+  const { update } = review;
+  const change =
+    update.trigger === ATTENTION_TRIGGER.ERROR_REPORTED || update.status === SESSION_STATUS.ERROR
+      ? SESSION_ANNOUNCEMENT_CHANGE.FAILED
+      : update.status === SESSION_STATUS.WAITING && update.holdingForDeveloper === true
+        ? SESSION_ANNOUNCEMENT_CHANGE.NEEDS_INPUT
+        : update.status === SESSION_STATUS.COMPLETE
+          ? SESSION_ANNOUNCEMENT_CHANGE.FINISHED
+          : SESSION_ANNOUNCEMENT_CHANGE.UPDATED;
+  return announcement(
+    {
+      providerId: review.providerId,
+      providerSessionId: review.providerSessionId,
+      title: update.title,
+      ...(update.context?.activity ? { activity: update.context.activity } : undefined),
+      ...(update.context?.error ? { error: update.context.error } : undefined),
+      ...(update.recap ? { recap: update.recap } : undefined),
+    },
+    change,
+    review.decision.decidedAt,
+  );
+}
+
+/** Selects decided, non-silent reviews and turns them into voice-owned announcements. */
+export function sessionAnnouncementsFromReviews(
+  reviews: readonly AttentionReview[],
+): readonly SessionAnnouncement[] {
+  const announcements: SessionAnnouncement[] = [];
+  for (const review of reviews) {
+    if (review.outcome !== ATTENTION_REVIEW_OUTCOME.DECIDED) continue;
+    if (review.decision.disposition === ATTENTION_DISPOSITION.SILENT) continue;
+    const spoken = reviewAnnouncement(review);
+    if (spoken) announcements.push(spoken);
+  }
+  return announcements;
 }

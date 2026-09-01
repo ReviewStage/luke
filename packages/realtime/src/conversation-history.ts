@@ -17,11 +17,7 @@
  */
 
 import type { Session, SessionIdentity } from "@sidecar/session";
-import {
-  type AttentionSpeech,
-  announcementSummaryText,
-  SESSION_NO_LONGER_OBSERVED_NOTE,
-} from "./realtime-protocol.js";
+import { SESSION_NO_LONGER_OBSERVED_NOTE } from "./realtime-protocol.js";
 import { actNarration, type CarriedSessionAction } from "./realtime-tools.js";
 
 /** What one history line records, which also says who it speaks for. */
@@ -32,7 +28,7 @@ export const CONVERSATION_ENTRY_KIND = {
   SPOKEN_ASK: "spoken-ask",
   /** The words Luke spoke as a conversation reply. */
   REPLY: "reply",
-  /** The bounded announcement payload Luke put in front of the developer. */
+  /** The words Luke spoke as a proactive announcement. */
   ANNOUNCEMENT: "announcement",
   /** An act Luke carried at the developer's ask, recorded as the ask itself. */
   ACT: "act",
@@ -57,8 +53,6 @@ export interface ConversationEntry {
    * about, not every word of it.
    */
   words: string;
-  /** Cleaner visible copy when the model context in `words` is structured. */
-  displayWords?: string;
   /**
    * The roster-validated session the line was about, when it was about one.
    * Only ever an identity the roster reported at the moment of the entry —
@@ -82,8 +76,6 @@ export function appendConversationThreadEntry(
   const words = boundedEntryWords(entry.words);
   if (!words) return entries;
   const appended: ConversationEntry = { kind: entry.kind, words };
-  const displayWords = entry.displayWords ? boundedEntryWords(entry.displayWords) : undefined;
-  if (displayWords) appended.displayWords = displayWords;
   if (entry.identity) appended.identity = entry.identity;
   return [...entries, appended];
 }
@@ -142,24 +134,6 @@ export function insertSpokenAskEntry(
   after: ConversationEntry | undefined,
 ): readonly ConversationEntry[] {
   return recentConversationEntries(insertSpokenAskThreadEntry(entries, words, after));
-}
-
-/**
- * The history line one announcement leaves behind — the same bounded payload
- * the announcement itself traveled as, with the identity the attention layer
- * validated. An announcement whose words bound away to nothing leaves none.
- */
-export function announcementConversationEntry(
-  speech: AttentionSpeech,
-): ConversationEntry | undefined {
-  const words = announcementSummaryText(speech);
-  if (!words) return undefined;
-  return {
-    kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
-    words,
-    ...(speech.historyText ? { displayWords: speech.historyText } : undefined),
-    identity: { providerId: speech.providerId, providerSessionId: speech.providerSessionId },
-  };
 }
 
 /**

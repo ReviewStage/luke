@@ -30,10 +30,10 @@ import {
   type TrackerActionResult,
 } from "@sidecar/issues";
 import type {
-  AttentionSpeech,
   IssueToolAction,
   RealtimeConnection,
   RealtimeDiagnostics,
+  SessionAnnouncement,
 } from "@sidecar/realtime";
 import {
   isProviderId,
@@ -848,11 +848,11 @@ export const BRIDGE = {
     args: noArgs,
     result: result<SupersetSignInSnapshot>(),
   }),
-  onAttentionSpeech: entry({
+  onSessionAnnouncements: entry({
     kind: "subscribe",
-    channel: "app:attention-speech",
+    channel: "app:session-announcements",
     args: noArgs,
-    result: result<readonly AttentionSpeech[]>(),
+    result: result<readonly SessionAnnouncement[]>(),
   }),
 } as const;
 

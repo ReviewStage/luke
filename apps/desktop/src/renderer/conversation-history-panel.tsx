@@ -38,7 +38,7 @@ const COPY_CONFIRMATION_MS = 1500;
 
 function HistoryEntryRow({ entry }: { entry: ConversationEntry }): React.JSX.Element {
   const presentation = historyEntryPresentation(entry.kind);
-  const words = entry.displayWords ?? entry.words;
+  const words = entry.words;
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -76,7 +76,7 @@ function keyedHistoryEntries(entries: readonly ConversationEntry[]) {
   const occurrences = new Map<string, number>();
   return entries.map((entry) => {
     const identity = entry.identity;
-    const base = `${entry.kind}:${entry.words}:${entry.displayWords ?? ""}:${identity?.providerId ?? ""}:${identity?.providerSessionId ?? ""}`;
+    const base = `${entry.kind}:${entry.words}:${identity?.providerId ?? ""}:${identity?.providerSessionId ?? ""}`;
     const occurrence = (occurrences.get(base) ?? 0) + 1;
     occurrences.set(base, occurrence);
     return { entry, key: `${base}:${occurrence}` };

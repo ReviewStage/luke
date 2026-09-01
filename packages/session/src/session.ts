@@ -147,17 +147,16 @@ export type AttentionDisposition =
   (typeof ATTENTION_DISPOSITION)[keyof typeof ATTENTION_DISPOSITION];
 
 /**
- * A bounded, display-safe result from Luke's attention evaluation. The summary
- * must be a redacted synopsis, never a provider transcript.
+ * The result of Luke's attention evaluation: a judgment about one session and
+ * nothing else. It carries no words, deliberately — an evaluator decides
+ * whether a development is worth an interruption, and the voice that will
+ * actually be heard words what gets said, from the same observed fields the
+ * evaluator judged.
  */
 export interface AttentionDecision {
   disposition: AttentionDisposition;
   decidedAt: number;
-  summary?: string;
 }
-
-/** A spoken sentence stays far shorter than a provider recap. */
-export const maximumAttentionSummaryLength = 180;
 
 /** Validates an untrusted attention decision without importing evaluator behavior. */
 export function attentionDecisionFromWire(
@@ -169,12 +168,9 @@ export function attentionDecisionFromWire(
     (candidate) => candidate === value.disposition,
   );
   if (!disposition) return undefined;
-  const summary = text(value.summary)?.slice(0, maximumAttentionSummaryLength);
-  if (disposition !== ATTENTION_DISPOSITION.SILENT && !summary) return undefined;
   return normalizeAttention({
     disposition,
     decidedAt,
-    ...(summary ? { summary } : undefined),
   });
 }
 
@@ -854,12 +850,10 @@ export function normalizeAttention(decision: AttentionDecision): AttentionDecisi
   if (!Object.values(ATTENTION_DISPOSITION).includes(decision.disposition)) {
     throw new Error(`Unknown attention disposition: ${decision.disposition}`);
   }
-  const summary = boundedText(decision.summary, maximumSessionRecapLength);
   const normalized: AttentionDecision = {
     disposition: decision.disposition,
     decidedAt: timestamp(decision.decidedAt, "attention decidedAt"),
   };
-  if (summary) normalized.summary = summary;
   return normalized;
 }
 

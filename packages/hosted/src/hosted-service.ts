@@ -51,6 +51,10 @@ export const HOSTED_SERVICE_PATH = {
   OBSERVE: "/api/observe",
 } as const;
 
+/** Selects the judgment-only attention response understood by current desktops. */
+export const HOSTED_ATTENTION_CONTRACT_HEADER = "x-luke-attention-contract";
+export const HOSTED_ATTENTION_CONTRACT_VERSION = "2";
+
 /**
  * The cloud providers whose API keys the vault accepts. Only providers that
  * Luke's service can observe on the user's behalf belong here; local-only

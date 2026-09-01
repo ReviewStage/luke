@@ -8,7 +8,6 @@ import {
 } from "@sidecar/session";
 import { isRecord, isWireString, text, type UnparsedWireValue } from "@sidecar/wire";
 import { ATTENTION_TRIGGER, type AttentionContext, type AttentionTrigger } from "./attention.js";
-import { LUKE_PERSONA } from "./persona.js";
 
 const NONE_LABEL = "none";
 
@@ -20,10 +19,8 @@ const ATTENTION_INSTRUCTION_LINES: readonly string[] = [
   "- Treat waiting as actionable only when the recap or context shows a concrete question, permission, or approval.",
   "- A session waiting on automation it set in motion — CI, a merge queue, a watcher it left running — is not waiting on the developer: nothing they reply can move it, so stay silent and let the automation's outcome be the development.",
   "",
-  "How to word it:",
-  "- If speaking, write the sentence Luke says, in Luke's own voice as it is described below. State what the CTO needs to know and stop; add no advice and no next step.",
-  "",
-  LUKE_PERSONA,
+  "What you return:",
+  "- A judgment, and no words at all. You do not write what Luke says; his voice does that, from the same fields you are reading. Return only the disposition.",
 ];
 
 /**

@@ -297,7 +297,6 @@ test("refresh atomically replaces one adapter's sessions and preserves attention
     {
       disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
       decidedAt: 40,
-      summary: "A review decision is ready.",
     },
   );
 
@@ -321,7 +320,6 @@ test("refresh atomically replaces one adapter's sessions and preserves attention
       decision: {
         disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
         decidedAt: 40,
-        summary: "A review decision is ready.",
       },
     },
   ]);
@@ -420,7 +418,7 @@ test("registry snapshots are isolated and listeners only receive effective updat
     const mutable = snapshot.sessions[0];
     if (mutable) mutable.title = "Changed outside the registry";
     const decision = snapshot.attention[0]?.decision;
-    if (decision) decision.summary = "Changed outside the registry";
+    if (decision) decision.decidedAt = 99;
   });
 
   registry.upsert(codex, observation("active", 10));
@@ -431,7 +429,7 @@ test("registry snapshots are isolated and listeners only receive effective updat
   );
 
   assert.equal(registry.list()[0]?.title, "Implement the shared session core");
-  assert.equal(registry.snapshot().attention[0]?.decision.summary, undefined);
+  assert.equal(registry.snapshot().attention[0]?.decision.decidedAt, 11);
   unsubscribe();
   registry.remove({ providerId: "codex", providerSessionId: "active" });
 
@@ -447,7 +445,6 @@ test("attention changes only for a standing session and one effective decision",
   const decision = {
     disposition: ATTENTION_DISPOSITION.SPEAK_DURING_TURN,
     decidedAt: 11,
-    summary: "A review decision is ready.",
   };
 
   assert.equal(registry.setAttention(identity, decision), undefined);

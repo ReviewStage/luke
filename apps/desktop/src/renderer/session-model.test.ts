@@ -279,7 +279,7 @@ test("a speaking disposition needs a person even while the session works", () =>
   assert.equal(session?.urgency, SESSION_URGENCY.ATTENTION);
 });
 
-test("attention joins on the whole provider identity and supplies the row detail", () => {
+test("attention joins on the whole provider identity and never words the row", () => {
   const codex = liveSession(CODEX_PROVIDER, "shared-id", SESSION_STATUS.WORKING);
   const claude = liveSession(CLAUDE_PROVIDER, "shared-id", SESSION_STATUS.WORKING);
   const sessions = displaySessions(
@@ -289,27 +289,21 @@ test("attention joins on the whole provider identity and supplies the row detail
       {
         providerId: claude.providerId,
         providerSessionId: claude.providerSessionId,
-        decision: {
-          disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
-          decidedAt: 1_000,
-          summary: "Claude needs a review decision.",
-        },
+        decision: { disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END, decidedAt: 1_000 },
       },
       {
         providerId: CODEX_PROVIDER.id,
         providerSessionId: "missing",
-        decision: {
-          disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
-          decidedAt: 1_000,
-          summary: "This orphan must not attach to a row.",
-        },
+        decision: { disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END, decidedAt: 1_000 },
       },
     ],
   );
 
   const byProvider = new Map(sessions.map((session) => [session.providerId, session]));
   assert.equal(byProvider.get(CLAUDE_PROVIDER.id)?.urgency, SESSION_URGENCY.ATTENTION);
-  assert.equal(byProvider.get(CLAUDE_PROVIDER.id)?.detail, "Claude needs a review decision.");
+  // A decision carries no words, so the row says its own state rather than
+  // anything the evaluator wrote; the orphan decision still attaches to no row.
+  assert.equal(byProvider.get(CLAUDE_PROVIDER.id)?.detail, "Needs you");
   assert.equal(byProvider.get(CODEX_PROVIDER.id)?.urgency, SESSION_URGENCY.WORKING);
   assert.equal(byProvider.get(CODEX_PROVIDER.id)?.detail, "Working");
 });
