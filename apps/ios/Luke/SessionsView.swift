@@ -767,8 +767,9 @@ private struct SessionRow: View {
 
 /// Wraps the app's real ProviderMark (SVG brand art) inside the fixed 30pt slot
 /// the desktop's row-mark uses. Falls back to a colored initial for provider IDs
-/// not covered by VaultProviderID.
-private struct RosterProviderMark: View {
+/// not covered by VaultProviderID. Shared with the session detail screen,
+/// whose title bar wears the same mark the row does.
+struct RosterProviderMark: View {
     let providerId: String
 
     var body: some View {

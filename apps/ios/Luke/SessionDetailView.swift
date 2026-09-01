@@ -52,17 +52,29 @@ struct SessionDetailView: View {
         .background(Color.ground.ignoresSafeArea())
         .navigationTitle(session.title)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            // The bar wears the same mark the session's row does, beside the
+            // title — the way Messages puts who the chat is with in the bar.
+            ToolbarItem(placement: .principal) {
+                HStack(spacing: 8) {
+                    RosterProviderMark(providerId: session.providerId)
+                        .scaleEffect(24.0 / 30.0)
+                        .frame(width: 24, height: 24)
+                    Text(session.title)
+                        .font(.headline)
+                        .foregroundStyle(Color.ink)
+                        .lineLimit(1)
+                }
+            }
+        }
         .toolbarBackground(Color.ground, for: .navigationBar)
         .safeAreaInset(edge: .bottom, spacing: 0) { inputBar }
     }
 
     /// The chat's own centered caption slot, where iMessage puts a timestamp:
-    /// the provider's name and the place the session runs.
+    /// the place the session runs. The provider now stands in the bar itself.
     private var metaHeader: some View {
-        VStack(spacing: 3) {
-            Text(VaultProviderID.displayLabel(forWireId: session.providerId))
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(Color.inkSecondary)
+        Group {
             if let workspace = session.workspace {
                 Text(session.branch.map { "\(workspace) · \($0)" } ?? workspace)
                     .font(.system(size: 11, design: .monospaced))
