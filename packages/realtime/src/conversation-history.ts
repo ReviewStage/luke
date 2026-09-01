@@ -63,10 +63,8 @@ export interface ConversationEntry {
    */
   identity?: SessionIdentity;
   /**
-   * When the line entered the thread, stamped at append rather than at
-   * construction so every way in carries one. A spoken ask is stamped when
-   * its transcription lands, not when the turn was spoken; the panel shows
-   * minutes, so the difference cannot be seen.
+   * When the line happened in the conversation. Appends stamp themselves;
+   * delayed spoken transcripts carry the time their turn began.
    */
   recordedAt?: number;
 }
@@ -123,6 +121,7 @@ export function insertSpokenAskThreadEntry(
   entries: readonly ConversationEntry[],
   words: string,
   after: ConversationEntry | undefined,
+  recordedAt: number,
 ): readonly ConversationEntry[] {
   const bounded = boundedEntryWords(words);
   if (!bounded) return entries;
@@ -133,7 +132,7 @@ export function insertSpokenAskThreadEntry(
   placed.splice(at, 0, {
     kind: CONVERSATION_ENTRY_KIND.SPOKEN_ASK,
     words: bounded,
-    recordedAt: Date.now(),
+    recordedAt,
   });
   return placed;
 }
@@ -144,7 +143,7 @@ export function insertSpokenAskEntry(
   words: string,
   after: ConversationEntry | undefined,
 ): readonly ConversationEntry[] {
-  return recentConversationEntries(insertSpokenAskThreadEntry(entries, words, after));
+  return recentConversationEntries(insertSpokenAskThreadEntry(entries, words, after, Date.now()));
 }
 
 /**

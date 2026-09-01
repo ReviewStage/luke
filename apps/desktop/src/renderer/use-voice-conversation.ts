@@ -593,15 +593,18 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   const [conversationHistory, setConversationHistory] = useState<readonly ConversationEntry[]>([]);
   /** Where each server-identified spoken turn belongs when its transcript returns. */
   const spokenTurnMarksRef = useRef(
-    new Map<string, { after: ConversationEntry | undefined; generation: number }>(),
+    new Map<
+      string,
+      { after: ConversationEntry | undefined; generation: number; recordedAt: number }
+    >(),
   );
   /** Local turn-close marks waiting for the server item ids that name them. */
   const pendingSpokenTurnMarksRef = useRef<
-    { after: ConversationEntry | undefined; generation: number }[]
+    { after: ConversationEntry | undefined; generation: number; recordedAt: number }[]
   >([]);
   /** The turn opened by the current talk-key press, before it closes. */
   const activeSpokenTurnMarkRef = useRef<
-    { after: ConversationEntry | undefined; generation: number } | undefined
+    { after: ConversationEntry | undefined; generation: number; recordedAt: number } | undefined
   >(undefined);
   /** The generation of the developer-opened turn whose reply is still in flight. */
   const activeReplyGenerationRef = useRef<number | undefined>(undefined);
@@ -675,6 +678,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       conversationRef.current,
       transcript,
       mark.after,
+      mark.recordedAt,
     );
     setConversationHistory(conversationRef.current);
     voiceSession.current?.updateConversation(recentConversationEntries(conversationRef.current));
@@ -1080,6 +1084,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     activeSpokenTurnMarkRef.current = {
       after: conversationRef.current.at(-1),
       generation: conversationGenerationRef.current,
+      recordedAt: Date.now(),
     };
     // Only after the interrupted reply's handover does this new turn own the
     // active reply generation.
