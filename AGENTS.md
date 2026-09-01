@@ -237,8 +237,9 @@ Trust constraints:
   never from a model's words alone — and a chat archived in its provider
   keeps a working deep link, so its chip still opens it, at the last address an
   observation pass itself reported this run — remembered in the main
-  process, never carried over the bridge — while a session still observed
-  offers exactly what it currently reports, and a chat that never reported
+  process, never carried over the bridge — while a session still reporting
+  an address opens at its current one, the remembered address answering
+  only where the roster has nothing better, and a chat that never reported
   an address draws no chip at all. A workspace Luke just
   created opens itself the same way: the creation ask, already a
   developer-opened turn, is also the ask to be taken there, so the session id

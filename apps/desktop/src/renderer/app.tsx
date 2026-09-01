@@ -2392,9 +2392,9 @@ export function App(): React.JSX.Element {
    * line's chips can outlive their roster rows: the words stay on the panel
    * after a chat is archived away, and the main process remembers the
    * departed session's last reported address on the same run lifetime. Grown
-   * from the same broadcast roster the rows draw, and consulted only once
-   * the roster no longer answers, so a session still observed offers exactly
-   * what it currently reports.
+   * from the same broadcast roster the rows draw, which every address the
+   * main process remembers also crossed, so a chip offered from here is one
+   * the press can honor.
    */
   const addressedSessionsRef = useRef<Map<string, Set<string>>>(new Map());
   useEffect(() => {
@@ -2409,6 +2409,11 @@ export function App(): React.JSX.Element {
     }
   }, [sessions]);
 
+  // Openable at the chip is exactly what the main process will open: the
+  // session's current address, or the last one this launch saw reported —
+  // the same order the open itself resolves in, so the offer and the act
+  // cannot disagree about a session the roster filtered or that withdrew
+  // its address while the memory still holds one.
   const conversationSessionOpenable = useCallback(
     (identity: SessionIdentity): boolean => {
       const session = sessions.find(
@@ -2416,10 +2421,10 @@ export function App(): React.JSX.Element {
           candidate.providerId === identity.providerId &&
           candidate.providerSessionId === identity.providerSessionId,
       );
-      if (session) return session.detail.link !== undefined;
       return (
-        addressedSessionsRef.current.get(identity.providerId)?.has(identity.providerSessionId) ??
-        false
+        session?.detail.link !== undefined ||
+        (addressedSessionsRef.current.get(identity.providerId)?.has(identity.providerSessionId) ??
+          false)
       );
     },
     [sessions],

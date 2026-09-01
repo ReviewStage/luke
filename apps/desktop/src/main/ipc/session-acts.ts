@@ -330,16 +330,17 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
     // go are different answers, and only the second says what to try instead.
     absentAddressReason: string,
     failureReason: string,
-    // The one open that outlives the roster row: a History chip's press. It
-    // answers only once the session has departed — while a session still
-    // stands, its current word is the whole offer, so an address its
-    // provider withdrew cannot be overruled by an older one.
-    departedAddress?: (identity: SessionIdentity) => string | undefined,
+    // The one open that outlives the roster row: a History chip's press. A
+    // session still reporting an address opens at its current one; the
+    // remembered address answers only where the roster has nothing better,
+    // so the offer the renderer computes from what it ever saw reported can
+    // never name a chat this refuses on this-run staleness alone.
+    rememberedAddress?: (identity: SessionIdentity) => string | undefined,
   ) =>
     registerAction<[SessionIdentity], SessionOpenResult>(definition, {
       async act(identity) {
         const observed = sessionRegistry.get(identity) !== undefined;
-        const url = observed ? address(identity) : departedAddress?.(identity);
+        const url = (observed ? address(identity) : undefined) ?? rememberedAddress?.(identity);
         if (!url)
           return {
             status: ACT_RESULT_STATUS.UNSUPPORTED,

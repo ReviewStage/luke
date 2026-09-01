@@ -14,10 +14,12 @@ import type { Session, SessionIdentity } from "./session.js";
  * main-process memory and dies with the run, the same lifetime as the
  * history whose presses it answers.
  *
- * A session that later reports no address keeps its last one here: while the
- * session still stands on the roster, its current word is the whole offer
- * and this memory is never consulted, so an address a provider withdrew can
- * only answer again once the session itself has departed.
+ * A session that later reports no address keeps its last one here, and the
+ * open consults this memory only where the roster has nothing better: a
+ * session still reporting an address opens at its current one, and the
+ * remembered address answers for a chat departed, filtered from the drawn
+ * roster, or standing with its address withdrawn — every case where the
+ * words on the History line still name somewhere this run actually saw.
  */
 export class ReportedSessionLinks {
   /** Last links keyed by the original identifiers, never a composite string. */

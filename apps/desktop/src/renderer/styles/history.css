@@ -231,6 +231,9 @@
 
 .history-entry[data-speaker="luke"] {
   align-self: flex-start;
+  /* Shrink-wrapped, not stretched: the bubble is the copy control's anchor,
+     and a chip row wrapping wider than the words must not widen it. */
+  align-items: flex-start;
 }
 
 .history-entry[data-speaker="luke"] p {
