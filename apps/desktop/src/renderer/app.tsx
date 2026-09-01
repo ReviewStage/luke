@@ -2508,7 +2508,7 @@ export function App(): React.JSX.Element {
       // The shared thread's seed guards itself: the conversation hook already
       // holds the live pushes, and a thread this window has touched is always
       // the newer word than the snapshot.
-      seedConversationHistory(value.conversationHistory);
+      seedConversationHistory(value.conversationHistory, value.conversationHistoryGeneration);
       acceptSessionReplayBootstrap(value.sessionReplay);
       acceptSettingsBootstrap(value.settings);
       // The stored filter chips and search words come back with the panel:

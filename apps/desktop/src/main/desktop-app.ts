@@ -457,6 +457,13 @@ let meetingQuietActive = false;
  * one exchange at a time.
  */
 let conversationHistory: readonly ConversationEntry[] = [];
+/**
+ * How many Clears the thread has survived, which is what keeps the relay's
+ * races honest: a report may only extend the generation it was built
+ * against, so a thread still in flight when a Clear lands is dropped rather
+ * than standing the retired lines back up.
+ */
+let conversationHistoryGeneration = 0;
 // Notices come from status edges the registry observed, never from anything a
 // model decided, so they work — and matter most — with no evaluator configured.
 const sessionNoticeTracker = new SessionNoticeTracker();
@@ -1407,6 +1414,7 @@ function registerIpc(): void {
         calendars: accountCapabilitiesActive() ? observedCalendars : [],
         meetingQuiet: accountCapabilitiesActive() && meetingQuietActive,
         conversationHistory,
+        conversationHistoryGeneration,
         sessionReplay: await sessionReplayBootstrap(),
         settings: await settingsStore.snapshot(),
       };
@@ -1419,15 +1427,27 @@ function registerIpc(): void {
   registerBridge(
     BRIDGE,
     {
-      reportConversationHistory(context, entries) {
+      reportConversationHistory(context, entries, generation) {
+        // A report built against a thread a Clear has since retired would
+        // stand the retired lines back up; it is dropped, and the cleared
+        // broadcast already on its way to the reporter says why.
+        if (generation !== conversationHistoryGeneration) return;
         conversationHistory = entries;
-        const payload: ConversationHistoryPayload = { entries, cleared: false };
+        const payload: ConversationHistoryPayload = { entries, cleared: false, generation };
         panels.broadcast(channels.onConversationHistoryChanged, payload, context.sender);
       },
-      reportConversationHistoryCleared(context) {
+      reportConversationHistoryCleared() {
+        conversationHistoryGeneration += 1;
         conversationHistory = [];
-        const payload: ConversationHistoryPayload = { entries: [], cleared: true };
-        panels.broadcast(channels.onConversationHistoryChanged, payload, context.sender);
+        const payload: ConversationHistoryPayload = {
+          entries: [],
+          cleared: true,
+          generation: conversationHistoryGeneration,
+        };
+        // Unlike an ordinary report, the Clear echoes to its own sender too:
+        // the new generation is the sender's licence to report again, and the
+        // echo is the one ordered channel that can carry it.
+        panels.broadcast(channels.onConversationHistoryChanged, payload);
       },
     },
     { ipcMain, trustedSender },

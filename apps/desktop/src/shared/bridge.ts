@@ -639,17 +639,26 @@ export const BRIDGE = {
   }),
   /**
    * One window's copy of the conversation history, reported whole after each
-   * line it appends. The main process holds the launch's thread and mirrors
-   * the report to every other panel window, so the History tab reads the same
-   * on every display; a window's own report is not echoed back to it. The
-   * relay never leaves the machine, and every line in it is one the reporting
-   * window already held on the terms the history's own module states.
+   * line it appends, beside the Clear generation it was built against — the
+   * main process drops a report from any other generation, so a thread still
+   * in flight when a Clear lands cannot stand the retired lines back up. The
+   * main process holds the launch's thread and mirrors the report to every
+   * other panel window, so the History tab reads the same on every display; a
+   * window's own report is not echoed back to it. The relay never leaves the
+   * machine, and every line in it is one the reporting window already held on
+   * the terms the history's own module states.
    */
   reportConversationHistory: entry({
     kind: "send",
     channel: "app:report-conversation-history",
-    args: args<[readonly ConversationEntry[]]>(
-      (v) => v.length === 1 && Array.isArray(v[0]) && v[0].every(isConversationEntry),
+    args: args<[readonly ConversationEntry[], number]>(
+      (v) =>
+        v.length === 2 &&
+        Array.isArray(v[0]) &&
+        v[0].every(isConversationEntry) &&
+        isWireNumber(v[1]) &&
+        Number.isInteger(v[1]) &&
+        v[1] >= 0,
     ),
   }),
   /** The History Clear press, relayed so every display lets the same thread go. */

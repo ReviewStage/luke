@@ -532,13 +532,13 @@ export interface VoiceConversation {
    */
   liveConversationEntries: readonly ConversationEntry[];
   /**
-   * Bootstrap's snapshot of the shared thread, for a panel that opens late.
-   * Applied only while this window's own thread is untouched: the snapshot is
-   * older than anything that raced past it — another window's report arrives
-   * on the live channel, and this window's own lines never come back at all —
-   * so a touched thread is always the newer word.
+   * Bootstrap's snapshot of the shared thread and its Clear generation, for a
+   * panel that opens late. The snapshot is older than anything that raced
+   * past it, so a push that already landed retires it whole; lines this
+   * window recorded before the seed slide on top of it instead of being
+   * replaced; and the generation is the window's licence to start reporting.
    */
-  seedConversationHistory: (entries: readonly ConversationEntry[]) => void;
+  seedConversationHistory: (entries: readonly ConversationEntry[], generation: number) => void;
   voiceTurn: WaveformVoice | undefined;
   /**
    * The words being spoken, one entry per response: a turn that speaks twice
@@ -659,6 +659,14 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   const conversationRef = useRef<readonly ConversationEntry[]>([]);
   /** Rises when Clear retires every event that began before that press. */
   const conversationGenerationRef = useRef(0);
+  /**
+   * The main process's Clear generation as this window last heard it — from
+   * the bootstrap seed, or from any relay push — and this window's licence to
+   * report: undefined means the window does not yet know which thread it
+   * would be extending, so it reports nothing, and the seed folds whatever it
+   * held into the launch thread instead.
+   */
+  const sharedConversationGenerationRef = useRef<number | undefined>(undefined);
   // State is the ref's identical drawn copy, so History retains the whole
   // current launch even though a call receives only the recent context slice.
   const [conversationHistory, setConversationHistory] = useState<readonly ConversationEntry[]>([]);
@@ -714,6 +722,20 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   }, []);
 
   /**
+   * The whole thread to the main process, which mirrors it to every other
+   * display's panel: an exchange lands on one window, and the others' History
+   * tabs must read the same. Reported beside the generation it extends, and
+   * not at all while the generation is unknown — a window that has not been
+   * seeded holds a fragment, and a fragment reported whole would replace the
+   * launch thread everywhere.
+   */
+  const reportConversationThread = useCallback(() => {
+    const generation = sharedConversationGenerationRef.current;
+    if (generation === undefined) return;
+    window.sidecar.reportConversationHistory(conversationRef.current, generation);
+  }, []);
+
+  /**
    * Appends one bounded line to this launch's history and tells the call now
    * open about only the recent context slice. A session leaving the roster
    * costs a line its identity at model render, never its visible words. An
@@ -732,15 +754,12 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       }
       conversationRef.current = appendConversationThreadEntry(conversationRef.current, entry);
       setConversationHistory(conversationRef.current);
-      // The whole thread goes to the main process, which mirrors it to every
-      // other display's panel: an exchange lands on one window, and the
-      // others' History tabs must read the same.
-      window.sidecar.reportConversationHistory(conversationRef.current);
+      reportConversationThread();
       voiceSession.current?.updateConversation(recentConversationEntries(conversationRef.current), {
         announced: entry.kind === CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
       });
     },
-    [],
+    [reportConversationThread],
   );
 
   const clearConversationHistory = useCallback(() => {
@@ -752,7 +771,13 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     // The previews go with the marks: a transcription still arriving belongs
     // to a turn the press just retired, and could never be recorded anyway.
     setSpokenAskPreviews(NO_SPOKEN_ASK_PREVIEWS);
-    window.sidecar.reportConversationHistoryCleared();
+    // The press is relayed only once this window knows the thread it would
+    // clear; before the seed, the developer has only ever seen this window's
+    // own fragment, and the seed delivers the held press instead. The echo
+    // carries back the new generation, which is what re-licenses reporting.
+    if (sharedConversationGenerationRef.current !== undefined) {
+      window.sidecar.reportConversationHistoryCleared();
+    }
     talkLatched.current = false;
     talkPressedAt.current = undefined;
     voiceSession.current?.clearConversation();
@@ -765,11 +790,13 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
    * An exchange lands on one window — voice on the primary display's panel, a
    * typed ask on the panel it was typed into — so every other display hears
    * about it here, through the main process, and draws the same History. A
-   * cleared report is a Clear pressed elsewhere: it retires this window's
-   * in-flight turns the way its own press would, but leaves the talk key's
-   * latch alone, because a key held here is not another display's to let go.
+   * cleared report — pressed elsewhere, or this window's own press echoed
+   * back with the new generation — retires this window's in-flight turns the
+   * way the local press would, but leaves the talk key's latch alone,
+   * because a key held here is not the relay's to let go.
    */
   const applySharedConversationHistory = useCallback((payload: ConversationHistoryPayload) => {
+    sharedConversationGenerationRef.current = payload.generation;
     if (payload.cleared) {
       conversationGenerationRef.current += 1;
       conversationRef.current = [];
@@ -804,13 +831,33 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   );
 
   const seedConversationHistory = useCallback(
-    (entries: readonly ConversationEntry[]) => {
-      // A snapshot the main process built before this window's first report —
-      // or before a Clear pressed here — must not stand old lines back up.
-      if (conversationRef.current.length > 0 || conversationGenerationRef.current > 0) return;
-      applySharedConversationHistory({ entries, cleared: false });
+    (entries: readonly ConversationEntry[], generation: number) => {
+      // A push that already landed carried the whole thread and a newer
+      // generation; the older snapshot has nothing left to say.
+      if (sharedConversationGenerationRef.current !== undefined) return;
+      sharedConversationGenerationRef.current = generation;
+      // A Clear pressed before the seed arrived went unreported — the window
+      // held no licence yet — and is still a Clear: delivered now, so the
+      // snapshot cannot stand back up what the press retired. The echo
+      // brings back the new generation like any other Clear's.
+      if (conversationGenerationRef.current > 0) {
+        window.sidecar.reportConversationHistoryCleared();
+        return;
+      }
+      if (conversationRef.current.length === 0) {
+        applySharedConversationHistory({ entries, cleared: false, generation });
+        return;
+      }
+      // Lines this window recorded before its seed arrived are strictly newer
+      // than the snapshot and were never reported, so the launch thread slides
+      // in under them — replacing either half would lose the other — and the
+      // whole is reported at last, under the licence just learned.
+      conversationRef.current = [...entries, ...conversationRef.current];
+      setConversationHistory(conversationRef.current);
+      reportConversationThread();
+      voiceSession.current?.updateConversation(recentConversationEntries(conversationRef.current));
     },
-    [applySharedConversationHistory],
+    [applySharedConversationHistory, reportConversationThread],
   );
 
   /**
@@ -847,10 +894,10 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       if (placed === conversationRef.current) return;
       conversationRef.current = placed;
       setConversationHistory(conversationRef.current);
-      window.sidecar.reportConversationHistory(conversationRef.current);
+      reportConversationThread();
       voiceSession.current?.updateConversation(recentConversationEntries(conversationRef.current));
     },
-    [dropSpokenAskPreview],
+    [dropSpokenAskPreview, reportConversationThread],
   );
 
   const ensureVoiceSession = useCallback((): RealtimeVoiceSession => {

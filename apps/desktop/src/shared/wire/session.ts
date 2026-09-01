@@ -109,14 +109,18 @@ export interface SessionReplayBootstrap {
  * lands on one window — the primary display hosts the talk key and the
  * announcements, a typed ask lands on the panel it was typed into — so the
  * thread is relayed through the main process for every other display's
- * History to draw the same. `cleared` marks the relay of a Clear pressed on
- * another display, which retires the receiving window's in-flight turns the
- * way its own press would; an ordinary report replaces the thread and
- * retires nothing.
+ * History to draw the same. `cleared` marks the relay of a Clear, which
+ * retires the receiving window's in-flight turns the way its own press
+ * would; an ordinary report replaces the thread and retires nothing.
+ * `generation` is the main process's count of Clears, which is what keeps
+ * the relay's races honest: a report may only extend the generation it was
+ * built against, so a thread still in flight when a Clear lands cannot
+ * stand the retired lines back up.
  */
 export interface ConversationHistoryPayload {
   entries: readonly ConversationEntry[];
   cleared: boolean;
+  generation: number;
 }
 
 export interface AppBootstrap {
@@ -203,9 +207,12 @@ export interface AppBootstrap {
   /**
    * The launch's conversation history so far, so a panel that opens late — a
    * display plugged in mid-conversation — draws the History every other
-   * window already holds.
+   * window already holds. The generation rides along because it is the
+   * window's licence to report: a window reports nothing until it knows
+   * which generation of the thread it would be extending.
    */
   conversationHistory: readonly ConversationEntry[];
+  conversationHistoryGeneration: number;
   /** Whether, where, and for whom this run may record its own surface. */
   sessionReplay: SessionReplayBootstrap;
   settings: AppSettings;

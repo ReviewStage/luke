@@ -31,21 +31,25 @@ test("a conversation history report carries only bounded history lines", () => {
     words: "A chat finished.",
     identity: { providerId: "claude-code", providerSessionId: "session-a" },
   };
-  assert.equal(guard([[]]), true);
-  assert.equal(guard([[ask, announcement]]), true);
-  // One argument, and it is the thread itself.
+  assert.equal(guard([[], 0]), true);
+  assert.equal(guard([[ask, announcement], 3]), true);
+  // Two arguments: the thread itself, and the Clear generation it extends.
   assert.equal(guard([]), false);
+  assert.equal(guard([[ask, announcement]]), false);
   assert.equal(guard([[ask], [announcement]]), false);
-  assert.equal(guard([ask]), false);
+  assert.equal(guard([ask, 0]), false);
+  assert.equal(guard([[ask], -1]), false);
+  assert.equal(guard([[ask], 1.5]), false);
+  assert.equal(guard([[ask], "1"]), false);
   // A line is only a line: a made-up kind, wordless words, a malformed
   // identity, or a smuggled extra shape all refuse the whole report.
-  assert.equal(guard([[{ kind: "transcript", words: "x" }]]), false);
-  assert.equal(guard([[{ kind: "reply" }]]), false);
-  assert.equal(guard([[{ kind: "reply", words: 3 }]]), false);
-  assert.equal(guard([[{ ...ask, identity: { providerId: "claude-code" } }]]), false);
+  assert.equal(guard([[{ kind: "transcript", words: "x" }], 0]), false);
+  assert.equal(guard([[{ kind: "reply" }], 0]), false);
+  assert.equal(guard([[{ kind: "reply", words: 3 }], 0]), false);
+  assert.equal(guard([[{ ...ask, identity: { providerId: "claude-code" } }], 0]), false);
   assert.equal(
-    guard([[{ ...ask, identity: { providerId: "nope", providerSessionId: "s" } }]]),
+    guard([[{ ...ask, identity: { providerId: "nope", providerSessionId: "s" } }], 0]),
     false,
   );
-  assert.equal(guard([[{ ...ask, recordedAt: Number.POSITIVE_INFINITY }]]), false);
+  assert.equal(guard([[{ ...ask, recordedAt: Number.POSITIVE_INFINITY }], 0]), false);
 });
