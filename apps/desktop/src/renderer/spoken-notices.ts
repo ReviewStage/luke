@@ -1,5 +1,5 @@
-import type { ProactiveSpeech, RealtimeStatus, ScheduledTimer } from "@sidecar/realtime";
-import { REALTIME_STATUS } from "@sidecar/realtime";
+import type { ProactiveSpeechTurn, RealtimeStatus, ScheduledTimer } from "@sidecar/realtime";
+import { isArrivalSpeech, REALTIME_STATUS } from "@sidecar/realtime";
 
 /**
  * How long a notice stays worth saying. News about a session is news for
@@ -57,7 +57,7 @@ export interface AnnouncerSession {
   readonly status: RealtimeStatus;
   readonly microphoneCall: boolean;
   connect(options: { microphone: false }): Promise<boolean>;
-  speak(speech: ProactiveSpeech): boolean;
+  speak(speech: ProactiveSpeechTurn): boolean;
   stopSpeaking(): boolean;
   close(): Promise<void>;
 }
@@ -75,9 +75,9 @@ export interface SpokenNoticeAnnouncerOptions {
  * A notice arriving while the developer's call is up rides it, exactly as
  * attention speech always has. One arriving into silence is what this class
  * exists for: it opens a call of Luke's own — speak-only, no microphone, no
- * context — reads the queue out one reply at a time, lingers briefly for the
- * cluster of finishes that usually follows the first, and closes the call it
- * opened. It never closes the developer's call.
+ * context — reads each main-process batch in one reply, lingers briefly for
+ * the cluster of finishes that usually follows the first, and closes the call
+ * it opened. It never closes the developer's call.
  *
  * A call that is refused keeps the backlog and tries again on a short clock,
  * because the refusal this path actually meets is transient — a rate limit,
@@ -99,7 +99,7 @@ export interface SpokenNoticeAnnouncerOptions {
  */
 export class SpokenNoticeAnnouncer {
   readonly #options: SpokenNoticeAnnouncerOptions;
-  #queue: ProactiveSpeech[] = [];
+  #queue: ProactiveSpeechTurn[] = [];
   /** Whether the call now up is one this announcer opened, and so must close. */
   #ownsCall = false;
   /** The last status seen, which tells a reply's READY from a connect's. */
@@ -148,15 +148,11 @@ export class SpokenNoticeAnnouncer {
     void session.close();
   }
 
-  /** Takes notices the main process decided to voice, and starts saying them. */
-  enqueue(notices: readonly ProactiveSpeech[]): void {
-    if (this.#quiet || notices.length === 0) return;
-    this.#queue.push(...notices);
-    // The oldest waiting sentence is the least newsworthy one; a bounded queue
-    // sheds from the front.
-    if (this.#queue.length > MAXIMUM_QUEUED_NOTICES) {
-      this.#queue = this.#queue.slice(this.#queue.length - MAXIMUM_QUEUED_NOTICES);
-    }
+  /** Takes one turn the main process decided to voice, and starts saying it. */
+  enqueue(turn: ProactiveSpeechTurn): void {
+    if (this.#quiet || (!isArrivalSpeech(turn) && turn.length === 0)) return;
+    this.#queue.push(turn);
+    this.#trimQueue();
     this.#cancelLinger();
     this.#flush();
   }
@@ -229,7 +225,18 @@ export class SpokenNoticeAnnouncer {
     // start the linger toward closing a call the quiet already closed.
     if (this.#quiet) return;
     const now = this.#options.now?.() ?? Date.now();
-    this.#queue = this.#queue.filter((item) => now - item.decidedAt <= SPOKEN_NOTICE_MAX_AGE_MS);
+    const fresh: ProactiveSpeechTurn[] = [];
+    for (const turn of this.#queue) {
+      if (isArrivalSpeech(turn)) {
+        if (now - turn.decidedAt <= SPOKEN_NOTICE_MAX_AGE_MS) fresh.push(turn);
+        continue;
+      }
+      const announcements = turn.filter(
+        (announcement) => now - announcement.decidedAt <= SPOKEN_NOTICE_MAX_AGE_MS,
+      );
+      if (announcements.length > 0) fresh.push(announcements);
+    }
+    this.#queue = fresh;
     const session = this.#options.session();
     if (this.#queue.length === 0) {
       this.#connectAttempts = 0;
@@ -244,12 +251,9 @@ export class SpokenNoticeAnnouncer {
         this.#armHold(floorHeld);
         return;
       }
-      // One reply at a time: the first speak takes the turn and the second is
-      // refused, so the loop stops itself and READY resumes it. Notices go
-      // first — the developer asked to hear them.
-      while (this.#queue.length > 0) {
-        const next = this.#queue[0];
-        if (!next || !session.speak(next)) break;
+      const next = this.#queue[0];
+      if (!next) return;
+      if (session.speak(next)) {
         this.#ownReply = true;
         this.#queue.shift();
       }
@@ -281,6 +285,25 @@ export class SpokenNoticeAnnouncer {
         this.#ownsCall = false;
         this.#retreatOrRetry();
       });
+  }
+
+  /** Sheds the oldest news without dissolving the remaining batch boundaries. */
+  #trimQueue(): void {
+    let excess =
+      this.#queue.reduce((count, turn) => count + (isArrivalSpeech(turn) ? 1 : turn.length), 0) -
+      MAXIMUM_QUEUED_NOTICES;
+    while (excess > 0) {
+      const first = this.#queue[0];
+      if (!first) return;
+      const length = isArrivalSpeech(first) ? 1 : first.length;
+      if (length <= excess) {
+        this.#queue.shift();
+        excess -= length;
+      } else {
+        this.#queue[0] = isArrivalSpeech(first) ? first : first.slice(excess);
+        return;
+      }
+    }
   }
 
   /**
