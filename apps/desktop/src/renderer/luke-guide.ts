@@ -413,7 +413,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
       label: "Conversation history",
       detail:
         "The panel's History tab shows every typed ask, transcribed spoken ask, reply, " +
-        "announcement, and session act from this app launch. Luke carries only the 20 most recent " +
+        "notification, and session act from this app launch. Luke carries only the 20 most recent " +
         "entries into a call. The full view stays only in this app's memory, is blocked from " +
         "panel recordings, disappears when Luke quits, and can be cleared by hand " +
         "from that tab. It is not saved or exportable.",
@@ -536,7 +536,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
           {
             // A behavior rather than a setting: stated here so Luke neither
             // denies announcing nor offers to turn it off.
-            label: "Announcements",
+            label: "Notifications",
             detail:
               "Luke says it out loud when an observed session is holding for you, stops on " +
               "an error, or finishes — a hold is a question, a permission, or an approval, " +
@@ -546,7 +546,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
               "own provider announces nothing until that conversation closes.",
           },
           {
-            // A behavior rather than a setting, for the announcements' own
+            // A behavior rather than a setting, for the notifications' own
             // reason: Luke must neither deny having just spoken it nor offer
             // to replay it.
             label: "The arrival beat",

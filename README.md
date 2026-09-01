@@ -48,7 +48,7 @@ what he remembers, correct something, or tell him to forget it.
 
 ![Luke's capsule under the notch, speaking a summary of which sessions finished and which are waiting.](docs/media/luke-talking.png)
 
-### Announcements
+### Notifications
 
 Luke speaks up when an agent is waiting for you, hits an error, or finishes.
 

@@ -155,7 +155,7 @@ service, and usage counts and recordings by PostHog.
 Luke's use of information received from Google APIs adheres to the
 [Google API Services User Data Policy](https://developers.google.com/terms/api-services-user-data-policy),
 including the Limited Use requirements. We use your calendar availability only
-to hold Luke's spoken announcements while you are in a meeting. It is not
+to hold Luke's spoken notifications while you are in a meeting. It is not
 transferred, sold, or used for advertising, and no human reads it.
 
 ## Contact
