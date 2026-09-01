@@ -62,6 +62,13 @@ export interface ConversationEntry {
    * toward a refusal nor leave "that chat" open to a lookalike.
    */
   identity?: SessionIdentity;
+  /**
+   * When the line entered the thread, stamped at append rather than at
+   * construction so every way in carries one. A spoken ask is stamped when
+   * its transcription lands, not when the turn was spoken; the panel shows
+   * minutes, so the difference cannot be seen.
+   */
+  recordedAt?: number;
 }
 
 /**
@@ -75,7 +82,7 @@ export function appendConversationThreadEntry(
 ): readonly ConversationEntry[] {
   const words = boundedEntryWords(entry.words);
   if (!words) return entries;
-  const appended: ConversationEntry = { kind: entry.kind, words };
+  const appended: ConversationEntry = { kind: entry.kind, words, recordedAt: Date.now() };
   if (entry.identity) appended.identity = entry.identity;
   return [...entries, appended];
 }
@@ -123,7 +130,11 @@ export function insertSpokenAskThreadEntry(
   // exactly where an entry older than the whole history belongs.
   const at = after ? entries.indexOf(after) + 1 : 0;
   const placed = [...entries];
-  placed.splice(at, 0, { kind: CONVERSATION_ENTRY_KIND.SPOKEN_ASK, words: bounded });
+  placed.splice(at, 0, {
+    kind: CONVERSATION_ENTRY_KIND.SPOKEN_ASK,
+    words: bounded,
+    recordedAt: Date.now(),
+  });
   return placed;
 }
 

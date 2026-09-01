@@ -64,6 +64,23 @@ test("appending flattens, bounds, and retires the oldest lines", () => {
   assert.equal(entries[0]?.words, "line 3");
 });
 
+test("every way into the thread stamps when the line was recorded", () => {
+  const before = Date.now();
+  const appended = appendConversationThreadEntry([], {
+    kind: CONVERSATION_ENTRY_KIND.REPLY,
+    words: "Checkout is ready.",
+  });
+  const placed = insertSpokenAskThreadEntry(appended, "how is checkout going?", undefined);
+
+  for (const entry of placed) {
+    assert.ok(entry.recordedAt !== undefined);
+    assert.ok(entry.recordedAt >= before && entry.recordedAt <= Date.now());
+  }
+
+  // The stamp is the panel's alone: the model's context item is unchanged.
+  assert.ok(!conversationHistoryText(placed, [])?.includes(String(placed[0]?.recordedAt)));
+});
+
 test("the current-launch thread keeps every entry while model context stays recent", () => {
   let thread: readonly ConversationEntry[] = [];
   for (let index = 0; index < maximumConversationEntries + 3; index += 1) {

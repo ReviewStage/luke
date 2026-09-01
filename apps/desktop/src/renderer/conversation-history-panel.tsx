@@ -36,6 +36,8 @@ export function historyEntryPresentation(kind: ConversationEntryKind): HistoryEn
 
 const COPY_CONFIRMATION_MS = 1500;
 
+const ENTRY_TIME = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
+
 function HistoryEntryRow({ entry }: { entry: ConversationEntry }): React.JSX.Element {
   const presentation = historyEntryPresentation(entry.kind);
   const words = entry.words;
@@ -47,10 +49,19 @@ function HistoryEntryRow({ entry }: { entry: ConversationEntry }): React.JSX.Ele
     return () => clearTimeout(timer);
   }, [copied]);
 
+  const recordedAt = entry.recordedAt === undefined ? undefined : new Date(entry.recordedAt);
+
   return (
     <li className="history-entry" data-speaker={presentation.speaker}>
       <small className="visually-hidden">{presentation.label}</small>
-      <p>{words}</p>
+      <p>
+        {words}
+        {recordedAt ? (
+          <time className="history-time" dateTime={recordedAt.toISOString()}>
+            {ENTRY_TIME.format(recordedAt)}
+          </time>
+        ) : null}
+      </p>
       {presentation.speaker === HISTORY_ENTRY_SPEAKER.EVENT ? null : (
         <button
           type="button"
