@@ -332,7 +332,7 @@ export interface RealtimeVoiceSessionOptions extends RealtimeVoiceSessionCallbac
    * caller that narrows this — to its own instructions and an empty tool
    * list — so its pre-account call is tool-free at the API itself.
    */
-  sessionSyncEvents?: () => readonly WireRecord[];
+  sessionSyncEvents?: (model: string) => readonly WireRecord[];
   connectTimeoutMs?: number;
   /** Injectable so a test can hold the clock a truncate measures against. */
   now?: () => number;
@@ -880,7 +880,7 @@ export class RealtimeVoiceSession {
 
       await this.#waitForChannel(channel, deadline.signal);
       if (this.#closed) return this.#abandonConnect();
-      this.#send((this.#options.sessionSyncEvents ?? realtimeSessionSyncEvents)());
+      this.#send((this.#options.sessionSyncEvents ?? realtimeSessionSyncEvents)(connection.model));
       this.#setStatus(REALTIME_STATUS.READY);
       // A pace changed during the handshake could not be sent then, and the
       // credential this call answered may have been minted before the change.

@@ -133,6 +133,13 @@ test("the minted session asks for the developer's spoken words back as text", ()
   });
 });
 
+test("a model override receives no unsupported reasoning configuration", () => {
+  assert.equal(realtimeSessionConfig({ model: "gpt-realtime-preview" }).reasoning, undefined);
+  const [sync] = realtimeSessionSyncEvents("gpt-realtime-preview");
+  assert.ok(sync && isRecord(sync.session));
+  assert.equal(sync.session.reasoning, undefined);
+});
+
 test("unclear audio is clarified without guessing or acting", () => {
   const instructions = realtimeInstructions();
 
@@ -381,7 +388,7 @@ test("the session sync asks every call for the developer's words back", () => {
   // The hosted mint composes its session on the service, so the sync the
   // channel opens with is the one place every call — hosted or keyed — can be
   // asked to transcribe the developer's spoken turns.
-  const [sync] = realtimeSessionSyncEvents();
+  const [sync] = realtimeSessionSyncEvents(REALTIME_DEFAULTS.MODEL);
 
   assert.ok(sync && isRecord(sync.session));
   assert.deepEqual(sync.session.reasoning, { effort: "low" });

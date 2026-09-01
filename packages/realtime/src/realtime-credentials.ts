@@ -55,6 +55,12 @@ export const REALTIME_TRUNCATION = {
   RETENTION_RATIO: 0.8,
 } as const;
 
+/** Reasoning is rejected by unsupported Realtime models, so only send it where documented. */
+export function realtimeReasoning(model: string): { effort: "low" } | undefined {
+  if (model !== "gpt-realtime-2" && model !== REALTIME_DEFAULTS.MODEL) return undefined;
+  return { effort: "low" };
+}
+
 /**
  * Builds the session a client secret is minted against. Turn detection is
  * disabled outright so the developer, not a voice-activity heuristic, decides
@@ -62,10 +68,12 @@ export const REALTIME_TRUNCATION = {
  * that sits on someone's desk all day must not have.
  */
 export function realtimeSessionConfig(options: RealtimeSessionOptions = {}) {
+  const model = trimmedText(options.model) ?? REALTIME_DEFAULTS.MODEL;
+  const reasoning = realtimeReasoning(model);
   return {
     type: REALTIME_SESSION_TYPE,
-    model: trimmedText(options.model) ?? REALTIME_DEFAULTS.MODEL,
-    reasoning: { effort: "low" },
+    model,
+    ...(reasoning ? { reasoning } : undefined),
     instructions: trimmedText(options.instructions) ?? realtimeInstructions(),
     tools: realtimeToolDefinitions(),
     // Auto for the conversation; each proactive readout narrows itself to none.
@@ -107,13 +115,14 @@ export function realtimeSessionConfig(options: RealtimeSessionOptions = {}) {
  * hosted mint composes its session on the service, so the one place every
  * call can be asked to hand the developer's words back is the call itself.
  */
-export function realtimeSessionSyncEvents(): readonly WireRecord[] {
+export function realtimeSessionSyncEvents(model: string): readonly WireRecord[] {
+  const reasoning = realtimeReasoning(model);
   const built = [
     {
       type: REALTIME_CLIENT_EVENT.SESSION_UPDATE,
       session: {
         type: REALTIME_SESSION_TYPE,
-        reasoning: { effort: "low" },
+        ...(reasoning ? { reasoning } : undefined),
         instructions: realtimeInstructions(),
         tools: realtimeToolDefinitions(),
         tool_choice: "auto",

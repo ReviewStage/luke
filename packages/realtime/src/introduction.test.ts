@@ -7,6 +7,7 @@ import {
   introductionSpeechEvents,
 } from "./introduction.js";
 import { realtimeSessionConfig } from "./realtime-credentials.js";
+import { REALTIME_DEFAULTS } from "./realtime-voice-settings.js";
 
 test("the minted introduction session declares no tools and no way to choose one", () => {
   const config = introductionSessionConfig({ voice: "marin", speed: 1.2 });
@@ -24,7 +25,7 @@ test("the minted introduction session declares no tools and no way to choose one
 });
 
 test("the sync events re-assert the same tool-free session after connect", () => {
-  const events = introductionSessionSyncEvents();
+  const events = introductionSessionSyncEvents(REALTIME_DEFAULTS.MODEL);
   assert.equal(events.length, 1);
   const event = events[0];
   assert.ok(event);
