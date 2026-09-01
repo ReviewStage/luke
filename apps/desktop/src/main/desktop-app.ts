@@ -160,6 +160,7 @@ import {
   CONVERSATION_FILE,
   conversationFromStored,
   conversationRecord,
+  mergeConversationHistory,
   REMEMBERED_FACTS_FILE,
   rememberedFactsFromStored,
   rememberedFactsRecord,
@@ -457,15 +458,12 @@ const heldEvaluatorSpeech = new SessionNoticeHold<SessionAnnouncement>();
  */
 let meetingQuietActive = false;
 /**
- * The launch's conversation history, one thread shared by every panel window.
- * Held in memory alone like the renderer copies it mirrors: written to no
- * disk, dying with the app, never read by anything here — the main process
- * only relays it between windows and seeds a panel that opens late. Each
- * window reports the whole thread after a line it appended, and the last
- * report wins, which is the conversation's own shape: one developer holds
- * one exchange at a time.
+ * The conversation history, one retained thread shared by every panel window
+ * and persisted for the next launch. The main process merges whole-window
+ * snapshots before relaying them, so one display cannot erase another's line.
  */
 let conversationHistory: readonly ConversationEntry[] = [];
+let conversationClearedAt: number | undefined;
 // Notices come from status edges the registry observed, never from anything a
 // model decided, so they work — and matter most — with no evaluator configured.
 const sessionNoticeTracker = new SessionNoticeTracker();
@@ -1475,34 +1473,35 @@ function registerIpc(): void {
       };
     },
   );
-  // The conversation history's relay between windows and durable store. The
-  // sender already drew what it reported, so only the other panels need the
-  // mirrored snapshot.
+  // The conversation history's relay between windows and durable store.
   registerBridge(
     BRIDGE,
     {
       reportConversationHistory(context, entries) {
-        conversationHistory = entries;
+        const now = Date.now();
+        const merged = runMode.observesProviders
+          ? mergeConversationHistory(conversationHistory, entries, conversationClearedAt, now)
+          : entries;
         if (runMode.observesProviders) {
-          if (entries.length === 0) {
-            removeStoredState(conversationPath(), "the conversation");
-          } else {
-            writeStoredState(
-              conversationPath(),
-              conversationRecord(entries, Date.now()),
-              "the conversation",
-            );
-          }
+          const persisted =
+            merged.length === 0
+              ? removeStoredState(conversationPath(), "the conversation")
+              : writeStoredState(
+                  conversationPath(),
+                  conversationRecord(merged, now),
+                  "the conversation",
+                );
+          if (!persisted) return;
         }
-        const payload: ConversationHistoryPayload = { entries, cleared: false };
+        conversationHistory = merged;
+        const payload: ConversationHistoryPayload = { entries: merged, cleared: false };
         panels.broadcast(channels.onConversationHistoryChanged, payload, context.sender);
       },
       clearConversationHistory(context) {
-        if (
-          runMode.observesProviders &&
-          !removeStoredState(conversationPath(), "the conversation")
-        ) {
-          return false;
+        if (runMode.observesProviders) {
+          const clearedAt = Date.now();
+          if (!removeStoredState(conversationPath(), "the conversation")) return false;
+          conversationClearedAt = clearedAt;
         }
         conversationHistory = [];
         const payload: ConversationHistoryPayload = { entries: [], cleared: true };
@@ -1715,6 +1714,7 @@ function registerIpc(): void {
         return false;
       }
       rememberedFacts = facts;
+      panels.broadcast(channels.onRememberedFactsChanged, facts);
       return true;
     },
   });

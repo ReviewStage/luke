@@ -45,6 +45,34 @@ export function conversationRecord(entries: readonly ConversationEntry[], now: n
   return `${JSON.stringify({ entries: retainedConversationEntries(entries, now) })}\n`;
 }
 
+/** Merges complete window snapshots without letting either window erase the other's new lines. */
+export function mergeConversationHistory(
+  current: readonly ConversationEntry[],
+  incoming: readonly ConversationEntry[],
+  clearedAt: number | undefined,
+  now: number,
+): readonly ConversationEntry[] {
+  const afterClear = (entry: ConversationEntry) =>
+    clearedAt === undefined || (entry.recordedAt !== undefined && entry.recordedAt > clearedAt);
+  const merged = current.filter(afterClear);
+  const currentCounts = new Map<string, number>();
+  for (const entry of merged) {
+    const key = conversationEntryKey(entry);
+    currentCounts.set(key, (currentCounts.get(key) ?? 0) + 1);
+  }
+  const incomingCounts = new Map<string, number>();
+  for (const entry of incoming.filter(afterClear)) {
+    const key = conversationEntryKey(entry);
+    const count = (incomingCounts.get(key) ?? 0) + 1;
+    incomingCounts.set(key, count);
+    if (count > (currentCounts.get(key) ?? 0)) merged.push(entry);
+  }
+  return retainedConversationEntries(
+    merged.sort((left, right) => (left.recordedAt ?? now) - (right.recordedAt ?? now)),
+    now,
+  );
+}
+
 /**
  * Reads remembered entries, dropping invalid records and anything beyond the cap.
  */
@@ -78,4 +106,14 @@ function parsedList(stored: string | undefined, field: string): readonly Unparse
   if (!isRecord(parsed)) return [];
   const list = parsed[field];
   return Array.isArray(list) ? list : [];
+}
+
+function conversationEntryKey(entry: ConversationEntry): string {
+  return JSON.stringify([
+    entry.kind,
+    entry.words,
+    entry.recordedAt,
+    entry.identity?.providerId,
+    entry.identity?.providerSessionId,
+  ]);
 }

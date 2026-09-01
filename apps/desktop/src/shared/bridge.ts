@@ -656,7 +656,13 @@ export const BRIDGE = {
       (v) =>
         v.length === 1 &&
         Array.isArray(v[0]) &&
-        v[0].every((entry) => storedConversationEntry(entry) !== undefined),
+        v[0].every((entry) => {
+          const stored = storedConversationEntry(entry);
+          return (
+            stored !== undefined &&
+            (stored.identity === undefined || isSessionIdentity(stored.identity))
+          );
+        }),
     ),
   }),
   /** The History Clear press, persisted and relayed to every other display. */
@@ -783,6 +789,12 @@ export const BRIDGE = {
     channel: "app:settings-changed",
     args: noArgs,
     result: result<AppSettings>(),
+  }),
+  onRememberedFactsChanged: entry({
+    kind: "subscribe",
+    channel: "app:remembered-facts-changed",
+    args: noArgs,
+    result: result<readonly RememberedFact[]>(isRememberedFacts),
   }),
   onAccountChanged: entry({
     kind: "subscribe",

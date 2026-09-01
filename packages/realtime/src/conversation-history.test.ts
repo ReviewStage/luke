@@ -23,9 +23,9 @@ import {
   recentConversationEntries,
   retainedConversationEntries,
   sessionActConversationEntry,
-  streamingConversationEntry,
   storedConversationEntry,
   storedConversationMaximumAgeMs,
+  streamingConversationEntry,
 } from "./conversation-history.js";
 import { SESSION_NO_LONGER_OBSERVED_NOTE } from "./realtime-protocol.js";
 import { SESSION_TOOL_KIND } from "./realtime-tools.js";

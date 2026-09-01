@@ -8,6 +8,7 @@ import {
 import {
   conversationFromStored,
   conversationRecord,
+  mergeConversationHistory,
   rememberedFactsFromStored,
   rememberedFactsRecord,
 } from "./memory-flow";
@@ -54,6 +55,23 @@ test("retention cuts by age and by count, whichever bites first", () => {
   const kept = conversationFromStored(conversationRecord(many, NOW), NOW);
   assert.equal(kept.length, maximumStoredConversationEntries);
   assert.equal(kept.at(-1)?.words, `line ${many.length - 1}`);
+});
+
+test("window snapshots merge once and cannot restore a cleared thread", () => {
+  const first = {
+    kind: CONVERSATION_ENTRY_KIND.TYPED_ASK,
+    words: "first window",
+    recordedAt: NOW - 2,
+  };
+  const second = {
+    kind: CONVERSATION_ENTRY_KIND.REPLY,
+    words: "second window",
+    recordedAt: NOW - 1,
+  };
+  const merged = mergeConversationHistory([first], [second], undefined, NOW);
+  assert.deepEqual(merged, [first, second]);
+  assert.deepEqual(mergeConversationHistory(merged, [second], undefined, NOW), merged);
+  assert.deepEqual(mergeConversationHistory([], merged, NOW, NOW), []);
 });
 
 test("remembered entries read back and are never retired by a clock", () => {

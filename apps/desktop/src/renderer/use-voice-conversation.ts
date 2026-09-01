@@ -25,8 +25,8 @@ import {
   retainedConversationEntries,
   SESSION_TOOL_KIND,
   sessionActConversationEntry,
-  streamingConversationEntry,
   storedConversationMaximumAgeMs,
+  streamingConversationEntry,
 } from "@sidecar/realtime";
 import {
   mentionedSessions,

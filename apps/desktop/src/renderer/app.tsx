@@ -2428,6 +2428,10 @@ export function App(): React.JSX.Element {
       }),
     applySettings,
   );
+  const acceptRememberedFactsBootstrap = useBootstrapRacedChannel(
+    (onChange) => window.sidecar.onRememberedFactsChanged(onChange),
+    setRememberedFacts,
+  );
   const acceptAccountBootstrap = useBootstrapRacedChannel(
     (onChange) => window.sidecar.onAccountChanged(onChange),
     setAccount,
@@ -2528,7 +2532,7 @@ export function App(): React.JSX.Element {
       setBootstrap(value);
       acceptSessionsBootstrap(value.sessionRoster);
       if (value.sessionsSettled) setSessionsSettled(true);
-      setRememberedFacts(value.rememberedFacts);
+      acceptRememberedFactsBootstrap(value.rememberedFacts);
       // Only fill in what no push has said yet: the bootstrap snapshot is
       // older than any change that raced past it, and the main process will
       // not repeat a list it believes it already announced.
@@ -2635,6 +2639,7 @@ export function App(): React.JSX.Element {
     acceptMeetingQuietBootstrap,
     acceptOutputAudioBootstrap,
     acceptProjectsBootstrap,
+    acceptRememberedFactsBootstrap,
     acceptSessionReplayBootstrap,
     acceptSessionsBootstrap,
     acceptSettingsBootstrap,

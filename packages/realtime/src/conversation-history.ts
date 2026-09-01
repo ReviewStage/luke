@@ -314,14 +314,6 @@ export function conversationHistoryText(
   ].join("\n");
 }
 
-const CONVERSATION_ENTRY_KINDS: ReadonlySet<string> = new Set(
-  Object.values(CONVERSATION_ENTRY_KIND),
-);
-
-function isConversationEntryKind(value: UnparsedWireValue): value is ConversationEntryKind {
-  return isWireString(value) && CONVERSATION_ENTRY_KINDS.has(value);
-}
-
 /**
  * Parses one stored line back, or nothing. A file half-written by a crash, or
  * a record from a build that spelled an entry differently, drops the line

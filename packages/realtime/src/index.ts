@@ -21,9 +21,9 @@ export {
   recentConversationEntries,
   retainedConversationEntries,
   sessionActConversationEntry,
-  streamingConversationEntry,
   storedConversationEntry,
   storedConversationMaximumAgeMs,
+  streamingConversationEntry,
 } from "./conversation-history.js";
 export {
   type IntroductionLine,
