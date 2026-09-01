@@ -4,6 +4,7 @@ import SwiftUI
 /// Shows the signed-in user's active cloud sessions with pull-to-refresh.
 struct SessionsView: View {
     @Environment(AccountSession.self) private var session
+    @Environment(ProductEventSender.self) private var events
 
     @State private var sessions: [RosterSession] = []
     /// Starts true because the list's first frame can paint before its
@@ -88,8 +89,6 @@ struct SessionsView: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .background(Color.ground.ignoresSafeArea())
-        .toolbarBackground(Color.ground, for: .navigationBar)
-        .toolbarBackground(.visible, for: .navigationBar)
         .searchable(text: $searchQuery, prompt: "Search sessions")
         .toolbar {
             // The filter rides with the search the way Notion docks one in
@@ -185,10 +184,25 @@ struct SessionsView: View {
                 let fresh = try await session.refreshAccessToken()
                 sessions = try await rosterClient.observe(bearerToken: fresh)
             }
+            recordObservation(sessions)
         } catch is AccountSessionError {
             ()  // Signed out — the state change redraws automatically.
         } catch {
             fetchError = error.localizedDescription
+        }
+    }
+
+    /// One count per provider per day, in buckets — refreshing is not using.
+    /// A provider id the shared vocabulary has not answered for is left
+    /// uncounted rather than sent to be refused.
+    private func recordObservation(_ sessions: [RosterSession]) {
+        let rowsByProvider = Dictionary(grouping: sessions, by: \.providerId)
+        for (providerId, rows) in rowsByProvider {
+            guard let provider = ProductProviderID(rawValue: providerId) else { continue }
+            events.recordOncePerDay(
+                .sessionObserve(provider: provider, sessions: .bucket(for: rows.count)),
+                discriminator: providerId
+            )
         }
     }
 }

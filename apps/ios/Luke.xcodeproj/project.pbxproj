@@ -21,6 +21,8 @@
 		AABBCC00000000000000008A /* SessionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC00000000000000001B /* SessionsView.swift */; };
 		AABBCC00000000000000008C /* SessionComposerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC00000000000000001D /* SessionComposerView.swift */; };
 		AABBCC00000000000000008D /* WorkspaceCreatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC00000000000000001E /* WorkspaceCreatorView.swift */; };
+		AABBCC00000000000000008E /* SessionReplay.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC00000000000000001F /* SessionReplay.swift */; };
+		AABBCC000000000000000092 /* PostHog in Frameworks */ = {isa = PBXBuildFile; productRef = AABBCC000000000000000091 /* PostHog */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -38,6 +40,8 @@
 		AABBCC00000000000000001B /* SessionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionsView.swift; sourceTree = "<group>"; };
 		AABBCC00000000000000001D /* SessionComposerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionComposerView.swift; sourceTree = "<group>"; };
 		AABBCC00000000000000001E /* WorkspaceCreatorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceCreatorView.swift; sourceTree = "<group>"; };
+		AABBCC00000000000000001F /* SessionReplay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionReplay.swift; sourceTree = "<group>"; };
+		AABBCC00000000000000001C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -46,6 +50,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AABBCC000000000000000083 /* LukeKit in Frameworks */,
+				AABBCC000000000000000092 /* PostHog in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -90,7 +95,9 @@
 				AABBCC00000000000000001B /* SessionsView.swift */,
 				AABBCC00000000000000001D /* SessionComposerView.swift */,
 				AABBCC00000000000000001E /* WorkspaceCreatorView.swift */,
+				AABBCC00000000000000001F /* SessionReplay.swift */,
 				AABBCC000000000000000014 /* Assets.xcassets */,
+				AABBCC00000000000000001C /* Info.plist */,
 			);
 			path = Luke;
 			sourceTree = "<group>";
@@ -122,6 +129,7 @@
 			name = Luke;
 			packageProductDependencies = (
 				AABBCC000000000000000081 /* LukeKit */,
+				AABBCC000000000000000091 /* PostHog */,
 			);
 			productName = Luke;
 			productReference = AABBCC000000000000000010 /* Luke.app */;
@@ -177,6 +185,7 @@
 			mainGroup = AABBCC000000000000000002;
 			packageReferences = (
 				AABBCC000000000000000080 /* XCLocalSwiftPackageReference "LukeKit" */,
+				AABBCC000000000000000090 /* XCRemoteSwiftPackageReference "posthog-ios" */,
 			);
 			productRefGroup = AABBCC000000000000000003 /* Products */;
 			projectDirPath = "";
@@ -220,6 +229,7 @@
 				AABBCC00000000000000008A /* SessionsView.swift in Sources */,
 				AABBCC00000000000000008C /* SessionComposerView.swift in Sources */,
 				AABBCC00000000000000008D /* WorkspaceCreatorView.swift in Sources */,
+				AABBCC00000000000000008E /* SessionReplay.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -364,6 +374,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Luke/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -374,6 +385,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.1.1;
+				POSTHOG_PROJECT_API_KEY = "";
 				PRODUCT_BUNDLE_IDENTIFIER = "dev.tryluke.ios";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -392,6 +404,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Luke/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -402,6 +415,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.1.1;
+				POSTHOG_PROJECT_API_KEY = "";
 				PRODUCT_BUNDLE_IDENTIFIER = "dev.tryluke.ios";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -481,6 +495,17 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		AABBCC000000000000000090 /* XCRemoteSwiftPackageReference "posthog-ios" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/PostHog/posthog-ios.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 3.71.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
 		AABBCC000000000000000081 /* LukeKit */ = {
 			isa = XCSwiftPackageProductDependency;
@@ -491,6 +516,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = AABBCC000000000000000080 /* XCLocalSwiftPackageReference "LukeKit" */;
 			productName = LukeKit;
+		};
+		AABBCC000000000000000091 /* PostHog */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AABBCC000000000000000090 /* XCRemoteSwiftPackageReference "posthog-ios" */;
+			productName = PostHog;
 		};
 /* End XCSwiftPackageProductDependency section */
 
