@@ -223,7 +223,7 @@ final class RealtimeSessionStateTests: XCTestCase {
     private func makeOptions(
         ws: MockWebSocketTask,
         capturer: any AudioCapturer = SilentCapturer(),
-        onStatus: @Sendable @escaping (RealtimeStatus) -> Void = { _ in },
+        onStatus: @MainActor @escaping (RealtimeStatus) -> Void = { _ in },
         dispatchToolCall: (@Sendable @MainActor (_ name: String, _ arguments: [String: Any], _ callId: String) async -> String)? = nil
     ) -> RealtimeSessionOptions {
         RealtimeSessionOptions(

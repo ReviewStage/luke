@@ -52,14 +52,14 @@ public struct RealtimeSessionOptions: Sendable {
     /// Mints the Realtime connection. Called once on connect.
     public var requestConnection: @Sendable () async throws -> VoiceConnection
 
-    /// Called on each status change.
-    public var onStatus: @Sendable (RealtimeStatus) -> Void
-    /// Called with the running caption text while the model speaks, nil when done.
-    public var onCaption: @Sendable (String?) -> Void
-    /// Called with the developer's transcribed words when a turn ends.
-    public var onSpokenAsk: (@Sendable (String) -> Void)?
-    /// Called with an error description when the session closes unexpectedly.
-    public var onError: @Sendable (String?) -> Void
+    /// Called on each status change. Always delivered on the main actor.
+    public var onStatus: @MainActor (RealtimeStatus) -> Void
+    /// Called with the running caption text while the model speaks, nil when done. Always delivered on the main actor.
+    public var onCaption: @MainActor (String?) -> Void
+    /// Called with the developer's transcribed words when a turn ends. Always delivered on the main actor.
+    public var onSpokenAsk: (@MainActor (String) -> Void)?
+    /// Called with an error description when the session closes unexpectedly. Always delivered on the main actor.
+    public var onError: @MainActor (String?) -> Void
 
     /// Dispatches an armed tool call to the appropriate hosted act endpoint.
     /// Receives the tool name, the parsed arguments, and the call id; returns
@@ -88,10 +88,10 @@ public struct RealtimeSessionOptions: Sendable {
 
     public init(
         requestConnection: @Sendable @escaping () async throws -> VoiceConnection,
-        onStatus: @Sendable @escaping (RealtimeStatus) -> Void,
-        onCaption: @Sendable @escaping (String?) -> Void,
-        onSpokenAsk: (@Sendable (String) -> Void)? = nil,
-        onError: @Sendable @escaping (String?) -> Void,
+        onStatus: @MainActor @escaping (RealtimeStatus) -> Void,
+        onCaption: @MainActor @escaping (String?) -> Void,
+        onSpokenAsk: (@MainActor (String) -> Void)? = nil,
+        onError: @MainActor @escaping (String?) -> Void,
         dispatchToolCall: (
             @Sendable @MainActor (_ name: String, _ arguments: [String: Any], _ callId: String) async -> String
         )? = nil,
