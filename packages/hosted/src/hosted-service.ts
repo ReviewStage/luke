@@ -363,10 +363,7 @@ function observedSessionFromWire(value: UnparsedWireValue): ObservedSession | un
   const branch = text(value.branch);
   const recap = text(value.recap);
   const error = text(value.error);
-  const observedAt =
-    typeof value.observedAt === "number" && Number.isFinite(value.observedAt)
-      ? value.observedAt
-      : undefined;
+  const observedAt = wholeNumber(value.observedAt);
   const session: ObservedSession = { providerId, sessionId, title, status };
   if (workspace) session.workspace = workspace;
   if (branch) session.branch = branch;
