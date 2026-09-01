@@ -2388,6 +2388,61 @@ export function App(): React.JSX.Element {
   );
 
   /**
+   * Every session this launch reported an address for, kept so a History
+   * line's chips can outlive their roster rows: the words stay on the panel
+   * after a chat is archived away, and the main process remembers the
+   * departed session's last reported address on the same run lifetime. Grown
+   * from the same broadcast roster the rows draw, and consulted only once
+   * the roster no longer answers, so a session still observed offers exactly
+   * what it currently reports.
+   */
+  const addressedSessionsRef = useRef<Map<string, Set<string>>>(new Map());
+  useEffect(() => {
+    for (const session of sessions) {
+      if (session.detail.link === undefined) continue;
+      let provider = addressedSessionsRef.current.get(session.providerId);
+      if (!provider) {
+        provider = new Set();
+        addressedSessionsRef.current.set(session.providerId, provider);
+      }
+      provider.add(session.providerSessionId);
+    }
+  }, [sessions]);
+
+  const conversationSessionOpenable = useCallback(
+    (identity: SessionIdentity): boolean => {
+      const session = sessions.find(
+        (candidate) =>
+          candidate.providerId === identity.providerId &&
+          candidate.providerSessionId === identity.providerSessionId,
+      );
+      if (session) return session.detail.link !== undefined;
+      return (
+        addressedSessionsRef.current.get(identity.providerId)?.has(identity.providerSessionId) ??
+        false
+      );
+    },
+    [sessions],
+  );
+
+  /**
+   * A History chip's press: the row press at one remove, on the identity the
+   * line's words were recorded beside. Only the identity crosses the bridge;
+   * the main process answers with the session's current address, or its last
+   * reported one for a chat whose row has since departed. The panel stands
+   * down for the same reason a row press stands it down: the chat is being
+   * brought forward underneath it.
+   */
+  const openConversationSession = useCallback(
+    (identity: SessionIdentity) => {
+      void window.sidecar.openSession(identity);
+      cancelHover();
+      void changeMode(false);
+    },
+    [cancelHover, changeMode],
+  );
+
+  /**
    * A live push beats a bootstrap snapshot still in flight. The main process
    * will not repeat a list it believes it already announced, so the older
    * snapshot must not clobber one that raced past it.
@@ -3244,6 +3299,8 @@ export function App(): React.JSX.Element {
             conversationHistory={conversationHistory}
             liveConversationEntries={liveConversationEntries}
             onClearConversationHistory={clearConversationHistory}
+            conversationSessionOpenable={conversationSessionOpenable}
+            onOpenConversationSession={openConversationSession}
             ask={askLuke}
             // Reaching for the composer during a spent day is answered before
             // a keystroke: the caret arriving re-announces the spent caption

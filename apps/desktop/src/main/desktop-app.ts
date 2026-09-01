@@ -65,6 +65,7 @@ import {
   PROVIDER_ID,
   PROVIDER_ID_LIST,
   type ProviderId,
+  ReportedSessionLinks,
   rosterRelevantSessions,
   type Session,
   type SessionNotice,
@@ -225,6 +226,9 @@ const HOSTED_SERVICE_BASE_URL = ACCOUNT_BASE_URL.replace(/\/api\/auth\/?$/, "");
 const ACCOUNT_CLIENT_ID = "luke-desktop";
 const SESSION_REFRESH_INTERVAL_MS = 5_000;
 const sessionRegistry = new InMemorySessionRegistry();
+// What lets a History line still open a chat whose roster row has departed —
+// archived in its provider — at the last address observation itself reported.
+const reportedSessionLinks = new ReportedSessionLinks();
 // Declared before the settings store because the store's snapshot asks it
 // what the latest pass learned about the Codex CLI's login. It observes only
 // inside the codex composite the provider registrations build; a fixture or
@@ -1689,6 +1693,7 @@ function registerIpc(): void {
     ipcMain,
     trustedSender,
     sessionRegistry,
+    lastReportedSessionLink: (identity) => reportedSessionLinks.lastReported(identity),
     openExternal: (url) => shell.openExternal(url),
     adapterFor,
     sendsNetwork: runMode.sendsNetwork,
@@ -2475,6 +2480,9 @@ function broadcastRelevantSessions(): void {
 function startSessionObservation(): void {
   if (!runMode.observesProviders || !accountCapabilitiesActive() || unsubscribeSessions) return;
   unsubscribeSessions = sessionRegistry.subscribe((snapshot) => {
+    // Remembered from the unfiltered snapshot, before the roster narrows it:
+    // a History press may name any session an observation pass ever addressed.
+    reportedSessionLinks.remember(snapshot.sessions);
     broadcastRelevantSessions();
     // The registry only speaks on an effective change, which is exactly when
     // a status edge can exist to announce. The notices read the unfiltered

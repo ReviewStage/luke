@@ -61,6 +61,8 @@ export interface SessionActsIpcDependencies {
   ipcMain: Pick<IpcMain, "handle" | "on">;
   trustedSender: (event: IpcMainEvent | IpcMainInvokeEvent) => boolean;
   sessionRegistry: InMemorySessionRegistry;
+  /** The last address an observation pass reported for a now-departed session. */
+  lastReportedSessionLink: (identity: SessionIdentity) => string | undefined;
   openExternal: (url: string) => Promise<void>;
   adapterFor: (providerId: string) => SessionProviderAdapter | undefined;
   sendsNetwork: boolean;
@@ -216,6 +218,7 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
     ipcMain,
     trustedSender,
     sessionRegistry,
+    lastReportedSessionLink,
     openExternal,
     adapterFor,
     sendsNetwork,
@@ -327,16 +330,21 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
     // go are different answers, and only the second says what to try instead.
     absentAddressReason: string,
     failureReason: string,
+    // The one open that outlives the roster row: a History chip's press. It
+    // answers only once the session has departed — while a session still
+    // stands, its current word is the whole offer, so an address its
+    // provider withdrew cannot be overruled by an older one.
+    departedAddress?: (identity: SessionIdentity) => string | undefined,
   ) =>
     registerAction<[SessionIdentity], SessionOpenResult>(definition, {
       async act(identity) {
-        if (!sessionRegistry.get(identity))
+        const observed = sessionRegistry.get(identity) !== undefined;
+        const url = observed ? address(identity) : departedAddress?.(identity);
+        if (!url)
           return {
             status: ACT_RESULT_STATUS.UNSUPPORTED,
-            reason: "No observed session matches that identity.",
+            reason: observed ? absentAddressReason : "No observed session matches that identity.",
           };
-        const url = address(identity);
-        if (!url) return { status: ACT_RESULT_STATUS.UNSUPPORTED, reason: absentAddressReason };
         await openExternal(url);
         if (isProviderId(identity.providerId)) {
           recordProductEvent(PRODUCT_EVENT.SESSION_ACT_SEND, {
@@ -359,6 +367,11 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
     (identity) => pressedLink(sessionRegistry.get(identity)?.detail.link),
     "That session has no address to open.",
     "The system could not open that session.",
+    // A History line keeps its press after the roster lets its session go —
+    // Conductor keeps an archived chat's deep link alive — at the last
+    // address an observation pass itself reported, never one the renderer
+    // carried over the bridge.
+    (identity) => pressedLink(lastReportedSessionLink(identity)),
   );
   registerAction<[SessionIdentity, string], SessionOpenResult>(BRIDGE.openSessionApplication, {
     async act(identity, applicationId) {

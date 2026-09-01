@@ -223,13 +223,23 @@ Trust constraints:
   endpoint; a session whose provider lists none takes no such ask. A session whose provider documents no way in, or whose current state is
   documented for none, advertises nothing and is offered nothing; local
   sessions have no such endpoint and stay entirely read-only. Opening a
-  session (its row pressed, the same press asked of Luke in conversation, or
-  the notice popup announcing it pressed under the housing) is not a write
+  session (its row pressed, the same press asked of Luke in conversation,
+  the notice popup announcing it pressed under the housing, or a History
+  line's chat chip pressed) is not a write
   and needs no endpoint: the address its provider reported is handed to the
   operating system, and nothing reaches the provider; an open asked of Luke
   still runs only in a developer-opened turn, and a session that reported no
   address is offered nowhere to open; its popup's press opens Luke's own
-  panel instead, which touches no provider at all. A workspace Luke just
+  panel instead, which touches no provider at all. A History line's chips
+  are the one press that outlives a roster row, because the words they were
+  recorded beside do: each line draws a chip per chat it attributably named —
+  identity, title, and marks read from the roster at the moment of the entry,
+  never from a model's words alone — and a chat archived in its provider
+  keeps a working deep link, so its chip still opens it, at the last address an
+  observation pass itself reported this run — remembered in the main
+  process, never carried over the bridge — while a session still observed
+  offers exactly what it currently reports, and a chat that never reported
+  an address draws no chip at all. A workspace Luke just
   created opens itself the same way: the creation ask, already a
   developer-opened turn, is also the ask to be taken there, so the session id
   the provider's creation response named (the one thing read out of that

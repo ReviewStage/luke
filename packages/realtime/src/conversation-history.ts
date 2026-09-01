@@ -30,7 +30,14 @@
  * app" was itself a policy and persisting means replacing it with a real one.
  */
 
-import type { Session, SessionIdentity } from "@sidecar/session";
+import {
+  MAXIMUM_MENTIONED_SESSIONS,
+  mentionedSessions,
+  SESSION_MENTION_KIND,
+  type Session,
+  type SessionIdentity,
+  type SessionMentionKind,
+} from "@sidecar/session";
 import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import { SESSION_NO_LONGER_OBSERVED_NOTE } from "./realtime-protocol.js";
 import { actNarration, type CarriedSessionAction } from "./realtime-tools.js";
@@ -87,6 +94,30 @@ export const maximumConversationEntryLength = 400;
 export const maximumStoredConversationEntries = 200;
 export const storedConversationMaximumAgeMs = 14 * 24 * 60 * 60 * 1000;
 
+/** One app mark trailing a chip's name, as the chat's own row wore it at the entry. */
+export interface ConversationEntryMentionApplication {
+  id: string;
+  name: string;
+}
+
+/** One chat a line named, as the roster reported it at the moment of the entry. */
+export interface ConversationEntryMention extends SessionIdentity {
+  /**
+   * The title the roster read when the line was recorded: the label its chip
+   * wears. History is a record, so a later rename does not rewrite it, and a
+   * chat the roster has since let go still has a worded way back.
+   */
+  title: string;
+  /**
+   * The mark the chip leads with — the agent having the conversation, the
+   * same identity the session's own row and the notice band's chips lead
+   * with — falling back to the provider where no agent was reported.
+   */
+  markId: string;
+  /** The app marks trailing the name, less the one the leading mark already draws. */
+  applications: readonly ConversationEntryMentionApplication[];
+}
+
 export interface ConversationEntry {
   kind: ConversationEntryKind;
   /**
@@ -110,6 +141,20 @@ export interface ConversationEntry {
    * retention's clock and never enters model context.
    */
   recordedAt?: number;
+  /**
+   * The chats the line named, for the History panel's chips alone. Each is
+   * an identity the roster reported at the moment of the entry, with the
+   * title it wore then — never anything a model composed — and none of it is
+   * ever rendered into model context: {@link conversationHistoryText}
+   * carries `identity` and nothing of this list, so however many chats a
+   * line names, the model's window pays for one subject at most. A chip's
+   * press hands its identity — never an address — back to the main process,
+   * which answers from what observation itself reported, which is what lets
+   * the press outlast the roster row for a chat archived away. Persisting a
+   * line keeps its chips: labels the roster read on this machine, stored in
+   * Luke's own file beside the words that named them and nowhere else.
+   */
+  mentions?: readonly ConversationEntryMention[];
 }
 
 /**
@@ -126,6 +171,7 @@ export function appendConversationThreadEntry(
   if (!words) return entries;
   const appended: ConversationEntry = { kind: entry.kind, words, recordedAt: now };
   if (entry.identity) appended.identity = entry.identity;
+  if (entry.mentions && entry.mentions.length > 0) appended.mentions = entry.mentions;
   return retainedConversationEntries([...entries, appended], now);
 }
 
@@ -256,8 +302,110 @@ export function sessionActConversationEntry(
 ): ConversationEntry {
   const words = actNarration(action, sessions);
   const entry: ConversationEntry = { kind: CONVERSATION_ENTRY_KIND.ACT, words };
-  if ("identity" in action) entry.identity = action.identity;
+  if ("identity" in action) {
+    entry.identity = action.identity;
+    const mention = rosterMention(action.identity, sessions);
+    if (mention) entry.mentions = [mention];
+  }
   return entry;
+}
+
+/**
+ * The history line an announcement leaves behind: the spoken words, the one
+ * roster-validated subject the update was about, and that subject's chip.
+ * The subject stays the whole answer however many sessions the sentence
+ * brushes past — the same rule the notice band keeps while it speaks.
+ */
+export function announcementConversationEntry(
+  words: string,
+  about: SessionIdentity,
+  sessions: readonly Session[],
+): ConversationEntry {
+  const entry: ConversationEntry = {
+    kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
+    words,
+    identity: about,
+  };
+  const mention = rosterMention(about, sessions);
+  if (mention) entry.mentions = [mention];
+  return entry;
+}
+
+/**
+ * The history line a conversation reply leaves behind, with the chats it
+ * answered about when the words say so attributably. A reply carries no
+ * subject of its own, so its chats are read the way the notice band reads
+ * its chips: the reply's words matched whole against the observed roster's
+ * own names, under the mention rules' minimum-length and ambiguity bounds,
+ * so nothing a model said can name a session the roster does not observe.
+ * Every chat named earns a chip; only an answer about exactly one also
+ * records it as the line's subject, because the subject is what a later
+ * turn's bare "that chat" resolves through, and several cannot say which.
+ */
+export function replyConversationEntry(
+  words: string,
+  sessions: readonly Session[],
+): ConversationEntry {
+  const entry: ConversationEntry = { kind: CONVERSATION_ENTRY_KIND.REPLY, words };
+  const named = new Map<string, Map<string, ConversationEntryMention>>();
+  for (const mentioned of mentionedSessions(words, sessions)) {
+    const mention = rosterMention(mentioned, sessions, mentioned.kind);
+    if (!mention) continue;
+    let provider = named.get(mention.providerId);
+    if (!provider) {
+      provider = new Map();
+      named.set(mention.providerId, provider);
+    }
+    provider.set(mention.providerSessionId, mention);
+  }
+  // A title mention and its workspace's may resolve to the same chat; the
+  // subject is single when the identities are, not when the names were.
+  const mentions = [...named.values()].flatMap((provider) => [...provider.values()]);
+  if (mentions.length === 0) return entry;
+  entry.mentions = mentions;
+  const [subject] = mentions;
+  if (subject && mentions.length === 1) {
+    entry.identity = {
+      providerId: subject.providerId,
+      providerSessionId: subject.providerSessionId,
+    };
+  }
+  return entry;
+}
+
+/**
+ * The chip one identity earns — its roster row's title, marks, and app
+ * associations, or nothing off-roster. A mention made by a workspace's name
+ * wears that name, since those are the words that named it; every other chip
+ * wears the chat's own title.
+ */
+function rosterMention(
+  identity: SessionIdentity,
+  sessions: readonly Session[],
+  namedAs?: SessionMentionKind,
+): ConversationEntryMention | undefined {
+  const session = sessions.find(
+    (candidate) =>
+      candidate.providerId === identity.providerId &&
+      candidate.providerSessionId === identity.providerSessionId,
+  );
+  if (!session) return undefined;
+  const markId = session.agent?.id ?? session.providerId;
+  return {
+    providerId: identity.providerId,
+    providerSessionId: identity.providerSessionId,
+    title:
+      namedAs === SESSION_MENTION_KIND.WORKSPACE && session.workspace?.name !== undefined
+        ? session.workspace.name
+        : session.title,
+    markId,
+    // An app the leading mark already stands for — a provider that is itself
+    // the app, standing in where no agent was reported — would draw the same
+    // mark twice on one chip.
+    applications: session.applications.flatMap((application) =>
+      application.id === markId ? [] : [{ id: application.id, name: application.displayName }],
+    ),
+  };
 }
 
 /**
@@ -341,6 +489,8 @@ export function storedConversationEntry(value: UnparsedWireValue): ConversationE
   ) {
     return undefined;
   }
+  const mentions = value.mentions === undefined ? [] : storedEntryMentions(value.mentions);
+  if (mentions === undefined) return undefined;
   return {
     kind: value.kind,
     words,
@@ -348,7 +498,50 @@ export function storedConversationEntry(value: UnparsedWireValue): ConversationE
     ...(isWireString(providerId) && isWireString(providerSessionId)
       ? { identity: { providerId, providerSessionId } }
       : undefined),
+    ...(mentions.length > 0 ? { mentions } : undefined),
   };
+}
+
+/**
+ * Parses a stored line's chips back, or refuses the line's mentions whole:
+ * like a misspelled identity, a mentions list this build cannot read means a
+ * record from another spelling, and half a chip row would press for chats it
+ * cannot name. The count bound is the mention rules' own — nothing this build
+ * records can exceed it, so a longer list is not this build's record.
+ */
+function storedEntryMentions(
+  value: UnparsedWireValue,
+): readonly ConversationEntryMention[] | undefined {
+  if (!Array.isArray(value) || value.length > MAXIMUM_MENTIONED_SESSIONS) return undefined;
+  const mentions: ConversationEntryMention[] = [];
+  for (const mention of value) {
+    if (!isRecord(mention)) return undefined;
+    const { providerId, providerSessionId, title, markId, applications } = mention;
+    if (
+      !isWireString(providerId) ||
+      providerId.length === 0 ||
+      !isWireString(providerSessionId) ||
+      providerSessionId.length === 0 ||
+      !isWireString(title) ||
+      title.length === 0 ||
+      !isWireString(markId) ||
+      markId.length === 0 ||
+      !Array.isArray(applications)
+    ) {
+      return undefined;
+    }
+    const marks: ConversationEntryMentionApplication[] = [];
+    for (const application of applications) {
+      if (!isRecord(application)) return undefined;
+      const { id, name } = application;
+      if (!isWireString(id) || id.length === 0 || !isWireString(name) || name.length === 0) {
+        return undefined;
+      }
+      marks.push({ id, name });
+    }
+    mentions.push({ providerId, providerSessionId, title, markId, applications: marks });
+  }
+  return mentions;
 }
 
 /**
