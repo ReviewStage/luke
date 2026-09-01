@@ -86,6 +86,7 @@ export {
   type RealtimeStatus,
   realtimeInstructions,
   type ScheduledTimer,
+  SESSION_NO_LONGER_OBSERVED_NOTE,
   truncateResponseEvents,
   typedAskEvents,
 } from "./realtime-protocol.js";

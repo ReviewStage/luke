@@ -17,7 +17,11 @@
  */
 
 import type { Session, SessionIdentity } from "@sidecar/session";
-import { type AttentionSpeech, announcementSummaryText } from "./realtime-protocol.js";
+import {
+  type AttentionSpeech,
+  announcementSummaryText,
+  SESSION_NO_LONGER_OBSERVED_NOTE,
+} from "./realtime-protocol.js";
 import { actNarration, type CarriedSessionAction } from "./realtime-tools.js";
 
 /** What one history line records, which also says who it speaks for. */
@@ -59,8 +63,9 @@ export interface ConversationEntry {
    * The roster-validated session the line was about, when it was about one.
    * Only ever an identity the roster reported at the moment of the entry —
    * never one a model composed — and rendered only while the session is
-   * still observed, so a stale identity cannot steer a tool call toward a
-   * refusal.
+   * still observed; once the roster lets the session go, the render says so
+   * in place of the ids, so a stale identity can neither steer a tool call
+   * toward a refusal nor leave "that chat" open to a lookalike.
    */
   identity?: SessionIdentity;
 }
@@ -193,6 +198,10 @@ const CONVERSATION_ENTRY_LEAD = {
  * still observes that session: the words are history and stay, but an
  * identity the roster no longer reports is one no tool call may name, and a
  * line still offering it would steer "that chat" toward a guaranteed refusal.
+ * The departure is said rather than left blank — a line that merely fell
+ * silent reads like one that never named a session, and an ask pointed at it
+ * would be resolved by guessing among the sessions still observed. The fixed
+ * note is what the standing instructions teach: gone, so say so or ask.
  */
 export function conversationHistoryText(
   entries: readonly ConversationEntry[],
@@ -216,9 +225,10 @@ export function conversationHistoryText(
             candidate.providerId === identity.providerId &&
             candidate.providerSessionId === identity.providerSessionId,
         );
-      return observed && identity
+      if (!identity) return line;
+      return observed
         ? `${line} [provider_id=${identity.providerId} provider_session_id=${identity.providerSessionId}]`
-        : line;
+        : `${line} [${SESSION_NO_LONGER_OBSERVED_NOTE}]`;
     }),
   ].join("\n");
 }

@@ -22,7 +22,11 @@ import {
   recentConversationEntries,
   sessionActConversationEntry,
 } from "./conversation-history.js";
-import { ATTENTION_SPEECH_SOURCE, type AttentionSpeech } from "./realtime-protocol.js";
+import {
+  ATTENTION_SPEECH_SOURCE,
+  type AttentionSpeech,
+  SESSION_NO_LONGER_OBSERVED_NOTE,
+} from "./realtime-protocol.js";
 import { SESSION_TOOL_KIND } from "./realtime-tools.js";
 
 const OBSERVED_AT = 1_800_000_000_000;
@@ -316,7 +320,7 @@ test("a spoken ask lands at its turn's own mark, not where its transcription did
   );
 });
 
-test("a line whose session left the roster keeps its words and drops the identity", () => {
+test("a line whose session left the roster keeps its words and says the session is gone", () => {
   const entries = appendConversationEntry([], {
     kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
     words: "Claude Code finished checkout-service.",
@@ -327,9 +331,21 @@ test("a line whose session left the roster keeps its words and drops the identit
 
   // The words are history and stay; the identity is an offer to a tool call,
   // and an unobserved one would steer "that chat" toward a certain refusal.
+  // The departure is said in the identity's place with the note the standing
+  // instructions teach: a line that merely fell silent would leave "archive
+  // that chat" to be resolved by guessing among the sessions still observed.
   assert.ok(text);
   assert.match(text, /finished checkout-service/);
   assert.doesNotMatch(text, /provider_session_id=session-gone/);
+  assert.match(text, new RegExp(`\\[${SESSION_NO_LONGER_OBSERVED_NOTE}\\]$`, "m"));
+
+  // A line that never named a session carries neither identity nor note.
+  const aboutNoSession = conversationHistoryText(
+    appendConversationEntry([], { kind: CONVERSATION_ENTRY_KIND.REPLY, words: "All quiet." }),
+    [],
+  );
+  assert.ok(aboutNoSession);
+  assert.doesNotMatch(aboutNoSession, /no longer observed/);
 });
 
 test("an empty history says nothing at all", () => {
