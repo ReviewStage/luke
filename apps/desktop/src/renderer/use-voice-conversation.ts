@@ -6,6 +6,7 @@ import { mentionedIssues, type TrackedIssue } from "@sidecar/issues";
 import {
   ARRIVAL_SPEECH_KIND,
   type ArrivalSpeech,
+  adoptConversationThread,
   appendConversationThreadEntry,
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
@@ -38,7 +39,11 @@ import { TALK_KEY_RELEASE, talkKeyRelease, voiceHotkeyLabel } from "@sidecar/set
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MicrophoneStatus, VoiceHotkeyState } from "#shared/wire/audio";
-import type { SessionOpenResult, WorkspaceProviderId } from "#shared/wire/session";
+import type {
+  ConversationHistoryPayload,
+  SessionOpenResult,
+  WorkspaceProviderId,
+} from "#shared/wire/session";
 import { askRefusal } from "./ask-luke";
 import { voiceQuotaSpentNote } from "./microphone-access";
 import { openPreferredMicrophone } from "./microphone-choice";
@@ -510,8 +515,10 @@ export interface VoiceConversation {
   stopMicrophone: () => Promise<void>;
   askLuke: (text: string) => Promise<string | undefined>;
   /**
-   * Every bounded line from this app launch. It lives only in this renderer;
-   * the model receives a recent slice and the whole view disappears on exit.
+   * Every bounded line from this app launch — the same thread on every
+   * display's panel, relayed through the main process and living nowhere but
+   * in memory; the model receives a recent slice and the whole view
+   * disappears on exit.
    */
   conversationHistory: readonly ConversationEntry[];
   /** Clears the visible history and the context handed to the next call. */
@@ -524,6 +531,8 @@ export interface VoiceConversation {
    * exactly as the words it previews do.
    */
   liveConversationEntries: readonly ConversationEntry[];
+  /** Another window's report of the shared thread, applied as this window's own. */
+  applySharedConversationHistory: (payload: ConversationHistoryPayload) => void;
   voiceTurn: WaveformVoice | undefined;
   /**
    * The words being spoken, one entry per response: a turn that speaks twice
@@ -717,6 +726,10 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       }
       conversationRef.current = appendConversationThreadEntry(conversationRef.current, entry);
       setConversationHistory(conversationRef.current);
+      // The whole thread goes to the main process, which mirrors it to every
+      // other display's panel: an exchange lands on one window, and the
+      // others' History tabs must read the same.
+      window.sidecar.reportConversationHistory(conversationRef.current);
       voiceSession.current?.updateConversation(recentConversationEntries(conversationRef.current), {
         announced: entry.kind === CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
       });
@@ -733,11 +746,46 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     // The previews go with the marks: a transcription still arriving belongs
     // to a turn the press just retired, and could never be recorded anyway.
     setSpokenAskPreviews(NO_SPOKEN_ASK_PREVIEWS);
+    window.sidecar.reportConversationHistoryCleared();
     talkLatched.current = false;
     talkPressedAt.current = undefined;
     voiceSession.current?.clearConversation();
     activeReplyGenerationRef.current = undefined;
     activeAnnouncementGenerationRef.current = undefined;
+  }, []);
+
+  /**
+   * Takes another window's report of the shared thread as this window's own.
+   * An exchange lands on one window — voice on the primary display's panel, a
+   * typed ask on the panel it was typed into — so every other display hears
+   * about it here, through the main process, and draws the same History. A
+   * cleared report is a Clear pressed elsewhere: it retires this window's
+   * in-flight turns the way its own press would, but leaves the talk key's
+   * latch alone, because a key held here is not another display's to let go.
+   */
+  const applySharedConversationHistory = useCallback((payload: ConversationHistoryPayload) => {
+    if (payload.cleared) {
+      conversationGenerationRef.current += 1;
+      conversationRef.current = [];
+      spokenTurnMarksRef.current.clear();
+      pendingSpokenTurnMarksRef.current = [];
+      setConversationHistory([]);
+      // The previews go with the marks here too: the turns they belong to
+      // were just retired, wherever the Clear was pressed.
+      setSpokenAskPreviews(NO_SPOKEN_ASK_PREVIEWS);
+      voiceSession.current?.clearConversation();
+      activeReplyGenerationRef.current = undefined;
+      activeAnnouncementGenerationRef.current = undefined;
+      return;
+    }
+    conversationRef.current = adoptConversationThread(conversationRef.current, payload.entries);
+    setConversationHistory(conversationRef.current);
+    // An announcement tail re-seeds an open call's history item exactly as a
+    // local announcement line would: the line enters that call's own
+    // conversation items nowhere else.
+    voiceSession.current?.updateConversation(recentConversationEntries(conversationRef.current), {
+      announced: payload.entries.at(-1)?.kind === CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
+    });
   }, []);
 
   /**
@@ -769,10 +817,12 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       );
       // A transcription that came back empty ended its turn — the preview
       // and the mark are already spent — but placed no line, and a thread
-      // that did not change owes the open call no update.
+      // that did not change owes the open call no update and the other
+      // displays no report.
       if (placed === conversationRef.current) return;
       conversationRef.current = placed;
       setConversationHistory(conversationRef.current);
+      window.sidecar.reportConversationHistory(conversationRef.current);
       voiceSession.current?.updateConversation(recentConversationEntries(conversationRef.current));
     },
     [dropSpokenAskPreview],
@@ -1688,6 +1738,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     conversationHistory,
     clearConversationHistory,
     liveConversationEntries: live,
+    applySharedConversationHistory,
     voiceTurn,
     lukeCaptions,
     mentionedSessions: mentioned,

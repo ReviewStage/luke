@@ -196,7 +196,9 @@ export class PanelManager {
    * one microphone, one reply, one face speaking — so the talk key and the
    * attention readouts go to a single renderer rather than opening one
    * conversation per display: the main display's window when Luke stands there,
-   * else the first window standing anywhere.
+   * else the first window standing anywhere. The thread the exchange leaves
+   * behind is not the host's alone: each appended line comes back through the
+   * conversation history relay, so every display's History reads the same.
    */
   voiceHost(): BrowserWindow | undefined {
     const primary = this.#windows.get(screen.getPrimaryDisplay().id);

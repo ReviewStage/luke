@@ -2053,6 +2053,7 @@ export function App(): React.JSX.Element {
     conversationHistory,
     clearConversationHistory,
     liveConversationEntries,
+    applySharedConversationHistory,
     voiceTurn,
     lukeCaptions,
     mentionedSessions,
@@ -2421,6 +2422,12 @@ export function App(): React.JSX.Element {
     (onChange) => window.sidecar.onMeetingQuietChanged(onChange),
     setMeetingQuiet,
   );
+  // The other displays' half of the one conversation: an exchange lands on a
+  // single window, and every other panel's History draws the same thread.
+  const acceptConversationHistoryBootstrap = useBootstrapRacedChannel(
+    (onChange) => window.sidecar.onConversationHistoryChanged(onChange),
+    applySharedConversationHistory,
+  );
 
   /**
    * The two writes a row can ask for, handed to the main process by session
@@ -2504,6 +2511,7 @@ export function App(): React.JSX.Element {
       acceptIssuesBootstrap(value.issues);
       acceptCalendarsBootstrap(value.calendars);
       acceptMeetingQuietBootstrap(value.meetingQuiet);
+      acceptConversationHistoryBootstrap({ entries: value.conversationHistory, cleared: false });
       acceptSessionReplayBootstrap(value.sessionReplay);
       acceptSettingsBootstrap(value.settings);
       // The stored filter chips and search words come back with the panel:
@@ -2595,6 +2603,7 @@ export function App(): React.JSX.Element {
   }, [
     acceptAccountBootstrap,
     acceptCalendarsBootstrap,
+    acceptConversationHistoryBootstrap,
     acceptIssuesBootstrap,
     acceptMeetingQuietBootstrap,
     acceptOutputAudioBootstrap,
