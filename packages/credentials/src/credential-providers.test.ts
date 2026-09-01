@@ -9,6 +9,8 @@ import {
   INTEGRATION_PROVIDER_LIST,
   isCredentialProviderId,
   providerRunsSessionsInCloud,
+  SPEECH_CREDENTIAL_PROVIDER,
+  SPEECH_CREDENTIAL_PROVIDER_ID,
   VOICE_CREDENTIAL_PROVIDER,
   VOICE_CREDENTIAL_PROVIDER_ID,
 } from "./credential-providers.js";
@@ -46,12 +48,13 @@ test("describes every provider it lists", () => {
       assert.equal(provider.hint, undefined, provider.id);
       assert.equal(provider.apiKeysUrl, undefined, provider.id);
     }
-    // The environment fallback is `<PROVIDER>_API_KEY` — except OpenAI, which
-    // deliberately offers none (a key that costs money and moves the review
-    // path is connected by hand or not at all), and except a provider
+    // The environment fallback is `<PROVIDER>_API_KEY` — except the two voice
+    // keys, which deliberately offer none (a key that costs money the moment
+    // Luke speaks is connected by hand or not at all), and except a provider
     // connected by consent, where there is no key for an environment to hold.
     if (
-      provider.id === CREDENTIAL_PROVIDER_ID.OPENAI ||
+      provider.id === VOICE_CREDENTIAL_PROVIDER_ID ||
+      provider.id === SPEECH_CREDENTIAL_PROVIDER_ID ||
       provider.connection === CREDENTIAL_CONNECTION.CONSENT
     ) {
       assert.deepEqual(provider.environmentVariables, [], provider.id);
@@ -75,10 +78,15 @@ test("describes every provider it lists", () => {
 test("splits the settings sections without losing a provider", () => {
   // The sections together are exactly the registry: a provider missing from
   // all of them would hold a key no row can enter, and one in two would be
-  // asked for the same key twice. The voice key stands apart because its row
-  // is drawn on the Voice page rather than under Connections.
+  // asked for the same key twice. The two voice keys stand apart because their
+  // rows are drawn on the Voice page rather than under Connections.
   assert.deepEqual(
-    [...CLOUD_AGENT_PROVIDER_LIST, ...INTEGRATION_PROVIDER_LIST, VOICE_CREDENTIAL_PROVIDER]
+    [
+      ...CLOUD_AGENT_PROVIDER_LIST,
+      ...INTEGRATION_PROVIDER_LIST,
+      VOICE_CREDENTIAL_PROVIDER,
+      SPEECH_CREDENTIAL_PROVIDER,
+    ]
       .map((provider) => provider.id)
       .sort(),
     CREDENTIAL_PROVIDER_LIST.map((provider) => provider.id).sort(),
@@ -91,13 +99,14 @@ test("splits the settings sections without losing a provider", () => {
 
 test("the cloud badge belongs to the agents alone", () => {
   // The badge says a provider's sessions run in a cloud service. Linear's
-  // issues and OpenAI's voice are services Luke uses rather than sessions he
-  // watches, so a badge on their marks would claim sessions neither has.
+  // issues and the two voice services are ones Luke uses rather than sessions
+  // he watches, so a badge on their marks would claim sessions none has.
   for (const provider of CLOUD_AGENT_PROVIDER_LIST) {
     assert.equal(providerRunsSessionsInCloud(provider.id), true, provider.id);
   }
   assert.equal(providerRunsSessionsInCloud(CREDENTIAL_PROVIDER_ID.LINEAR), false);
   assert.equal(providerRunsSessionsInCloud(CREDENTIAL_PROVIDER_ID.OPENAI), false);
+  assert.equal(providerRunsSessionsInCloud(CREDENTIAL_PROVIDER_ID.ELEVENLABS), false);
 });
 
 test("sends the user to the one GitHub token kind the agent-tasks API answers", () => {
@@ -186,4 +195,26 @@ test("holds the key Luke speaks through, apart from the agents he observes", () 
   assert.equal(VOICE_CREDENTIAL_PROVIDER, openai);
   assert.equal(INTEGRATION_PROVIDER_LIST.includes(openai), false);
   assert.equal(CLOUD_AGENT_PROVIDER_LIST.includes(openai), false);
+});
+
+test("holds the key that only says Luke's words aloud", () => {
+  const elevenlabs = CREDENTIAL_PROVIDERS[SPEECH_CREDENTIAL_PROVIDER_ID];
+
+  assert.equal(elevenlabs.displayName, "ElevenLabs");
+  // Never read from the environment, for the reason the OpenAI key is not:
+  // an ELEVENLABS_API_KEY exported for some other tool would start spending
+  // itself the moment Luke spoke.
+  assert.deepEqual(elevenlabs.environmentVariables, []);
+  // ElevenLabs issues keys with every permission off, and a key missing
+  // either of the two fails at a different moment, so the copy names both.
+  assert.ok(elevenlabs.hint);
+  assert.match(elevenlabs.hint.trail ?? "", /Text to speech/i);
+  assert.match(elevenlabs.hint.trail ?? "", /Voices read/i);
+  assert.equal(elevenlabs.keyFormat, undefined);
+
+  // Neither an agent nor an integration, like the OpenAI key beside it: its
+  // row stands on the Voice page, and it buys no session anywhere.
+  assert.equal(SPEECH_CREDENTIAL_PROVIDER, elevenlabs);
+  assert.equal(INTEGRATION_PROVIDER_LIST.includes(elevenlabs), false);
+  assert.equal(CLOUD_AGENT_PROVIDER_LIST.includes(elevenlabs), false);
 });

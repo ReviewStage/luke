@@ -11,18 +11,19 @@ import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
  * so a credential row names the same service a session row or the issue
  * roster does — that is what lets one mark registry serve them all.
  *
- * OpenAI is the one that names nothing elsewhere, so it carries an id of its
- * own: Luke speaks through it rather than observing it, and there are no OpenAI
- * sessions or issues for a row to belong to. It belongs here all the same,
- * because a credential the app cannot be given is a feature the app does not
- * have — and an app opened from Finder has no launch environment to read one
- * from.
+ * OpenAI and ElevenLabs are the two that name nothing elsewhere, so they carry
+ * ids of their own: Luke speaks through them rather than observing them, and
+ * there are no sessions or issues of theirs for a row to belong to. They belong
+ * here all the same, because a credential the app cannot be given is a feature
+ * the app does not have — and an app opened from Finder has no launch
+ * environment to read one from.
  */
 export const CREDENTIAL_PROVIDER_ID = {
   CONDUCTOR: PROVIDER_ID.CONDUCTOR,
   COPILOT: PROVIDER_ID.COPILOT,
   CURSOR: PROVIDER_ID.CURSOR,
   DEVIN: PROVIDER_ID.DEVIN,
+  ELEVENLABS: "elevenlabs",
   JULES: PROVIDER_ID.JULES,
   LINEAR: ISSUE_TRACKER_ID.LINEAR,
   OPENAI: "openai",
@@ -212,6 +213,27 @@ export const CREDENTIAL_PROVIDERS: CredentialProviderRegistry = {
         "Devin's personal access tokens start with cog_. The older apk_ keys are for an API version Luke does not read.",
     },
   },
+  [CREDENTIAL_PROVIDER_ID.ELEVENLABS]: {
+    id: CREDENTIAL_PROVIDER_ID.ELEVENLABS,
+    connection: CREDENTIAL_CONNECTION.KEY,
+    displayName: "ElevenLabs",
+    // The two permissions are named because ElevenLabs issues keys with every
+    // permission switched off by default, and a key missing either fails at a
+    // different moment: without Voices read the list is empty with no voices
+    // to choose, and without Text to speech the first reply is the failure.
+    hint: {
+      lead: "Create a key in ElevenLabs under",
+      destination: "My Account > API Keys",
+      trail: "Give it Text to speech and Voices read access.",
+    },
+    apiKeysUrl: "https://elevenlabs.io/app/settings/api-keys",
+    // Deliberately no environment fallback, for the same reason OpenAI has
+    // none: an `ELEVENLABS_API_KEY` exported for some other tool would start
+    // spending itself the moment Luke spoke.
+    environmentVariables: [],
+    // No key format. ElevenLabs publishes none, and its keys have changed
+    // prefix before, so one could only refuse a working key.
+  },
   [CREDENTIAL_PROVIDER_ID.JULES]: {
     id: CREDENTIAL_PROVIDER_ID.JULES,
     connection: CREDENTIAL_CONNECTION.KEY,
@@ -299,10 +321,32 @@ export const VOICE_CREDENTIAL_PROVIDER_ID = CREDENTIAL_PROVIDER_ID.OPENAI;
 export const VOICE_CREDENTIAL_PROVIDER: CredentialProvider =
   CREDENTIAL_PROVIDERS[VOICE_CREDENTIAL_PROVIDER_ID];
 
+/**
+ * The one key that only says Luke's words aloud. It buys nothing else: the
+ * conversation, its transcription, its tools, and the review of a session all
+ * stay with {@link VOICE_CREDENTIAL_PROVIDER_ID} whichever speech provider is
+ * selected, so this key is connected and disconnected on its own.
+ */
+export const SPEECH_CREDENTIAL_PROVIDER_ID = CREDENTIAL_PROVIDER_ID.ELEVENLABS;
+
+/** The one provider the Voice page holds a speech key for. */
+export const SPEECH_CREDENTIAL_PROVIDER: CredentialProvider =
+  CREDENTIAL_PROVIDERS[SPEECH_CREDENTIAL_PROVIDER_ID];
+
+/**
+ * The services the Voice page holds a key for rather than the Providers
+ * section: Luke speaks through them, and neither has a session or an issue for
+ * a row to belong to.
+ */
+const VOICE_PAGE_IDS: ReadonlySet<CredentialProviderId> = new Set([
+  VOICE_CREDENTIAL_PROVIDER_ID,
+  SPEECH_CREDENTIAL_PROVIDER_ID,
+]);
+
 /** The coding-agent providers, in the order the Providers section lists them. */
 export const CLOUD_AGENT_PROVIDER_LIST: readonly CredentialProvider[] =
   CREDENTIAL_PROVIDER_LIST.filter(
-    (provider) => !INTEGRATION_IDS.has(provider.id) && provider.id !== VOICE_CREDENTIAL_PROVIDER_ID,
+    (provider) => !INTEGRATION_IDS.has(provider.id) && !VOICE_PAGE_IDS.has(provider.id),
   );
 
 /**
@@ -316,12 +360,12 @@ export const INTEGRATION_PROVIDER_LIST: readonly CredentialProvider[] =
 
 /**
  * Whether this provider's key buys the observation of cloud sessions, which is
- * what the cloud badge on a mark says. Linear's issues and OpenAI's voice are
- * services Luke uses rather than sessions he watches, so their marks carry no
- * badge — a badge there would claim sessions neither service has.
+ * what the cloud badge on a mark says. Linear's issues and the two voice
+ * services are ones Luke uses rather than sessions he watches, so their marks
+ * carry no badge — a badge there would claim sessions none of them has.
  */
 export function providerRunsSessionsInCloud(id: CredentialProviderId): boolean {
-  return !INTEGRATION_IDS.has(id) && id !== VOICE_CREDENTIAL_PROVIDER_ID;
+  return !INTEGRATION_IDS.has(id) && !VOICE_PAGE_IDS.has(id);
 }
 
 /**

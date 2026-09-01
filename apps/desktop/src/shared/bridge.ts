@@ -92,6 +92,7 @@ import {
   type WindowRole,
 } from "./wire/session";
 import type { AppSettings, SettingsUpdateResult } from "./wire/settings";
+import type { SpeechTokenAnswer, SpeechVoicesAnswer } from "./wire/speech";
 import type { UpdateSnapshot } from "./wire/update";
 
 export interface WireGuard<Value> {
@@ -641,6 +642,29 @@ export const BRIDGE = {
     channel: "app:request-realtime-diagnostics",
     args: noArgs,
     result: result<RealtimeDiagnostics>(),
+  }),
+  /**
+   * The personal voices the connected ElevenLabs account holds. Read in the
+   * main process under the stored key, which never crosses this door: what
+   * comes back is bounded metadata the page draws, or the sentence saying why
+   * it could not be read.
+   */
+  listSpeechVoices: entry({
+    kind: "invoke",
+    channel: "app:list-speech-voices",
+    args: noArgs,
+    result: result<SpeechVoicesAnswer>(),
+  }),
+  /**
+   * One single-use credential for one reply's speech socket. Minted afresh
+   * for every reply — the token is spent by the socket it opens, so there is
+   * nothing here worth holding on to.
+   */
+  mintSpeechToken: entry({
+    kind: "invoke",
+    channel: "app:mint-speech-token",
+    args: noArgs,
+    result: result<SpeechTokenAnswer>(),
   }),
   requestHostedUsage: entry({
     kind: "invoke",
