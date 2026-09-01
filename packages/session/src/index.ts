@@ -66,6 +66,7 @@ export {
   maximumSessionApplications,
   maximumSessionDetailLength,
   maximumSessionMessageLength,
+  maximumSessionRecapExcerptLength,
   maximumSessionRecapLength,
   maximumSessionTitleLength,
   normalizeAttention,

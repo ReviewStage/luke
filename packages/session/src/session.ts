@@ -542,7 +542,24 @@ export const maximumSessionApplications = SESSION_APPLICATION_ID_LIST.length;
 export const maximumSpawnableAgentLength = 40;
 /** How many kinds of agent one session may offer to start. */
 export const maximumSpawnableAgents = 8;
-export const maximumSessionRecapLength = 500;
+/**
+ * How long a reported recap may run: a wire-hygiene bound on an observed
+ * field, not a model bound. It matches the widest read any adapter
+ * deliberately makes (Conductor's transcript tail), so a recap is never cut
+ * below words an adapter was allowed to read, and the surfaces that draw it —
+ * a row, a session's own screen — show the settled turn's parting words
+ * whole. What may enter a model window or leave the machine unbidden is the
+ * narrower {@link maximumSessionRecapExcerptLength}.
+ */
+export const maximumSessionRecapLength = 2_000;
+/**
+ * The bounded excerpt of a recap that may reach a model: the attention
+ * evaluator's update, the announcement worded from it, and the voice roster
+ * context all cut to this at their own edge, so a longer retained recap
+ * costs a model window — and sends unbidden — exactly what the shorter
+ * retained recap used to.
+ */
+export const maximumSessionRecapExcerptLength = 500;
 /** One line of context beside a title, not a paragraph. */
 export const maximumSessionDetailLength = 120;
 /** Long enough for any provider's session address without becoming a payload. */

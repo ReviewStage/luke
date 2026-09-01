@@ -11,6 +11,7 @@ import {
 import {
   ATTENTION_DISPOSITION,
   type AttentionDecision,
+  maximumSessionRecapExcerptLength,
   normalizeSession,
   type ProviderSessionObservation,
   SESSION_COMPLETION_CAUSE,
@@ -121,6 +122,26 @@ test("derives an update only when a session reports something new", () => {
   assert.ok(held);
   assert.equal(held?.holdingForDeveloper, true);
   assert.doesNotMatch(attentionUpdateInput(held), /holdingForDeveloper/);
+});
+
+test("an update carries the recap's excerpt, and a change past it is no development", () => {
+  const opening = `Waiting on the rounding rule. ${"y".repeat(700)}`;
+  const before = session(claude, "review", { recap: opening });
+
+  const update = attentionUpdate(before);
+  assert.equal(update?.recap, opening.slice(0, maximumSessionRecapExcerptLength));
+
+  // A recap that differs only past the excerpt reads identical to the
+  // evaluator, so it opens no review the model would have to judge blind.
+  const changedPastExcerpt = session(claude, "review", { recap: `${opening} and one more word` });
+  assert.equal(attentionUpdate(changedPastExcerpt, before), undefined);
+
+  // A change inside the excerpt is still the development it always was.
+  const changedInsideExcerpt = session(claude, "review", { recap: `Settled. ${opening}` });
+  assert.equal(
+    attentionUpdate(changedInsideExcerpt, before)?.trigger,
+    ATTENTION_TRIGGER.RECAP_CHANGED,
+  );
 });
 
 test("the update names the workspace a chat belongs to, and only by its name", () => {
@@ -822,7 +843,7 @@ test("sends bounded material and withholds what a decision does not turn on", as
     "trigger",
   ]);
   assert.equal(update.title.length, 160, "titles stay bounded by session normalization");
-  assert.equal(update.recap?.length, 500, "recaps stay bounded by session normalization");
+  assert.equal(update.recap?.length, 500, "recaps leave only as the update's bounded excerpt");
 
   // An evaluator is the one place session material leaves the machine, so the
   // session's own address and the change it published stay behind: they are

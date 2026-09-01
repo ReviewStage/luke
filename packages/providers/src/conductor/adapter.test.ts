@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { SESSION_STATUS, type SessionControl } from "@sidecar/session";
+import { maximumSessionRecapLength, SESSION_STATUS, type SessionControl } from "@sidecar/session";
 import type { JsonObject, JsonValue } from "@sidecar/wire/testing";
 import { HTTP_STATUS, jsonResponse, recordingFetch } from "@sidecar/wire/testing";
 import { CLOUD_ADAPTER_DEFAULTS, type CloudFetch } from "../shared/cloud-session-adapter.js";
@@ -706,17 +706,29 @@ test("reports no recap for a tail it cannot attribute to the agent", async () =>
   }
 });
 
-test("cuts a recap at the recap bound", async () => {
+test("cuts a recap at the recap bound and keeps a shorter one whole", async () => {
+  const partingWords = `all tests pass ${"and a word ".repeat(80)}`.trim();
   const api = fakeConductorApi({
     userId: TEST_USER_ID,
     projects: [LUKE_PROJECT],
-    workspaces: [ownedWorkspace("workspace-idle", TEST_TIME - 30_000)],
+    workspaces: [
+      ownedWorkspace("workspace-idle", TEST_TIME - 30_000),
+      ownedWorkspace("workspace-talkative", TEST_TIME - 30_000),
+    ],
     sessions: [
       {
         id: IDLE_SESSION_UUID,
         workspaceId: "workspace-idle",
         name: TEST_SESSION_NAME,
-        transcriptTail: `## Assistant\n\n${"a word ".repeat(200)}`,
+        transcriptTail: `## Assistant\n\n${"a word ".repeat(400)}`,
+        status: TEST_CONDUCTOR_STATUS.IDLE,
+        statusUpdatedAt: TEST_TIME - 1_000,
+      },
+      {
+        id: SECOND_IDLE_SESSION_UUID,
+        workspaceId: "workspace-talkative",
+        name: TEST_SESSION_NAME,
+        transcriptTail: `## Assistant\n\n${partingWords}`,
         status: TEST_CONDUCTOR_STATUS.IDLE,
         statusUpdatedAt: TEST_TIME - 1_000,
       },
@@ -725,7 +737,10 @@ test("cuts a recap at the recap bound", async () => {
 
   const observations = await adapterFor(api.fetch).observe();
 
-  assert.equal(observations[0]?.recap?.length, 500);
+  assert.equal(observations[0]?.recap?.length, maximumSessionRecapLength);
+  // The bound refuses a runaway tail; parting words within it — longer than
+  // the model's excerpt — reach the surfaces whole.
+  assert.equal(observations[1]?.recap, partingWords);
 });
 
 test("keeps a session id that is not a UUID out of the read document", async () => {

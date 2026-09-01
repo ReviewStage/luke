@@ -5,6 +5,7 @@ import path from "node:path";
 import test, { type TestContext } from "node:test";
 import { pathToFileURL } from "node:url";
 import {
+  maximumSessionRecapLength,
   SESSION_APPLICATION_ID,
   SESSION_APPLICATION_SCOPE,
   SESSION_COMPLETION_CAUSE,
@@ -345,7 +346,7 @@ test("a recap stands only while its turn is the newest word", async (t) => {
     [
       {
         role: TEST_ROLE.ASSISTANT,
-        message: { content: [{ type: "text", text: "y".repeat(700) }] },
+        message: { content: [{ type: "text", text: "y".repeat(maximumSessionRecapLength + 200) }] },
       },
       turnEndedRecord(TEST_TURN_STATUS.SUCCESS),
     ],
@@ -355,7 +356,7 @@ test("a recap stands only while its turn is the newest word", async (t) => {
   const observations = await adapterFor(state).observe();
 
   assert.equal(observations[0]?.recap, undefined);
-  assert.equal(observations[1]?.recap?.length, 500);
+  assert.equal(observations[1]?.recap?.length, maximumSessionRecapLength);
   assert.ok(observations[1]?.recap?.endsWith("…"));
   assert.equal(JSON.stringify(observations).includes(SECRET_TRANSCRIPT_TEXT), false);
 });
