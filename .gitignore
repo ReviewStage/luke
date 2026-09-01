@@ -21,3 +21,7 @@ pnpm-debug.log*
 .vercel/
 .claude/
 error.log
+
+# Xcode resolves the iOS app's packages into the workspace beside the project.
+apps/ios/Luke.xcodeproj/project.xcworkspace/
+apps/ios/Luke.xcodeproj/xcuserdata/
