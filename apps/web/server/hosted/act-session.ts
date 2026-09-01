@@ -1,14 +1,14 @@
 import {
   HOSTED_ACT_RESULT,
-  type HostedActAnswer,
-  type HostedActResult,
+  type HostedActWorkspaceAnswer,
   isRecord,
-  sessionMessageText,
   text,
   type UnparsedWireValue,
   VAULT_PROVIDER_ID,
   type VaultProviderId,
+  type WireRecord,
 } from "../core.js";
+import type { ActExecutionAnswer } from "./act-execute.js";
 import { decryptProviderKey } from "./encryption.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
 
@@ -41,40 +41,47 @@ function trimmedSecretOrUnavailable(secret: string | undefined): { secret: strin
   return { secret: trimmed };
 }
 
-export interface ActMessageExecuteResult {
-  result: HostedActResult;
-  reason?: string;
-}
-
-export interface ActMessageOptions {
+/**
+ * One session-scoped act request: every act a mobile row asks of an observed
+ * session shares these gates — bearer auth, a vault provider id, a bounded
+ * session id, the act's own bounded fields, the unsupported answer before a
+ * key is required, and the stored key decrypted only for a request that
+ * passed everything else. Only the fields and the executor differ per act,
+ * so they are the seams.
+ */
+export interface SessionActOptions<Fields extends Record<string, string | undefined>> {
   request: Request;
   resolveUserId: (request: Request) => Promise<string | undefined>;
   encryptionSecret: string | undefined;
   /** Reads the encrypted key row for this user and provider, or undefined if none stored. */
   readKey: (userId: string, providerId: string) => Promise<{ ciphertext: string } | undefined>;
   /**
-   * The reason this provider cannot take a message act, or undefined for one
-   * that can. Checked before the vault key is required, so an unsupported
-   * provider answers "unsupported" whether or not a key is stored — storing
-   * a key would not enable the act.
+   * Parses and bounds the act's own fields from the validated body; undefined
+   * is an invalid request, exactly as an unbounded message text is.
+   */
+  parseFields: (body: WireRecord) => Fields | undefined;
+  /**
+   * The reason this provider cannot take this act, or undefined for one that
+   * can. Checked before the vault key is required, so an unsupported provider
+   * answers "unsupported" whether or not a key is stored — storing a key
+   * would not enable the act.
    */
   unsupportedReason: (providerId: VaultProviderId) => string | undefined;
   /**
-   * Validates (via a fresh observation pass) and delivers the message. The
-   * implementation is provider-specific and injected by the route; the handler
-   * enforces text bounds and auth before calling it.
+   * Validates (via a fresh observation pass) and delivers the act. The
+   * implementation is provider-specific and injected by the route; the
+   * handler enforces bounds and auth before calling it.
    */
-  executeMessage: (options: {
-    providerId: VaultProviderId;
-    providerSessionId: string;
-    text: string;
-    apiKey: string;
-  }) => Promise<ActMessageExecuteResult>;
+  execute: (
+    options: { providerId: VaultProviderId; providerSessionId: string; apiKey: string } & Fields,
+  ) => Promise<ActExecutionAnswer>;
 }
 
-/** Validates and delivers a message to a cloud session on the user's behalf. */
-export async function handleActMessage(options: ActMessageOptions): Promise<Response> {
-  const { request, resolveUserId, encryptionSecret, readKey, unsupportedReason, executeMessage } =
+/** Validates and delivers one act aimed at a cloud session on the user's behalf. */
+export async function handleSessionAct<Fields extends Record<string, string | undefined>>(
+  options: SessionActOptions<Fields>,
+): Promise<Response> {
+  const { request, resolveUserId, encryptionSecret, readKey, parseFields, unsupportedReason } =
     options;
 
   if (request.method !== "POST") {
@@ -114,15 +121,15 @@ export async function handleActMessage(options: ActMessageOptions): Promise<Resp
     return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
   }
 
-  // Bound the text exactly as the desktop does before any network call.
-  const messageText = sessionMessageText(body.text);
-  if (!messageText) {
+  // Bound the act's own fields exactly as the desktop does before any network call.
+  const fields = parseFields(body);
+  if (!fields) {
     return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
   }
 
   const unsupported = unsupportedReason(providerId);
   if (unsupported) {
-    const answer: HostedActAnswer = {
+    const answer: HostedActWorkspaceAnswer = {
       result: HOSTED_ACT_RESULT.UNSUPPORTED,
       reason: unsupported,
     };
@@ -131,7 +138,7 @@ export async function handleActMessage(options: ActMessageOptions): Promise<Resp
 
   const keyRow = await readKey(userId, providerId);
   if (!keyRow) {
-    const answer: HostedActAnswer = {
+    const answer: HostedActWorkspaceAnswer = {
       result: HOSTED_ACT_RESULT.REJECTED,
       reason: "No provider key stored. Add a key for this provider in settings.",
     };
@@ -145,16 +152,14 @@ export async function handleActMessage(options: ActMessageOptions): Promise<Resp
     return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
   }
 
-  const executeResult = await executeMessage({
-    providerId,
-    providerSessionId,
-    text: messageText,
-    apiKey,
-  });
+  const executeResult = await options.execute({ providerId, providerSessionId, apiKey, ...fields });
 
-  const answer: HostedActAnswer = {
+  const answer: HostedActWorkspaceAnswer = {
     result: executeResult.result,
     ...(executeResult.reason ? { reason: executeResult.reason } : undefined),
+    ...(executeResult.providerSessionId
+      ? { providerSessionId: executeResult.providerSessionId }
+      : undefined),
   };
   return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);
 }

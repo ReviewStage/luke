@@ -208,13 +208,25 @@ export const CURSOR_PROVIDER: SessionProvider = {
   displayName: CURSOR_PROVIDER_NAME,
 };
 
+/**
+ * How an observation pass runs the repository refresh that feeds
+ * `workspaceProjects()`. The desktop's long-lived adapter lets it ride beside
+ * the pass on its own cadence; a stateless context chooses instead: skip it
+ * when the instance is discarded after one observe() and the result could
+ * never be used, or await it when that one observe() is exactly what must
+ * populate the project list before a creation ask is validated against it.
+ */
+export const CURSOR_PROJECT_REFRESH = {
+  BACKGROUND: "background",
+  SKIP: "skip",
+  AWAIT: "await",
+} as const;
+
+export type CursorProjectRefresh =
+  (typeof CURSOR_PROJECT_REFRESH)[keyof typeof CURSOR_PROJECT_REFRESH];
+
 export interface CursorAdapterOptions extends CloudAdapterOptions {
-  /**
-   * When true, the adapter never fires the background repository refresh.
-   * Use this in stateless/on-demand contexts where the adapter is discarded
-   * after a single observe() call and the refresh result can never be used.
-   */
-  skipBackgroundFetches?: boolean;
+  projectRefresh?: CursorProjectRefresh;
 }
 
 interface CursorAgent {
@@ -301,7 +313,7 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
   #repositories: readonly string[] = [];
   #repositoriesAttemptedAt = Number.NEGATIVE_INFINITY;
   #repositoriesRefreshMs = CURSOR_REPOSITORY_RETRY_MS;
-  readonly #skipBackgroundFetches: boolean;
+  readonly #projectRefresh: CursorProjectRefresh;
 
   constructor(options: CursorAdapterOptions) {
     super(
@@ -312,7 +324,7 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
       },
       options,
     );
-    this.#skipBackgroundFetches = options.skipBackgroundFetches ?? false;
+    this.#projectRefresh = options.projectRefresh ?? CURSOR_PROJECT_REFRESH.BACKGROUND;
   }
 
   protected override forgetCachedIdentity(): void {
@@ -325,20 +337,26 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
     request: CloudRequest,
     now: number,
   ): Promise<readonly ProviderSessionObservation[]> {
-    // The repository offer rides beside the pass, never inside it: Cursor
-    // documents this read as slow for a large organisation, so it runs on its
-    // own clock with its own wide deadline, the sessions never wait on it, and
-    // an offer that lands after the pass — or several — is announced by the
-    // next one. It reads through the credential-bound path rather than the
-    // pass-scoped request, because passes keep coming while it runs and each
-    // would discard exactly the slow answer this exists for; only a
-    // credential change may do that.
+    // On the desktop's long-lived adapter the repository offer rides beside
+    // the pass, never inside it: Cursor documents this read as slow for a
+    // large organisation, so it runs on its own clock with its own wide
+    // deadline, the sessions never wait on it, and an offer that lands after
+    // the pass — or several — is announced by the next one. It reads through
+    // the credential-bound path rather than the pass-scoped request, because
+    // passes keep coming while it runs and each would discard exactly the
+    // slow answer this exists for; only a credential change may do that.
     // The repository refresh exists solely to populate instance state for
-    // future workspace-project queries. In stateless/on-demand contexts the
-    // adapter is discarded after one pass, so the fetch can never be used;
-    // firing it anyway leaks a serverless invocation and spends the caller's
-    // Cursor quota.
-    if (!this.#skipBackgroundFetches) void this.#refreshRepositories(now);
+    // workspace-project queries. A stateless context chooses at construction:
+    // skipped when the instance is discarded after one pass and the fetch
+    // could never be used — firing it anyway leaks a serverless invocation
+    // and spends the caller's Cursor quota — or awaited when this one pass is
+    // what must populate the project list before a creation ask is validated
+    // against it.
+    if (this.#projectRefresh === CURSOR_PROJECT_REFRESH.AWAIT) {
+      await this.#refreshRepositories(now);
+    } else if (this.#projectRefresh === CURSOR_PROJECT_REFRESH.BACKGROUND) {
+      void this.#refreshRepositories(now);
+    }
 
     const body = await request(CURSOR_ROUTE.AGENTS, {
       [CURSOR_QUERY.LIMIT]: String(CURSOR_ADAPTER_DEFAULTS.AGENT_PAGE_SIZE),
